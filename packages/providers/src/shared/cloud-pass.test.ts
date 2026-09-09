@@ -91,7 +91,7 @@ interface StubOptions {
   apiKey?: string | undefined;
   readApiKey?: () => Promise<string | undefined>;
   now?: () => number;
-  minimumRefreshIntervalMs?: number;
+  minimumPassIntervalMs?: number;
   onDiagnostic?: AdapterDiagnosticCallback;
   requestHeaders?: Readonly<Record<string, string>>;
   sleep?: (ms: number) => Promise<void>;
@@ -116,7 +116,7 @@ function stubPluginFor(fetch: CloudFetch, overrides: StubOptions = {}): StubClou
     baseUrl: TEST_BASE_URL,
     fetch,
     now: overrides.now ?? (() => TEST_TIME),
-    minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
+    minimumPassIntervalMs: overrides.minimumPassIntervalMs ?? 0,
     ...(overrides.onDiagnostic ? { onDiagnostic: overrides.onDiagnostic } : undefined),
     ...(overrides.sleep ? { sleep: overrides.sleep } : undefined),
     forget: () => {
@@ -381,7 +381,7 @@ function deferred() {
 function accountBoundPlugin(options: {
   readApiKey: () => Promise<string | undefined>;
   fetch: CloudFetch;
-  minimumRefreshIntervalMs: number;
+  minimumPassIntervalMs: number;
 }) {
   return cloudPass({
     provider: STUB_PROVIDER,
@@ -440,7 +440,7 @@ test("a pass superseded by a key rotation neither lands nor keeps using the old 
   const plugin = accountBoundPlugin({
     readApiKey: async () => apiKey,
     fetch,
-    minimumRefreshIntervalMs: 0,
+    minimumPassIntervalMs: 0,
   });
 
   const stalePass = plugin.run();
@@ -470,7 +470,7 @@ test("a replaced key rejected mid-flight does not clear the new key's observatio
   const plugin = accountBoundPlugin({
     readApiKey: async () => apiKey,
     fetch,
-    minimumRefreshIntervalMs: 60_000,
+    minimumPassIntervalMs: 60_000,
   });
 
   const stalePass = plugin.run();
@@ -478,7 +478,7 @@ test("a replaced key rejected mid-flight does not clear the new key's observatio
   await plugin.run();
   oldKeyRequest.resolve();
   const staleObservations = await stalePass;
-  // Inside the refresh interval this serves the cache, which is exactly where
+  // Inside the pass interval this serves the cache, which is exactly where
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // a wrongly cleared snapshot would surface as vanished rows.
   const cachedObservations = await plugin.run();
@@ -512,7 +512,7 @@ test("a programming error during observation is reported rather than swallowed",
   const stub = stubFetch();
   const plugin = stubPluginFor(stub.fetch, {
     now: () => now,
-    minimumRefreshIntervalMs: 60_000,
+    minimumPassIntervalMs: 60_000,
     onDiagnostic: (kind, error) => diagnostics.push([kind, error]),
   });
   plugin.collected = [observation("session-one")];
@@ -629,7 +629,7 @@ test("reports an unanswered send as indeterminate and makes the next refresh ask
     if (failWrites && request.method === "POST") throw new Error("connection reset");
     return jsonResponse({});
   });
-  const plugin = stubPluginFor(fetch, { minimumRefreshIntervalMs: 60_000 });
+  const plugin = stubPluginFor(fetch, { minimumPassIntervalMs: 60_000 });
   plugin.collected = [observation("session-one", { advertises: [{ kind: ACTION_KIND.MESSAGE }] })];
   await plugin.observe();
 
@@ -654,7 +654,7 @@ test("reports an unanswered send as indeterminate and makes the next refresh ask
 test("a write answered with an unnamed status makes the next refresh ask", async () => {
   let status: number = HTTP_STATUS.OK;
   const stub = stubFetch(() => status);
-  const plugin = stubPluginFor(stub.fetch, { minimumRefreshIntervalMs: 60_000 });
+  const plugin = stubPluginFor(stub.fetch, { minimumPassIntervalMs: 60_000 });
   plugin.collected = [observation("session-one", { advertises: [{ kind: ACTION_KIND.MESSAGE }] })];
   await plugin.observe();
 
@@ -682,7 +682,7 @@ test("a write runs on the deadline its own route asked for", async () => {
       request.init.signal?.addEventListener("abort", () => reject(new Error("deadline")));
     });
   });
-  const plugin = stubPluginFor(fetch, { minimumRefreshIntervalMs: 60_000 });
+  const plugin = stubPluginFor(fetch, { minimumPassIntervalMs: 60_000 });
   plugin.collected = [observation("session-slow", { advertises: [STUB_SLOW_ACTION_CONTROL] })];
   await plugin.observe();
 

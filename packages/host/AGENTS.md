@@ -49,9 +49,9 @@ argument, in the order the composers are built.
 
 `Host.stop()` is the whole quit, in the coordinator's fixed order:
 admissions closed, everything under way cancelled, a bounded wait for it to
-settle, whatever did not settle written down as unresolved for the next
+settle, whatever did not settle written down as unsettled for the next
 launch's recovery, and only then the store closed. A caller that ran the
-steps itself would be a second order for the same quit; a shutdown never
+steps itself would be a second order for the same quit; a dispose never
 fabricates a completion for work it cut off.
 
 ## The account preference client is here for the graph's sake

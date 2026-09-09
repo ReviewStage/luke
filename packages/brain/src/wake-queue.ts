@@ -4,7 +4,7 @@ import type { BrainWakeEvent } from "./wake-events.js";
 
 /**
  * The wakes waiting for a turn. Nothing opens at once: wakes inside the
- * coalescing window open one turn together — a hook and the poll's edge for
+ * coalescing window open one turn together — a hook and the pass's edge for
  * the same stop — and wakes during a model's quiet wait for it to end rather
  * than being dropped. The queue owns the events and the timer; the host owns
  * what a flush does with them, and hands events back when the turn they

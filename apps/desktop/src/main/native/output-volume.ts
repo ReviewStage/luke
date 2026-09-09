@@ -35,7 +35,7 @@ export interface OutputVolumeWatch {
    * is not yet a readable output — that arrives on the helper's first line.
    */
   start(): boolean;
-  /** Stops the helper. Nothing succeeds it during shutdown, so no one waits. */
+  /** Stops the helper. Nothing succeeds it during dispose, so no one waits. */
   stop(): void;
 }
 

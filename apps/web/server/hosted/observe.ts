@@ -38,7 +38,7 @@ export interface ObserveOptions
 
 /**
  * Observe-on-demand: decrypts the caller's vault keys, runs each cloud
- * adapter once (minimumRefreshIntervalMs: 0 bypasses the refresh debounce),
+ * adapter once (minimumPassIntervalMs: 0 bypasses the pass debounce),
  * and returns a bounded roster. Nothing is stored between requests.
  */
 export async function handleObserve(options: ObserveOptions): Promise<Response> {

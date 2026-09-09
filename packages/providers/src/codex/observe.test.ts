@@ -846,7 +846,7 @@ test("a thread archived between passes leaves the roster and stays gone", async 
   });
   const registry = new SessionRoster();
 
-  await registry.refresh(plugin);
+  await registry.pass(plugin);
   assert.deepEqual(
     registry.list().map((session) => session.providerSessionId),
     ["codex-live"],
@@ -863,7 +863,7 @@ test("a thread archived between passes leaves the roster and stays gone", async 
     database.close();
   }
 
-  await registry.refresh(plugin);
+  await registry.pass(plugin);
   assert.deepEqual(registry.list(), []);
 });
 

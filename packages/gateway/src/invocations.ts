@@ -48,7 +48,7 @@ export function unknownInvocation(
 export class PendingInvocations {
   readonly #pending = new Map<
     string,
-    { capability: string; resolve: (result: NodeCapabilityResult) => void }
+    { capability: string; settle: (result: NodeCapabilityResult) => void }
   >();
   #closed = false;
 
@@ -63,8 +63,8 @@ export class PendingInvocations {
         unavailableInvocation(invocation, NODE_INVOCATION_REFUSAL.DISCONNECTED),
       );
     }
-    return new Promise((resolve) => {
-      this.#pending.set(invocation.invocationId, { capability: invocation.capability, resolve });
+    return new Promise((settle) => {
+      this.#pending.set(invocation.invocationId, { capability: invocation.capability, settle });
     });
   }
 
@@ -73,7 +73,7 @@ export class PendingInvocations {
     const held = this.#pending.get(answer.invocationId);
     if (!held) return false;
     this.#pending.delete(answer.invocationId);
-    held.resolve(answer.result);
+    held.settle(answer.result);
     return true;
   }
 
@@ -86,7 +86,7 @@ export class PendingInvocations {
     this.#closed = true;
     for (const [id, held] of [...this.#pending]) {
       this.#pending.delete(id);
-      held.resolve(unknownInvocation({ capability: held.capability }));
+      held.settle(unknownInvocation({ capability: held.capability }));
     }
   }
 }

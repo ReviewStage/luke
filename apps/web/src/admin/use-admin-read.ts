@@ -20,7 +20,7 @@ export type AdminRead<T> =
 export type AdminReader<T> = (response: Response) => Promise<T>;
 
 export interface AdminReadOptions<T> {
-  /** False parks the read: no fetch, no abort, the state stands. Default true. */
+  /** False parks the read: no fetch, no cancel, the state stands. Default true. */
   enabled?: boolean;
   /**
    * Delays a path changed after the first read by this many milliseconds. The
@@ -152,7 +152,7 @@ function isFailedRead<State extends { status: string }>(state: State): state is 
  * refusals kept distinct, and the last answer held up while the next is in
  * flight. A screen names its address, how to read a 200, and what to say when
  * the endpoint refuses for no reason of the gate's; everything else — the
- * local sign-in consent, the abort discipline, the refreshing flag, the
+ * local sign-in consent, the cancellation discipline, the refreshing flag, the
  * sign-out withdrawal — is the same on every screen and lives here.
  */
 export function useAdminRead<T>(

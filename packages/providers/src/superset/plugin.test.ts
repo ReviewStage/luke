@@ -35,7 +35,7 @@ test("reports the idle workspaces its own pass read, and nothing before one", as
   // Nothing until a pass has run: the rows are the pass's, never state this
   // reads for itself.
   assert.deepEqual(await plugin.observe(), []);
-  await plugin.refresh(undefined);
+  await plugin.pass(undefined);
   assert.deepEqual(await plugin.observe(), []);
   assert.equal(plugin.provider.id, SUPERSET_WORKSPACE_PROVIDER_ID);
   assert.equal(plugin.activeOrganization(), "org-1");
@@ -55,8 +55,8 @@ test("reuses recently discovered workspace projects", async (t) => {
     },
   });
 
-  await plugin.refresh("codex");
-  await plugin.refresh("codex");
+  await plugin.pass("codex");
+  await plugin.pass("codex");
 
   assert.equal(projectQueries, 1);
   assert.equal(plugin.projects?.()[0]?.defaultAgent, "codex");
@@ -76,8 +76,8 @@ test("retries workspace discovery after an empty result", async (t) => {
     },
   });
 
-  await plugin.refresh("codex");
-  await plugin.refresh("codex");
+  await plugin.pass("codex");
+  await plugin.pass("codex");
 
   assert.equal(projectQueries, 2);
   assert.equal(plugin.projects?.()[0]?.providerProjectId, "project-1");
@@ -91,7 +91,7 @@ test("a signed-out home observes its workspaces and offers no project", async (t
     },
   });
 
-  const enrich = await plugin.refresh("codex");
+  const enrich = await plugin.pass("codex");
 
   // Host state reads without a login, so the rows stand — undecorated with
   // actions — however the connection looks.

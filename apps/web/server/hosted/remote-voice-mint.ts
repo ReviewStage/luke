@@ -75,14 +75,14 @@ export async function handleRemoteVoiceMint(options: RemoteVoiceMintOptions): Pr
 
   const now = options.now ?? Date.now;
 
-  // Ephemeral Realtime keys expire in 60 s. Cap the observe leg to 30 s so the
+  // Ephemeral Realtime keys expire in 60 s. Cap the pass leg to 30 s so the
   // key still has plenty of time to connect even if a cloud pass runs long.
-  // observe resolves to [] on timeout rather than failing the whole request.
-  const OBSERVE_TIMEOUT_MS = 30_000;
+  // The pass resolves to [] on timeout rather than failing the whole request.
+  const PASS_TIMEOUT_MS = 30_000;
 
-  // Mint credential and observe sessions concurrently — neither depends on the
-  // other, so there is no reason to serialize them.
-  let observeTimeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  // Mint the credential and run the session pass concurrently — neither
+  // depends on the other, so there is no reason to serialize them.
+  let passTimeoutHandle: ReturnType<typeof setTimeout> | undefined;
   const [minted, sessions] = await Promise.all([
     mintRealtimeConnection({
       apiKey,
@@ -94,11 +94,11 @@ export async function handleRemoteVoiceMint(options: RemoteVoiceMintOptions): Pr
       timeoutMs: options.timeoutMs,
     }),
     Promise.race([
-      observeCloudSessions(userId, options),
+      passCloudSessions(userId, options),
       new Promise<ObservedSession[]>((resolve) => {
-        observeTimeoutHandle = setTimeout(() => resolve([]), OBSERVE_TIMEOUT_MS);
+        passTimeoutHandle = setTimeout(() => resolve([]), PASS_TIMEOUT_MS);
       }),
-    ]).finally(() => clearTimeout(observeTimeoutHandle)),
+    ]).finally(() => clearTimeout(passTimeoutHandle)),
   ]);
 
   if ("failure" in minted) return minted.failure;
@@ -121,7 +121,7 @@ export async function handleRemoteVoiceMint(options: RemoteVoiceMintOptions): Pr
   });
 }
 
-async function observeCloudSessions(
+async function passCloudSessions(
   userId: string,
   options: RemoteVoiceMintOptions,
 ): Promise<ObservedSession[]> {

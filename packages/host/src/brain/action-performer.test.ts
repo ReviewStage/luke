@@ -118,7 +118,7 @@ function performer(overrides: Partial<BrainActionPerformerDependencies> = {}) {
       openSessionChange: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
     },
     sessions: (): readonly Session[] => [observed],
-    refreshSessions: async () => {},
+    passSessions: async () => {},
     workspaceProjects: () => [],
     workspaceDefaults: async () => ({}),
     trackedIssues: () => undefined,
@@ -357,7 +357,7 @@ test("an action with no turn standing is refused in main before any validator or
 test("a turn revoked while the roster refreshed is refused before the effect, and nothing is recorded", async () => {
   let revoked = false;
   const { actions, performed, recorded } = performer({
-    refreshSessions: async () => {
+    passSessions: async () => {
       revoked = true;
     },
   });
@@ -404,7 +404,7 @@ test("an action is validated against the roster as refreshed inside the turn, no
   let sessions: readonly Session[] = [observed];
   const { actions, performed } = performer({
     sessions: () => sessions,
-    refreshSessions: async () => {
+    passSessions: async () => {
       // The session is gone by the time the action is validated.
       sessions = [];
     },
@@ -419,7 +419,7 @@ test("a creation is admitted against the projects the same pass reported, and th
   let passes = 0;
   const { actions, performed } = performer({
     workspaceProjects: () => projects,
-    refreshSessions: async () => {
+    passSessions: async () => {
       passes += 1;
       // The project is only offered once an observation pass has run.
       projects = [LISTED_PROJECT];
@@ -437,7 +437,7 @@ test("a creation is admitted against the projects the same pass reported, and th
 test("an issue act observes nothing: no pass runs for an action the roster cannot answer for", async () => {
   let passes = 0;
   const { actions } = performer({
-    refreshSessions: async () => {
+    passSessions: async () => {
       passes += 1;
     },
   });
@@ -449,8 +449,8 @@ test("an issue act observes nothing: no pass runs for an action the roster canno
   assert.equal(passes, 0);
 });
 
-test("a cancel during the roster refresh or the defaults read settles the action, and the late read dispatches nothing", async () => {
-  for (const held of ["refreshSessions", "workspaceDefaults"] as const) {
+test("a cancel during the roster pass or the defaults read settles the action, and the late read dispatches nothing", async () => {
+  for (const held of ["passSessions", "workspaceDefaults"] as const) {
     let release: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -472,7 +472,7 @@ test("a cancel during the roster refresh or the defaults read settles the action
     // Only a creation reads the defaults, so each held read is exercised by the
     // act that actually waits on it.
     const pending = h.actions.perform(
-      held === "refreshSessions" ? MESSAGE_CALL : CREATE_CALL,
+      held === "passSessions" ? MESSAGE_CALL : CREATE_CALL,
       execution,
     );
     let settled = false;

@@ -101,7 +101,7 @@ export interface CloudPassInput {
   now?: () => number;
   /** How a 429's wait is spent; injected in tests, a timer otherwise. */
   sleep?: (ms: number) => Promise<void>;
-  minimumRefreshIntervalMs?: number;
+  minimumPassIntervalMs?: number;
   /**
    * The headers every request carries besides the credential, for a provider
    * that asks for its own media type or a version pin. The authorization
@@ -137,7 +137,7 @@ export interface CloudSessionPlugin extends SessionProviderPlugin {
 
 /**
  * The shared half of every cloud provider: credential handling, its own
- * refresh cadence, the failure rules that decide whether a snapshot survives,
+ * pass cadence, the failure rules that decide whether a snapshot survives,
  * bounded read-only requests, and the one authenticated write. An adapter
  * supplies the provider's routes and how its reported state maps onto Luke's,
  * and reaches its provider through nothing but these.
@@ -198,10 +198,10 @@ export function cloudPass(input: CloudPassInput): CloudPass {
   const performFetch = input.fetch ?? defaultFetch;
   const sleep = input.sleep ?? defaultSleep;
   const now = input.now ?? Date.now;
-  const { minimumRefreshIntervalMs } = resolveOptions(
+  const { minimumPassIntervalMs } = resolveOptions(
     input,
-    { minimumRefreshIntervalMs: CLOUD_ADAPTER_DEFAULTS.MINIMUM_REFRESH_INTERVAL_MS },
-    { nonNegative: ["minimumRefreshIntervalMs"] },
+    { minimumPassIntervalMs: CLOUD_ADAPTER_DEFAULTS.MINIMUM_PASS_INTERVAL_MS },
+    { nonNegative: ["minimumPassIntervalMs"] },
   );
   const requestHeaders = input.requestHeaders ?? DEFAULT_REQUEST_HEADERS;
 
@@ -219,7 +219,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
   let collectPass = 0;
 
   /**
-   * One observer must never abort the shared refresh pass, so a settings read
+   * One observer must never cancel the shared pass, so a settings read
    * that fails is treated the same as having no credential at all — here, and
    * for the action that reads the credential again at its own moment.
    */
@@ -376,19 +376,19 @@ export function cloudPass(input: CloudPassInput): CloudPass {
 
       const attemptedAt = now();
       if (apiKey === credential) {
-        // A network provider refreshes on its own cadence instead of on every
-        // tick of the shared observation timer.
-        if (attemptedAt - lastAttemptAt < minimumRefreshIntervalMs) return observations;
+        // A network provider takes a pass on its own cadence instead of on
+        // every tick of the shared observation timer.
+        if (attemptedAt - lastAttemptAt < minimumPassIntervalMs) return observations;
       } else {
         credential = apiKey;
         forgetObservedState();
       }
       lastAttemptAt = attemptedAt;
 
-      // Observers can overlap: a settings save refreshes this adapter while a
-      // timer-driven pass is still in flight with the key it replaced. Only
-      // the newest pass may write, or sessions read as one credential would be
-      // served as another's until the next refresh.
+      // Observers can overlap: a settings save opens a pass over this adapter
+      // while a timer-driven pass is still in flight with the key it replaced.
+      // Only the newest pass may write, or sessions read as one credential
+      // would be served as another's until the next pass.
       const pass = ++collectPass;
       try {
         const collected = await input.collect(requestForPass(pass, apiKey), attemptedAt);
@@ -463,7 +463,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
         // connection that never opened sent nothing, but a timeout or a reset
         // while the answer was coming back leaves a request the provider may
         // have already acted on. So the refusal hedges rather than claims, and
-        // the refresh that follows must actually ask, so a write that did land
+        // the pass that follows must actually ask, so a write that did land
         // is reconciled against the provider instead of the cache still
         // advertising it.
         lastAttemptAt = Number.NEGATIVE_INFINITY;
@@ -477,7 +477,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
 
       if (response.ok) {
         // A write that landed changes what the session is doing, so the
-        // refresh that follows must actually ask: served from the cache inside
+        // pass that follows must actually ask: served from the cache inside
         // the minimum interval, the row would keep offering what the provider
         // has already taken.
         lastAttemptAt = Number.NEGATIVE_INFINITY;
@@ -518,7 +518,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
       }
       // Any other status is an answer that says nothing certain about the action
       // — a gateway that gave up may stand in front of a write that finished —
-      // so this hedges the way a thrown fetch does, and the refresh that
+      // so this hedges the way a thrown fetch does, and the pass that
       // follows must actually ask rather than keep advertising what the
       // provider may have already taken.
       lastAttemptAt = Number.NEGATIVE_INFINITY;

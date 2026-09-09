@@ -1,4 +1,11 @@
-import { isRecord, isWireNumber, type WireRecord, type WireValue } from "@sidecar/wire";
+import {
+  type IDisposable,
+  isRecord,
+  isWireNumber,
+  toDisposable,
+  type WireRecord,
+  type WireValue,
+} from "@sidecar/wire";
 import {
   GATEWAY_ERROR,
   GATEWAY_METHOD,
@@ -70,7 +77,7 @@ export class GatewayClient {
   #generation = 0;
   /** Events that arrived while a reconnection was in flight, taken again once it has settled. */
   #arrivedDuringReconnect: GatewayEvent[] = [];
-  #unsubscribe: (() => void) | undefined;
+  #unsubscribe: IDisposable | undefined;
 
   constructor(options: GatewayClientOptions) {
     this.#options = options;
@@ -83,7 +90,7 @@ export class GatewayClient {
 
   /** Ends the subscription; a client not listening reconnects nothing. */
   close(): void {
-    this.#unsubscribe?.();
+    this.#unsubscribe?.dispose();
     this.#unsubscribe = undefined;
   }
 
@@ -111,20 +118,20 @@ export class GatewayClient {
   }
 
   /** Hears every event of one kind, in sequence, after any gap has been filled. */
-  on(kind: GatewayEventKind, listener: GatewayClientEventListener): () => void {
+  on(kind: GatewayEventKind, listener: GatewayClientEventListener): IDisposable {
     const held = this.#listeners.get(kind) ?? new Set<GatewayClientEventListener>();
     held.add(listener);
     this.#listeners.set(kind, held);
-    return () => {
+    return toDisposable(() => {
       held.delete(listener);
-    };
+    });
   }
 
-  onEvery(listener: GatewayClientEventListener): () => void {
+  onEvery(listener: GatewayClientEventListener): IDisposable {
     this.#everyListener.add(listener);
-    return () => {
+    return toDisposable(() => {
       this.#everyListener.delete(listener);
-    };
+    });
   }
 
   /**

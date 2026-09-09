@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import {
+  isRecord,
+  isWireString,
+  toDisposable,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "@sidecar/wire";
 import { WebSocket } from "ws";
 import { GatewayClient } from "./client.js";
 import { InvocationMemory, NODE_INVOCATION_REFUSAL } from "./invocations.js";
@@ -381,7 +387,9 @@ test("a client that adopts a replaced host follows the new host's numbering from
       request: (request) => current.handle(request, OPERATOR),
       events: (sink) => {
         sinks.add(sink);
-        return () => sinks.delete(sink);
+        return toDisposable(() => {
+          sinks.delete(sink);
+        });
       },
       connected: () => true,
     },
@@ -526,7 +534,9 @@ test("an event of the new host arriving during adoption is held and delivered af
       },
       events: (sink) => {
         sinks.add(sink);
-        return () => sinks.delete(sink);
+        return toDisposable(() => {
+          sinks.delete(sink);
+        });
       },
       connected: () => true,
     },

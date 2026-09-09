@@ -90,7 +90,7 @@ export {
   responsesModelAnswer,
   userMessageItem,
 } from "./responses-api.js";
-export { settledUnlessAborted } from "./settled.js";
+export { settledUnlessCancelled } from "./settled.js";
 export {
   CONTEXT_ITEM_KIND,
   type ContextItemKind,

@@ -26,8 +26,8 @@ import { BRAIN_DEFAULTS } from "./defaults.js";
 import {
   CONTEXT_OPENING,
   claimOpenedContext,
+  disposeContext,
   type Generation,
-  retireContext,
 } from "./generation.js";
 import {
   activityNoticesInputText,
@@ -49,7 +49,7 @@ import {
 } from "./requests.js";
 import { incompleteDetail, TOOL_RESULT_STATUS } from "./runtime.js";
 import type { AgentSeam } from "./seam.js";
-import { settledUnlessAborted } from "./settled.js";
+import { settledUnlessCancelled } from "./settled.js";
 import { SteeredDeliveries } from "./steered-deliveries.js";
 import {
   type BrainChildAccess,
@@ -695,18 +695,18 @@ export class TurnRunner {
       "the runtime could not reopen its own checkpoint",
       this.#seam.now,
     );
-    if (reopened.aborted) return;
+    if (reopened.cancelled) return;
     const standing = await generation.opened;
     const stillUsed = standing.kind === CONTEXT_OPENING.LOADED && standing.context === context;
     if (generation !== this.#seam.generation() || !stillUsed) {
-      if (reopened.value.kind === CONTEXT_OPENING.LOADED) retireContext(reopened.value.context);
+      if (reopened.value.kind === CONTEXT_OPENING.LOADED) disposeContext(reopened.value.context);
       return;
     }
     // The engine the turn used is not re-admitted either way: it may hold
     // what a late hook applied. A refused reopen leaves the generation
     // standing without a context, every turn over it refused as incompatible.
     generation.opened = Promise.resolve(reopened.value);
-    retireContext(context);
+    disposeContext(context);
     if (reopened.value.kind === CONTEXT_OPENING.INCOMPATIBLE) {
       this.#seam.reportIncompatible(generation, reopened.value.reason);
     }
@@ -726,7 +726,7 @@ export class TurnRunner {
       // A forked child: the requester's context is the child's opening
       // history, adopted whole and recorded as a fork boundary, and the task
       // then follows it as the first words of the child's own.
-      await settledUnlessAborted(
+      await settledUnlessCancelled(
         Promise.resolve(context.adoptFork(inherited, { signal: turnContext.signal })),
         turnContext.signal,
       );
@@ -734,8 +734,8 @@ export class TurnRunner {
     }
     const primer = this.#options.primeFreshContext;
     if (!primer) return [];
-    const settled = await settledUnlessAborted(primer(), turnContext.signal);
-    if (settled.aborted || !settled.value) return [];
+    const settled = await settledUnlessCancelled(primer(), turnContext.signal);
+    if (settled.cancelled || !settled.value) return [];
     return [primedNotesInputText(settled.value)];
   }
 

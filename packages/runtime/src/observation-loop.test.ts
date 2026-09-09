@@ -3,14 +3,14 @@ import test from "node:test";
 import { ObservationLoop, ObservationSupervisor } from "./observation-loop.js";
 
 function deferred() {
-  let resolve: () => void = () => undefined;
-  const promise = new Promise<void>((settle) => {
-    resolve = settle;
+  let settle: () => void = () => undefined;
+  const promise = new Promise<void>((resolve) => {
+    settle = resolve;
   });
-  return { promise, resolve };
+  return { promise, settle };
 }
 
-test("coalesces overlapping refreshes into one immediate follow-up", async () => {
+test("coalesces overlapping passes into one immediate follow-up", async () => {
   const first = deferred();
   const generations: number[] = [];
   const loop = new ObservationLoop({
@@ -22,11 +22,11 @@ test("coalesces overlapping refreshes into one immediate follow-up", async () =>
     },
   });
 
-  const running = loop.refresh();
-  await loop.refresh();
-  await loop.refresh();
+  const running = loop.pass();
+  await loop.pass();
+  await loop.pass();
   assert.deepEqual(generations, [0]);
-  first.resolve();
+  first.settle();
   await running;
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(generations, [0, 0]);
@@ -42,13 +42,13 @@ test("stop invalidates work already in flight and prevents gated work", async ()
   });
 
   const generation = loop.generation;
-  const running = loop.refresh();
+  const running = loop.pass();
   loop.stop();
   enabled = false;
   assert.equal(loop.isCurrent(generation), false);
-  pending.resolve();
+  pending.settle();
   await running;
-  await loop.refresh();
+  await loop.pass();
   assert.equal(loop.generation, generation + 1);
 });
 
@@ -113,14 +113,14 @@ test("a pass that outlives its stop does not run the after-run hook", async () =
     afterRun: () => hooks.push(1),
   });
 
-  const running = loop.refresh();
+  const running = loop.pass();
   loop.stop();
   enabled = false;
-  pending.resolve();
+  pending.settle();
   await running;
   assert.deepEqual(hooks, []);
 
   enabled = true;
-  await loop.refresh();
+  await loop.pass();
   assert.deepEqual(hooks, [1]);
 });

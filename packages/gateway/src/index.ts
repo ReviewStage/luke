@@ -14,10 +14,10 @@
  */
 export * from "./attachment.js";
 export * from "./client.js";
+export * from "./dispose.js";
 export * from "./invocations.js";
 export * from "./nodes.js";
 export * from "./protocol.js";
 export * from "./server.js";
-export * from "./shutdown.js";
 export * from "./transport.js";
 export * from "./wire.js";

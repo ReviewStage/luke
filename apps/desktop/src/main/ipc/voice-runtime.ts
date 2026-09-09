@@ -67,14 +67,14 @@ export function voiceRuntimeActRows(
     // bounded it; here it is checked to come from a panel — the voice window
     // does not command itself — and handed on. A Clear is carried out here
     // first, because the main process is the thread's store and every panel's
-    // relay; the voice window is told to retire its own turns at the fence,
+    // relay; the voice window is told to dispose its own turns at the fence,
     // whatever the disk later answers, and the panel hears whether the
     // erasure completed.
     async [ACT_KIND.VOICE_COMMAND]({ command }, { panel }) {
       if (!panel) return undefined;
       // The Clear's fence is raised in this call's synchronous prefix, and
       // the voice window is told in the same breath — before the disk is
-      // waited on — so its turns, marks, and context retire with main's.
+      // waited on — so its turns, marks, and context are disposed with main's.
       // Its answer, the disk's, comes after and goes to the panel alone.
       const erasing =
         command === VOICE_COMMAND.CLEAR_CONVERSATION ? dependencies.clearConversation() : undefined;

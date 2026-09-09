@@ -75,14 +75,14 @@ function readerWith(
 test("with no accounts it observes nothing and issues no request", async () => {
   const { reader, requests } = readerWith(routes, []);
 
-  assert.equal(await reader.observe(), undefined);
+  assert.equal(await reader.pass(), undefined);
   assert.deepEqual(requests, []);
 });
 
 test("an account's pass lists its calendars and reads only their busy times", async () => {
   const { reader, requests } = readerWith(routes, [WORK_ACCOUNT]);
 
-  const observed = await reader.observe();
+  const observed = await reader.pass();
 
   assert.deepEqual(observed, [
     {
@@ -115,7 +115,7 @@ test("a selection the list no longer names never enters the read document", asyn
     { ...WORK_ACCOUNT, selectedCalendarIds: ["team-calendar", "a-calendar-long-gone"] },
   ]);
 
-  await reader.observe();
+  await reader.pass();
 
   const read = JSON.parse(requests[2]?.body ?? "{}");
   assert.deepEqual(read.items, [{ id: "team-calendar" }]);
@@ -124,7 +124,7 @@ test("a selection the list no longer names never enters the read document", asyn
 test("nothing selected means no free/busy read at all", async () => {
   const { reader, requests } = readerWith(routes, [{ ...WORK_ACCOUNT, selectedCalendarIds: [] }]);
 
-  const observed = await reader.observe();
+  const observed = await reader.pass();
 
   assert.deepEqual(observed?.[0]?.meetings, []);
   assert.deepEqual(
@@ -158,7 +158,7 @@ test("every connected account is read, and their meetings stand apart", async ()
     [WORK_ACCOUNT, home],
   );
 
-  const observed = await reader.observe();
+  const observed = await reader.pass();
 
   assert.equal(observed?.length, 2);
   assert.equal(observed?.[1]?.accountId, "home@example.com");
@@ -175,8 +175,8 @@ test("every connected account is read, and their meetings stand apart", async ()
 test("the access token is cached across passes under the same grant", async () => {
   const { reader, requests } = readerWith(routes, [WORK_ACCOUNT]);
 
-  await reader.observe();
-  await reader.observe();
+  await reader.pass();
+  await reader.pass();
 
   assert.equal(requests.filter((request) => request.url === TOKEN_URL).length, 1);
 });
@@ -190,7 +190,7 @@ test("a revoked grant is a failure naming the account, not a quieter calendar", 
     [WORK_ACCOUNT],
   );
 
-  const observed = await reader.observe();
+  const observed = await reader.pass();
 
   assert.match(observed?.[0]?.failure ?? "", /work@example\.com.*connect the account again/);
   assert.deepEqual(observed?.[0]?.meetings, []);
@@ -219,10 +219,10 @@ test("one bad account never blinds the others, and keeps what it last showed", a
     [WORK_ACCOUNT, home],
   );
 
-  const first = await reader.observe();
+  const first = await reader.pass();
   assert.equal(first?.[0]?.failure, undefined);
   workBroken = true;
-  const second = await reader.observe();
+  const second = await reader.pass();
 
   assert.equal(second?.length, 2);
   // Work answers with what it last showed, and why it cannot answer now.
@@ -258,10 +258,10 @@ test("a calendar unread inside an OK answer is a failure, not a quieter calendar
     [WORK_ACCOUNT],
   );
 
-  const first = await reader.observe();
+  const first = await reader.pass();
   assert.equal(first?.[0]?.failure, undefined);
   broken = true;
-  const second = await reader.observe();
+  const second = await reader.pass();
 
   assert.match(second?.[0]?.failure ?? "", /team-calendar/);
   assert.deepEqual(second?.[0]?.meetings, first?.[0]?.meetings);
@@ -282,7 +282,7 @@ test("an asked-for calendar missing from the answer fails the pass the same way"
     [WORK_ACCOUNT],
   );
 
-  const observed = await reader.observe();
+  const observed = await reader.pass();
 
   assert.match(observed?.[0]?.failure ?? "", /team-calendar/);
   assert.deepEqual(observed?.[0]?.meetings, []);
@@ -298,13 +298,13 @@ test("forgetting ends an era: a failing pass after it holds nothing up", async (
     [WORK_ACCOUNT],
   );
 
-  const first = await reader.observe();
+  const first = await reader.pass();
   assert.notEqual(first?.[0]?.meetings.length, 0);
   // Sign-out forgets what observation held; a failing pass after signing
   // back in must not resurrect meetings from the era the stop ended.
   reader.forget();
   broken = true;
-  const second = await reader.observe();
+  const second = await reader.pass();
 
   assert.match(second?.[0]?.failure ?? "", /work@example\.com/);
   assert.deepEqual(second?.[0]?.meetings, []);

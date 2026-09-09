@@ -20,10 +20,10 @@ describeProviderContract(
     });
     return {
       ...plugin,
-      // Superset's rows come from the host-state read its `refresh` performs,
+      // Superset's rows come from the host-state read its `pass` performs,
       // so the pass under test is that read and the roster it publishes.
       async observe() {
-        await plugin.refresh(undefined);
+        await plugin.pass(undefined);
         return plugin.observe();
       },
     };

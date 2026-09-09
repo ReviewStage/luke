@@ -23,11 +23,11 @@ export interface UpdateServiceHostDependencies {
    */
   engine: UpdaterEngine | undefined;
   /**
-   * The whole quit's teardown, awaited before Squirrel is let near this
-   * executable. It is the teardown and not the host's drain alone for two
+   * The whole quit's dispose, awaited before Squirrel is let near this
+   * executable. It is the dispose and not the host's drain alone for two
    * reasons: the restart must not swap the binary over runtime work still
    * going, and the install's own quit must not be the one `before-quit`
-   * holds back — a prevented `before-quit` aborts the install, so everything
+   * holds back — a prevented `before-quit` cancels the install, so everything
    * owed has to be given back, and seen to be given back, before the
    * installer asks to leave.
    */

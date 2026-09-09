@@ -51,7 +51,7 @@ export interface WindowServiceDependencies {
    * Whether the launch this start belongs to still stands. False from the
    * moment a Quit is asked for, which is what every wait below re-checks: a
    * start suspended on one of its own awaits must not resume into opening a
-   * window and re-claiming keys the teardown has already given back.
+   * window and re-claiming keys the dispose has already given back.
    */
   launchStanding: () => boolean;
 }
@@ -240,14 +240,14 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
    * Every wait this service schedules — the takeover's handoff and the
    * settling a display change waits out — held so the quit can take them
    * back. Each opens a window or claims the keys when it fires, and the
-   * teardown now runs for seconds with the drain behind it, so one landing
-   * afterwards would re-open what the teardown had just given back.
+   * dispose now runs for seconds with the drain behind it, so one landing
+   * afterwards would re-open what the dispose had just given back.
    */
   const pendingWaits = new Set<ReturnType<typeof setTimeout>>();
   function afterDelay(delayMs: number, run: () => void): void {
     // Nothing new is scheduled once a quit has been asked for, so the last
     // act of a wait that was already running cannot arm the next one behind
-    // the teardown that just cleared them.
+    // the dispose that just cleared them.
     if (!launchStanding()) return;
     const wait = setTimeout(() => {
       pendingWaits.delete(wait);

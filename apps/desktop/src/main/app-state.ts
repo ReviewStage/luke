@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { fixtureSnapshot } from "@sidecar/session/fixtures";
+import { type IDisposable, toDisposable } from "@sidecar/wire";
 import type { AppState } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import type { HostBootstrap } from "./gateway/host-operator";
@@ -71,11 +72,11 @@ export class AppStateStore {
     this.#announce();
   }
 
-  subscribe(listener: () => void): () => void {
+  subscribe(listener: () => void): IDisposable {
     this.#listeners.add(listener);
-    return () => {
+    return toDisposable(() => {
       this.#listeners.delete(listener);
-    };
+    });
   }
 
   #announce(): void {

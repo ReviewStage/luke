@@ -262,12 +262,12 @@ test("a session runs on this machine unless its provider observed it elsewhere",
   );
 });
 
-test("refresh replaces one adapter's sessions whole and leaves other providers untouched", async () => {
+test("a pass replaces one adapter's sessions whole and leaves other providers untouched", async () => {
   const roster = new SessionRoster();
   roster.replaceProvider(codex, [observation("stale", 10), observation("active", 20)]);
   roster.replaceProvider(claude, [observation("review", 30, { status: SESSION_STATUS.WAITING })]);
 
-  await roster.refresh({
+  await roster.pass({
     provider: codex,
     observe: async () => [observation("active", 50), observation("new", 60)],
   });
@@ -289,9 +289,9 @@ test("refresh replaces one adapter's sessions whole and leaves other providers u
   assert.equal(roster.get({ providerId: "codex", providerSessionId: "stale" }), undefined);
 });
 
-test("a refresh may reshape the observation before it lands, per provider", async () => {
+test("a pass may reshape the observation before it lands, per provider", async () => {
   const roster = new SessionRoster();
-  await roster.refresh(
+  await roster.pass(
     { provider: codex, observe: async () => [observation("run:1", 10)] },
     (providerId, observations) =>
       observations.map((observed) => ({ ...observed, title: `${providerId}: ${observed.title}` })),
@@ -305,14 +305,14 @@ test("a refresh may reshape the observation before it lands, per provider", asyn
 test("every pass reaches the listeners, moved or not", () => {
   const roster = new SessionRoster();
   const heard: number[] = [];
-  const unsubscribe = roster.subscribe((sessions) => {
+  const subscription = roster.subscribe((sessions) => {
     heard.push(sessions.length);
   });
 
   roster.replaceProvider(codex, [observation("active", 10)]);
   roster.replaceProvider(codex, [observation("active", 10)]);
   roster.replaceProvider(codex, []);
-  unsubscribe();
+  subscription.dispose();
   roster.replaceProvider(codex, [observation("active", 10)]);
 
   // Nothing here decides whether anything moved; the renderer draws identical

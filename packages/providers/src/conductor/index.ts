@@ -20,7 +20,7 @@ export interface ConductorPluginOptions {
   baseUrl?: string;
   fetch?: CloudFetch;
   now?: () => number;
-  minimumRefreshIntervalMs?: number;
+  minimumPassIntervalMs?: number;
   sleep?: (ms: number) => Promise<void>;
   onDiagnostic?: AdapterDiagnosticCallback;
 }

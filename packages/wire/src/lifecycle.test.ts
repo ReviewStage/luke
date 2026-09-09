@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { DisposableStore, disposeAll, toDisposable } from "./lifecycle.js";
 
-test("a wrapped teardown runs at most once however often it is disposed", () => {
+test("a wrapped dispose runs at most once however often it is disposed", () => {
   let runs = 0;
   const disposable = toDisposable(() => {
     runs += 1;

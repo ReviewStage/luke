@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { toDisposable } from "@sidecar/wire";
 import { retryAttachWhileDetached } from "./attachment.js";
 
 /** A client stand-in: it announces changes in whether a host stands, never the standing state. */
@@ -8,7 +9,9 @@ function client() {
   return {
     onAttachedChanged: (listener: (attached: boolean) => void) => {
       listeners.add(listener);
-      return () => listeners.delete(listener);
+      return toDisposable(() => {
+        listeners.delete(listener);
+      });
     },
     announce: (attached: boolean) => {
       for (const listener of [...listeners]) listener(attached);
@@ -53,7 +56,7 @@ test("a failed attach is tried again after a growing pause until one attaches, a
   scheduled[2]?.work();
   c.announce(false);
   assert.equal(scheduled.at(-1)?.delayMs, 100);
-  release();
+  release.dispose();
   const before = attaches;
   scheduled.at(-1)?.work();
   assert.equal(attaches, before);

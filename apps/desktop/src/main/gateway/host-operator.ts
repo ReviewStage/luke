@@ -38,6 +38,7 @@ import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
 import {
   ACTION_RESULT_STATUS,
   type ActionResult,
+  type IDisposable,
   isRecord,
   isWireBoolean,
   isWireNumber,
@@ -165,23 +166,23 @@ export interface HostOperator {
   onboardingState(): Promise<{ calendarOnboardingOwed: boolean } | undefined>;
   skipCalendarOnboarding(): Promise<void>;
   completeCalendarOnboarding(): Promise<void>;
-  onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
-  onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
+  onSettingsChanged(listener: (change: HostSettingsChange) => void): IDisposable;
+  onAccountChanged(listener: (account: AccountSnapshot) => void): IDisposable;
   onSessionsChanged(
     listener: (roster: { sessions: readonly Session[]; settled: boolean }) => void,
-  ): () => void;
+  ): IDisposable;
   onWorkspaceProjectsChanged(
     listener: (projects: readonly ObservedWorkspaceProject[]) => void,
-  ): () => void;
+  ): IDisposable;
   onCalendarsChanged(
     listener: (calendars: readonly ObservedAccountCalendars[]) => void,
-  ): () => void;
-  onAnnouncementsHeldChanged(listener: (held: boolean) => void): () => void;
-  onSupersetSignInChanged(listener: (state: SupersetSignInSnapshot) => void): () => void;
-  onCalendarOnboardingChanged(listener: (owed: boolean) => void): () => void;
-  onSpeechOffered(listener: (offer: SpeechOffer) => void): () => void;
-  onSpeechWithdrawn(listener: (id: string) => void): () => void;
-  onSessionReplayChanged(listener: (replay: HostSessionReplay) => void): () => void;
+  ): IDisposable;
+  onAnnouncementsHeldChanged(listener: (held: boolean) => void): IDisposable;
+  onSupersetSignInChanged(listener: (state: SupersetSignInSnapshot) => void): IDisposable;
+  onCalendarOnboardingChanged(listener: (owed: boolean) => void): IDisposable;
+  onSpeechOffered(listener: (offer: SpeechOffer) => void): IDisposable;
+  onSpeechWithdrawn(listener: (id: string) => void): IDisposable;
+  onSessionReplayChanged(listener: (replay: HostSessionReplay) => void): IDisposable;
 }
 
 export interface HostOperatorOptions {

@@ -13,14 +13,14 @@ import type { Composer, ComposerContext } from "./composer.js";
 import { reporterOf } from "./wire-helpers.js";
 
 /** A board changes at the pace of hands, not of models; a minute is current. */
-const ISSUE_REFRESH_INTERVAL_MS = 60_000;
+const ISSUE_PASS_INTERVAL_MS = 60_000;
 
 export interface IssuesComposer extends Composer {
   /** The loop the merge's supervisor enables; the composer never enables it itself. */
   readonly loop: ObservationLoop;
   readonly trackers: readonly LinearIssueTracker[];
   issues: () => readonly TrackedIssue[] | undefined;
-  refresh: () => void;
+  pass: () => void;
   /** What the account's capability gate takes back: the board a signed-out Luke may not draw. */
   stopObservation: () => void;
 }
@@ -55,7 +55,7 @@ export function composeIssues(dependencies: IssuesDependencies): IssuesComposer 
   const issueTrackers = [linearTracker] as const;
   let trackedIssues: readonly TrackedIssue[] | undefined;
 
-  async function refreshTrackedIssues(generation: number): Promise<void> {
+  async function passTrackedIssues(generation: number): Promise<void> {
     try {
       const collected: TrackedIssue[] = [];
       let connected = false;
@@ -82,8 +82,8 @@ export function composeIssues(dependencies: IssuesDependencies): IssuesComposer 
 
   const loop = new ObservationLoop({
     gate: observationGate,
-    intervalMs: ISSUE_REFRESH_INTERVAL_MS,
-    run: refreshTrackedIssues,
+    intervalMs: ISSUE_PASS_INTERVAL_MS,
+    run: passTrackedIssues,
   });
 
   const methods: GatewayMethodTable = {
@@ -96,7 +96,7 @@ export function composeIssues(dependencies: IssuesDependencies): IssuesComposer 
         },
         (saved) => {
           if (saved.reason) return;
-          void loop.refresh();
+          void loop.pass();
           settings.recordProductEvent(PRODUCT_EVENT.TRACKER_CONNECT, {
             tracker_id: ISSUE_TRACKER_ID.LINEAR,
           });
@@ -125,7 +125,7 @@ export function composeIssues(dependencies: IssuesDependencies): IssuesComposer 
         },
         (saved) => {
           if (saved.reason) return;
-          void loop.refresh();
+          void loop.pass();
           settings.recordProductEvent(PRODUCT_EVENT.TRACKER_DISCONNECT, {
             tracker_id: ISSUE_TRACKER_ID.LINEAR,
           });
@@ -142,7 +142,7 @@ export function composeIssues(dependencies: IssuesDependencies): IssuesComposer 
     loop,
     trackers: issueTrackers,
     issues: () => trackedIssues,
-    refresh: () => void loop.refresh(),
+    pass: () => void loop.pass(),
     stopObservation,
     // The loop is armed by the merge's supervisor, so there is nothing of its own to begin.
     start: async () => undefined,

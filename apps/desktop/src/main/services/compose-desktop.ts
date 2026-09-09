@@ -40,9 +40,9 @@ export interface DesktopServices {
   stop: () => Promise<void>;
   /**
    * Whether a stop has run to its end. The entry reads it to decide whether
-   * to hold a quit back: the first ask is held so the teardown can finish,
+   * to hold a quit back: the first ask is held so the dispose can finish,
    * and every quit after it — including the installer's own — is let
-   * through, because a prevented `before-quit` aborts an update.
+   * through, because a prevented `before-quit` cancels an update.
    */
   stopped: () => boolean;
 }
@@ -62,8 +62,8 @@ export function composeDesktop(config: DesktopConfig): DesktopServices {
    * Whether a Quit has been asked for. It is set the moment `stop` is called
    * rather than when the drain is reached, because the drain is several
    * awaited stops behind that ask: a launch suspended on one of its own waits
-   * would otherwise resume after the teardown and open a window, claim the
-   * keys, and re-attach the listeners the teardown just released.
+   * would otherwise resume after the dispose and open a window, claim the
+   * keys, and re-attach the listeners the dispose just released.
    */
   let quitting = false;
   const keychain = createKeychainService();
@@ -99,7 +99,7 @@ export function composeDesktop(config: DesktopConfig): DesktopServices {
     config,
     recordProductEvent: telemetry.recordProductEvent,
     engine: updateEngine,
-    beforeRestart: () => teardown(),
+    beforeRestart: () => dispose(),
     state,
   });
 
@@ -145,11 +145,11 @@ export function composeDesktop(config: DesktopConfig): DesktopServices {
   let stopping: Promise<void> | undefined;
   let stopped = false;
 
-  // Two paths ask for the teardown — the explicit Quit, a launch that could
+  // Two paths ask for the dispose — the explicit Quit, a launch that could
   // not stand up — and the updater asks for it before the install. All three
   // are handed the one under way rather than a second pass over services
   // already stopped.
-  function teardown(): Promise<void> {
+  function dispose(): Promise<void> {
     quitting = true;
     // An action still waiting on a panel is refused before the host drains: the
     // panels are going, so nothing can answer one, and the drain would
@@ -178,12 +178,12 @@ export function composeDesktop(config: DesktopConfig): DesktopServices {
       await host.start();
       // A Quit that landed during the standup is already tearing this process
       // down; the launch must not go on to spend the update mark or draw
-      // windows over it, which would also abort the quit it interrupted.
+      // windows over it, which would also cancel the quit it interrupted.
       if (quitting) return;
       await updates.start();
       await windows.start();
     },
-    stop: teardown,
+    stop: dispose,
     stopped: () => stopped,
   };
 }

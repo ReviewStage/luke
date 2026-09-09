@@ -59,8 +59,8 @@ export interface ConversationThreadOptions {
 /**
  * The spoken conversation this launch leaves behind, held apart from the call
  * that transported any of it: a call is a transport that comes and goes —
- * Luke's own is torn down by the talk key on its way to the developer's, and
- * an idle one retires — while the thread stands for as long as the window
+ * Luke's own is disposed by the talk key on its way to the developer's, and an
+ * idle one disposes itself — while the thread stands for as long as the window
  * does. It owns the lines, the generation a Clear advances, the marks that
  * say where a spoken turn belongs when its transcript comes back on the
  * service's own clock, and the previews drawn while it is still arriving.
@@ -180,7 +180,7 @@ export class ConversationThread {
 
   /**
    * The Clear a panel pressed, already carried out by the main process,
-   * arriving here to retire this window's in-flight turns the way the press
+   * arriving here to dispose this window's in-flight turns the way the press
    * would have.
    */
   clear(): void {
@@ -195,7 +195,7 @@ export class ConversationThread {
     this.#latestMark = undefined;
     this.#activeMark = undefined;
     // The previews go with the marks: a transcription still arriving belongs
-    // to a turn the press just retired.
+    // to a turn the press just disposed.
     this.#previews = NO_SPOKEN_ASK_PREVIEWS;
     this.#replyGeneration = undefined;
     this.#announcementGeneration = undefined;

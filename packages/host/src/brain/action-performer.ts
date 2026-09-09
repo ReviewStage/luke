@@ -46,7 +46,7 @@ export interface BrainActionPerformerDependencies {
    * Triggers a fresh observation pass so the session registry is current before
    * validation and perform. Called before every session action.
    */
-  refreshSessions: () => Promise<void>;
+  passSessions: () => Promise<void>;
   workspaceProjects: () => readonly ObservedWorkspaceProject[];
   workspaceDefaults: () => Promise<WorkspaceCreationDefaults>;
   trackedIssues: () => readonly TrackedIssue[] | undefined;
@@ -95,7 +95,7 @@ function rejection(reason: string): WireRecord {
  * the run and who opened it. Whether the action may run at all was the tool
  * policy's decision before the call left the brain; here the context is what
  * says the turn still stands, and admission asks it again after every read of
- * its own, so an action whose turn ended while the roster was refreshing is
+ * its own, so an action whose turn ended while the roster pass was under way is
  * refused rather than dispatched. A call with no context or a malformed one is
  * refused before admission runs. The origin decides only how Conversation records
  * the action: at the developer's ask, or as Luke's own judgment in a turn nobody
@@ -111,13 +111,13 @@ export function createBrainActionPerformer(
     // them admission asks for. An action that asks for neither — an issue action, a
     // setting — observes nothing at all.
     let pass: Promise<void> | undefined;
-    const observed = () => (pass ??= dependencies.refreshSessions());
+    const observed = () => (pass ??= dependencies.passSessions());
     return {
       origin: execution.origin,
       guard: execution,
       // The reads before an effect wait only as long as the standing does: a
-      // cancel landing mid-refresh settles the action inside admission, and the
-      // refresh's late answer dispatches nothing.
+      // cancel landing mid-pass settles the action inside admission, and the
+      // pass's late answer dispatches nothing.
       roster: {
         read: async () => {
           await observed();

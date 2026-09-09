@@ -460,7 +460,7 @@ export async function installObservationHooks<Event extends string>(
 /**
  * Takes the whole arrangement back out: the registration entries, the script,
  * and the spool with whatever events it held. The configuration file is the
- * one thing never created here — a teardown that leaves new files behind has
+ * one thing never created here — a dispose that leaves new files behind has
  * the relationship backwards — and a file that cannot be parsed is left as
  * found.
  *

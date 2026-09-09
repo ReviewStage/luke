@@ -115,7 +115,7 @@ export interface PosthogForgetOptions extends PosthogUpstreamOptions {
  * Asks the processor to erase the person behind one distinct id, and the
  * events recorded against them. The documented bulk-delete endpoint takes the
  * distinct ids in its body and `delete_events` in its query, and queues the
- * event deletion rather than performing it — so a resolved promise means the
+ * event deletion rather than performing it — so a settled promise means the
  * erasure was accepted, never that it has already happened.
  */
 export async function forgetPosthogPerson(

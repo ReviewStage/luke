@@ -44,15 +44,15 @@ async function tick(): Promise<void> {
   for (let index = 0; index < 5; index += 1) await new Promise((resolve) => setImmediate(resolve));
 }
 
-test("an abort and the open's resolution in the same turn leave the context discarded exactly once and never installed, in either order", async () => {
-  const abortFirst = heldRuntime();
-  const first = generationFrom(freshBrainState("gen-1", NOW), abortFirst.runtime, "{}");
+test("a cancel and the open's resolution in the same turn leave the context discarded exactly once and never installed, in either order", async () => {
+  const cancelFirst = heldRuntime();
+  const first = generationFrom(freshBrainState("gen-1", NOW), cancelFirst.runtime, "{}");
   first.abort.abort();
-  abortFirst.release();
+  cancelFirst.release();
   const firstOpened = await first.opened;
   await tick();
   assert.equal(firstOpened.kind, CONTEXT_OPENING.INCOMPATIBLE);
-  assert.equal(abortFirst.disposed(), 1);
+  assert.equal(cancelFirst.disposed(), 1);
   assert.match(
     firstOpened.kind === CONTEXT_OPENING.INCOMPATIBLE ? firstOpened.reason : "",
     /replaced while its context was opening/u,

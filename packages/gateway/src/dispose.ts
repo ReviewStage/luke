@@ -2,46 +2,46 @@
  * How the Gateway leaves at an explicit quit, in a fixed order: the door
  * closes to new work, everything under way is cancelled, and the host waits
  * a bounded time for it to settle. What has not settled by then is persisted
- * as unresolved for the next launch's recovery and reported as such: a
- * shutdown never fabricates a completion for work it cut off, and an effect
+ * as unsettled for the next launch's recovery and reported as such: a
+ * dispose never fabricates a completion for work it cut off, and an effect
  * whose outcome the cut left unknown stays unknown.
  */
 import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 
-export const GATEWAY_SHUTDOWN_DEFAULTS = {
+export const GATEWAY_DISPOSE_DEFAULTS = {
   DEADLINE_MS: 10_000,
 } as const;
 
-export interface GatewayShutdownSteps {
+export interface GatewayDisposeSteps {
   closeAdmissions: () => void;
   /** Cancels everything under way; answers the ids of the runs it asked to stop. */
   cancelActive: () => Promise<readonly string[]>;
   /** Settles once no run is under way, or rejects/hangs, in which case the deadline decides. */
   awaitSettled: (signal: AbortSignal) => Promise<void>;
   /** Writes down whatever did not settle; answers how many records were left for recovery. */
-  persistUnresolved: () => Promise<number>;
+  persistUnsettled: () => Promise<number>;
 }
 
-export interface GatewayShutdownOptions {
+export interface GatewayDisposeOptions {
   deadlineMs?: number;
   now?: () => number;
   setTimeout?: (work: () => void, delayMs: number) => ScheduledTimer;
   clearTimeout?: (handle: ScheduledTimer) => void;
 }
 
-export interface GatewayShutdownReport {
+export interface GatewayDisposeReport {
   /** Whether every run under way settled before the deadline. */
   settled: boolean;
   cancelled: readonly string[];
-  /** How many records were persisted unresolved for recovery. */
-  unresolved: number;
+  /** How many records were persisted unsettled for recovery. */
+  unsettled: number;
   elapsedMs: number;
 }
 
-export async function shutdownGateway(
-  steps: GatewayShutdownSteps,
-  options: GatewayShutdownOptions = {},
-): Promise<GatewayShutdownReport> {
+export async function disposeGateway(
+  steps: GatewayDisposeSteps,
+  options: GatewayDisposeOptions = {},
+): Promise<GatewayDisposeReport> {
   const now = options.now ?? Date.now;
   const schedule = options.setTimeout ?? ((work, ms) => setTimeout(work, ms));
   const cancel =
@@ -50,7 +50,7 @@ export async function shutdownGateway(
       // SAFETY: a handle this default cancels is one the default scheduler above made, a Node timeout.
       clearTimeout(handle as NodeJS.Timeout);
     });
-  const deadlineMs = options.deadlineMs ?? GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS;
+  const deadlineMs = options.deadlineMs ?? GATEWAY_DISPOSE_DEFAULTS.DEADLINE_MS;
   const startedAt = now();
   steps.closeAdmissions();
   // One deadline covers the cancellation and the settling both: a cancel
@@ -78,6 +78,6 @@ export async function shutdownGateway(
         deadline,
       ]);
   if (timer !== undefined) cancel(timer);
-  const unresolved = await steps.persistUnresolved();
-  return { settled, cancelled, unresolved, elapsedMs: now() - startedAt };
+  const unsettled = await steps.persistUnsettled();
+  return { settled, cancelled, unsettled, elapsedMs: now() - startedAt };
 }

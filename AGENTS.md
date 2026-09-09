@@ -612,7 +612,7 @@ Canonical commands:
   by no control and no method, and stands exercised by its tests.
   **Delete conversation** is the
   recoverable deletion, in a fixed order: the relayed thread is fenced and
-  every window told, the conversation's brain retired and its publication
+  every window told, the conversation's brain disposed and its publication
   drained, and then the store removes the conversation's lines, transcript,
   boundaries, and standing lifetime in one transaction with a compressed
   recovery archive of them all — zstd through `node:zlib` where the runtime
@@ -1208,7 +1208,7 @@ Canonical commands:
   them, the words Luke spoke or announced, and the actions he carried at their
   ask), beside the brain's own working memory of its turns — so the one
   conversation survives the calls that transport it: a briefing read out on
-  Luke's own call, or a call retired idle, is still remembered on the next
+  Luke's own call, or a call disposed idle, is still remembered on the next
   ask. A reply that quoted or summarized a transcript read is Conversation like
   any other reply, and enters that context under the same bounds. Each
   Conversation line's session identity is the roster-validated one its action

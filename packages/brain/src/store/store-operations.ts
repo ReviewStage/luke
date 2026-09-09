@@ -222,7 +222,7 @@ export function isStoreOperationName(value: UnparsedWireValue): value is StoreOp
 }
 
 /**
- * The two messages that are not operations: they create and destroy the
+ * The two messages that are not operations: they create and dispose the
  * `OpenStore` every operation's first parameter is, so the worker owns them
  * and the table holds neither.
  */

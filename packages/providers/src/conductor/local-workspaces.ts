@@ -160,7 +160,7 @@ export interface ConductorLocalWorkspaceOptions {
 
 /** A Conductor local-workspace plugin, plus the read that fills its offer. */
 export interface ConductorLocalWorkspacePlugin extends SessionProviderPlugin {
-  refresh(): Promise<void>;
+  pass(): Promise<void>;
 }
 
 /**
@@ -210,7 +210,7 @@ export function conductorLocalWorkspacePlugin(
      * empties the offer, so a create is never validated against repositories
      * a later read could no longer see.
      */
-    async refresh() {
+    async pass() {
       let repositories: readonly ConductorRepository[];
       try {
         repositories = await repositoryIndex.read();

@@ -46,9 +46,9 @@ test("every reload, replacement, or close ends the epoch and makes the receiver 
 test("a ready listener removed hears nothing more", () => {
   const receiver = new VoiceReceiver();
   const heard: number[] = [];
-  const stop = receiver.onReady((epoch) => heard.push(epoch));
+  const ready = receiver.onReady((epoch) => heard.push(epoch));
   const epoch = receiver.begin();
-  stop();
+  ready.dispose();
   receiver.markReady(epoch);
   assert.deepEqual(heard, []);
 });

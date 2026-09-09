@@ -2,12 +2,12 @@ import type { BrainAgent } from "@sidecar/brain";
 
 /**
  * Who owns the standing brain agent through a transition. A key or account
- * change retires the agent that stands and, once the new capability is known,
+ * change disposes the agent that stands and, once the new capability is known,
  * builds another; two transitions can overlap — an account landing while a
  * key is still being removed — and the older one must never install an agent
- * after the newer has decided. So retirement is synchronous and immediate,
+ * after the newer has decided. So disposal is synchronous and immediate,
  * withdrawing the old agent's execution before the transition's first await,
- * and building is serialized behind every earlier retirement and coalesced to
+ * and building is serialized behind every earlier disposal and coalesced to
  * the latest transition: when the queue reaches a build, only the newest
  * request still owns the outcome, and every older one installs nothing.
  */
@@ -18,9 +18,9 @@ export interface BrainHostDependencies {
   publishEmpty: () => void;
 }
 
-type RetirementOutcome = { ok: true } | { ok: false; error: Error };
+type DisposalOutcome = { ok: true } | { ok: false; error: Error };
 
-function settledOutcome(drain: Promise<unknown>): Promise<RetirementOutcome> {
+function settledOutcome(drain: Promise<unknown>): Promise<DisposalOutcome> {
   return drain.then(
     () => ({ ok: true }),
     (error: Error) => ({ ok: false, error }),
@@ -32,12 +32,12 @@ export class BrainHost {
   #agent: BrainAgent | undefined;
   #unfollow: (() => Promise<void>) | undefined;
   /**
-   * Each retirement's drain, captured as it settles rather than as it runs: a
+   * Each disposal's drain, captured as it settles rather than as it runs: a
    * drain that rejects has a handler from the moment it is queued, since the
    * transition that awaits it may begin only after a slow credential apply,
    * and its failure is kept for that transition to answer with.
    */
-  #retiring: Promise<RetirementOutcome>[] = [];
+  #disposing: Promise<DisposalOutcome>[] = [];
   #transitions = 0;
   #chain: Promise<void> = Promise.resolve();
 
@@ -53,11 +53,11 @@ export class BrainHost {
    * Withdraws the standing agent now: nothing may ask it anything more, and
    * its `stop` — which revokes every run and observation turn synchronously
    * before it awaits — is begun at once. Its follower relays the stop's own
-   * interruptions and retires when the stop settles. The stop's settling is
+   * interruptions and disposes when the stop settles. The stop's settling is
    * awaited by the next build, never by the caller.
    */
-  retire(): void {
-    // Retiring is itself a transition: a build already queued for an earlier
+  dispose(): void {
+    // Disposing is itself a transition: a build already queued for an earlier
     // one must not install after this withdrawal, or a source that has gone
     // away would gain an agent.
     this.#transitions += 1;
@@ -66,14 +66,14 @@ export class BrainHost {
     this.#agent = undefined;
     this.#unfollow = undefined;
     if (!previous) {
-      if (unfollow) this.#retiring.push(settledOutcome(unfollow()));
+      if (unfollow) this.#disposing.push(settledOutcome(unfollow()));
       return;
     }
     // The follower stays through the stop, so the runs the stop interrupts
     // still reach the windows and the thread, and its publication of them
     // drains before anything succeeds this agent: the next build, and the
     // store's lease, wait on it.
-    this.#retiring.push(
+    this.#disposing.push(
       settledOutcome(
         previous
           .stop()
@@ -84,19 +84,19 @@ export class BrainHost {
   }
 
   /**
-   * Retires whatever stands and, once every retirement has settled, installs
+   * Disposes whatever stands and, once every disposal has settled, installs
    * what `build` answers — unless a newer transition has been asked for since,
    * in which case this one installs nothing and the newer one decides. A
    * build answering nothing stands the host down and says so to the windows.
    */
   replace(build: () => BrainAgent | undefined): Promise<void> {
-    this.retire();
+    this.dispose();
     const transition = ++this.#transitions;
     const step = this.#chain.then(async () => {
-      // Every retirement queued so far drains before a successor stands. A
+      // Every disposal queued so far drains before a successor stands. A
       // drain that rejected has still ended, and its failure is this
       // transition's to answer with, as it always was.
-      const outcomes = await Promise.all(this.#retiring.splice(0));
+      const outcomes = await Promise.all(this.#disposing.splice(0));
       const failed = outcomes.find((outcome) => !outcome.ok);
       if (failed && !failed.ok) throw failed.error;
       if (transition !== this.#transitions) return;

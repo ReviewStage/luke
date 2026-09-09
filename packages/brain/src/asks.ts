@@ -6,6 +6,7 @@ import {
 } from "@sidecar/runtime";
 import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import { CONTEXT_INPUT_KIND } from "@sidecar/runtime/vocabulary";
+import { type IDisposable, toDisposable } from "@sidecar/wire";
 import { CONTEXT_OPENING, type Generation } from "./generation.js";
 import { askInputText } from "./input-items.js";
 import {
@@ -97,7 +98,7 @@ export class AskLedger {
     this.#queue.flush();
   }
 
-  /** Aborts and forgets every run this agent holds; the generation being replaced is not a cancel. */
+  /** Revokes and forgets every run this agent holds; the generation being replaced is not a cancel. */
   revokeAll(): void {
     for (const run of this.#runs.values()) {
       run.cancelled = true;
@@ -106,8 +107,8 @@ export class AskLedger {
     this.#runs.clear();
   }
 
-  /** Aborts every run without cancelling it: the agent is stopping, not the developer. */
-  abortAll(): void {
+  /** Interrupts every run without cancelling it: the agent is stopping, not the developer. */
+  interruptAll(): void {
     for (const run of this.#runs.values()) run.abort.abort();
   }
 
@@ -143,11 +144,11 @@ export class AskLedger {
   }
 
   /** Hears the whole list on every change to any record. */
-  subscribe(listener: BrainRequestsListener): () => void {
+  subscribe(listener: BrainRequestsListener): IDisposable {
     this.#listeners.add(listener);
-    return () => {
+    return toDisposable(() => {
       this.#listeners.delete(listener);
-    };
+    });
   }
 
   /**
@@ -437,11 +438,11 @@ export class AskLedger {
     return new Promise((resolve) => {
       let timer: ScheduledTimer | undefined;
       const finish = () => {
-        unsubscribe();
+        subscription.dispose();
         if (timer !== undefined) this.#seam.cancel(timer);
         resolve(this.record(runId));
       };
-      const unsubscribe = this.subscribe(() => {
+      const subscription = this.subscribe(() => {
         const current = this.record(runId);
         if (!current || isTerminalBrainRequestStatus(current.status)) finish();
       });
@@ -451,8 +452,8 @@ export class AskLedger {
 
   /**
    * Cancels a run: a queued one never starts, a running one has its model and
-   * read work aborted and every action not yet dispatched refused. An action whose
-   * effect is already under way is neither retried nor aborted — its result
+   * read work cancelled and every action not yet dispatched refused. An action whose
+   * effect is already under way is neither retried nor cancelled — its result
    * is kept, known or unknown — because cancelling cannot undo a message
    * already sent.
    */

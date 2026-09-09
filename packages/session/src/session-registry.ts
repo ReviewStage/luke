@@ -1,3 +1,4 @@
+import { type IDisposable, toDisposable } from "@sidecar/wire";
 import { normalizeSession, normalizeSessionIdentity } from "./normalize.js";
 import type { SessionProviderPlugin } from "./provider-plugin.js";
 import type { SessionIdentity, SessionProvider } from "./session-identity.js";
@@ -19,7 +20,7 @@ function normalizedProviderId(provider: SessionProvider): string {
 }
 
 /**
- * The roster is the latest poll and nothing more: each provider's most recent
+ * The roster is the latest pass and nothing more: each provider's most recent
  * observation, normalized, merged into one list for the panel, the brain, and
  * action validation. Nothing here detects a change — no field comparators, no
  * revision, no retention of sessions a provider stopped reporting. A session
@@ -50,9 +51,11 @@ export class SessionRoster {
       );
   }
 
-  subscribe(listener: SessionRosterListener): () => void {
+  subscribe(listener: SessionRosterListener): IDisposable {
     this.#listeners.add(listener);
-    return () => this.#listeners.delete(listener);
+    return toDisposable(() => {
+      this.#listeners.delete(listener);
+    });
   }
 
   /**
@@ -84,7 +87,7 @@ export class SessionRoster {
   }
 
   /** Reads one provider's pass and takes its newest full observation as that provider's sessions. */
-  async refresh(
+  async pass(
     plugin: Pick<SessionProviderPlugin, "provider" | "observe">,
     transform?: SessionObservationTransform,
   ): Promise<readonly Session[]> {

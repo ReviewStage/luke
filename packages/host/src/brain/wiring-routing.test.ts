@@ -195,7 +195,7 @@ function composed(t: TestContext, gate?: Gate): Composed {
         openSessionChange: () => Promise.reject(new Error("not in test")),
       },
       sessions: () => roster,
-      refreshSessions: async () => undefined,
+      passSessions: async () => undefined,
       workspaceProjects: () => [],
       workspaceDefaults: async () => ({}),
       trackedIssues: () => undefined,
@@ -282,7 +282,7 @@ test("each conversation's standing context is built for its own key", async (t) 
   for (const text of texts) {
     assert.ok(!text.includes(`standing context for ${MAIN_SESSION_KEY}`));
   }
-  c.wiring.retire();
+  c.wiring.dispose();
   await c.wiring.rebuild();
 });
 
@@ -348,7 +348,7 @@ test("a roster look opens one conversation per observed session, each reading on
   await until(() => c.wiring.current(defKey) === undefined);
   assert.equal(c.wiring.current(defKey), undefined);
   assert.ok(c.wiring.current(abcKey));
-  c.wiring.retire();
+  c.wiring.dispose();
   await c.wiring.rebuild();
 });
 
@@ -388,7 +388,7 @@ test("hooks route to the session's own conversation, main is never woken by one,
   assert.ok(releases.some((text) => text.includes("old news") && !text.includes("abc finished")));
   // The wake rode into the source conversation's hold-release turn, and main's carried none.
   assert.equal(observed.pendingWakes(), 0);
-  c.wiring.retire();
+  c.wiring.dispose();
   await c.wiring.rebuild();
 });
 
@@ -417,7 +417,7 @@ test("a held briefing whose source conversation has stood down goes back to that
   assert.ok(releases()[0]?.includes("a session that has stood down"));
   // Main read nothing of it: the one notice is the source's own turn.
   assert.equal(c.wiring.pendingNotices().length, 1);
-  c.wiring.retire();
+  c.wiring.dispose();
   await c.wiring.rebuild();
 });
 
@@ -446,7 +446,7 @@ test("a session that leaves the roster while its analysis is held keeps its conv
   // The next look, with the analysis over and nothing owed, stands it down.
   c.wiring.rosterLook();
   await until(() => c.wiring.current(abcKey) === undefined);
-  c.wiring.retire();
+  c.wiring.dispose();
   await c.wiring.rebuild();
 });
 
@@ -480,7 +480,7 @@ test("a hook for a session whose conversation is standing down waits for the clo
   // first was let go of before the second was opened.
   assert.ok(c.wiring.current(abcKey));
   assert.equal(c.repositories.get(abcKey), 2);
-  c.wiring.retire();
+  c.wiring.dispose();
   await c.wiring.rebuild();
 });
 
@@ -501,7 +501,7 @@ test("a rebuild landing while a conversation stands down leaves the closing host
   await closing;
   assert.equal(c.wiring.current(abcKey), undefined);
   // The rebuild built main's brain and def's, and nothing onto the host the
-  // close was about to discard, where no retire could ever reach it; the
+  // close was about to discard, where no dispose could ever reach it; the
   // first envelope took no write after its conversation stood down.
   await drainMicrotasks(60);
   assert.equal(c.builds() - buildsBefore, 2);
@@ -520,7 +520,7 @@ test("a rebuild landing while a conversation stands down leaves the closing host
   await until(() => c.wiring.pendingNotices().length === 3);
   assert.ok(c.wiring.current(abcKey));
   assert.equal(c.repositories.get(abcKey), 2);
-  c.wiring.retire();
+  c.wiring.dispose();
   await c.wiring.rebuild();
 });
 
@@ -539,7 +539,7 @@ test("a conversation reopened while it stands down waits for the close and stand
   // directory, on the second store, and the first is gone.
   assert.ok(c.wiring.current(threadKey));
   assert.equal(c.repositories.get(threadKey), 2);
-  c.wiring.retire();
+  c.wiring.dispose();
   await c.wiring.rebuild();
 });
 
@@ -570,7 +570,7 @@ test("two opens of one key landing in the same tick, a hook and a held briefing,
   const last = itemTexts(c.inputs[1] ?? []).join("\n");
   assert.ok(last.includes(BRAIN_INPUT_MARKER.OBSERVED_EVENTS));
   assert.ok(last.includes(BRAIN_INPUT_MARKER.HOLD_RELEASED));
-  c.wiring.retire();
+  c.wiring.dispose();
   await c.wiring.rebuild();
 });
 
@@ -606,6 +606,6 @@ test("one observed conversation waiting on its model neither blocks another nor 
   assert.equal(c.wiring.lanes.snapshot("agent").active, 0);
   assert.equal(c.wiring.pendingNotices().length, 1);
   assert.equal(c.wiring.pendingNotices()[0]?.label, "Claude Code: def");
-  c.wiring.retire();
+  c.wiring.dispose();
   await c.wiring.rebuild();
 });

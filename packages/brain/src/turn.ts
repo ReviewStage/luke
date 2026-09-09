@@ -106,7 +106,7 @@ export type TurnResult =
 
 /**
  * One developer run's live controls: the signal its model and read work are
- * aborted through, and the flags every `isRevoked` reads. A run's execution
+ * cancelled through, and the flags every `isRevoked` reads. A run's execution
  * is revoked by the developer's cancel, by the deadline, by the agent
  * stopping, and by the store's generation being replaced under it.
  */

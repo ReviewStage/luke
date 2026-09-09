@@ -1,5 +1,6 @@
 import type { ConversationRecord, SessionKey } from "@sidecar/runtime/vocabulary";
 import type { ConversationEntry } from "@sidecar/session";
+import { type IDisposable, toDisposable } from "@sidecar/wire";
 import {
   type ConversationDeleteOutcome,
   deleteConversationFlow,
@@ -69,13 +70,14 @@ export interface ConversationMaintenanceDependencies {
 /**
  * Maintenance runs at every live launch — interrupted archive publications
  * retried first — and then on its own hourly clock, keeping the
- * conversations with a run under way whatever their age. Answers the stop.
+ * conversations with a run under way whatever their age. Answers the hourly
+ * clock's own disposable.
  */
 export function startConversationMaintenance(
   dependencies: ConversationMaintenanceDependencies,
-): () => void {
+): IDisposable {
   const run = () => void dependencies.store.runMaintenance(dependencies.brain.busyConversations());
   run();
   const timer = setInterval(run, CONVERSATION_MAINTENANCE_INTERVAL_MS).unref();
-  return () => clearInterval(timer);
+  return toDisposable(() => clearInterval(timer));
 }

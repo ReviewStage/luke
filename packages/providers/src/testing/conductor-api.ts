@@ -310,7 +310,7 @@ export function pluginFor(
     apiKey?: string | undefined;
     readApiKey?: () => Promise<string | undefined>;
     now?: () => number;
-    minimumRefreshIntervalMs?: number;
+    minimumPassIntervalMs?: number;
   } = {},
 ): SessionProviderPlugin {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
@@ -319,7 +319,7 @@ export function pluginFor(
     baseUrl: TEST_BASE_URL,
     fetch,
     now: overrides.now ?? (() => TEST_TIME),
-    minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
+    minimumPassIntervalMs: overrides.minimumPassIntervalMs ?? 0,
   });
 }
 export const LUKE_PROJECT: TestProject = {

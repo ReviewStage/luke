@@ -187,7 +187,7 @@ test("the meter is pointed at whoever holds the turn, and the element at Luke", 
   assert.deepEqual(seen.at(-1), [undefined, "luke"]);
 });
 
-test("a Clear retires the latch, so the next press opens a turn rather than ending one", async () => {
+test("a Clear disposes the latch, so the next press opens a turn rather than ending one", async () => {
   const { subject, calls } = orchestrator();
   await subject.beginTalk();
   const conversation = calls.conversation;

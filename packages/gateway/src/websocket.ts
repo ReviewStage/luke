@@ -3,7 +3,13 @@ import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
 import { isIdentifier } from "@sidecar/runtime/vocabulary";
-import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import {
+  type IDisposable,
+  isRecord,
+  isWireString,
+  toDisposable,
+  type UnparsedWireValue,
+} from "@sidecar/wire";
 import { WebSocket, WebSocketServer } from "ws";
 import {
   InvocationMemory,
@@ -162,7 +168,7 @@ export class WebSocketTransport {
   /** The raw sockets whose credential is still being checked; `ws` owns none of them yet. */
   readonly #handshaking = new Set<Duplex>();
   readonly #closedListeners = new Set<(client: GatewayClientIdentity) => void>();
-  #unsubscribe: (() => void) | undefined;
+  #unsubscribe: IDisposable | undefined;
   #admitting = true;
   #connections = 0;
 
@@ -212,11 +218,11 @@ export class WebSocketTransport {
   }
 
   /** Hears every admitted socket close, with the identity it was admitted under. */
-  onClientClosed(listener: (client: GatewayClientIdentity) => void): () => void {
+  onClientClosed(listener: (client: GatewayClientIdentity) => void): IDisposable {
     this.#closedListeners.add(listener);
-    return () => {
+    return toDisposable(() => {
       this.#closedListeners.delete(listener);
-    };
+    });
   }
 
   /** Refuses every new connection from here on and closes the server's own door to mutations. */
@@ -227,7 +233,7 @@ export class WebSocketTransport {
 
   async close(): Promise<void> {
     this.#admitting = false;
-    this.#unsubscribe?.();
+    this.#unsubscribe?.dispose();
     this.#unsubscribe = undefined;
     for (const socket of [...this.#clients.keys()]) socket.close(1001, "the host is leaving");
     this.#clients.clear();
@@ -307,9 +313,9 @@ export class WebSocketTransport {
       },
       onClosed: (listener) => {
         client.closedListeners.add(listener);
-        return () => {
+        return toDisposable(() => {
           client.closedListeners.delete(listener);
-        };
+        });
       },
     };
   }
@@ -485,8 +491,8 @@ export class WebSocketGatewayConnection implements GatewayTransport {
     if (!this.#open || this.#socket.readyState !== WebSocket.OPEN) {
       return Promise.resolve(disconnected(request.id));
     }
-    return new Promise((resolve) => {
-      this.#pending.set(request.id, resolve);
+    return new Promise((settle) => {
+      this.#pending.set(request.id, settle);
       this.#socket.send(
         JSON.stringify({
           kind: GATEWAY_FRAME.REQUEST,
@@ -495,17 +501,17 @@ export class WebSocketGatewayConnection implements GatewayTransport {
         (error) => {
           if (!error) return;
           this.#pending.delete(request.id);
-          resolve(disconnected(request.id));
+          settle(disconnected(request.id));
         },
       );
     });
   }
 
-  events(sink: GatewayEventSink): () => void {
+  events(sink: GatewayEventSink): IDisposable {
     this.#sinks.add(sink);
-    return () => {
+    return toDisposable(() => {
       this.#sinks.delete(sink);
-    };
+    });
   }
 
   connected(): boolean {
@@ -518,19 +524,19 @@ export class WebSocketGatewayConnection implements GatewayTransport {
    * invocation arriving while no handler is served is answered unavailable,
    * so the host never waits on a node that is not there.
    */
-  serveInvocations(handler: NodeInvocationHandler): () => void {
+  serveInvocations(handler: NodeInvocationHandler): IDisposable {
     const memory = new InvocationMemory(handler);
     this.#memory = memory;
-    return () => {
+    return toDisposable(() => {
       if (this.#memory === memory) this.#memory = undefined;
-    };
+    });
   }
 
-  onClosed(listener: () => void): () => void {
+  onClosed(listener: () => void): IDisposable {
     this.#closedListeners.add(listener);
-    return () => {
+    return toDisposable(() => {
       this.#closedListeners.delete(listener);
-    };
+    });
   }
 
   close(): void {
@@ -552,10 +558,10 @@ export class WebSocketGatewayConnection implements GatewayTransport {
     if (kind === GATEWAY_FRAME.RESPONSE) {
       const response = gatewayResponseFromWire(envelope);
       if (!response) return;
-      const resolve = this.#pending.get(response.id);
-      if (!resolve) return;
+      const settle = this.#pending.get(response.id);
+      if (!settle) return;
       this.#pending.delete(response.id);
-      resolve(response);
+      settle(response);
       return;
     }
     if (kind === GATEWAY_FRAME.EVENT) {
@@ -591,7 +597,7 @@ export class WebSocketGatewayConnection implements GatewayTransport {
   #closed(): void {
     if (!this.#open) return;
     this.#open = false;
-    for (const [id, resolve] of this.#pending) resolve(disconnected(id));
+    for (const [id, settle] of this.#pending) settle(disconnected(id));
     this.#pending.clear();
     for (const listener of [...this.#closedListeners]) listener();
     this.#closedListeners.clear();

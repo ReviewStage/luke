@@ -57,7 +57,7 @@ export interface ProviderFixtureInput {
   /** A temporary directory seeded from `home/`; the provider's home for this case. */
   readonly home: string;
   readonly now: () => number;
-  readonly minimumRefreshIntervalMs: number;
+  readonly minimumPassIntervalMs: number;
   /** Answers `undefined` for the no-key cases, and throws for the unreadable one. */
   readonly readApiKey: () => Promise<string | undefined>;
   /**
@@ -187,7 +187,7 @@ function admissionRequest(
 
 const CONTRACT_API_KEY = "contract-initial-key";
 const REPLACEMENT_API_KEY = "contract-replacement-key";
-const REFRESH_INTERVAL_MS = 15_000;
+const PASS_INTERVAL_MS = 15_000;
 /** The one body key a POSTed read document rides under. */
 const READ_DOCUMENT_FIELD = "query";
 const UNSUPPORTED_MESSAGE_TEXT = "This message must never reach a provider.";
@@ -303,7 +303,7 @@ interface ContractCase {
 
 interface CaseOptions {
   readonly readApiKey?: () => Promise<string | undefined>;
-  readonly minimumRefreshIntervalMs?: number;
+  readonly minimumPassIntervalMs?: number;
   readonly hookEventsDirectory?: () => string | undefined;
 }
 
@@ -341,7 +341,7 @@ export function describeProviderContract(
     const plugin = await factory({
       home,
       now: () => now,
-      minimumRefreshIntervalMs: options.minimumRefreshIntervalMs ?? 0,
+      minimumPassIntervalMs: options.minimumPassIntervalMs ?? 0,
       readApiKey: options.readApiKey ?? (async () => apiKey),
       api,
       hookEventsDirectory: options.hookEventsDirectory ?? (() => undefined),
@@ -569,7 +569,7 @@ export function describeProviderContract(
     });
 
     test(named("reads again at once under a credential the user just replaced"), async (t) => {
-      const contract = await contractCase(t, { minimumRefreshIntervalMs: 60_000 });
+      const contract = await contractCase(t, { minimumPassIntervalMs: 60_000 });
 
       await contract.plugin.observe();
       const requestsAfterFirstPass = contract.api.requests().length;
@@ -598,12 +598,12 @@ export function describeProviderContract(
       },
     );
 
-    test(named("asks nothing again inside its own refresh interval"), async (t) => {
-      const contract = await contractCase(t, { minimumRefreshIntervalMs: REFRESH_INTERVAL_MS });
+    test(named("asks nothing again inside its own pass interval"), async (t) => {
+      const contract = await contractCase(t, { minimumPassIntervalMs: PASS_INTERVAL_MS });
 
       const first = await contract.plugin.observe();
       const requestsAfterFirstPass = contract.api.requests().length;
-      contract.setNow(fixtures.now + REFRESH_INTERVAL_MS / 3);
+      contract.setNow(fixtures.now + PASS_INTERVAL_MS / 3);
       const throttled = await contract.plugin.observe();
 
       assert.deepEqual(throttled, first);

@@ -142,7 +142,7 @@ test("a withdrawn generation while the call is opening leaves the words unspoken
   assert.deepEqual(h.log.at(-1), "claim run-2@1");
 });
 
-test("a newer offer arriving during a claim retires the older attempt without speaking it", async () => {
+test("a newer offer arriving during a claim disposes the older attempt without speaking it", async () => {
   const h = harness();
   h.player.offer(offer("run-1"));
   h.player.offer(offer("run-2"));

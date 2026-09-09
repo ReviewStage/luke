@@ -59,11 +59,11 @@ export interface SettingsLinks {
   setVoice: (voice: StoredSettings["voice"]) => void;
   setVoiceSpeed: (speed: StoredSettings["voiceSpeed"]) => void;
   reconcileSpeech: () => void;
-  refreshSupersetWorkspaceHost: () => Promise<void>;
+  passSupersetWorkspaceHost: () => Promise<void>;
   broadcastWorkspaceProjects: () => Promise<void>;
   /** One provider's sessions read again after its key changed. */
   refreshCredentialAdapter: (providerId: CredentialProviderId) => void;
-  refreshIssues: () => void;
+  passIssues: () => void;
   workspaceProjectOffered: (providerId: string, providerProjectId: string) => boolean;
 }
 
@@ -328,7 +328,7 @@ export function composeSettings(dependencies: SettingsDependencies): SettingsCom
       APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
     );
     if (workspaceAgentDefaultsChanged) {
-      await links.get().refreshSupersetWorkspaceHost();
+      await links.get().passSupersetWorkspaceHost();
     }
     if (
       workspaceAgentDefaultsChanged ||
@@ -451,7 +451,7 @@ export function composeSettings(dependencies: SettingsDependencies): SettingsCom
         async (saved) => {
           if (saved.reason) return;
           links.get().refreshCredentialAdapter(providerId);
-          if (providerId === CREDENTIAL_PROVIDER_ID.LINEAR) links.get().refreshIssues();
+          if (providerId === CREDENTIAL_PROVIDER_ID.LINEAR) links.get().passIssues();
           if (providerId === VOICE_CREDENTIAL_PROVIDER_ID) {
             await links.get().applyVoiceCredential();
             await emitSettings();

@@ -726,7 +726,7 @@ function heldIngestRuntime(model: ModelAdapter): AgentRuntime {
   });
 }
 
-test("an ingest held across a cancel that resolves after the successor turn began lands on the retired engine, never in the context the next turn reads or keeps", async () => {
+test("an ingest held across a cancel that resolves after the successor turn began lands on the disposed engine, never in the context the next turn reads or keeps", async () => {
   const repository = fakeBrainStateRepository();
   const upstream = fakeUpstream([
     () => payload([message("LATE_WORDS")]),

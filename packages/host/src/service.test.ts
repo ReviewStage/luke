@@ -169,7 +169,7 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
     deleted,
     events,
     generation,
-    retireBrain: () => {
+    disposeBrain: () => {
       brainStands = false;
     },
     /** The followers' report of every record, as the wiring's broadcast hands it on. */
@@ -303,9 +303,9 @@ for (const kind of ["in-process", "loopback"] as const) {
     f.receiver.markReady(epoch);
     f.end("run-1");
     assert.equal(deliveryState(f.deliveries, "run-1"), DELIVERY_STATE.OFFERED);
-    // The credential changes: the generation is replaced and the brain retired.
+    // The credential changes: the generation is replaced and the brain disposed.
     f.generation.id = "gen-2";
-    f.retireBrain();
+    f.disposeBrain();
     f.service.generationReplaced(MAIN_SESSION_KEY);
     assert.deepEqual(withdrawn, [epoch]);
     assert.equal(deliveryState(f.deliveries, "run-1"), undefined);

@@ -34,7 +34,7 @@ interface Hosted {
   host: WebSocketTransport;
   server: GatewayServer;
   port: number;
-  shutdowns: number;
+  disposals: number;
   effects: string[];
   close: () => Promise<void>;
 }
@@ -43,7 +43,7 @@ async function hosted(
   authenticate: GatewayAuthenticate = bearerAuthentication(TOKEN),
 ): Promise<Hosted> {
   const effects: string[] = [];
-  const state = { shutdowns: 0 };
+  const state = { disposals: 0 };
   let ids = 0;
   const server = new GatewayServer({
     methods: {
@@ -54,7 +54,7 @@ async function hosted(
         return gatewayOk({ runId: `run-${effects.length}` });
       },
       [GATEWAY_METHOD.SHUTDOWN]: () => {
-        state.shutdowns += 1;
+        state.disposals += 1;
         return gatewayOk({ accepted: true });
       },
       [GATEWAY_METHOD.MEMORY_STATUS]: () => gatewayError(GATEWAY_ERROR.REFUSED, "no"),
@@ -75,8 +75,8 @@ async function hosted(
     server,
     port,
     effects,
-    get shutdowns() {
-      return state.shutdowns;
+    get disposals() {
+      return state.disposals;
     },
     close: () => host.close(),
   };
@@ -174,7 +174,7 @@ test("a wrong token, a wrong protocol, and a malformed handshake are refused bef
   }
 });
 
-test("closing admissions refuses new connections and new mutations while reads and the shutdown still answer", async () => {
+test("closing admissions refuses new connections and new mutations while reads and the dispose still answer", async () => {
   const h = await hosted();
   try {
     const attached = await connect(h);
@@ -193,7 +193,7 @@ test("closing admissions refuses new connections and new mutations while reads a
     assert.deepEqual(h.effects, []);
     assert.equal((await client.call(GATEWAY_METHOD.RUN_LIST)).ok, true);
     assert.equal((await client.call(GATEWAY_METHOD.SHUTDOWN)).ok, true);
-    assert.equal(h.shutdowns, 1);
+    assert.equal(h.disposals, 1);
     attached.connection.close();
   } finally {
     await h.close();

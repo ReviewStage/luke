@@ -14,7 +14,7 @@ describeProviderContract(
       baseUrl: "https://api.conductor.test",
       fetch: input.api.fetch,
       now: input.now,
-      minimumRefreshIntervalMs: input.minimumRefreshIntervalMs,
+      minimumPassIntervalMs: input.minimumPassIntervalMs,
     }),
   {
     providerId: "conductor",

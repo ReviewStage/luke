@@ -32,7 +32,7 @@ function host(log: string[]) {
   });
 }
 
-test("retiring withdraws the agent at once and begins its stop before any await", () => {
+test("disposing withdraws the agent at once and begins its stop before any await", () => {
   const log: string[] = [];
   const brains = host(log);
   const a = fakeAgent("a", log);
@@ -40,7 +40,7 @@ test("retiring withdraws the agent at once and begins its stop before any await"
   a.release();
   return brains.settled().then(() => {
     assert.equal(brains.current(), a.agent);
-    brains.retire();
+    brains.dispose();
     assert.equal(brains.current(), undefined);
     assert.deepEqual(log, ["follow agent", "stop a"]);
   });
@@ -56,7 +56,7 @@ test("overlapping transitions install only the latest agent, once every earlier 
   assert.equal(brains.current(), a.agent);
   const installed = log.length;
 
-  // Transition B retires A and waits on A's slow stop; transition C arrives
+  // Transition B disposes A and waits on A's slow stop; transition C arrives
   // meanwhile. B must install nothing, and C must not install until A has
   // stopped.
   const second = brains.replace(() => {
@@ -100,7 +100,7 @@ test("a build decided after a newer transition is stopped rather than installed,
   assert.equal(log.filter((entry) => entry === "publish empty").length, 1);
 });
 
-test("a retirement while an earlier replacement waits on a stop leaves that build uninstalled", async () => {
+test("a disposal while an earlier replacement waits on a stop leaves that build uninstalled", async () => {
   const log: string[] = [];
   const brains = host(log);
   const a = fakeAgent("a", log);
@@ -111,7 +111,7 @@ test("a retirement while an earlier replacement waits on a stop leaves that buil
     return b.agent;
   });
   // The source goes away before A has finished stopping: nothing may install.
-  brains.retire();
+  brains.dispose();
   a.release();
   await replacing;
   assert.equal(brains.current(), undefined);
@@ -121,12 +121,12 @@ test("a retirement while an earlier replacement waits on a stop leaves that buil
   assert.equal(log.filter((entry) => entry === "publish empty").length, 1);
 });
 
-test("the follower outlives the stop it relays, and retires once the stop settles", async () => {
+test("the follower outlives the stop it relays, and is disposed once the stop settles", async () => {
   const log: string[] = [];
   const brains = host(log);
   const a = fakeAgent("a", log);
   await brains.replace(() => a.agent);
-  brains.retire();
+  brains.dispose();
   assert.deepEqual(log, ["follow agent", "stop a"]);
   a.release();
   await brains.replace(() => undefined);
@@ -179,7 +179,7 @@ test("a rejected drain fails the transition that waited on it, and the next tran
   await brains.replace(() => a.agent);
   const b = fakeAgent("b", log);
   b.release();
-  // Retiring a queues its rejecting drain; the replacement that waits on it
+  // Disposing a queues its rejecting drain; the replacement that waits on it
   // fails as its caller's transition, and b is never installed.
   await assert.rejects(
     brains.replace(() => b.agent),
@@ -189,7 +189,7 @@ test("a rejected drain fails the transition that waited on it, and the next tran
   assert.equal(log.includes("follow 2"), false);
 
   // The queue is not poisoned: the next transition installs, and the one
-  // after it retires that agent and publishes empty.
+  // after it disposes that agent and publishes empty.
   const c = fakeAgent("c", log);
   c.release();
   await brains.replace(() => c.agent);
@@ -238,7 +238,7 @@ test("a superseded build's rejecting stop fails the older transition, and the ne
   assert.deepEqual(log, ["follow agent", "stop first", "unfollow", "stop stale", "follow agent"]);
 });
 
-test("a retirement queued alone has its rejection handled before any transition waits on it", async () => {
+test("a disposal queued alone has its rejection handled before any transition waits on it", async () => {
   const log: string[] = [];
   let unhandled = 0;
   const onUnhandled = () => {
@@ -257,8 +257,8 @@ test("a retirement queued alone has its rejection handled before any transition 
     const a = fakeAgent("a", log);
     a.release();
     await brains.replace(() => a.agent);
-    brains.retire();
-    // A slow credential apply stands between the retire and the rebuild.
+    brains.dispose();
+    // A slow credential apply stands between the dispose and the rebuild.
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.equal(unhandled, 0);
     await assert.rejects(

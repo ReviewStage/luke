@@ -4,7 +4,7 @@ import { INBOX_CAPACITY } from "./observation-inbox.js";
 /** The bounds and cadences a brain agent runs under when its host names none. */
 export const BRAIN_DEFAULTS = {
   MAXIMUM_OUTPUT_TOKENS: HOSTED_BRAIN_OPTION_BOUNDS.MAXIMUM_OUTPUT_TOKENS,
-  /** Wakes inside this window open one turn together: a hook and the poll's edge for the same stop. */
+  /** Wakes inside this window open one turn together: a hook and the pass's edge for the same stop. */
   WAKE_COALESCE_MS: 3_000,
   /**
    * How long a caller waits on a run before being answered with the run still

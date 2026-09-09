@@ -125,7 +125,7 @@ export class GoogleCalendarReader {
     this.#accessTokens.clear();
   }
 
-  async observe(): Promise<readonly CalendarAccountObservation[] | undefined> {
+  async pass(): Promise<readonly CalendarAccountObservation[] | undefined> {
     const accounts = await this.#readAccounts();
     // No accounts, no request: the calendar is not connected, which is a
     // different answer from a connected calendar with no meetings.
@@ -141,7 +141,7 @@ export class GoogleCalendarReader {
     const observations: CalendarAccountObservation[] = [];
     for (const account of accounts) {
       try {
-        const observation = await this.#observeAccount(account);
+        const observation = await this.#passAccount(account);
         this.#lastObservations.set(account.id, observation);
         observations.push(observation);
       } catch (error) {
@@ -206,7 +206,7 @@ export class GoogleCalendarReader {
     );
   }
 
-  async #observeAccount(account: CalendarAccountCredential): Promise<CalendarAccountObservation> {
+  async #passAccount(account: CalendarAccountCredential): Promise<CalendarAccountObservation> {
     const now = this.#now();
     const accessToken = await this.#accessTokenFor(account, now);
     const calendars = await this.listCalendars(accessToken);

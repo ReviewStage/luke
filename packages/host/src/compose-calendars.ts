@@ -38,7 +38,7 @@ import type { OnboardingBeatKind } from "./voice/speech-arbiter.js";
 import { reporterOf } from "./wire-helpers.js";
 
 /** A diary changes at the pace of hands too; five minutes is current. */
-const CALENDAR_REFRESH_INTERVAL_MS = 5 * 60_000;
+const CALENDAR_PASS_INTERVAL_MS = 5 * 60_000;
 /**
  * How often held notices ask whether the meeting holding them has ended. The
  * question is answered from meetings already in memory, so asking often costs
@@ -54,7 +54,7 @@ const HELD_NOTICE_RELEASE_INTERVAL_MS = 30_000;
  * process can be trusted about where the switch stands now. Ten seconds is
  * the longest consent taken back keeps holding anything.
  */
-const APPLE_ACCESS_POLL_INTERVAL_MS = 10_000;
+const APPLE_ACCESS_PASS_INTERVAL_MS = 10_000;
 
 /** What the calendars reach in the speech the meetings hold. */
 export interface CalendarsLinks {
@@ -127,7 +127,7 @@ export function composeCalendars(dependencies: CalendarsDependencies): Calendars
   let quietBoundaryTimer: NodeJS.Timeout | undefined;
   let observedCalendars: readonly ObservedAccountCalendars[] = [];
   let heldNoticeReleaseTimer: NodeJS.Timeout | undefined;
-  let appleAccessPollTimer: NodeJS.Timeout | undefined;
+  let appleAccessPassTimer: NodeJS.Timeout | undefined;
   let appleAccessProbeFailing = false;
   let announcementsHeld = false;
   let appleConnectGeneration = 0;
@@ -210,11 +210,11 @@ export function composeCalendars(dependencies: CalendarsDependencies): Calendars
     quietBoundaryTimer.unref();
   }
 
-  async function refreshCalendarMeetings(generation: number): Promise<void> {
+  async function passCalendarMeetings(generation: number): Promise<void> {
     try {
       const [observations, appleObservation] = await Promise.all([
-        googleCalendar.observe(),
-        appleCalendar.observe(),
+        googleCalendar.pass(),
+        appleCalendar.pass(),
       ]);
       if (!loop.isCurrent(generation)) return;
       const accounts = [...(observations ?? []), ...(appleObservation ? [appleObservation] : [])];
@@ -244,11 +244,11 @@ export function composeCalendars(dependencies: CalendarsDependencies): Calendars
 
   const loop = new ObservationLoop({
     gate: observationGate,
-    intervalMs: CALENDAR_REFRESH_INTERVAL_MS,
-    run: refreshCalendarMeetings,
+    intervalMs: CALENDAR_PASS_INTERVAL_MS,
+    run: passCalendarMeetings,
   });
 
-  async function pollAppleCalendarAccess(): Promise<void> {
+  async function passAppleCalendarAccess(): Promise<void> {
     if (!(await settingsStore.readAppleCalendarConnection())) return;
     let access: string | undefined;
     try {
@@ -267,7 +267,7 @@ export function composeCalendars(dependencies: CalendarsDependencies): Calendars
     const probeRevoked = access !== APPLE_CALENDAR_ACCESS.FULL;
     if (probeRevoked !== drawnRevoked) {
       report(`Calendar access now reads ${access}; running a pass.`);
-      void loop.refresh();
+      void loop.pass();
     }
   }
 
@@ -278,18 +278,18 @@ export function composeCalendars(dependencies: CalendarsDependencies): Calendars
     }, HELD_NOTICE_RELEASE_INTERVAL_MS);
     heldNoticeReleaseTimer.unref();
     if (process.platform === "darwin" && runMode.observesProviders) {
-      appleAccessPollTimer = setInterval(() => {
-        void pollAppleCalendarAccess();
-      }, APPLE_ACCESS_POLL_INTERVAL_MS);
-      appleAccessPollTimer.unref();
+      appleAccessPassTimer = setInterval(() => {
+        void passAppleCalendarAccess();
+      }, APPLE_ACCESS_PASS_INTERVAL_MS);
+      appleAccessPassTimer.unref();
     }
   }
 
   function stopObservation(): void {
     if (heldNoticeReleaseTimer) clearInterval(heldNoticeReleaseTimer);
     heldNoticeReleaseTimer = undefined;
-    if (appleAccessPollTimer) clearInterval(appleAccessPollTimer);
-    appleAccessPollTimer = undefined;
+    if (appleAccessPassTimer) clearInterval(appleAccessPassTimer);
+    appleAccessPassTimer = undefined;
     appleAccessProbeFailing = false;
     if (quietBoundaryTimer) clearTimeout(quietBoundaryTimer);
     quietBoundaryTimer = undefined;
@@ -322,7 +322,7 @@ export function composeCalendars(dependencies: CalendarsDependencies): Calendars
         },
         (saved) => {
           if (saved.reason) return;
-          void loop.refresh();
+          void loop.pass();
           settings.recordProductEvent(PRODUCT_EVENT.CALENDAR_CONNECT, {
             calendar_source: PRODUCT_CALENDAR_SOURCE.GOOGLE,
           });
@@ -347,7 +347,7 @@ export function composeCalendars(dependencies: CalendarsDependencies): Calendars
         () => settingsStore.removeCalendarAccount(accountId),
         (saved) => {
           if (saved.reason) return;
-          void loop.refresh();
+          void loop.pass();
           settings.recordProductEvent(PRODUCT_EVENT.CALENDAR_DISCONNECT, {
             calendar_source: PRODUCT_CALENDAR_SOURCE.GOOGLE,
           });
@@ -388,7 +388,7 @@ export function composeCalendars(dependencies: CalendarsDependencies): Calendars
         },
         (saved) => {
           if (saved.reason) return;
-          void loop.refresh();
+          void loop.pass();
           if (stored) {
             settings.recordProductEvent(PRODUCT_EVENT.CALENDAR_CONNECT, {
               calendar_source: PRODUCT_CALENDAR_SOURCE.APPLE,
@@ -405,7 +405,7 @@ export function composeCalendars(dependencies: CalendarsDependencies): Calendars
         () => settingsStore.disconnectAppleCalendar(),
         (saved) => {
           if (saved.reason) return;
-          void loop.refresh();
+          void loop.pass();
           settings.recordProductEvent(PRODUCT_EVENT.CALENDAR_DISCONNECT, {
             calendar_source: PRODUCT_CALENDAR_SOURCE.APPLE,
           });
@@ -427,7 +427,7 @@ export function composeCalendars(dependencies: CalendarsDependencies): Calendars
       return gatewayOk({});
     },
     [GATEWAY_METHOD.CALENDAR_REFRESH]: async () => {
-      await loop.refresh();
+      await loop.pass();
       return gatewayOk({});
     },
     [GATEWAY_METHOD.CALENDAR_SET_SELECTED]: async (params) => {
@@ -454,7 +454,7 @@ export function composeCalendars(dependencies: CalendarsDependencies): Calendars
         () => settingsStore.setCalendarSelected(accountId, calendarId, selected),
         (saved) => {
           if (saved.reason) return;
-          void loop.refresh();
+          void loop.pass();
           settings.recordProductEvent(PRODUCT_EVENT.SETTING_UPDATE, {
             setting_id: APP_SETTING_ID.CALENDAR_SELECTED,
             setting_value: selected ? PRODUCT_SETTING_VALUE.ON : PRODUCT_SETTING_VALUE.OFF,

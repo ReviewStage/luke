@@ -15,7 +15,7 @@ import {
 } from "./compaction.js";
 import { CONTEXT_OPENING } from "./generation.js";
 import type { AgentSeam } from "./seam.js";
-import { claimedUnlessAborted, type Settled, settledUnlessAborted } from "./settled.js";
+import { claimedUnlessCancelled, type Settled, settledUnlessCancelled } from "./settled.js";
 import {
   BRAIN_TURN_KIND,
   type BrainTurnDescription,
@@ -208,7 +208,7 @@ export class Maintenance {
     });
     if (!due) return;
     const cycle = generation.compactionCount;
-    const settled = await settledUnlessAborted(
+    const settled = await settledUnlessCancelled(
       hook({
         items: [...context.checkpoint().items],
         contextTokens: assessment.contextTokens,
@@ -219,7 +219,7 @@ export class Maintenance {
       }).catch((error: Error) => failedHousekeeping(error.message)),
       signal,
     );
-    if (settled.aborted || this.#revoked(turnContext)) return;
+    if (settled.cancelled || this.#revoked(turnContext)) return;
     if (!housekeepingCompleted(settled.value.outcome)) {
       this.#seam.report(
         `Memory flush did not complete (${settled.value.outcome}${settled.value.reason ? `: ${settled.value.reason}` : ""}); it runs again at the next assessment`,
@@ -227,7 +227,7 @@ export class Maintenance {
       return;
     }
     const marked = await this.#writeFlushMarker(turnContext, cycle);
-    if (marked.aborted || this.#revoked(turnContext)) return;
+    if (marked.cancelled || this.#revoked(turnContext)) return;
     if (!marked.value.ok) {
       this.#seam.report(
         `Memory flush completed but its marker could not be recorded after ${MEMORY_FLUSH_DEFAULTS.MARKER_WRITE_ATTEMPTS} attempt(s) (${marked.value.reason}); the cycle stays unflushed and runs again at the next assessment`,
@@ -252,8 +252,8 @@ export class Maintenance {
       // A write an earlier turn stopped waiting for may still be in flight;
       // the gate is read only once it has landed or failed, so the store is
       // never consulted ahead of a write already issued to it.
-      const settled = await settledUnlessAborted(generation.flush.settling, signal);
-      if (settled.aborted || this.#revoked(turnContext)) return false;
+      const settled = await settledUnlessCancelled(generation.flush.settling, signal);
+      if (settled.cancelled || this.#revoked(turnContext)) return false;
       delete generation.flush.settling;
     }
     if (generation.flush.read) return true;
@@ -262,14 +262,14 @@ export class Maintenance {
       generation.flush.read = true;
       return true;
     }
-    const read = await settledUnlessAborted(
+    const read = await settledUnlessCancelled(
       store.read(generation.id).then(
         (lastCompactionCount) => ({ ok: true as const, lastCompactionCount }),
         (error: Error) => ({ ok: false as const, reason: error.message }),
       ),
       signal,
     );
-    if (read.aborted || this.#revoked(turnContext)) return false;
+    if (read.cancelled || this.#revoked(turnContext)) return false;
     if (!read.value.ok) {
       this.#seam.report(
         `Memory flush marker could not be read (${read.value.reason}); the flush waits for the next assessment`,
@@ -293,7 +293,7 @@ export class Maintenance {
     cycle: number,
   ): Promise<Settled<{ ok: true } | { ok: false; reason: string }>> {
     const store = this.#options.flushMarker;
-    if (!store) return { aborted: false, value: { ok: true } };
+    if (!store) return { cancelled: false, value: { ok: true } };
     const { generation, signal } = turnContext;
     const attempts = async (): Promise<{ ok: true } | { ok: false; reason: string }> => {
       let reason = "";
@@ -309,10 +309,10 @@ export class Maintenance {
       return { ok: false, reason };
     };
     const outcome = attempts();
-    const settled = await claimedUnlessAborted(outcome, signal, (late) => {
+    const settled = await claimedUnlessCancelled(outcome, signal, (late) => {
       if (late.ok) generation.flush.lastCompactionCount = cycle;
     });
-    if (settled.aborted) {
+    if (settled.cancelled) {
       generation.flush.settling = outcome.then(() => undefined);
     }
     return settled;

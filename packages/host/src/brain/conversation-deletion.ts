@@ -67,7 +67,7 @@ export const CONVERSATION_DELETION_INCOMPLETE = {
  * remove what stood at or before the press: the lines and transcript of that
  * instant and earlier, in one transaction with the compressed recovery
  * archive and the raised cutoff, while a line accepted after the press stays
- * and the successor lifetime stands. Nothing is retired or reopened: the same
+ * and the successor lifetime stands. Nothing is disposed or reopened: the same
  * brain works on from the empty successor, and a credential rebuild landing
  * meanwhile builds over the same store, whose standing generation is that
  * successor.

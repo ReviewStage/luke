@@ -28,7 +28,7 @@ import {
 /**
  * Documented public API routes. The reads walk projects, the user's own open
  * workspaces through the workspace listing's documented creator and archive
- * filters, and each workspace's sessions, and poll the status endpoints
+ * filters, and each workspace's sessions, and read the status endpoints
  * workspaces and sessions document. Beside those pass-driven reads stands one
  * a user asks for by opening a conversation screen:
  * `GET …/sessions/{id}/messages`, Conductor's documented read of one

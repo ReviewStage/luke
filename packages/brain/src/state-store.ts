@@ -1,4 +1,5 @@
 import { checkpointFormatTag, type TranscriptEvent } from "@sidecar/runtime/vocabulary";
+import { type IDisposable, toDisposable } from "@sidecar/wire";
 import {
   BRAIN_STATE_VERSION,
   type BrainPersistedState,
@@ -535,11 +536,11 @@ export class BrainStateStore {
   }
 
   /** Hears every replacement, expiry, or Clear, with the generation that now stands. */
-  onReplaced(listener: (state: BrainPersistedState) => void): () => void {
+  onReplaced(listener: (state: BrainPersistedState) => void): IDisposable {
     this.#replacedListeners.add(listener);
-    return () => {
+    return toDisposable(() => {
       this.#replacedListeners.delete(listener);
-    };
+    });
   }
 
   /** Settles once every write queued so far has landed or been refused. */

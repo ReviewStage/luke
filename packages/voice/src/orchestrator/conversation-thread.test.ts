@@ -102,7 +102,7 @@ test("a line refused by the store is sent again on the next publish", async () =
   );
 });
 
-test("a Clear retires the turns, the previews, and the generations that outlived it", () => {
+test("a Clear disposes the turns, the previews, and the generations that outlived it", () => {
   const { subject } = thread();
   subject.seed([]);
   subject.openTurn();
@@ -119,7 +119,7 @@ test("a Clear retires the turns, the previews, and the generations that outlived
   assert.equal(subject.previews.size, 0);
   assert.equal(subject.latestTurn, undefined);
   assert.equal(subject.takeAnnouncementGeneration(), undefined);
-  // A transcript for the retired turn cannot borrow the newer thread's place.
+  // A transcript for the disposed turn cannot borrow the newer thread's place.
   subject.rememberSpokenAsk("how is the checkout agent", "item-1");
   assert.deepEqual(subject.entries, []);
 });

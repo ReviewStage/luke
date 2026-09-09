@@ -235,7 +235,7 @@ function composed(
         openSessionChange: () => Promise.reject(new Error("not in test")),
       },
       sessions: () => [],
-      refreshSessions: async () => undefined,
+      passSessions: async () => undefined,
       workspaceProjects: () => [],
       workspaceDefaults: async () => ({}),
       trackedIssues: () => undefined,
@@ -362,7 +362,7 @@ test("a spawn from main runs the child in its own conversation at depth one and 
   await drainMicrotasks(180);
   assert.deepEqual(c.archived, [child.childSessionKey]);
   assert.equal(c.wiring.current(child.childSessionKey), undefined);
-  c.wiring.retire();
+  c.wiring.dispose();
   await c.wiring.rebuild();
 });
 
@@ -403,7 +403,7 @@ test("a child spawning a child counts one deeper, and at the depth cap the deleg
   for (const record of c.children.values()) {
     assert.equal(record.status, CHILD_RUN_STATUS.COMPLETED);
   }
-  c.wiring.retire();
+  c.wiring.dispose();
   await c.wiring.rebuild();
 });
 
@@ -450,7 +450,7 @@ test("a fork carries the requester's context into the child and an isolated chil
   const isolatedTurn = childTurns.find((seen) => !seen.texts.includes(MAIN_SECRET));
   assert.ok(forkedTurn, "the forked child read the requester's earlier words");
   assert.ok(isolatedTurn, "the isolated child read none of them");
-  c.wiring.retire();
+  c.wiring.dispose();
   await c.wiring.rebuild();
 });
 
@@ -466,7 +466,7 @@ test("Start fresh cancels a conversation's descendants first, and their cancella
     if (seen.texts.includes(BRAIN_INPUT_MARKER.SUBAGENT_TASK)) {
       // The child's model call never answers until released: the child stays running.
       return new Promise<ScriptedAnswer>((_resolve, reject) => {
-        releaseChild = () => reject(new Error("aborted"));
+        releaseChild = () => reject(new Error("cancelled"));
       });
     }
     return script(seen, calls);
@@ -488,7 +488,7 @@ test("Start fresh cancels a conversation's descendants first, and their cancella
   assert.ok(completion);
   assert.equal(completion.status, CHILD_RUN_STATUS.CANCELLED);
   releaseChild?.();
-  c.wiring.retire();
+  c.wiring.dispose();
   await c.wiring.rebuild();
 });
 
@@ -520,6 +520,6 @@ test("a reset capture that was skipped reports nothing, while one that failed is
       reported,
       outcome,
     );
-    c.wiring.retire();
+    c.wiring.dispose();
   }
 });

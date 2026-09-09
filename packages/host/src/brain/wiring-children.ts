@@ -54,7 +54,7 @@ export interface ChildWiringHost {
    * inherited fork as its opening history; nothing while no model stands.
    */
   open: (sessionKey: SessionKey, fork?: readonly WireRecord[]) => Promise<BrainAgent | undefined>;
-  /** Retires a conversation's brain and lets its store go. */
+  /** Disposes a conversation's brain and lets its store go. */
   closeConversation: (sessionKey: SessionKey) => Promise<void>;
 }
 

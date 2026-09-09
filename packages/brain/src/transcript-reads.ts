@@ -6,7 +6,7 @@ import {
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { rejection, sameIdentity } from "./records.js";
-import { type Settled, settledUnlessAborted } from "./settled.js";
+import { type Settled, settledUnlessCancelled } from "./settled.js";
 import { REFUSAL_REASON } from "./turn.js";
 import type { BrainTranscriptDelta, BrainWakeEvent } from "./wake-events.js";
 
@@ -85,14 +85,14 @@ export async function readTranscriptDelta(
   const { cursors } = options;
   let read: Settled<ProviderTranscriptSinceResult>;
   try {
-    read = await settledUnlessAborted(
+    read = await settledUnlessCancelled(
       options.read(identity, cursors.cursor(identity)),
       options.signal,
     );
   } catch {
     return { text: "", truncated: false, status: ACTION_RESULT_STATUS.REJECTED };
   }
-  if (read.aborted) return undefined;
+  if (read.cancelled) return undefined;
   const result = read.value;
   if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
     return { text: "", truncated: false, status: result.status };
@@ -118,11 +118,11 @@ export async function readWholeTranscript(
 ): Promise<WireRecord> {
   let read: Settled<ProviderTranscriptResult>;
   try {
-    read = await settledUnlessAborted(options.read(identity), options.signal);
+    read = await settledUnlessCancelled(options.read(identity), options.signal);
   } catch {
     return rejection(REFUSAL_REASON.READ_FAILED);
   }
-  if (read.aborted) return rejection(REFUSAL_REASON.RUN_REVOKED);
+  if (read.cancelled) return rejection(REFUSAL_REASON.RUN_REVOKED);
   const result = read.value;
   if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
     return { status: result.status, reason: result.reason };

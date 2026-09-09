@@ -107,7 +107,7 @@ test("a successor replacing the agent under outstanding runs inherits a thread w
   const fresh = c.repository.state?.requests.find((r) => r.question === "new ask");
   assert.equal(fresh?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assert.equal(c.thread().at(-1)?.words, "done");
-  // The retired agent takes nothing more and writes nothing more: its store
+  // The disposed agent takes nothing more and writes nothing more: its store
   // lease passed to the successor with the handoff.
   assert.equal(
     (

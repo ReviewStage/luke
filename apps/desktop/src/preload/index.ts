@@ -29,7 +29,9 @@ for (const [method, definition] of bridgeEntries()) {
       if (definition.result?.(payload) !== false) callback(payload);
     };
     ipcRenderer.on(definition.channel, listener);
-    return () => ipcRenderer.removeListener(definition.channel, listener);
+    return () => {
+      ipcRenderer.removeListener(definition.channel, listener);
+    };
   };
 }
 

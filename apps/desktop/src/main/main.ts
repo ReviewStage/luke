@@ -120,13 +120,13 @@ async function main(): Promise<void> {
  * The whole quit: every service gives back what it began, in the reverse of
  * the order it began in, and the host's drain is one of those steps — so no
  * runtime work of Luke's continues after an intentional quit. The first ask
- * is held open for the teardown; the quit it makes afterwards is the one that
+ * is held open for the dispose; the quit it makes afterwards is the one that
  * leaves.
  *
- * A quit arriving after the teardown has finished is never held, and the
+ * A quit arriving after the dispose has finished is never held, and the
  * updater's restart depends on it: Squirrel's own quit must reach the
- * installer, and a prevented `before-quit` aborts the update. So the updater
- * runs the same teardown itself and only then hands over, which is why what
+ * installer, and a prevented `before-quit` cancels the update. So the updater
+ * runs the same dispose itself and only then hands over, which is why what
  * is read here is whether one has finished rather than whether one is owed.
  */
 function registerQuit(services: DesktopServices): void {

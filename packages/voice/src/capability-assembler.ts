@@ -15,6 +15,7 @@ import {
   VOICE_SOURCE,
   type VoiceSource,
 } from "@sidecar/settings";
+import { type IDisposable, toDisposable } from "@sidecar/wire";
 import { openAiRealtimeCredentials, unavailableRealtimeDiagnostics } from "./openai-credentials.js";
 import { hostedRealtimeCredentialMinter, type RealtimeCredentialMinter } from "./service-mint.js";
 
@@ -141,13 +142,13 @@ export class VoiceCapabilityAssembler {
   /**
    * Hears every application that published, after its capability set stands,
    * so a reader of the adapters can follow a credential change without
-   * polling. Answers the unsubscribe.
+   * polling. Answers the listener's own disposable.
    */
-  onApplied(listener: () => void): () => void {
+  onApplied(listener: () => void): IDisposable {
     this.#applied.add(listener);
-    return () => {
+    return toDisposable(() => {
       this.#applied.delete(listener);
-    };
+    });
   }
 
   get realtimeCredentials(): RealtimeCredentialMinter | undefined {

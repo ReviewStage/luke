@@ -5,7 +5,7 @@ import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { HOST_OPERATOR_CLIENT_ID } from "@sidecar/host";
 import { SUPERSET_SIGN_IN_STAGE } from "@sidecar/providers/superset/sign-in-stage";
 import type { AppSettings } from "@sidecar/settings/wire";
-import { type LateRef, lateRef } from "@sidecar/wire";
+import { DisposableStore, type LateRef, lateRef } from "@sidecar/wire";
 import { channels } from "#shared/bridge";
 import { type AppStateStore, bootstrapPatch } from "../app-state";
 import type { HostBootstrap, HostOperator } from "../gateway/host-operator";
@@ -76,7 +76,7 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
    */
   let voiceAvailable = false;
   let attachments = 0;
-  const unsubscribers: (() => void)[] = [];
+  const subscriptions = new DisposableStore();
 
   const gateway = wireGateway({
     transport: new InProcessTransport(dependencies.server, {
@@ -97,16 +97,20 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
 
   // The two offers a receiver alone may take are not state and reach the voice
   // window directly; everything else is written to the document.
-  unsubscribers.push(
+  subscriptions.add(
     gateway.host.onSettingsChanged((change) => {
       const stoodVoice = voiceAvailable;
       voiceAvailable = change.settings.status.voiceAvailable;
       state.update({ settings: change.settings });
       if (stoodVoice !== voiceAvailable) links.get().reapplyTalkHotkey();
     }),
+  );
+  subscriptions.add(
     gateway.host.onAccountChanged((account) => {
       state.update({ account });
     }),
+  );
+  subscriptions.add(
     gateway.host.onSessionsChanged((roster) => {
       state.update({
         sessions: {
@@ -116,18 +120,26 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
         },
       });
     }),
+  );
+  subscriptions.add(
     gateway.host.onWorkspaceProjectsChanged((workspaceProjects) => {
       state.update({ sessions: { ...state.snapshot().sessions, workspaceProjects } });
     }),
+  );
+  subscriptions.add(
     gateway.host.onCalendarsChanged((calendars) => {
       state.update({ calendars });
     }),
+  );
+  subscriptions.add(
     gateway.host.onAnnouncementsHeldChanged((held) => {
       state.update({ announcements: { held } });
     }),
-    // The stage is also what answers for the connection between two host
-    // reads: the bootstrap probes the CLI's own login configuration, and a
-    // sign-in carried through — or a sign-out — moves this first.
+  );
+  // The stage is also what answers for the connection between two host
+  // reads: the bootstrap probes the CLI's own login configuration, and a
+  // sign-in carried through — or a sign-out — moves this first.
+  subscriptions.add(
     gateway.host.onSupersetSignInChanged((signIn) => {
       state.update({
         superset: {
@@ -137,17 +149,25 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
         },
       });
     }),
+  );
+  subscriptions.add(
     gateway.host.onCalendarOnboardingChanged((calendarOwed) => {
       state.update({ onboarding: { calendarOwed } });
     }),
+  );
+  subscriptions.add(
     gateway.host.onSpeechOffered((offer) =>
       links.get().sendToVoice(channels.onSpeechOffered, offer),
     ),
+  );
+  subscriptions.add(
     gateway.host.onSpeechWithdrawn((id) =>
       links.get().sendToVoice(channels.onSpeechWithdrawn, { id }),
     ),
-    // The host's own answer about recording stands the halt down: it is the
-    // account transition the halt was waiting on.
+  );
+  // The host's own answer about recording stands the halt down: it is the
+  // account transition the halt was waiting on.
+  subscriptions.add(
     gateway.host.onSessionReplayChanged((replay) => {
       state.update({ sessionReplay: { ...replay, halted: false } });
     }),
@@ -205,7 +225,7 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
       relay.recycleVoiceWindow();
     },
     stop: async () => {
-      while (unsubscribers.length > 0) unsubscribers.pop()?.();
+      subscriptions.dispose();
       gateway.client.close();
     },
   };

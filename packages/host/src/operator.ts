@@ -12,7 +12,14 @@ import {
 import type { GatewayCallResult, GatewayClient } from "@sidecar/gateway";
 import { GATEWAY_EVENT, GATEWAY_METHOD, gatewayEventReader } from "@sidecar/gateway";
 import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime/vocabulary";
-import { isRecord, isWireBoolean, isWireNumber, isWireString, type WireValue } from "@sidecar/wire";
+import {
+  type IDisposable,
+  isRecord,
+  isWireBoolean,
+  isWireNumber,
+  isWireString,
+  type WireValue,
+} from "@sidecar/wire";
 import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
 import { REJECTED_SUBMISSION } from "./brain/publication.js";
 
@@ -37,10 +44,10 @@ export interface GatewayOperator {
   acknowledge: (runId: string, deliveryId: string, epoch: number) => Promise<boolean>;
   /** Delete conversation on a conversation: answers whether the erasure completed or was interrupted, false only when refused. */
   deleteConversation: (sessionKey?: SessionKey) => Promise<boolean>;
-  onRunsChanged: (listener: (runs: readonly BrainRequestSnapshot[]) => void) => () => void;
-  onDeliveryOffered: (listener: (offer: BrainReplyOffer) => void) => () => void;
-  onDeliveriesWithdrawn: (listener: (epoch: number) => void) => () => void;
-  onConversationChanged: (listener: (change: GatewayConversationChange) => void) => () => void;
+  onRunsChanged: (listener: (runs: readonly BrainRequestSnapshot[]) => void) => IDisposable;
+  onDeliveryOffered: (listener: (offer: BrainReplyOffer) => void) => IDisposable;
+  onDeliveriesWithdrawn: (listener: (epoch: number) => void) => IDisposable;
+  onConversationChanged: (listener: (change: GatewayConversationChange) => void) => IDisposable;
   /** The underlying client, for the calls the typed surface above does not name. */
   readonly client: GatewayClient;
 }

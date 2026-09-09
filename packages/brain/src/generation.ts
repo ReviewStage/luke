@@ -11,7 +11,7 @@ import type { BrainPersistedState } from "./envelope.js";
 import { BrainJournal } from "./journal.js";
 import type { BrainObservationEntry } from "./observation-inbox.js";
 import type { BrainRequestRecord } from "./requests.js";
-import { claimedUnlessAborted, type Settled } from "./settled.js";
+import { claimedUnlessCancelled, type Settled } from "./settled.js";
 import { RecordingContextEngine } from "./transcript-recorder.js";
 
 /**
@@ -93,10 +93,10 @@ export function storedCheckpoint(state: BrainPersistedState): RuntimeCheckpoint 
  * against the signal: a runtime whose bootstrap ignores the signal cannot
  * hold the wait open past a stop or a replacement, and a context that
  * finishes opening once the signal has fired — in the same turn or later —
- * is retired by the race itself, exactly once, so a successor never inherits
+ * is disposed by the race itself, exactly once, so a successor never inherits
  * it. The value is claimed while the signal stands, but this continuation
  * runs later, so the signal is read once more before the context is handed
- * back: an abort that landed between the two retires it as well.
+ * back: a cancel that landed between the two disposes it as well.
  */
 export async function claimOpenedContext(
   open: Promise<ContextOpening>,
@@ -104,19 +104,21 @@ export async function claimOpenedContext(
   notLoadedReason: string,
   now: () => number = Date.now,
 ): Promise<Settled<OpenedContext>> {
-  const claimed = await claimedUnlessAborted(open, signal, ({ context }) => retireContext(context));
-  if (claimed.aborted) return claimed;
+  const claimed = await claimedUnlessCancelled(open, signal, ({ context }) =>
+    disposeContext(context),
+  );
+  if (claimed.cancelled) return claimed;
   const { context, bootstrap } = claimed.value;
   if (signal.aborted) {
-    retireContext(context);
-    return { aborted: true };
+    disposeContext(context);
+    return { cancelled: true };
   }
   if (bootstrap.loaded) {
     // The engine is handed back behind the transcript recorder, so every
     // input the runtime ingests and every fold is on record beside the
     // checkpoint that carries it.
     return {
-      aborted: false,
+      cancelled: false,
       value: {
         kind: CONTEXT_OPENING.LOADED,
         context: new RecordingContextEngine(context, now),
@@ -124,8 +126,8 @@ export async function claimOpenedContext(
       },
     };
   }
-  retireContext(context);
-  return { aborted: false, value: incompatibleContext(bootstrap.reason ?? notLoadedReason) };
+  disposeContext(context);
+  return { cancelled: false, value: incompatibleContext(bootstrap.reason ?? notLoadedReason) };
 }
 
 export function generationFrom(
@@ -150,7 +152,7 @@ export function generationFrom(
           now,
         )
           .then((claimed) =>
-            claimed.aborted ? incompatibleContext(REPLACED_WHILE_OPENING) : claimed.value,
+            claimed.cancelled ? incompatibleContext(REPLACED_WHILE_OPENING) : claimed.value,
           )
           .catch((error: Error) =>
             incompatibleContext(`the runtime could not open the context: ${error.message}`),
@@ -171,10 +173,10 @@ export function generationFrom(
   };
 }
 
-/** Retires the generation's context once it is known, when it was loaded; nothing else holds one. */
-export function retireOpenedContext(generation: Generation): void {
+/** Disposes the generation's context once it is known, when it was loaded; nothing else holds one. */
+export function disposeOpenedContext(generation: Generation): void {
   void generation.opened.then((opened) => {
-    if (opened.kind === CONTEXT_OPENING.LOADED) retireContext(opened.context);
+    if (opened.kind === CONTEXT_OPENING.LOADED) disposeContext(opened.context);
   });
 }
 
@@ -183,7 +185,7 @@ export function retireOpenedContext(generation: Generation): void {
  * an engine whose dispose hangs must not hold a stop, a replacement, or a
  * successor's first turn, and a dispose that throws has nothing to tell.
  */
-export function retireContext(context: ContextEngine): void {
+export function disposeContext(context: ContextEngine): void {
   void Promise.resolve()
     .then(() => context.dispose())
     .catch(() => undefined);

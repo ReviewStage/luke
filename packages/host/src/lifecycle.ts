@@ -1,4 +1,4 @@
-import type { GatewayShutdownSteps } from "@sidecar/gateway";
+import type { GatewayDisposeSteps } from "@sidecar/gateway";
 
 /**
  * Two moments of the runtime host's life where one concern must not decide
@@ -42,10 +42,10 @@ export async function seedWorkspaceThenStartMemory(options: StartupStoreOptions)
  * The sender's own flush never rejects; the guard here is for the shape, not
  * a case it has.
  */
-export function shutdownStepsFlushingEvents(
-  steps: GatewayShutdownSteps,
+export function disposeStepsFlushingEvents(
+  steps: GatewayDisposeSteps,
   flushEvents: () => Promise<void>,
-): GatewayShutdownSteps {
+): GatewayDisposeSteps {
   let flushing: Promise<void> | undefined;
   return {
     closeAdmissions: () => {
@@ -56,6 +56,6 @@ export function shutdownStepsFlushingEvents(
     awaitSettled: async (signal) => {
       await Promise.all([steps.awaitSettled(signal), flushing ?? Promise.resolve()]);
     },
-    persistUnresolved: steps.persistUnresolved,
+    persistUnsettled: steps.persistUnsettled,
   };
 }

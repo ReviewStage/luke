@@ -60,6 +60,7 @@ import {
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import {
   ACTION_RESULT_STATUS,
+  type IDisposable,
   isRecord,
   isWireString,
   lateRef,
@@ -79,7 +80,7 @@ import {
 } from "./session-action-performer.js";
 import { createSessionRowActions } from "./session-row-actions.js";
 
-const SESSION_REFRESH_INTERVAL_MS = 60_000;
+const SESSION_PASS_INTERVAL_MS = 60_000;
 
 const DIAGNOSTIC_COUNTED_AS = {
   [ADAPTER_DIAGNOSTIC_KIND.PASS_FAILURE]: PRODUCT_DIAGNOSTIC_KIND.PASS_FAILURE,
@@ -194,7 +195,7 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
 
   let spoolWatchers: readonly ObservationSpoolWatcher[] = [];
   const createdWorkspaceOpens = new CreatedWorkspaceOpenTracker();
-  let unsubscribeSessions: (() => void) | undefined;
+  let sessionsSubscription: IDisposable | undefined;
   let lastWorkspaceProjects: string | undefined;
   let workspaceProjectsBroadcastGeneration = 0;
   let rosterBroadcast = false;
@@ -206,7 +207,7 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     onChange: (state) => {
       kernel.emit(GATEWAY_EVENT.SUPERSET_SIGN_IN_CHANGED, carried(state));
       if (state.stage !== SUPERSET_SIGN_IN_STAGE.CONNECTED) return;
-      void loop.refresh();
+      void loop.pass();
       settings.recordProductEvent(PRODUCT_EVENT.SUPERSET_ACTION, {
         superset_action: PRODUCT_SUPERSET_ACTION.SIGN_IN_COMPLETE,
       });
@@ -399,7 +400,7 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     openCreatedWorkspaces: () => openCreatedWorkspaces(sessionRegistry.list()),
     trackedIssues: () => issues.issues(),
     issueTrackers: issues.trackers,
-    refreshIssues: () => issues.refresh(),
+    passIssues: () => issues.pass(),
     supersetContext: (identity) =>
       superset.actableContext(identity.providerId, identity.providerSessionId),
     supersetCli,
@@ -413,7 +414,7 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
   const rowActions = createSessionRowActions({
     roster: {
       read: async () => {
-        await loop.refresh();
+        await loop.pass();
         return actableSessions();
       },
     },
@@ -447,7 +448,7 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
           events: observationSpool.events,
           onEvents: (events) => {
             void (async () => {
-              await loop.refresh().catch(() => undefined);
+              await loop.pass().catch(() => undefined);
               links.get().wake(wakeEventsFromHooks(providerId, events, sessionRegistry, now()));
             })();
           },
@@ -461,7 +462,7 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
       const agentDefault = (
         await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field)
       )?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent;
-      return await superset.refresh(agentDefault);
+      return await superset.pass(agentDefault);
     } catch (error) {
       report(
         `Superset observation failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -470,9 +471,9 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     }
   }
 
-  async function refreshProviderSessions(generation: number): Promise<void> {
+  async function passProviderSessions(generation: number): Promise<void> {
     const actionsWereEnabled = superset.activeOrganization() !== undefined;
-    const conductorRepositoriesPromise = conductorLocalWorkspaces.refresh().catch((error) => {
+    const conductorRepositoriesPromise = conductorLocalWorkspaces.pass().catch((error) => {
       report(
         `Conductor repository observation failed: ${error instanceof Error ? error.message : String(error)}`,
       );
@@ -502,7 +503,7 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     await Promise.all([
       ...orderedRegistrations.map(async ({ plugin }) => {
         try {
-          await sessionRegistry.refresh(plugin, (providerId, observations) =>
+          await sessionRegistry.pass(plugin, (providerId, observations) =>
             hostEnrichments.reduce(
               (enriched, enrichment) => enrichment(providerId, enriched),
               observations,
@@ -516,7 +517,7 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
       }),
       (async () => {
         try {
-          await sessionRegistry.refresh(superset);
+          await sessionRegistry.pass(superset);
         } catch (error) {
           report(
             `Session observation failed (${superset.provider.id}): ${error instanceof Error ? error.message : String(error)}`,
@@ -530,8 +531,8 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
 
   const loop = new ObservationLoop({
     gate: observationGate,
-    intervalMs: SESSION_REFRESH_INTERVAL_MS,
-    run: refreshProviderSessions,
+    intervalMs: SESSION_PASS_INTERVAL_MS,
+    run: passProviderSessions,
     afterRun: () => {
       links.get().rosterLook();
     },
@@ -573,8 +574,8 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
   }
 
   function startObservation(): void {
-    if (!runMode.observesProviders || !account.capabilitiesActive() || unsubscribeSessions) return;
-    unsubscribeSessions = sessionRegistry.subscribe((sessions) => {
+    if (!runMode.observesProviders || !account.capabilitiesActive() || sessionsSubscription) return;
+    sessionsSubscription = sessionRegistry.subscribe((sessions) => {
       broadcastSessions(sessions);
       openCreatedWorkspaces(sessions);
       void broadcastWorkspaceProjects();
@@ -584,8 +585,8 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
 
   function stopObservation(): void {
     workspaceProjectsBroadcastGeneration += 1;
-    unsubscribeSessions?.();
-    unsubscribeSessions = undefined;
+    sessionsSubscription?.dispose();
+    sessionsSubscription = undefined;
     for (const { plugin } of orderedRegistrations) {
       sessionRegistry.replaceProvider(plugin.provider, []);
     }
@@ -690,7 +691,7 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
         });
       }
       supersetSignIn.cancel();
-      void loop.refresh();
+      void loop.pass();
       settings.recordProductEvent(PRODUCT_EVENT.SUPERSET_ACTION, {
         superset_action: PRODUCT_SUPERSET_ACTION.DISCONNECT,
       });
@@ -714,7 +715,7 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     readSupersetWorkspaceHost,
     refreshCredentialAdapter: (providerId) => {
       const plugin = pluginForCredential(providerId);
-      if (plugin) void sessionRegistry.refresh(plugin);
+      if (plugin) void sessionRegistry.pass(plugin);
     },
     actableSessions,
     roster: () => {
@@ -743,11 +744,11 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
       });
     },
     stop: async () => {
-      unsubscribeSessions?.();
-      unsubscribeSessions = undefined;
+      sessionsSubscription?.dispose();
+      sessionsSubscription = undefined;
       for (const watcher of spoolWatchers) watcher.close();
       spoolWatchers = [];
-      supersetSignIn.shutdown();
+      supersetSignIn.dispose();
     },
   };
 }

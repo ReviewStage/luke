@@ -169,7 +169,7 @@ test("an absent Conductor database reports no repositories", async (t) => {
   assert.deepEqual(await reader.read(), []);
 });
 
-test("refresh offers each repository as an optional-task project", async (t) => {
+test("a pass offers each repository as an optional-task project", async (t) => {
   const databasePath = await temporaryDatabasePath(t);
   const database = createReposDatabase(databasePath);
   writeRepo(database, {
@@ -185,7 +185,7 @@ test("refresh offers each repository as an optional-task project", async (t) => 
     openExternal: async () => {},
   });
   assert.deepEqual(plugin.projects?.() ?? [], []);
-  await plugin.refresh();
+  await plugin.pass();
   assert.deepEqual(plugin.projects?.() ?? [], [
     {
       providerProjectId: "repo-luke",
@@ -210,7 +210,7 @@ test("creating a workspace fires Conductor's create link for the offered reposit
       opened.push(url);
     },
   });
-  await plugin.refresh();
+  await plugin.pass();
   const result = await dispatchAction(
     plugin,
     "createWorkspace",
@@ -233,7 +233,7 @@ test("creating a workspace fires Conductor's create link for the offered reposit
   );
 });
 
-test("a failed refresh empties the offer rather than keeping a stale one", async (t) => {
+test("a failed pass empties the offer rather than keeping a stale one", async (t) => {
   const databasePath = await temporaryDatabasePath(t);
   // The file must exist for the read-only open to be attempted; the mock below
   // stands in for its contents, succeeding once and then failing.
@@ -260,11 +260,11 @@ test("a failed refresh empties the offer rather than keeping a stale one", async
     repositories: conductorRepositories({ databasePath, sqlite }),
     openExternal: async () => {},
   });
-  await plugin.refresh();
+  await plugin.pass();
   assert.equal((plugin.projects?.() ?? []).length, 1);
   // A non-ignorable read failure surfaces, and must leave nothing behind to
   // validate a later create against.
-  await assert.rejects(() => plugin.refresh());
+  await assert.rejects(() => plugin.pass());
   assert.deepEqual(plugin.projects?.() ?? [], []);
 });
 
@@ -278,7 +278,7 @@ test("creating a workspace with no task lands clean, with no send warning", asyn
     repositories: conductorRepositories({ databasePath }),
     openExternal: async () => {},
   });
-  await plugin.refresh();
+  await plugin.pass();
   const result = await dispatchAction(
     plugin,
     "createWorkspace",
@@ -302,7 +302,7 @@ test("creating a workspace uses the offered root path, never the request's", asy
       opened.push(url);
     },
   });
-  await plugin.refresh();
+  await plugin.pass();
   // A request naming a different target than the one offered is not the project
   // this pass reported, so it is refused rather than fired at a path of its own.
   const result = await dispatchAction(
@@ -331,7 +331,7 @@ test("creating a workspace in an unoffered project is unsupported", async (t) =>
       opened.push(url);
     },
   });
-  await plugin.refresh();
+  await plugin.pass();
   const result = await dispatchAction(
     plugin,
     "createWorkspace",
@@ -353,7 +353,7 @@ test("a failed open is reported as a rejection the user can act on", async (t) =
       throw new Error("no handler for conductor://");
     },
   });
-  await plugin.refresh();
+  await plugin.pass();
   const result = await dispatchAction(
     plugin,
     "createWorkspace",
@@ -391,7 +391,7 @@ test("a create whose deep link was handed to the machine and never answered is u
       throw new ExternalOpenAnswerLostError("the desktop went away before answering");
     },
   });
-  await plugin.refresh();
+  await plugin.pass();
   const result = await dispatchAction(
     plugin,
     "createWorkspace",
@@ -409,7 +409,7 @@ test("a create whose deep link was handed to the machine and never answered is u
       throw new Error("no handler for the scheme");
     },
   });
-  await refused.refresh();
+  await refused.pass();
   const rejected = await dispatchAction(
     refused,
     "createWorkspace",

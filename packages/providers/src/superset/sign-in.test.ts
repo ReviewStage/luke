@@ -167,9 +167,9 @@ test("duplicate starts share one attempt and cancellation kills its exact child"
   assert.equal(signIn.current().stage, SUPERSET_SIGN_IN_STAGE.IDLE);
 });
 
-test("process failure, timeout, and shutdown end without exposing CLI output", async (t) => {
+test("process failure, timeout, and dispose end without exposing CLI output", async (t) => {
   const home = await homeWithCli(t);
-  for (const ending of ["error", "timeout", "shutdown"] as const) {
+  for (const ending of ["error", "timeout", "dispose"] as const) {
     const child = new FakeChild();
     const states: string[] = [];
     const signIn = new SupersetSignIn({
@@ -182,7 +182,7 @@ test("process failure, timeout, and shutdown end without exposing CLI output", a
     await signIn.begin();
     child.stderr.write("token=must-not-cross-the-boundary");
     if (ending === "error") child.emit("error", new Error("secret output"));
-    if (ending === "shutdown") signIn.shutdown();
+    if (ending === "dispose") signIn.dispose();
     await new Promise((resolve) => setTimeout(resolve, ending === "timeout" ? 5 : 0));
     assert.equal(
       states.some((state) => state.includes("must-not-cross")),

@@ -1,5 +1,11 @@
 import type { MaybePromise } from "@sidecar/runtime/vocabulary";
-import { isWireNumber, type WireRecord, type WireValue } from "@sidecar/wire";
+import {
+  type IDisposable,
+  isWireNumber,
+  toDisposable,
+  type WireRecord,
+  type WireValue,
+} from "@sidecar/wire";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_ERROR,
@@ -120,7 +126,7 @@ export class GatewayServer {
   }
 
   /**
-   * Closes the door to new work: every mutating method but the shutdown
+   * Closes the door to new work: every mutating method but the dispose
    * itself answers shutting-down from here on, while reads, hellos, and
    * reconnections still answer, so a client can see the host leaving rather
    * than lose it. Nothing under way is touched; that is the coordinator's.
@@ -174,11 +180,11 @@ export class GatewayServer {
     return event;
   }
 
-  subscribe(listener: GatewayEventListener): () => void {
+  subscribe(listener: GatewayEventListener): IDisposable {
     this.#listeners.add(listener);
-    return () => {
+    return toDisposable(() => {
       this.#listeners.delete(listener);
-    };
+    });
   }
 
   /**

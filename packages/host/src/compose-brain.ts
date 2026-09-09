@@ -35,6 +35,7 @@ import {
 import { VOICE_SOURCE } from "@sidecar/settings";
 import {
   ACTION_RESULT_STATUS,
+  type IDisposable,
   isRecord,
   UNKNOWN_ACTION_STATUS,
   type WireRecord,
@@ -103,7 +104,7 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
   });
   const deliveries = new DeliveryLedger<GrantedWords>({ nextDeliveryId: createId });
   let appGuide: AppGuideSnapshot = EMPTY_APP_GUIDE;
-  let stopConversationMaintenance: (() => void) | undefined;
+  let conversationMaintenance: IDisposable | undefined;
 
   const memory: MemoryWiring = runMode.observesProviders
     ? composeNotebookMemory({
@@ -216,7 +217,7 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
     actions: {
       sessionActions: observation.sessionActions,
       sessions: observation.actableSessions,
-      refreshSessions: () => observation.loop.refresh(),
+      passSessions: () => observation.loop.pass(),
       workspaceProjects: observation.workspaceProjects,
       workspaceDefaults: observation.workspaceDefaults,
       trackedIssues: () => issues.issues(),
@@ -309,12 +310,12 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
       });
       await wiring.store().load();
       await store.restore();
-      stopConversationMaintenance = startConversationMaintenance({ store, brain: wiring });
+      conversationMaintenance = startConversationMaintenance({ store, brain: wiring });
     },
     stop: async () => {
-      stopConversationMaintenance?.();
-      stopConversationMaintenance = undefined;
-      wiring.retire();
+      conversationMaintenance?.dispose();
+      conversationMaintenance = undefined;
+      wiring.dispose();
       memory.stop();
       await store.close();
     },

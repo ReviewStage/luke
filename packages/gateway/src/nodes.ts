@@ -1,5 +1,5 @@
 import type { MaybePromise } from "@sidecar/runtime/vocabulary";
-import type { WireRecord, WireValue } from "@sidecar/wire";
+import { type IDisposable, toDisposable, type WireRecord, type WireValue } from "@sidecar/wire";
 import { NODE_CAPABILITY_STATUS, type NodeCapabilityResult } from "./protocol.js";
 
 export type NodeCapabilityHandler = (params: WireRecord) => MaybePromise<WireValue | undefined>;
@@ -146,11 +146,11 @@ export class NodeRegistry {
     return provider.perform(capability, params);
   }
 
-  onChange(listener: NodeRegistryListener): () => void {
+  onChange(listener: NodeRegistryListener): IDisposable {
     this.#listeners.add(listener);
-    return () => {
+    return toDisposable(() => {
       this.#listeners.delete(listener);
-    };
+    });
   }
 
   #provider(capability: string): HeldNode | undefined {

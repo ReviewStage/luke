@@ -43,7 +43,7 @@ function dependencies(overrides: Partial<BrainWiringDependencies> = {}) {
         openSessionChange: async () => ({ status: "accepted" }),
       },
       sessions: () => [],
-      refreshSessions: async () => undefined,
+      passSessions: async () => undefined,
       workspaceProjects: () => [],
       workspaceDefaults: async () => ({}),
       trackedIssues: () => undefined,
@@ -86,7 +86,7 @@ test("with no model to run on, a rebuild opens no conversation and loads no stor
   assert.deepEqual(loads, [MAIN_SESSION_KEY, threadSessionKey("t-1")]);
   assert.equal(brains.current(threadSessionKey("t-1")), undefined);
   await brains.closeConversation(threadSessionKey("t-1"));
-  brains.retire();
+  brains.dispose();
 });
 
 const NOW = 1_800_000_000_000;
@@ -124,7 +124,7 @@ test("every hook event wakes the brain, carrying the session when the roster hol
     session: held,
     atMs: NOW - 500,
   });
-  // A hook for a session the poll has not seen yet still wakes the brain,
+  // A hook for a session the pass has not seen yet still wakes the brain,
   // dated now when the spool carried no usable time.
   assert.deepEqual(wakes[1], {
     kind: BRAIN_WAKE_KIND.HOOK,

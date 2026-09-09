@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { GATEWAY_SHUTDOWN_DEFAULTS, shutdownGateway } from "@sidecar/gateway";
+import { disposeGateway, GATEWAY_DISPOSE_DEFAULTS } from "@sidecar/gateway";
 import { drainMicrotasks } from "@sidecar/runtime/testing";
-import { seedWorkspaceThenStartMemory, shutdownStepsFlushingEvents } from "./lifecycle.js";
+import { disposeStepsFlushingEvents, seedWorkspaceThenStartMemory } from "./lifecycle.js";
 
 test("a workspace seed that fails is reported and the memory index still starts, after the seed and not before", async () => {
   const order: string[] = [];
@@ -51,17 +51,17 @@ function baseSteps(order: string[]) {
     awaitSettled: async () => {
       order.push("settled");
     },
-    persistUnresolved: async () => {
+    persistUnsettled: async () => {
       order.push("persist");
       return 0;
     },
   };
 }
 
-test("the flush begins as admissions close and is waited for before the unresolved count, so the install's count leaves with the drain", async () => {
+test("the flush begins as admissions close and is waited for before the unsettled count, so the install's count leaves with the drain", async () => {
   const order: string[] = [];
   let settleFlush: (() => void) | undefined;
-  const steps = shutdownStepsFlushingEvents(baseSteps(order), () => {
+  const steps = disposeStepsFlushingEvents(baseSteps(order), () => {
     order.push("flush:start");
     return new Promise<void>((resolve) => {
       settleFlush = () => {
@@ -70,7 +70,7 @@ test("the flush begins as admissions close and is waited for before the unresolv
       };
     });
   });
-  const report = shutdownGateway(steps, { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS });
+  const report = disposeGateway(steps, { deadlineMs: GATEWAY_DISPOSE_DEFAULTS.DEADLINE_MS });
   await drainMicrotasks(1);
   assert.deepEqual(order, ["close", "flush:start", "cancel", "settled"]);
   settleFlush?.();
@@ -80,26 +80,26 @@ test("the flush begins as admissions close and is waited for before the unresolv
   assert.deepEqual(outcome.cancelled, ["run-1"]);
 });
 
-test("a flush that never answers ends the shutdown at the deadline with the runs' own outcome intact", async () => {
+test("a flush that never answers ends the dispose at the deadline with the runs' own outcome intact", async () => {
   const order: string[] = [];
-  const steps = shutdownStepsFlushingEvents(
+  const steps = disposeStepsFlushingEvents(
     baseSteps(order),
     () => new Promise<void>(() => undefined),
   );
-  const outcome = await shutdownGateway(steps, { deadlineMs: 20 });
+  const outcome = await disposeGateway(steps, { deadlineMs: 20 });
   assert.equal(outcome.settled, false);
   assert.deepEqual(outcome.cancelled, ["run-1"]);
-  assert.equal(outcome.unresolved, 0);
+  assert.equal(outcome.unsettled, 0);
   assert.ok(order.includes("persist"));
 });
 
 test("a flush that rejects is a count nobody has, not a failed quit", async () => {
   const order: string[] = [];
-  const steps = shutdownStepsFlushingEvents(baseSteps(order), () =>
+  const steps = disposeStepsFlushingEvents(baseSteps(order), () =>
     Promise.reject(new Error("offline")),
   );
-  const outcome = await shutdownGateway(steps, {
-    deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS,
+  const outcome = await disposeGateway(steps, {
+    deadlineMs: GATEWAY_DISPOSE_DEFAULTS.DEADLINE_MS,
   });
   assert.equal(outcome.settled, true);
   assert.deepEqual(order, ["close", "cancel", "settled", "persist"]);
@@ -107,7 +107,7 @@ test("a flush that rejects is a count nobody has, not a failed quit", async () =
 
 test("closing admissions twice flushes once", () => {
   let flushes = 0;
-  const steps = shutdownStepsFlushingEvents(baseSteps([]), async () => {
+  const steps = disposeStepsFlushingEvents(baseSteps([]), async () => {
     flushes += 1;
   });
   steps.closeAdmissions();

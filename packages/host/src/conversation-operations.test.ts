@@ -72,7 +72,7 @@ function harness(erasePublished = true, { marks = true, readsCutoff = true } = {
   return { operations: conversationOperations(dependencies), calls };
 }
 
-test("Delete conversation fences the thread and the brain's generation, then erases what stood at or before the press while the successor lifetime stands; nothing is retired or reopened", async () => {
+test("Delete conversation fences the thread and the brain's generation, then erases what stood at or before the press while the successor lifetime stands; nothing is disposed or reopened", async () => {
   const { operations, calls } = harness();
   assert.equal(await operations.deleteConversation(THREAD), CONVERSATION_DELETE_OUTCOME.COMPLETE);
   assert.deepEqual(calls, [
@@ -111,9 +111,9 @@ test("a cutoff the store cannot read refuses the deletion after the marker, with
   assert.ok(calls.some((call) => call.includes("earlier cutoff could not be read")));
 });
 
-test("maintenance runs at the launch, preserving the busy conversations, and stops with its clock", () => {
+test("maintenance runs at the launch, preserving the busy conversations, and ends with its clock", () => {
   const runs: (readonly SessionKey[])[] = [];
-  const stop = startConversationMaintenance({
+  const maintenance = startConversationMaintenance({
     store: {
       runMaintenance: async (preserve) => {
         runs.push(preserve);
@@ -123,5 +123,5 @@ test("maintenance runs at the launch, preserving the busy conversations, and sto
     brain: { busyConversations: () => [THREAD] },
   });
   assert.deepEqual(runs, [[THREAD]]);
-  stop();
+  maintenance.dispose();
 });

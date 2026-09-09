@@ -35,7 +35,7 @@ export interface MicrophoneRouteWatch {
    * the same line every change does.
    */
   probe(): void;
-  /** Stops the helper. Nothing succeeds it during shutdown, so no one waits. */
+  /** Stops the helper. Nothing succeeds it during dispose, so no one waits. */
   stop(): void;
 }
 

@@ -3,11 +3,11 @@ import test from "node:test";
 import { agentLaneWidth, LANE, LaneScheduler, laneConfiguration } from "./lanes.js";
 
 function deferred<T = void>() {
-  let resolve!: (value: T) => void;
+  let settle!: (value: T) => void;
   const promise = new Promise<T>((done) => {
-    resolve = done;
+    settle = done;
   });
-  return { promise, resolve };
+  return { promise, settle };
 }
 
 const tick = () => new Promise<void>((done) => setImmediate(done));
@@ -49,9 +49,9 @@ test("a lane admits its width and queues the rest in order, apart from every oth
   assert.deepEqual(started, [0, 1, 2]);
   assert.equal(await child, "child");
   assert.deepEqual(scheduler.snapshot(LANE.BACKGROUND), { width: 3, active: 3, queued: 1 });
-  gates[0]?.resolve();
+  gates[0]?.settle();
   await tick();
   assert.deepEqual(started, [0, 1, 2, 3]);
-  for (const gate of gates) gate.resolve();
+  for (const gate of gates) gate.settle();
   assert.deepEqual(await Promise.all(runs), [0, 1, 2, 3]);
 });

@@ -50,7 +50,7 @@ function fullAccessAnswer(): string {
 
 test("with no connection the helper is never run", async () => {
   const { reader, runs } = readerFor({ answer: () => fullAccessAnswer() });
-  assert.equal(await reader.observe(), undefined);
+  assert.equal(await reader.pass(), undefined);
   assert.equal(runs.length, 0);
 });
 
@@ -60,7 +60,7 @@ test("a pass asks for the shared window and the chosen calendars, and answers me
     answer: () => fullAccessAnswer(),
   });
 
-  const observation = await reader.observe();
+  const observation = await reader.pass();
   assert.deepEqual(runs[0]?.helperArguments, [
     "observe",
     new Date(NOW - MAXIMUM_MEETING_LENGTH_MS).toISOString(),
@@ -134,14 +134,14 @@ test("access withdrawn empties the calendar rather than standing what it held", 
     answer: () => answer(),
   });
 
-  const first = await reader.observe();
+  const first = await reader.pass();
   assert.equal(first?.meetings.length, 2);
 
   // The system's own answer takes the calendars and meetings with it:
   // nothing may keep standing — or keep holding announcements — on consent
   // the user just took back in System Settings.
   answer = () => JSON.stringify({ access: APPLE_CALENDAR_ACCESS.DENIED });
-  const withdrawn = await reader.observe();
+  const withdrawn = await reader.pass();
   assert.match(withdrawn?.failure ?? "", /System Settings/);
   assert.deepEqual(withdrawn?.meetings, []);
   assert.deepEqual(withdrawn?.calendars, []);
@@ -151,7 +151,7 @@ test("access withdrawn empties the calendar rather than standing what it held", 
   // withdrawal itself — never resurrecting what it took, nor dressing the
   // row back up as connected.
   answer = () => new Error("helper went away");
-  const failed = await reader.observe();
+  const failed = await reader.pass();
   assert.deepEqual(failed?.meetings, []);
   assert.equal(failed?.revoked, true);
   assert.match(failed?.failure ?? "", /helper went away/);
@@ -163,15 +163,15 @@ test("a helper that fails or answers unreadably stands the last observation", as
     connection: { selectedCalendarIds: ["work"] },
     answer: () => answer(),
   });
-  const first = await reader.observe();
+  const first = await reader.pass();
 
   answer = () => new Error("helper went away");
-  const failed = await reader.observe();
+  const failed = await reader.pass();
   assert.match(failed?.failure ?? "", /helper went away/);
   assert.deepEqual(failed?.meetings, first?.meetings);
 
   answer = () => "not json at all";
-  const unreadable = await reader.observe();
+  const unreadable = await reader.pass();
   assert.match(unreadable?.failure ?? "", /answered unreadably/);
   assert.deepEqual(unreadable?.meetings, first?.meetings);
 });
@@ -182,11 +182,11 @@ test("forget clears what a failing pass would otherwise stand", async () => {
     connection: { selectedCalendarIds: ["work"] },
     answer: () => (healthy ? fullAccessAnswer() : new Error("helper went away")),
   });
-  await reader.observe();
+  await reader.pass();
   reader.forget();
 
   healthy = false;
-  const observation = await reader.observe();
+  const observation = await reader.pass();
   assert.deepEqual(observation?.meetings, []);
   assert.deepEqual(observation?.calendars, []);
   assert.match(observation?.failure ?? "", /helper went away/);

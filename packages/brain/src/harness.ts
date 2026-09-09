@@ -625,7 +625,7 @@ export const LIFETIME = 14 * 24 * 60 * 60 * 1000;
  * A runtime whose first context open is held until the test releases it, over
  * an engine whose dispose the test can count or hold. What the host does
  * with an open that finishes after a stop is the point: the late context is
- * retired, exactly once, and a dispose that never settles holds nothing.
+ * disposed, exactly once, and a dispose that never settles holds nothing.
  */
 export function heldOpenRuntime(model: ModelAdapter, disposeHangs = false) {
   const inner = runtimeOver(model);

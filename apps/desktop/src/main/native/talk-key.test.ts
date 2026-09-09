@@ -110,7 +110,7 @@ test("stopping is the app's own doing and is not a key becoming unavailable", ()
   context.die();
 
   assert.equal(context.killed(), true);
-  // Falling back to another key during shutdown would register a global
+  // Falling back to another key during dispose would register a global
   // shortcut on the way out of the app.
   assert.deepEqual(context.edges, ["registered:Alt+Space"]);
 });

@@ -24,7 +24,7 @@ export interface SupersetPlugin extends SessionProviderPlugin {
    * offers for creation. Answers the enrichment that pass produced, which is
    * what annotates the other providers' rows.
    */
-  refresh(defaultAgent: string | undefined): Promise<WorkspaceHostEnrichment>;
+  pass(defaultAgent: string | undefined): Promise<WorkspaceHostEnrichment>;
   /** The organization the CLI's login serves, as the latest pass read it. */
   activeOrganization(): string | undefined;
   /** The context an action resolves against, in that organization and no other. */
@@ -82,15 +82,15 @@ export function supersetPlugin(options: SupersetPluginOptions): SupersetPlugin {
 
     /**
      * The idle workspaces the latest pass reported, exactly as the snapshot
-     * decorated them. `refresh` publishes them rather than this reading state
-     * of its own, so a plain registry refresh after an action commits the same
+     * decorated them. `pass` publishes them rather than this reading state
+     * of its own, so a plain registry pass after an action commits the same
      * shape the observation loop does.
      */
     observe: async () => workspaceRows,
     latest: () => workspaceRows,
     projects: () => projects,
 
-    async refresh(defaultAgent) {
+    async pass(defaultAgent) {
       const [read, activeOrganization] = await Promise.all([
         supersetHostState(options),
         cli.activeOrganization(),

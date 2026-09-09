@@ -193,7 +193,7 @@ export class SupersetSignIn {
     this.#set(snapshot(SUPERSET_SIGN_IN_STAGE.IDLE));
   }
 
-  shutdown(): void {
+  dispose(): void {
     this.cancel();
   }
 

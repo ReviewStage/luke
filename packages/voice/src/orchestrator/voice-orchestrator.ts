@@ -438,9 +438,9 @@ export class VoiceOrchestrator<Stream> {
 
   /**
    * The Clear a panel pressed, already carried out by the main process,
-   * arriving here to retire this window's in-flight turns the way the press
+   * arriving here to dispose this window's in-flight turns the way the press
    * would have. The talk key's latch goes with them: a turn the press just
-   * retired is not one the next press ends.
+   * disposed is not one the next press ends.
    */
   clearConversation(): void {
     this.#thread.clear();
@@ -523,8 +523,8 @@ export class VoiceOrchestrator<Stream> {
   /**
    * The call Luke opens for himself. A stood-down call cannot be recalled
    * mid-handshake: a mint already out lands when it lands, and the abandon
-   * that follows tears the attempt down and reports it. Reported to the
-   * window, that teardown would clear the remote stream the developer's call
+   * that follows disposes the attempt and reports it. Reported to the
+   * window, that disposal would clear the remote stream the developer's call
    * had already put there, and a late failure of Luke's own call would be
    * drawn as theirs. So the speak-only call is heard only while no
    * conversation call has taken over, which is exactly when standing it down

@@ -151,7 +151,7 @@ function composition() {
     });
   const transition = () =>
     transitionVoiceCredential({
-      retire: () => host.retire(),
+      dispose: () => host.dispose(),
       apply: () => assembler.apply(),
       rebuild,
     });

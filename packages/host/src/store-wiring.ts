@@ -124,11 +124,11 @@ export interface StoreWiring {
     kind: ConversationKind,
     name: string,
   ) => Promise<ConversationRecord>;
-  /** Closes the worker, once opened; the host's last action at a shutdown. */
+  /** Closes the worker, once opened; the host's last action at a dispose. */
   close: () => Promise<void>;
   /** The child service's records and completions; a run with nothing on disk keeps them in memory alone. */
   childStore: () => ChildStore;
-  /** Retires a conversation's row, keeping its history: the brain's own cleanup of an ended child. */
+  /** Disposes a conversation's row, keeping its history: the brain's own cleanup of an ended child. */
   archive: (sessionKey: SessionKey) => Promise<boolean>;
   /**
    * The conversation's durable Clear cutoff as the store holds it now, in
@@ -139,7 +139,7 @@ export interface StoreWiring {
   conversationCutoff: (sessionKey: SessionKey) => Promise<CutoffBefore | undefined>;
   /**
    * The store side of Delete conversation, called once the thread is fenced and
-   * the conversation's brain retired: the rows go behind a committed archive
+   * the conversation's brain disposed: the rows go behind a committed archive
    * and the archive is published. A thread held in memory alone has nothing
    * on disk to archive, so forgetting its lines is the whole erasure and
    * answers as published.

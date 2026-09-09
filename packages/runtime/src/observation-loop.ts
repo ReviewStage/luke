@@ -26,8 +26,8 @@ export class ObservationLoop {
 
   start(): void {
     if (this.#timer || !this.#options.gate()) return;
-    void this.refresh();
-    this.#timer = setInterval(() => void this.refresh(), this.#options.intervalMs);
+    void this.pass();
+    this.#timer = setInterval(() => void this.pass(), this.#options.intervalMs);
     this.#timer.unref();
   }
 
@@ -38,7 +38,7 @@ export class ObservationLoop {
     this.#timer = undefined;
   }
 
-  async refresh(): Promise<void> {
+  async pass(): Promise<void> {
     if (!this.#options.gate()) return;
     if (this.#running) {
       this.#queued = true;
@@ -57,7 +57,7 @@ export class ObservationLoop {
       if (this.isCurrent(generation)) this.#options.afterRun?.();
       if (this.#queued) {
         this.#queued = false;
-        void this.refresh();
+        void this.pass();
       }
     }
   }

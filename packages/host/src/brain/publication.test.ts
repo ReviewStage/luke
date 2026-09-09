@@ -14,6 +14,7 @@ import {
   type ConversationEntry,
   maximumTypedAskLength,
 } from "@sidecar/session";
+import { toDisposable } from "@sidecar/wire";
 import { operatorOverBrain } from "../testing/index.js";
 import { followBrainRequests, publishRuns } from "./publication.js";
 
@@ -200,7 +201,7 @@ test("a run's end reaches the thread once, at the moment it settled, decided aga
   assert.equal(written.recorded.length, 2);
 });
 
-test("a retired follower stops between two records, and the second waits for a live report", async () => {
+test("a disposed follower stops between two records, and the second waits for a live report", async () => {
   const written = thread();
   const marked: string[] = [];
   const live = [record({ runId: "run-1" }), record({ runId: "run-2" })];
@@ -343,9 +344,9 @@ test("following a brain relays every report, writes and marks the ended runs, an
   const agent = {
     subscribe: (next: (records: readonly BrainRequestRecord[]) => void) => {
       listener = next;
-      return () => {
+      return toDisposable(() => {
         listener = undefined;
-      };
+      });
     },
     ready: () => Promise.resolve(),
     requests: () => [ready],
@@ -377,14 +378,14 @@ test("following a brain relays every report, writes and marks the ended runs, an
   assert.equal(listener, undefined);
 });
 
-test("a retired follower relays nothing a late report carries", async () => {
+test("a disposed follower relays nothing a late report carries", async () => {
   let listener: ((records: readonly BrainRequestRecord[]) => void) | undefined;
   let releaseReady: (() => void) | undefined;
   // SAFETY: the follower reads only these four members off the agent.
   const agent = {
     subscribe: (next: (records: readonly BrainRequestRecord[]) => void) => {
       listener = next;
-      return () => undefined;
+      return toDisposable(() => undefined);
     },
     ready: () =>
       new Promise<void>((resolve) => {
@@ -453,7 +454,7 @@ test("an end is published downstream only once its line and its mark have both l
   assert.equal(written.entries().length, 1);
 });
 
-test("a refused thread write publishes nothing downstream, and a retired follower publishes nothing late", async () => {
+test("a refused thread write publishes nothing downstream, and a disposed follower publishes nothing late", async () => {
   const published: string[] = [];
   let refuse = true;
   // SAFETY: publication reads only these members off the agent.
@@ -473,10 +474,10 @@ test("a refused thread write publishes nothing downstream, and a retired followe
   assert.equal(published.length, 0);
   refuse = false;
   let following = true;
-  // The follower retires while the mark is out: the end is written, but not
-  // handed on, because nothing may be offered on a retired follower's behalf.
+  // The follower is disposed while the mark is out: the end is written, but not
+  // handed on, because nothing may be offered on a disposed follower's behalf.
   // SAFETY: publication reads only `request` and the two marks off the agent; the fixture stands in for the rest.
-  const retiringAgent = {
+  const disposingAgent = {
     ...agent,
     markConversationRecorded: async () => {
       following = false;
@@ -484,7 +485,7 @@ test("a refused thread write publishes nothing downstream, and a retired followe
     },
   } as unknown as BrainAgent;
   await publishRuns(
-    retiringAgent,
+    disposingAgent,
     [record()],
     written.record,
     () => following,

@@ -30,7 +30,7 @@ export interface BrainActionExecution {
   isRevoked(): boolean;
   /**
    * Fires the moment the standing is revoked, so a performer can settle a
-   * read it is waiting on — a roster refresh, a settings read — rather than
+   * read it is waiting on — a roster pass, a settings read — rather than
    * finishing it first. It reaches no provider write: an effect already
    * dispatched is awaited for its result whatever the signal says.
    */

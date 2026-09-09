@@ -29,7 +29,7 @@ import {
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { compactContext } from "./compaction.js";
 import { LOOP_GUARD_LEVEL, LoopGuard, type LoopGuardConfig } from "./loop-guard.js";
-import { settledUnlessAborted } from "./settled.js";
+import { settledUnlessCancelled } from "./settled.js";
 import { outputStatus } from "./tool-results.js";
 
 /**
@@ -212,8 +212,8 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
     // on the model: a held hook cannot keep a cancel or a deadline from
     // landing, and its late answer is not read.
     const engine = async <Value>(work: MaybePromise<Value>): Promise<Value | undefined> => {
-      const settled = await settledUnlessAborted(Promise.resolve(work), signal);
-      return settled.aborted ? undefined : settled.value;
+      const settled = await settledUnlessCancelled(Promise.resolve(work), signal);
+      return settled.cancelled ? undefined : settled.value;
     };
     const ingest = (input: ContextInput) => engine(context.ingest(input, lifecycle));
     for (const input of request.input) {
@@ -234,7 +234,7 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
         context.assemble({ ephemeral: request.ephemeral() }, lifecycle),
       );
       if (assembled === undefined || signal.aborted) return cancelled();
-      const answered = await settledUnlessAborted(
+      const answered = await settledUnlessCancelled(
         this.#options.model.respond(assembled, {
           prompt: request.prompt,
           tools: request.toolSchemas,
@@ -247,7 +247,7 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
         }),
         signal,
       );
-      if (answered.aborted || signal.aborted) return cancelled();
+      if (answered.cancelled || signal.aborted) return cancelled();
       const answer = answered.value;
       if (answer.outcome === MODEL_RESPONSE_OUTCOME.THROTTLED) {
         await emit({ kind: RUNTIME_EVENT.THROTTLED, until: answer.until });
@@ -349,11 +349,11 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
     await ingest({ kind: CONTEXT_INPUT_KIND.MODEL_OUTPUT, items: answer.items });
     if (lifecycle.signal?.aborted) return false;
     if (answer.compacted) {
-      const settled = await settledUnlessAborted(
+      const settled = await settledUnlessCancelled(
         Promise.resolve(request.context.compact(lifecycle)),
         lifecycle.signal ?? new AbortController().signal,
       );
-      if (settled.aborted) return false;
+      if (settled.cancelled) return false;
       await emit({ kind: RUNTIME_EVENT.COMPACTED, dropped: settled.value });
     }
     if (answer.usage) await emit({ kind: RUNTIME_EVENT.USAGE, usage: answer.usage });

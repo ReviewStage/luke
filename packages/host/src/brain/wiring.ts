@@ -90,7 +90,7 @@ import {
   type SessionIdentity,
   type SessionProviderPlugin,
 } from "@sidecar/session";
-import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, type IDisposable, type WireRecord } from "@sidecar/wire";
 import {
   type BrainActionPerformerDependencies,
   createBrainActionPerformer,
@@ -232,11 +232,11 @@ export interface BrainWiring {
    */
   rebuild: () => Promise<void>;
   /** Withdraws every standing brain now; their stops are awaited by the next rebuild. */
-  retire: () => void;
+  dispose: () => void;
   /** Opens a conversation for asks: its store is built and, when a model stands, its brain. */
   openConversation: (sessionKey: SessionKey) => Promise<void>;
   /**
-   * Retires a conversation's brain, drains its publication, and forgets its
+   * Disposes a conversation's brain, drains its publication, and forgets its
    * store, so nothing of the old lifetime can write. An archive closes a
    * thread for good; a deletion closes any conversation, main included, and
    * opens it again over the emptied rows.
@@ -284,7 +284,7 @@ interface OpenConversation {
   host: BrainHost;
   store: BrainStateStore;
   clock: BrainGenerationClock;
-  unsubscribe: () => void;
+  unsubscribe: IDisposable;
 }
 
 /** How many notices main keeps unread before the oldest go; each is one line about one turn. */
@@ -395,7 +395,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     // The generation's clock stands with the store, not with an agent, so a
     // store whose automatic reset is enabled sees the generation die on time
     // through a launch with no key or account, and after its agent was
-    // retired. Under the default policy of no automatic reset it arms nothing.
+    // disposed. Under the default policy of no automatic reset it arms nothing.
     const clock = new BrainGenerationClock({ store });
     void clock.start();
     const opened: OpenConversation = { host, store, clock, unsubscribe };
@@ -693,7 +693,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     // A conversation standing down is left to its close: a rebuild landing
     // while its drain is awaited would be the newer transition, and would
     // install a live agent on a host the close is about to drop from the
-    // directory, where nothing could ever retire it. The reopen that follows
+    // directory, where nothing could ever dispose it. The reopen that follows
     // the close builds on the model then standing.
     await Promise.all(
       [...conversations.entries()]
@@ -706,8 +706,8 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     if (model) await children.service.start();
   };
 
-  const retire = (): void => {
-    for (const opened of conversations.values()) opened.host.retire();
+  const dispose = (): void => {
+    for (const opened of conversations.values()) opened.host.dispose();
   };
 
   /**
@@ -873,15 +873,15 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     const opened = conversations.get(sessionKey);
     if (!opened) return Promise.resolve();
     const work = (async () => {
-      // The replacement with nothing awaits every retirement's drain, so the
+      // The replacement with nothing awaits every disposal's drain, so the
       // follower has written its last interruption before the store is let
       // go. The entry stays in the directory until then: an open that lands
       // meanwhile waits on this closing rather than building a second store
       // on the same envelope.
-      opened.host.retire();
+      opened.host.dispose();
       await opened.host.replace(() => undefined);
       opened.clock.stop();
-      opened.unsubscribe();
+      opened.unsubscribe.dispose();
       conversations.delete(sessionKey);
       latestRecords.delete(sessionKey);
       publications.delete(sessionKey);
@@ -932,7 +932,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     allRequests,
     busyConversations: () => [...latestRecords.keys()].filter(busy),
     rebuild,
-    retire,
+    dispose,
     openConversation: async (sessionKey) => {
       // The same wait an observed opening keeps: a conversation still
       // standing down is let go of before it is opened again, so the reopen
@@ -998,7 +998,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
  * Turns one provider's batch of spool events into wakes. Every hook event
  * wakes the brain — the brain decides what matters, so nothing is filtered
  * here — and each wake carries the session as the registry holds it at that
- * moment, when it holds it at all: a hook can land for a session the poll has
+ * moment, when it holds it at all: a hook can land for a session the pass has
  * not yet seen, and the brain still hears that it moved.
  */
 export function wakeEventsFromHooks(

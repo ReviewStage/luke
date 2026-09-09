@@ -208,7 +208,7 @@ export class AppleCalendarReader {
     this.#lastObservation = undefined;
   }
 
-  async observe(): Promise<AppleCalendarObservation | undefined> {
+  async pass(): Promise<AppleCalendarObservation | undefined> {
     const connection = await this.#readConnection();
     // Not connected, no read: the calendar is not connected, which is a
     // different answer from a connected calendar with no meetings.
@@ -217,7 +217,7 @@ export class AppleCalendarReader {
       return undefined;
     }
     try {
-      const observation = await this.#observeConnection(connection);
+      const observation = await this.#passConnection(connection);
       // What the next failing pass stands: a clean read's lists, or a
       // refusal's emptiness with its `revoked` — a transient failure after a
       // withdrawal must not resurrect what the withdrawal already took, nor
@@ -311,7 +311,7 @@ export class AppleCalendarReader {
     return outcome;
   }
 
-  async #observeConnection(connection: AppleCalendarConnection): Promise<AppleCalendarObservation> {
+  async #passConnection(connection: AppleCalendarConnection): Promise<AppleCalendarObservation> {
     const now = this.#now();
     // The same window the Google free/busy read keeps to, so the two sources
     // hold and release announcements on identical terms.

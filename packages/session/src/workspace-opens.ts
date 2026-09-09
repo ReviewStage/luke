@@ -5,7 +5,7 @@ import type { Session } from "./session-shape.js";
  * How long a created workspace stays worth opening. The identity arrives the
  * moment its creation is accepted, but the address only exists once an
  * observation pass reports the new session with a link — usually the very next
- * pass, though a cloud provider's refresh floor and an eventually-consistent
+ * pass, though a cloud provider's pass floor and an eventually-consistent
  * listing can each add one more. Past this window the open would no longer
  * read as the answer to the ask that created it, so the entry lapses and the
  * workspace stays where every other session starts: on its row, unopened.

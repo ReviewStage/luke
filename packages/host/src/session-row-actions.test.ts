@@ -94,7 +94,7 @@ function fixture() {
     openCreatedWorkspaces: () => {},
     trackedIssues: () => undefined,
     issueTrackers: [],
-    refreshIssues: () => {},
+    passIssues: () => {},
     supersetContext: () => undefined,
     supersetCli: {
       sendMessage: unreachable,

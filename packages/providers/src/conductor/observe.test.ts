@@ -769,7 +769,7 @@ test("adopts the provider's timestamp again the moment the chat's work moves", a
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a whole turn between passes reads as unmoved", async () => {
-  // A short turn can start and settle inside one refresh interval, so both
+  // A short turn can start and settle inside one pass interval, so both
   // passes read idle. Status and failure are the only facts compared, and
   // neither moved, so the wake-bumped timestamp is not adopted: the accepted
   // cost of reading no words of the conversation is that such a turn keeps

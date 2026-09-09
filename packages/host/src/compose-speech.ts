@@ -144,7 +144,7 @@ export function composeSpeech(dependencies: SpeechDependencies): SpeechComposer 
       return;
     }
     if (!arrivalBeatOwed(calendars.onboarding())) return;
-    await observation.loop.refresh().catch(() => undefined);
+    await observation.loop.pass().catch(() => undefined);
     if (!account.signedIn() || !arrivalBeatOwed(calendars.onboarding())) return;
     arbiter.request({ kind: ARRIVAL_SPEECH_KIND });
     void reconcileSpeech();

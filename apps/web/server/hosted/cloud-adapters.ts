@@ -4,11 +4,11 @@ import type { CloudAgentProviderId, CloudFetch } from "../core.js";
 import { CLOUD_AGENT_PROVIDER_ID } from "../core.js";
 
 /**
- * What one invocation supplies to a cloud plugin: the caller's own decrypted
- * key behind the same read-at-action-time seam the desktop uses, and the
- * fetch, clock, and sleep seams tests inject. The refresh debounce is always
- * bypassed — every server-side plugin lives for exactly one pass, so a
- * debounced pass could only ever answer with nothing.
+ * What a stateless invocation supplies to a cloud plugin: the caller's own
+ * decrypted key behind the same read-at-action-time seam the desktop uses, and
+ * the fetch/now seams tests inject. The pass debounce is always bypassed —
+ * every server-side plugin lives for exactly one request, so a debounced
+ * pass could only ever answer with nothing.
  */
 export interface CloudAdapterSeams {
   readApiKey: () => Promise<string | undefined>;
@@ -23,7 +23,7 @@ type PluginBuilder = (seams: CloudAdapterSeams) => CloudSessionPlugin;
 function baseOptions(seams: CloudAdapterSeams) {
   return {
     readApiKey: seams.readApiKey,
-    minimumRefreshIntervalMs: 0,
+    minimumPassIntervalMs: 0,
     ...(seams.fetch ? { fetch: seams.fetch } : undefined),
     ...(seams.now ? { now: seams.now } : undefined),
     ...(seams.sleep ? { sleep: seams.sleep } : undefined),

@@ -12,7 +12,7 @@ import type {
   ProviderTranscriptSinceResult,
   SessionIdentity,
 } from "@sidecar/session";
-import type { WireRecord } from "@sidecar/wire";
+import type { IDisposable, WireRecord } from "@sidecar/wire";
 import { AskLedger, type BrainRequestsListener } from "./asks.js";
 import { type BrainCompletionDelivery, ChildRuns } from "./children.js";
 import { BRAIN_DEFAULTS } from "./defaults.js";
@@ -23,9 +23,9 @@ import {
 } from "./envelope.js";
 import {
   CONTEXT_OPENING,
+  disposeOpenedContext,
   type Generation,
   generationFrom,
-  retireOpenedContext,
 } from "./generation.js";
 import { holdReleasedInputText, wakeInputText } from "./input-items.js";
 import { journalActionCounts, UNKNOWN_ACTION_RESULT } from "./journal.js";
@@ -218,7 +218,7 @@ export class BrainAgent {
   #restored: Promise<void> | undefined;
   #queue: Promise<unknown> = Promise.resolve();
   #stopped = false;
-  #unsubscribeStore: (() => void) | undefined;
+  #storeSubscription: IDisposable | undefined;
   #incompatibleReported: string | undefined;
 
   constructor(options: BrainAgentOptions) {
@@ -328,7 +328,7 @@ export class BrainAgent {
       active: () => this.#turns.active(),
       turn: (plan) => this.#turns.turn(plan),
     });
-    this.#unsubscribeStore = options.store.onReplaced((state) => this.#adoptGeneration(state));
+    this.#storeSubscription = options.store.onReplaced((state) => this.#adoptGeneration(state));
   }
 
   /** The store lease this agent writes under, for a host to check who owns the store. */
@@ -395,7 +395,7 @@ export class BrainAgent {
   }
 
   /** Hears the whole list on every change to any record. */
-  subscribe(listener: BrainRequestsListener): () => void {
+  subscribe(listener: BrainRequestsListener): IDisposable {
     return this.#asks.subscribe(listener);
   }
 
@@ -426,8 +426,8 @@ export class BrainAgent {
 
   /**
    * Cancels a run: a queued one never starts, a running one has its model and
-   * read work aborted and every action not yet dispatched refused. An action whose
-   * effect is already under way is neither retried nor aborted — its result
+   * read work cancelled and every action not yet dispatched refused. An action whose
+   * effect is already under way is neither retried nor cancelled — its result
    * is kept, known or unknown — because cancelling cannot undo a message
    * already sent.
    */
@@ -547,10 +547,10 @@ export class BrainAgent {
     this.#maintenance.cancel();
     this.#wakes.clear();
     const waiting = this.#asks.takeWaiting();
-    this.#unsubscribeStore?.();
-    this.#unsubscribeStore = undefined;
+    this.#storeSubscription?.dispose();
+    this.#storeSubscription = undefined;
     this.#generation?.abort.abort();
-    this.#asks.abortAll();
+    this.#asks.interruptAll();
     // An acceptance whose write is still out settles before the stop does:
     // its caller hears the durable answer, its run is recorded interrupted,
     // and nothing of it is left to land on the agent that comes next.
@@ -570,7 +570,7 @@ export class BrainAgent {
       }
     }
     await this.#queue;
-    if (this.#generation) retireOpenedContext(this.#generation);
+    if (this.#generation) disposeOpenedContext(this.#generation);
   }
 
   /**
@@ -698,7 +698,7 @@ export class BrainAgent {
     void this.#asks.settleWaiting(this.#asks.takeWaiting());
     previous?.abort.abort();
     this.#asks.revokeAll();
-    if (previous) retireOpenedContext(previous);
+    if (previous) disposeOpenedContext(previous);
     // Wakes coalesced against the old memory — including a quiet retry's —
     // are that generation's work, and go with it.
     this.#wakes.clear();

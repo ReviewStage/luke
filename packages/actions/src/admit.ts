@@ -239,26 +239,26 @@ export function guardedRead<T>(
     const settle = () => {
       if (decided) return false;
       decided = true;
-      signal.removeEventListener("abort", onAbort);
+      signal.removeEventListener("abort", onCancel);
       return true;
     };
-    function onAbort() {
+    function onCancel() {
       if (settle()) resolve(undefined);
     }
     if (signal.aborted) {
-      onAbort();
+      onCancel();
       // The read still runs; its value and any failure are nobody's once the
-      // abort has answered, so neither is left to surface unhandled.
+      // cancel has answered, so neither is left to surface unhandled.
       void read.catch(() => undefined);
       return;
     }
-    signal.addEventListener("abort", onAbort, { once: true });
+    signal.addEventListener("abort", onCancel, { once: true });
     void (async () => {
       try {
         const value = await read;
         if (settle()) resolve(value);
       } catch (failure) {
-        // A failure after the abort answered belongs to nobody, and is dropped
+        // A failure after the cancel answered belongs to nobody, and is dropped
         // rather than surfacing as an unhandled rejection.
         if (settle()) reject(failure instanceof Error ? failure : new Error(String(failure)));
       }

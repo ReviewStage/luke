@@ -148,7 +148,7 @@ test("the host service starts and stops leaving no handle, and says what the dra
   await host.stop();
   assert.equal(host.drainOwed(), false);
   assert.ok(
-    reports.some((message) => message.startsWith("shutting down:")),
+    reports.some((message) => message.startsWith("disposing:")),
     `the drain reported nothing: ${reports.join(" | ")}`,
   );
   // A second ask is not a second drain, and nothing is owed once one finished.
@@ -210,7 +210,7 @@ test("the updater's timers are handles the stop takes back, and a restart tears 
     recordProductEvent: () => undefined,
     engine,
     beforeRestart: async () => {
-      order.push("teardown");
+      order.push("dispose");
     },
     state,
   });
@@ -222,7 +222,7 @@ test("the updater's timers are handles the stop takes back, and a restart tears 
   // The restart into a downloaded build swaps this executable, so everything
   // owed is given back before Squirrel is let anywhere near it — and given
   // back first, so the installer's own quit is not the one held open.
-  assert.deepEqual(order, ["teardown", "install"]);
+  assert.deepEqual(order, ["dispose", "install"]);
   assert.ok(snapshots.length > 0, "no update state ever reached the windows");
   await updates.stop();
   await updates.stop();
@@ -231,9 +231,9 @@ test("the updater's timers are handles the stop takes back, and a restart tears 
 test("a launch suspended on one of its waits opens nothing once a quit has been asked for", async (t) => {
   // The invariant, in the shape the composition wires: the signal a start
   // re-checks is set the instant `stop` is asked for, so a start that resumes
-  // after the teardown has run opens nothing. Reading the drain's own state
+  // after the dispose has run opens nothing. Reading the drain's own state
   // instead would flip the signal several awaited stops later, which is how a
-  // resumed start came to re-open what the teardown had just given back.
+  // resumed start came to re-open what the dispose had just given back.
   const stateRoot = await temporaryDirectory(t);
   const host = createHostService({ config: fixtureConfig(stateRoot), cipher: CIPHER });
   host.link({ attach: async () => undefined });
@@ -251,7 +251,7 @@ test("a launch suspended on one of its waits opens nothing once a quit has been 
       if (!quitting) opened.push("window");
     },
     stop: async () => {
-      opened.push("teardown");
+      opened.push("dispose");
     },
   };
   const all = [host, windows];
@@ -264,17 +264,17 @@ test("a launch suspended on one of its waits opens nothing once a quit has been 
   const quit = stop();
   releaseSettings?.();
   await Promise.all([launch, quit]);
-  // The teardown ran and the launch, resuming after it, opened nothing.
-  assert.deepEqual(opened, ["teardown"]);
+  // The dispose ran and the launch, resuming after it, opened nothing.
+  assert.deepEqual(opened, ["dispose"]);
   // And by now the drain has finished, so its own state is back to owing
   // nothing — a signal that says nothing about whether a quit was asked for.
   assert.equal(host.drainOwed(), false);
 });
 
-test("a quit arriving after the teardown finished is not held back, so an install is not aborted", async () => {
-  // The regression this pins: holding every `before-quit` open aborts the
+test("a quit arriving after the dispose finished is not held back, so an install is not cancelled", async () => {
+  // The regression this pins: holding every `before-quit` open cancels the
   // update, because Squirrel's own quit is the one that reaches the
-  // installer. The updater runs the teardown itself and hands over only once
+  // installer. The updater runs the dispose itself and hands over only once
   // it has finished, so what the entry reads is whether one has finished.
   const order: string[] = [];
   let stopped = false;
@@ -288,7 +288,7 @@ test("a quit arriving after the teardown finished is not held back, so an instal
       },
     },
   ];
-  const teardown = (): Promise<void> => {
+  const dispose = (): Promise<void> => {
     if (!stopping) {
       stopping = stopInReverse(all, () => undefined).finally(() => {
         stopping = undefined;
@@ -300,16 +300,16 @@ test("a quit arriving after the teardown finished is not held back, so an instal
   // The entry's own rule, as `registerQuit` applies it.
   const beforeQuit = (): "held" | "through" => {
     if (stopped) return "through";
-    void teardown();
+    void dispose();
     return "held";
   };
 
-  await teardown();
+  await dispose();
   order.push("install");
   assert.equal(beforeQuit(), "through");
   assert.deepEqual(order, ["drain", "install"]);
 
-  // And the explicit Quit, which arrives with nothing torn down yet, is held
+  // And the explicit Quit, which arrives with nothing disposed yet, is held
   // exactly once.
   stopped = false;
   assert.equal(beforeQuit(), "held");
@@ -318,8 +318,8 @@ test("a quit arriving after the teardown finished is not held back, so an instal
 });
 
 test("a wait guarded against the quit schedules nothing new once one is asked for", () => {
-  // Both halves matter. A wait that fires must not act after the teardown,
-  // and a wait that was running must not arm the next one behind a teardown
+  // Both halves matter. A wait that fires must not act after the dispose,
+  // and a wait that was running must not arm the next one behind a dispose
   // that has already cleared them — which is how the takeover's fade came to
   // be scheduled after its own stop.
   let standing = true;

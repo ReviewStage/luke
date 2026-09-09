@@ -98,8 +98,8 @@ export class VoiceWindow {
 
   /**
    * Stands a fresh renderer up in place of one that died, after a short pause
-   * and only within the bound. A window `close()` already retired reports
-   * nothing: its listeners can still fire as it is torn down.
+   * and only within the bound. A window `close()` already disposed reports
+   * nothing: its listeners can still fire as it is disposed.
    */
   #replace(window: BrowserWindow, reason: string): void {
     if (this.#closedForGood || window !== this.#window || this.#reopenTimer) return;

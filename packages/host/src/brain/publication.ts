@@ -125,7 +125,7 @@ async function publishEnd(
  * rebuilt followers, and launches. Each write is decided against the record
  * as it stands at that moment, never against the report that prompted it, so
  * an older report cannot write what a newer one already marked, and a
- * follower retired mid-way writes nothing more. Only a write the thread
+ * follower disposed mid-way writes nothing more. Only a write the thread
  * confirmed marks the run; a write that failed leaves it for the next report.
  * The mark, not the thread's contents, is what says a run was published, so
  * a line the thread has since let go of is never written back.
@@ -152,7 +152,7 @@ export async function publishRuns(
  * as it arrives, its records relayed to every window and its runs written to
  * the thread. The subscription is the completion channel the reply delivery
  * reads; the thread write here is the one Conversation write for a run.
- * Unfollowing retires the subscription, drains the publication of the reports
+ * Unfollowing disposes the subscription, drains the publication of the reports
  * already taken, and then relays nothing more, so a replaced agent's records
  * are all written once and its late ones reach neither the thread nor the
  * windows.
@@ -188,13 +188,13 @@ export function followBrainRequests(
   const unsubscribe = agent.subscribe(listener);
   void agent.ready().then(() => listener(agent.requests()));
   // Unfollowing takes no more reports at once, but lets the ones already
-  // taken finish: the stop that retires an agent reports every run it
+  // taken finish: the stop that disposes an agent reports every run it
   // interrupted, and those ends belong in the thread before the follower
   // goes. Each write answers promptly — the store refuses rather than hangs —
   // so the drain is bounded by the reports already queued.
   return async () => {
     accepting = false;
-    unsubscribe();
+    unsubscribe.dispose();
     await publishing;
     following = false;
   };

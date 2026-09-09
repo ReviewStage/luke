@@ -533,7 +533,7 @@ test("a queued ask cancelled before its turn never starts, and its record says c
   assert.equal(await h.agent.cancelAsk("no-such-run"), undefined);
 });
 
-test("a cancel while the model is thinking aborts the request and settles the run cancelled", async () => {
+test("a cancel while the model is thinking cancels the request and settles the run cancelled", async () => {
   const signals: (AbortSignal | undefined)[] = [];
   let reject: ((error: Error) => void) | undefined;
   const h = harness({
@@ -542,7 +542,7 @@ test("a cancel while the model is thinking aborts the request and settles the ru
         signals.push(options.signal);
         return new Promise((_resolve, rejectRespond) => {
           reject = rejectRespond;
-          options.signal?.addEventListener("abort", () => rejectRespond(new Error("aborted")));
+          options.signal?.addEventListener("abort", () => rejectRespond(new Error("cancelled")));
         });
       },
       quietUntil: () => undefined,
@@ -730,9 +730,9 @@ test("a spoken submission keeps its origin, and an empty ask is refused without 
   });
   const runId = acceptedRunId(accepted);
   const heard: (readonly BrainRequestRecord[])[] = [];
-  const unsubscribe = h.agent.subscribe((records) => heard.push(records));
+  const subscription = h.agent.subscribe((records) => heard.push(records));
   const record = await h.agent.waitAsk(runId, 60_000);
-  unsubscribe();
+  subscription.dispose();
   assert.equal(record?.origin, BRAIN_REQUEST_ORIGIN.SPOKEN);
   assert.equal(record?.question, "hello there");
   assert.ok(heard.length > 0);
@@ -1258,7 +1258,7 @@ test("the reply is everything the model said across the run: a preface before a 
   assert.equal(h.traces[2]?.incomplete, "incomplete: max_output_tokens");
 });
 
-test("a stop during a held initial bootstrap settles at once; the open finishing afterwards is retired exactly once, and a dispose that never settles holds nothing", async () => {
+test("a stop during a held initial bootstrap settles at once; the open finishing afterwards is disposed exactly once, and a dispose that never settles holds nothing", async () => {
   for (const disposeHangs of [false, true]) {
     const model = adapterOf(new FakeClient());
     const held = heldOpenRuntime(model, disposeHangs);
@@ -1325,7 +1325,7 @@ test("a reopen the runtime refuses re-admits nothing: the generation refuses tur
   await h.agent.stop();
 });
 
-test("a reopen claimed just before a stop installs nothing: the stop's signal is checked after the wait, and the claimed context is retired", async () => {
+test("a reopen claimed just before a stop installs nothing: the stop's signal is checked after the wait, and the claimed context is disposed", async () => {
   const h = harness();
   let disposed = 0;
   let releaseReopen: (() => void) | undefined;

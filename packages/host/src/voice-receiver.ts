@@ -10,6 +10,8 @@
  * makes the receiver unready again; whatever was offered to the old epoch is
  * the caller's to reoffer once a new one reports.
  */
+import { type IDisposable, toDisposable } from "@sidecar/wire";
+
 export type VoiceReceiverListener = (epoch: number) => void;
 
 export class VoiceReceiver {
@@ -55,19 +57,19 @@ export class VoiceReceiver {
     return true;
   }
 
-  onReady(listener: VoiceReceiverListener): () => void {
+  onReady(listener: VoiceReceiverListener): IDisposable {
     this.#readyListeners.add(listener);
-    return () => {
+    return toDisposable(() => {
       this.#readyListeners.delete(listener);
-    };
+    });
   }
 
   /** Hears every epoch ending, with the epoch that ended, after a reset or a new beginning. */
-  onReset(listener: VoiceReceiverListener): () => void {
+  onReset(listener: VoiceReceiverListener): IDisposable {
     this.#resetListeners.add(listener);
-    return () => {
+    return toDisposable(() => {
       this.#resetListeners.delete(listener);
-    };
+    });
   }
 
   #end(): void {

@@ -118,7 +118,7 @@ interface ObservedActionPass {
   unreachable: boolean;
 }
 
-async function observeForAction(
+async function passForAction(
   providerId: CloudAgentProviderId,
   apiKey: string,
   seams: ActionExecuteSeams,
@@ -249,7 +249,7 @@ export async function executeSessionAction(options: {
   const unsupported = actionUnsupportedReason(kind, providerId);
   if (unsupported) return { result: ACTION_RESULT_STATUS.UNSUPPORTED, reason: unsupported };
 
-  const pass = await observeForAction(providerId, apiKey, options.seams ?? {});
+  const pass = await passForAction(providerId, apiKey, options.seams ?? {});
   const request: ActionRequest<HostedSessionActionKind> = { kind, fields };
   const admitted = await admit(request, admissionOver(pass));
   if (admitted.kind === undefined) return fromRefusal(providerId, pass, admitted);
@@ -325,7 +325,7 @@ export async function executeConversationRead(options: {
     };
   }
 
-  const pass = await observeForAction(providerId, apiKey, options.seams ?? {});
+  const pass = await passForAction(providerId, apiKey, options.seams ?? {});
   const observation = pass.observations.find(
     (candidate) => candidate.providerSessionId === providerSessionId,
   );

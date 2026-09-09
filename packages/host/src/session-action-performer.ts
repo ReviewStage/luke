@@ -72,7 +72,7 @@ function unknownOpen(error: ExternalOpenAnswerLostError): SessionOpenResult {
 /**
  * What performing an action needs from the app: the registry the action is
  * validated against once more, the adapters that carry it, and the seams a
- * landed action moves — the refresh, the created-workspace watch, the counts.
+ * landed action moves — the pass, the created-workspace watch, the counts.
  */
 export interface SessionActionPerformerDependencies {
   sessionRegistry: SessionRoster;
@@ -97,7 +97,7 @@ export interface SessionActionPerformerDependencies {
   openCreatedWorkspaces: () => void;
   trackedIssues: () => readonly TrackedIssue[] | undefined;
   issueTrackers: readonly LinearIssueTracker[];
-  refreshIssues: () => void;
+  passIssues: () => void;
   supersetContext: (identity: SessionIdentity) => SupersetSessionContext | undefined;
   supersetCli: Pick<
     SupersetCli,
@@ -172,7 +172,7 @@ export function createSessionActionPerformer(
     openCreatedWorkspaces,
     trackedIssues,
     issueTrackers,
-    refreshIssues,
+    passIssues,
     supersetContext,
     supersetCli,
     recordProductEvent,
@@ -217,13 +217,13 @@ export function createSessionActionPerformer(
       return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.PROVIDER_ABSENT };
     }
     const result = await action(plugin);
-    // A rejection refreshes like an acceptance: a write whose answer never
+    // A rejection runs a pass like an acceptance: a write whose answer never
     // arrived may still have landed, so the roster must catch up with the
     // provider rather than keep advertising what it may have already taken. A
     // rejection that never reached the network is answered from the adapter's
     // cache anyway.
     if (result.status !== ACTION_RESULT_STATUS.UNSUPPORTED) {
-      void sessionRegistry.refresh(plugin);
+      void sessionRegistry.pass(plugin);
     }
     return countSessionAction(plugin.provider.id, counted, result);
   }
@@ -417,7 +417,7 @@ export function createSessionActionPerformer(
     );
     // A workspace that landed is a session the panel should be showing, so
     // the next look must actually ask rather than serve the cache. A
-    // rejection refreshes too: a workspace can stand with its opening task
+    // rejection runs one too: a workspace can stand with its opening task
     // undelivered, and the adapter answers a rejection that never reached
     // the network from its cache anyway.
     if (result.status !== ACTION_RESULT_STATUS.UNSUPPORTED) {
@@ -425,7 +425,7 @@ export function createSessionActionPerformer(
       // taken to, so the session the creation response named — an id the
       // adapter reported, never an address — waits here for observation to
       // report it, and is opened then like a pressed row. Noted before the
-      // refresh, so the very pass that first sees the session resolves it.
+      // pass, so the very pass that first sees the session resolves it.
       if (result.status === ACTION_RESULT_STATUS.ACCEPTED && result.providerSessionId) {
         expectCreatedWorkspace(
           { providerId: plugin.provider.id, providerSessionId: result.providerSessionId },
@@ -438,7 +438,7 @@ export function createSessionActionPerformer(
         // against here, and future commits carry every later arrival.
         openCreatedWorkspaces();
       }
-      void sessionRegistry.refresh(plugin);
+      void sessionRegistry.pass(plugin);
     }
     // The first workspace that actually lands chooses the default provider,
     // so a later ask that names none has somewhere unsurprising to go. Only
@@ -570,7 +570,7 @@ export function createSessionActionPerformer(
     // An action that landed changes the board, so the roster should catch up
     // as soon as Linear will say.
     if (result.status === ACTION_RESULT_STATUS.ACCEPTED) {
-      refreshIssues();
+      passIssues();
       if (isIssueTrackerId(issue.trackerId)) {
         recordProductEvent(PRODUCT_EVENT.ISSUE_ACTION_SEND, {
           tracker_id: issue.trackerId,

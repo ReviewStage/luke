@@ -284,7 +284,7 @@ export function supersetSnapshot(
     /**
      * The chatless workspaces as rows of the Superset workspace provider,
      * decorated here — beside `enrich`, from the same observed state — rather
-     * than by a registry transform, so an action path's plain refresh commits the
+     * than by a registry transform, so an action path's plain pass commits the
      * same shape the observation loop does. Each row stands (`standing`): it is
      * re-reported for as long as the workspace exists and dropped the pass
      * after it is gone, so retention never ages it out however long the

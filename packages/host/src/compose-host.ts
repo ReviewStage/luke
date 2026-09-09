@@ -1,13 +1,13 @@
 import { BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
 import {
   carried,
+  disposeGateway,
   GATEWAY_METHOD,
+  type GatewayDisposeOptions,
+  type GatewayDisposeSteps,
   type GatewayMethodTable,
   type GatewayServer,
-  type GatewayShutdownOptions,
-  type GatewayShutdownSteps,
   gatewayOk,
-  shutdownGateway,
 } from "@sidecar/gateway";
 import { ARRIVAL_SPEECH_KIND, CALENDAR_ONBOARDING_SPEECH_KIND } from "@sidecar/realtime";
 import { ObservationSupervisor } from "@sidecar/runtime";
@@ -28,7 +28,7 @@ import { composeSettings } from "./compose-settings.js";
 import { composeSpeech } from "./compose-speech.js";
 import { type Composer, mergeMethods } from "./composer.js";
 import { createHostKernel, type HostSeams } from "./host-kernel.js";
-import { shutdownStepsFlushingEvents } from "./lifecycle.js";
+import { disposeStepsFlushingEvents } from "./lifecycle.js";
 import { createGatewayService } from "./service.js";
 
 /**
@@ -47,13 +47,13 @@ export interface Host {
   /**
    * The whole quit, in the coordinator's fixed order: admissions closed,
    * everything under way cancelled, a bounded wait for it to settle,
-   * whatever did not settle written down as unresolved for the next launch's
+   * whatever did not settle written down as unsettled for the next launch's
    * recovery, and only then the store closed. A caller that ran the steps
    * itself would be a second order for the same quit, so there is none to
    * run: what became of it is reported, never answered, because nothing a
    * client could do with the answer is left to do.
    */
-  stop: (options?: GatewayShutdownOptions) => Promise<void>;
+  stop: (options?: GatewayDisposeOptions) => Promise<void>;
 }
 
 export function composeHost(options: HostSeams): Host {
@@ -81,12 +81,12 @@ export function composeHost(options: HostSeams): Host {
     setVoice: (voice) => account.voiceCapabilities.realtimeCredentials?.setVoice(voice),
     setVoiceSpeed: (speed) => account.voiceCapabilities.realtimeCredentials?.setSpeed(speed),
     reconcileSpeech: () => void speech.reconcileSpeech(),
-    refreshSupersetWorkspaceHost: async () => {
+    passSupersetWorkspaceHost: async () => {
       await observation.readSupersetWorkspaceHost();
     },
     broadcastWorkspaceProjects: observation.broadcastWorkspaceProjects,
     refreshCredentialAdapter: observation.refreshCredentialAdapter,
-    refreshIssues: issues.refresh,
+    passIssues: issues.pass,
     workspaceProjectOffered: observation.workspaceProjectOffered,
   });
   account.link({
@@ -94,7 +94,7 @@ export function composeHost(options: HostSeams): Host {
     stopCapabilities: stopAccountCapabilities,
     onFirstSignIn: calendars.recordFirstSignIn,
     onFirstSignInArrival: speech.seedArrivalOnFirstSignIn,
-    retireBrain: () => brain.wiring.retire(),
+    disposeBrain: () => brain.wiring.dispose(),
     rebuildBrain: () => brain.wiring.rebuild(),
     syncMemory: brain.syncMemory,
     releaseDevice: (stored) => devices.release(stored),
@@ -270,7 +270,7 @@ export function composeHost(options: HostSeams): Host {
    * counted rather than finished: the store's load at the next start marks
    * an unsettled run interrupted and replays nothing.
    */
-  const shutdownSteps: GatewayShutdownSteps = shutdownStepsFlushingEvents(
+  const disposeSteps: GatewayDisposeSteps = disposeStepsFlushingEvents(
     {
       closeAdmissions: () => service.server.closeAdmissions(),
       cancelActive: async () => {
@@ -298,27 +298,27 @@ export function composeHost(options: HostSeams): Host {
         if (signal.aborted) return;
         await brain.wiring.publicationSettled();
       },
-      persistUnresolved: async () => {
+      persistUnsettled: async () => {
         // What the next launch will find: the records as the stores last
         // persisted them, read from the envelopes rather than from memory. A
         // cancellation whose write did not land leaves its run queued or
         // running on disk, and that is what the load marks interrupted and
-        // never replays, so it is counted here as unresolved.
+        // never replays, so it is counted here as unsettled.
         const keys = new Set<SessionKey>([
           MAIN_SESSION_KEY,
           ...brain.store.directory().map((entry) => entry.sessionKey),
         ]);
-        let unresolved = 0;
+        let unsettled = 0;
         for (const key of keys) {
           const persisted = brain.wiring.store(key).current();
           if (!persisted) continue;
-          unresolved += persisted.requests.filter(
+          unsettled += persisted.requests.filter(
             (record) =>
               record.status === BRAIN_REQUEST_STATUS.QUEUED ||
               record.status === BRAIN_REQUEST_STATUS.RUNNING,
           ).length;
         }
-        return unresolved;
+        return unsettled;
       },
     },
     () => settings.flushProductEvents(),
@@ -335,14 +335,14 @@ export function composeHost(options: HostSeams): Host {
     }
   };
 
-  const stop = async (shutdown: GatewayShutdownOptions = {}): Promise<void> => {
+  const stop = async (dispose: GatewayDisposeOptions = {}): Promise<void> => {
     // A drain that cannot finish still says so and still closes the store:
     // what it could not settle is what the next launch marks interrupted, and
     // a quit must leave either way rather than on an unhandled failure.
     try {
-      const outcome = await shutdownGateway(shutdownSteps, shutdown);
+      const outcome = await disposeGateway(disposeSteps, dispose);
       report(
-        `shutting down: ${outcome.settled ? "settled" : "unsettled"}, ${outcome.cancelled.length} cancelled, ${outcome.unresolved} unresolved`,
+        `disposing: ${outcome.settled ? "settled" : "not settled"}, ${outcome.cancelled.length} cancelled, ${outcome.unsettled} left for recovery`,
       );
     } catch (error) {
       report(`the drain did not finish: ${error instanceof Error ? error.message : String(error)}`);

@@ -40,7 +40,7 @@ export interface AccountLinks {
   onFirstSignIn: () => void;
   /** The arrival beat's own moment, recorded after the account event. */
   onFirstSignInArrival: () => void;
-  retireBrain: () => void;
+  disposeBrain: () => void;
   rebuildBrain: () => Promise<void>;
   syncMemory: () => void;
   /** The device row let go of on the departing account's own token, before the credential is cleared. */
@@ -159,7 +159,7 @@ export function composeAccount(dependencies: AccountDependencies): AccountCompos
 
   async function applyVoiceCredential(): Promise<void> {
     await transitionVoiceCredential({
-      retire: () => links.get().retireBrain(),
+      dispose: () => links.get().disposeBrain(),
       apply: () => voiceCapabilities.apply(),
       rebuild: async () => {
         await links.get().rebuildBrain();

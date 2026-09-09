@@ -4,14 +4,14 @@ import type { BrainAgent, BrainRequestRecord, BrainSubmission } from "@sidecar/b
 import { DeliveryLedger } from "@sidecar/brain";
 import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
 import {
+  disposeGateway,
   GATEWAY_CLIENT_ROLE,
+  GATEWAY_DISPOSE_DEFAULTS,
   GATEWAY_ERROR,
   GATEWAY_HANDSHAKE_HEADER,
   GATEWAY_METHOD,
-  GATEWAY_SHUTDOWN_DEFAULTS,
   GatewayClient,
   NODE_CAPABILITY_STATUS,
-  shutdownGateway,
 } from "@sidecar/gateway";
 import {
   bearerAuthentication,
@@ -34,7 +34,7 @@ import { VoiceReceiver } from "./voice-receiver.js";
  * socket: the host holds the asks, the Conversation, and the receiver; a client
  * that dies takes none of it with it; the next client finds it all; the
  * host's native asks answer typed unavailable while no client stands; and
- * the explicit shutdown counts what the durable records still hold.
+ * the explicit dispose counts what the durable records still hold.
  */
 const NOW = 1_800_000_000_000;
 const TOKEN = "a-shared-secret";
@@ -231,7 +231,7 @@ test("while no client stands, a native capability the host needs answers unavail
   }
 });
 
-test("the explicit shutdown closes admissions, cancels what runs, and counts unresolved from the persisted records, so a cancellation that never landed stays recoverable", async () => {
+test("the explicit dispose closes admissions, cancels what runs, and counts unsettled from the persisted records, so a cancellation that never landed stays recoverable", async () => {
   for (const persistCancellations of [true, false]) {
     const f = fakeHost({ persistCancellations });
     const { host, port } = await listen(f.service);
@@ -243,7 +243,7 @@ test("the explicit shutdown closes admissions, cancels what runs, and counts unr
         { idempotencyKey: "sub-q" },
       );
       assert.ok(submitted.ok);
-      const report = await shutdownGateway(
+      const report = await disposeGateway(
         {
           closeAdmissions: () => {
             host.closeAdmissions();
@@ -258,21 +258,21 @@ test("the explicit shutdown closes admissions, cancels what runs, and counts unr
             return cancelled;
           },
           awaitSettled: async () => undefined,
-          persistUnresolved: async () =>
+          persistUnsettled: async () =>
             [...f.persisted.values()].filter(
               (held) =>
                 held.status === BRAIN_REQUEST_STATUS.QUEUED ||
                 held.status === BRAIN_REQUEST_STATUS.RUNNING,
             ).length,
         },
-        { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS },
+        { deadlineMs: GATEWAY_DISPOSE_DEFAULTS.DEADLINE_MS },
       );
       assert.deepEqual(report.cancelled, ["run-1"]);
       assert.equal(report.settled, true);
-      // A cancellation the store took leaves nothing unresolved; one it did
+      // A cancellation the store took leaves nothing unsettled; one it did
       // not leaves the run running on disk, which the next launch marks
       // interrupted and never replays.
-      assert.equal(report.unresolved, persistCancellations ? 0 : 1);
+      assert.equal(report.unsettled, persistCancellations ? 0 : 1);
       // The door is closed: a new ask is refused as shutting down, a read still answers.
       const refused = await desktop.gateway.call(
         GATEWAY_METHOD.RUN_SUBMIT,
@@ -289,17 +289,17 @@ test("the explicit shutdown closes admissions, cancels what runs, and counts unr
   }
 });
 
-test("a shutdown whose cancellation hangs still ends at the deadline with what did not settle counted", async () => {
-  const report = await shutdownGateway(
+test("a dispose whose cancellation hangs still ends at the deadline with what did not settle counted", async () => {
+  const report = await disposeGateway(
     {
       closeAdmissions: () => undefined,
       cancelActive: () => new Promise(() => undefined),
       awaitSettled: async () => undefined,
-      persistUnresolved: async () => 2,
+      persistUnsettled: async () => 2,
     },
     { deadlineMs: 20 },
   );
   assert.equal(report.settled, false);
   assert.deepEqual(report.cancelled, []);
-  assert.equal(report.unresolved, 2);
+  assert.equal(report.unsettled, 2);
 });

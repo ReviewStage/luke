@@ -30,9 +30,49 @@ statements of the same rule that can drift.
 
 `@sidecar/wire` is also the base every layer's lifecycle is written in —
 `IDisposable`, `DisposableStore`, `toDisposable`, `Event`, and `Emitter` — so a
-listener's unsubscribe, a watcher's teardown, and the store that ends both are
+listener's unsubscribe, a watcher's dispose, and the store that ends both are
 one shape wherever they are held, and adopting it adds no edge: every package
 but `packages/panel` already depends on wire.
+
+## One word per concept
+
+The repository names each of these ideas with exactly one word, everywhere,
+so a reader never has to check whether `retire` and `dispose` two lines apart
+mean the same thing or something subtly different. This is the standing word
+list; a new file that reaches for a synonym below is reaching for the wrong
+word, not a stylistic variant.
+
+- **`dispose`** — a resource, subscription, or service reaching the end of
+  its life. `retire`, `teardown`/`tear down`, `destroy`, and `shutdown`/
+  `shut down` are the same concept and are never used for it. `start`/`stop`
+  stay only where `Composer`, `DesktopService`, or CLAUDE.md's `Host.stop()`
+  already name the pair; everywhere else, ending something is `dispose`. A
+  function that returns a bare `() => void` whose only purpose is
+  unsubscribing or undoing a registration returns an `IDisposable` instead,
+  so the caller holds one shape rather than a bag of unlabeled callbacks.
+- **`cancel`** — stopping in-flight work, except where the thing genuinely is
+  a web-standard `AbortSignal` or `AbortController`, which keep their own
+  vocabulary because it is not ours to rename.
+- **`close`** — a socket, stream, or handle.
+- **`release`** — a lock or a hold.
+- **`settle`** — a promise or a queued unit of work reaching its outcome.
+  `resolve` stays for configuration, path, and module resolution, which is an
+  unrelated sense of the word.
+- **`generation`** — a late-answer barrier (a conversation's envelope
+  replaced out from under an in-flight turn). `epoch` stays only for the
+  wire-visible receiver epochs, which are a different, narrower mechanism.
+- **`pass`** — one iteration of an observation loop (reading a coding-agent
+  session's state, a roster of sessions, or similar). `poll`, `refresh`, and
+  `observe` are not used for this; each of those words also has an
+  unrelated, legitimate sense elsewhere (a credential's refresh token, the
+  generic observer/listener pattern) that is not this concept and is not
+  renamed.
+- **`roster`** / **`directory`** — the observed set of sessions, and the
+  conversation registry, respectively.
+
+Fixed value sets are `as const` SCREAMING_SNAKE_CASE objects with unions
+derived from them, never a raw string literal repeated at each call site, and
+never a key built by concatenating identifiers.
 
 ## The graph is acyclic, and stays that way
 

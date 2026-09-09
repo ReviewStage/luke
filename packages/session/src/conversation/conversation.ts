@@ -1,8 +1,8 @@
 /**
  * The conversation history: the one continuous conversation, held on this side
  * of the wire. A Realtime call is a transport that comes and goes — the
- * announcer's speak-only call is torn down by the very talk-key press that
- * asks about it, and the developer's call retires when idle — so the thread
+ * announcer's speak-only call is disposed by the very talk-key press that
+ * asks about it, and the developer's call disposes when idle — so the thread
  * itself is kept here, and a bounded recent slice is re-fed to whichever call
  * the developer opens next.
  *
