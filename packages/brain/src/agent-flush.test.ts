@@ -6,6 +6,7 @@ import {
   MEMORY_HOUSEKEEPING_OUTCOME,
   type MemoryHousekeepingResult,
 } from "@sidecar/memory";
+import { RESPONSES_ITEM_FORMAT } from "@sidecar/runtime";
 import {
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
@@ -21,11 +22,7 @@ import {
   BRAIN_REQUEST_STATUS,
   BRAIN_SUBMISSION_OUTCOME,
 } from "./requests.js";
-import {
-  RESPONSES_ITEM_FORMAT,
-  type ResponsesInputItem,
-  responsesModelAnswer,
-} from "./responses-api.js";
+import { type ResponsesInputItem, responsesModelAnswer } from "./responses-api.js";
 import { TOOL_LOOP_RUNTIME, ToolLoopAgentRuntime } from "./runtime.js";
 import { type BrainStateStorage, BrainStateStore } from "./state-store.js";
 
@@ -80,8 +77,8 @@ function adapterOf(model: FakeModel, compacts = false): ModelAdapter {
         checkpoint: {
           runtime: TOOL_LOOP_RUNTIME.ID,
           runtimeVersion: TOOL_LOOP_RUNTIME.VERSION,
-          format: RESPONSES_ITEM_FORMAT.FORMAT,
-          formatVersion: RESPONSES_ITEM_FORMAT.VERSION,
+          format: RESPONSES_ITEM_FORMAT.format,
+          formatVersion: RESPONSES_ITEM_FORMAT.version,
         },
         contextWindowTokens: WINDOW_TOKENS,
         countsInputTokens: false,
@@ -153,7 +150,7 @@ function agentWith(
   const model = new FakeModel();
   const runtime = new ToolLoopAgentRuntime({
     model: adapterOf(model, launch.compacts ?? false),
-    itemFormat: { format: RESPONSES_ITEM_FORMAT.FORMAT, version: RESPONSES_ITEM_FORMAT.VERSION },
+    itemFormat: RESPONSES_ITEM_FORMAT,
     createContext: () => new ResponsesContextEngine(IDENTITY),
   });
   let ids = 0;

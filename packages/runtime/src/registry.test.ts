@@ -3,6 +3,7 @@ import test from "node:test";
 import { agentId } from "./identifiers.js";
 import {
   BUILTIN_CONTEXT_ENGINE,
+  BUILTIN_EMBEDDING_ADAPTER,
   BUILTIN_MEMORY_PROVIDER,
   BUILTIN_MODEL_ADAPTER,
   BUILTINS,
@@ -12,6 +13,8 @@ import {
   ConfigurationStore,
   CREDENTIAL_REFERENCE_KIND,
   defaultAgentConfiguration,
+  MEMORY_CAPABILITY,
+  notebookMemoryProviderFor,
   resolveConfiguration,
   TOOL_LOOP_RUNTIME,
 } from "./registry.js";
@@ -27,11 +30,31 @@ function configuration(overrides: Partial<Parameters<typeof defaultAgentConfigur
   });
 }
 
-test("every built-in memory provider names the embedding adapter its vectors run on", () => {
+test("the notebook index stands as a memory provider per embedding adapter, one per credential", () => {
+  assert.deepEqual(
+    Object.entries(BUILTINS.memoryProviders).map(([id, provider]) => [
+      id,
+      provider.embeddingAdapterId,
+    ]),
+    [
+      [BUILTIN_MEMORY_PROVIDER.OPENAI, BUILTIN_EMBEDDING_ADAPTER.OPENAI],
+      [BUILTIN_MEMORY_PROVIDER.HOSTED, BUILTIN_EMBEDDING_ADAPTER.HOSTED],
+    ],
+  );
   for (const provider of Object.values(BUILTINS.memoryProviders)) {
-    assert.deepEqual([...provider.capabilities], ["keyword", "vector", "notebook"]);
-    assert.ok(provider.embeddingAdapterId.length > 0);
+    assert.deepEqual(
+      [...provider.capabilities],
+      [MEMORY_CAPABILITY.KEYWORD, MEMORY_CAPABILITY.VECTOR, MEMORY_CAPABILITY.NOTEBOOK],
+    );
   }
+  assert.equal(
+    notebookMemoryProviderFor(CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY),
+    BUILTIN_MEMORY_PROVIDER.OPENAI,
+  );
+  assert.equal(
+    notebookMemoryProviderFor(CREDENTIAL_REFERENCE_KIND.HOSTED_ACCOUNT),
+    BUILTIN_MEMORY_PROVIDER.HOSTED,
+  );
 });
 
 /** The refusal an outcome carries, or nothing when it resolved. */

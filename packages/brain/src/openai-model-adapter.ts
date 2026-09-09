@@ -64,8 +64,6 @@ export const BRAIN_OPENAI_DEFAULTS = {
   MAXIMUM_OUTPUT_TOKENS: BRAIN_MAXIMUM_OUTPUT_TOKENS,
 } as const;
 
-export const OPENAI_MODEL_ADAPTER_ID = BUILTIN_MODEL_ADAPTER.OPENAI;
-
 const OPENAI_PATH = {
   [RESPONSES_OPERATION.RESPOND]: BRAIN_RESPONSES_PATH,
   [RESPONSES_OPERATION.COUNT_TOKENS]: BRAIN_RESPONSES_INPUT_TOKENS_PATH,
@@ -93,7 +91,7 @@ const ADMITTED: Admission<undefined> = { admitted: undefined };
  * provider: every operation is admitted, and the key alone authorizes it.
  */
 class OpenAiTransport implements ResponsesTransport<undefined> {
-  readonly adapter = OPENAI_MODEL_ADAPTER_ID;
+  readonly adapter = BUILTIN_MODEL_ADAPTER.OPENAI;
   readonly #model: string;
   readonly #apiKey: string;
   readonly #baseUrl: string;

@@ -46,9 +46,6 @@ import {
  * selection degrades to keyword search and an explicit selection reports.
  */
 
-export const OPENAI_EMBEDDING_ADAPTER_ID = BUILTIN_EMBEDDING_ADAPTER.OPENAI;
-export const HOSTED_EMBEDDING_ADAPTER_ID = BUILTIN_EMBEDDING_ADAPTER.HOSTED;
-
 /** Batches wider than the hosted bound are cut to it on both transports, so the two behave alike. */
 export const EMBEDDING_BATCH_SIZE = HOSTED_BRAIN_EMBED_BOUNDS.MAXIMUM_TEXTS;
 
@@ -78,7 +75,7 @@ export class OpenAiEmbeddingAdapter implements EmbeddingAdapter {
 
   identity(): Promise<EmbeddingIdentity> {
     return Promise.resolve({
-      provider: OPENAI_EMBEDDING_ADAPTER_ID,
+      provider: BUILTIN_EMBEDDING_ADAPTER.OPENAI,
       model: BRAIN_EMBEDDING_MODEL,
       dimensions: this.#dimensions ?? 0,
     });
@@ -153,7 +150,7 @@ export class HostedEmbeddingAdapter implements EmbeddingAdapter {
 
   identity(): Promise<EmbeddingIdentity> {
     return Promise.resolve({
-      provider: HOSTED_EMBEDDING_ADAPTER_ID,
+      provider: BUILTIN_EMBEDDING_ADAPTER.HOSTED,
       model: this.#model ?? BRAIN_EMBEDDING_MODEL,
       dimensions: this.#dimensions ?? 0,
     });

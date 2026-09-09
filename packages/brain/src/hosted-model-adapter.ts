@@ -54,8 +54,6 @@ import {
   type ResponsesTransport,
 } from "./responses-model-adapter.js";
 
-export const HOSTED_MODEL_ADAPTER_ID = BUILTIN_MODEL_ADAPTER.HOSTED;
-
 export interface HostedModelAdapterOptions {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
@@ -82,7 +80,7 @@ const HOSTED_PATH = {
  * installed client still speaks.
  */
 class HostedTransport implements ResponsesTransport<HostedBrainCapabilities> {
-  readonly adapter = HOSTED_MODEL_ADAPTER_ID;
+  readonly adapter = BUILTIN_MODEL_ADAPTER.HOSTED;
   readonly #calls: HostedServiceCalls;
   readonly #now: () => number;
   #capabilities: HostedBrainCapabilities | undefined;

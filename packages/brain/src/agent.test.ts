@@ -3,6 +3,7 @@ import test from "node:test";
 import { REALTIME_TOOL, type RealtimeFunctionCall } from "@sidecar/acts";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import type { ScheduledTimer } from "@sidecar/realtime";
+import { RESPONSES_ITEM_FORMAT } from "@sidecar/runtime";
 import {
   CHILD_CLEANUP,
   CHILD_CONTEXT_MODE,
@@ -56,11 +57,7 @@ import {
   type BrainSubmissionResult,
   isTerminalBrainRequestStatus,
 } from "./requests.js";
-import {
-  RESPONSES_ITEM_FORMAT,
-  type ResponsesInputItem,
-  responsesModelAnswer,
-} from "./responses-api.js";
+import { type ResponsesInputItem, responsesModelAnswer } from "./responses-api.js";
 import { TOOL_LOOP_RUNTIME, ToolLoopAgentRuntime } from "./runtime.js";
 import {
   BRAIN_STATE_BOUNDS,
@@ -195,8 +192,8 @@ function actsOffered(options: BrainRespondOptions): boolean {
 const CHECKPOINT = {
   runtime: TOOL_LOOP_RUNTIME.ID,
   runtimeVersion: TOOL_LOOP_RUNTIME.VERSION,
-  format: RESPONSES_ITEM_FORMAT.FORMAT,
-  formatVersion: RESPONSES_ITEM_FORMAT.VERSION,
+  format: RESPONSES_ITEM_FORMAT.format,
+  formatVersion: RESPONSES_ITEM_FORMAT.version,
 } as const;
 
 /** A test's client as the full model adapter the runtime takes. */
@@ -232,7 +229,7 @@ function adapterOf(client: BrainClient): ModelAdapter {
 function runtimeOver(model: ModelAdapter): ToolLoopAgentRuntime {
   return new ToolLoopAgentRuntime({
     model,
-    itemFormat: { format: RESPONSES_ITEM_FORMAT.FORMAT, version: RESPONSES_ITEM_FORMAT.VERSION },
+    itemFormat: RESPONSES_ITEM_FORMAT,
     createContext: () => new ResponsesContextEngine(TOOL_LOOP_IDENTITY),
   });
 }

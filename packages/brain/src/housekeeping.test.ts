@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { MEMORY_HOUSEKEEPING_OUTCOME, memoryFlushPrompt } from "@sidecar/memory";
-import { WORKSPACE_FILE_REFUSAL } from "@sidecar/runtime";
+import { RESPONSES_ITEM_FORMAT, WORKSPACE_FILE_REFUSAL } from "@sidecar/runtime";
 import {
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
@@ -13,11 +13,7 @@ import {
 import type { WireRecord } from "@sidecar/wire";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { HOUSEKEEPING_REFUSAL, runMemoryHousekeeping } from "./housekeeping.js";
-import {
-  RESPONSES_ITEM_FORMAT,
-  type ResponsesInputItem,
-  responsesModelAnswer,
-} from "./responses-api.js";
+import { type ResponsesInputItem, responsesModelAnswer } from "./responses-api.js";
 import { TOOL_LOOP_RUNTIME, ToolLoopAgentRuntime } from "./runtime.js";
 import { BRAIN_TOOL } from "./tools.js";
 
@@ -68,8 +64,8 @@ function adapterOf(model: FakeModel): ModelAdapter {
         checkpoint: {
           runtime: TOOL_LOOP_RUNTIME.ID,
           runtimeVersion: TOOL_LOOP_RUNTIME.VERSION,
-          format: RESPONSES_ITEM_FORMAT.FORMAT,
-          formatVersion: RESPONSES_ITEM_FORMAT.VERSION,
+          format: RESPONSES_ITEM_FORMAT.format,
+          formatVersion: RESPONSES_ITEM_FORMAT.version,
         },
         countsInputTokens: false,
         compacts: false,
@@ -94,7 +90,7 @@ function adapterOf(model: FakeModel): ModelAdapter {
 function runtimeOver(model: FakeModel): ToolLoopAgentRuntime {
   return new ToolLoopAgentRuntime({
     model: adapterOf(model),
-    itemFormat: { format: RESPONSES_ITEM_FORMAT.FORMAT, version: RESPONSES_ITEM_FORMAT.VERSION },
+    itemFormat: RESPONSES_ITEM_FORMAT,
     createContext: () => new ResponsesContextEngine(IDENTITY),
   });
 }

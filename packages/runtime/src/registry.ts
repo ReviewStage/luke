@@ -126,12 +126,7 @@ interface BuiltinModelAdapter {
 
 interface BuiltinMemoryProvider {
   readonly capabilities: readonly MemoryCapability[];
-  /**
-   * The embedding adapter a vector provider runs its vectors on. Required,
-   * not optional: a vector provider that named none was the one pairing the
-   * old registry refused at run time, and a required field is the same rule
-   * as a type error.
-   */
+  /** The embedding adapter this provider runs its vectors on; a vector provider without one is a type error. */
   readonly embeddingAdapterId: string;
 }
 
@@ -187,6 +182,15 @@ export type BuiltinContextEngineId = (typeof BUILTINS.contextEngineIds)[number];
 export type BuiltinModelAdapterId = keyof typeof BUILTINS.modelAdapters;
 export type BuiltinMemoryProviderId = keyof typeof BUILTINS.memoryProviders;
 
+/** The notebook provider a credential runs on: the same split the model adapter makes. */
+export function notebookMemoryProviderFor(
+  credentialKind: CredentialReferenceKind,
+): BuiltinMemoryProviderId {
+  return credentialKind === CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY
+    ? BUILTIN_MEMORY_PROVIDER.OPENAI
+    : BUILTIN_MEMORY_PROVIDER.HOSTED;
+}
+
 export interface AgentConfiguration {
   readonly agentId: AgentId;
   readonly agentRuntimeId: string;
@@ -226,16 +230,6 @@ function deepFreeze<Value>(value: Value): Value {
   return Object.freeze(value);
 }
 
-/**
- * The table read by id rather than by key, so a name that arrived over the
- * wire can be looked up without an assertion the derived unions would not
- * cover.
- */
-const AGENT_RUNTIME_IDS: readonly string[] = BUILTINS.agentRuntimeIds;
-const CONTEXT_ENGINE_IDS: readonly string[] = BUILTINS.contextEngineIds;
-const MODEL_ADAPTERS: Readonly<Record<string, BuiltinModelAdapter>> = BUILTINS.modelAdapters;
-const MEMORY_PROVIDERS: Readonly<Record<string, BuiltinMemoryProvider>> = BUILTINS.memoryProviders;
-
 export const CONFIGURATION_OUTCOME = {
   RESOLVED: "resolved",
   REFUSED: "refused",
@@ -262,12 +256,18 @@ function refused(refusal: ConfigurationRefusal): ConfigurationOutcome {
  * not hold: every name a build spells is checked by the derived id unions.
  */
 export function resolveConfiguration(names: AgentConfiguration): ConfigurationOutcome {
-  const adapter = MODEL_ADAPTERS[names.modelAdapterId];
+  // The table read by wire-shaped id rather than by key, which is what lets a
+  // name no built-in holds be looked up at all.
+  const runtimes: readonly string[] = BUILTINS.agentRuntimeIds;
+  const engines: readonly string[] = BUILTINS.contextEngineIds;
+  const providers: Readonly<Record<string, BuiltinMemoryProvider>> = BUILTINS.memoryProviders;
+  const adapters: Readonly<Record<string, BuiltinModelAdapter>> = BUILTINS.modelAdapters;
+  const adapter = adapters[names.modelAdapterId];
   if (
-    !AGENT_RUNTIME_IDS.includes(names.agentRuntimeId) ||
-    !CONTEXT_ENGINE_IDS.includes(names.contextEngineId) ||
+    !runtimes.includes(names.agentRuntimeId) ||
+    !engines.includes(names.contextEngineId) ||
     !adapter ||
-    (names.memoryProviderId !== undefined && !MEMORY_PROVIDERS[names.memoryProviderId])
+    (names.memoryProviderId !== undefined && !providers[names.memoryProviderId])
   ) {
     return refused(CONFIGURATION_REFUSAL.UNKNOWN_ID);
   }

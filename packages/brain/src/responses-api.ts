@@ -4,7 +4,6 @@ import {
   RESPONSES_INPUT_ITEM_TYPE,
   RESPONSES_MESSAGE_ROLE,
 } from "@sidecar/hosted";
-import { RESPONSES_ITEM_FORMAT as ITEM_FORMAT } from "@sidecar/runtime";
 import {
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
@@ -220,17 +219,6 @@ export function brainResponsesOutput(payload: UnparsedWireValue): BrainResponses
     ...(incompleteReason ? { incompleteReason } : undefined),
   };
 }
-
-/**
- * The provider item format the brain's checkpoints are in, as this file's
- * callers spell it. The identity itself is `@sidecar/runtime`'s, so the
- * format the built-ins declare and the format a checkpoint is stamped with
- * are one literal.
- */
-export const RESPONSES_ITEM_FORMAT = {
-  FORMAT: ITEM_FORMAT.format,
-  VERSION: ITEM_FORMAT.version,
-} as const;
 
 export const BRAIN_RESPONSES_COMPACT_PATH = "/responses/compact";
 export const BRAIN_RESPONSES_INPUT_TOKENS_PATH = "/responses/input_tokens";

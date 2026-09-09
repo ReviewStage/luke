@@ -1,5 +1,6 @@
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { ESTIMATED_CHARS_PER_TOKEN } from "@sidecar/memory";
+import { RESPONSES_ITEM_FORMAT } from "@sidecar/runtime";
 import {
   type CheckpointFormat,
   CONTEXT_INPUT_KIND,
@@ -17,7 +18,6 @@ import {
   functionCallOutputItem,
   isCompactionItem,
   isUserMessageItem,
-  RESPONSES_ITEM_FORMAT,
   type ResponsesInputItem,
   userMessageItem,
 } from "./responses-api.js";
@@ -41,8 +41,8 @@ export class ResponsesContextEngine implements ContextEngine {
     this.checkpointFormat = {
       runtime: runtime.id,
       runtimeVersion: runtime.version,
-      format: RESPONSES_ITEM_FORMAT.FORMAT,
-      formatVersion: RESPONSES_ITEM_FORMAT.VERSION,
+      format: RESPONSES_ITEM_FORMAT.format,
+      formatVersion: RESPONSES_ITEM_FORMAT.version,
     };
   }
 

@@ -24,10 +24,7 @@ import {
   type BrainWorkspaceAccess,
   brainToolCatalog,
   brainToolNotes,
-  HOSTED_MODEL_ADAPTER_ID,
   LOOK_SUBJECT,
-  notebookMemoryProviderFor,
-  OPENAI_MODEL_ADAPTER_ID,
   resolveTurnToolPolicy,
   runOriginOf,
   TOOL_LOOP_RUNTIME,
@@ -43,6 +40,7 @@ import type { ObservedSpoolEvent } from "@sidecar/providers";
 import type { ConversationEntry } from "@sidecar/realtime";
 import {
   BUILTIN_CONTEXT_ENGINE,
+  BUILTIN_MODEL_ADAPTER,
   type BuiltPrompt,
   buildSystemPrompt,
   type ChildPolicyContext,
@@ -60,6 +58,7 @@ import {
   LaneScheduler,
   laneConfiguration,
   loadSkill,
+  notebookMemoryProviderFor,
   type ResolvedConfiguration,
   readWorkspaceFile,
   recentDailyNotes,
@@ -457,8 +456,8 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       agentRuntimeId: TOOL_LOOP_RUNTIME.ID,
       modelAdapterId:
         credential.kind === CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY
-          ? OPENAI_MODEL_ADAPTER_ID
-          : HOSTED_MODEL_ADAPTER_ID,
+          ? BUILTIN_MODEL_ADAPTER.OPENAI
+          : BUILTIN_MODEL_ADAPTER.HOSTED,
       contextEngineId: BUILTIN_CONTEXT_ENGINE.RESPONSES,
       memoryProviderId: notebookMemoryProviderFor(credential.kind),
       credential,

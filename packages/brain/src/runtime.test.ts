@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
+import { RESPONSES_ITEM_FORMAT } from "@sidecar/runtime";
 import {
   CONTEXT_INPUT_KIND,
   type ContextEngine,
@@ -20,7 +21,6 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { isWireString, type WireRecord } from "@sidecar/wire";
 import { ResponsesContextEngine } from "./context-engine.js";
-import { RESPONSES_ITEM_FORMAT } from "./responses-api.js";
 import { TOOL_LOOP_RUNTIME, ToolLoopAgentRuntime } from "./runtime.js";
 
 const TOOL_LOOP_IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOOP_RUNTIME.VERSION };
@@ -59,8 +59,8 @@ class FakeModel implements ModelAdapter {
         checkpoint: {
           runtime: TOOL_LOOP_RUNTIME.ID,
           runtimeVersion: TOOL_LOOP_RUNTIME.VERSION,
-          format: RESPONSES_ITEM_FORMAT.FORMAT,
-          formatVersion: RESPONSES_ITEM_FORMAT.VERSION,
+          format: RESPONSES_ITEM_FORMAT.format,
+          formatVersion: RESPONSES_ITEM_FORMAT.version,
         },
         countsInputTokens: false,
         compacts: false,
@@ -95,7 +95,7 @@ class FakeModel implements ModelAdapter {
 function runtime(model: FakeModel, loopGuard?: { enabled: boolean }) {
   return new ToolLoopAgentRuntime({
     model,
-    itemFormat: { format: RESPONSES_ITEM_FORMAT.FORMAT, version: RESPONSES_ITEM_FORMAT.VERSION },
+    itemFormat: RESPONSES_ITEM_FORMAT,
     createContext: () => new ResponsesContextEngine(TOOL_LOOP_IDENTITY),
     ...(loopGuard ? { loopGuard } : undefined),
   });

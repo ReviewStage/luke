@@ -14,12 +14,14 @@ import {
 import type { ScheduledTimer } from "@sidecar/realtime";
 import {
   BUILTIN_CONTEXT_ENGINE,
+  BUILTIN_MODEL_ADAPTER,
   type BuiltinModelAdapterId,
   buildSystemPrompt,
   ConfigurationStore,
   CREDENTIAL_REFERENCE_KIND,
   defaultAgentConfiguration,
   gatherPromptFacts,
+  RESPONSES_ITEM_FORMAT,
   recentDailyNotes,
   seedWorkspace,
 } from "@sidecar/runtime";
@@ -52,10 +54,10 @@ import {
 import { BrainAgent, type BrainAgentOptions } from "./agent.js";
 import { toolLoopRuntimeOver } from "./builtins.js";
 import { ResponsesContextEngine } from "./context-engine.js";
-import { HOSTED_MODEL_ADAPTER_ID, HostedModelAdapter } from "./hosted-model-adapter.js";
+import { HostedModelAdapter } from "./hosted-model-adapter.js";
 import { BRAIN_INPUT_MARKER } from "./input-items.js";
 import { brainToolNotes } from "./instructions.js";
-import { OPENAI_MODEL_ADAPTER_ID, OpenAiModelAdapter } from "./openai-model-adapter.js";
+import { OpenAiModelAdapter } from "./openai-model-adapter.js";
 import {
   BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_ORIGIN,
@@ -64,7 +66,6 @@ import {
   BRAIN_SUBMISSION_REJECTION,
   type BrainRequestRecord,
 } from "./requests.js";
-import { RESPONSES_ITEM_FORMAT } from "./responses-api.js";
 import { TOOL_LOOP_RUNTIME, ToolLoopAgentRuntime } from "./runtime.js";
 import {
   type BrainPersistedState,
@@ -733,7 +734,7 @@ class HeldIngestEngine extends ResponsesContextEngine {
 function heldIngestRuntime(model: ModelAdapter): AgentRuntime {
   return new ToolLoopAgentRuntime({
     model,
-    itemFormat: { format: RESPONSES_ITEM_FORMAT.FORMAT, version: RESPONSES_ITEM_FORMAT.VERSION },
+    itemFormat: RESPONSES_ITEM_FORMAT,
     createContext: (format) =>
       new HeldIngestEngine({ id: format.runtime, version: format.runtimeVersion }),
   });
@@ -864,11 +865,11 @@ async function workspacePreparation(
 }
 
 test("a keyed turn and a hosted turn send the same prompt upstream, built from the same workspace by the same three stages", async () => {
-  const keyedPreparation = await workspacePreparation(OPENAI_MODEL_ADAPTER_ID, {
+  const keyedPreparation = await workspacePreparation(BUILTIN_MODEL_ADAPTER.OPENAI, {
     kind: CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY,
     providerId: "openai",
   });
-  const hostedPreparation = await workspacePreparation(HOSTED_MODEL_ADAPTER_ID, {
+  const hostedPreparation = await workspacePreparation(BUILTIN_MODEL_ADAPTER.HOSTED, {
     kind: CREDENTIAL_REFERENCE_KIND.HOSTED_ACCOUNT,
   });
   const sent: string[] = [];

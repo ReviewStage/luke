@@ -8,7 +8,7 @@ export {
   LOOK_SUBJECT,
   type LookSubjectKind,
 } from "./agent.js";
-export { notebookMemoryProviderFor, toolLoopRuntimeOver } from "./builtins.js";
+export { toolLoopRuntimeOver } from "./builtins.js";
 export {
   DELIVERY_STATE,
   type DeliveryClaim,
@@ -28,7 +28,7 @@ export {
   OpenAiEmbeddingAdapter,
 } from "./embedding-adapters.js";
 export { BrainGenerationClock } from "./generation-clock.js";
-export { HOSTED_MODEL_ADAPTER_ID, HostedModelAdapter } from "./hosted-model-adapter.js";
+export { HostedModelAdapter } from "./hosted-model-adapter.js";
 export {
   completeToolFree,
   type PrivateTurnOptions,
@@ -49,7 +49,6 @@ export {
 export type { BrainObservationEntry } from "./observation-inbox.js";
 export {
   BRAIN_OPENAI_DEFAULTS,
-  OPENAI_MODEL_ADAPTER_ID,
   openAiModelAdapter,
 } from "./openai-model-adapter.js";
 export type { BrainActExecution, BrainActPerformer, BrainRoster } from "./performer.js";
