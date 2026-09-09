@@ -51,9 +51,10 @@ export interface ObserveOptions
  * The signed-in user's cloud roster: the snapshot the scheduled pass last
  * stored, mapped onto the bounded wire rows. A live pass runs only where the
  * caller asked for a fresh read — under the per-user brake, since a pass is
- * the whole provider fan-out — or where no snapshot stands yet, and either
- * way it is the same pass the schedule runs, stored the same way. A user with
- * no cloud key has no roster to read or store and is answered empty.
+ * the whole provider fan-out — or where no snapshot stands yet or the one
+ * standing was observed under keys since replaced, and either way it is the
+ * same pass the schedule runs, stored the same way. A user with no cloud key
+ * has no roster to read or store and is answered empty.
  */
 export async function handleObserve(options: ObserveOptions): Promise<Response> {
   const { request, resolveUserId, encryptionSecret, readVaultKeys } = options;
@@ -84,7 +85,7 @@ export async function handleObserve(options: ObserveOptions): Promise<Response> 
   const fresh =
     new URL(request.url).searchParams.get(OBSERVE_QUERY.FRESH) === OBSERVE_QUERY.FRESH_VALUE;
   if (!fresh) {
-    const stored = await storedRoster(store, userId);
+    const stored = await storedRoster(store, userId, rows);
     if (stored?.roster) {
       return jsonResponse(HOSTED_HTTP_STATUS.OK, observeAnswer(stored.roster, stored.observedAt));
     }

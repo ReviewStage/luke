@@ -381,9 +381,9 @@ async function snapshotRoster(api: ConductorApi): Promise<ActionRoster> {
     providerId: "conductor",
     secret: SECRET,
     store,
-    readVaultKeys: async () => {
-      throw new Error("a standing snapshot is read, never re-observed");
-    },
+    // The key rows are read to check the snapshot was observed under them;
+    // the provider itself is never asked while a matching snapshot stands.
+    readVaultKeys: async () => KEY_ROWS,
     seams: {
       fetch: async () => {
         throw new Error("no pass runs for a user with a snapshot");
@@ -549,6 +549,38 @@ test("a user with no snapshot yet is seeded by the action's own pass, once", asy
   });
   assert.deepEqual(second.observations, first.observations);
   assert.equal(api.reads.length, readsAfterSeeding);
+});
+
+test("an action under a replaced key is admitted against a fresh pass, not the old key's snapshot", async () => {
+  const api = conductorApi("idle");
+  const store = memoryObservationStore();
+  await rosterForAction({
+    userId: "user-1",
+    providerId: "conductor",
+    secret: SECRET,
+    store,
+    readVaultKeys: async () => KEY_ROWS,
+    seams: { fetch: api.fetch },
+    now: NOW,
+  });
+  const readsAfterSeeding = api.reads.length;
+  const replaced: VaultKeyRow[] = [
+    { providerId: "conductor", ciphertext: encryptProviderKey("key-1", SECRET) },
+  ];
+
+  const roster = await rosterForAction({
+    userId: "user-1",
+    providerId: "conductor",
+    secret: SECRET,
+    store,
+    readVaultKeys: async () => replaced,
+    seams: { fetch: api.fetch },
+    now: NOW + 1,
+  });
+
+  assert.ok(api.reads.length > readsAfterSeeding);
+  assert.equal(roster.observations.length, 1);
+  assert.equal(store.snapshots.get("user-1")?.observedAt, NOW + 1);
 });
 
 test("a snapshot with no slice for the provider is no session, not a failure", () => {

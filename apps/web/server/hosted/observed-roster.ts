@@ -31,6 +31,12 @@ export const OBSERVED_ROSTER_VERSION = 1;
 
 interface ObservedRosterProvider {
   readonly providerId: CloudAgentProviderId;
+  /**
+   * A fingerprint of the stored key row the pass observed under, so a
+   * snapshot read under a key since replaced or removed is not served or
+   * admitted against as if it were this key's roster.
+   */
+  readonly keyFingerprint: string;
   readonly observations: readonly ProviderSessionObservation[];
   readonly projects: readonly WorkspaceProject[];
 }
@@ -151,6 +157,7 @@ const observedRosterSchema: Schema<ObservedRoster> = s.record(
     providers: s.array(
       s.record({
         providerId: cloudProviderIdSchema,
+        keyFingerprint: storedText,
         observations: s.array(observationSchema),
         projects: s.array(projectSchema),
       }),

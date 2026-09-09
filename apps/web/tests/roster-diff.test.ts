@@ -39,6 +39,7 @@ function roster(observations: readonly ProviderSessionObservation[]): ObservedRo
     providers: [
       {
         providerId: "conductor",
+        keyFingerprint: "fingerprint-1",
         observations,
         projects: [{ providerProjectId: "project-1", repository: "repo", taskSupport: "optional" }],
       },
@@ -168,7 +169,14 @@ test("a diff and a roster round-trip through their stored encodings, and an unre
     decodeObservedRoster(
       JSON.stringify({
         version: 1,
-        providers: [{ providerId: "conductor", observations: [{ title: "no id" }], projects: [] }],
+        providers: [
+          {
+            providerId: "conductor",
+            keyFingerprint: "f",
+            observations: [{ title: "no id" }],
+            projects: [],
+          },
+        ],
       }),
     ),
     undefined,
@@ -177,7 +185,7 @@ test("a diff and a roster round-trip through their stored encodings, and an unre
     decodeObservedRoster(
       JSON.stringify({
         version: 1,
-        providers: [{ providerId: "linear", observations: [], projects: [] }],
+        providers: [{ providerId: "linear", keyFingerprint: "f", observations: [], projects: [] }],
       }),
     ),
     undefined,

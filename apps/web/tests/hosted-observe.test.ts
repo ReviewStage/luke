@@ -139,6 +139,38 @@ test("a user with a snapshot is answered from it, dated, and the provider is not
   assert.equal(observeAnswerSchema.parse(storedBody)?.observedAt, TEST_TIME);
 });
 
+test("a snapshot observed under a replaced key is not served: the read runs a pass under the new key", async () => {
+  const store = memoryObservationStore();
+  await handleObserve(
+    observeOptions({
+      readVaultKeys: async () => KEY_ROWS,
+      store: () => store,
+      fetch: conductorApi().fetch,
+      now: () => TEST_TIME,
+    }),
+  );
+  const replaced: VaultKeyRow[] = [
+    { providerId: "conductor", ciphertext: encryptProviderKey("conductor-test-key", SECRET) },
+  ];
+  const api = conductorApi(TEST_CONDUCTOR_STATUS.IDLE);
+
+  const response = await handleObserve(
+    observeOptions({
+      readVaultKeys: async () => replaced,
+      store: () => store,
+      fetch: api.fetch,
+      now: () => TEST_TIME + 1_000,
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.ok(api.requests.length > 0);
+  assert.equal(body.sessions[0].status, SESSION_STATUS.WAITING);
+  assert.equal(body.observedAt, TEST_TIME + 1_000);
+  assert.deepEqual(store.diffs.get("user-1") ?? [], []);
+});
+
 test("a fresh read runs the pass again, stores it, and answers the new roster", async () => {
   const store = memoryObservationStore();
   const working = conductorApi();
