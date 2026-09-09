@@ -325,11 +325,10 @@ under the "read the recent tail" terms above, and the pass itself still reads
 none. We keep the latest roster it read, encrypted at rest with the same
 server-only secret as your keys, and beside it what changed since the pass
 before — a session that appeared or vanished, a status that moved, an error
-line that changed — so Luke can later be woken by a change rather than by a
-clock, and so the phone
-and watch can later be shown your sessions without asking Conductor again;
-today they still ask Conductor directly. The roster and its changes are
-replaced on every pass; nothing older is kept.
+line that changed — so the phone and watch can show your sessions without
+asking Conductor again, and so Luke can later be woken by a change rather
+than by a clock. The roster and its changes are replaced on every pass;
+nothing older is kept.
 Observation stops, and the stored roster and changes are deleted, when you
 delete the synced key, when you have not signed in for 7 days, and alongside
 your account if you delete that.
