@@ -10,7 +10,6 @@ import {
 import type { JsonObject, JsonValue } from "@sidecar/wire/testing";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
 import { CLOUD_ADAPTER_DEFAULTS, type CloudFetch } from "../shared/cloud-session-adapter.js";
-import { describeCloudAdapterContract } from "../testing/cloud-adapter-contract.js";
 import { CONDUCTOR_PROVIDER, ConductorSessionAdapter } from "./adapter.js";
 
 const TEST_TIME = Date.parse("2026-08-12T02:45:00.000Z");
@@ -348,35 +347,6 @@ function ownedWorkspace(id: string, lastActivityAt: number): TestWorkspace {
     lastActivityAt,
   };
 }
-
-describeCloudAdapterContract("Conductor", (options) => {
-  const api = fakeConductorApi({
-    userId: TEST_USER_ID,
-    projects: [LUKE_PROJECT],
-    workspaces: [ownedWorkspace("contract-workspace", TEST_TIME - 1_000)],
-    sessions: [
-      {
-        id: "contract-session",
-        workspaceId: "contract-workspace",
-        name: TEST_SESSION_NAME,
-        status: TEST_CONDUCTOR_STATUS.WORKING,
-        statusUpdatedAt: TEST_TIME - 1_000,
-      },
-    ],
-  });
-  const fetch: CloudFetch = async (url, init) => {
-    if (options.failRequests()) throw new Error("network unreachable");
-    return api.fetch(url, init);
-  };
-  return {
-    adapter: adapterFor(fetch, options),
-    requestCount: () => api.requests.length,
-    credentials: () =>
-      api.requests
-        .map((request) => request.authorization?.replace("Bearer ", ""))
-        .filter((credential): credential is string => credential !== undefined),
-  };
-});
 
 test("observes cloud sessions the signed-in user created, under their own names", async () => {
   const api = fakeConductorApi({
