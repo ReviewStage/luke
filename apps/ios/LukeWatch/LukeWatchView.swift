@@ -27,15 +27,19 @@ struct LukeWatchView: View {
 
     private var signedInPages: some View {
         @Bindable var navigation = navigation
+        // The list stands to the left of Luke, and Luke is still the page the
+        // watch opens on: a swipe to the right reaches the sessions, and a
+        // swipe to the left over the thread is the pull that uncovers its
+        // times, which the two pages would otherwise contest.
         return TabView(selection: $navigation.page) {
-            NavigationStack {
-                WatchVoiceView()
-            }
-            .tag(WatchPage.voice)
             NavigationStack(path: $navigation.path) {
                 WatchRosterView()
             }
             .tag(WatchPage.sessions)
+            NavigationStack {
+                WatchVoiceView()
+            }
+            .tag(WatchPage.voice)
         }
         .tabViewStyle(.page)
         // The pages and the stack above the list are the signed-in

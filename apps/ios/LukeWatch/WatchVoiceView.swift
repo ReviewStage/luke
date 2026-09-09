@@ -301,16 +301,22 @@ struct WatchVoiceView: View {
 /// keep room spare beside it, so here both sides ride the pull and move left
 /// together, Luke's words running off the leading edge for as long as the
 /// fingers hold; the phone, with room to the right of his bubbles, leaves
-/// them standing.
+/// them standing. The pull stops the moment the column stands fully in, the
+/// least travel that shows every stamp whole, because every point further is
+/// more of the words off the screen for nothing.
 private struct WatchVoiceBubble: View {
     let message: VoiceConversationMessage
     let pull: CGFloat
 
-    /// Room for the widest stamp a twelve-hour clock draws at this size.
-    static let timeColumn: CGFloat = 48
-    /// How far the column travels to stand fully in view: its own width and
-    /// the thread's trailing inset it rests behind.
-    static let reveal: CGFloat = timeColumn + 4
+    /// Room for the widest stamp a twelve-hour clock draws at this size, and
+    /// the inset it keeps from the thread's edge once uncovered.
+    private static let timeColumn: CGFloat = 44
+    private static let stampInset: CGFloat = 2
+    /// The thread's horizontal inset, which the column rests behind.
+    private static let threadInset: CGFloat = 4
+    /// How far the pull travels before it stops: the column and the inset it
+    /// rests behind, which is exactly what stands it fully in view.
+    static let reveal: CGFloat = timeColumn + stampInset + threadInset
 
     private var isDeveloper: Bool { message.speaker == .developer }
 
@@ -334,7 +340,7 @@ private struct WatchVoiceBubble: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .frame(width: Self.timeColumn, alignment: .trailing)
-                .padding(.trailing, 2)
+                .padding(.trailing, Self.stampInset)
                 .offset(x: Self.reveal - pull)
         }
     }
