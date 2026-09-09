@@ -156,7 +156,7 @@ export interface ConversationEntry {
   requestId?: string;
 }
 
-/** The line as the Gateway protocol carries it; `storedConversationEntry` reads it back whole. */
+/** The line as the Gateway protocol carries it; the unstrict read below takes it back whole. */
 export function conversationEntryToWire(entry: ConversationEntry): WireRecord {
   return {
     kind: entry.kind,

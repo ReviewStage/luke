@@ -88,8 +88,6 @@ export {
   CONTEXT_ITEM_KIND,
   type ContextItemKind,
   contextItemId,
-  maximumVoiceContextSessions,
-  maximumVoiceContextWorkspaceProjects,
   sessionContextText,
   workspaceProjectContextText,
 } from "./standing-context.js";

@@ -9,6 +9,7 @@ import {
   remoteRealtimeInstructions,
 } from "./realtime-instructions.js";
 import { REALTIME_DEFAULTS } from "./realtime-voice-settings.js";
+import { trimmedText } from "./trimmed-text.js";
 
 /**
  * Minting an ephemeral Realtime credential and diagnosing why voice is or is
@@ -25,11 +26,6 @@ export interface RealtimeSessionOptions {
   /** A multiple of the voice's natural rate, within the API's 0.25–1.5. */
   speed?: number;
   instructions?: string;
-}
-
-function trimmedText(value: string | undefined): string | undefined {
-  const normalized = value?.trim();
-  return normalized || undefined;
 }
 
 /**

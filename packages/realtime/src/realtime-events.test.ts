@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isRecord, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { PRESS_AUDIO_SAMPLE_RATE } from "./press-audio.js";
 import { realtimeSessionConfig } from "./realtime-credentials.js";
 import {
@@ -17,12 +17,6 @@ import {
   truncateResponseEvents,
 } from "./realtime-events.js";
 import { ASK_BRAIN_TOOL } from "./realtime-instructions.js";
-
-function responseField(event: WireRecord | undefined): WireRecord | undefined {
-  if (!event) return undefined;
-  const response = event.response;
-  return isRecord(response) ? response : undefined;
-}
 
 test("a refused delete is read back with the event it names", () => {
   // The caller tells its own delete's refusal from a fault meant for the
@@ -408,11 +402,12 @@ test("the reply that voices an outcome cannot itself call a tool", () => {
   const [request] = functionCallFollowUpEvents();
 
   assert.equal(request?.type, REALTIME_CLIENT_EVENT.RESPONSE_CREATE);
-  const response = responseField(request);
+  const response = request?.response;
+  assert.ok(isRecord(response));
   // The follow-up is opened to say what happened, not to act again — a tool
   // output that reads like an instruction has nothing to act with. It also
   // inherits the session's standing instructions rather than replacing them.
-  assert.equal(response?.tool_choice, "none");
-  assert.deepEqual(response?.tools, []);
-  assert.equal(response?.instructions, undefined);
+  assert.equal(response.tool_choice, "none");
+  assert.deepEqual(response.tools, []);
+  assert.equal(response.instructions, undefined);
 });

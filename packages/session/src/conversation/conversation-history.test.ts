@@ -417,6 +417,41 @@ test("a stored line reads back, and retention cuts by age and by count", () => {
   assert.equal(retainedConversationEntries(many, now).length, maximumStoredConversationEntries);
 });
 
+test("the unstrict read takes what the strict one refuses, and nothing wider", () => {
+  const line = {
+    kind: CONVERSATION_ENTRY_KIND.REPLY,
+    words: " two agents ",
+    recordedAt: 1_800_000_000_000,
+  };
+
+  // The three refusals that are the whole of the difference: unnormalized
+  // words, no clock, and an empty identity field. A line another process of
+  // the same build just wrote is taken as it was sent.
+  assert.deepEqual(storedConversationEntry(line, { strict: false }), line);
+  assert.equal(storedConversationEntry(line), undefined);
+
+  const unclocked = { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "settled" };
+  assert.deepEqual(storedConversationEntry(unclocked, { strict: false }), unclocked);
+  assert.equal(storedConversationEntry(unclocked), undefined);
+
+  const blankIdentity = { ...unclocked, identity: { providerId: "", providerSessionId: "" } };
+  assert.deepEqual(storedConversationEntry(blankIdentity, { strict: false }), blankIdentity);
+  assert.equal(
+    storedConversationEntry({ ...blankIdentity, recordedAt: line.recordedAt }),
+    undefined,
+  );
+
+  // Neither read repairs a kind this build does not know, or words that are
+  // not words at all: those refusals are the parse itself, not its strictness.
+  for (const strict of [true, false]) {
+    assert.equal(
+      storedConversationEntry({ ...unclocked, kind: "invented" }, { strict }),
+      undefined,
+    );
+    assert.equal(storedConversationEntry({ ...unclocked, words: 7 }, { strict }), undefined);
+  }
+});
+
 test("the live thread obeys the same count and age retention as storage", () => {
   const now = 1_800_000_000_000;
   let entries: readonly ConversationEntry[] = [];
