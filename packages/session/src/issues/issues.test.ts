@@ -3,14 +3,12 @@ import test from "node:test";
 import {
   ISSUE_TRACKER_ID,
   issueCommentText,
-  maximumIssueTransitions,
-  normalizeTrackedIssue,
-} from "@sidecar/issues";
-import {
   maximumIssueCommentLength,
   maximumIssueIdentifierLength,
   maximumIssueStateNameLength,
   maximumIssueTitleLength,
+  maximumIssueTransitions,
+  normalizeTrackedIssue,
 } from "./issues.js";
 
 const OBSERVED_AT = 1_800_000_000_000;

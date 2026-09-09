@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ACT_RESULT_STATUS, ISSUE_ACTION_KIND } from "@sidecar/issues";
+import { ACT_RESULT_STATUS, ISSUE_ACTION_KIND } from "@sidecar/session";
 import { UNSUPPORTED_BY_OBSERVATION } from "@sidecar/wire";
 import type { JsonValue, ParsedJsonObject } from "@sidecar/wire/testing";
 import {

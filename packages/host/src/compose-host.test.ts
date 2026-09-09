@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { temporaryDirectory } from "@sidecar/fixtures/testing";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_METHOD,
@@ -8,6 +7,7 @@ import {
   type GatewayMethod,
   gatewayOk,
 } from "@sidecar/gateway";
+import { temporaryDirectory } from "@sidecar/runtime/testing";
 import { isRecord } from "@sidecar/wire";
 import { composeHost } from "./compose-host.js";
 import { type Composer, mergeMethods } from "./composer.js";

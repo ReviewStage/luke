@@ -23,7 +23,6 @@
  */
 import "../../../packages/credentials/src/credential-providers.js";
 import "../../../packages/guide/src/index.js";
-import "../../../packages/issues/src/index.js";
 import "../../../packages/memory/src/index.js";
 import "../../../packages/runtime/src/index.js";
 

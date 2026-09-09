@@ -13,13 +13,13 @@ import {
 import type { BrainActExecution, BrainActPerformer } from "@sidecar/brain";
 import type { BrainAppActRequest } from "@sidecar/brain/requests-wire";
 import type { AppGuideSnapshot } from "@sidecar/guide";
-import type { TrackedIssue } from "@sidecar/issues";
 import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
   sessionActConversationEntry,
 } from "@sidecar/realtime";
 import { isRunOrigin, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
+import type { TrackedIssue } from "@sidecar/session";
 import {
   type ObservedWorkspaceProject,
   type Session,

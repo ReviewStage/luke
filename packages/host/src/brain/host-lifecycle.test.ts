@@ -7,8 +7,8 @@ import {
   brainStateFromStored,
 } from "@sidecar/brain";
 import { brainReplyWords } from "@sidecar/brain/requests";
-import { drainMicrotasks } from "@sidecar/fixtures/testing";
 import { CONVERSATION_ENTRY_KIND } from "@sidecar/realtime";
+import { drainMicrotasks } from "@sidecar/runtime/testing";
 import {
   answered,
   answerOf,

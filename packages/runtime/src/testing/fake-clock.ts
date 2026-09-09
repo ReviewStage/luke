@@ -1,4 +1,4 @@
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
+import type { ScheduledTimer } from "../vocabulary.js";
 import { drainMicrotasks } from "./drain.js";
 
 interface ArmedTimer {

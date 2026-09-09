@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { BRAIN_REQUEST_ORIGIN, type BrainRequestOrigin } from "@sidecar/brain/requests";
 import type { BrainReplyClaimResult, BrainReplyOffer } from "@sidecar/brain/requests-wire";
-import { drainMicrotasks } from "@sidecar/fixtures/testing";
 import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
+import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { ReplyDeliveryPlayer } from "./reply-delivery-player";
 
 interface Harness {

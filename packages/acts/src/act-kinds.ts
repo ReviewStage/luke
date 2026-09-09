@@ -14,10 +14,11 @@ import type {
   FeedbackComposerKind,
   SessionListSort,
 } from "@sidecar/guide";
-import type { IssueIdentity, IssueTransition } from "@sidecar/issues";
 import type {
   ACT_KIND as ADVERTISED_ACT_KIND,
   AdvertisedControl,
+  IssueIdentity,
+  IssueTransition,
   SessionApplicationId,
   SessionIdentity,
   WorkspaceAgentSelection,

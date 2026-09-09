@@ -29,7 +29,6 @@
     "@sidecar/brain": "workspace:*",
     "@sidecar/credentials": "workspace:*",
     "@sidecar/hosted": "workspace:*",
-    "@sidecar/fixtures": "workspace:*",
     "@sidecar/panel": "workspace:*",
     "@sidecar/realtime": "workspace:*",
     "@sidecar/session": "workspace:*",

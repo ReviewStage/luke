@@ -6,7 +6,6 @@ import type { BrainAgent, BrainRequestRecord } from "@sidecar/brain";
 import { DeliveryLedger } from "@sidecar/brain";
 import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
 import type { BrainAskWait, BrainReplyClaimResult } from "@sidecar/brain/requests-wire";
-import { drainMicrotasks } from "@sidecar/fixtures/testing";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
@@ -21,6 +20,7 @@ import {
   VoiceReceiver,
 } from "@sidecar/host";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
+import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
 import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import { BRIDGE } from "#shared/bridge";

@@ -16,13 +16,13 @@ import {
   toolLoopRuntimeOver,
 } from "@sidecar/brain";
 import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testing";
-import { drainMicrotasks, temporaryDirectory } from "@sidecar/fixtures/testing";
 import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
   conversationHistoryText,
   recentConversationEntries,
 } from "@sidecar/realtime";
+import { drainMicrotasks, temporaryDirectory } from "@sidecar/runtime/testing";
 import {
   ARCHIVE_ENCODING,
   DEFAULT_AGENT_ID,

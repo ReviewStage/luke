@@ -27,8 +27,8 @@ import {
   appToggleValue,
   EMPTY_APP_GUIDE,
 } from "@sidecar/guide";
-import type { IssueIdentity, TrackedIssue } from "@sidecar/issues";
 import type { RunOrigin } from "@sidecar/runtime/vocabulary";
+import type { IssueIdentity, TrackedIssue } from "@sidecar/session";
 import {
   advertisedActFor,
   advertisedControl,

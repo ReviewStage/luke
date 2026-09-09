@@ -1,12 +1,12 @@
-import { FIXTURE_EPOCH_MS } from "@sidecar/fixtures";
 import { WingFace as LukeFace, MicrophoneIcon } from "@sidecar/panel";
 import { introductionSessionConfig, REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
+import { SESSION_URGENCY } from "@sidecar/session";
+import { FIXTURE_EPOCH_MS } from "@sidecar/session/fixtures";
 import { DEFAULT_VOICE_HOTKEYS, TALK_KEY_RELEASE, talkKeyRelease } from "@sidecar/settings";
 import {
   FACE_MOTION,
   FACE_MOTION_CYCLE_MS,
   type FaceMotion,
-  SESSION_URGENCY,
   urgencyLabel,
   WORDMARK_ART,
 } from "@sidecar/surface";

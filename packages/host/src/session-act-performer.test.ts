@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ACT_KIND, ACT_REFUSAL, type SessionActKind, type ValidatedAct } from "@sidecar/acts";
-import { drainMicrotasks } from "@sidecar/fixtures/testing";
+import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import {
   type ActHandlers,

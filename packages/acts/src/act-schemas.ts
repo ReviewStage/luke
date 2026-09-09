@@ -12,8 +12,8 @@ import {
   FEEDBACK_COMPOSER_KIND,
   SESSION_LIST_SORT,
 } from "@sidecar/guide";
-import { maximumIssueCommentLength } from "@sidecar/issues";
 import {
+  maximumIssueCommentLength,
   maximumSessionMessageLength,
   maximumWorkspaceNameLength,
   PROVIDER_ID_LIST,

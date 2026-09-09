@@ -1,8 +1,8 @@
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
-import type { FixtureSnapshot } from "@sidecar/fixtures";
 import type { ConversationEntry } from "@sidecar/realtime";
 import type { ObservedWorkspaceProject, Session } from "@sidecar/session";
+import type { FixtureSnapshot } from "@sidecar/session/fixtures";
 import type { AppSettings } from "@sidecar/settings/wire";
 import type { Rectangle, ResolvedNotchGeometry, WindowMode } from "@sidecar/surface";
 import type { MicrophoneStatus, OutputAudioState } from "./audio";

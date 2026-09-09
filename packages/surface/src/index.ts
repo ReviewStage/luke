@@ -37,12 +37,7 @@ export {
   OPENCODE_FRAME_PATH,
   SUPERSET_PATH,
 } from "./generated/provider-mark-paths.js";
-export {
-  compareSessionsByUrgency,
-  SESSION_URGENCY,
-  type SessionUrgency,
-  urgencyLabel,
-} from "./generated/session-display.js";
+export { compareSessionsByUrgency, urgencyLabel } from "./generated/session-display.js";
 export {
   CAPSULE_SIDE_WIDTH,
   DEFAULT_PANEL_FORM_FACTOR,

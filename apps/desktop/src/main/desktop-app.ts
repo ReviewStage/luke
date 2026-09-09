@@ -14,7 +14,6 @@ import {
 import type { BrainAppActRequest } from "@sidecar/brain/requests-wire";
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidecar/feedback";
-import { fixtureSnapshot } from "@sidecar/fixtures";
 import { GATEWAY_CLIENT_ROLE, InProcessTransport } from "@sidecar/gateway";
 import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import {
@@ -34,6 +33,7 @@ import {
 import { peekLocalSessions } from "@sidecar/providers";
 import type { SpeechOutcome } from "@sidecar/realtime/speech";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
+import { fixtureSnapshot } from "@sidecar/session/fixtures";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { AppSettings } from "@sidecar/settings/wire";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";

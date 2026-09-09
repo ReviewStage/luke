@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { temporaryDirectory } from "@sidecar/fixtures/testing";
+import { temporaryDirectory } from "@sidecar/runtime/testing";
 import { arrivalBeatOwed, countsFirstAnnouncement } from "./arrival-flow.js";
 import { calendarOnboardingOwed } from "./calendar-onboarding-flow.js";
 import { shouldRunIntroduction } from "./introduction-flow.js";

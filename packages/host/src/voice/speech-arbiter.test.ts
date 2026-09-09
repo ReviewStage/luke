@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { BrainDelivery } from "@sidecar/brain";
 import type { SpeechTraceRecord } from "@sidecar/devtrace";
-import { FakeClock } from "@sidecar/fixtures/testing";
 import {
   ARRIVAL_SPEECH_KIND,
   BRIEFING_SPEECH_KIND,
@@ -10,6 +9,7 @@ import {
   isBriefingSpeech,
 } from "@sidecar/realtime";
 import { SPEECH_OUTCOME } from "@sidecar/realtime/speech";
+import { FakeClock } from "@sidecar/runtime/testing";
 import {
   MAXIMUM_PENDING_BRIEFINGS,
   SPEECH_DECISION,

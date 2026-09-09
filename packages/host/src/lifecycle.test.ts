@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { drainMicrotasks } from "@sidecar/fixtures/testing";
 import { GATEWAY_SHUTDOWN_DEFAULTS, shutdownGateway } from "@sidecar/gateway";
+import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { seedWorkspaceThenStartMemory, shutdownStepsFlushingEvents } from "./lifecycle.js";
 
 test("a workspace seed that fails is reported and the memory index still starts, after the seed and not before", async () => {

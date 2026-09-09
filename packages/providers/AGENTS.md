@@ -49,7 +49,7 @@ which `repository-checks.sh` enforces and Biome is kept away from;
 Capabilities stay with their owning package in explicit, exhaustive maps:
 credentials in `@sidecar/credentials`, analytics connections in
 `@sidecar/analytics` and the desktop bridge, hooks and plugin registration in
-this package, fixture coverage in `@sidecar/fixtures` and the recorded
+this package, fixture coverage in `@sidecar/session/fixtures` and the recorded
 provider fixtures beside `@sidecar/session`, workspace presentation in the
 surface that offers it, and Superset agent kinds in this package.
 Provider marks and CSS are presentation owned by their surfaces, not identity.
