@@ -113,6 +113,7 @@ export function composeDesktop(config: DesktopConfig): DesktopServices {
   host.link({ attach: () => operator.start() });
   native.link({
     sendToPrimaryPanel: (channel, payload) => windows.sendToPrimaryPanel(channel, payload),
+    standPanelsDown: () => windows.panels.standDown(),
   });
   operator.link({
     sendToVoice: (channel, payload) => windows.sendToVoice(channel, payload),

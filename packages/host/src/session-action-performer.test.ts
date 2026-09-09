@@ -20,6 +20,7 @@ import {
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { admittedForTest } from "@sidecar/wire/testing";
+import { HOST_NODE_OPEN_KIND, type HostNodeOpenKind } from "./node-capabilities.js";
 import { createSessionActionPerformer } from "./session-action-performer.js";
 import type { SettingsStore } from "./settings-store.js";
 
@@ -89,7 +90,11 @@ function heldSettings() {
   return { store, release: () => release?.(), reads: () => reads };
 }
 
-function deeperPerformer(plugin: FakePlugin, settingsStore: Pick<SettingsStore, "get">) {
+function deeperPerformer(
+  plugin: FakePlugin,
+  settingsStore: Pick<SettingsStore, "get">,
+  openExternal: (url: string, kind: HostNodeOpenKind) => Promise<void> = async () => {},
+) {
   const registry = new SessionRoster();
   registry.replaceProvider(plugin.provider, [WORKSPACE_OBSERVATION]);
   const unreachable = async () => {
@@ -97,7 +102,7 @@ function deeperPerformer(plugin: FakePlugin, settingsStore: Pick<SettingsStore, 
   };
   return createSessionActionPerformer({
     sessionRegistry: registry,
-    openExternal: async () => {},
+    openExternal,
     pluginFor: (providerId) => (providerId === plugin.provider.id ? plugin : undefined),
     sendsNetwork: true,
     settingsStore,
@@ -119,13 +124,36 @@ function deeperPerformer(plugin: FakePlugin, settingsStore: Pick<SettingsStore, 
 }
 
 const NOW_DEEP = 1_800_000_000_000;
+const WORKSPACE_LINK = "https://conductor.invalid/workspaces/workspace-1";
+const WORKSPACE_IDENTITY = {
+  providerId: PROVIDER_ID.CONDUCTOR,
+  providerSessionId: "workspace-1",
+} as const;
 const WORKSPACE_OBSERVATION: ProviderSessionObservation = {
   providerSessionId: "workspace-1",
   title: "Fix the flaky test",
   status: SESSION_STATUS.WAITING,
   lastActivityAt: NOW_DEEP,
+  detail: { link: WORKSPACE_LINK },
   advertises: [{ kind: ACTION_KIND.ADD_AGENT, agents: ["claude"] }],
 };
+/** The open the brain carries at an ask of Luke, as admission would have minted it. */
+const OPEN: ValidatedAction<SessionActionKind> = admittedForTest({
+  kind: ACTION_KIND.OPEN,
+  identity: WORKSPACE_IDENTITY,
+  origin: RUN_ORIGIN.USER,
+});
+
+/** The node's open, written down with what the host said each address was. */
+function recordingOpens() {
+  const opens: { url: string; kind: HostNodeOpenKind }[] = [];
+  return {
+    opens,
+    openExternal: async (url: string, kind: HostNodeOpenKind) => {
+      opens.push({ url, kind });
+    },
+  };
+}
 /** What admission would have minted, since only an admitted act reaches a performer. */
 const CREATE: ValidatedAction<SessionActionKind> = admittedForTest({
   kind: ACTION_KIND.CREATE_WORKSPACE,
@@ -230,4 +258,36 @@ test("a row-shaped call with no guard still lands, because a press is its own tu
   settings.release();
   assert.equal((await creating).status, ACTION_RESULT_STATUS.ACCEPTED);
   assert.equal(plugin.creates.length, 1);
+});
+
+test("an open the brain carries tells the node it was asked of Luke, and a row press hands it an address", async () => {
+  const node = recordingOpens();
+  const performer = deeperPerformer(fakePlugin(), heldSettings().store, node.openExternal);
+  assert.equal((await performer.perform(OPEN)).status, ACTION_RESULT_STATUS.ACCEPTED);
+  assert.equal(
+    (await performer.openSession(WORKSPACE_IDENTITY)).status,
+    ACTION_RESULT_STATUS.ACCEPTED,
+  );
+  assert.deepEqual(
+    node.opens.map((open) => open.kind),
+    [HOST_NODE_OPEN_KIND.ASKED_SESSION, HOST_NODE_OPEN_KIND.ADDRESS],
+  );
+  assert.ok(node.opens.every((open) => open.url === WORKSPACE_LINK));
+});
+
+test("an open refused before the node, or lost at it, is answered without the node opening anything of its own", async () => {
+  const node = recordingOpens();
+  const performer = deeperPerformer(fakePlugin(), heldSettings().store, node.openExternal);
+  const absent = admittedForTest({
+    kind: ACTION_KIND.OPEN,
+    identity: { providerId: PROVIDER_ID.CONDUCTOR, providerSessionId: "workspace-gone" },
+    origin: RUN_ORIGIN.USER,
+  });
+  assert.equal((await performer.perform(absent)).status, ACTION_RESULT_STATUS.UNSUPPORTED);
+  assert.equal(node.opens.length, 0);
+
+  const failing = deeperPerformer(fakePlugin(), heldSettings().store, async () => {
+    throw new Error("no application claims that address");
+  });
+  assert.equal((await failing.perform(OPEN)).status, ACTION_RESULT_STATUS.REJECTED);
 });
