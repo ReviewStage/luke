@@ -29,7 +29,24 @@ import {
 import { accountInitials, accountLabel } from "./account-initials";
 import { GitHubMark, GoogleMark } from "./account-marks";
 import { calendarWeeks, DAYS_PER_WEEK, lastWeeks, monthLabels } from "./activity-calendar";
-import { SIGN_IN_CHOSEN } from "./admin/prefs";
+import {
+  ACCOUNTS_SORT_KEY,
+  type AccountsDetailColumn,
+  type AccountsSort,
+  type AccountsSortKey,
+  type AccountsTableRow,
+  nextSort,
+  SORT_DIRECTION,
+  sortAccountsRows,
+} from "./admin/accounts-table/sort";
+import { ACCOUNTS_SORT, ADMINS_HIDDEN, SIDEBAR_COLLAPSED, SIGN_IN_CHOSEN } from "./admin/prefs";
+import {
+  SKELETON_PLOT,
+  SKELETON_SHAPE,
+  Skeleton,
+  SkeletonBody,
+  type SkeletonShape,
+} from "./admin/skeleton";
 import { type AdminReader, adminReadFailure, useAdminRead } from "./admin/use-admin-read";
 import {
   ANIMATION_ROSTER,
@@ -204,54 +221,6 @@ function windowHref(windowDays: AdminMetricsWindow): string {
  */
 function plainLeftClick(event: React.MouseEvent): boolean {
   return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
-}
-
-/**
- * Whether the sidebar was left collapsed, remembered the way the sign-in
- * press is: locally, as the presence of a key, so a browser that refuses
- * storage simply opens expanded every visit.
- */
-const SIDEBAR_COLLAPSED_STORAGE_KEY = "luke-admin-sidebar-collapsed";
-
-function sidebarLeftCollapsed(): boolean {
-  try {
-    return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) !== null;
-  } catch {
-    return false;
-  }
-}
-
-function rememberSidebarCollapsed(collapsed: boolean): void {
-  try {
-    if (collapsed) window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, "true");
-    else window.localStorage.removeItem(SIDEBAR_COLLAPSED_STORAGE_KEY);
-  } catch {
-    // Storage refused: the sidebar opens expanded on the next visit.
-  }
-}
-
-/**
- * Whether the "Hide admins" filter was left off, remembered the way the
- * sidebar fold is: locally, as the presence of a key marking the exception,
- * so a browser that refuses storage simply opens with admins hidden.
- */
-const HIDE_ADMINS_STORAGE_KEY = "luke-admin-hide-admins";
-
-function adminsLeftHidden(): boolean {
-  try {
-    return window.localStorage.getItem(HIDE_ADMINS_STORAGE_KEY) === null;
-  } catch {
-    return true;
-  }
-}
-
-function rememberAdminsHidden(hide: boolean): void {
-  try {
-    if (hide) window.localStorage.removeItem(HIDE_ADMINS_STORAGE_KEY);
-    else window.localStorage.setItem(HIDE_ADMINS_STORAGE_KEY, "false");
-  } catch {
-    // Storage refused: admins hide again on the next visit.
-  }
 }
 
 /** The signed-in account the header names; read from the session, shown as-is. */
@@ -1566,163 +1535,57 @@ function HideAdminsToggle({
 }
 
 /**
- * The first load's stand-in: the page's own layout with bones where the data
- * will land, so the answer replaces the skeleton without moving what the
- * reader is already looking at. Every fixed dimension in the components below
- * mirrors a real component above and must move with it — a stat card's line
- * boxes, each chart's fixed plot height, the retention grid's eight `min-h-9`
- * cohort rows and the tables' ten (`ADMIN_RETENTION_WEEKS` and
- * `ADMIN_TOP_USERS_LIMIT`, not imported because the modules exporting them
- * carry query code the client bundle must not), and a table row's `py-3`
- * around a `size-8` avatar. Static words — the headings, the
- * notes under the sections, the working window and scope controls — render as
- * themselves; only unknown data gets bones, each hidden from readers while
- * `aria-busy` on the region and one visually hidden line say what the page is
- * doing.
+ * The loading stand-in every view wears: the page's own header and controls,
+ * drawn for real, over the bones its own sections name. The header is the
+ * loaded page's own component, so the two cannot drift apart — which is what
+ * four page-shaped copies of it could not promise.
  */
-function Skeleton({
-  className,
-  circle = false,
+function PageSkeleton({
+  title,
+  account,
+  onSignOut,
+  controls,
+  loading,
+  back,
+  shapes,
 }: {
-  className: string;
-  circle?: boolean;
+  title: string;
+  account: ViewerAccount | undefined;
+  onSignOut: () => void;
+  controls: React.ReactNode;
+  /** What the visually hidden line says this page is reading. */
+  loading: string;
+  back?: { tab: AdminTab; label: string; onBack: () => void };
+  shapes: readonly SkeletonShape[];
 }): React.JSX.Element {
   return (
-    <div
-      aria-hidden="true"
-      className={`${circle ? "rounded-full" : "rounded-md"} animate-pulse bg-muted motion-reduce:animate-none ${className}`}
-    />
-  );
-}
-
-/** A bone boxed to the height of the text line it stands for, so the swap to words moves nothing. */
-function SkeletonLine({ box, bone }: { box: string; bone: string }): React.JSX.Element {
-  return (
-    <div className={`flex items-center ${box}`}>
-      <Skeleton className={bone} />
-    </div>
-  );
-}
-
-function skeletonRows(count: number): readonly number[] {
-  return Array.from({ length: count }, (_, row) => row);
-}
-
-function SkeletonStatCard({ grouped = false }: { grouped?: boolean }): React.JSX.Element {
-  return (
-    <div
-      className={
-        grouped ? "min-w-0 bg-card px-5 py-4" : "rounded-lg border border-border bg-card px-5 py-4"
-      }
+    <main
+      className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10"
+      aria-busy="true"
     >
-      <SkeletonLine box="h-4" bone="h-3 w-24" />
-      <div className="mt-2">
-        <SkeletonLine box="h-9" bone="h-7 w-20" />
-      </div>
-      <div className="mt-1">
-        <SkeletonLine box="h-5" bone="h-3.5 w-32" />
-      </div>
-    </div>
-  );
-}
-
-/** Each plot height is its chart's own fixed height, so the bars land where the bone stood. */
-const SKELETON_PLOT = {
-  USAGE: "h-48",
-  SIGNUPS: "h-40",
-  SIGN_IN_METHODS: "h-[120px]",
-} as const;
-
-type SkeletonPlot = (typeof SKELETON_PLOT)[keyof typeof SKELETON_PLOT];
-
-function SkeletonChartCard({ plot }: { plot: SkeletonPlot }): React.JSX.Element {
-  return (
-    <div className="rounded-lg border border-border bg-card p-5">
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <SkeletonLine box="h-4" bone="h-3 w-36" />
-        <SkeletonLine box="h-4" bone="h-3 w-56" />
-      </div>
-      <Skeleton className={`w-full ${plot}`} />
-    </div>
-  );
-}
-
-/**
- * The bone block approximates the calendar grid's height at the page's own
- * max width, where a flexed day cell lands near 1rem: a month-label row and
- * seven day rows with 0.25rem gaps.
- */
-function SkeletonCalendarCard(): React.JSX.Element {
-  return (
-    <div className="rounded-lg border border-border bg-card p-5">
-      <div className="mb-4">
-        <SkeletonLine box="h-4" bone="h-3 w-52" />
-      </div>
-      <Skeleton className="h-[156px] w-full" />
-      <div className="mt-4">
-        <SkeletonLine box="h-4" bone="h-3 w-96 max-w-full" />
-      </div>
-    </div>
-  );
-}
-
-function SkeletonRetentionGrid(): React.JSX.Element {
-  return (
-    <div className="rounded-lg border border-border bg-card p-5">
-      <div className="grid gap-1">
-        <SkeletonLine box="h-4" bone="h-3 w-full" />
-        {skeletonRows(8).map((row) => (
-          <Skeleton key={row} className="h-9 w-full" />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function SkeletonAccountsTable({
-  rows,
-  numericColumns,
-  starGutter = false,
-}: {
-  rows: number;
-  numericColumns: number;
-  starGutter?: boolean;
-}): React.JSX.Element {
-  const columns = skeletonRows(numericColumns);
-  return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="flex items-center gap-6 border-b border-border px-5 py-3">
-        {starGutter ? <div className="w-4 shrink-0" /> : null}
-        <div className="min-w-0 flex-1">
-          <SkeletonLine box="h-4" bone="h-3 w-16" />
-        </div>
-        {columns.map((column) => (
-          <div key={column} className="flex w-14 shrink-0 justify-end">
-            <SkeletonLine box="h-4" bone="h-3 w-10" />
-          </div>
-        ))}
-      </div>
-      {skeletonRows(rows).map((row) => (
-        <div
-          key={row}
-          className="flex items-center gap-6 border-b border-border px-5 py-3 last:border-0"
+      <PageHeader
+        title={title}
+        account={account}
+        accountSkeleton
+        onSignOut={onSignOut}
+        controls={controls}
+      />
+      <p className="sr-only">Loading. {loading}</p>
+      {back === undefined ? null : (
+        <a
+          href={tabHref(back.tab)}
+          className="mt-8 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground"
+          onClick={(event) => {
+            if (!plainLeftClick(event)) return;
+            event.preventDefault();
+            back.onBack();
+          }}
         >
-          {starGutter ? <div className="w-4 shrink-0" /> : null}
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <Skeleton circle className="size-8 shrink-0" />
-            <div className="min-w-0">
-              <SkeletonLine box="h-5" bone="h-3.5 w-36" />
-              <SkeletonLine box="h-4" bone="h-3 w-44" />
-            </div>
-          </div>
-          {columns.map((column) => (
-            <div key={column} className="flex w-14 shrink-0 justify-end">
-              <SkeletonLine box="h-5" bone="h-3.5 w-10" />
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>
+          <span aria-hidden="true">←</span> {back.label}
+        </a>
+      )}
+      <SkeletonBody shapes={shapes} />
+    </main>
   );
 }
 
@@ -1780,278 +1643,67 @@ function RosterNote({
   );
 }
 
-function DashboardSkeleton({
-  hideAdmins,
-  onHideAdminsChange,
-  windowDays,
-  onWindowDaysChange,
-  account,
-  onSignOut,
-}: {
-  hideAdmins: boolean;
-  onHideAdminsChange: (hide: boolean) => void;
-  windowDays: AdminMetricsWindow;
-  onWindowDaysChange: (windowDays: AdminMetricsWindow) => void;
-  account: ViewerAccount | undefined;
-  onSignOut: () => void;
-}): React.JSX.Element {
-  return (
-    <main
-      className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10"
-      aria-busy="true"
-    >
-      <PageHeader
-        title="Dashboard"
-        account={account}
-        accountSkeleton
-        onSignOut={onSignOut}
-        controls={
-          <>
-            <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
-            <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-          </>
-        }
-      />
-      <p className="sr-only">Loading. Reading the service's own tables.</p>
-      <SectionHeading>User activity</SectionHeading>
-      <StatGroup columns={3}>
-        <SkeletonStatCard grouped />
-        <SkeletonStatCard grouped />
-        <SkeletonStatCard grouped />
-      </StatGroup>
-      <div className="mt-3 grid gap-3 min-[720px]:grid-cols-[1.6fr_1fr]">
-        <SkeletonChartCard plot={SKELETON_PLOT.SIGNUPS} />
-        <SkeletonChartCard plot={SKELETON_PLOT.SIGN_IN_METHODS} />
-      </div>
-      <SectionHeading>Signup retention · weekly cohorts</SectionHeading>
-      <SkeletonRetentionGrid />
-      <RetentionNote />
-      <SectionHeading>Feature usage · hosted tier</SectionHeading>
-      <StatGroup columns={2}>
-        <SkeletonStatCard grouped />
-        <SkeletonStatCard grouped />
-      </StatGroup>
-      <div className="mt-3">
-        <SkeletonChartCard plot={SKELETON_PLOT.USAGE} />
-      </div>
-      <SectionHeading>Most active hosted-tier accounts</SectionHeading>
-      <SkeletonAccountsTable rows={10} numericColumns={5} />
-      <TopAccountsNote />
-      <SectionHeading>Reliability</SectionHeading>
-      <StatGroup columns={2}>
-        <SkeletonStatCard grouped />
-        <SkeletonStatCard grouped />
-      </StatGroup>
-      <div className="mt-3">
-        <SkeletonLine box="h-5" bone="h-3.5 w-full" />
-        <SkeletonLine box="h-5" bone="h-3.5 w-full" />
-        <SkeletonLine box="h-5" bone="h-3.5 w-2/5" />
-      </div>
-      <SectionHeading>System health</SectionHeading>
-      <div className="grid gap-3 min-[720px]:grid-cols-[1fr_1.4fr]">
-        <div className="rounded-lg border border-border bg-card px-5 py-4">
-          <SkeletonLine box="h-4" bone="h-3 w-20" />
-          <div className="mt-2">
-            <SkeletonLine box="h-7" bone="h-5 w-32" />
-          </div>
-          <div className="mt-1">
-            <SkeletonLine box="h-5" bone="h-3.5 w-40" />
-          </div>
-        </div>
-        <div className="rounded-lg border border-border bg-card px-5 py-4">
-          <div className="mb-1">
-            <SkeletonLine box="h-4" bone="h-3 w-24" />
-          </div>
-          {skeletonRows(5).map((row) => (
-            <div
-              key={row}
-              className="flex items-center justify-between gap-4 border-b border-border py-3 last:border-0"
-            >
-              <SkeletonLine box="h-5" bone="h-3.5 w-48" />
-              <SkeletonLine box="h-4" bone="h-3 w-24" />
-            </div>
-          ))}
-        </div>
-      </div>
-    </main>
-  );
-}
+/** The dashboard's own sections, in the order the loaded page states them. */
+const DASHBOARD_SHAPES: readonly SkeletonShape[] = [
+  { kind: SKELETON_SHAPE.HEADING, label: "User activity" },
+  { kind: SKELETON_SHAPE.STAT_GROUP, columns: 3 },
+  { kind: SKELETON_SHAPE.CHART, plots: [SKELETON_PLOT.SIGNUPS, SKELETON_PLOT.SIGN_IN_METHODS] },
+  { kind: SKELETON_SHAPE.HEADING, label: "Signup retention · weekly cohorts" },
+  { kind: SKELETON_SHAPE.RETENTION },
+  { kind: SKELETON_SHAPE.STATIC, node: <RetentionNote /> },
+  { kind: SKELETON_SHAPE.HEADING, label: "Feature usage · hosted tier" },
+  { kind: SKELETON_SHAPE.STAT_CARDS, count: 1, columns: 1 },
+  { kind: SKELETON_SHAPE.CHART, plots: [SKELETON_PLOT.USAGE] },
+  { kind: SKELETON_SHAPE.HEADING, label: "Most active hosted-tier accounts" },
+  { kind: SKELETON_SHAPE.TABLE, rows: 10, numericColumns: 3 },
+  { kind: SKELETON_SHAPE.STATIC, node: <TopAccountsNote /> },
+  { kind: SKELETON_SHAPE.HEADING, label: "Reliability" },
+  { kind: SKELETON_SHAPE.STAT_GROUP, columns: 2 },
+  { kind: SKELETON_SHAPE.LINES, bones: ["w-full", "w-full", "w-2/5"] },
+  { kind: SKELETON_SHAPE.HEADING, label: "System health" },
+  { kind: SKELETON_SHAPE.HEALTH },
+];
 
-function UsersSkeleton({
-  hideAdmins,
-  onHideAdminsChange,
-  windowDays,
-  onWindowDaysChange,
-  account,
-  onSignOut,
-}: {
-  hideAdmins: boolean;
-  onHideAdminsChange: (hide: boolean) => void;
-  windowDays: AdminMetricsWindow;
-  onWindowDaysChange: (windowDays: AdminMetricsWindow) => void;
-  account: ViewerAccount | undefined;
-  onSignOut: () => void;
-}): React.JSX.Element {
-  return (
-    <main
-      className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10"
-      aria-busy="true"
-    >
-      <PageHeader
-        title="Users"
-        account={account}
-        accountSkeleton
-        onSignOut={onSignOut}
-        controls={
-          <>
-            <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
-            <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-          </>
-        }
-      />
-      <p className="sr-only">Loading. Reading the service's own tables.</p>
-      <div className="mt-8 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-        <Skeleton className="h-[34px] w-full max-w-[320px]" />
-        <SkeletonLine box="h-4" bone="h-3 w-28" />
-      </div>
-      <div className="mt-4">
-        <SkeletonAccountsTable rows={10} numericColumns={6} starGutter />
-      </div>
-      <RosterNote />
-    </main>
-  );
-}
+/** The roster's own sections. */
+const USERS_SHAPES: readonly SkeletonShape[] = [
+  { kind: SKELETON_SHAPE.SEARCH },
+  { kind: SKELETON_SHAPE.TABLE, rows: 10, numericColumns: 5, starGutter: true },
+  { kind: SKELETON_SHAPE.STATIC, node: <RosterNote /> },
+];
 
-function AccountSkeleton({
-  windowDays,
-  onWindowDaysChange,
-  account,
-  onSignOut,
-  onBack,
-}: {
-  windowDays: AdminMetricsWindow;
-  onWindowDaysChange: (windowDays: AdminMetricsWindow) => void;
-  account: ViewerAccount | undefined;
-  onSignOut: () => void;
-  onBack: () => void;
-}): React.JSX.Element {
-  return (
-    <main
-      className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10"
-      aria-busy="true"
-    >
-      <PageHeader
-        title="Account"
-        account={account}
-        accountSkeleton
-        onSignOut={onSignOut}
-        controls={<WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />}
-      />
-      <p className="sr-only">Loading. Reading the account's own rows.</p>
-      <a
-        href={tabHref("users")}
-        className="mt-8 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground"
-        onClick={(event) => {
-          if (!plainLeftClick(event)) return;
-          event.preventDefault();
-          onBack();
-        }}
-      >
-        <span aria-hidden="true">←</span> All users
-      </a>
-      <div className="mt-6 flex flex-wrap items-center gap-4">
-        <Skeleton circle className="size-14 shrink-0" />
-        <div>
-          <SkeletonLine box="h-8" bone="h-6 w-48" />
-          <div className="mt-1">
-            <SkeletonLine box="h-5" bone="h-3.5 w-56" />
-          </div>
-          <div className="mt-1">
-            <SkeletonLine box="h-4" bone="h-3 w-40" />
-          </div>
-        </div>
-      </div>
-      <SectionHeading>Daily use · hosted tier</SectionHeading>
-      <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
-        <SkeletonStatCard />
-        <SkeletonStatCard />
-        <SkeletonStatCard />
-        <SkeletonStatCard />
-      </div>
-      <div className="mt-3">
-        <SkeletonChartCard plot={SKELETON_PLOT.USAGE} />
-      </div>
-      <div className="mt-3">
-        <SkeletonCalendarCard />
-      </div>
-      <SectionHeading>Volume</SectionHeading>
-      <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
-        <SkeletonStatCard />
-        <SkeletonStatCard />
-        <SkeletonStatCard />
-        <SkeletonStatCard />
-      </div>
-      <AccountActivityNote />
-    </main>
-  );
-}
+/** One account's own sections. */
+const ACCOUNT_SHAPES: readonly SkeletonShape[] = [
+  {
+    kind: SKELETON_SHAPE.MASTHEAD,
+    avatar: true,
+    lines: [
+      { box: "h-8", bone: "h-6 w-48" },
+      { box: "h-5", bone: "h-3.5 w-56" },
+      { box: "h-4", bone: "h-3 w-40" },
+    ],
+  },
+  { kind: SKELETON_SHAPE.HEADING, label: "Daily use · hosted tier" },
+  { kind: SKELETON_SHAPE.STAT_CARDS, count: 4, columns: 4 },
+  { kind: SKELETON_SHAPE.CHART, plots: [SKELETON_PLOT.USAGE] },
+  { kind: SKELETON_SHAPE.CALENDAR },
+  { kind: SKELETON_SHAPE.HEADING, label: "Volume" },
+  { kind: SKELETON_SHAPE.STAT_CARDS, count: 3, columns: 3 },
+  { kind: SKELETON_SHAPE.STATIC, node: <AccountActivityNote /> },
+];
 
-function DaySkeleton({
-  day,
-  hideAdmins,
-  onHideAdminsChange,
-  account,
-  onSignOut,
-  onBack,
-}: {
-  day: string;
-  hideAdmins: boolean;
-  onHideAdminsChange: (hide: boolean) => void;
-  account: ViewerAccount | undefined;
-  onSignOut: () => void;
-  onBack: () => void;
-}): React.JSX.Element {
-  return (
-    <main
-      className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10"
-      aria-busy="true"
-    >
-      <PageHeader
-        title="Day"
-        account={account}
-        accountSkeleton
-        onSignOut={onSignOut}
-        controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
-      />
-      <p className="sr-only">Loading. Reading the day's own rows.</p>
-      <a
-        href={tabHref("dashboard")}
-        className="mt-8 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground"
-        onClick={(event) => {
-          if (!plainLeftClick(event)) return;
-          event.preventDefault();
-          onBack();
-        }}
-      >
-        <span aria-hidden="true">←</span> Dashboard
-      </a>
-      <div className="mt-6">
-        <h1 className="text-2xl font-semibold tracking-[-0.01em]">{formatDayHeading(day)}</h1>
-        <div className="mt-1">
-          <SkeletonLine box="h-5" bone="h-3.5 w-56" />
-        </div>
-      </div>
-      <SectionHeading>Hosted tier · this day</SectionHeading>
-      <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
-        <SkeletonStatCard />
-        <SkeletonStatCard />
-        <SkeletonStatCard />
-        <SkeletonStatCard />
-      </div>
-      <SectionHeading>Accounts active this day</SectionHeading>
-      <SkeletonAccountsTable rows={5} numericColumns={3} />
-    </main>
-  );
+/** One day's own sections, under the heading the address already names. */
+function daySkeletonShapes(day: string): readonly SkeletonShape[] {
+  return [
+    {
+      kind: SKELETON_SHAPE.MASTHEAD,
+      title: formatDayHeading(day),
+      lines: [{ box: "h-5", bone: "h-3.5 w-56" }],
+    },
+    { kind: SKELETON_SHAPE.HEADING, label: "Hosted tier · this day" },
+    { kind: SKELETON_SHAPE.STAT_CARDS, count: 2, columns: 2 },
+    { kind: SKELETON_SHAPE.HEADING, label: "Accounts active this day" },
+    { kind: SKELETON_SHAPE.TABLE, rows: 5, numericColumns: 1 },
+  ];
 }
 
 /** A windowed read's address: the default scope, window, and no search ride as no params. */
@@ -2744,87 +2396,6 @@ const readUserList: AdminReader<AdminUserList> = async (response) =>
   (await response.json()) as AdminUserList;
 
 /**
- * The account fields both admin tables' rows carry — the shared columns'
- * whole vocabulary, so a row from either endpoint draws through the one
- * `AccountsTable` below.
- */
-interface AccountsTableRow {
-  id: string;
-  name: string;
-  email: string;
-  image: string | null;
-  admin: boolean;
-  activeDays: number;
-  lastActiveDay: string | null;
-  calls: number;
-}
-
-/** The sortable columns, one per header the roster draws. */
-const ACCOUNTS_SORT_KEY = {
-  ACCOUNT: "account",
-  JOINED: "joined",
-  LAST_SEEN: "lastSeen",
-  ACTIVE_DAYS: "activeDays",
-  LAST_ACTIVE: "lastActive",
-  CALLS: "calls",
-} as const;
-
-type AccountsSortKey = (typeof ACCOUNTS_SORT_KEY)[keyof typeof ACCOUNTS_SORT_KEY];
-
-/** The values `aria-sort` takes, so the state is the announcement. */
-const SORT_DIRECTION = {
-  ASCENDING: "ascending",
-  DESCENDING: "descending",
-} as const;
-
-type SortDirection = (typeof SORT_DIRECTION)[keyof typeof SORT_DIRECTION];
-
-/** A column's first press: names read forward, counts and dates largest first. */
-const ACCOUNTS_SORT_FIRST_DIRECTION = {
-  [ACCOUNTS_SORT_KEY.ACCOUNT]: SORT_DIRECTION.ASCENDING,
-  [ACCOUNTS_SORT_KEY.JOINED]: SORT_DIRECTION.DESCENDING,
-  [ACCOUNTS_SORT_KEY.LAST_SEEN]: SORT_DIRECTION.DESCENDING,
-  [ACCOUNTS_SORT_KEY.ACTIVE_DAYS]: SORT_DIRECTION.DESCENDING,
-  [ACCOUNTS_SORT_KEY.LAST_ACTIVE]: SORT_DIRECTION.DESCENDING,
-  [ACCOUNTS_SORT_KEY.CALLS]: SORT_DIRECTION.DESCENDING,
-} satisfies Record<AccountsSortKey, SortDirection>;
-
-/**
- * What each shared column orders by. An account sorts by the name its row
- * shows — falling back to the email exactly as the cell does — and a
- * last-active day is an ISO date, so its lexicographic order is its
- * chronological one. A detail column's ordering rides the column itself,
- * because its fields exist only on the rows of the surface that draws it.
- */
-const SHARED_SORT_VALUE = new Map<
-  AccountsSortKey,
-  (row: AccountsTableRow) => string | number | null
->([
-  [ACCOUNTS_SORT_KEY.ACCOUNT, (row) => accountLabel(row).toLowerCase()],
-  [ACCOUNTS_SORT_KEY.ACTIVE_DAYS, (row) => row.activeDays],
-  [ACCOUNTS_SORT_KEY.LAST_ACTIVE, (row) => row.lastActiveDay],
-  [ACCOUNTS_SORT_KEY.CALLS, (row) => row.calls],
-]);
-
-/**
- * A column one surface adds between Account and the usage counts — the
- * roster's Joined and Last seen. It carries its own cell and ordering because
- * its fields exist only on that surface's rows; the shared columns are fixed
- * in the table itself.
- */
-interface AccountsDetailColumn<Row> {
-  key: AccountsSortKey;
-  label: string;
-  cell: (row: Row) => React.ReactNode;
-  sortValue: (row: Row) => string | number | null;
-}
-
-interface AccountsSort {
-  key: AccountsSortKey;
-  direction: SortDirection;
-}
-
-/**
  * The narrowest each surface's table may draw before its scroll wrapper takes
  * over — past this the columns crush instead of shrinking. The roster stands
  * wider because its detail and star columns join the shared set.
@@ -2836,78 +2407,6 @@ const ACCOUNTS_TABLE_MIN_WIDTH = {
 
 type AccountsTableMinWidth =
   (typeof ACCOUNTS_TABLE_MIN_WIDTH)[keyof typeof ACCOUNTS_TABLE_MIN_WIDTH];
-
-/**
- * The last sort chosen, remembered the way the sidebar's collapse is: locally,
- * so a refresh reopens the roster in the order it was left. A stored value the
- * sets above no longer name reads as no sort at all — the server's own order —
- * rather than a guess at what an old build meant by it.
- */
-const ACCOUNTS_SORT_STORAGE_KEY = "luke-admin-users-sort";
-
-/** No sort key contains the separator, so the stored token splits back apart. */
-const ACCOUNTS_SORT_STORAGE_SEPARATOR = ":";
-
-function accountsSortLeft(): AccountsSort | undefined {
-  try {
-    const stored = window.localStorage.getItem(ACCOUNTS_SORT_STORAGE_KEY);
-    if (stored === null) return undefined;
-    const [key, direction] = stored.split(ACCOUNTS_SORT_STORAGE_SEPARATOR);
-    const knownKey = Object.values(ACCOUNTS_SORT_KEY).find((candidate) => candidate === key);
-    const knownDirection = Object.values(SORT_DIRECTION).find(
-      (candidate) => candidate === direction,
-    );
-    if (knownKey === undefined || knownDirection === undefined) return undefined;
-    return { key: knownKey, direction: knownDirection };
-  } catch {
-    return undefined;
-  }
-}
-
-function rememberAccountsSort(sort: AccountsSort): void {
-  try {
-    window.localStorage.setItem(
-      ACCOUNTS_SORT_STORAGE_KEY,
-      `${sort.key}${ACCOUNTS_SORT_STORAGE_SEPARATOR}${sort.direction}`,
-    );
-  } catch {
-    // Storage refused: the roster opens in the server's order on the next visit.
-  }
-}
-
-/**
- * Orders the rows for one sort. Starred rows stand above everything first —
- * the star marks the accounts the admin actually watches, so no column order
- * may bury them — and the sort chosen orders each tier on its own. No sort
- * keeps the server's order — most recently active first — and ties keep it
- * too, since the sort is stable. An account with no active day yet sits below
- * the dated rows of its tier in either direction: it has no place in a
- * chronology, and flipping one should not bury the answer under the blanks.
- * A stored key naming a column this table does not draw reads as no sort at
- * all.
- */
-function sortAccountsRows<Row extends AccountsTableRow>(
-  rows: readonly Row[],
-  sort: AccountsSort | undefined,
-  detailColumns: readonly AccountsDetailColumn<Row>[],
-  starred: ((row: Row) => boolean) | undefined,
-): readonly Row[] {
-  const detail = sort ? detailColumns.find((column) => column.key === sort.key) : undefined;
-  const value = sort ? (detail?.sortValue ?? SHARED_SORT_VALUE.get(sort.key)) : undefined;
-  if (value === undefined && starred === undefined) return rows;
-  const flip = sort?.direction === SORT_DIRECTION.DESCENDING ? -1 : 1;
-  return [...rows].sort((a, b) => {
-    if (starred && starred(a) !== starred(b)) return starred(a) ? -1 : 1;
-    if (value === undefined) return 0;
-    const left = value(a);
-    const right = value(b);
-    if (left === null) return right === null ? 0 : 1;
-    if (right === null) return -1;
-    if (left < right) return -flip;
-    if (left > right) return flip;
-    return 0;
-  });
-}
 
 /**
  * A column heading, sortable where the surface sorts: a real button inside
@@ -2995,20 +2494,11 @@ function AccountsTable<Row extends AccountsTableRow>({
   favorite?: { starred: (row: Row) => boolean; onToggle: (id: string, favorite: boolean) => void };
 }): React.JSX.Element {
   const [sort, setSort] = useState<AccountsSort | undefined>(
-    sortable ? accountsSortLeft : undefined,
+    sortable ? ACCOUNTS_SORT.read : undefined,
   );
   const toggleSort = (key: AccountsSortKey) => {
-    const next: AccountsSort =
-      sort?.key === key
-        ? {
-            key,
-            direction:
-              sort.direction === SORT_DIRECTION.ASCENDING
-                ? SORT_DIRECTION.DESCENDING
-                : SORT_DIRECTION.ASCENDING,
-          }
-        : { key, direction: ACCOUNTS_SORT_FIRST_DIRECTION[key] };
-    rememberAccountsSort(next);
+    const next = nextSort(sort, key);
+    ACCOUNTS_SORT.write(next);
     setSort(next);
   };
   const onSort = sortable ? toggleSort : undefined;
@@ -3356,13 +2846,18 @@ function UsersScreen({
   switch (state.status) {
     case "loading":
       return frame(
-        <UsersSkeleton
-          hideAdmins={hideAdmins}
-          onHideAdminsChange={onHideAdminsChange}
-          windowDays={windowDays}
-          onWindowDaysChange={onWindowDaysChange}
+        <PageSkeleton
+          title="Users"
           account={account}
           onSignOut={signOut}
+          loading="Reading the service's own tables."
+          controls={
+            <>
+              <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
+              <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
+            </>
+          }
+          shapes={USERS_SHAPES}
         />,
       );
     case "signed-out":
@@ -3439,12 +2934,14 @@ function UserDetailScreen({
   switch (state.status) {
     case "loading":
       return frame(
-        <AccountSkeleton
-          windowDays={windowDays}
-          onWindowDaysChange={onWindowDaysChange}
+        <PageSkeleton
+          title="Account"
           account={account}
           onSignOut={signOut}
-          onBack={onBack}
+          loading="Reading the account's own rows."
+          controls={<WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />}
+          back={{ tab: "users", label: "All users", onBack }}
+          shapes={ACCOUNT_SHAPES}
         />,
       );
     case "signed-out":
@@ -3522,13 +3019,14 @@ function DayDetailScreen({
   switch (state.status) {
     case "loading":
       return frame(
-        <DaySkeleton
-          day={day}
-          hideAdmins={hideAdmins}
-          onHideAdminsChange={onHideAdminsChange}
+        <PageSkeleton
+          title="Day"
           account={account}
           onSignOut={signOut}
-          onBack={onBack}
+          loading="Reading the day's own rows."
+          controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
+          back={{ tab: "dashboard", label: "Dashboard", onBack }}
+          shapes={daySkeletonShapes(day)}
         />,
       );
     case "signed-out":
@@ -3693,9 +3191,9 @@ export function AdminDashboard(): React.JSX.Element {
   // every count, so admins start hidden and the toggle is the explicit ask to
   // include them, remembered across visits. The scope is the server's filter —
   // aggregates cannot be unpicked client-side — so flipping it refetches.
-  const [hideAdmins, setHideAdmins] = useState(adminsLeftHidden);
+  const [hideAdmins, setHideAdmins] = useState(ADMINS_HIDDEN.read);
   const changeHideAdmins = (hide: boolean) => {
-    rememberAdminsHidden(hide);
+    ADMINS_HIDDEN.write(hide);
     setHideAdmins(hide);
   };
   const session = authClient.useSession();
@@ -3736,10 +3234,10 @@ export function AdminDashboard(): React.JSX.Element {
     });
   }, []);
 
-  const [sidebarFolded, setSidebarFolded] = useState(sidebarLeftCollapsed);
+  const [sidebarFolded, setSidebarFolded] = useState(SIDEBAR_COLLAPSED.read);
   const toggleSidebar = () => {
     setSidebarFolded((current) => {
-      rememberSidebarCollapsed(!current);
+      SIDEBAR_COLLAPSED.write(!current);
       return !current;
     });
   };
@@ -3851,13 +3349,18 @@ export function AdminDashboard(): React.JSX.Element {
     case "loading":
       return shell(
         "dashboard",
-        <DashboardSkeleton
-          hideAdmins={hideAdmins}
-          onHideAdminsChange={changeHideAdmins}
-          windowDays={windowDays}
-          onWindowDaysChange={changeWindow}
+        <PageSkeleton
+          title="Dashboard"
           account={viewer}
           onSignOut={() => void signOut()}
+          loading="Reading the service's own tables."
+          controls={
+            <>
+              <WindowSwitcher value={windowDays} onChange={changeWindow} />
+              <HideAdminsToggle checked={hideAdmins} onChange={changeHideAdmins} />
+            </>
+          }
+          shapes={DASHBOARD_SHAPES}
         />,
       );
     case "signed-out":

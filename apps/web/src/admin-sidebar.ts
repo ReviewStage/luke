@@ -52,19 +52,6 @@ export function sidebarToggleLabel(collapsed: boolean): string {
  */
 export const SIDEBAR_ICON_SLOT = SIDEBAR_WIDTH.COLLAPSED;
 
-export function collapsedIconCenterOffset(): number {
-  return SIDEBAR_ICON_SLOT / 2 - SIDEBAR_WIDTH.COLLAPSED / 2;
-}
-
-/**
- * Where a label begins, measured from the rail's left edge: the slot's far
- * edge. It must be at least the collapsed width so the collapsed rail clips the
- * label entirely rather than revealing its first characters.
- */
-export function labelStartOffset(): number {
-  return SIDEBAR_ICON_SLOT;
-}
-
 /**
  * The hover and active fill cannot be the row's own background: the row is
  * laid out at the expanded width and clipped by the rail, so its background
