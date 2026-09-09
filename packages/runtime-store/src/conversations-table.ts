@@ -194,19 +194,6 @@ export function pinConversation(
   return changes > 0;
 }
 
-export function renameConversation(
-  database: RuntimeDatabase,
-  sessionKey: SessionKey,
-  name: string,
-): boolean {
-  const trimmed = name.trim();
-  if (!trimmed) return false;
-  const { changes } = database
-    .prepare("UPDATE conversations SET name = ? WHERE session_key = ?")
-    .run(trimmed, sessionKey);
-  return changes > 0;
-}
-
 /**
  * Removes everything a conversation holds beneath its row: its history
  * lines, its transcript and the boundaries folded into it, and the standing

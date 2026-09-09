@@ -150,9 +150,6 @@ test("the minimal profile carries AGENTS.md alone and no persona, identity, user
         diagnostic.subject === PROMPT_SECTION.MEMORY,
     ),
   );
-  const none = buildSystemPrompt(facts({ profile: PROMPT_PROFILE.NONE }));
-  assert.equal(none.sections.length, 1);
-  assert.equal(none.dynamicSuffix, "");
 });
 
 test("a truncated or missing file is named in the notice and the diagnostics", () => {

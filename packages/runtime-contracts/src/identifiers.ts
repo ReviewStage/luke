@@ -3,18 +3,14 @@ import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 /**
  * The identities the runtime keeps apart, each a string with one meaning.
  * On the wire and in the database they are plain strings; in code each is a
- * branded string that only its own constructor can make, so a run cannot be
- * handed where a submission is expected without passing through the boundary
- * that says which it is. The constructors validate the one thing every
- * identifier shares — a non-empty string — and refuse anything else.
+ * branded string that only its own constructor can make, so an agent cannot
+ * be handed where a conversation's address is expected without passing
+ * through the boundary that says which it is. The constructors validate the
+ * one thing every identifier shares — a non-empty string — and refuse
+ * anything else.
  *
  * - An agent owns a workspace, a configuration, and a memory.
  * - A session key is a logical conversation's stable address.
- * - A session id is one lifetime of that conversation; it changes on reset.
- * - A run is one accepted execution; a submission id is the caller's own
- *   retry identifier for the ask that opened it.
- * - A call id names one tool invocation within a run.
- * - A delivery id names one independently acknowledged delivery.
  */
 declare const identifierBrand: unique symbol;
 
@@ -22,11 +18,6 @@ type Identifier<Brand extends string> = string & { readonly [identifierBrand]: B
 
 export type AgentId = Identifier<"agent">;
 export type SessionKey = Identifier<"session-key">;
-export type SessionId = Identifier<"session">;
-export type RunId = Identifier<"run">;
-export type SubmissionId = Identifier<"submission">;
-export type CallId = Identifier<"call">;
-export type DeliveryId = Identifier<"delivery">;
 
 export function isIdentifier(value: UnparsedWireValue): value is string {
   return isWireString(value) && value.length > 0;
@@ -40,11 +31,6 @@ function identifier<Brand extends string>(kind: Brand, value: string): Identifie
 
 export const agentId = (value: string): AgentId => identifier("agent", value);
 export const sessionKey = (value: string): SessionKey => identifier("session-key", value);
-export const sessionId = (value: string): SessionId => identifier("session", value);
-export const runId = (value: string): RunId => identifier("run", value);
-export const submissionId = (value: string): SubmissionId => identifier("submission", value);
-export const callId = (value: string): CallId => identifier("call", value);
-export const deliveryId = (value: string): DeliveryId => identifier("delivery", value);
 
 /** The provider and provider-session pair that identifies an observed coding session. */
 export interface SourceSessionRef {

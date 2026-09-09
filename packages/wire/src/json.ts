@@ -183,19 +183,15 @@ export function resolveOptions<K extends string>(
 ): ResolvedNumericOptions<K> {
   let resolved = { ...defaults };
   for (const key of bounds.positive ?? []) {
-    const fallback = defaults[key];
-    if (!isWireNumber(fallback)) continue;
     resolved = {
       ...resolved,
-      [key]: positiveInteger(options[key], fallback),
+      [key]: positiveInteger(options[key], defaults[key]),
     };
   }
   for (const key of bounds.nonNegative ?? []) {
-    const fallback = defaults[key];
-    if (!isWireNumber(fallback)) continue;
     resolved = {
       ...resolved,
-      [key]: nonNegativeNumber(options[key], fallback),
+      [key]: nonNegativeNumber(options[key], defaults[key]),
     };
   }
   return resolved;

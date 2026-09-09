@@ -2,59 +2,42 @@ export {
   BRAIN_DEFAULTS,
   BrainAgent,
   type BrainAgentOptions,
-  type BrainCompletionDelivery,
-  type BrainFlushCycle,
   type BrainFlushInput,
   type BrainFlushMarkerStore,
-  type BrainLane,
-  type BrainOpeningNotes,
   type BrainWorkspaceAccess,
   LOOK_SUBJECT,
-  type LookSubject,
   type LookSubjectKind,
 } from "./agent.js";
 export {
-  NOTEBOOK_MEMORY_PROVIDER_ID,
   notebookMemoryProviderFor,
   RESPONSES_CONTEXT_ENGINE_ID,
   registerBrainBuiltIns,
 } from "./builtins.js";
 export {
   EMBEDDING_BATCH_SIZE,
-  HOSTED_EMBEDDING_ADAPTER_ID,
   HostedEmbeddingAdapter,
-  OPENAI_EMBEDDING_ADAPTER_ID,
   OpenAiEmbeddingAdapter,
 } from "./embedding-adapters.js";
 export { BrainGenerationClock } from "./generation-clock.js";
 export { HOSTED_MODEL_ADAPTER_ID, HostedModelAdapter } from "./hosted-model-adapter.js";
 export {
   completeToolFree,
-  HOUSEKEEPING_REFUSAL,
-  HOUSEKEEPING_TOOLS,
-  type MemoryHousekeepingOptions,
   type PrivateTurnOptions,
   runMemoryHousekeeping,
   runPrivateTurn,
   type ToolFreeCompletionOptions,
 } from "./housekeeping.js";
-export { BRAIN_INPUT_MARKER, primedNotesInputText } from "./input-items.js";
+export { BRAIN_INPUT_MARKER } from "./input-items.js";
 export { brainToolNotes } from "./instructions.js";
 export type { BrainJournalEntry } from "./journal.js";
-export { UNCONFIRMED_ACT_RESULT, UNKNOWN_ACT_RESULT, UNKNOWN_ACT_STATUS } from "./journal.js";
+export { UNKNOWN_ACT_STATUS } from "./journal.js";
 export {
   BRAIN_RATE_LIMIT_COOLDOWN_MS,
   BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS,
   RETRY_AFTER_HEADER,
   rateLimitWaitMs,
 } from "./model-adapter-shared.js";
-export {
-  type BrainObservationEntry,
-  brainObservationEntryFromWire,
-  entryFromEvent,
-  eventFromEntry,
-  sessionSummary,
-} from "./observation-inbox.js";
+export type { BrainObservationEntry } from "./observation-inbox.js";
 export {
   BRAIN_OPENAI_DEFAULTS,
   OPENAI_MODEL_ADAPTER_ID,
@@ -107,20 +90,11 @@ export {
   brainStateRepositoryFromStorage,
   freshBrainState,
 } from "./state-store.js";
-export type {
-  BrainChildAccess,
-  BrainChildListing,
-  BrainChildSpawnAsk,
-  BrainMemoryAccess,
-} from "./tool-executor.js";
+export type { BrainChildAccess, BrainMemoryAccess } from "./tool-executor.js";
 export {
   BRAIN_TOOL,
-  brainToolCatalog,
-  brainToolSchemas,
   hostedBrainToolCatalog,
   resolveTurnToolPolicy,
-  TOOL_GROUP,
-  turnToolPolicy,
 } from "./tools.js";
 export type { BrainTurnTraceRecord } from "./trace.js";
 export {

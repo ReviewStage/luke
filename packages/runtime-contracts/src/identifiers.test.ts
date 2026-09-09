@@ -6,8 +6,7 @@ import {
   MAIN_SESSION_KEY,
   mainSessionKey,
   RUN_ORIGIN,
-  runId,
-  submissionId,
+  sessionKey,
 } from "./identifiers.js";
 
 test("the default agent's main conversation has the fixed address the plan names", () => {
@@ -16,11 +15,11 @@ test("the default agent's main conversation has the fixed address the plan names
 });
 
 test("an identifier is made only through its own constructor, which refuses an empty one", () => {
-  assert.equal(runId("run-1"), "run-1");
-  assert.throws(() => submissionId(""), TypeError);
-  // @ts-expect-error a run is not a submission, whatever its letters.
-  const wrong: ReturnType<typeof submissionId> = runId("run-1");
-  assert.equal(wrong, "run-1");
+  assert.equal(agentId("main"), "main");
+  assert.throws(() => sessionKey(""), TypeError);
+  // @ts-expect-error an agent is not a conversation's address, whatever its letters.
+  const wrong: ReturnType<typeof sessionKey> = agentId("main");
+  assert.equal(wrong, "main");
 });
 
 test("run origins are the fixed vocabulary and nothing else", () => {

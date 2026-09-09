@@ -1,19 +1,8 @@
 import { text, type UnparsedWireValue } from "@sidecar/wire";
-import {
-  isOpenableSessionLink,
-  SESSION_APPLICATION_ID_LIST,
-  SESSION_LINK_SCHEME,
-} from "./session-identity.js";
+import { isOpenableSessionLink, SESSION_LINK_SCHEME } from "./session-identity.js";
 import type { SessionDiffSummary } from "./session-shape.js";
 
 export const maximumSessionTitleLength = 160;
-/**
- * Every app this build can recognize at once, and no more: the bound exists to
- * refuse an unbounded roster decoration, not to drop the newest association on
- * a chat every manager holds, so it follows the value set rather than sitting
- * on a literal the next app silently overflows.
- */
-export const maximumSessionApplications = SESSION_APPLICATION_ID_LIST.length;
 /** An agent kind is a short identifier, never a sentence. */
 export const maximumSpawnableAgentLength = 40;
 /** How many kinds of agent one session may offer to start. */

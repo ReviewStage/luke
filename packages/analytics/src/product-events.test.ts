@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { WireRecord } from "@sidecar/wire";
 import {
   isProductSurfaceEventName,
   PRODUCT_EVENT,
@@ -16,8 +17,7 @@ import {
   productEventFromWire,
   productSessionCountBucket,
   productSignInAge,
-} from "@sidecar/analytics";
-import type { WireRecord } from "@sidecar/wire";
+} from "./product-events.js";
 
 const AT = Date.parse("2026-08-19T12:00:00.000Z");
 

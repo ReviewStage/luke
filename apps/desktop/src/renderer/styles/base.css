@@ -354,16 +354,16 @@ button:disabled {
 }
 
 /* Any element that carries a session state gets its accent from one place. */
-[data-state="working"] {
+[data-state="urgency-working"] {
   --accent: var(--state-working);
 }
-[data-state="attention"] {
+[data-state="urgency-attention"] {
   --accent: var(--state-attention);
 }
-[data-state="complete"] {
+[data-state="urgency-complete"] {
   --accent: var(--state-complete);
 }
-[data-state="unknown"] {
+[data-state="urgency-unknown"] {
   --accent: var(--state-idle);
 }
 

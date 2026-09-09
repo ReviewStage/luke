@@ -4,7 +4,6 @@ export {
   type ActResultStatus,
   isActResult,
   isActResultStatus,
-  isUnknownActResult,
   UNKNOWN_ACT_STATUS,
   type UnknownActResult,
 } from "./act-result.js";
@@ -32,7 +31,6 @@ export {
   type WireRecord,
   type WireValue,
   wholeNumber,
-  wholeText,
   wireRecord,
 } from "./json.js";
 export {

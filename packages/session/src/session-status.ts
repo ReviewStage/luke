@@ -1,18 +1,11 @@
 /**
- * Provider-observed condition. Distinct from `SESSION_URGENCY`, the surface's
- * ranked disposition: both contain the literal "working", so the brand keeps
- * one from being passed where the other is expected.
+ * Provider-observed condition. `SESSION_URGENCY`, the surface's ranked
+ * disposition, prefixes its own literals, so neither value set can be passed
+ * where the other is expected.
  */
-type SessionStatusBrand<T extends string> = T & { readonly __brand: "SessionStatus" };
-
-function sessionStatusBrand<T extends string>(value: T): SessionStatusBrand<T> {
-  // SAFETY: brands a session-status literal at the vocabulary boundary.
-  return value as SessionStatusBrand<T>;
-}
-
 export const SESSION_STATUS = {
-  WORKING: sessionStatusBrand("working"),
-  WAITING: sessionStatusBrand("waiting"),
+  WORKING: "working",
+  WAITING: "waiting",
   /**
    * The session stopped on something it cannot get past on its own. Providers
    * report this natively — a Conductor `error`, a Claude
@@ -20,9 +13,9 @@ export const SESSION_STATUS = {
    * ask different things of the developer: one wants an answer, the other wants
    * a rescue.
    */
-  ERROR: sessionStatusBrand("error"),
-  COMPLETE: sessionStatusBrand("complete"),
-  UNKNOWN: sessionStatusBrand("unknown"),
+  ERROR: "error",
+  COMPLETE: "complete",
+  UNKNOWN: "unknown",
 } as const;
 
 export type SessionStatus = (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS];
