@@ -129,7 +129,7 @@ test("listeners are announced in order and an unsubscribed one hears nothing", (
   const first = app.subscribe(() => heard.push("first"));
   app.subscribe(() => heard.push("second"));
   app.update({ announcements: { held: true } });
-  first();
+  first.dispose();
   app.update({ announcements: { held: false } });
   assert.deepEqual(heard, ["first", "second", "second"]);
 });

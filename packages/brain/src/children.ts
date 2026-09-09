@@ -3,6 +3,7 @@ import {
   type ChildCompletionRecord,
   type ChildRunRecord,
   CONTEXT_INPUT_KIND,
+  SingleFlight,
 } from "@sidecar/runtime/vocabulary";
 import { childRunEnd, RUN_FORGOTTEN } from "./child-records.js";
 import { BRAIN_DEFAULTS } from "./defaults.js";
@@ -53,7 +54,7 @@ export class ChildRuns {
   /** Completions this conversation has taken, by their stable id, so a retried delivery is one item. */
   readonly #delivered = new Set<string>();
   /** Deliveries still being decided, by completion id, so a retry that arrives meanwhile joins rather than repeats. */
-  readonly #pending = new Map<string, Promise<BrainCompletionDelivery>>();
+  readonly #deciding = new SingleFlight<string, BrainCompletionDelivery>();
 
   constructor(options: ChildRunsOptions) {
     this.#options = options;
@@ -146,13 +147,9 @@ export class ChildRuns {
     completion: ChildCompletionRecord,
     record: ChildRunRecord,
   ): Promise<BrainCompletionDelivery> {
-    const pending = this.#pending.get(completion.completionId);
-    if (pending) return pending;
-    const deciding = this.#deliverCompletion(completion, record).finally(() => {
-      this.#pending.delete(completion.completionId);
-    });
-    this.#pending.set(completion.completionId, deciding);
-    return deciding;
+    return this.#deciding.run(completion.completionId, () =>
+      this.#deliverCompletion(completion, record),
+    );
   }
 
   async #deliverCompletion(

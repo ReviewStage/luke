@@ -1,4 +1,12 @@
-import { isRecord, isWireNumber, type WireRecord, type WireValue } from "@sidecar/wire";
+import {
+  Emitter,
+  type Event,
+  type IDisposable,
+  isRecord,
+  isWireNumber,
+  type WireRecord,
+  type WireValue,
+} from "@sidecar/wire";
 import {
   GATEWAY_ERROR,
   GATEWAY_METHOD,
@@ -36,8 +44,6 @@ export type GatewayCallResult =
   | { ok: true; result: WireValue | undefined }
   | { ok: false; error: GatewayError };
 
-export type GatewayClientEventListener = (event: GatewayEvent) => void;
-
 /**
  * The client side of the protocol. It mints request ids, stamps the version,
  * supplies an idempotency key to every mutation the caller did not key
@@ -49,8 +55,10 @@ export type GatewayClientEventListener = (event: GatewayEvent) => void;
  */
 export class GatewayClient {
   readonly #options: GatewayClientOptions;
-  readonly #listeners = new Map<GatewayEventKind, Set<GatewayClientEventListener>>();
-  readonly #everyListener = new Set<GatewayClientEventListener>();
+  readonly #byKind = new Map<GatewayEventKind, Emitter<GatewayEvent>>();
+  readonly #every = new Emitter<GatewayEvent>();
+  /** Hears every event of every kind, in sequence, after any gap has been filled. */
+  readonly onEvery: Event<GatewayEvent> = this.#every.event;
   #lastSequence = 0;
   /**
    * Whether this client has a baseline in the host's numbering: adopted from
@@ -70,11 +78,11 @@ export class GatewayClient {
   #generation = 0;
   /** Events that arrived while a reconnection was in flight, taken again once it has settled. */
   #arrivedDuringReconnect: GatewayEvent[] = [];
-  #unsubscribe: (() => void) | undefined;
+  #transportEvents: IDisposable | undefined;
 
   constructor(options: GatewayClientOptions) {
     this.#options = options;
-    this.#unsubscribe = options.transport.events((event) => this.#take(event));
+    this.#transportEvents = options.transport.events((event) => this.#take(event));
   }
 
   lastSequence(): number {
@@ -83,8 +91,8 @@ export class GatewayClient {
 
   /** Ends the subscription; a client not listening reconnects nothing. */
   close(): void {
-    this.#unsubscribe?.();
-    this.#unsubscribe = undefined;
+    this.#transportEvents?.dispose();
+    this.#transportEvents = undefined;
   }
 
   async call(
@@ -111,20 +119,10 @@ export class GatewayClient {
   }
 
   /** Hears every event of one kind, in sequence, after any gap has been filled. */
-  on(kind: GatewayEventKind, listener: GatewayClientEventListener): () => void {
-    const held = this.#listeners.get(kind) ?? new Set<GatewayClientEventListener>();
-    held.add(listener);
-    this.#listeners.set(kind, held);
-    return () => {
-      held.delete(listener);
-    };
-  }
-
-  onEvery(listener: GatewayClientEventListener): () => void {
-    this.#everyListener.add(listener);
-    return () => {
-      this.#everyListener.delete(listener);
-    };
+  on(kind: GatewayEventKind, listener: (event: GatewayEvent) => void): IDisposable {
+    const held = this.#byKind.get(kind) ?? new Emitter<GatewayEvent>();
+    this.#byKind.set(kind, held);
+    return held.event(listener);
   }
 
   /**
@@ -256,8 +254,8 @@ export class GatewayClient {
 
   #deliver(event: GatewayEvent): void {
     this.#lastSequence = event.sequence;
-    for (const listener of [...(this.#listeners.get(event.kind) ?? [])]) listener(event);
-    for (const listener of [...this.#everyListener]) listener(event);
+    this.#byKind.get(event.kind)?.fire(event);
+    this.#every.fire(event);
   }
 }
 

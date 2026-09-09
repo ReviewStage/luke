@@ -1,13 +1,15 @@
 /**
  * The runtime's vocabulary: the identities it keeps apart, the storage
  * contracts a durable owner of conversation state satisfies, the execution
- * seams a host composes over, the records delegation keeps, and the one
- * scheduler handle. A re-export door and nothing else, Node-free by
+ * seams a host composes over, the records delegation keeps, the scheduler
+ * handle, and the two collections a runtime's bookkeeping is kept in. A
+ * re-export door and nothing else, Node-free by
  * construction, because packages below the runtime — realtime, hosted,
  * voice, devtrace, memory — import this door and not the barrel, which
  * reaches `node:fs`.
  */
 
+export { BoundedMap } from "./bounded-map.js";
 export {
   CHILD_CLEANUP,
   CHILD_CONTEXT_MODE,
@@ -92,6 +94,7 @@ export {
   agentIdOf,
   CONVERSATION_KIND,
   type ConversationKind,
+  type CreateId,
   childAgentOf,
   childIdOf,
   childSessionKey,
@@ -113,6 +116,7 @@ export {
   sessionKey,
   threadSessionKey,
 } from "./identifiers.js";
+export { SingleFlight } from "./single-flight.js";
 export {
   ARCHIVE_ENCODING,
   ARCHIVE_REASON,

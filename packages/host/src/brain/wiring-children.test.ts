@@ -228,6 +228,7 @@ function composed(
     broadcastRequests: () => undefined,
     onGenerationReplaced: () => undefined,
     actions: {
+      createId: () => "id",
       sessionActions: {
         perform: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "not in test" }),
         openSession: () => Promise.reject(new Error("not in test")),

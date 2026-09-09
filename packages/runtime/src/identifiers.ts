@@ -32,6 +32,13 @@ function identifier<Brand extends string>(kind: Brand, value: string): Identifie
 export const agentId = (value: string): AgentId => identifier("agent", value);
 export const sessionKey = (value: string): SessionKey => identifier("session-key", value);
 
+/**
+ * Where a fresh identifier comes from. Everything that mints one takes this
+ * seam rather than reaching `node:crypto` itself, so a test names the ids it
+ * expects and one composition root decides what a real id is.
+ */
+export type CreateId = () => string;
+
 /** The provider and provider-session pair that identifies an observed coding session. */
 export interface SourceSessionRef {
   providerId: string;

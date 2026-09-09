@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import type { CreateId } from "@sidecar/runtime/vocabulary";
 import {
   ACTION_RESULT_STATUS,
   type ProviderControlResult,
@@ -84,7 +85,7 @@ export interface SupersetCliOptions {
   homeDirectory: string;
   run?: SupersetCommandRunner;
   query?: SupersetQueryRunner;
-  uniqueId?: () => string;
+  createId?: CreateId;
   /** Overridable for tests through the file it reads, never through a process. */
   activeOrganizationId?: () => Promise<string | undefined>;
 }
@@ -93,13 +94,13 @@ export class SupersetCli {
   readonly #homeDirectory: string;
   readonly #run: SupersetCommandRunner;
   readonly #query: SupersetQueryRunner;
-  readonly #uniqueId: () => string;
+  readonly #createId: CreateId;
   readonly #activeOrganizationId: () => Promise<string | undefined>;
 
   constructor(options: SupersetCliOptions) {
     this.#homeDirectory = options.homeDirectory;
     this.#run = options.run ?? defaultCommandRunner;
-    this.#uniqueId = options.uniqueId ?? randomUUID;
+    this.#createId = options.createId ?? randomUUID;
     this.#activeOrganizationId =
       options.activeOrganizationId ?? (() => activeOrganizationId(this.#homeDirectory));
     this.#query =
@@ -508,6 +509,6 @@ export class SupersetCli {
       .replace(/^-+|-+$/gu, "")
       .slice(0, 40)
       .replace(/-+$/gu, "");
-    return `luke-${slug || "session"}-${this.#uniqueId().slice(0, 8)}`;
+    return `luke-${slug || "session"}-${this.#createId().slice(0, 8)}`;
   }
 }

@@ -36,6 +36,7 @@ function dependencies(overrides: Partial<BrainWiringDependencies> = {}) {
     broadcastRequests: () => undefined,
     onGenerationReplaced: () => undefined,
     actions: {
+      createId: () => "id",
       sessionActions: {
         perform: async () => ({ status: "accepted" }),
         openSession: async () => ({ status: "accepted" }),

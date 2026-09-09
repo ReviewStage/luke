@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { fixtureSnapshot } from "@sidecar/session/fixtures";
+import { Emitter, type Event } from "@sidecar/wire";
 import type { AppState } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import type { HostBootstrap } from "./gateway/host-operator";
@@ -36,7 +37,9 @@ function patchEntries(patch: AppStatePatch): [AppStateSlice, AppState[AppStateSl
  */
 export class AppStateStore {
   #state: AppState;
-  readonly #listeners = new Set<() => void>();
+  readonly #announced = new Emitter<void>();
+  /** Hears every applied patch and every touch, with the document to be read back by snapshot. */
+  readonly subscribe: Event<void> = this.#announced.event;
 
   constructor(initial: Omit<AppState, "version">) {
     this.#state = { ...initial, version: 0 };
@@ -71,18 +74,11 @@ export class AppStateStore {
     this.#announce();
   }
 
-  subscribe(listener: () => void): () => void {
-    this.#listeners.add(listener);
-    return () => {
-      this.#listeners.delete(listener);
-    };
-  }
-
   #announce(): void {
     // A listener that patches in turn is applied and announced inside this
-    // call, so nothing it wrote is lost; the copy is what lets it subscribe
-    // or unsubscribe while the round is running.
-    for (const listener of Array.from(this.#listeners)) listener();
+    // call, so nothing it wrote is lost; the emitter's own copy is what lets
+    // it subscribe or unsubscribe while the round is running.
+    this.#announced.fire();
   }
 }
 

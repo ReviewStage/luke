@@ -102,6 +102,7 @@ function deeperPerformer(
   };
   return createSessionActionPerformer({
     sessionRegistry: registry,
+    createId: () => "press-nonce",
     openExternal,
     pluginFor: (providerId) => (providerId === plugin.provider.id ? plugin : undefined),
     sendsNetwork: true,

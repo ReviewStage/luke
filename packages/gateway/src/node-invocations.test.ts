@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import {
+  Emitter,
+  isRecord,
+  isWireString,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "@sidecar/wire";
 import { WebSocket } from "ws";
 import { GatewayClient } from "./client.js";
 import { InvocationMemory, NODE_INVOCATION_REFUSAL } from "./invocations.js";
@@ -13,6 +19,7 @@ import {
   GATEWAY_METHOD,
   GATEWAY_PROTOCOL_VERSION,
   type GatewayClientIdentity,
+  type GatewayEvent,
   NODE_CAPABILITY_STATUS,
   type NodeInvocation,
   nodeInvocationAnswerToWire,
@@ -369,20 +376,17 @@ test("a client that adopts a replaced host follows the new host's numbering from
   const oldServer = makeServer("old");
   const newServer = makeServer("new");
   let current = oldServer;
-  const sinks = new Set<(event: import("./protocol.js").GatewayEvent) => void>();
+  const events = new Emitter<GatewayEvent>();
   for (const server of [oldServer, newServer]) {
     server.subscribe((event) => {
       if (current !== server) return;
-      for (const sink of [...sinks]) sink(event);
+      events.fire(event);
     });
   }
   const client = new GatewayClient({
     transport: {
       request: (request) => current.handle(request, OPERATOR),
-      events: (sink) => {
-        sinks.add(sink);
-        return () => sinks.delete(sink);
-      },
+      events: events.event,
       connected: () => true,
     },
     createId: () => `r-${++ids}`,
@@ -506,11 +510,11 @@ test("an event of the new host arriving during adoption is held and delivered af
   const newServer = makeServer();
   let current = oldServer;
   let wireUp = true;
-  const sinks = new Set<(event: import("./protocol.js").GatewayEvent) => void>();
+  const events = new Emitter<GatewayEvent>();
   for (const server of [oldServer, newServer]) {
     server.subscribe((event) => {
       if (current !== server || !wireUp) return;
-      for (const sink of [...sinks]) sink(event);
+      events.fire(event);
     });
   }
   // Every request is handled at once but its answer travels back only when
@@ -524,10 +528,7 @@ test("an event of the new host arriving during adoption is held and delivered af
         await new Promise<void>((resolve) => pendingAnswers.push(resolve));
         return answered;
       },
-      events: (sink) => {
-        sinks.add(sink);
-        return () => sinks.delete(sink);
-      },
+      events: events.event,
       connected: () => true,
     },
     createId: () => `r-${++ids}`,

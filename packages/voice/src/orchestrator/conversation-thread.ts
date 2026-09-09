@@ -1,4 +1,4 @@
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
+import type { CreateId, ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import {
   adoptConversationThread,
   appendConversationThreadEntry,
@@ -53,7 +53,7 @@ export interface ConversationThreadOptions {
   now?: () => number;
   schedule?: (callback: () => void, delayMs: number) => ScheduledTimer;
   cancel?: (timer: ScheduledTimer) => void;
-  newEventId?: () => string;
+  createEventId?: CreateId;
 }
 
 /**
@@ -225,7 +225,7 @@ export class ConversationThread {
     if (!entry || !conversationEntryBelongsToConversation(generation, this.#generation)) return;
     this.#entries = appendConversationThreadEntry(this.#entries, {
       ...entry,
-      eventId: entry.eventId ?? this.#newEventId(),
+      eventId: entry.eventId ?? this.#createEventId(),
     });
     this.#publish();
   }
@@ -339,7 +339,7 @@ export class ConversationThread {
       mark.after,
       mark.recordedAt,
       mark.runId,
-      this.#newEventId(),
+      this.#createEventId(),
     );
     // A transcription that came back empty ended its turn — the preview and
     // the mark are already spent — but placed no line, and a thread that did
@@ -458,8 +458,8 @@ export class ConversationThread {
     this.#clearRetention();
   }
 
-  #newEventId(): string {
-    return (this.#options.newEventId ?? crypto.randomUUID.bind(crypto))();
+  #createEventId(): string {
+    return (this.#options.createEventId ?? crypto.randomUUID.bind(crypto))();
   }
 
   #now(): number {

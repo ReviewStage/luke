@@ -90,7 +90,7 @@ import {
   type SessionIdentity,
   type SessionProviderPlugin,
 } from "@sidecar/session";
-import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, type IDisposable, type WireRecord } from "@sidecar/wire";
 import {
   type BrainActionPerformerDependencies,
   createBrainActionPerformer,
@@ -284,7 +284,7 @@ interface OpenConversation {
   host: BrainHost;
   store: BrainStateStore;
   clock: BrainGenerationClock;
-  unsubscribe: () => void;
+  generationReplacements: IDisposable;
 }
 
 /** How many notices main keeps unread before the oldest go; each is one line about one turn. */
@@ -391,14 +391,16 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     // included: they are that generation's words, and an offer is not proof
     // they were said. The agent hears the same announcement and stands its
     // runs down itself.
-    const unsubscribe = store.onReplaced(() => dependencies.onGenerationReplaced(sessionKey));
+    const generationReplacements = store.onReplaced(() =>
+      dependencies.onGenerationReplaced(sessionKey),
+    );
     // The generation's clock stands with the store, not with an agent, so a
     // store whose automatic reset is enabled sees the generation die on time
     // through a launch with no key or account, and after its agent was
     // retired. Under the default policy of no automatic reset it arms nothing.
     const clock = new BrainGenerationClock({ store });
     void clock.start();
-    const opened: OpenConversation = { host, store, clock, unsubscribe };
+    const opened: OpenConversation = { host, store, clock, generationReplacements };
     conversations.set(sessionKey, opened);
     return opened;
   };
@@ -882,7 +884,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       opened.host.retire();
       await opened.host.replace(() => undefined);
       opened.clock.stop();
-      opened.unsubscribe();
+      opened.generationReplacements.dispose();
       conversations.delete(sessionKey);
       latestRecords.delete(sessionKey);
       publications.delete(sessionKey);

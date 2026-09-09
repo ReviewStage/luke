@@ -14,6 +14,7 @@ import {
   type ConversationEntry,
   maximumTypedAskLength,
 } from "@sidecar/session";
+import { toDisposable } from "@sidecar/wire";
 import { operatorOverBrain } from "../testing/index.js";
 import { followBrainRequests, publishRuns } from "./publication.js";
 
@@ -343,9 +344,9 @@ test("following a brain relays every report, writes and marks the ended runs, an
   const agent = {
     subscribe: (next: (records: readonly BrainRequestRecord[]) => void) => {
       listener = next;
-      return () => {
+      return toDisposable(() => {
         listener = undefined;
-      };
+      });
     },
     ready: () => Promise.resolve(),
     requests: () => [ready],
@@ -384,7 +385,7 @@ test("a retired follower relays nothing a late report carries", async () => {
   const agent = {
     subscribe: (next: (records: readonly BrainRequestRecord[]) => void) => {
       listener = next;
-      return () => undefined;
+      return toDisposable(() => undefined);
     },
     ready: () =>
       new Promise<void>((resolve) => {

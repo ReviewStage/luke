@@ -23,7 +23,7 @@ function thread(
       return overrides.append?.(entries) ?? Promise.resolve(true);
     },
     onChanged: () => changes.push(1),
-    newEventId: () => {
+    createEventId: () => {
       ids += 1;
       return `event-${ids}`;
     },

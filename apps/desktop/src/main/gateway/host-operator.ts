@@ -38,6 +38,7 @@ import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
 import {
   ACTION_RESULT_STATUS,
   type ActionResult,
+  type Event,
   isRecord,
   isWireBoolean,
   isWireNumber,
@@ -165,23 +166,17 @@ export interface HostOperator {
   onboardingState(): Promise<{ calendarOnboardingOwed: boolean } | undefined>;
   skipCalendarOnboarding(): Promise<void>;
   completeCalendarOnboarding(): Promise<void>;
-  onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
-  onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
-  onSessionsChanged(
-    listener: (roster: { sessions: readonly Session[]; settled: boolean }) => void,
-  ): () => void;
-  onWorkspaceProjectsChanged(
-    listener: (projects: readonly ObservedWorkspaceProject[]) => void,
-  ): () => void;
-  onCalendarsChanged(
-    listener: (calendars: readonly ObservedAccountCalendars[]) => void,
-  ): () => void;
-  onAnnouncementsHeldChanged(listener: (held: boolean) => void): () => void;
-  onSupersetSignInChanged(listener: (state: SupersetSignInSnapshot) => void): () => void;
-  onCalendarOnboardingChanged(listener: (owed: boolean) => void): () => void;
-  onSpeechOffered(listener: (offer: SpeechOffer) => void): () => void;
-  onSpeechWithdrawn(listener: (id: string) => void): () => void;
-  onSessionReplayChanged(listener: (replay: HostSessionReplay) => void): () => void;
+  onSettingsChanged: Event<HostSettingsChange>;
+  onAccountChanged: Event<AccountSnapshot>;
+  onSessionsChanged: Event<{ sessions: readonly Session[]; settled: boolean }>;
+  onWorkspaceProjectsChanged: Event<readonly ObservedWorkspaceProject[]>;
+  onCalendarsChanged: Event<readonly ObservedAccountCalendars[]>;
+  onAnnouncementsHeldChanged: Event<boolean>;
+  onSupersetSignInChanged: Event<SupersetSignInSnapshot>;
+  onCalendarOnboardingChanged: Event<boolean>;
+  onSpeechOffered: Event<SpeechOffer>;
+  onSpeechWithdrawn: Event<string>;
+  onSessionReplayChanged: Event<HostSessionReplay>;
 }
 
 export interface HostOperatorOptions {

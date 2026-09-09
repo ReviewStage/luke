@@ -1,3 +1,4 @@
+import { SingleFlight } from "@sidecar/runtime/vocabulary";
 import type { BrainStoreLease } from "./envelope.js";
 import type { Generation } from "./generation.js";
 import type { BrainObservationEntry } from "./observation-inbox.js";
@@ -54,7 +55,14 @@ export class BrainRequestLedger {
   readonly #now: () => number;
   readonly #report: (message: string) => void;
   readonly #notify: () => void;
-  readonly #pendingMarks = new Map<string, Map<PendingMarkField, Promise<boolean>>>();
+  /**
+   * The marks still being written, nested by field and then by run: two
+   * identifiers name a flight together, and joining them into one key would
+   * let a run id be spelled into a field's place. The field is the outer key
+   * because there are two of them and no end of run ids, so this map is
+   * bounded by the vocabulary and each flight forgets its run as it settles.
+   */
+  readonly #pendingMarks = new Map<PendingMarkField, SingleFlight<string, boolean>>();
 
   constructor(options: BrainRequestLedgerOptions) {
     this.#store = options.store;
@@ -73,29 +81,20 @@ export class BrainRequestLedger {
    * run while a write is out share that write's answer, the way retried
    * submissions share one acceptance.
    */
-  async mark(
+  mark(
     generation: Generation,
     runId: string,
     field: PendingMarkField,
     recordedAt: number,
   ): Promise<boolean> {
-    const pending = this.#pendingMarks.get(runId)?.get(field);
-    if (pending) return pending;
-    const marking = (async () => {
+    const marks = this.#pendingMarks.get(field) ?? new SingleFlight<string, boolean>();
+    this.#pendingMarks.set(field, marks);
+    return marks.run(runId, async () => {
       const record = generation.requests.get(runId);
       if (!record) return false;
       if (record[field] !== undefined) return true;
       return this.commit(generation, runId, { [field]: recordedAt });
-    })();
-    const marks = this.#pendingMarks.get(runId) ?? new Map<PendingMarkField, Promise<boolean>>();
-    marks.set(field, marking);
-    this.#pendingMarks.set(runId, marks);
-    try {
-      return await marking;
-    } finally {
-      marks.delete(field);
-      if (marks.size === 0) this.#pendingMarks.delete(runId);
-    }
+    });
   }
 
   /**

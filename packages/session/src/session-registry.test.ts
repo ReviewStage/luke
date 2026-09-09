@@ -305,14 +305,14 @@ test("a refresh may reshape the observation before it lands, per provider", asyn
 test("every pass reaches the listeners, moved or not", () => {
   const roster = new SessionRoster();
   const heard: number[] = [];
-  const unsubscribe = roster.subscribe((sessions) => {
+  const subscription = roster.subscribe((sessions) => {
     heard.push(sessions.length);
   });
 
   roster.replaceProvider(codex, [observation("active", 10)]);
   roster.replaceProvider(codex, [observation("active", 10)]);
   roster.replaceProvider(codex, []);
-  unsubscribe();
+  subscription.dispose();
   roster.replaceProvider(codex, [observation("active", 10)]);
 
   // Nothing here decides whether anything moved; the renderer draws identical
