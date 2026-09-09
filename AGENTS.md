@@ -656,10 +656,10 @@ Trust constraints:
   A build before this one promoted entries into that file behind HTML
   markers; they are left where they stand, since removing them would be a
   write to the notebook nobody asked for. Flush state lives in the
-  runtime store's own table. Forgetting names notebook entries: the entries
-  named go, with the provenance rows beside them and `USER.md`'s index rows,
-  and an id the notebook does not hold is reported as a limitation rather
-  than claimed erased. Deleting a conversation's history stays the separate,
+  runtime store's own table. Forgetting names a notebook entry: the entry
+  and the provenance row beside it go, `USER.md` is written again, and the
+  watcher's next reconcile takes its index rows with it; an id the notebook
+  does not hold is refused rather than reported as erased. Deleting a conversation's history stays the separate,
   recoverable operation. Widening what the flush may write, or what a forget
   reaches, is a product decision, not an implementation detail, and
   `PRIVACY.md` says each in as many words.

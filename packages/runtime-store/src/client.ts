@@ -23,12 +23,7 @@ import type {
   MemorySearchOutcome,
   MemorySearchQuery,
 } from "./memory-index-table.js";
-import type {
-  NotebookEntry,
-  NotebookForgetAsk,
-  NotebookForgetReport,
-  NotebookMutation,
-} from "./notebook-table.js";
+import type { NotebookEntry, NotebookMutation } from "./notebook-table.js";
 import {
   RUNTIME_STORE_METHOD,
   type RuntimeStoreMethod,
@@ -215,10 +210,6 @@ export class RuntimeStoreClient {
 
   recordMemoryFlush(sessionKey: SessionKey, state: FlushState): Promise<boolean> {
     return this.request(RUNTIME_STORE_METHOD.MEMORY_FLUSH_STATE_PUT, { sessionKey, state });
-  }
-
-  forgetNotebookEntries(ask: NotebookForgetAsk, now: number): Promise<NotebookForgetReport> {
-    return this.request(RUNTIME_STORE_METHOD.MEMORY_FORGET, { ask, now });
   }
 
   listConversations(): Promise<readonly ConversationRecord[]> {

@@ -26,12 +26,7 @@ import type {
   MemorySearchOutcome,
   MemorySearchQuery,
 } from "./memory-index-table.js";
-import type {
-  NotebookEntry,
-  NotebookForgetAsk,
-  NotebookForgetReport,
-  NotebookMutation,
-} from "./notebook-table.js";
+import type { NotebookEntry, NotebookMutation } from "./notebook-table.js";
 
 /**
  * What crosses between the store's client on the main thread and the worker
@@ -60,7 +55,6 @@ export const RUNTIME_STORE_METHOD = {
   MEMORY_STATUS: "memory.status",
   MEMORY_FLUSH_STATE_GET: "memory.flush-state.get",
   MEMORY_FLUSH_STATE_PUT: "memory.flush-state.put",
-  MEMORY_FORGET: "memory.forget",
   CONVERSATIONS_LIST: "conversations.list",
   CONVERSATION_CREATE: "conversations.create",
   CONVERSATION_ARCHIVE: "conversations.archive",
@@ -165,10 +159,6 @@ export interface RuntimeStoreMethods {
   [RUNTIME_STORE_METHOD.MEMORY_FLUSH_STATE_PUT]: {
     params: { sessionKey: SessionKey; state: FlushState };
     result: boolean;
-  };
-  [RUNTIME_STORE_METHOD.MEMORY_FORGET]: {
-    params: { ask: NotebookForgetAsk; now: number };
-    result: NotebookForgetReport;
   };
   [RUNTIME_STORE_METHOD.CONVERSATIONS_LIST]: {
     params: Record<string, never>;

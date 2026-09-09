@@ -31,7 +31,6 @@ const stamp = (atMs: number) => {
 const TODAY = stamp(NOW);
 const YESTERDAY = stamp(NOW - DAY_MS);
 const TWO_DAYS_AGO = stamp(NOW - 2 * DAY_MS);
-const FACT = "The developer prefers pnpm over npm for every workspace install";
 
 function client() {
   const channel = new MessageChannel();
@@ -186,18 +185,5 @@ test("the flush marker is kept per conversation under the generation the brain n
   );
   await thread.write("gen-1", 0);
   assert.equal(await marker.read("gen-1"), 2);
-  h.close();
-});
-
-test("forgetting a notebook entry removes its line, and an id the notebook does not hold is reported", async () => {
-  const h = await harness();
-  const remembered = await h.store.rememberNotebookEntry({ id: "fact-1", words: FACT, now: NOW });
-  assert.equal(remembered.ok, true);
-  const report = await h.maintenance.forget({ entryIds: ["fact-1", "never-there"] });
-  assert.ok(report);
-  assert.equal(report.forgottenEntries, 1);
-  assert.equal(fs.readFileSync(path.join(h.workspace, "USER.md"), "utf8").includes(FACT), false);
-  assert.equal(report.limitations.length, 1);
-  assert.ok(h.reports.some((line) => /Memory forget limitation/u.test(line)));
   h.close();
 });

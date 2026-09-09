@@ -229,9 +229,9 @@ changes only when you edit it or ask Luke to. An earlier version of Luke
 promoted lines into that file behind HTML markers, and wrote a `DREAMS.md`
 beside it. Both are left exactly where they are, for you to keep or delete:
 `MEMORY.md` is still read as your notebook, markers and all, and nothing
-reads `DREAMS.md` at all. Asking Luke to forget removes the notebook
-lines you name and their search index rows; a line he no longer holds under
-that name he says so about rather than claiming it erased. Forgetting does
+reads `DREAMS.md` at all. Asking Luke to forget removes the notebook line
+you name, and the search index follows the file; a line he no longer holds
+under that name he says so about rather than claiming it erased. Forgetting does
 not delete the conversation itself; Delete history is still the separate,
 recoverable act above.
 

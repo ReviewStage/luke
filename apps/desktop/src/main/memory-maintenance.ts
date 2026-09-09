@@ -13,18 +13,14 @@ import {
 } from "@sidecar/memory";
 import { readWorkspaceFile, writeWorkspaceFile } from "@sidecar/runtime";
 import type { AgentRuntime, SessionKey } from "@sidecar/runtime-contracts";
-import type {
-  NotebookForgetAsk,
-  NotebookForgetReport,
-  RuntimeStoreClient,
-} from "@sidecar/runtime-store";
+import type { RuntimeStoreClient } from "@sidecar/runtime-store";
 import type { WireRecord } from "@sidecar/wire";
 
 /**
  * Memory maintenance as the desktop wires it: the pre-compaction flush hook
  * and flush marker each eligible conversation's brain is handed, the capture
- * run before an eligible private conversation starts fresh, and forgetting
- * the notebook entries an ask names. Every model call is a workspace-only
+ * run before an eligible private conversation starts fresh. Every model call
+ * is a workspace-only
  * run over a private context that is dropped at its end, on the developer's
  * own key or through Luke's service.
  */
@@ -62,8 +58,6 @@ export interface MemoryMaintenance {
     sessionKey: SessionKey,
     items: readonly WireRecord[],
   ) => Promise<MemoryHousekeepingResult>;
-  /** Forgets the notebook entries an ask names; nothing on a run with no store. */
-  forget: (ask: NotebookForgetAsk) => Promise<NotebookForgetReport | undefined>;
 }
 
 export function wireMemoryMaintenance(
@@ -157,21 +151,10 @@ export function wireMemoryMaintenance(
     }
   };
 
-  const forget: MemoryMaintenance["forget"] = async (ask) => {
-    if (!dependencies.persistent) return undefined;
-    const report = await dependencies.client().forgetNotebookEntries(ask, dependencies.now());
-    dependencies.onNotebookChanged?.();
-    for (const limitation of report.limitations) {
-      dependencies.report(`Memory forget limitation: ${limitation}`);
-    }
-    return report;
-  };
-
   return {
     flushHookFor,
     flushMarkerFor,
     capturesOnReset: eligible,
     captureBeforeReset,
-    forget,
   };
 }
