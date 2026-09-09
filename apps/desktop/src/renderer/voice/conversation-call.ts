@@ -50,6 +50,16 @@ import { ToolFollowUp } from "./tool-follow-up";
  */
 export type AppActionCarrier = (action: BrainAppActionRequest["action"]) => Promise<WireRecord>;
 
+/**
+ * How long the developer's call stands with nothing happening on it before
+ * it is put away. The provider caps a session at sixty minutes and ends it
+ * with a fault, a follow-up after minutes of silence has no use for the
+ * server-side context the call kept (the conversation itself is the brain's
+ * History), and a new call opens in under a second. Luke's own speak-only
+ * call is not covered: the mouth already owns that lifetime.
+ */
+export const IDLE_CALL_RETIRE_MS = 5 * 60_000;
+
 export interface ConversationCallOptions extends SpeakOnlyCallOptions {
   /**
    * Answers the voice's one tool: the developer's words go to the brain under
@@ -160,6 +170,7 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
    * an intention rather than a turn.
    */
   #pendingTurn = false;
+  #idleTimer: ReturnType<typeof setTimeout> | undefined;
   /**
    * The calls an armed reply asked for, and whether the follow-up voicing
    * their outcomes is still owed. The turn holds through the writes — a READY
@@ -409,7 +420,36 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
     // the commit Luke is just starting to answer. Here the reply is over and
     // the blip lands in the quiet. A press already waiting keeps the device:
     // its turn is about to reuse it.
-    if (status === REALTIME_STATUS.READY && !this.#pendingTurn) this.#releaseMicrophone();
+    if (status === REALTIME_STATUS.READY && !this.#pendingTurn) {
+      this.#releaseMicrophone();
+      this.#armIdleTimer();
+    } else {
+      this.#clearIdleTimer();
+    }
+  }
+
+  /**
+   * The countdown is not cleared by a press, only re-read at the fire: a
+   * press let go of before its device arrived leaves the status at READY and
+   * would otherwise stand the call up until the provider's cap. A press or
+   * reply still under way at the fire starts the countdown over instead.
+   */
+  #armIdleTimer(): void {
+    this.#idleTimer ??= setTimeout(() => {
+      this.#idleTimer = undefined;
+      if (!this.isConnected || this.status !== REALTIME_STATUS.READY) return;
+      if (this.#pendingTurn || this.replying) {
+        this.#armIdleTimer();
+        return;
+      }
+      this.endCall();
+    }, IDLE_CALL_RETIRE_MS);
+  }
+
+  #clearIdleTimer(): void {
+    if (this.#idleTimer === undefined) return;
+    clearTimeout(this.#idleTimer);
+    this.#idleTimer = undefined;
   }
 
   protected override onPeerConnection(
@@ -441,6 +481,7 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
     for (const track of tracks) step(() => track.stop());
     super.onTeardown(step);
     this.#pendingTurn = false;
+    this.#clearIdleTimer();
     step(() => this.options.onLocalStream(undefined));
   }
 

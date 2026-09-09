@@ -57,6 +57,9 @@ export const BRAIN_ASK_SETTLE_TIMEOUT_MS = 60_000;
  */
 export const REMOTE_QUIET_MS = 2_500;
 
+/** The provider's own code for a call it ended at its maximum duration. */
+const SESSION_EXPIRED_ERROR_CODE = "session_expired";
+
 /**
  * What a call Luke opens for himself declares at the API. The empty tool list
  * and the choice that can pick nothing from it are the whole of `CLAUDE.md`'s
@@ -559,6 +562,14 @@ export class SpeakOnlyCall<
         // sentence and never shown.
         if (Interruption.pastAudioEnd(event.message)) return;
         if (this.#interruption.error(event)) return;
+        // The provider ending a call at its maximum duration is an ordinary
+        // end, not a fault: nothing is drawn, and the next press opens a
+        // fresh call. The channel abort that follows lands on a transport
+        // the teardown has already let go of.
+        if (event.errorCode === SESSION_EXPIRED_ERROR_CODE) {
+          this.endCall();
+          return;
+        }
         this.options.onError(event.message);
         // An error can arrive *instead of* `response.done` — an empty push-to-talk
         // commit is the common case — which would otherwise leave the call
@@ -825,6 +836,11 @@ export class SpeakOnlyCall<
   }
 
   /** Starts the backstop for a reply whose proper ending never arrives. */
+  /** Whether the server has confirmed a reply it has not yet finished. */
+  protected get replying(): boolean {
+    return this.#activeResponseId !== undefined;
+  }
+
   protected armSettleTimer(delayMs: number = REALTIME_SETTLE_TIMEOUT_MS): void {
     this.#settleTimer ??= setTimeout(() => {
       this.#settleTimer = undefined;
