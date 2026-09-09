@@ -1,5 +1,13 @@
-import { type AccountToken, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
-import { type CloudFetch, positiveInteger, text, withoutTrailingSlash } from "@sidecar/wire";
+import {
+  type AccountCall,
+  type AccountToken,
+  accountBearer,
+  CALL_FAULT,
+  callAnswered,
+  createAccountCall,
+  HOSTED_SERVICE_PATH,
+} from "@sidecar/hosted";
+import { type CloudFetch, HTTP_METHOD, positiveInteger } from "@sidecar/wire";
 import {
   PRODUCT_EVENT,
   PRODUCT_EVENT_BATCH_LIMIT,
@@ -12,7 +20,6 @@ import {
 } from "./product-events.js";
 
 const PRODUCT_EVENT_DEFAULTS = {
-  REQUEST_TIMEOUT_MS: 10_000,
   /**
    * A minute between flushes. Long enough that a launch, a sign-in, and a
    * first observation ride one request rather than three; short enough that a
@@ -27,8 +34,6 @@ const PRODUCT_EVENT_DEFAULTS = {
    */
   QUEUE_LIMIT: 200,
 } as const;
-
-const UNAUTHORIZED_STATUS = 401;
 
 /** The one discriminator the day marker dedups on; the day itself is the key. */
 const DAY_ACTIVE_KEY = "day";
@@ -66,14 +71,10 @@ export interface ProductEventSenderOptions extends AccountToken {
  * so there is nothing here to name a person with.
  */
 export class ProductEventSender {
-  readonly #endpoint: string;
+  readonly #call: AccountCall;
   readonly #appVersion: string;
   readonly #sends: boolean;
-  readonly #readAccessToken: () => Promise<string | undefined>;
-  readonly #refreshAccount: () => Promise<void>;
-  readonly #fetch: CloudFetch;
   readonly #now: () => number;
-  readonly #requestTimeoutMs: number;
   readonly #flushIntervalMs: number;
   readonly #queueLimit: number;
   readonly #queue: ProductEvent[] = [];
@@ -84,19 +85,15 @@ export class ProductEventSender {
   #inFlight: Promise<void> | undefined;
 
   constructor(options: ProductEventSenderOptions) {
-    const baseUrl = text(options.serviceBaseUrl);
-    if (!baseUrl) throw new Error("Hosted service base URL must not be empty");
-    this.#endpoint = `${withoutTrailingSlash(baseUrl)}${HOSTED_SERVICE_PATH.EVENTS}`;
+    this.#call = createAccountCall({
+      baseUrl: options.serviceBaseUrl,
+      credential: accountBearer(options),
+      fetch: options.fetch,
+      requestTimeoutMs: options.requestTimeoutMs,
+    });
     this.#appVersion = options.appVersion;
     this.#sends = options.sends;
-    this.#readAccessToken = options.readAccessToken;
-    this.#refreshAccount = options.refreshAccount;
-    this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
     this.#now = options.now ?? Date.now;
-    this.#requestTimeoutMs = positiveInteger(
-      options.requestTimeoutMs,
-      PRODUCT_EVENT_DEFAULTS.REQUEST_TIMEOUT_MS,
-    );
     this.#flushIntervalMs = positiveInteger(
       options.flushIntervalMs,
       PRODUCT_EVENT_DEFAULTS.FLUSH_INTERVAL_MS,
@@ -121,9 +118,7 @@ export class ProductEventSender {
     const event = productEventFromWire({ name, at: this.#now(), properties });
     if (!event) return;
     this.#queue.push(event);
-    if (this.#queue.length > this.#queueLimit) {
-      this.#queue.splice(0, this.#queue.length - this.#queueLimit);
-    }
+    this.#trimQueue();
   }
 
   /**
@@ -213,39 +208,32 @@ export class ProductEventSender {
 
   async #send(): Promise<void> {
     if (this.#queue.length === 0) return;
-    const token = await this.#readAccessToken();
-    // Signed out is temporary and nobody's fault, so the queue waits rather
-    // than being spent against a request that cannot authenticate.
-    if (!token) return;
-    // Taken only once a request will actually be made, and gone whatever
-    // becomes of it.
+    // Gone whatever becomes of the request, save for the one end that never
+    // authenticated at all.
     const events = this.#queue.splice(0, PRODUCT_EVENT_BATCH_LIMIT);
-    let response = await this.#post(token, events);
-    if (response?.status === UNAUTHORIZED_STATUS) {
-      await this.#refreshAccount().catch(() => undefined);
-      const refreshed = await this.#readAccessToken();
-      if (refreshed && refreshed !== token) {
-        response = await this.#post(refreshed, events);
-      }
+    const answer = await this.#call.send({
+      method: HTTP_METHOD.POST,
+      path: HOSTED_SERVICE_PATH.EVENTS,
+      headers: {
+        // This sender is the desktop's; the iOS app runs its own Swift
+        // sender and names itself the same way.
+        [PRODUCT_EVENT_CLIENT_HEADER]: PRODUCT_EVENT_CLIENT.DESKTOP,
+      },
+      body: JSON.stringify({ events }),
+    });
+    // Signed out is temporary and nobody's fault, and nothing was asked of the
+    // service, so the batch waits rather than being spent. An account that
+    // changed under a refreshed token is not that case: those counts were
+    // queued by an account this request can no longer name, and they go.
+    if (!callAnswered(answer) && answer.fault === CALL_FAULT.NO_CREDENTIAL) {
+      this.#queue.unshift(...events);
+      this.#trimQueue();
     }
   }
 
-  async #post(token: string, events: readonly ProductEvent[]): Promise<Response | undefined> {
-    try {
-      return await this.#fetch(this.#endpoint, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${token}`,
-          "content-type": "application/json",
-          // This sender is the desktop's; the iOS app runs its own Swift
-          // sender and names itself the same way.
-          [PRODUCT_EVENT_CLIENT_HEADER]: PRODUCT_EVENT_CLIENT.DESKTOP,
-        },
-        body: JSON.stringify({ events }),
-        signal: AbortSignal.timeout(this.#requestTimeoutMs),
-      });
-    } catch {
-      return undefined;
+  #trimQueue(): void {
+    if (this.#queue.length > this.#queueLimit) {
+      this.#queue.splice(0, this.#queue.length - this.#queueLimit);
     }
   }
 }

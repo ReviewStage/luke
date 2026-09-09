@@ -17,6 +17,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import {
   type CloudFetch,
+  HTTP_METHOD,
   HTTP_STATUS,
   isRecord,
   isWireNumber,
@@ -24,8 +25,8 @@ import {
   numberVectors,
   type UnparsedWireValue,
 } from "@sidecar/wire";
-import { HostedBrainTransport, KeyedBrainTransport } from "./client.js";
-import { failed, HTTP_METHOD, notServed, payloadOf, throttled } from "./model-adapter-shared.js";
+import { type BrainTransport, hostedBrainTransport, keyedBrainTransport } from "./client.js";
+import { failed, notServed, payloadOf, throttled } from "./model-adapter-shared.js";
 import { BRAIN_OPENAI_DEFAULTS } from "./openai-model-adapter.js";
 
 /**
@@ -84,11 +85,11 @@ export interface OpenAiEmbeddingAdapterOptions {
 
 /** The model and endpoint are fixed by the build: the index stores vectors under one model, and a key chooses none. */
 export class OpenAiEmbeddingAdapter implements EmbeddingAdapter {
-  readonly #client: KeyedBrainTransport;
+  readonly #client: BrainTransport;
   #dimensions: number | undefined;
 
   constructor(options: OpenAiEmbeddingAdapterOptions) {
-    this.#client = new KeyedBrainTransport({
+    this.#client = keyedBrainTransport({
       ...options,
       baseUrl: BRAIN_OPENAI_DEFAULTS.BASE_URL,
     });
@@ -146,13 +147,13 @@ export interface HostedEmbeddingAdapterOptions extends AccountToken {
 }
 
 export class HostedEmbeddingAdapter implements EmbeddingAdapter {
-  readonly #client: HostedBrainTransport;
+  readonly #client: BrainTransport;
   #model: string | undefined;
   #dimensions: number | undefined;
   #offered: boolean | undefined;
 
   constructor(options: HostedEmbeddingAdapterOptions) {
-    this.#client = new HostedBrainTransport({ ...options, baseUrl: options.serviceBaseUrl });
+    this.#client = hostedBrainTransport({ ...options, baseUrl: options.serviceBaseUrl });
   }
 
   identity(): Promise<EmbeddingIdentity> {

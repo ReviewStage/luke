@@ -227,6 +227,16 @@ export function wireRecord(value: UnparsedWireValue): WireRecord | undefined {
   return isRecord(value) ? value : undefined;
 }
 
+/** The methods this build's own requests are made with. */
+export const HTTP_METHOD = {
+  GET: "GET",
+  POST: "POST",
+  PUT: "PUT",
+  DELETE: "DELETE",
+} as const;
+
+export type HttpMethod = (typeof HTTP_METHOD)[keyof typeof HTTP_METHOD];
+
 /** The statuses this build branches on at the HTTP boundary. */
 export const HTTP_STATUS = {
   UNAUTHORIZED: 401,

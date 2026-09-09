@@ -1,5 +1,12 @@
 import {
+  type AccountCall,
   type AccountToken,
+  accountBearer,
+  CALL_FAULT,
+  type CallCredential,
+  callAnswered,
+  createAccountCall,
+  fixedBearer,
   HOSTED_API_ERROR,
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_SERVICE_PATH,
@@ -10,20 +17,18 @@ import {
 import { MODEL_FAILURE } from "@sidecar/runtime/vocabulary";
 import {
   type CloudFetch,
+  HTTP_METHOD,
   HTTP_STATUS,
-  positiveInteger,
+  type HttpMethod,
   text,
   type UnparsedWireValue,
   unparsedWire,
   wireRecord,
-  withoutTrailingSlash,
 } from "@sidecar/wire";
 import {
   BRAIN_REQUEST_TIMEOUT_MS,
   type Failure,
   failed,
-  HTTP_METHOD,
-  type HttpMethod,
   notServed,
   payloadOf,
   RETRY_AFTER_HEADER,
@@ -42,47 +47,47 @@ export interface BrainTransportOptions {
 }
 
 /**
- * One call out of the brain, whatever authorizes it: the base URL trimmed
- * once, the bearer header written once, the per-request timeout joined with
- * the caller's own cancellation once, a fetch that throws read as a network
- * failure by the error's kind alone and never by its words, which could carry
- * a key, and one reading of what a 429 means. What a subclass supplies is the
- * credential — a key the developer typed, or the signed-in account's token,
- * which is refreshed once when the first attempt is refused.
+ * One call out of the brain, whatever authorizes it: the account call's own
+ * bearer header, renewal, and single retry, with the two readings that are
+ * the brain's alone — a fault named as the failure kind the host reads, and
+ * what a 429 means. What a factory below supplies is the credential — a key
+ * the developer typed, or the signed-in account's token — and the words a
+ * quiet is reported with.
  */
-abstract class BrainTransport {
-  readonly #baseUrl: string;
+export class BrainTransport {
+  readonly #call: AccountCall;
+  readonly #label: string;
   readonly #now: () => number;
-  readonly #fetch: CloudFetch;
-  readonly #requestTimeoutMs: number;
 
-  protected constructor(options: BrainTransportOptions) {
-    const baseUrl = text(options.baseUrl);
-    if (!baseUrl) throw new Error("Brain transport base URL must not be empty");
-    this.#baseUrl = withoutTrailingSlash(baseUrl);
-    this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
+  constructor(
+    options: BrainTransportOptions & {
+      credential: CallCredential;
+      /** The words a quiet is reported with, which name the transport the developer is on. */
+      label: string;
+    },
+  ) {
+    this.#call = createAccountCall({
+      baseUrl: options.baseUrl,
+      credential: options.credential,
+      fetch: options.fetch,
+      // A turn may read a transcript, reason over it, and act, so the brain
+      // asks for its own deadline rather than the ten seconds a settings row
+      // would wait.
+      requestTimeoutMs: options.requestTimeoutMs ?? BRAIN_REQUEST_TIMEOUT_MS,
+    });
+    this.#label = options.label;
     this.#now = options.now ?? Date.now;
-    this.#requestTimeoutMs = positiveInteger(options.requestTimeoutMs, BRAIN_REQUEST_TIMEOUT_MS);
   }
 
-  /** The words a quiet is reported with, which name the transport the developer is on. */
-  protected abstract readonly label: string;
-
-  /** The authorization header for one attempt, or nothing when there is no credential to send. */
-  protected abstract authorization(): Promise<string | undefined>;
-
-  /** Asks whoever owns the credential to renew it; a transport with nothing to renew does nothing. */
-  protected renewCredential(): Promise<void> {
-    return Promise.resolve();
+  /** The deadline every request of this transport is under. */
+  get requestTimeoutMs(): number {
+    return this.#call.requestTimeoutMs;
   }
 
   /**
-   * One authorized request. No credential at all and a fetch that did not
-   * complete are already ends, named by kind; every status is the caller's to
-   * read, including the refusal that outlived a renewed credential.
-   *
-   * A refusal is retried exactly once, and only on a credential that actually
-   * changed: retrying the same one would only repeat the no.
+   * One authorized request. A call that never reached the service is already
+   * an end, named by kind; every status is the caller's to read, including
+   * the refusal that outlived a renewed credential.
    */
   async send(
     path: string,
@@ -90,17 +95,16 @@ abstract class BrainTransport {
     body?: string,
     signal?: AbortSignal,
   ): Promise<Response | Failure> {
-    const authorization = await this.authorization();
-    if (!authorization) return failed(MODEL_FAILURE.CREDENTIAL, "no account token");
-    const response = await this.#attempt(path, method, authorization, body, signal);
-    if (!(response instanceof Response) || response.status !== HTTP_STATUS.UNAUTHORIZED) {
-      return response;
+    const answer = await this.#call.send({ path, method, body, signal });
+    if (callAnswered(answer)) return answer.response;
+    switch (answer.fault) {
+      case CALL_FAULT.NO_CREDENTIAL:
+        return failed(MODEL_FAILURE.CREDENTIAL, "no account token");
+      case CALL_FAULT.HOLDER_CHANGED:
+        return failed(MODEL_FAILURE.CREDENTIAL, "the account changed mid-call");
+      case CALL_FAULT.NETWORK:
+        return requestFault(answer.errorName);
     }
-    await this.renewCredential();
-    const renewed = await this.authorization();
-    return renewed === undefined || renewed === authorization
-      ? response
-      : this.#attempt(path, method, renewed, body, signal);
   }
 
   /**
@@ -119,70 +123,14 @@ abstract class BrainTransport {
     if (resetsAt !== undefined && resetsAt > this.#now()) {
       return {
         until: resetsAt,
-        message: `${this.label} are out of today's allowance; pausing for ${Math.round((resetsAt - this.#now()) / 1000)}s`,
+        message: `${this.#label} are out of today's allowance; pausing for ${Math.round((resetsAt - this.#now()) / 1000)}s`,
       };
     }
     const waitMs = rateLimitWaitMs(response.headers.get(RETRY_AFTER_HEADER));
     return {
       until: this.#now() + waitMs,
-      message: `${this.label} are rate limited; pausing for ${Math.round(waitMs / 1000)}s`,
+      message: `${this.#label} are rate limited; pausing for ${Math.round(waitMs / 1000)}s`,
     };
-  }
-
-  async #attempt(
-    path: string,
-    method: HttpMethod,
-    authorization: string,
-    body: string | undefined,
-    signal: AbortSignal | undefined,
-  ): Promise<Response | Failure> {
-    try {
-      return await this.#fetch(`${this.#baseUrl}${path}`, {
-        method,
-        headers: {
-          authorization,
-          ...(body !== undefined ? { "content-type": "application/json" } : undefined),
-        },
-        ...(body !== undefined ? { body } : undefined),
-        signal: requestSignal(this.#requestTimeoutMs, signal),
-      });
-    } catch (error) {
-      return requestFault(error instanceof Error ? error : undefined);
-    }
-  }
-}
-
-/** The developer's own key straight to the provider: one header, one attempt, nothing to refresh. */
-export class KeyedBrainTransport extends BrainTransport {
-  protected readonly label = "OpenAI brain turns";
-  readonly #authorization: string;
-
-  constructor(options: BrainTransportOptions & { apiKey: string }) {
-    super(options);
-    const apiKey = text(options.apiKey);
-    if (!apiKey) throw new Error("OpenAI API key must not be empty");
-    this.#authorization = bearer(apiKey);
-  }
-
-  protected authorization(): Promise<string | undefined> {
-    return Promise.resolve(this.#authorization);
-  }
-}
-
-/**
- * Luke's hosted service on the signed-in account, shared by every adapter
- * that speaks to it: the token read fresh per attempt and refreshed once when
- * the first is refused, and the capabilities read that admits an operation.
- */
-export class HostedBrainTransport extends BrainTransport {
-  protected readonly label = "Hosted brain turns";
-  readonly #readAccessToken: () => Promise<string | undefined>;
-  readonly #refreshAccount: () => Promise<void>;
-
-  constructor(options: BrainTransportOptions & AccountToken) {
-    super(options);
-    this.#readAccessToken = options.readAccessToken;
-    this.#refreshAccount = options.refreshAccount;
   }
 
   /** Reads the service's capabilities; a service that has none, or names another contract, is incompatible. */
@@ -210,24 +158,35 @@ export class HostedBrainTransport extends BrainTransport {
     }
     return capabilities;
   }
-
-  /** Routine expiry of an hour-lived token inside a day-lived app; a refresh that itself fails leaves the refusal standing. */
-  protected override renewCredential(): Promise<void> {
-    return this.#refreshAccount().catch(() => undefined);
-  }
-
-  protected async authorization(): Promise<string | undefined> {
-    const token = await this.#readAccessToken();
-    return token ? bearer(token) : undefined;
-  }
 }
 
-function bearer(credential: string): string {
-  return `Bearer ${credential}`;
+/** The developer's own key straight to the provider: one header, one attempt, nothing to renew. */
+export function keyedBrainTransport(
+  options: BrainTransportOptions & { apiKey: string },
+): BrainTransport {
+  // Destructured rather than spread: the key travels no further than the one
+  // credential that holds it.
+  const { apiKey, ...addressed } = options;
+  const key = text(apiKey);
+  if (!key) throw new Error("OpenAI API key must not be empty");
+  return new BrainTransport({
+    ...addressed,
+    credential: fixedBearer(key),
+    label: "OpenAI brain turns",
+  });
 }
 
-/** The per-request timeout, joined with the run's own cancellation when the call belongs to one. */
-function requestSignal(timeoutMs: number, cancellation: AbortSignal | undefined): AbortSignal {
-  const timeout = AbortSignal.timeout(timeoutMs);
-  return cancellation ? AbortSignal.any([timeout, cancellation]) : timeout;
+/**
+ * Luke's hosted service on the signed-in account, shared by every adapter
+ * that speaks to it: the token read fresh per attempt and refreshed once when
+ * the first is refused, and the capabilities read that admits an operation.
+ */
+export function hostedBrainTransport(
+  options: BrainTransportOptions & AccountToken,
+): BrainTransport {
+  return new BrainTransport({
+    ...options,
+    credential: accountBearer(options),
+    label: "Hosted brain turns",
+  });
 }

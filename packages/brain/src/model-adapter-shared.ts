@@ -17,13 +17,6 @@ export const BRAIN_REQUEST_TIMEOUT_MS = 90_000;
  * transport, the cooldown a rate limit earns, and the shapes of a failure.
  */
 
-export const HTTP_METHOD = {
-  GET: "GET",
-  POST: "POST",
-} as const;
-
-export type HttpMethod = (typeof HTTP_METHOD)[keyof typeof HTTP_METHOD];
-
 export const RETRY_AFTER_HEADER = "retry-after";
 
 /**
@@ -70,11 +63,8 @@ export type Failure = ReturnType<typeof failed>;
 export type Normalized = Failure | ReturnType<typeof throttled>;
 
 /** A network fault or a timeout, named by the error's kind alone, never its words, which could carry a key. */
-export function requestFault(error: Error | undefined) {
-  return failed(
-    MODEL_FAILURE.NETWORK,
-    `request did not complete: ${error?.name ?? "unknown error"}`,
-  );
+export function requestFault(errorName: string | undefined) {
+  return failed(MODEL_FAILURE.NETWORK, `request did not complete: ${errorName ?? "unknown error"}`);
 }
 
 /** Whether the service answered that it does not serve the path at all, as distinct from refusing the call. */

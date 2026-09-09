@@ -24,16 +24,16 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import {
   type CloudFetch,
+  HTTP_METHOD,
   HTTP_STATUS,
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import { HostedBrainTransport } from "./client.js";
+import { type BrainTransport, hostedBrainTransport } from "./client.js";
 import { COMPACTION_POLICY } from "./compaction.js";
 import {
   type Failure,
   failed,
-  HTTP_METHOD,
   type Normalized,
   notServed,
   payloadOf,
@@ -74,11 +74,11 @@ const HOSTED_PATH = {
  */
 class HostedTransport implements ResponsesTransport<HostedBrainCapabilities> {
   readonly adapter = BUILTIN_MODEL_ADAPTER.HOSTED;
-  readonly #client: HostedBrainTransport;
+  readonly #client: BrainTransport;
   #capabilities: HostedBrainCapabilities | undefined;
 
   constructor(options: HostedModelAdapterOptions) {
-    this.#client = new HostedBrainTransport({ ...options, baseUrl: options.serviceBaseUrl });
+    this.#client = hostedBrainTransport({ ...options, baseUrl: options.serviceBaseUrl });
   }
 
   /** The service's model, once capabilities have been read; the service's to know until then. */
