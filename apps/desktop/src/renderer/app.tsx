@@ -5,21 +5,12 @@ import {
   PRODUCT_SURFACE_EVENT,
 } from "@sidecar/analytics";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import {
-  CREDENTIAL_PROVIDER_LIST,
-  CREDENTIAL_PROVIDERS,
-  CREDENTIAL_SOURCE,
-  isCredentialProviderId,
-} from "@sidecar/credentials/vocabulary";
+import { CREDENTIAL_PROVIDER_LIST, CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
 import { FEEDBACK_KIND, feedbackKindForLifecycleEvent } from "@sidecar/feedback";
 import { APP_UPDATE_ACTION, FEEDBACK_COMPOSER_KIND } from "@sidecar/guide";
 import { WingFace as LukeFace } from "@sidecar/panel";
 import { REALTIME_STATUS } from "@sidecar/realtime";
-import {
-  type ObservedWorkspaceProject,
-  type SessionApplicationId,
-  workspaceProjectSelectionId,
-} from "@sidecar/session";
+import type { ObservedWorkspaceProject } from "@sidecar/session";
 import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTION } from "@sidecar/session/fixtures";
 import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE, voiceHotkeyLabel } from "@sidecar/settings";
 import type { AppSettingsView, ObservedAccountCalendars } from "@sidecar/settings/wire";
@@ -38,16 +29,8 @@ import {
 } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { type AppStateSnapshot, sessionReplayBootstrap } from "#shared/messages/app-state";
-import type {
-  DisplayDiagnostic,
-  SupersetSignInSnapshot,
-  WorkspaceProviderId,
-} from "#shared/messages/session";
-import {
-  isWorkspaceProviderId,
-  SUPERSET_SIGN_IN_STAGE,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
-} from "#shared/messages/session";
+import type { DisplayDiagnostic, SupersetSignInSnapshot } from "#shared/messages/session";
+import { SUPERSET_SIGN_IN_STAGE, SUPERSET_WORKSPACE_PROVIDER_ID } from "#shared/messages/session";
 import { act, tell, updateSetting, updateSettingEntry } from "./act";
 import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
 import type { CalendarGateControl } from "./calendar-gate";
@@ -74,7 +57,7 @@ import { type Errand, errandTargets, LukeErrand } from "./luke-errand";
 import { applySpokenSetting, buildLukeGuide, isAppSettingId } from "./luke-guide";
 import { MarkdownMessage } from "./markdown-message";
 import { NotchWings } from "./notch-wings";
-import { PanelBody, type SessionWriteHandlers } from "./panel-body";
+import { PanelBody } from "./panel-body";
 import {
   collapseMarkAfter,
   HIT_REGION,
@@ -82,22 +65,10 @@ import {
   type PanelPresentation,
 } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
-import {
-  arrangeSessions,
-  DEFAULT_SESSION_VIEW,
-  displaySessions,
-  type SessionArrangement,
-  type SessionFilter,
-  type SessionView,
-  sameSessionFilters,
-  sessionFiltersFromSpoken,
-  sessionTally,
-  spokenSearchOutcome,
-} from "./session-model";
+import { displaySessions, sessionFiltersFromSpoken, spokenSearchOutcome } from "./session-model";
 import { parsePixels } from "./session-motion";
-import { SESSION_OPTIONS_CONTROL_ID, SESSION_OPTIONS_ID } from "./session-parts";
 import { applySessionReplay } from "./session-replay";
-import { focusSearchField, SESSION_SEARCH_INPUT_ID } from "./session-search";
+import { focusSearchField } from "./session-search";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings-panel";
 import { SETTINGS_SEARCH_INPUT_ID } from "./settings-search";
 import {
@@ -125,6 +96,7 @@ import { useMeasuredHeight } from "./use-measured-height";
 import type { PanelEntrySurface } from "./use-panel-entry";
 import { usePanelPresentation } from "./use-panel-presentation";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
+import { useSessionList } from "./use-session-list";
 import { useStateWithRef } from "./use-state-with-ref";
 import { useVoiceView, voiceErrorToShow, voiceNoticeToShow } from "./use-voice-view";
 import type { AppActionCarrier } from "./voice/conversation-call";
@@ -135,14 +107,6 @@ import {
   volumeHintDismissed,
   volumeHintText,
 } from "./volume-hint";
-
-/**
- * How long a changed search query waits before it is stored. The query moves
- * at typing speed and the store is a file write per change, so only where the
- * words settle is worth writing — long enough to sit out a burst of
- * keystrokes, short enough that quitting mid-thought still keeps the search.
- */
-const SEARCH_QUERY_STORE_DELAY_MS = 400;
 
 /**
  * The composer kind a spoken open names, matched to the composer's own. The
@@ -285,9 +249,6 @@ export function App(): React.JSX.Element {
   const [settingsView, setSettingsView, settingsViewNow] = useStateWithRef<SettingsView>(
     SETTINGS_VIEW.ROOT,
   );
-  const [sessionView, setSessionView] = useState<SessionArrangement>(DEFAULT_SESSION_VIEW);
-  const [optionsOpen, setOptionsOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
   // The settings search's field, on the sessions search's own terms: the
   // magnifier beside the tab bar answers for it, and its query lives with the
   // field in the settings panel — closing here is what lets that query go.
@@ -305,6 +266,19 @@ export function App(): React.JSX.Element {
     [state?.settings],
   );
   const settings = heldSettings ?? liveSettings;
+  const sessions = useSessionList({
+    state,
+    liveSettings,
+    settings,
+    tab,
+    // The panel's own two acts, declared below: the list only ever reaches
+    // them from a press, which is long after this render has closed.
+    dismissPanel: () => {
+      cancelHover();
+      void changeMode(false);
+    },
+    showSessionsTab: () => changeTab(PANEL_TAB.SESSIONS),
+  });
   const [errand, setErrand] = useState<Errand>();
   // Counts for nothing except having changed: each tick re-renders the rows so
   // their "how long ago" labels stay honest while they are on screen.
@@ -468,23 +442,26 @@ export function App(): React.JSX.Element {
    * flight they are timing, and an errand whose callbacks changed identity
    * would be torn down and rebuilt mid-air.
    */
-  const drawErrandHold = useCallback((hold: ErrandHold) => {
-    if (hold.settings !== undefined) setHeldSettings(hold.settings);
-    // Folded into whatever the view is at the moment it lands rather than the
-    // moment it was chosen: the list corrects its own filter during render
-    // when one empties, and a snapshot taken at the ask would undo that.
-    const view = hold.view;
-    if (view !== undefined) setSessionView((current) => ({ ...current, ...view }));
-    // A query landing opens the field it fills, on the rule the field's own
-    // closing keeps: a narrowing in force behind no visible control would
-    // hide sessions with nothing on screen admitting it.
-    if (view?.query) setSearchOpen(true);
-    // The panel goes back on the document's own settings once nothing is
-    // left to sign: every hold this run caught has been drawn by then, and
-    // the newest word — including a change another window made mid-flight
-    // — is the document's.
-    if (errandRunIdle(errandRun.current)) setHeldSettings(undefined);
-  }, []);
+  const drawErrandHold = useCallback(
+    (hold: ErrandHold) => {
+      if (hold.settings !== undefined) setHeldSettings(hold.settings);
+      // Folded into whatever the view is at the moment it lands rather than the
+      // moment it was chosen: the list corrects its own filter during render
+      // when one empties, and a snapshot taken at the ask would undo that.
+      const view = hold.view;
+      if (view !== undefined) sessions.applyView(view);
+      // A query landing opens the field it fills, on the rule the field's own
+      // closing keeps: a narrowing in force behind no visible control would
+      // hide sessions with nothing on screen admitting it.
+      if (view?.query) sessions.openSearchField();
+      // The panel goes back on the document's own settings once nothing is
+      // left to sign: every hold this run caught has been drawn by then, and
+      // the newest word — including a change another window made mid-flight
+      // — is the document's.
+      if (errandRunIdle(errandRun.current)) setHeldSettings(undefined);
+    },
+    [sessions.applyView, sessions.openSearchField],
+  );
 
   /** The tap has landed, so the action in the air may finally be drawn. */
   const releaseErrandChange = useCallback(() => {
@@ -506,7 +483,7 @@ export function App(): React.JSX.Element {
       setTab(next);
       // The sheet belongs to the session list, and it is drawn over the list it
       // belongs to, so leaving for Settings has to take it along.
-      setOptionsOpen(false);
+      sessions.closeOptions();
       // Arriving at the tab is arriving at its front page: a page left open
       // behind a tab switch would greet the next visit with a corner of the
       // settings rather than the settings. The flows that need a deeper page —
@@ -519,25 +496,8 @@ export function App(): React.JSX.Element {
         panel_tab: next,
       });
     },
-    [setSettingsView, setTab],
+    [sessions.closeOptions, setSettingsView, setTab],
   );
-
-  // A sort chosen in the sheet puts the sheet away: an order is one choice of
-  // two, made once. The fallback the render performs when a selection empties
-  // writes the view directly instead: that is the list correcting itself, not
-  // somebody choosing.
-  const changeSessionView = useCallback((next: SessionArrangement) => {
-    setSessionView(next);
-    setOptionsOpen(false);
-  }, []);
-
-  // A filter toggled in the sheet leaves it open: the chips combine, and a
-  // sheet that closed on every press would make choosing two filters cost two
-  // openings. The sheet still goes away by hand — its button, a press outside
-  // it, Escape — and the options button names the narrowing the whole time.
-  const changeSessionFilters = useCallback((filters: readonly SessionFilter[]) => {
-    setSessionView((current) => ({ ...current, filters }));
-  }, []);
 
   /**
    * True while sign-in stands between Luke and anything to watch. The gate is
@@ -586,7 +546,7 @@ export function App(): React.JSX.Element {
       consentConnectHeld.current ||
       supersetSignInHeld.current,
     onNotPanel: () => {
-      setOptionsOpen(false);
+      sessions.closeOptions();
       // The settings search closes with the shape it was opened on, taking
       // its query with it: no search survives the panel closing.
       setSettingsSearchOpen(false);
@@ -600,7 +560,7 @@ export function App(): React.JSX.Element {
       // query hides is admitted by the field on screen and the count it
       // carries — waiting where the developer left it, like a search held
       // while Settings shows.
-      setSessionView((current) => ({ ...current, sort: DEFAULT_SESSION_VIEW.sort }));
+      sessions.resetSort();
     },
     onCapsuleTab: () => changeTab(PANEL_TAB.SESSIONS),
   });
@@ -727,96 +687,6 @@ export function App(): React.JSX.Element {
     heldRef: feedbackHeld,
   };
 
-  /**
-   * The selection as last stored, so only a change of selection writes.
-   * Seeded from the document's own snapshot rather than from nothing, because
-   * restoring the stored chips must not read as a fresh choice to store
-   * again. A ref rather than reading the settings state: a stored write's
-   * reply races the next chip press, and the last value this window sent is
-   * the only honest baseline either way.
-   */
-  const storedSessionFilters = useRef<readonly SessionFilter[] | undefined>(undefined);
-  /** Whether the stored way of viewing the list has been taken up. */
-  const restoredView = useRef(false);
-  /**
-   * The stored filter chips and search words coming back with the panel: each
-   * is a standing way of viewing the list, and this is the one moment they are
-   * read from the store — from here on the view leads and the store follows.
-   * Never in a fixture or capture run, whose evidence must not vary with what
-   * a developer last chose.
-   *
-   * Taken up during the render that first has them rather than from an
-   * effect, for the reason the emptied filter below is: an effect would let
-   * one paint, and the two effects that store the view, read this build's
-   * default as though the developer had chosen it — and storing that would
-   * clear the very narrowing being restored.
-   */
-  if (!restoredView.current && state?.settings !== undefined) {
-    restoredView.current = true;
-    const storedFilters = state.settings.stored.sessionFilters;
-    const storedQuery = state.settings.stored.sessionSearchQuery;
-    if (!state.run.fixtureMode && (storedFilters !== undefined || storedQuery !== undefined)) {
-      setSessionView((current) => ({
-        ...current,
-        ...(storedFilters !== undefined ? { filters: storedFilters } : undefined),
-        ...(storedQuery !== undefined ? { query: storedQuery } : undefined),
-      }));
-      // A restored query opens the field it refills, on the rule the field's
-      // own closing keeps: a narrowing in force behind no visible control
-      // would hide sessions with nothing on screen admitting it.
-      if (storedQuery !== undefined) setSearchOpen(true);
-    }
-  }
-  // Every way the selection changes funnels through the view — a chip, a
-  // spoken ask, the widen button, the list correcting an emptied selection —
-  // so the store follows the view from one place. Never in a fixture or
-  // capture run, which must not write a developer's own settings file.
-  useEffect(() => {
-    if (!restoredView.current || state === undefined || state.run.fixtureMode) return;
-    storedSessionFilters.current ??= liveSettings?.sessionFilters ?? [];
-    const filters = sessionView.filters;
-    if (sameSessionFilters(storedSessionFilters.current, filters)) return;
-    storedSessionFilters.current = filters;
-    void updateSetting(
-      APP_SETTING_SCHEMA.sessionFilters.field,
-      filters.length > 0 ? filters : undefined,
-    );
-  }, [state, sessionView.filters, liveSettings?.sessionFilters]);
-
-  /**
-   * The search query as last stored, on the filter selection's own terms:
-   * seeded from the document's snapshot so restoring the stored words must
-   * not read as fresh typing to store again.
-   */
-  const storedSessionQuery = useRef<string | undefined>(undefined);
-  // The query funnels through the view the way the selection does — typing,
-  // a spoken ask, Escape clearing the field — so the store follows the view
-  // from one place, never in a fixture or capture run. Unlike a chip press
-  // the query changes at typing speed, so a write waits out the keystrokes
-  // and stores only where the words settled — except letting go, which writes
-  // at once: a clear is a discrete act rather than a keystroke on the way
-  // somewhere, and a quit inside a waited write would bring back a search the
-  // developer deliberately let go.
-  useEffect(() => {
-    if (!restoredView.current || state === undefined || state.run.fixtureMode) return;
-    storedSessionQuery.current ??= liveSettings?.sessionSearchQuery ?? "";
-    const query = sessionView.query;
-    if (storedSessionQuery.current === query) return;
-    const store = () => {
-      storedSessionQuery.current = query;
-      void updateSetting(
-        APP_SETTING_SCHEMA.sessionSearchQuery.field,
-        query !== "" ? query : undefined,
-      );
-    };
-    if (query === "") {
-      store();
-      return;
-    }
-    const settled = window.setTimeout(store, SEARCH_QUERY_STORE_DELAY_MS);
-    return () => window.clearTimeout(settled);
-  }, [state, sessionView.query, liveSettings?.sessionSearchQuery]);
-
   const connections = useConnections({
     surface: panelEntrySurface,
     credentialHeld,
@@ -834,51 +704,6 @@ export function App(): React.JSX.Element {
     workspaceProjects,
   });
   const slotOccupant = connections.slotOccupant;
-
-  /**
-   * The providers the default-workspace rows can offer: every provider
-   * currently offering projects, named the way its adapter names itself, plus
-   * one holding a stored default provider that is not offering right now — a
-   * provider falls back to its own display name, so the row still shows a
-   * choice it can name. A project has no such name to fall back to: its label
-   * lived on the observed list that stopped listing it, and an option labelled
-   * with the stored identity would offer a raw id for a default that already
-   * steers nothing. So each option carries only the projects its provider is
-   * offering, and a default the provider stops offering is cleared by the main
-   * process rather than shown here.
-   */
-  const storedWorkspaceProvider = settings?.defaultWorkspaceProvider;
-  const storedWorkspaceProjects = settings?.workspaceProjectDefaults;
-  const workspaceProviderOptions = useMemo(() => {
-    const fallbackName = (providerId: WorkspaceProviderId) =>
-      isCredentialProviderId(providerId)
-        ? CREDENTIAL_PROVIDERS[providerId].displayName
-        : providerId;
-    const names = new Map<WorkspaceProviderId, string>();
-    for (const project of workspaceProjects) {
-      if (isWorkspaceProviderId(project.providerId)) {
-        names.set(project.providerId, project.providerName);
-      }
-    }
-    if (storedWorkspaceProvider && !names.has(storedWorkspaceProvider)) {
-      names.set(storedWorkspaceProvider, fallbackName(storedWorkspaceProvider));
-    }
-    for (const providerId of Object.keys(storedWorkspaceProjects ?? {})) {
-      if (!isWorkspaceProviderId(providerId)) continue;
-      if (!names.has(providerId)) names.set(providerId, fallbackName(providerId));
-    }
-    return [...names.entries()].map(([id, name]) => {
-      const offered = workspaceProjects
-        .filter((project) => project.providerId === id)
-        .map((project) => ({
-          id: workspaceProjectSelectionId(project),
-          label: project.targetName
-            ? `${project.repository} on ${project.targetName}`
-            : project.repository,
-        }));
-      return { id, name, projects: offered };
-    });
-  }, [workspaceProjects, storedWorkspaceProvider, storedWorkspaceProjects]);
 
   const stillMotion = usePrefersReducedMotion();
 
@@ -930,48 +755,6 @@ export function App(): React.JSX.Element {
   }, []);
 
   /**
-   * Sends a session to its provider and gets out of the way. Luke floats above
-   * every window, so a panel left open would be sitting on top of the very chat
-   * it was just asked to bring forward — the same reason fetching a key stands
-   * the panel down. The pointer is on the row that was pressed and cannot leave
-   * a shape that is no longer drawn, so the close is asked for here rather than
-   * waited for.
-   */
-  const openSession = useCallback(
-    (session: SessionView) => {
-      tell(ACT_KIND.SESSION_OPEN, {
-        identity: {
-          providerId: session.providerId,
-          providerSessionId: session.id,
-        },
-      });
-      cancelHover();
-      void changeMode(false);
-    },
-    [cancelHover, changeMode],
-  );
-
-  /**
-   * Opens the exact route carried by one app association. The app id, rather
-   * than its address, crosses the bridge; the main process validates it against
-   * the latest roster before handing the normalized route to macOS.
-   */
-  const openSessionApplication = useCallback(
-    (session: SessionView, applicationId: SessionApplicationId) => {
-      tell(ACT_KIND.SESSION_OPEN_APPLICATION, {
-        identity: {
-          providerId: session.providerId,
-          providerSessionId: session.id,
-        },
-        applicationId,
-      });
-      cancelHover();
-      void changeMode(false);
-    },
-    [cancelHover, changeMode],
-  );
-
-  /**
    * The ask key, pressed anywhere on the system. The main process has already
    * stood the panel up focused; what is left is the caret — or the dismissal,
    * because a summons repeated over its own open field is someone asking the
@@ -994,31 +777,6 @@ export function App(): React.JSX.Element {
     if (tabNow() === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
     focusAskField();
   }, [cancelHover, changeMode, changeTab, presentationOf, tabNow]);
-
-  /**
-   * The session search summons, from its magnifier or Command-F over the
-   * Sessions tab. It lands on that tab — the field it opens is that list's —
-   * and the caret follows the same frame-by-frame seek the ask field needs,
-   * because the field may not be drawn until React has answered.
-   */
-  const openSearch = useCallback(() => {
-    changeTab(PANEL_TAB.SESSIONS);
-    setSearchOpen(true);
-    focusSearchField(SESSION_SEARCH_INPUT_ID);
-    window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
-      search_surface: PRODUCT_SEARCH_SURFACE.SESSIONS,
-    });
-  }, [changeTab]);
-
-  /**
-   * Closing the search lets go of its query in the same action: a field that
-   * left its narrowing in force behind no visible control would be hiding
-   * sessions with nothing on screen admitting it.
-   */
-  const closeSearch = useCallback(() => {
-    setSearchOpen(false);
-    setSessionView((view) => (view.query === "" ? view : { ...view, query: "" }));
-  }, []);
 
   /**
    * The settings search summons, from its magnifier beside the tab bar. The
@@ -1253,7 +1011,7 @@ export function App(): React.JSX.Element {
           const searched =
             action.query !== undefined && held !== undefined
               ? spokenSearchOutcome(displaySessions(held), {
-                  ...sessionView,
+                  ...sessions.view,
                   ...view,
                 })
               : undefined;
@@ -1337,7 +1095,7 @@ export function App(): React.JSX.Element {
       feedback.latest,
       presentationOf,
       publishGuide,
-      sessionView,
+      sessions.view,
     ],
   );
 
@@ -1492,24 +1250,6 @@ export function App(): React.JSX.Element {
     heldCaptionHeight.current = captionTextHeight;
   });
   const shownCaptionHeight = leavingPanel ? heldCaptionHeight.current : captionTextHeight;
-
-  /**
-   * The one action a row's chip can ask for, handed to the main process by
-   * session identity. Unlike opening the session, it leaves the panel up: a
-   * refusal lands back on the row that asked.
-   */
-  const sessionWrites: SessionWriteHandlers = useMemo(
-    () => ({
-      openChange: (session) =>
-        act(ACT_KIND.SESSION_OPEN_CHANGE, {
-          identity: {
-            providerId: session.providerId,
-            providerSessionId: session.id,
-          },
-        }),
-    }),
-    [],
-  );
 
   /** The capsule is a button: pressing it opens the panel, or closes it again. */
   const handleCapsulePress = useCallback(
@@ -1688,7 +1428,7 @@ export function App(): React.JSX.Element {
         if (presentation !== PANEL_PRESENTATION.PANEL) return;
         event.preventDefault();
         if (tab === PANEL_TAB.SETTINGS) openSettingsSearch();
-        else if (tab === PANEL_TAB.SESSIONS) openSearch();
+        else if (tab === PANEL_TAB.SESSIONS) sessions.openSearch();
         return;
       }
       if (event.key !== "Escape") return;
@@ -1739,8 +1479,8 @@ export function App(): React.JSX.Element {
       // The search field answers its own Escapes while the caret is in it —
       // clearing before closing — so the press that lands here is one made
       // from elsewhere in the panel, and it closes the field outright.
-      if (optionsOpen) setOptionsOpen(false);
-      else if (tab === PANEL_TAB.SESSIONS && searchOpen) closeSearch();
+      if (sessions.optionsOpen) sessions.closeOptions();
+      else if (tab === PANEL_TAB.SESSIONS && sessions.searchOpen) sessions.closeSearch();
       // The search field stands on whichever page it was opened over, so it
       // is the nearer layer than the page itself.
       else if (tab === PANEL_TAB.SETTINGS && settingsSearchOpen) closeSettingsSearch();
@@ -1755,15 +1495,16 @@ export function App(): React.JSX.Element {
   }, [
     changeMode,
     changeTab,
-    closeSearch,
     closeSettingsSearch,
     feedback.dismiss,
     discardListening,
-    openSearch,
     openSettingsSearch,
-    optionsOpen,
     presentation,
-    searchOpen,
+    sessions.closeOptions,
+    sessions.closeSearch,
+    sessions.openSearch,
+    sessions.optionsOpen,
+    sessions.searchOpen,
     settingsSearchOpen,
     setSettingsView,
     settingsView,
@@ -1792,78 +1533,10 @@ export function App(): React.JSX.Element {
     return () => window.clearInterval(timer);
   }, [presentation, state?.run.fixtureMode]);
 
-  // A press anywhere else is the same dismissal Escape is, and the one a sheet
-  // over a list has to answer: what is behind it can only be reached by asking
-  // it to move, so pressing there has to be what asks. The press is taken on the
-  // way down, before whatever it lands on can act on it, and the control that
-  // opened the sheet — toggle and, while a selection stands, the X that clears
-  // it — is left to its own clicks. Nothing outside the drawn shape reaches
-  // this renderer at all — those presses belong to whatever is behind Luke —
-  // so leaving the shape is what closes the panel, and closing the panel is
-  // what puts the sheet away.
-  useEffect(() => {
-    if (!optionsOpen) return;
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target instanceof Node ? event.target : undefined;
-      if (!target) return;
-      const sheet = document.getElementById(SESSION_OPTIONS_ID);
-      const control = document.getElementById(SESSION_OPTIONS_CONTROL_ID);
-      if (sheet?.contains(target) || control?.contains(target)) return;
-      setOptionsOpen(false);
-    };
-    window.addEventListener("pointerdown", handlePointerDown, { capture: true });
-    return () => window.removeEventListener("pointerdown", handlePointerDown, { capture: true });
-  }, [optionsOpen]);
-
   // Nothing is drawn over a state the window has not been told, nor over a
   // runtime that could not answer for the settings every row reads.
   if (!state || !settings || !display) return <div />;
 
-  const visibleSessions = displaySessions(state);
-  // The tally is taken before the list is narrowed — the capsule reports what
-  // Luke is watching, not what the panel is currently showing — but it reads
-  // in the list's own sort, so the wing's marks sit in the order the rows do.
-  const tally = sessionTally(visibleSessions, sessionView.sort);
-  const list = arrangeSessions(visibleSessions, sessionView);
-  // Dropping an emptied selection is a change of view, not a way of drawing
-  // one. Left in state it would lie dormant behind a list that only looks
-  // unnarrowed, and the next session to enter that state would narrow the list
-  // back down to it with nothing having been pressed. Setting state here rather
-  // than from an effect is what keeps that from being drawn first and corrected
-  // after. Only a roster actually read and holding sessions can prove a
-  // selection stale, though: before the first reading an empty list says "not
-  // looked yet", and an empty roster hides nothing behind a chip — either way
-  // a selection restored from the store is left to stand rather than wiped
-  // against a list that has nothing to show under any view.
-  if (
-    sessionsSettled &&
-    visibleSessions.length > 0 &&
-    !sameSessionFilters(list.filters, sessionView.filters)
-  ) {
-    setSessionView({ ...sessionView, filters: list.filters });
-  }
-  // The sheet exists only while there is something for it to decide, and its
-  // being open has to go when its button does — by the same rule the emptied
-  // filter follows. Left set behind a button nobody can see, Escape would spend
-  // itself closing a sheet that is not drawn instead of closing the panel, and
-  // the next session to arrive would open it again with nothing pressed.
-  const offerOptions = tab === PANEL_TAB.SESSIONS && list.total > 1;
-  if (optionsOpen && !offerOptions) setOptionsOpen(false);
-  // Search is offered on the options' own terms: one session leaves nothing
-  // to find that is not already on screen. Its being open goes when its button
-  // does — and the query goes with it, by the same rule the emptied filter
-  // follows, because a narrowing left in force behind no visible control would
-  // hide sessions with nothing admitting it. Only a roster actually read may
-  // decide that, on the emptied filter's own gate: an unread roster says
-  // nothing about how many sessions there are, and a search restored at
-  // launch must not be let go on its silence. The tab is not part of this
-  // gate: a search held while Settings shows is still the sessions tab's own
-  // state, waiting where the developer left it.
-  const offerSearch = tab === PANEL_TAB.SESSIONS && list.total > 1;
-  if (searchOpen && sessionsSettled && list.total <= 1) {
-    setSearchOpen(false);
-    if (sessionView.query !== "") setSessionView({ ...sessionView, query: "" });
-  }
   // Which clock the rows' ages are honest against. Fixture observations are
   // measured back from the fixture's own epoch precisely so that no capture
   // run reads them against the time it happened to run at.
@@ -2040,15 +1713,15 @@ export function App(): React.JSX.Element {
               ? { signInFailure: connections.signInFailure }
               : undefined)}
             {...(calendarGate ? { calendarGate } : undefined)}
-            list={list}
+            list={sessions.list}
             sessionsSettled={sessionsSettled}
-            view={sessionView}
-            onViewChange={changeSessionView}
-            onFiltersChange={changeSessionFilters}
+            view={sessions.view}
+            onViewChange={sessions.onViewChange}
+            onFiltersChange={sessions.onFiltersChange}
             now={now}
-            onOpenSession={openSession}
-            onOpenSessionApplication={openSessionApplication}
-            writes={sessionWrites}
+            onOpenSession={sessions.onOpenSession}
+            onOpenSessionApplication={sessions.onOpenSessionApplication}
+            writes={sessions.writes}
             conversationLines={state.conversation.entries}
             liveConversationEntries={liveConversationEntries}
             onClearConversationConversation={clearConversationLines}
@@ -2057,13 +1730,15 @@ export function App(): React.JSX.Element {
             ask={askLuke}
             onAskEngaged={changeAskEngagement}
             {...(shownAskHotkey ? { askShortcut: shownAskHotkey } : undefined)}
-            offerOptions={offerOptions}
-            optionsOpen={optionsOpen}
-            onOptionsToggle={() => setOptionsOpen((open) => !open)}
-            offerSearch={offerSearch}
-            searchOpen={searchOpen}
-            onSearchToggle={() => (searchOpen ? closeSearch() : openSearch())}
-            onSearchClose={closeSearch}
+            offerOptions={sessions.offerOptions}
+            optionsOpen={sessions.optionsOpen}
+            onOptionsToggle={sessions.toggleOptions}
+            offerSearch={sessions.offerSearch}
+            searchOpen={sessions.searchOpen}
+            onSearchToggle={() =>
+              sessions.searchOpen ? sessions.closeSearch() : sessions.openSearch()
+            }
+            onSearchClose={sessions.closeSearch}
             settingsSearchOpen={settingsSearchOpen}
             onSettingsSearchToggle={() =>
               settingsSearchOpen ? closeSettingsSearch() : openSettingsSearch()
@@ -2097,7 +1772,7 @@ export function App(): React.JSX.Element {
               credentials: connections.credentials,
               feedback: feedback.control,
               panelOpen,
-              workspaceProviders: workspaceProviderOptions,
+              workspaceProviders: sessions.workspaceProviders,
               calendar: connections.calendar,
               appleCalendar: connections.appleCalendar,
               linear: connections.linear,
@@ -2172,7 +1847,7 @@ export function App(): React.JSX.Element {
         still={stillMotion}
       />
       <NotchWings
-        tally={tally}
+        tally={sessions.tally}
         level={voiceLevel}
         voiceActive={voiceActive}
         {...(voiceTurn ? { voice: voiceTurn } : undefined)}
