@@ -1,0 +1,12 @@
+[
+  "GET /me",
+  "GET /v0/projects?limit=10",
+  "GET /v0/workspaces?creator=user-under-observation&includeArchived=false&limit=100&offset=0",
+  "GET /v0/workspaces/workspace-notch/status",
+  "GET /v0/workspaces/workspace-brain/status",
+  "GET /v0/workspaces/workspace-notch/sessions?limit=20",
+  "GET /v0/workspaces/workspace-brain/sessions?limit=20",
+  "POST /v0/sql",
+  "GET /v0/sessions/6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50/status",
+  "GET /v0/sessions/6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e51/status"
+]

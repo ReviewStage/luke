@@ -1,0 +1,3 @@
+This rollout stands compressed. Nothing reads its bytes: the reader refuses
+a compressed rollout by its name, because a bounded window cannot be cut
+from one.

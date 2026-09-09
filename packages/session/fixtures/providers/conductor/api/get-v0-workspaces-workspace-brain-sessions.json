@@ -1,0 +1,15 @@
+{
+  "route": "GET /v0/workspaces/workspace-brain/sessions",
+  "body": {
+    "data": [
+      {
+        "id": "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e51",
+        "name": "Rewrite the notch panel",
+        "resolvedModel": "gpt-5.6-terra",
+        "deepLink": "conductor://workspace?session=6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e51"
+      }
+    ],
+    "offset": 0,
+    "hasMore": false
+  }
+}

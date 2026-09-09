@@ -1,0 +1,2 @@
+Developer: Rewrite the notch panel.
+→ Bash: pnpm test

@@ -1,0 +1,29 @@
+{
+  "route": "GET /v0/workspaces",
+  "body": {
+    "data": [
+      {
+        "id": "workspace-notch",
+        "name": "notch-panel",
+        "state": "ready",
+        "creatorId": "user-under-observation",
+        "repoUrl": "https://github.com/reviewstage/luke.git",
+        "createdAt": "2026-09-01T08:57:00.000Z",
+        "lastActivityAt": "2026-09-01T08:57:00.000Z",
+        "deepLink": "conductor://workspace?id=workspace-notch"
+      },
+      {
+        "id": "workspace-brain",
+        "name": "brain-turns",
+        "state": "ready",
+        "creatorId": "user-under-observation",
+        "repoUrl": "https://github.com/reviewstage/luke.git",
+        "createdAt": "2026-09-01T08:57:00.000Z",
+        "lastActivityAt": "2026-09-01T08:57:00.000Z",
+        "deepLink": "conductor://workspace?id=workspace-brain"
+      }
+    ],
+    "offset": 0,
+    "hasMore": false
+  }
+}

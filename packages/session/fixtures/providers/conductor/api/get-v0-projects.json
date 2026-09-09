@@ -1,0 +1,14 @@
+{
+  "route": "GET /v0/projects",
+  "body": {
+    "data": [
+      {
+        "id": "project-luke",
+        "name": "luke",
+        "gitRemote": "https://github.com/reviewstage/luke.git"
+      }
+    ],
+    "offset": 0,
+    "hasMore": false
+  }
+}

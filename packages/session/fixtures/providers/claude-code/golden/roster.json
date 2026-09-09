@@ -1,0 +1,39 @@
+[
+  {
+    "advertises": [],
+    "applications": [],
+    "detail": {
+      "model": "claude-opus-5",
+      "repository": "luke"
+    },
+    "lastActivityAt": 1788253020000,
+    "location": "local",
+    "provider": {
+      "displayName": "Claude Code",
+      "id": "claude-code"
+    },
+    "providerId": "claude-code",
+    "providerSessionId": "0f3a1c22-6f10-4d5e-9a71-2b8c4d5e6f70",
+    "status": "waiting",
+    "title": "luke"
+  },
+  {
+    "advertises": [],
+    "applications": [],
+    "detail": {
+      "activity": "Bash: pnpm test",
+      "model": "claude-opus-5",
+      "repository": "luke"
+    },
+    "lastActivityAt": 1788253140000,
+    "location": "local",
+    "provider": {
+      "displayName": "Claude Code",
+      "id": "claude-code"
+    },
+    "providerId": "claude-code",
+    "providerSessionId": "0f3a1c22-6f10-4d5e-9a71-2b8c4d5e6f71",
+    "status": "working",
+    "title": "luke"
+  }
+]

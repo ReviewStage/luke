@@ -7,7 +7,14 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!!**/pnpm-lock.yaml", "!!**/.agents", "!apps/ios", "apps/ios/*.test.mjs"]
+    "includes": [
+      "**",
+      "!!**/pnpm-lock.yaml",
+      "!!**/.agents",
+      "!apps/ios",
+      "apps/ios/*.test.mjs",
+      "!packages/session/fixtures"
+    ]
   },
   "formatter": {
     "enabled": true,

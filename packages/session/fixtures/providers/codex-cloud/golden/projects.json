@@ -1,0 +1,8 @@
+[
+  {
+    "namesItself": true,
+    "providerProjectId": "env-luke",
+    "repository": "luke",
+    "taskSupport": "required"
+  }
+]

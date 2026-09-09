@@ -1,0 +1,9 @@
+{
+  "route": "GET /v0/sessions/6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50/status",
+  "body": {
+    "workspaceId": "workspace-notch",
+    "sessionId": "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50",
+    "status": "idle",
+    "updatedAt": "2026-09-01T08:57:00.000Z"
+  }
+}
