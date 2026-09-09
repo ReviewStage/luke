@@ -1312,13 +1312,17 @@ html[data-keyboard="true"] .row-application-button:focus-visible {
   height: 12px;
 }
 
-/* Luke's turn: while a run of his is still going the disc is its stop, in his
-   blue — the colour the surface gives something of his in progress — and lit
-   whatever the field holds. The disc alone carries the state: it neither grows
-   nor moves, nothing arrives around it, and a quick reply flickers nothing in
-   and out because no element ever arrives or leaves. */
+/* Luke's turn: while a run of his is still going the disc is its stop, lit in
+   the primary ink whatever the field holds — the way every desktop chat surface
+   draws a stop — and in no colour at all. Green is your turn and Luke's blue is
+   his voice, and a stop is neither; a blue here would also stand a few pixels
+   from the sent bubbles' own, different blue and read as a mismatch rather than
+   a meaning. The thread's wait already says whose turn it is. The disc alone
+   carries the state: it neither grows nor moves, nothing arrives around it, and
+   a quick reply flickers nothing in and out because no element ever arrives or
+   leaves. */
 .ask-luke[data-turn="luke"] .ask-luke-send {
-  background: var(--voice-luke);
+  background: var(--text-primary);
   color: rgba(0, 0, 0, 0.82);
 }
 

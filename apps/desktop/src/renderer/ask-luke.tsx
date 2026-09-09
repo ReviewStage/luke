@@ -72,8 +72,8 @@ export type AskHandler = (text: string) => Promise<string | undefined>;
  * sends; Shift-Enter breaks the line.
  *
  * While a run of Luke's is still going, the disc is its stop: the same control
- * in the same place, changing colour and glyph rather than anything arriving
- * beside the field, and Escape in the field presses it. The disc is the one
+ * in the same place, lit in the primary ink with a stop glyph rather than
+ * anything arriving beside the field, and Escape in the field presses it. The disc is the one
  * element both tabs share, so a run opened from either tab or the ask key can
  * be stopped from wherever the hand already is. An ask typed meanwhile still
  * sends, and joins the turn under way as the brain's queue has it.
