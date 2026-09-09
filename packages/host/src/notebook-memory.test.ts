@@ -23,7 +23,7 @@ import {
   serveRuntimeStore,
 } from "@sidecar/runtime-store";
 import { isRecord, type WireRecord } from "@sidecar/wire";
-import { composeNotebookMemory, type NotebookMemoryDependencies } from "./compose-host.js";
+import { composeNotebookMemory, type NotebookMemoryDependencies } from "./notebook-memory.js";
 
 const NOW = 1_800_000_000_000;
 
