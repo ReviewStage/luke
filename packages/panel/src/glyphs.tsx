@@ -411,7 +411,7 @@ export function SendIcon(): React.JSX.Element {
 export function StopIcon(): React.JSX.Element {
   return (
     <Glyph className="control-icon">
-      <rect x="6.5" y="6.5" width="11" height="11" rx="2.2" fill="currentColor" stroke="none" />
+      <rect x="5.2" y="5.2" width="13.6" height="13.6" rx="2.8" fill="currentColor" stroke="none" />
     </Glyph>
   );
 }
