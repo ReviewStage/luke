@@ -1,4 +1,5 @@
 import {
+  type AccountToken,
   HOSTED_SERVICE_PATH,
   type HostedQuota,
   hostedMintAnswerAt,
@@ -44,18 +45,6 @@ export interface RealtimeCredentialMinter {
   diagnostics(): RealtimeDiagnostics;
 }
 
-export interface ServiceMintAuthorization {
-  /** The signed-in account's current access token, read fresh for every attempt. */
-  readAccessToken: () => Promise<string | undefined>;
-  /**
-   * Asks the account lifecycle to refresh its tokens. Access tokens outlive a
-   * mint by an hour at most while the app runs for days, so a 401 here is
-   * routine — the mint retries once with whatever the refresh produced, and
-   * only a second refusal is reported.
-   */
-  refreshAccount: () => Promise<void>;
-}
-
 interface ServiceMintOptions {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
@@ -69,7 +58,7 @@ interface ServiceMintOptions {
    * The identity an attempt carries. An endpoint that takes none omits this,
    * and then neither the header nor the refresh-and-retry exists.
    */
-  authorization?: ServiceMintAuthorization;
+  authorization?: AccountToken;
   voice?: string;
   speed?: number;
   fetch?: CloudFetch;
@@ -89,7 +78,7 @@ class ServiceRealtimeCredentialMinter implements RealtimeCredentialMinter {
   readonly #endpoint: string;
   readonly #logLabel: string;
   readonly #malformedDetail: string;
-  readonly #authorization: ServiceMintAuthorization | undefined;
+  readonly #authorization: AccountToken | undefined;
   /** The voice from construction, which a cleared setting falls back to. */
   readonly #configuredVoice: string | undefined;
   #voice: string | undefined;
@@ -274,7 +263,7 @@ type RealtimeCredentialOptions = Omit<
   "servicePath" | "logLabel" | "malformedDetail" | "authorization"
 >;
 
-export type HostedRealtimeCredentialOptions = RealtimeCredentialOptions & ServiceMintAuthorization;
+export type HostedRealtimeCredentialOptions = RealtimeCredentialOptions & AccountToken;
 
 /**
  * The signed-in account's voice mint, for a developer who has not connected

@@ -5,6 +5,7 @@ import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { OMISSION_MARKER } from "@sidecar/session";
 import { ACT_RESULT_STATUS, isWireString, unparsedWire, wireRecord } from "@sidecar/wire";
 import { LOOK_SUBJECT } from "./agent.js";
+import { HostedBrainTransport, KeyedBrainTransport } from "./client.js";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
   BRAIN_STATE_VERSION,
@@ -41,6 +42,7 @@ import {
   TRANSCRIPT_SECRET,
   UNKNOWN,
 } from "./harness.js";
+import { HTTP_METHOD } from "./model-adapter-shared.js";
 import { INBOX_CAPACITY } from "./observation-inbox.js";
 import {
   BRAIN_REQUEST_STATUS,
@@ -471,4 +473,47 @@ test("an ask's reply is its final text, and announce is refused inside one", asy
     h.traces.every((trace) => !trace.tools.includes(BRAIN_TOOL.ANNOUNCE)),
     "and it was never offered",
   );
+});
+
+/**
+ * "The brain's own turns are the first … on the developer's own key or
+ * through Luke's own service." — `client.ts`: a call is addressed to the one
+ * origin its transport was built with, and what a quiet reports names the
+ * transport and the wait alone.
+ */
+test("a brain call is addressed to the developer's own key or to Luke's own service, and reports neither", async () => {
+  const addressed: string[] = [];
+  const fetch = (url: string) => {
+    addressed.push(url);
+    return Promise.resolve(Response.json({}));
+  };
+  const keyed = new KeyedBrainTransport({
+    baseUrl: "https://api.openai.test/v1",
+    apiKey: "sk-secret",
+    fetch,
+    now: () => NOW,
+  });
+  const service = new HostedBrainTransport({
+    baseUrl: "https://luke.test",
+    readAccessToken: () => Promise.resolve("account-secret"),
+    refreshAccount: () => Promise.resolve(),
+    fetch,
+    now: () => NOW,
+  });
+  await keyed.send("/responses", HTTP_METHOD.POST, TRANSCRIPT_SECRET);
+  await service.send("/api/brain/v2/respond", HTTP_METHOD.POST, TRANSCRIPT_SECRET);
+  assert.deepEqual(addressed, [
+    "https://api.openai.test/v1/responses",
+    "https://luke.test/api/brain/v2/respond",
+  ]);
+
+  const throttle = new Response("", { status: 429 });
+  for (const reported of [
+    keyed.quietUntil(throttle).message,
+    service.quietUntil(throttle).message,
+  ]) {
+    assert.ok(!reported.includes("sk-secret"));
+    assert.ok(!reported.includes("account-secret"));
+    assert.ok(!reported.includes(TRANSCRIPT_SECRET));
+  }
 });

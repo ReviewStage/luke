@@ -1,6 +1,6 @@
 import {
+  type AccountToken,
   brainOutputReplayable,
-  HOSTED_API_ERROR,
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_REQUEST_REFUSAL,
   HOSTED_SERVICE_PATH,
@@ -10,7 +10,6 @@ import {
   hostedBrainCountTokensAnswerFromWire,
   hostedBrainCountTokensRequestFromWire,
   hostedBrainRespondRequestFromWire,
-  hostedQuotaSchema,
   maximumHostedBrainRequestBytes,
   serializedRequestBytes,
 } from "@sidecar/hosted";
@@ -27,21 +26,17 @@ import {
   type CloudFetch,
   HTTP_STATUS,
   type UnparsedWireValue,
-  unparsedWire,
   type WireRecord,
-  wireRecord,
 } from "@sidecar/wire";
+import { HostedBrainTransport } from "./client.js";
 import { COMPACTION_POLICY } from "./compaction.js";
 import {
   type Failure,
   failed,
-  HostedServiceCalls,
   HTTP_METHOD,
   type Normalized,
   notServed,
   payloadOf,
-  RETRY_AFTER_HEADER,
-  rateLimitWaitMs,
 } from "./model-adapter-shared.js";
 import { responsesCompactedWindow, responsesModelAnswer } from "./responses-api.js";
 import {
@@ -54,11 +49,9 @@ import {
   type ResponsesTransport,
 } from "./responses-model-adapter.js";
 
-export interface HostedModelAdapterOptions {
+export interface HostedModelAdapterOptions extends AccountToken {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
-  readAccessToken: () => Promise<string | undefined>;
-  refreshAccount: () => Promise<void>;
   fetch?: CloudFetch;
   now?: () => number;
   requestTimeoutMs?: number;
@@ -81,13 +74,11 @@ const HOSTED_PATH = {
  */
 class HostedTransport implements ResponsesTransport<HostedBrainCapabilities> {
   readonly adapter = BUILTIN_MODEL_ADAPTER.HOSTED;
-  readonly #calls: HostedServiceCalls;
-  readonly #now: () => number;
+  readonly #client: HostedBrainTransport;
   #capabilities: HostedBrainCapabilities | undefined;
 
   constructor(options: HostedModelAdapterOptions) {
-    this.#calls = new HostedServiceCalls(options);
-    this.#now = options.now ?? Date.now;
+    this.#client = new HostedBrainTransport({ ...options, baseUrl: options.serviceBaseUrl });
   }
 
   /** The service's model, once capabilities have been read; the service's to know until then. */
@@ -192,46 +183,21 @@ class HostedTransport implements ResponsesTransport<HostedBrainCapabilities> {
     );
   }
 
-  async request(
+  request(
     operation: ResponsesOperation,
     body: string,
     signal: AbortSignal | undefined,
   ): Promise<Response | Normalized> {
-    const response = await this.#calls.request(
-      HOSTED_PATH[operation],
-      HTTP_METHOD.POST,
-      body,
-      signal,
-    );
-    if (!response) return failed(MODEL_FAILURE.NETWORK, "request did not complete");
-    return response;
+    return this.#client.send(HOSTED_PATH[operation], HTTP_METHOD.POST, body, signal);
   }
 
   /**
-   * Two quiets wear the same status. A spent allowance names the day's reset
-   * in its quota and stands the adapter down until then; the provider rate
-   * limiting behind the service names a bounded wait in `Retry-After`, or
-   * earns the same fixed cooldown the keyed adapter takes, so a hosted
-   * developer and a keyed one wait the same way for the same limit.
+   * Two quiets wear the same status, so the answer's own body is what tells
+   * a spent daily allowance from the provider rate limiting behind the
+   * service. Reading it is the transport's.
    */
   async quiet(response: Response): Promise<Quiet> {
-    const record = wireRecord(unparsedWire(await payloadOf(response)));
-    const quota =
-      record?.error === HOSTED_API_ERROR.QUOTA_EXHAUSTED
-        ? hostedQuotaSchema.parse(unparsedWire(record.quota))
-        : undefined;
-    const resetsAt = quota?.resetsAt;
-    if (resetsAt !== undefined && resetsAt > this.#now()) {
-      return {
-        until: resetsAt,
-        message: `Hosted brain turns are out of today's allowance; pausing for ${Math.round((resetsAt - this.#now()) / 1000)}s`,
-      };
-    }
-    const waitMs = rateLimitWaitMs(response.headers.get(RETRY_AFTER_HEADER));
-    return {
-      until: this.#now() + waitMs,
-      message: `Hosted brain turns are rate limited; pausing for ${Math.round(waitMs / 1000)}s`,
-    };
+    return this.#client.quietUntil(response, await payloadOf(response));
   }
 
   failureFor(response: Response, operation: ResponsesOperation): Failure {
@@ -252,7 +218,7 @@ class HostedTransport implements ResponsesTransport<HostedBrainCapabilities> {
 
   /** Reads the capabilities once per adapter; a service that has none, or names another contract, is incompatible. */
   async #discover(): Promise<HostedBrainCapabilities | Failure> {
-    const capabilities = await this.#calls.capabilities();
+    const capabilities = await this.#client.capabilities();
     if (!("outcome" in capabilities)) this.#capabilities = capabilities;
     return capabilities;
   }

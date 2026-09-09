@@ -1,4 +1,5 @@
 import {
+  type AccountToken,
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_EMBED_BOUNDS,
   HOSTED_BRAIN_OPERATION,
@@ -21,22 +22,10 @@ import {
   isWireNumber,
   isWireString,
   numberVectors,
-  positiveInteger,
-  text,
   type UnparsedWireValue,
 } from "@sidecar/wire";
-import {
-  BRAIN_REQUEST_TIMEOUT_MS,
-  failed,
-  HostedServiceCalls,
-  HTTP_METHOD,
-  notServed,
-  payloadOf,
-  RETRY_AFTER_HEADER,
-  rateLimitWaitMs,
-  requestSignal,
-  throttled,
-} from "./model-adapter-shared.js";
+import { HostedBrainTransport, KeyedBrainTransport } from "./client.js";
+import { failed, HTTP_METHOD, notServed, payloadOf, throttled } from "./model-adapter-shared.js";
 import { BRAIN_OPENAI_DEFAULTS } from "./openai-model-adapter.js";
 
 /**
@@ -95,19 +84,14 @@ export interface OpenAiEmbeddingAdapterOptions {
 
 /** The model and endpoint are fixed by the build: the index stores vectors under one model, and a key chooses none. */
 export class OpenAiEmbeddingAdapter implements EmbeddingAdapter {
-  readonly #apiKey: string;
-  readonly #fetch: CloudFetch;
-  readonly #now: () => number;
-  readonly #timeoutMs: number;
+  readonly #client: KeyedBrainTransport;
   #dimensions: number | undefined;
 
   constructor(options: OpenAiEmbeddingAdapterOptions) {
-    const apiKey = text(options.apiKey);
-    if (!apiKey) throw new Error("OpenAI API key must not be empty");
-    this.#apiKey = apiKey;
-    this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
-    this.#now = options.now ?? Date.now;
-    this.#timeoutMs = positiveInteger(options.requestTimeoutMs, BRAIN_REQUEST_TIMEOUT_MS);
+    this.#client = new KeyedBrainTransport({
+      ...options,
+      baseUrl: BRAIN_OPENAI_DEFAULTS.BASE_URL,
+    });
   }
 
   identity(): Promise<EmbeddingIdentity> {
@@ -129,25 +113,15 @@ export class OpenAiEmbeddingAdapter implements EmbeddingAdapter {
         `an embedding batch carries at most ${EMBEDDING_BATCH_SIZE} texts`,
       );
     }
-    let response: Response;
-    try {
-      response = await this.#fetch(`${BRAIN_OPENAI_DEFAULTS.BASE_URL}${BRAIN_EMBEDDINGS_PATH}`, {
-        method: HTTP_METHOD.POST,
-        headers: {
-          authorization: `Bearer ${this.#apiKey}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(brainEmbeddingsRequest(texts, { model: BRAIN_EMBEDDING_MODEL })),
-        signal: requestSignal(this.#timeoutMs, options?.signal),
-      });
-    } catch (error) {
-      return failed(
-        MODEL_FAILURE.NETWORK,
-        `embeddings request did not complete: ${error instanceof Error ? error.name : "unknown error"}`,
-      );
-    }
+    const response = await this.#client.send(
+      BRAIN_EMBEDDINGS_PATH,
+      HTTP_METHOD.POST,
+      JSON.stringify(brainEmbeddingsRequest(texts, { model: BRAIN_EMBEDDING_MODEL })),
+      options?.signal,
+    );
+    if (!(response instanceof Response)) return response;
     if (response.status === HTTP_STATUS.TOO_MANY_REQUESTS) {
-      return throttled(this.#now() + rateLimitWaitMs(response.headers.get(RETRY_AFTER_HEADER)));
+      return throttled(this.#client.quietUntil(response).until);
     }
     if (response.status === HTTP_STATUS.UNAUTHORIZED) {
       return failed(MODEL_FAILURE.CREDENTIAL, "the OpenAI key was refused");
@@ -164,25 +138,21 @@ export class OpenAiEmbeddingAdapter implements EmbeddingAdapter {
   }
 }
 
-export interface HostedEmbeddingAdapterOptions {
+export interface HostedEmbeddingAdapterOptions extends AccountToken {
   serviceBaseUrl: string;
-  readAccessToken: () => Promise<string | undefined>;
-  refreshAccount: () => Promise<void>;
   fetch?: CloudFetch;
   now?: () => number;
   requestTimeoutMs?: number;
 }
 
 export class HostedEmbeddingAdapter implements EmbeddingAdapter {
-  readonly #calls: HostedServiceCalls;
-  readonly #now: () => number;
+  readonly #client: HostedBrainTransport;
   #model: string | undefined;
   #dimensions: number | undefined;
   #offered: boolean | undefined;
 
   constructor(options: HostedEmbeddingAdapterOptions) {
-    this.#calls = new HostedServiceCalls(options);
-    this.#now = options.now ?? Date.now;
+    this.#client = new HostedBrainTransport({ ...options, baseUrl: options.serviceBaseUrl });
   }
 
   identity(): Promise<EmbeddingIdentity> {
@@ -196,7 +166,7 @@ export class HostedEmbeddingAdapter implements EmbeddingAdapter {
   /** Reads the capabilities once: a service that does not list the embed operation offers no embeddings. */
   async #offers(): Promise<EmbeddingBatch | undefined> {
     if (this.#offered === true) return undefined;
-    const capabilities = await this.#calls.capabilities();
+    const capabilities = await this.#client.capabilities();
     if ("outcome" in capabilities) return capabilities;
     if (!capabilities.operations.includes(HOSTED_BRAIN_OPERATION.EMBED)) {
       this.#offered = false;
@@ -221,17 +191,15 @@ export class HostedEmbeddingAdapter implements EmbeddingAdapter {
       texts,
     });
     if (!read.ok) return failed(MODEL_FAILURE.BOUNDS, `embed request refused: ${read.refusal}`);
-    const response = await this.#calls.request(
+    const response = await this.#client.send(
       HOSTED_SERVICE_PATH.BRAIN_EMBED,
       HTTP_METHOD.POST,
       JSON.stringify(read.request),
       options?.signal,
     );
-    if (!(response instanceof Response)) {
-      return response ?? failed(MODEL_FAILURE.NETWORK, "embed request did not complete");
-    }
+    if (!(response instanceof Response)) return response;
     if (response.status === HTTP_STATUS.TOO_MANY_REQUESTS) {
-      return throttled(this.#now() + rateLimitWaitMs(response.headers.get(RETRY_AFTER_HEADER)));
+      return throttled(this.#client.quietUntil(response).until);
     }
     if (response.status === HTTP_STATUS.UNAUTHORIZED) {
       return failed(MODEL_FAILURE.CREDENTIAL, "the account token was refused");

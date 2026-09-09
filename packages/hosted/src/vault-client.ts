@@ -7,6 +7,7 @@ import {
   unparsedWire,
   withoutTrailingSlash,
 } from "@sidecar/wire";
+import type { AccountToken } from "./account-token.js";
 import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 import {
   type VaultKeyDeleteAnswer,
@@ -24,11 +25,9 @@ const VAULT_DEFAULTS = {
 
 const UNAUTHORIZED_STATUS = 401;
 
-export interface HostedVaultClientOptions {
+export interface HostedVaultClientOptions extends AccountToken {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
-  readAccessToken: () => Promise<string | undefined>;
-  refreshAccount: () => Promise<void>;
   /**
    * Who the bearer answers for, as an opaque identity. Read before an ask and
    * again before its one 401 retry, because the retry re-reads the token: a
