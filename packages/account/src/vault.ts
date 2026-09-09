@@ -3,10 +3,10 @@ import {
   type VaultKeyDeleteAnswer,
   type VaultKeyListEntry,
   type VaultKeyStoreAnswer,
-  vaultKeyDeleteAnswerFromWire,
+  vaultKeyDeleteAnswerSchema,
   vaultKeyIsStorable,
-  vaultKeyStoreAnswerFromWire,
-  vaultKeysListAnswerFromWire,
+  vaultKeyStoreAnswerSchema,
+  vaultKeysListAnswerSchema,
 } from "@sidecar/hosted";
 import type { CloudAgentProviderId } from "@sidecar/session";
 import {
@@ -88,7 +88,7 @@ export class HostedVaultClient {
     if (!vaultKeyIsStorable(key)) return undefined;
     return this.#ask(
       { method: "POST", path: HOSTED_SERVICE_PATH.VAULT_KEY, body: { providerId, key } },
-      vaultKeyStoreAnswerFromWire,
+      (payload) => vaultKeyStoreAnswerSchema.parse(payload),
     );
   }
 
@@ -96,7 +96,7 @@ export class HostedVaultClient {
   async listKeys(): Promise<readonly VaultKeyListEntry[] | undefined> {
     const answer = await this.#ask(
       { method: "GET", path: HOSTED_SERVICE_PATH.VAULT_KEYS },
-      vaultKeysListAnswerFromWire,
+      (payload) => vaultKeysListAnswerSchema.parse(payload),
     );
     return answer?.keys;
   }
@@ -105,7 +105,7 @@ export class HostedVaultClient {
   async deleteKey(providerId: CloudAgentProviderId): Promise<VaultKeyDeleteAnswer | undefined> {
     return this.#ask(
       { method: "DELETE", path: HOSTED_SERVICE_PATH.VAULT_KEY, body: { providerId } },
-      vaultKeyDeleteAnswerFromWire,
+      (payload) => vaultKeyDeleteAnswerSchema.parse(payload),
     );
   }
 

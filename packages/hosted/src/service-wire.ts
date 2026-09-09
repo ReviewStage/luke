@@ -47,8 +47,7 @@ export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_E
 export interface HostedQuota {
   used: number;
   limit: number;
-  remaining: number;
-  /** When the day's counters reset, as epoch milliseconds. */
+  /** When the day's counter resets, as epoch milliseconds. */
   resetsAt: number;
 }
 
@@ -75,26 +74,7 @@ export function countedNumber(): Schema<number> {
 }
 
 export const hostedQuotaSchema: Schema<HostedQuota> = s.record(
-  {
-    used: countedNumber(),
-    limit: countedNumber(),
-    remaining: countedNumber(),
-    resetsAt: countedNumber(),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-);
-
-/**
- * Where today's allowance stands on both meters, read without spending
- * either: what the usage endpoint answers, and what the panel shows.
- */
-export interface HostedUsageAnswer {
-  voice: HostedQuota;
-  attention: HostedQuota;
-}
-
-export const hostedUsageAnswerSchema: Schema<HostedUsageAnswer> = s.record(
-  { voice: hostedQuotaSchema, attention: hostedQuotaSchema },
+  { used: countedNumber(), limit: countedNumber(), resetsAt: countedNumber() },
   { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
 );
 

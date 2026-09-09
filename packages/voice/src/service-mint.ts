@@ -1,8 +1,4 @@
-import {
-  type HostedQuota,
-  hostedMintAnswerFromWire,
-  type RealtimeConnection,
-} from "@sidecar/hosted";
+import { type HostedQuota, hostedMintAnswerAt, type RealtimeConnection } from "@sidecar/hosted";
 import {
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
@@ -156,9 +152,7 @@ export abstract class ServiceRealtimeCredentialMinter implements RealtimeCredent
     }
 
     const answer =
-      payload === undefined
-        ? undefined
-        : hostedMintAnswerFromWire(unparsedWire(payload), this.#now());
+      payload === undefined ? undefined : hostedMintAnswerAt(unparsedWire(payload), this.#now());
     if (!answer) {
       this.recordOutcome(REALTIME_MINT_OUTCOME.MALFORMED_RESPONSE, this.#malformedDetail);
       return undefined;

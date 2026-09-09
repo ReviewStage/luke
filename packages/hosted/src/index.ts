@@ -1,4 +1,10 @@
 export {
+  type HostedActAnswer,
+  type HostedActWorkspaceAnswer,
+  hostedActAnswerSchema,
+  hostedActWorkspaceAnswerSchema,
+} from "./act-wire.js";
+export {
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_EMBED_BOUNDS,
   HOSTED_BRAIN_OPERATION,
@@ -28,57 +34,48 @@ export {
   hostedBrainRespondRequestFromWire,
 } from "./brain-contract.js";
 export {
+  type HostedConversationAnswer,
+  type HostedConversationMessage,
+  hostedConversationAnswerSchema,
+} from "./conversation-wire.js";
+export {
   DEVICE_PLATFORM,
   DEVICE_TOKEN_BOUNDS,
   type DevicePlatform,
   type DeviceTokenDeleteAnswer,
   type DeviceTokenStoreAnswer,
-  deviceTokenDeleteAnswerFromWire,
+  deviceTokenDeleteAnswerSchema,
   deviceTokenIsStorable,
-  deviceTokenStoreAnswerFromWire,
-  HOSTED_API_ERROR,
-  HOSTED_CALLS_URL,
-  HOSTED_SERVICE_PATH,
-  HOSTED_WS_BASE_URL,
-  type HostedActAnswer,
-  type HostedActWorkspaceAnswer,
-  type HostedApiError,
-  type HostedConversationAnswer,
-  type HostedConversationMessage,
-  type HostedMintAnswer,
-  type HostedProjectsAnswer,
-  type HostedQuota,
-  type HostedWorkspaceAgentModels,
-  type HostedWorkspaceProject,
-  hostedActAnswerFromWire,
-  hostedActWorkspaceAnswerFromWire,
-  hostedConversationAnswerFromWire,
-  hostedErrorFromWire,
-  hostedMintAnswerFromWire,
-  hostedProjectsAnswerFromWire,
-  hostedQuotaFromWire,
+  deviceTokenStoreAnswerSchema,
   isDevicePlatform,
   isPushEnvironment,
-  type ObserveAnswer,
-  type ObservedSession,
-  type ObservedSessionControl,
-  observeAnswerFromWire,
   PUSH_ENVIRONMENT,
   type PushEnvironment,
+} from "./device-wire.js";
+export {
+  HOSTED_CALLS_URL,
+  HOSTED_WS_BASE_URL,
+  type HostedMintAnswer,
+  hostedMintAnswerAt,
+  hostedMintAnswerSchema,
   type RemoteMintAnswer,
   type RemoteVoiceContext,
   type RemoteVoiceContextItem,
-  remoteMintAnswerFromWire,
-  VAULT_KEY_MAX_LENGTH,
-  type VaultKeyDeleteAnswer,
-  type VaultKeyListEntry,
-  type VaultKeyStoreAnswer,
-  type VaultKeysListAnswer,
-  vaultKeyDeleteAnswerFromWire,
-  vaultKeyIsStorable,
-  vaultKeyStoreAnswerFromWire,
-  vaultKeysListAnswerFromWire,
-} from "./hosted-service.js";
+  remoteMintAnswerAt,
+  remoteMintAnswerSchema,
+} from "./mint-wire.js";
+export {
+  type ObserveAnswer,
+  type ObservedSession,
+  type ObservedSessionControl,
+  observeAnswerSchema,
+} from "./observe-wire.js";
+export {
+  type HostedProjectsAnswer,
+  type HostedWorkspaceAgentModels,
+  type HostedWorkspaceProject,
+  hostedProjectsAnswerSchema,
+} from "./projects-wire.js";
 export {
   REALTIME_CALLS_PATH,
   type RealtimeConnection,
@@ -99,3 +96,22 @@ export {
   RESPONSES_MESSAGE_ROLE,
   serializedRequestBytes,
 } from "./responses-input.js";
+export { HOSTED_SERVICE_PATH } from "./service-paths.js";
+export {
+  HOSTED_API_ERROR,
+  type HostedApiError,
+  type HostedQuota,
+  hostedErrorSchema,
+  hostedQuotaSchema,
+} from "./service-wire.js";
+export {
+  VAULT_KEY_MAX_LENGTH,
+  type VaultKeyDeleteAnswer,
+  type VaultKeyListEntry,
+  type VaultKeyStoreAnswer,
+  type VaultKeysListAnswer,
+  vaultKeyDeleteAnswerSchema,
+  vaultKeyIsStorable,
+  vaultKeyStoreAnswerSchema,
+  vaultKeysListAnswerSchema,
+} from "./vault-wire.js";

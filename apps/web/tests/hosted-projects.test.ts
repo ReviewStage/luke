@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hostedProjectsAnswerFromWire } from "@sidecar/hosted";
+import { hostedProjectsAnswerSchema } from "@sidecar/hosted";
 import { encryptProviderKey } from "../server/hosted/encryption";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import type { VaultKeyRow } from "../server/hosted/observe";
@@ -73,7 +73,7 @@ test("a provider that fails its pass does not fail the whole answer", async () =
   assert.deepEqual(body.projects, []);
 });
 
-test("hostedProjectsAnswerFromWire skips malformed entries rather than failing", () => {
+test("a projects answer skips malformed entries rather than failing", () => {
   const raw = {
     projects: [
       {
@@ -106,7 +106,7 @@ test("hostedProjectsAnswerFromWire skips malformed entries rather than failing",
       },
     ],
   };
-  const answer = hostedProjectsAnswerFromWire(JSON.parse(JSON.stringify(raw)));
+  const answer = hostedProjectsAnswerSchema.parse(JSON.parse(JSON.stringify(raw)));
   assert.ok(answer);
   assert.equal(answer.projects.length, 3);
   assert.equal(answer.projects[0]?.providerProjectId, "proj-1");
@@ -155,7 +155,7 @@ test("a provider that offered a project carries its agent table on the answer", 
     ),
   );
 
-  const answer = hostedProjectsAnswerFromWire(body);
+  const answer = hostedProjectsAnswerSchema.parse(body);
   assert.ok(answer);
   assert.equal(answer.agentModels.length, 3);
   const codex = answer.agentModels.find((entry) => entry.agent === "codex");

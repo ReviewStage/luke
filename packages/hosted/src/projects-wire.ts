@@ -1,7 +1,7 @@
 import {
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentModels,
-  type WorkspaceTaskSupport,
+  type WorkspaceProject,
 } from "@sidecar/session";
 import { RECORD_EXTRA_KEYS, type Schema, s, TEXT_ENDS } from "@sidecar/wire";
 import { writtenText } from "./service-wire.js";
@@ -21,19 +21,13 @@ import { writtenText } from "./service-wire.js";
  * the id against the provider's own list again, so this entry can offer a
  * project but can never conjure one.
  */
-export interface HostedWorkspaceProject {
-  /** The vault provider id that reported this project. */
+export interface HostedWorkspaceProject
+  extends Pick<
+    WorkspaceProject,
+    "namesItself" | "providerProjectId" | "repository" | "targetName" | "taskSupport"
+  > {
+  /** The cloud-agent provider id that reported this project. */
   providerId: string;
-  /** The provider-owned identifier a creation request names the project by. */
-  providerProjectId: string;
-  /** The repository label the project is named by on screen. */
-  repository: string;
-  /** Whether a new workspace here takes — or needs — an opening task. */
-  taskSupport: WorkspaceTaskSupport;
-  /** The bounded label of the execution target owning this project, when it has one. */
-  targetName?: string;
-  /** The provider names a workspace here itself and refuses a name from the ask. */
-  namesItself?: boolean;
 }
 
 /**

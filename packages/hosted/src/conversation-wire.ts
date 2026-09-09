@@ -4,10 +4,8 @@ import { countedNumber, writtenText } from "./service-wire.js";
 
 /**
  * What the messages endpoint answers: one bounded page of a session's
- * conversation. Who wrote one message is `@sidecar/session`'s own vocabulary,
- * imported rather than mirrored the way `HOSTED_ACT_RESULT` mirrors
- * `@sidecar/acts`: that package sits above this one, where session sits
- * below, so nothing stops the wire from sharing the adapters' set.
+ * conversation. Who wrote one message, like every other vocabulary on this
+ * wire, is the owning package's own set rather than a copy of it.
  */
 
 /**

@@ -1,4 +1,11 @@
-import { RECORD_EXTRA_KEYS, type Schema, s, TEXT_ENDS } from "@sidecar/wire";
+import {
+  ACT_RESULT_STATUS,
+  type ActResultStatus,
+  RECORD_EXTRA_KEYS,
+  type Schema,
+  s,
+  TEXT_ENDS,
+} from "@sidecar/wire";
 import { writtenText } from "./service-wire.js";
 
 /**
@@ -8,24 +15,14 @@ import { writtenText } from "./service-wire.js";
  */
 
 /**
- * The three outcomes a hosted act endpoint can return. Values match
- * `ACT_RESULT_STATUS` in `@sidecar/acts` so the mobile client and the desktop
- * can share the same vocabulary without a direct dependency on that package.
+ * What the message and workspace-creation act endpoints return. The outcome
+ * is `ACT_RESULT_STATUS`, the vocabulary every adapter already answers an act
+ * in, under the field name the phone reads. It is the status alone and never
+ * the adapter's whole `ActResult`: the reason is optional here, and the
+ * workspace form carries a field of its own.
  */
-export const HOSTED_ACT_RESULT = {
-  /** The provider accepted the act. */
-  ACCEPTED: "accepted",
-  /** The provider or server refused the act; `reason` says why. */
-  REJECTED: "rejected",
-  /** The act is not available for this provider via mobile yet. */
-  UNSUPPORTED: "unsupported",
-} as const;
-
-export type HostedActResult = (typeof HOSTED_ACT_RESULT)[keyof typeof HOSTED_ACT_RESULT];
-
-/** What the message and workspace-creation act endpoints return. */
 export interface HostedActAnswer {
-  result: HostedActResult;
+  result: ActResultStatus;
   /** Human-readable reason; present on rejected and unsupported results. */
   reason?: string;
 }
@@ -38,7 +35,7 @@ export interface HostedActWorkspaceAnswer extends HostedActAnswer {
 
 export const hostedActAnswerSchema: Schema<HostedActAnswer> = s.record(
   {
-    result: s.enumOf(Object.values(HOSTED_ACT_RESULT), { ends: TEXT_ENDS.TRIM }),
+    result: s.enumOf(Object.values(ACT_RESULT_STATUS), { ends: TEXT_ENDS.TRIM }),
     reason: s.dropRefused(writtenText()),
   },
   { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
@@ -46,7 +43,7 @@ export const hostedActAnswerSchema: Schema<HostedActAnswer> = s.record(
 
 export const hostedActWorkspaceAnswerSchema: Schema<HostedActWorkspaceAnswer> = s.record(
   {
-    result: s.enumOf(Object.values(HOSTED_ACT_RESULT), { ends: TEXT_ENDS.TRIM }),
+    result: s.enumOf(Object.values(ACT_RESULT_STATUS), { ends: TEXT_ENDS.TRIM }),
     reason: s.dropRefused(writtenText()),
     providerSessionId: s.dropRefused(writtenText()),
   },

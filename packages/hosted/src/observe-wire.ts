@@ -1,4 +1,9 @@
-import { normalizeSessionDetail, SESSION_CONTROL_KIND } from "@sidecar/session";
+import {
+  normalizeSessionDetail,
+  SESSION_CONTROL_KIND,
+  SESSION_STATUS,
+  type SessionDetail,
+} from "@sidecar/session";
 import { RECORD_EXTRA_KEYS, type Schema, s, TEXT_ENDS } from "@sidecar/wire";
 import { writtenText } from "./service-wire.js";
 
@@ -30,9 +35,16 @@ export interface ObservedSessionControl {
  * adapter's observation onto this shape and stores nothing — a new request is
  * a new observation pass, and every act endpoint re-observes for itself
  * rather than trusting these advertisements.
+ *
+ * The detail fields are the session vocabulary's own, and the reader holds
+ * them to that vocabulary's own bounds: `change` to an HTTPS address, `link`
+ * to the openable session-link schemes. `link` is the one observed field a
+ * surface acts on rather than draws, so an address outside the set never
+ * crosses the wire at all.
  */
-export interface ObservedSession {
-  /** The vault provider id for this session (conductor today). */
+export interface ObservedSession
+  extends Pick<SessionDetail, "branch" | "change" | "error" | "link"> {
+  /** The cloud-agent provider id for this session (conductor today). */
   providerId: string;
   /** The provider's own id for this session. */
   sessionId: string;
@@ -42,19 +54,6 @@ export interface ObservedSession {
   status: string;
   /** Repository label or workspace name, when the provider reported one. */
   workspace?: string;
-  /** Current branch, when the provider reported one. */
-  branch?: string;
-  /** HTTPS address of the work the session published, when it reported one. */
-  change?: string;
-  /**
-   * Provider-owned address that opens this session where it lives, when the
-   * provider reported one. Bounded to the openable session-link schemes —
-   * this is the one observed field a surface acts on rather than draws, so
-   * an address outside the set never crosses the wire at all.
-   */
-  link?: string;
-  /** Error description, when the session stopped on something it cannot pass. */
-  error?: string;
   /** Unix milliseconds of the provider's last write about the session, when it reported one. */
   lastActivityAt?: number;
   /**
@@ -89,12 +88,7 @@ export interface ObserveAnswer {
   sessions: ObservedSession[];
 }
 
-/**
- * The statuses a roster row may carry. Named here rather than imported from
- * `@sidecar/session`'s own set: what a client outside this build may be shown
- * is a wire decision, and widening it is one too.
- */
-const OBSERVED_SESSION_STATUS_NAMES = ["working", "waiting", "error", "complete", "unknown"];
+const OBSERVED_SESSION_STATUS_NAMES = Object.values(SESSION_STATUS);
 
 const observedSessionControlSchema: Schema<ObservedSessionControl> = s.record(
   {

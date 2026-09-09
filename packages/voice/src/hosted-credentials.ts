@@ -1,8 +1,8 @@
 import {
   HOSTED_API_ERROR,
   HOSTED_SERVICE_PATH,
-  hostedErrorFromWire,
-  hostedQuotaFromWire,
+  hostedErrorSchema,
+  hostedQuotaSchema,
   type RealtimeConnection,
 } from "@sidecar/hosted";
 import { REALTIME_MINT_OUTCOME } from "@sidecar/realtime";
@@ -93,10 +93,10 @@ export class HostedRealtimeCredentialMinter extends ServiceRealtimeCredentialMin
 
   /** Names a refusal from its status and reason, keeping the quota a 429 carries. */
   protected override refuseMint(status: number, payload: UnparsedWireValue): void {
-    const reason = hostedErrorFromWire(payload);
+    const reason = hostedErrorSchema.parse(payload);
     if (status === QUOTA_STATUS && reason === HOSTED_API_ERROR.QUOTA_EXHAUSTED) {
       this.keepQuota(
-        isRecord(payload) ? hostedQuotaFromWire(unparsedWire(payload.quota)) : undefined,
+        isRecord(payload) ? hostedQuotaSchema.parse(unparsedWire(payload.quota)) : undefined,
       );
       this.recordOutcome(REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED);
       return;
