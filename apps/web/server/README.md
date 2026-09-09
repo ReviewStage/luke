@@ -244,6 +244,49 @@ secret simply has no working vault, and no plaintext key can be stored
 accidentally. Set this variable in the Vercel project environment (production
 and any Preview that needs a working vault) alongside `DATABASE_URL`.
 
+# Hosted conversation store
+
+The tables under `server/db/conversation-schema.ts`, `workspace-schema.ts`,
+`roster-schema.ts`, and `briefing-schema.ts` hold the hosted brain's
+conversation per account: the conversation directory, the standing generation
+with its checkpoint items, cursors, inbox, runs, and action receipts, the
+conversation lines, the retained transcript and its compaction boundaries, the
+identity workspace and daily notes, the remembered facts, the latest roster
+snapshot, and the briefings. Every row is keyed by `user_id` and cascades with
+the user row, so `api/account/delete.ts` erases them with the account. No route
+reads or writes them yet; `server/hosted/store/` is the store the brain host
+will compose against, implementing the storage contracts the desktop's SQLite
+store implements under `packages/brain/src/store`.
+
+Every user-derived column is a `sealed_*` column: the payload envelope in
+`server/hosted/encryption.ts`, AES-256-GCM under the vault's
+`PROVIDER_KEY_ENCRYPTION_SECRET`, written as `<keyId>:base64(nonce || ciphertext
+|| tag)` and bound to the row's user id as authenticated data. The key id is
+what makes a rotation possible: the ring names the current key and every key
+an envelope on record may still name, and the vault's own key format is left
+exactly as it was. Ids, keys, sequences, instants, states, and fixed vocabulary
+words stand clear so they can be indexed; a line's idempotency key is the
+SHA-256 of its identity, since a value-keyed line's identity is its words.
+
+The store keeps the SQLite store's invariants: a save is a compare-and-set on
+the standing generation and a stale handle is refused whole; the transcript is
+written in the same transaction as the checkpoint and never cascades with a
+generation; conversation lines carry their own retention and cutoff; a
+generation whose rows cannot be opened or read is reported unreadable and is
+repaired by the store that observed it. Clear is a hard delete of the
+conversation's lines, transcript, and boundaries at or before its instant,
+with no recovery archive and no maintenance ladder.
+
+The store tests run the generated migrations on PGlite in process, so
+`check.sh` needs no service; the `postgres` CI job runs the same migrations
+and tests against a Postgres service container. To run them against a
+Postgres of your own:
+
+```sh
+DATABASE_URL_UNPOOLED=postgresql://... pnpm --filter @luke/web db:migrate
+LUKE_STORE_TEST_DATABASE_URL=postgresql://... pnpm --filter @luke/web test:store
+```
+
 # Phone push tokens
 
 `api/devices/token.ts` registers (POST) and forgets (DELETE) the push token of

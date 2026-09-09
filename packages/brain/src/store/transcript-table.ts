@@ -1,17 +1,13 @@
 import {
-  COMPACTION_SOURCE,
-  CONTEXT_INPUT_KIND,
-  type CompactionBoundary,
-  type ContextInput,
-  isCompactionSource,
   type SessionKey,
   type StoredTranscriptEvent,
   TRANSCRIPT_EVENT_KIND,
   type TranscriptEvent,
 } from "@sidecar/runtime/vocabulary";
-import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import type { UnparsedWireValue } from "@sidecar/wire";
 import { touchConversation } from "./conversations-table.js";
 import { nullable, type StoreDatabase } from "./database.js";
+import { transcriptEventFromPayload, transcriptPayload } from "./transcript-payload.js";
 
 /**
  * The retained transcript: every input the context engine ingested, in
@@ -90,15 +86,6 @@ function nextTranscriptSequence(database: StoreDatabase, sessionKey: SessionKey)
     .get(sessionKey) as { sequence: number } | undefined;
   if (!row) throw new Error(`no conversation stands at ${sessionKey}`);
   return row.sequence;
-}
-
-/** The payload a row keeps: the event less its kind and clock, which have columns of their own. */
-function transcriptPayload(
-  event: TranscriptEvent,
-): { input: ContextInput } | { boundary: CompactionBoundary } {
-  return event.kind === TRANSCRIPT_EVENT_KIND.CONTEXT_INPUT
-    ? { input: event.input }
-    : { boundary: event.boundary };
 }
 
 export interface TranscriptListOptions {
@@ -216,59 +203,4 @@ export function transcriptEventFromRow(
     return undefined;
   }
   return transcriptEventFromPayload(kind, recordedAt, parsed);
-}
-
-/** The event a parsed payload describes: the row's `{ input }` or `{ boundary }`, or an archive line carrying the same fields. */
-export function transcriptEventFromPayload(
-  kind: string,
-  recordedAt: number,
-  parsed: UnparsedWireValue,
-): TranscriptEvent | undefined {
-  if (!isRecord(parsed)) return undefined;
-  if (kind === TRANSCRIPT_EVENT_KIND.CONTEXT_INPUT) {
-    const input = contextInputFromWire(parsed.input);
-    return input ? { kind, recordedAt, input } : undefined;
-  }
-  if (kind === TRANSCRIPT_EVENT_KIND.COMPACTION) {
-    const boundary = parsed.boundary;
-    if (!isRecord(boundary) || !isWireNumber(boundary.dropped)) return undefined;
-    const source = isCompactionSource(boundary.source)
-      ? boundary.source
-      : COMPACTION_SOURCE.PROVIDER_INLINE;
-    return {
-      kind,
-      recordedAt,
-      boundary: {
-        source,
-        dropped: boundary.dropped,
-        ...(isWireString(boundary.checkpointFormat)
-          ? { checkpointFormat: boundary.checkpointFormat }
-          : undefined),
-      },
-    };
-  }
-  return undefined;
-}
-
-export function contextInputFromWire(value: UnparsedWireValue): ContextInput | undefined {
-  if (!isRecord(value)) return undefined;
-  switch (value.kind) {
-    case CONTEXT_INPUT_KIND.USER_TEXT:
-      return isWireString(value.text) ? { kind: value.kind, text: value.text } : undefined;
-    case CONTEXT_INPUT_KIND.MODEL_OUTPUT: {
-      if (!Array.isArray(value.items)) return undefined;
-      const items = [];
-      for (const item of value.items) {
-        if (!isRecord(item)) return undefined;
-        items.push(item);
-      }
-      return { kind: value.kind, items };
-    }
-    case CONTEXT_INPUT_KIND.TOOL_RESULT:
-      return isWireString(value.callId) && isWireString(value.outputJson)
-        ? { kind: value.kind, callId: value.callId, outputJson: value.outputJson }
-        : undefined;
-    default:
-      return undefined;
-  }
 }
