@@ -59,8 +59,6 @@ export interface FakeBrainStateRepository extends BrainStateRepository {
   readonly state: BrainPersistedState | undefined;
   /** Everything the standing envelope would say, so a test can assert old content is gone. */
   words(): string;
-  /** Content no build can read, so the next load answers unreadable. */
-  corrupt(): void;
   /** Refuses every save until `accept()`; a refused save changes nothing. */
   refuse(): void;
   accept(): void;
@@ -73,8 +71,8 @@ export interface FakeBrainStateRepository extends BrainStateRepository {
   readonly loads: number;
   /** How many saves have landed. */
   readonly saves: number;
-  /** The transcript events every landed save carried, in order. */
-  readonly transcript: readonly TranscriptEvent[];
+  /** What each landed save carried into the transcript, in order; a save that carried none adds nothing. */
+  readonly transcripts: readonly (readonly TranscriptEvent[])[];
 }
 
 /**
@@ -94,7 +92,7 @@ export function fakeBrainStateRepository(
   let refusing = false;
   let loads = 0;
   let saves = 0;
-  const transcript: TranscriptEvent[] = [];
+  const transcripts: TranscriptEvent[][] = [];
   let holdNextSave = false;
   let holdNextLoad = false;
   let releaseSave: ((landed: boolean) => void) | undefined;
@@ -111,7 +109,7 @@ export function fakeBrainStateRepository(
     held = state;
     unreadable = false;
     saves += 1;
-    if (events) transcript.push(...events);
+    if (events && events.length > 0) transcripts.push([...events]);
     return true;
   };
 
@@ -128,14 +126,10 @@ export function fakeBrainStateRepository(
     get saves() {
       return saves;
     },
-    get transcript() {
-      return transcript;
+    get transcripts() {
+      return transcripts;
     },
     words: () => JSON.stringify(held ?? null),
-    corrupt: () => {
-      held = undefined;
-      unreadable = true;
-    },
     refuse: () => {
       refusing = true;
     },

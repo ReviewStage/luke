@@ -12,6 +12,5 @@ export type {
 } from "./memory-index-table.js";
 export type { NotebookEntry, NotebookMutation } from "./notebook-table.js";
 export { type StoreClient, storeClient } from "./store-client.js";
-export { STORE_OPERATIONS, type StoreOperationName } from "./store-operations.js";
 export type { StorePort } from "./wire.js";
 export { serveStore } from "./worker-host.js";

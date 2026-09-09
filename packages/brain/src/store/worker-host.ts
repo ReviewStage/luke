@@ -25,7 +25,11 @@ export function serveStore(port: StorePort): void {
 
   const answer = (request: StoreRequest): StoreAnswer => {
     if (request.name === STORE_LIFECYCLE.OPEN) {
+      // The old store is let go before the new one is opened, so an open that
+      // throws leaves the worker honestly closed rather than holding a handle
+      // to a database it already closed.
       open?.db.close();
+      open = undefined;
       open = openStore(request.params);
       return true;
     }

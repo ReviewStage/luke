@@ -10,7 +10,6 @@ import {
   type ModelCapabilities,
   type ModelResponse,
   TRANSCRIPT_EVENT_KIND,
-  type TranscriptEvent,
 } from "@sidecar/runtime/vocabulary";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { BrainAgent } from "./agent.js";
@@ -32,11 +31,8 @@ import {
 } from "./requests.js";
 import { responsesModelAnswer, userMessageItem } from "./responses-api.js";
 import { ToolLoopAgentRuntime } from "./runtime.js";
-import {
-  type BrainPersistedState,
-  type BrainStateRepository,
-  BrainStateStore,
-} from "./state-store.js";
+import { type BrainPersistedState, BrainStateStore } from "./state-store.js";
+import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
 import { RecordingContextEngine } from "./transcript-recorder.js";
 
 /**
@@ -283,21 +279,7 @@ test("the recorder keeps every ingested input and fold as transcript events, rol
   assert.equal(recorder.pending().length, 1);
 });
 
-/** A repository in memory that records what each save carried into the transcript. */
-class RecordingRepository implements BrainStateRepository {
-  state: BrainPersistedState | undefined;
-  readonly transcripts: TranscriptEvent[][] = [];
-  load() {
-    return this.state ? { state: this.state } : {};
-  }
-  save(state: BrainPersistedState, transcript?: readonly TranscriptEvent[]) {
-    this.state = state;
-    if (transcript && transcript.length > 0) this.transcripts.push([...transcript]);
-    return true;
-  }
-}
-
-function agentOver(model: ModelAdapter, repository: RecordingRepository) {
+function agentOver(model: ModelAdapter, repository: FakeBrainStateRepository) {
   let ids = 0;
   const store = new BrainStateStore({
     repository,
@@ -340,7 +322,7 @@ async function settle(): Promise<void> {
 }
 
 test("a turn's inputs travel into the transcript with the checkpoint, and optional maintenance compacts once the reply is persisted", async () => {
-  const repository = new RecordingRepository();
+  const repository = fakeBrainStateRepository();
   let compacted = 0;
   const model = adapter({
     respond: async () => {
@@ -389,7 +371,6 @@ test("a turn's inputs travel into the transcript with the checkpoint, and option
 });
 
 test("a required compaction that fails ends the run recoverably and leaves the context exactly as it was", async () => {
-  const repository = new RecordingRepository();
   let responded = 0;
   const model = adapter({
     capabilities: async () => ({
@@ -413,7 +394,7 @@ test("a required compaction that fails ends the run recoverably and leaves the c
     },
   });
   // A generation whose checkpoint is already past the bound.
-  repository.state = {
+  const planted: BrainPersistedState = {
     version: 2,
     generationId: "gen-0",
     createdAt: NOW,
@@ -427,7 +408,8 @@ test("a required compaction that fails ends the run recoverably and leaves the c
     requests: [],
     journal: [],
   };
-  const before = repository.state.items;
+  const repository = fakeBrainStateRepository(planted);
+  const before = planted.items;
   const { agent } = agentOver(model, repository);
   const accepted = await agent.submitAsk({
     submissionId: "s1",
