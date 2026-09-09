@@ -105,17 +105,9 @@ import {
   CREDENTIAL_PLACEHOLDER,
   type CredentialEntryControl,
   entryForProvider,
-  focusWhenVisible,
   isSubmittable,
   useStagedFocus,
 } from "./credential-entry";
-import {
-  REMOVAL_STAGE,
-  type RemovalStage,
-  removalAsked,
-  removalStage,
-  removalWithdrawable,
-} from "./credential-removal";
 import { DestinationNote } from "./destination-note";
 import { FEEDBACK_COPY, type FeedbackEntryControl } from "./feedback-entry";
 import { Keycaps } from "./keycaps";
@@ -131,6 +123,8 @@ import {
   voiceSourceLabel,
 } from "./microphone-access";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
+import { useConfirm, useConfirmGroup } from "./settings/confirm-state";
+import { ConfirmSwap } from "./settings/confirm-swap";
 import {
   defaultProjectRowId,
   landOnSettingsRow,
@@ -364,19 +358,6 @@ const PROVIDER_DEFAULT_VALUE = "";
    value for the same reason: no provider's project id can collide with it. */
 const PROJECT_ASK_EACH_TIME = "";
 
-/* The safe answer arrives first and the one that cannot be taken back lands a
-   beat behind it, on the same stagger the panel's rows fan open with. Their
-   order on the line is the order they arrive in, so this is their place in it
-   rather than a delay written per button. */
-const REMOVAL_ANSWER_INDEX = {
-  KEEP: 0,
-  DELETE: 1,
-} as const;
-
-function answerOrder(index: number): React.CSSProperties {
-  return cssCustomProperties({ "--answer-index": index });
-}
-
 /**
  * One provider, one line: its mark, its name, whether it is connected, and what
  * can be done about that — connect, supersede, or delete, whichever the state
@@ -413,16 +394,7 @@ function ProviderCredential({
    */
   children?: React.ReactNode;
 }): React.JSX.Element {
-  // Deleting is the one action that begins and ends on this line, question and
-  // answer both. Entering a credential does not: it can leave for the slot and
-  // come back, so it is held above.
-  const [heldRemoval, setHeldRemoval] = useState<RemovalStage>(REMOVAL_STAGE.RESTING);
-  const [removalRejection, setRemovalRejection] = useState<string>();
   const field = useRef<HTMLInputElement | null>(null);
-  const trash = useRef<HTMLButtonElement | null>(null);
-  const keep = useRef<HTMLButtonElement | null>(null);
-  const editControl = useRef<HTMLButtonElement | null>(null);
-  const returnFocus = useRef(false);
   const fieldId = `${provider.id}-api-key`;
   const entry = entryForProvider(control, provider.id);
   const editing = entry !== undefined;
@@ -432,15 +404,14 @@ function ProviderCredential({
   // asked to connect.
   const stored = source === CREDENTIAL_SOURCE.ENCRYPTED_FILE;
   const connected = source !== CREDENTIAL_SOURCE.NONE;
-  const removal = removalStage(heldRemoval, { stored, panelOpen });
-  // Corrected during the render that discovers it rather than from an effect,
-  // the way an emptied filter is: a question whose subject or whose surface has
-  // gone must never be drawn once and taken back on the next frame.
-  if (removal !== heldRemoval) setHeldRemoval(removal);
-  const asking = removalAsked(removal);
-  const clearing = removal === REMOVAL_STAGE.CLEARING;
-  const busy = clearing || (entry?.busy ?? false);
-  const rejection = removalRejection ?? entry?.rejection;
+  // Deleting is the one action that begins and ends on this line, question and
+  // answer both. Entering a credential does not: it can leave for the slot and
+  // come back, so it is held above.
+  const removal = useConfirm({ subject: stored, surfaceOpen: panelOpen }, () =>
+    control.remove(provider.id),
+  );
+  const busy = removal.busy || (entry?.busy ?? false);
+  const rejection = removal.rejection ?? entry?.rejection;
   const status =
     source === CREDENTIAL_SOURCE.ENVIRONMENT
       ? CREDENTIAL_STATUS[CREDENTIAL_SOURCE.ENVIRONMENT]
@@ -473,63 +444,19 @@ function ProviderCredential({
   // someone who was in the middle of typing.
   useStagedFocus(field, editing && panelOpen && !busy);
 
-  // The question takes the focus to the answer that changes nothing. The
-  // control that asked it is inert by the time the confirm is drawn, so focus
-  // has nowhere else to go — and of the two places it could land, only one is
-  // safe to arrive on with a key already pressed.
-  useStagedFocus(keep, asking && !clearing);
-
-  // Answering hands it back to the line: to the trash if the key survived, and
-  // to whatever now stands where the trash was if it did not. Only an answer
-  // moves focus — a question the panel closing withdrew was never answered, and
-  // reaching into a shape that is leaving would pull it back open.
-  useEffect(() => {
-    if (asking || !returnFocus.current) return;
-    returnFocus.current = false;
-    return focusWhenVisible(trash.current ?? editControl.current);
-  }, [asking]);
-
   // Every control that offers to write one begins the one entry — which takes
   // the panel down to the slot — and clears whatever the last attempt was
   // rejected for on the way. Connect also opens the provider's key page,
   // because whoever is connecting has no key yet; the pencil does not, because
   // whoever is replacing one may already be holding the replacement.
   const beginEntry = () => {
-    setRemovalRejection(undefined);
+    removal.clear();
     control.begin(provider.id);
   };
 
   const connectEntry = () => {
-    setRemovalRejection(undefined);
+    removal.clear();
     control.connect(provider.id);
-  };
-
-  // The trash asks; only the answer acts. Nothing here can hand a key back, so
-  // a delete taken on the first press would cost a trip to the provider's own
-  // site to undo.
-  const askToRemove = () => {
-    setRemovalRejection(undefined);
-    setHeldRemoval(REMOVAL_STAGE.ASKING);
-  };
-
-  // Keeping it changes nothing, so it says nothing: the line goes back to the
-  // controls it was showing. Only a question can be kept from — an answer
-  // already sent is not this control's to take back.
-  const keepKey = () => {
-    if (!removalWithdrawable(removal)) return;
-    returnFocus.current = true;
-    setHeldRemoval(REMOVAL_STAGE.RESTING);
-  };
-
-  const removeKey = async () => {
-    setHeldRemoval(REMOVAL_STAGE.CLEARING);
-    const reason = actionRejection(await control.remove(provider.id));
-    returnFocus.current = true;
-    setRemovalRejection(reason);
-    // Answered either way. A refusal is an answer too, and asking again is a
-    // fresh decision rather than a confirm left standing over a key that turned
-    // out to still be there.
-    setHeldRemoval(REMOVAL_STAGE.RESTING);
   };
 
   return (
@@ -556,106 +483,59 @@ function ProviderCredential({
             it, so the words are kept for the one thing neither can say:
             connected from the environment rather than from a key kept here. */}
         {status ? <span className="credential-status">{status}</span> : null}
-        {/* The line's controls and the confirm that stands in for them are the
-            same cell of one grid, so the box is as wide as the wider of the two
-            whichever is showing and the provider's name beside it never
-            re-shapes as they trade places. Neither layer is mounted by the
-            press either: one arriving from nothing would have no size to spring
-            from. */}
-        <span className="credential-actions">
-          <span
-            className="settings-actions credential-controls"
-            data-drawn={String(!asking)}
-            aria-hidden={asking}
-            inert={asking}
-          >
-            {stored ? (
-              <button
-                type="button"
-                ref={trash}
-                className="icon-button credential-remove"
-                disabled={busy}
-                aria-label={`Delete the ${provider.displayName} ${credential}`}
-                /* The ellipsis is the promise that it asks first. */
-                title="Delete…"
-                onClick={askToRemove}
-              >
-                <TrashIcon />
-              </button>
-            ) : null}
-            {connected ? (
-              <button
-                type="button"
-                ref={editControl}
-                className="icon-button"
-                disabled={beginBlocked}
-                aria-label={editLabel}
-                title={held ? HELD_TITLE : editTitle}
-                onClick={beginEntry}
-              >
-                <PencilIcon />
-              </button>
-            ) : (
-              /* Named for its provider like the icon buttons beside it: a list
-                 of controls read on its own is otherwise two identical
-                 Connects. */
-              <button
-                type="button"
-                ref={editControl}
-                className="quiet-button"
-                disabled={beginBlocked}
-                aria-label={`Connect ${provider.displayName}`}
-                title={held ? HELD_TITLE : undefined}
-                onClick={connectEntry}
-              >
-                Connect
-              </button>
-            )}
-          </span>
-          {/* Only ever drawn for a key Luke keeps, because that is the only key
-              it has any business deleting. The group carries the question, so
-              the two answers are read as answers rather than as a Cancel and a
-              Delete that could belong to anything on the line. */}
+        <ConfirmSwap
+          {...(stored
+            ? {
+                question: `Delete the ${provider.displayName} ${credential}?`,
+                stage: removal.stage,
+                verb: "Delete",
+                running: "Deleting…",
+                onKeep: removal.keep,
+                onAct: removal.run,
+              }
+            : undefined)}
+        >
+          {/* Only ever offered for a key Luke keeps, because that is the only
+              key it has any business deleting. */}
           {stored ? (
-            <fieldset
-              className="settings-actions credential-confirm"
-              aria-label={`Delete the ${provider.displayName} ${credential}?`}
-              data-drawn={String(asking)}
-              aria-hidden={!asking}
-              inert={!asking}
-              onKeyDown={(event) => {
-                // Escape withdraws the question rather than closing the panel
-                // the question was asked on — but only while it is still a
-                // question. Once the delete has gone there is nothing here for
-                // Escape to take back, so it is left to mean what it means
-                // everywhere else in the panel.
-                if (event.key !== "Escape" || !removalWithdrawable(removal)) return;
-                event.stopPropagation();
-                keepKey();
-              }}
+            <button
+              type="button"
+              className="icon-button credential-remove"
+              disabled={busy}
+              aria-label={`Delete the ${provider.displayName} ${credential}`}
+              /* The ellipsis is the promise that it asks first. */
+              title="Delete…"
+              onClick={removal.ask}
             >
-              <button
-                type="button"
-                ref={keep}
-                className="quiet-button"
-                style={answerOrder(REMOVAL_ANSWER_INDEX.KEEP)}
-                disabled={clearing}
-                onClick={keepKey}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="danger-button"
-                style={answerOrder(REMOVAL_ANSWER_INDEX.DELETE)}
-                disabled={clearing}
-                onClick={() => void removeKey()}
-              >
-                {clearing ? "Deleting…" : "Delete"}
-              </button>
-            </fieldset>
+              <TrashIcon />
+            </button>
           ) : null}
-        </span>
+          {connected ? (
+            <button
+              type="button"
+              className="icon-button"
+              disabled={beginBlocked}
+              aria-label={editLabel}
+              title={held ? HELD_TITLE : editTitle}
+              onClick={beginEntry}
+            >
+              <PencilIcon />
+            </button>
+          ) : (
+            /* Named for its provider like the icon buttons beside it: a list of
+               controls read on its own is otherwise two identical Connects. */
+            <button
+              type="button"
+              className="quiet-button"
+              disabled={beginBlocked}
+              aria-label={`Connect ${provider.displayName}`}
+              title={held ? HELD_TITLE : undefined}
+              onClick={connectEntry}
+            >
+              Connect
+            </button>
+          )}
+        </ConfirmSwap>
       </div>
 
       {entry ? (
@@ -1372,6 +1252,7 @@ function CredentialsSection({
       <SupersetIntegration
         control={superset}
         settings={settings}
+        panelOpen={panelOpen}
         writes={writes}
         {...(supersetWorkspace ? { workspaceProvider: supersetWorkspace } : {})}
       />
@@ -1488,77 +1369,6 @@ function CalendarChoices({
 }
 
 /**
- * The trash that disconnects a calendar connection, and the confirm that
- * stands in for it: the two share one grid cell, exactly as the credential
- * rows' do, so asking the question never re-shapes the line. Disconnecting
- * asks first, exactly like deleting a key: nothing here can hand a grant
- * back, so a remove taken on the first press would cost a consent flow to
- * undo.
- */
-function CalendarDisconnect({
-  name,
-  busy,
-  asking,
-  onAsk,
-  onSettle,
-  onRemove,
-  children,
-}: {
-  /** Whose disconnect this is, for the labels a hand or a reader needs. */
-  name: string;
-  busy: boolean;
-  asking: boolean;
-  onAsk: () => void;
-  onSettle: () => void;
-  onRemove: () => void;
-  /** Controls drawn beside the trash, hidden with it while the confirm asks. */
-  children?: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <span className="credential-actions">
-      <span
-        className="settings-actions credential-controls"
-        data-drawn={String(!asking)}
-        aria-hidden={asking}
-        inert={asking}
-      >
-        {children}
-        <button
-          type="button"
-          className="icon-button credential-remove"
-          disabled={busy}
-          aria-label={`Disconnect ${name}`}
-          /* The ellipsis is the promise that it asks first. */
-          title="Disconnect…"
-          onClick={onAsk}
-        >
-          <TrashIcon />
-        </button>
-      </span>
-      <fieldset
-        className="settings-actions credential-confirm"
-        aria-label={`Disconnect ${name}?`}
-        data-drawn={String(asking)}
-        aria-hidden={!asking}
-        inert={!asking}
-        onKeyDown={(event) => {
-          if (event.key !== "Escape" || busy) return;
-          event.stopPropagation();
-          onSettle();
-        }}
-      >
-        <button type="button" className="quiet-button" disabled={busy} onClick={onSettle}>
-          Cancel
-        </button>
-        <button type="button" className="danger-button" disabled={busy} onClick={onRemove}>
-          {busy ? "Disconnecting…" : "Disconnect"}
-        </button>
-      </fieldset>
-    </span>
-  );
-}
-
-/**
  * One connected Google account: its address, the trash that disconnects it,
  * and the checkboxes choosing which of its calendars count.
  */
@@ -1566,6 +1376,7 @@ function CalendarAccountRow({
   account,
   calendars,
   failure,
+  panelOpen,
   onRemove,
   onToggle,
 }: {
@@ -1573,41 +1384,48 @@ function CalendarAccountRow({
   calendars: readonly AccountCalendar[];
   /** Why the latest pass could not read the account, when it could not. */
   failure?: string;
+  /** True while the surface this row is drawn on is the shape on screen. */
+  panelOpen: boolean;
   onRemove: () => Promise<ActionResult>;
   onToggle: (calendarId: string, selected: boolean) => Promise<ActionResult>;
 }): React.JSX.Element {
-  const [asking, setAsking] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [rejection, setRejection] = useState<string>();
-
-  const removeAccount = async () => {
-    setBusy(true);
-    setRejection(actionRejection(await onRemove()));
-    setBusy(false);
-    setAsking(false);
-  };
+  // The account going takes this row with it, so the question's subject is the
+  // row itself; the surface is what it has to be asked in front of.
+  const removal = useConfirm({ subject: true, surfaceOpen: panelOpen }, onRemove);
+  const [toggling, setToggling] = useState(false);
+  const [toggleRejection, setToggleRejection] = useState<string>();
+  const busy = removal.busy || toggling;
 
   const toggleCalendar = async (calendarId: string, selected: boolean) => {
-    setBusy(true);
-    setRejection(actionRejection(await onToggle(calendarId, selected)));
-    setBusy(false);
+    setToggling(true);
+    setToggleRejection(actionRejection(await onToggle(calendarId, selected)));
+    setToggling(false);
   };
 
   return (
     <div className="calendar-account">
       <div className="calendar-account-row">
         <span className="calendar-account-name">{account.id}</span>
-        <CalendarDisconnect
-          name={account.id}
-          busy={busy}
-          asking={asking}
-          onAsk={() => {
-            setRejection(undefined);
-            setAsking(true);
-          }}
-          onSettle={() => setAsking(false)}
-          onRemove={() => void removeAccount()}
-        />
+        <ConfirmSwap
+          question={`Disconnect ${account.id}?`}
+          stage={removal.stage}
+          verb="Disconnect"
+          running="Disconnecting…"
+          onKeep={removal.keep}
+          onAct={removal.run}
+        >
+          <button
+            type="button"
+            className="icon-button credential-remove"
+            disabled={busy}
+            aria-label={`Disconnect ${account.id}`}
+            /* The ellipsis is the promise that it asks first. */
+            title="Disconnect…"
+            onClick={removal.ask}
+          >
+            <TrashIcon />
+          </button>
+        </ConfirmSwap>
       </div>
       <CalendarChoices
         account={account}
@@ -1617,7 +1435,9 @@ function CalendarAccountRow({
       />
       {/* An action just refused, else what the latest pass reported — a revoked
           grant surfaces on its own row, not in a log. */}
-      {(rejection ?? failure) ? <p className="error-message">{rejection ?? failure}</p> : null}
+      {(removal.rejection ?? toggleRejection ?? failure) ? (
+        <p className="error-message">{removal.rejection ?? toggleRejection ?? failure}</p>
+      ) : null}
     </div>
   );
 }
@@ -1652,33 +1472,35 @@ export interface AppleCalendarControl {
 function AppleCalendarRow({
   account,
   appleCalendar,
+  panelOpen,
   onRefresh,
 }: {
   /** The stored connection, absent while not connected. */
   account: CalendarAccount | undefined;
   appleCalendar: AppleCalendarControl;
+  /** True while the surface this row is drawn on is the shape on screen. */
+  panelOpen: boolean;
   /** Runs one observation pass now, so a calendar just created appears. */
   onRefresh: () => Promise<void>;
 }): React.JSX.Element {
-  const [asking, setAsking] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [rejection, setRejection] = useState<string>();
+  const [toggling, setToggling] = useState(false);
+  const [toggleRejection, setToggleRejection] = useState<string>();
   const [refreshing, setRefreshing] = useState(false);
   // A withdrawn grant reads as not connected: the stored choice stands for a
   // reconnect, but every affordance returns to the beginning.
   const connected = account !== undefined && !appleCalendar.revoked;
-
-  const disconnect = async () => {
-    setBusy(true);
-    setRejection(actionRejection(await appleCalendar.onDisconnect()));
-    setBusy(false);
-    setAsking(false);
-  };
+  // The grant is the question's subject: withdrawn in System Settings, there is
+  // nothing left to disconnect and the row is offering Connect again.
+  const removal = useConfirm(
+    { subject: connected, surfaceOpen: panelOpen },
+    appleCalendar.onDisconnect,
+  );
+  const busy = removal.busy || toggling;
 
   const toggleCalendar = async (calendarId: string, selected: boolean) => {
-    setBusy(true);
-    setRejection(actionRejection(await appleCalendar.onToggleCalendar(calendarId, selected)));
-    setBusy(false);
+    setToggling(true);
+    setToggleRejection(actionRejection(await appleCalendar.onToggleCalendar(calendarId, selected)));
+    setToggling(false);
   };
 
   const refresh = async () => {
@@ -1701,16 +1523,13 @@ function AppleCalendarRow({
           {connected ? <CheckIcon /> : null}
         </span>
         {connected ? (
-          <CalendarDisconnect
-            name={APPLE_CALENDAR_NAME}
-            busy={busy}
-            asking={asking}
-            onAsk={() => {
-              setRejection(undefined);
-              setAsking(true);
-            }}
-            onSettle={() => setAsking(false)}
-            onRemove={() => void disconnect()}
+          <ConfirmSwap
+            question={`Disconnect ${APPLE_CALENDAR_NAME}?`}
+            stage={removal.stage}
+            verb="Disconnect"
+            running="Disconnecting…"
+            onKeep={removal.keep}
+            onAct={removal.run}
           >
             {/* A calendar made a moment ago appears on the next pass; this
                 is the next pass, asked for by hand. */}
@@ -1725,7 +1544,18 @@ function AppleCalendarRow({
             >
               <RefreshIcon />
             </button>
-          </CalendarDisconnect>
+            <button
+              type="button"
+              className="icon-button credential-remove"
+              disabled={busy}
+              aria-label={`Disconnect ${APPLE_CALENDAR_NAME}`}
+              /* The ellipsis is the promise that it asks first. */
+              title="Disconnect…"
+              onClick={removal.ask}
+            >
+              <TrashIcon />
+            </button>
+          </ConfirmSwap>
         ) : (
           <span className="settings-actions">
             {/* The system's consent dialog does the connecting: the same
@@ -1756,7 +1586,9 @@ function AppleCalendarRow({
       {/* Only an action just refused: a pass that could not read surfaces as
           the row's own state — a withdrawn grant is the Connect button
           standing again — never as standing red text. */}
-      {rejection ? <p className="error-message">{rejection}</p> : null}
+      {(removal.rejection ?? toggleRejection) ? (
+        <p className="error-message">{removal.rejection ?? toggleRejection}</p>
+      ) : null}
     </>
   );
 }
@@ -1774,6 +1606,7 @@ export function CalendarIntegrations({
   view,
   calendar,
   appleCalendar,
+  panelOpen,
   writes,
 }: {
   settings: AppSettingsView;
@@ -1786,6 +1619,8 @@ export function CalendarIntegrations({
   view?: SettingsRowsInput;
   calendar: CalendarControl;
   appleCalendar: AppleCalendarControl;
+  /** True while the surface this block is drawn on is the shape on screen. */
+  panelOpen: boolean;
   writes: SettingsWrites;
 }): React.JSX.Element | null {
   if (!settings.calendarSignInAvailable && !settings.appleCalendarAvailable) return null;
@@ -1797,6 +1632,7 @@ export function CalendarIntegrations({
         <AppleCalendarRow
           account={settings.appleCalendar}
           appleCalendar={appleCalendar}
+          panelOpen={panelOpen}
           onRefresh={calendar.onRefresh}
         />
       ) : null}
@@ -1842,6 +1678,7 @@ export function CalendarIntegrations({
                 account={account}
                 calendars={observed?.calendars ?? []}
                 {...(observed?.failure ? { failure: observed.failure } : {})}
+                panelOpen={panelOpen}
                 onRemove={() => calendar.onRemoveAccount(account.id)}
                 onToggle={(calendarId, selected) =>
                   calendar.onToggleCalendar(account.id, calendarId, selected)
@@ -1932,11 +1769,14 @@ function ConductorLocalIntegration({
 function SupersetIntegration({
   control,
   settings,
+  panelOpen,
   writes,
   workspaceProvider,
 }: {
   control: SupersetControl;
   settings: AppSettingsView;
+  /** True while the surface this row is drawn on is the shape on screen. */
+  panelOpen: boolean;
   writes: SettingsWrites;
   /** Superset's own projects, absent until an observation pass reports any. */
   workspaceProvider?: WorkspaceProviderOption;
@@ -1944,18 +1784,12 @@ function SupersetIntegration({
   // Disconnecting asks first, exactly like deleting a key: the sign-out
   // clears the CLI's stored login, so a disconnect taken on the first press
   // would cost a whole new sign-in to undo.
-  const [asking, setAsking] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [rejection, setRejection] = useState<string>();
+  const removal = useConfirm(
+    { subject: control.connected, surfaceOpen: panelOpen },
+    control.onDisconnect,
+  );
 
   if (!control.installed) return null;
-
-  const disconnect = async () => {
-    setBusy(true);
-    setRejection(actionRejection(await control.onDisconnect()));
-    setBusy(false);
-    setAsking(false);
-  };
 
   return (
     <div className="credential" {...searchAnchorProps(SUPERSET_WORKSPACE_PROVIDER_ID)}>
@@ -1968,80 +1802,44 @@ function SupersetIntegration({
           {control.connected ? <CheckIcon /> : null}
         </span>
         {control.connected ? (
-          /* The trash and the confirm that stands in for it share one grid
-             cell, exactly as the credential rows' do: the cell is as wide and
-             as tall as the larger of the two whichever is showing, so asking
-             the question never re-shapes the line. */
-          <span className="credential-actions">
-            <span
-              className="settings-actions credential-controls"
-              data-drawn={String(!asking)}
-              aria-hidden={asking}
-              inert={asking}
+          <ConfirmSwap
+            question="Disconnect Superset?"
+            stage={removal.stage}
+            verb="Disconnect"
+            running="Disconnecting…"
+            onKeep={removal.keep}
+            onAct={removal.run}
+          >
+            <button
+              type="button"
+              className="icon-button credential-remove"
+              disabled={removal.busy}
+              aria-label="Disconnect Superset"
+              /* The ellipsis is the promise that it asks first. */
+              title="Disconnect…"
+              onClick={removal.ask}
             >
-              <button
-                type="button"
-                className="icon-button credential-remove"
-                disabled={busy}
-                aria-label="Disconnect Superset"
-                /* The ellipsis is the promise that it asks first. */
-                title="Disconnect…"
-                onClick={() => {
-                  setRejection(undefined);
-                  setAsking(true);
-                }}
-              >
-                <TrashIcon />
-              </button>
-              {/* The pencil is the credential rows' word for editing a
-                  connection that already stands. Here the connection is the
-                  CLI's own login, so editing it is signing in again — the
-                  same action the Connect button runs, which is how the CLI
-                  switches organizations. */}
-              <button
-                type="button"
-                className="icon-button"
-                disabled={busy || control.held || control.connecting}
-                aria-label="Sign in to Superset again"
-                title={control.held ? HELD_TITLE : "Sign in again"}
-                onClick={() => {
-                  setRejection(undefined);
-                  control.onConnect();
-                }}
-              >
-                <PencilIcon />
-              </button>
-            </span>
-            <fieldset
-              className="settings-actions credential-confirm"
-              aria-label="Disconnect Superset?"
-              data-drawn={String(asking)}
-              aria-hidden={!asking}
-              inert={!asking}
-              onKeyDown={(event) => {
-                if (event.key !== "Escape" || busy) return;
-                event.stopPropagation();
-                setAsking(false);
+              <TrashIcon />
+            </button>
+            {/* The pencil is the credential rows' word for editing a
+                connection that already stands. Here the connection is the
+                CLI's own login, so editing it is signing in again — the same
+                action the Connect button runs, which is how the CLI switches
+                organizations. */}
+            <button
+              type="button"
+              className="icon-button"
+              disabled={removal.busy || control.held || control.connecting}
+              aria-label="Sign in to Superset again"
+              title={control.held ? HELD_TITLE : "Sign in again"}
+              onClick={() => {
+                removal.clear();
+                control.onConnect();
               }}
             >
-              <button
-                type="button"
-                className="quiet-button"
-                disabled={busy}
-                onClick={() => setAsking(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="danger-button"
-                disabled={busy}
-                onClick={() => void disconnect()}
-              >
-                {busy ? "Disconnecting…" : "Disconnect"}
-              </button>
-            </fieldset>
-          </span>
+              <PencilIcon />
+            </button>
+          </ConfirmSwap>
         ) : (
           <span className="settings-actions">
             <button
@@ -2055,9 +1853,9 @@ function SupersetIntegration({
           </span>
         )}
       </div>
-      {rejection ? (
+      {removal.rejection ? (
         <p className="error-message" role="alert">
-          {rejection}
+          {removal.rejection}
         </p>
       ) : null}
       {control.connected && control.agents.length > 0 ? (
@@ -2094,27 +1892,21 @@ function SupersetIntegration({
 function LinearIntegration({
   settings,
   linear,
+  panelOpen,
 }: {
   settings: AppSettingsView;
   linear: LinearControl;
+  /** True while the surface this row is drawn on is the shape on screen. */
+  panelOpen: boolean;
 }): React.JSX.Element | null {
   const provider = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.LINEAR];
+  const connected = settings.credentialSources[provider.id] !== CREDENTIAL_SOURCE.NONE;
   // Disconnecting asks first, exactly like deleting a key: nothing here can
   // hand the grant back, so a disconnect taken on the first press would cost
   // a trip through Linear's consent to undo.
-  const [asking, setAsking] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [rejection, setRejection] = useState<string>();
+  const removal = useConfirm({ subject: connected, surfaceOpen: panelOpen }, linear.onDisconnect);
 
   if (!settings.linearSignInAvailable) return null;
-  const connected = settings.credentialSources[provider.id] !== CREDENTIAL_SOURCE.NONE;
-
-  const disconnect = async () => {
-    setBusy(true);
-    setRejection(actionRejection(await linear.onDisconnect()));
-    setBusy(false);
-    setAsking(false);
-  };
 
   return (
     <div className="credential" {...searchAnchorProps(provider.id)}>
@@ -2127,62 +1919,26 @@ function LinearIntegration({
           {connected ? <CheckIcon /> : null}
         </span>
         {connected ? (
-          /* The trash and the confirm that stands in for it share one grid
-             cell, exactly as the credential rows' do: the cell is as wide and
-             as tall as the larger of the two whichever is showing, so asking
-             the question never re-shapes the line. */
-          <span className="credential-actions">
-            <span
-              className="settings-actions credential-controls"
-              data-drawn={String(!asking)}
-              aria-hidden={asking}
-              inert={asking}
+          <ConfirmSwap
+            question={`Disconnect ${provider.displayName}?`}
+            stage={removal.stage}
+            verb="Disconnect"
+            running="Disconnecting…"
+            onKeep={removal.keep}
+            onAct={removal.run}
+          >
+            <button
+              type="button"
+              className="icon-button credential-remove"
+              disabled={removal.busy}
+              aria-label={`Disconnect ${provider.displayName}`}
+              /* The ellipsis is the promise that it asks first. */
+              title="Disconnect…"
+              onClick={removal.ask}
             >
-              <button
-                type="button"
-                className="icon-button credential-remove"
-                disabled={busy}
-                aria-label={`Disconnect ${provider.displayName}`}
-                /* The ellipsis is the promise that it asks first. */
-                title="Disconnect…"
-                onClick={() => {
-                  setRejection(undefined);
-                  setAsking(true);
-                }}
-              >
-                <TrashIcon />
-              </button>
-            </span>
-            <fieldset
-              className="settings-actions credential-confirm"
-              aria-label={`Disconnect ${provider.displayName}?`}
-              data-drawn={String(asking)}
-              aria-hidden={!asking}
-              inert={!asking}
-              onKeyDown={(event) => {
-                if (event.key !== "Escape" || busy) return;
-                event.stopPropagation();
-                setAsking(false);
-              }}
-            >
-              <button
-                type="button"
-                className="quiet-button"
-                disabled={busy}
-                onClick={() => setAsking(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="danger-button"
-                disabled={busy}
-                onClick={() => void disconnect()}
-              >
-                {busy ? "Disconnecting…" : "Disconnect"}
-              </button>
-            </fieldset>
-          </span>
+              <TrashIcon />
+            </button>
+          </ConfirmSwap>
         ) : (
           <span className="settings-actions">
             {/* The consent page does the connecting: the same word every
@@ -2200,9 +1956,9 @@ function LinearIntegration({
           </span>
         )}
       </div>
-      {rejection ? (
+      {removal.rejection ? (
         <p className="error-message" role="alert">
-          {rejection}
+          {removal.rejection}
         </p>
       ) : null}
     </div>
@@ -2219,6 +1975,7 @@ function LinearIntegration({
 function IntegrationsSection({
   settings,
   view,
+  panelOpen,
   writes,
   calendar,
   appleCalendar,
@@ -2226,6 +1983,7 @@ function IntegrationsSection({
 }: {
   settings: AppSettingsView;
   view: SettingsRowsInput;
+  panelOpen: boolean;
   writes: SettingsWrites;
   calendar: CalendarControl;
   appleCalendar: AppleCalendarControl;
@@ -2238,12 +1996,13 @@ function IntegrationsSection({
         <PlugIcon />
         Integrations
       </h2>
-      <LinearIntegration settings={settings} linear={linear} />
+      <LinearIntegration settings={settings} linear={linear} panelOpen={panelOpen} />
       <CalendarIntegrations
         settings={settings}
         view={view}
         calendar={calendar}
         appleCalendar={appleCalendar}
+        panelOpen={panelOpen}
         writes={writes}
       />
       {/* The same refusal the agents' section explains: a Connect stilled by
@@ -2911,17 +2670,6 @@ function ShortcutSection({
   );
 }
 
-/* Which question the Account section is asking, at most one at a time: both
-   acts end in the same signed-out place, so their confirms never stand side
-   by side. */
-const ACCOUNT_ASK = {
-  NONE: "none",
-  SIGN_OUT: "sign-out",
-  DELETE: "delete",
-} as const;
-
-type AccountAsk = (typeof ACCOUNT_ASK)[keyof typeof ACCOUNT_ASK];
-
 /**
  * The choice itself: two halves side by side, each carrying its own name, with
  * the live one marked. A radio group rather than two buttons, because it is
@@ -3107,51 +2855,22 @@ function AccountSection({
   // Signing out asks first, the way deleting a key does: getting back in costs
   // a whole trip through the browser, so the button asks and only the answer
   // acts. Deleting asks harder still — it erases the account at the service,
-  // which no sign-in brings back. Each question follows the removal confirm's
-  // one rule about surfaces — it does not survive the panel closing —
-  // corrected during the render that discovers it rather than from an effect.
-  const [asking, setAsking] = useState<AccountAsk>(ACCOUNT_ASK.NONE);
-  const [busy, setBusy] = useState(false);
-  const [rejection, setRejection] = useState<string>();
-  const keepSignedIn = useRef<HTMLButtonElement | null>(null);
-  const keepAccount = useRef<HTMLButtonElement | null>(null);
-  if (asking !== ACCOUNT_ASK.NONE && !panelOpen && !busy) setAsking(ACCOUNT_ASK.NONE);
-  const askingSignOut = asking === ACCOUNT_ASK.SIGN_OUT;
-  const askingDelete = asking === ACCOUNT_ASK.DELETE;
-
-  // The question takes the focus to the answer that changes nothing, exactly
-  // as the delete confirm does: the control that asked is inert by the time
-  // the confirm is drawn.
-  useStagedFocus(keepSignedIn, askingSignOut && !busy);
-  useStagedFocus(keepAccount, askingDelete && !busy);
-
-  // Escape withdraws the question rather than closing the panel it was asked
-  // on — but only while it is still a question.
-  const withdrawOnEscape = (event: React.KeyboardEvent) => {
-    if (event.key !== "Escape" || busy) return;
-    event.stopPropagation();
-    setAsking(ACCOUNT_ASK.NONE);
-  };
-
-  const signOut = () => {
-    setBusy(true);
-    void onSignOut().finally(() => {
-      setBusy(false);
-      setAsking(ACCOUNT_ASK.NONE);
-    });
-  };
-
-  // Success signs out, which unmounts this whole section; a refusal keeps the
-  // account and says so under the row it was asked on.
-  const deleteAccount = () => {
-    setBusy(true);
-    setRejection(undefined);
-    void onDeleteAccount().then((result) => {
-      setRejection(actionRejection(result));
-      setBusy(false);
-      setAsking(ACCOUNT_ASK.NONE);
-    });
-  };
+  // which no sign-in brings back. Both ways out end in the same signed-out
+  // place, so at most one of them may be standing: the group is what withdraws
+  // the other's question when one is raised.
+  const ways = useConfirmGroup();
+  const surroundings = { subject: true, surfaceOpen: panelOpen };
+  // The sign-out cannot be refused, so its answer is the accepted one every
+  // confirming action reports through.
+  const signOut = useConfirm(
+    surroundings,
+    async () => {
+      await onSignOut();
+      return { status: ACTION_RESULT_STATUS.ACCEPTED } satisfies ActionResult;
+    },
+    ways,
+  );
+  const deletion = useConfirm(surroundings, onDeleteAccount, ways);
 
   return (
     <section className="settings-section" style={cssCustomProperties({ "--row-index": 4 })}>
@@ -3186,112 +2905,55 @@ function AccountSection({
             </small>
           </span>
         </span>
-        {/* The control and the confirm that stands in for it are the same cell
-            of one grid, exactly as a credential row's are, so the line never
-            re-shapes as they trade places. */}
-        <span className="credential-actions">
-          <span
-            className="settings-actions credential-controls"
-            data-drawn={String(!askingSignOut)}
-            aria-hidden={askingSignOut}
-            inert={askingSignOut}
+        <ConfirmSwap
+          question={`Sign out of ${account.email}?`}
+          stage={signOut.stage}
+          verb="Sign out"
+          running="Signing out…"
+          onKeep={signOut.keep}
+          onAct={signOut.run}
+        >
+          <button
+            type="button"
+            className="quiet-button account-signout"
+            disabled={signOut.busy}
+            /* The ellipsis is the promise that it asks first. */
+            title="Sign out…"
+            onClick={signOut.ask}
           >
-            <button
-              type="button"
-              className="quiet-button account-signout"
-              disabled={busy}
-              /* The ellipsis is the promise that it asks first. */
-              title="Sign out…"
-              onClick={() => setAsking(ACCOUNT_ASK.SIGN_OUT)}
-            >
-              Sign out
-            </button>
-          </span>
-          <fieldset
-            className="settings-actions credential-confirm"
-            aria-label={`Sign out of ${account.email}?`}
-            data-drawn={String(askingSignOut)}
-            aria-hidden={!askingSignOut}
-            inert={!askingSignOut}
-            onKeyDown={withdrawOnEscape}
-          >
-            <button
-              type="button"
-              ref={keepSignedIn}
-              className="quiet-button"
-              style={answerOrder(REMOVAL_ANSWER_INDEX.KEEP)}
-              disabled={busy}
-              onClick={() => setAsking(ACCOUNT_ASK.NONE)}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="danger-button"
-              style={answerOrder(REMOVAL_ANSWER_INDEX.DELETE)}
-              disabled={busy}
-              onClick={signOut}
-            >
-              {busy && askingSignOut ? "Signing out…" : "Sign out"}
-            </button>
-          </fieldset>
-        </span>
+            Sign out
+          </button>
+        </ConfirmSwap>
       </div>
       <div className="settings-row" {...searchAnchorProps(SETTINGS_SEARCH_ROW.DELETE_ACCOUNT)}>
         <span className="settings-copy">
           <strong>Delete account</strong>
         </span>
-        <span className="credential-actions">
-          <span
-            className="settings-actions credential-controls"
-            data-drawn={String(!askingDelete)}
-            aria-hidden={askingDelete}
-            inert={askingDelete}
+        <ConfirmSwap
+          question={`Delete the account ${account.email}? This cannot be undone.`}
+          stage={deletion.stage}
+          verb="Delete account"
+          running="Deleting…"
+          onKeep={deletion.keep}
+          onAct={deletion.run}
+        >
+          <button
+            type="button"
+            className="quiet-button account-delete"
+            disabled={deletion.busy}
+            /* The ellipsis is the promise that it asks first. */
+            title="Delete account…"
+            onClick={deletion.ask}
           >
-            <button
-              type="button"
-              className="quiet-button account-delete"
-              disabled={busy}
-              /* The ellipsis is the promise that it asks first. */
-              title="Delete account…"
-              onClick={() => setAsking(ACCOUNT_ASK.DELETE)}
-            >
-              Delete
-            </button>
-          </span>
-          <fieldset
-            className="settings-actions credential-confirm"
-            aria-label={`Delete the account ${account.email}? This cannot be undone.`}
-            data-drawn={String(askingDelete)}
-            aria-hidden={!askingDelete}
-            inert={!askingDelete}
-            onKeyDown={withdrawOnEscape}
-          >
-            <button
-              type="button"
-              ref={keepAccount}
-              className="quiet-button"
-              style={answerOrder(REMOVAL_ANSWER_INDEX.KEEP)}
-              disabled={busy}
-              onClick={() => setAsking(ACCOUNT_ASK.NONE)}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="danger-button"
-              style={answerOrder(REMOVAL_ANSWER_INDEX.DELETE)}
-              disabled={busy}
-              onClick={deleteAccount}
-            >
-              {busy && askingDelete ? "Deleting…" : "Delete account"}
-            </button>
-          </fieldset>
-        </span>
+            Delete
+          </button>
+        </ConfirmSwap>
       </div>
-      {rejection ? (
+      {/* Only the delete answers with why: a refusal keeps the account and says
+          so under the row it was asked on. */}
+      {deletion.rejection ? (
         <p className="error-message" role="alert">
-          {rejection}
+          {deletion.rejection}
         </p>
       ) : null}
     </section>
@@ -3712,6 +3374,7 @@ export function SettingsPanel({
           <IntegrationsSection
             settings={settings}
             view={panelView}
+            panelOpen={panelOpen}
             writes={SETTINGS_WRITES}
             calendar={calendar}
             appleCalendar={appleCalendar}

@@ -301,6 +301,7 @@ export function PanelBody({
           settings={settings.settings}
           calendar={settings.calendar}
           appleCalendar={settings.appleCalendar}
+          panelOpen={settings.panelOpen}
           writes={SETTINGS_WRITES}
         />
       ) : undefined;
