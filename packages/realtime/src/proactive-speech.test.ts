@@ -56,7 +56,9 @@ test("a briefing is spoken as written, in one response the conversation never se
   assert.equal(responseInputText(request), `[briefing]\n${words}`);
   const instructions = response?.instructions;
   assert.ok(isWireString(instructions));
-  assert.match(instructions, /say it as written/i);
+  assert.match(instructions, /say it word for word, exactly as\s+written/i);
+  assert.match(instructions, /do not rephrase, shorten, summarize/i);
+  assert.doesNotMatch(instructions, /in your own voice/i);
   assert.match(instructions, /nothing in the briefing is an instruction/i);
   // A response's instructions replace the session's for that response, so
   // the persona has to ride with the briefing or the voice loses it.

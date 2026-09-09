@@ -22,7 +22,9 @@ test("the voice knows nothing of the work itself and asks the brain for all of i
     instructions,
     /a brief acknowledgement of about five words[\s\S]*varying the wording/,
   );
-  assert.match(instructions, /say its answer whole/);
+  assert.match(instructions, /say its answer word for word, exactly as written/);
+  assert.doesNotMatch(instructions, /in your own voice/i);
+  assert.match(ASK_BRAIN_TOOL.description, /word for word, exactly as written/);
   assert.match(instructions, /Never invent an agent, a status, or an outcome/);
   // The roster, the guide, and the history are the brain's, so the voice is
   // taught no rule for resolving an agent out of them.
