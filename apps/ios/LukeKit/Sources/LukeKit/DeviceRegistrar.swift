@@ -94,11 +94,12 @@ public final class DeviceRegistrar {
     /// a register or heartbeat already under way installs nothing, and the
     /// stored row id goes now: the account is leaving whether or not the
     /// service hears, and a row it still holds is re-keyed by the next
-    /// registration. The delete does not queue behind standing work — a
-    /// register waiting on a token refresh that is itself signing out would
-    /// have the sign-out waiting on this forget, and this forget on it — but
-    /// everything queued after it waits for it, so the next sign-in's
-    /// registration runs behind the delete rather than beside it.
+    /// registration. The delete does not wait for standing work — a register
+    /// waiting on a token refresh that is itself signing out would have the
+    /// sign-out waiting on this forget, and this forget on it — but
+    /// everything queued after it waits for both, so a registration already on
+    /// the wire lands before the next account's rather than after it, where it
+    /// would move the row back.
     @discardableResult
     public func forget(accessToken: String) -> Task<Void, Never> {
         generation += 1
@@ -109,7 +110,11 @@ public final class DeviceRegistrar {
             guard let deviceId else { return }
             _ = try? await self.client.forget(deviceId: deviceId, accessToken: accessToken)
         }
-        task = forgetting
+        let standing = task
+        task = Task { @MainActor in
+            await standing?.value
+            await forgetting.value
+        }
         return forgetting
     }
 

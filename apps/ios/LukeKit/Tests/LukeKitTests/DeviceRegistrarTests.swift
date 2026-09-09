@@ -322,6 +322,29 @@ final class DeviceRegistrarTests: XCTestCase {
         XCTAssertNil(subject.deviceId)
     }
 
+    func testARegistrationStillOnTheWireAtSignOutLandsBeforeTheNextAccountRegisters() async {
+        let store = makeStore()
+        let http = GatedHTTP(answers: [
+            (200, ["deviceId": deviceId]),
+            (200, ["deviceId": otherDeviceId]),
+        ])
+        let subject = registrar(store: store, http: http)
+
+        let departing = subject.register()
+        while http.waiting == 0 { await Task.yield() }
+        subject.forget(accessToken: "departing")
+        let arriving = subject.register()
+        for _ in 0 ..< 20 { await Task.yield() }
+        XCTAssertEqual(http.sent.count, 1, "the next registration waits for the one on the wire")
+
+        http.open()
+        await departing.value
+        await arriving.value
+
+        XCTAssertEqual(http.sent.map(\.method), ["POST", "POST"])
+        XCTAssertEqual(subject.deviceId, otherDeviceId, "the row the new sign-in registered stands")
+    }
+
     func testARegisterAskedRightAfterAForgetRunsBehindIt() async {
         let store = makeStore()
         let http = RecordingHTTP(answers: [

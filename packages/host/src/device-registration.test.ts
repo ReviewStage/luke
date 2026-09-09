@@ -212,6 +212,44 @@ test("a registration that did not land is tried again by the next beat, and a la
   assert.equal(clock.armed(), 0);
 });
 
+test("a registration still on the wire at sign-out lands before the next account registers", async (t) => {
+  const directory = temporaryDirectory(t);
+  const clock = new FakeClock();
+  let release: (() => void) | undefined;
+  const ids = [DEVICE_ID, OTHER_DEVICE_ID];
+  const { client, calls } = fakeClient({});
+  const gated: DeviceRegistrationClient = {
+    ...client,
+    register: (request) =>
+      new Promise((resolve) => {
+        calls.push({ kind: "register", body: request });
+        const deviceId = ids.shift() ?? OTHER_DEVICE_ID;
+        if (release === undefined) {
+          release = () => resolve({ deviceId });
+          return;
+        }
+        resolve({ deviceId });
+      }),
+  };
+  const subject = registration(directory, gated, clock);
+  const departing = subject.start();
+  await subject.stop({ forget: { accessToken: "leaving" } });
+
+  const arriving = subject.start();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls.length, 1, "the next registration waits for the one on the wire");
+
+  release?.();
+  await departing;
+  await arriving;
+  assert.deepEqual(
+    calls.map((call) => call.kind),
+    ["register", "register"],
+  );
+  assert.equal(subject.deviceId(), OTHER_DEVICE_ID, "the row the new sign-in registered stands");
+  assert.equal(clock.armed(), 1);
+});
+
 test("a stored record is read only with a well-formed installation id", () => {
   assert.deepEqual(deviceStateFrom({ installationId: INSTALLATION_ID, deviceId: DEVICE_ID }), {
     installationId: INSTALLATION_ID.toLowerCase(),

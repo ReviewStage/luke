@@ -102,6 +102,14 @@ export class DeviceRegistration {
   #generation = 0;
   #timer: ScheduledTimer | undefined;
   #standing = false;
+  /**
+   * The call under way, if any. A start waits for it before registering, so
+   * a registration already on the wire at sign-out lands before the next
+   * account's rather than after it, where it would move the row back. A stop
+   * never waits for it: the work may be waiting on a token refresh that is
+   * itself signing out.
+   */
+  #inFlight: Promise<void> = Promise.resolve();
 
   constructor(options: DeviceRegistrationOptions) {
     this.#options = options;
@@ -122,7 +130,7 @@ export class DeviceRegistration {
     if (this.#standing) return;
     this.#standing = true;
     const generation = ++this.#generation;
-    await this.#register(generation);
+    await this.#settle(() => this.#register(generation));
     this.#arm(generation);
   }
 
@@ -142,7 +150,19 @@ export class DeviceRegistration {
     this.#options.state.update((current) => ({
       installationId: current?.installationId ?? this.#installationId(),
     }));
-    await this.#options.client.forget({ deviceId }, options.forget);
+    const forgetting = this.#options.client
+      .forget({ deviceId }, options.forget)
+      .then(() => undefined);
+    const standing = this.#inFlight;
+    this.#inFlight = Promise.all([standing, forgetting]).then(() => undefined);
+    await forgetting;
+  }
+
+  /** Runs `work` once the call under way has settled, and holds the slot until it has. */
+  #settle(work: () => Promise<void>): Promise<void> {
+    const next = this.#inFlight.then(work);
+    this.#inFlight = next;
+    return next;
   }
 
   #installationId(): string {
@@ -170,7 +190,7 @@ export class DeviceRegistration {
     if (generation !== this.#generation) return;
     this.#timer = this.#options.schedule(() => {
       this.#timer = undefined;
-      void this.#beat(generation);
+      void this.#settle(() => this.#beat(generation));
     }, this.#intervalMs);
   }
 
