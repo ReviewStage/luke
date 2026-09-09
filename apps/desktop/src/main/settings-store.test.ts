@@ -39,18 +39,9 @@ const CONDUCTOR = CREDENTIAL_PROVIDER_ID.CONDUCTOR;
 const TEST_ENVIRONMENT_VARIABLE = {
   API_KEY: "CONDUCTOR_API_KEY",
   API_TOKEN: "CONDUCTOR_API_TOKEN",
-  FIRST_CLOUD_API_KEY: "FIRST_CLOUD_API_KEY",
-  SECOND_CLOUD_API_KEY: "SECOND_CLOUD_API_KEY",
-  THIRD_CLOUD_API_KEY: "THIRD_CLOUD_API_KEY",
 } as const;
 
-/**
- * The registry's own providers, read by what each one is for here: a key with
- * no launch-environment fallback, a key with one, and the service connected on
- * its own consent page rather than by a pasted key.
- */
-const STORED_KEY_SERVICE = CREDENTIAL_PROVIDER_ID.OPENAI;
-const ENVIRONMENT_KEY_SERVICE = CREDENTIAL_PROVIDER_ID.CONDUCTOR;
+/** The one service connected on its own consent page rather than by a pasted key. */
 const CONSENT_SERVICE = CREDENTIAL_PROVIDER_ID.LINEAR;
 
 /** Stands in for Electron's Keychain-backed `safeStorage`. */
@@ -606,23 +597,26 @@ test("keeps each provider's key, environment fallback, and reported source separ
     environment: { [TEST_ENVIRONMENT_VARIABLE.API_KEY]: "conductor-environment" },
   });
 
-  await store.setApiKey(STORED_KEY_SERVICE, "sk-stored-key");
+  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-stored-key");
   const settings = appSettingsView(await store.snapshot());
 
-  assert.equal(settings.credentialSources[STORED_KEY_SERVICE], CREDENTIAL_SOURCE.ENCRYPTED_FILE);
-  assert.equal(settings.credentialSources[ENVIRONMENT_KEY_SERVICE], CREDENTIAL_SOURCE.ENVIRONMENT);
-  assert.equal(await store.readApiKey(STORED_KEY_SERVICE), "sk-stored-key");
-  assert.equal(await store.readApiKey(ENVIRONMENT_KEY_SERVICE), "conductor-environment");
+  assert.equal(
+    settings.credentialSources[CREDENTIAL_PROVIDER_ID.OPENAI],
+    CREDENTIAL_SOURCE.ENCRYPTED_FILE,
+  );
+  assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.ENVIRONMENT);
+  assert.equal(await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI), "sk-stored-key");
+  assert.equal(await store.readApiKey(CONDUCTOR), "conductor-environment");
 
   // Storing and then clearing one provider's key leaves the other untouched.
-  await store.setApiKey(ENVIRONMENT_KEY_SERVICE, "conductor-stored-key");
-  assert.equal(await store.readApiKey(STORED_KEY_SERVICE), "sk-stored-key");
-  await store.setApiKey(STORED_KEY_SERVICE, undefined);
+  await store.setApiKey(CONDUCTOR, "conductor-stored-key");
+  assert.equal(await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI), "sk-stored-key");
+  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, undefined);
 
-  assert.equal(await store.readApiKey(ENVIRONMENT_KEY_SERVICE), "conductor-stored-key");
-  assert.equal(await store.readApiKey(STORED_KEY_SERVICE), undefined);
+  assert.equal(await store.readApiKey(CONDUCTOR), "conductor-stored-key");
+  assert.equal(await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI), undefined);
   assert.equal(
-    appSettingsView(await store.snapshot()).credentialSources[STORED_KEY_SERVICE],
+    appSettingsView(await store.snapshot()).credentialSources[CREDENTIAL_PROVIDER_ID.OPENAI],
     CREDENTIAL_SOURCE.NONE,
     "a provider with no key must report nothing",
   );
@@ -635,26 +629,26 @@ test("keeps both keys when two providers are saved at once", async (t) => {
   const store = storeIn(directory);
 
   await Promise.all([
-    store.setApiKey(STORED_KEY_SERVICE, "sk-stored-key"),
-    store.setApiKey(ENVIRONMENT_KEY_SERVICE, "conductor-stored-key"),
+    store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-stored-key"),
+    store.setApiKey(CONDUCTOR, "conductor-stored-key"),
   ]);
 
-  assert.equal(await store.readApiKey(STORED_KEY_SERVICE), "sk-stored-key");
-  assert.equal(await store.readApiKey(ENVIRONMENT_KEY_SERVICE), "conductor-stored-key");
+  assert.equal(await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI), "sk-stored-key");
+  assert.equal(await store.readApiKey(CONDUCTOR), "conductor-stored-key");
   assert.deepEqual(
     JSON.parse(await readSettingsFile(directory)),
     expectedPersistedSettings({
       apiKeys: {
-        [STORED_KEY_SERVICE]: sealed("sk-stored-key"),
-        [ENVIRONMENT_KEY_SERVICE]: sealed("conductor-stored-key"),
+        [CREDENTIAL_PROVIDER_ID.OPENAI]: sealed("sk-stored-key"),
+        [CONDUCTOR]: sealed("conductor-stored-key"),
       },
       // Storing the voice key is choosing it, so the file records the choice.
       voiceSource: VOICE_SOURCE.KEY,
     }),
   );
   const reopened = storeIn(directory);
-  assert.equal(await reopened.readApiKey(STORED_KEY_SERVICE), "sk-stored-key");
-  assert.equal(await reopened.readApiKey(ENVIRONMENT_KEY_SERVICE), "conductor-stored-key");
+  assert.equal(await reopened.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI), "sk-stored-key");
+  assert.equal(await reopened.readApiKey(CONDUCTOR), "conductor-stored-key");
 });
 
 test("reports nothing for a provider the registry does not name", async (t) => {
@@ -1710,7 +1704,7 @@ test("a grant is stored encrypted, and read back only in the main process", asyn
 test("clearing a grant leaves nothing behind, and keys alone", async (t) => {
   const directory = temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
-  await store.setApiKey(STORED_KEY_SERVICE, "sk-stored-key");
+  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-stored-key");
   await store.setGrant(CONSENT_SERVICE, { accessToken: "granted-access", expiresAt: 1 });
 
   const { settings } = await store.clearGrant(CONSENT_SERVICE);
@@ -1720,7 +1714,7 @@ test("clearing a grant leaves nothing behind, and keys alone", async (t) => {
   );
   assert.equal(await store.readGrant(CONSENT_SERVICE), undefined);
   // Disconnecting one service never disturbs another's credential.
-  assert.equal(await store.readApiKey(STORED_KEY_SERVICE), "sk-stored-key");
+  assert.equal(await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI), "sk-stored-key");
   assert.doesNotMatch(await readSettingsFile(directory), /granted-access/);
 });
 
@@ -1734,7 +1728,7 @@ test("a key left by a build that asked for one is dropped, never carried", async
       version: 2,
       apiKeys: {
         [CONSENT_SERVICE]: sealed("stale-pasted-key"),
-        [STORED_KEY_SERVICE]: sealed("sk-stored-key"),
+        [CREDENTIAL_PROVIDER_ID.OPENAI]: sealed("sk-stored-key"),
       },
     }),
     "utf8",
@@ -1747,8 +1741,8 @@ test("a key left by a build that asked for one is dropped, never carried", async
 
   // A provider this build does know, and knows takes no key, has its key let
   // go on the next write — a credential Luke will not use is not one to keep.
-  await store.setApiKey(STORED_KEY_SERVICE, "sk-replaced-key");
+  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-replaced-key");
   const file = JSON.parse(await readSettingsFile(directory));
   assert.equal(file.apiKeys[CONSENT_SERVICE], undefined);
-  assert.ok(file.apiKeys[STORED_KEY_SERVICE]);
+  assert.ok(file.apiKeys[CREDENTIAL_PROVIDER_ID.OPENAI]);
 });

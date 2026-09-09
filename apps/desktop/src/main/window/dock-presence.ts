@@ -78,7 +78,7 @@ export class DockPresence {
   apply(show: boolean, askedFrom?: number): void {
     this.#desired = show;
     this.#askedFrom = askedFrom;
-    void this.#chase();
+    void this.#settle();
   }
 
   /**
@@ -87,7 +87,7 @@ export class DockPresence {
    * re-checked after every change and asked again until it matches — the switch
    * and the file must not end a quick on-and-off disagreeing with the Dock.
    */
-  async #chase(): Promise<void> {
+  async #settle(): Promise<void> {
     if (this.#settling || !this.#dock) return;
     this.#settling = true;
     try {

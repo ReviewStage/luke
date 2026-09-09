@@ -776,8 +776,6 @@ export class SettingsStore {
         // Whether this build can offer the Apple Calendar connection: a Mac to
         // read, and a run that would use what macOS grants. No client gates it
         // the way the sign-ins are gated — the grant lives with the system.
-        // No client or key gates the Apple connection — the grant lives with
-        // macOS — so a Mac to read is the whole question.
         appleCalendarAvailable: this.#credentialsUsable && process.platform === "darwin",
         // The accounts without their grants: which are connected and which
         // calendars count is the renderer's to draw; the tokens never travel.

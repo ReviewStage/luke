@@ -2,6 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   maximumSessionTitleLength,
+  OBSERVATION_WINDOW,
   PROVIDER_ID,
   type ProviderSessionObservation,
   type ProviderTranscriptResult,
@@ -790,7 +791,7 @@ export class CodexSessionAdapter extends LocalSessionAdapter {
             rollouts.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? ""),
             names,
             now,
-            this.activeSessionFreshnessMs,
+            OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
             hookEvents.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? ""),
           ),
         )

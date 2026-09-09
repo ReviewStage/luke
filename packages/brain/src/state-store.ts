@@ -41,6 +41,12 @@ export const BRAIN_STATE_BOUNDS: BrainStateBounds = {
   MAXIMUM_SERIALIZED_BYTES: 8 * 1024 * 1024,
 };
 
+/** The same bounds with one place kept open, which is what asks whether one more record fits. */
+const ADMISSION_BOUNDS: BrainStateBounds = {
+  ...BRAIN_STATE_BOUNDS,
+  MAXIMUM_TERMINAL_REQUESTS: BRAIN_STATE_BOUNDS.MAXIMUM_TERMINAL_REQUESTS - 1,
+};
+
 /**
  * What a Clear leaves behind in place of the generation it erased: the id of
  * the generation nothing may write into again, and the instant of the Clear,
@@ -583,9 +589,10 @@ export class BrainStateStore {
   admits(generationId: string): boolean {
     const held = this.#state;
     if (!held || held.generationId !== generationId) return false;
-    const cap = BRAIN_STATE_BOUNDS.MAXIMUM_TERMINAL_REQUESTS;
-    const withRoom = { ...BRAIN_STATE_BOUNDS, MAXIMUM_TERMINAL_REQUESTS: cap - 1 };
-    return retainedBrainState(held, withRoom).state.requests.length < cap;
+    return (
+      retainedBrainState(held, ADMISSION_BOUNDS).state.requests.length <
+      BRAIN_STATE_BOUNDS.MAXIMUM_TERMINAL_REQUESTS
+    );
   }
 
   /**

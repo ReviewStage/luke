@@ -81,7 +81,7 @@ const NOW = 1_800_000_000_000;
 const { DELTA_PER_SESSION_CHARS, FULL_TRANSCRIPT_CHARS } = BRAIN_DEFAULTS;
 const RECORD_CAP = BRAIN_STATE_BOUNDS.MAXIMUM_TERMINAL_REQUESTS;
 
-/** A generation seeded at the record cap, so the next ask is the one that overflows it. */
+/** Settled runs a generation is seeded with, oldest first, their ends taken by the thread or not. */
 function seededRequests(count: number, published: boolean): BrainPersistedState["requests"] {
   return Array.from({ length: count }, (_, index) => ({
     runId: `seeded-${index}`,
@@ -99,6 +99,7 @@ function seededRequests(count: number, published: boolean): BrainPersistedState[
     ...(published ? { historyRecordedAt: NOW - count + index } : undefined),
   }));
 }
+
 const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
 const ABC: SessionIdentity = { providerId: claude.id, providerSessionId: "abc" };
 const DEF: SessionIdentity = { providerId: claude.id, providerSessionId: "def" };
@@ -2993,10 +2994,11 @@ test("a generation at its record bound refuses a new ask at the door, and admits
   assert.equal(second?.text, "b");
   // The subscriber heard the oldest run go when the second was admitted.
   assert.ok(heard.some((records) => !records.some((record) => record.runId === oldest)));
+  assert.ok(second);
   const standing = h.agent.requests().map((record) => record.runId);
   assert.equal(standing.length, RECORD_CAP);
   assert.ok(!standing.includes(oldest));
-  assert.ok(standing.includes(first.runId) && standing.includes(second?.runId ?? ""));
+  assert.ok(standing.includes(first.runId) && standing.includes(second.runId));
 });
 
 test("a Clear or expiry asked for while a write is out on disk revokes a held act's preparation before the disk answers, and no effect dispatches", async () => {
@@ -3441,6 +3443,30 @@ test("steering lands between tool calls: every emitted call is answered before t
   assert.equal(functionOutputs(h.storage.stored()?.items ?? []).length, 1);
 });
 
+/**
+ * A conversation held busy by a review. A heartbeat's turn takes no steered
+ * words, so asks made while it stands wait in the queue for a turn of their
+ * own; releasing ends the review, which drains what waited into one turn.
+ * `inner.inputs[0]` is the review; the drained turn is the one after it.
+ */
+async function reviewing(...replies: readonly BrainClientAnswer[]) {
+  const inner = new FakeClient();
+  const gated = gatedClient(inner);
+  const h = harness({ client: gated.client });
+  inner.answers.push(answered([message("nothing spoken")]), ...replies);
+  const tick = h.agent.heartbeat();
+  await settle();
+  return {
+    h,
+    inner,
+    async release(): Promise<void> {
+      gated.open();
+      await tick;
+      await settle();
+    },
+  };
+}
+
 test("a steered ask cancelled before the run ends is settled cancelled and takes no reply", async () => {
   const inner = new FakeClient();
   const gated = gatedClient(inner);
@@ -3492,22 +3518,12 @@ test("cancelling the run under way pairs its pending call, and the ask behind it
 });
 
 test("asks that arrive while a review runs open one turn together, each settled with its reply", async () => {
-  const inner = new FakeClient();
-  const gated = gatedClient(inner);
-  const h = harness({ client: gated.client });
-  inner.answers.push(
-    answered([message("nothing spoken")]),
-    answered([message("One reply for both.")]),
-  );
-  const tick = h.agent.heartbeat();
-  await settle();
+  const { h, inner, release } = await reviewing(answered([message("One reply for both.")]));
   const first = acceptedRunId(await submit(h, "first?"));
   const second = acceptedRunId(await submit(h, "second?"));
   await settle();
   assert.equal(inner.inputs.length, 0);
-  gated.open();
-  await tick;
-  await settle();
+  await release();
   assert.equal(inner.inputs.length, 2);
   const opening = (inner.inputs[1] ?? []).map(itemText).join("\n");
   assert.ok(opening.includes("first?"));
@@ -3837,12 +3853,7 @@ test("a rider settles when the shared turn dies to a thrown hook after its check
 });
 
 test("riders committed running before a turn refused at its door are settled with it, never left running", async () => {
-  const inner = new FakeClient();
-  const gated = gatedClient(inner);
-  const h = harness({ client: gated.client });
-  inner.answers.push(answered([message("nothing spoken")]));
-  const tick = h.agent.heartbeat();
-  await settle();
+  const { h, inner, release } = await reviewing();
   const first = acceptedRunId(await submit(h, "first?"));
   const second = acceptedRunId(await submit(h, "second?"));
   await settle();
@@ -3860,9 +3871,7 @@ test("riders committed running before a turn refused at its door are settled wit
       h.store.reset();
     }
   });
-  gated.open();
-  await tick;
-  await settle();
+  await release();
   assert.ok(reset);
   assert.equal(inner.inputs.length, 1);
   assert.ok(h.agent.requests().every((record) => record.status !== BRAIN_REQUEST_STATUS.RUNNING));
@@ -3871,40 +3880,24 @@ test("riders committed running before a turn refused at its door are settled wit
 });
 
 test("asks queued behind a primary that is cancelled or whose start the store refuses still open their own turn", async () => {
-  const inner = new FakeClient();
-  const gated = gatedClient(inner);
-  const h = harness({ client: gated.client });
-  inner.answers.push(answered([message("nothing spoken")]), answered([message("second answered")]));
-  const tick = h.agent.heartbeat();
-  await settle();
+  const { h, inner, release } = await reviewing(answered([message("second answered")]));
   const first = acceptedRunId(await submit(h, "first?"));
   const second = acceptedRunId(await submit(h, "second?"));
   await settle();
   // The primary is cancelled while the queue still holds them both.
   assert.equal((await h.agent.cancelAsk(first))?.status, BRAIN_REQUEST_STATUS.CANCELLED);
-  gated.open();
-  await tick;
-  await settle();
+  await release();
   assert.equal((await h.agent.waitAsk(second, 1))?.text, "second answered");
   assert.equal(inner.inputs.length, 2);
 
   // A primary whose start write the store refuses: it fails, and the ask queued behind it still runs.
-  const refusingInner = new FakeClient();
-  const refusingGate = gatedClient(refusingInner);
-  const refusing = harness({ client: refusingGate.client });
-  refusingInner.answers.push(
-    answered([message("nothing spoken")]),
-    answered([message("fourth answered")]),
-  );
-  const refusingTick = refusing.agent.heartbeat();
-  await settle();
+  const refused = await reviewing(answered([message("fourth answered")]));
+  const refusing = refused.h;
   const third = acceptedRunId(await submit(refusing, "third?"));
   const fourth = acceptedRunId(await submit(refusing, "fourth?"));
   await settle();
   refusing.storage.failWrites = true;
-  refusingGate.open();
-  await refusingTick;
-  await settle();
+  await refused.release();
   assert.equal(refusing.agent.request(third)?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(refusing.agent.request(third)?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
   // The fourth's own start write is refused too, so it fails the same way rather than waiting forever.
@@ -3915,23 +3908,13 @@ test("asks queued behind a primary that is cancelled or whose start the store re
 
 test("past the queue's capacity the oldest ask is folded into the drained turn's summary and ends with it", async () => {
   const { QUEUE_DEFAULTS } = await import("@sidecar/runtime");
-  const inner = new FakeClient();
-  const gated = gatedClient(inner);
-  const h = harness({ client: gated.client });
-  inner.answers.push(
-    answered([message("nothing spoken")]),
-    answered([message("one reply for all of them")]),
-  );
-  const tick = h.agent.heartbeat();
-  await settle();
+  const { h, inner, release } = await reviewing(answered([message("one reply for all of them")]));
   const runIdsInOrder: string[] = [];
   for (let index = 0; index <= QUEUE_DEFAULTS.CAPACITY; index += 1) {
     runIdsInOrder.push(acceptedRunId(await submit(h, `ask ${index}?`)));
   }
   assert.equal(inner.inputs.length, 0);
-  gated.open();
-  await tick;
-  await settle();
+  await release();
   // One turn for them all, opening with what the overflow folded and then
   // the asks the queue still held.
   assert.equal(inner.inputs.length, 2);
@@ -3956,40 +3939,23 @@ test("an idle ask pays no debounce, and one that arrives during a turn opens the
   assert.equal(idle.client.inputs.length, 1);
   assert.equal(idle.clock.timers.size, 0);
 
-  const inner = new FakeClient();
-  const gated = gatedClient(inner);
-  const h = harness({ client: gated.client });
-  inner.answers.push(answered([message("nothing spoken")]), answered([message("answered")]));
-  const tick = h.agent.heartbeat();
-  await settle();
+  const { h, inner, release } = await reviewing(answered([message("answered")]));
   const queued = acceptedRunId(await submit(h, "queued?"));
   await settle();
   assert.equal(h.agent.request(queued)?.status, BRAIN_REQUEST_STATUS.QUEUED);
-  gated.open();
-  await tick;
-  await settle();
+  await release();
   // Nothing advanced the clock: the run ending is what drained the queue.
   assert.equal(inner.inputs.length, 2);
   assert.equal((await h.agent.waitAsk(queued, 1))?.text, "answered");
 });
 
 test("a queued ask cancelled before its turn opens settles cancelled and the drained turn still opens for the rest", async () => {
-  const inner = new FakeClient();
-  const gated = gatedClient(inner);
-  const h = harness({ client: gated.client });
-  inner.answers.push(
-    answered([message("nothing spoken")]),
-    answered([message("answered for both")]),
-  );
-  const tick = h.agent.heartbeat();
-  await settle();
+  const { h, inner, release } = await reviewing(answered([message("answered for both")]));
   const first = acceptedRunId(await submit(h, "first?"));
   const second = acceptedRunId(await submit(h, "second?"));
   const third = acceptedRunId(await submit(h, "third?"));
   assert.equal((await h.agent.cancelAsk(second))?.status, BRAIN_REQUEST_STATUS.CANCELLED);
-  gated.open();
-  await tick;
-  await settle();
+  await release();
   assert.equal(inner.inputs.length, 2);
   assert.equal((await h.agent.waitAsk(first, 1))?.text, "answered for both");
   assert.equal((await h.agent.waitAsk(third, 1))?.text, "answered for both");
@@ -3998,22 +3964,12 @@ test("a queued ask cancelled before its turn opens settles cancelled and the dra
 });
 
 test("a queued ask cancelled before its turn opens leaves no trace of its words in the model's input", async () => {
-  const inner = new FakeClient();
-  const gated = gatedClient(inner);
-  const h = harness({ client: gated.client });
-  inner.answers.push(
-    answered([message("nothing spoken")]),
-    answered([message("answered for the rest")]),
-  );
-  const tick = h.agent.heartbeat();
-  await settle();
+  const { h, inner, release } = await reviewing(answered([message("answered for the rest")]));
   const first = acceptedRunId(await submit(h, "first, kept"));
   const second = acceptedRunId(await submit(h, "second, withdrawn-marker-7f3a"));
   const third = acceptedRunId(await submit(h, "third, kept"));
   assert.equal((await h.agent.cancelAsk(second))?.status, BRAIN_REQUEST_STATUS.CANCELLED);
-  gated.open();
-  await tick;
-  await settle();
+  await release();
   assert.equal(inner.inputs.length, 2);
   const opening = (inner.inputs[1] ?? []).map(itemText).join("\n");
   assert.ok(opening.includes("first, kept"));
@@ -4030,38 +3986,21 @@ test("a queued ask cancelled before its turn opens leaves no trace of its words 
 
   // The same cancel with the primary alone left: the drained turn opens for
   // the one ask still standing, with only its words.
-  const aloneInner = new FakeClient();
-  const aloneGate = gatedClient(aloneInner);
-  const alone = harness({ client: aloneGate.client });
-  aloneInner.answers.push(
-    answered([message("nothing spoken")]),
-    answered([message("just the one")]),
-  );
-  const aloneTick = alone.agent.heartbeat();
-  await settle();
+  const solo = await reviewing(answered([message("just the one")]));
+  const alone = solo.h;
   const kept = acceptedRunId(await submit(alone, "kept alone"));
   const gone = acceptedRunId(await submit(alone, "gone-marker-9c1d"));
   await alone.agent.cancelAsk(gone);
-  aloneGate.open();
-  await aloneTick;
-  await settle();
-  assert.equal(aloneInner.inputs.length, 2);
-  const only = (aloneInner.inputs[1] ?? []).map(itemText).join("\n");
+  await solo.release();
+  assert.equal(solo.inner.inputs.length, 2);
+  const only = (solo.inner.inputs[1] ?? []).map(itemText).join("\n");
   assert.ok(only.includes("kept alone") && !only.includes("gone-marker-9c1d"));
   assert.equal((await alone.agent.waitAsk(kept, 1))?.text, "just the one");
 });
 
 test("an overflow-summarized ask cancelled before the drain leaves the summary without its line, and no summary at all when it was the only one folded", async () => {
   const { QUEUE_DEFAULTS } = await import("@sidecar/runtime");
-  const inner = new FakeClient();
-  const gated = gatedClient(inner);
-  const h = harness({ client: gated.client });
-  inner.answers.push(
-    answered([message("nothing spoken")]),
-    answered([message("one reply for the rest")]),
-  );
-  const tick = h.agent.heartbeat();
-  await settle();
+  const { h, inner, release } = await reviewing(answered([message("one reply for the rest")]));
   const folded = acceptedRunId(await submit(h, "folded-marker-2b8e, the oldest"));
   const kept: string[] = [];
   for (let index = 1; index <= QUEUE_DEFAULTS.CAPACITY; index += 1) {
@@ -4069,9 +4008,7 @@ test("an overflow-summarized ask cancelled before the drain leaves the summary w
   }
   // The oldest is already folded into the summary when the developer cancels it.
   assert.equal((await h.agent.cancelAsk(folded))?.status, BRAIN_REQUEST_STATUS.CANCELLED);
-  gated.open();
-  await tick;
-  await settle();
+  await release();
   assert.equal(inner.inputs.length, 2);
   const opening = (inner.inputs[1] ?? []).map(itemText).join("\n");
   assert.ok(!opening.includes("folded-marker-2b8e"));
@@ -4085,22 +4022,16 @@ test("an overflow-summarized ask cancelled before the drain leaves the summary w
 
   // With two folded and one of them cancelled, the summary still opens the
   // turn, counting and naming only the ask that stands.
-  const twoInner = new FakeClient();
-  const twoGate = gatedClient(twoInner);
-  const two = harness({ client: twoGate.client });
-  twoInner.answers.push(answered([message("nothing spoken")]), answered([message("reply")]));
-  const twoTick = two.agent.heartbeat();
-  await settle();
+  const pair = await reviewing(answered([message("reply")]));
+  const two = pair.h;
   const standing = acceptedRunId(await submit(two, "standing-fold-4d0f"));
   const withdrawn = acceptedRunId(await submit(two, "withdrawn-fold-6a2c"));
   for (let index = 0; index < QUEUE_DEFAULTS.CAPACITY; index += 1) {
     acceptedRunId(await submit(two, `later ${index}`));
   }
   await two.agent.cancelAsk(withdrawn);
-  twoGate.open();
-  await twoTick;
-  await settle();
-  const summary = (twoInner.inputs[1] ?? []).map(itemText).join("\n");
+  await pair.release();
+  const summary = (pair.inner.inputs[1] ?? []).map(itemText).join("\n");
   assert.ok(summary.includes("1 earlier input was summarized because the queue was full"));
   assert.ok(summary.includes("standing-fold-4d0f"));
   assert.ok(!summary.includes("withdrawn-fold-6a2c"));
@@ -4109,15 +4040,7 @@ test("an overflow-summarized ask cancelled before the drain leaves the summary w
 });
 
 test("an ask already drained but waiting behind another turn takes its words with it when cancelled", async () => {
-  const inner = new FakeClient();
-  const gated = gatedClient(inner);
-  const h = harness({ client: gated.client });
-  inner.answers.push(
-    answered([message("nothing spoken")]),
-    answered([message("for the kept one")]),
-  );
-  const tick = h.agent.heartbeat();
-  await settle();
+  const { h, inner, release } = await reviewing(answered([message("for the kept one")]));
   // The review is at the model behind the gate; two asks queue behind it and
   // the debounce drains them into a turn that waits behind it too.
   const keptRun = acceptedRunId(await submit(h, "kept-behind-1e9b"));
@@ -4126,9 +4049,7 @@ test("an ask already drained but waiting behind another turn takes its words wit
   await settle();
   assert.equal(h.agent.request(cancelledRun)?.status, BRAIN_REQUEST_STATUS.QUEUED);
   assert.equal((await h.agent.cancelAsk(cancelledRun))?.status, BRAIN_REQUEST_STATUS.CANCELLED);
-  gated.open();
-  await tick;
-  await settle();
+  await release();
   assert.equal((await h.agent.waitAsk(keptRun, 1))?.text, "for the kept one");
   assert.equal(inner.inputs.length, 2);
   const secondTurn = (inner.inputs[1] ?? []).map((item) => JSON.stringify(item)).join("\n");
@@ -4139,15 +4060,7 @@ test("an ask already drained but waiting behind another turn takes its words wit
 
 test("folded asks left alone by cancelling every ordinary one still open their turn", async () => {
   const { QUEUE_DEFAULTS } = await import("@sidecar/runtime");
-  const inner = new FakeClient();
-  const gated = gatedClient(inner);
-  const h = harness({ client: gated.client });
-  inner.answers.push(
-    answered([message("nothing spoken")]),
-    answered([message("for the folded one")]),
-  );
-  const tick = h.agent.heartbeat();
-  await settle();
+  const { h, inner, release } = await reviewing(answered([message("for the folded one")]));
   // The queue fills behind the running turn; the oldest waiting ask folds into the summary.
   const folded = acceptedRunId(await submit(h, "folded-survivor-3e1a"));
   const ordinary: string[] = [];
@@ -4160,9 +4073,7 @@ test("folded asks left alone by cancelling every ordinary one still open their t
   }
   assert.equal(h.agent.request(folded)?.status, BRAIN_REQUEST_STATUS.QUEUED);
   assert.equal(h.agent.busy(), true);
-  gated.open();
-  await tick;
-  await settle();
+  await release();
   // The folded ask is not left queued forever: the summary alone opens its turn.
   assert.equal((await h.agent.waitAsk(folded, 1))?.text, "for the folded one");
   assert.equal(inner.inputs.length, 2);
@@ -4175,12 +4086,7 @@ test("folded asks left alone by cancelling every ordinary one still open their t
 
 test("cancelling every waiting ask, folded ones included, leaves nothing queued, no turn to open, and the conversation idle", async () => {
   const { QUEUE_DEFAULTS } = await import("@sidecar/runtime");
-  const inner = new FakeClient();
-  const gated = gatedClient(inner);
-  const h = harness({ client: gated.client });
-  inner.answers.push(answered([message("nothing spoken")]), answered([message("fresh")]));
-  const tick = h.agent.heartbeat();
-  await settle();
+  const { h, inner, release } = await reviewing(answered([message("fresh")]));
   const all: string[] = [];
   for (let index = 0; index <= QUEUE_DEFAULTS.CAPACITY + 1; index += 1) {
     all.push(acceptedRunId(await submit(h, `ask ${index}`)));
@@ -4189,9 +4095,7 @@ test("cancelling every waiting ask, folded ones included, leaves nothing queued,
   for (const runId of all) {
     assert.equal((await h.agent.cancelAsk(runId))?.status, BRAIN_REQUEST_STATUS.CANCELLED);
   }
-  gated.open();
-  await tick;
-  await settle();
+  await release();
   // Only the review ran: no turn opened for words the developer took back.
   assert.equal(inner.inputs.length, 1);
   assert.equal(h.agent.busy(), false);
@@ -4205,12 +4109,7 @@ test("cancelling every waiting ask, folded ones included, leaves nothing queued,
 });
 
 test("a refused final checkpoint fails a drained batch's primary and its riders alike", async () => {
-  const inner = new FakeClient();
-  const gated = gatedClient(inner);
-  const h = harness({ client: gated.client });
-  inner.answers.push(answered([message("nothing spoken")]), answered([message("reply for both")]));
-  const tick = h.agent.heartbeat();
-  await settle();
+  const { h, release } = await reviewing(answered([message("reply for both")]));
   const first = acceptedRunId(await submit(h, "first?"));
   const second = acceptedRunId(await submit(h, "second?"));
   await settle();
@@ -4225,9 +4124,7 @@ test("a refused final checkpoint fails a drained batch's primary and its riders 
       h.storage.failWrites = true;
     }
   });
-  gated.open();
-  await tick;
-  await settle();
+  await release();
   for (const runId of [first, second]) {
     const record = h.agent.request(runId);
     assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
@@ -4237,18 +4134,11 @@ test("a refused final checkpoint fails a drained batch's primary and its riders 
 });
 
 test("a Clear with an ask still queued opens nothing for it and leaves no timer standing", async () => {
-  const inner = new FakeClient();
-  const gated = gatedClient(inner);
-  const h = harness({ client: gated.client });
-  inner.answers.push(answered([message("nothing spoken")]));
-  const tick = h.agent.heartbeat();
-  await settle();
+  const { h, inner, release } = await reviewing();
   const queued = acceptedRunId(await submit(h, "queued?"));
   await settle();
   assert.equal(await h.store.clear(), true);
-  gated.open();
-  await tick;
-  await settle();
+  await release();
   // The queued ask belonged to the memory the Clear replaced: no turn opens
   // for it, and the debounce that would have opened one is gone.
   assert.equal(inner.inputs.length, 1);

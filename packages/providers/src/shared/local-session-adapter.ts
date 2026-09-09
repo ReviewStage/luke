@@ -189,7 +189,6 @@ export interface LocalSessionAdapterOptions {
 export abstract class LocalSessionAdapter extends SessionProviderAdapterBase {
   readonly #now: () => number;
   #observations: readonly ProviderSessionObservation[] = [];
-  protected readonly activeSessionFreshnessMs = OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS;
 
   protected constructor(options: LocalSessionAdapterOptions = {}) {
     super();
@@ -280,7 +279,12 @@ export abstract class LocalFileSessionAdapter<
         cached?.mtimeMs === candidate.mtimeMs ? cached.value : await this.parseAndCache(candidate);
       observations.set(
         candidate.providerSessionId,
-        await this.observation(candidate, parsed, now, this.activeSessionFreshnessMs),
+        await this.observation(
+          candidate,
+          parsed,
+          now,
+          OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
+        ),
       );
     }
     const discovered = new Set(candidates.map((candidate) => candidate.filePath));

@@ -14,6 +14,8 @@ const SECRET_TRANSCRIPT_TEXT = "SECRET_TRANSCRIPT_TEXT";
  * before it sits outside that tail however small the rest of the file is.
  */
 const PAST_TAIL_TEXT = "x".repeat(96 * 1024);
+/** One filler record's words: forty of them outweigh that same tail. */
+const PAST_TAIL_FILLER = SECRET_TRANSCRIPT_TEXT.repeat(200);
 const CLAUDE_PROJECTS_DIRECTORY = "projects";
 const TEST_CLAUDE_EVENT_TYPE = {
   ASSISTANT: "assistant",
@@ -1215,7 +1217,7 @@ test("recovers a chosen title from the head of a session too long to hold one in
     type: TEST_CLAUDE_EVENT_TYPE.USER,
     cwd: "/Users/test/luke",
     timestamp: `2026-08-11T23:44:${String(10 + index).padStart(2, "0")}.000Z`,
-    message: { content: SECRET_TRANSCRIPT_TEXT.repeat(200) },
+    message: { content: PAST_TAIL_FILLER },
   }));
   await writeSessionFile(
     claudeHome,
@@ -1240,7 +1242,7 @@ test("a chosen title in the head outranks a generated one the tail still holds",
     type: TEST_CLAUDE_EVENT_TYPE.USER,
     cwd: "/Users/test/luke",
     timestamp: `2026-08-11T23:44:${String(10 + index).padStart(2, "0")}.000Z`,
-    message: { content: SECRET_TRANSCRIPT_TEXT.repeat(200) },
+    message: { content: PAST_TAIL_FILLER },
   }));
   await writeSessionFile(
     claudeHome,
