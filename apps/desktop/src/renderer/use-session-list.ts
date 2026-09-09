@@ -53,8 +53,6 @@ export interface UseSessionListOptions {
 }
 
 export interface SessionList {
-  /** Every session the panel may draw, before the view narrows it. */
-  visible: readonly SessionView[];
   /** The rows as arranged, and the counts the widen button reads. */
   list: ArrangedSessions;
   /** What the capsule reports, taken before the list is narrowed. */
@@ -409,7 +407,6 @@ export function useSessionList(options: UseSessionListOptions): SessionList {
   }
 
   return {
-    visible,
     list,
     tally,
     view,

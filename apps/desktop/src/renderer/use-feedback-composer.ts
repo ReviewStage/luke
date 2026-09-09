@@ -1,6 +1,6 @@
 import type { FeedbackImage, FeedbackKind } from "@sidecar/feedback";
 import { FEEDBACK_LIMITS } from "@sidecar/feedback";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { act } from "./act";
 import {
@@ -35,8 +35,8 @@ export interface UseFeedbackComposerOptions {
   presentation: PanelPresentation;
   /** Whether motion is reduced, which shortens the landing's hold. */
   stillMotion: boolean;
-  /** Records where leaving the composer comes back to. */
-  rememberStandDownPage: (page: SettingsView) => void;
+  /** Where leaving the composer comes back to. */
+  standDownPage: RefObject<SettingsView>;
 }
 
 export interface FeedbackComposer {
@@ -72,7 +72,7 @@ export interface FeedbackComposer {
  * act — writing a note — drawn in one shape.
  */
 export function useFeedbackComposer(options: UseFeedbackComposerOptions): FeedbackComposer {
-  const { surface, presentation, stillMotion, rememberStandDownPage } = options;
+  const { surface, presentation, stillMotion, standDownPage } = options;
   const [notice, setNotice] = useState<string>();
   const [confirming, setConfirming] = useState<{
     confirmation: FeedbackConfirmation;
@@ -205,7 +205,7 @@ export function useFeedbackComposer(options: UseFeedbackComposerOptions): Feedba
       setNotice(undefined);
       // The Feedback section is on the front page, so that is where leaving
       // the composer — or the thank-you the send lands in — comes back to.
-      rememberStandDownPage(standDownReturnPage({ kind: PANEL_STAND_DOWN.FEEDBACK }));
+      standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.FEEDBACK });
       // Asking to write again is the confirmation's end: the composer takes
       // the shape back, and the return the landing held is dropped unrun.
       dropConfirmation();
@@ -221,7 +221,7 @@ export function useFeedbackComposer(options: UseFeedbackComposerOptions): Feedba
       entry.standDown();
       return opened.drafted;
     },
-    [dropConfirmation, entry.apply, entry.latest, entry.standDown, rememberStandDownPage],
+    [dropConfirmation, entry.apply, entry.latest, entry.standDown, standDownPage],
   );
 
   /**

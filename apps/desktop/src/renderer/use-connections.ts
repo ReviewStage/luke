@@ -64,8 +64,8 @@ export interface UseConnectionsOptions {
   credentialHeld: RefObject<boolean>;
   consentConnectHeld: RefObject<boolean>;
   supersetSignInHeld: RefObject<boolean>;
-  /** Records where leaving the slot this connection stood down to comes back to. */
-  rememberStandDownPage: (page: SettingsView) => void;
+  /** Where leaving the slot this connection stood down to comes back to. */
+  standDownPage: RefObject<SettingsView>;
   /** Brings the panel forward around what a landed sign-in just unlocked. */
   expand: () => void;
   calendars: readonly ObservedAccountCalendars[];
@@ -121,7 +121,7 @@ export function useConnections(options: UseConnectionsOptions): Connections {
     credentialHeld,
     consentConnectHeld,
     supersetSignInHeld,
-    rememberStandDownPage,
+    standDownPage,
     expand,
     calendars,
     workspaceProjects,
@@ -190,7 +190,7 @@ export function useConnections(options: UseConnectionsOptions): Connections {
       slotOccupant.current = PANEL_STAND_DOWN.CONSENT;
       // Every consent block stands under Integrations, so that is where a
       // cancelled or refused sign-in comes back to.
-      rememberStandDownPage(standDownReturnPage({ kind: PANEL_STAND_DOWN.CONSENT }));
+      standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.CONSENT });
       consentConnect.begin({ serviceId, busy: false });
       consentConnect.commit();
     },
@@ -199,7 +199,7 @@ export function useConnections(options: UseConnectionsOptions): Connections {
       consentConnect.commit,
       consentConnectHeld,
       credentialHeld,
-      rememberStandDownPage,
+      standDownPage,
     ],
   );
 
@@ -257,7 +257,7 @@ export function useConnections(options: UseConnectionsOptions): Connections {
     if (credentialHeld.current || consentConnectHeld.current) return;
     supersetSignInHeld.current = true;
     slotOccupant.current = PANEL_STAND_DOWN.SUPERSET;
-    rememberStandDownPage(standDownReturnPage({ kind: PANEL_STAND_DOWN.SUPERSET }));
+    standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.SUPERSET });
     cancelHover();
     applyPresentation(PANEL_PRESENTATION.SLOT);
     tell(ACT_KIND.SUPERSET_BEGIN_SIGN_IN);
@@ -266,7 +266,7 @@ export function useConnections(options: UseConnectionsOptions): Connections {
     cancelHover,
     consentConnectHeld,
     credentialHeld,
-    rememberStandDownPage,
+    standDownPage,
     supersetSignIn.stage,
     supersetSignInHeld,
   ]);
@@ -306,11 +306,11 @@ export function useConnections(options: UseConnectionsOptions): Connections {
     (providerId: CredentialProviderId) => {
       // Where the entry's row is drawn, remembered before the trip to the
       // slot so coming back lands on the page the entry began on.
-      rememberStandDownPage(standDownReturnPage({ kind: PANEL_STAND_DOWN.KEY, providerId }));
+      standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.KEY, providerId });
       slotOccupant.current = PANEL_STAND_DOWN.KEY;
       credentialsEntry.begin({ providerId, draft: "", busy: false, away: false });
     },
-    [credentialsEntry.begin, rememberStandDownPage],
+    [credentialsEntry.begin, standDownPage],
   );
 
   /**
@@ -327,12 +327,12 @@ export function useConnections(options: UseConnectionsOptions): Connections {
    */
   const connectEntry = useCallback(
     (providerId: CredentialProviderId) => {
-      rememberStandDownPage(standDownReturnPage({ kind: PANEL_STAND_DOWN.KEY, providerId }));
+      standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.KEY, providerId });
       slotOccupant.current = PANEL_STAND_DOWN.KEY;
       tell(ACT_KIND.CREDENTIAL_OPEN_API_KEYS, { providerId });
       credentialsEntry.begin({ providerId, draft: "", busy: false, away: true });
     },
-    [credentialsEntry.begin, rememberStandDownPage],
+    [credentialsEntry.begin, standDownPage],
   );
 
   /**

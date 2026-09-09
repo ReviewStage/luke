@@ -9,7 +9,7 @@ import {
 import type { AppSettingsView } from "@sidecar/settings/wire";
 import { appSettingsView } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
 import { act, tell, updateSetting, updateSettingEntry } from "./act";
@@ -113,243 +113,230 @@ export function useAppActionCarrier(options: UseAppActionCarrierOptions): void {
    * the flight with it. The composer is neither: it is a shape of its own
    * standing where the panel was, so there is nothing for a mark to land on.
    */
-  const carryAppAction = useCallback<AppActionCarrier>(
-    async (action) =>
-      dispatchByKind(action, {
-        [ACTION_KIND.SETTING]: async (action): Promise<WireRecord> => {
-          // The drawing is held back before the write, not after it: the store
-          // answers by moving the document, and the switch is what Luke is on
-          // his way to move, so it has to still read as it did when he set
-          // off. Every path out of here releases the hold, and the outcome the
-          // conversation is told is the store's own either way — what is
-          // delayed is the drawing, never the change or the report of it.
-          //
-          // Two things must not wait for Luke, and neither is the drawing. The
-          // guide has to describe the store's answer at once, because the next
-          // call in this same turn is validated against it — an effort named in
-          // the same breath as a model only exists in the guide the model
-          // change just made true. And that next call composes against the
-          // same answer, before any version of the document could have carried
-          // it back, which is why it is remembered outside the hold: the hold
-          // belongs to one act, and every act after it has to read this.
-          errands.deferSettings();
-          let caught: AppSettingsView | undefined;
-          const outcome = await applySpokenSetting(
-            { updateSetting, updateSettingEntry },
-            action,
-            (wire) => {
-              const next = appSettingsView(wire);
-              caught = next;
-              const held = appStateNow();
-              answeredSettings.current = { view: next, atVersion: held?.version ?? -1 };
-              if (held) publishGuide(held, next);
-            },
-            composeSettingsAgainst(answeredSettings.current),
-          );
-          const hold: ErrandHold = caught === undefined ? NOTHING_HELD : { settings: caught };
-          // Nothing to show and nothing to sign: a refused change must not stand
-          // the panel up in front of a switch that did not move.
-          if (outcome.status !== ACTION_RESULT_STATUS.ACCEPTED) {
-            errands.drawHold(hold);
-            return {
-              status: ACTION_RESULT_STATUS.REJECTED,
-              reason: outcome.reason ?? "That setting could not be changed.",
-            };
-          }
-          const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
-          // The guide's ids travel as plain text, so one that names no setting
-          // of Luke's names no page either — and nothing will fly to it.
-          const page = isAppSettingId(action.setting.id)
-            ? SETTING_PAGE[action.setting.id]
-            : undefined;
-          try {
-            await changeMode(true);
-            // Queued rather than flown at once. The tab, the page and the wait
-            // are all decided when this action comes up for its turn, because an
-            // earlier act may still be out over the very page this one would
-            // otherwise turn away.
-            errands.arm({
-              targets: errandTargets(action),
-              tab: PANEL_TAB.SETTINGS,
-              ...(page === undefined ? undefined : { page }),
-              opening,
-              borrowsPanel: true,
-              hold,
-            });
-          } catch {
-            // Showing the change is not what was asked for — making it is, and it
-            // is already made. A window that refused to come forward must not be
-            // reported back as a setting that refused to change, and the switch
-            // must be drawn whether or not anyone was shown it moving.
-            errands.drawHold(hold);
-          }
-          return outcome;
-        },
-        [ACTION_KIND.FEEDBACK]: async (action) => {
-          // The main process expands the window and sends the composer's
-          // lifecycle event down the same ordered channel as the mode event,
-          // so the composer's shape can never lose a race to the panel apply
-          // the expansion causes. The draft
-          // rides this ref because the lifecycle channel carries event names,
-          // not payloads: set before the ask, consumed when the event lands.
-          // Whether it will be placed is decided here with the same pure
-          // decision the open itself makes, on the same entry — the open lands
-          // a beat later on the event, and nothing else writes the entry in
-          // between — so the spoken outcome says what actually happens. And
-          // nothing here sends: the note leaves only by the Send button's own
-          // press.
-          const kind = FEEDBACK_KIND_FOR_COMPOSER[action.composer];
-          const drafted = openedFeedbackEntry(feedback.latest(), {
-            kind,
-            fromPanel: false,
-            ...(action.draft === undefined ? undefined : { draft: action.draft }),
-            signature: accountSignature(appStateNow()?.account),
-          }).drafted;
-          feedback.holdSpokenDraft(action.draft);
-          try {
-            await act(ACT_KIND.FEEDBACK_SUMMON, { kind });
-          } catch (error) {
-            // The composer is not coming, so the event that would consume the
-            // draft is not coming either; a stale one must not season some
-            // later spoken request.
-            feedback.holdSpokenDraft(undefined);
-            throw error;
-          }
+  const carryAppAction: AppActionCarrier = async (action) =>
+    dispatchByKind(action, {
+      [ACTION_KIND.SETTING]: async (action): Promise<WireRecord> => {
+        // The drawing is held back before the write, not after it: the store
+        // answers by moving the document, and the switch is what Luke is on
+        // his way to move, so it has to still read as it did when he set
+        // off. Every path out of here releases the hold, and the outcome the
+        // conversation is told is the store's own either way — what is
+        // delayed is the drawing, never the change or the report of it.
+        //
+        // Two things must not wait for Luke, and neither is the drawing. The
+        // guide has to describe the store's answer at once, because the next
+        // call in this same turn is validated against it — an effort named in
+        // the same breath as a model only exists in the guide the model
+        // change just made true. And that next call composes against the
+        // same answer, before any version of the document could have carried
+        // it back, which is why it is remembered outside the hold: the hold
+        // belongs to one act, and every act after it has to read this.
+        errands.deferSettings();
+        let caught: AppSettingsView | undefined;
+        const outcome = await applySpokenSetting(
+          { updateSetting, updateSettingEntry },
+          action,
+          (wire) => {
+            const next = appSettingsView(wire);
+            caught = next;
+            const held = appStateNow();
+            answeredSettings.current = { view: next, atVersion: held?.version ?? -1 };
+            if (held) publishGuide(held, next);
+          },
+          composeSettingsAgainst(answeredSettings.current),
+        );
+        const hold: ErrandHold = caught === undefined ? NOTHING_HELD : { settings: caught };
+        // Nothing to show and nothing to sign: a refused change must not stand
+        // the panel up in front of a switch that did not move.
+        if (outcome.status !== ACTION_RESULT_STATUS.ACCEPTED) {
+          errands.drawHold(hold);
           return {
-            status: ACTION_RESULT_STATUS.ACCEPTED,
-            kind: action.composer,
-            ...(action.draft === undefined
-              ? undefined
-              : drafted
-                ? {
-                    note: "The ask is drafted in the composer; the developer edits and sends it by hand.",
-                  }
-                : {
-                    note: "A note was already being written, so it was kept and nothing was drafted over it.",
-                  }),
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: outcome.reason ?? "That setting could not be changed.",
           };
-        },
-        [ACTION_KIND.PANEL]: async (action) => {
-          // Whether this ask is what opens the panel, read before it does: an
-          // errand into a shape still growing has to trail the whole opening,
-          // and one into a panel already up does not.
-          const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
-          const spoken = action.filters ? sessionFiltersFromSpoken(action.filters) : undefined;
-          // An identity this build holds no chip for cannot narrow the list, and
-          // Luke must not claim it did. The list still has to match the sentence
-          // that says every session is shown, so an unmappable ask widens the view
-          // to everything rather than leaving whatever narrowing was already in
-          // force — the whole ask, because a combination quietly missing one of
-          // its values would show more than the sentence names.
-          const filters = action.filters ? (spoken ?? []) : undefined;
-          // Caught rather than applied, on the settings switch's terms: the
-          // narrowing is what Luke is on his way to the options control — or
-          // its clear X, for a whole-list ask — to do, and a list that has
-          // already re-sorted itself by the time he gets there makes the
-          // flight a report rather than the action.
-          const view =
-            filters || action.sort || action.query !== undefined
-              ? {
-                  ...(filters ? { filters } : undefined),
-                  ...(action.sort ? { sort: action.sort } : undefined),
-                  ...(action.query !== undefined ? { query: action.query } : undefined),
-                }
-              : undefined;
-          // What the query will leave, read now against the roster and the
-          // view the hold is about to land: the reply voices this outcome, and
-          // it must not claim rows the list will not draw. Only the drawing
-          // waits for the flight, never the report.
-          const held = appStateNow();
-          const searched =
-            action.query !== undefined && held !== undefined
-              ? spokenSearchOutcome(displaySessions(held), {
-                  ...sessionView,
-                  ...view,
-                })
-              : undefined;
+        }
+        const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
+        // The guide's ids travel as plain text, so one that names no setting
+        // of Luke's names no page either — and nothing will fly to it.
+        const page = isAppSettingId(action.setting.id)
+          ? SETTING_PAGE[action.setting.id]
+          : undefined;
+        try {
           await changeMode(true);
-          // The tab bar and the options button are drawn outside the settings
-          // pages, so this action names no page and waits for none. An action with
-          // nowhere to land releases what it holds the moment it comes up: the
-          // panel itself is what was asked for and it is already open, so the
-          // list must show what the answer is about to claim it shows.
+          // Queued rather than flown at once. The tab, the page and the wait
+          // are all decided when this action comes up for its turn, because an
+          // earlier act may still be out over the very page this one would
+          // otherwise turn away.
           errands.arm({
             targets: errandTargets(action),
-            tab: action.tab,
+            tab: PANEL_TAB.SETTINGS,
+            ...(page === undefined ? undefined : { page }),
             opening,
-            // The panel is what was asked for, so it is nobody's to take away.
-            borrowsPanel: false,
-            hold: view === undefined ? NOTHING_HELD : { view },
+            borrowsPanel: true,
+            hold,
           });
-          // One note line, because an unmappable narrowing and an emptied
-          // search can arrive in the same ask and each has its own sentence.
-          const notes = [
-            action.filters && spoken === undefined
-              ? "That narrowing has no filter of its own here, so every session is shown."
-              : undefined,
-            searched?.note,
-          ].filter((line): line is string => line !== undefined);
+        } catch {
+          // Showing the change is not what was asked for — making it is, and it
+          // is already made. A window that refused to come forward must not be
+          // reported back as a setting that refused to change, and the switch
+          // must be drawn whether or not anyone was shown it moving.
+          errands.drawHold(hold);
+        }
+        return outcome;
+      },
+      [ACTION_KIND.FEEDBACK]: async (action) => {
+        // The main process expands the window and sends the composer's
+        // lifecycle event down the same ordered channel as the mode event,
+        // so the composer's shape can never lose a race to the panel apply
+        // the expansion causes. The draft
+        // rides this ref because the lifecycle channel carries event names,
+        // not payloads: set before the ask, consumed when the event lands.
+        // Whether it will be placed is decided here with the same pure
+        // decision the open itself makes, on the same entry — the open lands
+        // a beat later on the event, and nothing else writes the entry in
+        // between — so the spoken outcome says what actually happens. And
+        // nothing here sends: the note leaves only by the Send button's own
+        // press.
+        const kind = FEEDBACK_KIND_FOR_COMPOSER[action.composer];
+        const drafted = openedFeedbackEntry(feedback.latest(), {
+          kind,
+          fromPanel: false,
+          ...(action.draft === undefined ? undefined : { draft: action.draft }),
+          signature: accountSignature(appStateNow()?.account),
+        }).drafted;
+        feedback.holdSpokenDraft(action.draft);
+        try {
+          await act(ACT_KIND.FEEDBACK_SUMMON, { kind });
+        } catch (error) {
+          // The composer is not coming, so the event that would consume the
+          // draft is not coming either; a stale one must not season some
+          // later spoken request.
+          feedback.holdSpokenDraft(undefined);
+          throw error;
+        }
+        return {
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          kind: action.composer,
+          ...(action.draft === undefined
+            ? undefined
+            : drafted
+              ? {
+                  note: "The ask is drafted in the composer; the developer edits and sends it by hand.",
+                }
+              : {
+                  note: "A note was already being written, so it was kept and nothing was drafted over it.",
+                }),
+        };
+      },
+      [ACTION_KIND.PANEL]: async (action) => {
+        // Whether this ask is what opens the panel, read before it does: an
+        // errand into a shape still growing has to trail the whole opening,
+        // and one into a panel already up does not.
+        const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
+        const spoken = action.filters ? sessionFiltersFromSpoken(action.filters) : undefined;
+        // An identity this build holds no chip for cannot narrow the list, and
+        // Luke must not claim it did. The list still has to match the sentence
+        // that says every session is shown, so an unmappable ask widens the view
+        // to everything rather than leaving whatever narrowing was already in
+        // force — the whole ask, because a combination quietly missing one of
+        // its values would show more than the sentence names.
+        const filters = action.filters ? (spoken ?? []) : undefined;
+        // Caught rather than applied, on the settings switch's terms: the
+        // narrowing is what Luke is on his way to the options control — or
+        // its clear X, for a whole-list ask — to do, and a list that has
+        // already re-sorted itself by the time he gets there makes the
+        // flight a report rather than the action.
+        const view =
+          filters || action.sort || action.query !== undefined
+            ? {
+                ...(filters ? { filters } : undefined),
+                ...(action.sort ? { sort: action.sort } : undefined),
+                ...(action.query !== undefined ? { query: action.query } : undefined),
+              }
+            : undefined;
+        // What the query will leave, read now against the roster and the
+        // view the hold is about to land: the reply voices this outcome, and
+        // it must not claim rows the list will not draw. Only the drawing
+        // waits for the flight, never the report.
+        const held = appStateNow();
+        const searched =
+          action.query !== undefined && held !== undefined
+            ? spokenSearchOutcome(displaySessions(held), {
+                ...sessionView,
+                ...view,
+              })
+            : undefined;
+        await changeMode(true);
+        // The tab bar and the options button are drawn outside the settings
+        // pages, so this action names no page and waits for none. An action with
+        // nowhere to land releases what it holds the moment it comes up: the
+        // panel itself is what was asked for and it is already open, so the
+        // list must show what the answer is about to claim it shows.
+        errands.arm({
+          targets: errandTargets(action),
+          tab: action.tab,
+          opening,
+          // The panel is what was asked for, so it is nobody's to take away.
+          borrowsPanel: false,
+          hold: view === undefined ? NOTHING_HELD : { view },
+        });
+        // One note line, because an unmappable narrowing and an emptied
+        // search can arrive in the same ask and each has its own sentence.
+        const notes = [
+          action.filters && spoken === undefined
+            ? "That narrowing has no filter of its own here, so every session is shown."
+            : undefined,
+          searched?.note,
+        ].filter((line): line is string => line !== undefined);
+        return {
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          tab: action.tab,
+          ...(spoken !== undefined ? { filters: action.filters } : undefined),
+          ...(action.sort ? { sort: action.sort } : undefined),
+          ...(action.query !== undefined ? { query: action.query } : undefined),
+          ...(searched !== undefined ? { matches: searched.matches } : undefined),
+          ...(notes.length > 0 ? { note: notes.join(" ") } : undefined),
+        };
+      },
+      [ACTION_KIND.UPDATE]: async (action): Promise<WireRecord> => {
+        // The Updates row's own three presses, behind the same bridge calls
+        // its button uses; the main process holds its own guards — a check
+        // never interrupts a download, an install runs only on a build in
+        // hand, and the releases page is an address fixed by the build.
+        if (action.action === APP_UPDATE_ACTION.CHECK) {
+          // Answered rather than fire-and-forget, like the row's own press,
+          // so the outcome voiced is the answer the check actually returned.
+          const answered = await act(ACT_KIND.UPDATE_CHECK);
+          return { status: ACTION_RESULT_STATUS.ACCEPTED, outcome: updateRow(answered).detail };
+        }
+        if (action.action === APP_UPDATE_ACTION.DOWNLOAD) {
+          tell(ACT_KIND.UPDATE_OPEN_RELEASE);
           return {
             status: ACTION_RESULT_STATUS.ACCEPTED,
-            tab: action.tab,
-            ...(spoken !== undefined ? { filters: action.filters } : undefined),
-            ...(action.sort ? { sort: action.sort } : undefined),
-            ...(action.query !== undefined ? { query: action.query } : undefined),
-            ...(searched !== undefined ? { matches: searched.matches } : undefined),
-            ...(notes.length > 0 ? { note: notes.join(" ") } : undefined),
+            note: "The latest release's page is open in the browser; the download itself is by hand from there.",
           };
-        },
-        [ACTION_KIND.UPDATE]: async (action): Promise<WireRecord> => {
-          // The Updates row's own three presses, behind the same bridge calls
-          // its button uses; the main process holds its own guards — a check
-          // never interrupts a download, an install runs only on a build in
-          // hand, and the releases page is an address fixed by the build.
-          if (action.action === APP_UPDATE_ACTION.CHECK) {
-            // Answered rather than fire-and-forget, like the row's own press,
-            // so the outcome voiced is the answer the check actually returned.
-            const answered = await act(ACT_KIND.UPDATE_CHECK);
-            return { status: ACTION_RESULT_STATUS.ACCEPTED, outcome: updateRow(answered).detail };
-          }
-          if (action.action === APP_UPDATE_ACTION.DOWNLOAD) {
-            tell(ACT_KIND.UPDATE_OPEN_RELEASE);
-            return {
-              status: ACTION_RESULT_STATUS.ACCEPTED,
-              note: "The latest release's page is open in the browser; the download itself is by hand from there.",
-            };
-          }
-          // Re-read at the action what the button reads at its press: the guide
-          // the call was validated against is a snapshot, and an install that
-          // failed or landed between the two must answer as the row now
-          // stands. The main process quietly refuses a stale ask either way;
-          // this makes the refusal a sentence rather than a claimed restart
-          // that never comes.
-          const standing = appStateNow()?.update;
-          const row = standing ? updateRow(standing) : undefined;
-          if (row?.action !== UPDATE_ROW_ACTION.RESTART) {
-            return {
-              status: ACTION_RESULT_STATUS.REJECTED,
-              reason: row?.detail ?? "This run does not report where updates stand.",
-            };
-          }
-          tell(ACT_KIND.UPDATE_INSTALL);
+        }
+        // Re-read at the action what the button reads at its press: the guide
+        // the call was validated against is a snapshot, and an install that
+        // failed or landed between the two must answer as the row now
+        // stands. The main process quietly refuses a stale ask either way;
+        // this makes the refusal a sentence rather than a claimed restart
+        // that never comes.
+        const standing = appStateNow()?.update;
+        const row = standing ? updateRow(standing) : undefined;
+        if (row?.action !== UPDATE_ROW_ACTION.RESTART) {
           return {
-            status: ACTION_RESULT_STATUS.ACCEPTED,
-            note: "Luke is quitting to install the downloaded release; this conversation ends with it.",
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: row?.detail ?? "This run does not report where updates stand.",
           };
-        },
-      }),
-    [
-      errands.arm,
-      changeMode,
-      errands.deferSettings,
-      errands.drawHold,
-      feedback.holdSpokenDraft,
-      feedback.latest,
-      presentationOf,
-      publishGuide,
-      sessionView,
-    ],
-  );
+        }
+        tell(ACT_KIND.UPDATE_INSTALL);
+        return {
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          note: "Luke is quitting to install the downloaded release; this conversation ends with it.",
+        };
+      },
+    });
 
   // An app act the brain decided that only a panel can perform. It was
   // validated against the guide in the main process, which sends it to the

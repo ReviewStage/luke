@@ -401,11 +401,6 @@ export function App(): React.JSX.Element {
     expand();
   }, [changeTab, expand, setSettingsView]);
 
-  /** Records where leaving whatever stands in the panel's place comes back to. */
-  const rememberStandDownPage = useCallback((page: SettingsView) => {
-    standDownPage.current = page;
-  }, []);
-
   /**
    * The panel every composer stands down from and comes back to, gathered
    * once so each composer's hook is handed the same one.
@@ -427,7 +422,7 @@ export function App(): React.JSX.Element {
     credentialHeld,
     consentConnectHeld,
     supersetSignInHeld,
-    rememberStandDownPage,
+    standDownPage,
     expand,
     calendars,
     superset: {
@@ -446,7 +441,7 @@ export function App(): React.JSX.Element {
     surface: panelEntrySurface,
     presentation,
     stillMotion,
-    rememberStandDownPage,
+    standDownPage,
   });
 
   /**
@@ -818,7 +813,7 @@ export function App(): React.JSX.Element {
       // note is longer than a key, and a key is the only thing Escape is
       // allowed to discard.
       if (presentation === PANEL_PRESENTATION.FEEDBACK) {
-        feedback.dismiss();
+        feedback.control.dismiss();
         return;
       }
       if (presentation !== PANEL_PRESENTATION.PANEL) return;
@@ -845,7 +840,7 @@ export function App(): React.JSX.Element {
     changeMode,
     changeTab,
     closeSettingsSearch,
-    feedback.dismiss,
+    feedback.control.dismiss,
     discardListening,
     openSettingsSearch,
     presentation,
