@@ -8,15 +8,6 @@ export {
   type VoiceSettings,
 } from "./capability-assembler.js";
 export {
-  HostedRealtimeCredentialMinter,
-  type HostedRealtimeCredentialOptions,
-} from "./hosted-credentials.js";
-export {
-  IntroductionRealtimeCredentialMinter,
-  type IntroductionRealtimeCredentialOptions,
-} from "./introduction-credentials.js";
-export type { RealtimeCredentialMinter } from "./minter.js";
-export {
   environmentRealtimeSpeed,
   environmentRealtimeVoice,
   OPENAI_ENVIRONMENT,
@@ -26,3 +17,11 @@ export {
   openAiRealtimeCredentials,
   unavailableRealtimeDiagnostics,
 } from "./openai-credentials.js";
+export {
+  type HostedRealtimeCredentialOptions,
+  hostedRealtimeCredentialMinter,
+  type IntroductionRealtimeCredentialOptions,
+  introductionRealtimeCredentialMinter,
+  type RealtimeCredentialMinter,
+  type ServiceMintAuthorization,
+} from "./service-mint.js";

@@ -13,6 +13,20 @@
 import { REALTIME_CLIENT_EVENT } from "@sidecar/realtime";
 import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 
+/**
+ * Which kind of record one line of the trace carries. It is vocabulary rather
+ * than the writer's own detail because the exporter that reads a trace back
+ * must name the same kinds without reaching the writer's file handling.
+ */
+export const TRACE_ENTRY_KIND = {
+  WIRE: "wire",
+  BRAIN: "brain",
+  BRAIN_REQUEST: "brain-request",
+  SPEECH: "speech",
+} as const;
+
+export type TraceEntryKind = (typeof TRACE_ENTRY_KIND)[keyof typeof TRACE_ENTRY_KIND];
+
 export const TRACE_DIRECTION = {
   CLIENT: "client",
   SERVER: "server",

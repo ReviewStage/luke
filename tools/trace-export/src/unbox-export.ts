@@ -14,6 +14,7 @@
  */
 
 import { hostedBrainToolCatalog } from "@sidecar/brain";
+import { TRACE_DIRECTION, TRACE_ENTRY_KIND } from "@sidecar/devtrace/vocabulary";
 import { REALTIME_CLIENT_EVENT, REALTIME_SERVER_EVENT } from "@sidecar/realtime";
 import {
   isRecord,
@@ -25,8 +26,6 @@ import {
   wholeNumber,
   wireRecord,
 } from "@sidecar/wire";
-import { TRACE_ENTRY_KIND } from "./trace-writer.js";
-import { TRACE_DIRECTION } from "./vocabulary.js";
 
 export interface UnboxExportOptions {
   /** Names the trace in the viewer, defaulting to a fixed label. */

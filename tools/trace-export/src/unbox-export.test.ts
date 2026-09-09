@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { BRAIN_TOOL, BRAIN_TURN_TRIGGER, hostedBrainToolCatalog } from "@sidecar/brain";
+import { TRACE_DIRECTION, TRACE_ENTRY_KIND } from "@sidecar/devtrace/vocabulary";
 import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
-import { TRACE_ENTRY_KIND } from "./trace-writer.js";
 import { unboxTraceFromLines } from "./unbox-export.js";
-import { TRACE_DIRECTION } from "./vocabulary.js";
 
 function wireLine(at: string, direction: string, event: WireRecord): string {
   return JSON.stringify({ at, kind: TRACE_ENTRY_KIND.WIRE, direction, event });
