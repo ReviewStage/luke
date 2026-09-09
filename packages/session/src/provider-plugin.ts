@@ -493,6 +493,23 @@ export function mergePlugins(
     reason: "No provider observer supports that action.",
   } as const;
 
+  /**
+   * A transcript read belongs to the observer whose latest pass reported the
+   * session, and its answer — a rendering, a refusal in its own words, or no
+   * transcript at all — is the session's own: a local file reader asked
+   * about a cloud session would answer not found, when the honest answer is
+   * that the cloud keeps no transcript. A session no observer reported is
+   * asked of each in turn, the way a hook's session between passes is.
+   */
+  const readOf = <Result extends { status: string }>(
+    providerSessionId: string,
+    ask: (plugin: SessionProviderPlugin) => Promise<Result>,
+    unread: Result,
+  ): Promise<Result> => {
+    const holder = plugins.find((plugin) => observationFor(plugin, providerSessionId));
+    return holder ? ask(holder) : firstFirmAnswer(ask, unread);
+  };
+
   /** One action, asked of each observer in turn with the ask it was built from. */
   const askEach = <Kind extends PluginActionKind>(
     kind: Kind,
@@ -532,12 +549,14 @@ export function mergePlugins(
 
     reads: {
       transcript: (providerSessionId) =>
-        firstFirmAnswer<ProviderTranscriptResult>(
+        readOf<ProviderTranscriptResult>(
+          providerSessionId,
           (plugin) => dispatchRead(plugin, "transcript", providerSessionId),
           exhausted,
         ),
       transcriptSince: (providerSessionId, cursor) =>
-        firstFirmAnswer<ProviderTranscriptSinceResult>(
+        readOf<ProviderTranscriptSinceResult>(
+          providerSessionId,
           (plugin) => dispatchRead(plugin, "transcriptSince", providerSessionId, cursor),
           exhausted,
         ),
