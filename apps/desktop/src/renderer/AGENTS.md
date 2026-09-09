@@ -144,14 +144,39 @@ the motion recorder alike. `COLLAPSE_ANIMATION_MS` is the sum of
 the three cannot drift.
 
 A key being entered is app state, not field state, because it outlives the panel
-it was started in: asking to write one stands the panel down to the slot, where
-the same entry is drawn instead of in the settings row, and the entry remembers
-whether the provider's key page was opened, which decides whether giving
+it was started in: asking to write one stands the panel down to the slot — one
+`SecretSlot` for every secret anyone pastes into Luke, because to a hand a
+one-time code and an API key are the same errand with a different word on it —
+where the same entry is drawn instead of in the settings row, and the entry
+remembers whether the provider's key page was opened, which decides whether giving
 up returns you to the panel or leaves the browser alone. Nothing that closes the
 panel may discard the entry: the pointer leaving is already refused, and a slot
 left alone is the normal case rather than a dismissal, so the settings tab and
 the entry both survive a close and the field takes the caret back whenever the
 shape it is drawn in comes forward again.
+
+## Connections and confirms
+
+Every connection Luke can hold is one entry in `CONNECTION_SCHEMA`: where its
+row stands, its mark, its name, how its status is read off the settings
+snapshot, and every action its row offers. `<ConnectionRow>` is the only
+component that draws one, so five integrations cannot describe themselves five
+ways, and a connection this build cannot offer contributes no row rather than a
+row whose one action cannot run. An entry's own `offered` is judged from the
+settings snapshot alone, which is what the settings search reads too — so a
+result can neither lead to a page without its row nor go missing from a page
+that has one, and a row's name in a result is the name the row itself draws.
+
+Any action that cannot be undone from inside the panel asks first, through
+`<ConfirmSwap>` over `confirm-state.ts`. Two rules the confirm keeps, and the
+reason each is a function rather than a convention: a question does not outlive
+its subject — a confirm left standing where a key used to be would be pointed
+at whatever is stored there next — and it does not outlive the surface it was
+asked on, because one still waiting behind a closed panel would be the first
+thing under the pointer the next time it opened, with nobody having asked for
+it. An answer already sent is the exception to both: it is no longer a
+question, so it finishes wherever it is. `useConfirm` is where all three live;
+a row holding a bare `useState(false)` keeps none of them.
 
 ## Brand artwork
 

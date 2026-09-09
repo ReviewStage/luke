@@ -29,7 +29,7 @@ import {
 import { SESSION_OPTIONS_CONTROL_ID, SESSION_OPTIONS_ID } from "./session-parts";
 import type { SessionWriteHandlers } from "./session-row-view";
 import { focusSearchField, SESSION_SEARCH_INPUT_ID } from "./session-search";
-import type { WorkspaceProviderOption } from "./settings-panel";
+import type { WorkspaceProviderOption } from "./settings/controls";
 
 /**
  * How long a changed search query waits before it is stored. The query moves

@@ -435,10 +435,18 @@ function searchableLines(session: SessionView): readonly string[] {
   return lines.filter((line): line is string => line !== undefined);
 }
 
-/** Every word somewhere on the row: words narrow, they never widen. */
+/**
+ * Every one of a query's words somewhere in the lines read: words narrow, they
+ * never widen. Exported for the settings search, so the two searches cannot
+ * disagree about what finding a word means any more than about what one is.
+ */
+export function matchesTokens(lines: readonly string[], tokens: readonly string[]): boolean {
+  const read = lines.map((line) => line.toLowerCase());
+  return tokens.every((token) => read.some((line) => line.includes(token)));
+}
+
 function matchesQuery(session: SessionView, tokens: readonly string[]): boolean {
-  const lines = searchableLines(session).map((line) => line.toLowerCase());
-  return tokens.every((token) => lines.some((line) => line.includes(token)));
+  return matchesTokens(searchableLines(session), tokens);
 }
 
 /** One stretch of a drawn line that a query's word landed on. */

@@ -49,12 +49,8 @@ import {
   SessionSearchButton,
   widenedView,
 } from "./session-search";
-import {
-  CalendarIntegrations,
-  SETTINGS_WRITES,
-  SettingsPanel,
-  type SettingsPanelProps,
-} from "./settings-panel";
+import { CalendarGateReview } from "./settings/calendar-gate-review";
+import { SettingsPanel, type SettingsPanelProps } from "./settings/settings-panel";
 import { SettingsSearchButton } from "./settings-search";
 import { SignInGate } from "./sign-in-gate";
 import { updateAvailable, updateRow } from "./update-row";
@@ -297,12 +293,7 @@ export function PanelBody({
       settings.settings !== undefined &&
       (settings.settings.calendarAccounts.length > 0 ||
         settings.settings.appleCalendar !== undefined) ? (
-        <CalendarIntegrations
-          settings={settings.settings}
-          calendar={settings.calendar}
-          appleCalendar={settings.appleCalendar}
-          writes={SETTINGS_WRITES}
-        />
+        <CalendarGateReview settings={settings} />
       ) : undefined;
     return (
       <div className="body">

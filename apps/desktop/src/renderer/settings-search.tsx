@@ -1,31 +1,12 @@
 import {
-  APPLE_CALENDAR_ID,
-  APPLE_CALENDAR_NAME,
-  GOOGLE_CALENDAR_ID,
-  GOOGLE_CALENDAR_NAME,
-} from "@sidecar/calendar/vocabulary";
-import {
-  CLOUD_AGENT_PROVIDER_LIST,
-  CREDENTIAL_PROVIDER_ID,
-  VOICE_CREDENTIAL_PROVIDER,
-} from "@sidecar/credentials/vocabulary";
-import {
   ChevronIcon,
   CloseIcon,
   DownloadIcon,
   MegaphoneIcon,
-  PlugIcon,
   PowerIcon,
-  ProviderMark,
   SearchIcon,
   UserIcon,
 } from "@sidecar/panel";
-import {
-  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
-  PROVIDER_ID,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
-  type WorkspaceProviderId,
-} from "@sidecar/session";
 import {
   APP_SETTING_SCHEMA,
   type SettingsRowsInput,
@@ -33,14 +14,19 @@ import {
   settingGuideEntries,
   settingIdVisible,
 } from "@sidecar/settings";
-import { VOICE_SOURCE } from "@sidecar/settings/wire";
 import { Fragment, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { tell } from "./act";
-import { FOCUS_FRAME_LIMIT } from "./credential-entry";
+import { drawnVisibly, focusSeek } from "./focus-seek";
 import { ERRAND_TARGET_ATTRIBUTE } from "./luke-errand";
-import { searchTokens } from "./session-model";
+import { matchesTokens, searchTokens } from "./session-model";
 import { Highlighted } from "./session-search";
+import { type ConnectionVisibility, offeredConnections } from "./settings/connection-schema";
+import {
+  defaultProjectRowId,
+  SETTINGS_SEARCH_ANCHOR_ATTRIBUTE,
+  SETTINGS_SEARCH_ROW,
+} from "./settings-anchors";
 import {
   SETTINGS_SUBVIEW_LIST,
   SETTINGS_VIEW,
@@ -83,67 +69,6 @@ const SEARCH_PLACEHOLDER = "Search settings…";
  */
 export const SETTINGS_SEARCH_INPUT_ID = "settings-search-input";
 
-/**
- * How a row says a pressed result may land on it. The settings' own controls
- * already wear their errand marks, so the anchor exists for the rows that are
- * not settings — a credential line, a shortcut, a section's one row — and the
- * landing looks for either.
- */
-export const SETTINGS_SEARCH_ANCHOR_ATTRIBUTE = "data-search-anchor";
-
-/** What a row spreads onto itself to be somewhere a pressed result lands. */
-export function searchAnchorProps(id: string) {
-  return { [SETTINGS_SEARCH_ANCHOR_ATTRIBUTE]: id } satisfies Record<string, string>;
-}
-
-/**
- * The ids of the searchable rows that are not stored settings, shared with
- * the panel so the entry and the anchor its row wears cannot drift apart.
- * Rows that already have an id of their own — a provider's, the calendar's —
- * anchor by that id instead.
- */
-export const SETTINGS_SEARCH_ROW = {
-  UPDATES: "updates",
-  CHANGELOG: "changelog",
-  FEEDBACK: "feedback",
-  SIGN_OUT: "sign-out",
-  DELETE_ACCOUNT: "delete-account",
-  QUIT: "quit",
-  MICROPHONE: "microphone",
-  TALK_KEY: "talk-key",
-  ASK_KEY: "ask-key",
-  STOP_KEY: "stop-key",
-  CODEX_CLOUD: "codex-cloud",
-} as const;
-
-/**
- * Each provider's Default project row, by the provider it belongs to: several
- * providers draw one, so a shared id would land a press on whichever row
- * happens to stand first. A literal table rather than a composed string, and
- * deliberately only the providers that create workspaces today — a provider
- * it does not name draws its row unfound rather than mislanding a press, and
- * widening it is one line beside the capability that widened.
- */
-type DefaultProjectProviderId =
-  | typeof PROVIDER_ID.CONDUCTOR
-  | typeof CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID
-  | typeof PROVIDER_ID.CODEX
-  | typeof SUPERSET_WORKSPACE_PROVIDER_ID;
-
-const DEFAULT_PROJECT_ROW_ID = {
-  [PROVIDER_ID.CONDUCTOR]: "default-project-conductor",
-  [CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID]: "default-project-conductor-local",
-  [PROVIDER_ID.CODEX]: "default-project-codex",
-  [SUPERSET_WORKSPACE_PROVIDER_ID]: "default-project-superset",
-} as const satisfies Readonly<Record<DefaultProjectProviderId, string>>;
-
-/** The anchor a provider's Default project row wears, if the table names it. */
-export function defaultProjectRowId(providerId: WorkspaceProviderId): string | undefined {
-  if (!Object.hasOwn(DEFAULT_PROJECT_ROW_ID, providerId)) return undefined;
-  // SAFETY: hasOwn narrows the id to the table's own keys.
-  return DEFAULT_PROJECT_ROW_ID[providerId as keyof typeof DEFAULT_PROJECT_ROW_ID];
-}
-
 /** One row a query can find, and where pressing it leads. */
 export interface SettingsSearchEntry {
   /**
@@ -157,7 +82,7 @@ export interface SettingsSearchEntry {
   /** The page the row is drawn on, which is where the result leads. */
   page: SettingsView;
   /** The small mark the row itself wears, for a result to wear too. */
-  icon?: React.JSX.Element;
+  icon?: React.ReactNode;
   /** Every line the query is read against: the label, and words about it. */
   haystack: readonly string[];
 }
@@ -191,32 +116,15 @@ const PAGE_ORDER: readonly SettingsView[] = [SETTINGS_VIEW.ROOT, ...SETTINGS_SUB
 /** The words every shortcut row can be found by, beside its own name. */
 const SHORTCUT_WORDS = "keyboard shortcut hotkey key chord record remove delete none";
 
-/** The words every key row can be found by, beside its provider's name. */
-const KEY_WORDS = "API key credential connect cloud agent sync synced";
-
 /**
- * The rows that are not stored settings, each gated by the condition that
- * draws it. Declared as one table so a row added to a page has one place to
- * become findable — the same rule the guide states for its facts.
+ * The rows that are neither stored settings nor connections, each gated by the
+ * condition that draws it. Declared as one table so a row added to a page has
+ * one place to become findable — the same rule the guide states for its facts.
+ * Every connection is `CONNECTION_SCHEMA`'s to declare, so nothing here
+ * restates one.
  */
 function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[] {
   const entries: (SettingsSearchEntry | undefined)[] = [
-    // The key row is drawn only while the key half of Provider is the live one; on the
-    // account, the section's own entry is what a key-shaped query finds,
-    // because its toggle is where a key is begun from there.
-    input.accountDrawn && input.settings.voiceSource === VOICE_SOURCE.KEY
-      ? {
-          // The row is a provider credential's, so it anchors by provider id.
-          id: VOICE_CREDENTIAL_PROVIDER.id,
-          label: `${VOICE_CREDENTIAL_PROVIDER.displayName} API key`,
-          page: SETTINGS_VIEW.VOICE,
-          icon: <ProviderMark providerId={VOICE_CREDENTIAL_PROVIDER.id} />,
-          haystack: [
-            `${VOICE_CREDENTIAL_PROVIDER.displayName} API key`,
-            "credential connect voice provider",
-          ],
-        }
-      : undefined,
     {
       id: SETTINGS_SEARCH_ROW.UPDATES,
       label: "Updates",
@@ -292,78 +200,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       page: SETTINGS_VIEW.SHORTCUTS,
       haystack: ["Stop Luke", SHORTCUT_WORDS, "stop interrupt quiet cut off a reply"],
     },
-    // Every agent key row, whether or not a key is stored: the list is how
-    // you learn which services Luke can watch at all, and so how you find one.
-    ...CLOUD_AGENT_PROVIDER_LIST.map((provider) => ({
-      id: provider.id,
-      label: provider.displayName,
-      page: SETTINGS_VIEW.CONNECTIONS,
-      icon: <ProviderMark providerId={provider.id} />,
-      haystack: [
-        provider.displayName,
-        KEY_WORDS,
-        ...(provider.keyFormat ? [provider.keyFormat.label] : []),
-      ],
-    })),
-    // The one provider observed through its own CLI's login rather than a key.
-    {
-      id: SETTINGS_SEARCH_ROW.CODEX_CLOUD,
-      label: "Codex",
-      page: SETTINGS_VIEW.CONNECTIONS,
-      icon: <ProviderMark providerId={PROVIDER_ID.CODEX} />,
-      haystack: ["Codex", "cloud tasks CLI login connect"],
-    },
-    input.settings.linearSignInAvailable
-      ? {
-          id: CREDENTIAL_PROVIDER_ID.LINEAR,
-          label: "Linear",
-          page: SETTINGS_VIEW.CONNECTIONS,
-          icon: <ProviderMark providerId={CREDENTIAL_PROVIDER_ID.LINEAR} />,
-          haystack: ["Linear", "issues issue tracker sign in connect integration"],
-        }
-      : undefined,
-    input.superset.installed
-      ? {
-          id: SUPERSET_WORKSPACE_PROVIDER_ID,
-          label: "Superset",
-          page: SETTINGS_VIEW.CONNECTIONS,
-          icon: <PlugIcon />,
-          haystack: ["Superset", "workspaces sign in connect integration"],
-        }
-      : undefined,
-    // Drawn only while local Conductor is actually detected — the block stands
-    // on the same repositories its row offers, so it is searchable exactly when
-    // it is on screen.
-    input.workspaceProviders.some(
-      (provider) =>
-        provider.offersProjects && provider.id === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
-    )
-      ? {
-          id: CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
-          label: "Conductor (local)",
-          page: SETTINGS_VIEW.CONNECTIONS,
-          icon: <ProviderMark providerId={CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID} />,
-          haystack: ["Conductor local", "workspaces create this Mac no key integration"],
-        }
-      : undefined,
-    input.settings.appleCalendarAvailable
-      ? {
-          id: APPLE_CALENDAR_ID,
-          label: APPLE_CALENDAR_NAME,
-          page: SETTINGS_VIEW.CONNECTIONS,
-          icon: <ProviderMark providerId={APPLE_CALENDAR_ID} />,
-          haystack: [APPLE_CALENDAR_NAME, "meetings Mac calendar connect integration"],
-        }
-      : undefined,
-    input.settings.calendarSignInAvailable
-      ? {
-          id: GOOGLE_CALENDAR_ID,
-          label: GOOGLE_CALENDAR_NAME,
-          page: SETTINGS_VIEW.CONNECTIONS,
-          icon: <ProviderMark providerId={GOOGLE_CALENDAR_ID} />,
-          haystack: [GOOGLE_CALENDAR_NAME, "meetings account sign in connect integration"],
-        }
-      : undefined,
     // One entry per provider drawing a Default project row, named for its
     // provider so the results can be told apart, each landing on its own row.
     ...input.workspaceProviders.flatMap((provider): SettingsSearchEntry[] => {
@@ -380,6 +216,31 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
     }),
   ];
   return entries.filter((entry): entry is SettingsSearchEntry => entry !== undefined);
+}
+
+/**
+ * Every connection the pages are offering right now, read from the one table
+ * that declares them: its id is the anchor its row already wears, its name is
+ * the name the row draws, and its own `offered` is the condition that draws it
+ * — so a connection can neither be found where it is not drawn nor go missing
+ * from the search when it is.
+ */
+function connectionEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[] {
+  const visibility: ConnectionVisibility = {
+    settings: input.settings,
+    accountDrawn: input.accountDrawn,
+    supersetInstalled: input.superset.installed,
+    workspaceProjects: input.workspaceProviders
+      .filter((provider) => provider.offersProjects)
+      .map((provider) => ({ id: provider.id, name: provider.name })),
+  };
+  return offeredConnections(visibility).map((spec) => ({
+    id: spec.id,
+    label: spec.name(visibility),
+    page: spec.page,
+    ...(spec.mark ? { icon: spec.mark } : undefined),
+    haystack: [spec.name(visibility), ...spec.haystack],
+  }));
 }
 
 /**
@@ -402,7 +263,7 @@ export function settingsSearchEntries(input: SettingsSearchInput): readonly Sett
       },
     ];
   });
-  const fixed = fixedEntries(input);
+  const fixed = [...connectionEntries(input), ...fixedEntries(input)];
   return PAGE_ORDER.flatMap((page) => [
     ...guided.filter((entry) => entry.page === page),
     ...fixed.filter((entry) => entry.page === page),
@@ -443,10 +304,7 @@ export function searchSettings(
 ): SettingsSearchOutcome | undefined {
   const tokens = searchTokens(query);
   if (tokens.length === 0) return undefined;
-  const kept = entries.filter((entry) => {
-    const lines = entry.haystack.map((line) => line.toLowerCase());
-    return tokens.every((token) => lines.some((line) => line.includes(token)));
-  });
+  const kept = entries.filter((entry) => matchesTokens(entry.haystack, tokens));
   const groups = PAGE_ORDER.flatMap((page): SettingsSearchGroup[] => {
     const items = kept.filter((entry) => entry.page === page);
     return items.length > 0 ? [{ page, items }] : [];
@@ -469,22 +327,16 @@ const FOCUSABLE = "button, select, input, textarea, [tabindex]";
  * view belongs. A row the page is not drawing is given up on quietly.
  */
 export function landOnSettingsRow(id: string): () => void {
-  let frame = 0;
-  let frames = 0;
-  const take = () => {
-    const element =
-      document.querySelector(`[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${id}"]`) ??
-      document.querySelector(`[${ERRAND_TARGET_ATTRIBUTE}="${id}"]`);
-    if (element instanceof HTMLElement && element.checkVisibility({ opacityProperty: true })) {
+  return focusSeek({
+    find: () =>
+      document.querySelector<HTMLElement>(`[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${id}"]`) ??
+      document.querySelector<HTMLElement>(`[${ERRAND_TARGET_ATTRIBUTE}="${id}"]`),
+    ready: drawnVisibly,
+    act: (element) => {
       element.scrollIntoView({ block: "start" });
       if (element.matches(FOCUSABLE)) element.focus({ preventScroll: true });
-      return;
-    }
-    if (frames++ > FOCUS_FRAME_LIMIT) return;
-    frame = requestAnimationFrame(take);
-  };
-  take();
-  return () => cancelAnimationFrame(frame);
+    },
+  });
 }
 
 /**

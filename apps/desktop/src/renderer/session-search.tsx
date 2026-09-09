@@ -2,7 +2,7 @@ import { CloseIcon, SearchIcon } from "@sidecar/panel";
 import { useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { tell } from "./act";
-import { FOCUS_FRAME_LIMIT } from "./credential-entry";
+import { focusSeek } from "./focus-seek";
 import { ERRAND_TARGET, errandTargetProps } from "./luke-errand";
 import { type ArrangedSessions, matchRanges, type SessionArrangement } from "./session-model";
 
@@ -28,20 +28,13 @@ export const SESSION_SEARCH_INPUT_ID = "session-search-input";
  * caller, because the settings search opens its own field the same way.
  */
 export function focusSearchField(fieldId: string): () => void {
-  let frame = 0;
-  let frames = 0;
-  const take = () => {
-    const element = document.getElementById(fieldId);
-    if (element instanceof HTMLInputElement && getComputedStyle(element).visibility === "visible") {
+  return focusSeek({
+    find: () => document.getElementById(fieldId),
+    act: (element) => {
       element.focus({ preventScroll: true });
-      element.select();
-      return;
-    }
-    if (frames++ > FOCUS_FRAME_LIMIT) return;
-    frame = requestAnimationFrame(take);
-  };
-  take();
-  return () => cancelAnimationFrame(frame);
+      if (element instanceof HTMLInputElement) element.select();
+    },
+  });
 }
 
 /**
