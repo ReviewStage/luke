@@ -7,6 +7,7 @@ import {
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import type { TranscriptCursors } from "./cursors.js";
+import { BRAIN_DEFAULTS } from "./defaults.js";
 import type { Generation } from "./generation.js";
 import { heartbeatInputText, wakeInputText } from "./input-items.js";
 import { NestedMap } from "./nested-map.js";
@@ -55,9 +56,6 @@ export interface WakeCaptureOptions {
     cursor: string | undefined,
   ) => Promise<ProviderTranscriptSinceResult>;
   createRunId: () => string;
-  deltaPerSessionChars: number;
-  coalesceMs: number;
-  capacity: number;
   /** The moment the model may be asked again, or nothing when it may be asked now. */
   quietUntil: () => number | undefined;
   /** Whether a turn or the maintenance holds the context; a look waits for it. */
@@ -97,8 +95,8 @@ export class WakeCapture {
     this.#seam = options.seam;
     this.#subject = options.subject;
     this.#queue = new WakeQueue({
-      coalesceMs: options.coalesceMs,
-      capacity: options.capacity,
+      coalesceMs: BRAIN_DEFAULTS.WAKE_COALESCE_MS,
+      capacity: BRAIN_DEFAULTS.PENDING_WAKE_CAPACITY,
       now: this.#seam.now,
       schedule: this.#seam.schedule,
       cancel: this.#seam.cancel,
@@ -279,7 +277,7 @@ export class WakeCapture {
             cursors: generation.captureCursors,
             read: (identity, cursor) => this.#options.readTranscriptSince(identity, cursor),
             signal: generation.abort.signal,
-            maximumChars: this.#options.deltaPerSessionChars,
+            maximumChars: BRAIN_DEFAULTS.DELTA_PER_SESSION_CHARS,
           });
           if (!delta) {
             generation.captureCursors.rollback(mark);

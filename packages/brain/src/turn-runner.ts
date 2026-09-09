@@ -21,6 +21,7 @@ import type {
   SessionIdentity,
 } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
+import { BRAIN_DEFAULTS } from "./defaults.js";
 import {
   CONTEXT_OPENING,
   claimOpenedContext,
@@ -58,11 +59,7 @@ import {
 } from "./tool-executor.js";
 import { brainToolCatalog, brainToolSchemas, resolveTurnToolPolicy } from "./tools.js";
 import type { BrainToolCallTrace, BrainTurnTraceRecord } from "./trace.js";
-import {
-  attachTranscriptDeltas,
-  readWholeTranscript,
-  type TranscriptDeltasAttached,
-} from "./transcript-reads.js";
+import { attachTranscriptDeltas, readWholeTranscript } from "./transcript-reads.js";
 import {
   BRAIN_TURN_KIND,
   BRAIN_TURN_TRIGGER,
@@ -200,8 +197,6 @@ export interface TurnRunnerOptions {
   maximumOutputTokens: number;
   reasoningEffort?: ReasoningEffort;
   executionDeadlineMs: number;
-  deltaPerSessionChars: number;
-  fullTranscriptChars: number;
   /** The one compaction path, owned by the maintenance that also holds the flush counters. */
   compactIfNeeded: (
     turnContext: Omit<TurnContext, "run"> & { run?: RunControl },
@@ -520,7 +515,13 @@ export class TurnRunner {
         );
       }
     }
-    const attachedDeltas = await this.#attachDeltas(plan.events, turnContext);
+    const attachedDeltas = await attachTranscriptDeltas(plan.events, {
+      cursors: generation.cursors,
+      read: (identity, cursor) => this.#options.readTranscriptSince(identity, cursor),
+      signal: turnContext.signal,
+      maximumChars: BRAIN_DEFAULTS.DELTA_PER_SESSION_CHARS,
+      revoked: () => this.#revoked(turnContext),
+    });
     const transcriptBytes = attachedDeltas.transcriptBytes;
     let failure: TurnResult | undefined;
     if (this.#revoked(turnContext)) {
@@ -778,7 +779,12 @@ export class TurnRunner {
         workspace: this.#options.workspace,
         children: this.#options.children,
         memory: this.#options.memory,
-        readWhole: (identity, readContext) => this.#readWhole(identity, readContext),
+        readWhole: (identity, readContext) =>
+          readWholeTranscript(identity, {
+            read: (session) => this.#options.readTranscript(session),
+            signal: readContext.signal,
+            maximumChars: BRAIN_DEFAULTS.FULL_TRANSCRIPT_CHARS,
+          }),
         checkpoint: (checkpointContext) => this.#seam.ledger.checkpoint(checkpointContext),
         runRevoked: (checked) => this.#seam.runRevoked(checked),
         now: this.#seam.now,
@@ -892,35 +898,6 @@ export class TurnRunner {
           end.reason === RUN_END_REASON.DEADLINE ? "execution deadline passed" : "turn revoked";
         return { outcome: TURN_OUTCOME.REVOKED };
     }
-  }
-
-  /**
-   * Reads what each woken session's transcript gained since the brain last
-   * looked, once per session however many events name it, and moves the
-   * cursor. The cursor moves with the context: a turn that fails rolls both
-   * back, so the same delta is read again rather than skipped. A read still
-   * out when the turn is revoked is left unread: the wait settles, and the
-   * turn goes on to its rollback without it.
-   */
-  #attachDeltas(
-    events: readonly BrainWakeEvent[],
-    context: TurnContext,
-  ): Promise<TranscriptDeltasAttached> {
-    return attachTranscriptDeltas(events, {
-      cursors: context.generation.cursors,
-      read: (identity, cursor) => this.#options.readTranscriptSince(identity, cursor),
-      signal: context.signal,
-      maximumChars: this.#options.deltaPerSessionChars,
-      revoked: () => this.#revoked(context),
-    });
-  }
-
-  #readWhole(identity: SessionIdentity, context: TurnContext): Promise<WireRecord> {
-    return readWholeTranscript(identity, {
-      read: (identity) => this.#options.readTranscript(identity),
-      signal: context.signal,
-      maximumChars: this.#options.fullTranscriptChars,
-    });
   }
 
   #revoked(context: Pick<TurnContext, "signal">): boolean {

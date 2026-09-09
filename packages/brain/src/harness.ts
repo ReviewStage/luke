@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { REALTIME_TOOL, type RealtimeFunctionCall } from "@sidecar/acts";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
+import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import {
   CHILD_CLEANUP,
   CHILD_CONTEXT_MODE,

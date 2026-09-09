@@ -1,11 +1,11 @@
 import type { MemoryHousekeepingResult } from "@sidecar/memory";
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import type { ChildEnd, ChildPolicyContext } from "@sidecar/runtime";
 import type {
   AgentRuntime,
   ChildCompletionRecord,
   ChildRunRecord,
   ReasoningEffort,
+  ScheduledTimer,
 } from "@sidecar/runtime/vocabulary";
 import type {
   ProviderTranscriptResult,
@@ -256,7 +256,6 @@ export class BrainAgent {
       ...(options.beforeCompaction ? { beforeCompaction: options.beforeCompaction } : undefined),
       ...(options.flushMarker ? { flushMarker: options.flushMarker } : undefined),
       holdTurnInFlight: (held) => this.#turns.holdInFlight(held),
-      checkpoint: (turnContext) => this.#ledger.checkpoint(turnContext),
     });
     this.#turns = new TurnRunner({
       seam,
@@ -281,8 +280,6 @@ export class BrainAgent {
       maximumOutputTokens: options.maximumOutputTokens ?? BRAIN_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
       ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : undefined),
       executionDeadlineMs: options.executionDeadlineMs ?? BRAIN_DEFAULTS.EXECUTION_DEADLINE_MS,
-      deltaPerSessionChars: BRAIN_DEFAULTS.DELTA_PER_SESSION_CHARS,
-      fullTranscriptChars: BRAIN_DEFAULTS.FULL_TRANSCRIPT_CHARS,
       compactIfNeeded: (turnContext, prompt, countedTokens) =>
         this.#maintenance.compactIfNeeded(turnContext, prompt, countedTokens),
       scheduleMaintenance: (turnContext, countedTokens) =>
@@ -307,9 +304,6 @@ export class BrainAgent {
       roster: options.roster,
       readTranscriptSince: options.readTranscriptSince,
       createRunId: options.createRunId,
-      deltaPerSessionChars: BRAIN_DEFAULTS.DELTA_PER_SESSION_CHARS,
-      coalesceMs: BRAIN_DEFAULTS.WAKE_COALESCE_MS,
-      capacity: BRAIN_DEFAULTS.PENDING_WAKE_CAPACITY,
       quietUntil: () => options.runtime.quietUntil(),
       turnInFlight: () => this.#turns.inFlight(),
       turn: (plan) => this.#turns.turn(plan),
@@ -451,7 +445,7 @@ export class BrainAgent {
   async #mark(runId: string, field: PendingMarkField, recordedAt: number): Promise<boolean> {
     await this.ready();
     const generation = this.#generation;
-    return generation ? this.#asks.mark(generation, runId, field, recordedAt) : false;
+    return generation ? this.#ledger.mark(generation, runId, field, recordedAt) : false;
   }
 
   /**

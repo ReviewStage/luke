@@ -1,14 +1,13 @@
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import {
   PendingInputQueue,
   type QueueBatch,
   type QueuedInput,
   queueSummaryLine,
 } from "@sidecar/runtime";
+import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import { CONTEXT_INPUT_KIND } from "@sidecar/runtime/vocabulary";
 import { CONTEXT_OPENING, type Generation } from "./generation.js";
 import { askInputText } from "./input-items.js";
-import type { PendingMarkField } from "./ledger.js";
 import {
   BRAIN_REQUEST_STATUS,
   BRAIN_SUBMISSION_OUTCOME,
@@ -96,16 +95,6 @@ export class AskLedger {
   /** Opens the queue's own drain now: what the waiting asks waited for has ended. */
   flushQueue(): void {
     this.#queue.flush();
-  }
-
-  /** One marker onto a run, through the ledger that never lets it stand in memory before it stands on disk. */
-  mark(
-    generation: Generation,
-    runId: string,
-    field: PendingMarkField,
-    recordedAt: number,
-  ): Promise<boolean> {
-    return this.#seam.ledger.mark(generation, runId, field, recordedAt);
   }
 
   /** Aborts and forgets every run this agent holds; the generation being replaced is not a cancel. */

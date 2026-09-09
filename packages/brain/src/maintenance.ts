@@ -56,8 +56,6 @@ export interface MaintenanceOptions {
   flushMarker?: BrainFlushMarkerStore;
   /** Holds the turn-in-flight flag while maintenance holds the context the way a turn does. */
   holdTurnInFlight: (held: boolean) => void;
-  /** The turn's own checkpoint, so a compaction the maintenance made is durable before anything reads it. */
-  checkpoint: (turnContext: Omit<TurnContext, "run"> & { run?: RunControl }) => Promise<boolean>;
 }
 
 /**
@@ -168,7 +166,7 @@ export class Maintenance {
     if (this.#revoked(turnContext)) return { ok: true };
     if (!outcome.compacted) return { ok: false, reason: outcome.reason };
     turnContext.generation.compactionCount += 1;
-    if (!(await this.#options.checkpoint(turnContext))) {
+    if (!(await this.#seam.ledger.checkpoint(turnContext))) {
       return { ok: false, reason: "the compacted context could not be checkpointed" };
     }
     return { ok: true };
