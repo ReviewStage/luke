@@ -6,23 +6,14 @@ import {
   REASONING_EFFORT,
   type ReasoningEffort,
 } from "@sidecar/runtime/vocabulary";
-import {
-  type CloudFetch,
-  HTTP_STATUS,
-  positiveInteger,
-  text,
-  type WireRecord,
-  withoutTrailingSlash,
-} from "@sidecar/wire";
+import { type CloudFetch, HTTP_STATUS, text, type WireRecord } from "@sidecar/wire";
+import { KeyedBrainTransport } from "./client.js";
 import { COMPACTION_POLICY } from "./compaction.js";
 import {
   BRAIN_MAXIMUM_OUTPUT_TOKENS,
   BRAIN_REQUEST_TIMEOUT_MS,
   failed,
-  RETRY_AFTER_HEADER,
-  rateLimitWaitMs,
-  requestFault,
-  requestSignal,
+  HTTP_METHOD,
 } from "./model-adapter-shared.js";
 import {
   BRAIN_RESPONSES_COMPACT_PATH,
@@ -93,26 +84,16 @@ const ADMITTED: Admission<undefined> = { admitted: undefined };
 class OpenAiTransport implements ResponsesTransport<undefined> {
   readonly adapter = BUILTIN_MODEL_ADAPTER.OPENAI;
   readonly #model: string;
-  readonly #apiKey: string;
-  readonly #baseUrl: string;
   readonly #reasoningEffort: ReasoningEffort;
-  readonly #fetch: CloudFetch;
-  readonly #now: () => number;
-  readonly #requestTimeoutMs: number;
+  readonly #client: KeyedBrainTransport;
 
   constructor(options: OpenAiModelAdapterOptions) {
-    const apiKey = text(options.apiKey);
-    if (!apiKey) throw new Error("OpenAI API key must not be empty");
-    this.#apiKey = apiKey;
     this.#model = text(options.model) ?? BRAIN_OPENAI_DEFAULTS.MODEL;
-    this.#baseUrl = withoutTrailingSlash(text(options.baseUrl) ?? BRAIN_OPENAI_DEFAULTS.BASE_URL);
     this.#reasoningEffort = options.reasoningEffort ?? BRAIN_OPENAI_DEFAULTS.REASONING_EFFORT;
-    this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
-    this.#now = options.now ?? Date.now;
-    this.#requestTimeoutMs = positiveInteger(
-      options.requestTimeoutMs,
-      BRAIN_OPENAI_DEFAULTS.REQUEST_TIMEOUT_MS,
-    );
+    this.#client = new KeyedBrainTransport({
+      ...options,
+      baseUrl: text(options.baseUrl) ?? BRAIN_OPENAI_DEFAULTS.BASE_URL,
+    });
   }
 
   model(): string {
@@ -184,28 +165,13 @@ class OpenAiTransport implements ResponsesTransport<undefined> {
     );
   }
 
-  async request(operation: ResponsesOperation, body: string, signal: AbortSignal | undefined) {
-    try {
-      return await this.#fetch(`${this.#baseUrl}${OPENAI_PATH[operation]}`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${this.#apiKey}`,
-          "content-type": "application/json",
-        },
-        body,
-        signal: requestSignal(this.#requestTimeoutMs, signal),
-      });
-    } catch (error) {
-      return requestFault(error instanceof Error ? error : undefined);
-    }
+  request(operation: ResponsesOperation, body: string, signal: AbortSignal | undefined) {
+    return this.#client.send(OPENAI_PATH[operation], HTTP_METHOD.POST, body, signal);
   }
 
+  /** Nothing stands between the key and the provider, so a 429 is the provider's own bounded wait. */
   quiet(response: Response): Promise<Quiet> {
-    const waitMs = rateLimitWaitMs(response.headers.get(RETRY_AFTER_HEADER));
-    return Promise.resolve({
-      until: this.#now() + waitMs,
-      message: `OpenAI brain turns are rate limited; pausing for ${Math.round(waitMs / 1000)}s`,
-    });
+    return Promise.resolve(this.#client.quietUntil(response));
   }
 
   /** Status alone diagnoses credentials or an outage, without writing the request, the key, or any session material to the log. */

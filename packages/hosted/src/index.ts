@@ -1,3 +1,4 @@
+export type { AccountToken } from "./account-token.js";
 export {
   type HostedActAnswer,
   type HostedActWorkspaceAnswer,

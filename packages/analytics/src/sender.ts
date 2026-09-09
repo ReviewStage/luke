@@ -8,7 +8,7 @@ import {
   type ProductEventPropertiesFor,
   productEventFromWire,
 } from "@sidecar/analytics";
-import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
+import { type AccountToken, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { type CloudFetch, positiveInteger, text, withoutTrailingSlash } from "@sidecar/wire";
 
 const PRODUCT_EVENT_DEFAULTS = {
@@ -33,15 +33,13 @@ const UNAUTHORIZED_STATUS = 401;
 /** The one discriminator the day marker dedups on; the day itself is the key. */
 const DAY_ACTIVE_KEY = "day";
 
-export interface ProductEventSenderOptions {
+export interface ProductEventSenderOptions extends AccountToken {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   /** The running build's version, as the packaged app reports it. */
   appVersion: string;
   /** `runMode.sendsNetwork`. False makes every record a no-op. */
   sends: boolean;
-  readAccessToken: () => Promise<string | undefined>;
-  refreshAccount: () => Promise<void>;
   fetch?: CloudFetch;
   now?: () => number;
   requestTimeoutMs?: number;
