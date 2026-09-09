@@ -5,6 +5,8 @@ import {
   UNKNOWN_ACT_STATUS,
   type UnparsedWireValue,
 } from "@sidecar/wire";
+import { NestedMap } from "./nested-map.js";
+import { outputStatus } from "./tool-results.js";
 
 /**
  * The action journal: one entry per act a developer ask dispatched, keyed by
@@ -101,43 +103,24 @@ export function journalActCounts(
   return counts;
 }
 
-function outputStatus(outputJson: string): string | undefined {
-  try {
-    // SAFETY: JSON.parse returns a wire value; the record and string guards are the validation.
-    const parsed = JSON.parse(outputJson) as UnparsedWireValue;
-    return isRecord(parsed) && isWireString(parsed.status) ? parsed.status : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * Journal entries as one run reads them: by call id, with the two questions
  * the dispatch asks — has this call already been answered, and does a repeated
  * id carry the same arguments it did the first time.
  */
 export class BrainJournal {
-  readonly #entries = new Map<string, Map<string, BrainJournalEntry>>();
+  readonly #entries = new NestedMap<BrainJournalEntry>();
 
   constructor(entries: readonly BrainJournalEntry[] = []) {
-    for (const entry of entries) this.#run(entry.runId).set(entry.callId, { ...entry });
-  }
-
-  #run(runId: string): Map<string, BrainJournalEntry> {
-    let run = this.#entries.get(runId);
-    if (!run) {
-      run = new Map();
-      this.#entries.set(runId, run);
-    }
-    return run;
+    for (const entry of entries) this.#entries.set(entry.runId, entry.callId, { ...entry });
   }
 
   get(runId: string, callId: string): BrainJournalEntry | undefined {
-    return this.#entries.get(runId)?.get(callId);
+    return this.#entries.get(runId, callId);
   }
 
   start(entry: Omit<BrainJournalEntry, "outputJson" | "settledAt">): void {
-    this.#run(entry.runId).set(entry.callId, { ...entry });
+    this.#entries.set(entry.runId, entry.callId, { ...entry });
   }
 
   settle(runId: string, callId: string, outputJson: string, settledAt: number): void {
@@ -149,18 +132,18 @@ export class BrainJournal {
 
   /** Every entry, runs in insertion order and calls in dispatch order. */
   entries(): readonly BrainJournalEntry[] {
-    return [...this.#entries.values()].flatMap((run) => [...run.values()].map((e) => ({ ...e })));
+    return [...this.#entries.groups()].flatMap(([, run]) =>
+      [...run.values()].map((entry) => ({ ...entry })),
+    );
   }
 
   /** Drops one entry whose start could not be checkpointed, so it never reads as an act that ran. */
   forget(runId: string, callId: string): void {
-    const run = this.#entries.get(runId);
-    run?.delete(callId);
-    if (run?.size === 0) this.#entries.delete(runId);
+    this.#entries.delete(runId, callId);
   }
 
   /** Drops the journals of the runs named, for the host's retention to call. */
   dropRuns(runIds: Iterable<string>): void {
-    for (const runId of runIds) this.#entries.delete(runId);
+    for (const runId of runIds) this.#entries.deleteOuter(runId);
   }
 }

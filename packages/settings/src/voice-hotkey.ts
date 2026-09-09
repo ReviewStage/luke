@@ -28,6 +28,26 @@ export const DEFAULT_VOICE_HOTKEYS: readonly string[] = ["Alt+Space"];
 export const VOICE_HOTKEY_NONE = "none";
 
 /**
+ * The one rule all three Luke keys follow: a deleted key offers nothing, a
+ * chosen chord goes first because it is what the user asked for, the defaults
+ * stand behind a choice and never behind a removal, and a chord a
+ * higher-ranked key already holds is left out, because two Luke keys competing
+ * for one chord would silently cost one of them its whole feature with nothing
+ * on screen saying why.
+ */
+function hotkeyCandidates(
+  chosen: string | undefined,
+  defaults: readonly string[],
+  taken: readonly (string | undefined)[],
+): readonly string[] {
+  if (chosen === VOICE_HOTKEY_NONE) return [];
+  const candidates = chosen
+    ? [chosen, ...defaults.filter((candidate) => candidate !== chosen)]
+    : defaults;
+  return candidates.filter((candidate) => !taken.includes(candidate));
+}
+
+/**
  * The key that cuts off a reply being spoken, from whatever app is frontmost.
  *
  * Option-S because S is for stop, and Option-letter is the family the other
@@ -50,11 +70,7 @@ export function stopHotkeyCandidates(
   chosen: string | undefined,
   taken: readonly (string | undefined)[],
 ): readonly string[] {
-  if (chosen === VOICE_HOTKEY_NONE) return [];
-  const candidates = chosen
-    ? [chosen, ...DEFAULT_STOP_HOTKEYS.filter((candidate) => candidate !== chosen)]
-    : DEFAULT_STOP_HOTKEYS;
-  return candidates.filter((candidate) => !taken.includes(candidate));
+  return hotkeyCandidates(chosen, DEFAULT_STOP_HOTKEYS, taken);
 }
 
 /**
@@ -83,11 +99,7 @@ export function askHotkeyCandidates(
   chosen: string | undefined,
   taken: readonly (string | undefined)[],
 ): readonly string[] {
-  if (chosen === VOICE_HOTKEY_NONE) return [];
-  const candidates = chosen
-    ? [chosen, ...DEFAULT_ASK_HOTKEYS.filter((candidate) => candidate !== chosen)]
-    : DEFAULT_ASK_HOTKEYS;
-  return candidates.filter((candidate) => !taken.includes(candidate));
+  return hotkeyCandidates(chosen, DEFAULT_ASK_HOTKEYS, taken);
 }
 
 /**
@@ -194,9 +206,7 @@ export function parseVoiceHotkey(value: string): string | undefined {
  * back on its own.
  */
 export function voiceHotkeyCandidates(chosen: string | undefined): readonly string[] {
-  if (chosen === VOICE_HOTKEY_NONE) return [];
-  if (!chosen) return DEFAULT_VOICE_HOTKEYS;
-  return [chosen, ...DEFAULT_VOICE_HOTKEYS.filter((candidate) => candidate !== chosen)];
+  return hotkeyCandidates(chosen, DEFAULT_VOICE_HOTKEYS, []);
 }
 
 /** What became of one keystroke offered to the recording control. */

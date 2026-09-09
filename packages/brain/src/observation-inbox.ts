@@ -2,9 +2,9 @@ import type { Session, SessionIdentity } from "@sidecar/session";
 import {
   ACT_RESULT_STATUS,
   type ActResultStatus,
+  isInstant,
   isRecord,
   isWireBoolean,
-  isWireNumber,
   isWireString,
   type UnparsedWireValue,
   type WireRecord,
@@ -53,10 +53,6 @@ function isWakeKind(value: UnparsedWireValue): value is BrainWakeKind {
   return isWireString(value) && WAKE_KIND_LIST.includes(value as BrainWakeKind);
 }
 
-function instant(value: UnparsedWireValue): value is number {
-  return isWireNumber(value) && Number.isFinite(value) && value >= 0;
-}
-
 const ACT_RESULT_STATUS_LIST: readonly ActResultStatus[] = Object.values(ACT_RESULT_STATUS);
 
 function isActResultStatus(value: UnparsedWireValue): value is ActResultStatus {
@@ -78,7 +74,7 @@ export function brainObservationEntryFromWire(
   if (!isRecord(value)) return undefined;
   if (!isWireString(value.id) || value.id.length === 0 || !isWakeKind(value.kind)) return undefined;
   if (!isWireString(value.providerId) || !isWireString(value.providerSessionId)) return undefined;
-  if (!instant(value.atMs) || !instant(value.capturedAt)) return undefined;
+  if (!isInstant(value.atMs) || !isInstant(value.capturedAt)) return undefined;
   if (value.hookEvent !== undefined && !isWireString(value.hookEvent)) return undefined;
   if (value.session !== undefined && !isRecord(value.session)) return undefined;
   if (value.cursor !== undefined && !isWireString(value.cursor)) return undefined;
@@ -159,13 +155,31 @@ export function eventFromEntry(entry: BrainObservationEntry): BrainWakeEvent {
   };
 }
 
-/** Whether an entry already stands for the same observation: the same hook for the same session at the same instant. */
-export function sameObservation(entry: BrainObservationEntry, event: BrainWakeEvent): boolean {
+/** What makes two observations the same one: the same hook for the same session at the same instant. */
+export interface ObservationMark {
+  readonly kind: BrainWakeKind;
+  readonly hookEvent?: string;
+  readonly atMs: number;
+  readonly identity: SessionIdentity;
+}
+
+/** An inbox entry's mark; the entry keeps the session identity as two flat fields. */
+export function entryMark(entry: BrainObservationEntry): ObservationMark {
+  return {
+    kind: entry.kind,
+    hookEvent: entry.hookEvent,
+    atMs: entry.atMs,
+    identity: { providerId: entry.providerId, providerSessionId: entry.providerSessionId },
+  };
+}
+
+/** Whether two observations are the one observation, so a hook delivered twice is captured once. */
+export function sameObservation(first: ObservationMark, second: ObservationMark): boolean {
   return (
-    entry.kind === event.kind &&
-    entry.hookEvent === event.hookEvent &&
-    entry.atMs === event.atMs &&
-    entry.providerId === event.identity.providerId &&
-    entry.providerSessionId === event.identity.providerSessionId
+    first.kind === second.kind &&
+    first.hookEvent === second.hookEvent &&
+    first.atMs === second.atMs &&
+    first.identity.providerId === second.identity.providerId &&
+    first.identity.providerSessionId === second.identity.providerSessionId
   );
 }

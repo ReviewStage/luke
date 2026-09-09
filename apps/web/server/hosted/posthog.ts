@@ -13,6 +13,8 @@
  * retry, which this pipeline does not want — the desktop never retries either.
  */
 
+import { type CloudFetch, withoutTrailingSlash } from "@sidecar/wire";
+
 export const POSTHOG_ENVIRONMENT = {
   PROJECT_API_KEY: "POSTHOG_PROJECT_API_KEY",
   /** The ingestion host a batch is posted to. */
@@ -42,8 +44,6 @@ export const POSTHOG_DEFAULTS = {
 export function posthogProjectConsoleUrl(projectId: string, host?: string): string {
   return `${resolvePosthogApiHost(host)}/project/${encodeURIComponent(projectId)}`;
 }
-
-export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
 /**
  * Who the account behind a batch is, as the person record should read. The
@@ -75,12 +75,8 @@ export interface PosthogBatch {
 
 export interface PosthogUpstreamOptions {
   host?: string;
-  fetch?: FetchLike;
+  fetch?: CloudFetch;
   timeoutMs?: number;
-}
-
-function withoutTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value.slice(0, -1) : value;
 }
 
 /** The deployment's private-API host override when it holds one, the default otherwise. */

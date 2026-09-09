@@ -12,6 +12,7 @@ import {
   type ProviderWorkspaceResult,
   SessionProviderAdapterBase,
   SUPERSET_WORKSPACE_PROVIDER_ID,
+  UNSUPPORTED_BY_OBSERVATION,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
 } from "@sidecar/session";
@@ -40,6 +41,8 @@ const SUPERSET_TARGET_LIMIT = 20;
 const SUPERSET_PROJECT_LIMIT = 50;
 const SUPERSET_FAILURE_REASON_LIMIT = 300;
 const SUPERSET_PROJECT_REFRESH_INTERVAL_MS = 60_000;
+/** How long any one CLI invocation may run before it is given up on. */
+const SUPERSET_INVOCATION_TIMEOUT_MS = 30_000;
 const LOCAL_TARGET_ID = "local";
 const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "gu");
 
@@ -65,6 +68,25 @@ function supersetFailureReason(error: UnparsedWireValue, fallback: string): stri
   return reason || fallback;
 }
 
+/**
+ * The stderr a failed invocation attached to what it threw, whether the runner
+ * is the injected one or `execFile`. The parameter is the thrown cause itself,
+ * because that attachment is the only place the CLI's own words survive.
+ */
+function attachedStderr(cause: unknown): UnparsedWireValue {
+  if (!(cause instanceof Error) || !("stderr" in cause)) return undefined;
+  // SAFETY: a command runner's failure may attach stderr; the reason reader validates it as wire.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The attached value is untyped; the wire reader is the validation.
+  return (cause as Error & { stderr?: UnparsedWireValue }).stderr;
+}
+
+/** The values an envelope carries, whether the CLI answered a bare array or wrapped it in `data`. */
+function envelopeValues(parsed: UnparsedWireValue): readonly UnparsedWireValue[] {
+  if (Array.isArray(parsed)) return parsed;
+  const envelope = wireRecord(parsed);
+  return envelope && Array.isArray(envelope.data) ? envelope.data : [];
+}
+
 function failedSupersetInvocation(binary: string, stderr: string): InvocationError {
   return Object.assign(new InvocationError(INVOCATION_FAILURE.FAILED, binary), { stderr });
 }
@@ -87,7 +109,7 @@ async function defaultCommandRunner(
   const result = await boundedInvocation({
     binary: executable,
     arguments: arguments_,
-    timeoutMs: 30_000,
+    timeoutMs: SUPERSET_INVOCATION_TIMEOUT_MS,
     maximumOutputBytes: SUPERSET_QUERY_OUTPUT_LIMIT,
   });
   if (result.exitCode !== 0) {
@@ -196,7 +218,11 @@ export class SupersetCli {
     const choice = choices.find((organization) => organization.slug === slug);
     if (!choice) return false;
     try {
-      await this.#query(this.executable, ["organization", "switch", choice.slug, "--json"], 30_000);
+      await this.#query(
+        this.executable,
+        ["organization", "switch", choice.slug, "--json"],
+        SUPERSET_INVOCATION_TIMEOUT_MS,
+      );
       return this.connected();
     } catch {
       return false;
@@ -205,14 +231,12 @@ export class SupersetCli {
 
   async organizations(): Promise<readonly SupersetOrganizationChoice[]> {
     try {
-      const output = await this.#query(this.executable, ["organization", "list", "--json"], 30_000);
-      const parsed = unparsedWire(JSON.parse(output));
-      const envelope = wireRecord(parsed);
-      const values = Array.isArray(parsed)
-        ? parsed
-        : envelope && Array.isArray(envelope.data)
-          ? envelope.data
-          : [];
+      const output = await this.#query(
+        this.executable,
+        ["organization", "list", "--json"],
+        SUPERSET_INVOCATION_TIMEOUT_MS,
+      );
+      const values = envelopeValues(unparsedWire(JSON.parse(output)));
       return values.slice(0, SUPERSET_ORGANIZATION_LIMIT).flatMap((value) => {
         if (!isRecord(value)) return [];
         const id = text(value.id);
@@ -314,7 +338,7 @@ export class SupersetCli {
     if (!offered)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: UNSUPPORTED_BY_OBSERVATION,
       };
     const branch = this.#branchName(request.name ?? request.task);
     const name = request.name ?? branch;
@@ -341,10 +365,10 @@ export class SupersetCli {
     if (!(await this.connected()))
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: UNSUPPORTED_BY_OBSERVATION,
       };
     try {
-      const output = await this.#query(this.executable, arguments_, 30_000);
+      const output = await this.#query(this.executable, arguments_, SUPERSET_INVOCATION_TIMEOUT_MS);
       const parsed = unparsedWire(JSON.parse(output));
       const envelope = wireRecord(parsed);
       // The CLI answers a creation with `{ workspace, alreadyExists }`, so the
@@ -371,15 +395,10 @@ export class SupersetCli {
         };
       }
     } catch (error) {
-      const stderr =
-        error instanceof Error && "stderr" in error
-          ? // SAFETY: injected command-runner failures may attach stderr.
-            (error as Error & { stderr?: UnparsedWireValue }).stderr
-          : undefined;
       return {
         status: ACT_RESULT_STATUS.REJECTED,
         reason: supersetFailureReason(
-          unparsedWire({ stderr }),
+          unparsedWire({ stderr: attachedStderr(error) }),
           "Superset could not create that workspace.",
         ),
       };
@@ -397,7 +416,7 @@ export class SupersetCli {
     if (!context.terminalId)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: UNSUPPORTED_BY_OBSERVATION,
       };
     return this.#act(
       [
@@ -429,7 +448,7 @@ export class SupersetCli {
     }
     return {
       status: ACT_RESULT_STATUS.UNSUPPORTED,
-      reason: "That act is not supported by the latest observation.",
+      reason: UNSUPPORTED_BY_OBSERVATION,
     };
   }
 
@@ -450,7 +469,7 @@ export class SupersetCli {
     if (!(await this.connected()))
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: UNSUPPORTED_BY_OBSERVATION,
       };
     try {
       await this.#run(this.executable, [
@@ -462,15 +481,10 @@ export class SupersetCli {
       ]);
       return { status: ACT_RESULT_STATUS.ACCEPTED };
     } catch (error) {
-      const stderr =
-        error instanceof Error && "stderr" in error
-          ? // SAFETY: execFile failures attach stderr to the thrown Error object.
-            (error as Error & { stderr?: UnparsedWireValue }).stderr
-          : undefined;
       return {
         status: ACT_RESULT_STATUS.REJECTED,
         reason: supersetFailureReason(
-          unparsedWire({ stderr }),
+          unparsedWire({ stderr: attachedStderr(error) }),
           "Superset could not rename that workspace.",
         ),
       };
@@ -508,7 +522,7 @@ export class SupersetCli {
     if (!(await this.connected()))
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: UNSUPPORTED_BY_OBSERVATION,
       };
     try {
       await this.#run(this.executable, arguments_);
@@ -521,14 +535,9 @@ export class SupersetCli {
   async #records(arguments_: readonly string[]): Promise<readonly WireRecord[]> {
     try {
       const parsed = unparsedWire(
-        JSON.parse(await this.#query(this.executable, arguments_, 30_000)),
+        JSON.parse(await this.#query(this.executable, arguments_, SUPERSET_INVOCATION_TIMEOUT_MS)),
       );
-      const envelope = wireRecord(parsed);
-      const values = Array.isArray(parsed)
-        ? parsed
-        : envelope && Array.isArray(envelope.data)
-          ? envelope.data
-          : [];
+      const values = envelopeValues(parsed);
       return values.flatMap((value) => {
         const record = wireRecord(value);
         return record ? [record] : [];

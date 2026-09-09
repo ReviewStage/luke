@@ -3,7 +3,6 @@ import type { GatewayCallResult, GatewayClient } from "@sidecar/runtime";
 import {
   GATEWAY_EVENT,
   GATEWAY_METHOD,
-  type GatewayEvent,
   MAIN_SESSION_KEY,
   type SessionKey,
 } from "@sidecar/runtime-contracts";
@@ -20,6 +19,7 @@ import {
 } from "#shared/messages/brain";
 import { CONVERSATION_DELETE_OUTCOME } from "../brain/conversation-deletion";
 import { REJECTED_SUBMISSION } from "../brain/ipc";
+import { gatewayEventReader } from "./wire";
 
 /**
  * The desktop's operator client: what the windows' IPC and the main
@@ -85,15 +85,7 @@ export interface GatewayOperatorOptions {
 
 export function createGatewayOperator(options: GatewayOperatorOptions): GatewayOperator {
   const { client } = options;
-  const on = <Payload>(
-    kind: GatewayEvent["kind"],
-    read: (payload: WireValue) => Payload | undefined,
-    listener: (payload: Payload) => void,
-  ) =>
-    client.on(kind, (event) => {
-      const payload = read(event.payload);
-      if (payload !== undefined) listener(payload);
-    });
+  const on = gatewayEventReader(client);
   return {
     client,
     submit: async (submission, sessionKey = MAIN_SESSION_KEY) =>

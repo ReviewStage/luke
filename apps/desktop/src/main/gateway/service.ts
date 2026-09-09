@@ -59,6 +59,13 @@ import type {
 import { publishAsk } from "../brain/ipc";
 import type { SettableConfigurationPatch } from "../brain/wiring";
 import type { ConversationOperations } from "../conversation-operations";
+import { invalid } from "./wire";
+
+/** The two parameters a Gateway method refuses by name; protocol diagnostics, never words a person reads. */
+const REFUSAL = {
+  NO_RUN: "no run has that id",
+  NOT_LISTED: "the directory does not list that conversation",
+} as const;
 
 /**
  * The host side of the desktop's Gateway: every capability the protocol
@@ -144,15 +151,6 @@ export interface GatewayService {
   observationChanged: () => void;
   configurationChanged: () => void;
   childChanged: (childId: string) => void;
-}
-
-const REFUSAL = {
-  NO_RUN: "no run has that id",
-  NOT_LISTED: "the directory does not list that conversation",
-} as const;
-
-function invalid(message: string): GatewayMethodOutcome {
-  return gatewayError(GATEWAY_ERROR.INVALID_PARAMS, message);
 }
 
 /** A parameter that is not the shape its method takes; the reading handler answers it as an invalid-params refusal. */

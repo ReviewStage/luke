@@ -104,6 +104,15 @@ export function text(value: UnparsedWireValue): string | undefined {
   return normalized || undefined;
 }
 
+/**
+ * An instant on the wire: epoch milliseconds, finite and never before the
+ * epoch, so a record claiming a negative or infinite time reads as no time at
+ * all rather than as an arithmetic hazard downstream.
+ */
+export function isInstant(value: UnparsedWireValue): value is number {
+  return isWireNumber(value) && Number.isFinite(value) && value >= 0;
+}
+
 export function wholeNumber(value: UnparsedWireValue): number | undefined {
   if (!isWireNumber(value) || !Number.isFinite(value)) return undefined;
   return value;
@@ -223,8 +232,18 @@ export const HTTP_STATUS = {
   UNAUTHORIZED: 401,
   FORBIDDEN: 403,
   NOT_FOUND: 404,
+  METHOD_NOT_ALLOWED: 405,
   CONFLICT: 409,
+  TOO_MANY_REQUESTS: 429,
 } as const;
 
 /** The fetch a caller is given, so a test can answer for the network. */
 export type CloudFetch = (url: string, init: RequestInit) => Promise<Response>;
+
+/**
+ * A base address with no trailing separator, so a path joined to it cannot
+ * produce a doubled slash the upstream reads as a different route.
+ */
+export function withoutTrailingSlash(value: string): string {
+  return value.endsWith("/") ? value.slice(0, -1) : value;
+}

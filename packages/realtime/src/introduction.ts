@@ -1,5 +1,5 @@
 import { LUKE_PERSONA } from "@sidecar/guide";
-import type { WireRecord } from "@sidecar/wire";
+import { text, type WireRecord } from "@sidecar/wire";
 import { type RealtimeSessionOptions, realtimeSessionConfig } from "./realtime-credentials.js";
 import { REALTIME_CLIENT_EVENT } from "./realtime-protocol.js";
 
@@ -86,11 +86,6 @@ export interface IntroductionLine {
  */
 const maximumIntroductionDataLength = 1_000;
 
-function trimmedText(value: string | undefined): string | undefined {
-  const normalized = value?.trim();
-  return normalized || undefined;
-}
-
 /**
  * Builds the events that speak one introduction beat.
  *
@@ -102,20 +97,20 @@ function trimmedText(value: string | undefined): string | undefined {
  * declares no tools, so a scripted beat can never become an act.
  */
 export function introductionSpeechEvents(line: IntroductionLine): readonly WireRecord[] {
-  const direction = trimmedText(line.direction);
+  const direction = text(line.direction);
   if (!direction) return [];
   const data = (line.data ?? [])
-    .map((value) => trimmedText(value.replace(/\s+/g, " ")))
+    .map((value) => text(value.replace(/\s+/g, " ")))
     .filter((value): value is string => value !== undefined)
     .join("\n")
     .slice(0, maximumIntroductionDataLength);
-  const text = data
+  const content = data
     ? `[introduction line]\n${direction}\n[data]\n${data}`
     : `[introduction line]\n${direction}`;
   return [
     {
       type: REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
-      item: { type: "message", role: "user", content: [{ type: "input_text", text }] },
+      item: { type: "message", role: "user", content: [{ type: "input_text", text: content }] },
     },
     {
       type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE,

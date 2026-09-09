@@ -7,7 +7,7 @@ import type { AppGuideSnapshot } from "@sidecar/guide";
 import type { RealtimeConnection } from "@sidecar/hosted";
 import type { ConversationEntry, RealtimeDiagnostics } from "@sidecar/realtime";
 import type { GatewayCallResult, GatewayClient } from "@sidecar/runtime";
-import { GATEWAY_EVENT, GATEWAY_METHOD, type GatewayEventKind } from "@sidecar/runtime-contracts";
+import { GATEWAY_EVENT, GATEWAY_METHOD } from "@sidecar/runtime-contracts";
 import type {
   ObservedWorkspaceProject,
   Session,
@@ -31,13 +31,13 @@ import {
   isWireString,
   type UnparsedWireValue,
   type WireRecord,
-  type WireValue,
 } from "@sidecar/wire";
 import type { AppleCalendarAccess } from "#shared/apple-calendar";
 import type { AppSettings, SettingsUpdateResult } from "#shared/messages/settings";
 import type { SpeechOffer, SpeechOutcome } from "#shared/messages/speech";
 import { isSpeechOffer } from "#shared/messages/speech";
 import { RECEIVER_REPORT_KIND } from "../host/runtime-host";
+import { carried, gatewayEventReader } from "./wire";
 
 /**
  * The desktop's client over the host's own vocabulary: the settings, account,
@@ -204,13 +204,6 @@ function answeredList<Value>(value: UnparsedWireValue): readonly Value[] {
   return Array.isArray(value) ? value.flatMap((entry) => answered<Value>(entry) ?? []) : [];
 }
 
-/** One domain value of this client's, carried to the host as the JSON it already is. */
-function carried<Value>(value: Value): WireValue {
-  // SAFETY: the values carried here (settings values, guide snapshots, History entries, event properties) are the structured-clone payloads the bridge already guarded; each is JSON data.
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The protocol carries JSON; the domain type is set aside at this one boundary.
-  return value as unknown as WireValue;
-}
-
 export function createHostOperator(options: HostOperatorOptions): HostOperator {
   const { client } = options;
 
@@ -246,15 +239,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     await result;
   };
 
-  const on = <Payload>(
-    kind: GatewayEventKind,
-    read: (payload: WireValue) => Payload | undefined,
-    listener: (payload: Payload) => void,
-  ) =>
-    client.on(kind, (event) => {
-      const payload = read(event.payload);
-      if (payload !== undefined) listener(payload);
-    });
+  const on = gatewayEventReader(client);
 
   const wireReporter = (reporter: string) => ({ reporter });
 

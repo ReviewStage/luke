@@ -26,7 +26,6 @@ import {
   type ToolExecutionContext,
   type ToolExecutor,
   type ToolInvocation,
-  type ToolResult,
 } from "@sidecar/runtime-contracts";
 import type { SessionIdentity } from "@sidecar/session";
 import {
@@ -46,6 +45,7 @@ import {
 } from "./input-items.js";
 import { UNCONFIRMED_ACT_RESULT, UNKNOWN_ACT_RESULT } from "./journal.js";
 import type { BrainActExecution, BrainActPerformer, BrainRoster } from "./performer.js";
+import { answer } from "./tool-results.js";
 import {
   BRAIN_TOOL,
   isBrainOnlyTool,
@@ -190,11 +190,6 @@ export function refusalForPolicy(
     return rejection(REFUSAL_REASON.ANNOUNCE_IN_ASK);
   }
   return rejection(REFUSAL_REASON.NOT_ALLOWED);
-}
-
-function answer(output: WireRecord): ToolResult {
-  const status = text(output.status);
-  return { outputJson: JSON.stringify(output), ...(status ? { status } : undefined) };
 }
 
 /**

@@ -1,16 +1,14 @@
-import type {
-  ProviderTranscriptResult,
-  ProviderTranscriptSinceResult,
-  SessionIdentity,
+import {
+  OMISSION_MARKER,
+  type ProviderTranscriptResult,
+  type ProviderTranscriptSinceResult,
+  type SessionIdentity,
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { rejection, sameIdentity } from "./generation.js";
 import { type Settled, settledUnlessAborted } from "./settled.js";
 import { REFUSAL_REASON } from "./turn.js";
 import type { BrainTranscriptDelta, BrainWakeEvent } from "./wake-events.js";
-
-/** Stands where the front of a transcript was cut, so the model knows it is reading a tail. */
-export const OMISSION_MARKER = "[… earlier transcript omitted …]";
 
 /** A transcript held to a bound from the front, and whether anything was cut. */
 export interface FrontCut {

@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
+import { OMISSION_MARKER } from "@sidecar/session";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import { OmpSessionAdapter } from "./adapter.js";
 import { OMP_SESSIONS_DIRECTORY } from "./records.js";
@@ -164,7 +165,7 @@ test("keeps the newest turns when the rendering outgrows its bound", async (t) =
     maximumRenderedLength: 80,
   });
 
-  assert.ok(rendered?.startsWith("[earlier turns omitted]"));
+  assert.ok(rendered?.startsWith(OMISSION_MARKER));
   assert.ok(rendered?.endsWith("OMP: Fixed; the test passes now."));
 });
 

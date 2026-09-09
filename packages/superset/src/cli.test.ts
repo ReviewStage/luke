@@ -3,7 +3,12 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { ACT_RESULT_STATUS, PROVIDER_ID, SESSION_STATUS } from "@sidecar/session";
+import {
+  ACT_RESULT_STATUS,
+  PROVIDER_ID,
+  SESSION_STATUS,
+  UNSUPPORTED_BY_OBSERVATION,
+} from "@sidecar/session";
 import { isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
 import {
   isSupersetControlId,
@@ -114,7 +119,7 @@ test("a missing CLI login exposes no Superset actions", async (t) => {
   assert.equal(await cli.connected(), false);
   assert.deepEqual(await cli.sendMessage(CONTEXT, "hello"), {
     status: ACT_RESULT_STATUS.UNSUPPORTED,
-    reason: "That act is not supported by the latest observation.",
+    reason: UNSUPPORTED_BY_OBSERVATION,
   });
 });
 
@@ -259,7 +264,7 @@ test("a chatless workspace context takes the delete but never a message", async 
   // No terminal exists for a message to land in, so no invocation may run.
   assert.deepEqual(await cli.sendMessage(chatless, "hello"), {
     status: ACT_RESULT_STATUS.UNSUPPORTED,
-    reason: "That act is not supported by the latest observation.",
+    reason: UNSUPPORTED_BY_OBSERVATION,
   });
   assert.equal(
     (await cli.executeControl(chatless, SUPERSET_CONTROL_ID.DELETE_WORKSPACE)).status,

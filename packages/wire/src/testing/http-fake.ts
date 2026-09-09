@@ -13,8 +13,6 @@ export const HTTP_STATUS = {
   // What a production route answers a request missing a header it demands,
   // reproduced by a provider fake so a forgotten header cannot pass.
   BAD_REQUEST: 400,
-  // Named by the OAuth tests, which treat it as transient alongside 408.
-  TOO_MANY_REQUESTS: 429,
   SERVER_ERROR: 500,
 } as const;
 

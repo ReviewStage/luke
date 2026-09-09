@@ -11,14 +11,19 @@ import {
   type RealtimeDiagnostics,
   type RealtimeMintOutcome,
 } from "@sidecar/realtime";
-import { positiveInteger, text, type UnparsedWireValue, unparsedWire } from "@sidecar/wire";
+import {
+  type CloudFetch,
+  positiveInteger,
+  text,
+  type UnparsedWireValue,
+  unparsedWire,
+  withoutTrailingSlash,
+} from "@sidecar/wire";
 import type { RealtimeCredentialMinter } from "./minter.js";
 
 const SERVICE_MINT_DEFAULTS = {
   REQUEST_TIMEOUT_MS: 10_000,
 } as const;
-
-export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
 export interface ServiceMintOptions {
   /** The hosted service origin, without a trailing slash. */
@@ -31,13 +36,9 @@ export interface ServiceMintOptions {
   malformedDetail: string;
   voice?: string;
   speed?: number;
-  fetch?: FetchLike;
+  fetch?: CloudFetch;
   now?: () => number;
   requestTimeoutMs?: number;
-}
-
-function withoutTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value.slice(0, -1) : value;
 }
 
 /**
@@ -58,7 +59,7 @@ export abstract class ServiceRealtimeCredentialMinter implements RealtimeCredent
   #voice: string | undefined;
   readonly #configuredSpeed: number | undefined;
   #speed: number | undefined;
-  readonly #fetch: FetchLike;
+  readonly #fetch: CloudFetch;
   readonly #now: () => number;
   readonly #requestTimeoutMs: number;
   #lastModel: string | undefined;

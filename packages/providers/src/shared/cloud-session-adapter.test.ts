@@ -9,6 +9,7 @@ import {
   type ProviderSessionObservation,
   SESSION_LOCATION,
   SESSION_STATUS,
+  UNSUPPORTED_BY_OBSERVATION,
 } from "@sidecar/session";
 import { isWireString } from "@sidecar/wire";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
@@ -159,7 +160,7 @@ test("answers unsupported explicitly when no observed route exists", async () =>
   for (const adapter of [stub, observer]) {
     assert.deepEqual(await adapter.sendMessage({ providerSessionId: "missing", text: "hello" }), {
       status: ACT_RESULT_STATUS.UNSUPPORTED,
-      reason: "That act is not supported by the latest observation.",
+      reason: UNSUPPORTED_BY_OBSERVATION,
     });
     assert.deepEqual(adapter.workspaceProjects(), []);
   }
@@ -530,11 +531,11 @@ test("refuses a message for any session that did not advertise taking one", asyn
   // been promised nothing, and no request should exist to find that out.
   assert.deepEqual(unadvertised, {
     status: "unsupported",
-    reason: "That act is not supported by the latest observation.",
+    reason: UNSUPPORTED_BY_OBSERVATION,
   });
   assert.deepEqual(unobserved, {
     status: "unsupported",
-    reason: "That act is not supported by the latest observation.",
+    reason: UNSUPPORTED_BY_OBSERVATION,
   });
   assert.equal(stub.requests.length, observationRequests);
 });
@@ -721,11 +722,11 @@ test("runs an advertised control through its documented route, sending no body",
   assert.equal(write?.body, undefined);
   assert.deepEqual(unadvertised, {
     status: "unsupported",
-    reason: "That act is not supported by the latest observation.",
+    reason: UNSUPPORTED_BY_OBSERVATION,
   });
   assert.deepEqual(unknown, {
     status: "unsupported",
-    reason: "That act is not supported by the latest observation.",
+    reason: UNSUPPORTED_BY_OBSERVATION,
   });
   assert.equal(stub.requests.length, observationRequests + 1);
 });

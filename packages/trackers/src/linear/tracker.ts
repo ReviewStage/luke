@@ -14,6 +14,7 @@ import {
   isRecord,
   isWireNumber,
   text,
+  UNSUPPORTED_BY_OBSERVATION,
   type UnparsedWireValue,
   unparsedWire,
   type WireRecord,
@@ -191,7 +192,7 @@ export class LinearIssueTracker implements IssueTrackerAdapter {
     if (!accessToken)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: UNSUPPORTED_BY_OBSERVATION,
       };
 
     const [document, variables, resultField] =

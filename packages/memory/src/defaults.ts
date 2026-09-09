@@ -1,4 +1,11 @@
 /**
+ * How many characters stand for a token where no real count is at hand. The
+ * pinned OpenClaw uses it both to cut a chunk and to size a context, so one
+ * number answers for both rather than two that could drift apart.
+ */
+export const ESTIMATED_CHARS_PER_TOKEN = 4;
+
+/**
  * The retrieval defaults, pinned to OpenClaw `b7528507`
  * (`src/agents/memory-search.ts`). Changing one of these is a deliberate
  * change to the parity fixture, not a tuning an implementer makes alone.
@@ -18,7 +25,7 @@ export const MEMORY_SEARCH_DEFAULTS = {
   TEMPORAL_DECAY_HALF_LIFE_DAYS: 30,
   EMBEDDING_CACHE_MAXIMUM_ENTRIES: 50_000,
   /** The pinned source estimates four characters per token when it cuts a chunk. */
-  CHARS_PER_TOKEN_ESTIMATE: 4,
+  CHARS_PER_TOKEN_ESTIMATE: ESTIMATED_CHARS_PER_TOKEN,
 } as const;
 
 /**

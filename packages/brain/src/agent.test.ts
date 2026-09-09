@@ -23,6 +23,7 @@ import {
 } from "@sidecar/runtime-contracts";
 import {
   normalizeSession,
+  OMISSION_MARKER,
   type ProviderSessionObservation,
   type ProviderTranscriptResult,
   type ProviderTranscriptSinceResult,
@@ -70,7 +71,6 @@ import {
 } from "./state-store.js";
 import { BRAIN_TOOL, isBrainOnlyTool, TOOL_GROUP } from "./tools.js";
 import type { BrainTurnTraceRecord } from "./trace.js";
-import { OMISSION_MARKER } from "./transcript-reads.js";
 import { BRAIN_TURN_TRIGGER } from "./turn.js";
 import { BRAIN_WAKE_KIND, type BrainDelivery, type BrainWakeEvent } from "./wake-events.js";
 

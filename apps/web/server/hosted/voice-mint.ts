@@ -1,4 +1,5 @@
 import {
+  type CloudFetch,
   HOSTED_WS_BASE_URL,
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
@@ -16,12 +17,7 @@ import {
   type UnparsedWireValue,
 } from "../core.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
-import {
-  type FetchLike,
-  HOSTED_OPENAI_DEFAULTS,
-  type OpenAiPostBody,
-  postOpenAi,
-} from "./openai.js";
+import { HOSTED_OPENAI_DEFAULTS, type OpenAiPostBody, postOpenAi } from "./openai.js";
 import type { HostedSpend } from "./quota.js";
 
 /**
@@ -83,7 +79,7 @@ export interface RealtimeConnectionMintOptions {
   preferences: VoiceMintPreferences;
   /** Builds the session document this endpoint mints with. */
   clientSecretRequest: (options: RealtimeSessionOptions) => OpenAiPostBody;
-  fetch?: FetchLike;
+  fetch?: CloudFetch;
   now?: () => number;
   timeoutMs?: number;
 }
@@ -159,7 +155,7 @@ export interface VoiceMintOptions {
   model?: string;
   resolveUserId: (request: Request) => Promise<string | undefined>;
   spend: (userId: string) => Promise<HostedSpend>;
-  fetch?: FetchLike;
+  fetch?: CloudFetch;
   now?: () => number;
   timeoutMs?: number;
 }

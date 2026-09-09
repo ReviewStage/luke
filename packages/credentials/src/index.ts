@@ -12,6 +12,7 @@ export {
   VOICE_CREDENTIAL_PROVIDER,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "./credential-providers.js";
+export { ACCESS_TOKEN_EXPIRY_SLACK_MS } from "./expiry.js";
 export {
   accountLoopbackPage,
   LOOPBACK_CONNECTION_SOURCE,

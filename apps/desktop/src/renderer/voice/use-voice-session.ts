@@ -193,23 +193,14 @@ export function lukeCaptionsToShow(input: {
 }
 
 /**
- * What a talk-key press does before the session is asked. A latched turn is
- * already open — this press is someone saying they are done, which is the
- * release's to answer. Otherwise a press against no microphone call has
- * seconds of handshake ahead of it, and the meter has to answer the press,
- * not the handshake.
+ * Whether a talk-key press has a call to open before the session is asked. A
+ * latched turn is already open — that press is someone saying they are done,
+ * which is the release's to answer. Otherwise a press against no microphone
+ * call has seconds of handshake ahead of it, and the meter has to answer the
+ * press, not the handshake.
  */
 export function talkKeyPress(input: { latched: boolean; microphoneCall: boolean }) {
-  if (input.latched) {
-    return { deferToRelease: true, openCall: false } satisfies {
-      deferToRelease: boolean;
-      openCall: boolean;
-    };
-  }
-  return { deferToRelease: false, openCall: !input.microphoneCall } satisfies {
-    deferToRelease: boolean;
-    openCall: boolean;
-  };
+  return { openCall: !input.latched && !input.microphoneCall };
 }
 
 /**
@@ -243,6 +234,14 @@ export function liveSpeedApplies(
 }
 
 /**
+ * Whether a changed voice is still owed a restart, and what to do about it now.
+ */
+export interface VoiceRestartDecision {
+  due: boolean;
+  action: VoiceRestart;
+}
+
+/**
  * What a changed voice should do to a call already up. A call being opened
  * counts as one to reopen: its credential may already have been minted in the
  * old voice. A call that ended on its own owes nothing.
@@ -253,41 +252,20 @@ export function voiceRestartAction(input: {
   live: boolean;
   due: boolean;
   status: RealtimeStatus;
-}) {
-  if (input.next === undefined) {
-    return { due: input.due, action: VOICE_RESTART.NONE } satisfies {
-      due: boolean;
-      action: VoiceRestart;
-    };
-  }
+}): VoiceRestartDecision {
+  if (input.next === undefined) return { due: input.due, action: VOICE_RESTART.NONE };
   const due =
     input.due || (input.previous !== undefined && input.previous !== input.next && input.live);
-  if (!due) {
-    return { due: false, action: VOICE_RESTART.NONE } satisfies {
-      due: boolean;
-      action: VoiceRestart;
-    };
-  }
+  if (!due) return { due: false, action: VOICE_RESTART.NONE };
   if (
     input.status === REALTIME_STATUS.IDLE ||
     input.status === REALTIME_STATUS.FAILED ||
     input.status === REALTIME_STATUS.UNAVAILABLE
   ) {
-    return { due: false, action: VOICE_RESTART.DROP } satisfies {
-      due: boolean;
-      action: VoiceRestart;
-    };
+    return { due: false, action: VOICE_RESTART.DROP };
   }
-  if (input.status !== REALTIME_STATUS.READY) {
-    return { due: true, action: VOICE_RESTART.WAIT } satisfies {
-      due: boolean;
-      action: VoiceRestart;
-    };
-  }
-  return { due: false, action: VOICE_RESTART.RESTART } satisfies {
-    due: boolean;
-    action: VoiceRestart;
-  };
+  if (input.status !== REALTIME_STATUS.READY) return { due: true, action: VOICE_RESTART.WAIT };
+  return { due: false, action: VOICE_RESTART.RESTART };
 }
 
 /** A transcription belongs only to the same visible history generation as its turn. */

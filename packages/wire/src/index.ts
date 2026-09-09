@@ -5,11 +5,13 @@ export {
   isActResult,
   isActResultStatus,
   UNKNOWN_ACT_STATUS,
+  UNSUPPORTED_BY_OBSERVATION,
   type UnknownActResult,
 } from "./act-result.js";
 export {
   type CloudFetch,
   HTTP_STATUS,
+  isInstant,
   isOptionalWireString,
   isRecord,
   isUnitLevel,
@@ -32,6 +34,7 @@ export {
   type WireValue,
   wholeNumber,
   wireRecord,
+  withoutTrailingSlash,
 } from "./json.js";
 export {
   type ArrayOptions,

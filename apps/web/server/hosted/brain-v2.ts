@@ -12,6 +12,7 @@ import {
   brainOutputReplayable,
   brainResponsesOutput,
   brainResponsesRequest,
+  type CloudFetch,
   embeddingsVectors,
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_OPERATION,
@@ -44,7 +45,7 @@ import {
   jsonResponse,
   readBoundedBody,
 } from "./http.js";
-import { type FetchLike, postOpenAi } from "./openai.js";
+import { postOpenAi } from "./openai.js";
 import type { HostedSpend } from "./quota.js";
 
 /**
@@ -81,7 +82,7 @@ export interface BrainCapabilitiesOptions {
 
 export interface BrainV2Options extends BrainCapabilitiesOptions {
   spend: (userId: string) => Promise<HostedSpend>;
-  fetch?: FetchLike;
+  fetch?: CloudFetch;
   timeoutMs?: number;
 }
 

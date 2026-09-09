@@ -79,9 +79,11 @@ import {
   type RunEnd,
   SAVE_SCOPE,
 } from "./ledger.js";
+import { NestedMap } from "./nested-map.js";
 import {
   type BrainObservationEntry,
   entryFromEvent,
+  entryMark,
   eventFromEntry,
   sameObservation,
 } from "./observation-inbox.js";
@@ -205,10 +207,12 @@ export const BRAIN_DEFAULTS = {
   FULL_TRANSCRIPT_CHARS: 60_000,
   /**
    * The most wakes held for one turn; past it the oldest go, since the delta
-   * read covers what they said. The wake buffer is not the ask queue, whose
-   * capacity and overflow are the port's own.
+   * read covers what they said. It is the inbox's own bound, because a wake
+   * held past what one turn can open with is a wake no turn would read. The
+   * wake buffer is not the ask queue, whose capacity and overflow are the
+   * port's own.
    */
-  PENDING_WAKE_CAPACITY: 20,
+  PENDING_WAKE_CAPACITY: INBOX_CAPACITY,
 } as const;
 
 /**
@@ -503,7 +507,7 @@ export class BrainAgent {
    * launch is captured even with no transcript gained, because a status that
    * changed while Luke was closed is still a change worth one look.
    */
-  readonly #lastLook = new BySession<string>();
+  readonly #lastLook = new NestedMap<string>();
   /** Captures run one after another, so two reads of one session never race each other's cursor. */
   #capturing: Promise<unknown> = Promise.resolve();
   #capturesInFlight = 0;
@@ -1062,19 +1066,19 @@ export class BrainAgent {
       if (!generation || this.#stopped || generation.abort.signal.aborted) return 0;
       const fresh = events.filter(
         (event, index) =>
-          !generation.inbox.some((entry) => sameObservation(entry, event)) &&
-          !events.slice(0, index).some((earlier) => sameWake(earlier, event)),
+          !generation.inbox.some((entry) => sameObservation(entryMark(entry), event)) &&
+          !events.slice(0, index).some((earlier) => sameObservation(earlier, event)),
       );
       if (fresh.length === 0) return 0;
       const mark = generation.captureCursors.persisted();
-      const reads = new BySession<{
+      const reads = new NestedMap<{
         delta: BrainTranscriptDelta | undefined;
         cursor: string | undefined;
       }>();
       const entries: BrainObservationEntry[] = [];
       const now = this.#now();
       for (const event of fresh) {
-        let read = reads.get(event.identity);
+        let read = reads.get(event.identity.providerId, event.identity.providerSessionId);
         if (!read) {
           const delta = await readTranscriptDelta(event.identity, {
             cursors: generation.captureCursors,
@@ -1087,7 +1091,7 @@ export class BrainAgent {
             return 0;
           }
           read = { delta, cursor: generation.captureCursors.cursor(event.identity) };
-          reads.set(event.identity, read);
+          reads.set(event.identity.providerId, event.identity.providerSessionId, read);
         } else {
           // A second event for the same session in one batch carries no
           // second delta: the first read covers both.
@@ -1103,7 +1107,8 @@ export class BrainAgent {
         if (
           event.kind === BRAIN_WAKE_KIND.ROSTER &&
           !read.delta?.text &&
-          this.#lastLook.get(event.identity) === lookFingerprint(event)
+          this.#lastLook.get(event.identity.providerId, event.identity.providerSessionId) ===
+            lookFingerprint(event)
         ) {
           continue;
         }
@@ -1123,7 +1128,11 @@ export class BrainAgent {
       }
       for (const event of fresh) {
         if (event.kind === BRAIN_WAKE_KIND.ROSTER) {
-          this.#lastLook.set(event.identity, lookFingerprint(event));
+          this.#lastLook.set(
+            event.identity.providerId,
+            event.identity.providerSessionId,
+            lookFingerprint(event),
+          );
         }
       }
       return entries.length;
@@ -2750,37 +2759,6 @@ function uniqueIdentities(events: readonly BrainWakeEvent[]): readonly SessionId
     }
   }
   return seen;
-}
-
-function sameWake(first: BrainWakeEvent, second: BrainWakeEvent): boolean {
-  return (
-    first.kind === second.kind &&
-    first.hookEvent === second.hookEvent &&
-    first.atMs === second.atMs &&
-    sameIdentity(first.identity, second.identity)
-  );
-}
-
-/**
- * A value per observed session, keyed by provider and then by the provider's
- * own session id, the way the cursors are: two identifiers, never one string
- * composed of both.
- */
-class BySession<T> {
-  readonly #providers = new Map<string, Map<string, T>>();
-
-  get(identity: SessionIdentity): T | undefined {
-    return this.#providers.get(identity.providerId)?.get(identity.providerSessionId);
-  }
-
-  set(identity: SessionIdentity, value: T): void {
-    let sessions = this.#providers.get(identity.providerId);
-    if (!sessions) {
-      sessions = new Map();
-      this.#providers.set(identity.providerId, sessions);
-    }
-    sessions.set(identity.providerSessionId, value);
-  }
 }
 
 /** A session as the roster showed it at a look, in the fields a change would move; never a transcript. */

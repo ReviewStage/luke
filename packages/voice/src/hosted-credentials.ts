@@ -6,8 +6,8 @@ import {
   type RealtimeConnection,
 } from "@sidecar/hosted";
 import { REALTIME_MINT_OUTCOME } from "@sidecar/realtime";
-import { isRecord, type UnparsedWireValue, unparsedWire } from "@sidecar/wire";
-import { type FetchLike, ServiceRealtimeCredentialMinter } from "./service-mint.js";
+import { type CloudFetch, isRecord, type UnparsedWireValue, unparsedWire } from "@sidecar/wire";
+import { ServiceRealtimeCredentialMinter } from "./service-mint.js";
 
 const UNAUTHORIZED_STATUS = 401;
 const QUOTA_STATUS = 429;
@@ -27,7 +27,7 @@ export interface HostedRealtimeCredentialOptions {
   refreshAccount: () => Promise<void>;
   voice?: string;
   speed?: number;
-  fetch?: FetchLike;
+  fetch?: CloudFetch;
   now?: () => number;
   requestTimeoutMs?: number;
 }

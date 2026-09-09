@@ -21,6 +21,7 @@ import {
   SESSION_STATUS,
   type SessionProvider,
   type SessionStatus,
+  UNSUPPORTED_BY_OBSERVATION,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentSelection,
   type WorkspaceProject,
@@ -940,7 +941,7 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     if (!observation) {
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: UNSUPPORTED_BY_OBSERVATION,
       };
     }
     // Only ids that are actually UUIDs may enter the request path — the same

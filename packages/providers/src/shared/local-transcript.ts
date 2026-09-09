@@ -9,7 +9,7 @@
  * a reader sees the whole rendering the tail it read produces.
  */
 
-import { transcriptReadTailBytes } from "@sidecar/session";
+import { OMISSION_MARKER, transcriptReadTailBytes } from "@sidecar/session";
 import { isRecord, isWireString, recordFromJsonLine, text, type WireRecord } from "@sidecar/wire";
 import { type FileWindow, fileStats, readRange, readTailWindow } from "./local-session-adapter.js";
 
@@ -29,8 +29,6 @@ export const TRANSCRIPT_BOUNDS = {
   /** A rendered tool call or its result: the gist, never the payload. */
   MAXIMUM_TOOL_LENGTH: 200,
 } as const;
-
-export const OMISSION_MARKER = "[earlier turns omitted]";
 
 export function transcriptContentBlocks(
   record: WireRecord,

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ACT_RESULT_STATUS, ISSUE_ACTION_KIND } from "@sidecar/issues";
+import { UNSUPPORTED_BY_OBSERVATION } from "@sidecar/wire";
 import type { JsonValue, ParsedJsonObject } from "@sidecar/wire/testing";
 import {
   HTTP_STATUS,
@@ -87,7 +88,7 @@ test("no token means no request and a tracker that is not connected", async () =
     }),
     {
       status: ACT_RESULT_STATUS.UNSUPPORTED,
-      reason: "That act is not supported by the latest observation.",
+      reason: UNSUPPORTED_BY_OBSERVATION,
     },
   );
   assert.equal(requests.length, 0);

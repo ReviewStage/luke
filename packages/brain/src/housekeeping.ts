@@ -18,6 +18,7 @@ import {
 } from "@sidecar/runtime-contracts";
 import { ACT_RESULT_STATUS, isWireString, type WireRecord, wireRecord } from "@sidecar/wire";
 import type { BrainWorkspaceAccess } from "./tool-executor.js";
+import { answer } from "./tool-results.js";
 import { BRAIN_TOOL, brainToolCatalog } from "./tools.js";
 import { REFUSAL_REASON } from "./turn.js";
 
@@ -136,13 +137,6 @@ export async function completeToolFree(
   return end.reason === RUN_END_REASON.COMPLETED && end.text.trim().length > 0
     ? end.text
     : undefined;
-}
-
-function answer(output: WireRecord): ToolResult {
-  return {
-    outputJson: JSON.stringify(output),
-    ...(isWireString(output.status) ? { status: output.status } : undefined),
-  };
 }
 
 function rejection(reason: string): ToolResult {

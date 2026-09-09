@@ -14,3 +14,11 @@ export const APPLE_CALENDAR_ACCESS = {
 
 export type AppleCalendarAccess =
   (typeof APPLE_CALENDAR_ACCESS)[keyof typeof APPLE_CALENDAR_ACCESS];
+
+/**
+ * The System Settings pane where the Mac's own calendar grant is given or
+ * taken back. The grant is macOS's, never Luke's, so the only thing to offer
+ * is the way there.
+ */
+export const CALENDAR_PRIVACY_PANE_URL =
+  "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars";

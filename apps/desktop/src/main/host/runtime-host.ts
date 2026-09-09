@@ -88,7 +88,6 @@ import {
   DeliveryLedger,
   type GatewayMethodTable,
   type GatewayShutdownSteps,
-  gatewayError,
   gatewayOk,
   HEARTBEAT_DEFAULTS,
   heartbeatJob,
@@ -101,7 +100,6 @@ import {
   CONVERSATION_KIND,
   type ConversationRecord,
   type EmbeddingAdapter,
-  GATEWAY_ERROR,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   isIdentifier,
@@ -172,7 +170,7 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
-import { APPLE_CALENDAR_ACCESS } from "#shared/apple-calendar";
+import { APPLE_CALENDAR_ACCESS, CALENDAR_PRIVACY_PANE_URL } from "#shared/apple-calendar";
 import { ACCOUNT_STATUS, type AccountSnapshot, isAccountProvider } from "#shared/messages/account";
 import type { BrainAppActRequest } from "#shared/messages/brain";
 import type { ObservedAccountCalendars, SettingsUpdateResult } from "#shared/messages/settings";
@@ -189,6 +187,7 @@ import { calendarOnboardingOwed } from "../calendar-onboarding-flow";
 import { conversationOperations, startHistoryMaintenance } from "../conversation-operations";
 import { NODE_CAPABILITY } from "../gateway/desktop-node";
 import { createGatewayService, type GatewayService, type GrantedWords } from "../gateway/service";
+import { carried, invalid } from "../gateway/wire";
 import { createSessionActPerformer, NodeAnswerLostError } from "../ipc/session-acts";
 import { wireMemoryMaintenance } from "../memory-maintenance";
 import { type OnboardingState, onboardingStateFile } from "../onboarding-state";
@@ -277,8 +276,6 @@ const HELD_NOTICE_RELEASE_INTERVAL_MS = 30_000;
  * the longest consent taken back keeps holding anything.
  */
 const APPLE_ACCESS_POLL_INTERVAL_MS = 10_000;
-const CALENDAR_PRIVACY_PANE_URL =
-  "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars";
 
 /** The agent's identity workspace and the skills beside it, under the agent's own directory. */
 const AGENT_WORKSPACE_DIRECTORY = "workspace";
@@ -289,10 +286,6 @@ const DIAGNOSTIC_COUNTED_AS = {
   [ADAPTER_DIAGNOSTIC_KIND.ACCIDENTAL_WAKE]: PRODUCT_DIAGNOSTIC_KIND.ACCIDENTAL_WAKE,
 } satisfies Record<AdapterDiagnosticKind, ProductDiagnosticKind>;
 
-function invalid(message: string) {
-  return gatewayError(GATEWAY_ERROR.INVALID_PARAMS, message);
-}
-
 function isSessionIdentity(value: UnparsedWireValue): value is SessionIdentity & WireRecord {
   return (
     isRecord(value) &&
@@ -300,13 +293,6 @@ function isSessionIdentity(value: UnparsedWireValue): value is SessionIdentity &
     isWireString(value.providerSessionId) &&
     value.providerSessionId.length > 0
   );
-}
-
-/** A record the build made, carried to the wire as it stands; every field of these shapes is already a wire value. */
-function wire<Value>(value: Value): WireValue {
-  // SAFETY: the shapes carried here (settings, snapshots, rosters, offers) are the structured-clone payloads the windows already receive; each is JSON data.
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The protocol carries JSON; the domain type is set aside at this one boundary.
-  return value as unknown as WireValue;
 }
 
 /**
@@ -510,7 +496,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         writeOnboardingState({ calendarOnboardingRequiredAt: new Date(now()).toISOString() });
         void settleCalendarOnboardingIfConnected();
       }
-      emit(GATEWAY_EVENT.ACCOUNT_CHANGED, wire(account));
+      emit(GATEWAY_EVENT.ACCOUNT_CHANGED, carried(account));
       void emitSettings();
       void emitSessionReplay();
       if (signedIn && !wasSignedIn) productEvents.record(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
@@ -855,7 +841,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     const generation = ++sessionReplayGeneration;
     const replay = await sessionReplayState();
     if (generation !== sessionReplayGeneration) return;
-    emit(GATEWAY_EVENT.SESSION_REPLAY_CHANGED, wire(replay));
+    emit(GATEWAY_EVENT.SESSION_REPLAY_CHANGED, carried(replay));
   }
 
   function emitSettingsSnapshot(
@@ -863,7 +849,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     reporter?: string,
   ): void {
     emit(GATEWAY_EVENT.SETTINGS_CHANGED, {
-      settings: wire(settings),
+      settings: carried(settings),
       ...(reporter !== undefined ? { reporter } : undefined),
     });
   }
@@ -946,7 +932,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     cli: supersetCli,
     openExternal: (url) => openExternalThroughNode(url),
     onChange: (state) => {
-      emit(GATEWAY_EVENT.SUPERSET_SIGN_IN_CHANGED, wire(state));
+      emit(GATEWAY_EVENT.SUPERSET_SIGN_IN_CHANGED, carried(state));
       if (state.stage !== SUPERSET_SIGN_IN_STAGE.CONNECTED) return;
       void sessionObservationLoop.refresh();
       recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
@@ -974,7 +960,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     const serialized = JSON.stringify(projects);
     if (serialized === lastWorkspaceProjects) return;
     lastWorkspaceProjects = serialized;
-    emit(GATEWAY_EVENT.WORKSPACE_PROJECTS_CHANGED, { projects: wire(projects) });
+    emit(GATEWAY_EVENT.WORKSPACE_PROJECTS_CHANGED, { projects: carried(projects) });
   }
 
   async function pruneWorkspaceProjectDefaults(
@@ -1112,7 +1098,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
    * shape this build cannot read, is a refusal, and the act is left undone.
    */
   async function performBrainAppAct(action: BrainAppActRequest["action"]): Promise<WireRecord> {
-    const result = await nodes.invoke(NODE_CAPABILITY.PANEL_APP_ACT, { action: wire(action) });
+    const result = await nodes.invoke(NODE_CAPABILITY.PANEL_APP_ACT, { action: carried(action) });
     if (result.status === NODE_CAPABILITY_STATUS.OK && isRecord(result.value)) return result.value;
     if (result.status === NODE_CAPABILITY_STATUS.UNKNOWN) {
       return { status: UNKNOWN_ACT_STATUS, reason: result.reason };
@@ -1589,7 +1575,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
   function offerNextSpeech(): void {
     if (!voiceReceiver.isReady() || !voiceCapabilities.realtimeCredentials) return;
     const offer = speechArbiter.next();
-    if (offer) emit(GATEWAY_EVENT.SPEECH_OFFERED, wire(offer));
+    if (offer) emit(GATEWAY_EVENT.SPEECH_OFFERED, carried(offer));
   }
 
   voiceReceiver.onReady(() => {
@@ -1621,7 +1607,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         ...(failure ? { failure } : undefined),
         ...(revoked ? { revoked } : undefined),
       }));
-      emit(GATEWAY_EVENT.CALENDARS_CHANGED, { calendars: wire(observedCalendars) });
+      emit(GATEWAY_EVENT.CALENDARS_CHANGED, { calendars: carried(observedCalendars) });
       for (const held of accounts) {
         if (held.failure) report(`Calendar observation failed: ${held.failure}`);
       }
@@ -1719,7 +1705,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
 
   function broadcastSessions(sessions: readonly Session[]): void {
     rosterBroadcast = true;
-    emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: wire(sessions), settled: true });
+    emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: carried(sessions), settled: true });
   }
 
   function startSessionObservation(): void {
@@ -1898,13 +1884,13 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         sessionReplayState(),
       ]);
       return gatewayOk({
-        settings: wire(settings),
-        account: wire(account),
-        sessions: wire(rosterForClients()),
+        settings: carried(settings),
+        account: carried(account),
+        sessions: carried(rosterForClients()),
         sessionsSettled: !runMode.observesProviders || rosterBroadcast,
         announcementsHeld: quiet,
-        conversationHistory: wire(runtimeStoreWiring.thread().entries()),
-        workspaceProjects: wire(
+        conversationHistory: carried(runtimeStoreWiring.thread().entries()),
+        workspaceProjects: carried(
           accountCapabilitiesActive()
             ? normalizeObservedWorkspaceProjects(
                 offeredWorkspaceProjects(),
@@ -1912,18 +1898,18 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
               )
             : [],
         ),
-        calendars: wire(accountCapabilitiesActive() ? observedCalendars : []),
+        calendars: carried(accountCapabilitiesActive() ? observedCalendars : []),
         calendarOnboardingOwed: calendarOnboardingGateOwed(),
         supersetInstalled,
         supersetConnected,
-        sessionReplay: wire(replay),
+        sessionReplay: carried(replay),
         receiverEpoch: voiceReceiver.epoch(),
         voiceAvailable: voiceCapabilities.realtimeCredentials !== undefined,
         agentTraceEnabled: agentTrace !== undefined,
       });
     },
     [GATEWAY_METHOD.SETTINGS_SNAPSHOT]: async () =>
-      gatewayOk({ settings: wire(await settingsStore.snapshot()) }),
+      gatewayOk({ settings: carried(await settingsStore.snapshot()) }),
     [GATEWAY_METHOD.SETTINGS_UPDATE]: async (params) => {
       const field = params.field;
       if (!isAppSettingField(field) || isKeyedAppSettingField(field)) {
@@ -1942,7 +1928,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         reporterOf(params),
       );
       if (!result.reason && isAccountPreferenceField(field)) pushAccountPreferences();
-      return gatewayOk(wire(result));
+      return gatewayOk(carried(result));
     },
     [GATEWAY_METHOD.SETTINGS_UPDATE_ENTRY]: async (params) => {
       const field = params.field;
@@ -1973,7 +1959,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         reporterOf(params),
       );
       if (!result.reason && isAccountPreferenceField(field)) pushAccountPreferences();
-      return gatewayOk(wire(result));
+      return gatewayOk(carried(result));
     },
     [GATEWAY_METHOD.SETTINGS_RESET]: async (params) => {
       const scope = params.scope;
@@ -1993,7 +1979,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         reporterOf(params),
       );
       if (!result.reason && resetTouchesAccountPreferences(scope)) pushAccountPreferences();
-      return gatewayOk(wire(result));
+      return gatewayOk(carried(result));
     },
     [GATEWAY_METHOD.CREDENTIAL_SET_API_KEY]: async (params) => {
       const providerId = params.providerId;
@@ -2027,9 +2013,9 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         "Could not save that API key on this system.",
         reporterOf(params),
       );
-      return gatewayOk(wire(result));
+      return gatewayOk(carried(result));
     },
-    [GATEWAY_METHOD.ACCOUNT_SNAPSHOT]: () => gatewayOk({ account: wire(account) }),
+    [GATEWAY_METHOD.ACCOUNT_SNAPSHOT]: () => gatewayOk({ account: carried(account) }),
     [GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN]: async (params) => {
       if (!isAccountProvider(params.provider))
         return invalid("provider is not one this build knows");
@@ -2037,7 +2023,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         account_act: PRODUCT_ACCOUNT_ACT.SIGN_IN_START,
       });
       const snapshot = await accountSession.beginSignIn(params.provider);
-      return gatewayOk({ account: wire(snapshot) });
+      return gatewayOk({ account: carried(snapshot) });
     },
     [GATEWAY_METHOD.ACCOUNT_CANCEL_SIGN_IN]: () => {
       recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACT, {
@@ -2053,7 +2039,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
       // next sign-in.
       await productEvents.flush();
       const snapshot = await accountSession.signOut({ revokeRemote: true });
-      return gatewayOk({ account: wire(snapshot) });
+      return gatewayOk({ account: carried(snapshot) });
     },
     [GATEWAY_METHOD.ACCOUNT_DELETE]: async () => {
       recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACT, { account_act: PRODUCT_ACCOUNT_ACT.DELETE });
@@ -2062,7 +2048,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
       // Only a deletion that landed stands recording down for the run.
       sessionReplayEndedByDeletion = true;
       void emitSessionReplay();
-      return gatewayOk({ account: wire(snapshot) });
+      return gatewayOk({ account: carried(snapshot) });
     },
     [GATEWAY_METHOD.CALENDAR_CONNECT_GOOGLE]: async (params) => {
       const result = await settingsWrite(
@@ -2091,7 +2077,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         "Could not connect Google Calendar on this system.",
         reporterOf(params),
       );
-      return gatewayOk(wire(result));
+      return gatewayOk(carried(result));
     },
     [GATEWAY_METHOD.CALENDAR_CANCEL_GOOGLE_SIGN_IN]: () => {
       googleCalendarSignIn.cancel();
@@ -2116,7 +2102,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         "Could not disconnect that account on this system.",
         reporterOf(params),
       );
-      return gatewayOk(wire(result));
+      return gatewayOk(carried(result));
     },
     [GATEWAY_METHOD.CALENDAR_CONNECT_APPLE]: async (params) => {
       const generation = ++appleConnectGeneration;
@@ -2154,7 +2140,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         "Could not connect Apple Calendar on this system.",
         reporterOf(params),
       );
-      return gatewayOk(wire(result));
+      return gatewayOk(carried(result));
     },
     [GATEWAY_METHOD.CALENDAR_DISCONNECT_APPLE]: async (params) => {
       const result = await settingsWrite(
@@ -2169,7 +2155,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         "Could not disconnect Apple Calendar on this system.",
         reporterOf(params),
       );
-      return gatewayOk(wire(result));
+      return gatewayOk(carried(result));
     },
     [GATEWAY_METHOD.CALENDAR_APPLE_ACCESS_STATUS]: async () => {
       try {
@@ -2199,7 +2185,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
           ?.calendars.some((candidate) => candidate.id === calendarId)
       ) {
         return gatewayOk(
-          wire(
+          carried(
             await refusedSettings("That calendar is not one the account's latest list offered."),
           ),
         );
@@ -2217,7 +2203,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         "Could not save that calendar choice on this system.",
         reporterOf(params),
       );
-      return gatewayOk(wire(result));
+      return gatewayOk(carried(result));
     },
     [GATEWAY_METHOD.TRACKER_CONNECT]: async (params) => {
       const result = await settingsWrite(
@@ -2236,7 +2222,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         "Could not connect Linear on this system.",
         reporterOf(params),
       );
-      return gatewayOk(wire(result));
+      return gatewayOk(carried(result));
     },
     [GATEWAY_METHOD.TRACKER_CANCEL_SIGN_IN]: () => {
       linearSignIn.cancel();
@@ -2262,7 +2248,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         "Could not disconnect Linear on this system.",
         reporterOf(params),
       );
-      return gatewayOk(wire(result));
+      return gatewayOk(carried(result));
     },
     [GATEWAY_METHOD.SUPERSET_STATUS]: async () => {
       const [installed, connected] = await Promise.all([
@@ -2275,15 +2261,15 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
       recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
         superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_START,
       });
-      return gatewayOk({ state: wire(await supersetSignIn.begin()) });
+      return gatewayOk({ state: carried(await supersetSignIn.begin()) });
     },
     [GATEWAY_METHOD.SUPERSET_SUBMIT_CODE]: async (params) => {
       if (!isWireString(params.code)) return invalid("code must be a string");
-      return gatewayOk({ state: wire(await supersetSignIn.submitCode(params.code)) });
+      return gatewayOk({ state: carried(await supersetSignIn.submitCode(params.code)) });
     },
     [GATEWAY_METHOD.SUPERSET_CHOOSE_ORGANIZATION]: async (params) => {
       if (!isWireString(params.slug)) return invalid("slug must be a string");
-      return gatewayOk({ state: wire(await supersetSignIn.chooseOrganization(params.slug)) });
+      return gatewayOk({ state: carried(await supersetSignIn.chooseOrganization(params.slug)) });
     },
     [GATEWAY_METHOD.SUPERSET_REOPEN_SIGN_IN]: () => {
       supersetSignIn.reopen();
@@ -2312,12 +2298,12 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     },
     [GATEWAY_METHOD.SESSION_ROSTER]: () =>
       gatewayOk({
-        sessions: wire(rosterForClients()),
+        sessions: carried(rosterForClients()),
         settled: !runMode.observesProviders || rosterBroadcast,
       }),
     [GATEWAY_METHOD.SESSION_OPEN]: async (params) => {
       if (!isSessionIdentity(params.identity)) return invalid("identity must name a session");
-      return gatewayOk(wire(await sessionActPerformer.openSession(params.identity)));
+      return gatewayOk(carried(await sessionActPerformer.openSession(params.identity)));
     },
     [GATEWAY_METHOD.SESSION_OPEN_APPLICATION]: async (params) => {
       if (!isSessionIdentity(params.identity)) return invalid("identity must name a session");
@@ -2325,18 +2311,18 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         return invalid("applicationId is not one this build knows");
       }
       return gatewayOk(
-        wire(
+        carried(
           await sessionActPerformer.openSessionApplication(params.identity, params.applicationId),
         ),
       );
     },
     [GATEWAY_METHOD.SESSION_OPEN_CHANGE]: async (params) => {
       if (!isSessionIdentity(params.identity)) return invalid("identity must name a session");
-      return gatewayOk(wire(await sessionActPerformer.openSessionChange(params.identity)));
+      return gatewayOk(carried(await sessionActPerformer.openSessionChange(params.identity)));
     },
     [GATEWAY_METHOD.WORKSPACE_PROJECTS]: async () =>
       gatewayOk({
-        projects: wire(
+        projects: carried(
           accountCapabilitiesActive()
             ? normalizeObservedWorkspaceProjects(
                 offeredWorkspaceProjects(),
@@ -2382,11 +2368,11 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
           credential_source: VOICE_SOURCE_COUNTED_AS[voiceCapabilities.voiceSource],
         });
       }
-      return gatewayOk(credential ? { credential: wire(credential) } : {});
+      return gatewayOk(credential ? { credential: carried(credential) } : {});
     },
     [GATEWAY_METHOD.VOICE_DIAGNOSTICS]: () =>
       gatewayOk({
-        diagnostics: wire(
+        diagnostics: carried(
           voiceCapabilities.realtimeCredentials?.diagnostics() ??
             voiceCapabilities.unavailableDiagnostics,
         ),

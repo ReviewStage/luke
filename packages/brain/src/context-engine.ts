@@ -1,4 +1,5 @@
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
+import { ESTIMATED_CHARS_PER_TOKEN } from "@sidecar/memory";
 import {
   type CheckpointFormat,
   CONTEXT_INPUT_KIND,
@@ -20,9 +21,6 @@ import {
   type ResponsesInputItem,
   userMessageItem,
 } from "./responses-api.js";
-
-/** OpenClaw's own approximation where no count is at hand. */
-export const ESTIMATED_CHARS_PER_TOKEN = 4;
 
 /**
  * The context engine for the OpenAI Responses input array. It is the one

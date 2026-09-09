@@ -6,6 +6,7 @@ import {
   CLI_CONNECTION,
   SESSION_LOCATION,
   SESSION_STATUS,
+  UNSUPPORTED_BY_OBSERVATION,
 } from "@sidecar/session";
 import type { JsonObject } from "@sidecar/wire/testing";
 import {
@@ -435,7 +436,7 @@ test("refuses a creation the latest pass did not offer or cannot honour", async 
   // An environment the pass never reported names nowhere a creation could go.
   assert.deepEqual(await adapter.createWorkspace({ providerProjectId: "env-9", task: "Fix it" }), {
     status: "unsupported",
-    reason: "That act is not supported by the latest observation.",
+    reason: UNSUPPORTED_BY_OBSERVATION,
   });
   // Codex names tasks itself, so a chosen name is refused rather than dropped.
   const named = await adapter.createWorkspace({

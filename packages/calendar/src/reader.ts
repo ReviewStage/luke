@@ -4,6 +4,7 @@ import {
   type MeetingInterval,
   meetingsFromBusyIntervals,
 } from "@sidecar/calendar";
+import { ACCESS_TOKEN_EXPIRY_SLACK_MS } from "@sidecar/credentials";
 import {
   isRecord,
   isWireNumber,
@@ -33,9 +34,6 @@ const GOOGLE_CALENDAR_LIST_URL = "https://www.googleapis.com/calendar/v3/users/m
 const GOOGLE_FREEBUSY_URL = "https://www.googleapis.com/calendar/v3/freeBusy";
 
 const REQUEST_TIMEOUT_MS = 10_000;
-
-/** Refreshed a minute early, so a pass never rides a token mid-expiry. */
-const ACCESS_TOKEN_EXPIRY_SLACK_MS = 60_000;
 
 // The list bounds, exported because the Apple reader keeps them too: the two
 // sources' calendars land on the same settings rows, which must not learn to

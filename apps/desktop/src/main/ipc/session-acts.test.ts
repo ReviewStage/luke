@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ACT_KIND, type CarriedSessionAct } from "@sidecar/acts";
+import { ACT_KIND, ACT_REFUSAL, type CarriedSessionAct } from "@sidecar/acts";
 import {
   PROVIDER_ID,
   type ProviderSessionObservation,
@@ -142,7 +142,7 @@ test("a create whose turn ends while the stored defaults are read never reaches 
   settings.release();
   const result = await pending;
   assert.equal(result.status, ACT_RESULT_STATUS.REJECTED);
-  assert.ok(String(result.reason).includes("ended"));
+  assert.equal(result.reason, ACT_REFUSAL.TURN_OVER);
   assert.deepEqual(adapter.creates, []);
 });
 
@@ -159,7 +159,7 @@ test("a spawn whose turn ends while the stored defaults are read never reaches t
   settings.release();
   const result = await pending;
   assert.equal(result.status, ACT_RESULT_STATUS.REJECTED);
-  assert.ok(String(result.reason).includes("ended"));
+  assert.equal(result.reason, ACT_REFUSAL.TURN_OVER);
   assert.deepEqual(adapter.spawns, []);
 });
 

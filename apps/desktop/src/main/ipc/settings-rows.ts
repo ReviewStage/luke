@@ -8,7 +8,7 @@ import {
 } from "@sidecar/settings";
 import { ACT_RESULT_STATUS, isWireString } from "@sidecar/wire";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
-import { APPLE_CALENDAR_ACCESS } from "#shared/apple-calendar";
+import { APPLE_CALENDAR_ACCESS, CALENDAR_PRIVACY_PANE_URL } from "#shared/apple-calendar";
 import { BRIDGE, type BridgeArgumentsFor } from "#shared/bridge";
 import type { AppSettings } from "#shared/messages/settings";
 import type { HostOperator } from "../gateway/host-operator";
@@ -193,9 +193,6 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
 
   registerConnectionRows(dependencies);
 }
-
-const CALENDAR_PRIVACY_PANE_URL =
-  "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars";
 
 /**
  * The Linear and calendar rows, proxied to the host that owns each grant: the

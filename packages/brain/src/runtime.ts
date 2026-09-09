@@ -25,10 +25,11 @@ import {
   type ToolInvocation,
   type ToolResult,
 } from "@sidecar/runtime-contracts";
-import { ACT_RESULT_STATUS, isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { compactContext } from "./compaction.js";
 import { LOOP_GUARD_LEVEL, LoopGuard, type LoopGuardConfig } from "./loop-guard.js";
 import { settledUnlessAborted } from "./settled.js";
+import { outputStatus } from "./tool-results.js";
 
 /**
  * The loop between a model and its tools, and nothing outside it. A run
@@ -83,16 +84,6 @@ interface EndSignal {
 
 export function incompleteDetail(incomplete: ModelIncomplete): string {
   return `${incomplete.status ?? "incomplete"}: ${incomplete.reason}`;
-}
-
-function resultStatus(outputJson: string): string | undefined {
-  try {
-    // SAFETY: JSON.parse returns a wire value; the record and string checks are the validation.
-    const parsed = JSON.parse(outputJson) as UnparsedWireValue;
-    return isRecord(parsed) && isWireString(parsed.status) ? parsed.status : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 export class ToolLoopAgentRuntime implements AgentRuntime {
@@ -392,7 +383,7 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
         status: TOOL_DID_NOT_ANSWER.status,
       };
     }
-    const status = result.status ?? resultStatus(result.outputJson);
+    const status = result.status ?? outputStatus(result.outputJson);
     return status !== undefined ? { outputJson: result.outputJson, status } : result;
   }
 }
