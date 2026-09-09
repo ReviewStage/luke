@@ -720,6 +720,14 @@ test("a briefing is offered once, claimed by one device once, settled only by it
   assert.equal((await briefings.list(userId, BRIEFING_STATE.OFFERED))[0]?.id, "briefing-4");
   const rows = await database.db.select().from(briefing).where(eq(briefing.userId, userId));
   for (const row of rows) assert.doesNotMatch(row.sealedWords, /needs you/);
+  await database.db
+    .update(briefing)
+    .set({ sealedWords: "1:not-an-envelope" })
+    .where(and(eq(briefing.userId, userId), eq(briefing.id, "briefing-2")));
+  assert.deepEqual(
+    (await briefings.list(userId)).map((record) => record.id),
+    ["briefing-1", "briefing-3", "briefing-4"],
+  );
 });
 
 test("deleting the user row cascades through every conversation table and leaves another user's rows standing", async () => {

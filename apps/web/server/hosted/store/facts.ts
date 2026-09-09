@@ -1,5 +1,5 @@
 import { asc, eq } from "drizzle-orm";
-import { personalFact } from "../../db/schema.js";
+import { personalFact, user } from "../../db/schema.js";
 import type { HostedStoreDatabase, UserSeal } from "./database.js";
 
 /**
@@ -42,7 +42,11 @@ export async function listFacts(
   return facts;
 }
 
-/** Replaces the list whole; a fact keeping its id keeps the instant it was first remembered. */
+/**
+ * Replaces the list whole under the user's row lock, so two replacements
+ * land one after the other rather than each deleting what it saw and both
+ * inserting; a fact keeping its id keeps the instant it was first remembered.
+ */
 export function replaceFacts(
   db: HostedStoreDatabase,
   seal: UserSeal,
@@ -51,6 +55,7 @@ export function replaceFacts(
   now: number,
 ): Promise<readonly StoredFact[]> {
   return db.transaction(async (tx) => {
+    await tx.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
     const held = await tx
       .select({ id: personalFact.id, createdAt: personalFact.createdAt })
       .from(personalFact)

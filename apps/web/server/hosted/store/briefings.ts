@@ -54,13 +54,23 @@ export interface BriefingRecord {
   readonly settledAt?: number;
 }
 
-function recordFromRow(seal: UserSeal, row: typeof briefing.$inferSelect): BriefingRecord {
+/** A row read back, or nothing for one whose words this ring cannot open; a bad row drops the row, not the list. */
+function recordFromRow(
+  seal: UserSeal,
+  row: typeof briefing.$inferSelect,
+): BriefingRecord | undefined {
+  let words: string;
+  try {
+    words = seal.open(row.sealedWords);
+  } catch {
+    return undefined;
+  }
   return {
     id: row.id,
     // SAFETY: the column holds the key the conversation row lock admitted when the briefing was recorded.
     sessionKey: row.sessionKey as SessionKey,
     ...(row.runId !== null ? { runId: row.runId } : undefined),
-    words: seal.open(row.sealedWords),
+    words,
     decidedAt: row.decidedAt,
     expiresAt: row.expiresAt,
     state: isBriefingState(row.state) ? row.state : BRIEFING_STATE.EXPIRED,
@@ -199,5 +209,5 @@ export async function listBriefings(
       and(eq(briefing.userId, userId), state !== undefined ? eq(briefing.state, state) : undefined),
     )
     .orderBy(asc(briefing.decidedAt), asc(briefing.id));
-  return rows.map((row) => recordFromRow(seal, row));
+  return rows.flatMap((row) => recordFromRow(seal, row) ?? []);
 }
