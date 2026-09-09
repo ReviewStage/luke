@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { fakeCloudApi, fixedAnswer, recordedBody, recordedRoutes } from "./cloud-fake.js";
+import { fakeCloudApi, recordedRoutes } from "./cloud-fake.js";
 import { HTTP_STATUS } from "./http-fake.js";
 
 const API_KEY = "fake-api-key";
@@ -11,7 +11,9 @@ function get(url: string, apiKey = API_KEY) {
 }
 
 test("answers a routed read and records what was asked", async () => {
-  const api = fakeCloudApi({ "GET /v0/sessions": fixedAnswer({ data: [{ id: "session-1" }] }) });
+  const api = fakeCloudApi({
+    "GET /v0/sessions": { answer: () => ({ data: [{ id: "session-1" }] }) },
+  });
 
   const request = get("https://api.test/v0/sessions?limit=20");
   const response = await api.fetch(request.url, request.init);
@@ -23,7 +25,7 @@ test("answers a routed read and records what was asked", async () => {
 });
 
 test("throws for a request no route names, rather than answering nothing", async () => {
-  const api = fakeCloudApi({ "GET /v0/sessions": fixedAnswer({ data: [] }) });
+  const api = fakeCloudApi({ "GET /v0/sessions": { answer: () => ({ data: [] }) } });
 
   const request = get("https://api.test/v0/undocumented");
 
@@ -34,7 +36,7 @@ test("throws for a request no route names, rather than answering nothing", async
 });
 
 test("keys a write apart from the read on the same path", async () => {
-  const api = fakeCloudApi({ "GET /v0/sessions": fixedAnswer({ data: [] }) });
+  const api = fakeCloudApi({ "GET /v0/sessions": { answer: () => ({ data: [] }) } });
 
   await assert.rejects(
     () => api.fetch("https://api.test/v0/sessions", { method: "POST", body: "{}" }),
@@ -45,7 +47,7 @@ test("keys a write apart from the read on the same path", async () => {
 test("hands a write route its own request, and reads the body back", async () => {
   const api = fakeCloudApi({
     "POST /v0/sessions/session-1/messages": {
-      answer: (request) => ({ echoed: recordedBody(request)?.message ?? null }),
+      answer: (request) => JSON.parse(request.body ?? "{}"),
       status: 201,
     },
   });
@@ -56,11 +58,11 @@ test("hands a write route its own request, and reads the body back", async () =>
   });
 
   assert.equal(response.status, 201);
-  assert.deepEqual(await response.json(), { echoed: "ship it" });
+  assert.deepEqual(await response.json(), { message: "ship it" });
 });
 
 test("fails and heals every route at once", async () => {
-  const api = fakeCloudApi({ "GET /v0/sessions": fixedAnswer({ data: [] }) });
+  const api = fakeCloudApi({ "GET /v0/sessions": { answer: () => ({ data: [] }) } });
   const request = get("https://api.test/v0/sessions");
 
   api.fail();

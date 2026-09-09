@@ -38,10 +38,6 @@ export function codexStateDb(home: string, sql: string): Promise<void> {
   return applyFixtureDatabase(path.join(home, ...CODEX_STATE_DATABASE_PATH), sql);
 }
 
-export function conductorDb(home: string, sql: string): Promise<void> {
-  return applyFixtureDatabase(path.join(home, "conductor.db"), sql);
-}
-
 export function supersetHostDb(home: string, sql: string): Promise<void> {
   return applyFixtureDatabase(path.join(home, ...SUPERSET_HOST_DATABASE_PATH), sql);
 }

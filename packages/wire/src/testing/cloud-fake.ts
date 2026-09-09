@@ -1,6 +1,6 @@
 import type { CloudFetch } from "../http.js";
 import { HTTP_STATUS, jsonResponse, type RecordedRequest, recordingFetch } from "./http-fake.js";
-import { isJsonObject, type JsonObject, type JsonValue } from "./json.js";
+import type { JsonValue } from "./json.js";
 
 /**
  * What one route answers. The answer is a function of the request rather than
@@ -28,11 +28,6 @@ export interface FakeCloudApi {
 }
 
 const AUTHORIZATION_SCHEME_PREFIX = "Bearer ";
-
-/** A route that answers the same recorded body however it is asked. */
-export function fixedAnswer(body: JsonValue): FakeCloudRoute {
-  return { answer: () => body };
-}
 
 function routeKey(method: string, pathname: string): string {
   return `${method} ${pathname}`;
@@ -90,13 +85,4 @@ export function recordedRoutes(requests: readonly RecordedRequest[]): readonly s
     const route = routeKey(request.method, request.pathname);
     return query ? `${route}?${query}` : route;
   });
-}
-
-/** The JSON body a recorded write carried, for a test asserting the document. */
-export function recordedBody(request: RecordedRequest): JsonObject | undefined {
-  if (request.body === undefined) return undefined;
-  // SAFETY: `parsedJson` answers the parsed value; `isJsonObject` narrows it to
-  // an object before it is handed back, so nothing unparsed escapes here.
-  const parsed: JsonValue = JSON.parse(request.body);
-  return isJsonObject(parsed) ? parsed : undefined;
 }

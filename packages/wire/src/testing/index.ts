@@ -2,8 +2,6 @@ export {
   type FakeCloudApi,
   type FakeCloudRoute,
   fakeCloudApi,
-  fixedAnswer,
-  recordedBody,
   recordedRoutes,
 } from "./cloud-fake.js";
 export {

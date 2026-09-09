@@ -1,4 +1,5 @@
 export { codexStateDb, supersetHostDb } from "./fixture-databases.js";
+export { providerFixtureRoot } from "./fixture-recording.js";
 export {
   describeProviderContract,
   PROVIDER_OBSERVATION,
@@ -6,5 +7,4 @@ export {
   type ProviderFixtures,
   type ProviderObservation,
   type ProviderPluginFactory,
-  providerFixtureRoot,
 } from "./provider-contract.js";
