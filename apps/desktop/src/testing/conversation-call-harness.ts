@@ -16,13 +16,13 @@ import {
   REALTIME_SERVER_EVENT,
   type RealtimeStatus,
 } from "@sidecar/realtime";
+import type { ReplyKind } from "@sidecar/voice/orchestrator";
 import { ACT_RESULT_STATUS, isRecord, text, type WireRecord } from "@sidecar/wire";
 import type { JsonValue, ParsedJsonObject } from "@sidecar/wire/testing";
 import type {
   SdkRealtimeTransport,
   SdkTransportFactoryOptions,
 } from "#renderer/voice/agents-realtime-transport";
-import type { ReplyKind } from "#renderer/voice/captions";
 import { ConversationCall } from "#renderer/voice/conversation-call";
 import {
   asMediaStream,

@@ -15,7 +15,7 @@ import {
   MAXIMUM_CONNECT_ATTEMPTS,
   SpeechMouth,
   type SpeechMouthSession,
-} from "./speech-mouth";
+} from "./speech-mouth.js";
 
 const FAR_DEADLINE = Number.MAX_SAFE_INTEGER;
 

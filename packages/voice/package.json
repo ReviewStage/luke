@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.js"
+    ".": "./src/index.js",
+    "./orchestrator": "./src/orchestrator/index.js"
   },
   "types": "./src/index.ts",
   "scripts": {
@@ -22,6 +23,7 @@
     "@sidecar/hosted": "workspace:*",
     "@sidecar/realtime": "workspace:*",
     "@sidecar/runtime": "workspace:*",
+    "@sidecar/session": "workspace:*",
     "@sidecar/settings": "workspace:*",
     "@sidecar/wire": "workspace:*"
   }

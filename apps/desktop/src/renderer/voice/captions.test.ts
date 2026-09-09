@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CAPTION_SEGMENT_LIMIT, CaptionStrip, REPLY_KIND, type ReplyKind } from "./captions";
+import { REPLY_KIND, type ReplyKind } from "@sidecar/voice/orchestrator";
+import { CAPTION_SEGMENT_LIMIT, CaptionStrip } from "./captions";
 
 interface Drawn {
   texts: readonly string[] | undefined;

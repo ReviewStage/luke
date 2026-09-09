@@ -19,6 +19,7 @@ import {
   voiceExchangeActive,
 } from "@sidecar/realtime";
 import { maximumTypedAskLength } from "@sidecar/session";
+import { REPLY_KIND } from "@sidecar/voice/orchestrator";
 import {
   ACT_RESULT_STATUS,
   isRecord,
@@ -27,7 +28,6 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import type { BuiltRealtimeSessionConfig, SdkToolCallDetails } from "./agents-realtime-transport";
-import { REPLY_KIND } from "./captions";
 import { MICROPHONE_PROCESSING } from "./microphone-choice";
 import type { PressCaptureFactory } from "./press-audio-capture";
 import { type MicrophoneSender, PressTurnCapture } from "./press-turn-capture";

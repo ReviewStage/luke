@@ -15,9 +15,10 @@ import {
   realtimeSessionConfig,
   voiceExchangeActive,
 } from "@sidecar/realtime";
+import { REPLY_KIND, type ReplyKind } from "@sidecar/voice/orchestrator";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import type { BuiltRealtimeSessionConfig, SdkToolCallDetails } from "./agents-realtime-transport";
-import { CaptionStrip, REPLY_KIND, type ReplyKind } from "./captions";
+import { CaptionStrip } from "./captions";
 import { type InterruptedSpan, Interruption } from "./interruption";
 import {
   RealtimeCall,

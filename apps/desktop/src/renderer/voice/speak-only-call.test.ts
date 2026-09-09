@@ -12,6 +12,7 @@ import {
   REALTIME_STATUS,
   realtimeSessionConfig,
 } from "@sidecar/realtime";
+import { REPLY_KIND, type ReplyKind } from "@sidecar/voice/orchestrator";
 import { ACT_RESULT_STATUS, isRecord, type WireRecord } from "@sidecar/wire";
 import type { JsonValue, ParsedJsonObject } from "@sidecar/wire/testing";
 import {
@@ -21,7 +22,6 @@ import {
   type MockPeerConnection,
 } from "#testing/realtime-fixtures";
 import type { SdkRealtimeTransport, SdkTransportFactoryOptions } from "./agents-realtime-transport";
-import { REPLY_KIND, type ReplyKind } from "./captions";
 import { SPEAK_ONLY_SESSION_CONFIG, SpeakOnlyCall } from "./speak-only-call";
 
 const CONNECTION: RealtimeConnection = {

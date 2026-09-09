@@ -5,6 +5,7 @@ import {
 } from "@sidecar/brain/requests";
 import type { BrainAskSubmissionResult, BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
 import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
+import { VOICE_ERROR_NOTICE_MS } from "@sidecar/voice/orchestrator";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   IDLE_VOICE_VIEW,
@@ -14,7 +15,6 @@ import {
   type VoiceView,
 } from "#shared/messages/voice-view";
 import { useAppState } from "./use-app-state";
-import { VOICE_ERROR_NOTICE_MS } from "./voice/use-voice-session";
 import { VOICE_ACTIVITY_HANGOVER_MS, VOICE_ACTIVITY_THRESHOLD } from "./voice/voice-level-meter";
 import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
 

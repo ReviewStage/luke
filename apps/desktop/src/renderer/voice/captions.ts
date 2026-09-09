@@ -1,15 +1,4 @@
-import { BRIEFING_SPEECH_KIND } from "@sidecar/realtime";
-
-/**
- * Whose words the caption is showing: a briefing the brain decided to give,
- * or a reply to the developer. History records the two differently.
- */
-export const REPLY_KIND = {
-  BRIEFING: BRIEFING_SPEECH_KIND,
-  REPLY: "reply",
-} as const;
-
-export type ReplyKind = (typeof REPLY_KIND)[keyof typeof REPLY_KIND];
+import type { ReplyKind } from "@sidecar/voice/orchestrator";
 
 /**
  * How many back-to-back responses the caption keeps on screen at once. Two is

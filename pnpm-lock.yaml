@@ -785,6 +785,9 @@ importers:
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
+      '@sidecar/session':
+        specifier: workspace:*
+        version: link:../session
       '@sidecar/settings':
         specifier: workspace:*
         version: link:../settings
