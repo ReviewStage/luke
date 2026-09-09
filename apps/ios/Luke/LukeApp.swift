@@ -12,6 +12,7 @@ struct LukeApp: App {
     private let phoneRelay: PhoneSessionRelay
     private let accountPreferences: AccountPreferencesSync
     private let accountPreferencesEnabled: Bool
+    private let devices: DeviceRegistrar
 
     init() {
         let session = AccountSession(
@@ -30,6 +31,15 @@ struct LukeApp: App {
             client: VaultClient(baseURL: AccountConstants.serviceURL),
             session: session
         ))
+        let devices = DeviceRegistrar(
+            client: DeviceClient(baseURL: AccountConstants.serviceURL),
+            session: session,
+            platform: .iOS
+        )
+        self.devices = devices
+        // The row is forgotten on the account's own way out, while its token
+        // still stands: the state change below arrives after the token is gone.
+        session.onSignOut = { token in await devices.forget(accessToken: token).value }
         // XCTest launches this app as its suites' host, and a test run's
         // counts and recording would be a test's, not a developer's — the
         // desktop's fixture and evidence gate, at this app's one seam.
@@ -56,6 +66,7 @@ struct LukeApp: App {
             if case .signedIn(let identity) = session.state, let accountId = identity.id {
                 SessionReplay.identify(accountId: accountId)
             }
+            if case .signedIn = session.state { devices.register() }
         }
     }
 
@@ -70,7 +81,10 @@ struct LukeApp: App {
                     accountEdge(from: previous, to: current)
                     switch current {
                     case .signedIn:
-                        if accountPreferencesEnabled { accountPreferences.reconcile() }
+                        if accountPreferencesEnabled {
+                            accountPreferences.reconcile()
+                            devices.register()
+                        }
                         phoneRelay.push()
                     case .signedOut:
                         if accountPreferencesEnabled { accountPreferences.clearAccountPreferences() }
@@ -82,7 +96,10 @@ struct LukeApp: App {
             // iOS suspends rather than quits, so backgrounding is the moment
             // the desktop's timed flush cannot be counted on to arrive.
             if phase == .background { events.flush() }
-            if phase == .active && accountPreferencesEnabled { accountPreferences.reconcile() }
+            if phase == .active && accountPreferencesEnabled {
+                accountPreferences.reconcile()
+                devices.heartbeat()
+            }
         }
     }
 

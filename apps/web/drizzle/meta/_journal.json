@@ -78,6 +78,13 @@
       "when": 1788967420794,
       "tag": "0010_same_scarecrow",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788982598227,
+      "tag": "0011_devices",
+      "breakpoints": true
     }
   ]
 }

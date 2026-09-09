@@ -64,6 +64,13 @@ export interface AccountSessionManagerOptions {
   openExternal: (url: string) => Promise<void>;
   startCapabilities: () => Promise<void>;
   stopCapabilities: () => Promise<void>;
+  /**
+   * The last thing the departing account is used for, before its credential
+   * is cleared: what the account signed this installation up for on the
+   * service (its device row) is told to let go while the token still stands
+   * to say so. A failure here never holds up the sign-out.
+   */
+  onSignOut?: (account: StoredAccount) => Promise<void>;
   onChange: (account: AccountSnapshot) => void;
 }
 
@@ -96,12 +103,18 @@ export class AccountSessionManager {
     this.#generation += 1;
     this.#account = { status: ACCOUNT_STATUS.SIGNED_OUT };
     this.#options.onChange(this.#account);
-    const stored = options.revokeRemote ? await this.#options.store.readAccount() : undefined;
+    const stored = await this.#options.store.readAccount();
+    if (stored && this.#options.onSignOut) {
+      await this.#options.onSignOut(stored).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        process.stderr.write(`Account sign-out release failed: ${message}\n`);
+      });
+    }
     const clearing = this.#options.store.clearAccount();
     await this.#options.stopCapabilities();
     this.#account = await clearing;
     this.#options.onChange(this.#account);
-    if (stored?.refreshToken) {
+    if (options.revokeRemote && stored?.refreshToken) {
       await this.#options.client.revoke(stored.refreshToken).catch((error) => {
         const message = error instanceof Error ? error.message : String(error);
         process.stderr.write(`Account token revocation failed: ${message}\n`);

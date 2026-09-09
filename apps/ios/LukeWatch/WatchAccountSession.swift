@@ -26,9 +26,20 @@ final class WatchAccountSession {
     private(set) var accountScope: String?
 
     @ObservationIgnored var onCredentialsNeeded: (() -> Void)?
+    /// Tokens landed from the phone: the moment this watch registers its device row.
+    @ObservationIgnored var onSignedIn: (@MainActor () -> Void)?
+    /// The phone signed out: the row is forgotten on the token the watch still
+    /// held. Called in place, before this method returns, so what the next
+    /// payload asks for is queued behind the forget rather than beside it.
+    @ObservationIgnored var onSignOut: (@MainActor (String) -> Void)?
 
     private var accessToken: String?
     private var tokenExpiry: Date?
+    /// The token the near-expiry invalidation let go of, kept for one purpose:
+    /// a phone sign-out that arrives before the phone pushed a fresh pair still
+    /// has something to forget the device row with. It is not restored to the
+    /// session, and a fresh pair or a sign-out clears it.
+    private var departedAccessToken: String?
 
     init() {
         restoreFromKeychain()
@@ -38,7 +49,10 @@ final class WatchAccountSession {
     /// Accepts both proactive pushes and sign-out notifications.
     func receive(payload: [String: Any]) {
         if payload["event"] as? String == "signedOut" {
+            let departing = accessToken ?? departedAccessToken
+            departedAccessToken = nil
             signOut()
+            if let departing { onSignOut?(departing) }
             return
         }
         guard
@@ -60,8 +74,10 @@ final class WatchAccountSession {
         KeychainStore.watch.save(stored)
         self.accessToken = accessToken
         self.tokenExpiry = stored.expiry
+        departedAccessToken = nil
         accountScope = Self.scope(email: stored.email)
         state = .signedIn(email: email, name: stored.name)
+        onSignedIn?()
     }
 
     func signOut() {
@@ -119,6 +135,7 @@ final class WatchAccountSession {
     }
 
     private func invalidateCredentialsAndRequestReplacement() {
+        departedAccessToken = accessToken
         signOut()
         onCredentialsNeeded?()
     }

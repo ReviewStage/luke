@@ -75,11 +75,13 @@ export const HOSTED_SERVICE_PATH = {
   /** List stored provider keys — ids and timestamps, never keys. */
   VAULT_KEYS: "/api/vault/keys",
   /**
-   * Register the signed-in phone's push token (POST) or forget it at sign-out
-   * (DELETE). The token addresses one app installation and moves to whichever
-   * account the phone last signed in under.
+   * The signed-in installation's device row: register it (POST), move its
+   * last-seen instant and carry a presence or push token change (PUT), or
+   * forget it at sign-out (DELETE). One row per installation on every
+   * platform, keyed by the id the client minted, and it moves to whichever
+   * account the device last signed in under.
    */
-  DEVICE_TOKEN: "/api/devices/token",
+  DEVICES: "/api/devices",
   /**
    * Observe cloud sessions on demand for the signed-in user. GET: decrypts the
    * caller's vault keys, runs each provider's cloud adapter once, and returns a

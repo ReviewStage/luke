@@ -11,6 +11,7 @@ struct LukeWatchApp: App {
     @Environment(\.scenePhase) private var scenePhase
     // Held for its lifetime — the delegate must not be deallocated.
     private let connectivity: WatchConnectivityReceiver
+    private let devices: DeviceRegistrar
 
     init() {
         let watchSession = WatchAccountSession()
@@ -25,6 +26,18 @@ struct LukeWatchApp: App {
         )
         _events = State(initialValue: events)
         _rosterStore = State(initialValue: WatchRosterStore(session: watchSession, events: events))
+        // The watch registers under the tokens the phone hands it, and never
+        // spends the phone's refresh token to do so: a token near expiry means
+        // the registration waits for the next pair, which registers again.
+        let devices = DeviceRegistrar(
+            client: DeviceClient(baseURL: AccountConstants.serviceURL),
+            session: WatchCountingTokens(session: watchSession),
+            platform: .watchOS
+        )
+        self.devices = devices
+        watchSession.onSignedIn = { devices.register() }
+        watchSession.onSignOut = { token in devices.forget(accessToken: token) }
+        if case .signedIn = watchSession.state { devices.register() }
         // Account edges are not counted here: a sign-in on the watch is the
         // phone's relay, and the phone already counted it.
         events.arm()

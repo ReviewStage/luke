@@ -301,13 +301,21 @@ explicitly request through that provider. The server-side use of these keys
 ships as a separate feature; this describes only the storage. Every synced key
 is deleted alongside your account if you delete that.
 
-**Phone push tokens.** When you sign into the iOS app, it registers the push
-token Apple issued to that installation with our service, so we can address
-notifications to it. The token names the installation and nothing else, and
-it is not a credential. We store it with your account and delete it when you
-sign out on that phone, when Apple reports it gone, and alongside your account
-if you delete that. Sending notifications ships as a separate feature; this
-describes only the registration.
+**Devices.** When you sign in on the Mac app, the iOS app, or the Apple Watch
+app, that installation registers itself with our service as one device row.
+The row holds which platform it is, when it was last seen (refreshed on a
+timer by the Mac and each time the phone comes to the foreground), an
+optional push token, and a presence field for the Mac that is not yet
+collected: no app reports whether you are at the keyboard today. The
+installation is named by an id the app made up once for itself; it is not a
+credential, and neither is a push token, which only our own Apple key can
+address. Signing into a different account on the same device moves its one
+row to that account rather than leaving a second. The row is deleted when
+you sign out on that device, when the phone and the watch part ways with the
+account, when Apple reports a push token gone, and alongside your account if
+you delete that. No push token is issued to the phone yet, and sending
+notifications ships as a separate feature; this describes only the
+registration.
 
 **Feedback.** If you use the feedback form, we receive what you typed, the name
 and email you signed it with, and any screenshots you attached.
