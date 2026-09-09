@@ -7,6 +7,7 @@ import {
   productSessionCountBucket,
 } from "@sidecar/analytics";
 import type { BrainRoster, BrainWakeEvent } from "@sidecar/brain";
+import { sessionContextText } from "@sidecar/brain";
 import type { CredentialProviderId } from "@sidecar/credentials";
 import {
   carried,
@@ -36,7 +37,6 @@ import {
   watchObservationSpool,
   workspaceHostRegistrations,
 } from "@sidecar/providers";
-import { sessionContextText } from "@sidecar/realtime";
 import { ObservationLoop } from "@sidecar/runtime";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,

@@ -13,9 +13,11 @@ import {
 
 /**
  * Roster context serialization: the bounded, redacted view of sessions and
- * workspace projects a model is allowed to know about. On the desktop it is
- * the brain's standing context; on a remote call it is the roster item the
- * call is sent. Context, never a prompt.
+ * workspace projects a model is allowed to know about. It is a view composed
+ * for a window rather than the roster itself, which is why it lives here and
+ * not with the session vocabulary it reads. On the desktop it is the brain's
+ * standing context; on a remote call it is the roster item the call is sent.
+ * Context, never a prompt.
  */
 
 /**

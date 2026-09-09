@@ -15,10 +15,11 @@ import {
 import type { AppGuideSnapshot } from "@sidecar/guide";
 import type { RealtimeConnection } from "@sidecar/hosted";
 import type { SupersetSignInSnapshot } from "@sidecar/providers/superset/sign-in-stage";
-import type { ConversationEntry, RealtimeDiagnostics } from "@sidecar/realtime";
+import type { RealtimeDiagnostics } from "@sidecar/realtime";
 import type { SpeechOffer, SpeechOutcome } from "@sidecar/realtime/speech";
 import { isSpeechOffer } from "@sidecar/realtime/speech";
 import type {
+  ConversationEntry,
   ObservedWorkspaceProject,
   Session,
   SessionApplicationId,

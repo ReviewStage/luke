@@ -1,4 +1,4 @@
-import { type ConversationEntry, conversationEntryIdentity } from "@sidecar/realtime";
+import { type ConversationEntry, conversationEntryIdentity } from "@sidecar/session";
 
 /**
  * Which of this window's lines the main process's store has acknowledged, so

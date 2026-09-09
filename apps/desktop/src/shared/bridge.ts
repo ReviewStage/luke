@@ -41,11 +41,7 @@ import {
 import { type AppGuideSnapshot, isAppGuideSnapshot } from "@sidecar/guide";
 import type { RealtimeConnection } from "@sidecar/hosted";
 import type { SupersetSignInSnapshot } from "@sidecar/providers/superset/sign-in-stage";
-import {
-  type ConversationEntry,
-  type RealtimeDiagnostics,
-  storedConversationEntry,
-} from "@sidecar/realtime";
+import type { RealtimeDiagnostics } from "@sidecar/realtime";
 import {
   isSpeechOffer,
   isSpeechOutcome,
@@ -55,12 +51,14 @@ import {
   type SpeechWithdrawal,
 } from "@sidecar/realtime/speech";
 import {
+  type ConversationEntry,
   isProviderId,
   isSessionApplicationId,
   type ObservedWorkspaceProject,
   type Session,
   type SessionApplicationId,
   type SessionIdentity,
+  storedConversationEntry,
 } from "@sidecar/session";
 import {
   APP_SETTING_SCHEMA,

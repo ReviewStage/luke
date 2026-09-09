@@ -6,7 +6,6 @@ import {
   ARRIVAL_SPEECH_KIND,
   BRIEFING_SPEECH_KIND,
   CALENDAR_ONBOARDING_SPEECH_KIND,
-  isBriefingSpeech,
 } from "@sidecar/realtime";
 import { SPEECH_OUTCOME } from "@sidecar/realtime/speech";
 import { FakeClock } from "@sidecar/runtime/testing";
@@ -50,7 +49,7 @@ function requestBriefing(arbiter: SpeechArbiter, text: string, decidedAt = 1_000
 function offeredWords(arbiter: SpeechArbiter): string | undefined {
   const offer = arbiter.next();
   if (!offer) return undefined;
-  return isBriefingSpeech(offer.turn) ? offer.turn.briefing : offer.turn.kind;
+  return offer.turn.kind === BRIEFING_SPEECH_KIND ? offer.turn.briefing : offer.turn.kind;
 }
 
 test("a beat is requested once: pending, offered, or spent, the repeat is dropped", () => {
@@ -192,7 +191,7 @@ test("offers go out FIFO across kinds, each with its deadline from its own decis
   arbiter.request({ kind: CALENDAR_ONBOARDING_SPEECH_KIND });
 
   const first = arbiter.next();
-  assert.ok(first && isBriefingSpeech(first.turn));
+  assert.ok(first && first.turn.kind === BRIEFING_SPEECH_KIND);
   assert.equal(first.turn.briefing, "news");
   assert.equal(first.turn.decidedAt, 4_000);
   assert.equal(first.speakBy, 4_000 + SPOKEN_NOTICE_MAX_AGE_MS);
@@ -369,7 +368,7 @@ test("an offer past its deadline with no settle is reclaimed stale and the head 
 
   clock.now = lost.speakBy + 1;
   const reoffered = arbiter.next();
-  assert.ok(reoffered && isBriefingSpeech(reoffered.turn));
+  assert.ok(reoffered && reoffered.turn.kind === BRIEFING_SPEECH_KIND);
   assert.equal(reoffered.turn.briefing, "next");
   assert.notEqual(reoffered.id, lost.id);
   assert.equal(traces.filter((record) => record.decision === SPEECH_OUTCOME.STALE).length, 1);
@@ -411,7 +410,9 @@ test("withdrawing briefings takes the queued, the held, and the offered alike, a
   requestBriefing(arbiter, "QUEUED_OLD");
   arbiter.request({ kind: ARRIVAL_SPEECH_KIND });
   const offer = arbiter.next();
-  assert.ok(offer && isBriefingSpeech(offer.turn) && offer.turn.briefing === "OFFERED_OLD");
+  assert.ok(
+    offer && offer.turn.kind === BRIEFING_SPEECH_KIND && offer.turn.briefing === "OFFERED_OLD",
+  );
   arbiter.setQuiet(true);
   requestBriefing(arbiter, "HELD_OLD");
   // The quiet held the queued one too; the offered one is the mouth's.
@@ -437,7 +438,7 @@ test("reclaiming takes the outstanding offer back to the head unspoken, so the n
   requestBriefing(arbiter, "second");
   const offered = arbiter.next();
   assert.equal(
-    offered && isBriefingSpeech(offered.turn) ? offered.turn.briefing : undefined,
+    offered && offered.turn.kind === BRIEFING_SPEECH_KIND ? offered.turn.briefing : undefined,
     "first",
   );
   // While the offer stands, nothing else is offered.
@@ -447,7 +448,10 @@ test("reclaiming takes the outstanding offer back to the head unspoken, so the n
   assert.equal(arbiter.offeredId, undefined);
   assert.equal(arbiter.pendingCount, 2);
   const again = arbiter.next();
-  assert.equal(again && isBriefingSpeech(again.turn) ? again.turn.briefing : undefined, "first");
+  assert.equal(
+    again && again.turn.kind === BRIEFING_SPEECH_KIND ? again.turn.briefing : undefined,
+    "first",
+  );
   // The reoffer carries a fresh id, so a late settle from the vanished renderer
   // names an offer nobody holds and is ignored.
   assert.notEqual(again?.id, offered?.id);

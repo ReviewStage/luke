@@ -9,7 +9,6 @@ import {
   type StorePort,
   storeClient,
 } from "@sidecar/brain/store";
-import type { ConversationEntry } from "@sidecar/realtime";
 import {
   type ChildStore,
   memoryChildStore,
@@ -26,6 +25,7 @@ import {
   MAIN_SESSION_KEY,
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
+import type { ConversationEntry } from "@sidecar/session";
 import type { CutoffBefore } from "./brain/conversation-deletion.js";
 import { ConversationThread, MemoryHistoryStore } from "./conversation-thread.js";
 

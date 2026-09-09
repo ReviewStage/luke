@@ -17,12 +17,6 @@ import {
 } from "@sidecar/brain";
 import { type StoreClient, type StorePort, serveStore, storeClient } from "@sidecar/brain/store";
 import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testing";
-import {
-  CONVERSATION_ENTRY_KIND,
-  type ConversationEntry,
-  conversationHistoryText,
-  recentConversationEntries,
-} from "@sidecar/realtime";
 import { drainMicrotasks, temporaryDirectory } from "@sidecar/runtime/testing";
 import {
   ARCHIVE_ENCODING,
@@ -32,6 +26,12 @@ import {
   type ModelResponse,
   type TranscriptEvent,
 } from "@sidecar/runtime/vocabulary";
+import {
+  CONVERSATION_ENTRY_KIND,
+  type ConversationEntry,
+  conversationHistoryText,
+  recentConversationEntries,
+} from "@sidecar/session";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { ConversationThread } from "../conversation-thread.js";
 import { operatorOverBrain } from "../testing/index.js";

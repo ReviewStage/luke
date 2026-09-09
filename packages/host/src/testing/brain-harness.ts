@@ -21,13 +21,13 @@ import {
   bareModelAdapter,
   fakeBrainStateRepository,
 } from "@sidecar/brain/testing";
+import { drainMicrotasks } from "@sidecar/runtime/testing";
+import type { ModelResponse } from "@sidecar/runtime/vocabulary";
 import {
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
-} from "@sidecar/realtime";
-import { drainMicrotasks } from "@sidecar/runtime/testing";
-import type { ModelResponse } from "@sidecar/runtime/vocabulary";
+} from "@sidecar/session";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { BrainHost } from "../brain/host.js";
 import { followBrainRequests } from "../brain/publication.js";

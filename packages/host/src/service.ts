@@ -36,11 +36,6 @@ import {
   NodeRegistry,
   nodeSnapshotToWire,
 } from "@sidecar/gateway";
-import {
-  type ConversationEntry,
-  conversationEntryToWire,
-  maximumTypedAskLength,
-} from "@sidecar/realtime";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
 import {
   type ChildRunRecord,
@@ -51,6 +46,11 @@ import {
   type SessionKey,
   sessionKey as toSessionKey,
 } from "@sidecar/runtime/vocabulary";
+import {
+  type ConversationEntry,
+  conversationEntryToWire,
+  maximumTypedAskLength,
+} from "@sidecar/session";
 import {
   isRecord,
   isWireNumber,

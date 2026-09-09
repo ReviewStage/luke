@@ -1,5 +1,4 @@
 import { type FSWatcher, watch } from "node:fs";
-import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
 import {
   type ConversationRecord,
   DEFAULT_AGENT_ID,
@@ -7,6 +6,7 @@ import {
   MODEL_RESPONSE_OUTCOME,
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
+import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import {
   type ConversationLineHit,

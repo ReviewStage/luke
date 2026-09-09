@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ConversationEntry } from "@sidecar/realtime";
 import {
   CONVERSATION_KIND,
   type ConversationRecord,
@@ -8,6 +7,7 @@ import {
   type SessionKey,
   threadSessionKey,
 } from "@sidecar/runtime/vocabulary";
+import type { ConversationEntry } from "@sidecar/session";
 import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
 import {
   type ConversationOperationsDependencies,

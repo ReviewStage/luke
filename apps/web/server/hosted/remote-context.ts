@@ -9,7 +9,7 @@ import {
  *
  * Remote clients can only observe cloud sessions through vault keys — no local
  * sessions, no transcript reads, no desktop-app links. The output format
- * matches `sessionContextText` from `@sidecar/realtime` so the model's
+ * matches `sessionContextText` from `@sidecar/brain` so the model's
  * instructions and this context share one vocabulary, with fields the server
  * does not have (running tool, pull request, workspace display name) simply
  * omitted. Every row opens, because the phone draws a screen of its own for
@@ -91,7 +91,7 @@ function remoteCapabilityText(
 /**
  * Renders the session roster for a remote voice session context item.
  *
- * The format mirrors `sessionContextText` from `@sidecar/realtime` so the
+ * The format mirrors `sessionContextText` from `@sidecar/brain` so the
  * session document the phone receives reads against the same instructions the
  * desktop uses. Fields the server does not hold — the session's open link,
  * current running tool, pull-request association, and the separate workspace

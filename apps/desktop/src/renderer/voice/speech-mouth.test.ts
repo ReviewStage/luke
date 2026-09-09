@@ -4,7 +4,6 @@ import type { BriefingSpeech, ProactiveSpeechTurn, RealtimeStatus } from "@sidec
 import {
   BRIEFING_SPEECH_KIND,
   CALENDAR_ONBOARDING_SPEECH_KIND,
-  isBriefingSpeech,
   REALTIME_STATUS,
 } from "@sidecar/realtime";
 import { SPEECH_OUTCOME, type SpeechOffer, type SpeechOutcome } from "@sidecar/realtime/speech";
@@ -77,7 +76,7 @@ function fakeSession(): FakeSession {
     },
     speak(item: ProactiveSpeechTurn) {
       if (!this.isConnected || this.status === REALTIME_STATUS.RESPONDING) return false;
-      if (isBriefingSpeech(item)) this.spoken.push(item);
+      if (item.kind === BRIEFING_SPEECH_KIND) this.spoken.push(item);
       this.setStatus(REALTIME_STATUS.RESPONDING);
       return true;
     },

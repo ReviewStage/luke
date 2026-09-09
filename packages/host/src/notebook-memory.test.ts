@@ -4,7 +4,6 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { type StorePort, serveStore, storeClient } from "@sidecar/brain/store";
 import { MEMORY_SOURCE, RETRIEVAL_MODE } from "@sidecar/memory";
-import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
 import { temporaryDirectory } from "@sidecar/runtime/testing";
 import {
   type ConversationRecord,
@@ -18,6 +17,7 @@ import {
   type SessionKey,
   threadSessionKey,
 } from "@sidecar/runtime/vocabulary";
+import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import { isRecord, type WireRecord } from "@sidecar/wire";
 import { composeNotebookMemory, type NotebookMemoryDependencies } from "./notebook-memory.js";
 

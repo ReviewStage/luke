@@ -5,7 +5,7 @@ import {
   type AccountSnapshot,
 } from "@sidecar/credentials/snapshot";
 import { SessionRow as PanelSessionRow, ProviderMark } from "@sidecar/panel";
-import type { ConversationEntry } from "@sidecar/realtime";
+import type { ConversationEntry } from "@sidecar/session";
 import {
   isSessionApplicationId,
   SESSION_APPLICATION_SCOPE,

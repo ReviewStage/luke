@@ -36,7 +36,6 @@ import {
   type MemoryHousekeepingResult,
 } from "@sidecar/memory";
 import type { ObservedSpoolEvent } from "@sidecar/providers";
-import type { ConversationEntry } from "@sidecar/realtime";
 import {
   BUILTIN_CONTEXT_ENGINE,
   BUILTIN_MODEL_ADAPTER,
@@ -81,6 +80,7 @@ import {
   RUN_ORIGIN,
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
+import type { ConversationEntry } from "@sidecar/session";
 import {
   dispatchRead,
   SESSION_LOCATION,

@@ -16,7 +16,6 @@ import {
 } from "@sidecar/brain/testing";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { MEMORY_HOUSEKEEPING_OUTCOME } from "@sidecar/memory";
-import type { ConversationEntry } from "@sidecar/realtime";
 import { type ChildStore, CREDENTIAL_REFERENCE_KIND } from "@sidecar/runtime";
 import { drainMicrotasks, FakeClock, temporaryDirectory } from "@sidecar/runtime/testing";
 import {
@@ -31,6 +30,7 @@ import {
   MAIN_SESSION_KEY,
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
+import type { ConversationEntry } from "@sidecar/session";
 import { ACT_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
 import { type BrainWiring, wireBrain } from "./wiring.js";
 

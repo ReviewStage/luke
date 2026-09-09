@@ -12,26 +12,29 @@ import {
 } from "@sidecar/brain/requests-wire";
 import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
 import {
+  ARRIVAL_SPEECH_KIND,
   type ArrivalSpeech,
+  REALTIME_STATUS,
+  type RealtimeStatus,
+  type RealtimeVoice,
+  type RealtimeVoiceSpeed,
+  realtimeSessionConfig,
+} from "@sidecar/realtime";
+import {
   adoptConversationThread,
   announcementConversationEntry,
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
   insertSpokenAskThreadEntry,
-  isArrivalSpeech,
-  REALTIME_STATUS,
-  type RealtimeStatus,
-  type RealtimeVoice,
-  type RealtimeVoiceSpeed,
-  realtimeSessionConfig,
   replyConversationEntry,
   retainedConversationEntries,
+  SESSION_STATUS,
+  type Session,
   storedConversationMaximumAgeMs,
   streamingConversationEntry,
   withConversationEntryRequest,
-} from "@sidecar/realtime";
-import { SESSION_STATUS, type Session } from "@sidecar/session";
+} from "@sidecar/session";
 import { TALK_KEY_RELEASE, talkKeyRelease, voiceHotkeyLabel } from "@sidecar/settings";
 import { type AppSettingsView, appSettingsView } from "@sidecar/settings/wire";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
@@ -1042,7 +1045,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
           },
           connect: (connectOptions: { microphone: false }) => session.connect(connectOptions),
           speak: (item) => {
-            if (!isArrivalSpeech(item)) {
+            if (item.kind !== ARRIVAL_SPEECH_KIND) {
               const spoke = session.speak(item);
               if (spoke) {
                 activeAnnouncementGenerationRef.current = conversationGenerationRef.current;

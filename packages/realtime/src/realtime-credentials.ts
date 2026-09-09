@@ -2,12 +2,12 @@ import { remoteRealtimeToolDefinitions } from "@sidecar/acts";
 import type { RealtimeCredential } from "@sidecar/hosted";
 import { isRecord, text, type UnparsedWireValue, wholeNumber } from "@sidecar/wire";
 import { PRESS_AUDIO_SAMPLE_RATE } from "./press-audio.js";
+import { REALTIME_SESSION_TYPE } from "./realtime-events.js";
 import {
   mouthToolDefinitions,
-  REALTIME_SESSION_TYPE,
   realtimeInstructions,
   remoteRealtimeInstructions,
-} from "./realtime-protocol.js";
+} from "./realtime-instructions.js";
 import { REALTIME_DEFAULTS } from "./realtime-voice-settings.js";
 
 /**

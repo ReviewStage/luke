@@ -7,12 +7,12 @@ import {
   isTerminalBrainRequestStatus,
 } from "@sidecar/brain/requests";
 import type { BrainAskSubmissionResult, BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
+import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime/vocabulary";
 import {
   type ConversationEntry,
   replyConversationEntry,
   typedAskConversationEntry,
-} from "@sidecar/realtime";
-import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime/vocabulary";
+} from "@sidecar/session";
 
 /** What the publication owner reaches: the thread, every window, and the delivery owner. */
 export interface BrainPublicationDependencies {

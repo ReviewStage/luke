@@ -30,8 +30,6 @@
  * app" was itself a policy and persisting means replacing it with a real one.
  */
 
-import { actNarration, type CarriedSessionAct } from "@sidecar/acts";
-import type { Session, SessionIdentity } from "@sidecar/session";
 import {
   isRecord,
   isWireNumber,
@@ -39,7 +37,18 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import { SESSION_NO_LONGER_OBSERVED_NOTE } from "./realtime-protocol.js";
+import type { SessionIdentity } from "../session-identity.js";
+import type { Session } from "../session-shape.js";
+
+/**
+ * The note a history line carries in place of an identity the roster no
+ * longer reports, rendered below and taught verbatim by the standing
+ * instructions a voice runs under, so the words the model is taught are
+ * always the words it reads: a line wearing it names work that is gone —
+ * perhaps already archived — never an invitation to act on a lookalike still
+ * observed.
+ */
+export const SESSION_NO_LONGER_OBSERVED_NOTE = "this session is no longer observed";
 
 /** What one history line records, which also says who it speaks for. */
 export const CONVERSATION_ENTRY_KIND = {
@@ -147,7 +156,7 @@ export interface ConversationEntry {
   requestId?: string;
 }
 
-/** The line as the Gateway protocol carries it; `conversationEntryFromWire` reads it back whole. */
+/** The line as the Gateway protocol carries it; `storedConversationEntry` reads it back whole. */
 export function conversationEntryToWire(entry: ConversationEntry): WireRecord {
   return {
     kind: entry.kind,
@@ -163,34 +172,6 @@ export function conversationEntryToWire(entry: ConversationEntry): WireRecord {
       : undefined),
     ...(entry.recordedAt !== undefined ? { recordedAt: entry.recordedAt } : undefined),
     ...(entry.requestId !== undefined ? { requestId: entry.requestId } : undefined),
-  };
-}
-
-/**
- * One History line as a Gateway event carried it, or nothing for a shape this
- * build cannot draw. Unlike {@link storedConversationEntry}, which reads a
- * line back from disk, this reads a line another process of the same build
- * just wrote, so every optional field is taken as it was sent.
- */
-export function conversationEntryFromWire(value: UnparsedWireValue): ConversationEntry | undefined {
-  if (!isRecord(value) || !isConversationEntryKind(value.kind) || !isWireString(value.words)) {
-    return undefined;
-  }
-  const identity = value.identity;
-  const providerId = isRecord(identity) ? identity.providerId : undefined;
-  const providerSessionId = isRecord(identity) ? identity.providerSessionId : undefined;
-  if (identity !== undefined && !(isWireString(providerId) && isWireString(providerSessionId))) {
-    return undefined;
-  }
-  return {
-    kind: value.kind,
-    words: value.words,
-    ...(isWireString(value.eventId) ? { eventId: value.eventId } : undefined),
-    ...(isWireString(providerId) && isWireString(providerSessionId)
-      ? { identity: { providerId, providerSessionId } }
-      : undefined),
-    ...(isWireNumber(value.recordedAt) ? { recordedAt: value.recordedAt } : undefined),
-    ...(isWireString(value.requestId) ? { requestId: value.requestId } : undefined),
   };
 }
 
@@ -413,24 +394,6 @@ export function withConversationEntryRequest(
   return tied;
 }
 
-/**
- * The history line one carried act leaves behind: the ask, in the words of
- * what was asked — never the outcome, which the reply voicing it records as
- * its own line. A transcript reading is deliberately only the fact that one
- * was read: the rendering travels in the turn that asked for it and nowhere
- * else, so the record keeps the act and not a word of what it rendered.
- */
-export function sessionActConversationEntry(
-  action: CarriedSessionAct,
-  sessions: readonly Session[],
-  kind: typeof CONVERSATION_ENTRY_KIND.ACT | typeof CONVERSATION_ENTRY_KIND.OWN_ACT,
-): ConversationEntry {
-  const words = actNarration(action, sessions);
-  const entry: ConversationEntry = { kind, words };
-  if ("identity" in action) entry.identity = action.identity;
-  return entry;
-}
-
 /** The history line an announcement leaves behind: the words the brain had spoken. */
 export function announcementConversationEntry(words: string): ConversationEntry {
   return { kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT, words };
@@ -514,26 +477,51 @@ export function conversationHistoryText(
 }
 
 /**
- * Parses one stored line back, or nothing. A file half-written by a crash, or
- * a record from a build that spelled an entry differently, drops the line
- * rather than the thread: history is not load-bearing, and a single unreadable
- * line is worth less than everything said around it. Fields an older build
- * stored beside the words are left unread rather than refused, so the words
- * of a line recorded before them still come back.
+ * What one line's optional fields are held to, which is a question of where
+ * it came from rather than of the line itself.
  */
-export function storedConversationEntry(value: UnparsedWireValue): ConversationEntry | undefined {
-  if (!isRecord(value) || !isConversationEntryKind(value.kind)) return undefined;
-  const words = isWireString(value.words) ? normalizedEntryWords(value.words) : undefined;
-  if (!words || words !== value.words) return undefined;
-  const recordedAt =
-    isWireNumber(value.recordedAt) && Number.isFinite(value.recordedAt)
-      ? value.recordedAt
-      : undefined;
-  if (recordedAt === undefined || recordedAt < 0) return undefined;
-  if (value.requestId !== undefined && !(isWireString(value.requestId) && value.requestId)) {
+export interface StoredConversationEntryOptions {
+  /**
+   * `true` reads a line back from disk: every optional field is validated and
+   * a clock is required, so a file half-written by a crash, or a record from a
+   * build that spelled an entry differently, drops the line rather than the
+   * thread — history is not load-bearing, and a single unreadable line is
+   * worth less than everything said around it. `false` reads a line another
+   * process of the same build just wrote over the Gateway, where every
+   * optional field is taken as it was sent and an unclocked draft is legal.
+   *
+   * Fields an older build stored beside the words are left unread rather than
+   * refused either way, so the words of a line recorded before them still
+   * come back.
+   */
+  strict: boolean;
+}
+
+/**
+ * Parses one line back, or nothing, under the read's own strictness. The
+ * default is the stricter read: the disk is the boundary with a half-written
+ * file behind it, so a caller that omits the argument gets the read that
+ * refuses rather than the one that trusts.
+ */
+export function storedConversationEntry(
+  value: UnparsedWireValue,
+  { strict }: StoredConversationEntryOptions = { strict: true },
+): ConversationEntry | undefined {
+  if (!isRecord(value) || !isConversationEntryKind(value.kind) || !isWireString(value.words)) {
     return undefined;
   }
-  if (value.eventId !== undefined && !(isWireString(value.eventId) && value.eventId)) {
+  if (strict) {
+    const normalized = normalizedEntryWords(value.words);
+    if (!normalized || normalized !== value.words) return undefined;
+    if (value.requestId !== undefined && !(isWireString(value.requestId) && value.requestId)) {
+      return undefined;
+    }
+    if (value.eventId !== undefined && !(isWireString(value.eventId) && value.eventId)) {
+      return undefined;
+    }
+  }
+  const recordedAt = isWireNumber(value.recordedAt) ? value.recordedAt : undefined;
+  if (strict && (recordedAt === undefined || !Number.isFinite(recordedAt) || recordedAt < 0)) {
     return undefined;
   }
   const identity = value.identity;
@@ -541,17 +529,18 @@ export function storedConversationEntry(value: UnparsedWireValue): ConversationE
   const providerSessionId = isRecord(identity) ? identity.providerSessionId : undefined;
   if (
     identity !== undefined &&
-    (!isWireString(providerId) ||
-      providerId.length === 0 ||
-      !isWireString(providerSessionId) ||
-      providerSessionId.length === 0)
+    !(
+      isWireString(providerId) &&
+      isWireString(providerSessionId) &&
+      (!strict || (providerId.length > 0 && providerSessionId.length > 0))
+    )
   ) {
     return undefined;
   }
   return {
     kind: value.kind,
-    words,
-    recordedAt,
+    words: value.words,
+    ...(recordedAt !== undefined ? { recordedAt } : undefined),
     ...(isWireString(providerId) && isWireString(providerSessionId)
       ? { identity: { providerId, providerSessionId } }
       : undefined),
@@ -562,7 +551,7 @@ export function storedConversationEntry(value: UnparsedWireValue): ConversationE
 
 /**
  * Applies both retention bounds, oldest lines going first. Unclocked draft
- * entries may participate in pure in-memory ordering; the storage parser above
+ * entries may participate in pure in-memory ordering; the strict parse above
  * refuses them, and every live append supplies a clock.
  */
 export function retainedConversationEntries(

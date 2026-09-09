@@ -5,13 +5,8 @@ import {
   CREDENTIAL_SOURCE,
   SECRET_STORAGE,
 } from "@sidecar/credentials/vocabulary";
-import {
-  CONVERSATION_ENTRY_KIND,
-  REALTIME_STATUS,
-  REALTIME_VOICE,
-  REALTIME_VOICE_SPEED,
-} from "@sidecar/realtime";
-import { normalizeSession, SESSION_STATUS } from "@sidecar/session";
+import { REALTIME_STATUS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
+import { CONVERSATION_ENTRY_KIND, normalizeSession, SESSION_STATUS } from "@sidecar/session";
 import { APP_SETTING_DEFAULTS } from "@sidecar/settings";
 import { type AppSettings, appSettingsView, CLI_CONNECTION } from "@sidecar/settings/wire";
 import type { VoiceBootstrap } from "#shared/messages/session";

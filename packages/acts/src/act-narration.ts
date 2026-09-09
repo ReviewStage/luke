@@ -4,8 +4,14 @@
  * written and no act can be recorded as "an act" with nothing said about it.
  */
 
-import type { Session, SessionApplicationId, SessionIdentity } from "@sidecar/session";
-import { ACT_KIND, type ActKind, type CarriedAct } from "./act-kinds.js";
+import type {
+  CONVERSATION_ENTRY_KIND,
+  ConversationEntry,
+  Session,
+  SessionApplicationId,
+  SessionIdentity,
+} from "@sidecar/session";
+import { ACT_KIND, type ActKind, type CarriedAct, type CarriedSessionAct } from "./act-kinds.js";
 
 function observedSessionName(identity: SessionIdentity, sessions: readonly Session[]): string {
   const session = sessions.find(
@@ -73,4 +79,26 @@ export function actNarration(act: CarriedAct, sessions: readonly Session[]): str
   // SAFETY: the record is keyed by the same union `act.kind` ranges over, so the
   // entry selected is the one written for this act's own shape.
   return (narrate as (act: CarriedAct, sessions: readonly Session[]) => string)(act, sessions);
+}
+
+/**
+ * The history line one carried act leaves behind: the ask, in the words of
+ * what was asked — never the outcome, which the reply voicing it records as
+ * its own line. A transcript reading is deliberately only the fact that one
+ * was read: the rendering travels in the turn that asked for it and nowhere
+ * else, so the record keeps the act and not a word of what it rendered.
+ *
+ * It is here rather than beside the rest of the conversation model because it
+ * is the one line whose words are an act's narration, and the act vocabulary
+ * sits above the session vocabulary the conversation model is part of.
+ */
+export function sessionActConversationEntry(
+  action: CarriedSessionAct,
+  sessions: readonly Session[],
+  kind: typeof CONVERSATION_ENTRY_KIND.ACT | typeof CONVERSATION_ENTRY_KIND.OWN_ACT,
+): ConversationEntry {
+  const words = actNarration(action, sessions);
+  const entry: ConversationEntry = { kind, words };
+  if ("identity" in action) entry.identity = action.identity;
+  return entry;
 }

@@ -5,7 +5,7 @@ import {
   type ConversationEntry,
   type ConversationEntryKind,
   conversationEntryKey,
-} from "@sidecar/realtime";
+} from "@sidecar/session";
 import { useEffect, useRef, useState } from "react";
 import { type AskHandler, AskLuke } from "./ask-luke";
 import { createHistoryTimeBreakFormatter, opensHistoryTimeBreak } from "./history-time-break";

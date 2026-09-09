@@ -1,10 +1,10 @@
-import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
 import {
   DEFAULT_AGENT_ID,
   MAIN_CONVERSATION_NAME,
   MAIN_SESSION_KEY,
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
+import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import type { BrainJournalEntry } from "../journal.js";
 import {
   BRAIN_REQUEST_ORIGIN,
