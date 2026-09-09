@@ -37,9 +37,10 @@ export class CaptionStrip {
    * or the follow-up after a tool call — starts a new segment rather than
    * running its words onto the last one's, and an item's own final transcript
    * can still land on its own segment after the turn has moved on. Every
-   * segment stays until the reply ends, because the handover to Conversation
-   * is owed the whole reply; how many the housing draws is the surface's own
-   * limit, applied where the caption is drawn.
+   * segment stays until the reply ends: the handover to Conversation is owed
+   * the whole reply, and how many of them fit under the housing is the
+   * surface's question to answer from the room it has, not a count to keep
+   * here.
    */
   #segments: { itemId: string | undefined; text: string }[] = [];
   /**

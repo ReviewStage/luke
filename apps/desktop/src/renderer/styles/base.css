@@ -1323,8 +1323,11 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    under it is what answers, so hovering the words holds the peek like
    hovering the shape does. */
 .voice-caption {
-  /* Named so the widen keyframe can hold it while animating the sides: an
-     animation owns the whole clip-path while it runs. */
+  /* Named so the widen keyframe can hold them while animating the sides: an
+     animation owns the whole clip-path while it runs. The top clip is the
+     block's own inset, so a stack rolled up past the words' edge is cut where
+     the inset begins rather than drawn in it. */
+  --voice-band-clip-top: var(--voice-band-inset);
   --voice-band-clip-bottom: calc(var(--caption-max) - var(--caption-size, 20px));
   position: absolute;
   z-index: 3;
@@ -1338,7 +1341,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
      the gap on that side, so the words are the same distance from the thing
      above them as from the thing below however the stack is composed. */
   padding: var(--voice-band-inset) 0 0;
-  clip-path: inset(0 0 var(--voice-band-clip-bottom));
+  clip-path: inset(var(--voice-band-clip-top) 0 var(--voice-band-clip-bottom));
   opacity: 0;
   pointer-events: none;
   transform: translate(-50%, calc(var(--caption-rest, 0px) + var(--voice-band-origin)));
@@ -1403,16 +1406,30 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   );
 }
 
-/* The stack holds one block per response, so two responses spoken
-   back-to-back sit apart instead of running together. Nothing here moves:
-   the whole reply stays on screen — the block grows to the words, and the
-   window reserves room past what a spoken reply wraps to — so the clip on
-   the caption above is the only reveal. */
+/* The stack holds one block per response, oldest first, so responses spoken
+   back-to-back sit apart instead of running together. While the stack fits
+   the room the window reserved, nothing here moves: the block grows to the
+   words and the clip on the caption above is the only reveal. Past that room
+   the block stops growing and the stack rolls up by `--caption-overflow`,
+   the renderer's measure of what will not fit, so the newest words stay at
+   the block's foot and the oldest lines travel up under the housing and out
+   through the clip's top edge — a transform on the spring, like every
+   travel on the surface, never a scroll. The roll waits out
+   `--duration-exit` in the compact states like the caption's own transform,
+   so a stack leaving a state rolls with the shape rather than ahead of it;
+   the captioned rules below drop the delay while the words are up, the way
+   they do for the clip. */
 .voice-caption-stack {
   display: flex;
   flex-direction: column;
   gap: 14px;
   width: 100%;
+  transform: translateY(calc(-1 * var(--caption-overflow, 0px)));
+  transition: transform var(--duration-shape) var(--spring) var(--duration-exit);
+}
+
+.app-stage[data-caption="true"] .voice-caption-stack {
+  transition: transform var(--duration-shape) var(--spring);
 }
 
 .voice-caption-text {
@@ -1566,18 +1583,20 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    animation fires only at the flip and never mid-panel, where the surface is
    already wide and the caption's arriving content needs its clip transition
    live rather than owned by a finished animation. One keyframe serves both
-   because each element's `--voice-band-clip-bottom` — 0 for the hint's bare
-   row — rides through both frames unchanged, so the animation ends exactly
-   on the clip the element's own rule draws. Leaving the panel needs no twin:
-   the compact width snaps back on the flip, already inside every edge the
-   collapse will pass. */
+   because each element's `--voice-band-clip-top` and `--voice-band-clip-bottom`
+   — 0 for the hint's bare row — ride through both frames unchanged, so the
+   animation ends exactly on the clip the element's own rule draws. Leaving
+   the panel needs no twin: the compact width snaps back on the flip, already
+   inside every edge the collapse will pass. */
 @keyframes voice-band-widen {
   from {
-    clip-path: inset(0 var(--voice-band-widen) var(--voice-band-clip-bottom, 0px));
+    clip-path: inset(
+      var(--voice-band-clip-top, 0px) var(--voice-band-widen) var(--voice-band-clip-bottom, 0px)
+    );
   }
 
   to {
-    clip-path: inset(0 0 var(--voice-band-clip-bottom, 0px));
+    clip-path: inset(var(--voice-band-clip-top, 0px) 0 var(--voice-band-clip-bottom, 0px));
   }
 }
 

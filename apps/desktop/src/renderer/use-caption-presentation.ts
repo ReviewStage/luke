@@ -1,4 +1,3 @@
-import { VOICE_CAPTION_MAX_HEIGHT } from "@sidecar/surface";
 import { cssCustomProperties, SURFACE_PROPERTY } from "@sidecar/surface/react-css";
 import {
   type CSSProperties,
@@ -8,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { captionBlockSize, captionSegments, captionStackOverflow } from "./caption-layout";
 import { parsePixels } from "./session-motion";
 import {
   CAPTION_TONE,
@@ -18,34 +18,19 @@ import {
 } from "./strip-hold";
 import { useMeasuredHeight } from "./use-measured-height";
 import { voiceErrorToShow, voiceNoticeToShow } from "./use-voice-view";
-import { VOLUME_HINT_BAND_HEIGHT } from "./volume-hint";
 import type { WaveformVoice } from "./waveform";
-
-/**
- * The caption block's visible height — the `--caption-size` the clip ends the
- * element at. The strip's hover test reads it too: the element's own box runs
- * to the reserved maximum, and only this much of it is words rather than
- * desktop.
- */
-function captionBlockSize(textHeight: number, volumeHint: boolean, padding: number): number {
-  const hintBand = volumeHint ? VOLUME_HINT_BAND_HEIGHT : 0;
-  return Math.min(VOICE_CAPTION_MAX_HEIGHT - hintBand, textHeight + padding);
-}
 
 /**
  * Sizes the caption block to the words it currently holds. The text wraps, so
  * only a measurement can say how tall it is; the size drives the surface's
- * growth and the clip that reveals the text. The whole reply stays on screen —
- * the reserved maximum is sized past what a spoken reply wraps to, so the
- * clamp below is the window's physical bound rather than a working edge.
- * The volume hint stands in a band of its own below the block: while it is
- * drawn, the band comes off the block's maximum, so the block and the band
- * partition the reserved room instead of sharing it, and the stack never asks
- * for more height than the window holds.
- * Padding is the caption's own computed padding, not a restated number, so a
- * retune in the stylesheet grows the surface by exactly what the text is
- * inset — the one inset above the words, with whatever stands below the block
- * carrying the gap on that side.
+ * growth and the clip that reveals the text. The block grows to the stack
+ * until it meets the room the window reserved, and past that the stack rolls
+ * up by the overflow instead, so the newest words stay inside the clip while
+ * the oldest lines leave under the housing — `caption-layout.ts` says why the
+ * bound is spent that way. Padding is the caption's own computed padding, not
+ * a restated number, so a retune in the stylesheet grows the surface by
+ * exactly what the text is inset — the one inset above the words, with
+ * whatever stands below the block carrying the gap on that side.
  */
 function captionSizeStyle(
   textHeight: number | undefined,
@@ -55,6 +40,7 @@ function captionSizeStyle(
   if (!textHeight) return {};
   return cssCustomProperties({
     [SURFACE_PROPERTY.CAPTION_SIZE]: `${captionBlockSize(textHeight, volumeHint, padding)}px`,
+    [SURFACE_PROPERTY.CAPTION_OVERFLOW]: `${captionStackOverflow(textHeight, volumeHint, padding)}px`,
   });
 }
 
@@ -79,11 +65,11 @@ export interface CaptionPresentation {
   /** Everything the strip is showing, live words or a held snapshot. */
   texts: readonly string[] | undefined;
   tone: CaptionTone;
-  /** The reply above, drawn only when two are stacked. */
-  settled: string | undefined;
+  /** The segments already spoken, oldest first, each drawn only while it has words. */
+  settled: readonly string[];
   /** The words still arriving, in the always-mounted slot. */
   live: string | undefined;
-  /** The `--caption-size` the surface grows by. */
+  /** The `--caption-size` the surface grows by, and the `--caption-overflow` the stack rolls by. */
   style: CSSProperties;
 }
 
@@ -200,8 +186,9 @@ export function useCaptionPresentation(
    * The measured caption height the shape spends, held through a collapse
    * out of the panel. The compact width lands at the flip and re-wraps the
    * words while they are still riding down at the panel's foot, and a
-   * re-measure landing mid-ride would open the clip and retarget the surface
-   * past room nothing has made yet. The collapse travels on the panel's
+   * re-measure landing mid-ride would open the clip, retarget the surface
+   * past room nothing has made yet, and roll the stack against words still
+   * travelling. The collapse travels on the panel's
    * numbers; the compact re-measure lands when the shape has settled, and
    * grows it there the way words arriving at rest do.
    */
@@ -222,16 +209,17 @@ export function useCaptionPresentation(
       ? 0
       : captionBlockSize(textHeight, volumeHint, padding);
 
+  // Responses spoken back-to-back stack as captions in the order they were
+  // said: every settled one above, the one still arriving below, in the
+  // always-mounted slot the lone caption also uses.
+  const { settled, live } = captionSegments(texts);
   return {
     ref: element,
     textRef: textElement,
     texts,
     tone,
-    // Two responses spoken back-to-back stack as two captions: the settled one
-    // above, the one still arriving below, in the always-mounted slot the lone
-    // caption also uses.
-    settled: texts && texts.length > 1 ? texts.at(-2) : undefined,
-    live: texts?.at(-1),
+    settled,
+    live,
     style: captionSizeStyle(shownHeight, volumeHint, padding),
   };
 }

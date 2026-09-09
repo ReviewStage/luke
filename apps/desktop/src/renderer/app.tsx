@@ -10,7 +10,7 @@ import { feedbackKindForLifecycleEvent } from "@sidecar/feedback";
 import { WingFace as LukeFace } from "@sidecar/panel";
 import { REALTIME_STATUS } from "@sidecar/realtime";
 import type { ObservedWorkspaceProject } from "@sidecar/session";
-import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTION } from "@sidecar/session/fixtures";
+import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTIONS } from "@sidecar/session/fixtures";
 import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE, voiceHotkeyLabel } from "@sidecar/settings";
 import type { AppSettingsView, ObservedAccountCalendars } from "@sidecar/settings/wire";
 import { appSettingsView } from "@sidecar/settings/wire";
@@ -583,7 +583,7 @@ export function App(): React.JSX.Element {
   }, [brainRequests, cancelBrainAsk]);
   // A capture run always draws the fixture's words: the voice window that
   // otherwise decides the captions does not stand in one.
-  const lukeCaptions = fixtureSpeaking ? [FIXTURE_SPEAKING_CAPTION] : voiceView.lukeCaptions;
+  const lukeCaptions = fixtureSpeaking ? FIXTURE_SPEAKING_CAPTIONS : voiceView.lukeCaptions;
 
   // The hint rides the caption it explains, and only over a silence the
   // helper actually reported. "Got it" quiets it for this stretch of silence
@@ -1221,12 +1221,16 @@ export function App(): React.JSX.Element {
           jumping between two copies. Not in a wing — the wings clip at the
           capsule's height — and always mounted, like the count's caption, so
           both edges of its fade can run. The inner stack is what is measured —
-          two responses spoken back-to-back are two blocks in it, the settled
-          words above the ones still arriving — and its wrapped height is the
-          only honest answer to how much room the words need. The newest block
-          is always mounted like the stack itself; the settled one mounts only
-          while it has words, so a lone reply pays no gap for a block that is
-          not there. Hidden from readers while it captions speech — it
+          responses spoken back-to-back are one block each in it, oldest
+          first, the settled words above the ones still arriving — and its
+          wrapped height is the only honest answer to how much room the words
+          need; past the room the window reserved it rolls up rather than
+          growing, as `caption-layout.ts` says. The newest block is always
+          mounted like the stack itself; a settled one mounts only while it
+          has words, so a lone reply pays no gap for a block that is not
+          there, and the blocks keep their order as keys so a segment that
+          settles stays the element it streamed into. Hidden from readers
+          while it captions speech — it
           duplicates what is already audible — and announced as a status line
           when it carries a failure or a notice, which was never audible at
           all. */}
@@ -1237,10 +1241,15 @@ export function App(): React.JSX.Element {
         {...(caption.tone !== CAPTION_TONE.WORDS ? { role: "status" } : { "aria-hidden": true })}
       >
         <span className="voice-caption-stack" ref={caption.textRef}>
-          {caption.settled === undefined ? null : (
-            <MarkdownMessage className="voice-caption-text" words={caption.settled} />
-          )}
-          <MarkdownMessage className="voice-caption-text" words={caption.live ?? ""} />
+          {caption.settled.map((words, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: a segment's place in the reply is its identity — the strip never reorders or removes one while the reply stands — and the live slot below takes the next place, so the block a segment streamed into is the block it settles in.
+            <MarkdownMessage key={index} className="voice-caption-text" words={words} />
+          ))}
+          <MarkdownMessage
+            key={caption.settled.length}
+            className="voice-caption-text"
+            words={caption.live ?? ""}
+          />
         </span>
       </span>
 

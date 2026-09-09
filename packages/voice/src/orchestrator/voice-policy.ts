@@ -72,20 +72,10 @@ export function lukeCaptionsToShow(input: {
     (input.captionsEnabled || input.outputSilent) &&
     input.status === REALTIME_STATUS.RESPONDING
   ) {
-    return input.captions?.slice(-CAPTION_SEGMENT_LIMIT);
+    return input.captions;
   }
   return undefined;
 }
-
-/**
- * How many back-to-back responses the housing's caption keeps on screen at
- * once. Two is the shape the surface stacks — the words just settled and the
- * words now arriving — and a third response starting simply retires the
- * oldest from view, the way a long reply's oldest lines already roll up under
- * the shape. A limit on the drawing alone: the call keeps every segment of
- * the reply, so what Conversation records and streams is the whole of it.
- */
-export const CAPTION_SEGMENT_LIMIT = 2;
 
 /**
  * Whether a talk-key press has a call to open before the session is asked. A

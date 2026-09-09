@@ -65,12 +65,12 @@ const ROW_FAN_LIMIT = 5;
 // stays at the edge.
 const SURFACE_GEOMETRY_PX = {
   BUBBLE_LIFT: 4,
-  // The caption block shows a spoken reply whole — the block grows to the
-  // words and nothing scrolls — so the reservation must sit past what a
-  // reply wraps to at the peek's width: fourteen 14px lines plus the block's
-  // own padding, room enough for two long responses stacked. The window
-  // cannot resize for speech, so this bound is physical: a reply taller
-  // still clips at the block's edge rather than growing the window.
+  // The caption block grows to the words and nothing scrolls, so the
+  // reservation sits past what a reply wraps to at the peek's width: fourteen
+  // 14px lines plus the block's own padding, room enough for two long
+  // responses stacked. The window cannot resize for speech, so this bound is
+  // physical: a stack taller still rolls up inside the block, its oldest
+  // lines leaving under the housing, rather than growing the window.
   VOICE_CAPTION_MAX_HEIGHT: 210,
   // The one gap between anything the surface grows below the strip. The
   // words and the volume hint stack under the housing in the compact states
@@ -433,7 +433,8 @@ ${tsRecord(Object.entries(MOTION_DELAY_MS).map(([key, value]) => [key, value]))}
 export const BUBBLE_LIFT = ${SURFACE_GEOMETRY_PX.BUBBLE_LIFT};
 
 /** Tallest caption block the window holds — sized past a whole spoken reply,
- * because the block grows to the words and nothing scrolls. CSS: \`--caption-max\`. */
+ * because the block grows to the words and nothing scrolls; a taller stack
+ * rolls up inside it. CSS: \`--caption-max\`. */
 export const VOICE_CAPTION_MAX_HEIGHT = ${SURFACE_GEOMETRY_PX.VOICE_CAPTION_MAX_HEIGHT};
 
 /** The one gap between the strip, each band grown below it, and the shape's

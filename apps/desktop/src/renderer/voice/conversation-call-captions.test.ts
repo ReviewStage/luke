@@ -44,7 +44,7 @@ test("the caption grows with the deltas and the final text supersedes them", asy
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("back-to-back responses stack as two captions instead of running together", async () => {
+test("back-to-back responses stack as captions instead of running together", async () => {
   const context = harness();
   await context.session.connect();
   await holdTurn(context);
@@ -94,7 +94,8 @@ test("back-to-back responses stack as two captions instead of running together",
   ]);
 
   // A third response is kept with the rest: the call reports the whole reply,
-  // and how many of its segments the housing draws is the surface's own limit.
+  // and how many of its segments fit under the housing is the surface's own
+  // question, answered from the room it has rather than a count.
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
     item: { id: "item-three" },

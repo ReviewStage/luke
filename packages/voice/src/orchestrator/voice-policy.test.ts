@@ -133,8 +133,8 @@ test("Luke's captions are offered only on his turn, and only with a reason to re
       ...shown,
       captions: ["Sentence 1.", "Sentence 2.", "Sentence 3.", "Sentence 4."],
     }),
-    ["Sentence 3.", "Sentence 4."],
-    "the housing draws only the newest segments; the reply itself keeps them all",
+    ["Sentence 1.", "Sentence 2.", "Sentence 3.", "Sentence 4."],
+    "the gate decides whether captions draw, never how many: the surface bounds them by room",
   );
   assert.equal(lukeCaptionsToShow({ ...shown, captions: [] })?.length, 0);
   assert.equal(
