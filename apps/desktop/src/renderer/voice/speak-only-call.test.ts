@@ -21,12 +21,8 @@ import {
   type MockPeerConnection,
 } from "#testing/realtime-fixtures";
 import type { SdkRealtimeTransport, SdkTransportFactoryOptions } from "./agents-realtime-transport";
-import {
-  REPLY_KIND,
-  type ReplyKind,
-  SPEAK_ONLY_SESSION_CONFIG,
-  SpeakOnlyCall,
-} from "./speak-only-call";
+import { REPLY_KIND, type ReplyKind } from "./captions";
+import { SPEAK_ONLY_SESSION_CONFIG, SpeakOnlyCall } from "./speak-only-call";
 
 const CONNECTION: RealtimeConnection = {
   value: "ek_test_secret",

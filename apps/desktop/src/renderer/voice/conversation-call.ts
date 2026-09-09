@@ -31,6 +31,7 @@ import {
 } from "@sidecar/wire";
 import { voiceExchangeActive } from "#shared/messages/voice-view";
 import type { BuiltRealtimeSessionConfig, SdkToolCallDetails } from "./agents-realtime-transport";
+import { REPLY_KIND } from "./captions";
 import { MICROPHONE_PROCESSING } from "./microphone-choice";
 import {
   createPressCaptureSource,
@@ -40,7 +41,6 @@ import {
 import type { TeardownStep } from "./realtime-call";
 import {
   BRAIN_ASK_SETTLE_TIMEOUT_MS,
-  REPLY_KIND,
   type ResponseDoneEvent,
   SpeakOnlyCall,
   type SpeakOnlyCallOptions,

@@ -28,14 +28,13 @@ import {
   type MockTrackEvent,
 } from "#testing/realtime-fixtures";
 import type { SdkRealtimeTransport, SdkTransportFactoryOptions } from "./agents-realtime-transport";
+import { REPLY_KIND, type ReplyKind } from "./captions";
 import { ConversationCall } from "./conversation-call";
 import {
   BRAIN_ASK_SETTLE_TIMEOUT_MS,
   quietIsLukesOwn,
   REALTIME_SETTLE_TIMEOUT_MS,
   REMOTE_QUIET_MS,
-  REPLY_KIND,
-  type ReplyKind,
 } from "./speak-only-call";
 import { SpeechMouth } from "./speech-mouth";
 
