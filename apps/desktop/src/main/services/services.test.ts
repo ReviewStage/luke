@@ -204,7 +204,7 @@ test("the updater's timers are handles the stop takes back, and a restart tears 
     runMode: runModeFor({ capture: false, fixture: false }),
   };
   const state = new AppStateStore(initialAppState(config, true));
-  state.subscribe((change) => snapshots.push(change.state.update.status));
+  state.subscribe(() => snapshots.push(state.snapshot().update.status));
   const updates = createUpdateServiceHost({
     config,
     recordProductEvent: () => undefined,

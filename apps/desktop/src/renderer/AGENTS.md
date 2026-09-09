@@ -13,6 +13,19 @@ both are real modules that simply are not there at run time.
 `repository-checks.sh` fails the build on either. A colocated `*.test.ts` is
 exempt from the `node:` half: it runs under Node and never enters the bundle.
 
+It reads app state one way: `app:state`, whose first delivery is this window's
+bootstrap and whose every later delivery carries a version at least as high,
+read through `use-app-state.ts` and never subscribed to twice. A delivery that
+repeats the version is this window's own facts having moved — its mode, or the
+display under it — which the document does not number. There is no separate
+bootstrap call and no per-field push channel, so there is no "which arrived
+first" for a component to answer. The channels that remain beside it are
+events rather than state: a one-shot addressed to a named receiver that a
+late subscriber must not receive and cannot reconstruct, or a reading that
+expires before the next version of the document could carry it — which is
+what the voice level is, twenty readings a second each good for fifty
+milliseconds.
+
 Two renderers load this bundle under the same rule. The panel is one; the
 hidden voice window under `WINDOW_ROLE.VOICE` is the other, and everything it
 mounts lives under `renderer/voice/`: the calls, the microphone, the mouth,
@@ -22,8 +35,8 @@ the same sandbox, and it must never mount `App` or import `session-replay.ts`:
 the panel is the one surface that records, and a recording of a blank hidden
 window would be a session nobody consented to. `repository-checks.sh` fails the
 build on a `session-replay` import anywhere under `renderer/voice/`. A panel
-draws the voice state the main process forwards and forwards its presses back;
-it constructs no call of its own.
+draws the voice state that arrives in its `app:state` snapshot and forwards
+its presses back; it constructs no call of its own.
 
 A call Luke opens for himself is a `SpeakOnlyCall`
 (`voice/speak-only-call.ts`): it is configured with

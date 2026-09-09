@@ -82,7 +82,6 @@ import {
 import type {
   AccountCalendar,
   AppSettingField,
-  AppSettings,
   AppSettingsView,
   AppSettingValue,
   CalendarAccount,
@@ -217,29 +216,18 @@ export interface SettingsWrites {
 }
 
 /**
- * The one way a settings row writes: through the bridge, with the returned
- * snapshot applied where the panel keeps it. A factory rather than a hook so
- * the calendar gate can hand the same writes to the same rows it borrows.
+ * The one way a settings row writes: through the bridge, answering the row
+ * with the store's own reply so a refusal lands where it was asked for. What
+ * the rows then draw is the document, which carries the change to every
+ * window including this one, so nothing here applies a snapshot — and with
+ * nothing to close over, one shared value serves the settings panel and the
+ * rows the calendar gate borrows from it alike.
  */
-export function settingsWrites(onSettingsChange: (settings: AppSettings) => void): SettingsWrites {
-  return {
-    async setting(field, value) {
-      const result = await window.sidecar.updateSetting(field, value);
-      onSettingsChange(result.settings);
-      return result;
-    },
-    async entry(field, key, value) {
-      const result = await window.sidecar.updateSettingEntry(field, key, value);
-      onSettingsChange(result.settings);
-      return result;
-    },
-    async reset(scope) {
-      const result = await window.sidecar.resetSettings(scope);
-      onSettingsChange(result.settings);
-      return result;
-    },
-  };
-}
+export const SETTINGS_WRITES: SettingsWrites = {
+  setting: (field, value) => window.sidecar.updateSetting(field, value),
+  entry: (field, key, value) => window.sidecar.updateSettingEntry(field, key, value),
+  reset: (scope) => window.sidecar.resetSettings(scope),
+};
 
 /**
  * The talk, ask, and stop keys as registered, and the one way to move them
@@ -324,7 +312,6 @@ export interface SettingsPanelProps {
   microphone: MicrophoneControl;
   updates: UpdateControl;
   settings?: AppSettingsView;
-  onSettingsChange: (settings: AppSettings) => void;
   /** The one credential being entered anywhere, and everything that can be done to it. */
   credentials: CredentialEntryControl;
   /** The one note to the founders being written, and everything that can be done to it. */
@@ -3617,7 +3604,6 @@ export function SettingsPanel({
   microphone,
   updates,
   settings,
-  onSettingsChange,
   credentials,
   feedback,
   panelOpen,
@@ -3632,7 +3618,6 @@ export function SettingsPanel({
   onSearchClose,
   onSearchEngaged,
 }: SettingsPanelProps): React.JSX.Element {
-  const writes = settingsWrites(onSettingsChange);
   // Why the front page's Voice row wears its mark, or nothing while voice is
   // fully set up. Judged here rather than on the Voice page because the mark
   // has to stand while that page is not drawn: it is the front page saying a
@@ -3709,7 +3694,7 @@ export function SettingsPanel({
     backControl.current?.focus();
   }, [view, panelOpen]);
   // The drawn page's reset, absent while that page stands at its defaults.
-  const pageReset = pageResetControl(view, settings, writes);
+  const pageReset = pageResetControl(view, settings, SETTINGS_WRITES);
   return (
     <div
       className="settings"
@@ -3779,19 +3764,19 @@ export function SettingsPanel({
           credentials={credentials}
           panelOpen={panelOpen}
           settings={settings}
-          writes={writes}
+          writes={SETTINGS_WRITES}
           microphone={microphone}
         />
       ) : null}
 
       {view === SETTINGS_VIEW.APPEARANCE && settings && !search ? (
-        <AppearanceSection settings={settings} writes={writes} />
+        <AppearanceSection settings={settings} writes={SETTINGS_WRITES} />
       ) : null}
 
       {view === SETTINGS_VIEW.SHORTCUTS && !search ? (
         <ShortcutSection
           shortcuts={shortcuts}
-          writes={writes}
+          writes={SETTINGS_WRITES}
           {...(settings ? { settings } : undefined)}
           voiceAvailable={microphone.voiceAvailable}
         />
@@ -3804,20 +3789,20 @@ export function SettingsPanel({
           <WorkspacesSection
             settings={settings}
             workspaceProviders={workspaceProviders}
-            writes={writes}
+            writes={SETTINGS_WRITES}
           />
-          <KeySyncSection settings={settings} writes={writes} />
+          <KeySyncSection settings={settings} writes={SETTINGS_WRITES} />
           <CredentialsSection
             settings={settings}
             control={credentials}
             panelOpen={panelOpen}
-            writes={writes}
+            writes={SETTINGS_WRITES}
             superset={superset}
             workspaceProviders={workspaceProviders}
           />
           <IntegrationsSection
             settings={settings}
-            writes={writes}
+            writes={SETTINGS_WRITES}
             calendar={calendar}
             appleCalendar={appleCalendar}
             linear={linear}
@@ -3825,7 +3810,7 @@ export function SettingsPanel({
           <SchemaSettingRows
             page={SCHEMA_SETTINGS_PAGE.CONNECTIONS}
             settings={settings}
-            writes={writes}
+            writes={SETTINGS_WRITES}
             exclude={[
               APP_SETTING_SCHEMA.quietDuringMeetings.field,
               APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,

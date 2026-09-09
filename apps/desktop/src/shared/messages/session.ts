@@ -1,12 +1,5 @@
-import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
-import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
-import type { ConversationEntry, ObservedWorkspaceProject, Session } from "@sidecar/session";
-import type { FixtureSnapshot } from "@sidecar/session/fixtures";
-import type { AppSettings } from "@sidecar/settings/wire";
-import type { Rectangle, ResolvedNotchGeometry, WindowMode } from "@sidecar/surface";
-import type { MicrophoneStatus, OutputAudioState } from "./audio";
-import type { UpdateSnapshot } from "./update";
-import type { VoiceView } from "./voice-view";
+import type { Session } from "@sidecar/session";
+import type { Rectangle, ResolvedNotchGeometry } from "@sidecar/surface";
 
 export {
   SUPERSET_SIGN_IN_STAGE,
@@ -47,8 +40,8 @@ export interface DisplayDiagnostic {
 }
 
 /**
- * How screen recording is armed, decided in the main process and handed over
- * at bootstrap and again on every account transition.
+ * How screen recording is armed, decided in the main process and carried on
+ * every version of the app-state document.
  *
  * It carries what the renderer cannot work out for itself and nothing else.
  * The two switches are not here: the renderer already holds `shareUsageData`
@@ -84,152 +77,6 @@ export interface SessionReplayBootstrap {
    */
   accountId?: string;
 }
-
-/**
- * The conversation history as every panel window draws it. The thread has one
- * store, the main process's brain store, which takes the hidden voice
- * window's appends and the main process's own lines and relays the thread
- * whole to every panel so History reads the same on every display. `cleared`
- * marks the relay of a Clear, which the voice window is told of on its own
- * command; a panel needs nothing from it but the empty thread.
- */
-export interface ConversationHistoryPayload {
-  entries: readonly ConversationEntry[];
-  cleared: boolean;
-}
-
-export interface AppBootstrap {
-  mode: WindowMode;
-  /** Capture-only: start drawn as the peek, which normally needs a pointer. */
-  startPeeked: boolean;
-  /** Capture-only: start drawn as the key slot, which normally needs a press. */
-  startInSlot: boolean;
-  profile: string;
-  fixture: FixtureSnapshot;
-  captureMode: boolean;
-  /** True when `--fixture` (or a capture run) makes the panel render fixture sessions. */
-  fixtureMode: boolean;
-  /**
-   * Whether this run records the development trace, so the conversation taps
-   * the wire only while a writer actually stands behind the bridge. False on
-   * every packaged run by construction.
-   */
-  agentTraceEnabled: boolean;
-  /** Whether Superset's bundled CLI exists on this Mac. */
-  supersetInstalled: boolean;
-  /** Whether that CLI also has its own login configuration. */
-  supersetConnected: boolean;
-  /** False for fixture and capture runs, which must stay deterministic. */
-  accountRequired: boolean;
-  account: AccountSnapshot;
-  packaged: boolean;
-  platform: string;
-  microphoneStatus: MicrophoneStatus;
-  /**
-   * The receiver epoch the main process gave this load of the hidden voice
-   * window, which its readiness report must name; absent for every other
-   * window, which receives no speech.
-   */
-  voiceEpoch?: number;
-  /**
-   * The accelerator the talk key was registered as, absent when the system
-   * refused to register one — a shortcut nothing can trigger must not be shown
-   * as though it works. Raw rather than labelled for the ask key's reason
-   * below: the renderer draws the keys apart and says the chord whole.
-   */
-  voiceHotkey?: string;
-  /**
-   * Whether that key reports being let go of. Only a key that does can hold a
-   * turn open for as long as it is down; the fallback can only toggle one, and
-   * the panel says which of the two the user actually has.
-   */
-  voiceHotkeyHeld: boolean;
-  /**
-   * The accelerator that summons the ask field from any app, absent when the
-   * system refused every candidate. The raw accelerator rather than a label,
-   * because the renderer needs both spellings: the keycaps' ⌥ and L, drawn as
-   * the two keys they are, and aria's Alt+L.
-   */
-  askHotkey?: string;
-  /**
-   * The accelerator that stops a reply mid-sentence from any app, absent when
-   * the system refused it or another Luke key sits on its chord. Raw for the
-   * same reason the other two are.
-   */
-  stopHotkey?: string;
-  /**
-   * The output's switches as last read, absent until the helper's first line
-   * arrives — or forever, where there is no helper to ask.
-   */
-  outputAudio?: OutputAudioState;
-  /**
-   * The display this window stands on. Absent for the hidden voice window,
-   * which stands on none and draws nothing that would need one.
-   */
-  display: DisplayDiagnostic | undefined;
-  /** Where the app stands against the latest release, as last learned. */
-  update: UpdateSnapshot;
-  sessionRoster: SessionRosterPayload;
-  /**
-   * Whether `sessions` reflects a roster Luke has actually read. False only
-   * while a live run's first observation pass is still on its way, so an
-   * empty list can say "not looked yet" rather than "nothing to watch"; every
-   * later reading arrives over `onSessionsChanged`, whose first delivery is
-   * itself the settling signal.
-   */
-  sessionsSettled: boolean;
-  /** Where a new workspace can be created, as the adapters currently offer it. */
-  workspaceProjects: readonly ObservedWorkspaceProject[];
-  /** Each connected account's calendars, as last observed. */
-  calendars: readonly ObservedAccountCalendars[];
-  /** Whether announcements are held right now, by the pause switch or a meeting's quiet. */
-  announcementsHeld: boolean;
-  /**
-   * The conversation thread as the last launch left it, already retained.
-   * Only the recent slice reaches a model; the rest is shared across every
-   * display's panel, so History opens where the developer left it.
-   * Empty in a fixture or capture run, which reads no thread and writes none.
-   */
-  conversationHistory: readonly ConversationEntry[];
-  /**
-   * The live conversation as the voice window last reported it, so a panel
-   * that opens mid-exchange draws the exchange rather than an idle voice.
-   * Absent until the voice window has reported once, and always in a fixture
-   * or capture run, which raises no voice window.
-   */
-  voiceView: VoiceView | undefined;
-  /**
-   * Whether the mandatory calendar step of onboarding still stands: this
-   * install's first sign-in has been observed and no calendar has connected
-   * since. The panel gates on it only while signed in.
-   */
-  calendarOnboardingOwed: boolean;
-  /** Whether, where, and for whom this run may record its own surface. */
-  sessionReplay: SessionReplayBootstrap;
-  settings: AppSettings;
-}
-
-/**
- * What the hidden voice window bootstraps with: only the fields it reads. It
- * stands on no display, draws no panel, and records nothing, so the panel's
- * display, account, Superset, project, issue, calendar, and recording fields
- * are neither read nor waited for — a voice window held on a Superset CLI
- * probe or an account read would report itself ready that much later for
- * nothing. Every field here is the same value the panel bootstrap carries,
- * read from the same source at the same moment.
- */
-export type VoiceBootstrap = Pick<
-  AppBootstrap,
-  | "agentTraceEnabled"
-  | "microphoneStatus"
-  | "voiceEpoch"
-  | "voiceHotkey"
-  | "outputAudio"
-  | "sessionRoster"
-  | "announcementsHeld"
-  | "conversationHistory"
-  | "settings"
->;
 
 /** The complete session state one observation revision publishes to a desktop surface. */
 export interface SessionRosterPayload {

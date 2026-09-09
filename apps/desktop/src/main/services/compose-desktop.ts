@@ -1,5 +1,4 @@
 import { AppStateStore, initialAppState } from "../app-state";
-import { fanOutAppState } from "../app-state-channels";
 import { createElectronUpdaterEngine } from "../update-installer";
 import type { DesktopConfig } from "./desktop-config";
 import { createHostService } from "./host-service";
@@ -122,21 +121,12 @@ export function composeDesktop(config: DesktopConfig): DesktopServices {
   });
 
   /**
-   * The one place the document becomes a push. Every channel a window
-   * subscribes to leaves from here, so what a window is told and what the
-   * next bootstrap answers are the same document read twice — and a window
-   * whose own write produced the change is skipped rather than told what it
-   * already drew.
+   * The one place the document becomes a push. Every window reads its state
+   * on one channel, so what a window is told and what `app:state-request`
+   * answers it are the same document read twice, and a window's own write is
+   * not raced against a broadcast: the version it is handed only ever rises.
    */
-  state.subscribe((change) => {
-    fanOutAppState(change, (channel, payload, exceptReporter) => {
-      windows.broadcast(
-        channel,
-        payload,
-        exceptReporter === undefined ? undefined : windows.webContentsByReporter(exceptReporter),
-      );
-    });
-  });
+  state.subscribe(() => windows.publishAppState());
 
   /**
    * The order the launch begins them in, which a quit reverses. What this

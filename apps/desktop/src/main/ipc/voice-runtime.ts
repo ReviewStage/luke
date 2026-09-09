@@ -104,10 +104,13 @@ export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencie
           });
         }
       },
+      // Relayed to the panels rather than written to the document: a
+      // loudness is a reading that expires before the next one arrives, so no
+      // panel bootstraps from it and no version of the document should carry
+      // one.
       reportVoiceLevel(context, level) {
         if (!voiceWindow.owns(context.sender)) return;
-        const { state } = dependencies;
-        state.update({ voice: { ...state.snapshot().voice, level } });
+        panels.broadcast(channels.onVoiceLevelChanged, level);
       },
       // The voice renderer saying it can receive. Only the renderer the
       // window holds now may say so, and only for the epoch its own bootstrap

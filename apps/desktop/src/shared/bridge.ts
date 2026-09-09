@@ -22,10 +22,8 @@ import {
   isBrainReplyClaimResult,
   isBrainReplyOffer,
   isBrainRequestSnapshot,
-  isBrainRequestSnapshotList,
   isReceiverEpoch,
 } from "@sidecar/brain/requests-wire";
-import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { AppleCalendarAccess } from "@sidecar/calendar/vocabulary";
 import type { AccountProvider, AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { isAccountProvider } from "@sidecar/credentials/snapshot";
@@ -54,7 +52,6 @@ import {
   type ConversationEntry,
   isProviderId,
   isSessionApplicationId,
-  type ObservedWorkspaceProject,
   type Session,
   type SessionApplicationId,
   type SessionIdentity,
@@ -73,7 +70,7 @@ import {
   type SettingsResetScope,
   settingEntryGuard,
 } from "@sidecar/settings";
-import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
+import type { SettingsUpdateResult } from "@sidecar/settings/wire";
 import type { WindowMode } from "@sidecar/surface";
 import {
   type ActResult,
@@ -88,24 +85,9 @@ import {
   unparsedWire,
   type WireBoundaryInput,
 } from "@sidecar/wire";
-import {
-  MICROPHONE_STATUS,
-  type MicrophoneRoute,
-  type MicrophoneStatus,
-  type OutputAudioState,
-  type VoiceHotkeyState,
-} from "./messages/audio";
-import {
-  type AppBootstrap,
-  type ConversationHistoryPayload,
-  type DisplayDiagnostic,
-  type SessionOpenResult,
-  type SessionReplayBootstrap,
-  type SessionRosterPayload,
-  type VoiceBootstrap,
-  WINDOW_ROLE,
-  type WindowRole,
-} from "./messages/session";
+import { type AppStateSnapshot, isAppStateSnapshot } from "./messages/app-state";
+import type { MicrophoneRoute, MicrophoneStatus } from "./messages/audio";
+import type { SessionOpenResult } from "./messages/session";
 import type { UpdateSnapshot } from "./messages/update";
 import {
   isVoiceCommand,
@@ -178,18 +160,6 @@ const noArgs = args<[]>((values) => values.length === 0);
 const oneString = args<[string]>((values) => values.length === 1 && isWireString(values[0]));
 const oneBoolean = args<[boolean]>((values) => values.length === 1 && isWireBoolean(values[0]));
 
-const MICROPHONE_STATUSES: ReadonlySet<string> = new Set(Object.values(MICROPHONE_STATUS));
-
-function isMicrophoneStatus(value: UnparsedWireValue): value is MicrophoneStatus {
-  return isWireString(value) && MICROPHONE_STATUSES.has(value);
-}
-
-const WINDOW_ROLES: ReadonlySet<string> = new Set(Object.values(WINDOW_ROLE));
-
-function isWindowRole(value: UnparsedWireValue): value is WindowRole {
-  return isWireString(value) && WINDOW_ROLES.has(value);
-}
-
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This function parses an IPC field into a domain identity.
 function isSessionIdentity(value: unknown): value is SessionIdentity {
   // SAFETY: an IPC payload is structured-clone data; unparsedWire is the boundary the guards parse.
@@ -219,17 +189,17 @@ type SurfaceEventArguments = {
 }[ProductSurfaceEventName];
 
 export const BRIDGE = {
-  getBootstrap: entry({
+  /**
+   * The document as this window stands: every slice, and this window's own
+   * facts beside them. Read once at mount, before the subscription below has
+   * anything to say, so a window is never drawn over a state it has not been
+   * told.
+   */
+  requestAppState: entry({
     kind: "invoke",
-    channel: "app:bootstrap",
+    channel: "app:state-request",
     args: noArgs,
-    result: result<AppBootstrap>(),
-  }),
-  getVoiceBootstrap: entry({
-    kind: "invoke",
-    channel: "app:voice-bootstrap",
-    args: noArgs,
-    result: result<VoiceBootstrap>(),
+    result: result<AppStateSnapshot>(isAppStateSnapshot),
   }),
   beginSignIn: entry({
     kind: "invoke",
@@ -514,13 +484,6 @@ export const BRIDGE = {
       (v) => v === undefined || isBrainRequestSnapshot(v),
     ),
   }),
-  /** Every run the brain holds, for a window to reconcile against the pushes it already heard. */
-  brainRequestSnapshots: entry({
-    kind: "invoke",
-    channel: "app:brain-request-snapshots",
-    args: noArgs,
-    result: result<readonly BrainRequestSnapshot[]>(isBrainRequestSnapshotList),
-  }),
   /**
    * The voice window asking to speak one offered reply, by run and delivery.
    * The main process grants at most once per delivery, only to the receiver
@@ -790,17 +753,6 @@ export const BRIDGE = {
     channel: "app:introduction-mounted",
     args: noArgs,
   }),
-  /**
-   * Which surface this window draws, asked before anything mounts. Its own
-   * tiny invoke rather than a bootstrap field, so the ordinary panel renders
-   * without waiting on the full bootstrap twice.
-   */
-  getWindowRole: entry({
-    kind: "invoke",
-    channel: "app:window-role",
-    args: noArgs,
-    result: result<WindowRole>(isWindowRole),
-  }),
   quit: entry({ kind: "send", channel: "app:quit", args: noArgs }),
   recordSurfaceEvent: entry({
     kind: "send",
@@ -812,71 +764,25 @@ export const BRIDGE = {
         productEventFromWire({ name: v[0], at: Date.now(), properties: v[1] ?? {} }) !== undefined,
     ),
   }),
+  /**
+   * The one way a window learns what main holds. Its first delivery is this
+   * window's bootstrap and every later one carries a version at least as
+   * high, so there is no per-field push channel and no "which arrived first"
+   * for a reader to answer. A delivery whose version repeats the one held is
+   * this window's own facts having moved — its mode, or the display it stands
+   * on — which the document does not number.
+   */
+  onAppState: entry({
+    kind: "subscribe",
+    channel: "app:state",
+    args: noArgs,
+    result: result<AppStateSnapshot>(isAppStateSnapshot),
+  }),
   onLifecycle: entry({
     kind: "subscribe",
     channel: "app:lifecycle",
     args: noArgs,
     result: result<string>(isWireString),
-  }),
-  onDisplayChanged: entry({
-    kind: "subscribe",
-    channel: "app:display-changed",
-    args: noArgs,
-    result: result<DisplayDiagnostic>(),
-  }),
-  onSettingsChanged: entry({
-    kind: "subscribe",
-    channel: "app:settings-changed",
-    args: noArgs,
-    result: result<AppSettings>(),
-  }),
-  onAccountChanged: entry({
-    kind: "subscribe",
-    channel: "app:account-changed",
-    args: noArgs,
-    result: result<AccountSnapshot | undefined>(),
-  }),
-  onSessionReplayChanged: entry({
-    kind: "subscribe",
-    channel: "app:session-replay-changed",
-    args: noArgs,
-    result: result<SessionReplayBootstrap>(),
-  }),
-  onUpdateChanged: entry({
-    kind: "subscribe",
-    channel: "app:update-changed",
-    args: noArgs,
-    result: result<UpdateSnapshot>(),
-  }),
-  onSessionsChanged: entry({
-    kind: "subscribe",
-    channel: "app:sessions-changed",
-    args: noArgs,
-    result: result<SessionRosterPayload>(),
-  }),
-  onWorkspaceProjectsChanged: entry({
-    kind: "subscribe",
-    channel: "app:workspace-projects-changed",
-    args: noArgs,
-    result: result<readonly ObservedWorkspaceProject[]>(),
-  }),
-  onCalendarsChanged: entry({
-    kind: "subscribe",
-    channel: "app:calendars-changed",
-    args: noArgs,
-    result: result<readonly ObservedAccountCalendars[]>(),
-  }),
-  onAnnouncementsHeldChanged: entry({
-    kind: "subscribe",
-    channel: "app:announcements-held-changed",
-    args: noArgs,
-    result: result<boolean>(isWireBoolean),
-  }),
-  onCalendarOnboardingChanged: entry({
-    kind: "subscribe",
-    channel: "app:calendar-onboarding-changed",
-    args: noArgs,
-    result: result<boolean>(isWireBoolean),
   }),
   onVoiceHotkeyPress: entry({
     kind: "subscribe",
@@ -890,41 +796,11 @@ export const BRIDGE = {
     args: noArgs,
     result: result<void>((v) => v === undefined),
   }),
-  onVoiceHotkeyChanged: entry({
-    kind: "subscribe",
-    channel: "app:voice-hotkey-changed",
-    args: noArgs,
-    result: result<VoiceHotkeyState>(),
-  }),
-  onAskHotkeyChanged: entry({
-    kind: "subscribe",
-    channel: "app:ask-hotkey-changed",
-    args: noArgs,
-    result: result<string | undefined>(isOptionalWireString),
-  }),
   onStopHotkeyPress: entry({
     kind: "subscribe",
     channel: "app:stop-hotkey-press",
     args: noArgs,
     result: result<void>((v) => v === undefined),
-  }),
-  onStopHotkeyChanged: entry({
-    kind: "subscribe",
-    channel: "app:stop-hotkey-changed",
-    args: noArgs,
-    result: result<string | undefined>(isOptionalWireString),
-  }),
-  onOutputAudioChanged: entry({
-    kind: "subscribe",
-    channel: "app:output-audio-changed",
-    args: noArgs,
-    result: result<OutputAudioState | undefined>(),
-  }),
-  onSupersetSignInChanged: entry({
-    kind: "subscribe",
-    channel: "app:superset-sign-in-changed",
-    args: noArgs,
-    result: result<SupersetSignInSnapshot>(),
   }),
   /**
    * One proactive turn the speech arbiter decided to voice now — a briefing
@@ -945,29 +821,16 @@ export const BRIDGE = {
     args: noArgs,
     result: result<SpeechWithdrawal>(isSpeechWithdrawal),
   }),
-  /** The latest voice snapshot, forwarded by the main process to every panel. */
-  onVoiceViewChanged: entry({
-    kind: "subscribe",
-    channel: "app:voice-view-changed",
-    args: noArgs,
-    result: result<VoiceView>(isVoiceView),
-  }),
-  /** The current loudness of whoever is talking, relayed to every panel. */
+  /**
+   * How loud whoever is talking is, relayed to every panel as the stream it
+   * is: twenty readings a second, each expiring in fifty milliseconds, so it
+   * is an event rather than a slice of the document a panel bootstraps from.
+   */
   onVoiceLevelChanged: entry({
     kind: "subscribe",
     channel: "app:voice-level-changed",
     args: noArgs,
     result: result<number>(isUnitLevel),
-  }),
-  /**
-   * The system's answer on microphone access, which the main process owns and
-   * broadcasts so no panel has to hold a microphone to know it.
-   */
-  onMicrophoneStatusChanged: entry({
-    kind: "subscribe",
-    channel: "app:microphone-status-changed",
-    args: noArgs,
-    result: result<MicrophoneStatus>(isMicrophoneStatus),
   }),
   /**
    * A panel's validated command, forwarded by the main process to the voice
@@ -1005,13 +868,6 @@ export const BRIDGE = {
     args: noArgs,
     result: result<number>(isReceiverEpoch),
   }),
-  /** Every run the brain holds, pushed whole whenever any record changes. */
-  onBrainRequestsChanged: entry({
-    kind: "subscribe",
-    channel: "app:brain-requests-changed",
-    args: noArgs,
-    result: result<readonly BrainRequestSnapshot[]>(isBrainRequestSnapshotList),
-  }),
   /**
    * An app act the brain decided that only the renderer can perform, already
    * validated in the main process against the guide the renderer reported.
@@ -1029,12 +885,6 @@ export const BRIDGE = {
         v.action.kind !== ACT_KIND.REMEMBER &&
         v.action.kind !== ACT_KIND.FORGET,
     ),
-  }),
-  onConversationHistoryChanged: entry({
-    kind: "subscribe",
-    channel: "app:conversation-history-changed",
-    args: noArgs,
-    result: result<ConversationHistoryPayload>(),
   }),
 } as const;
 

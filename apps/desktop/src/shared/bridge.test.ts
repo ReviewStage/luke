@@ -48,11 +48,30 @@ test("a conversation history report carries only well-formed history lines", () 
   assert.equal(guard([[{ ...ask, recordedAt: Number.POSITIVE_INFINITY }]]), false);
 });
 
-test("the voice bootstraps through its own invoke, taking no arguments", () => {
-  assert.equal(BRIDGE.getVoiceBootstrap.kind, "invoke");
-  assert.notEqual(BRIDGE.getVoiceBootstrap.channel, BRIDGE.getBootstrap.channel);
-  assert.equal(BRIDGE.getVoiceBootstrap.args([]), true);
-  assert.equal(BRIDGE.getVoiceBootstrap.args(["voice"]), false);
+const WINDOW = { role: "panel", mode: "compact" };
+
+test("app state is read on one invoke and delivered on one subscription", () => {
+  assert.equal(BRIDGE.requestAppState.kind, "invoke");
+  assert.equal(BRIDGE.onAppState.kind, "subscribe");
+  assert.equal(BRIDGE.requestAppState.args([]), true);
+  assert.equal(BRIDGE.requestAppState.args(["panel"]), false);
+  assert.equal(BRIDGE.onAppState.args([]), true);
+  for (const guard of [BRIDGE.requestAppState.result, BRIDGE.onAppState.result]) {
+    assert.ok(guard);
+    assert.equal(guard({ version: 0, window: WINDOW }), true);
+    assert.equal(guard({ version: 12, window: { ...WINDOW, role: "voice" } }), true);
+    // The version orders every delivery, so nothing but a whole count is one.
+    assert.equal(guard({ version: -1, window: WINDOW }), false);
+    assert.equal(guard({ version: 1.5, window: WINDOW }), false);
+    assert.equal(guard({ version: "1", window: WINDOW }), false);
+    assert.equal(guard({ window: WINDOW }), false);
+    // The facts decide which surface draws at all, so a snapshot without
+    // them, or naming a role this build has no surface for, is refused.
+    assert.equal(guard({ version: 0 }), false);
+    assert.equal(guard({ version: 0, window: { role: "takeover", mode: "compact" } }), false);
+    assert.equal(guard({ version: 0, window: { role: "panel" } }), false);
+    assert.equal(guard(undefined), false);
+  }
 });
 
 test("a brain ask is one submission with an id, bounded words, and an origin", () => {
@@ -129,12 +148,6 @@ test("a run is waited on, cancelled, and listed by its own record shape", () => 
   assert.ok(BRIDGE.onBrainRepliesWithdrawn.result);
   assert.equal(BRIDGE.onBrainRepliesWithdrawn.result(2), true);
   assert.equal(BRIDGE.onBrainRepliesWithdrawn.result("2"), false);
-  assert.equal(BRIDGE.brainRequestSnapshots.args([]), true);
-  assert.ok(BRIDGE.brainRequestSnapshots.result);
-  assert.equal(BRIDGE.brainRequestSnapshots.result([snapshot]), true);
-  assert.equal(BRIDGE.brainRequestSnapshots.result([snapshot, { runId: "x" }]), false);
-  assert.ok(BRIDGE.onBrainRequestsChanged.result);
-  assert.equal(BRIDGE.onBrainRequestsChanged.result([]), true);
 });
 
 test("a reported guide is refused whole when any entry is malformed", () => {
@@ -238,15 +251,6 @@ test("settling speech takes an id and one of the four outcomes", () => {
   assert.equal(guard(["one", "spoken", "extra"]), false);
 });
 
-test("the window role guard admits the hidden voice role beside the drawn two", () => {
-  const guard = BRIDGE.getWindowRole.result;
-  assert.ok(guard);
-  assert.equal(guard("panel"), true);
-  assert.equal(guard("introduction"), true);
-  assert.equal(guard("voice"), true);
-  assert.equal(guard("takeover"), false);
-});
-
 const VOICE_VIEW = {
   voiceStatus: "responding",
   voiceError: undefined,
@@ -257,16 +261,6 @@ const VOICE_VIEW = {
 };
 
 test("a voice view carries its six fields and nothing malformed", () => {
-  const guard = BRIDGE.onVoiceViewChanged.result;
-  assert.ok(guard);
-  assert.equal(guard(VOICE_VIEW), true);
-  assert.equal(guard({ ...VOICE_VIEW, lukeCaptions: undefined, voiceNotice: undefined }), true);
-  assert.equal(guard({ ...VOICE_VIEW, voiceStatus: "shouting" }), false);
-  assert.equal(guard({ ...VOICE_VIEW, talkOpening: "yes" }), false);
-  assert.equal(guard({ ...VOICE_VIEW, voiceError: 4 }), false);
-  assert.equal(guard({ ...VOICE_VIEW, lukeCaptions: [1] }), false);
-  assert.equal(guard({ ...VOICE_VIEW, liveConversationEntries: [{ kind: "reply" }] }), false);
-  assert.equal(guard({ ...VOICE_VIEW, liveConversationEntries: undefined }), false);
   assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW, undefined]), true);
   assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW]), false);
   assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW, VOICE_VIEW]), false);
@@ -302,16 +296,6 @@ test("a voice level is one finite number in the unit interval", () => {
   assert.equal(BRIDGE.reportVoiceLevel.args([0.25]), true);
   assert.equal(BRIDGE.reportVoiceLevel.args([]), false);
   assert.equal(BRIDGE.reportVoiceLevel.args([0.25, 0.5]), false);
-});
-
-test("a microphone status broadcast is one of the system's five answers", () => {
-  const guard = BRIDGE.onMicrophoneStatusChanged.result;
-  assert.ok(guard);
-  for (const status of ["not-determined", "granted", "denied", "restricted", "unknown"]) {
-    assert.equal(guard(status), true);
-  }
-  assert.equal(guard("allowed"), false);
-  assert.equal(guard(undefined), false);
 });
 
 test("a voice command is one of the four commands and carries no words", () => {

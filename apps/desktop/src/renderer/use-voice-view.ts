@@ -5,14 +5,7 @@ import {
 } from "@sidecar/brain/requests";
 import type { BrainAskSubmissionResult, BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
 import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
-import type { ConversationEntry } from "@sidecar/session";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  MICROPHONE_STATUS,
-  type MicrophoneStatus,
-  type VoiceHotkeyState,
-} from "#shared/messages/audio";
-import type { AppBootstrap } from "#shared/messages/session";
 import {
   IDLE_VOICE_VIEW,
   VOICE_COMMAND,
@@ -20,7 +13,7 @@ import {
   type VoiceCommandOutcome,
   type VoiceView,
 } from "#shared/messages/voice-view";
-import { useBootstrapRacedChannel } from "./use-bootstrap-raced-channel";
+import { useAppState } from "./use-app-state";
 import { VOICE_ERROR_NOTICE_MS } from "./voice/use-voice-session";
 import { VOICE_ACTIVITY_HANGOVER_MS, VOICE_ACTIVITY_THRESHOLD } from "./voice/voice-level-meter";
 import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
@@ -33,6 +26,9 @@ import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
  * silence would be the one outcome nobody chose.
  */
 export const ASK_UNSENT_REASON = "Luke could not take that ask. Try again.";
+
+/** No run standing, which is what a document with no brain answer yet reads as. */
+const EMPTY_BRAIN_REQUESTS: readonly BrainRequestSnapshot[] = [];
 
 export function askDraftReason(result: BrainAskSubmissionResult | undefined): string | undefined {
   if (result === undefined) return ASK_UNSENT_REASON;
@@ -120,17 +116,6 @@ export interface VoiceViewState {
    * face and the meter answer the same edge the turn ends on.
    */
   voiceActive: boolean;
-  microphoneStatus: MicrophoneStatus;
-  voiceHotkey: VoiceHotkeyState | undefined;
-  /**
-   * Every line the thread holds, words whole — this launch's and, ahead of
-   * them, what the last launch left within the retention policy — the same
-   * on every display's panel. The model still receives only the recent
-   * slice, each line cut at render to its own length bound.
-   */
-  conversationHistory: readonly ConversationEntry[];
-  /** The bootstrap's snapshots, applied only where no push has spoken yet. */
-  acceptBootstrap: (bootstrap: AppBootstrap) => void;
   /**
    * A typed ask to Luke, submitted to the brain in the main process and
    * answered with whether it was accepted into a run: nothing when it was, a
@@ -152,48 +137,21 @@ export interface VoiceViewState {
 
 /**
  * The panel's view of the conversation the hidden voice window holds. The
- * panel owns none of it: state arrives as one snapshot the main process
- * forwards from the voice window, so every display draws the same voice at
- * the same instant, and every press is forwarded to the main process, which
- * validates it and hands it on. A panel reload, close, or display change
- * therefore costs the exchange nothing.
+ * panel owns none of it: the voice window reports one snapshot to the main
+ * process, which carries it in the app-state document every panel reads, so
+ * every display draws the same voice at the same instant. Every press is
+ * forwarded to the main process, which validates it and hands it on. A panel
+ * reload, close, or display change therefore costs the exchange nothing.
  */
 export function useVoiceView(): VoiceViewState {
-  const [view, setView] = useState<VoiceView>(IDLE_VOICE_VIEW);
+  const state = useAppState();
+  // A voice window that went away leaves no view behind, and an idle voice is
+  // what every panel draws in its place.
+  const view = state?.voice.view ?? IDLE_VOICE_VIEW;
   // Each report is a fresh object even at a repeated loudness, so the hangover
   // below re-arms on every arrival rather than only on a changed number.
   const [levelReport, setLevelReport] = useState({ level: 0 });
   const level = levelReport.level;
-  const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneStatus>(
-    MICROPHONE_STATUS.NOT_DETERMINED,
-  );
-  const [voiceHotkey, setVoiceHotkey] = useState<VoiceHotkeyState>();
-  const [conversationHistory, setConversationHistory] = useState<readonly ConversationEntry[]>([]);
-
-  const acceptViewBootstrap = useBootstrapRacedChannel(
-    (onChange) => window.sidecar.onVoiceViewChanged(onChange),
-    setView,
-  );
-  const acceptMicrophoneBootstrap = useBootstrapRacedChannel(
-    (onChange) => window.sidecar.onMicrophoneStatusChanged(onChange),
-    setMicrophoneStatus,
-  );
-  // The thread as the main process holds it, whoever appended the last line:
-  // the voice window's report or the main process's own act line, relayed
-  // whole. A Clear relays as an empty thread, which is all a view needs.
-  const acceptHistoryBootstrap = useBootstrapRacedChannel(
-    (onChange) =>
-      window.sidecar.onConversationHistoryChanged((payload) => onChange(payload.entries)),
-    setConversationHistory,
-  );
-  const acceptBootstrap = useCallback(
-    (bootstrap: AppBootstrap) => {
-      acceptViewBootstrap(bootstrap.voiceView ?? IDLE_VOICE_VIEW);
-      acceptMicrophoneBootstrap(bootstrap.microphoneStatus);
-      acceptHistoryBootstrap(bootstrap.conversationHistory);
-    },
-    [acceptHistoryBootstrap, acceptMicrophoneBootstrap, acceptViewBootstrap],
-  );
 
   useEffect(
     () => window.sidecar.onVoiceLevelChanged((reported) => setLevelReport({ level: reported })),
@@ -221,10 +179,6 @@ export function useVoiceView(): VoiceViewState {
   useEffect(() => {
     if (!turnLive) setVoiceActive(false);
   }, [turnLive]);
-  // A broadcast with no accelerator is still a change — the key was deleted
-  // or lost its chord — so it is kept as one rather than as no news at all,
-  // or bootstrap's old chord would keep winning for the rest of the session.
-  useEffect(() => window.sidecar.onVoiceHotkeyChanged(setVoiceHotkey), []);
 
   // One submission id per press of Send: the id is what makes a retry of
   // this very ask the same run and a second deliberate ask a new one.
@@ -241,22 +195,10 @@ export function useVoiceView(): VoiceViewState {
       ),
     [],
   );
-  // Subscribed before the snapshots are read, and reconciled by run, so a
-  // change landing between the two is never overwritten by the older read.
-  // Every push is the whole list the standing brain holds — a run absent
-  // from it is one no current brain can find, so its row must go — and the
-  // bootstrap read applies only where no push has spoken yet.
-  const [brainRequests, setBrainRequests] = useState<readonly BrainRequestSnapshot[]>([]);
-  const acceptRequestsBootstrap = useBootstrapRacedChannel(
-    (onChange) => window.sidecar.onBrainRequestsChanged(onChange),
-    setBrainRequests,
-  );
-  useEffect(() => {
-    void window.sidecar
-      .brainRequestSnapshots()
-      .then((records) => acceptRequestsBootstrap(records))
-      .catch(() => undefined);
-  }, [acceptRequestsBootstrap]);
+  // Every version of the document carries the whole list the standing brain
+  // holds: a run absent from it is one no current brain can find, so its row
+  // must go.
+  const brainRequests = state?.brain.runs ?? EMPTY_BRAIN_REQUESTS;
   const cancelBrainAsk = useCallback((runId: string) => {
     void window.sidecar.cancelBrainAsk(runId).catch(() => undefined);
   }, []);
@@ -293,10 +235,6 @@ export function useVoiceView(): VoiceViewState {
     voiceTurn: waveformVoice(view.voiceStatus),
     level,
     voiceActive: turnLive && voiceActive,
-    microphoneStatus,
-    voiceHotkey,
-    conversationHistory,
-    acceptBootstrap,
     askLuke,
     brainRequests,
     cancelBrainAsk,
