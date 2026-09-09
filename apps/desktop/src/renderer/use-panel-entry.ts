@@ -13,39 +13,6 @@ export interface PanelEntryBase {
   rejection?: string;
 }
 
-/** Where giving up from the aside shape goes. */
-export const PANEL_ENTRY_CANCEL = {
-  /** The composer was not the drawn shape, so nothing to put away. */
-  NONE: "none",
-  /** Return to the panel this was opened from. */
-  RESTORE: "restore",
-  /** Leave entirely — a browser or nothing of Luke's. */
-  LEAVE: "leave",
-} as const;
-
-export type PanelEntryCancel = (typeof PANEL_ENTRY_CANCEL)[keyof typeof PANEL_ENTRY_CANCEL];
-
-/** What a send's reply means for the entry that is still on screen. */
-export const PANEL_ENTRY_REPLY = {
-  /** The entry that was sent is gone; the reply is spent. */
-  IGNORE: "ignore",
-  /** Still that entry, and the send was refused. */
-  REJECT: "reject",
-  /** Still that entry, and the send landed. */
-  DELIVER: "deliver",
-} as const;
-
-export type PanelEntryReply = (typeof PANEL_ENTRY_REPLY)[keyof typeof PANEL_ENTRY_REPLY];
-
-/**
- * Whether ending an entry released the hold it had on the panel. An entry
- * that ends while the pointer is already away would otherwise leave the
- * panel held open by nothing, because the pointer cannot leave a second time.
- */
-export function panelEntryReleased<T>(previous: T | undefined, next: T | undefined): boolean {
-  return previous !== undefined && next === undefined;
-}
-
 /**
  * Whether the entry is open to being changed: something is held, and no reply
  * is on its way back answering it.
@@ -54,37 +21,6 @@ export function panelEntryOpen<T extends PanelEntryBase>(
   entry: T | undefined,
 ): entry is T & { busy: false } {
   return entry !== undefined && !entry.busy;
-}
-
-/**
- * Where cancel goes. Giving up from the aside shape returns you where you
- * were; giving up from inside the panel has nothing to put away.
- */
-export function panelEntryCancel(input: { aside: boolean; restore: boolean }): PanelEntryCancel {
-  if (!input.aside) return PANEL_ENTRY_CANCEL.NONE;
-  return input.restore ? PANEL_ENTRY_CANCEL.RESTORE : PANEL_ENTRY_CANCEL.LEAVE;
-}
-
-/**
- * What a send's reply does. Whoever is writing now is not necessarily whoever
- * sent this one: Escape reaches the shape while a save is in flight, and so
- * does beginning again. A reply that outlived its own entry is spent.
- */
-export function panelEntryReply(input: {
-  stillHeld: boolean;
-  rejection?: string;
-}): PanelEntryReply {
-  if (!input.stillHeld) return PANEL_ENTRY_REPLY.IGNORE;
-  return input.rejection ? PANEL_ENTRY_REPLY.REJECT : PANEL_ENTRY_REPLY.DELIVER;
-}
-
-/**
- * Whether a delivered send should show its answer and then take its leave.
- * Saved from the aside shape, the panel comes back around what was just done;
- * with the pointer away, nothing else would ever ask it to close.
- */
-export function panelEntrySettles(input: { aside: boolean; pointerInside: boolean }): boolean {
-  return input.aside && !input.pointerInside;
 }
 
 export interface PanelEntryHost {
@@ -117,6 +53,13 @@ export interface PanelEntryHost {
    */
   heldRef: { current: boolean };
 }
+
+/**
+ * The panel a composer stands down from, without the shape it stands down to.
+ * A hook that owns one composer knows its own aside; what it is handed is
+ * everything about the panel it is leaving and coming back to.
+ */
+export type PanelEntrySurface = Omit<PanelEntryHost, "aside">;
 
 export interface UsePanelEntryOptions<T extends PanelEntryBase> extends PanelEntryHost {
   /**
@@ -169,7 +112,10 @@ export function usePanelEntry<T extends PanelEntryBase>(
   const apply = useCallback(
     (next: T | undefined) => {
       const host = optionsRef.current;
-      const released = panelEntryReleased(latest(), next);
+      // An entry that ends while the pointer is already away would otherwise
+      // leave the panel held open by nothing, because the pointer cannot
+      // leave a second time.
+      const released = latest() !== undefined && next === undefined;
       setEntry(next);
       host.heldRef.current = next !== undefined;
       if (released && !host.pointerInside()) host.onReleasedWhileAway();
@@ -203,13 +149,14 @@ export function usePanelEntry<T extends PanelEntryBase>(
   const cancel = useCallback(() => {
     const host = optionsRef.current;
     const current = latest();
-    const destination = panelEntryCancel({
-      aside: host.presentation() === host.aside,
-      restore: current !== undefined && host.restoresPanel(current),
-    });
+    // Giving up from the aside shape returns you where you were; giving up
+    // from inside the panel has nothing to put away.
+    const aside = host.presentation() === host.aside;
+    const restores = current !== undefined && host.restoresPanel(current);
     apply(undefined);
-    if (destination === PANEL_ENTRY_CANCEL.RESTORE) host.restorePanel();
-    else if (destination === PANEL_ENTRY_CANCEL.LEAVE) host.leave();
+    if (!aside) return;
+    if (restores) host.restorePanel();
+    else host.leave();
   }, [apply, latest]);
 
   const commit = useCallback(() => {
@@ -219,12 +166,11 @@ export function usePanelEntry<T extends PanelEntryBase>(
     const sending = { ...current, busy: true, rejection: undefined };
     apply(sending);
     void host.send(sending).then((result) => {
-      const reply = panelEntryReply({
-        stillHeld: latest() === sending,
-        rejection: result.rejection,
-      });
-      if (reply === PANEL_ENTRY_REPLY.IGNORE) return;
-      if (reply === PANEL_ENTRY_REPLY.REJECT) {
+      // Whoever is writing now is not necessarily whoever sent this one:
+      // Escape reaches the shape while a save is in flight, and so does
+      // beginning again. A reply that outlived its own entry is spent.
+      if (latest() !== sending) return;
+      if (result.rejection) {
         apply({ ...sending, busy: false, rejection: result.rejection });
         return;
       }
@@ -237,7 +183,10 @@ export function usePanelEntry<T extends PanelEntryBase>(
         const now = optionsRef.current;
         if (now.presentation() !== now.aside) return;
         now.restorePanel();
-        if (!panelEntrySettles({ aside: true, pointerInside: now.pointerInside() })) return;
+        // Saved from the aside shape, the panel comes back around what was
+        // just done; with the pointer away, nothing else would ever ask it to
+        // close.
+        if (now.pointerInside()) return;
         now.cancelHover();
         now.settle();
       };

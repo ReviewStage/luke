@@ -155,11 +155,13 @@ function wingSpread(container: HTMLElement): boolean {
 }
 
 /**
- * Where a mark is drawn along the wing. Flat, that is `offsetLeft`: the marks
- * are anchored beside the housing, which is the wing's own left edge, so it is
- * already the distance from the edge that never moves — `--wing-bound` grows
- * the wing 88px on a morph, and a position measured from the far edge would
- * read that growth as a travel and animate the whole strip across the wing.
+ * The wing's strip: marks laid along the wing, anchored beside the housing.
+ *
+ * Flat, a mark's position is `offsetLeft`: the marks are anchored beside the
+ * housing, which is the wing's own left edge, so it is already the distance
+ * from the edge that never moves — `--wing-bound` grows the wing 88px on a
+ * morph, and a position measured from the far edge would read that growth as
+ * a travel and animate the whole strip across the wing.
  *
  * Stacked, every mark is drawn on the first slot whatever seat the flex strip
  * laid out for it, so they all report the same position and a reorder is no
@@ -168,14 +170,9 @@ function wingSpread(container: HTMLElement): boolean {
  * which the wing does not clip — it is bounded by the peek the capsule can
  * grow into — and would be drawn on the desktop.
  */
-export function wingSlotOffset(element: HTMLElement, spread: boolean): number {
-  return spread ? element.offsetLeft : 0;
-}
-
-/** The wing's strip: marks laid along the wing, anchored beside the housing. */
 const WING_STRIP: ReorderList = {
   idAttribute: WING_SLOT_ID_ATTRIBUTE,
-  offset: (element, container) => wingSlotOffset(element, wingSpread(container)),
+  offset: (element, container) => (wingSpread(container) ? element.offsetLeft : 0),
   translate: (px) => `translateX(${px}px)`,
   basis: (container) => String(wingSpread(container)),
   arrivesFromFan: false,
@@ -245,19 +242,6 @@ export function planReorder(
     if (Math.abs(travel) > TRAVEL_EPSILON) travels.set(id, travel);
   }
   return { travels, arrivals };
-}
-
-/**
- * The positions this measurement is compared against: the last ones taken,
- * unless they were taken in another basis, in which case there is nothing to
- * compare and the list is simply where it is.
- */
-export function comparableBaseline<T>(
-  baseline: T | undefined,
-  previousBasis: string | undefined,
-  basis: string | undefined,
-): T | undefined {
-  return previousBasis === basis ? baseline : undefined;
 }
 
 /** Only elements a reader can see are worth moving; hidden ones just take their place. */
@@ -342,8 +326,11 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
     }
 
     const basis = list.basis?.(container);
+    // Compared against the last positions taken, unless they were taken in
+    // another basis, in which case there is nothing to compare and the list
+    // is simply where it is.
     const plan = planReorder(
-      comparableBaseline(baseline.current, baselineBasis.current, basis),
+      baselineBasis.current === basis ? baseline.current : undefined,
       positions,
     );
     baseline.current = positions;
@@ -541,7 +528,7 @@ export function rosterRows<T extends { id: string }>(
  * again — its departure is dropped and the slot it kept is the slot it
  * resumes.
  */
-export function nextDepartures<T extends { id: string }>(
+function nextDepartures<T extends { id: string }>(
   drawn: readonly RosterRow<T>[],
   items: readonly T[],
   departures: readonly Departure<T>[],
@@ -564,7 +551,7 @@ export function nextDepartures<T extends { id: string }>(
  * one step up a place — without that, an occupant still fading would be
  * spliced one slot too far into the shorter list and jump mid-fade.
  */
-export function withoutDeparture<T extends { id: string }>(
+function withoutDeparture<T extends { id: string }>(
   departures: readonly Departure<T>[],
   id: string,
 ): readonly Departure<T>[] {

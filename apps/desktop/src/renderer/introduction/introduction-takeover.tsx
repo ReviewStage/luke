@@ -21,7 +21,6 @@ import type { DisplayDiagnostic } from "#shared/messages/session";
 import { act, tell } from "../act";
 import { Keycaps } from "../keycaps";
 import { NotchWings } from "../notch-wings";
-import { SessionRow, type SessionWriteHandlers } from "../panel-body";
 import { PANEL_PRESENTATION } from "../panel-state";
 import {
   fixtureSessions,
@@ -30,6 +29,7 @@ import {
   sessionTally,
 } from "../session-model";
 import { parseMilliseconds, useSessionReorderMotion } from "../session-motion";
+import { SessionRow, type SessionWriteHandlers } from "../session-row-view";
 import { useSignInFaceCycle } from "../sign-in-gate";
 import { appStateNow } from "../use-app-state";
 import { useMeasuredHeight } from "../use-measured-height";

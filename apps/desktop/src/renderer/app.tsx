@@ -1,104 +1,42 @@
-import { ACTION_KIND, dispatchByKind } from "@sidecar/actions";
 import {
   PRODUCT_PANEL_SOURCE,
   PRODUCT_SEARCH_SURFACE,
   PRODUCT_SURFACE_EVENT,
 } from "@sidecar/analytics";
-import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
-import type { AccountProvider } from "@sidecar/credentials/snapshot";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import type { CredentialProviderId } from "@sidecar/credentials/vocabulary";
-import {
-  CREDENTIAL_PROVIDER_LIST,
-  CREDENTIAL_PROVIDERS,
-  CREDENTIAL_SOURCE,
-  isCredentialProviderId,
-} from "@sidecar/credentials/vocabulary";
-import type { FeedbackImage, FeedbackKind } from "@sidecar/feedback";
-import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "@sidecar/feedback";
-import { APP_UPDATE_ACTION, FEEDBACK_COMPOSER_KIND } from "@sidecar/guide";
+import { CREDENTIAL_PROVIDER_LIST, CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
+import { feedbackKindForLifecycleEvent } from "@sidecar/feedback";
 import { WingFace as LukeFace } from "@sidecar/panel";
 import { REALTIME_STATUS } from "@sidecar/realtime";
-import {
-  type ObservedWorkspaceProject,
-  type SessionApplicationId,
-  workspaceProjectSelectionId,
-} from "@sidecar/session";
+import type { ObservedWorkspaceProject } from "@sidecar/session";
 import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTION } from "@sidecar/session/fixtures";
 import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE, voiceHotkeyLabel } from "@sidecar/settings";
-import type {
-  AppSettingsView,
-  ObservedAccountCalendars,
-  SettingsUpdateResult,
-} from "@sidecar/settings/wire";
+import type { AppSettingsView, ObservedAccountCalendars } from "@sidecar/settings/wire";
 import { appSettingsView } from "@sidecar/settings/wire";
-import { MOTION_DURATION_MS, VOICE_CAPTION_MAX_HEIGHT } from "@sidecar/surface";
-import { cssCustomProperties } from "@sidecar/surface/react-css";
-import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { MOTION_DURATION_MS } from "@sidecar/surface";
 import {
-  type CSSProperties,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { CONSENT_SERVICE_ID, type ConsentServiceId } from "#shared/consent-services";
+  cssCustomProperties,
+  SURFACE_PROPERTY,
+  type SurfaceProperty,
+} from "@sidecar/surface/react-css";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { type AppStateSnapshot, sessionReplayBootstrap } from "#shared/messages/app-state";
-import type {
-  DisplayDiagnostic,
-  SupersetSignInSnapshot,
-  WorkspaceProviderId,
-} from "#shared/messages/session";
-import {
-  isWorkspaceProviderId,
-  SUPERSET_SIGN_IN_STAGE,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
-} from "#shared/messages/session";
-import { act, tell, updateSetting, updateSettingEntry } from "./act";
+import type { DisplayDiagnostic, SupersetSignInSnapshot } from "#shared/messages/session";
+import { SUPERSET_SIGN_IN_STAGE, SUPERSET_WORKSPACE_PROVIDER_ID } from "#shared/messages/session";
+import { act, tell, updateSetting } from "./act";
+import { useAppActionCarrier } from "./app-action-carrier";
 import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
 import type { CalendarGateControl } from "./calendar-gate";
-import { type ConsentConnectEntry, ConsentConnectSlot } from "./consent-connect-slot";
-import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
-import { isSubmittable, removalEndsEntry } from "./credential-entry";
-import {
-  armErrand,
-  EMPTY_ERRAND_RUN,
-  type ErrandHold,
-  type ErrandRun,
-  errandBorrowedPanel,
-  errandRunIdle,
-  errandWait,
-  finishErrand,
-  flushErrands,
-  landErrand,
-  NOTHING_HELD,
-  nextErrand,
-  type PendingErrand,
-} from "./errand-queue";
-import {
-  confirmationHoldMs,
-  type FeedbackConfirmation,
-  feedbackConfirmation,
-} from "./feedback-confirmation";
-import {
-  accountSignature,
-  type FeedbackEntry,
-  type FeedbackEntryControl,
-  IMAGE_REFUSAL,
-  isSendable,
-  openedFeedbackEntry,
-} from "./feedback-entry";
-import { encodeFeedbackImage } from "./feedback-images";
+import { ConsentConnectSlot } from "./consent-connect-slot";
 import { FeedbackSlot } from "./feedback-slot";
 import { KeySlot } from "./key-slot";
-import { type Errand, errandTargets, LukeErrand } from "./luke-errand";
-import { applySpokenSetting, buildLukeGuide, isAppSettingId } from "./luke-guide";
+import { LukeErrand } from "./luke-errand";
+import { buildLukeGuide } from "./luke-guide";
 import { MarkdownMessage } from "./markdown-message";
 import { NotchWings } from "./notch-wings";
-import { PanelBody, type SessionWriteHandlers } from "./panel-body";
+import { PanelBody } from "./panel-body";
 import {
   collapseMarkAfter,
   HIT_REGION,
@@ -106,161 +44,43 @@ import {
   type PanelPresentation,
 } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
-import {
-  arrangeSessions,
-  DEFAULT_SESSION_VIEW,
-  displaySessions,
-  type SessionArrangement,
-  type SessionFilter,
-  type SessionView,
-  sameSessionFilters,
-  sessionFiltersFromSpoken,
-  sessionTally,
-  spokenSearchOutcome,
-} from "./session-model";
-import { parsePixels } from "./session-motion";
-import { SESSION_OPTIONS_CONTROL_ID, SESSION_OPTIONS_ID } from "./session-parts";
 import { applySessionReplay } from "./session-replay";
-import { focusSearchField, SESSION_SEARCH_INPUT_ID } from "./session-search";
-import type {
-  MicrophoneControl,
-  ShortcutControl,
-  SupersetControl,
-  UpdateControl,
-} from "./settings-panel";
+import { focusSearchField } from "./session-search";
+import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings-panel";
 import { SETTINGS_SEARCH_INPUT_ID } from "./settings-search";
 import {
   credentialSettingsPage,
   PANEL_STAND_DOWN,
-  SETTING_PAGE,
   SETTINGS_VIEW,
   type SettingsView,
-  type SlotOccupant,
-  standDownReturnPage,
 } from "./settings-views";
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { SignInSlot } from "./sign-in-slot";
-import {
-  CAPTION_TONE,
-  type CaptionTone,
-  pointOverStrip,
-  type SpokenStripContent,
-  stripHoldNext,
-} from "./strip-hold";
+import { CAPTION_TONE } from "./strip-hold";
 import { SupersetSignInSlot } from "./superset-sign-in-slot";
-import { UPDATE_ROW_ACTION, updateRow } from "./update-row";
-import { appSettingsNow, appStateNow, useAppState } from "./use-app-state";
+import { useAppState } from "./use-app-state";
+import { useCaptionPresentation } from "./use-caption-presentation";
+import { useConnections } from "./use-connections";
+import { useErrandFlight } from "./use-errand-flight";
+import { useFeedbackComposer } from "./use-feedback-composer";
 import { useMeasuredHeight } from "./use-measured-height";
-import { panelEntryOpen, usePanelEntry } from "./use-panel-entry";
+import type { PanelEntrySurface } from "./use-panel-entry";
 import { usePanelPresentation } from "./use-panel-presentation";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
+import { useSessionList } from "./use-session-list";
 import { useStateWithRef } from "./use-state-with-ref";
-import { useVoiceView, voiceErrorToShow, voiceNoticeToShow } from "./use-voice-view";
-import type { AppActionCarrier } from "./voice/conversation-call";
+import { useVoiceView } from "./use-voice-view";
 import {
   outputSilent,
-  VOLUME_HINT_BAND_HEIGHT,
   type VolumeHintDismissal,
   volumeHintDismissed,
   volumeHintText,
 } from "./volume-hint";
 
-/**
- * How long the settings tab keeps saying a note to the founders was sent. Long
- * enough to be read on the way back from the Send button, short enough that
- * the line is gone before anyone wonders whether it is stuck.
- */
-const FEEDBACK_NOTICE_MS = 6_000;
-
-/**
- * How long a changed search query waits before it is stored. The query moves
- * at typing speed and the store is a file write per change, so only where the
- * words settle is worth writing — long enough to sit out a burst of
- * keystrokes, short enough that quitting mid-thought still keeps the search.
- */
-const SEARCH_QUERY_STORE_DELAY_MS = 400;
-
-/**
- * The bridge acts behind each consent service's wait: the documented connect
- * the slot's send runs, the main-process side a mid-wait cancel must stop,
- * and — for the browser flows alone — the way a lost tab reopens. One row
- * per service, so a fourth service is a fourth row rather than a fourth
- * branch at every dispatch site.
- */
-const CONSENT_ACTIONS = {
-  [CONSENT_SERVICE_ID.APPLE_CALENDAR]: {
-    connect: () => act(ACT_KIND.CALENDAR_CONNECT_APPLE),
-    cancel: () => tell(ACT_KIND.CALENDAR_CANCEL_APPLE_CONNECT),
-  },
-  [CONSENT_SERVICE_ID.GOOGLE_CALENDAR]: {
-    connect: () => act(ACT_KIND.CALENDAR_CONNECT_GOOGLE),
-    cancel: () => tell(ACT_KIND.CALENDAR_CANCEL_GOOGLE_SIGN_IN),
-    reopen: () => tell(ACT_KIND.CALENDAR_REOPEN_GOOGLE_SIGN_IN),
-  },
-  [CONSENT_SERVICE_ID.LINEAR]: {
-    connect: () => act(ACT_KIND.TRACKER_CONNECT),
-    cancel: () => tell(ACT_KIND.TRACKER_CANCEL_SIGN_IN),
-    reopen: () => tell(ACT_KIND.TRACKER_REOPEN_SIGN_IN),
-  },
-} as const satisfies Readonly<
-  Record<
-    ConsentServiceId,
-    { connect: () => Promise<SettingsUpdateResult>; cancel: () => void; reopen?: () => void }
-  >
->;
-
-/**
- * The composer kind a spoken open names, matched to the composer's own. The
- * two vocabularies are defined apart — the tool's in brand-neutral core, the
- * composer's beside the endpoint that reads a submission — so the seam between
- * them is written down once, here, rather than assumed at a call site.
- */
-const FEEDBACK_KIND_FOR_COMPOSER = {
-  [FEEDBACK_COMPOSER_KIND.FEEDBACK]: FEEDBACK_KIND.FEEDBACK,
-  [FEEDBACK_COMPOSER_KIND.PROMPT]: FEEDBACK_KIND.PROMPT,
-};
-
-/**
- * Sizes the caption block to the words it currently holds. The text wraps, so
- * only a measurement can say how tall it is; the size drives the surface's
- * growth and the clip that reveals the text. The whole reply stays on screen —
- * the reserved maximum is sized past what a spoken reply wraps to, so the
- * clamp below is the window's physical bound rather than a working edge.
- * The volume hint stands in a band of its own below the block: while it is
- * drawn, the band comes off the block's maximum, so the block and the band
- * partition the reserved room instead of sharing it, and the stack never asks
- * for more height than the window holds.
- * Padding is the caption's own computed padding, not a restated number, so a
- * retune in the stylesheet grows the surface by exactly what the text is
- * inset — the one inset above the words, with whatever stands below the block
- * carrying the gap on that side.
- */
-function captionSizeStyle(
-  textHeight: number | undefined,
-  volumeHint: boolean,
-  padding: number,
-): CSSProperties {
-  if (!textHeight) return {};
-  return cssCustomProperties({
-    "--caption-size": `${captionBlockSize(textHeight, volumeHint, padding)}px`,
-  });
-}
-
-/**
- * The caption block's visible height — the `--caption-size` the clip ends the
- * element at. The strip's hover test reads it too: the element's own box runs
- * to the reserved maximum, and only this much of it is words rather than
- * desktop.
- */
-function captionBlockSize(textHeight: number, volumeHint: boolean, padding: number): number {
-  const hintBand = volumeHint ? VOLUME_HINT_BAND_HEIGHT : 0;
-  return Math.min(VOICE_CAPTION_MAX_HEIGHT - hintBand, textHeight + padding);
-}
-
 function notchStyle(display: DisplayDiagnostic): CSSProperties {
   return cssCustomProperties({
-    "--notch-top-inset": `${display.notch.topInset}px`,
-    "--notch-housing-width": `${display.notch.housingWidth}px`,
+    [SURFACE_PROPERTY.NOTCH_TOP_INSET]: `${display.notch.topInset}px`,
+    [SURFACE_PROPERTY.NOTCH_HOUSING_WIDTH]: `${display.notch.housingWidth}px`,
   });
 }
 
@@ -269,10 +89,12 @@ function surfaceHeightStyle(
   slotHeight: number | undefined,
   feedbackHeight: number | undefined,
 ): CSSProperties {
-  const properties: Record<string, string> = {};
-  if (panelHeight !== undefined) properties["--panel-height"] = `${panelHeight}px`;
-  if (slotHeight !== undefined) properties["--slot-height"] = `${slotHeight}px`;
-  if (feedbackHeight !== undefined) properties["--feedback-height"] = `${feedbackHeight}px`;
+  const properties: Partial<Record<SurfaceProperty, string>> = {};
+  if (panelHeight !== undefined) properties[SURFACE_PROPERTY.PANEL_HEIGHT] = `${panelHeight}px`;
+  if (slotHeight !== undefined) properties[SURFACE_PROPERTY.SLOT_HEIGHT] = `${slotHeight}px`;
+  if (feedbackHeight !== undefined) {
+    properties[SURFACE_PROPERTY.FEEDBACK_HEIGHT] = `${feedbackHeight}px`;
+  }
   return cssCustomProperties(properties);
 }
 
@@ -290,21 +112,6 @@ const IDLE_SUPERSET_SIGN_IN: SupersetSignInSnapshot = {
   stage: SUPERSET_SIGN_IN_STAGE.IDLE,
   organizations: [],
 };
-
-/**
- * What a spoken settings change composes against: this window's own last
- * answer while the document has not moved since, and the document itself
- * from that version onward — by which point it carries the answer, and any
- * newer word from another window or hand with it.
- */
-function composeSettingsAgainst(
-  answered: { view: AppSettingsView; atVersion: number } | undefined,
-): AppSettingsView | undefined {
-  if (answered !== undefined && answered.atVersion === appStateNow()?.version) {
-    return answered.view;
-  }
-  return appSettingsNow();
-}
 
 /**
  * True from the render that leaves the panel for a compact shape until the
@@ -350,9 +157,6 @@ export function App(): React.JSX.Element {
   const [settingsView, setSettingsView, settingsViewNow] = useStateWithRef<SettingsView>(
     SETTINGS_VIEW.ROOT,
   );
-  const [sessionView, setSessionView] = useState<SessionArrangement>(DEFAULT_SESSION_VIEW);
-  const [optionsOpen, setOptionsOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
   // The settings search's field, on the sessions search's own terms: the
   // magnifier beside the tab bar answers for it, and its query lives with the
   // field in the settings panel — closing here is what lets that query go.
@@ -370,17 +174,19 @@ export function App(): React.JSX.Element {
     [state?.settings],
   );
   const settings = heldSettings ?? liveSettings;
-  const [errand, setErrand] = useState<Errand>();
-  const [feedbackNotice, setFeedbackNotice] = useState<string>();
-  /**
-   * The landing being played in the composer's shape after a send, keyed by
-   * play so a second send restarts the swoop rather than reusing a finished
-   * one. Undefined is the composer as it always was.
-   */
-  const [feedbackConfirming, setFeedbackConfirming] = useState<{
-    confirmation: FeedbackConfirmation;
-    play: number;
-  }>();
+  const sessions = useSessionList({
+    state,
+    liveSettings,
+    settings,
+    tab,
+    // The panel's own two acts, declared below: the list only ever reaches
+    // them from a press, which is long after this render has closed.
+    dismissPanel: () => {
+      cancelHover();
+      void changeMode(false);
+    },
+    showSessionsTab: () => changeTab(PANEL_TAB.SESSIONS),
+  });
   // Counts for nothing except having changed: each tick re-renders the rows so
   // their "how long ago" labels stay honest while they are on screen.
   const [, setClock] = useState(0);
@@ -389,16 +195,6 @@ export function App(): React.JSX.Element {
   const [signInSlotElement, signInSlotHeight] = useMeasuredHeight();
   const [connectElement, connectHeight] = useMeasuredHeight();
   const [feedbackElement, feedbackHeight] = useMeasuredHeight();
-  const [captionTextElement, captionTextHeight] = useMeasuredHeight();
-  const captionElement = useRef<HTMLSpanElement>(null);
-  const [captionPadding, setCaptionPadding] = useState(0);
-  useLayoutEffect(() => {
-    const element = captionElement.current;
-    if (!element) return;
-    const style = getComputedStyle(element);
-    const next = parsePixels(style.paddingTop) + parsePixels(style.paddingBottom);
-    setCaptionPadding((previous) => (previous === next ? previous : next));
-  });
   /**
    * Which stretch of unbroken silence is on screen, advanced each time one
    * begins. A "Got it" is remembered against the stretch it answered, so it
@@ -428,55 +224,7 @@ export function App(): React.JSX.Element {
   /** Whether a calendar sign-in holds the slot, mirrored like the other two. */
   const consentConnectHeld = useRef(false);
   const supersetSignInHeld = useRef(false);
-  /**
-   * Which entry the slot shape is drawn around — a key being pasted or either
-   * sign-in being waited out. One shape, three occupants, never together.
-   */
-  const slotOccupant = useRef<SlotOccupant>(PANEL_STAND_DOWN.KEY);
-  const feedbackNoticeTimer = useRef<number | undefined>(undefined);
-  /**
-   * The landing the latest send drew, held so the confirmation's hold waits
-   * out the same gesture the slot is playing. The initial flip is fixed
-   * because it is never played: a landing is always drawn again on delivery.
-   */
-  const feedbackLanding = useRef(feedbackConfirmation(() => 0));
-  /** Counts confirmations so each landing's swoop is replayed, not reused. */
-  const feedbackConfirmPlays = useRef(0);
-  const feedbackConfirmTimer = useRef<number | undefined>(undefined);
-  /**
-   * The panel's deferred return, held for as long as the confirmation plays.
-   * Running it is the confirmation ending on time; dropping it is the shape
-   * being asked for again — or left — before the celebration finished.
-   */
-  const feedbackFinish = useRef<(() => void) | undefined>(undefined);
-  /**
-   * The words a spoken open asked to start the note with, waiting for the
-   * composer's lifecycle event to consume them. A ref rather than an event
-   * payload because the lifecycle channel carries names alone — and only ever
-   * the developer's own words, under the spoken tool's contract.
-   */
-  const spokenFeedbackDraft = useRef<string | undefined>(undefined);
-  /**
-   * How many errands Luke has run. Carried with each one so that asking for
-   * the same control twice flies twice, exactly as a repeated face gesture is
-   * replayed by counting its plays.
-   */
-  const errands = useRef(0);
 
-  /**
-   * The store's own answer to this window's last spoken settings write, and
-   * the document version that stood when it landed.
-   *
-   * A spoken change composes against it — two changes asked in one breath are
-   * two calls in one turn, and the second has to compose against what the
-   * first stored, before any version of the document could have carried it
-   * back. It is read only while the document has not moved since: from the
-   * version that carries the write onward the document is the newer word,
-   * whichever window or hand wrote it.
-   */
-  const answeredSettings = useRef<{ view: AppSettingsView; atVersion: number } | undefined>(
-    undefined,
-  );
   /**
    * Recording follows the account: a sign-out ends it rather than leaving it
    * filed under the person who just left, and a sign-in can start one without
@@ -533,83 +281,12 @@ export function App(): React.JSX.Element {
     window.sidecar.reportAppGuide(guide);
   }, []);
 
-  /**
-   * Every action this reply asked Luke to sign, in the order he will sign them.
-   * One flight at a time: a second action handed straight to the flight ends the
-   * first one mid-air, which is both switches flipping at once with nobody
-   * seen doing either.
-   */
-  const errandRun = useRef<ErrandRun>(EMPTY_ERRAND_RUN);
-
-  /**
-   * Stops the panel following the document's settings, from before the write
-   * that is about to move them: the store answers before the errand is even
-   * armed, and the switch Luke is on his way to move has to still read as it
-   * did when he set off. A freeze already standing is kept, because the run
-   * signs its actions in turn and the oldest is the one still owed its tap.
-   */
-  const deferSettings = useCallback(() => {
-    setHeldSettings((held) => held ?? appSettingsNow());
-  }, []);
-
-  /**
-   * Draws what the panel was not drawing yet, because Luke had not reached it.
-   *
-   * The change itself is made the moment it is asked for — nothing here delays
-   * a write, and the spoken answer reports what actually happened. What waits
-   * is only the drawing of it: a switch that has already flipped, or a list
-   * already narrowed, by the time Luke arrives makes the action look like
-   * something he flew over to inspect, and the whole point of the errand is
-   * that he is the one doing it. Both kinds wait, because both are the same
-   * mistake — the settings snapshot the store answered with, and the narrowing
-   * or re-ordering a spoken ask chose for the list.
-   *
-   * A hold belongs to the action that caught it rather than to the app, because
-   * one reply can ask for several actions and each has its own switch to move.
-   * They ride the run in {@link errandRun}, which is a ref rather than state:
-   * the callbacks that release them have to stay stable across the whole
-   * flight they are timing, and an errand whose callbacks changed identity
-   * would be torn down and rebuilt mid-air.
-   */
-  const drawErrandHold = useCallback((hold: ErrandHold) => {
-    if (hold.settings !== undefined) setHeldSettings(hold.settings);
-    // Folded into whatever the view is at the moment it lands rather than the
-    // moment it was chosen: the list corrects its own filter during render
-    // when one empties, and a snapshot taken at the ask would undo that.
-    const view = hold.view;
-    if (view !== undefined) setSessionView((current) => ({ ...current, ...view }));
-    // A query landing opens the field it fills, on the rule the field's own
-    // closing keeps: a narrowing in force behind no visible control would
-    // hide sessions with nothing on screen admitting it.
-    if (view?.query) setSearchOpen(true);
-    // The panel goes back on the document's own settings once nothing is
-    // left to sign: every hold this run caught has been drawn by then, and
-    // the newest word — including a change another window made mid-flight
-    // — is the document's.
-    if (errandRunIdle(errandRun.current)) setHeldSettings(undefined);
-  }, []);
-
-  /** The tap has landed, so the action in the air may finally be drawn. */
-  const releaseErrandChange = useCallback(() => {
-    const landed = landErrand(errandRun.current);
-    errandRun.current = landed.run;
-    drawErrandHold(landed.hold);
-  }, [drawErrandHold]);
-
-  /**
-   * Whether the panel on screen is one an errand stood up. Only then is it the
-   * errand's to put away again — a panel that was already open is somewhere
-   * the developer had gone themselves, and closing it would be taking it from
-   * them for having spoken.
-   */
-  const errandOpenedPanel = useRef(false);
-
   const changeTab = useCallback(
     (next: PanelTab) => {
       setTab(next);
       // The sheet belongs to the session list, and it is drawn over the list it
       // belongs to, so leaving for Settings has to take it along.
-      setOptionsOpen(false);
+      sessions.closeOptions();
       // Arriving at the tab is arriving at its front page: a page left open
       // behind a tab switch would greet the next visit with a corner of the
       // settings rather than the settings. The flows that need a deeper page —
@@ -622,25 +299,8 @@ export function App(): React.JSX.Element {
         panel_tab: next,
       });
     },
-    [setSettingsView, setTab],
+    [sessions.closeOptions, setSettingsView, setTab],
   );
-
-  // A sort chosen in the sheet puts the sheet away: an order is one choice of
-  // two, made once. The fallback the render performs when a selection empties
-  // writes the view directly instead: that is the list correcting itself, not
-  // somebody choosing.
-  const changeSessionView = useCallback((next: SessionArrangement) => {
-    setSessionView(next);
-    setOptionsOpen(false);
-  }, []);
-
-  // A filter toggled in the sheet leaves it open: the chips combine, and a
-  // sheet that closed on every press would make choosing two filters cost two
-  // openings. The sheet still goes away by hand — its button, a press outside
-  // it, Escape — and the options button names the narrowing the whole time.
-  const changeSessionFilters = useCallback((filters: readonly SessionFilter[]) => {
-    setSessionView((current) => ({ ...current, filters }));
-  }, []);
 
   /**
    * True while sign-in stands between Luke and anything to watch. The gate is
@@ -689,7 +349,7 @@ export function App(): React.JSX.Element {
       consentConnectHeld.current ||
       supersetSignInHeld.current,
     onNotPanel: () => {
-      setOptionsOpen(false);
+      sessions.closeOptions();
       // The settings search closes with the shape it was opened on, taking
       // its query with it: no search survives the panel closing.
       setSettingsSearchOpen(false);
@@ -703,7 +363,7 @@ export function App(): React.JSX.Element {
       // query hides is admitted by the field on screen and the count it
       // carries — waiting where the developer left it, like a search held
       // while Settings shows.
-      setSessionView((current) => ({ ...current, sort: DEFAULT_SESSION_VIEW.sort }));
+      sessions.resetSort();
     },
     onCapsuleTab: () => changeTab(PANEL_TAB.SESSIONS),
   });
@@ -727,74 +387,6 @@ export function App(): React.JSX.Element {
   }, [panelHeight, panelReceded]);
 
   /**
-   * Sends Luke to sign the next action waiting on him, and puts the panel where
-   * that action can be seen.
-   *
-   * Only the panel can hold a signature, so every caller stands it up first
-   * and this is the backstop rather than the decision: a run whose panel never
-   * opened has nobody to show anything to, so everything it was holding is
-   * drawn at once and the run is over. An action that named a control this build
-   * does not draw is over the moment it is taken up, in the same way — which
-   * is why this loops rather than returning: the next action takes its turn
-   * immediately instead of waiting for a flight that will never be made.
-   *
-   * The tab and the page are turned here rather than where the action was asked
-   * for, because a page turned at the ask would take the previous action's
-   * control off screen before Luke had reached it.
-   */
-  const flyNextErrand = useCallback(() => {
-    while (errandRun.current.flying === undefined && errandRun.current.waiting.length > 0) {
-      if (presentationOf() !== PANEL_PRESENTATION.PANEL) {
-        const flushed = flushErrands(errandRun.current);
-        errandRun.current = flushed.run;
-        drawErrandHold(flushed.hold);
-        return;
-      }
-      const { run, launch } = nextErrand(errandRun.current);
-      errandRun.current = run;
-      if (launch === undefined) return;
-      const wait = errandWait({
-        opening: launch.opening,
-        surfaceChanging:
-          launch.page !== undefined &&
-          (tabNow() !== launch.tab || settingsViewNow() !== launch.page),
-      });
-      // The control has to be drawn to be flown to, and a settings page that is
-      // not open is not drawn at all — so the tab comes forward and then the
-      // page the setting lives on, in that order, because arriving at the tab
-      // is arriving at its front page. This is the same move a credential entry
-      // returning from the key slot makes.
-      changeTab(launch.tab);
-      if (launch.page !== undefined) setSettingsView(launch.page);
-      if (launch.targets.length > 0) {
-        errands.current += 1;
-        setErrand({ targets: launch.targets, wait, run: errands.current });
-        // Whether the panel is still the run's to put away, asked of the run
-        // rather than of this action alone. A later act must not answer "no" on
-        // the first one's behalf just for having found the panel already open:
-        // a close the first action scheduled and the second disowned still fires,
-        // into the middle of the second action's flight. But an action that asked for
-        // the panel itself does disclaim it, whichever action stood it up.
-        errandOpenedPanel.current = errandBorrowedPanel(errandOpenedPanel.current, launch);
-        return;
-      }
-      // Nothing flew, so nothing is coming to release it.
-      const finished = finishErrand(errandRun.current);
-      errandRun.current = finished.run;
-      drawErrandHold(finished.hold);
-    }
-  }, [changeTab, drawErrandHold, presentationOf, setSettingsView, settingsViewNow, tabNow]);
-
-  /** Adds an action to the run, and sends Luke off if he is not already out. */
-  const armErrandFlight = useCallback(
-    (pending: PendingErrand) => {
-      errandRun.current = armErrand(errandRun.current, pending);
-      flyNextErrand();
-    },
-    [flyNextErrand],
-  );
-
-  /**
    * Brings the panel back around the line the entry belongs to, and leaves it
    * open the way every other way of opening it does — the pointer closes it by
    * visiting and leaving.
@@ -810,554 +402,10 @@ export function App(): React.JSX.Element {
   }, [changeTab, expand, setSettingsView]);
 
   /**
-   * The selection as last stored, so only a change of selection writes.
-   * Seeded from the document's own snapshot rather than from nothing, because
-   * restoring the stored chips must not read as a fresh choice to store
-   * again. A ref rather than reading the settings state: a stored write's
-   * reply races the next chip press, and the last value this window sent is
-   * the only honest baseline either way.
+   * The panel every composer stands down from and comes back to, gathered
+   * once so each composer's hook is handed the same one.
    */
-  const storedSessionFilters = useRef<readonly SessionFilter[] | undefined>(undefined);
-  /** Whether the stored way of viewing the list has been taken up. */
-  const restoredView = useRef(false);
-  /**
-   * The stored filter chips and search words coming back with the panel: each
-   * is a standing way of viewing the list, and this is the one moment they are
-   * read from the store — from here on the view leads and the store follows.
-   * Never in a fixture or capture run, whose evidence must not vary with what
-   * a developer last chose.
-   *
-   * Taken up during the render that first has them rather than from an
-   * effect, for the reason the emptied filter below is: an effect would let
-   * one paint, and the two effects that store the view, read this build's
-   * default as though the developer had chosen it — and storing that would
-   * clear the very narrowing being restored.
-   */
-  if (!restoredView.current && state?.settings !== undefined) {
-    restoredView.current = true;
-    const storedFilters = state.settings.stored.sessionFilters;
-    const storedQuery = state.settings.stored.sessionSearchQuery;
-    if (!state.run.fixtureMode && (storedFilters !== undefined || storedQuery !== undefined)) {
-      setSessionView((current) => ({
-        ...current,
-        ...(storedFilters !== undefined ? { filters: storedFilters } : undefined),
-        ...(storedQuery !== undefined ? { query: storedQuery } : undefined),
-      }));
-      // A restored query opens the field it refills, on the rule the field's
-      // own closing keeps: a narrowing in force behind no visible control
-      // would hide sessions with nothing on screen admitting it.
-      if (storedQuery !== undefined) setSearchOpen(true);
-    }
-  }
-  // Every way the selection changes funnels through the view — a chip, a
-  // spoken ask, the widen button, the list correcting an emptied selection —
-  // so the store follows the view from one place. Never in a fixture or
-  // capture run, which must not write a developer's own settings file.
-  useEffect(() => {
-    if (!restoredView.current || state === undefined || state.run.fixtureMode) return;
-    storedSessionFilters.current ??= liveSettings?.sessionFilters ?? [];
-    const filters = sessionView.filters;
-    if (sameSessionFilters(storedSessionFilters.current, filters)) return;
-    storedSessionFilters.current = filters;
-    void updateSetting(
-      APP_SETTING_SCHEMA.sessionFilters.field,
-      filters.length > 0 ? filters : undefined,
-    );
-  }, [state, sessionView.filters, liveSettings?.sessionFilters]);
-
-  /**
-   * The search query as last stored, on the filter selection's own terms:
-   * seeded from the document's snapshot so restoring the stored words must
-   * not read as fresh typing to store again.
-   */
-  const storedSessionQuery = useRef<string | undefined>(undefined);
-  // The query funnels through the view the way the selection does — typing,
-  // a spoken ask, Escape clearing the field — so the store follows the view
-  // from one place, never in a fixture or capture run. Unlike a chip press
-  // the query changes at typing speed, so a write waits out the keystrokes
-  // and stores only where the words settled — except letting go, which writes
-  // at once: a clear is a discrete act rather than a keystroke on the way
-  // somewhere, and a quit inside a waited write would bring back a search the
-  // developer deliberately let go.
-  useEffect(() => {
-    if (!restoredView.current || state === undefined || state.run.fixtureMode) return;
-    storedSessionQuery.current ??= liveSettings?.sessionSearchQuery ?? "";
-    const query = sessionView.query;
-    if (storedSessionQuery.current === query) return;
-    const store = () => {
-      storedSessionQuery.current = query;
-      void updateSetting(
-        APP_SETTING_SCHEMA.sessionSearchQuery.field,
-        query !== "" ? query : undefined,
-      );
-    };
-    if (query === "") {
-      store();
-      return;
-    }
-    const settled = window.setTimeout(store, SEARCH_QUERY_STORE_DELAY_MS);
-    return () => window.clearTimeout(settled);
-  }, [state, sessionView.query, liveSettings?.sessionSearchQuery]);
-
-  const removeCalendarAccount = useCallback(
-    (accountId: string) => act(ACT_KIND.CALENDAR_REMOVE_ACCOUNT, { accountId }),
-    [],
-  );
-
-  const toggleCalendarSelected = useCallback(
-    (accountId: string, calendarId: string, selected: boolean) =>
-      act(ACT_KIND.CALENDAR_SET_SELECTED, { accountId, calendarId, selected }),
-    [],
-  );
-
-  const disconnectAppleCalendar = useCallback(() => act(ACT_KIND.CALENDAR_DISCONNECT_APPLE), []);
-
-  const toggleAppleCalendarSelected = useCallback(
-    (calendarId: string, selected: boolean) =>
-      act(ACT_KIND.CALENDAR_SET_SELECTED, { accountId: APPLE_CALENDAR_ID, calendarId, selected }),
-    [],
-  );
-
-  const disconnectLinear = useCallback(() => act(ACT_KIND.TRACKER_DISCONNECT), []);
-
-  /**
-   * A consent sign-in is asking for one thing too, so the panel gets out of
-   * the way of it the same way it does for a key: the shape goes down to a
-   * slot that says what it is waiting for. The flow itself runs in the
-   * browser and the main process; when the grant lands, the panel comes back
-   * around the newly connected service. One entry serves every such sign-in,
-   * because only one consent page can be open at a time and there is only one
-   * slot for it to stand in.
-   */
-  const consentConnect = usePanelEntry<ConsentConnectEntry>({
-    aside: PANEL_PRESENTATION.SLOT,
-    // Giving up mid-wait leaves — the consent page is where the user is — but
-    // a sign-in that failed is read in the slot, so its Close restores the
-    // panel to try again from the row.
-    restoresPanel: (held) => held.rejection !== undefined,
-    isSendable: (entry): entry is ConsentConnectEntry => entry !== undefined && !entry.busy,
-    send: async (sending) => {
-      // Which service is being connected decides which documented act runs,
-      // and nothing else does: the entry names a row of the actions table.
-      const result = await CONSENT_ACTIONS[sending.serviceId].connect();
-      return result.reason ? { rejection: result.reason } : {};
-    },
-    pointerInside: pointerIsInside,
-    presentation: presentationOf,
-    onReleasedWhileAway: onHitRegionLeave,
-    cancelHover,
-    applyPresentation,
-    restorePanel,
-    leave,
-    settle,
-    heldRef: consentConnectHeld,
-  });
-
-  /** One press: stand down to the waiting slot and open the consent page. */
-  const beginConsentSignIn = useCallback(
-    (serviceId: ConsentServiceId) => {
-      // One slot, one occupant: a key mid-paste is not disturbed by a
-      // sign-in, and neither is another sign-in already waiting.
-      if (credentialHeld.current || consentConnectHeld.current) return;
-      slotOccupant.current = PANEL_STAND_DOWN.CONSENT;
-      // Every consent block stands under Integrations, so that is where a
-      // cancelled or refused sign-in comes back to.
-      standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.CONSENT });
-      consentConnect.begin({ serviceId, busy: false });
-      consentConnect.commit();
-    },
-    [consentConnect.begin, consentConnect.commit],
-  );
-
-  /** True while a granted-already connect runs on the row, dialog-free. */
-  const [appleCalendarBusy, setAppleCalendarBusy] = useState(false);
-
-  /**
-   * Connecting this Mac's Calendar stands the panel down only when macOS is
-   * actually about to ask: with the grant already standing, the dialog never
-   * appears, and a stand-down would flash the slot for a single frame — so
-   * the press probes the status first and connects in place when it can.
-   */
-  const connectAppleCalendar = useCallback(async () => {
-    setAppleCalendarBusy(true);
-    let granted = false;
-    try {
-      granted = (await act(ACT_KIND.CALENDAR_APPLE_ACCESS_STATUS)) === APPLE_CALENDAR_ACCESS.FULL;
-      if (granted) await act(ACT_KIND.CALENDAR_CONNECT_APPLE);
-    } finally {
-      setAppleCalendarBusy(false);
-    }
-    if (!granted) beginConsentSignIn(CONSENT_SERVICE_ID.APPLE_CALENDAR);
-  }, [beginConsentSignIn]);
-
-  /** The Mac's own entry in the latest calendars broadcast, for its block. */
-  const appleCalendarObserved = calendars.find((choice) => choice.accountId === APPLE_CALENDAR_ID);
-
-  /**
-   * Whether another entry holds the one slot, which refuses this service's
-   * Connect: a key mid-paste, or a different service's consent wait.
-   */
-  const slotHeldExcept = (serviceId: ConsentServiceId) =>
-    credentialsEntry.entry !== undefined ||
-    (consentConnect.entry !== undefined && consentConnect.entry.serviceId !== serviceId);
-
-  const cancelConsentSignIn = useCallback(() => {
-    // Mid-wait, the flow's main-process side must stop listening too — a
-    // browser flow's loopback, or Apple's System Settings watch; after a
-    // failure there is nothing left to stop.
-    const waiting = consentConnect.latest();
-    if (waiting?.busy) CONSENT_ACTIONS[waiting.serviceId].cancel();
-    consentConnect.cancel();
-  }, [consentConnect.cancel, consentConnect.latest]);
-
-  // The stage the slot draws is the document's throughout: the flow moves it
-  // as it goes — browser code, exchanging, the organization choice — and each
-  // stage reaches every window before the press's own reply returns.
-  const beginSupersetSignIn = useCallback(() => {
-    if (supersetSignInHeld.current) {
-      if (supersetSignIn.stage === SUPERSET_SIGN_IN_STAGE.FAILURE) {
-        tell(ACT_KIND.SUPERSET_BEGIN_SIGN_IN);
-      }
-      return;
-    }
-    if (credentialHeld.current || consentConnectHeld.current) return;
-    supersetSignInHeld.current = true;
-    slotOccupant.current = PANEL_STAND_DOWN.SUPERSET;
-    standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.SUPERSET });
-    cancelHover();
-    applyPresentation(PANEL_PRESENTATION.SLOT);
-    tell(ACT_KIND.SUPERSET_BEGIN_SIGN_IN);
-  }, [applyPresentation, cancelHover, supersetSignIn.stage]);
-
-  const cancelSupersetSignIn = useCallback(() => {
-    if (!supersetSignInHeld.current) return;
-    tell(ACT_KIND.SUPERSET_CANCEL_SIGN_IN);
-    supersetSignInHeld.current = false;
-    if (presentationOf() === PANEL_PRESENTATION.SLOT) restorePanel();
-  }, [presentationOf, restorePanel]);
-
-  const disconnectSuperset = useCallback(() => act(ACT_KIND.SUPERSET_DISCONNECT), []);
-
-  /**
-   * Asking to write a key is asking for one thing, so the panel gets out of the
-   * way of it: the shape goes down to the slot, which is the field and nothing
-   * else. It is the same wherever the key is coming from — a first connection, a
-   * stored key being replaced, or one standing in front of the environment's —
-   * because they are all the same action.
-   */
-  const credentialsEntry = usePanelEntry<CredentialEntry>({
-    aside: PANEL_PRESENTATION.SLOT,
-    restoresPanel: (held) => held.away !== true,
-    isSendable: isSubmittable,
-    send: async (sending) => {
-      const result = await act(ACT_KIND.CREDENTIAL_SET_API_KEY, {
-        providerId: sending.providerId,
-        apiKey: sending.draft,
-      });
-      return result.reason ? { rejection: result.reason } : {};
-    },
-    pointerInside: pointerIsInside,
-    presentation: presentationOf,
-    onReleasedWhileAway: onHitRegionLeave,
-    cancelHover,
-    applyPresentation,
-    restorePanel,
-    leave,
-    settle,
-    heldRef: credentialHeld,
-  });
-
-  const beginEntry = useCallback(
-    (providerId: CredentialProviderId) => {
-      // Where the entry's row is drawn, remembered before the trip to the
-      // slot so coming back lands on the page the entry began on.
-      standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.KEY, providerId });
-      slotOccupant.current = PANEL_STAND_DOWN.KEY;
-      credentialsEntry.begin({ providerId, draft: "", busy: false, away: false });
-    },
-    [credentialsEntry.begin],
-  );
-
-  /**
-   * A Connect press: the same entry {@link beginEntry} opens, with the
-   * provider's key page opened in the same press. Someone connecting has no
-   * key yet, so the first thing they need is the page that issues one — the
-   * consent and CLI connectors already work this way, because their browser
-   * half *is* the connection. The entry starts `away` for the same reason
-   * {@link fetchKey} marks it: the person this slot is now waiting for is
-   * reading a browser, so giving up leaves the browser alone rather than
-   * bringing the panel back over it. The page is still opened by provider id,
-   * so the only addresses reachable are the ones the credential registry
-   * fixes.
-   */
-  const connectEntry = useCallback(
-    (providerId: CredentialProviderId) => {
-      standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.KEY, providerId });
-      slotOccupant.current = PANEL_STAND_DOWN.KEY;
-      tell(ACT_KIND.CREDENTIAL_OPEN_API_KEYS, { providerId });
-      credentialsEntry.begin({ providerId, draft: "", busy: false, away: true });
-    },
-    [credentialsEntry.begin],
-  );
-
-  /**
-   * Sends the browser to the provider's key page. The entry remembers that it
-   * did: from here on, the person this slot is waiting for is reading a page
-   * that Luke — which floats above every window — would otherwise be sitting on
-   * top of. It is also what the slot is for, so the shape is already right; the
-   * panel is only stood down if the link was pressed from inside it.
-   */
-  const fetchKey = useCallback(() => {
-    const current = credentialsEntry.latest();
-    // Same rule as typing: the key on its way to the store is what the entry is
-    // for, and going to fetch another one is not a reason to disturb it. Both
-    // views disable the link while it is in flight, so this is the floor rather
-    // than the answer.
-    if (!panelEntryOpen(current)) return;
-    tell(ACT_KIND.CREDENTIAL_OPEN_API_KEYS, { providerId: current.providerId });
-    credentialsEntry.apply({ ...current, away: true });
-    if (presentationOf() === PANEL_PRESENTATION.SLOT) return;
-    credentialsEntry.standDown();
-  }, [credentialsEntry.apply, credentialsEntry.latest, credentialsEntry.standDown, presentationOf]);
-
-  const removeProviderApiKey = useCallback(
-    async (providerId: CredentialProviderId) => {
-      const result = await act(ACT_KIND.CREDENTIAL_SET_API_KEY, { providerId, apiKey: undefined });
-      // Delete and the field are on the row together once the panel has been
-      // brought back around an entry, and a key that has been removed cannot be
-      // replaced.
-      if (removalEndsEntry(credentialsEntry.latest(), providerId, result.reason)) {
-        credentialsEntry.apply(undefined);
-      }
-      return result;
-    },
-    [credentialsEntry.apply, credentialsEntry.latest],
-  );
-
-  const credentials: CredentialEntryControl = {
-    entry: credentialsEntry.entry,
-    begin: beginEntry,
-    connect: connectEntry,
-    change: (draft) => credentialsEntry.patch({ draft }),
-    fetchKey,
-    cancel: credentialsEntry.cancel,
-    commit: credentialsEntry.commit,
-    remove: removeProviderApiKey,
-  };
-
-  /**
-   * Whose sign-in the surface is waiting on. Choosing a provider on the gate
-   * sends the browser to it and stands the panel down to a small waiting
-   * popup, the way fetching an API key stands it down to the slot: the real
-   * work is in the browser, and Luke floats above the page it needs. Held as
-   * app state with a ref because the attempt's own reply has to read whether
-   * it is still the one being waited on.
-   */
-  const [signInWait, setSignInWait, signInWaitNow] = useStateWithRef<AccountProvider | undefined>(
-    undefined,
-  );
-  /**
-   * Which attempt any reply answers. Cancel advances it, so the outcome of a
-   * sign-in already withdrawn is spent rather than moving the shape again.
-   */
-  const signInAttempt = useRef(0);
-  const [signInFailure, setSignInFailure] = useState<string>();
-
-  const beginSignIn = useCallback(
-    (provider: AccountProvider) => {
-      if (signInWaitNow() !== undefined) return;
-      const attempt = ++signInAttempt.current;
-      setSignInFailure(undefined);
-      setSignInWait(provider);
-      cancelHover();
-      applyPresentation(PANEL_PRESENTATION.SLOT);
-      act(ACT_KIND.ACCOUNT_BEGIN_SIGN_IN, { provider }).then(
-        () => {
-          if (signInAttempt.current !== attempt) return;
-          setSignInWait(undefined);
-          if (presentationOf() !== PANEL_PRESENTATION.SLOT) return;
-          // The panel comes forward around what was just unlocked — the
-          // session roster — and stays open like any other opened panel:
-          // signing in is an arrival, not an errand to settle and leave.
-          expand();
-        },
-        () => {
-          if (signInAttempt.current !== attempt) return;
-          setSignInWait(undefined);
-          setSignInFailure("Sign-in did not finish. Try again when you’re ready.");
-          if (presentationOf() === PANEL_PRESENTATION.SLOT) expand();
-        },
-      );
-    },
-    [applyPresentation, cancelHover, expand, presentationOf, setSignInWait, signInWaitNow],
-  );
-
-  /**
-   * Takes the wait back. The main process withdraws the loopback and signs the
-   * attempt back out; the panel returns to the gate at once rather than
-   * waiting for that round trip, and the attempt's eventual rejection finds
-   * itself already spent.
-   */
-  const cancelSignIn = useCallback(() => {
-    if (signInWaitNow() === undefined) return;
-    signInAttempt.current += 1;
-    setSignInWait(undefined);
-    tell(ACT_KIND.ACCOUNT_CANCEL_SIGN_IN);
-    if (presentationOf() === PANEL_PRESENTATION.SLOT) expand();
-  }, [expand, presentationOf, setSignInWait, signInWaitNow]);
-
-  const changeSupersetAgentDefault = useCallback(
-    (agent: string | undefined) =>
-      act(ACT_KIND.SETTING_UPDATE_ENTRY, {
-        field: APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-        key: SUPERSET_WORKSPACE_PROVIDER_ID,
-        value: agent === undefined ? undefined : { agent },
-      }),
-    [],
-  );
-
-  /**
-   * The providers the default-workspace rows can offer: every provider
-   * currently offering projects, named the way its adapter names itself, plus
-   * one holding a stored default provider that is not offering right now — a
-   * provider falls back to its own display name, so the row still shows a
-   * choice it can name. A project has no such name to fall back to: its label
-   * lived on the observed list that stopped listing it, and an option labelled
-   * with the stored identity would offer a raw id for a default that already
-   * steers nothing. So each option carries only the projects its provider is
-   * offering, and a default the provider stops offering is cleared by the main
-   * process rather than shown here.
-   */
-  const storedWorkspaceProvider = settings?.defaultWorkspaceProvider;
-  const storedWorkspaceProjects = settings?.workspaceProjectDefaults;
-  const workspaceProviderOptions = useMemo(() => {
-    const fallbackName = (providerId: WorkspaceProviderId) =>
-      isCredentialProviderId(providerId)
-        ? CREDENTIAL_PROVIDERS[providerId].displayName
-        : providerId;
-    const names = new Map<WorkspaceProviderId, string>();
-    for (const project of workspaceProjects) {
-      if (isWorkspaceProviderId(project.providerId)) {
-        names.set(project.providerId, project.providerName);
-      }
-    }
-    if (storedWorkspaceProvider && !names.has(storedWorkspaceProvider)) {
-      names.set(storedWorkspaceProvider, fallbackName(storedWorkspaceProvider));
-    }
-    for (const providerId of Object.keys(storedWorkspaceProjects ?? {})) {
-      if (!isWorkspaceProviderId(providerId)) continue;
-      if (!names.has(providerId)) names.set(providerId, fallbackName(providerId));
-    }
-    return [...names.entries()].map(([id, name]) => {
-      const offered = workspaceProjects
-        .filter((project) => project.providerId === id)
-        .map((project) => ({
-          id: workspaceProjectSelectionId(project),
-          label: project.targetName
-            ? `${project.repository} on ${project.targetName}`
-            : project.repository,
-        }));
-      return { id, name, projects: offered };
-    });
-  }, [workspaceProjects, storedWorkspaceProvider, storedWorkspaceProjects]);
-
-  /**
-   * Says a send landed, and stops saying it once it has been readable. Long
-   * enough to be read on the way back from the Send button, short enough that
-   * the line is gone before anyone wonders whether it is stuck.
-   */
-  const showFeedbackNotice = useCallback((notice: string) => {
-    if (feedbackNoticeTimer.current !== undefined) {
-      window.clearTimeout(feedbackNoticeTimer.current);
-    }
-    setFeedbackNotice(notice);
-    feedbackNoticeTimer.current = window.setTimeout(() => {
-      feedbackNoticeTimer.current = undefined;
-      setFeedbackNotice(undefined);
-    }, FEEDBACK_NOTICE_MS);
-  }, []);
-
-  useEffect(() => () => window.clearTimeout(feedbackNoticeTimer.current), []);
-
-  /**
-   * Ends the confirmation without restoring anything: the shape was asked for
-   * again, or left, so the finish it held is dropped rather than run.
-   */
-  const dropFeedbackConfirmation = useCallback(() => {
-    if (feedbackConfirmTimer.current !== undefined) {
-      window.clearTimeout(feedbackConfirmTimer.current);
-      feedbackConfirmTimer.current = undefined;
-    }
-    feedbackFinish.current = undefined;
-    setFeedbackConfirming(undefined);
-  }, []);
-
-  useEffect(() => () => window.clearTimeout(feedbackConfirmTimer.current), []);
-
-  // A confirmation lives exactly as long as the shape it is drawn in: the
-  // presentation moving on ends it and drops the unrun finish it held.
-  useEffect(() => {
-    if (presentation === PANEL_PRESENTATION.FEEDBACK) return;
-    dropFeedbackConfirmation();
-  }, [presentation, dropFeedbackConfirmation]);
-
-  const stillMotion = usePrefersReducedMotion();
-
-  const feedbackEntry = usePanelEntry<FeedbackEntry>({
-    aside: PANEL_PRESENTATION.FEEDBACK,
-    restoresPanel: (held) => held.fromPanel === true,
-    isSendable,
-    send: async (sending) => {
-      const name = sending.name.trim();
-      const email = sending.email.trim();
-      try {
-        const result = await act(ACT_KIND.FEEDBACK_SEND, {
-          submission: {
-            kind: sending.kind,
-            message: sending.message.trim(),
-            ...(name ? { name } : undefined),
-            ...(email ? { email } : undefined),
-            images: sending.images,
-          },
-        });
-        if (!result.delivered) {
-          return { rejection: result.reason ?? "Could not send that. Try again." };
-        }
-        return {};
-      } catch {
-        return { rejection: "Could not send that. Try again." };
-      }
-    },
-    onDelivered: () => {
-      showFeedbackNotice("Sent — thank you!");
-      // The landing plays in the shape the note left from: Luke swoops down
-      // beside the thank-you and plays this send's flip of the coin. The pick
-      // is held on a ref so the hold below waits out the same gesture.
-      const confirmation = feedbackConfirmation();
-      feedbackLanding.current = confirmation;
-      feedbackConfirmPlays.current += 1;
-      setFeedbackConfirming({
-        confirmation,
-        play: feedbackConfirmPlays.current,
-      });
-    },
-    afterDelivery: (finish) => {
-      feedbackFinish.current = finish;
-      const { motion } = feedbackLanding.current;
-      if (feedbackConfirmTimer.current !== undefined) {
-        window.clearTimeout(feedbackConfirmTimer.current);
-      }
-      feedbackConfirmTimer.current = window.setTimeout(
-        () => {
-          feedbackConfirmTimer.current = undefined;
-          setFeedbackConfirming(undefined);
-          const held = feedbackFinish.current;
-          feedbackFinish.current = undefined;
-          held?.();
-        },
-        confirmationHoldMs({ motion, still: stillMotion }),
-      );
-    },
+  const panelEntrySurface: PanelEntrySurface = {
     pointerInside: pointerIsInside,
     presentation: presentationOf,
     onReleasedWhileAway: onHitRegionLeave,
@@ -1367,122 +415,34 @@ export function App(): React.JSX.Element {
     leave,
     settle,
     heldRef: feedbackHeld,
-  });
-
-  /**
-   * Opens the composer for a kind — from the section's own buttons or asked of
-   * Luke out loud — and stands the panel down to its shape,
-   * the way beginning a key entry stands it down to the slot: writing one
-   * note is one action. What opening does to a note already there is
-   * {@link openedFeedbackEntry}'s to decide — a half-written note is brought
-   * back rather than discarded, and a starting draft lands only in an empty
-   * one. Reports whether the draft was placed, so the spoken path can say
-   * what it found; where leaving returns you follows the latest ask, not the
-   * first.
-   */
-  const beginFeedback = useCallback(
-    (kind: FeedbackKind, fromPanel: boolean, draft?: string): boolean => {
-      setFeedbackNotice(undefined);
-      // The Feedback section is on the front page, so that is where leaving
-      // the composer — or the thank-you the send lands in — comes back to.
-      standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.FEEDBACK });
-      // Asking to write again is the confirmation's end: the composer takes
-      // the shape back, and the return the landing held is dropped unrun.
-      dropFeedbackConfirmation();
-      const opened = openedFeedbackEntry(feedbackEntry.latest(), {
-        kind,
-        fromPanel,
-        ...(draft !== undefined ? { draft } : undefined),
-        // A fresh note starts signed with the account; a note already there
-        // keeps its fields as its author left them, cleared ones included.
-        signature: accountSignature(appStateNow()?.account),
-      });
-      if (opened.entry) feedbackEntry.apply(opened.entry);
-      feedbackEntry.standDown();
-      return opened.drafted;
-    },
-    [dropFeedbackConfirmation, feedbackEntry.apply, feedbackEntry.latest, feedbackEntry.standDown],
-  );
-
-  /**
-   * Leaves the shape and keeps the draft — Escape's meaning here. A note is
-   * longer than a key, and a key is the only thing Escape is allowed to
-   * discard; the way back in is the same button, now reading "keep writing".
-   * Where it returns you is where the composer was last asked for from: the
-   * panel, or — from a spoken ask — nothing at all.
-   */
-  const dismissFeedback = useCallback(() => {
-    if (presentationOf() !== PANEL_PRESENTATION.FEEDBACK) return;
-    // Escape during the landing skips the celebration, never the return: the
-    // finish the confirmation held runs now instead of later.
-    if (feedbackFinish.current) {
-      const finish = feedbackFinish.current;
-      dropFeedbackConfirmation();
-      finish();
-      return;
-    }
-    if (feedbackEntry.latest()?.fromPanel === true) restorePanel();
-    else leave();
-  }, [dropFeedbackConfirmation, feedbackEntry.latest, leave, presentationOf, restorePanel]);
-
-  /**
-   * Takes picked or pasted files aboard. Encoding happens here on the user's
-   * machine — scaled and re-written where a screenshot would not fit the
-   * request a submission has to travel as — and what could not come is said
-   * beside the field rather than dropped in silence.
-   */
-  const attachFeedbackImages = useCallback(
-    async (files: readonly File[]) => {
-      const current = feedbackEntry.latest();
-      if (!panelEntryOpen(current)) return;
-      const room = FEEDBACK_LIMITS.MAX_IMAGES - current.images.length;
-      const taken = files.slice(0, Math.max(0, room));
-      const encoded: FeedbackImage[] = [];
-      let refused = false;
-      for (const file of taken) {
-        const image = await encodeFeedbackImage(file);
-        if (image) encoded.push(image);
-        else refused = true;
-      }
-      // Read again after the awaits: typing meanwhile replaced the entry
-      // object, and Cancel or a send may have ended it altogether.
-      const latest = feedbackEntry.latest();
-      if (!panelEntryOpen(latest)) return;
-      const rejection = refused
-        ? IMAGE_REFUSAL.UNREADABLE
-        : files.length > room
-          ? IMAGE_REFUSAL.FULL
-          : undefined;
-      feedbackEntry.apply({
-        ...latest,
-        images: [...latest.images, ...encoded].slice(0, FEEDBACK_LIMITS.MAX_IMAGES),
-        rejection,
-      });
-    },
-    [feedbackEntry.apply, feedbackEntry.latest],
-  );
-
-  const feedbackControl: FeedbackEntryControl = {
-    entry: feedbackEntry.entry,
-    ...(feedbackNotice ? { notice: feedbackNotice } : undefined),
-    // The section's own buttons are the panel asking, so leaving returns there.
-    begin: (kind) => beginFeedback(kind, true),
-    changeMessage: (message) => feedbackEntry.patch({ message }),
-    changeName: (name) => feedbackEntry.patch({ name }),
-    changeEmail: (email) => feedbackEntry.patch({ email }),
-    attach: (files) => void attachFeedbackImages(files),
-    removeImage: (index) => {
-      const current = feedbackEntry.latest();
-      if (!panelEntryOpen(current)) return;
-      feedbackEntry.apply({
-        ...current,
-        images: current.images.filter((_, held) => held !== index),
-      });
-    },
-    dismiss: dismissFeedback,
-    cancel: feedbackEntry.cancel,
-    commit: feedbackEntry.commit,
   };
+
+  const connections = useConnections({
+    surface: panelEntrySurface,
+    credentialHeld,
+    consentConnectHeld,
+    supersetSignInHeld,
+    standDownPage,
+    expand,
+    calendars,
+    superset: {
+      installed: state?.superset.installed === true,
+      connected: supersetConnected,
+      signIn: supersetSignIn,
+      defaultAgent: settings?.workspaceAgentDefaults?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent,
+    },
+    workspaceProjects,
+  });
+  const slotOccupant = connections.slotOccupant;
+
+  const stillMotion = usePrefersReducedMotion();
+
+  const feedback = useFeedbackComposer({
+    surface: panelEntrySurface,
+    presentation,
+    stillMotion,
+    standDownPage,
+  });
 
   /**
    * Moves the talk key, or resets it when no chord is named. The key the row
@@ -1525,48 +485,6 @@ export function App(): React.JSX.Element {
   }, []);
 
   /**
-   * Sends a session to its provider and gets out of the way. Luke floats above
-   * every window, so a panel left open would be sitting on top of the very chat
-   * it was just asked to bring forward — the same reason fetching a key stands
-   * the panel down. The pointer is on the row that was pressed and cannot leave
-   * a shape that is no longer drawn, so the close is asked for here rather than
-   * waited for.
-   */
-  const openSession = useCallback(
-    (session: SessionView) => {
-      tell(ACT_KIND.SESSION_OPEN, {
-        identity: {
-          providerId: session.providerId,
-          providerSessionId: session.id,
-        },
-      });
-      cancelHover();
-      void changeMode(false);
-    },
-    [cancelHover, changeMode],
-  );
-
-  /**
-   * Opens the exact route carried by one app association. The app id, rather
-   * than its address, crosses the bridge; the main process validates it against
-   * the latest roster before handing the normalized route to macOS.
-   */
-  const openSessionApplication = useCallback(
-    (session: SessionView, applicationId: SessionApplicationId) => {
-      tell(ACT_KIND.SESSION_OPEN_APPLICATION, {
-        identity: {
-          providerId: session.providerId,
-          providerSessionId: session.id,
-        },
-        applicationId,
-      });
-      cancelHover();
-      void changeMode(false);
-    },
-    [cancelHover, changeMode],
-  );
-
-  /**
    * The ask key, pressed anywhere on the system. The main process has already
    * stood the panel up focused; what is left is the caret — or the dismissal,
    * because a summons repeated over its own open field is someone asking the
@@ -1591,31 +509,6 @@ export function App(): React.JSX.Element {
   }, [cancelHover, changeMode, changeTab, presentationOf, tabNow]);
 
   /**
-   * The session search summons, from its magnifier or Command-F over the
-   * Sessions tab. It lands on that tab — the field it opens is that list's —
-   * and the caret follows the same frame-by-frame seek the ask field needs,
-   * because the field may not be drawn until React has answered.
-   */
-  const openSearch = useCallback(() => {
-    changeTab(PANEL_TAB.SESSIONS);
-    setSearchOpen(true);
-    focusSearchField(SESSION_SEARCH_INPUT_ID);
-    window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
-      search_surface: PRODUCT_SEARCH_SURFACE.SESSIONS,
-    });
-  }, [changeTab]);
-
-  /**
-   * Closing the search lets go of its query in the same action: a field that
-   * left its narrowing in force behind no visible control would be hiding
-   * sessions with nothing on screen admitting it.
-   */
-  const closeSearch = useCallback(() => {
-    setSearchOpen(false);
-    setSessionView((view) => (view.query === "" ? view : { ...view, query: "" }));
-  }, []);
-
-  /**
    * The settings search summons, from its magnifier beside the tab bar. The
    * field opens at the head of whichever settings page is showing — the
    * search reads across every page wherever it is opened from, so there is
@@ -1637,323 +530,29 @@ export function App(): React.JSX.Element {
    */
   const closeSettingsSearch = useCallback(() => setSettingsSearchOpen(false), []);
 
-  /**
-   * The panel standing back down once an errand it stood up is over. The same
-   * rule a saved key follows, for the same reason: the shape was brought
-   * forward to show an answer, the answer has been shown, and nothing else
-   * would ever ask it to close — the pointer is not on it, because the
-   * developer was talking rather than reaching for it.
-   *
-   * Everything that holds a panel open against the pointer holds it open
-   * against this too. A key half-typed and an ask half-written are both things
-   * someone is in the middle of, and a panel someone's hands have arrived in
-   * is theirs now rather than the errand's.
-   */
-  const standDownAfterErrand = useCallback(() => {
-    if (!errandOpenedPanel.current) return;
-    errandOpenedPanel.current = false;
-    if (pointerIsInside() || heldAgainstPointer()) return;
-    cancelHover();
-    settle();
-  }, [cancelHover, heldAgainstPointer, pointerIsInside, settle]);
+  const errands = useErrandFlight({
+    holdSettings: setHeldSettings,
+    applyView: sessions.applyView,
+    openSearchField: sessions.openSearchField,
+    changeTab,
+    setSettingsView,
+    tabNow,
+    settingsViewNow,
+    presentationOf,
+    pointerInside: pointerIsInside,
+    heldAgainstPointer,
+    cancelHover,
+    settle,
+  });
 
-  /**
-   * One flight over, and the next one away if the reply asked for more than one
-   * act. The panel only stands back down once the whole run is signed: a close
-   * scheduled between two flights would land in the middle of the second, and
-   * a flight whose shape goes out from under it is cut short where it stands.
-   *
-   * Every beat is acted on, with no test for whether the flight reporting it is
-   * still the current one. There is no such thing as a stale flight —
-   * a second action waits its turn rather than overtaking the one in the air — and
-   * a guard here would be worse than redundant: this is what advances the run,
-   * so a beat it declined to act on would strand every action still waiting and
-   * every hold they carry.
-   */
-  const finishErrandFlight = useCallback(() => {
-    const finished = finishErrand(errandRun.current);
-    errandRun.current = finished.run;
-    drawErrandHold(finished.hold);
-    flyNextErrand();
-    if (!errandRunIdle(errandRun.current)) return;
-    standDownAfterErrand();
-  }, [drawErrandHold, flyNextErrand, standDownAfterErrand]);
-
-  /**
-   * The spoken asks about Luke himself. A settings change goes through the
-   * same bridge calls the settings rows use, and the snapshot that comes back
-   * redraws the panel's switches; showing the panel is the capsule's press
-   * with a tab — or, already open, that tab's own press — and optionally a
-   * narrowing, chosen out loud; opening the composer follows the spoken-ask
-   * path. All were validated against their fixed
-   * vocabularies before they arrive here, so this only performs and reports.
-   *
-   * A settings change and a change of view are also the two actions nobody
-   * watched anyone make, so both end by showing the control that moved and
-   * sending Luke to it. A settings change stands the panel up on the Settings
-   * tab to do it: the switch is the whole report, and a switch flipped behind
-   * a closed panel is a change the developer is only ever told about. The
-   * errand is drawing over what already happened — it runs after the change,
-   * it carries nothing to the store, and a refusal takes both the showing and
-   * the flight with it. The composer is neither: it is a shape of its own
-   * standing where the panel was, so there is nothing for a mark to land on.
-   */
-  const carryAppAction = useCallback<AppActionCarrier>(
-    async (action) =>
-      dispatchByKind(action, {
-        [ACTION_KIND.SETTING]: async (action): Promise<WireRecord> => {
-          // The drawing is held back before the write, not after it: the store
-          // answers by moving the document, and the switch is what Luke is on
-          // his way to move, so it has to still read as it did when he set
-          // off. Every path out of here releases the hold, and the outcome the
-          // conversation is told is the store's own either way — what is
-          // delayed is the drawing, never the change or the report of it.
-          //
-          // Two things must not wait for Luke, and neither is the drawing. The
-          // guide has to describe the store's answer at once, because the next
-          // call in this same turn is validated against it — an effort named in
-          // the same breath as a model only exists in the guide the model
-          // change just made true. And that next call composes against the
-          // same answer, before any version of the document could have carried
-          // it back, which is why it is remembered outside the hold: the hold
-          // belongs to one action, and every action after it has to read this.
-          deferSettings();
-          let caught: AppSettingsView | undefined;
-          const outcome = await applySpokenSetting(
-            { updateSetting, updateSettingEntry },
-            action,
-            (wire) => {
-              const next = appSettingsView(wire);
-              caught = next;
-              const held = appStateNow();
-              answeredSettings.current = { view: next, atVersion: held?.version ?? -1 };
-              if (held) publishGuide(held, next);
-            },
-            composeSettingsAgainst(answeredSettings.current),
-          );
-          const hold: ErrandHold = caught === undefined ? NOTHING_HELD : { settings: caught };
-          // Nothing to show and nothing to sign: a refused change must not stand
-          // the panel up in front of a switch that did not move.
-          if (outcome.status !== ACTION_RESULT_STATUS.ACCEPTED) {
-            drawErrandHold(hold);
-            return {
-              status: ACTION_RESULT_STATUS.REJECTED,
-              reason: outcome.reason ?? "That setting could not be changed.",
-            };
-          }
-          const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
-          // The guide's ids travel as plain text, so one that names no setting
-          // of Luke's names no page either — and nothing will fly to it.
-          const page = isAppSettingId(action.setting.id)
-            ? SETTING_PAGE[action.setting.id]
-            : undefined;
-          try {
-            await changeMode(true);
-            // Queued rather than flown at once. The tab, the page and the wait
-            // are all decided when this action comes up for its turn, because an
-            // earlier act may still be out over the very page this one would
-            // otherwise turn away.
-            armErrandFlight({
-              targets: errandTargets(action),
-              tab: PANEL_TAB.SETTINGS,
-              ...(page === undefined ? undefined : { page }),
-              opening,
-              borrowsPanel: true,
-              hold,
-            });
-          } catch {
-            // Showing the change is not what was asked for — making it is, and it
-            // is already made. A window that refused to come forward must not be
-            // reported back as a setting that refused to change, and the switch
-            // must be drawn whether or not anyone was shown it moving.
-            drawErrandHold(hold);
-          }
-          return outcome;
-        },
-        [ACTION_KIND.FEEDBACK]: async (action) => {
-          // The main process expands the window and sends the composer's
-          // lifecycle event down the same ordered channel as the mode event,
-          // so the composer's shape can never lose a race to the panel apply
-          // the expansion causes. The draft
-          // rides this ref because the lifecycle channel carries event names,
-          // not payloads: set before the ask, consumed when the event lands.
-          // Whether it will be placed is decided here with the same pure
-          // decision the open itself makes, on the same entry — the open lands
-          // a beat later on the event, and nothing else writes the entry in
-          // between — so the spoken outcome says what actually happens. And
-          // nothing here sends: the note leaves only by the Send button's own
-          // press.
-          const kind = FEEDBACK_KIND_FOR_COMPOSER[action.composer];
-          const drafted = openedFeedbackEntry(feedbackEntry.latest(), {
-            kind,
-            fromPanel: false,
-            ...(action.draft === undefined ? undefined : { draft: action.draft }),
-            signature: accountSignature(appStateNow()?.account),
-          }).drafted;
-          spokenFeedbackDraft.current = action.draft;
-          try {
-            await act(ACT_KIND.FEEDBACK_SUMMON, { kind });
-          } catch (error) {
-            // The composer is not coming, so the event that would consume the
-            // draft is not coming either; a stale one must not season some
-            // later spoken request.
-            spokenFeedbackDraft.current = undefined;
-            throw error;
-          }
-          return {
-            status: ACTION_RESULT_STATUS.ACCEPTED,
-            kind: action.composer,
-            ...(action.draft === undefined
-              ? undefined
-              : drafted
-                ? {
-                    note: "The ask is drafted in the composer; the developer edits and sends it by hand.",
-                  }
-                : {
-                    note: "A note was already being written, so it was kept and nothing was drafted over it.",
-                  }),
-          };
-        },
-        [ACTION_KIND.PANEL]: async (action) => {
-          // Whether this ask is what opens the panel, read before it does: an
-          // errand into a shape still growing has to trail the whole opening,
-          // and one into a panel already up does not.
-          const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
-          const spoken = action.filters ? sessionFiltersFromSpoken(action.filters) : undefined;
-          // An identity this build holds no chip for cannot narrow the list, and
-          // Luke must not claim it did. The list still has to match the sentence
-          // that says every session is shown, so an unmappable ask widens the view
-          // to everything rather than leaving whatever narrowing was already in
-          // force — the whole ask, because a combination quietly missing one of
-          // its values would show more than the sentence names.
-          const filters = action.filters ? (spoken ?? []) : undefined;
-          // Caught rather than applied, on the settings switch's terms: the
-          // narrowing is what Luke is on his way to the options control — or
-          // its clear X, for a whole-list ask — to do, and a list that has
-          // already re-sorted itself by the time he gets there makes the
-          // flight a report rather than the action.
-          const view =
-            filters || action.sort || action.query !== undefined
-              ? {
-                  ...(filters ? { filters } : undefined),
-                  ...(action.sort ? { sort: action.sort } : undefined),
-                  ...(action.query !== undefined ? { query: action.query } : undefined),
-                }
-              : undefined;
-          // What the query will leave, read now against the roster and the
-          // view the hold is about to land: the reply voices this outcome, and
-          // it must not claim rows the list will not draw. Only the drawing
-          // waits for the flight, never the report.
-          const held = appStateNow();
-          const searched =
-            action.query !== undefined && held !== undefined
-              ? spokenSearchOutcome(displaySessions(held), {
-                  ...sessionView,
-                  ...view,
-                })
-              : undefined;
-          await changeMode(true);
-          // The tab bar and the options button are drawn outside the settings
-          // pages, so this action names no page and waits for none. An action with
-          // nowhere to land releases what it holds the moment it comes up: the
-          // panel itself is what was asked for and it is already open, so the
-          // list must show what the answer is about to claim it shows.
-          armErrandFlight({
-            targets: errandTargets(action),
-            tab: action.tab,
-            opening,
-            // The panel is what was asked for, so it is nobody's to take away.
-            borrowsPanel: false,
-            hold: view === undefined ? NOTHING_HELD : { view },
-          });
-          // One note line, because an unmappable narrowing and an emptied
-          // search can arrive in the same ask and each has its own sentence.
-          const notes = [
-            action.filters && spoken === undefined
-              ? "That narrowing has no filter of its own here, so every session is shown."
-              : undefined,
-            searched?.note,
-          ].filter((line): line is string => line !== undefined);
-          return {
-            status: ACTION_RESULT_STATUS.ACCEPTED,
-            tab: action.tab,
-            ...(spoken !== undefined ? { filters: action.filters } : undefined),
-            ...(action.sort ? { sort: action.sort } : undefined),
-            ...(action.query !== undefined ? { query: action.query } : undefined),
-            ...(searched !== undefined ? { matches: searched.matches } : undefined),
-            ...(notes.length > 0 ? { note: notes.join(" ") } : undefined),
-          };
-        },
-        [ACTION_KIND.UPDATE]: async (action): Promise<WireRecord> => {
-          // The Updates row's own three presses, behind the same bridge calls
-          // its button uses; the main process holds its own guards — a check
-          // never interrupts a download, an install runs only on a build in
-          // hand, and the releases page is an address fixed by the build.
-          if (action.action === APP_UPDATE_ACTION.CHECK) {
-            // Answered rather than fire-and-forget, like the row's own press,
-            // so the outcome voiced is the answer the check actually returned.
-            const answered = await act(ACT_KIND.UPDATE_CHECK);
-            return { status: ACTION_RESULT_STATUS.ACCEPTED, outcome: updateRow(answered).detail };
-          }
-          if (action.action === APP_UPDATE_ACTION.DOWNLOAD) {
-            tell(ACT_KIND.UPDATE_OPEN_RELEASE);
-            return {
-              status: ACTION_RESULT_STATUS.ACCEPTED,
-              note: "The latest release's page is open in the browser; the download itself is by hand from there.",
-            };
-          }
-          // Re-read at the action what the button reads at its press: the guide
-          // the call was validated against is a snapshot, and an install that
-          // failed or landed between the two must answer as the row now
-          // stands. The main process quietly refuses a stale ask either way;
-          // this makes the refusal a sentence rather than a claimed restart
-          // that never comes.
-          const standing = appStateNow()?.update;
-          const row = standing ? updateRow(standing) : undefined;
-          if (row?.action !== UPDATE_ROW_ACTION.RESTART) {
-            return {
-              status: ACTION_RESULT_STATUS.REJECTED,
-              reason: row?.detail ?? "This run does not report where updates stand.",
-            };
-          }
-          tell(ACT_KIND.UPDATE_INSTALL);
-          return {
-            status: ACTION_RESULT_STATUS.ACCEPTED,
-            note: "Luke is quitting to install the downloaded release; this conversation ends with it.",
-          };
-        },
-      }),
-    [
-      armErrandFlight,
-      changeMode,
-      deferSettings,
-      drawErrandHold,
-      feedbackEntry.latest,
-      presentationOf,
-      publishGuide,
-      sessionView,
-    ],
-  );
-
-  // An app act the brain decided that only a panel can perform. It was
-  // validated against the guide in the main process, which sends it to the
-  // primary panel alone; the carrier performs it and the answer goes back by
-  // the request's id, so the brain's turn can say what happened.
-  const carryAppActionRef = useRef(carryAppAction);
-  carryAppActionRef.current = carryAppAction;
-  useEffect(
-    () =>
-      window.sidecar.onBrainAppAction((request) => {
-        void carryAppActionRef
-          .current(request.action)
-          .catch((error: Error) => ({
-            status: ACTION_RESULT_STATUS.REJECTED,
-            reason: error instanceof Error ? error.message : "The change could not be made.",
-          }))
-          .then((answer) => window.sidecar.answerBrainAppAction(request.requestId, answer));
-      }),
-    [],
-  );
+  useAppActionCarrier({
+    presentationOf,
+    changeMode,
+    errands,
+    feedback,
+    sessionView: sessions.view,
+    publishGuide,
+  });
 
   // The muted evidence run is the speaking run with the hint drawn over it: a
   // capture has no system output to read, so the state is asked for directly.
@@ -1978,132 +577,23 @@ export function App(): React.JSX.Element {
   // otherwise decides the captions does not stand in one.
   const lukeCaptions = fixtureSpeaking ? [FIXTURE_SPEAKING_CAPTION] : voiceView.lukeCaptions;
 
-  // A failed call is reported where its reply would have landed: on the
-  // caption strip, under the field or the key press that asked. It yields to
-  // live words, so it can never be drawn over a reply being spoken.
-  const voiceErrorNotice = voiceErrorToShow({
+  // The hint rides the caption it explains, and only over a silence the
+  // helper actually reported. "Got it" quiets it for this stretch of silence
+  // and any that follows too soon; the captions above it stay either way.
+  const volumeHint =
+    fixtureMuted ||
+    (outputSilent(outputAudio) &&
+      lukeCaptions !== undefined &&
+      !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
+  const caption = useCaptionPresentation({
+    lukeCaptions,
+    voiceError,
+    voiceNotice,
+    voiceTurn,
     fixtureSpeaking,
-    voice: voiceTurn,
-    error: voiceError,
+    volumeHint,
+    leavingPanel,
   });
-  // A state notice borrows the strip on the failure's own terms — leaving on
-  // the same clock, in its quieter tone — but yields only to Luke's own turn:
-  // the developer's open microphone draws nothing on the strip, and the one
-  // refusal that happens during it belongs there. The failure outranks it: a
-  // fault is the more urgent thing to read.
-  const voiceNoticeShown = voiceNoticeToShow({
-    fixtureSpeaking,
-    voice: voiceTurn,
-    notice: voiceNotice,
-  });
-  // What the caption block is being handed live this frame: Luke's words, a
-  // failure borrowing their strip, or a notice borrowing it more quietly.
-  const liveStripText = voiceErrorNotice ?? voiceNoticeShown;
-  const liveCaptionTexts =
-    lukeCaptions ?? (liveStripText === undefined ? undefined : [liveStripText]);
-  // Words is the resting tone, kept even when nothing is drawn, so a frame
-  // with no words never snapshots a coloured tone into the strip hold.
-  const captionLiveTone: CaptionTone =
-    lukeCaptions !== undefined || liveStripText === undefined
-      ? CAPTION_TONE.WORDS
-      : voiceErrorNotice !== undefined
-        ? CAPTION_TONE.ERROR
-        : CAPTION_TONE.NOTICE;
-
-  /**
-   * The pointer's hold on the strip. The words leave with the reply that
-   * earned them, and a failure leaves on its own clock — but never out from
-   * under a pointer resting on them, which is someone mid-read. The hold
-   * snapshots exactly what the strip was showing and keeps it drawn until the
-   * pointer moves away; it can start nothing, so nothing dismissed before the
-   * hover began is ever resurrected.
-   */
-  const [stripHovered, setStripHovered] = useState(false);
-  // Derived in the render, never advanced after paint: the frame that brings
-  // a new reply's content composes the hold against that same content, so a
-  // held snapshot can never paint one frame beside live words it should have
-  // yielded to. The ref carries the previous frame's answer.
-  const stripHoldRef = useRef<SpokenStripContent | undefined>(undefined);
-  const stripHold = stripHoldNext({
-    hovered: stripHovered,
-    drawn:
-      liveCaptionTexts === undefined
-        ? undefined
-        : { texts: liveCaptionTexts, tone: captionLiveTone },
-    held: stripHoldRef.current,
-  });
-  stripHoldRef.current = stripHold;
-
-  /**
-   * The strip's hoverable box, kept current for the window's move listener:
-   * the caption block's visible height — zero while no words are drawn, so an
-   * invisible block holds nothing. A ref rather than state, because the
-   * listener reads it at each move and re-subscribing per frame would be work
-   * for nobody.
-   */
-  const captionHoverHeight = useRef(0);
-  useEffect(() => {
-    // Forwarded moves arrive even while the window is click-through, which is
-    // what lets a pointer resting on words that take no pointer be seen here
-    // at all.
-    const handleMove = (event: MouseEvent) => {
-      const caption = captionElement.current;
-      setStripHovered(
-        pointOverStrip({
-          x: event.clientX,
-          y: event.clientY,
-          caption:
-            caption && captionHoverHeight.current > 0
-              ? {
-                  box: caption.getBoundingClientRect(),
-                  visibleHeight: captionHoverHeight.current,
-                }
-              : undefined,
-        }),
-      );
-    };
-    const handleLeave = () => setStripHovered(false);
-    window.addEventListener("mousemove", handleMove, { passive: true });
-    document.documentElement.addEventListener("mouseleave", handleLeave);
-    return () => {
-      window.removeEventListener("mousemove", handleMove);
-      document.documentElement.removeEventListener("mouseleave", handleLeave);
-    };
-  }, []);
-
-  /**
-   * The measured caption height the shape spends, held through a collapse
-   * out of the panel. The compact width lands at the flip and re-wraps the
-   * words while they are still riding down at the panel's foot, and a
-   * re-measure landing mid-ride would open the clip and retarget the surface
-   * past room nothing has made yet. The collapse travels on the panel's
-   * numbers; the compact re-measure lands when the shape has settled, and
-   * grows it there the way words arriving at rest do.
-   */
-  const heldCaptionHeight = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    if (leavingPanel) return;
-    heldCaptionHeight.current = captionTextHeight;
-  });
-  const shownCaptionHeight = leavingPanel ? heldCaptionHeight.current : captionTextHeight;
-
-  /**
-   * The one action a row's chip can ask for, handed to the main process by
-   * session identity. Unlike opening the session, it leaves the panel up: a
-   * refusal lands back on the row that asked.
-   */
-  const sessionWrites: SessionWriteHandlers = useMemo(
-    () => ({
-      openChange: (session) =>
-        act(ACT_KIND.SESSION_OPEN_CHANGE, {
-          identity: {
-            providerId: session.providerId,
-            providerSessionId: session.id,
-          },
-        }),
-    }),
-    [],
-  );
 
   /** The capsule is a button: pressing it opens the panel, or closes it again. */
   const handleCapsulePress = useCallback(
@@ -2177,10 +667,17 @@ export function App(): React.JSX.Element {
       // here lands where it would have in the flow this is standing in for.
       changeTab(PANEL_TAB.SETTINGS);
       setSettingsView(credentialSettingsPage(firstProvider.id));
-      beginEntry(firstProvider.id);
+      connections.beginEntry(firstProvider.id);
     }
     window.sidecar.notifyReady();
-  }, [state, applyAuthoritativeMode, applyPresentation, beginEntry, changeTab, setSettingsView]);
+  }, [
+    state,
+    applyAuthoritativeMode,
+    applyPresentation,
+    connections.beginEntry,
+    changeTab,
+    setSettingsView,
+  ]);
 
   // The mode main decided, and the two events only a window can be told: the
   // ask field summoned from any app, and the composer a spoken request opens.
@@ -2200,28 +697,22 @@ export function App(): React.JSX.Element {
       // open left waiting is taken up here, then forgotten.
       const feedbackKind = feedbackKindForLifecycleEvent(eventName);
       if (feedbackKind) {
-        const draft = spokenFeedbackDraft.current;
-        spokenFeedbackDraft.current = undefined;
         changeTab(PANEL_TAB.SETTINGS);
-        beginFeedback(feedbackKind, false, draft);
+        feedback.begin(feedbackKind, false, feedback.takeSpokenDraft());
       }
     });
     return () => {
       cancelHover();
       removeLifecycle();
     };
-  }, [applyAuthoritativeMode, beginFeedback, cancelHover, changeTab, summonAsk]);
-
-  // A Superset sign-in carried through to the end gives the panel back around
-  // the newly connected service. Only the wait's own slot is answered: a
-  // connection the document reports for any other reason has no slot standing
-  // to come back from.
-  useEffect(() => {
-    if (!supersetSignInHeld.current) return;
-    if (supersetSignIn.stage !== SUPERSET_SIGN_IN_STAGE.CONNECTED) return;
-    supersetSignInHeld.current = false;
-    if (presentationOf() === PANEL_PRESENTATION.SLOT) restorePanel();
-  }, [supersetSignIn, presentationOf, restorePanel]);
+  }, [
+    applyAuthoritativeMode,
+    cancelHover,
+    changeTab,
+    feedback.begin,
+    feedback.takeSpokenDraft,
+    summonAsk,
+  ]);
 
   // The one greeting an unauthed launch gets: the panel opens on the sign-in
   // gate exactly once, then behaves like any panel — Escape, the pointer, and
@@ -2281,7 +772,7 @@ export function App(): React.JSX.Element {
         if (presentation !== PANEL_PRESENTATION.PANEL) return;
         event.preventDefault();
         if (tab === PANEL_TAB.SETTINGS) openSettingsSearch();
-        else if (tab === PANEL_TAB.SESSIONS) openSearch();
+        else if (tab === PANEL_TAB.SESSIONS) sessions.openSearch();
         return;
       }
       if (event.key !== "Escape") return;
@@ -2313,16 +804,16 @@ export function App(): React.JSX.Element {
       // else it could mean. The sign-in wait and the consent connect borrow
       // the same shape, so the same key withdraws whichever is holding it.
       if (presentation === PANEL_PRESENTATION.SLOT) {
-        if (signInWaitNow() !== undefined) cancelSignIn();
-        else if (consentConnect.latest()) cancelConsentSignIn();
-        else credentialsEntry.cancel();
+        if (connections.signInWaitNow() !== undefined) connections.cancelSignIn();
+        else if (connections.consentWaiting()) connections.cancelConsentSignIn();
+        else connections.cancelEntry();
         return;
       }
       // Escape out of the composer leaves the shape and keeps the draft: a
       // note is longer than a key, and a key is the only thing Escape is
       // allowed to discard.
       if (presentation === PANEL_PRESENTATION.FEEDBACK) {
-        dismissFeedback();
+        feedback.control.dismiss();
         return;
       }
       if (presentation !== PANEL_PRESENTATION.PANEL) return;
@@ -2332,8 +823,8 @@ export function App(): React.JSX.Element {
       // The search field answers its own Escapes while the caret is in it —
       // clearing before closing — so the press that lands here is one made
       // from elsewhere in the panel, and it closes the field outright.
-      if (optionsOpen) setOptionsOpen(false);
-      else if (tab === PANEL_TAB.SESSIONS && searchOpen) closeSearch();
+      if (sessions.optionsOpen) sessions.closeOptions();
+      else if (tab === PANEL_TAB.SESSIONS && sessions.searchOpen) sessions.closeSearch();
       // The search field stands on whichever page it was opened over, so it
       // is the nearer layer than the page itself.
       else if (tab === PANEL_TAB.SETTINGS && settingsSearchOpen) closeSettingsSearch();
@@ -2346,25 +837,26 @@ export function App(): React.JSX.Element {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [
-    cancelSignIn,
-    consentConnect.latest,
-    cancelConsentSignIn,
-    credentialsEntry.cancel,
     changeMode,
     changeTab,
-    closeSearch,
     closeSettingsSearch,
-    dismissFeedback,
+    feedback.control.dismiss,
     discardListening,
-    openSearch,
     openSettingsSearch,
-    optionsOpen,
     presentation,
-    searchOpen,
+    sessions.closeOptions,
+    sessions.closeSearch,
+    sessions.openSearch,
+    sessions.optionsOpen,
+    sessions.searchOpen,
     settingsSearchOpen,
     setSettingsView,
     settingsView,
-    signInWaitNow,
+    connections.cancelConsentSignIn,
+    connections.cancelEntry,
+    connections.cancelSignIn,
+    connections.consentWaiting,
+    connections.signInWaitNow,
     speaking,
     stopSpeaking,
     tab,
@@ -2385,78 +877,10 @@ export function App(): React.JSX.Element {
     return () => window.clearInterval(timer);
   }, [presentation, state?.run.fixtureMode]);
 
-  // A press anywhere else is the same dismissal Escape is, and the one a sheet
-  // over a list has to answer: what is behind it can only be reached by asking
-  // it to move, so pressing there has to be what asks. The press is taken on the
-  // way down, before whatever it lands on can act on it, and the control that
-  // opened the sheet — toggle and, while a selection stands, the X that clears
-  // it — is left to its own clicks. Nothing outside the drawn shape reaches
-  // this renderer at all — those presses belong to whatever is behind Luke —
-  // so leaving the shape is what closes the panel, and closing the panel is
-  // what puts the sheet away.
-  useEffect(() => {
-    if (!optionsOpen) return;
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target instanceof Node ? event.target : undefined;
-      if (!target) return;
-      const sheet = document.getElementById(SESSION_OPTIONS_ID);
-      const control = document.getElementById(SESSION_OPTIONS_CONTROL_ID);
-      if (sheet?.contains(target) || control?.contains(target)) return;
-      setOptionsOpen(false);
-    };
-    window.addEventListener("pointerdown", handlePointerDown, { capture: true });
-    return () => window.removeEventListener("pointerdown", handlePointerDown, { capture: true });
-  }, [optionsOpen]);
-
   // Nothing is drawn over a state the window has not been told, nor over a
   // runtime that could not answer for the settings every row reads.
   if (!state || !settings || !display) return <div />;
 
-  const visibleSessions = displaySessions(state);
-  // The tally is taken before the list is narrowed — the capsule reports what
-  // Luke is watching, not what the panel is currently showing — but it reads
-  // in the list's own sort, so the wing's marks sit in the order the rows do.
-  const tally = sessionTally(visibleSessions, sessionView.sort);
-  const list = arrangeSessions(visibleSessions, sessionView);
-  // Dropping an emptied selection is a change of view, not a way of drawing
-  // one. Left in state it would lie dormant behind a list that only looks
-  // unnarrowed, and the next session to enter that state would narrow the list
-  // back down to it with nothing having been pressed. Setting state here rather
-  // than from an effect is what keeps that from being drawn first and corrected
-  // after. Only a roster actually read and holding sessions can prove a
-  // selection stale, though: before the first reading an empty list says "not
-  // looked yet", and an empty roster hides nothing behind a chip — either way
-  // a selection restored from the store is left to stand rather than wiped
-  // against a list that has nothing to show under any view.
-  if (
-    sessionsSettled &&
-    visibleSessions.length > 0 &&
-    !sameSessionFilters(list.filters, sessionView.filters)
-  ) {
-    setSessionView({ ...sessionView, filters: list.filters });
-  }
-  // The sheet exists only while there is something for it to decide, and its
-  // being open has to go when its button does — by the same rule the emptied
-  // filter follows. Left set behind a button nobody can see, Escape would spend
-  // itself closing a sheet that is not drawn instead of closing the panel, and
-  // the next session to arrive would open it again with nothing pressed.
-  const offerOptions = tab === PANEL_TAB.SESSIONS && list.total > 1;
-  if (optionsOpen && !offerOptions) setOptionsOpen(false);
-  // Search is offered on the options' own terms: one session leaves nothing
-  // to find that is not already on screen. Its being open goes when its button
-  // does — and the query goes with it, by the same rule the emptied filter
-  // follows, because a narrowing left in force behind no visible control would
-  // hide sessions with nothing admitting it. Only a roster actually read may
-  // decide that, on the emptied filter's own gate: an unread roster says
-  // nothing about how many sessions there are, and a search restored at
-  // launch must not be let go on its silence. The tab is not part of this
-  // gate: a search held while Settings shows is still the sessions tab's own
-  // state, waiting where the developer left it.
-  const offerSearch = tab === PANEL_TAB.SESSIONS && list.total > 1;
-  if (searchOpen && sessionsSettled && list.total <= 1) {
-    setSearchOpen(false);
-    if (sessionView.query !== "") setSessionView({ ...sessionView, query: "" });
-  }
   // Which clock the rows' ages are honest against. Fixture observations are
   // measured back from the fixture's own epoch precisely so that no capture
   // run reads them against the time it happened to run at.
@@ -2464,31 +888,6 @@ export function App(): React.JSX.Element {
   const shownAskHotkey = state.hotkeys.ask;
   const shownStopHotkey = state.hotkeys.stop;
   const hasAudioSignal = fixtureSpeaking || voiceTurn !== undefined;
-  const outputIsSilent = outputSilent(outputAudio);
-  // Live words win; the held snapshot only ever finishes being read. A held
-  // caption is drawn exactly as it was, its tone included.
-  const heldCaptionTexts = liveCaptionTexts === undefined ? stripHold?.texts : undefined;
-  const captionTexts = liveCaptionTexts ?? heldCaptionTexts;
-  const captionTone: CaptionTone =
-    liveCaptionTexts !== undefined ? captionLiveTone : (stripHold?.tone ?? CAPTION_TONE.WORDS);
-  // Two responses spoken back-to-back stack as two captions: the settled one
-  // above, the one still arriving below, in the always-mounted slot the lone
-  // caption also uses.
-  const settledCaption = captionTexts && captionTexts.length > 1 ? captionTexts.at(-2) : undefined;
-  const liveCaption = captionTexts?.at(-1);
-  // The hint rides the caption it explains, and only over a silence the
-  // helper actually reported. "Got it" quiets it for this stretch of silence
-  // and any that follows too soon; the captions above it stay either way.
-  const volumeHint =
-    fixtureMuted ||
-    (outputIsSilent &&
-      lukeCaptions !== undefined &&
-      !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
-  // What the hover test may match this frame, now that both are known.
-  captionHoverHeight.current =
-    captionTexts === undefined || captionTextHeight === undefined
-      ? 0
-      : captionBlockSize(captionTextHeight, volumeHint, captionPadding);
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
   const slotOpen = presentation === PANEL_PRESENTATION.SLOT;
   const feedbackOpen = presentation === PANEL_PRESENTATION.FEEDBACK;
@@ -2496,8 +895,8 @@ export function App(): React.JSX.Element {
   // What the slot's field is for depends on what answers for that provider now,
   // and settings resolve after the first render.
   const slotSource =
-    credentialsEntry.entry && settings
-      ? settings.credentialSources[credentialsEntry.entry.providerId]
+    connections.credentialEntry && settings
+      ? settings.credentialSources[connections.credentialEntry.providerId]
       : CREDENTIAL_SOURCE.NONE;
   const microphone: MicrophoneControl = {
     status: state.audio.microphoneStatus,
@@ -2548,19 +947,16 @@ export function App(): React.JSX.Element {
           ...(gateSettings.appleCalendarAvailable
             ? {
                 apple: {
-                  connecting:
-                    appleCalendarBusy ||
-                    consentConnect.entry?.serviceId === CONSENT_SERVICE_ID.APPLE_CALENDAR,
-                  onConnect: () => void connectAppleCalendar(),
+                  connecting: connections.appleCalendar.connecting,
+                  onConnect: connections.appleCalendar.onSignIn,
                 },
               }
             : undefined),
           ...(gateSettings.calendarSignInAvailable
             ? {
                 google: {
-                  connecting:
-                    consentConnect.entry?.serviceId === CONSENT_SERVICE_ID.GOOGLE_CALENDAR,
-                  onConnect: () => beginConsentSignIn(CONSENT_SERVICE_ID.GOOGLE_CALENDAR),
+                  connecting: connections.calendar.connecting,
+                  onConnect: connections.calendar.onSignIn,
                 },
               }
             : undefined),
@@ -2589,7 +985,7 @@ export function App(): React.JSX.Element {
       // Whether there are words to draw under the shape — a caption or a
       // failure borrowing its strip — so the surface can grow the room they
       // are drawn in.
-      data-caption={String(Boolean(captionTexts))}
+      data-caption={String(Boolean(caption.texts))}
       // Whether those words need the volume hint under them, which stands in
       // a band of its own below the caption block.
       data-volume-hint={String(volumeHint)}
@@ -2608,7 +1004,7 @@ export function App(): React.JSX.Element {
         // height of whichever is actually drawn.
         ...surfaceHeightStyle(
           panelHeight,
-          signInWait !== undefined
+          connections.signInWait !== undefined
             ? signInSlotHeight
             : slotOccupant.current === PANEL_STAND_DOWN.CONSENT ||
                 slotOccupant.current === PANEL_STAND_DOWN.SUPERSET
@@ -2616,7 +1012,7 @@ export function App(): React.JSX.Element {
               : slotHeight,
           feedbackHeight,
         ),
-        ...captionSizeStyle(shownCaptionHeight, volumeHint, captionPadding),
+        ...caption.style,
       }}
     >
       {/* Capsule, peek, slot and panel are all this one shape at different
@@ -2631,18 +1027,20 @@ export function App(): React.JSX.Element {
           <PanelBody
             accountRequired={state.run.accountRequired}
             account={state.account}
-            onBeginSignIn={beginSignIn}
-            {...(signInFailure ? { signInFailure } : undefined)}
+            onBeginSignIn={connections.beginSignIn}
+            {...(connections.signInFailure
+              ? { signInFailure: connections.signInFailure }
+              : undefined)}
             {...(calendarGate ? { calendarGate } : undefined)}
-            list={list}
+            list={sessions.list}
             sessionsSettled={sessionsSettled}
-            view={sessionView}
-            onViewChange={changeSessionView}
-            onFiltersChange={changeSessionFilters}
+            view={sessions.view}
+            onViewChange={sessions.onViewChange}
+            onFiltersChange={sessions.onFiltersChange}
             now={now}
-            onOpenSession={openSession}
-            onOpenSessionApplication={openSessionApplication}
-            writes={sessionWrites}
+            onOpenSession={sessions.onOpenSession}
+            onOpenSessionApplication={sessions.onOpenSessionApplication}
+            writes={sessions.writes}
             conversationLines={state.conversation.entries}
             liveConversationEntries={liveConversationEntries}
             onClearConversationConversation={clearConversationLines}
@@ -2651,13 +1049,15 @@ export function App(): React.JSX.Element {
             ask={askLuke}
             onAskEngaged={changeAskEngagement}
             {...(shownAskHotkey ? { askShortcut: shownAskHotkey } : undefined)}
-            offerOptions={offerOptions}
-            optionsOpen={optionsOpen}
-            onOptionsToggle={() => setOptionsOpen((open) => !open)}
-            offerSearch={offerSearch}
-            searchOpen={searchOpen}
-            onSearchToggle={() => (searchOpen ? closeSearch() : openSearch())}
-            onSearchClose={closeSearch}
+            offerOptions={sessions.offerOptions}
+            optionsOpen={sessions.optionsOpen}
+            onOptionsToggle={sessions.toggleOptions}
+            offerSearch={sessions.offerSearch}
+            searchOpen={sessions.searchOpen}
+            onSearchToggle={() =>
+              sessions.searchOpen ? sessions.closeSearch() : sessions.openSearch()
+            }
+            onSearchClose={sessions.closeSearch}
             settingsSearchOpen={settingsSearchOpen}
             onSettingsSearchToggle={() =>
               settingsSearchOpen ? closeSettingsSearch() : openSettingsSearch()
@@ -2688,60 +1088,14 @@ export function App(): React.JSX.Element {
               microphone,
               updates,
               settings,
-              credentials,
-              feedback: feedbackControl,
+              credentials: connections.credentials,
+              feedback: feedback.control,
               panelOpen,
-              workspaceProviders: workspaceProviderOptions,
-              calendar: {
-                choices: calendars,
-                held: slotHeldExcept(CONSENT_SERVICE_ID.GOOGLE_CALENDAR),
-                connecting: consentConnect.entry?.serviceId === CONSENT_SERVICE_ID.GOOGLE_CALENDAR,
-                onSignIn: () => beginConsentSignIn(CONSENT_SERVICE_ID.GOOGLE_CALENDAR),
-                onRemoveAccount: removeCalendarAccount,
-                onToggleCalendar: toggleCalendarSelected,
-                onRefresh: () => act(ACT_KIND.CALENDAR_REFRESH),
-              },
-              appleCalendar: {
-                choices: appleCalendarObserved?.calendars ?? [],
-                held: slotHeldExcept(CONSENT_SERVICE_ID.APPLE_CALENDAR),
-                connecting:
-                  appleCalendarBusy ||
-                  consentConnect.entry?.serviceId === CONSENT_SERVICE_ID.APPLE_CALENDAR,
-                onSignIn: () => void connectAppleCalendar(),
-                onDisconnect: disconnectAppleCalendar,
-                onToggleCalendar: toggleAppleCalendarSelected,
-                revoked: appleCalendarObserved?.revoked === true,
-              },
-              linear: {
-                held: slotHeldExcept(CONSENT_SERVICE_ID.LINEAR),
-                connecting: consentConnect.entry?.serviceId === CONSENT_SERVICE_ID.LINEAR,
-                onSignIn: () => beginConsentSignIn(CONSENT_SERVICE_ID.LINEAR),
-                onDisconnect: disconnectLinear,
-              },
-              superset: (() => {
-                const supersetAgentDefault =
-                  settings.workspaceAgentDefaults?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent;
-                const superset: SupersetControl = {
-                  installed: state.superset.installed,
-                  connected: supersetConnected,
-                  held: credentialHeld.current || consentConnectHeld.current,
-                  connecting: supersetSignInHeld.current,
-                  onConnect: beginSupersetSignIn,
-                  onDisconnect: disconnectSuperset,
-                  agents: [
-                    ...new Set(
-                      workspaceProjects
-                        .filter((project) => project.providerId === SUPERSET_WORKSPACE_PROVIDER_ID)
-                        .flatMap((project) => project.spawnableAgents ?? []),
-                    ),
-                  ],
-                  onDefaultAgentChange: changeSupersetAgentDefault,
-                };
-                if (supersetAgentDefault) {
-                  superset.defaultAgent = supersetAgentDefault;
-                }
-                return superset;
-              })(),
+              workspaceProviders: sessions.workspaceProviders,
+              calendar: connections.calendar,
+              appleCalendar: connections.appleCalendar,
+              linear: connections.linear,
+              superset: connections.supersetControl,
               onQuit: () => tell(ACT_KIND.WINDOW_QUIT),
               shortcuts,
               searchOpen: settingsSearchOpen,
@@ -2762,10 +1116,10 @@ export function App(): React.JSX.Element {
           consent-connect pills split the remaining case by which entry
           holds the slot. A pill held through an old exit must not resurface
           under another's wait. */}
-      {signInWait === undefined ? (
+      {connections.signInWait === undefined ? (
         <>
           <KeySlot
-            control={credentials}
+            control={connections.credentials}
             source={slotSource}
             drawn={slotOpen && slotOccupant.current === PANEL_STAND_DOWN.KEY}
             measure={slotElement}
@@ -2773,19 +1127,10 @@ export function App(): React.JSX.Element {
           {/* The panel stood down while a consent sign-in waits on the
               browser, on the key slot's exact terms. */}
           <ConsentConnectSlot
-            entry={consentConnect.entry}
+            entry={connections.consentEntry}
             drawn={slotOpen && slotOccupant.current === PANEL_STAND_DOWN.CONSENT}
-            onCancel={cancelConsentSignIn}
-            onReopen={() => {
-              // The page reopened is the one the waiting flow built, named by
-              // the service the entry says is waiting — no address from here.
-              // A wait with no page to reopen has no action in its row, and the
-              // slot draws no button for it either.
-              const waiting = consentConnect.latest()?.serviceId;
-              if (!waiting) return;
-              const acts = CONSENT_ACTIONS[waiting];
-              if ("reopen" in acts) acts.reopen();
-            }}
+            onCancel={connections.cancelConsentSignIn}
+            onReopen={connections.reopenConsentPage}
             onOpenSystemSettings={() => tell(ACT_KIND.CALENDAR_OPEN_SETTINGS)}
             measure={connectElement}
           />
@@ -2795,33 +1140,33 @@ export function App(): React.JSX.Element {
               drawn={slotOpen && slotOccupant.current === PANEL_STAND_DOWN.SUPERSET}
               onSubmit={(code) => tell(ACT_KIND.SUPERSET_SUBMIT_CODE, { code })}
               onReopen={() => tell(ACT_KIND.SUPERSET_REOPEN_SIGN_IN)}
-              onCancel={cancelSupersetSignIn}
-              onRetry={beginSupersetSignIn}
+              onCancel={connections.cancelSupersetSignIn}
+              onRetry={connections.beginSupersetSignIn}
               onChooseOrganization={(slug) => tell(ACT_KIND.SUPERSET_CHOOSE_ORGANIZATION, { slug })}
               measure={connectElement}
             />
           ) : null}
         </>
       ) : null}
-      {credentialsEntry.entry === undefined && consentConnect.entry === undefined ? (
+      {connections.credentialEntry === undefined && connections.consentEntry === undefined ? (
         /* The panel stood down to the account sign-in it is waiting on. */
         <SignInSlot
-          {...(signInWait ? { provider: signInWait } : undefined)}
+          {...(connections.signInWait ? { provider: connections.signInWait } : undefined)}
           drawn={slotOpen}
-          onCancel={cancelSignIn}
+          onCancel={connections.cancelSignIn}
           measure={signInSlotElement}
         />
       ) : null}
       {/* The panel stood down to the composer, on the same terms. */}
       <FeedbackSlot
-        control={feedbackControl}
+        control={feedback.control}
         drawn={feedbackOpen}
         measure={feedbackElement}
-        confirming={feedbackConfirming}
+        confirming={feedback.confirming}
         still={stillMotion}
       />
       <NotchWings
-        tally={tally}
+        tally={sessions.tally}
         level={voiceLevel}
         voiceActive={voiceActive}
         {...(voiceTurn ? { voice: voiceTurn } : undefined)}
@@ -2857,9 +1202,9 @@ export function App(): React.JSX.Element {
           be seen to move, and the way home is what lets a panel stood up for
           the errand stand back down. */}
       <LukeErrand
-        {...(errand ? { errand } : undefined)}
-        onLanded={releaseErrandChange}
-        onReturned={finishErrandFlight}
+        {...(errands.errand ? { errand: errands.errand } : undefined)}
+        onLanded={errands.onLanded}
+        onReturned={errands.onReturned}
       />
 
       {/* Luke's words while he says them: one element in every state, under
@@ -2879,15 +1224,15 @@ export function App(): React.JSX.Element {
           all. */}
       <span
         className="voice-caption"
-        ref={captionElement}
-        data-tone={captionTone}
-        {...(captionTone !== CAPTION_TONE.WORDS ? { role: "status" } : { "aria-hidden": true })}
+        ref={caption.ref}
+        data-tone={caption.tone}
+        {...(caption.tone !== CAPTION_TONE.WORDS ? { role: "status" } : { "aria-hidden": true })}
       >
-        <span className="voice-caption-stack" ref={captionTextElement}>
-          {settledCaption === undefined ? null : (
-            <MarkdownMessage className="voice-caption-text" words={settledCaption} />
+        <span className="voice-caption-stack" ref={caption.textRef}>
+          {caption.settled === undefined ? null : (
+            <MarkdownMessage className="voice-caption-text" words={caption.settled} />
           )}
-          <MarkdownMessage className="voice-caption-text" words={liveCaption ?? ""} />
+          <MarkdownMessage className="voice-caption-text" words={caption.live ?? ""} />
         </span>
       </span>
 
