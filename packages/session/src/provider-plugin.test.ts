@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ACT_RESULT_STATUS } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, UNSUPPORTED_BY_OBSERVATION } from "@sidecar/wire";
 import { ACT_KIND, SESSION_CONTROL_KIND } from "./advertised-acts.js";
 import {
   type ProviderControlRequest,
@@ -17,7 +17,6 @@ import {
   mergePlugins,
   pluginAsAdapter,
   type SessionProviderPlugin,
-  UNSUPPORTED_BY_OBSERVATION,
 } from "./provider-plugin.js";
 import type { ProviderSessionObservation } from "./session-shape.js";
 import { SESSION_STATUS } from "./session-status.js";

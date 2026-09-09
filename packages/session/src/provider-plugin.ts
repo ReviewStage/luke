@@ -1,4 +1,4 @@
-import { ACT_RESULT_STATUS } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, UNSUPPORTED_BY_OBSERVATION } from "@sidecar/wire";
 import type {
   ProviderActResult,
   ProviderConversationResult,
@@ -144,13 +144,11 @@ export function adapterAsPlugin(adapter: SessionProviderAdapter): SessionProvide
 }
 
 /**
- * The one refusal an absent handler or an unobserved target answers with. It
- * is deliberately the same wording for both: a caller learns that the latest
+ * The one answer an absent handler and an unobserved target both give. The
+ * wording is deliberately the same for both: a caller learns that the latest
  * observation does not support the act, and nothing about which of the two
  * reasons it was.
  */
-export const UNSUPPORTED_BY_OBSERVATION = "That act is not supported by the latest observation.";
-
 const unsupportedByObservation = {
   status: ACT_RESULT_STATUS.UNSUPPORTED,
   reason: UNSUPPORTED_BY_OBSERVATION,

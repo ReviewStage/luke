@@ -18,10 +18,10 @@ import {
   type SessionProvider,
   SessionProviderAdapterBase,
   sessionMessageText,
+  UNSUPPORTED_BY_OBSERVATION,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentSelection,
   type WorkspaceProject,
-  UNSUPPORTED_BY_OBSERVATION,
   workspaceNameText,
 } from "@sidecar/session";
 import type { CloudFetch, WireRecord } from "@sidecar/wire";

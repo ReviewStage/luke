@@ -28,6 +28,7 @@ import {
   SESSION_STATUS,
   type SessionProviderAdapter,
   type SessionProviderPlugin,
+  UNSUPPORTED_BY_OBSERVATION,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
 } from "@sidecar/session";
@@ -329,7 +330,7 @@ test("an act the plugin does not name answers unsupported and issues no request"
 
   const expected = {
     status: ACT_RESULT_STATUS.UNSUPPORTED,
-    reason: "That act is not supported by the latest observation.",
+    reason: UNSUPPORTED_BY_OBSERVATION,
   };
   assert.deepEqual(
     await dispatchAct(withoutActs, "message", { providerSessionId: SESSION_ID, text: "ship it" }),
@@ -382,7 +383,7 @@ test("a plugin that reports no projects is offered nowhere to create", async () 
     }),
     {
       status: ACT_RESULT_STATUS.UNSUPPORTED,
-      reason: "That act is not supported by the latest observation.",
+      reason: UNSUPPORTED_BY_OBSERVATION,
     },
   );
 });
@@ -420,7 +421,7 @@ test("a conversation read is refused for a session the pass did not report", asy
 
   assert.deepEqual(await dispatchConversation(plugin, { providerSessionId: ABSENT_SESSION_ID }), {
     status: ACT_RESULT_STATUS.UNSUPPORTED,
-    reason: "That act is not supported by the latest observation.",
+    reason: UNSUPPORTED_BY_OBSERVATION,
   });
   assert.equal(requests.length, from);
 });
