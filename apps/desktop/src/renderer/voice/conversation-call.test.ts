@@ -5,11 +5,9 @@ import { BRAIN_ASK_PENDING_STATUS, type BrainAskResult } from "@sidecar/brain/re
 import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/devtrace/vocabulary";
 import type { RealtimeConnection } from "@sidecar/hosted";
 import {
-  ARRIVAL_SPEECH_KIND,
   ASK_BRAIN_TOOL,
   BRIEFING_SPEECH_KIND,
   type BriefingSpeech,
-  CALENDAR_ONBOARDING_SPEECH_KIND,
   inputAudioAppendEvents,
   inputAudioFormatUpdateEvents,
   REALTIME_CLIENT_EVENT,
@@ -30,15 +28,15 @@ import {
   type MockTrackEvent,
 } from "#testing/realtime-fixtures";
 import type { SdkRealtimeTransport, SdkTransportFactoryOptions } from "./agents-realtime-transport";
+import { ConversationCall } from "./conversation-call";
 import {
   BRAIN_ASK_SETTLE_TIMEOUT_MS,
   quietIsLukesOwn,
   REALTIME_SETTLE_TIMEOUT_MS,
   REMOTE_QUIET_MS,
   REPLY_KIND,
-  RealtimeVoiceSession,
   type ReplyKind,
-} from "./realtime-session";
+} from "./speak-only-call";
 import { SpeechMouth } from "./speech-mouth";
 
 function sessionField(event: ParsedJsonObject | undefined): ParsedJsonObject | undefined {
@@ -65,7 +63,7 @@ interface ReplyEnding {
 }
 
 interface Harness {
-  session: RealtimeVoiceSession;
+  session: ConversationCall;
   sent: ParsedJsonObject[];
   errors: (string | undefined)[];
   /** Each caption emission: one text per stacked response, or a clear. */
@@ -311,7 +309,7 @@ function harness(
   let microphoneError = options.microphoneError;
   let microphoneGate: (() => void)[] | undefined;
   const pressCaptures: { stopped: boolean; feed: (samples: readonly number[]) => void }[] = [];
-  const sessionOptions: ConstructorParameters<typeof RealtimeVoiceSession>[0] = {
+  const sessionOptions: ConstructorParameters<typeof ConversationCall>[0] = {
     requestConnection: async () => {
       calls.push("credential-requested");
       if (options.connectionDelayMs) {
@@ -385,7 +383,7 @@ function harness(
       return askBrain(question);
     };
   }
-  const session = new RealtimeVoiceSession(sessionOptions);
+  const session = new ConversationCall(sessionOptions);
 
   return {
     session,
@@ -772,7 +770,7 @@ test("a remote track arriving with no stream is wrapped rather than dropped", as
   }
   globals.MediaStream = StubMediaStream;
   try {
-    await context.session.connect({ microphone: false });
+    await context.session.connect();
     context.deliverRemoteTrack([]);
   } finally {
     globals.MediaStream = previous;
@@ -1099,21 +1097,6 @@ test("a re-press released before its device arrives still delivers the sealed wo
   context.ungateMicrophone();
   await deviceArrives();
   assert.equal(context.microphoneStopped(), true);
-});
-
-test("a speak-only call captures nothing, however long a press waits", async () => {
-  const context = harness();
-
-  context.session.beginTurn();
-  assert.equal(await context.session.connect({ microphone: false }), true);
-  await deviceArrives();
-
-  // Luke's own call takes no device: one the press opened ahead of it is
-  // released the moment it answers, nothing is captured, and the press stays
-  // pending for the developer's call.
-  assert.deepEqual(context.pressCaptures, []);
-  assert.equal(context.session.turnPending, true);
-  assert.equal(context.microphoneEnabled(), false);
 });
 
 test("a press does not outlive the call it failed to open", async () => {
@@ -1805,22 +1788,6 @@ test("a developer turn is identified before its transcript returns", async () =>
   assert.deepEqual(context.spokenAskItems, ["item-1"]);
 });
 
-test("a speak-only call has no spoken turns to hand back", async () => {
-  const context = harness();
-  await context.session.connect({ microphone: false });
-
-  // The speak-only shape offers no microphone, so a transcription arriving on
-  // it speaks for nobody: the guard keeps a stray event from ever writing a
-  // developer line into the history.
-  context.emit({
-    type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED,
-    item_id: "item-1",
-    transcript: "how is the checkout agent doing?",
-  });
-
-  assert.deepEqual(context.spokenAsks, []);
-});
-
 test("the developer's spoken words preview as they are transcribed", async () => {
   const context = harness();
   await context.session.connect();
@@ -1851,26 +1818,6 @@ test("the developer's spoken words preview as they are transcribed", async () =>
   assert.deepEqual(context.spokenAskFailures, ["item-2"]);
 });
 
-test("a speak-only call has no spoken words taking shape either", async () => {
-  const context = harness();
-  await context.session.connect({ microphone: false });
-
-  // The completed transcript's microphone guard, applied to its preview and
-  // its failure alike.
-  context.emit({
-    type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_DELTA,
-    item_id: "item-1",
-    delta: "how is the",
-  });
-  context.emit({
-    type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_FAILED,
-    item_id: "item-1",
-  });
-
-  assert.deepEqual(context.spokenAskDeltas, []);
-  assert.deepEqual(context.spokenAskFailures, []);
-});
-
 test("a reply hands its words back as it ends, whole and once", async () => {
   const context = harness();
   await context.session.connect();
@@ -1897,86 +1844,6 @@ test("a reply hands its words back as it ends, whole and once", async () => {
   assert.deepEqual(context.replyEndings, [
     { texts: ["The checkout work is done."], kind: undefined },
   ]);
-});
-
-test("a briefing's reply hands its kind back with the words", async () => {
-  const context = harness();
-  await context.session.connect({ microphone: false });
-
-  context.session.speak(briefingAbout("session-a", "Claude Code finished checkout-service."));
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
-    item: { id: "item-1" },
-  });
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
-    item_id: "item-1",
-    delta: "Claude Code finished checkout-service.",
-  });
-  context.session.stopSpeaking();
-
-  // The kind rides along so the caller can record the spoken transcript as a
-  // briefing rather than an answer.
-  assert.deepEqual(context.replyEndings, [
-    {
-      texts: ["Claude Code finished checkout-service."],
-      kind: REPLY_KIND.BRIEFING,
-    },
-  ]);
-});
-
-test("an onboarding beat hands its words back as plain words", async () => {
-  const context = harness();
-  await context.session.connect({ microphone: false });
-
-  assert.equal(
-    context.session.speak({
-      kind: ARRIVAL_SPEECH_KIND,
-      sessionTitle: "Claude Code: checkout-service",
-      talkKeyLabel: "the right Option key",
-      decidedAt: Date.now(),
-    }),
-    true,
-  );
-  // The beat's turn is opened with no tools.
-  const response = context.sent.at(-1)?.response;
-  assert.ok(isRecord(response));
-  assert.equal(response.tool_choice, "none");
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
-    delta: "You're all set.",
-  });
-  settleReply(context);
-  assert.deepEqual(context.replyEndings, [{ texts: ["You're all set."], kind: undefined }]);
-
-  // The calendar beat keeps the same terms.
-  assert.equal(
-    context.session.speak({ kind: CALENDAR_ONBOARDING_SPEECH_KIND, decidedAt: Date.now() }),
-    true,
-  );
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
-    delta: "Your calendar can quiet me.",
-  });
-  settleReply(context);
-  assert.deepEqual(context.replyEndings.at(-1), {
-    texts: ["Your calendar can quiet me."],
-    kind: undefined,
-  });
-});
-
-test("a failed briefing delivery leaves no transcript for History", async () => {
-  const context = harness();
-  await context.session.connect({ microphone: false });
-  context.session.speak(briefingAbout("session-a", "Checkout finished."));
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
-    delta: "Checkout finished.",
-  });
-
-  context.closeChannel();
-
-  assert.deepEqual(context.replyEndings, []);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -3519,39 +3386,6 @@ test("a cancelled reply's late transcript cannot pollute the next caption", asyn
   );
 });
 
-test("a speak-only connect never asks for the microphone", async () => {
-  const context = harness();
-
-  assert.equal(await context.session.connect({ microphone: false }), true);
-
-  assert.equal(context.session.status, REALTIME_STATUS.READY);
-  // The device was never requested, so there is no permission to ask and no
-  // indicator to light.
-  assert.ok(!context.calls.includes("microphone-requested"));
-  // The SDK keeps one synthetic track negotiated; no real device rides it.
-  assert.equal(context.replacedTracks().length, 0);
-  assert.equal(context.silenceTrack.kind, "audio");
-  assert.equal(context.session.microphoneCall, false);
-});
-
-test("a speak-only call reads a briefing out but refuses the reply to a typed ask", async () => {
-  const context = harness();
-  await context.session.connect({ microphone: false });
-  const sentAfterConnect = context.sent.length;
-
-  assert.equal(context.session.speak(briefingAbout("session-a")), true);
-  assert.deepEqual(
-    context.sent.slice(sentAfterConnect).map((event) => event.type),
-    [REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
-  );
-  settleReply(context);
-
-  // A typed ask is a conversation, and Luke's own call is not one: the caller
-  // stands the call down and opens the developer's own, so the brain's reply
-  // to a typed ask is refused here.
-  assert.equal(context.session.speakReply("Stopped."), false);
-});
-
 test("an idle call stays open until the provider closes it", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const context = harness();
@@ -3734,26 +3568,6 @@ test("a call put away on purpose does not report itself as lost", async () => {
   await context.session.close();
 
   assert.deepEqual(reportedErrors(context), []);
-});
-
-test("the developer's call replaces Luke's own and keeps the waiting press", async () => {
-  const context = harness();
-  await context.session.connect({ microphone: false });
-
-  // The press lands while Luke's call is up: it cannot take a turn there, so
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // it waits as an intention rather than being lost.
-  context.session.beginTurn();
-  assert.equal(context.microphoneEnabled(), false);
-
-  assert.equal(await context.session.connect(), true);
-
-  // The replacement call has the microphone, and the waiting press opened its
-  // turn the moment the call could take one.
-  assert.equal(context.session.microphoneCall, true);
-  assert.ok(context.calls.includes("microphone-requested"));
-  assert.equal(context.microphoneEnabled(), true);
-  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
 });
 
 test("a reply voicing a run's end names that run when it ends, and a plain reply names none", async () => {

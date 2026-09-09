@@ -10,7 +10,7 @@ import { CONVERSATION_ENTRY_KIND, normalizeSession, SESSION_STATUS } from "@side
 import { APP_SETTING_DEFAULTS } from "@sidecar/settings";
 import { type AppSettings, appSettingsView, CLI_CONNECTION } from "@sidecar/settings/wire";
 import type { VoiceBootstrap } from "#shared/messages/session";
-import { REPLY_KIND } from "./realtime-session";
+import { REPLY_KIND } from "./speak-only-call";
 import {
   activeVoiceStream,
   applyVoiceBootstrap,

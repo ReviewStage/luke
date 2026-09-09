@@ -55,10 +55,16 @@ import {
 import { hostedVoiceUnavailableNote } from "../microphone-access";
 import { useStateWithRef } from "../use-state-with-ref";
 import { outputSilent } from "../volume-hint";
+import { ConversationCall } from "./conversation-call";
 import { HistoryReporter, withPendingLines } from "./history-reporter";
 import { openPreferredMicrophone } from "./microphone-choice";
-import { REPLY_KIND, RealtimeVoiceSession, type ReplyKind } from "./realtime-session";
 import { ReplyDeliveryPlayer } from "./reply-delivery-player";
+import {
+  REPLY_KIND,
+  type ReplyKind,
+  SpeakOnlyCall,
+  type SpeakOnlyCallOptions,
+} from "./speak-only-call";
 import { SpeechMouth } from "./speech-mouth";
 import { startVoiceLevelMeter } from "./voice-level-meter";
 
@@ -512,7 +518,15 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   const [typedAsk, setTypedAsk] = useState(false);
 
   const audioContext = useRef<AudioContext | undefined>(undefined);
-  const voiceSession = useRef<RealtimeVoiceSession | undefined>(undefined);
+  /**
+   * The two kinds of call this window can hold, each built at most once and
+   * only one of them ever standing: the developer's own, and the speak-only
+   * one Luke opens to read a notice out. They are two types rather than one
+   * call with a flag, so nothing on the announcer's path can reach a capture
+   * device or a tool — a {@link SpeakOnlyCall} has neither.
+   */
+  const conversationCall = useRef<ConversationCall | undefined>(undefined);
+  const speakOnlyCall = useRef<SpeakOnlyCall | undefined>(undefined);
   const mouth = useRef<SpeechMouth | undefined>(undefined);
   /** When the talk key went down, which is what tells a hold from a tap. */
   const talkPressedAt = useRef<number | undefined>(undefined);
@@ -828,18 +842,66 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     [publishConversation],
   );
 
-  const ensureVoiceSession = useCallback((): RealtimeVoiceSession => {
-    voiceSession.current ??= new RealtimeVoiceSession({
+  /**
+   * The callbacks and seams every call of either kind is built with. What a
+   * call may do with them is the call's own type: a speak-only one has no
+   * microphone member to open and declares no tools, so nothing here can
+   * widen it.
+   */
+  const callOptions = useCallback(
+    (): SpeakOnlyCallOptions => ({
       requestConnection: () => window.sidecar.requestRealtimeCredential(),
-      sessionConfig: (model) => {
+      // Read at each handshake rather than captured, so a voice or a pace
+      // changed between calls is the one the next call is configured with.
+      voice: () => {
         const settings = surroundingsNow().settings;
-        return realtimeSessionConfig({
-          model,
+        return {
           ...(settings?.voice ? { voice: settings.voice } : undefined),
           ...(settings?.voiceSpeed ? { speed: settings.voiceSpeed } : undefined),
-        });
+        };
       },
       audioElement: () => remoteAudio.current,
+      onStatus: setVoiceStatus,
+      onRemoteStream: setRemoteStream,
+      onError: setVoiceError,
+      onCaption: (texts, kind) => setVoiceCaption({ texts, kind }),
+      onReplyEnded: (texts, kind, runId) => {
+        if (kind === REPLY_KIND.BRIEFING) {
+          const generation = activeAnnouncementGenerationRef.current;
+          activeAnnouncementGenerationRef.current = undefined;
+          rememberConversationEntry(announcementConversationEntry(texts.join(" ")), generation);
+          return;
+        }
+        const generation = activeReplyGenerationRef.current;
+        activeReplyGenerationRef.current = undefined;
+        // A reply voicing a brain run's end is already in the thread, written
+        // by the main process from the record; the voice's rendering of it is
+        // not a second line. The reply names its own run, so a reply cut off
+        // by the next one cannot hand its attribution to it, and its ending
+        // is what lets the next delivered reply be offered.
+        if (runId !== undefined) {
+          replyPlayer.current?.onReplyEnded(runId);
+          return;
+        }
+        rememberConversationEntry(replyConversationEntry(texts.join(" ")), generation);
+      },
+      // The development trace's tap, checked at each event rather than at
+      // construction because the session outlives the bootstrap that says
+      // whether a writer stands behind the bridge. The audio is stripped
+      // here, before the event ever crosses the sandbox.
+      onWireEvent: (direction, event) => {
+        if (!surroundingsNow().agentTraceEnabled) return;
+        window.sidecar.recordAgentTrace({ direction, event: sanitizedTraceEvent(event) });
+      },
+    }),
+    [rememberConversationEntry, remoteAudio, setVoiceStatus, surroundingsNow],
+  );
+
+  /** The developer's own call, built once and reused across its connections. */
+  const ensureConversationCall = useCallback((): ConversationCall => {
+    conversationCall.current ??= new ConversationCall({
+      ...callOptions(),
+      onLocalStream: setLocalStream,
       // The press's device, chosen by facts read natively: the Mac's own
       // microphone where a Bluetooth headset would otherwise pay for the
       // capture with its music codec, the browser's default everywhere else.
@@ -905,31 +967,6 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
           runId: waited.record.runId,
         };
       },
-      onStatus: setVoiceStatus,
-      onLocalStream: setLocalStream,
-      onRemoteStream: setRemoteStream,
-      onError: setVoiceError,
-      onCaption: (texts, kind) => setVoiceCaption({ texts, kind }),
-      onReplyEnded: (texts, kind, runId) => {
-        if (kind === REPLY_KIND.BRIEFING) {
-          const generation = activeAnnouncementGenerationRef.current;
-          activeAnnouncementGenerationRef.current = undefined;
-          rememberConversationEntry(announcementConversationEntry(texts.join(" ")), generation);
-          return;
-        }
-        const generation = activeReplyGenerationRef.current;
-        activeReplyGenerationRef.current = undefined;
-        // A reply voicing a brain run's end is already in the thread, written
-        // by the main process from the record; the voice's rendering of it is
-        // not a second line. The reply names its own run, so a reply cut off
-        // by the next one cannot hand its attribution to it, and its ending
-        // is what lets the next delivered reply be offered.
-        if (runId !== undefined) {
-          replyPlayer.current?.onReplyEnded(runId);
-          return;
-        }
-        rememberConversationEntry(replyConversationEntry(texts.join(" ")), generation);
-      },
       onSpokenAskCommitted: (itemId) => {
         const mark = pendingSpokenTurnMarksRef.current.shift();
         if (mark) spokenTurnMarksRef.current.set(itemId, mark);
@@ -965,25 +1002,51 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       // No completed transcript is coming for this turn, so its preview
       // leaves the way its recorded line never arrives.
       onSpokenAskFailed: dropSpokenAskPreview,
-      // The development trace's tap, checked at each event rather than at
-      // construction because the session outlives the bootstrap that says
-      // whether a writer stands behind the bridge. The audio is stripped
-      // here, before the event ever crosses the sandbox.
-      onWireEvent: (direction, event) => {
-        if (!surroundingsNow().agentTraceEnabled) return;
-        window.sidecar.recordAgentTrace({ direction, event: sanitizedTraceEvent(event) });
-      },
     });
-    return voiceSession.current;
-  }, [
-    dropSpokenAskPreview,
-    remoteAudio,
-    rememberConversationEntry,
-    rememberSpokenAsk,
-    setVoiceStatus,
-    surroundingsNow,
-    tieSpokenTurnToRun,
-  ]);
+    return conversationCall.current;
+  }, [callOptions, dropSpokenAskPreview, rememberSpokenAsk, surroundingsNow, tieSpokenTurnToRun]);
+
+  /**
+   * The call Luke opens for himself. It carries no microphone and no tools by
+   * construction — {@link SpeakOnlyCall} has neither — so a briefing read out
+   * on it can never open a capture device or become an act.
+   */
+  const ensureSpeakOnlyCall = useCallback((): SpeakOnlyCall => {
+    speakOnlyCall.current ??= new SpeakOnlyCall(callOptions());
+    return speakOnlyCall.current;
+  }, [callOptions]);
+
+  /**
+   * The call now standing, whichever kind opened it — what a stop, a pace
+   * change, or the meter's report is for. With none open it is the
+   * developer's, which is who the next one belongs to.
+   */
+  const liveCall = useCallback((): SpeakOnlyCall | undefined => {
+    const conversation = conversationCall.current;
+    if (conversation?.isConnected || conversation?.isConnecting) return conversation;
+    const speakOnly = speakOnlyCall.current;
+    if (speakOnly?.isConnected || speakOnly?.isConnecting) return speakOnly;
+    return conversation ?? speakOnly;
+  }, []);
+
+  /**
+   * Stands Luke's own call down for the developer's, which is what the
+   * takeover is now that they are two calls: whatever it was reading out is
+   * cut where the developer's press or ask landed — the developer's turn
+   * always wins — and the call it was riding is put away rather than left
+   * open beside the one about to answer them.
+   */
+  const standDownSpeakOnlyCall = useCallback((): void => {
+    const speakOnly = speakOnlyCall.current;
+    if (!speakOnly?.isConnected && !speakOnly?.isConnecting) return;
+    speakOnly.stopSpeaking();
+    void speakOnly.close();
+  }, []);
+
+  /** Puts away whichever calls this window still holds. */
+  const closeCalls = useCallback(async (): Promise<void> => {
+    await Promise.all([conversationCall.current?.close(), speakOnlyCall.current?.close()]);
+  }, []);
 
   /**
    * Words the arrival beat from what is true at the moment it is spoken, not
@@ -1029,7 +1092,11 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     mouth.current ??= new SpeechMouth({
       settle: (id, outcome) => void window.sidecar.settleSpeech(id, outcome),
       session: () => {
-        const session = ensureVoiceSession();
+        // The developer's call while one stands — the mouth rides it rather
+        // than opening a second — and Luke's own speak-only call otherwise.
+        const developers = conversationCall.current;
+        const session: SpeakOnlyCall =
+          developers?.isConnected || developers?.isConnecting ? developers : ensureSpeakOnlyCall();
         return {
           get isConnected() {
             return session.isConnected;
@@ -1043,16 +1110,18 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
           get microphoneCall() {
             return session.microphoneCall;
           },
-          connect: (connectOptions: { microphone: false }) => session.connect(connectOptions),
+          connect: () => session.connect(),
           speak: (item) => {
-            if (item.kind !== ARRIVAL_SPEECH_KIND) {
-              const spoke = session.speak(item);
-              if (spoke) {
-                activeAnnouncementGenerationRef.current = conversationGenerationRef.current;
-              }
-              return spoke;
+            const arrival = item.kind === ARRIVAL_SPEECH_KIND;
+            const spoke = session.speak(arrival ? wordedArrival(item) : item);
+            // The generation the announcement was decided in, so a Clear
+            // while it is being read out keeps its words out of the thread
+            // that replaced it. An arrival beat is recorded as plain words
+            // and claims no announcement generation of its own.
+            if (spoke && !arrival) {
+              activeAnnouncementGenerationRef.current = conversationGenerationRef.current;
             }
-            return session.speak(wordedArrival(item));
+            return spoke;
           },
           stopSpeaking: () => session.stopSpeaking(),
           close: () => session.close(),
@@ -1060,7 +1129,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       },
     });
     return mouth.current;
-  }, [ensureVoiceSession, wordedArrival]);
+  }, [ensureSpeakOnlyCall, wordedArrival]);
 
   const stopMicrophone = useCallback(async () => {
     // The call is gone, so a tap-to-keep-open turn cannot still be open. Leaving
@@ -1068,8 +1137,8 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     // look like the end of that turn and do nothing.
     talkLatched.current = false;
     talkPressedAt.current = undefined;
-    await voiceSession.current?.close();
-  }, []);
+    await closeCalls();
+  }, [closeCalls]);
 
   // Voice arriving and voice going away. It is not read from bootstrap alone,
   // because it is not only true of a launch: a key entered in the panel turns
@@ -1115,9 +1184,9 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     );
     setVoiceError(undefined);
     setVoiceNotice(undefined);
-    const session = ensureVoiceSession();
-    return session.connect();
-  }, [ensureVoiceSession, surroundingsNow]);
+    standDownSpeakOnlyCall();
+    return ensureConversationCall().connect();
+  }, [ensureConversationCall, standDownSpeakOnlyCall, surroundingsNow]);
 
   /**
    * The press's way in: asks the system about the microphone, then opens the
@@ -1129,7 +1198,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
    */
   const startMicrophone = useCallback(async (): Promise<MicrophoneStatus> => {
     setVoiceError(undefined);
-    const session = ensureVoiceSession();
+    const session = ensureConversationCall();
     const permission = await window.sidecar.requestMicrophone();
     learnMicrophoneStatus(permission);
     if (permission !== MICROPHONE_STATUS.GRANTED) {
@@ -1142,7 +1211,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     }
     await startConversation();
     return permission;
-  }, [ensureVoiceSession, learnMicrophoneStatus, startConversation]);
+  }, [ensureConversationCall, learnMicrophoneStatus, startConversation]);
 
   /** The neutral note used when the hosted service's emergency brake refuses a call. */
   const hostedUnavailableNote = useCallback(async (): Promise<string | undefined> => {
@@ -1177,7 +1246,10 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     // A latched turn is already open. This press is someone saying they are
     // done, which is the release's to answer.
     if (talkLatched.current) return;
-    const session = ensureVoiceSession();
+    // Luke's own call goes now rather than when the developer's opens: the
+    // press is what stops him talking, whatever the handshake ahead of it.
+    standDownSpeakOnlyCall();
+    const session = ensureConversationCall();
     // The press is what opens a capture device, and the call under it may
     // have been opened by a typed ask, which asked the system for nothing.
     // So a press against anything but a granted microphone asks before the
@@ -1231,10 +1303,11 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       if (unavailable) setVoiceNotice(unavailable);
     }
   }, [
-    ensureVoiceSession,
+    ensureConversationCall,
     hostedUnavailableNote,
     learnMicrophoneStatus,
     microphoneStatusNow,
+    standDownSpeakOnlyCall,
     startMicrophone,
   ]);
 
@@ -1261,7 +1334,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       // permission prompt or a failed device swallowed it, must not latch, or
       // the next press would read as the end of a turn nobody is holding.
       if (
-        voiceSession.current?.turnPending === true ||
+        conversationCall.current?.turnPending === true ||
         voiceStatusNow() === REALTIME_STATUS.LISTENING
       ) {
         talkLatched.current = true;
@@ -1269,18 +1342,15 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       return;
     }
     talkLatched.current = false;
-    voiceSession.current?.endTurn(true);
+    conversationCall.current?.endTurn(true);
     // A held press let go of before the call opened is no longer always
     // dropped: its words were captured beside the handshake, and a press that
     // said something is still owed its turn — the session keeps it pending
     // and delivers it when the channel opens, so the meter rides until the
     // reply to it begins. One that said nothing leaves with its meter, as it
     // always did.
-    if (
-      voiceSession.current &&
-      !voiceSession.current.isConnected &&
-      !voiceSession.current.turnPending
-    ) {
+    const call = conversationCall.current;
+    if (call && !call.isConnected && !call.turnPending) {
       setTalkOpening(false);
     }
   }, [voiceStatusNow]);
@@ -1300,7 +1370,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   startConversationRef.current = startConversation;
   const ensureReplyPlayer = useCallback((): ReplyDeliveryPlayer => {
     replyPlayer.current ??= new ReplyDeliveryPlayer({
-      session: () => ensureVoiceSession(),
+      session: () => ensureConversationCall(),
       connect: () => startConversationRef.current(),
       claim: (offer) => window.sidecar.claimBrainReply(offer.runId, offer.deliveryId, offer.epoch),
       acknowledge: (offer) =>
@@ -1318,7 +1388,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       conversationGeneration: () => conversationGenerationRef.current,
     });
     return replyPlayer.current;
-  }, [ensureVoiceSession]);
+  }, [ensureConversationCall]);
 
   // The main process offering an ended run's reply. It offers one at a time,
   // only runs it watched end while this process ran, and only once their
@@ -1360,7 +1430,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   const discardListening = useCallback(() => {
     talkLatched.current = false;
     talkPressedAt.current = undefined;
-    voiceSession.current?.stopListening(false);
+    conversationCall.current?.stopListening(false);
   }, []);
 
   // The voice's own bootstrap, read once: the settings that shape a call,
@@ -1427,7 +1497,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   useEffect(() => {
     const unsubscribe = window.sidecar.onVoiceCommand(({ command }) => {
       if (command === VOICE_COMMAND.DISCARD_LISTENING) discardListening();
-      else if (command === VOICE_COMMAND.STOP_SPEAKING) voiceSession.current?.stopSpeaking();
+      else if (command === VOICE_COMMAND.STOP_SPEAKING) liveCall()?.stopSpeaking();
       else if (command === VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS) void requestMicrophoneAccess();
       else if (command === VOICE_COMMAND.CLEAR_CONVERSATION) clearConversation();
     });
@@ -1436,7 +1506,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       readiness.current?.uninstalled(VOICE_READINESS_PART.COMMANDS);
       unsubscribe();
     };
-  }, [clearConversation, discardListening, requestMicrophoneAccess]);
+  }, [clearConversation, discardListening, liveCall, requestMicrophoneAccess]);
 
   const heardSpeed = useRef<RealtimeVoiceSpeed | undefined>(undefined);
   const voiceSpeed = surroundings.settings?.voiceSpeed;
@@ -1445,8 +1515,8 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     const previous = heardSpeed.current;
     heardSpeed.current = voiceSpeed;
     if (!liveSpeedApplies(previous, voiceSpeed)) return;
-    voiceSession.current?.applySpeed(voiceSpeed);
-  }, [voiceSpeed]);
+    liveCall()?.applySpeed(voiceSpeed);
+  }, [liveCall, voiceSpeed]);
 
   const heardVoice = useRef<RealtimeVoice | undefined>(undefined);
   const voiceRestartDue = useRef(false);
@@ -1455,8 +1525,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     const decided = voiceRestartAction({
       previous: heardVoice.current,
       next: voice,
-      live:
-        voiceSession.current?.isConnected === true || voiceSession.current?.isConnecting === true,
+      live: liveCall()?.isConnected === true || liveCall()?.isConnecting === true,
       due: voiceRestartDue.current,
       status: voiceStatus,
     });
@@ -1466,10 +1535,10 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     // Reconnecting is the call's act, not a press: the device the old call
     // held went with its close, and the next press asks for its own.
     void (async () => {
-      await voiceSession.current?.close();
+      await closeCalls();
       await startConversation();
     })();
-  }, [voice, startConversation, voiceStatus]);
+  }, [closeCalls, liveCall, voice, startConversation, voiceStatus]);
 
   const activeStream = activeVoiceStream({
     status: voiceStatus,
@@ -1491,10 +1560,10 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     return startVoiceLevelMeter({
       stream: activeStream,
       audioContext: context,
-      onActivity: (active) => voiceSession.current?.reportRemoteAudioLevel(active),
+      onActivity: (active) => liveCall()?.reportRemoteAudioLevel(active),
       onLevel: (level) => window.sidecar.reportVoiceLevel(level),
     });
-  }, [activeStream]);
+  }, [activeStream, liveCall]);
 
   useEffect(() => {
     // The reply that answered the typed ask is over, so the caption goes
@@ -1515,7 +1584,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     if (
       !talkOpeningHolds({
         status: voiceStatus,
-        turnPending: voiceSession.current?.turnPending === true,
+        turnPending: conversationCall.current?.turnPending === true,
       })
     ) {
       setTalkOpening(false);
@@ -1635,15 +1704,15 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   // from the panel: the session itself answers whether there is a reply to
   // stop, so a press over silence simply does nothing.
   useEffect(
-    () => window.sidecar.onStopHotkeyPress(() => void voiceSession.current?.stopSpeaking()),
-    [],
+    () => window.sidecar.onStopHotkeyPress(() => void liveCall()?.stopSpeaking()),
+    [liveCall],
   );
 
   useEffect(
     () => () => {
-      void voiceSession.current?.close();
+      void closeCalls();
     },
-    [],
+    [closeCalls],
   );
 
   // Derived, not queued: the live lines arrive with the captions and die with
@@ -1691,7 +1760,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       return;
     }
     const kind = voiceExchangeKind({
-      microphoneCall: voiceSession.current?.microphoneCall === true,
+      microphoneCall: conversationCall.current?.microphoneCall === true,
       typedAsk: typedExchange.current,
     });
     typedExchange.current = false;
