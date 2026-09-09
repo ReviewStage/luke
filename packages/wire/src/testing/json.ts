@@ -34,11 +34,13 @@ export interface MutableWireRecord {
 export type ParsedJsonObject = WireRecord;
 
 /**
- * Whether a JSON value is an object rather than an array or a scalar. Read
- * through its runtime tag rather than `typeof`, which cannot tell an object
- * from `null` and says nothing about the value's contract.
+ * Whether a JSON value is an object rather than an array or a scalar —
+ * `isRecord` for the JSON vocabulary, which carries a `null` the wire
+ * vocabulary does not, and reading the same runtime tag and prototype.
  */
 export function isJsonObject(value: JsonValue | undefined): value is JsonObject {
-  if (value === null || value === undefined || Array.isArray(value)) return false;
-  return Object.prototype.toString.call(value) === "[object Object]";
+  if (value === null || value === undefined) return false;
+  if (Object.prototype.toString.call(value) !== "[object Object]") return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }

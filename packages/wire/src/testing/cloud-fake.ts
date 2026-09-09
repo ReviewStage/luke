@@ -1,4 +1,4 @@
-import type { CloudFetch } from "../http.js";
+import type { CloudFetch } from "../json.js";
 import { HTTP_STATUS, jsonResponse, type RecordedRequest, recordingFetch } from "./http-fake.js";
 import type { JsonValue } from "./json.js";
 
