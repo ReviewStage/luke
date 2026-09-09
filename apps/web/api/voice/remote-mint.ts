@@ -5,7 +5,7 @@ import { providerKey } from "../../server/db/schema.js";
 import { hostedUserId, oauthUserInfoFromAuthAnswer } from "../../server/hosted/bearer.js";
 import { VAULT_ENCRYPTION_ENVIRONMENT } from "../../server/hosted/encryption.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "../../server/hosted/openai.js";
-import { HOSTED_METER, spendHostedMeter } from "../../server/hosted/quota.js";
+import { spendHostedMeter } from "../../server/hosted/quota.js";
 import { handleRemoteVoiceMint } from "../../server/hosted/remote-voice-mint.js";
 
 /**
@@ -24,12 +24,7 @@ export default {
         hostedUserId(incoming, async (input) =>
           oauthUserInfoFromAuthAnswer(await auth.api.oauth2UserInfo(input)),
         ),
-      spend: (userId) =>
-        spendHostedMeter(getDatabase(), {
-          userId,
-          meter: HOSTED_METER.VOICE_CALL,
-          now: Date.now(),
-        }),
+      spend: (userId) => spendHostedMeter(getDatabase(), { userId, now: Date.now() }),
       encryptionSecret: process.env[VAULT_ENCRYPTION_ENVIRONMENT.SECRET],
       readVaultKeys: (userId) =>
         getDatabase()

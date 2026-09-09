@@ -208,7 +208,7 @@ function fakeService(upstream: ReturnType<typeof fakeUpstream>, allowance: { rem
       return Response.json(
         {
           error: "quota-exhausted",
-          quota: { used: 5000, limit: 5000, remaining: 0, resetsAt: NOW + 3_600_000 },
+          quota: { used: 5000, limit: 5000, resetsAt: NOW + 3_600_000 },
         },
         { status: 429 },
       );

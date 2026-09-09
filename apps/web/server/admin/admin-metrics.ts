@@ -48,14 +48,10 @@ const WEEK_MS = 7 * DAY_MS;
  */
 export const ADMIN_RETENTION_WEEKS = 8;
 
-export interface AdminUsageDay {
-  voiceCalls: number;
-  attentionReviews: number;
-}
-
-export interface AdminDailyUsage extends AdminUsageDay {
-  /** The UTC day the counters cover, as YYYY-MM-DD. */
+export interface AdminDailyUsage {
+  /** The UTC day the count covers, as YYYY-MM-DD. */
   day: string;
+  calls: number;
 }
 
 export interface AdminDailySignups {
@@ -160,9 +156,7 @@ export interface AdminTopUser {
   activeDays: number;
   /** The account's most recent active day inside the window, as YYYY-MM-DD. */
   lastActiveDay: string;
-  voiceCalls: number;
-  attentionReviews: number;
-  total: number;
+  calls: number;
 }
 
 export interface AdminDatabaseHealth {
@@ -227,10 +221,8 @@ export interface AdminMetrics {
     dailySignups: AdminDailySignups[];
   };
   featureUsage: {
-    voiceCallsToday: number;
-    attentionReviewsToday: number;
-    voiceCallsWindow: number;
-    attentionReviewsWindow: number;
+    callsToday: number;
+    callsWindow: number;
     activeUsersToday: number;
     /** Distinct accounts that spent anything in the window — the engaged base behind today's number. */
     activeUsersWindow: number;
@@ -244,8 +236,7 @@ export interface AdminMetrics {
     cohorts: AdminRetentionCohort[];
   };
   reliability: {
-    voiceDailyLimit: number;
-    attentionDailyLimit: number;
+    dailyLimit: number;
     /** (user, day) rows that reached a ceiling — throttling made visible, since a rejected call still counts. */
     quotaLimitedUserDaysToday: number;
     quotaLimitedUserDaysWindow: number;
@@ -274,7 +265,7 @@ export interface AdminMetricsSource {
     signupsByDay: ReadonlyMap<string, number>;
   };
   usage: {
-    byDay: ReadonlyMap<string, AdminUsageDay>;
+    byDay: ReadonlyMap<string, number>;
     activeUsersToday: number;
     activeUsersWindow: number;
     topUsers: readonly AdminTopUser[];
@@ -394,22 +385,16 @@ export function buildAdminMetrics(
     count: source.users.signupsByDay.get(day) ?? 0,
   }));
 
-  const daily = dayKeys.map((day) => {
-    const row = source.usage.byDay.get(day);
-    return {
-      day,
-      voiceCalls: row?.voiceCalls ?? 0,
-      attentionReviews: row?.attentionReviews ?? 0,
-    };
-  });
+  const daily = dayKeys.map((day) => ({
+    day,
+    calls: source.usage.byDay.get(day) ?? 0,
+  }));
 
   // Every windowed count is folded from the zero-filled series rather than
   // queried beside it: a rolling `now - 30 days` count and a series of whole
   // UTC days cover different spans, so two reads of "the last 30 days" would
   // disagree by the part-day between them and the page would contradict itself.
-  const voiceCallsWindow = sum(daily.map((day) => day.voiceCalls));
-  const attentionReviewsWindow = sum(daily.map((day) => day.attentionReviews));
-  const today = source.usage.byDay.get(todayKey);
+  const callsWindow = sum(daily.map((day) => day.calls));
 
   return {
     generatedAt: now,
@@ -425,17 +410,12 @@ export function buildAdminMetrics(
       dailySignups,
     },
     featureUsage: {
-      voiceCallsToday: today?.voiceCalls ?? 0,
-      attentionReviewsToday: today?.attentionReviews ?? 0,
-      voiceCallsWindow,
-      attentionReviewsWindow,
+      callsToday: source.usage.byDay.get(todayKey) ?? 0,
+      callsWindow,
       activeUsersToday: source.usage.activeUsersToday,
       activeUsersWindow: source.usage.activeUsersWindow,
       usageTrend: trailingTrend(
-        trendKeys.map((day) => {
-          const row = source.usage.byDay.get(day);
-          return (row?.voiceCalls ?? 0) + (row?.attentionReviews ?? 0);
-        }),
+        trendKeys.map((day) => source.usage.byDay.get(day) ?? 0),
         ADMIN_TREND_DAYS,
       ),
       daily,
@@ -446,8 +426,7 @@ export function buildAdminMetrics(
       cohorts: buildRetentionCohorts(source.retention, now),
     },
     reliability: {
-      voiceDailyLimit: HOSTED_DAILY_LIMIT,
-      attentionDailyLimit: HOSTED_DAILY_LIMIT,
+      dailyLimit: HOSTED_DAILY_LIMIT,
       quotaLimitedUserDaysToday: source.reliability.quotaLimitedUserDaysToday,
       quotaLimitedUserDaysWindow: source.reliability.quotaLimitedUserDaysWindow,
       analyticsConsoleUrl: source.reliability.analyticsConsoleUrl,

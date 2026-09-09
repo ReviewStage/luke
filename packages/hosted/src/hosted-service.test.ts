@@ -63,7 +63,7 @@ test("a mint answer round-trips through the wire reader, with or without a quota
     },
   });
 
-  const quota = { used: 1, limit: 5, remaining: 4, resetsAt: NOW + 3_600_000 };
+  const quota = { used: 1, limit: 5, resetsAt: NOW + 3_600_000 };
   const metered = hostedMintAnswerFromWire({ ...mintedWire(), quota }, NOW);
   assert.deepEqual(metered?.quota, quota);
 });

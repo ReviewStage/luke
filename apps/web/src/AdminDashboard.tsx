@@ -53,8 +53,6 @@ import { AUTH_BUTTON } from "./auth-surface";
 import {
   type ChartConfig,
   ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
 } from "./components/ui/chart";
@@ -478,21 +476,19 @@ function ChartHeading({ label, trend }: { label: string; trend: AdminTrend }): R
 }
 
 const USAGE_CHART = {
-  voiceCalls: { label: "Voice calls", color: "var(--chart-1)" },
-  attentionReviews: { label: "Attention reviews", color: "var(--chart-2)" },
+  calls: { label: "Hosted calls", color: "var(--chart-1)" },
 } satisfies ChartConfig;
 
 /**
- * A trailing-window stacked bar chart on shadcn/ui's chart primitives. Voice
- * and attention stack so one bar reads as a day's total while its split stays
- * visible; the tooltip carries each day's exact numbers, and the legend names
- * the two series. A window with no calls at all says so instead of drawing
- * the server's zero-fill as a flat measurement, and today's bar wears the
- * partial-day fade. Where a day has a roster to open, a click anywhere in a
- * day's column opens it — read from the chart's own axis datum, so either
- * stacked segment and the hover band between them land on the same day —
- * and the pointer says so; one account's chart passes no opener, because
- * its day needs no roster.
+ * A trailing-window bar chart on shadcn/ui's chart primitives. One series, so
+ * the heading names it and no legend box restates the heading; the tooltip
+ * carries each day's exact count. A window with no calls at all says so
+ * instead of drawing the server's zero-fill as a flat measurement, and
+ * today's bar wears the partial-day fade. Where a day has a roster to open, a
+ * click anywhere in a day's column opens it — read from the chart's own axis
+ * datum, so the bar and the hover band around it land on the same day — and
+ * the pointer says so; one account's chart passes no opener, because its day
+ * needs no roster.
  */
 function UsageChart({
   daily,
@@ -507,7 +503,7 @@ function UsageChart({
   generatedAt: number;
   onOpenDay?: (day: string) => void;
 }): React.JSX.Element {
-  if (seriesHasNoData(daily.map((point) => point.voiceCalls + point.attentionReviews))) {
+  if (seriesHasNoData(daily.map((point) => point.calls))) {
     return (
       <div className="rounded-lg border border-border bg-card p-5">
         <ChartHeading label={label} trend={trend} />
@@ -556,21 +552,7 @@ function UsageChart({
               />
             }
           />
-          <ChartLegend content={<ChartLegendContent />} />
-          <Bar dataKey="voiceCalls" stackId="calls" fill="var(--color-voiceCalls)">
-            {daily.map((point) => (
-              <Cell
-                key={point.day}
-                fillOpacity={point.day === partialDay ? PARTIAL_DAY_OPACITY : 1}
-              />
-            ))}
-          </Bar>
-          <Bar
-            dataKey="attentionReviews"
-            stackId="calls"
-            fill="var(--color-attentionReviews)"
-            radius={[4, 4, 0, 0]}
-          >
+          <Bar dataKey="calls" fill="var(--color-calls)" radius={[4, 4, 0, 0]}>
             {daily.map((point) => (
               <Cell
                 key={point.day}
@@ -612,16 +594,15 @@ function CalendarDayCell({
   onShow: (day: AdminDailyUsage, cell: HTMLElement) => void;
   onHide: () => void;
 }): React.JSX.Element {
-  const total = day.voiceCalls + day.attentionReviews;
   const provisional =
     day.day === partialDay ? " border border-dashed border-muted-foreground/60" : "";
   return (
     <div
       role="img"
-      aria-label={`${formatTooltipDay(day.day, partialDay)} — ${formatNumber(day.voiceCalls)} voice · ${formatNumber(day.attentionReviews)} attention`}
+      aria-label={`${formatTooltipDay(day.day, partialDay)} — ${formatNumber(day.calls)} hosted calls`}
       data-calendar-day={day.day}
-      className={`rounded-[3px] outline-offset-2 ${total === 0 ? "bg-muted/60" : ""}${provisional}`}
-      style={total === 0 ? undefined : calendarCellStyle(total, maxTotal)}
+      className={`rounded-[3px] outline-offset-2 ${day.calls === 0 ? "bg-muted/60" : ""}${provisional}`}
+      style={day.calls === 0 ? undefined : calendarCellStyle(day.calls, maxTotal)}
       onPointerEnter={(event) => onShow(day, event.currentTarget)}
       onPointerLeave={(event) => {
         // A move straight onto a sibling cell fires that cell's enter next,
@@ -725,7 +706,7 @@ function ActivityCalendar({
   const months = monthLabels(allWeeks).slice(allWeeks.length - weeks.length);
   const partialDay = partialDayKey(daily, generatedAt);
   const shownDays = weeks.flatMap((week) => week.days.filter((day) => day !== undefined));
-  const maxTotal = Math.max(...shownDays.map((day) => day.voiceCalls + day.attentionReviews), 0);
+  const maxTotal = Math.max(...shownDays.map((day) => day.calls), 0);
   const spanLabel =
     weeks.length === allWeeks.length
       ? "trailing year"
@@ -822,26 +803,17 @@ function ActivityCalendar({
           className="pointer-events-none absolute z-10 grid min-w-[8rem] items-start gap-1.5 rounded-lg border border-border/50 bg-card px-2.5 py-1.5 text-xs shadow-xl"
         >
           <div className="font-medium">{formatTooltipDay(anchor.day.day, partialDay)}</div>
-          <div className="grid gap-1.5">
-            {(
-              [
-                ["voiceCalls", anchor.day.voiceCalls],
-                ["attentionReviews", anchor.day.attentionReviews],
-              ] as const
-            ).map(([series, value]) => (
-              <div key={series} className="flex w-full items-center gap-2">
-                <div
-                  className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
-                  style={{ backgroundColor: USAGE_CHART[series].color }}
-                />
-                <div className="flex flex-1 items-center justify-between gap-4 leading-none">
-                  <span className="text-muted-foreground">{USAGE_CHART[series].label}</span>
-                  <span className="font-mono font-medium text-foreground tabular-nums">
-                    {formatNumber(value)}
-                  </span>
-                </div>
-              </div>
-            ))}
+          <div className="flex w-full items-center gap-2">
+            <div
+              className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+              style={{ backgroundColor: USAGE_CHART.calls.color }}
+            />
+            <div className="flex flex-1 items-center justify-between gap-4 leading-none">
+              <span className="text-muted-foreground">{USAGE_CHART.calls.label}</span>
+              <span className="font-mono font-medium text-foreground tabular-nums">
+                {formatNumber(anchor.day.calls)}
+              </span>
+            </div>
           </div>
         </div>
       ) : null}
@@ -2244,20 +2216,11 @@ function Dashboard({
         <RetentionNote />
 
         <SectionHeading>Feature usage · hosted tier</SectionHeading>
-        <StatGroup columns={2}>
-          <StatCard
-            label="Voice · today"
-            value={formatNumber(metrics.featureUsage.voiceCallsToday)}
-            hint={`${formatNumber(metrics.featureUsage.voiceCallsWindow)} in ${metrics.windowDays} days`}
-            grouped
-          />
-          <StatCard
-            label="Attention · today"
-            value={formatNumber(metrics.featureUsage.attentionReviewsToday)}
-            hint={`${formatNumber(metrics.featureUsage.attentionReviewsWindow)} in ${metrics.windowDays} days`}
-            grouped
-          />
-        </StatGroup>
+        <StatCard
+          label="Hosted calls · today"
+          value={formatNumber(metrics.featureUsage.callsToday)}
+          hint={`${formatNumber(metrics.featureUsage.callsWindow)} in ${metrics.windowDays} days`}
+        />
         <div className="mt-3">
           <UsageChart
             daily={metrics.featureUsage.daily}
@@ -2274,7 +2237,6 @@ function Dashboard({
           emptyText="No hosted-tier usage recorded in this window yet."
           minWidth={ACCOUNTS_TABLE_MIN_WIDTH.OVERVIEW}
           onOpen={onOpenAccount}
-          total={(row) => row.total}
         />
         <TopAccountsNote />
 
@@ -2293,13 +2255,11 @@ function Dashboard({
           />
         </StatGroup>
         <p className="mt-3 text-sm text-muted-foreground">
-          A hosted request that reaches a daily ceiling —{" "}
-          {formatNumber(metrics.reliability.voiceDailyLimit)} voice calls or{" "}
-          {formatNumber(metrics.reliability.attentionDailyLimit)} attention reviews per account per
-          day — is refused with <code className="font-mono text-xs">quota-exhausted</code>; the
-          count above is the closest rejection signal the service's own tables hold. Per-request
-          error rates and client-side failures are recorded as product-analytics events, which live
-          with{" "}
+          A hosted request that reaches the daily ceiling —{" "}
+          {formatNumber(metrics.reliability.dailyLimit)} calls per account per day — is refused with{" "}
+          <code className="font-mono text-xs">quota-exhausted</code>; the count above is the closest
+          rejection signal the service's own tables hold. Per-request error rates and client-side
+          failures are recorded as product-analytics events, which live with{" "}
           {metrics.reliability.analyticsConsoleUrl ? (
             <a
               href={metrics.reliability.analyticsConsoleUrl}
@@ -2649,16 +2609,11 @@ function UserDetailPage({
         </div>
 
         <SectionHeading>Volume</SectionHeading>
-        <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-3">
           <StatCard
-            label={`Voice · ${detail.windowDays} days`}
-            value={formatNumber(activity.voiceCallsWindow)}
-            hint={`${formatNumber(activity.allTime.voiceCalls)} all time`}
-          />
-          <StatCard
-            label={`Attention · ${detail.windowDays} days`}
-            value={formatNumber(activity.attentionReviewsWindow)}
-            hint={`${formatNumber(activity.allTime.attentionReviews)} all time`}
+            label={`Hosted calls · ${detail.windowDays} days`}
+            value={formatNumber(activity.callsWindow)}
+            hint={`${formatNumber(activity.allTime.calls)} all time`}
           />
           <StatCard
             label="Active days · all time"
@@ -2734,9 +2689,7 @@ function DayAccountsTable({
           <thead>
             <tr className="border-b border-border text-left font-mono text-xs text-muted-foreground uppercase">
               <th className="px-5 py-3 font-medium">Account</th>
-              <th className="px-5 py-3 text-right font-medium">Voice</th>
-              <th className="px-5 py-3 text-right font-medium">Attention</th>
-              <th className="px-5 py-3 text-right font-medium">Total</th>
+              <th className="px-5 py-3 text-right font-medium">Calls</th>
             </tr>
           </thead>
           <tbody>
@@ -2775,15 +2728,7 @@ function DayAccountsTable({
                     </div>
                   </a>
                 </td>
-                <td className="px-5 py-3 text-right tabular-nums">
-                  {formatNumber(row.voiceCalls)}
-                </td>
-                <td className="px-5 py-3 text-right tabular-nums">
-                  {formatNumber(row.attentionReviews)}
-                </td>
-                <td className="px-5 py-3 text-right font-semibold tabular-nums">
-                  {formatNumber(row.total)}
-                </td>
+                <td className="px-5 py-3 text-right tabular-nums">{formatNumber(row.calls)}</td>
               </tr>
             ))}
           </tbody>
@@ -2875,23 +2820,13 @@ function DayDetailPage({
         </div>
 
         <SectionHeading>Hosted tier · this day</SectionHeading>
-        <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3">
           <StatCard
             label="Active accounts"
             value={formatNumber(detail.totals.accounts)}
             hint={soFar}
           />
-          <StatCard
-            label="Voice calls"
-            value={formatNumber(detail.totals.voiceCalls)}
-            hint={soFar}
-          />
-          <StatCard
-            label="Attention reviews"
-            value={formatNumber(detail.totals.attentionReviews)}
-            hint={soFar}
-          />
-          <StatCard label="Total calls" value={formatNumber(detail.totals.total)} hint={soFar} />
+          <StatCard label="Hosted calls" value={formatNumber(detail.totals.calls)} hint={soFar} />
         </div>
 
         <SectionHeading>Accounts active this day</SectionHeading>
@@ -2947,8 +2882,7 @@ interface AccountsTableRow {
   admin: boolean;
   activeDays: number;
   lastActiveDay: string | null;
-  voiceCalls: number;
-  attentionReviews: number;
+  calls: number;
 }
 
 /** The sortable columns, one per header the roster draws. */
@@ -2958,8 +2892,7 @@ const ACCOUNTS_SORT_KEY = {
   LAST_SEEN: "lastSeen",
   ACTIVE_DAYS: "activeDays",
   LAST_ACTIVE: "lastActive",
-  VOICE: "voice",
-  ATTENTION: "attention",
+  CALLS: "calls",
 } as const;
 
 type AccountsSortKey = (typeof ACCOUNTS_SORT_KEY)[keyof typeof ACCOUNTS_SORT_KEY];
@@ -2979,8 +2912,7 @@ const ACCOUNTS_SORT_FIRST_DIRECTION = {
   [ACCOUNTS_SORT_KEY.LAST_SEEN]: SORT_DIRECTION.DESCENDING,
   [ACCOUNTS_SORT_KEY.ACTIVE_DAYS]: SORT_DIRECTION.DESCENDING,
   [ACCOUNTS_SORT_KEY.LAST_ACTIVE]: SORT_DIRECTION.DESCENDING,
-  [ACCOUNTS_SORT_KEY.VOICE]: SORT_DIRECTION.DESCENDING,
-  [ACCOUNTS_SORT_KEY.ATTENTION]: SORT_DIRECTION.DESCENDING,
+  [ACCOUNTS_SORT_KEY.CALLS]: SORT_DIRECTION.DESCENDING,
 } satisfies Record<AccountsSortKey, SortDirection>;
 
 /**
@@ -2997,8 +2929,7 @@ const SHARED_SORT_VALUE = new Map<
   [ACCOUNTS_SORT_KEY.ACCOUNT, (row) => accountLabel(row).toLowerCase()],
   [ACCOUNTS_SORT_KEY.ACTIVE_DAYS, (row) => row.activeDays],
   [ACCOUNTS_SORT_KEY.LAST_ACTIVE, (row) => row.lastActiveDay],
-  [ACCOUNTS_SORT_KEY.VOICE, (row) => row.voiceCalls],
-  [ACCOUNTS_SORT_KEY.ATTENTION, (row) => row.attentionReviews],
+  [ACCOUNTS_SORT_KEY.CALLS, (row) => row.calls],
 ]);
 
 /**
@@ -3166,7 +3097,7 @@ function StarIcon({ filled }: { filled: boolean }): React.JSX.Element {
  * the row for the pointer, and a real anchor on the name so a keyboard
  * reaches it and a modified click still gets the browser's own gesture. What
  * belongs to one surface is opted into — the roster's star column, sortable
- * headers, and detail columns, and the overview's Total.
+ * headers, and detail columns.
  */
 function AccountsTable<Row extends AccountsTableRow>({
   rows,
@@ -3175,7 +3106,6 @@ function AccountsTable<Row extends AccountsTableRow>({
   minWidth,
   onOpen,
   detailColumns = [],
-  total,
   sortable = false,
   favorite,
 }: {
@@ -3185,8 +3115,6 @@ function AccountsTable<Row extends AccountsTableRow>({
   minWidth: AccountsTableMinWidth;
   onOpen: (id: string) => void;
   detailColumns?: readonly AccountsDetailColumn<Row>[];
-  /** Draws the trailing Total column from this reading of a row. */
-  total?: (row: Row) => number;
   /** Sorts by any header's press, remembering the order chosen. */
   sortable?: boolean;
   /** Draws the leading star column: what a row's star shows, and what its press asks. */
@@ -3261,20 +3189,12 @@ function AccountsTable<Row extends AccountsTableRow>({
                 numeric
               />
               <AccountsHeader
-                label="Voice"
-                sortKey={ACCOUNTS_SORT_KEY.VOICE}
+                label="Calls"
+                sortKey={ACCOUNTS_SORT_KEY.CALLS}
                 sort={sort}
                 onSort={onSort}
                 numeric
               />
-              <AccountsHeader
-                label="Attention"
-                sortKey={ACCOUNTS_SORT_KEY.ATTENTION}
-                sort={sort}
-                onSort={onSort}
-                numeric
-              />
-              {total ? <th className="px-5 py-3 text-right font-medium">Total</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -3342,17 +3262,7 @@ function AccountsTable<Row extends AccountsTableRow>({
                 <td className="px-5 py-3 text-right tabular-nums">
                   {row.lastActiveDay === null ? "—" : formatDayTick(row.lastActiveDay)}
                 </td>
-                <td className="px-5 py-3 text-right tabular-nums">
-                  {formatNumber(row.voiceCalls)}
-                </td>
-                <td className="px-5 py-3 text-right tabular-nums">
-                  {formatNumber(row.attentionReviews)}
-                </td>
-                {total ? (
-                  <td className="px-5 py-3 text-right font-semibold tabular-nums">
-                    {formatNumber(total(row))}
-                  </td>
-                ) : null}
+                <td className="px-5 py-3 text-right tabular-nums">{formatNumber(row.calls)}</td>
               </tr>
             ))}
           </tbody>

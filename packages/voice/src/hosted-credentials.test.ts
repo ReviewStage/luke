@@ -9,7 +9,7 @@ const NOW = 1_800_000_000_000;
 const MODEL = "gpt-realtime-2.1";
 const WS_URL = `${HOSTED_WS_BASE_URL}?model=${MODEL}`;
 const SERVICE = "https://tryluke.dev";
-const QUOTA = { used: 3, limit: 50, remaining: 47, resetsAt: NOW + 3_600_000 };
+const QUOTA = { used: 3, limit: 50, resetsAt: NOW + 3_600_000 };
 
 function mintedBody(overrides: ParsedJsonObject = {}) {
   return {
@@ -157,7 +157,7 @@ test("a refresh that changes nothing is not retried and reads as signed out", as
 });
 
 test("a spent allowance is diagnosed with the quota the refusal carried", async () => {
-  const spent = { used: 51, limit: 50, remaining: 0, resetsAt: NOW + 3_600_000 };
+  const spent = { used: 51, limit: 50, resetsAt: NOW + 3_600_000 };
   const { fetchLike } = service([
     () => new Response(JSON.stringify({ error: "quota-exhausted", quota: spent }), { status: 429 }),
   ]);

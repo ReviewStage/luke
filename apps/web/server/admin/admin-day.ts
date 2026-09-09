@@ -34,16 +34,13 @@ export interface AdminDayAccount {
   /** The avatar URL the sign-in provider gave the account, when it gave one. */
   image: string | null;
   admin: boolean;
-  voiceCalls: number;
-  attentionReviews: number;
-  total: number;
+  calls: number;
 }
 
 /** The whole day's counts, over every account the scope keeps, past the row bound. */
 export interface AdminDayTotals {
   accounts: number;
-  voiceCalls: number;
-  attentionReviews: number;
+  calls: number;
 }
 
 /**
@@ -62,7 +59,7 @@ export interface AdminDayDetail {
   day: string;
   /** The bound `accounts` was read under, so the page can word a truncation. */
   limit: number;
-  totals: AdminDayTotals & { total: number };
+  totals: AdminDayTotals;
   /** The day's active accounts, busiest first, cut at the stated bound. */
   accounts: AdminDayAccount[];
 }
@@ -77,10 +74,7 @@ export function buildAdminDayDetail(
     generatedAt: now,
     day,
     limit: ADMIN_DAY_ACCOUNTS_LIMIT,
-    totals: {
-      ...source.totals,
-      total: source.totals.voiceCalls + source.totals.attentionReviews,
-    },
+    totals: source.totals,
     accounts: [...source.accounts],
   };
 }

@@ -218,7 +218,7 @@ test("a spent allowance stands the adapter down until the day's reset, a token r
       () => Response.json({ status: "completed", output: [{ type: "web_search_call", id: "ws" }] }),
       () =>
         Response.json(
-          { error: "quota-exhausted", quota: { used: 5000, limit: 5000, remaining: 0, resetsAt } },
+          { error: "quota-exhausted", quota: { used: 5000, limit: 5000, resetsAt } },
           { status: 429 },
         ),
     ],
@@ -269,7 +269,7 @@ test("a 429 that names the day's quota waits for the reset; a 429 that names the
     [HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2]: [
       () =>
         Response.json(
-          { error: "quota-exhausted", quota: { used: 5000, limit: 5000, remaining: 0, resetsAt } },
+          { error: "quota-exhausted", quota: { used: 5000, limit: 5000, resetsAt } },
           { status: 429, headers: { "retry-after": "5" } },
         ),
     ],

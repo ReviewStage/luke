@@ -35,7 +35,7 @@ const NOW = Date.parse("2026-09-07T12:00:00.000Z");
 const API_KEY = "sk-hosted-secret";
 const OPEN_SPEND: HostedSpend = {
   allowed: true,
-  quota: { used: 2, limit: 5_000, remaining: 4_998, resetsAt: NOW + 43_200_000 },
+  quota: { used: 2, limit: 5_000, resetsAt: NOW + 43_200_000 },
 };
 const INPUT: readonly WireRecord[] = [
   { type: "message", role: "user", content: [{ type: "input_text", text: "[ask] anything?" }] },

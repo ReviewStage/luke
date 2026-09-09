@@ -18,7 +18,7 @@ const API_KEY = "sk-hosted-secret";
 
 const OPEN_SPEND: HostedSpend = {
   allowed: true,
-  quota: { used: 1, limit: 5_000, remaining: 4_999, resetsAt: NOW + 43_200_000 },
+  quota: { used: 1, limit: 5_000, resetsAt: NOW + 43_200_000 },
 };
 
 interface RemoteMintRequestBody {
@@ -115,7 +115,7 @@ test("the remote mint gate order is method, kill switch, token, body, quota", as
     options({ fetch, request: mintRequest({ voice: "nobody" }) }),
   );
   assert.equal(malformed.status, 400);
-  const quota = { used: 5_000, limit: 5_000, remaining: 0, resetsAt: NOW + 1_000 };
+  const quota = { used: 5_000, limit: 5_000, resetsAt: NOW + 1_000 };
   const spent = await handleRemoteVoiceMint(
     options({ fetch, spend: async () => ({ allowed: false, quota }) }),
   );

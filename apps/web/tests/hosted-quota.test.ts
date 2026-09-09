@@ -3,7 +3,6 @@ import test from "node:test";
 import { hostedUsage, introductionUsage } from "../server/db/usage-schema";
 import {
   HOSTED_DAILY_LIMIT,
-  HOSTED_METER,
   spendHostedMeter,
   spendIntroductionMeter,
   utcDayEnd,
@@ -17,35 +16,32 @@ type UsageDatabase = Parameters<typeof spendHostedMeter>[0];
 interface HostedUsageInsert {
   userId: string;
   day: string;
-  voiceCalls: number;
-  attentionReviews: number;
+  calls: number;
 }
-
-type HostedUsageConflictSet = { voiceCalls: unknown } | { attentionReviews: unknown };
 
 interface RecordedUpsert {
   values?: HostedUsageInsert;
-  set?: HostedUsageConflictSet;
+  set?: { calls: unknown };
 }
 
 /**
  * A database that answers the one upsert the meter makes, recording what was
  * asked. The chain mirrors drizzle's fluent insert.
  */
-function usageDatabase(row: Pick<HostedUsageInsert, "voiceCalls" | "attentionReviews">) {
-  const calls: RecordedUpsert = {};
+function usageDatabase(calls: number) {
+  const recorded: RecordedUpsert = {};
   // SAFETY: Test double implements only the insert chain spendHostedMeter exercises.
   const database = {
     insert(table: typeof hostedUsage) {
       assert.equal(table, hostedUsage);
       return {
         values(values: HostedUsageInsert) {
-          calls.values = values;
+          recorded.values = values;
           return {
-            onConflictDoUpdate(update: { set: HostedUsageConflictSet }) {
-              calls.set = update.set;
+            onConflictDoUpdate(update: { set: { calls: unknown } }) {
+              recorded.set = update.set;
               return {
-                returning: async () => [{ ...values, ...row }],
+                returning: async () => [{ ...values, calls }],
               };
             },
           };
@@ -53,7 +49,7 @@ function usageDatabase(row: Pick<HostedUsageInsert, "voiceCalls" | "attentionRev
       };
     },
   } as unknown as UsageDatabase;
-  return { database, calls };
+  return { database, recorded };
 }
 
 test("a day key is the UTC date and resets at the following midnight", () => {
@@ -61,42 +57,24 @@ test("a day key is the UTC date and resets at the following midnight", () => {
   assert.equal(utcDayEnd("2026-08-17"), Date.parse("2026-08-18T00:00:00.000Z"));
 });
 
-test("spending a voice call increments only its own counter", async () => {
-  const { database, calls } = usageDatabase({ voiceCalls: 1, attentionReviews: 0 });
-  const spend = await spendHostedMeter(database, {
-    userId: "user-1",
-    meter: HOSTED_METER.VOICE_CALL,
-    now: NOON_UTC,
-  });
+test("a hosted spend increments the day's one counter", async () => {
+  const { database, recorded } = usageDatabase(1);
+  const spend = await spendHostedMeter(database, { userId: "user-1", now: NOON_UTC });
 
-  assert.deepEqual(
-    { userId: calls.values?.userId, day: calls.values?.day },
-    { userId: "user-1", day: "2026-08-17" },
-  );
-  assert.equal(calls.values?.voiceCalls, 1);
-  assert.equal(calls.values?.attentionReviews, 0);
-  assert.deepEqual(Object.keys(calls.set ?? {}), ["voiceCalls"]);
+  assert.deepEqual(recorded.values, { userId: "user-1", day: "2026-08-17", calls: 1 });
+  assert.deepEqual(Object.keys(recorded.set ?? {}), ["calls"]);
   assert.equal(spend.allowed, true);
   assert.deepEqual(spend.quota, {
     used: 1,
     limit: HOSTED_DAILY_LIMIT,
-    remaining: HOSTED_DAILY_LIMIT - 1,
     resetsAt: utcDayEnd("2026-08-17"),
   });
 });
 
-test("an attention review spends its own meter, not the voice one", async () => {
-  const { database, calls } = usageDatabase({ voiceCalls: 0, attentionReviews: 3 });
-  const spend = await spendHostedMeter(database, {
-    userId: "user-1",
-    meter: HOSTED_METER.ATTENTION_REVIEW,
-    now: NOON_UTC,
-  });
+test("every hosted operation spends the same counter", async () => {
+  const { database } = usageDatabase(3);
+  const spend = await spendHostedMeter(database, { userId: "user-1", now: NOON_UTC });
 
-  assert.equal(calls.values?.voiceCalls, 0);
-  assert.equal(calls.values?.attentionReviews, 1);
-  assert.deepEqual(Object.keys(calls.set ?? {}), ["attentionReviews"]);
-  assert.equal(spend.allowed, true);
   assert.equal(spend.quota.used, 3);
 });
 
@@ -156,32 +134,17 @@ test("the emergency ceiling stays high", () => {
   assert.equal(HOSTED_DAILY_LIMIT, 5_000);
 });
 
-test("each hosted ceiling allows its last use and refuses the next", async () => {
-  for (const meter of Object.values(HOSTED_METER)) {
-    const limit = HOSTED_DAILY_LIMIT;
-    const row =
-      meter === HOSTED_METER.VOICE_CALL
-        ? { voiceCalls: limit, attentionReviews: 0 }
-        : { voiceCalls: 0, attentionReviews: limit };
+test("the hosted ceiling allows its last use and refuses the next", async () => {
+  const atLimit = await spendHostedMeter(usageDatabase(HOSTED_DAILY_LIMIT).database, {
+    userId: "user-1",
+    now: NOON_UTC,
+  });
+  assert.equal(atLimit.allowed, true);
 
-    const atLimit = await spendHostedMeter(usageDatabase(row).database, {
-      userId: "user-1",
-      meter,
-      now: NOON_UTC,
-    });
-    assert.equal(atLimit.allowed, true);
-    assert.equal(atLimit.quota.remaining, 0);
-
-    const overRow =
-      meter === HOSTED_METER.VOICE_CALL
-        ? { voiceCalls: limit + 1, attentionReviews: 0 }
-        : { voiceCalls: 0, attentionReviews: limit + 1 };
-    const overLimit = await spendHostedMeter(usageDatabase(overRow).database, {
-      userId: "user-1",
-      meter,
-      now: NOON_UTC,
-    });
-    assert.equal(overLimit.allowed, false);
-    assert.equal(overLimit.quota.remaining, 0);
-  }
+  const overLimit = await spendHostedMeter(usageDatabase(HOSTED_DAILY_LIMIT + 1).database, {
+    userId: "user-1",
+    now: NOON_UTC,
+  });
+  assert.equal(overLimit.allowed, false);
+  assert.equal(overLimit.quota.used, HOSTED_DAILY_LIMIT + 1);
 });

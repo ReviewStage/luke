@@ -17,7 +17,7 @@ import type { HostedSpend } from "../server/hosted/quota";
 const NOW = Date.parse("2026-09-08T12:00:00.000Z");
 const OPEN_SPEND: HostedSpend = {
   allowed: true,
-  quota: { used: 2, limit: 5_000, remaining: 4_998, resetsAt: NOW + 43_200_000 },
+  quota: { used: 2, limit: 5_000, resetsAt: NOW + 43_200_000 },
 };
 
 function request(body: WireRecord | null): Request {
