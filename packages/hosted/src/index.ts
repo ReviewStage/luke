@@ -104,7 +104,7 @@ export {
   hostedErrorSchema,
   hostedQuotaSchema,
 } from "./service-wire.js";
-export { HostedVaultClient, type HostedVaultClientOptions } from "./vault-client.js";
+export { HostedVaultClient } from "./vault-client.js";
 export {
   VAULT_KEY_MAX_LENGTH,
   type VaultKeyDeleteAnswer,

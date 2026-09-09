@@ -1,8 +1,5 @@
 export {
   AccountClient,
-  AccountClientError,
-  type AccountIdentity,
-  type AccountTokens,
   accountGateOpen,
   type FetchLike,
   type StoredAccount,
