@@ -1,0 +1,17 @@
+{
+  "route": "POST /v0/sql",
+  "body": {
+    "rows": [
+      {
+        "session_id": "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50",
+        "agent_type": "claude_code"
+      },
+      {
+        "session_id": "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e51",
+        "agent_type": "codex"
+      }
+    ],
+    "rowCount": 2,
+    "truncated": false
+  }
+}

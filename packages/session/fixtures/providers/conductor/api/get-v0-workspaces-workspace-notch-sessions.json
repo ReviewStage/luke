@@ -1,0 +1,15 @@
+{
+  "route": "GET /v0/workspaces/workspace-notch/sessions",
+  "body": {
+    "data": [
+      {
+        "id": "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50",
+        "name": "Fix the flaky check",
+        "resolvedModel": "claude-opus-5",
+        "deepLink": "conductor://workspace?session=6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50"
+      }
+    ],
+    "offset": 0,
+    "hasMore": false
+  }
+}

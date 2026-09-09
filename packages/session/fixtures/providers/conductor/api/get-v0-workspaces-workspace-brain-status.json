@@ -1,0 +1,8 @@
+{
+  "route": "GET /v0/workspaces/workspace-brain/status",
+  "body": {
+    "workspaceId": "workspace-brain",
+    "status": "ready",
+    "updatedAt": "2026-09-01T08:57:00.000Z"
+  }
+}

@@ -59,7 +59,7 @@ export type ObservedClaudeHookEvent = ObservedHookEvent<ClaudeHookEvent>;
  * permission prompt and an open question — because those are exactly the
  * moments the transcript shows nothing new.
  */
-const CLAUDE_HOOK_SPEC: ObservationHookSpec<ClaudeHookEvent> = {
+export const CLAUDE_HOOK_SPEC: ObservationHookSpec<ClaudeHookEvent> = {
   scriptName: CLAUDE_HOOK_SCRIPT_NAME,
   configurationFileName: "settings.json",
   scriptTitle: "Luke Claude Code observation hook v1",

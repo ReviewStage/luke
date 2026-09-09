@@ -7,6 +7,7 @@ export * from "./composite-provider-adapter.js";
 export * from "./normalize.js";
 export * from "./provider-contract.js";
 export * from "./provider-identity.js";
+export * from "./provider-plugin.js";
 export * from "./session-filter.js";
 export * from "./session-identity.js";
 export * from "./session-registry.js";

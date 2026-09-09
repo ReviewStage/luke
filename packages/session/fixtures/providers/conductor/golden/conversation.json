@@ -1,0 +1,21 @@
+{
+  "firstOffset": 0,
+  "hasMore": false,
+  "hasOlder": false,
+  "lastMessageId": "2b0e0f00-0000-4000-8000-000000000004",
+  "messages": [
+    {
+      "author": "user",
+      "id": "2b0e0f00-0000-4000-8000-000000000001",
+      "receivedAt": 1788252960000,
+      "text": "Please fix the flaky check."
+    },
+    {
+      "author": "agent",
+      "id": "2b0e0f00-0000-4000-8000-000000000004",
+      "receivedAt": 1788253020000,
+      "text": "Parting words."
+    }
+  ],
+  "status": "accepted"
+}

@@ -1,0 +1,55 @@
+[
+  {
+    "advertises": [],
+    "applications": [],
+    "detail": {
+      "model": "grok-4.6",
+      "repository": "luke"
+    },
+    "lastActivityAt": 1788253020000,
+    "location": "local",
+    "provider": {
+      "displayName": "OMP",
+      "id": "omp"
+    },
+    "providerId": "omp",
+    "providerSessionId": "01a0540a-c238-7264-80d8-546b0c7be0d8",
+    "status": "waiting",
+    "title": "Fix the flaky check"
+  },
+  {
+    "advertises": [],
+    "applications": [],
+    "detail": {
+      "repository": "luke"
+    },
+    "lastActivityAt": 1788253140000,
+    "location": "local",
+    "provider": {
+      "displayName": "OMP",
+      "id": "omp"
+    },
+    "providerId": "omp",
+    "providerSessionId": "01a0540a-c238-7264-80d8-546b0c7be0d9",
+    "status": "working",
+    "title": "Rewrite the notch panel"
+  },
+  {
+    "advertises": [],
+    "applications": [],
+    "completionCause": "session-closed",
+    "detail": {
+      "repository": "luke"
+    },
+    "lastActivityAt": 1788252840000,
+    "location": "local",
+    "provider": {
+      "displayName": "OMP",
+      "id": "omp"
+    },
+    "providerId": "omp",
+    "providerSessionId": "01a0540a-c238-7264-80d8-546b0c7be0da",
+    "status": "complete",
+    "title": "luke"
+  }
+]

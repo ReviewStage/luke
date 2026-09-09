@@ -1,0 +1,123 @@
+[
+  {
+    "advertises": [
+      {
+        "kind": "message"
+      },
+      {
+        "controlKind": "archive",
+        "id": "archive-workspace",
+        "kind": "control",
+        "label": "Archive",
+        "target": "workspace-notch"
+      },
+      {
+        "kind": "rename-session"
+      },
+      {
+        "agents": [
+          "claude",
+          "codex",
+          "cursor"
+        ],
+        "kind": "add-agent",
+        "target": "workspace-notch"
+      },
+      {
+        "kind": "rename-workspace",
+        "target": "workspace-notch"
+      }
+    ],
+    "applications": [
+      {
+        "displayName": "Conductor",
+        "id": "conductor",
+        "link": "conductor://workspace?session=6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50",
+        "scope": "session"
+      }
+    ],
+    "detail": {
+      "link": "conductor://workspace?session=6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50",
+      "model": "claude_code · claude-opus-5",
+      "repository": "luke"
+    },
+    "lastActivityAt": 1788253020000,
+    "location": "cloud",
+    "provider": {
+      "displayName": "Conductor",
+      "id": "conductor"
+    },
+    "providerId": "conductor",
+    "providerSessionId": "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50",
+    "status": "waiting",
+    "title": "Fix the flaky check",
+    "workspace": {
+      "managerName": "Conductor",
+      "name": "notch-panel",
+      "providerWorkspaceId": "workspace-notch",
+      "scopeId": "conductor"
+    }
+  },
+  {
+    "advertises": [
+      {
+        "kind": "message"
+      },
+      {
+        "controlKind": "stop",
+        "id": "cancel-turn",
+        "kind": "control",
+        "label": "Stop this turn"
+      },
+      {
+        "kind": "rename-session"
+      },
+      {
+        "agents": [
+          "claude",
+          "codex",
+          "cursor"
+        ],
+        "kind": "add-agent",
+        "target": "workspace-brain"
+      },
+      {
+        "kind": "rename-workspace",
+        "target": "workspace-brain"
+      }
+    ],
+    "agent": {
+      "displayName": "Codex",
+      "id": "codex"
+    },
+    "applications": [
+      {
+        "displayName": "Conductor",
+        "id": "conductor",
+        "link": "conductor://workspace?session=6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e51",
+        "scope": "session"
+      }
+    ],
+    "detail": {
+      "link": "conductor://workspace?session=6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e51",
+      "model": "gpt-5.6-terra",
+      "repository": "luke"
+    },
+    "lastActivityAt": 1788253140000,
+    "location": "cloud",
+    "provider": {
+      "displayName": "Conductor",
+      "id": "conductor"
+    },
+    "providerId": "conductor",
+    "providerSessionId": "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e51",
+    "status": "working",
+    "title": "Rewrite the notch panel",
+    "workspace": {
+      "managerName": "Conductor",
+      "name": "brain-turns",
+      "providerWorkspaceId": "workspace-brain",
+      "scopeId": "conductor"
+    }
+  }
+]

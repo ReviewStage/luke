@@ -1,0 +1,6 @@
+{
+  "route": "GET /me",
+  "body": {
+    "userId": "user-under-observation"
+  }
+}

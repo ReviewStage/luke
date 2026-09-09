@@ -1,0 +1,7 @@
+{
+  "route": "POST /v0/workspaces/workspace-notch/archive",
+  "body": {
+    "workspaceId": "workspace-notch",
+    "status": "archived"
+  }
+}

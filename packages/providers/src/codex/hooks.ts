@@ -58,7 +58,7 @@ export type ObservedCodexHookEvent = ObservedHookEvent<CodexHookEvent>;
  * database shows nothing new — and the entry only observes it: the command
  * always exits zero, so nothing here can answer the request.
  */
-const CODEX_HOOK_SPEC: ObservationHookSpec<CodexHookEvent> = {
+export const CODEX_HOOK_SPEC: ObservationHookSpec<CodexHookEvent> = {
   scriptName: CODEX_HOOK_SCRIPT_NAME,
   configurationFileName: "hooks.json",
   scriptTitle: "Luke Codex observation hook v1",
