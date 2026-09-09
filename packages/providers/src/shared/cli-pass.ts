@@ -36,12 +36,6 @@ export const CLI_ADAPTER_DEFAULTS = {
   MAXIMUM_OUTPUT_BYTES: 4 * 1024 * 1024,
 } as const;
 
-/**
- * Where provider CLIs actually land on a Mac. An app launched from the Finder
- * inherits a PATH without the package-manager directories a terminal adds, so
- * these are appended after the inherited PATH — never ahead of it, so a binary
- * the user's own shell would resolve still wins.
- */
 export interface CliRunResult {
   exitCode: number;
   stdout: string;

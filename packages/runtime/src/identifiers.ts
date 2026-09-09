@@ -116,7 +116,6 @@ export function childIdOf(key: SessionKey | string): string | undefined {
   return parsed?.rest.length === 2 && segment === SUBAGENT_SEGMENT ? childId : undefined;
 }
 
-/** The agent a child key belongs to. */
 export function childAgentOf(key: SessionKey | string): AgentId | undefined {
   const parsed = parsedSessionKey(key);
   return parsed && parsed.rest[0] === SUBAGENT_SEGMENT ? agentId(parsed.agent) : undefined;

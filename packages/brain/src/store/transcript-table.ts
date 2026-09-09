@@ -102,7 +102,6 @@ function transcriptPayload(
 }
 
 export interface TranscriptListOptions {
-  /** Only events after this sequence. */
   afterSequence?: number;
   limit?: number;
 }

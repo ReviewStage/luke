@@ -22,7 +22,6 @@ export interface BrainTurnTraceRecord {
   runtime: string;
   /** The tools the effective policy offered, by name. */
   tools: readonly string[];
-  /** How long the prepared prompt was, in characters. */
   promptChars: number;
   inputTokens?: number;
   transcriptBytes: number;

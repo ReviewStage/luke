@@ -151,19 +151,9 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
   [CREDENTIAL_PROVIDER_ID.OPENAI]: {
     id: CREDENTIAL_PROVIDER_ID.OPENAI,
     connection: CREDENTIAL_CONNECTION.KEY,
-    // The service, plainly. The row stands inside the section that already
-    // says what it is for — the other way voice can run — so the name has no
-    // acronym to carry: "BYOK" named the choice for anyone who already knew
-    // the word, and named nothing for everyone else.
     displayName: "OpenAI",
-    // No description, alone among the providers, because its section says
-    // everything one could: the toggle above the row names both sources and
-    // what each costs, and the disclosure below it says what the key is spent
-    // on and who bills for it. A sentence between them could only repeat one
-    // of the two.
-    // Realtime is what a spoken turn runs on, and an account that cannot reach
-    // it fails at the first word rather than at the paste — so the line says so
-    // before the key is entered rather than after.
+    // No description, alone among the providers: the toggle above the row and
+    // the disclosure below it already say everything a sentence could.
     hint: {
       lead: "Create a key on the OpenAI platform under",
       destination: "API keys",
@@ -192,15 +182,13 @@ export const CREDENTIAL_PROVIDER_LIST: readonly CredentialProvider[] =
 const INTEGRATION_IDS: ReadonlySet<CredentialProviderId> = new Set([CREDENTIAL_PROVIDER_ID.LINEAR]);
 
 /**
- * The one key Luke speaks through, and asks about a session with. Named here so
- * the main process reads it by what it is for rather than by an id spelled out
- * at each of the places that build something from it. Its row lives on the
- * Voice page rather than under Connections, because the key is what turns
- * voice on and the page that goes quiet without one is where that is learned.
+ * The one key Luke speaks through, and asks about a session with. Its row
+ * lives on the Voice page rather than under Connections, because the key is
+ * what turns voice on and the page that goes quiet without one is where that
+ * is learned.
  */
 export const VOICE_CREDENTIAL_PROVIDER_ID = CREDENTIAL_PROVIDER_ID.OPENAI;
 
-/** The one provider the Voice page holds a key for. */
 export const VOICE_CREDENTIAL_PROVIDER: CredentialProvider =
   CREDENTIAL_PROVIDERS[VOICE_CREDENTIAL_PROVIDER_ID];
 

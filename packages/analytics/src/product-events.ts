@@ -389,7 +389,6 @@ export function productSessionCountBucket(count: number): ProductSessionCountBuc
   );
 }
 
-/** What each property's value is, once it has been read. */
 interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.APP_VERSION]: string;
   [PRODUCT_EVENT_PROPERTY.CONNECTION_ID]: CredentialProviderId;

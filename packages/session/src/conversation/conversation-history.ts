@@ -3,31 +3,16 @@
  * of the wire. A Realtime call is a transport that comes and goes — the
  * announcer's speak-only call is torn down by the very talk-key press that
  * asks about it, and the developer's call retires when idle — so the thread
- * itself is kept here, as a record of what was already said and done during
- * this app launch. A bounded recent slice is re-fed to whichever call the
- * developer opens next; the retained thread remains available to the
- * developer in the panel until they clear it.
- *
- * Every panel window draws the same thread. The window that appends a line
- * reports the whole thread to its own main process, which holds the launch's
- * copy for a panel that opens late and mirrors each report to every other
- * display's panel — the relay never leaves the machine.
+ * itself is kept here, and a bounded recent slice is re-fed to whichever call
+ * the developer opens next.
  *
  * Every line already traveled to the voice service once, on the call that
  * said it: the developer's own asks — typed, or spoken and handed back as
  * text by the service that heard them — the words Luke spoke or announced,
  * and the acts he carried at the developer's ask. Nothing else may enter —
  * not a roster, not a transcript rendering, not an outcome a provider
- * answered with.
- *
- * The thread outlives the app. What is stored is exactly what that rule
- * already admits — words that were said, each of which reached the voice
- * service once on the call that said it — and never a claim Luke formed
- * about the developer, which is a different kind of thing kept somewhere
- * else. So the justification above holds across a launch unchanged: quitting
- * and coming back is the same continuity a retired call already has, one
- * boundary further out. Only the retention changes, because "dies with the
- * app" was itself a policy and persisting means replacing it with a real one.
+ * answered with — and never a claim Luke formed about the developer, which is
+ * a different kind of thing kept somewhere else.
  */
 
 import {
@@ -99,13 +84,6 @@ export const maximumConversationEntryLength = 400;
  * of its own: every word already traveled to the voice service once on the
  * call that said it, so keeping it whole changes what the panel can show back,
  * not what leaves the machine.
- *
- * At this size continuity needs no retrieval: quitting and returning to the
- * last twenty lines is the whole of it, and the panel simply draws the rest.
- * Retrieval starts to matter only if the model's slice stops being the recent
- * slice — if a turn should be able to reach back to something said last month
- * rather than last night. That is a different feature with a different budget,
- * and nothing here anticipates it.
  */
 export const maximumStoredConversationEntries = 200;
 export const storedConversationMaximumAgeMs = 14 * 24 * 60 * 60 * 1000;
@@ -441,14 +419,12 @@ const CONVERSATION_ENTRY_LEAD = {
  * opening says what was talked about at a fraction of the cost the whole
  * would spend — while the thread behind it keeps the full words, newlines
  * and all, for the panel.
- * Each line carries its identity only while the roster
- * still observes that session: the words are history and stay, but an
- * identity the roster no longer reports is one no tool call may name, and a
- * line still offering it would steer "that chat" toward a guaranteed refusal.
- * The departure is said rather than left blank — a line that merely fell
- * silent reads like one that never named a session, and an ask pointed at it
- * would be resolved by guessing among the sessions still observed. The fixed
- * note is what the standing instructions teach: gone, so say so or ask.
+ *
+ * A line carries its identity only while the roster still observes that
+ * session, and says so in place of the ids once it does not: a line that
+ * merely fell silent reads like one that never named a session, and an ask
+ * pointed at it would be resolved by guessing among the sessions still
+ * observed.
  */
 export function conversationHistoryText(
   entries: readonly ConversationEntry[],

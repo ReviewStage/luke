@@ -1,31 +1,5 @@
 import type { HistoryErasure } from "../store-wiring.js";
 
-/**
- * Delete history, in the order that makes a late arrival harmless and the
- * erasure recoverable. The fences come first and are synchronous: the relayed
- * thread is emptied and every window told, and the brain's generation is
- * fenced in the same breath — the store forgets it and announces the empty
- * successor before waiting on anything, so every run and every turn of the
- * old lifetime loses its execution at once and a late model answer, act
- * result, or checkpoint of it lands nowhere. The successor's marker is then
- * written over the old content, and only once it is durable does the store
- * remove what stood at or before the press: the lines and transcript of that
- * instant and earlier, in one transaction with the compressed recovery
- * archive and the raised cutoff, while a line accepted after the press stays
- * and the successor lifetime stands. Nothing is retired or reopened: the same
- * brain works on from the empty successor, and a credential rebuild landing
- * meanwhile builds over the same store, whose standing generation is that
- * successor.
- *
- * The answer is honest about each seam: complete only when the archive file
- * is published and verified; incomplete when the rows are gone and the
- * archive committed but not yet on disk, which the next launch retries; and
- * refused when the marker could not be written or the store did not take the
- * deletion — the fences stand either way, the old content is out of every
- * context and every window, and the next write that lands replaces what the
- * disk kept, so the developer sees an emptied History and is told the
- * erasure did not finish, never that it did.
- */
 /** The durable cutoff as read, which may itself be absent when no deletion ever raised one. */
 export interface CutoffBefore {
   value: number | undefined;
@@ -81,6 +55,23 @@ export const CONVERSATION_DELETION_INCOMPLETE = {
   ARCHIVE: "the recovery archive is committed but not yet published; the next launch retries",
 } as const;
 
+/**
+ * Delete history, in the order that makes a late arrival harmless and the
+ * erasure recoverable. The fences come first and are synchronous: the relayed
+ * thread is emptied and every window told, and the brain's generation is
+ * fenced in the same breath — the store forgets it and announces the empty
+ * successor before waiting on anything, so every run and every turn of the
+ * old lifetime loses its execution at once and a late model answer, act
+ * result, or checkpoint of it lands nowhere. The successor's marker is then
+ * written over the old content, and only once it is durable does the store
+ * remove what stood at or before the press: the lines and transcript of that
+ * instant and earlier, in one transaction with the compressed recovery
+ * archive and the raised cutoff, while a line accepted after the press stays
+ * and the successor lifetime stands. Nothing is retired or reopened: the same
+ * brain works on from the empty successor, and a credential rebuild landing
+ * meanwhile builds over the same store, whose standing generation is that
+ * successor.
+ */
 export async function deleteConversationHistoryFlow(
   dependencies: ConversationDeletionDependencies,
 ): Promise<ConversationDeleteOutcome> {

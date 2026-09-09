@@ -29,13 +29,6 @@ import {
  */
 export const maximumVoiceContextSessions = 25;
 
-/**
- * What one session can be asked to do, said in the roster so Luke offers only
- * what its provider promised: the identity a tool call must name, whether it
- * takes a message, each advertised control with the id a call names it by,
- * and each app whose exact address an open ask may pick — by name alone,
- * because the address behind it stays on the machine.
- */
 interface SessionRecency {
   readonly mostRecentForProvider: boolean;
   readonly mostRecentOpenableForProvider: boolean;

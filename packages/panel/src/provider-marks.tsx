@@ -1,3 +1,44 @@
+/**
+ * The provider marks, and the one badge that rides them. Path data is
+ * generated into `@sidecar/surface` from `design/generate-surface-shared.mjs`
+ * so the marketing mock cannot ship a different geometry; the React that
+ * traces it stays here, because the desktop ships marks the mock does not.
+ * Marks are inlined as path data rather than bundled image files, so the
+ * renderer stays asset-free and they scale with the surface.
+ *
+ * Each is the provider's own mark, reproduced rather than redrawn — Claude Code
+ * via Simple Icons (CC0-1.0, sourced from code.claude.com), the Claude app's
+ * own mark via Simple Icons (CC0-1.0, sourced from claude.ai), Codex via
+ * @lobehub/icons (MIT), Conductor's letter mark verbatim from the published
+ * brand kit at https://www.conductor.build/brandkit, Copilot via Simple Icons
+ * (MIT, sourced from https://primer.style/foundations/icons/copilot-24),
+ * Cursor via Simple Icons (CC0-1.0, sourced from https://cursor.com/brand),
+ * Gemini's aurora sparkle verbatim from the vector the
+ * Gemini web app inlines at gemini.google.com (trademark of Google LLC),
+ * keeping the masked, blurred colour field it is published with,
+ * Google Calendar via Simple Icons (CC0-1.0, sourced from
+ * https://developers.google.com/calendar), Grok Build's comet mark verbatim
+ * from the favicon https://grok.com serves (a trademark of xAI),
+ * OpenAI via Simple Icons (CC0-1.0), Linear via Simple Icons (CC0-1.0, sourced from
+ * https://linear.app), OpenCode's two-tone terminal mark verbatim from
+ * the favicon https://opencode.ai serves, OMP's pi verbatim from the favicon
+ * https://omp.sh serves, and Superset's bracket mark traced
+ * from the pixel grid of the favicon https://superset.sh serves — the one
+ * square mark Superset publishes — keeping the vertical metallic gradient the
+ * favicon draws it with. Each keeps its own brand colour
+ * (see the `--mark-*` custom properties), so a mark says which provider a
+ * session belongs to while the chips and row tints say what state it is in.
+ * Copilot, Cursor, and Grok Build each publish one
+ * silhouette rather than a colour, so all three are drawn in the light form
+ * their brand uses on a dark surface. They are trademarks of their respective owners. Do not restyle the
+ * geometry or recolour them; swap the path in the generator if a provider
+ * publishes an updated mark. Apple Calendar is the one exception to
+ * "reproduced rather than redrawn": Apple distributes the Calendar icon only
+ * as raster app artwork, so its flat anatomy — tile, red weekday line, and
+ * the marketing icon's 17 — is drawn in the generator instead (a trademark
+ * of Apple Inc.).
+ */
+
 import { APPLE_CALENDAR_ID, GOOGLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import {
@@ -38,49 +79,6 @@ import React, { useId } from "react";
 // `tsx` executes imported workspace-package JSX with the classic runtime.
 void React;
 
-/**
- * The provider marks, and the one badge that rides them.
- *
- * Path data is generated into `@sidecar/surface` from
- * `design/generate-surface-shared.mjs` so the marketing mock cannot ship a
- * different geometry. The React that traces it stays here: the desktop ships
- * marks the mock does not.
- *
- * Provider marks are inlined as path data rather than bundled image files, so
- * the renderer stays asset-free and the marks scale with the surface.
- *
- * Each is the provider's own mark, reproduced rather than redrawn — Claude Code
- * via Simple Icons (CC0-1.0, sourced from code.claude.com), the Claude app's
- * own mark via Simple Icons (CC0-1.0, sourced from claude.ai), Codex via
- * @lobehub/icons (MIT), Conductor's letter mark verbatim from the published
- * brand kit at https://www.conductor.build/brandkit, Copilot via Simple Icons
- * (MIT, sourced from https://primer.style/foundations/icons/copilot-24),
- * Cursor via Simple Icons (CC0-1.0, sourced from https://cursor.com/brand),
- * Gemini's aurora sparkle verbatim from the vector the
- * Gemini web app inlines at gemini.google.com (trademark of Google LLC),
- * keeping the masked, blurred colour field it is published with,
- * Google Calendar via Simple Icons (CC0-1.0, sourced from
- * https://developers.google.com/calendar), Grok Build's comet mark verbatim
- * from the favicon https://grok.com serves (a trademark of xAI),
- * OpenAI via Simple Icons (CC0-1.0), Linear via Simple Icons (CC0-1.0, sourced from
- * https://linear.app), OpenCode's two-tone terminal mark verbatim from
- * the favicon https://opencode.ai serves, OMP's pi verbatim from the favicon
- * https://omp.sh serves, and Superset's bracket mark traced
- * from the pixel grid of the favicon https://superset.sh serves — the one
- * square mark Superset publishes — keeping the vertical metallic gradient the
- * favicon draws it with. Each keeps its own brand colour
- * (see the `--mark-*` custom properties), so a mark says which provider a
- * session belongs to while the chips and row tints say what state it is in.
- * Copilot, Cursor, and Grok Build each publish one
- * silhouette rather than a colour, so all three are drawn in the light form
- * their brand uses on a dark surface. They are trademarks of their respective owners. Do not restyle the
- * geometry or recolour them; swap the path in the generator if a provider
- * publishes an updated mark. Apple Calendar is the one exception to
- * "reproduced rather than redrawn": Apple distributes the Calendar icon only
- * as raster app artwork, so its flat anatomy — tile, red weekday line, and
- * the marketing icon's 17 — is drawn in the generator instead (a trademark
- * of Apple Inc.).
- */
 interface MarkProps {
   className?: string;
 }

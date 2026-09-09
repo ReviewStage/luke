@@ -1,23 +1,14 @@
 import { normalizeSession, type Session, type SessionProviderPlugin } from "@sidecar/session";
 import { type LocalSessionAdapterHomes, localSessionAdapters } from "./local-adapters.js";
 
-/**
- * Where each local observer reads, overridable so a test can pin every
- * location to synthetic fixtures. Only read locations can be injected —
- * nothing hook-bearing, credential-bearing, or otherwise able to write —
- * so the peek stays read-only no matter what a caller hands it.
- */
 export type LocalPeekOptions = LocalSessionAdapterHomes;
 
-/** What the peek asks of an observer, whatever shape that observer has. */
 type LocalPeekObserver = Pick<SessionProviderPlugin, "provider" | "observe">;
 
 /**
  * The on-disk observers from the same table `providerRegistrations` builds
  * from, minus everything account-shaped: no hook spool to read or register,
- * no key, and no cloud half beside a local one. Each absent
- * `hookEventsDirectory` makes its observer read the provider's own recordings
- * alone, which is what they did before hooks existed.
+ * no key, and no cloud half beside a local one.
  */
 function localPeekObservers(options: LocalPeekOptions): readonly LocalPeekObserver[] {
   return Object.values(localSessionAdapters(options));

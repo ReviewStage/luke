@@ -147,7 +147,6 @@ export function isHostedAgentId(value: string): value is HostedAgentId {
 
 const PROVIDER_IDS: ReadonlySet<string> = new Set(PROVIDER_ID_LIST);
 
-/** Whether this build knows the provider an observation names. */
 export function isProviderId(value: string): value is ProviderId {
   return PROVIDER_IDS.has(value);
 }

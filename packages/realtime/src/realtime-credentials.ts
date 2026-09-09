@@ -152,7 +152,6 @@ export function realtimeCredentialFromResponse(
   };
 }
 
-/** Reports whether a credential is still usable at a given moment. */
 /**
  * Why the last attempt to mint a Realtime credential ended the way it did.
  *

@@ -238,15 +238,6 @@ function withoutLukeHooks(entry: WireRecord, scriptName: string): WireRecord | u
   return { ...entry, hooks: kept };
 }
 
-/**
- * Strips Luke's entries from every event in place — including events this
- * build no longer registers, so an entry from an older build is cleaned up by
- * the newer one rather than left behind. Anything that is not the nested
- * shape the provider documents is preserved verbatim: a malformed entry is
- * the user's problem to notice, never ours to discard. Answers whether
- * anything of Luke's was actually there, so removal can decline to rewrite a
- * file it only ever read — a formatting difference must not read as a change.
- */
 /** A JSON object this module may rewrite while merging hook entries. */
 type MutableWireRecord = { [key: string]: WireValue };
 
@@ -259,6 +250,15 @@ function mutableHooks(root: MutableWireRecord): MutableWireRecord {
   return hooks ? { ...hooks } : createMutableWireRecord();
 }
 
+/**
+ * Strips Luke's entries from every event in place — including events this
+ * build no longer registers, so an entry from an older build is cleaned up by
+ * the newer one rather than left behind. Anything that is not the nested
+ * shape the provider documents is preserved verbatim: a malformed entry is
+ * the user's problem to notice, never ours to discard. Answers whether
+ * anything of Luke's was actually there, so removal can decline to rewrite a
+ * file it only ever read — a formatting difference must not read as a change.
+ */
 function stripLukeEntries(events: MutableWireRecord, scriptName: string): boolean {
   let stripped = false;
   for (const [eventName, entries] of Object.entries(events)) {

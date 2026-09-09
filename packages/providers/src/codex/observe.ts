@@ -274,6 +274,12 @@ async function readCodexSessionTitles(codexHome: string): Promise<Map<string, st
   return titles;
 }
 
+/**
+ * Codex keeps the initial user message in the thread row even after it gives
+ * the chat a user-facing name. That makes it a more durable signal than the
+ * provisional title, while the title fallback covers older rows that do not
+ * carry the column's value.
+ */
 function isCodexRealtimeDelegationThread(row: CodexThreadRow): boolean {
   return (
     isCodexRealtimeDelegationText(textFromRow(row, CODEX_THREAD_COLUMN.FIRST_USER_MESSAGE)) ||
