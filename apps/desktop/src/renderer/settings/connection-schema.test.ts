@@ -122,3 +122,21 @@ test("every action either asks first or runs, and says which", () => {
     }
   }
 });
+
+test("a query reads the connections in the order the page draws them", () => {
+  // An entry's own `order` places it inside its section alone — the calendars'
+  // 10 and 20 sit below the providers' 100 on the page — so results ordered by
+  // `order` by itself would read in the reverse of what is drawn.
+  const offered = offeredConnections(everything())
+    .filter((spec) => spec.page === SETTINGS_VIEW.CONNECTIONS)
+    .map((spec) => spec.id);
+  assert.deepEqual(offered, [
+    "codex-cloud",
+    ...CLOUD_AGENT_PROVIDER_LIST.map((provider) => provider.id),
+    CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
+    SUPERSET_WORKSPACE_PROVIDER_ID,
+    CREDENTIAL_PROVIDER_ID.LINEAR,
+    "apple-calendar",
+    "google-calendar",
+  ]);
+});

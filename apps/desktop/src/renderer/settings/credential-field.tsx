@@ -27,6 +27,7 @@ export function CredentialField({
   entry,
   control,
   panelOpen,
+  stilled,
 }: {
   provider: CredentialProvider;
   /** What to paste, in the provider's own word for it. */
@@ -37,10 +38,16 @@ export function CredentialField({
   control: CredentialEntryControl;
   /** True while the panel is the shape on screen, which is when a field can hold the caret. */
   panelOpen: boolean;
+  /**
+   * Whether the line above is in the middle of an answer of its own. A key
+   * saved over a delete already sent would be a write to a credential on its
+   * way out, so the whole editor rests until that answer settles.
+   */
+  stilled?: boolean;
 }): React.JSX.Element {
   const field = useRef<HTMLInputElement | null>(null);
   const fieldId = `${provider.id}-api-key`;
-  const busy = entry.busy;
+  const busy = entry.busy || stilled === true;
 
   // The field takes the caret whenever the panel is the shape around it: coming
   // back to a panel mid-entry — pressing the capsule while the slot holds the
@@ -73,7 +80,7 @@ export function CredentialField({
             tell(ACT_KIND.WINDOW_FOCUS_PANEL);
           }}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && isSubmittable(entry)) control.commit();
+            if (event.key === "Enter" && isSubmittable(entry) && !busy) control.commit();
             // Escape closes the editor rather than the panel behind it.
             if (event.key === "Escape") {
               event.stopPropagation();
@@ -101,7 +108,7 @@ export function CredentialField({
             disabled={busy || !isSubmittable(entry)}
             onClick={() => control.commit()}
           >
-            {busy ? "Saving…" : "Save"}
+            {entry.busy ? "Saving…" : "Save"}
           </button>
         </span>
       </div>

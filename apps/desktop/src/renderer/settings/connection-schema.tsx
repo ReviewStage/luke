@@ -391,7 +391,7 @@ function credentialConnection(
             } satisfies ConnectionAction),
       ];
     },
-    body: (input) => {
+    body: (input, settling) => {
       const entry = entryForProvider(input.credentials, provider.id);
       if (!entry) return null;
       return (
@@ -402,6 +402,7 @@ function credentialConnection(
           entry={entry}
           control={input.credentials}
           panelOpen={input.panelOpen}
+          stilled={settling}
         />
       );
     },
@@ -844,6 +845,19 @@ export function connectionsFor(
 }
 
 /**
+ * Where each section stands among the others, which is what orders rows read
+ * across them. An entry's own `order` places it inside its section alone — the
+ * calendars' 10 and 20 sit below providers' 100 on the page — so sorting by
+ * `order` by itself would answer in the reverse of what is drawn.
+ */
+const SECTION_ORDER = {
+  [CONNECTION_SECTION.VOICE_PROVIDER]: 0,
+  [CONNECTION_SECTION.PROVIDERS]: 1,
+  [CONNECTION_SECTION.INTEGRATIONS]: 2,
+  [CONNECTION_SECTION.CALENDAR]: 3,
+} satisfies Record<ConnectionSection, number>;
+
+/**
  * Every connection a query can find right now, whatever section draws it, in
  * the order the table claims rather than the order the literal happens to be
  * written in — so a row inserted in the wrong place reads wrong on the page and
@@ -851,6 +865,7 @@ export function connectionsFor(
  */
 export function offeredConnections(visibility: ConnectionVisibility): readonly ConnectionSpec[] {
   return CONNECTION_SCHEMA.filter((spec) => spec.offered(visibility)).toSorted(
-    (left, right) => left.order - right.order,
+    (left, right) =>
+      SECTION_ORDER[left.section] - SECTION_ORDER[right.section] || left.order - right.order,
   );
 }
