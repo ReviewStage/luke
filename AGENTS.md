@@ -405,7 +405,7 @@ Canonical commands:
   the workspace files, and the runtime package that composes it knows the
   files' names and bounds but none of their words, which the brain supplies.
 
-### The Gateway, the host, and the quit
+### The Gateway and the host
 
 - Every client reaches the judgment through one boundary, the Gateway
   protocol in `packages/gateway` (`protocol.ts`): versioned request,
@@ -510,6 +510,9 @@ Canonical commands:
   respectively, an unknown action never retried on Luke's own initiative; the
   node performs each invocation id once, answering a repeated frame from the
   first performance.
+
+### Replies, the drain, and the hosted tier
+
 - Replies to the ear keep the reply-grant ledger's guarantee with its states
   named (queued, offered, claimed, acknowledged, granted on call,
   withdrawn): the Conversation write precedes any offer, the generation and the
@@ -929,7 +932,7 @@ Canonical commands:
   never committed, for the same reason fixtures stay synthetic. Widening what
   a trace records is a product decision, not an implementation detail.
 
-### Integrations and device helpers
+### Integrations
 
 - The issue tracker follows the same rule at one remove, and is connected the
   way the calendar is rather than the way a cloud provider is. Luke reads the
@@ -1003,6 +1006,9 @@ Canonical commands:
   grant stays the user's own in System Settings, withdrawable there like
   every system permission. The intervals pool with the signed-in accounts'
   and decide nothing more than theirs do.
+
+### Device helpers
+
 - Quieting other media is bounded the way the talk key is: a native helper that
   can do one narrow thing. While a spoken exchange is live, Luke may lower the
   volume of the players the helper names (Music and Spotify, through their own
@@ -1044,7 +1050,7 @@ Canonical commands:
   and never outlives it; typed asks never open one at all. An unreadable
   route means the browser's default device, never a refusal to listen.
 
-### Updating, the introduction, and the surface
+### Updating
 
 - Updating is the one thing Luke does on the network with no user-supplied
   key at all, and it follows the same shape Superset's production updater
@@ -1078,6 +1084,9 @@ Canonical commands:
   that serves a build which cannot install in place at all. Widening what
   the updater sends, reads, or does is a product decision, not an
   implementation detail.
+
+### The introduction
+
 - The spoken introduction is the one moment Luke runs before the account gate,
   and it is bounded on every side. It plays on the first interactive launch,
   before any account exists, at most once to the end: a completion on file
@@ -1107,6 +1116,9 @@ Canonical commands:
   that cannot speak stands down to the ordinary signed-out launch and writes
   nothing. Widening what the introduction reads, sends, or can do is a
   product decision, not an implementation detail.
+
+### The surface and its fixtures
+
 - Keep unsupported capabilities explicit; do not invent fallback controls.
 - Keep Electron renderers sandboxed with context isolation and narrow IPC: one
   state channel in, one act channel out, and beside them only the named event
