@@ -1,17 +1,12 @@
 /**
- * The issue-tracker model: the work items a tracker lists for the developer,
- * and the two acts a tracker may be asked to carry for one of them. It mirrors
- * the session model deliberately — bounded observations normalized once, acts
- * validated against what the latest observation advertised — so an issue and a
- * session are offered to the rest of the app under the same discipline.
+ * The issue-tracker model. It mirrors the session model deliberately —
+ * bounded observations normalized once, acts validated against what the
+ * latest observation advertised — so an issue and a session are offered to
+ * the rest of the app under the same discipline.
  */
 
 import { type ActResult, text, type UnparsedWireValue } from "@sidecar/wire";
 
-/**
- * Stable tracker identifiers shared by the tracker client, the settings that
- * hold its credential, and the UI that draws its mark.
- */
 export const ISSUE_TRACKER_ID = {
   LINEAR: "linear",
 } as const;
@@ -20,12 +15,10 @@ export type IssueTrackerId = (typeof ISSUE_TRACKER_ID)[keyof typeof ISSUE_TRACKE
 
 const ISSUE_TRACKER_IDS: ReadonlySet<string> = new Set(Object.values(ISSUE_TRACKER_ID));
 
-/** Whether this build knows the tracker an observation or an act names. */
 export function isIssueTrackerId(value: string): value is IssueTrackerId {
   return ISSUE_TRACKER_IDS.has(value);
 }
 
-/** A stable tracker identity and the label that can be shown or spoken. */
 export interface IssueTracker {
   id: string;
   displayName: string;
@@ -60,7 +53,6 @@ export interface TrackerIssueObservation {
   trackerIssueId: string;
   identifier: string;
   title: string;
-  /** The name of the state the issue is in now. */
   stateName: string;
   observedAt: number;
   url?: string;
@@ -73,7 +65,6 @@ export interface TrackerIssueObservation {
   canComment?: boolean;
 }
 
-/** The normalized issue shared by the main process, the bridge, and the voice roster. */
 export interface TrackedIssue extends IssueIdentity {
   tracker: IssueTracker;
   trackerIssueId: string;
@@ -238,11 +229,9 @@ export type TrackerIssueAction =
     };
 
 /**
- * A tracker client has no dependency on Electron, a renderer, or live UI
- * state. Observing must issue only reads; `execute` is the one place a client
- * may change tracker state, and only ever with an act the developer asked for,
+ * Observing must issue only reads; `execute` is the one place a client may
+ * change tracker state, and only ever with an act the developer asked for,
  * against an issue and a transition the latest observation advertised.
- * Nothing that decides on the developer's behalf may reach it.
  */
 export interface IssueTrackerAdapter {
   readonly tracker: IssueTracker;

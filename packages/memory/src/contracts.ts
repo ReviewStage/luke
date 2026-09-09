@@ -62,7 +62,6 @@ export interface MemorySearchAnswer {
   readonly note?: string;
 }
 
-/** A source file as the index recorded it last. */
 export interface IndexedSourceRecord {
   readonly path: string;
   readonly source: MemorySource;
@@ -117,13 +116,11 @@ export interface VectorHit {
   readonly provenance: MemoryProvenance;
 }
 
-/** One chunk's vector as a sync hands it to the store. */
 export interface EmbeddingWrite {
   readonly hash: string;
   readonly vector: readonly number[];
 }
 
-/** What the store plans for one sync: the files to write, the paths to drop, and the chunk texts still without a vector. */
 export interface MemoryScanPlan {
   readonly changed: readonly IndexedFileWrite[];
   readonly removed: readonly string[];
@@ -163,13 +160,11 @@ export interface MemorySearchOutcome {
   readonly vectorHits: number;
 }
 
-/** A retained History line that carries a search's words, with the conversation it was said in. */
 export interface ConversationLineHit {
   readonly sessionKey: SessionKey;
   readonly entry: ConversationEntry;
 }
 
-/** What a read of one file's lines answers with. */
 export interface MemoryReadResult {
   readonly path: string;
   readonly text: string;

@@ -4,12 +4,6 @@ import { hardenedWebPreferences, refuseForeignNavigation } from "./hardened-wind
 
 export interface VoiceWindowOptions {
   runMode: RunMode;
-  /**
-   * Whether the renderer inside can receive anything yet, owned by the main
-   * process: every load begins an epoch unready here, and every reload,
-   * crash, replacement, or close ends it, so nothing is sent to a renderer on
-   * the strength of its window existing.
-   */
   /** Where the renderer's epochs begin and end: the host's receiver, reached through the client. */
   receiver: { begin: () => void; reset: () => void };
   preloadPath: string;

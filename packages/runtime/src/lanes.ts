@@ -14,7 +14,6 @@ import { availableParallelism } from "node:os";
 export const LANE = {
   /** Ordinary conversation turns: asks, observation looks, heartbeats' own turns. */
   AGENT: "agent",
-  /** Child agent runs. */
   CHILD: "child",
   /** The cron coordinator: deciding which jobs are due and dispatching them. */
   CRON: "cron",

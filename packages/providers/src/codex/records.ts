@@ -109,12 +109,6 @@ export function argumentPhrase(value: UnparsedWireValue): string | undefined {
   return tokens.every((token) => token !== undefined) ? text(tokens.join(" ")) : undefined;
 }
 
-/**
- * Codex keeps the initial user message in the thread row even after it gives
- * the chat a user-facing name. That makes it a more durable signal than the
- * provisional title, while the title fallback covers older rows that do not
- * carry the column's value.
- */
 export function isCodexRealtimeDelegationText(value: string | undefined): boolean {
   return text(value)?.trimStart().startsWith(CODEX_REALTIME_DELEGATION_MARKER) === true;
 }

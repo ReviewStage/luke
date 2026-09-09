@@ -146,7 +146,6 @@ export function isBrainAskWait(value: UnparsedWireValue): boolean {
   );
 }
 
-/** The main process's answer to a claim: the words to say, once, or nothing. */
 /**
  * The main process's answer to a claim: the words to say, once, with the
  * origin of the ask they answer — a typed ask's reply holds the composer's

@@ -3,9 +3,10 @@
 This is the contract every animated element in the panel obeys, and the bar
 every word drawn on it has to clear. The "Panel motion" section of AGENTS.md
 says what the window and the surface are; this file says how anything drawn on
-them is allowed to move, and how much it is allowed to say. A change that adds
-or alters motion or copy is reviewed against these rules, and the fastest way
-to pass that review is to build from them.
+them is allowed to move, how much it is allowed to say, and which of the
+machine's keys Luke may take. A change that adds or alters motion or copy is
+reviewed against these rules, and the fastest way to pass that review is to
+build from them.
 
 ## The vocabulary
 
@@ -150,6 +151,27 @@ Compact geometry uses local optical spacing where one-off alignment demands
 it. Repeated structural widths, heights, gaps, radii, colors, and motion belong
 to semantic or generated tokens; a repeated literal is evidence that the
 vocabulary is missing a name.
+
+## The keys Luke takes from the machine
+
+A key Luke registers takes its chord away from every other app on the Mac, so
+which chord is a product decision and is argued about here rather than in
+`voice-hotkey.ts`.
+
+- **Option-Space talks.** It is where a macOS user already reaches for a voice
+  assistant: Superwhisper, the ChatGPT desktop app, and Alfred all sit there.
+- **Option-S stops.** S is for stop, and Option-letter is the family the other
+  two keys live in. It is a sibling of Escape rather than of the talk key: it
+  asks for quiet and nothing in its place, where the talk key over a reply
+  interrupts by taking the turn.
+- **Option-L asks.** Hold Option-Space to speak to Luke, tap Option-L to type
+  to him — one modifier for both halves of the same conversation. Deliberately
+  not Command-L, which is the address bar in every browser and a taken chord in
+  most editors, and which a global registration would swallow machine-wide.
+  Option-L costs the system only the ¬ character.
+
+No two of them may be able to land on one chord. `hotkeyCandidates` is where
+that is enforced, and says why.
 
 ## Copy: delete what describes, keep what instructs
 

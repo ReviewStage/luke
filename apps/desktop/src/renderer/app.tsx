@@ -503,12 +503,6 @@ export function App(): React.JSX.Element {
    */
   const answeredSettings = useRef<AppSettingsView | undefined>(undefined);
   /**
-   * The one way settings are drawn. Every path travels it — a row's own press,
-   * a key stored or removed, another window's push, and an errand's hold
-   * coming down — so the snapshot the next spoken change composes against is
-   * never older than the panel it is drawn on.
-   */
-  /**
    * What this run was told about recording, kept so a settings change can
    * re-decide without asking for another bootstrap. Absent until bootstrap
    * answers, which is also the whole window in which nothing can record.
@@ -534,6 +528,12 @@ export function App(): React.JSX.Element {
     },
   );
 
+  /**
+   * The one way settings are drawn. Every path travels it — a row's own press,
+   * a key stored or removed, another window's push, and an errand's hold
+   * coming down — so the snapshot the next spoken change composes against is
+   * never older than the panel it is drawn on.
+   */
   const applySettingsView = useCallback(
     (next: AppSettingsView) => {
       answeredSettings.current = next;

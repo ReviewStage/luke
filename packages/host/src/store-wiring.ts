@@ -83,7 +83,6 @@ export interface StoreWiring {
   thread: (sessionKey?: SessionKey) => ConversationThread;
   /** A conversation's envelope, for the brain wiring to build its writer on: the store's, or memory alone where nothing is kept on disk. */
   brainStateRepository: (sessionKey?: SessionKey) => BrainStateRepository;
-  /** Opens the database for this launch. */
   open: () => Promise<void>;
   /** Restores every stored conversation's thread, its cutoff, and the notebook's entries, once opened. */
   restore: () => Promise<void>;

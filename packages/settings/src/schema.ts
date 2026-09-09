@@ -465,9 +465,8 @@ export const APP_SETTING_SCHEMA = {
     guard: hotkey,
     settingsPage: SETTINGS_PAGE.SHORTCUTS,
     resetScope: SETTINGS_RESET_SCOPE.SHORTCUTS,
-    // The talk-key fact reports the registered chord and its manual path, so
-    // the guide builds no setting for it; the id is listed all the same, so
-    // the chord's page is named and a change to it can be counted.
+    // The talk-key fact reports the chord and its manual path, so the guide
+    // builds no setting; the id is listed to name the page and count a change.
     guideEntry: settingGuideEntry("voiceHotkey", [APP_SETTING_ID.TALK_HOTKEY], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.TALK_HOTKEY,
     analytics: { id: APP_SETTING_ID.TALK_HOTKEY, value: hotkeyAnalytics },
@@ -478,9 +477,8 @@ export const APP_SETTING_SCHEMA = {
     guard: hotkey,
     settingsPage: SETTINGS_PAGE.SHORTCUTS,
     resetScope: SETTINGS_RESET_SCOPE.SHORTCUTS,
-    // The ask-key fact reports the registered chord and its manual path, so
-    // the guide builds no setting for it; the id is listed all the same, so
-    // the chord's page is named and a change to it can be counted.
+    // The ask-key fact reports the chord and its manual path, so the guide
+    // builds no setting; the id is listed to name the page and count a change.
     guideEntry: settingGuideEntry("askHotkey", [APP_SETTING_ID.ASK_HOTKEY], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.ASK_HOTKEY,
     analytics: { id: APP_SETTING_ID.ASK_HOTKEY, value: hotkeyAnalytics },
@@ -491,9 +489,8 @@ export const APP_SETTING_SCHEMA = {
     guard: hotkey,
     settingsPage: SETTINGS_PAGE.SHORTCUTS,
     resetScope: SETTINGS_RESET_SCOPE.SHORTCUTS,
-    // The stop-key fact reports the registered chord and its manual path, so
-    // the guide builds no setting for it; the id is listed all the same, so
-    // the chord's page is named and a change to it can be counted.
+    // The stop-key fact reports the chord and its manual path, so the guide
+    // builds no setting; the id is listed to name the page and count a change.
     guideEntry: settingGuideEntry("stopHotkey", [APP_SETTING_ID.STOP_HOTKEY], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.STOP_HOTKEY,
     analytics: { id: APP_SETTING_ID.STOP_HOTKEY, value: hotkeyAnalytics },

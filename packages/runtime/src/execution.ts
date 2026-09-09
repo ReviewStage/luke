@@ -553,12 +553,6 @@ export interface RuntimeIdentity {
   readonly model?: string;
 }
 
-/**
- * Turns a request into normalized events over a model adapter, a context
- * engine, and a tool executor. It owns the loop between the model and the
- * tools and nothing outside it: no scheduling, no persistence, no policy
- * about what a tool may do.
- */
 /** That a compaction happened, by which way and folding how much, or why it did not. */
 export type RuntimeCompaction =
   | { readonly compacted: true; readonly source: CompactionSource; readonly dropped: number }
@@ -570,6 +564,12 @@ export interface CompactionOptions {
   readonly signal: AbortSignal;
 }
 
+/**
+ * Turns a request into normalized events over a model adapter, a context
+ * engine, and a tool executor. It owns the loop between the model and the
+ * tools and nothing outside it: no scheduling, no persistence, no policy
+ * about what a tool may do.
+ */
 export interface AgentRuntime {
   readonly descriptor: RuntimeIdentity;
   /** The moment held-back inferences may resume, for a host to ask before opening a turn. */

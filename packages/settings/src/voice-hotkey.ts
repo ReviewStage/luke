@@ -1,19 +1,14 @@
 /**
- * The key that starts, sends, and interrupts a spoken turn.
- *
- * It is registered with the system rather than with a window, so it answers
- * from whatever app is frontmost. That is also why it is chosen carefully: a
- * global shortcut takes its key away from every other app on the machine.
+ * The three keys Luke registers with the system rather than with a window, so
+ * each answers from whatever app is frontmost — which is also why a chord is
+ * chosen carefully: a global shortcut takes its key away from every other app
+ * on the machine. Which chords, and why those: `docs/DESIGN.md`.
  */
 
 /**
- * Tried in order when the user has not chosen one.
- *
- * Option-Space is where a macOS user reaches for a voice assistant —
- * Superwhisper, the ChatGPT desktop app and Alfred all sit there. It stands
- * alone, with no fallback chord: S is for stop, and a talk key that sometimes
- * lands on the stop key's chord would make which key does what depend on what
- * else is installed.
+ * Tried in order when the user has not chosen one. The talk key stands alone,
+ * with no fallback chord: one that sometimes landed on another Luke key's
+ * would make which key does what depend on what else is installed.
  */
 export const DEFAULT_VOICE_HOTKEYS: readonly string[] = ["Alt+Space"];
 
@@ -47,25 +42,9 @@ function hotkeyCandidates(
   return candidates.filter((candidate) => !taken.includes(candidate));
 }
 
-/**
- * The key that cuts off a reply being spoken, from whatever app is frontmost.
- *
- * Option-S because S is for stop, and Option-letter is the family the other
- * Luke keys already live in. A sibling of Escape rather than of the talk key:
- * it asks for quiet and nothing in its place, where the talk key over a reply
- * interrupts by taking the turn.
- */
+/** The key that cuts off a reply being spoken, from whatever app is frontmost. */
 export const DEFAULT_STOP_HOTKEYS: readonly string[] = ["Alt+S"];
 
-/**
- * The stop chords worth asking the system for, in order, on the ask key's
- * exact terms: a chosen chord goes first — it is what the user asked for —
- * with the default kept behind it, and any chord the other Luke keys could
- * sit on is left out, because the keys must never compete for one chord —
- * whichever registered first would silently cost the other its whole
- * feature, with nothing on screen saying why. A deleted key offers nothing,
- * on the talk key's terms.
- */
 export function stopHotkeyCandidates(
   chosen: string | undefined,
   taken: readonly (string | undefined)[],
@@ -73,28 +52,9 @@ export function stopHotkeyCandidates(
   return hotkeyCandidates(chosen, DEFAULT_STOP_HOTKEYS, taken);
 }
 
-/**
- * The key that summons the ask field from whatever app is frontmost, tried in
- * order like the talk key's candidates.
- *
- * A sibling of the talk key on purpose: hold Option-Space to speak to Luke,
- * tap Option-L to type to him — one modifier for both halves of the same
- * conversation. It is deliberately not Command-L, which is the address bar in
- * every browser and a taken chord in most editors; a global registration
- * would swallow it machine-wide. Option-L costs the system only the ¬
- * character, and Option-letter is the family launcher apps already claim.
- */
+/** The key that summons the ask field from whatever app is frontmost. */
 export const DEFAULT_ASK_HOTKEYS: readonly string[] = ["Alt+L", "Alt+Shift+L"];
 
-/**
- * The ask chords worth asking the system for, in order. A chosen chord goes
- * first — it is what the user asked for — with the defaults kept behind it,
- * exactly as the talk key's candidates work. Any chord the talk key holds is
- * left out, the chosen one included: the two Luke keys must never compete for
- * one chord — whichever registered first would silently cost the other its
- * whole feature, with nothing on screen saying why. A deleted key offers
- * nothing, on the talk key's terms.
- */
 export function askHotkeyCandidates(
   chosen: string | undefined,
   taken: readonly (string | undefined)[],
@@ -197,13 +157,8 @@ export function parseVoiceHotkey(value: string): string | undefined {
 }
 
 /**
- * The chords to try, in order. A chosen key goes first — it is what the user
- * asked for — and the defaults stay behind it, so a chord another app claims
- * while Luke is closed costs the user a different talk key rather than none.
- * The panel shows whichever one actually registered. A deleted key offers
- * nothing at all: the defaults stand behind a choice, never behind a removal,
- * because a fallback the user asked to have no key would be the key coming
- * back on its own.
+ * The talk chords to try, in order. Nothing is taken: the talk key ranks
+ * highest, so the other two are what give way.
  */
 export function voiceHotkeyCandidates(chosen: string | undefined): readonly string[] {
   return hotkeyCandidates(chosen, DEFAULT_VOICE_HOTKEYS, []);

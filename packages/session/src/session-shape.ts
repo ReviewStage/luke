@@ -180,10 +180,6 @@ export interface ProviderSessionObservation extends SessionFields {
   directory?: string;
 }
 
-/**
- * The normalized model shared by observers, the UI, and any future
- * capability-gated controls.
- */
 export type Session = SessionIdentity &
   Omit<SessionFields, NormalizedSessionField> &
   Required<Pick<SessionFields, NormalizedSessionField>> & { provider: SessionProvider };

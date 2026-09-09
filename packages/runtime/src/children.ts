@@ -285,7 +285,6 @@ export class ChildRunService {
     return this.#children.get(childId);
   }
 
-  /** The children one conversation asked for. */
   childrenOf(requesterSessionKey: SessionKey): readonly ChildRunRecord[] {
     return this.children().filter((record) => record.requesterSessionKey === requesterSessionKey);
   }
