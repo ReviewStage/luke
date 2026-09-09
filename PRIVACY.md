@@ -36,7 +36,13 @@ throttle, a failure, or a quit picks it up rather than rereading or losing
 it; an entry leaves the inbox when a turn has consumed it, and the inbox
 holds at most 20 entries. What he reads is sent to a model as described under
 "Who we send it to", and what he keeps of it lives under his working memory's
-own lifetime, described below, one memory per conversation. Nothing else reads message history, file
+own lifetime, described below, one memory per conversation. For a Conductor
+session, which keeps no transcript on your Mac, the same "read the recent
+tail" ask reads the newest page of that chat's conversation from Conductor
+instead — your own messages and the agent's replies, not its tool activity —
+using the Conductor key you gave the Mac app, only for a session Luke was just
+shown, and never on his periodic look; what he reads is held in that turn's
+working memory and stored nowhere else. Nothing else reads message history, file
 contents, or command output. If you run
 agents inside the Herdr terminal manager, Luke also asks Herdr's own
 command-line tool which of those sessions it holds, so their rows can say so;
@@ -380,7 +386,10 @@ and email you signed it with, and any screenshots you attached.
   agent's replies, not its tool activity — using the key you synced, and
   passes it to your phone while the screen is open. We store none of it: each
   refresh is a new read, and nothing about the conversation stays on our
-  servers after the response is sent.
+  servers after the response is sent. The Mac app reads the same conversation
+  directly from Conductor, with your own key and through no server of ours,
+  when Luke reads a Conductor session's recent tail as described under "What
+  we collect".
 - Google, if you connect Google Calendar. We request your calendar list and your
   availability. Google returns busy times only, so event titles and attendees
   are never available to Luke.

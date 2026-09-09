@@ -207,20 +207,27 @@ Canonical commands:
   address hands the address to the operating system exactly once, as a row
   press would. Nothing a model decided can start that wait, and a created
   session that reports no address inside its window is left unopened like any
-  other row without one. Reading a local session's
+  other row without one. Reading a session's
   transcript at the developer's ask is the brain's own read, not an action: the
   brain's `read_transcript` tool, offered in every kind of turn, names a
   session by the identity the standing context lists, is refused in the
   agent for any identity the roster does not hold, is refused again in the
-  main process for a session whose location is not this machine or whose
-  provider is not connected, and reads the provider's own file through that
-  provider's own reader, bounded as the next rule says. The read performs
-  nothing, reaches no provider, and answers only for a local session whose
-  provider's transcript this build documents reading (Claude Code, Codex,
-  and OMP today); a cloud session's conversation lives with its provider and
-  is never fetched. The read renders only what the provider actually wrote
-  down, and a provider whose stored shape this build cannot render
-  faithfully keeps the honest refusal instead. What the read rendered enters
+  main process for a session whose provider is not connected, and reads
+  through that provider's own reader, bounded as the next rule says. The read
+  performs nothing and answers only where this build documents reading a
+  transcript: for a local session, the provider's own file (Claude Code,
+  Codex, and OMP today), reaching no provider; for a Conductor cloud session,
+  the same documented messages endpoint the iOS screen reads
+  (`GET /v0/sessions/{id}/messages`), under the developer's own Conductor
+  key on this Mac, only for a session the plugin's latest pass reported, only
+  as the product of the tool call itself and never of an observation pass,
+  answering the newest page of the developer's own sends and the agent's own
+  words — a tool call, tool output, or unattributed record is dropped whole —
+  rendered in the same line vocabulary the local readers use and held only in
+  the turn's working memory; any other cloud session's conversation lives
+  with its provider and is never fetched. The read renders only what the
+  provider actually wrote down, and a provider whose stored shape this build
+  cannot render faithfully keeps the honest refusal instead. What the read rendered enters
   the brain's working memory like every other tool answer, and lives and dies
   with its generation under the next rule; what reaches the developer is the
   reply the brain writes from it, which may quote or summarize the reading
@@ -260,8 +267,9 @@ Canonical commands:
   is one entry, and the inbox holds at most 20 entries. The conversation
   may also read one observed session's whole
   tail, cut from the front to 60,000 characters, through the same read tool
-  a developer's ask is offered; a cloud session, and a provider whose
-  transcript this build does not read, are read from roster fields alone.
+  a developer's ask is offered; a cloud session whose provider documents no
+  transcript read, and a local provider whose transcript this build does not
+  read, are read from roster fields alone.
   An observed conversation's `announce` reaches the voice directly; main
   neither approves nor rewords it. Any conversation may delegate: the brain's
   `sessions_spawn` tool records a child (`agent:main:subagent:<uuid>`, kind
@@ -1142,8 +1150,9 @@ Canonical commands:
 
 ### Reading a session's conversation
 
-- A session's conversation itself is read in exactly one place, and the place
-  is deliberate: in the open, at the developer's own press, never behind an
+- A cloud session's conversation itself is read in exactly two places, and
+  both are deliberate: in the open, at the developer's own press, and through
+  the brain's `read_transcript` tool under the rule above, never behind an
   observation pass, which reads no message of any chat. When the developer opens a
   Conductor session's own screen in the iOS app, that screen asks Luke's
   service for the conversation, and the service reads it through Conductor's

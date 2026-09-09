@@ -42,9 +42,10 @@ test("names every action Conductor documents, and none it does not", () => {
     "renameWorkspace",
     "spawnAgent",
   ]);
-  // A cloud session's conversation lives with its provider: the developer's
-  // own conversation read is the one read here, and no transcript read at all.
-  assert.deepEqual(Object.keys(plugin.reads ?? {}), ["conversation"]);
+  // A cloud session's conversation lives with its provider, and both reads of
+  // it go there: the developer's own conversation read and the brain's
+  // transcript read, with no incremental read for an observation pass.
+  assert.deepEqual(Object.keys(plugin.reads ?? {}).sort(), ["conversation", "transcript"]);
 });
 test("observes cloud sessions the signed-in user created, under their own names", async () => {
   const api = fakeConductorApi({

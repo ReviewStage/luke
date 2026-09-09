@@ -4,7 +4,6 @@ import {
   advertisedActionFor,
   advertisedControls,
   type ObservedWorkspaceProject,
-  SESSION_LOCATION,
   type Session,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceTaskSupport,
@@ -65,7 +64,6 @@ function sessionCapabilityText(session: Session, recency: SessionRecency): strin
             .join(", ")}`,
         ]
       : []),
-    `transcript=${session.location === SESSION_LOCATION.LOCAL}`,
     ...(recency.mostRecentForProvider ? ["most_recent_for_provider=true"] : []),
     ...(recency.mostRecentOpenableForProvider ? ["most_recent_openable_for_provider=true"] : []),
     ...(session.detail.change ? ["pull_request=true"] : []),

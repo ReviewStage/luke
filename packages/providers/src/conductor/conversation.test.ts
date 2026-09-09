@@ -467,3 +467,70 @@ test("a conversation read names what refused it without echoing the provider", a
     reason: "Conductor did not answer, so the conversation could not be read.",
   });
 });
+
+test("the brain's transcript read renders the attributed words one line each, in the shared vocabulary", async () => {
+  const api = conversationApi();
+  const plugin = pluginFor(api.fetch);
+  await plugin.observe();
+  const requestsBefore = api.requests.length;
+
+  const read = await dispatchRead(plugin, "transcript", IDLE_SESSION_UUID);
+
+  assert.equal(read.status, "accepted");
+  if (read.status !== "accepted") return;
+  assert.equal(
+    read.transcript,
+    [
+      "Developer: Fix the flaky roster test",
+      "Conductor: Looking at the test now. It races the clock.",
+      "Conductor: Fixed: the test now stubs the clock.",
+    ].join("\n"),
+  );
+  const reads = api.requests.slice(requestsBefore);
+  assert.ok(reads.length >= 1);
+  for (const request of reads) {
+    assert.equal(request.method, "GET");
+    assert.equal(request.pathname, `/v0/sessions/${IDLE_SESSION_UUID}/messages`);
+  }
+});
+
+test("a transcript read refuses a session the latest pass did not report and reaches nothing", async () => {
+  const api = conversationApi();
+  const plugin = pluginFor(api.fetch);
+  await plugin.observe();
+  const requestsBefore = api.requests.length;
+
+  const read = await dispatchRead(plugin, "transcript", "99999999-9999-4999-8999-999999999999");
+
+  assert.equal(read.status, "unsupported");
+  assert.equal(api.requests.length, requestsBefore);
+});
+
+test("a transcript read of a chat with no attributed words is not found rather than empty", async () => {
+  const api = conversationApi({
+    storedMessages: [
+      storedAgentEvent(STORED_MESSAGE_UUIDS[7], { type: "system", subtype: "init" }, TEST_TIME),
+    ],
+  });
+  const plugin = pluginFor(api.fetch);
+  await plugin.observe();
+
+  const read = await dispatchRead(plugin, "transcript", IDLE_SESSION_UUID);
+
+  assert.deepEqual(read, {
+    status: "rejected",
+    reason: "That session's transcript could not be found.",
+  });
+});
+
+test("a transcript read that Conductor refuses is rejected with the reason, never thrown", async () => {
+  const api = conversationApi({ messagesHttpStatus: HTTP_STATUS.UNAUTHORIZED });
+  const plugin = pluginFor(api.fetch);
+  await plugin.observe();
+
+  const read = await dispatchRead(plugin, "transcript", IDLE_SESSION_UUID);
+
+  assert.equal(read.status, "rejected");
+  if (read.status !== "rejected") return;
+  assert.match(read.reason, /Conductor/u);
+});

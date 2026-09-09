@@ -33,7 +33,8 @@ import {
  * a user asks for by opening a conversation screen:
  * `GET …/sessions/{id}/messages`, Conductor's documented read of one
  * session's stored transcript, paged with the `after` cursor its own answers
- * hand back and never issued by an observation pass. The writers
+ * hand back; the brain's own transcript read takes its newest page too, and
+ * it is never issued by an observation pass. The writers
  * are `POST …/sessions/{id}/messages`, which is
  * Conductor's documented way to hand a prompt to an existing session — queued
  * while it is idle, steered into the running turn while it works —
@@ -237,7 +238,8 @@ export const CONDUCTOR_SQL_FIELD = {
  * The columns ask for the agent kind and nothing else. The view also holds
  * each chat's transcript, and no column of it is named here: the
  * conversation is the documented messages endpoint's to read, at the
- * developer's own press, never an observation pass's.
+ * developer's own press or the brain's own read tool, never an observation
+ * pass's.
  */
 export const CONDUCTOR_READ_AGENT_KINDS_PREFIX =
   `SELECT ${CONDUCTOR_SQL_FIELD.SESSION_ID}, ${CONDUCTOR_SQL_FIELD.AGENT_TYPE} ` +

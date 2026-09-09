@@ -108,9 +108,10 @@ const BRAIN_ONLY_TOOLS: readonly ActionToolDefinition[] = [
     name: BRAIN_TOOL.READ_TRANSCRIPT,
     description:
       "Read the recent transcript of one observed session in full, bounded to its tail. Use it " +
-      "when an event's transcript delta is not enough to judge what the agent is doing. Only a " +
-      "local session whose provider's transcript this build reads answers; a cloud session " +
-      "returns a refusal.",
+      "when an event's transcript delta is not enough to judge what the agent is doing. A local " +
+      "session answers when its provider's transcript this build reads; a Conductor cloud " +
+      "session answers with the developer's messages and the agent's replies, never its tool " +
+      "activity; any other cloud session returns a refusal.",
     parameters: {
       type: "object",
       properties: SESSION_IDENTITY_PROPERTIES,

@@ -364,8 +364,8 @@ test("the roster says what a session is doing and where, in the attention update
   assert.doesNotMatch(bareText, /error:/);
 });
 
-test("the roster says which sessions keep a readable transcript and a pull request, never an address", () => {
-  const local = normalizeSession(
+test("the roster says which sessions have a pull request, never an address", () => {
+  const plain = normalizeSession(
     { id: "codex", displayName: "Codex" },
     {
       providerSessionId: "thread-local",
@@ -374,8 +374,6 @@ test("the roster says which sessions keep a readable transcript and a pull reque
       lastActivityAt: OBSERVED_AT,
     },
   );
-  assert.match(sessionContextText([local]), /transcript=true/);
-
   const cloud = normalizeSession(
     { id: "conductor", displayName: "Conductor" },
     {
@@ -388,12 +386,11 @@ test("the roster says which sessions keep a readable transcript and a pull reque
     },
   );
   const cloudText = sessionContextText([cloud]);
-  assert.match(cloudText, /transcript=false/);
   // The pull request travels as a fact, like openability: the row is where it
   // opens from, and no address belongs in a conversation.
   assert.match(cloudText, /pull_request=true/);
   assert.doesNotMatch(cloudText, /github\.com/);
-  assert.doesNotMatch(sessionContextText([local]), /pull_request=true/);
+  assert.doesNotMatch(sessionContextText([plain]), /pull_request=true/);
 });
 
 test("session context stays bounded when many sessions are observed", () => {

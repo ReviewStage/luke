@@ -67,10 +67,8 @@ function remoteCapabilityText(
   const capabilities = [
     `provider_id=${session.providerId} provider_session_id=${session.sessionId}`,
     `messages=${Boolean(session.canReceiveMessage)}`,
-    // The phone opens a session on its own screen; no cloud session has a
-    // transcript on the device to read.
+    // The phone opens a session on its own screen.
     "open=true",
-    "transcript=false",
     ...(mostRecent.get(session.providerId) === session.sessionId
       ? ["most_recent_for_provider=true", "most_recent_openable_for_provider=true"]
       : []),
