@@ -1,16 +1,14 @@
 /**
- * The key that starts, sends, and interrupts a spoken turn.
- *
- * It is registered with the system rather than with a window, so it answers
- * from whatever app is frontmost. That is also why it is chosen carefully: a
- * global shortcut takes its key away from every other app on the machine.
+ * The three keys Luke registers with the system rather than with a window, so
+ * each answers from whatever app is frontmost — which is also why a chord is
+ * chosen carefully: a global shortcut takes its key away from every other app
+ * on the machine. Which chords, and why those: `docs/DESIGN.md`.
  */
 
 /**
- * Tried in order when the user has not chosen one. It stands alone, with no
- * fallback chord: a talk key that sometimes landed on another Luke key's
- * chord would make which key does what depend on what else is installed.
- * Why these chords: `docs/DESIGN.md`.
+ * Tried in order when the user has not chosen one. The talk key stands alone,
+ * with no fallback chord: one that sometimes landed on another Luke key's
+ * would make which key does what depend on what else is installed.
  */
 export const DEFAULT_VOICE_HOTKEYS: readonly string[] = ["Alt+Space"];
 

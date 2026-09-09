@@ -41,6 +41,13 @@ function sessionCanOpen(session: Session): boolean {
   );
 }
 
+/**
+ * What one session can be asked to do, so Luke offers only what its provider
+ * promised: the identity a tool call must name, whether it takes a message,
+ * each advertised control with the id a call names it by, and each app an
+ * open ask may pick — by name alone, because the address behind it stays on
+ * the machine.
+ */
 function sessionCapabilityText(session: Session, recency: SessionRecency): string {
   const openableApplications = session.applications.filter(
     (application) => application.link !== undefined,

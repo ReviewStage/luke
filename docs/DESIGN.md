@@ -154,9 +154,8 @@ vocabulary is missing a name.
 
 ## The keys Luke takes from the machine
 
-Luke's three keys are registered with the system rather than with a window, so
-each one takes its chord away from every other app on the Mac. That is the
-whole reason the chords are argued about here instead of chosen in
+A key Luke registers takes its chord away from every other app on the Mac, so
+which chord is a product decision and is argued about here rather than in
 `voice-hotkey.ts`.
 
 - **Option-Space talks.** It is where a macOS user already reaches for a voice
@@ -171,10 +170,8 @@ whole reason the chords are argued about here instead of chosen in
   most editors, and which a global registration would swallow machine-wide.
   Option-L costs the system only the ¬ character.
 
-Two keys must never be able to land on one chord: whichever registered first
-would silently cost the other its whole feature, with nothing on screen saying
-why. `hotkeyCandidates` is where that is enforced, and it is why the talk key
-carries no fallback chord of its own.
+No two of them may be able to land on one chord. `hotkeyCandidates` is where
+that is enforced, and says why.
 
 ## Copy: delete what describes, keep what instructs
 
