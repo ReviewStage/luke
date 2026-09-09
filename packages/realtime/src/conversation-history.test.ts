@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SESSION_TOOL_KIND } from "@sidecar/acts";
+import { ACT_KIND } from "@sidecar/acts";
 import {
-  ACT_KIND,
   type AdvertisedControl,
   normalizeSession,
   SESSION_APPLICATION_ID,
@@ -180,7 +179,7 @@ test("an act's line records the ask in words, with the identity it named", () =>
   const identity = { providerId: "claude-code", providerSessionId: "session-a" };
 
   const message = sessionActConversationEntry(
-    { kind: SESSION_TOOL_KIND.MESSAGE, identity, text: "please add tests" },
+    { kind: ACT_KIND.MESSAGE, identity, text: "please add tests" },
     sessions,
     CONVERSATION_ENTRY_KIND.ACT,
   );
@@ -191,7 +190,7 @@ test("an act's line records the ask in words, with the identity it named", () =>
   const control: AdvertisedControl = { kind: ACT_KIND.CONTROL, id: "retry", label: "Retry" };
   assert.equal(
     sessionActConversationEntry(
-      { kind: SESSION_TOOL_KIND.CONTROL, identity, control },
+      { kind: ACT_KIND.CONTROL, identity, control },
       sessions,
       CONVERSATION_ENTRY_KIND.ACT,
     ).words,
@@ -200,11 +199,8 @@ test("an act's line records the ask in words, with the identity it named", () =>
 
   // A session the roster no longer shows is still named honestly.
   assert.equal(
-    sessionActConversationEntry(
-      { kind: SESSION_TOOL_KIND.OPEN, identity },
-      [],
-      CONVERSATION_ENTRY_KIND.ACT,
-    ).words,
+    sessionActConversationEntry({ kind: ACT_KIND.OPEN, identity }, [], CONVERSATION_ENTRY_KIND.ACT)
+      .words,
     "opened a session",
   );
 
@@ -228,7 +224,7 @@ test("an act's line records the ask in words, with the identity it named", () =>
     },
   );
   const openedInApp = {
-    kind: SESSION_TOOL_KIND.OPEN,
+    kind: ACT_KIND.OPEN,
     identity,
     applicationId: SESSION_APPLICATION_ID.SUPERSET,
   } as const;
@@ -243,7 +239,7 @@ test("an act's line records the ask in words, with the identity it named", () =>
 
   // A workspace creation aims at no session, so its line carries no identity.
   const created = sessionActConversationEntry(
-    { kind: SESSION_TOOL_KIND.CREATE_WORKSPACE, providerId: "conductor", providerProjectId: "p1" },
+    { kind: ACT_KIND.CREATE_WORKSPACE, providerId: "conductor", providerProjectId: "p1" },
     sessions,
     CONVERSATION_ENTRY_KIND.ACT,
   );
@@ -251,7 +247,7 @@ test("an act's line records the ask in words, with the identity it named", () =>
   assert.equal(created.identity, undefined);
   const createdNamed = sessionActConversationEntry(
     {
-      kind: SESSION_TOOL_KIND.CREATE_WORKSPACE,
+      kind: ACT_KIND.CREATE_WORKSPACE,
       providerId: "conductor",
       providerProjectId: "p1",
       name: "Notch panel clipping",

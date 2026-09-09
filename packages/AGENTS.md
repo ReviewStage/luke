@@ -8,6 +8,14 @@ components. Each app owns the styling that presents those components. Other
 modules belong in an app when they import `electron`, `react`, or a DOM API.
 Everything else is logic and can be tested with `node --test` and no harness.
 
+Whether an act may run is decided once, by `admit()` in `@sidecar/acts`, which
+mints the only `ValidatedAct` there is: its brand is a module-private symbol, so
+nothing outside that module can write one down, and a signature that takes one
+says the gauntlet ran. The direction stays acts → session → wire, and
+`@sidecar/session` keeps the narrower act vocabulary an observation advertises
+with; the two are proven to be the same strings where `@sidecar/acts` declares
+the whole of it.
+
 A wire value's rules are declared once, as a `Schema` in `@sidecar/wire`,
 which both parses the untrusted value and emits the JSON Schema a model is
 shown for it. A hand-written parser beside a hand-written schema is two
@@ -53,7 +61,10 @@ is one whose sources compilation never visits. Packages the server names get
 `export *`; packages reached only through another get a bare side-effect
 import, which pulls the file into the compile graph without widening the
 export namespace, where `export *` can silently drop a name two doors both
-export.
+export. Where two doors genuinely both have to carry a name — `ACT_KIND`, which
+the act table names in full and the session package names its advertised subset
+of — the door that carries the whole of it re-exports the name explicitly,
+which takes precedence over both stars.
 
 Every package's `exports` names `./src/index.js`, never `./src/index.ts`. It is
 the same rule as the one above, one level up: post-compile the `.js` target is

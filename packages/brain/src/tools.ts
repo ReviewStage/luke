@@ -1,8 +1,4 @@
-import {
-  type RealtimeToolWireDefinition,
-  realtimeToolDefinitions,
-  realtimeToolFamily,
-} from "@sidecar/acts";
+import { type ActToolDefinition, realtimeToolDefinitions, realtimeToolFamily } from "@sidecar/acts";
 import { MEMORY_QUERY_MAXIMUM_CHARS } from "@sidecar/memory";
 import {
   type ChildPolicyContext,
@@ -16,7 +12,7 @@ import {
 } from "@sidecar/runtime";
 import type { ToolSchema } from "@sidecar/runtime-contracts";
 import {
-  type ResponsesFunctionTool,
+  type ResponsesToolDefinition,
   responsesToolDefinition,
   toolSchemaFromDefinition,
 } from "./responses-api.js";
@@ -92,7 +88,7 @@ export const maximumChildTaskLength = 8_000;
 /** The most history lines one `sessions_history` read answers with. */
 export const maximumSessionsHistoryLines = 50;
 
-const BRAIN_ONLY_TOOLS: readonly RealtimeToolWireDefinition[] = [
+const BRAIN_ONLY_TOOLS: readonly ActToolDefinition[] = [
   {
     type: BRAIN_TOOL_TYPE,
     name: BRAIN_TOOL.LIST_SESSIONS,
@@ -100,7 +96,7 @@ const BRAIN_ONLY_TOOLS: readonly RealtimeToolWireDefinition[] = [
       "Read the full roster of observed sessions as it stands right now, with each session's " +
       "identity, status, and capabilities. The standing context already carries it; call this " +
       "only when you need it fresher than the turn's opening.",
-    parameters: { type: "object", properties: {}, required: [] },
+    parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
   },
   {
     type: BRAIN_TOOL_TYPE,
@@ -114,6 +110,7 @@ const BRAIN_ONLY_TOOLS: readonly RealtimeToolWireDefinition[] = [
       type: "object",
       properties: SESSION_IDENTITY_PROPERTIES,
       required: SESSION_IDENTITY_REQUIRED,
+      additionalProperties: false,
     },
   },
   {
@@ -133,6 +130,7 @@ const BRAIN_ONLY_TOOLS: readonly RealtimeToolWireDefinition[] = [
         },
       },
       required: ["briefing"],
+      additionalProperties: false,
     },
   },
   {
@@ -148,6 +146,7 @@ const BRAIN_ONLY_TOOLS: readonly RealtimeToolWireDefinition[] = [
         name: { type: "string", description: "The file's name relative to the workspace." },
       },
       required: ["name"],
+      additionalProperties: false,
     },
   },
   {
@@ -164,6 +163,7 @@ const BRAIN_ONLY_TOOLS: readonly RealtimeToolWireDefinition[] = [
         content: { type: "string", description: "The file's whole new content." },
       },
       required: ["name", "content"],
+      additionalProperties: false,
     },
   },
   {
@@ -178,6 +178,7 @@ const BRAIN_ONLY_TOOLS: readonly RealtimeToolWireDefinition[] = [
         location: { type: "string", description: "The SKILL.md location exactly as listed." },
       },
       required: ["location"],
+      additionalProperties: false,
     },
   },
   {
@@ -221,6 +222,7 @@ const BRAIN_ONLY_TOOLS: readonly RealtimeToolWireDefinition[] = [
         },
       },
       required: ["task"],
+      additionalProperties: false,
     },
   },
   {
@@ -241,6 +243,7 @@ const BRAIN_ONLY_TOOLS: readonly RealtimeToolWireDefinition[] = [
         child_id: { type: "string", description: "The child to cancel, as the list gave it." },
       },
       required: [],
+      additionalProperties: false,
     },
   },
   {
@@ -250,7 +253,7 @@ const BRAIN_ONLY_TOOLS: readonly RealtimeToolWireDefinition[] = [
       "List Luke's own conversations — main, the developer's threads, the observed sessions' " +
       "conversations, and child conversations — by key, kind, name, and last activity. These " +
       "are your own conversations, not the coding agents the roster lists.",
-    parameters: { type: "object", properties: {}, required: [] },
+    parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
   },
   {
     type: BRAIN_TOOL_TYPE,
@@ -265,6 +268,7 @@ const BRAIN_ONLY_TOOLS: readonly RealtimeToolWireDefinition[] = [
         limit: { type: "integer", description: "How many lines at most." },
       },
       required: ["child_id"],
+      additionalProperties: false,
     },
   },
   {
@@ -289,6 +293,7 @@ const BRAIN_ONLY_TOOLS: readonly RealtimeToolWireDefinition[] = [
         },
       },
       required: ["query"],
+      additionalProperties: false,
     },
   },
   {
@@ -309,6 +314,7 @@ const BRAIN_ONLY_TOOLS: readonly RealtimeToolWireDefinition[] = [
         lines: { type: "integer", description: "How many lines to read." },
       },
       required: ["path"],
+      additionalProperties: false,
     },
   },
 ];
@@ -383,7 +389,7 @@ const BRAIN_ONLY_DESCRIPTORS = {
   },
 } as const satisfies Record<BrainToolName, Pick<ToolDescriptor, "execution" | "effect" | "groups">>;
 
-function actDescriptor(definition: RealtimeToolWireDefinition): ToolDescriptor {
+function actDescriptor(definition: ActToolDefinition): ToolDescriptor {
   const family = realtimeToolFamily(definition.name);
   if (family === undefined) throw new TypeError(`${definition.name} is not an act`);
   return {
@@ -395,7 +401,7 @@ function actDescriptor(definition: RealtimeToolWireDefinition): ToolDescriptor {
   };
 }
 
-function brainOnlyDescriptor(definition: RealtimeToolWireDefinition): ToolDescriptor {
+function brainOnlyDescriptor(definition: ActToolDefinition): ToolDescriptor {
   const name = definition.name;
   if (!isBrainOnlyTool(name)) throw new TypeError(`${name} is not a brain tool`);
   return {
@@ -456,6 +462,6 @@ export function brainToolSchemas(policy: EffectiveToolPolicy): readonly ToolSche
  * a desktop checks the names it means to send against the catalog the
  * service advertised; the trace viewer renders a turn's tools from it.
  */
-export function hostedBrainToolCatalog(): ReadonlyMap<string, ResponsesFunctionTool> {
+export function hostedBrainToolCatalog(): ReadonlyMap<string, ResponsesToolDefinition> {
   return new Map(brainToolCatalog().map((tool) => [tool.id, responsesToolDefinition(tool.schema)]));
 }

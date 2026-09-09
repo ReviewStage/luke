@@ -30,7 +30,7 @@
  * app" was itself a policy and persisting means replacing it with a real one.
  */
 
-import { actNarration, type CarriedSessionAction } from "@sidecar/acts";
+import { actNarration, type CarriedSessionAct } from "@sidecar/acts";
 import type { Session, SessionIdentity } from "@sidecar/session";
 import {
   isRecord,
@@ -421,7 +421,7 @@ export function withConversationEntryRequest(
  * else, so the record keeps the act and not a word of what it rendered.
  */
 export function sessionActConversationEntry(
-  action: CarriedSessionAction,
+  action: CarriedSessionAct,
   sessions: readonly Session[],
   kind: typeof CONVERSATION_ENTRY_KIND.ACT | typeof CONVERSATION_ENTRY_KIND.OWN_ACT,
 ): ConversationEntry {

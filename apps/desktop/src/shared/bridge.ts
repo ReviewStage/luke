@@ -1,5 +1,5 @@
 import type { AccountProvider, AccountSnapshot } from "@sidecar/account/snapshot";
-import { APP_TOOL_KIND } from "@sidecar/acts";
+import { ACT_KIND } from "@sidecar/acts";
 import {
   isProductExchangeKind,
   isProductSurfaceEventName,
@@ -1028,8 +1028,8 @@ export const BRIDGE = {
         isWireString(v.requestId) &&
         isRecord(v.action) &&
         isWireString(v.action.kind) &&
-        v.action.kind !== APP_TOOL_KIND.REMEMBER &&
-        v.action.kind !== APP_TOOL_KIND.FORGET,
+        v.action.kind !== ACT_KIND.REMEMBER &&
+        v.action.kind !== ACT_KIND.FORGET,
     ),
   }),
   onConversationHistoryChanged: entry({

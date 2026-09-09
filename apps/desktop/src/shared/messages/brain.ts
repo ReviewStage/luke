@@ -1,4 +1,4 @@
-import type { CarriedAppAction } from "@sidecar/acts";
+import type { CarriedAppAct } from "@sidecar/acts";
 import {
   type BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
@@ -171,7 +171,7 @@ export function isBrainReplyClaimResult(value: UnparsedWireValue): boolean {
  */
 export interface BrainAppActRequest {
   requestId: string;
-  action: Exclude<CarriedAppAction, { kind: "remember" | "forget" }>;
+  action: Exclude<CarriedAppAct, { kind: "remember" | "forget" }>;
 }
 
 /** The renderer's answer to one app act: what became of it, as the brain reads outcomes. */

@@ -28,6 +28,11 @@ import "../../../packages/memory/src/index.js";
 import "../../../packages/runtime/src/index.js";
 
 export * from "../../../packages/acts/src/index.js";
+// The act table and the session package both name the act vocabulary: the
+// table's is the whole of it and the session package's is the advertised
+// subset of the same strings, proven identical where the table declares it. A
+// star export from two doors carries neither, so the whole one is named here.
+export { ACT_KIND, type ActKind } from "../../../packages/acts/src/index.js";
 export * from "../../../packages/analytics/src/index.js";
 export * from "../../../packages/brain/src/index.js";
 export * from "../../../packages/hosted/src/index.js";

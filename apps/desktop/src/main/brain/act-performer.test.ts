@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  type CarriedIssueAction,
-  type CarriedSessionAction,
+  ACT_REFUSAL,
+  type CarriedIssueAct,
+  type CarriedSessionAct,
   REALTIME_TOOL,
   type RememberedFact,
 } from "@sidecar/acts";
@@ -10,7 +11,14 @@ import type { BrainActExecution } from "@sidecar/brain";
 import { APP_SETTING_KIND, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import type { ConversationEntry } from "@sidecar/realtime";
 import { RUN_ORIGIN } from "@sidecar/runtime-contracts";
-import { ACT_KIND, normalizeSession, SESSION_STATUS, type Session } from "@sidecar/session";
+import {
+  ACT_KIND,
+  normalizeSession,
+  type ObservedWorkspaceProject,
+  SESSION_STATUS,
+  type Session,
+  WORKSPACE_TASK_SUPPORT,
+} from "@sidecar/session";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import type { BrainAppActRequest } from "#shared/messages/brain";
 import { type BrainActPerformerDependencies, createBrainActPerformer } from "./act-performer";
@@ -66,6 +74,18 @@ const SETTING_CALL = {
   name: REALTIME_TOOL.CHANGE_APP_SETTING,
   argumentsJson: '{"setting_id":"voice_captions","value":"on"}',
 };
+/** The one act whose admission reads the saved creation defaults as well as the roster. */
+const CREATE_CALL = {
+  name: REALTIME_TOOL.CREATE_WORKSPACE,
+  argumentsJson: '{"provider_id":"conductor","project_id":"luke"}',
+};
+const LISTED_PROJECT: ObservedWorkspaceProject = {
+  providerId: "conductor",
+  providerName: "Conductor",
+  providerProjectId: "luke",
+  repository: "luke",
+  taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+};
 
 const observed = normalizeSession(
   { id: "claude-code", displayName: "Claude Code" },
@@ -79,7 +99,7 @@ const observed = normalizeSession(
 );
 
 function performer(overrides: Partial<BrainActPerformerDependencies> = {}) {
-  const performed: (CarriedSessionAction | CarriedIssueAction)[] = [];
+  const performed: (CarriedSessionAct | CarriedIssueAct)[] = [];
   const recorded: ConversationEntry[] = [];
   const appActs: BrainAppActRequest["action"][] = [];
   let facts: readonly RememberedFact[] = [];
@@ -339,7 +359,7 @@ test("a turn revoked while the roster refreshed is refused before the effect, an
     developerTurn(() => revoked),
   );
   assert.equal(refused.status, ACT_RESULT_STATUS.REJECTED);
-  assert.ok(String(refused.reason).includes("over"));
+  assert.equal(refused.reason, ACT_REFUSAL.TURN_OVER);
   assert.deepEqual(performed, []);
   assert.deepEqual(recorded, []);
 });
@@ -347,13 +367,14 @@ test("a turn revoked while the roster refreshed is refused before the effect, an
 test("a turn revoked while the creation defaults were read is refused before the effect", async () => {
   let revoked = false;
   const { acts, performed, recorded } = performer({
+    workspaceProjects: () => [LISTED_PROJECT],
     workspaceDefaults: async () => {
       revoked = true;
       return {};
     },
   });
   const refused = await acts.perform(
-    MESSAGE_CALL,
+    CREATE_CALL,
     developerTurn(() => revoked),
   );
   assert.equal(refused.status, ACT_RESULT_STATUS.REJECTED);
@@ -393,6 +414,7 @@ test("a cancel during the roster refresh or the defaults read settles the act, a
       release = resolve;
     });
     const h = performer({
+      workspaceProjects: () => [LISTED_PROJECT],
       [held]: async () => {
         await gate;
         return {};
@@ -405,7 +427,12 @@ test("a cancel during the roster refresh or the defaults read settles the act, a
       isRevoked: () => controller.signal.aborted,
       signal: controller.signal,
     };
-    const pending = h.acts.perform(MESSAGE_CALL, execution);
+    // Only a creation reads the defaults, so each held read is exercised by the
+    // act that actually waits on it.
+    const pending = h.acts.perform(
+      held === "refreshSessions" ? MESSAGE_CALL : CREATE_CALL,
+      execution,
+    );
     let settled = false;
     void pending.then(() => {
       settled = true;

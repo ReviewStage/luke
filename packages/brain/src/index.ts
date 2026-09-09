@@ -86,6 +86,7 @@ export {
   embeddingsVectors,
   type ResponsesFunctionTool,
   type ResponsesInputItem,
+  type ResponsesToolDefinition,
   responsesCompactedWindow,
   responsesInputTokens,
   responsesModelAnswer,

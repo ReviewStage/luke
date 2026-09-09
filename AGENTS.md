@@ -120,9 +120,12 @@ Trust constraints:
   it, or the same two acts asked of Luke, out loud or typed into his own
   composer, in a conversation the user is holding, each through the
   provider's own documented endpoint under the same user-supplied credential,
-  and each validated against the observed roster, and against that session's
-  own advertisement of the acts its provider documents for it now, before an
-  adapter sees it.
+  and each admitted against the observed roster, and against that session's
+  own advertisement of the acts its provider documents for it now, by
+  `@sidecar/acts`'s `admit()` — the one function that mints the validated act,
+  reading the roster for itself rather than taking a caller's copy of it — and
+  by the layers beneath it that still hold the same rule until they are
+  deleted, before an adapter sees it.
   Observation passes stay read-only by construction; where a provider's
   documented read answers only a POSTed query (Conductor's transcripts view,
   like Linear's GraphQL), observation sends a read document fixed by the
@@ -890,9 +893,9 @@ Trust constraints:
   here. The two acts a tracker takes, moving an issue to a state its latest
   observation listed and adding a comment, happen only as the direct product of
   a turn the developer opened themselves, through the tracker's own documented
-  endpoint under the same grant, validated against the observed issue roster
-  in the renderer and again in the main process before the tracker client sees
-  anything. Observation sends only the read document; the write documents are
+  endpoint under the same grant, admitted against the observed issue roster by
+  the same `admit()` every session act runs, and validated again in the main
+  process before the tracker client sees anything. Observation sends only the read document; the write documents are
   fixed by the build and issued only for a validated act.
 - The calendar is the same rule with no write path at all. Luke reads when
   the user's meetings start and end, under accounts the user signed in, and

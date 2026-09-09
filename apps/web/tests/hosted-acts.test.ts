@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { JsonObject } from "../../../packages/wire/src/testing/json.js";
-import { text, type WorkspaceAgentSelection } from "../server/core";
+import {
+  ACT_KIND,
+  admit,
+  normalizeSession,
+  PROVIDER_IDENTITY_BY_ID,
+  RUN_ORIGIN,
+  type Session,
+  text,
+  type WorkspaceAgentSelection,
+} from "../server/core";
 import {
   actUnsupportedReason,
   executeControlAct,
@@ -11,6 +20,7 @@ import {
 } from "../server/hosted/act-execute";
 import { handleSessionAct, type SessionActOptions } from "../server/hosted/act-session";
 import { handleActWorkspace } from "../server/hosted/act-workspace";
+import { cloudSessionAdapterFor } from "../server/hosted/cloud-adapters";
 import { encryptProviderKey } from "../server/hosted/encryption";
 
 const SECRET = "a".repeat(64);
@@ -287,6 +297,9 @@ function conductorApi(status: string) {
   return { fetch, posts };
 }
 
+/** The fake API one case runs against: its fetch, and what the act posted through it. */
+type ConductorApi = ReturnType<typeof conductorApi>;
+
 test("a message to a messageable Conductor session lands on its sendMessage method", async () => {
   const api = conductorApi("idle");
   const answer = await executeMessageAct({
@@ -495,4 +508,86 @@ test("no selection fields is no selection, never a guess", async () => {
 
   assert.equal(ran, true);
   assert.equal(received, undefined);
+});
+
+/**
+ * The hosted executors answer "may this act run?" with checks of their own,
+ * against the observations of their own fresh pass. `admit` answers the same
+ * question against the same observations, and this is what says the two agree
+ * before the executors' copies are deleted: every case below is run through
+ * both, and a disagreement on whether the act may run fails here.
+ */
+async function observedSessions(fetch: ConductorApi["fetch"]): Promise<readonly Session[]> {
+  const adapter = cloudSessionAdapterFor("conductor", { readApiKey: async () => "key-1", fetch });
+  const observations = await adapter.observe();
+  return observations.map((observation) =>
+    normalizeSession(PROVIDER_IDENTITY_BY_ID.conductor, observation),
+  );
+}
+
+async function admits(
+  fetch: ConductorApi["fetch"],
+  kind: typeof ACT_KIND.MESSAGE | typeof ACT_KIND.CONTROL,
+  fields: Record<string, string>,
+): Promise<boolean> {
+  const sessions = await observedSessions(fetch);
+  const admitted = await admit(
+    { kind, fields },
+    { origin: RUN_ORIGIN.USER, roster: { read: async () => sessions } },
+  );
+  return admitted.kind !== undefined;
+}
+
+test("admission answers each hosted act exactly as the executor's own checks do", async () => {
+  const messages = [
+    { status: "idle", providerSessionId: CONDUCTOR_SESSION_ID },
+    { status: "error", providerSessionId: CONDUCTOR_SESSION_ID },
+    { status: "idle", providerSessionId: "session-9" },
+  ] as const;
+  for (const { status, providerSessionId } of messages) {
+    const executor = conductorApi(status);
+    const admission = conductorApi(status);
+    const executed = await executeMessageAct({
+      providerId: "conductor",
+      providerSessionId,
+      text: "please continue",
+      apiKey: "key-1",
+      seams: { fetch: executor.fetch },
+    });
+    assert.equal(
+      await admits(admission.fetch, ACT_KIND.MESSAGE, {
+        provider_id: "conductor",
+        provider_session_id: providerSessionId,
+        text: "please continue",
+      }),
+      executed.result === "accepted",
+      `message on a ${status} ${providerSessionId}`,
+    );
+  }
+
+  const controls = [
+    { status: "working", controlId: "cancel-turn" },
+    { status: "idle", controlId: "cancel-turn" },
+    { status: "working", controlId: "terminate" },
+  ] as const;
+  for (const { status, controlId } of controls) {
+    const executor = conductorApi(status);
+    const admission = conductorApi(status);
+    const executed = await executeControlAct({
+      providerId: "conductor",
+      providerSessionId: CONDUCTOR_SESSION_ID,
+      controlId,
+      apiKey: "key-1",
+      seams: { fetch: executor.fetch },
+    });
+    assert.equal(
+      await admits(admission.fetch, ACT_KIND.CONTROL, {
+        provider_id: "conductor",
+        provider_session_id: CONDUCTOR_SESSION_ID,
+        control_id: controlId,
+      }),
+      executed.result === "accepted",
+      `${controlId} on a ${status} session`,
+    );
+  }
 });

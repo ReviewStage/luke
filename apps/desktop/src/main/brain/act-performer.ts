@@ -1,22 +1,16 @@
 import { randomUUID } from "node:crypto";
 import {
-  APP_TOOL_KIND,
-  appToolAction,
-  type CarriedAppAction,
+  ACT_KIND,
+  ACT_REFUSAL,
+  type AdmitContext,
   dispatchByKind,
-  issueToolAction,
-  REALTIME_TOOL_FAMILY,
   type RealtimeFunctionCall,
-  type RealtimeToolFamily,
   type RememberedFact,
-  realtimeToolFamily,
-  sessionToolAction,
+  type SessionActKind,
+  toolAction,
+  type ValidatedAct,
 } from "@sidecar/acts";
-import {
-  type BrainActExecution,
-  type BrainActPerformer,
-  settledUnlessAborted,
-} from "@sidecar/brain";
+import type { BrainActExecution, BrainActPerformer } from "@sidecar/brain";
 import type { AppGuideSnapshot } from "@sidecar/guide";
 import type { TrackedIssue } from "@sidecar/issues";
 import {
@@ -76,10 +70,11 @@ export interface BrainActPerformerDependencies {
 }
 
 const REFUSAL = {
-  NO_SUCH_TOOL: "No such tool exists.",
   NO_EXECUTION: "Not run: an act needs the standing of a turn.",
-  TURN_OVER: "Not run: the turn that asked for this act is over.",
-  NO_TRACKER: "No issue tracker is connected.",
+  // One sentence for a turn that ended, wherever it is noticed: here before
+  // admission runs, inside admission after each read of its own, and in the
+  // performer at the last boundary before an effect.
+  TURN_OVER: ACT_REFUSAL.TURN_OVER,
   MEMORY_NOT_SAVED: "That memory could not be saved.",
   MEMORY_NOT_REMOVED: "That memory could not be removed.",
 } as const;
@@ -90,58 +85,63 @@ function rejection(reason: string): WireRecord {
 
 /**
  * The gauntlet every act the brain asks for runs, in the main process: the
- * call is validated against the roster, the issue board, the offered
- * projects, the guide, or the remembered facts — the same validators the
- * voice's own tool calls once ran in the renderer — and only a validated act
- * reaches the performer that carries it. The brain is another way to ask,
- * never a wider one: a call that names a session Luke was not shown, a
- * project no adapter offers, or a setting the guide does not list is refused
- * with a reason the brain can read.
+ * call is admitted by `admit`, against the roster it reads for itself, the
+ * issue board, the offered projects, the guide, or the remembered facts, and
+ * only the validated act it mints reaches the performer that carries it. The
+ * brain is another way to ask, never a wider one: a call that names a session
+ * Luke was not shown, a project no adapter offers, or a setting the guide does
+ * not list is refused with a reason the brain can read.
  *
  * Before any of that, the act has to arrive with a turn's standing: an
- * execution context the brain built for the turn that emitted the call,
- * naming the run and who opened it. Whether the act may run at all was the
- * tool policy's decision before the call left the brain; here the context is
- * what says the turn still stands, and it is asked again after every step
- * awaited and once more just before the effect, so an act whose turn ended
- * while the roster was refreshing is refused rather than dispatched. A call
- * with no context or a malformed one is refused before a validator runs. The
- * origin decides only how History records the act: at the developer's ask,
- * or as Luke's own judgment in a turn nobody asked him anything in.
+ * execution context the brain built for the turn that emitted the call, naming
+ * the run and who opened it. Whether the act may run at all was the tool
+ * policy's decision before the call left the brain; here the context is what
+ * says the turn still stands, and admission asks it again after every read of
+ * its own, so an act whose turn ended while the roster was refreshing is
+ * refused rather than dispatched. A call with no context or a malformed one is
+ * refused before admission runs. The origin decides only how History records
+ * the act: at the developer's ask, or as Luke's own judgment in a turn nobody
+ * asked him anything in.
  */
 export function createBrainActPerformer(
   dependencies: BrainActPerformerDependencies,
 ): BrainActPerformer {
-  const performSession = async (
-    call: RealtimeFunctionCall,
+  const admissionContext = (execution: BrainActExecution): AdmitContext => {
+    const issues = dependencies.trackedIssues();
+    return {
+      origin: execution.origin,
+      guard: execution,
+      // The reads before an effect wait only as long as the standing does: a
+      // cancel landing mid-refresh settles the act inside admission, and the
+      // refresh's late answer dispatches nothing.
+      roster: {
+        read: async () => {
+          await dependencies.refreshSessions();
+          return dependencies.sessions();
+        },
+      },
+      projects: {
+        read: async () => dependencies.workspaceProjects(),
+        defaults: () => dependencies.workspaceDefaults(),
+        agentModels: workspaceAgentModels,
+      },
+      guide: dependencies.appGuide(),
+      ...(issues ? { issues } : undefined),
+      rememberedFacts: dependencies.rememberedFacts(),
+    };
+  };
+
+  const carrySessionAct = (
+    act: ValidatedAct<SessionActKind>,
     execution: BrainActExecution,
   ): Promise<WireRecord> => {
-    // The reads before the effect wait only as long as the standing does: a
-    // cancel landing mid-refresh settles the act here, and the refresh's late
-    // answer dispatches nothing.
-    const refreshed = await settledUnlessAborted(dependencies.refreshSessions(), execution.signal);
-    if (refreshed.aborted || execution.isRevoked()) return rejection(REFUSAL.TURN_OVER);
-    const sessions = dependencies.sessions();
-    const read = await settledUnlessAborted(dependencies.workspaceDefaults(), execution.signal);
-    if (read.aborted || execution.isRevoked()) return rejection(REFUSAL.TURN_OVER);
-    const defaults = read.value;
-    const action = sessionToolAction(
-      call,
-      sessions,
-      dependencies.workspaceProjects(),
-      workspaceAgentModels,
-      defaults.defaultProviderId,
-      defaults.defaultProjectIds,
-    );
-    if (action.status === ACT_RESULT_STATUS.REJECTED) return rejection(action.reason);
     // The ask is recorded before the outcome is known: a refusal still leaves
     // the developer having asked it, and the reply voicing the outcome is
     // recorded as what Luke said.
-    if (execution.isRevoked()) return rejection(REFUSAL.TURN_OVER);
     dependencies.recordConversationEntry(
       sessionActConversationEntry(
-        action,
-        sessions,
+        act,
+        dependencies.sessions(),
         execution.origin === RUN_ORIGIN.USER
           ? CONVERSATION_ENTRY_KIND.ACT
           : CONVERSATION_ENTRY_KIND.OWN_ACT,
@@ -149,74 +149,47 @@ export function createBrainActPerformer(
     );
     // The performer awaits once more of its own before a create or a spawn,
     // so the execution rides along to be asked again there.
-    return dependencies.sessionActs.perform(action, execution);
+    return dependencies.sessionActs.perform(act, execution);
   };
-
-  const performIssue = async (
-    call: RealtimeFunctionCall,
-    execution: BrainActExecution,
-  ): Promise<WireRecord> => {
-    const issues = dependencies.trackedIssues();
-    if (!issues) return rejection(REFUSAL.NO_TRACKER);
-    const action = issueToolAction(call, issues);
-    if (action.status === ACT_RESULT_STATUS.REJECTED) return rejection(action.reason);
-    if (execution.isRevoked()) return rejection(REFUSAL.TURN_OVER);
-    return dependencies.sessionActs.perform(action, execution);
-  };
-
-  const performApp = async (
-    call: RealtimeFunctionCall,
-    execution: BrainActExecution,
-  ): Promise<WireRecord> => {
-    const action = appToolAction(
-      call,
-      dependencies.appGuide(),
-      dependencies.sessions(),
-      dependencies.rememberedFacts(),
-    );
-    if (action.status === ACT_RESULT_STATUS.REJECTED) return rejection(action.reason);
-    if (execution.isRevoked()) return rejection(REFUSAL.TURN_OVER);
-    return carryAppAction(action);
-  };
-
-  const carryAppAction = (action: CarriedAppAction): Promise<WireRecord> =>
-    dispatchByKind(action, {
-      // The two memory writes are the notebook's own: the store's worker
-      // writes the line and its provenance, and its answer is the whole report.
-      [APP_TOOL_KIND.REMEMBER]: async (act) =>
-        (await dependencies.notebook.remember({
-          id: randomUUID(),
-          words: act.words,
-          ...(act.replaces !== undefined ? { replaces: act.replaces } : undefined),
-        }))
-          ? { status: ACT_RESULT_STATUS.ACCEPTED }
-          : rejection(REFUSAL.MEMORY_NOT_SAVED),
-      [APP_TOOL_KIND.FORGET]: async (act) =>
-        (await dependencies.notebook.forget(act.id))
-          ? { status: ACT_RESULT_STATUS.ACCEPTED }
-          : rejection(REFUSAL.MEMORY_NOT_REMOVED),
-      [APP_TOOL_KIND.SETTING]: (act) => dependencies.performAppAct(act),
-      [APP_TOOL_KIND.PANEL]: (act) => dependencies.performAppAct(act),
-      [APP_TOOL_KIND.FEEDBACK]: (act) => dependencies.performAppAct(act),
-      [APP_TOOL_KIND.UPDATE]: (act) => dependencies.performAppAct(act),
-    });
-
-  const performers = {
-    [REALTIME_TOOL_FAMILY.SESSION]: performSession,
-    [REALTIME_TOOL_FAMILY.ISSUE]: performIssue,
-    [REALTIME_TOOL_FAMILY.APP]: performApp,
-  } as const satisfies Record<
-    RealtimeToolFamily,
-    (call: RealtimeFunctionCall, execution: BrainActExecution) => Promise<WireRecord>
-  >;
 
   return {
     async perform(call: RealtimeFunctionCall, execution: BrainActExecution) {
       if (!isExecution(execution)) return rejection(REFUSAL.NO_EXECUTION);
       if (execution.isRevoked()) return rejection(REFUSAL.TURN_OVER);
-      const family = realtimeToolFamily(call.name);
-      if (family === undefined) return rejection(REFUSAL.NO_SUCH_TOOL);
-      return performers[family](call, execution);
+      const admitted = await toolAction(call, admissionContext(execution));
+      if (admitted.kind === undefined) return rejection(admitted.reason);
+      if (execution.isRevoked()) return rejection(REFUSAL.TURN_OVER);
+      // Where each admitted act goes, named kind by kind: the two notebook
+      // writes are carried here, an app act is the renderer's to perform, an
+      // issue act reaches its tracker without a History line, and a session
+      // act is recorded as it is carried.
+      return dispatchByKind(admitted, {
+        [ACT_KIND.REMEMBER]: async (act) =>
+          (await dependencies.notebook.remember({
+            id: randomUUID(),
+            words: act.words,
+            ...(act.replaces !== undefined ? { replaces: act.replaces } : undefined),
+          }))
+            ? { status: ACT_RESULT_STATUS.ACCEPTED }
+            : rejection(REFUSAL.MEMORY_NOT_SAVED),
+        [ACT_KIND.FORGET]: async (act) =>
+          (await dependencies.notebook.forget(act.id))
+            ? { status: ACT_RESULT_STATUS.ACCEPTED }
+            : rejection(REFUSAL.MEMORY_NOT_REMOVED),
+        [ACT_KIND.SETTING]: (act) => dependencies.performAppAct(act),
+        [ACT_KIND.PANEL]: (act) => dependencies.performAppAct(act),
+        [ACT_KIND.FEEDBACK]: (act) => dependencies.performAppAct(act),
+        [ACT_KIND.UPDATE]: (act) => dependencies.performAppAct(act),
+        [ACT_KIND.ISSUE_STATE]: (act) => dependencies.sessionActs.perform(act, execution),
+        [ACT_KIND.ISSUE_COMMENT]: (act) => dependencies.sessionActs.perform(act, execution),
+        [ACT_KIND.MESSAGE]: (act) => carrySessionAct(act, execution),
+        [ACT_KIND.CONTROL]: (act) => carrySessionAct(act, execution),
+        [ACT_KIND.OPEN]: (act) => carrySessionAct(act, execution),
+        [ACT_KIND.CREATE_WORKSPACE]: (act) => carrySessionAct(act, execution),
+        [ACT_KIND.ADD_AGENT]: (act) => carrySessionAct(act, execution),
+        [ACT_KIND.RENAME_WORKSPACE]: (act) => carrySessionAct(act, execution),
+        [ACT_KIND.RENAME_SESSION]: (act) => carrySessionAct(act, execution),
+      });
     },
   };
 }

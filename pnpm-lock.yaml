@@ -308,6 +308,9 @@ importers:
       '@sidecar/issues':
         specifier: workspace:*
         version: link:../issues
+      '@sidecar/runtime-contracts':
+        specifier: workspace:*
+        version: link:../runtime-contracts
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session

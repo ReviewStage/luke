@@ -1,4 +1,4 @@
-import { type AppToolAction, SESSION_LIST_ALL } from "@sidecar/acts";
+import { type CarriedAppAct, type Refusal, SESSION_LIST_ALL } from "@sidecar/acts";
 import { APP_PANEL_TAB, type AppPanelTab } from "@sidecar/guide";
 import { WingFace as LukeFace } from "@sidecar/panel";
 import { useEffect, useRef } from "react";
@@ -125,7 +125,7 @@ export function errandOriginProps() {
  * something to choose between, so the tab stands behind it. The flight takes
  * the first candidate actually drawn, and an act with none flies nowhere.
  */
-export function errandTargets(action: AppToolAction): readonly ErrandTarget[] {
+export function errandTargets(action: CarriedAppAct | Refusal): readonly ErrandTarget[] {
   if (action.kind === "setting") {
     // The guide's ids travel as plain text, so one that names no setting of
     // Luke's is no landing place either.

@@ -14,6 +14,8 @@ import {
   FEEDBACK_COMPOSER_KIND,
   SESSION_LIST_SORT,
 } from "@sidecar/guide";
+import { RUN_ORIGIN } from "@sidecar/runtime-contracts";
+import type { Session } from "@sidecar/session";
 import {
   maximumSessionMessageLength,
   normalizeSession,
@@ -22,13 +24,43 @@ import {
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import {
-  appToolAction,
+  ACT_FAMILY,
   REALTIME_TOOL,
-  REALTIME_TOOL_FAMILY,
   type RealtimeFunctionCall,
   realtimeToolFamily,
   SESSION_LIST_VOICE,
-} from "./acts.js";
+  toolAction,
+} from "./index.js";
+import { appToolAction as legacyAppToolAction } from "./legacy-validation.js";
+import { withoutAdmission } from "./testing/admitted.js";
+
+/**
+ * Every app act below is admitted twice — once by the validator the intakes
+ * ran before `admit` existed, once by `admit` — and the case passes only if
+ * the two answer identically. The pair goes when the old validator does.
+ */
+async function appToolAction(
+  functionCall: RealtimeFunctionCall,
+  guide: AppGuideSnapshot,
+  sessions: readonly Session[],
+) {
+  const legacy = legacyAppToolAction(functionCall, guide, sessions);
+  // Which family a name belongs to is the caller's question, before admission
+  // and after it; only what a named act admits to is compared here.
+  if (realtimeToolFamily(functionCall.name) !== undefined) {
+    assert.deepEqual(
+      withoutAdmission(
+        await toolAction(functionCall, {
+          origin: RUN_ORIGIN.USER,
+          roster: { read: async () => sessions },
+          guide,
+        }),
+      ),
+      legacy,
+    );
+  }
+  return legacy;
+}
 
 const GUIDE: AppGuideSnapshot = {
   facts: [
@@ -101,7 +133,7 @@ function observedConductorSession(realtimeVoice = false) {
   );
 }
 
-test("the guide's text carries app facts and compact setting data", () => {
+test("the guide's text carries app facts and compact setting data", async () => {
   const text = appGuideContextText(GUIDE);
 
   assert.match(text, /What Luke is: A macOS sidecar/);
@@ -119,11 +151,11 @@ test("the guide's text carries app facts and compact setting data", () => {
   assert.doesNotMatch(text, /Cursor Auto:/);
 });
 
-test("an empty guide says so rather than describing an app it was never told about", () => {
+test("an empty guide says so rather than describing an app it was never told about", async () => {
   assert.match(appGuideContextText(EMPTY_APP_GUIDE), /has not been provided/);
 });
 
-test("a spoken toggle accepts the unambiguous words and nothing else", () => {
+test("a spoken toggle accepts the unambiguous words and nothing else", async () => {
   assert.equal(appToggleValue("on"), "on");
   assert.equal(appToggleValue(" Enabled "), "on");
   assert.equal(appToggleValue("true"), "on");
@@ -135,59 +167,60 @@ test("a spoken toggle accepts the unambiguous words and nothing else", () => {
   assert.equal(appToggleText(false), "off");
 });
 
-test("only the app's own tools are routed to the guide", () => {
-  assert.equal(realtimeToolFamily(REALTIME_TOOL.CHANGE_APP_SETTING), REALTIME_TOOL_FAMILY.APP);
-  assert.equal(realtimeToolFamily(REALTIME_TOOL.SHOW_PANEL), REALTIME_TOOL_FAMILY.APP);
-  assert.equal(realtimeToolFamily(REALTIME_TOOL.OPEN_FEEDBACK_COMPOSER), REALTIME_TOOL_FAMILY.APP);
-  assert.equal(realtimeToolFamily(REALTIME_TOOL.RUN_UPDATE_ACTION), REALTIME_TOOL_FAMILY.APP);
-  assert.equal(
-    realtimeToolFamily(REALTIME_TOOL.SEND_SESSION_MESSAGE),
-    REALTIME_TOOL_FAMILY.SESSION,
-  );
+test("only the app's own tools are routed to the guide", async () => {
+  assert.equal(realtimeToolFamily(REALTIME_TOOL.CHANGE_APP_SETTING), ACT_FAMILY.APP);
+  assert.equal(realtimeToolFamily(REALTIME_TOOL.SHOW_PANEL), ACT_FAMILY.APP);
+  assert.equal(realtimeToolFamily(REALTIME_TOOL.OPEN_FEEDBACK_COMPOSER), ACT_FAMILY.APP);
+  assert.equal(realtimeToolFamily(REALTIME_TOOL.RUN_UPDATE_ACTION), ACT_FAMILY.APP);
+  assert.equal(realtimeToolFamily(REALTIME_TOOL.SEND_SESSION_MESSAGE), ACT_FAMILY.SESSION);
 });
 
-test("a spoken change can name only a setting the guide lists, to a value it accepts", () => {
-  const change = (argumentsJson: string) =>
-    appToolAction(call(REALTIME_TOOL.CHANGE_APP_SETTING, argumentsJson), GUIDE, []);
+test("a spoken change can name only a setting the guide lists, to a value it accepts", async () => {
+  const change = async (argumentsJson: string) =>
+    await appToolAction(call(REALTIME_TOOL.CHANGE_APP_SETTING, argumentsJson), GUIDE, []);
 
-  assert.deepEqual(change('{"setting_id":"voice_captions","value":"on"}'), {
+  assert.deepEqual(await change('{"setting_id":"voice_captions","value":"on"}'), {
     kind: "setting",
     setting: GUIDE.settings[0],
     value: "on",
   });
   // A choice is matched case-insensitively but answered in the guide's own case.
-  assert.deepEqual(change('{"setting_id":"voice","value":"Marin"}'), {
+  assert.deepEqual(await change('{"setting_id":"voice","value":"Marin"}'), {
     kind: "setting",
     setting: GUIDE.settings[1],
     value: "marin",
   });
 
-  const unknown = change('{"setting_id":"telemetry","value":"on"}');
+  const unknown = await change('{"setting_id":"telemetry","value":"on"}');
   assert.equal(unknown.status, ACT_RESULT_STATUS.REJECTED);
 
-  const unreadable = appToolAction(call(REALTIME_TOOL.CHANGE_APP_SETTING, "not json"), GUIDE, []);
+  const unreadable = await appToolAction(
+    call(REALTIME_TOOL.CHANGE_APP_SETTING, "not json"),
+    GUIDE,
+    [],
+  );
   assert.equal(unreadable.status, ACT_RESULT_STATUS.REJECTED);
 
-  const badToggle = change('{"setting_id":"voice_captions","value":"sideways"}');
+  const badToggle = await change('{"setting_id":"voice_captions","value":"sideways"}');
   assert.equal(badToggle.status, ACT_RESULT_STATUS.REJECTED);
   if (badToggle.status === ACT_RESULT_STATUS.REJECTED) {
     assert.match(badToggle.reason, /on or off/);
   }
 
-  const badChoice = change('{"setting_id":"voice","value":"basso"}');
+  const badChoice = await change('{"setting_id":"voice","value":"basso"}');
   assert.equal(badChoice.status, ACT_RESULT_STATUS.REJECTED);
   if (badChoice.status === ACT_RESULT_STATUS.REJECTED) {
     assert.match(badChoice.reason, /cedar, marin/);
   }
 });
 
-test("a value and its effort named in one change are validated as the pair they are", () => {
-  const change = (argumentsJson: string) =>
-    appToolAction(call(REALTIME_TOOL.CHANGE_APP_SETTING, argumentsJson), GUIDE, []);
+test("a value and its effort named in one change are validated as the pair they are", async () => {
+  const change = async (argumentsJson: string) =>
+    await appToolAction(call(REALTIME_TOOL.CHANGE_APP_SETTING, argumentsJson), GUIDE, []);
 
   // The pair rides one action, the effort matched like the value: case
   // retold rather than copied, answered in the guide's own casing.
-  assert.deepEqual(change('{"setting_id":"agent_model","value":"Fable 5","effort":"High"}'), {
+  assert.deepEqual(await change('{"setting_id":"agent_model","value":"Fable 5","effort":"High"}'), {
     kind: "setting",
     setting: GUIDE.settings[3],
     value: "Fable 5",
@@ -195,36 +228,40 @@ test("a value and its effort named in one change are validated as the pair they 
   });
 
   // Unnamed, nothing rides: the action carries no effort at all.
-  assert.deepEqual(change('{"setting_id":"agent_model","value":"Fable 5"}'), {
+  assert.deepEqual(await change('{"setting_id":"agent_model","value":"Fable 5"}'), {
     kind: "setting",
     setting: GUIDE.settings[3],
     value: "Fable 5",
   });
 
   // A level the choice's own list does not carry is refused with that list.
-  const wrongLevel = change('{"setting_id":"agent_model","value":"Fable 5","effort":"ultra"}');
+  const wrongLevel = await change(
+    '{"setting_id":"agent_model","value":"Fable 5","effort":"ultra"}',
+  );
   assert.equal(wrongLevel.status, ACT_RESULT_STATUS.REJECTED);
   if (wrongLevel.status === ACT_RESULT_STATUS.REJECTED) {
     assert.match(wrongLevel.reason, /low, high, max/);
   }
 
   // A choice the guide lists no levels for takes none.
-  const levelless = change('{"setting_id":"agent_model","value":"Cursor Auto","effort":"high"}');
+  const levelless = await change(
+    '{"setting_id":"agent_model","value":"Cursor Auto","effort":"high"}',
+  );
   assert.equal(levelless.status, ACT_RESULT_STATUS.REJECTED);
   if (levelless.status === ACT_RESULT_STATUS.REJECTED) {
     assert.match(levelless.reason, /Cursor Auto takes no effort level/);
   }
 
   // And a setting with no levels anywhere refuses by its own name.
-  const toggled = change('{"setting_id":"voice_captions","value":"on","effort":"high"}');
+  const toggled = await change('{"setting_id":"voice_captions","value":"on","effort":"high"}');
   assert.equal(toggled.status, ACT_RESULT_STATUS.REJECTED);
   if (toggled.status === ACT_RESULT_STATUS.REJECTED) {
     assert.match(toggled.reason, /Captions takes no effort level/);
   }
 });
 
-test("a by-hand-only setting is refused with the path to it, so the refusal is the guidance", () => {
-  const action = appToolAction(
+test("a by-hand-only setting is refused with the path to it, so the refusal is the guidance", async () => {
+  const action = await appToolAction(
     call(REALTIME_TOOL.CHANGE_APP_SETTING, '{"setting_id":"microphone","value":"on"}'),
     GUIDE,
     [],
@@ -236,65 +273,68 @@ test("a by-hand-only setting is refused with the path to it, so the refusal is t
   }
 });
 
-test("a spoken panel ask opens a real tab and narrows only to what is observed", () => {
+test("a spoken panel ask opens a real tab and narrows only to what is observed", async () => {
   const sessions = [observedConductorSession()];
-  const show = (argumentsJson: string) =>
-    appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, sessions);
+  const show = async (argumentsJson: string) =>
+    await appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, sessions);
 
-  assert.deepEqual(show("{}"), { kind: "panel", tab: APP_PANEL_TAB.SESSIONS });
-  assert.deepEqual(show('{"tab":"settings"}'), { kind: "panel", tab: APP_PANEL_TAB.SETTINGS });
-  assert.deepEqual(show('{"filters":["all"]}'), {
+  assert.deepEqual(await show("{}"), { kind: "panel", tab: APP_PANEL_TAB.SESSIONS });
+  assert.deepEqual(await show('{"tab":"settings"}'), {
+    kind: "panel",
+    tab: APP_PANEL_TAB.SETTINGS,
+  });
+  assert.deepEqual(await show('{"filters":["all"]}'), {
     kind: "panel",
     tab: APP_PANEL_TAB.SESSIONS,
     filters: ["all"],
   });
-  assert.deepEqual(show('{"filters":["conductor"]}'), {
+  assert.deepEqual(await show('{"filters":["conductor"]}'), {
     kind: "panel",
     tab: APP_PANEL_TAB.SESSIONS,
     filters: ["conductor"],
   });
   // A narrowing of one may arrive as a lone string, read as a list of one.
-  assert.deepEqual(show('{"filters":"cloud"}'), {
+  assert.deepEqual(await show('{"filters":"cloud"}'), {
     kind: "panel",
     tab: APP_PANEL_TAB.SESSIONS,
     filters: ["cloud"],
   });
 
-  assert.deepEqual(show('{"filters":["voice"]}'), {
+  assert.deepEqual(await show('{"filters":["voice"]}'), {
     status: ACT_RESULT_STATUS.REJECTED,
     reason: "No voice sessions are observed right now.",
   });
 
-  assert.equal(show('{"tab":"about"}').status, ACT_RESULT_STATUS.REJECTED);
+  assert.equal((await show('{"tab":"about"}')).status, ACT_RESULT_STATUS.REJECTED);
   // A narrowing that would show nothing is refused rather than applied: the
   // panel would fall back to everything, and the sentence would be wrong.
-  assert.equal(show('{"filters":["local"]}').status, ACT_RESULT_STATUS.REJECTED);
-  assert.equal(show('{"filters":["codex"]}').status, ACT_RESULT_STATUS.REJECTED);
+  assert.equal((await show('{"filters":["local"]}')).status, ACT_RESULT_STATUS.REJECTED);
+  assert.equal((await show('{"filters":["codex"]}')).status, ACT_RESULT_STATUS.REJECTED);
 
-  const voiceShow = (argumentsJson: string) =>
-    appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, [
+  const voiceShow = async (argumentsJson: string) =>
+    await appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, [
       observedConductorSession(true),
     ]);
-  assert.deepEqual(voiceShow('{"filters":["voice"]}'), {
+  assert.deepEqual(await voiceShow('{"filters":["voice"]}'), {
     kind: "panel",
     tab: APP_PANEL_TAB.SESSIONS,
     filters: [SESSION_LIST_VOICE],
   });
 });
 
-test("a spoken panel ask can combine filters, on the axes the chips combine on", () => {
+test("a spoken panel ask can combine filters, on the axes the chips combine on", async () => {
   const sessions = [observedConductorSession(), observedConductorSession(true)];
-  const show = (argumentsJson: string) =>
-    appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, sessions);
+  const show = async (argumentsJson: string) =>
+    await appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, sessions);
 
   // Values on different axes narrow: a cloud Conductor voice chat is observed.
-  assert.deepEqual(show('{"filters":["cloud","conductor","voice"]}'), {
+  assert.deepEqual(await show('{"filters":["cloud","conductor","voice"]}'), {
     kind: "panel",
     tab: APP_PANEL_TAB.SESSIONS,
     filters: ["cloud", "conductor", "voice"],
   });
   // A repeated value is one value, not a tighter ask.
-  assert.deepEqual(show('{"filters":["cloud","cloud"]}'), {
+  assert.deepEqual(await show('{"filters":["cloud","cloud"]}'), {
     kind: "panel",
     tab: APP_PANEL_TAB.SESSIONS,
     filters: ["cloud"],
@@ -304,12 +344,12 @@ test("a spoken panel ask can combine filters, on the axes the chips combine on",
   // nothing occupies: every observed session is cloud, so local matches
   // nothing — and with a local session beside them, local Conductor exists
   // but no local voice chat does.
-  assert.deepEqual(show('{"filters":["local","conductor"]}'), {
+  assert.deepEqual(await show('{"filters":["local","conductor"]}'), {
     status: ACT_RESULT_STATUS.REJECTED,
     reason: "No local sessions are observed right now.",
   });
-  const mixed = (argumentsJson: string) =>
-    appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, [
+  const mixed = async (argumentsJson: string) =>
+    await appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, [
       ...sessions,
       normalizeSession(
         { id: "conductor", displayName: "Conductor" },
@@ -322,36 +362,36 @@ test("a spoken panel ask can combine filters, on the axes the chips combine on",
         },
       ),
     ]);
-  assert.deepEqual(mixed('{"filters":["local","conductor"]}'), {
+  assert.deepEqual(await mixed('{"filters":["local","conductor"]}'), {
     kind: "panel",
     tab: APP_PANEL_TAB.SESSIONS,
     filters: ["local", "conductor"],
   });
-  assert.deepEqual(mixed('{"filters":["local","voice"]}'), {
+  assert.deepEqual(await mixed('{"filters":["local","voice"]}'), {
     status: ACT_RESULT_STATUS.REJECTED,
     reason: "No observed session matches that combination of filters.",
   });
 
   // The whole list is not a value to narrow by.
-  assert.deepEqual(show('{"filters":["all","cloud"]}'), {
+  assert.deepEqual(await show('{"filters":["all","cloud"]}'), {
     status: ACT_RESULT_STATUS.REJECTED,
     reason: "all is the whole list, so it combines with nothing.",
   });
   // A narrowing has to be a list of words; anything else is unreadable.
-  assert.equal(show('{"filters":[3]}').status, ACT_RESULT_STATUS.REJECTED);
-  assert.equal(show('{"filters":{"value":"cloud"}}').status, ACT_RESULT_STATUS.REJECTED);
+  assert.equal((await show('{"filters":[3]}')).status, ACT_RESULT_STATUS.REJECTED);
+  assert.equal((await show('{"filters":{"value":"cloud"}}')).status, ACT_RESULT_STATUS.REJECTED);
   // A list of nothing is no narrowing at all.
-  assert.deepEqual(show('{"filters":[]}'), { kind: "panel", tab: APP_PANEL_TAB.SESSIONS });
+  assert.deepEqual(await show('{"filters":[]}'), { kind: "panel", tab: APP_PANEL_TAB.SESSIONS });
 
   // The enum on the schema binds the model to real tokens — a developer's
   // phrase arriving untranslated is refused by the backstop, never guessed at.
-  assert.deepEqual(show('{"filters":["Claude Code"]}'), {
+  assert.deepEqual(await show('{"filters":["Claude Code"]}'), {
     status: ACT_RESULT_STATUS.REJECTED,
     reason: '"Claude Code" is not one of the filter values the tool lists.',
   });
 });
 
-test("a spoken panel ask can search, only where the list offers a search at all", () => {
+test("a spoken panel ask can search, only where the list offers a search at all", async () => {
   const pair = [
     observedConductorSession(),
     normalizeSession(
@@ -364,10 +404,10 @@ test("a spoken panel ask can search, only where the list offers a search at all"
       },
     ),
   ];
-  const show = (argumentsJson: string, sessions = pair) =>
-    appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, sessions);
+  const show = async (argumentsJson: string, sessions = pair) =>
+    await appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, sessions);
 
-  assert.deepEqual(show('{"query":" parser build "}'), {
+  assert.deepEqual(await show('{"query":" parser build "}'), {
     kind: "panel",
     tab: APP_PANEL_TAB.SESSIONS,
     query: "parser build",
@@ -375,7 +415,7 @@ test("a spoken panel ask can search, only where the list offers a search at all"
   // A search rides the same ask as a narrowing and an ordering, and the words
   // are not judged here: a query matching nothing is the list's own honest
   // answer, where a filter showing nothing would be a stale choice.
-  assert.deepEqual(show('{"filters":["conductor"],"sort":"recency","query":"zanzibar"}'), {
+  assert.deepEqual(await show('{"filters":["conductor"],"sort":"recency","query":"zanzibar"}'), {
     kind: "panel",
     tab: APP_PANEL_TAB.SESSIONS,
     filters: ["conductor"],
@@ -383,65 +423,65 @@ test("a spoken panel ask can search, only where the list offers a search at all"
     query: "zanzibar",
   });
   // A blank query is no search, the way a blank draft is no draft.
-  assert.deepEqual(show('{"query":"   "}'), { kind: "panel", tab: APP_PANEL_TAB.SESSIONS });
+  assert.deepEqual(await show('{"query":"   "}'), { kind: "panel", tab: APP_PANEL_TAB.SESSIONS });
 
   // The magnifier is only offered beside a list with more than one session,
   // and a spoken search reaches no further than the hand's own control.
-  assert.deepEqual(show('{"query":"parser"}', [observedConductorSession()]), {
+  assert.deepEqual(await show('{"query":"parser"}', [observedConductorSession()]), {
     status: ACT_RESULT_STATUS.REJECTED,
     reason: "The list offers a search only when more than one session is observed.",
   });
-  assert.equal(show('{"query":"parser"}', []).status, ACT_RESULT_STATUS.REJECTED);
+  assert.equal((await show('{"query":"parser"}', [])).status, ACT_RESULT_STATUS.REJECTED);
 });
 
-test("a spoken panel ask can reorder the list in the panel's own two words", () => {
+test("a spoken panel ask can reorder the list in the panel's own two words", async () => {
   const sessions = [observedConductorSession()];
-  const show = (argumentsJson: string) =>
-    appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, sessions);
+  const show = async (argumentsJson: string) =>
+    await appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, sessions);
 
-  assert.deepEqual(show('{"sort":"recency"}'), {
+  assert.deepEqual(await show('{"sort":"recency"}'), {
     kind: "panel",
     tab: APP_PANEL_TAB.SESSIONS,
     sort: SESSION_LIST_SORT.RECENCY,
   });
-  assert.deepEqual(show('{"filters":["conductor"],"sort":"urgency"}'), {
+  assert.deepEqual(await show('{"filters":["conductor"],"sort":"urgency"}'), {
     kind: "panel",
     tab: APP_PANEL_TAB.SESSIONS,
     filters: ["conductor"],
     sort: SESSION_LIST_SORT.URGENCY,
   });
-  assert.equal(show('{"sort":"alphabetical"}').status, ACT_RESULT_STATUS.REJECTED);
+  assert.equal((await show('{"sort":"alphabetical"}')).status, ACT_RESULT_STATUS.REJECTED);
 });
 
-test("a spoken composer open takes only the two kinds, drafting only the developer's words", () => {
-  const open = (argumentsJson: string) =>
-    appToolAction(call(REALTIME_TOOL.OPEN_FEEDBACK_COMPOSER, argumentsJson), GUIDE, []);
+test("a spoken composer open takes only the two kinds, drafting only the developer's words", async () => {
+  const open = async (argumentsJson: string) =>
+    await appToolAction(call(REALTIME_TOOL.OPEN_FEEDBACK_COMPOSER, argumentsJson), GUIDE, []);
 
-  assert.deepEqual(open('{"kind":"prompt","draft":"  let Luke restart a stuck run  "}'), {
+  assert.deepEqual(await open('{"kind":"prompt","draft":"  let Luke restart a stuck run  "}'), {
     kind: "feedback",
     composer: FEEDBACK_COMPOSER_KIND.PROMPT,
     draft: "let Luke restart a stuck run",
   });
   // No draft is a valid open: the composer simply comes up empty.
-  assert.deepEqual(open('{"kind":"feedback"}'), {
+  assert.deepEqual(await open('{"kind":"feedback"}'), {
     kind: "feedback",
     composer: FEEDBACK_COMPOSER_KIND.FEEDBACK,
   });
   // A blank draft is no draft either.
-  assert.deepEqual(open('{"kind":"prompt","draft":"   "}'), {
+  assert.deepEqual(await open('{"kind":"prompt","draft":"   "}'), {
     kind: "feedback",
     composer: FEEDBACK_COMPOSER_KIND.PROMPT,
   });
 
   // The vocabulary is fixed: a kind outside it names no composer the app has.
-  assert.equal(open('{"kind":"complaint"}').status, ACT_RESULT_STATUS.REJECTED);
-  assert.equal(open('{"kind":""}').status, ACT_RESULT_STATUS.REJECTED);
-  assert.equal(open("{}").status, ACT_RESULT_STATUS.REJECTED);
-  assert.equal(open("not json").status, ACT_RESULT_STATUS.REJECTED);
+  assert.equal((await open('{"kind":"complaint"}')).status, ACT_RESULT_STATUS.REJECTED);
+  assert.equal((await open('{"kind":""}')).status, ACT_RESULT_STATUS.REJECTED);
+  assert.equal((await open("{}")).status, ACT_RESULT_STATUS.REJECTED);
+  assert.equal((await open("not json")).status, ACT_RESULT_STATUS.REJECTED);
 });
 
-test("a spoken draft is bounded like a typed ask", () => {
-  const action = appToolAction(
+test("a spoken draft is bounded like a typed ask", async () => {
+  const action = await appToolAction(
     call(
       REALTIME_TOOL.OPEN_FEEDBACK_COMPOSER,
       `{"kind":"prompt","draft":"${"a".repeat(maximumSessionMessageLength + 100)}"}`,
@@ -457,8 +497,8 @@ test("a spoken draft is bounded like a typed ask", () => {
   }
 });
 
-test("an app tool call the build does not know is refused", () => {
-  const action = appToolAction(call("rename_the_app", "{}"), GUIDE, []);
+test("an app tool call the build does not know is refused", async () => {
+  const action = await appToolAction(call("rename_the_app", "{}"), GUIDE, []);
   assert.equal(action.status, ACT_RESULT_STATUS.REJECTED);
 });
 
@@ -466,20 +506,20 @@ function guideWithUpdate(button: AppUpdateButton, detail: string): AppGuideSnaps
   return { ...GUIDE, update: { version: "0.3.8", detail, button } };
 }
 
-test("a spoken update ask runs only the act the row's button offers", () => {
-  const ask = (argumentsJson: string, guide: AppGuideSnapshot) =>
-    appToolAction(call(REALTIME_TOOL.RUN_UPDATE_ACTION, argumentsJson), guide, []);
+test("a spoken update ask runs only the act the row's button offers", async () => {
+  const ask = async (argumentsJson: string, guide: AppGuideSnapshot) =>
+    await appToolAction(call(REALTIME_TOOL.RUN_UPDATE_ACTION, argumentsJson), guide, []);
 
   const offersCheck = guideWithUpdate(
     APP_UPDATE_ACT.CHECK,
     "The latest release has not been checked for yet.",
   );
-  assert.deepEqual(ask('{"action":"check"}', offersCheck), {
+  assert.deepEqual(await ask('{"action":"check"}', offersCheck), {
     kind: "update",
     act: APP_UPDATE_ACT.CHECK,
   });
   // One button, one act: what the row is not drawing, no ask can press.
-  const restartWhileCheckable = ask('{"action":"restart"}', offersCheck);
+  const restartWhileCheckable = await ask('{"action":"restart"}', offersCheck);
   assert.equal(restartWhileCheckable.status, ACT_RESULT_STATUS.REJECTED);
   if (restartWhileCheckable.status === ACT_RESULT_STATUS.REJECTED) {
     assert.match(restartWhileCheckable.reason, /not been checked for yet/);
@@ -487,7 +527,7 @@ test("a spoken update ask runs only the act the row's button offers", () => {
   }
 
   const offersRestart = guideWithUpdate(APP_UPDATE_ACT.RESTART, "Version 0.3.9 is downloaded.");
-  assert.deepEqual(ask('{"action":"restart"}', offersRestart), {
+  assert.deepEqual(await ask('{"action":"restart"}', offersRestart), {
     kind: "update",
     act: APP_UPDATE_ACT.RESTART,
   });
@@ -496,18 +536,18 @@ test("a spoken update ask runs only the act the row's button offers", () => {
     APP_UPDATE_ACT.DOWNLOAD,
     "This build updates by hand: the releases page has the latest.",
   );
-  assert.deepEqual(ask('{"action":"download"}', offersBrowser), {
+  assert.deepEqual(await ask('{"action":"download"}', offersBrowser), {
     kind: "update",
     act: APP_UPDATE_ACT.DOWNLOAD,
   });
-  assert.equal(ask('{"action":"check"}', offersBrowser).status, ACT_RESULT_STATUS.REJECTED);
+  assert.equal((await ask('{"action":"check"}', offersBrowser)).status, ACT_RESULT_STATUS.REJECTED);
 });
 
-test("a spoken update ask waits out a check or download already running", () => {
-  const ask = (argumentsJson: string, guide: AppGuideSnapshot) =>
-    appToolAction(call(REALTIME_TOOL.RUN_UPDATE_ACTION, argumentsJson), guide, []);
+test("a spoken update ask waits out a check or download already running", async () => {
+  const ask = async (argumentsJson: string, guide: AppGuideSnapshot) =>
+    await appToolAction(call(REALTIME_TOOL.RUN_UPDATE_ACTION, argumentsJson), guide, []);
 
-  const checking = ask(
+  const checking = await ask(
     '{"action":"check"}',
     guideWithUpdate(APP_UPDATE_WAIT.CHECKING, "Checking the latest release…"),
   );
@@ -515,7 +555,7 @@ test("a spoken update ask waits out a check or download already running", () => 
   if (checking.status === ACT_RESULT_STATUS.REJECTED)
     assert.match(checking.reason, /while the check is out/);
 
-  const downloading = ask(
+  const downloading = await ask(
     '{"action":"restart"}',
     guideWithUpdate(APP_UPDATE_WAIT.DOWNLOADING, "Downloading version 0.3.9…"),
   );
@@ -524,21 +564,26 @@ test("a spoken update ask waits out a check or download already running", () => 
     assert.match(downloading.reason, /while the download runs/);
 });
 
-test("a spoken update ask outside the vocabulary, or with no row to press, is refused", () => {
+test("a spoken update ask outside the vocabulary, or with no row to press, is refused", async () => {
   const offersCheck = guideWithUpdate(APP_UPDATE_ACT.CHECK, "This is the latest release.");
 
   assert.equal(
-    appToolAction(call(REALTIME_TOOL.RUN_UPDATE_ACTION, '{"action":"install"}'), offersCheck, [])
-      .status,
+    (
+      await appToolAction(
+        call(REALTIME_TOOL.RUN_UPDATE_ACTION, '{"action":"install"}'),
+        offersCheck,
+        [],
+      )
+    ).status,
     ACT_RESULT_STATUS.REJECTED,
   );
   assert.equal(
-    appToolAction(call(REALTIME_TOOL.RUN_UPDATE_ACTION, "{}"), offersCheck, []).status,
+    (await appToolAction(call(REALTIME_TOOL.RUN_UPDATE_ACTION, "{}"), offersCheck, [])).status,
     ACT_RESULT_STATUS.REJECTED,
   );
   // A guide with no update entry — a run that reports nothing about updates —
   // advertises no act at all.
-  const unreported = appToolAction(
+  const unreported = await appToolAction(
     call(REALTIME_TOOL.RUN_UPDATE_ACTION, '{"action":"check"}'),
     GUIDE,
     [],
@@ -546,7 +591,7 @@ test("a spoken update ask outside the vocabulary, or with no row to press, is re
   assert.equal(unreported.status, ACT_RESULT_STATUS.REJECTED);
 });
 
-test("the guide's text names the update button beside the state it stands in", () => {
+test("the guide's text names the update button beside the state it stands in", async () => {
   const text = appGuideContextText(
     guideWithUpdate(APP_UPDATE_ACT.CHECK, "This is the latest release."),
   );

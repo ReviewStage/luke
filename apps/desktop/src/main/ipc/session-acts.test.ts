@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { type CarriedSessionAction, SESSION_TOOL_KIND } from "@sidecar/acts";
+import { ACT_KIND, type CarriedSessionAct } from "@sidecar/acts";
 import {
-  ACT_KIND,
   PROVIDER_ID,
   type ProviderSessionObservation,
   type ProviderWorkspaceAgentRequest,
@@ -117,14 +116,14 @@ const WORKSPACE_OBSERVATION: ProviderSessionObservation = {
   lastActivityAt: NOW_DEEP,
   advertises: [{ kind: ACT_KIND.ADD_AGENT, agents: ["claude"] }],
 };
-const CREATE: CarriedSessionAction = {
-  kind: SESSION_TOOL_KIND.CREATE_WORKSPACE,
+const CREATE: CarriedSessionAct = {
+  kind: ACT_KIND.CREATE_WORKSPACE,
   providerId: PROVIDER_ID.CONDUCTOR,
   providerProjectId: "project-1",
   task: "add tests",
 };
-const SPAWN: CarriedSessionAction = {
-  kind: SESSION_TOOL_KIND.ADD_AGENT,
+const SPAWN: CarriedSessionAct = {
+  kind: ACT_KIND.ADD_AGENT,
   identity: { providerId: PROVIDER_ID.CONDUCTOR, providerSessionId: "workspace-1" },
   agent: "claude",
 };
