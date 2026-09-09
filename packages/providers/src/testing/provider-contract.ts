@@ -508,10 +508,15 @@ export function describeProviderContract(
         );
         const requestsAfterPass = api.requests().length;
 
-        await plugin.acts?.control?.(
+        // Asked the one way an act reaches a provider at all: `dispatchAct`
+        // resolves the advertised entry from the plugin's own latest roster,
+        // so the caller's rewritten copy never becomes a route.
+        await dispatchAct(
+          plugin,
+          "control",
           admittedForTest({
-            request: { control: { ...targeted, target: "contract-rewritten-target" } },
-            observation,
+            providerSessionId: fixtures.sessionId,
+            control: { ...targeted, target: "contract-rewritten-target" },
           }),
         );
 

@@ -25,7 +25,6 @@ import type {
   ProviderWorkspaceAgentRequest,
   ProviderWorkspaceRenameRequest,
   ProviderWorkspaceRequest,
-  SessionProviderAdapter,
 } from "./provider-contract.js";
 import type { CliConnection } from "./provider-identity.js";
 import type { SessionProvider } from "./session-identity.js";
@@ -128,44 +127,6 @@ export interface ReadHandlers {
     cursor?: string,
   ): Promise<ProviderTranscriptSinceResult>;
   conversation(input: ActInput<ConversationPage>): Promise<ProviderConversationResult>;
-}
-
-/**
- * Reads a class-shaped adapter as a plugin. Every adapter answers every act
- * through its base class today, so every handler is present and the
- * unsupported answers still come from the adapter's own roster check — which
- * is what lets one suite judge an adapter and the plugin that replaces it by
- * exactly the same tests.
- */
-export function adapterAsPlugin(adapter: SessionProviderAdapter): SessionProviderPlugin {
-  let observed: readonly ProviderSessionObservation[] = [];
-  return {
-    provider: adapter.provider,
-    async observe() {
-      observed = await adapter.observe();
-      return observed;
-    },
-    latest: () => observed,
-    projects: () => adapter.workspaceProjects(),
-    acts: {
-      message: (input) => adapter.sendMessage(ACT_REQUEST_FROM.message(input)),
-      control: (input) => adapter.executeControl(ACT_REQUEST_FROM.control(input)),
-      createWorkspace: (input) => adapter.createWorkspace(ACT_REQUEST_FROM.createWorkspace(input)),
-      spawnAgent: (input) => adapter.spawnWorkspaceAgent(ACT_REQUEST_FROM.spawnAgent(input)),
-      renameWorkspace: (input) => adapter.renameWorkspace(ACT_REQUEST_FROM.renameWorkspace(input)),
-      renameSession: (input) => adapter.renameSession(ACT_REQUEST_FROM.renameSession(input)),
-    },
-    reads: {
-      transcript: (providerSessionId) => adapter.readTranscript(providerSessionId),
-      transcriptSince: (providerSessionId, cursor) =>
-        adapter.readTranscriptSince(providerSessionId, cursor),
-      conversation: ({ request, observation }) =>
-        adapter.readConversation({
-          providerSessionId: observation.providerSessionId,
-          ...request,
-        }),
-    },
-  };
 }
 
 /**
@@ -468,30 +429,6 @@ export async function dispatchConversation(
   if (!handler) return NO_CONVERSATION_READ;
   const { providerSessionId: _named, ...page } = request;
   return handler({ request: page, observation });
-}
-
-/**
- * Reads a plugin as the class-shaped adapter the host's seams still take, so
- * a provider can become a plugin one at a time. It is the inverse of
- * {@link adapterAsPlugin} and lives exactly as long as
- * `SessionProviderAdapter` does.
- */
-export function pluginAsAdapter(plugin: SessionProviderPlugin): SessionProviderAdapter {
-  return {
-    provider: plugin.provider,
-    observe: () => plugin.observe(),
-    workspaceProjects: () => plugin.projects?.() ?? [],
-    sendMessage: (message) => dispatchAct(plugin, "message", message),
-    executeControl: (request) => dispatchAct(plugin, "control", request),
-    createWorkspace: (request) => dispatchAct(plugin, "createWorkspace", request),
-    spawnWorkspaceAgent: (request) => dispatchAct(plugin, "spawnAgent", request),
-    renameWorkspace: (request) => dispatchAct(plugin, "renameWorkspace", request),
-    renameSession: (request) => dispatchAct(plugin, "renameSession", request),
-    readTranscript: (providerSessionId) => dispatchRead(plugin, "transcript", providerSessionId),
-    readTranscriptSince: (providerSessionId, cursor) =>
-      dispatchRead(plugin, "transcriptSince", providerSessionId, cursor),
-    readConversation: (request) => dispatchConversation(plugin, request),
-  };
 }
 
 /**

@@ -8,14 +8,12 @@ import {
   mergePlugins,
   PROVIDER_ID,
   type ProviderId,
-  pluginAsAdapter,
-  type SessionProviderAdapter,
   type SessionProviderPlugin,
 } from "@sidecar/session";
 import { CLAUDE_HOOK_EVENT, installClaudeCodeObservationHooks } from "./claude-code/hooks.js";
 import { CODEX_HOOK_EVENT, installCodexObservationHooks } from "./codex/hooks.js";
 import { CODEX_PROVIDER } from "./codex/observe.js";
-import { ConductorSessionAdapter } from "./conductor/adapter.js";
+import { conductorPlugin } from "./conductor/index.js";
 import type { ObservationHookProviderId } from "./hook-registry.js";
 import { localSessionAdapters } from "./local-adapters.js";
 import type {
@@ -38,7 +36,7 @@ export interface ProviderObservationSpool {
 }
 
 export interface ProviderRegistration {
-  adapter: SessionProviderAdapter;
+  plugin: SessionProviderPlugin;
   credential?: CredentialProvider;
   registerObservationHook?: () => Promise<void>;
   observationSpool?: ProviderObservationSpool;
@@ -111,7 +109,7 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
 
   return {
     [PROVIDER_ID.CLAUDE_CODE]: {
-      adapter: pluginAsAdapter(locals.claudeCode),
+      plugin: locals.claudeCode,
       registerObservationHook: observationHookRegistration(
         installClaudeCodeObservationHooks,
         claudeInstallation,
@@ -123,7 +121,7 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
       },
     },
     [PROVIDER_ID.CODEX]: {
-      adapter: pluginAsAdapter(codex),
+      plugin: codex,
       registerObservationHook: observationHookRegistration(
         installCodexObservationHooks,
         codexInstallation,
@@ -135,7 +133,7 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
       },
     },
     [PROVIDER_ID.CONDUCTOR]: {
-      adapter: new ConductorSessionAdapter({
+      plugin: conductorPlugin({
         readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.CONDUCTOR),
         ...adapterDiagnostics(PROVIDER_ID.CONDUCTOR, options.onDiagnostic),
       }),
@@ -143,6 +141,6 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
     },
     // OMP's JSONL recordings already say whose move it is: message roles,
     // unmatched tool_execution_start, and session_exit. No observation hook.
-    [PROVIDER_ID.OMP]: { adapter: pluginAsAdapter(locals.omp) },
+    [PROVIDER_ID.OMP]: { plugin: locals.omp },
   } satisfies Readonly<Record<ProviderId, ProviderRegistration>>;
 }

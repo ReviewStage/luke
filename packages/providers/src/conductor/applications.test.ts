@@ -12,7 +12,7 @@ import {
   SESSION_LOCATION,
   SESSION_STATUS,
 } from "@sidecar/session";
-import { ConductorSessionApplicationReader } from "./session-applications.js";
+import { conductorApplications } from "./applications.js";
 
 const TEST_CONDUCTOR_AGENT_TYPE = {
   CLAUDE: "claude",
@@ -145,7 +145,7 @@ test("indexes supported provider session ids from Conductor records", async (t) 
     database.close();
   }
 
-  const snapshot = await new ConductorSessionApplicationReader({ databasePath }).read();
+  const snapshot = await conductorApplications({ databasePath }).read();
   for (const [providerId, providerSessionId] of [
     [PROVIDER_ID.CODEX, "codex-local"],
     [PROVIDER_ID.CLAUDE_CODE, "claude-local"],
@@ -165,7 +165,7 @@ test("a missing Conductor schema leaves provider observations intact", async (t)
   database.exec("CREATE TABLE unrelated (id TEXT PRIMARY KEY)");
   database.close();
 
-  const snapshot = await new ConductorSessionApplicationReader({ databasePath }).read();
+  const snapshot = await conductorApplications({ databasePath }).read();
   assert.equal(snapshot.has(PROVIDER_ID.CODEX, "codex-local"), false);
 });
 
@@ -178,7 +178,7 @@ test("annotates matching local observations and their spawned descendants", asyn
   } finally {
     database.close();
   }
-  const snapshot = await new ConductorSessionApplicationReader({ databasePath }).read();
+  const snapshot = await conductorApplications({ databasePath }).read();
   const observations = snapshot.enrich(PROVIDER_ID.CODEX, [
     {
       providerSessionId: "local",
@@ -257,7 +257,7 @@ test("a missing parent row and a cyclic parent graph remain bounded", async (t) 
   } finally {
     database.close();
   }
-  const snapshot = await new ConductorSessionApplicationReader({ databasePath }).read();
+  const snapshot = await conductorApplications({ databasePath }).read();
   const observations = snapshot.enrich(PROVIDER_ID.CODEX, [
     {
       providerSessionId: "orphaned-child",
@@ -323,7 +323,7 @@ test("groups a matched chat under its Conductor workspace like a manager", async
   } finally {
     database.close();
   }
-  const snapshot = await new ConductorSessionApplicationReader({ databasePath }).read();
+  const snapshot = await conductorApplications({ databasePath }).read();
   const observations = snapshot.enrich(PROVIDER_ID.CLAUDE_CODE, [
     OBSERVED_CHAT,
     { ...OBSERVED_CHAT, providerSessionId: "sibling", title: "Sibling" },
@@ -381,7 +381,7 @@ test("a nameless workspace groups under its PR title before its directory", asyn
   } finally {
     database.close();
   }
-  const snapshot = await new ConductorSessionApplicationReader({ databasePath }).read();
+  const snapshot = await conductorApplications({ databasePath }).read();
   const observations = snapshot.enrich(PROVIDER_ID.CLAUDE_CODE, [
     OBSERVED_CHAT,
     { ...OBSERVED_CHAT, providerSessionId: "sibling", title: "Sibling" },
@@ -404,7 +404,7 @@ test("titles a matched chat by the name Conductor gave it", async (t) => {
   } finally {
     database.close();
   }
-  const snapshot = await new ConductorSessionApplicationReader({ databasePath }).read();
+  const snapshot = await conductorApplications({ databasePath }).read();
   const observations = snapshot.enrich(PROVIDER_ID.CLAUDE_CODE, [
     OBSERVED_CHAT,
     { ...OBSERVED_CHAT, providerSessionId: "sibling", title: "Sibling" },
@@ -433,7 +433,7 @@ test("the annotation fills only an absent row link; precedence is not its call",
   } finally {
     database.close();
   }
-  const snapshot = await new ConductorSessionApplicationReader({ databasePath }).read();
+  const snapshot = await conductorApplications({ databasePath }).read();
   const observations = snapshot.enrich(PROVIDER_ID.CLAUDE_CODE, [
     {
       ...OBSERVED_CHAT,
@@ -478,7 +478,7 @@ test("a spawned descendant inherits its ancestor's Conductor workspace", async (
   } finally {
     database.close();
   }
-  const snapshot = await new ConductorSessionApplicationReader({ databasePath }).read();
+  const snapshot = await conductorApplications({ databasePath }).read();
   const observations = snapshot.enrich(PROVIDER_ID.CODEX, [
     OBSERVED_CHAT,
     {
@@ -516,7 +516,7 @@ test("a schema from before chat titles still annotates and groups", async (t) =>
   } finally {
     database.close();
   }
-  const snapshot = await new ConductorSessionApplicationReader({ databasePath }).read();
+  const snapshot = await conductorApplications({ databasePath }).read();
   const observations = snapshot.enrich(PROVIDER_ID.CLAUDE_CODE, [OBSERVED_CHAT]);
 
   assert.equal(observations[0]?.title, "Local");
@@ -548,7 +548,7 @@ test("keeps another manager's workspace and stays on the row instead", async (t)
     scopeId: "superset",
     managerName: "Superset",
   };
-  const snapshot = await new ConductorSessionApplicationReader({ databasePath }).read();
+  const snapshot = await conductorApplications({ databasePath }).read();
   const observations = snapshot.enrich(PROVIDER_ID.CLAUDE_CODE, [
     {
       ...OBSERVED_CHAT,
@@ -600,7 +600,7 @@ test("drops chats filed away in Conductor: hidden chats and archived workspaces"
   } finally {
     database.close();
   }
-  const snapshot = await new ConductorSessionApplicationReader({ databasePath }).read();
+  const snapshot = await conductorApplications({ databasePath }).read();
   const observations = snapshot.enrich(PROVIDER_ID.CLAUDE_CODE, [
     { ...OBSERVED_CHAT, providerSessionId: "open", title: "Open" },
     { ...OBSERVED_CHAT, providerSessionId: "hidden", title: "Hidden" },
@@ -643,7 +643,7 @@ test("a schema from before workspaces still annotates, without grouping", async 
   } finally {
     database.close();
   }
-  const snapshot = await new ConductorSessionApplicationReader({ databasePath }).read();
+  const snapshot = await conductorApplications({ databasePath }).read();
   const observations = snapshot.enrich(PROVIDER_ID.CLAUDE_CODE, [OBSERVED_CHAT]);
 
   assert.equal(observations[0]?.workspace, undefined);

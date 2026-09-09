@@ -79,9 +79,9 @@ export async function handleProjects(options: ProjectsOptions): Promise<Response
         stored.has(providerId),
     ),
     readApiKey,
-    read: async (adapter) => {
-      await adapter.observe();
-      return adapter.workspaceProjects();
+    read: async (plugin) => {
+      await plugin.observe();
+      return plugin.projects?.() ?? [];
     },
     seams: options,
   });

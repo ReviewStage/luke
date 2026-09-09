@@ -83,12 +83,12 @@ import {
   type SessionKey,
 } from "@sidecar/runtime-contracts";
 import {
-  type ProviderTranscriptResult,
-  type ProviderTranscriptSinceResult,
+  dispatchRead,
   SESSION_LOCATION,
   SESSION_STATUS,
   type Session,
   type SessionIdentity,
+  type SessionProviderPlugin,
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { type BrainActPerformerDependencies, createBrainActPerformer } from "./act-performer.js";
@@ -100,15 +100,6 @@ import {
   childRecordOf,
   wireChildren,
 } from "./wiring-children.js";
-
-/** What a provider adapter answers a transcript read with, by the session's own id. */
-interface TranscriptReader {
-  readTranscriptSince(
-    providerSessionId: string,
-    cursor: string | undefined,
-  ): Promise<ProviderTranscriptSinceResult>;
-  readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult>;
-}
 
 export interface BrainWiringDependencies extends ChildWiringDependencies {
   /** A conversation's envelope, read and written only through the store built here; a temporary thread's lives in memory alone. */
@@ -131,7 +122,7 @@ export interface BrainWiringDependencies extends ChildWiringDependencies {
   acts: BrainActPerformerDependencies;
   roster: () => BrainRoster;
   standingContext: () => string;
-  adapterFor: (providerId: string) => TranscriptReader | undefined;
+  pluginFor: (providerId: string) => SessionProviderPlugin | undefined;
   session: (identity: SessionIdentity) => Session | undefined;
   deliver: (delivery: BrainDelivery) => Promise<void>;
   /** Which credential the policy would build an adapter under, by reference; the value never enters a configuration. */
@@ -624,19 +615,19 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
         return notes.map((note) => `## ${note.name}\n\n${note.content}`).join("\n\n");
       },
       readTranscriptSince: (identity, cursor) => {
-        const adapter = dependencies.adapterFor(identity.providerId);
-        if (!adapter) {
+        const plugin = dependencies.pluginFor(identity.providerId);
+        if (!plugin) {
           return Promise.resolve({
             status: ACT_RESULT_STATUS.UNSUPPORTED,
             reason: "That session's provider is not connected.",
           });
         }
-        return adapter.readTranscriptSince(identity.providerSessionId, cursor);
+        return dispatchRead(plugin, "transcriptSince", identity.providerSessionId, cursor);
       },
       readTranscript: (identity) => {
         const session = dependencies.session(identity);
-        const adapter = dependencies.adapterFor(identity.providerId);
-        if (!session || !adapter) {
+        const plugin = dependencies.pluginFor(identity.providerId);
+        if (!session || !plugin) {
           return Promise.resolve({
             status: ACT_RESULT_STATUS.REJECTED,
             reason: "No observed session matches that identity.",
@@ -648,7 +639,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
             reason: "A cloud session's conversation lives with its provider, not on this machine.",
           });
         }
-        return adapter.readTranscript(identity.providerSessionId);
+        return dispatchRead(plugin, "transcript", identity.providerSessionId);
       },
       deliver: (delivery) => dependencies.deliver({ ...delivery, sessionKey }),
       store,

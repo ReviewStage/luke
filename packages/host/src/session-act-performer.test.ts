@@ -4,17 +4,14 @@ import { ACT_KIND, ACT_REFUSAL, type SessionActKind, type ValidatedAct } from "@
 import { drainMicrotasks } from "@sidecar/fixtures/testing";
 import { RUN_ORIGIN } from "@sidecar/runtime-contracts";
 import {
+  type ActHandlers,
   PROVIDER_ID,
   type ProviderSessionObservation,
-  type ProviderWorkspaceAgentRequest,
-  type ProviderWorkspaceRequest,
-  type ProviderWorkspaceResult,
   SESSION_STATUS,
   type SessionProvider,
-  SessionProviderAdapterBase,
+  type SessionProviderPlugin,
   SessionRoster,
   WORKSPACE_TASK_SUPPORT,
-  type WorkspaceProject,
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { admittedForTest } from "@sidecar/wire/testing";
@@ -29,38 +26,43 @@ import type { SettingsStore } from "./settings-store.js";
  * never asked; the live counterparts assert the same paths still land.
  */
 
-class FakeAdapter extends SessionProviderAdapterBase {
-  readonly provider: SessionProvider = { id: PROVIDER_ID.CONDUCTOR, displayName: "Conductor" };
-  readonly creates: ProviderWorkspaceRequest[] = [];
-  readonly spawns: ProviderWorkspaceAgentRequest[] = [];
+const FAKE_PROVIDER: SessionProvider = {
+  id: PROVIDER_ID.CONDUCTOR,
+  displayName: "Conductor",
+};
 
-  async observe(): Promise<readonly ProviderSessionObservation[]> {
-    return [WORKSPACE_OBSERVATION];
-  }
+interface FakePlugin extends SessionProviderPlugin {
+  readonly creates: Parameters<ActHandlers["createWorkspace"]>[0][];
+  readonly spawns: Parameters<ActHandlers["spawnAgent"]>[0][];
+}
 
-  override workspaceProjects(): readonly WorkspaceProject[] {
-    return [
+function fakePlugin(): FakePlugin {
+  const creates: Parameters<ActHandlers["createWorkspace"]>[0][] = [];
+  const spawns: Parameters<ActHandlers["spawnAgent"]>[0][] = [];
+  return {
+    provider: FAKE_PROVIDER,
+    observe: async () => [WORKSPACE_OBSERVATION],
+    latest: () => [WORKSPACE_OBSERVATION],
+    projects: () => [
       {
         providerProjectId: "project-1",
         repository: "acme/app",
         taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
       },
-    ];
-  }
-
-  override async createWorkspace(
-    request: ProviderWorkspaceRequest,
-  ): Promise<ProviderWorkspaceResult> {
-    this.creates.push(request);
-    return { status: ACT_RESULT_STATUS.ACCEPTED };
-  }
-
-  override async spawnWorkspaceAgent(
-    request: ProviderWorkspaceAgentRequest,
-  ): Promise<ProviderWorkspaceResult> {
-    this.spawns.push(request);
-    return { status: ACT_RESULT_STATUS.ACCEPTED };
-  }
+    ],
+    creates,
+    spawns,
+    acts: {
+      async createWorkspace(input) {
+        creates.push(input);
+        return { status: ACT_RESULT_STATUS.ACCEPTED };
+      },
+      async spawnAgent(input) {
+        spawns.push(input);
+        return { status: ACT_RESULT_STATUS.ACCEPTED };
+      },
+    },
+  };
 }
 
 /** A settings read that stays open until the test releases it. */
@@ -82,16 +84,16 @@ function heldSettings() {
   return { store, release: () => release?.(), reads: () => reads };
 }
 
-function deeperPerformer(adapter: FakeAdapter, settingsStore: Pick<SettingsStore, "get">) {
+function deeperPerformer(plugin: FakePlugin, settingsStore: Pick<SettingsStore, "get">) {
   const registry = new SessionRoster();
-  registry.replaceProvider(adapter.provider, [WORKSPACE_OBSERVATION]);
+  registry.replaceProvider(plugin.provider, [WORKSPACE_OBSERVATION]);
   const unreachable = async () => {
     throw new Error("the CLI is not reached in these tests");
   };
   return createSessionActPerformer({
     sessionRegistry: registry,
     openExternal: async () => {},
-    adapterFor: (providerId) => (providerId === adapter.provider.id ? adapter : undefined),
+    pluginFor: (providerId) => (providerId === plugin.provider.id ? plugin : undefined),
     sendsNetwork: true,
     settingsStore,
     rememberWorkspaceDefaults: async () => {},
@@ -135,43 +137,43 @@ const SPAWN: ValidatedAct<SessionActKind> = admittedForTest({
 });
 
 test("a create whose turn ends while the stored defaults are read never reaches the provider", async () => {
-  const adapter = new FakeAdapter();
+  const plugin = fakePlugin();
   const settings = heldSettings();
-  const performer = deeperPerformer(adapter, settings.store);
+  const performer = deeperPerformer(plugin, settings.store);
   let revoked = false;
   const pending = performer.perform(CREATE, { isRevoked: () => revoked });
   await drainMicrotasks(10);
   assert.equal(settings.reads(), 1);
-  assert.deepEqual(adapter.creates, []);
+  assert.deepEqual(plugin.creates, []);
   revoked = true;
   settings.release();
   const result = await pending;
   assert.equal(result.status, ACT_RESULT_STATUS.REJECTED);
   assert.equal(result.reason, ACT_REFUSAL.TURN_OVER);
-  assert.deepEqual(adapter.creates, []);
+  assert.deepEqual(plugin.creates, []);
 });
 
 test("a spawn whose turn ends while the stored defaults are read never reaches the provider", async () => {
-  const adapter = new FakeAdapter();
+  const plugin = fakePlugin();
   const settings = heldSettings();
-  const performer = deeperPerformer(adapter, settings.store);
+  const performer = deeperPerformer(plugin, settings.store);
   let revoked = false;
   const pending = performer.perform(SPAWN, { isRevoked: () => revoked });
   await drainMicrotasks(10);
   assert.equal(settings.reads(), 1);
-  assert.deepEqual(adapter.spawns, []);
+  assert.deepEqual(plugin.spawns, []);
   revoked = true;
   settings.release();
   const result = await pending;
   assert.equal(result.status, ACT_RESULT_STATUS.REJECTED);
   assert.equal(result.reason, ACT_REFUSAL.TURN_OVER);
-  assert.deepEqual(adapter.spawns, []);
+  assert.deepEqual(plugin.spawns, []);
 });
 
 test("a create whose turn is cancelled while the stored defaults are read settles at once, and the late read lands nothing", async () => {
-  const adapter = new FakeAdapter();
+  const plugin = fakePlugin();
   const settings = heldSettings();
-  const performer = deeperPerformer(adapter, settings.store);
+  const performer = deeperPerformer(plugin, settings.store);
   const controller = new AbortController();
   const pending = performer.perform(CREATE, {
     isRevoked: () => controller.signal.aborted,
@@ -185,7 +187,7 @@ test("a create whose turn is cancelled while the stored defaults are read settle
   assert.equal(result.status, ACT_RESULT_STATUS.REJECTED);
   settings.release();
   await drainMicrotasks(10);
-  assert.deepEqual(adapter.creates, []);
+  assert.deepEqual(plugin.creates, []);
   // A row's own press carries no signal and waits the read out, as before.
   const direct = performer.perform(CREATE, { isRevoked: () => false });
   await drainMicrotasks(10);
@@ -194,33 +196,33 @@ test("a create whose turn is cancelled while the stored defaults are read settle
 });
 
 test("a create and a spawn whose turn still stands after the read land on the provider", async () => {
-  const adapter = new FakeAdapter();
+  const plugin = fakePlugin();
   const settings = heldSettings();
-  const performer = deeperPerformer(adapter, settings.store);
+  const performer = deeperPerformer(plugin, settings.store);
   const live = { isRevoked: () => false };
 
   const creating = performer.perform(CREATE, live);
   await drainMicrotasks(10);
   settings.release();
   assert.equal((await creating).status, ACT_RESULT_STATUS.ACCEPTED);
-  assert.equal(adapter.creates.length, 1);
-  assert.equal(adapter.creates[0]?.task, "add tests");
+  assert.equal(plugin.creates.length, 1);
+  assert.equal(plugin.creates[0]?.task, "add tests");
 
   const spawning = performer.perform(SPAWN, live);
   await drainMicrotasks(10);
   settings.release();
   assert.equal((await spawning).status, ACT_RESULT_STATUS.ACCEPTED);
-  assert.equal(adapter.spawns.length, 1);
-  assert.equal(adapter.spawns[0]?.agent, "claude");
+  assert.equal(plugin.spawns.length, 1);
+  assert.equal(plugin.spawns[0]?.request.agent, "claude");
 });
 
 test("a row-shaped call with no guard still lands, because a press is its own turn", async () => {
-  const adapter = new FakeAdapter();
+  const plugin = fakePlugin();
   const settings = heldSettings();
-  const performer = deeperPerformer(adapter, settings.store);
+  const performer = deeperPerformer(plugin, settings.store);
   const creating = performer.perform(CREATE);
   await drainMicrotasks(10);
   settings.release();
   assert.equal((await creating).status, ACT_RESULT_STATUS.ACCEPTED);
-  assert.equal(adapter.creates.length, 1);
+  assert.equal(plugin.creates.length, 1);
 });

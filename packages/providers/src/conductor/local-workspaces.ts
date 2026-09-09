@@ -2,10 +2,7 @@ import {
   ACT_RESULT_STATUS,
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   ExternalOpenAnswerLostError,
-  type ProviderSessionObservation,
-  type ProviderWorkspaceRequest,
-  type ProviderWorkspaceResult,
-  SessionProviderAdapterBase,
+  type SessionProviderPlugin,
   UNSUPPORTED_BY_OBSERVATION,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
@@ -19,10 +16,7 @@ import {
   type SqliteDatabase,
   type SqliteModuleLoader,
 } from "../shared/local-sqlite.js";
-import {
-  conductorCreateWorkspaceLink,
-  defaultConductorDatabasePath,
-} from "./session-applications.js";
+import { conductorCreateWorkspaceLink, defaultConductorDatabasePath } from "./applications.js";
 
 /**
  * The name a person reads for the local creator, set apart from the cloud
@@ -84,7 +78,7 @@ interface ConductorRepository {
   repositoryLabel: string;
 }
 
-export interface ConductorRepositoryReaderOptions {
+export interface ConductorRepositoriesOptions {
   databasePath?: string;
   sqlite?: SqliteModuleLoader;
 }
@@ -96,11 +90,15 @@ export interface ConductorRepositoryReaderOptions {
  * empty offer, never a failed pass — because a place to create a workspace
  * that cannot be read is a place nothing may be created.
  */
-export class ConductorRepositoryReader {
+export interface ConductorRepositories {
+  read(): Promise<readonly ConductorRepository[]>;
+}
+
+class ConductorRepositoryIndex implements ConductorRepositories {
   readonly #databasePath: string;
   readonly #sqlite: SqliteModuleLoader;
 
-  constructor(options: ConductorRepositoryReaderOptions = {}) {
+  constructor(options: ConductorRepositoriesOptions = {}) {
     this.#databasePath = options.databasePath ?? defaultConductorDatabasePath();
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
   }
@@ -147,10 +145,22 @@ export class ConductorRepositoryReader {
   }
 }
 
-export interface ConductorLocalWorkspaceAdapterOptions {
-  reader?: ConductorRepositoryReader;
+/** The repositories Conductor's own index holds, read read-only. */
+export function conductorRepositories(
+  options: ConductorRepositoriesOptions = {},
+): ConductorRepositories {
+  return new ConductorRepositoryIndex(options);
+}
+
+export interface ConductorLocalWorkspaceOptions {
+  repositories?: ConductorRepositories;
   /** Hands one address to the operating system, the sole write this makes. */
   openExternal: (url: string) => Promise<void>;
+}
+
+/** A Conductor local-workspace plugin, plus the read that fills its offer. */
+export interface ConductorLocalWorkspacePlugin extends SessionProviderPlugin {
+  refresh(): Promise<void>;
 }
 
 /**
@@ -173,113 +183,107 @@ export interface ConductorLocalWorkspaceAdapterOptions {
  * own root path, read back here rather than taken from the request, so a create
  * can only ever reach a repository this pass saw.
  */
-export class ConductorLocalWorkspaceAdapter extends SessionProviderAdapterBase {
-  readonly provider = {
-    id: CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
-    displayName: CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_NAME,
-  };
-  readonly #reader: ConductorRepositoryReader;
-  readonly #openExternal: (url: string) => Promise<void>;
-  #projects: readonly WorkspaceProject[] = [];
+export function conductorLocalWorkspacePlugin(
+  options: ConductorLocalWorkspaceOptions,
+): ConductorLocalWorkspacePlugin {
+  const repositoryIndex = options.repositories ?? conductorRepositories();
+  let projects: readonly WorkspaceProject[] = [];
 
-  constructor(options: ConductorLocalWorkspaceAdapterOptions) {
-    super();
-    this.#reader = options.reader ?? new ConductorRepositoryReader();
-    this.#openExternal = options.openExternal;
-  }
+  return {
+    provider: {
+      id: CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
+      displayName: CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_NAME,
+    },
 
-  /** Creates no rows: local Conductor chats are observed by their own agents. */
-  async observe(): Promise<readonly ProviderSessionObservation[]> {
-    return [];
-  }
+    /**
+     * Creates no rows: local Conductor chats are observed by their own
+     * agents. The empty roster is the honest statement that this provider id
+     * exists so a creation ask resolves to exactly one plugin.
+     */
+    observe: async () => [],
+    latest: () => [],
+    projects: () => projects,
 
-  /**
-   * Re-reads the repositories Conductor holds and turns each into a project a
-   * workspace can be created in. A read that fails or finds nothing empties
-   * the offer, so a create is never validated against repositories a later
-   * read could no longer see.
-   */
-  async refresh(): Promise<void> {
-    let repositories: readonly ConductorRepository[];
-    try {
-      repositories = await this.#reader.read();
-    } catch (error) {
-      // A read that fails empties the offer before the throw surfaces, so a
-      // create is never validated against repositories a later pass could no
-      // longer see — where Conductor's unmatched-path fallback would otherwise
-      // land a workspace in the wrong repository. The caller still logs it.
-      this.#projects = [];
-      throw error;
-    }
-    this.#projects = repositories.map((repository) => ({
-      providerProjectId: repository.id,
-      repository: repository.repositoryLabel,
-      // Conductor makes an idle workspace happily and takes the opening task
-      // as its first prompt, so a task is welcome but never required.
-      taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
-      // The creation link documents no name, so Conductor names the workspace.
-      namesItself: true,
-      // The repository's own main-worktree path, which the creation link
-      // matches a project by and which a create reads back rather than trusts
-      // from the request.
-      providerTargetId: repository.rootPath,
-    }));
-  }
-
-  override workspaceProjects(): readonly WorkspaceProject[] {
-    return this.#projects;
-  }
-
-  override async createWorkspace(
-    request: ProviderWorkspaceRequest,
-  ): Promise<ProviderWorkspaceResult> {
-    const project = this.#projects.find(
-      (candidate) =>
-        candidate.providerProjectId === request.providerProjectId &&
-        (request.providerTargetId === undefined ||
-          candidate.providerTargetId === request.providerTargetId),
-    );
-    // The root path a create fires against is the offered project's own, never
-    // the request's: a create can reach only a repository this pass reported.
-    const rootPath = project?.providerTargetId;
-    if (!rootPath)
-      return {
-        status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: UNSUPPORTED_BY_OBSERVATION,
-      };
-    const link = conductorCreateWorkspaceLink(rootPath, request.task);
-    try {
-      await this.#openExternal(link);
-    } catch (error) {
-      // A link handed to the opening process and never answered may have
-      // created the workspace; that is an unknown outcome, not a refusal,
-      // and the journal must not read it as one it can repeat.
-      if (error instanceof ExternalOpenAnswerLostError) {
-        return { status: UNKNOWN_ACT_STATUS, reason: error.message };
+    /**
+     * Re-reads the repositories Conductor holds and turns each into a project
+     * a workspace can be created in. A read that fails or finds nothing
+     * empties the offer, so a create is never validated against repositories
+     * a later read could no longer see.
+     */
+    async refresh() {
+      let repositories: readonly ConductorRepository[];
+      try {
+        repositories = await repositoryIndex.read();
+      } catch (error) {
+        // A read that fails empties the offer before the throw surfaces, so a
+        // create is never validated against repositories a later pass could
+        // no longer see — where Conductor's unmatched-path fallback would
+        // otherwise land a workspace in the wrong repository. The caller
+        // still logs it.
+        projects = [];
+        throw error;
       }
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: `Couldn't ask Conductor to create the workspace: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      };
-    }
-    // Conductor's link both creates the workspace and opens it in Conductor's
-    // own window, and hands back no session id, so none is reported and the
-    // created-workspace open tracker stays out of it: the workspace opens
-    // where it was made.
-    //
-    // Conductor's creation link pre-fills the opening task in the new
-    // workspace's composer but does not send it — its link documents no way to,
-    // and a local chat has no message endpoint to send it after — so a create
-    // carrying a task says so, rather than letting the agent look started when
-    // the prompt is only waiting for the developer's own send.
-    return request.task
-      ? {
-          status: ACT_RESULT_STATUS.ACCEPTED,
-          warning:
-            "Conductor opened the new workspace with your prompt ready in its composer — press Return there to send it, since Conductor's create link can't send it for you.",
+      projects = repositories.map((repository) => ({
+        providerProjectId: repository.id,
+        repository: repository.repositoryLabel,
+        // Conductor makes an idle workspace happily and takes the opening
+        // task as its first prompt, so a task is welcome but never required.
+        taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+        // The creation link documents no name, so Conductor names the
+        // workspace.
+        namesItself: true,
+        // The repository's own main-worktree path, which the creation link
+        // matches a project by and which a create reads back rather than
+        // trusts from the request.
+        providerTargetId: repository.rootPath,
+      }));
+    },
+
+    acts: {
+      async createWorkspace({ project, task }) {
+        // The root path a create fires against is the offered project's own, never
+        // the request's: a create can reach only a repository this pass reported.
+        const rootPath = project.providerTargetId;
+        if (!rootPath)
+          return {
+            status: ACT_RESULT_STATUS.UNSUPPORTED,
+            reason: UNSUPPORTED_BY_OBSERVATION,
+          };
+        const link = conductorCreateWorkspaceLink(rootPath, task);
+        try {
+          await options.openExternal(link);
+        } catch (error) {
+          // A link handed to the opening process and never answered may have
+          // created the workspace; that is an unknown outcome, not a refusal,
+          // and the journal must not read it as one it can repeat.
+          if (error instanceof ExternalOpenAnswerLostError) {
+            return { status: UNKNOWN_ACT_STATUS, reason: error.message };
+          }
+          return {
+            status: ACT_RESULT_STATUS.REJECTED,
+            reason: `Couldn't ask Conductor to create the workspace: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          };
         }
-      : { status: ACT_RESULT_STATUS.ACCEPTED };
-  }
+        // Conductor's link both creates the workspace and opens it in Conductor's
+        // own window, and hands back no session id, so none is reported and the
+        // created-workspace open tracker stays out of it: the workspace opens
+        // where it was made.
+        //
+        // Conductor's creation link pre-fills the opening task in the new
+        // workspace's composer but does not send it — its link documents no way to,
+        // and a local chat has no message endpoint to send it after — so a create
+        // carrying a task says so, rather than letting the agent look started when
+        // the prompt is only waiting for the developer's own send.
+        return task
+          ? {
+              status: ACT_RESULT_STATUS.ACCEPTED,
+              warning:
+                "Conductor opened the new workspace with your prompt ready in its composer — press Return there to send it, since Conductor's create link can't send it for you.",
+            }
+          : { status: ACT_RESULT_STATUS.ACCEPTED };
+      },
+    },
+  };
 }

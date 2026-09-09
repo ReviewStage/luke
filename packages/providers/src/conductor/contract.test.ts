@@ -1,6 +1,6 @@
-import { ACT_KIND, adapterAsPlugin } from "@sidecar/session";
+import { ACT_KIND } from "@sidecar/session";
 import { describeProviderContract, PROVIDER_OBSERVATION } from "../testing/index.js";
-import { ConductorSessionAdapter } from "./adapter.js";
+import { conductorPlugin } from "./index.js";
 
 const CONDUCTOR_SESSION_ID = {
   IDLE: "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50",
@@ -9,15 +9,13 @@ const CONDUCTOR_SESSION_ID = {
 
 describeProviderContract(
   (input) =>
-    adapterAsPlugin(
-      new ConductorSessionAdapter({
-        readApiKey: input.readApiKey,
-        baseUrl: "https://api.conductor.test",
-        fetch: input.api.fetch,
-        now: input.now,
-        minimumRefreshIntervalMs: input.minimumRefreshIntervalMs,
-      }),
-    ),
+    conductorPlugin({
+      readApiKey: input.readApiKey,
+      baseUrl: "https://api.conductor.test",
+      fetch: input.api.fetch,
+      now: input.now,
+      minimumRefreshIntervalMs: input.minimumRefreshIntervalMs,
+    }),
   {
     providerId: "conductor",
     observation: PROVIDER_OBSERVATION.KEY,

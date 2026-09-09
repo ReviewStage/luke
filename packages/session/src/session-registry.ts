@@ -1,5 +1,5 @@
 import { normalizeSession, normalizeSessionIdentity } from "./normalize.js";
-import type { SessionProviderAdapter } from "./provider-contract.js";
+import type { SessionProviderPlugin } from "./provider-plugin.js";
 import type { SessionIdentity, SessionProvider } from "./session-identity.js";
 import type { ProviderSessionObservation, Session } from "./session-shape.js";
 
@@ -83,15 +83,15 @@ export class SessionRoster {
     return sessions;
   }
 
-  /** Reads a provider adapter and takes its newest full observation as the provider's sessions. */
+  /** Reads one provider's pass and takes its newest full observation as that provider's sessions. */
   async refresh(
-    adapter: Pick<SessionProviderAdapter, "provider" | "observe">,
+    plugin: Pick<SessionProviderPlugin, "provider" | "observe">,
     transform?: SessionObservationTransform,
   ): Promise<readonly Session[]> {
-    const providerId = normalizedProviderId(adapter.provider);
-    const observed = await adapter.observe();
+    const providerId = normalizedProviderId(plugin.provider);
+    const observed = await plugin.observe();
     return this.replaceProvider(
-      adapter.provider,
+      plugin.provider,
       transform ? transform(providerId, observed) : observed,
     );
   }

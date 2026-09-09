@@ -1,116 +1,17 @@
-import { ACT_RESULT_STATUS, type Admitted } from "@sidecar/wire";
-import type {
-  ProviderActResult,
-  ProviderControlResult,
-  ProviderConversationResult,
-  ProviderMessageResult,
-  ProviderTranscriptResult,
-  ProviderTranscriptSinceResult,
-  ProviderWorkspaceResult,
-} from "./act-results.js";
+import type { Admitted } from "@sidecar/wire";
 import type { AdvertisedControl } from "./advertised-acts.js";
-import type { SessionProvider } from "./session-identity.js";
-import type { ProviderSessionObservation } from "./session-shape.js";
 import type { WorkspaceAgentSelection } from "./workspace-agents.js";
-import type { WorkspaceProject } from "./workspace-projects.js";
 
 /**
- * A provider adapter has no dependency on Electron, a renderer, or live UI
- * state. Every adapter answers every act, because unsupported is already an
- * answer rather than a failure: one whose provider documents no way to do a
- * thing inherits that answer from `SessionProviderAdapterBase` and says so,
- * where a missing method would leave each caller asking whether the question
- * could be put at all. Overriding one is what taking on its constraint means.
- *
- * Every write below takes an `Admitted` request, which only `admit()` in
- * `@sidecar/acts` stands behind: the session or project was one the roster
- * that pass reported, the act was one it advertised, and the developer's text
- * was bounded, before an adapter saw any of it. An adapter answers for its own
- * route — the advertised control, spawn target, rename target, or listed
- * project it reads back from its own latest pass — and for the provider's
- * documented shape, and for nothing about whether the act may run.
+ * What each act is asked with. Every one is an `Admitted` request, which only
+ * `admit()` in `@sidecar/acts` stands behind: the session or project was one
+ * the roster that pass reported, the act was one it advertised, and the
+ * developer's text was bounded, before a provider saw any of it. What a
+ * provider answers for is its own route — the advertised control, spawn
+ * target, rename target, or listed project it reads back from its own latest
+ * pass — and the provider's documented shape, and nothing about whether the
+ * act may run.
  */
-export interface SessionProviderAdapter {
-  readonly provider: SessionProvider;
-  observe(): Promise<readonly ProviderSessionObservation[]>;
-
-  /**
-   * Runs a control the adapter's own latest observation advertised for a
-   * session it observed, building the route from that advertised entry rather
-   * than from the request's copy of it.
-   */
-  executeControl(request: ProviderControlRequest): Promise<ProviderControlResult>;
-
-  /**
-   * Hands a message to an already-observed session through the provider's own
-   * documented endpoint. It is one of the three places an adapter may change
-   * provider state, and only ever with text a user chose to send: nothing that
-   * decides on the user's behalf may reach it.
-   */
-  sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult>;
-
-  /** The projects the latest observation pass reported, or none. */
-  workspaceProjects(): readonly WorkspaceProject[];
-
-  /**
-   * Creates a workspace in a project the latest observation pass reported,
-   * read back from that pass rather than composed from the request, through
-   * the provider's own documented endpoint.
-   */
-  createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult>;
-
-  /**
-   * Starts another agent in the workspace an observed session already runs in,
-   * on the spawn target that session's own `add-agent` advertisement named.
-   */
-  spawnWorkspaceAgent(request: ProviderWorkspaceAgentRequest): Promise<ProviderWorkspaceResult>;
-
-  /**
-   * Renames the workspace an observed session already runs in, on the target
-   * that session's own `rename-workspace` advertisement named, so a rename
-   * only ever lands on a workspace its provider documents renaming.
-   */
-  renameWorkspace(request: ProviderWorkspaceRenameRequest): Promise<ProviderActResult>;
-
-  /**
-   * Renames an observed session itself — the chat, where `renameWorkspace`
-   * renames the workspace around it.
-   */
-  renameSession(request: ProviderSessionRenameRequest): Promise<ProviderActResult>;
-
-  /**
-   * Renders one observed session's own transcript, read from the provider's
-   * file on this machine, into a bounded conversation kept nowhere. The read
-   * performs nothing and reaches no provider; an adapter whose stored shape
-   * this build cannot render faithfully reports nothing rather than guessing.
-   */
-  readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult>;
-
-  /**
-   * Renders what one observed session's transcript has gained since the
-   * cursor a previous read handed back, under the same bounds and the same
-   * rules as `readTranscript`: read from the provider's own record, kept
-   * nowhere, performing nothing. Without a cursor, or with one the record no
-   * longer reaches, it renders the transcript's recent tail and says so
-   * through `truncated`. The cursor is opaque to callers and meaningful only
-   * to the adapter that minted it.
-   */
-  readTranscriptSince(
-    providerSessionId: string,
-    cursor?: string,
-  ): Promise<ProviderTranscriptSinceResult>;
-
-  /**
-   * Reads one observed session's conversation from the provider's documented
-   * transcript-read endpoint, as bounded pages of attributed messages kept
-   * nowhere. It exists only for a caller a user just opened a conversation
-   * screen for: it never rides an observation pass, it can express nothing
-   * but a read, and a message whose author the stored shape does not name is
-   * dropped rather than guessed at. An adapter whose provider documents no
-   * such read inherits the unsupported answer.
-   */
-  readConversation(request: ProviderConversationRequest): Promise<ProviderConversationResult>;
-}
 
 /** A provider-local request for a control that was previously exposed by observation. */
 export type ProviderControlRequest = Admitted<{
@@ -118,7 +19,7 @@ export type ProviderControlRequest = Admitted<{
   control: AdvertisedControl;
 }>;
 
-/** A user-authored message for one session the adapter has already observed. */
+/** A user-authored message for one session the latest pass already observed. */
 export type ProviderSessionMessage = Admitted<{
   providerSessionId: string;
   text: string;
@@ -216,82 +117,3 @@ export type ProviderSessionRenameRequest = Admitted<{
   /** The new name, exactly as the user chose it. */
   name: string;
 }>;
-
-/**
- * The explicit answers an adapter gives for acts its provider does not
- * document: unsupported for every write, no projects, and no transcript.
- * Concrete adapters override only the acts their provider routes, and an
- * override takes on that act's constraint above along with it.
- */
-export abstract class SessionProviderAdapterBase implements SessionProviderAdapter {
-  abstract readonly provider: SessionProvider;
-  abstract observe(): Promise<readonly ProviderSessionObservation[]>;
-
-  async executeControl(_request: ProviderControlRequest): Promise<ProviderControlResult> {
-    return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: "This provider has no such control." };
-  }
-
-  async sendMessage(_message: ProviderSessionMessage): Promise<ProviderMessageResult> {
-    return {
-      status: ACT_RESULT_STATUS.UNSUPPORTED,
-      reason: "This provider does not take messages.",
-    };
-  }
-
-  workspaceProjects(): readonly WorkspaceProject[] {
-    return [];
-  }
-
-  async createWorkspace(_request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult> {
-    return {
-      status: ACT_RESULT_STATUS.UNSUPPORTED,
-      reason: "This provider cannot create workspaces.",
-    };
-  }
-
-  async spawnWorkspaceAgent(
-    _request: ProviderWorkspaceAgentRequest,
-  ): Promise<ProviderWorkspaceResult> {
-    return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: "This provider cannot add agents." };
-  }
-
-  async renameWorkspace(_request: ProviderWorkspaceRenameRequest): Promise<ProviderActResult> {
-    return {
-      status: ACT_RESULT_STATUS.UNSUPPORTED,
-      reason: "This provider cannot rename workspaces.",
-    };
-  }
-
-  async renameSession(_request: ProviderSessionRenameRequest): Promise<ProviderActResult> {
-    return {
-      status: ACT_RESULT_STATUS.UNSUPPORTED,
-      reason: "This provider cannot rename sessions.",
-    };
-  }
-
-  async readTranscript(_providerSessionId: string): Promise<ProviderTranscriptResult> {
-    return {
-      status: ACT_RESULT_STATUS.UNSUPPORTED,
-      reason: "This provider keeps no transcript this build can read.",
-    };
-  }
-
-  async readTranscriptSince(
-    _providerSessionId: string,
-    _cursor?: string,
-  ): Promise<ProviderTranscriptSinceResult> {
-    return {
-      status: ACT_RESULT_STATUS.UNSUPPORTED,
-      reason: "This provider keeps no transcript this build can read.",
-    };
-  }
-
-  async readConversation(
-    _request: ProviderConversationRequest,
-  ): Promise<ProviderConversationResult> {
-    return {
-      status: ACT_RESULT_STATUS.UNSUPPORTED,
-      reason: "This provider documents no conversation read this build carries.",
-    };
-  }
-}

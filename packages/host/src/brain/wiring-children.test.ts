@@ -244,7 +244,7 @@ function composed(
     },
     roster: () => ({ text: "", identities: [], sessions: [] }),
     standingContext: () => "",
-    adapterFor: () => undefined,
+    pluginFor: () => undefined,
     session: () => undefined,
     deliver: async () => undefined,
     model: () => model,

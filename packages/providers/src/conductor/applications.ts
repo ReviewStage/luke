@@ -3,14 +3,18 @@ import path from "node:path";
 import {
   AGENT_IDENTITY,
   maximumSessionTitleLength,
-  type ProviderSessionObservation,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
   type SessionApplication,
   type SessionProvider,
 } from "@sidecar/session";
 import { text, type UnparsedWireValue, wholeNumber, wireRecord } from "@sidecar/wire";
-import { unclaimedWorkspace } from "../shared/host-claims.js";
+import {
+  type HostClaims,
+  hostClaims,
+  unclaimedWorkspace,
+  type WorkspaceHostContexts,
+} from "../shared/host-claims.js";
 import {
   canIgnoreSqliteError,
   defaultSqliteModule,
@@ -18,7 +22,6 @@ import {
   type SqliteDatabase,
   type SqliteModuleLoader,
 } from "../shared/local-sqlite.js";
-import { WorkspaceHostSnapshot } from "../shared/workspace-host-snapshot.js";
 
 const CONDUCTOR_APPLICATION_SUPPORT_DIRECTORY = "com.conductor.app";
 const CONDUCTOR_DATABASE_FILE = "conductor.db";
@@ -200,9 +203,15 @@ interface ConductorSessionContext {
   filedAway?: boolean;
 }
 
-export interface ConductorSessionApplicationReaderOptions {
+export interface ConductorApplicationsOptions {
   databasePath?: string;
   sqlite?: SqliteModuleLoader;
+}
+
+/** One workspace manager's claims, and the empty claim a failed read stands in with. */
+export interface ConductorApplications {
+  read(): Promise<HostClaims>;
+  readonly empty: HostClaims;
 }
 
 export function defaultConductorDatabasePath(): string {
@@ -234,79 +243,75 @@ function chatTitle(value: UnparsedWireValue): string | undefined {
  * away — the chat hidden, or its workspace archived — drops a row, and drops
  * it whole.
  */
-export class ConductorSessionApplicationSnapshot extends WorkspaceHostSnapshot<ConductorSessionContext> {
-  protected override readonly applicationId = SESSION_APPLICATION_ID.CONDUCTOR;
+function conductorClaims(contexts: WorkspaceHostContexts<ConductorSessionContext>): HostClaims {
+  return hostClaims<ConductorSessionContext>({
+    applicationId: SESSION_APPLICATION_ID.CONDUCTOR,
+    contexts,
+    // A filed-away chat is dropped rather than annotated: the user archived
+    // or hid it on Conductor's own surface, and a sub-agent inheriting that
+    // context was filed away with its parent — the agent's transcript
+    // outlives the chat the user already said goodbye to.
+    retains: (context) => context.filedAway !== true,
 
-  // A filed-away chat is dropped rather than annotated: the user archived
-  // or hid it on Conductor's own surface, and a sub-agent inheriting that
-  // context was filed away with its parent — the agent's transcript outlives
-  // the chat the user already said goodbye to.
-  protected override retains(context: ConductorSessionContext): boolean {
-    return context.filedAway !== true;
-  }
-
-  /**
-   * Adds Conductor beside any app associations the provider already reported,
-   * titles the chat by the name Conductor gave it, and groups it under the
-   * Conductor workspace it belongs to, the way a Superset-managed chat groups
-   * under its Superset workspace.
-   */
-  protected override annotate(
-    observation: ProviderSessionObservation,
-    context: ConductorSessionContext,
-    conductorSessions: ReadonlyMap<string, ConductorSessionContext>,
-  ): ProviderSessionObservation {
-    // The workspace is claimed only where no other manager already grouped
-    // the chat; the claim is what carries the manager's mark on the tray
-    // header, once, above the chats it holds.
-    const workspace = context.workspaceId
-      ? unclaimedWorkspace(observation, {
-          providerWorkspaceId: context.workspaceId,
-          ...(context.workspaceName ? { name: context.workspaceName } : undefined),
-          scopeId: SESSION_APPLICATION_ID.CONDUCTOR,
-          managerName: CONDUCTOR_APPLICATION_NAME,
-        })
-      : undefined;
-    // The address needs the workspace id — Conductor's handler drops a
-    // link without one — and a sub-agent's inherited context addresses the
-    // ancestor chat, which is where its conversation lives. The app that
-    // wrote the index is the scheme's handler, so the address stands with
-    // no credential at all.
-    const link = context.workspaceId
-      ? conductorWorkspaceLink(context.workspaceId, context.conductorSessionId)
-      : undefined;
-    // The association names the exact chat — its address does, when it has
-    // one — so it is the session's own and rides the row even inside the
-    // workspace's tray, where the tray header's manager mark comes from
-    // the workspace claim above rather than from this.
-    const application: SessionApplication = {
-      id: SESSION_APPLICATION_ID.CONDUCTOR,
-      displayName: CONDUCTOR_APPLICATION_NAME,
-      scope: SESSION_APPLICATION_SCOPE.SESSION,
-      ...(link ? { link } : undefined),
-    };
-    // The address fills the row's link only where nothing else gave one.
-    // Which app a grouped row's press follows is not decided here: the
-    // session normalization orders every row's marks with its workspace's
-    // manager in the lead and points the press at the first linked mark,
-    // so Conductor's precedence over an agent's own app falls out of the
-    // grouping rather than out of any Conductor-specific write.
-    const detail =
-      link && !observation.detail?.link ? { ...observation.detail, link } : observation.detail;
-    // The name Conductor gave the chat is what the user reads in Conductor's
-    // own sidebar, so it titles the row here the way it titles a
-    // cloud-observed chat's — but only on the chat itself, never inherited:
-    // a sub-agent labelled with its parent's name would read as the same
-    // conversation twice while saying nothing about its own work.
-    const title = conductorSessions.get(observation.providerSessionId)?.chatTitle;
-    return {
-      ...observation,
-      ...(title ? { title } : undefined),
-      ...(detail ? { detail } : undefined),
-      applications: [...(observation.applications ?? []), application],
-      ...(workspace ? { workspace } : undefined),
-    };
-  }
+    /**
+     * Adds Conductor beside any app associations the provider already
+     * reported, titles the chat by the name Conductor gave it, and groups it
+     * under the Conductor workspace it belongs to, the way a Superset-managed
+     * chat groups under its Superset workspace.
+     */
+    annotate({ observation, context, hostSessions }) {
+      // The workspace is claimed only where no other manager already grouped
+      // the chat; the claim is what carries the manager's mark on the tray
+      // header, once, above the chats it holds.
+      const workspace = context.workspaceId
+        ? unclaimedWorkspace(observation, {
+            providerWorkspaceId: context.workspaceId,
+            ...(context.workspaceName ? { name: context.workspaceName } : undefined),
+            scopeId: SESSION_APPLICATION_ID.CONDUCTOR,
+            managerName: CONDUCTOR_APPLICATION_NAME,
+          })
+        : undefined;
+      // The address needs the workspace id — Conductor's handler drops a
+      // link without one — and a sub-agent's inherited context addresses the
+      // ancestor chat, which is where its conversation lives. The app that
+      // wrote the index is the scheme's handler, so the address stands with
+      // no credential at all.
+      const link = context.workspaceId
+        ? conductorWorkspaceLink(context.workspaceId, context.conductorSessionId)
+        : undefined;
+      // The association names the exact chat — its address does, when it has
+      // one — so it is the session's own and rides the row even inside the
+      // workspace's tray, where the tray header's manager mark comes from
+      // the workspace claim above rather than from this.
+      const application: SessionApplication = {
+        id: SESSION_APPLICATION_ID.CONDUCTOR,
+        displayName: CONDUCTOR_APPLICATION_NAME,
+        scope: SESSION_APPLICATION_SCOPE.SESSION,
+        ...(link ? { link } : undefined),
+      };
+      // The address fills the row's link only where nothing else gave one.
+      // Which app a grouped row's press follows is not decided here: the
+      // session normalization orders every row's marks with its workspace's
+      // manager in the lead and points the press at the first linked mark,
+      // so Conductor's precedence over an agent's own app falls out of the
+      // grouping rather than out of any Conductor-specific write.
+      const detail =
+        link && !observation.detail?.link ? { ...observation.detail, link } : observation.detail;
+      // The name Conductor gave the chat is what the user reads in Conductor's
+      // own sidebar, so it titles the row here the way it titles a
+      // cloud-observed chat's — but only on the chat itself, never inherited:
+      // a sub-agent labelled with its parent's name would read as the same
+      // conversation twice while saying nothing about its own work.
+      const title = hostSessions.get(observation.providerSessionId)?.chatTitle;
+      return {
+        ...observation,
+        ...(title ? { title } : undefined),
+        ...(detail ? { detail } : undefined),
+        applications: [...(observation.applications ?? []), application],
+        ...(workspace ? { workspace } : undefined),
+      };
+    },
+  });
 }
 
 /**
@@ -315,25 +320,22 @@ export class ConductorSessionApplicationSnapshot extends WorkspaceHostSnapshot<C
  * an empty snapshot; failure can never make the provider's observation
  * disappear.
  */
-export class ConductorSessionApplicationReader {
-  readonly #databasePath: string;
-  readonly #sqlite: SqliteModuleLoader;
+export function conductorApplications(
+  options: ConductorApplicationsOptions = {},
+): ConductorApplications {
+  const databasePath = options.databasePath ?? defaultConductorDatabasePath();
+  const sqlite = options.sqlite ?? defaultSqliteModule;
 
-  constructor(options: ConductorSessionApplicationReaderOptions = {}) {
-    this.#databasePath = options.databasePath ?? defaultConductorDatabasePath();
-    this.#sqlite = options.sqlite ?? defaultSqliteModule;
-  }
-
-  async read(): Promise<ConductorSessionApplicationSnapshot> {
-    const database = await openReadOnlyDatabase(this.#sqlite, this.#databasePath);
-    if (!database) return new ConductorSessionApplicationSnapshot(new Map());
+  const read = async (): Promise<HostClaims> => {
+    const database = await openReadOnlyDatabase(sqlite, databasePath);
+    if (!database) return conductorClaims(new Map());
 
     let rows: UnparsedWireValue[];
     try {
-      rows = this.#queryRows(database);
+      rows = queryRows(database);
     } catch (error) {
       if (error instanceof Error && canIgnoreSqliteError(error)) {
-        return new ConductorSessionApplicationSnapshot(new Map());
+        return conductorClaims(new Map());
       }
       throw error;
     } finally {
@@ -368,22 +370,24 @@ export class ConductorSessionApplicationReader {
       });
       sessionsByProvider.set(providerId, sessions);
     }
-    return new ConductorSessionApplicationSnapshot(sessionsByProvider);
-  }
+    return conductorClaims(sessionsByProvider);
+  };
 
-  /**
-   * The fullest read first, then progressively older schemas: losing the
-   * chat titles must not cost the grouping, and losing the grouping must not
-   * cost the annotation itself.
-   */
-  #queryRows(database: SqliteDatabase): UnparsedWireValue[] {
-    for (const query of [CONDUCTOR_SESSION_QUERY, CONDUCTOR_SESSION_QUERY_WITHOUT_TITLES]) {
-      try {
-        return database.prepare(query).all();
-      } catch (error) {
-        if (!(error instanceof Error && canIgnoreSqliteError(error))) throw error;
-      }
+  return { read, empty: conductorClaims(new Map()) };
+}
+
+/**
+ * The fullest read first, then progressively older schemas: losing the chat
+ * titles must not cost the grouping, and losing the grouping must not cost
+ * the annotation itself.
+ */
+function queryRows(database: SqliteDatabase): UnparsedWireValue[] {
+  for (const query of [CONDUCTOR_SESSION_QUERY, CONDUCTOR_SESSION_QUERY_WITHOUT_TITLES]) {
+    try {
+      return database.prepare(query).all();
+    } catch (error) {
+      if (!(error instanceof Error && canIgnoreSqliteError(error))) throw error;
     }
-    return database.prepare(CONDUCTOR_SESSION_QUERY_WITHOUT_WORKSPACES).all();
   }
+  return database.prepare(CONDUCTOR_SESSION_QUERY_WITHOUT_WORKSPACES).all();
 }

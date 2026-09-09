@@ -83,10 +83,10 @@ import {
 import {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticKind,
-  ConductorLocalWorkspaceAdapter,
-  ConductorSessionApplicationReader,
   claudeDesktopApplications,
   codexCloudPlugin,
+  conductorApplications,
+  conductorLocalWorkspacePlugin,
   ObservationHookRegistry,
   type ObservationSpoolWatcher,
   type ProviderRegistration,
@@ -143,10 +143,9 @@ import {
   PROVIDER_ID,
   PROVIDER_ID_LIST,
   type ProviderId,
-  pluginAsAdapter,
   type Session,
   type SessionIdentity,
-  type SessionProviderAdapter,
+  type SessionProviderPlugin,
   SessionRoster,
   SUPERSET_WORKSPACE_PROVIDER_ID,
   staleWorkspaceProjectDefaults,
@@ -453,20 +452,19 @@ export function composeHost(options: HostSeams): Host {
   const codexCloud = codexCloudPlugin({
     onDiagnostic: (kind, error) => reportAdapterDiagnostic(PROVIDER_ID.CODEX, kind, error),
   });
-  const conductorSessionApplications = new ConductorSessionApplicationReader();
+  const conductorSessionApplications = conductorApplications();
   const claudeDesktopSessionApplications = claudeDesktopApplications();
   // The local counterpart of the cloud Conductor adapter's creation path: it
   // reads the repositories Conductor holds and creates a workspace in one by
   // handing Conductor's own creation deep link to the operating system, through
   // the native node.
-  const conductorLocalWorkspaceAdapter = new ConductorLocalWorkspaceAdapter({
-    openExternal: (url) => openExternalThroughNode(url),
+  const conductorLocalWorkspaces = conductorLocalWorkspacePlugin({
+    openExternal: (url: string) => openExternalThroughNode(url),
   });
   const supersetHomeDirectory =
     options.environment.SUPERSET_HOME_DIR ?? path.join(options.homeDirectory, ".superset");
   const superset = supersetPlugin({ homeDirectory: supersetHomeDirectory });
   const supersetCli = superset.cli;
-  const supersetWorkspaceAdapter = pluginAsAdapter(superset);
   const supersetWorkspaceHost: WorkspaceHostRegistration = {
     observationFailureLabel: "Superset observation",
     read: readSupersetWorkspaceHost,
@@ -1146,7 +1144,7 @@ export function composeHost(options: HostSeams): Host {
   const sessionActPerformer = createSessionActPerformer({
     sessionRegistry,
     openExternal: (url) => openExternalThroughNode(url),
-    adapterFor,
+    pluginFor,
     sendsNetwork: runMode.sendsNetwork,
     settingsStore,
     rememberWorkspaceDefaults,
@@ -1231,7 +1229,7 @@ export function composeHost(options: HostSeams): Host {
     },
     roster: brainRoster,
     standingContext: brainStandingContext,
-    adapterFor,
+    pluginFor,
     session: (identity) => sessionRegistry.get(identity),
     deliver: deliverBriefing,
     model: () => voiceCapabilities.brainModel,
@@ -1279,32 +1277,29 @@ export function composeHost(options: HostSeams): Host {
     report,
   });
 
-  function adapterFor(providerId: string) {
-    if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return supersetWorkspaceAdapter;
-    if (providerId === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID) return conductorLocalWorkspaceAdapter;
-    return isProviderId(providerId) ? providerRegistry[providerId].adapter : undefined;
+  function pluginFor(providerId: string) {
+    if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return superset;
+    if (providerId === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID) return conductorLocalWorkspaces;
+    return isProviderId(providerId) ? providerRegistry[providerId].plugin : undefined;
   }
 
-  function adapterForCredential(providerId: CredentialProviderId) {
-    return orderedRegistrations.find((entry) => entry.credential?.id === providerId)?.adapter;
+  function pluginForCredential(providerId: CredentialProviderId) {
+    return orderedRegistrations.find((entry) => entry.credential?.id === providerId)?.plugin;
   }
 
   function workspaceProjectOffered(providerId: string, providerProjectId: string): boolean {
-    const adapter = adapterFor(providerId);
-    if (!adapter) return false;
-    return adapter
-      .workspaceProjects()
-      .some((project) => workspaceProjectSelectionId(project) === providerProjectId);
+    const projects = pluginFor(providerId)?.projects?.() ?? [];
+    return projects.some((project) => workspaceProjectSelectionId(project) === providerProjectId);
   }
 
   async function rememberWorkspaceDefaults(
-    adapter: SessionProviderAdapter,
+    plugin: SessionProviderPlugin,
     providerProjectId: string,
     providerTargetId: string | undefined,
     namedSelection: WorkspaceAgentSelection | undefined,
     agent: string | undefined,
   ): Promise<void> {
-    const providerId = adapter.provider.id;
+    const providerId = plugin.provider.id;
     if (!isWorkspaceProviderId(providerId)) return;
     try {
       let accountPreferencesTouched = false;
@@ -1371,14 +1366,14 @@ export function composeHost(options: HostSeams): Host {
   function offeredWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
     if (!runMode.observesProviders) return [];
     return [
-      ...orderedRegistrations.map(({ adapter }) => adapter),
-      supersetWorkspaceAdapter,
-      conductorLocalWorkspaceAdapter,
-    ].flatMap((adapter) =>
-      adapter.workspaceProjects().map((project) => ({
+      ...orderedRegistrations.map(({ plugin }) => plugin),
+      superset,
+      conductorLocalWorkspaces,
+    ].flatMap((plugin) =>
+      (plugin.projects?.() ?? []).map((project) => ({
         ...project,
-        providerId: adapter.provider.id,
-        providerName: adapter.provider.displayName,
+        providerId: plugin.provider.id,
+        providerName: plugin.provider.displayName,
       })),
     );
   }
@@ -1386,13 +1381,13 @@ export function composeHost(options: HostSeams): Host {
   async function applyLocalSessionHooks(): Promise<void> {
     if (!runMode.observesProviders || options.registerProviderHooks === false) return;
     await Promise.all(
-      orderedRegistrations.map(async ({ adapter, registerObservationHook }) => {
+      orderedRegistrations.map(async ({ plugin, registerObservationHook }) => {
         if (!registerObservationHook) return;
         try {
           await registerObservationHook();
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          report(`${adapter.provider.displayName} hook registration failed: ${message}`);
+          report(`${plugin.provider.displayName} hook registration failed: ${message}`);
         }
       }),
     );
@@ -1401,9 +1396,9 @@ export function composeHost(options: HostSeams): Host {
 
   function watchObservationSpools(): void {
     if (spoolWatchers.length > 0) return;
-    spoolWatchers = orderedRegistrations.flatMap(({ adapter, observationSpool }) => {
+    spoolWatchers = orderedRegistrations.flatMap(({ plugin, observationSpool }) => {
       if (!observationSpool) return [];
-      const providerId = adapter.provider.id;
+      const providerId = plugin.provider.id;
       return [
         watchObservationSpool({
           spoolDirectory: observationSpool.directory(),
@@ -1435,7 +1430,7 @@ export function composeHost(options: HostSeams): Host {
 
   async function refreshProviderSessions(generation: number): Promise<void> {
     const actionsWereEnabled = superset.activeOrganization() !== undefined;
-    const conductorRepositoriesPromise = conductorLocalWorkspaceAdapter.refresh().catch((error) => {
+    const conductorRepositoriesPromise = conductorLocalWorkspaces.refresh().catch((error) => {
       report(
         `Conductor repository observation failed: ${error instanceof Error ? error.message : String(error)}`,
       );
@@ -1463,9 +1458,9 @@ export function composeHost(options: HostSeams): Host {
       }
     }
     await Promise.all([
-      ...orderedRegistrations.map(async ({ adapter }) => {
+      ...orderedRegistrations.map(async ({ plugin }) => {
         try {
-          await sessionRegistry.refresh(adapter, (providerId, observations) =>
+          await sessionRegistry.refresh(plugin, (providerId, observations) =>
             hostEnrichments.reduce(
               (enriched, enrichment) => enrichment(providerId, enriched),
               observations,
@@ -1473,16 +1468,16 @@ export function composeHost(options: HostSeams): Host {
           );
         } catch (error) {
           report(
-            `Session observation failed (${adapter.provider.id}): ${error instanceof Error ? error.message : String(error)}`,
+            `Session observation failed (${plugin.provider.id}): ${error instanceof Error ? error.message : String(error)}`,
           );
         }
       }),
       (async () => {
         try {
-          await sessionRegistry.refresh(supersetWorkspaceAdapter);
+          await sessionRegistry.refresh(superset);
         } catch (error) {
           report(
-            `Session observation failed (${supersetWorkspaceAdapter.provider.id}): ${error instanceof Error ? error.message : String(error)}`,
+            `Session observation failed (${superset.provider.id}): ${error instanceof Error ? error.message : String(error)}`,
           );
         }
       })(),
@@ -1736,8 +1731,8 @@ export function composeHost(options: HostSeams): Host {
     workspaceProjectsBroadcastGeneration += 1;
     unsubscribeSessions?.();
     unsubscribeSessions = undefined;
-    for (const { adapter } of orderedRegistrations) {
-      sessionRegistry.replaceProvider(adapter.provider, []);
+    for (const { plugin } of orderedRegistrations) {
+      sessionRegistry.replaceProvider(plugin.provider, []);
     }
     emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [], settled: true });
     emit(GATEWAY_EVENT.WORKSPACE_PROJECTS_CHANGED, { projects: [] });
@@ -1993,8 +1988,8 @@ export function composeHost(options: HostSeams): Host {
         () => settingsStore.setApiKey(providerId, apiKey),
         async (saved) => {
           if (saved.reason) return;
-          const adapter = adapterForCredential(providerId);
-          if (adapter) void sessionRegistry.refresh(adapter);
+          const plugin = pluginForCredential(providerId);
+          if (plugin) void sessionRegistry.refresh(plugin);
           if (providerId === CREDENTIAL_PROVIDER_ID.LINEAR) void issueObservationLoop.refresh();
           if (providerId === VOICE_CREDENTIAL_PROVIDER_ID) {
             await applyVoiceCredential();
