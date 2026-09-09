@@ -193,6 +193,10 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
    */
   const pendingWaits = new Set<ReturnType<typeof setTimeout>>();
   function afterDelay(delayMs: number, run: () => void): void {
+    // Nothing new is scheduled once a quit has been asked for, so the last
+    // act of a wait that was already running cannot arm the next one behind
+    // the teardown that just cleared them.
+    if (!launchStanding()) return;
     const wait = setTimeout(() => {
       pendingWaits.delete(wait);
       if (!launchStanding()) return;
@@ -312,6 +316,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
 
   const handleSecondInstance = (_event: Electron.Event, argv: string[]): void => {
     void panels.refreshGeometry().then(() => {
+      // A second launch already in flight when the quit landed must not raise
+      // panels over a client whose keys and windows are already given back.
+      if (!launchStanding()) return;
       if (introductionWindow.active) {
         introductionWindow.reposition();
         return;
@@ -440,6 +447,13 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       powerMonitor.removeListener("user-did-become-active", wakeHandlers["user-did-become-active"]);
       for (const wait of pendingWaits) clearTimeout(wait);
       pendingWaits.clear();
+      // The takeover's handoff waits on a panel or a clock, and the quit just
+      // took the clock away: settling it here is what lets
+      // `finishIntroduction` return, so the renderer's own invoke does not
+      // stay open for the rest of the quit. What it goes on to do is the
+      // fade, which schedules nothing once the launch is down.
+      resolveIntroductionPanelReady?.();
+      resolveIntroductionPanelReady = undefined;
       hotkeys.release();
       voiceWindow.closeForGood();
       panels.clearCollapseTimers();

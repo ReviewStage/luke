@@ -312,3 +312,29 @@ test("a quit arriving after the teardown finished is not held back, so an instal
   await stopping;
   assert.equal(beforeQuit(), "through");
 });
+
+test("a wait guarded against the quit schedules nothing new once one is asked for", () => {
+  // Both halves matter. A wait that fires must not act after the teardown,
+  // and a wait that was running must not arm the next one behind a teardown
+  // that has already cleared them — which is how the takeover's fade came to
+  // be scheduled after its own stop.
+  let standing = true;
+  const waits = new Set<ReturnType<typeof setTimeout>>();
+  const afterDelay = (delayMs: number, run: () => void): void => {
+    if (!standing) return;
+    const wait = setTimeout(() => {
+      waits.delete(wait);
+      if (!standing) return;
+      run();
+    }, delayMs);
+    waits.add(wait);
+  };
+
+  afterDelay(1_000, () => undefined);
+  assert.equal(waits.size, 1);
+  standing = false;
+  afterDelay(1_000, () => undefined);
+  assert.equal(waits.size, 1, "a wait was armed after the quit was asked for");
+  for (const wait of waits) clearTimeout(wait);
+  waits.clear();
+});
