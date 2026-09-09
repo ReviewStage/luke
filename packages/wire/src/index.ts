@@ -41,6 +41,7 @@ export {
   type BoundedTextOptions,
   type Branded,
   type DescribedOptions,
+  type EnumOptions,
   type JsonSchemaNode,
   type NumberOptions,
   RECORD_EXTRA_KEYS,

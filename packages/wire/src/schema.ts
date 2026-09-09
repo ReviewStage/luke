@@ -337,16 +337,29 @@ function literalSchema<const Literal extends string | number | boolean | null>(
   );
 }
 
+export interface EnumOptions extends DescribedOptions {
+  /**
+   * Whether the ends are settled before membership is read, the way `text`
+   * settles them. `KEEP` by default, because a request field naming one of a
+   * fixed set is stated exactly or not at all; an answer whose reader has
+   * always trimmed says `TRIM` rather than tightening what it admits.
+   */
+  ends?: TextEnds;
+}
+
 function enumSchema<const Member extends string>(
   members: readonly Member[],
-  options: DescribedOptions = {},
+  options: EnumOptions = {},
 ): Schema<Member> {
   const admitted = new Set<string>(members);
+  const trim = options.ends === TEXT_ENDS.TRIM;
   return schemaOver<Member>(
     (value) => {
-      if (!isWireString(value) || !admitted.has(value)) return refuse(SCHEMA_REFUSAL.MALFORMED);
+      if (!isWireString(value)) return refuse(SCHEMA_REFUSAL.MALFORMED);
+      const normalized = trim ? value.trim() : value;
+      if (!admitted.has(normalized)) return refuse(SCHEMA_REFUSAL.MALFORMED);
       // SAFETY: membership in the declared member set was just checked.
-      return admit(value as Member);
+      return admit(normalized as Member);
     },
     () => describedNode({ type: "string", enum: members }, options.description),
   );
@@ -539,6 +552,23 @@ function refineSchema<Value>(
   }, inner.jsonSchema);
 }
 
+/**
+ * A field a malformed value is dropped from rather than refused for: the
+ * per-field counterpart of an array's `skipRefused`. A quota a panel would
+ * have drawn, a position a scroll would have resumed from, a branch a row
+ * would have shown — each worth having when it is well formed and worth
+ * nothing when it is not, where refusing the whole answer over one of them
+ * would cost the reader everything else that answer carried. A record leaves
+ * the key out entirely, exactly as it does for an absent optional one.
+ */
+function droppedSchema<Value>(inner: Schema<Value>): Schema<Value | undefined> {
+  return schemaOver<Value | undefined>(
+    (value) => admit(inner.parse(value)),
+    inner.jsonSchema,
+    true,
+  );
+}
+
 /** A parsed value carried into another; the emitted node is the inner one's. */
 function mapSchema<Value, Mapped>(
   inner: Schema<Value>,
@@ -575,6 +605,7 @@ export const s = {
   literal: literalSchema,
   enumOf: enumSchema,
   array: arraySchema,
+  dropRefused: droppedSchema,
   record: recordSchema,
   union: unionSchema,
   brand: brandSchema,

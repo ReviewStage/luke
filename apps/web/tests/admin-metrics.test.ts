@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { AdminViewer } from "../server/admin/admin-access";
 import {
   ADMIN_INTEGRATION,
   ADMIN_RETENTION_WEEKS,
@@ -443,11 +442,6 @@ function metricsRequest(method = "GET"): Request {
   return new Request("https://luke.test/api/admin/metrics", { method });
 }
 
-const ADMIN_VIEWER: AdminViewer = {
-  userId: "user-1",
-  role: "admin",
-};
-
 function emptyMetrics(
   now: number,
   windowDays: AdminMetricsWindow = ADMIN_METRICS_WINDOW_DEFAULT,
@@ -455,35 +449,9 @@ function emptyMetrics(
   return buildAdminMetrics(source(), now, windowDays);
 }
 
-test("the gate answers 405, 401, 403, and 200 as distinct outcomes", async () => {
-  const wrongMethod = await handleAdminMetrics({
-    request: metricsRequest("POST"),
-    resolveViewer: async () => ADMIN_VIEWER,
-    readMetrics: async (now) => emptyMetrics(now),
-  });
-  assert.equal(wrongMethod.status, 405);
-  assert.equal(wrongMethod.headers.get("cache-control"), "no-store");
-  assert.equal((await wrongMethod.json()).error, ADMIN_ERROR.METHOD_NOT_ALLOWED);
-
-  const anonymous = await handleAdminMetrics({
-    request: metricsRequest(),
-    resolveViewer: async () => undefined,
-    readMetrics: async (now) => emptyMetrics(now),
-  });
-  assert.equal(anonymous.status, 401);
-  assert.equal((await anonymous.json()).error, ADMIN_ERROR.NOT_SIGNED_IN);
-
-  const forbidden = await handleAdminMetrics({
-    request: metricsRequest(),
-    resolveViewer: async () => ({ ...ADMIN_VIEWER, role: "user" }),
-    readMetrics: async (now) => emptyMetrics(now),
-  });
-  assert.equal(forbidden.status, 403);
-  assert.equal((await forbidden.json()).error, ADMIN_ERROR.NOT_AUTHORIZED);
-
+test("the read answers a whole document past the gate", async () => {
   const ok = await handleAdminMetrics({
     request: metricsRequest(),
-    resolveViewer: async () => ADMIN_VIEWER,
     readMetrics: async (now) => emptyMetrics(now),
     now: () => NOON_UTC,
   });
@@ -518,8 +486,7 @@ test("the handler reads metrics at the scope the request asked for", async () =>
     scopes.push(scope);
     return emptyMetrics(now);
   };
-  const respond = (request: Request) =>
-    handleAdminMetrics({ request, resolveViewer: async () => ADMIN_VIEWER, readMetrics });
+  const respond = (request: Request) => handleAdminMetrics({ request, readMetrics });
 
   assert.equal((await respond(metricsRequest())).status, 200);
   const widened = new Request(
@@ -557,8 +524,7 @@ test("the handler reads metrics at the window the request asked for", async () =
     windows.push(windowDays);
     return emptyMetrics(now, windowDays);
   };
-  const respond = (request: Request) =>
-    handleAdminMetrics({ request, resolveViewer: async () => ADMIN_VIEWER, readMetrics });
+  const respond = (request: Request) => handleAdminMetrics({ request, readMetrics });
 
   assert.equal((await respond(metricsRequest())).status, 200);
   const week = new Request(
@@ -575,7 +541,6 @@ test("a window outside the set is a 400 that reads nothing", async () => {
   let reads = 0;
   const response = await handleAdminMetrics({
     request: new Request(`https://luke.test/api/admin/metrics?${ADMIN_METRICS_WINDOW_PARAM}=13`),
-    resolveViewer: async () => ADMIN_VIEWER,
     readMetrics: async (now) => {
       reads += 1;
       return emptyMetrics(now);
@@ -586,34 +551,9 @@ test("a window outside the set is a 400 that reads nothing", async () => {
   assert.equal(reads, 0);
 });
 
-test("metrics are not read for a request that fails the gate", async () => {
-  let reads = 0;
-  const response = await handleAdminMetrics({
-    request: metricsRequest(),
-    resolveViewer: async () => undefined,
-    readMetrics: async (now) => {
-      reads += 1;
-      return emptyMetrics(now);
-    },
-  });
-  assert.equal(response.status, 401);
-  assert.equal(reads, 0);
-});
-
 test("a seam that throws is a 503 refusal rather than a crash", async () => {
-  const viewerThrew = await handleAdminMetrics({
-    request: metricsRequest(),
-    resolveViewer: async () => {
-      throw new Error("auth is down");
-    },
-    readMetrics: async (now) => emptyMetrics(now),
-  });
-  assert.equal(viewerThrew.status, 503);
-  assert.equal((await viewerThrew.json()).error, ADMIN_ERROR.UNAVAILABLE);
-
   const readThrew = await handleAdminMetrics({
     request: metricsRequest(),
-    resolveViewer: async () => ADMIN_VIEWER,
     readMetrics: async () => {
       throw new Error("database is down");
     },

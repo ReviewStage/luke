@@ -6,20 +6,25 @@ import {
   admit,
   normalizeSession,
   PROVIDER_IDENTITY_BY_ID,
+  RECORD_EXTRA_KEYS,
   RUN_ORIGIN,
   type Session,
-  text,
+  s,
   type WorkspaceAgentSelection,
 } from "../server/core";
 import {
   actUnsupportedReason,
-  executeControlAct,
+  CONTROL_ACT,
   executeCreateWorkspaceAct,
-  executeMessageAct,
+  executeSessionAct,
+  MESSAGE_ACT,
   REMOTE_SESSION_ACT,
 } from "../server/hosted/act-execute";
-import { handleSessionAct, type SessionActOptions } from "../server/hosted/act-session";
-import { handleActWorkspace } from "../server/hosted/act-workspace";
+import {
+  handleSessionAct,
+  handleWorkspaceAct,
+  type SessionActOptions,
+} from "../server/hosted/act-session";
 import { cloudSessionAdapterFor } from "../server/hosted/cloud-adapters";
 import { encryptProviderKey } from "../server/hosted/encryption";
 
@@ -36,8 +41,8 @@ function actRequest(path: string, fields: Record<string, string>): Request {
 type MessageFields = { text: string };
 
 function messageOptions(
-  overrides: Partial<SessionActOptions<MessageFields>> = {},
-): SessionActOptions<MessageFields> {
+  overrides: Partial<SessionActOptions<MessageFields, true>> = {},
+): SessionActOptions<MessageFields, true> {
   return {
     request: actRequest("/api/acts/message", {
       providerId: "conductor",
@@ -47,10 +52,8 @@ function messageOptions(
     encryptionSecret: SECRET,
     resolveUserId: async () => "user-1",
     readKey: async () => ({ ciphertext: encryptProviderKey("key-1", SECRET) }),
-    parseFields: (body) => {
-      const messageText = text(body.text);
-      return messageText ? { text: messageText } : undefined;
-    },
+    plan: MESSAGE_ACT,
+    fields: s.record({ text: s.text() }, { extraKeys: RECORD_EXTRA_KEYS.IGNORE }),
     unsupportedReason: () => undefined,
     execute: async () => ({ result: "accepted" }),
     ...overrides,
@@ -62,8 +65,8 @@ function workspaceRequest(fields: Record<string, string>): Request {
 }
 
 function workspaceOptions(
-  overrides: Partial<Parameters<typeof handleActWorkspace>[0]> = {},
-): Parameters<typeof handleActWorkspace>[0] {
+  overrides: Partial<Parameters<typeof handleWorkspaceAct>[0]> = {},
+): Parameters<typeof handleWorkspaceAct>[0] {
   return {
     request: workspaceRequest({
       providerId: "conductor",
@@ -99,7 +102,7 @@ test("an unsupported provider gets 'unsupported' even with no key stored", async
 });
 
 test("an unsupported workspace provider gets 'unsupported' even with no key stored", async () => {
-  const response = await handleActWorkspace(
+  const response = await handleWorkspaceAct(
     workspaceOptions({
       unsupportedReason: () => "Not available.",
       readKey: async () => undefined,
@@ -148,7 +151,7 @@ test("an act whose fields fail their bound is an invalid request", async () => {
 // --- The execute result travels to the wire unchanged ---
 
 test("a rejected execute result carries its reason and session id to the wire", async () => {
-  const response = await handleActWorkspace(
+  const response = await handleWorkspaceAct(
     workspaceOptions({
       executeCreateWorkspace: async () => ({
         result: "rejected",
@@ -166,7 +169,7 @@ test("a rejected execute result carries its reason and session id to the wire", 
 });
 
 test("an accepted execute result carries the created session id to the wire", async () => {
-  const response = await handleActWorkspace(
+  const response = await handleWorkspaceAct(
     workspaceOptions({
       executeCreateWorkspace: async () => ({ result: "accepted", providerSessionId: "session-9" }),
     }),
@@ -302,10 +305,10 @@ type ConductorApi = ReturnType<typeof conductorApi>;
 
 test("a message to a messageable Conductor session lands on its sendMessage method", async () => {
   const api = conductorApi("idle");
-  const answer = await executeMessageAct({
+  const answer = await executeSessionAct(MESSAGE_ACT, {
     providerId: "conductor",
     providerSessionId: CONDUCTOR_SESSION_ID,
-    text: "please continue",
+    fields: { text: "please continue" },
     apiKey: "key-1",
     seams: { fetch: api.fetch },
   });
@@ -318,10 +321,10 @@ test("a message to a messageable Conductor session lands on its sendMessage meth
 
 test("a message to an errored Conductor session is rejected without a write", async () => {
   const api = conductorApi("error");
-  const answer = await executeMessageAct({
+  const answer = await executeSessionAct(MESSAGE_ACT, {
     providerId: "conductor",
     providerSessionId: CONDUCTOR_SESSION_ID,
-    text: "hello",
+    fields: { text: "hello" },
     apiKey: "key-1",
     seams: { fetch: api.fetch },
   });
@@ -333,10 +336,10 @@ test("a message to an errored Conductor session is rejected without a write", as
 
 test("a message to a session the fresh pass did not observe is rejected", async () => {
   const api = conductorApi("idle");
-  const answer = await executeMessageAct({
+  const answer = await executeSessionAct(MESSAGE_ACT, {
     providerId: "conductor",
     providerSessionId: "session-9",
-    text: "hello",
+    fields: { text: "hello" },
     apiKey: "key-1",
     seams: { fetch: api.fetch },
   });
@@ -347,10 +350,10 @@ test("a message to a session the fresh pass did not observe is rejected", async 
 });
 
 test("a key the provider refuses is named as the reason, not a missing session", async () => {
-  const answer = await executeMessageAct({
+  const answer = await executeSessionAct(MESSAGE_ACT, {
     providerId: "conductor",
     providerSessionId: CONDUCTOR_SESSION_ID,
-    text: "hello",
+    fields: { text: "hello" },
     apiKey: "key-1",
     seams: { fetch: async () => new Response("{}", { status: 401 }) },
   });
@@ -360,10 +363,10 @@ test("a key the provider refuses is named as the reason, not a missing session",
 });
 
 test("a provider that cannot be reached is named as the reason", async () => {
-  const answer = await executeMessageAct({
+  const answer = await executeSessionAct(MESSAGE_ACT, {
     providerId: "conductor",
     providerSessionId: CONDUCTOR_SESSION_ID,
-    text: "hello",
+    fields: { text: "hello" },
     apiKey: "key-1",
     seams: {
       fetch: async () => {
@@ -378,10 +381,10 @@ test("a provider that cannot be reached is named as the reason", async () => {
 
 test("an advertised control runs through the provider's documented endpoint", async () => {
   const api = conductorApi("working");
-  const answer = await executeControlAct({
+  const answer = await executeSessionAct(CONTROL_ACT, {
     providerId: "conductor",
     providerSessionId: CONDUCTOR_SESSION_ID,
-    controlId: "cancel-turn",
+    fields: { controlId: "cancel-turn" },
     apiKey: "key-1",
     seams: { fetch: api.fetch },
   });
@@ -395,10 +398,10 @@ test("an advertised control runs through the provider's documented endpoint", as
 
 test("a control the fresh pass did not advertise is rejected without a write", async () => {
   const api = conductorApi("idle");
-  const answer = await executeControlAct({
+  const answer = await executeSessionAct(CONTROL_ACT, {
     providerId: "conductor",
     providerSessionId: CONDUCTOR_SESSION_ID,
-    controlId: "cancel-turn",
+    fields: { controlId: "cancel-turn" },
     apiKey: "key-1",
     seams: { fetch: api.fetch },
   });
@@ -453,7 +456,7 @@ test("a workspace creation naming an unreported project is rejected without a wr
 
 test("a listed agent selection reaches the executor whole", async () => {
   let received: WorkspaceAgentSelection | undefined;
-  const response = await handleActWorkspace(
+  const response = await handleWorkspaceAct(
     workspaceOptions({
       request: workspaceRequest({
         providerId: "conductor",
@@ -475,7 +478,7 @@ test("a listed agent selection reaches the executor whole", async () => {
 });
 
 test("an agent selection outside the build's table is an invalid request", async () => {
-  const response = await handleActWorkspace(
+  const response = await handleWorkspaceAct(
     workspaceOptions({
       request: workspaceRequest({
         providerId: "conductor",
@@ -496,7 +499,7 @@ test("an agent selection outside the build's table is an invalid request", async
 test("no selection fields is no selection, never a guess", async () => {
   let received: WorkspaceAgentSelection | undefined;
   let ran = false;
-  await handleActWorkspace(
+  await handleWorkspaceAct(
     workspaceOptions({
       executeCreateWorkspace: async (options) => {
         received = options.agentSelection;
@@ -547,10 +550,10 @@ test("admission answers each hosted act exactly as the executor's own checks do"
   for (const { status, providerSessionId } of messages) {
     const executor = conductorApi(status);
     const admission = conductorApi(status);
-    const executed = await executeMessageAct({
+    const executed = await executeSessionAct(MESSAGE_ACT, {
       providerId: "conductor",
       providerSessionId,
-      text: "please continue",
+      fields: { text: "please continue" },
       apiKey: "key-1",
       seams: { fetch: executor.fetch },
     });
@@ -573,10 +576,10 @@ test("admission answers each hosted act exactly as the executor's own checks do"
   for (const { status, controlId } of controls) {
     const executor = conductorApi(status);
     const admission = conductorApi(status);
-    const executed = await executeControlAct({
+    const executed = await executeSessionAct(CONTROL_ACT, {
       providerId: "conductor",
       providerSessionId: CONDUCTOR_SESSION_ID,
-      controlId,
+      fields: { controlId },
       apiKey: "key-1",
       seams: { fetch: executor.fetch },
     });

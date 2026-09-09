@@ -17,10 +17,12 @@ import {
   user,
   verification,
 } from "../server/db/auth-schema";
-import { DESKTOP_OAUTH_CLIENT, desktopOAuthClientRecord } from "../server/desktop-oauth-client";
-import { MOBILE_OAUTH_CLIENT, mobileOAuthClientRecord } from "../server/mobile-oauth-client";
-import { seedDesktopOAuthClient } from "../server/seed-desktop-client";
-import { seedMobileOAuthClient } from "../server/seed-mobile-client";
+import {
+  DESKTOP_OAUTH_CLIENT,
+  MOBILE_OAUTH_CLIENT,
+  oauthClientRecord,
+} from "../server/oauth-clients";
+import { seedOAuthClient } from "../server/seed-clients";
 
 const AUTH_TABLE_NAME = {
   ACCOUNT: "account",
@@ -59,7 +61,7 @@ test("the auth service encrypts credentials and refuses user-provisioned OAuth c
 
 test("the desktop client stays public, secretless, trusted, and bound to PKCE", () => {
   const now = new Date("2026-08-17T00:00:00.000Z");
-  const record = desktopOAuthClientRecord(now);
+  const record = oauthClientRecord(DESKTOP_OAUTH_CLIENT, now);
 
   assert.equal(record.id, DESKTOP_OAUTH_CLIENT.id);
   assert.equal(record.clientId, DESKTOP_OAUTH_CLIENT.id);
@@ -76,15 +78,15 @@ test("the desktop client stays public, secretless, trusted, and bound to PKCE", 
 
 test("seeding updates the one client identity instead of creating another", async () => {
   let insertedTable: typeof oauthClient | undefined;
-  let insertedRecord: ReturnType<typeof desktopOAuthClientRecord> | undefined;
+  let insertedRecord: ReturnType<typeof oauthClientRecord> | undefined;
   let conflict: { target?: unknown; set?: unknown } | undefined;
-  type SeedDatabase = Parameters<typeof seedDesktopOAuthClient>[0];
-  // SAFETY: Test double implements only the insert chain seedDesktopOAuthClient exercises.
+  type SeedDatabase = Parameters<typeof seedOAuthClient>[0];
+  // SAFETY: Test double implements only the insert chain seedOAuthClient exercises.
   const database = {
     insert(table: typeof oauthClient) {
       insertedTable = table;
       return {
-        values(record: ReturnType<typeof desktopOAuthClientRecord>) {
+        values(record: ReturnType<typeof oauthClientRecord>) {
           insertedRecord = record;
           return {
             async onConflictDoUpdate(input: { target?: unknown; set?: unknown }) {
@@ -97,10 +99,10 @@ test("seeding updates the one client identity instead of creating another", asyn
   } as unknown as SeedDatabase;
 
   const now = new Date("2026-08-17T00:00:00.000Z");
-  await seedDesktopOAuthClient(database, now);
+  await seedOAuthClient(database, DESKTOP_OAUTH_CLIENT, now);
 
   assert.equal(insertedTable, oauthClient);
-  assert.deepEqual(insertedRecord, desktopOAuthClientRecord(now));
+  assert.deepEqual(insertedRecord, oauthClientRecord(DESKTOP_OAUTH_CLIENT, now));
   assert.equal(conflict?.target, oauthClient.clientId);
   assert.deepEqual(conflict?.set, {
     disabled: false,
@@ -121,7 +123,7 @@ test("seeding updates the one client identity instead of creating another", asyn
 
 test("the mobile client stays public, secretless, trusted, and bound to PKCE", () => {
   const now = new Date("2026-08-17T00:00:00.000Z");
-  const record = mobileOAuthClientRecord(now);
+  const record = oauthClientRecord(MOBILE_OAUTH_CLIENT, now);
 
   assert.equal(record.id, MOBILE_OAUTH_CLIENT.id);
   assert.equal(record.clientId, MOBILE_OAUTH_CLIENT.id);
@@ -150,15 +152,15 @@ test("mobile client uses a custom URI scheme, not a loopback address", () => {
 
 test("mobile client seeding updates the one client identity instead of creating another", async () => {
   let insertedTable: typeof oauthClient | undefined;
-  let insertedRecord: ReturnType<typeof mobileOAuthClientRecord> | undefined;
+  let insertedRecord: ReturnType<typeof oauthClientRecord> | undefined;
   let conflict: { target?: unknown; set?: unknown } | undefined;
-  type SeedDatabase = Parameters<typeof seedMobileOAuthClient>[0];
-  // SAFETY: Test double implements only the insert chain seedMobileOAuthClient exercises.
+  type SeedDatabase = Parameters<typeof seedOAuthClient>[0];
+  // SAFETY: Test double implements only the insert chain seedOAuthClient exercises.
   const database = {
     insert(table: typeof oauthClient) {
       insertedTable = table;
       return {
-        values(record: ReturnType<typeof mobileOAuthClientRecord>) {
+        values(record: ReturnType<typeof oauthClientRecord>) {
           insertedRecord = record;
           return {
             async onConflictDoUpdate(input: { target?: unknown; set?: unknown }) {
@@ -171,10 +173,10 @@ test("mobile client seeding updates the one client identity instead of creating 
   } as unknown as SeedDatabase;
 
   const now = new Date("2026-08-17T00:00:00.000Z");
-  await seedMobileOAuthClient(database, now);
+  await seedOAuthClient(database, MOBILE_OAUTH_CLIENT, now);
 
   assert.equal(insertedTable, oauthClient);
-  assert.deepEqual(insertedRecord, mobileOAuthClientRecord(now));
+  assert.deepEqual(insertedRecord, oauthClientRecord(MOBILE_OAUTH_CLIENT, now));
   assert.equal(conflict?.target, oauthClient.clientId);
   assert.deepEqual(conflict?.set, {
     disabled: false,

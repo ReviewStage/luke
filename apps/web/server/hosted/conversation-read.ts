@@ -9,6 +9,7 @@ import { parseProviderSessionId } from "./act-session.js";
 import { decryptProviderKey } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import { createRateBrake } from "./rate-brake.js";
+import type { HostedVaultRoute } from "./vault-route.js";
 
 /**
  * Wider than the observe brake because one opened screen is several requests
@@ -27,13 +28,8 @@ const conversationRateLimited = createRateBrake({
   maxTrackedUsers: CONVERSATION_RATE_LIMIT.MAX_TRACKED_USERS,
 });
 
-export interface ConversationReadOptions {
-  request: Request;
-  resolveUserId: (request: Request) => Promise<string | undefined>;
-  /** The value of PROVIDER_KEY_ENCRYPTION_SECRET; undefined means the env var is absent. */
-  encryptionSecret: string | undefined;
-  /** Reads the encrypted key row for this user and provider, or undefined if none stored. */
-  readKey: (userId: string, providerId: string) => Promise<{ ciphertext: string } | undefined>;
+export interface ConversationReadOptions
+  extends Pick<HostedVaultRoute, "request" | "resolveUserId" | "encryptionSecret" | "readKey"> {
   /**
    * Validates (via a fresh observation pass) and makes the read. The
    * implementation is provider-specific and injected by the route; the

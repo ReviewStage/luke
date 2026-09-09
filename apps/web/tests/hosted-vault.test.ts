@@ -3,7 +3,6 @@ import test from "node:test";
 import { CLOUD_AGENT_PROVIDER_ID } from "@sidecar/session";
 import { decryptProviderKey, encryptProviderKey } from "../server/hosted/encryption";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
-import type { VaultKeyEntry } from "../server/hosted/vault";
 import {
   handleVaultKeyDelete,
   handleVaultKeyStore,
@@ -184,7 +183,7 @@ function listOptions(overrides: Partial<Parameters<typeof handleVaultKeysList>[0
     request: listRequest(),
     encryptionSecret: SECRET,
     resolveUserId: async () => "user-1",
-    listKeys: async (_userId: string): Promise<VaultKeyEntry[]> => [
+    listKeys: async (_userId: string) => [
       { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, updatedAt: NOW_DATE },
     ],
     ...overrides,

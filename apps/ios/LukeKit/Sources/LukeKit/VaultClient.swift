@@ -150,7 +150,7 @@ public final class VaultClient: Sendable {
     /// Lists the stored entries. GET /api/vault/keys.
     ///
     /// Any malformed entry drops the whole answer, mirroring
-    /// `vaultKeysListAnswerFromWire`: an unknown provider id means a service
+    /// `vaultKeysListAnswerSchema`: an unknown provider id means a service
     /// newer than this build, and a partial list would read as keys silently
     /// missing.
     public func listKeys(accessToken: String) async throws -> [VaultKeyEntry] {

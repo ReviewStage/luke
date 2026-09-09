@@ -385,3 +385,52 @@ test("every bound a schema enforces is a bound its node carries", () => {
     maxLength: 9,
   });
 });
+
+test("a member set is stated exactly unless the declaration settles the ends first", () => {
+  assert.equal(s.enumOf(["waiting", "working"]).parse(" waiting "), undefined);
+  assert.equal(
+    s.enumOf(["waiting", "working"], { ends: TEXT_ENDS.TRIM }).parse(" waiting "),
+    "waiting",
+  );
+  assert.equal(s.enumOf(["waiting"], { ends: TEXT_ENDS.TRIM }).parse(" wait ing "), undefined);
+  assert.equal(s.enumOf(["waiting"], { ends: TEXT_ENDS.TRIM }).parse(7), undefined);
+  assert.deepEqual(s.enumOf(["waiting"], { ends: TEXT_ENDS.TRIM }).jsonSchema(), {
+    type: "string",
+    enum: ["waiting"],
+  });
+});
+
+test("a dropped field leaves the key out rather than refusing what carried it", () => {
+  const schema = s.record({
+    id: s.text(),
+    branch: s.dropRefused(s.text()),
+    count: s.dropRefused(s.wholeNumber({ minimum: 0 })),
+  });
+
+  assert.deepEqual(schema.parse({ id: "a", branch: "main", count: 2 }), {
+    id: "a",
+    branch: "main",
+    count: 2,
+  });
+
+  const dropped = schema.parse({ id: "a", branch: 7, count: -1 });
+  assert.deepEqual(dropped, { id: "a" });
+  assert.ok(dropped);
+  assert.equal("branch" in dropped, false);
+  assert.deepEqual(schema.parse({ id: "a" }), { id: "a" });
+  // Only the field is forgiving: what carried it is refused as it always was.
+  assert.equal(schema.parse({ branch: "main" }), undefined);
+});
+
+test("a dropped field is optional in the node it emits, and says what it would have carried", () => {
+  const schema = s.record({ id: s.text(), count: s.dropRefused(s.wholeNumber({ minimum: 0 })) });
+  assert.deepEqual(schema.jsonSchema(), {
+    type: "object",
+    properties: {
+      id: { type: "string", minLength: 1 },
+      count: { type: "integer", minimum: 0 },
+    },
+    required: ["id"],
+    additionalProperties: false,
+  });
+});

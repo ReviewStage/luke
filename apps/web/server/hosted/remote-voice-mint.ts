@@ -1,18 +1,16 @@
 import {
-  CLOUD_AGENT_PROVIDER_ID,
-  type CloudAgentProviderId,
   type CloudFetch,
   CONTEXT_ITEM_KIND,
   contextItemId,
   type ObservedSession,
   remoteRealtimeClientSecretRequest,
 } from "../core.js";
-import { cloudSessionAdapterFor } from "./cloud-adapters.js";
-import { decryptProviderKey } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
-import { type VaultKeyRow, writeAdvertisedActs } from "./observe.js";
+import { observedSessionForResponse } from "./observe.js";
 import type { HostedSpend } from "./quota.js";
 import { remoteSessionContextText } from "./remote-context.js";
+import { observeProviders, readApiKeyFor } from "./vault-keys.js";
+import type { HostedVaultRoute } from "./vault-route.js";
 import { mintRealtimeConnection, voiceMintPreferences } from "./voice-mint.js";
 
 /**
@@ -27,14 +25,14 @@ import { mintRealtimeConnection, voiceMintPreferences } from "./voice-mint.js";
  * so the phone's narrowed set is a first gate, not the last.
  */
 
-export interface RemoteVoiceMintOptions {
-  request: Request;
+export interface RemoteVoiceMintOptions
+  extends Pick<
+    HostedVaultRoute,
+    "request" | "resolveUserId" | "encryptionSecret" | "readVaultKeys"
+  > {
   apiKey: string | undefined;
   model?: string;
-  resolveUserId: (request: Request) => Promise<string | undefined>;
   spend: (userId: string) => Promise<HostedSpend>;
-  encryptionSecret: string | undefined;
-  readVaultKeys: (userId: string) => Promise<VaultKeyRow[]>;
   fetch?: CloudFetch;
   now?: () => number;
   timeoutMs?: number;
@@ -131,53 +129,16 @@ async function observeCloudSessions(
   if (!secret) return [];
 
   const rows = await options.readVaultKeys(userId).catch(() => []);
-  const ciphertextByProviderId = new Map<string, string>(
-    rows.map((row) => [row.providerId, row.ciphertext]),
-  );
-
-  function readApiKeyFor(providerId: string): () => Promise<string | undefined> {
-    return async () => {
-      const ciphertext = ciphertextByProviderId.get(providerId);
-      if (!ciphertext) return undefined;
-      try {
-        return decryptProviderKey(ciphertext, secret);
-      } catch {
-        return undefined;
-      }
-    };
-  }
-
-  const cloudProviders = Object.values(CLOUD_AGENT_PROVIDER_ID);
-  const results = await Promise.allSettled(
-    cloudProviders.map((providerId: CloudAgentProviderId) =>
-      cloudSessionAdapterFor(providerId, {
-        readApiKey: readApiKeyFor(providerId),
-        ...(options.fetch ? { fetch: options.fetch } : undefined),
-        ...(options.now ? { now: options.now } : undefined),
-      }).observe(),
-    ),
-  );
+  const passes = await observeProviders({
+    readApiKey: readApiKeyFor(rows, secret),
+    read: (adapter) => adapter.observe(),
+    seams: options,
+  });
 
   const sessions: ObservedSession[] = [];
-  for (const [i, providerId] of cloudProviders.entries()) {
-    const result = results[i];
-    if (result?.status !== "fulfilled") continue;
-    for (const obs of result.value) {
-      const session: ObservedSession = {
-        providerId,
-        sessionId: obs.providerSessionId,
-        title: obs.title,
-        status: obs.status,
-      };
-      if (obs.detail?.repository) session.workspace = obs.detail.repository;
-      if (obs.detail?.branch) session.branch = obs.detail.branch;
-      if (obs.detail?.error) session.error = obs.detail.error;
-      if (obs.lastActivityAt !== undefined) {
-        session.lastActivityAt = obs.lastActivityAt;
-        session.observedAt = obs.lastActivityAt;
-      }
-      writeAdvertisedActs(session, obs);
-      sessions.push(session);
+  for (const pass of passes) {
+    for (const observation of pass.answer ?? []) {
+      sessions.push(observedSessionForResponse(pass.providerId, observation));
     }
   }
   return sessions;

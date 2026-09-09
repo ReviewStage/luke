@@ -4,17 +4,16 @@ import {
   ACT_KIND,
   advertisedActFor,
   advertisedControls,
-  CLOUD_AGENT_PROVIDER_ID,
   type CloudAgentProviderId,
   normalizeSessionDetail,
   type ObservedSession,
   type ObservedSessionControl,
 } from "../core.js";
 import { providerReadsConversation } from "./act-execute.js";
-import { cloudSessionAdapterFor } from "./cloud-adapters.js";
-import { decryptProviderKey } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import { createRateBrake } from "./rate-brake.js";
+import { observeProviders, readApiKeyFor } from "./vault-keys.js";
+import type { HostedVaultRoute } from "./vault-route.js";
 
 const OBSERVE_RATE_LIMIT = {
   WINDOW_MS: 60_000,
@@ -28,19 +27,11 @@ const observeRateLimited = createRateBrake({
   maxTrackedUsers: OBSERVE_RATE_LIMIT.MAX_TRACKED_USERS,
 });
 
-/** Stored vault key row as the API route supplies it. */
-export interface VaultKeyRow {
-  providerId: string;
-  ciphertext: string;
-}
-
-export interface ObserveOptions {
-  request: Request;
-  resolveUserId: (request: Request) => Promise<string | undefined>;
-  /** The value of PROVIDER_KEY_ENCRYPTION_SECRET; undefined means the env var is absent. */
-  encryptionSecret: string | undefined;
-  /** Reads every vault key row the user has stored, for decryption here. */
-  readVaultKeys: (userId: string) => Promise<VaultKeyRow[]>;
+export interface ObserveOptions
+  extends Pick<
+    HostedVaultRoute,
+    "request" | "resolveUserId" | "encryptionSecret" | "readVaultKeys"
+  > {
   /** Injected in tests; production uses the global fetch. */
   fetch?: CloudFetch;
   now?: () => number;
@@ -77,43 +68,16 @@ export async function handleObserve(options: ObserveOptions): Promise<Response> 
   }
 
   const rows = await readVaultKeys(userId);
-  const ciphertextByProviderId = new Map<string, string>(
-    rows.map((row) => [row.providerId, row.ciphertext]),
-  );
-
-  function readApiKeyFor(providerId: string): () => Promise<string | undefined> {
-    return async () => {
-      const ciphertext = ciphertextByProviderId.get(providerId);
-      if (!ciphertext) return undefined;
-      try {
-        return decryptProviderKey(ciphertext, secret);
-      } catch {
-        return undefined;
-      }
-    };
-  }
-
-  const providers: Array<{
-    providerId: CloudAgentProviderId;
-    observe: () => Promise<readonly ProviderSessionObservation[]>;
-  }> = Object.values(CLOUD_AGENT_PROVIDER_ID).map((providerId) => ({
-    providerId,
-    observe: () =>
-      cloudSessionAdapterFor(providerId, {
-        readApiKey: readApiKeyFor(providerId),
-        ...(options.fetch ? { fetch: options.fetch } : undefined),
-        ...(options.now ? { now: options.now } : undefined),
-      }).observe(),
-  }));
-
-  const results = await Promise.allSettled(providers.map(({ observe }) => observe()));
+  const passes = await observeProviders({
+    readApiKey: readApiKeyFor(rows, secret),
+    read: (adapter) => adapter.observe(),
+    seams: options,
+  });
 
   const sessions: ObservedSession[] = [];
-  for (const [i, { providerId }] of providers.entries()) {
-    const result = results[i];
-    if (result?.status !== "fulfilled") continue;
-    for (const obs of result.value) {
-      sessions.push(observedSessionForResponse(providerId, obs));
+  for (const pass of passes) {
+    for (const observation of pass.answer ?? []) {
+      sessions.push(observedSessionForResponse(pass.providerId, observation));
     }
   }
 
@@ -124,10 +88,9 @@ export async function handleObserve(options: ObserveOptions): Promise<Response> 
  * The acts an observation advertised, written onto its wire row. Each is
  * presence-only where it can be: what a control targets, or which workspace a
  * rename lands on, never travels — the act endpoints re-observe and rebuild
- * every write from their own fresh advertisement. One function, because the
- * roster a voice mint is sent carries exactly the same fields.
+ * every write from their own fresh advertisement.
  */
-export function writeAdvertisedActs(
+function writeAdvertisedActs(
   session: ObservedSession,
   observation: Pick<ProviderSessionObservation, "advertises">,
 ): void {

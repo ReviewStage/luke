@@ -4,7 +4,7 @@ import {
   handleAdminMetrics,
 } from "../../server/admin/admin-metrics.js";
 import { readAdminMetricsSource } from "../../server/admin/admin-queries.js";
-import { resolveSessionViewer } from "../../server/admin/viewer.js";
+import { withAdminViewer } from "../../server/admin/viewer.js";
 import { getDatabase } from "../../server/db/index.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "../../server/hosted/openai.js";
 import { POSTHOG_ENVIRONMENT, posthogProjectConsoleUrl } from "../../server/hosted/posthog.js";
@@ -16,46 +16,42 @@ function configured(name: string): boolean {
 
 /**
  * The admin dashboard's read. The logic lives behind seams in `server/admin/`;
- * this file hands it the deployment's real ones — the browser session the
- * maintainer signed in for, carrying that account's own `role`, and which
- * integrations the environment has keys for. The role is read from the session,
- * never asserted by the request, and no secret value crosses into the answer:
- * only whether each key is present.
+ * this file hands it the deployment's real ones — which integrations the
+ * environment has keys for, beside the database. The role is read from the
+ * session by the gate, never asserted by the request, and no secret value
+ * crosses into the answer: only whether each key is present.
  */
-export default {
-  fetch(request: Request): Promise<Response> {
-    const integrations = adminIntegrations({
-      hostedTier: configured(HOSTED_OPENAI_ENVIRONMENT.API_KEY),
-      analyticsRecording: configured(POSTHOG_ENVIRONMENT.PROJECT_API_KEY),
-      analyticsErasure:
-        configured(POSTHOG_ENVIRONMENT.PERSONAL_API_KEY) &&
-        configured(POSTHOG_ENVIRONMENT.PROJECT_ID),
-      googleSignIn: configured("GOOGLE_CLIENT_ID") && configured("GOOGLE_CLIENT_SECRET"),
-      githubSignIn: configured("GITHUB_CLIENT_ID") && configured("GITHUB_CLIENT_SECRET"),
-    });
+export default withAdminViewer(["GET"], (_viewer, request) => {
+  const integrations = adminIntegrations({
+    hostedTier: configured(HOSTED_OPENAI_ENVIRONMENT.API_KEY),
+    analyticsRecording: configured(POSTHOG_ENVIRONMENT.PROJECT_API_KEY),
+    analyticsErasure:
+      configured(POSTHOG_ENVIRONMENT.PERSONAL_API_KEY) &&
+      configured(POSTHOG_ENVIRONMENT.PROJECT_ID),
+    googleSignIn: configured("GOOGLE_CLIENT_ID") && configured("GOOGLE_CLIENT_SECRET"),
+    githubSignIn: configured("GITHUB_CLIENT_ID") && configured("GITHUB_CLIENT_SECRET"),
+  });
 
-    // The project id names which console to open, never a secret; the key
-    // presence booleans above are still the only thing said about the keys.
-    const projectId = (process.env[POSTHOG_ENVIRONMENT.PROJECT_ID] ?? "").trim();
-    const analyticsConsoleUrl = projectId
-      ? posthogProjectConsoleUrl(projectId, process.env[POSTHOG_ENVIRONMENT.API_HOST])
-      : undefined;
+  // The project id names which console to open, never a secret; the key
+  // presence booleans above are still the only thing said about the keys.
+  const projectId = (process.env[POSTHOG_ENVIRONMENT.PROJECT_ID] ?? "").trim();
+  const analyticsConsoleUrl = projectId
+    ? posthogProjectConsoleUrl(projectId, process.env[POSTHOG_ENVIRONMENT.API_HOST])
+    : undefined;
 
-    return handleAdminMetrics({
-      request,
-      resolveViewer: resolveSessionViewer,
-      readMetrics: async (now, scope, windowDays) =>
-        buildAdminMetrics(
-          await readAdminMetricsSource(getDatabase(), {
-            now,
-            integrations,
-            analyticsConsoleUrl,
-            scope,
-            windowDays,
-          }),
+  return handleAdminMetrics({
+    request,
+    readMetrics: async (now, scope, windowDays) =>
+      buildAdminMetrics(
+        await readAdminMetricsSource(getDatabase(), {
           now,
+          integrations,
+          analyticsConsoleUrl,
+          scope,
           windowDays,
-        ),
-    });
-  },
-};
+        }),
+        now,
+        windowDays,
+      ),
+  });
+});

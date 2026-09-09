@@ -10,7 +10,7 @@ import {
   hostedBrainCountTokensAnswerFromWire,
   hostedBrainCountTokensRequestFromWire,
   hostedBrainRespondRequestFromWire,
-  hostedQuotaFromWire,
+  hostedQuotaSchema,
   maximumHostedBrainRequestBytes,
   serializedRequestBytes,
 } from "@sidecar/hosted";
@@ -219,7 +219,7 @@ class HostedTransport implements ResponsesTransport<HostedBrainCapabilities> {
     const record = wireRecord(unparsedWire(await payloadOf(response)));
     const quota =
       record?.error === HOSTED_API_ERROR.QUOTA_EXHAUSTED
-        ? hostedQuotaFromWire(unparsedWire(record.quota))
+        ? hostedQuotaSchema.parse(unparsedWire(record.quota))
         : undefined;
     const resetsAt = quota?.resetsAt;
     if (resetsAt !== undefined && resetsAt > this.#now()) {

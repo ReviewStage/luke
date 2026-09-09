@@ -1,5 +1,3 @@
-import type { AdminViewer } from "./admin-access.js";
-import { isAdminRole } from "./admin-access.js";
 import {
   ADMIN_ERROR,
   ADMIN_HTTP_STATUS,
@@ -81,7 +79,6 @@ export function buildAdminDayDetail(
 
 export interface AdminDayOptions {
   request: Request;
-  resolveViewer: (request: Request) => Promise<AdminViewer | undefined>;
   readDay: (day: string, now: number, scope: AdminMetricsScope) => Promise<AdminDayDetail>;
   now?: () => number;
 }
@@ -95,23 +92,6 @@ export interface AdminDayOptions {
  */
 export async function handleAdminDay(options: AdminDayOptions): Promise<Response> {
   const { request } = options;
-  if (request.method !== "GET") {
-    return errorResponse(ADMIN_HTTP_STATUS.METHOD_NOT_ALLOWED, ADMIN_ERROR.METHOD_NOT_ALLOWED);
-  }
-
-  let viewer: AdminViewer | undefined;
-  try {
-    viewer = await options.resolveViewer(request);
-  } catch (error) {
-    console.error("admin day viewer resolution failed", error);
-    return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
-  }
-  if (!viewer) {
-    return errorResponse(ADMIN_HTTP_STATUS.UNAUTHORIZED, ADMIN_ERROR.NOT_SIGNED_IN);
-  }
-  if (!isAdminRole(viewer.role)) {
-    return errorResponse(ADMIN_HTTP_STATUS.FORBIDDEN, ADMIN_ERROR.NOT_AUTHORIZED);
-  }
 
   const day = adminDayKey(request.url);
   if (day === undefined) {

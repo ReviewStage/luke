@@ -2,6 +2,7 @@ import {
   ACT_KIND,
   ACT_RESULT_STATUS,
   type ActResultStatus,
+  type AdvertisedControl,
   advertisedActFor,
   advertisedControl,
   CLOUD_AGENT_PROVIDER_ID,
@@ -51,21 +52,121 @@ const SUPPORTED_ACTS = {
   ]),
 } satisfies Readonly<Record<CloudAgentProviderId, ReadonlySet<RemoteSessionAct>>>;
 
-const ACT_ABSENCE_PHRASE = {
-  [REMOTE_SESSION_ACT.MESSAGE]: "taking a message",
-  [REMOTE_SESSION_ACT.CONTROL]: "any session controls",
-  [REMOTE_SESSION_ACT.AGENT]: "starting another agent",
-  [REMOTE_SESSION_ACT.RENAME_SESSION]: "renaming a session",
-  [REMOTE_SESSION_ACT.RENAME_WORKSPACE]: "renaming a workspace",
-  [REMOTE_SESSION_ACT.CREATE_WORKSPACE]: "creating a workspace",
-} as const satisfies Readonly<Record<RemoteSessionAct, string>>;
+/**
+ * One act aimed at an observed session: what its provider-level absence is
+ * worded from, what the fresh pass has to be advertising for it, what a
+ * session not advertising it is told, and how it is delivered. Everything
+ * else about executing one — the capability guard, the fresh observation
+ * pass, finding the target in that pass, and mapping the provider's own
+ * answer onto the wire — is the same for all of them and lives in
+ * {@link executeSessionAct}.
+ */
+export interface SessionActPlan<Fields, Target> {
+  /** Which act this is, so a plan and the capability it is guarded by cannot be paired wrong. */
+  act: RemoteSessionAct;
+  /** What a provider that documents no way to do this is said not to document. */
+  absence: string;
+  /**
+   * What the fresh pass advertised for this act, or undefined for a session
+   * not offering it now. Read off the observation the request itself just
+   * made, never off anything the caller sent, so the caller can name a target
+   * but never describe one.
+   */
+  advertised: (observation: ProviderSessionObservation, fields: Fields) => Target | undefined;
+  /** What a session whose latest observation does not advertise the act is told. */
+  unadvertised: string;
+  deliver: (
+    adapter: SessionProviderAdapter,
+    request: { providerSessionId: string; target: Target; fields: Fields },
+  ) => Promise<ProviderActResult | ProviderWorkspaceResult>;
+}
+
+export const MESSAGE_ACT: SessionActPlan<{ text: string }, true> = {
+  act: REMOTE_SESSION_ACT.MESSAGE,
+  absence: "taking a message",
+  advertised: (observation) => (advertisedActFor(observation, ACT_KIND.MESSAGE) ? true : undefined),
+  unadvertised: "Session is not currently accepting messages.",
+  deliver: (adapter, { providerSessionId, fields }) =>
+    adapter.sendMessage({ providerSessionId, text: fields.text }),
+};
+
+export const CONTROL_ACT: SessionActPlan<{ controlId: string }, AdvertisedControl> = {
+  act: REMOTE_SESSION_ACT.CONTROL,
+  absence: "any session controls",
+  // The advertised control — never the caller's copy — is what reaches the
+  // adapter, and the adapter re-finds it in its own snapshot besides.
+  advertised: (observation, fields) => advertisedControl(observation, fields.controlId),
+  unadvertised: "That control is not currently offered for this session.",
+  deliver: (adapter, { providerSessionId, target }) =>
+    adapter.executeControl({ providerSessionId, control: target }),
+};
+
+export const AGENT_ACT: SessionActPlan<{ agent: string; name?: string; task?: string }, true> = {
+  act: REMOTE_SESSION_ACT.AGENT,
+  absence: "starting another agent",
+  advertised: (observation, fields) =>
+    advertisedActFor(observation, ACT_KIND.ADD_AGENT)?.agents.includes(fields.agent)
+      ? true
+      : undefined,
+  unadvertised: "That agent kind is not currently offered for this session's workspace.",
+  deliver: (adapter, { providerSessionId, fields }) =>
+    adapter.spawnWorkspaceAgent({
+      providerSessionId,
+      agent: fields.agent,
+      name: fields.name,
+      task: fields.task,
+    }),
+};
+
+export const RENAME_SESSION_ACT: SessionActPlan<{ name: string }, true> = {
+  act: REMOTE_SESSION_ACT.RENAME_SESSION,
+  absence: "renaming a session",
+  advertised: (observation) =>
+    advertisedActFor(observation, ACT_KIND.RENAME_SESSION) ? true : undefined,
+  unadvertised: "Renaming this session is not currently offered.",
+  deliver: (adapter, { providerSessionId, fields }) =>
+    adapter.renameSession({ providerSessionId, name: fields.name }),
+};
+
+export const RENAME_WORKSPACE_ACT: SessionActPlan<{ name: string }, true> = {
+  act: REMOTE_SESSION_ACT.RENAME_WORKSPACE,
+  absence: "renaming a workspace",
+  advertised: (observation) =>
+    advertisedActFor(observation, ACT_KIND.RENAME_WORKSPACE) ? true : undefined,
+  unadvertised: "Renaming this session's workspace is not currently offered.",
+  deliver: (adapter, { providerSessionId, fields }) =>
+    adapter.renameWorkspace({ providerSessionId, name: fields.name }),
+};
+
+/**
+ * Creating a workspace aims at a project rather than at an observed session,
+ * so it has no plan to run through {@link executeSessionAct}; it stands here
+ * for the one thing every act has, which is how its absence is worded.
+ */
+const CREATE_WORKSPACE_ACT = {
+  act: REMOTE_SESSION_ACT.CREATE_WORKSPACE,
+  absence: "creating a workspace",
+};
+
+/**
+ * Every act by name. The `satisfies` is what makes the absence total: an act
+ * added to `REMOTE_SESSION_ACT` without one does not compile.
+ */
+const SESSION_ACT_BY_NAME = {
+  [REMOTE_SESSION_ACT.MESSAGE]: MESSAGE_ACT,
+  [REMOTE_SESSION_ACT.CONTROL]: CONTROL_ACT,
+  [REMOTE_SESSION_ACT.AGENT]: AGENT_ACT,
+  [REMOTE_SESSION_ACT.RENAME_SESSION]: RENAME_SESSION_ACT,
+  [REMOTE_SESSION_ACT.RENAME_WORKSPACE]: RENAME_WORKSPACE_ACT,
+  [REMOTE_SESSION_ACT.CREATE_WORKSPACE]: CREATE_WORKSPACE_ACT,
+} as const satisfies Readonly<Record<RemoteSessionAct, { act: RemoteSessionAct; absence: string }>>;
 
 /**
  * The reason a provider cannot take this act, or undefined for one that can.
  * The routes ask before requiring a vault key — an unsupported provider
- * answers "unsupported" whether or not a key is stored — and the executors
- * ask again so the provider call is locally impossible to reach regardless of
- * that ordering.
+ * answers "unsupported" whether or not a key is stored — and the executor
+ * asks again so the provider call is locally impossible to reach regardless
+ * of that ordering.
  */
 export function actUnsupportedReason(
   act: RemoteSessionAct,
@@ -73,7 +174,7 @@ export function actUnsupportedReason(
 ): string | undefined {
   if (SUPPORTED_ACTS[providerId].has(act)) return undefined;
   const displayName = PROVIDER_IDENTITY_BY_ID[providerId].displayName;
-  return `${displayName} does not document ${ACT_ABSENCE_PHRASE[act]} through its API, so Luke does not offer it.`;
+  return `${displayName} does not document ${SESSION_ACT_BY_NAME[act].absence} through its API, so Luke does not offer it.`;
 }
 
 /** What an executed act answers with, in the hosted wire's own vocabulary. */
@@ -144,27 +245,23 @@ function missingTargetReason(
 }
 
 /**
- * Maps an adapter's own act answer onto the hosted wire. An unsupported
- * answer from the adapter after the capability map said yes is an observation
- * that moved between the pass and the write, so it travels as a rejection —
- * the wire's "unsupported" is reserved for a provider that can never take the
- * act, which the routes and executors already answered.
+ * Maps an adapter's own answer onto the hosted wire. An unsupported answer
+ * from the adapter after the capability map said yes is an observation that
+ * moved between the pass and the write, so it travels as a rejection — the
+ * wire's "unsupported" is reserved for a provider that can never take the
+ * act, which the routes and the guard below already answered.
  */
-function fromProviderActResult(result: ProviderActResult): ActExecutionAnswer {
-  if (result.status === ACT_RESULT_STATUS.ACCEPTED) {
-    return { result: ACT_RESULT_STATUS.ACCEPTED };
+function fromProviderResult(
+  result: ProviderActResult | ProviderWorkspaceResult,
+): ActExecutionAnswer {
+  if (result.status !== ACT_RESULT_STATUS.ACCEPTED) {
+    return { result: ACT_RESULT_STATUS.REJECTED, reason: result.reason };
   }
-  return { result: ACT_RESULT_STATUS.REJECTED, reason: result.reason };
-}
-
-function fromProviderWorkspaceResult(result: ProviderWorkspaceResult): ActExecutionAnswer {
-  if (result.status === ACT_RESULT_STATUS.ACCEPTED) {
-    return {
-      result: ACT_RESULT_STATUS.ACCEPTED,
-      ...(result.providerSessionId ? { providerSessionId: result.providerSessionId } : undefined),
-    };
-  }
-  return { result: ACT_RESULT_STATUS.REJECTED, reason: result.reason };
+  const providerSessionId = "providerSessionId" in result ? result.providerSessionId : undefined;
+  return {
+    result: ACT_RESULT_STATUS.ACCEPTED,
+    ...(providerSessionId ? { providerSessionId } : undefined),
+  };
 }
 
 function capabilityGuard(
@@ -175,15 +272,25 @@ function capabilityGuard(
   return reason ? { result: ACT_RESULT_STATUS.UNSUPPORTED, reason } : undefined;
 }
 
-export async function executeMessageAct(options: {
-  providerId: CloudAgentProviderId;
-  providerSessionId: string;
-  text: string;
-  apiKey: string;
-  seams?: ActExecuteSeams;
-}): Promise<ActExecutionAnswer> {
-  const { providerId, providerSessionId, text, apiKey } = options;
-  const guarded = capabilityGuard(REMOTE_SESSION_ACT.MESSAGE, providerId);
+/**
+ * Validates and delivers one act aimed at an observed session: the provider
+ * has to document the act at all, the fresh pass has to still hold the
+ * session, and that pass's own advertisement has to still offer it. Only then
+ * does the adapter see anything, and what it is handed is built from the
+ * advertisement rather than from the ask.
+ */
+export async function executeSessionAct<Fields, Target>(
+  plan: SessionActPlan<Fields, Target>,
+  options: {
+    providerId: CloudAgentProviderId;
+    providerSessionId: string;
+    fields: Fields;
+    apiKey: string;
+    seams?: ActExecuteSeams;
+  },
+): Promise<ActExecutionAnswer> {
+  const { providerId, providerSessionId, fields, apiKey } = options;
+  const guarded = capabilityGuard(plan.act, providerId);
   if (guarded) return guarded;
 
   const pass = await observeForAct(providerId, apiKey, options.seams ?? {});
@@ -196,142 +303,13 @@ export async function executeMessageAct(options: {
       reason: missingTargetReason(providerId, pass, "Session not found."),
     };
   }
-  if (!advertisedActFor(observation, ACT_KIND.MESSAGE)) {
-    return {
-      result: ACT_RESULT_STATUS.REJECTED,
-      reason: "Session is not currently accepting messages.",
-    };
+  const target = plan.advertised(observation, fields);
+  if (target === undefined) {
+    return { result: ACT_RESULT_STATUS.REJECTED, reason: plan.unadvertised };
   }
-  return fromProviderActResult(await pass.adapter.sendMessage({ providerSessionId, text }));
-}
-
-export async function executeControlAct(options: {
-  providerId: CloudAgentProviderId;
-  providerSessionId: string;
-  controlId: string;
-  apiKey: string;
-  seams?: ActExecuteSeams;
-}): Promise<ActExecutionAnswer> {
-  const { providerId, providerSessionId, controlId, apiKey } = options;
-  const guarded = capabilityGuard(REMOTE_SESSION_ACT.CONTROL, providerId);
-  if (guarded) return guarded;
-
-  const pass = await observeForAct(providerId, apiKey, options.seams ?? {});
-  const observation = pass.observations.find(
-    (candidate) => candidate.providerSessionId === providerSessionId,
+  return fromProviderResult(
+    await plan.deliver(pass.adapter, { providerSessionId, target, fields }),
   );
-  if (!observation) {
-    return {
-      result: ACT_RESULT_STATUS.REJECTED,
-      reason: missingTargetReason(providerId, pass, "Session not found."),
-    };
-  }
-  // The advertised control — never the caller's copy — is what reaches the
-  // adapter, and the adapter re-finds it in its own snapshot besides.
-  const advertised = advertisedControl(observation, controlId);
-  if (!advertised) {
-    return {
-      result: ACT_RESULT_STATUS.REJECTED,
-      reason: "That control is not currently offered for this session.",
-    };
-  }
-  return fromProviderActResult(
-    await pass.adapter.executeControl({ providerSessionId, control: advertised }),
-  );
-}
-
-export async function executeAgentAct(options: {
-  providerId: CloudAgentProviderId;
-  providerSessionId: string;
-  agent: string;
-  name: string | undefined;
-  task: string | undefined;
-  apiKey: string;
-  seams?: ActExecuteSeams;
-}): Promise<ActExecutionAnswer> {
-  const { providerId, providerSessionId, agent, name, task, apiKey } = options;
-  const guarded = capabilityGuard(REMOTE_SESSION_ACT.AGENT, providerId);
-  if (guarded) return guarded;
-
-  const pass = await observeForAct(providerId, apiKey, options.seams ?? {});
-  const observation = pass.observations.find(
-    (candidate) => candidate.providerSessionId === providerSessionId,
-  );
-  if (!observation) {
-    return {
-      result: ACT_RESULT_STATUS.REJECTED,
-      reason: missingTargetReason(providerId, pass, "Session not found."),
-    };
-  }
-  if (!advertisedActFor(observation, ACT_KIND.ADD_AGENT)?.agents.includes(agent)) {
-    return {
-      result: ACT_RESULT_STATUS.REJECTED,
-      reason: "That agent kind is not currently offered for this session's workspace.",
-    };
-  }
-  return fromProviderWorkspaceResult(
-    await pass.adapter.spawnWorkspaceAgent({ providerSessionId, agent, name, task }),
-  );
-}
-
-export async function executeRenameSessionAct(options: {
-  providerId: CloudAgentProviderId;
-  providerSessionId: string;
-  name: string;
-  apiKey: string;
-  seams?: ActExecuteSeams;
-}): Promise<ActExecutionAnswer> {
-  const { providerId, providerSessionId, name, apiKey } = options;
-  const guarded = capabilityGuard(REMOTE_SESSION_ACT.RENAME_SESSION, providerId);
-  if (guarded) return guarded;
-
-  const pass = await observeForAct(providerId, apiKey, options.seams ?? {});
-  const observation = pass.observations.find(
-    (candidate) => candidate.providerSessionId === providerSessionId,
-  );
-  if (!observation) {
-    return {
-      result: ACT_RESULT_STATUS.REJECTED,
-      reason: missingTargetReason(providerId, pass, "Session not found."),
-    };
-  }
-  if (!advertisedActFor(observation, ACT_KIND.RENAME_SESSION)) {
-    return {
-      result: ACT_RESULT_STATUS.REJECTED,
-      reason: "Renaming this session is not currently offered.",
-    };
-  }
-  return fromProviderActResult(await pass.adapter.renameSession({ providerSessionId, name }));
-}
-
-export async function executeRenameWorkspaceAct(options: {
-  providerId: CloudAgentProviderId;
-  providerSessionId: string;
-  name: string;
-  apiKey: string;
-  seams?: ActExecuteSeams;
-}): Promise<ActExecutionAnswer> {
-  const { providerId, providerSessionId, name, apiKey } = options;
-  const guarded = capabilityGuard(REMOTE_SESSION_ACT.RENAME_WORKSPACE, providerId);
-  if (guarded) return guarded;
-
-  const pass = await observeForAct(providerId, apiKey, options.seams ?? {});
-  const observation = pass.observations.find(
-    (candidate) => candidate.providerSessionId === providerSessionId,
-  );
-  if (!observation) {
-    return {
-      result: ACT_RESULT_STATUS.REJECTED,
-      reason: missingTargetReason(providerId, pass, "Session not found."),
-    };
-  }
-  if (!advertisedActFor(observation, ACT_KIND.RENAME_WORKSPACE)) {
-    return {
-      result: ACT_RESULT_STATUS.REJECTED,
-      reason: "Renaming this session's workspace is not currently offered.",
-    };
-  }
-  return fromProviderActResult(await pass.adapter.renameWorkspace({ providerSessionId, name }));
 }
 
 export async function executeCreateWorkspaceAct(options: {
@@ -359,7 +337,7 @@ export async function executeCreateWorkspaceAct(options: {
       reason: missingTargetReason(providerId, pass, "Project not found."),
     };
   }
-  return fromProviderWorkspaceResult(
+  return fromProviderResult(
     await pass.adapter.createWorkspace({ providerProjectId, name, task, agentSelection }),
   );
 }

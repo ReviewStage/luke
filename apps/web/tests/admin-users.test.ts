@@ -112,34 +112,10 @@ const ADMIN_VIEWER: AdminViewer = { userId: "user-1", role: "admin" };
 const readUsers = async (now: number): Promise<AdminUserList> =>
   buildAdminUserList(listSource(), now, ADMIN_METRICS_WINDOW_DEFAULT, undefined);
 
-test("the gate answers 405, 401, 403, and 200 as distinct outcomes", async () => {
-  const wrongMethod = await handleAdminUsers({
-    request: usersRequest("POST"),
-    resolveViewer: async () => ADMIN_VIEWER,
-    readUsers,
-  });
-  assert.equal(wrongMethod.status, 405);
-  assert.equal(wrongMethod.headers.get("cache-control"), "no-store");
-
-  const anonymous = await handleAdminUsers({
-    request: usersRequest(),
-    resolveViewer: async () => undefined,
-    readUsers,
-  });
-  assert.equal(anonymous.status, 401);
-  assert.equal((await anonymous.json()).error, ADMIN_ERROR.NOT_SIGNED_IN);
-
-  const forbidden = await handleAdminUsers({
-    request: usersRequest(),
-    resolveViewer: async () => ({ ...ADMIN_VIEWER, role: "user" }),
-    readUsers,
-  });
-  assert.equal(forbidden.status, 403);
-  assert.equal((await forbidden.json()).error, ADMIN_ERROR.NOT_AUTHORIZED);
-
+test("the read answers a whole roster past the gate", async () => {
   const ok = await handleAdminUsers({
     request: usersRequest(),
-    resolveViewer: async () => ADMIN_VIEWER,
+    viewer: ADMIN_VIEWER,
     readUsers,
     now: () => NOON_UTC,
   });
@@ -168,7 +144,7 @@ test("the roster is read at the scope and window the request asked for, as the v
     return buildAdminUserList(listSource(), now, windowDays, search);
   };
   const respond = (request: Request) =>
-    handleAdminUsers({ request, resolveViewer: async () => ADMIN_VIEWER, readUsers: countingRead });
+    handleAdminUsers({ request, viewer: ADMIN_VIEWER, readUsers: countingRead });
 
   assert.equal((await respond(usersRequest())).status, 200);
   const widened = usersRequest("GET", `?${ADMIN_METRICS_SCOPE_PARAM}=${ADMIN_METRICS_SCOPE.ALL}`);
@@ -189,14 +165,6 @@ test("the roster is read at the scope and window the request asked for, as the v
     ADMIN_METRICS_WINDOW_DEFAULT,
     ADMIN_METRICS_WINDOW.WEEK,
   ]);
-
-  const gated = await handleAdminUsers({
-    request: usersRequest(),
-    resolveViewer: async () => undefined,
-    readUsers: countingRead,
-  });
-  assert.equal(gated.status, 401);
-  assert.equal(scopes.length, 3);
 
   const invalid = await respond(usersRequest("GET", `?${ADMIN_METRICS_WINDOW_PARAM}=13`));
   assert.equal(invalid.status, 400);
@@ -219,7 +187,7 @@ test("the roster is searched by the term the request carried, trimmed, and only 
   const respond = (query: string) =>
     handleAdminUsers({
       request: usersRequest("GET", query),
-      resolveViewer: async () => ADMIN_VIEWER,
+      viewer: ADMIN_VIEWER,
       readUsers: countingRead,
     });
 
@@ -248,7 +216,7 @@ test("a term past the length bound is a 400 refusal that reaches no read", async
   const respond = (term: string) =>
     handleAdminUsers({
       request: usersRequest("GET", `?${ADMIN_USERS_SEARCH_PARAM}=${encodeURIComponent(term)}`),
-      resolveViewer: async () => ADMIN_VIEWER,
+      viewer: ADMIN_VIEWER,
       readUsers: countingRead,
     });
 
@@ -263,19 +231,9 @@ test("a term past the length bound is a 400 refusal that reaches no read", async
 });
 
 test("a seam that throws is a 503 refusal rather than a crash", async () => {
-  const viewerThrew = await handleAdminUsers({
-    request: usersRequest(),
-    resolveViewer: async () => {
-      throw new Error("auth is down");
-    },
-    readUsers,
-  });
-  assert.equal(viewerThrew.status, 503);
-  assert.equal((await viewerThrew.json()).error, ADMIN_ERROR.UNAVAILABLE);
-
   const readThrew = await handleAdminUsers({
     request: usersRequest(),
-    resolveViewer: async () => ADMIN_VIEWER,
+    viewer: ADMIN_VIEWER,
     readUsers: async () => {
       throw new Error("database is down");
     },
