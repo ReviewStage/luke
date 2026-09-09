@@ -1,6 +1,6 @@
 CREATE TABLE "briefing" (
-	"id" text PRIMARY KEY NOT NULL,
 	"user_id" text NOT NULL,
+	"id" text NOT NULL,
 	"session_key" text NOT NULL,
 	"run_id" text,
 	"sealed_words" text NOT NULL,
@@ -9,7 +9,8 @@ CREATE TABLE "briefing" (
 	"state" text NOT NULL,
 	"claimed_by_device_id" text,
 	"claimed_at" bigint,
-	"settled_at" bigint
+	"settled_at" bigint,
+	CONSTRAINT "briefing_user_id_id_pk" PRIMARY KEY("user_id","id")
 );
 --> statement-breakpoint
 CREATE TABLE "action_receipt" (

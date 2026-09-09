@@ -1,4 +1,4 @@
-import { bigint, index, pgTable, text } from "drizzle-orm/pg-core";
+import { bigint, index, pgTable, primaryKey, text } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema.js";
 
 /**
@@ -14,10 +14,11 @@ import { user } from "./auth-schema.js";
 export const briefing = pgTable(
   "briefing",
   {
-    id: text("id").notNull().primaryKey(),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    /** The briefing's id as the brain minted it; one user's ids never stand in another's way. */
+    id: text("id").notNull(),
     sessionKey: text("session_key").notNull(),
     runId: text("run_id"),
     /** The briefing's words, as the brain chose to say them. Sealed. */
@@ -29,5 +30,8 @@ export const briefing = pgTable(
     claimedAt: bigint("claimed_at", { mode: "number" }),
     settledAt: bigint("settled_at", { mode: "number" }),
   },
-  (table) => [index("briefing_by_user_state").on(table.userId, table.state, table.decidedAt)],
+  (table) => [
+    primaryKey({ columns: [table.userId, table.id] }),
+    index("briefing_by_user_state").on(table.userId, table.state, table.decidedAt),
+  ],
 );

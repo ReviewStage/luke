@@ -1,5 +1,5 @@
 {
-  "id": "96483389-b94a-47ca-a994-de16afd4a36d",
+  "id": "157bb098-45e3-4142-a5a7-705799ee4b1c",
   "prevId": "e71bcd47-fe5c-4fd8-b09e-f497fc091fc1",
   "version": "7",
   "dialect": "postgresql",
@@ -1074,14 +1074,14 @@
       "name": "briefing",
       "schema": "",
       "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
         "user_id": {
           "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "id": {
+          "name": "id",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -1181,7 +1181,12 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "briefing_user_id_id_pk": {
+          "name": "briefing_user_id_id_pk",
+          "columns": ["user_id", "id"]
+        }
+      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},

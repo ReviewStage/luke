@@ -22,7 +22,7 @@ import {
   observationInboxEntry,
   runtimeCheckpoint,
 } from "../../db/schema.js";
-import { clearConversationRows, touchConversation } from "./conversations.js";
+import { clearConversationRows, lockConversation, touchConversation } from "./conversations.js";
 import { type HostedStoreDatabase, nullable, optionalField, type UserSeal } from "./database.js";
 import { appendTranscript } from "./transcript.js";
 
@@ -166,7 +166,10 @@ export async function loadBrainEnvelope(
 
 /**
  * Makes the envelope given the one that stands, if the save's generation is
- * the one standing: the compare-and-set every save runs. A replacement
+ * the one standing: the compare-and-set every save runs, under the
+ * conversation's row lock so the check and the write are one step and two
+ * writers that observed the same generation land one after the other, the
+ * second refused. A replacement
  * replaces the generation it expected, its rows cascading away with it; an
  * amendment changes the generation it names. A writer naming some other
  * generation — or none, when one stands — is stale, and is refused without
@@ -184,10 +187,11 @@ export function saveBrainEnvelope(
   save: BrainStateSave,
 ): Promise<boolean> {
   return db.transaction(async (tx) => {
+    if (!(await lockConversation(tx, userId, sessionKey))) return false;
     const standing = await standingGeneration(tx, userId, sessionKey);
     if (save.kind === SAVE_KIND.REPLACE) {
       if (standing?.sessionId !== save.expectGeneration) return false;
-      await replaceGeneration(tx, seal, userId, sessionKey, save.state);
+      await replaceGeneration(tx, seal, userId, sessionKey, standing?.sessionId, save.state);
       await appendTranscript(
         tx,
         seal,
@@ -296,18 +300,22 @@ export function saveBrainEnvelope(
   });
 }
 
+/** Replaces exactly the generation the save observed standing, under the conversation's row lock. */
 async function replaceGeneration(
   db: HostedStoreDatabase,
   seal: UserSeal,
   userId: string,
   sessionKey: SessionKey,
+  replaced: string | undefined,
   state: BrainPersistedState,
 ): Promise<void> {
-  await db
-    .delete(conversationSession)
-    .where(
-      and(eq(conversationSession.userId, userId), eq(conversationSession.sessionKey, sessionKey)),
-    );
+  if (replaced !== undefined) {
+    await db
+      .delete(conversationSession)
+      .where(
+        and(eq(conversationSession.userId, userId), eq(conversationSession.sessionId, replaced)),
+      );
+  }
   await db.insert(conversationSession).values({
     userId,
     sessionId: state.generationId,

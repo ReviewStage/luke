@@ -13,7 +13,7 @@ import {
 } from "../../core.js";
 import { conversation, conversationLine } from "../../db/schema.js";
 import { standingGeneration } from "./brain-envelope.js";
-import { conversationCutoff } from "./conversations.js";
+import { conversationCutoff, lockConversation } from "./conversations.js";
 import type { HostedStoreDatabase, UserSeal } from "./database.js";
 
 /**
@@ -56,6 +56,9 @@ export function appendConversationLines(
   now: number,
 ): Promise<ConversationAppendOutcome<ConversationEntry>> {
   return db.transaction(async (tx) => {
+    if (!(await lockConversation(tx, userId, sessionKey))) {
+      throw new Error(`no conversation stands at ${sessionKey}`);
+    }
     const standing = await standingGeneration(tx, userId, sessionKey);
     const clearedAt = await conversationClearedAt(tx, userId, sessionKey);
     let changed = false;
@@ -87,8 +90,10 @@ async function appendOne(
       ),
     );
   // A run's line of this kind already standing elsewhere refuses the update
-  // and the insert alike; asked before either, so the once-published index
-  // is the backstop rather than the path.
+  // and the insert alike. Asked before either, under the conversation's row
+  // lock, so the once-published index is the backstop rather than the path;
+  // an insert it still refuses reads as already stored, never as a batch
+  // rolled back.
   const alreadyPublished =
     entry.requestId !== undefined &&
     (await published(db, userId, sessionKey, entry.requestId, entry.kind));
@@ -108,20 +113,24 @@ async function appendOne(
   }
   if (alreadyPublished) return false;
   const sequence = await nextLineSequence(db, userId, sessionKey);
-  await db.insert(conversationLine).values({
-    userId,
-    sessionKey,
-    sequence,
-    sessionId: sessionId ?? null,
-    eventKey,
-    kind: entry.kind,
-    recordedAt: entry.recordedAt,
-    requestId: entry.requestId ?? null,
-    providerId: entry.identity?.providerId ?? null,
-    providerSessionId: entry.identity?.providerSessionId ?? null,
-    sealedPayload: seal.seal(conversationPayload(entry)),
-  });
-  return true;
+  const inserted = await db
+    .insert(conversationLine)
+    .values({
+      userId,
+      sessionKey,
+      sequence,
+      sessionId: sessionId ?? null,
+      eventKey,
+      kind: entry.kind,
+      recordedAt: entry.recordedAt,
+      requestId: entry.requestId ?? null,
+      providerId: entry.identity?.providerId ?? null,
+      providerSessionId: entry.identity?.providerSessionId ?? null,
+      sealedPayload: seal.seal(conversationPayload(entry)),
+    })
+    .onConflictDoNothing()
+    .returning({ sequence: conversationLine.sequence });
+  return inserted.length > 0;
 }
 
 /** The conversation's next sequence, taken from its counter so a number is never handed out twice. */

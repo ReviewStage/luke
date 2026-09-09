@@ -660,6 +660,9 @@ test("a briefing is offered once, claimed by one device once, settled only by it
   };
   assert.equal(await briefings.insert(userId, offered), true);
   assert.equal(await briefings.insert(userId, offered), false);
+  const other = await database.createUser();
+  assert.equal(await briefings.insert(other, offered), true);
+  assert.equal((await briefings.list(other)).length, 1);
   assert.deepEqual(await briefings.list(userId, BRIEFING_STATE.OFFERED), [
     { ...offered, state: BRIEFING_STATE.OFFERED },
   ]);
@@ -714,7 +717,7 @@ test("deleting the user row cascades through every conversation table and leaves
     await database.store.workspace.write(id, "USER.md", "# user", NOW);
     await database.store.roster.write(id, { body: "{}", observedAt: NOW });
     await database.store.briefings.insert(id, {
-      id: `b-${id}`,
+      id: "briefing-shared-id",
       sessionKey: MAIN_SESSION_KEY,
       words: "words",
       decidedAt: NOW,

@@ -120,6 +120,28 @@ export async function createConversation(
   return created;
 }
 
+/**
+ * Takes the conversation's row lock for the rest of the transaction, so every
+ * writer of the conversation — a checkpoint save, a Clear, a line append —
+ * runs one at a time and the standing generation it reads afterwards is the
+ * one it writes against. Postgres reads uncommitted-by-others nothing but
+ * also locks nothing on a plain read, so without this two saves that both
+ * observed one generation could both proceed. Answers whether the
+ * conversation stands.
+ */
+export async function lockConversation(
+  db: HostedStoreDatabase,
+  userId: string,
+  sessionKey: SessionKey,
+): Promise<boolean> {
+  const rows = await db
+    .select({ sessionKey: conversation.sessionKey })
+    .from(conversation)
+    .where(and(eq(conversation.userId, userId), eq(conversation.sessionKey, sessionKey)))
+    .for("update");
+  return rows.length > 0;
+}
+
 /** The conversation's durable Clear cutoff, which outlives the generation whose marker raised it. */
 export async function conversationCutoff(
   db: HostedStoreDatabase,
