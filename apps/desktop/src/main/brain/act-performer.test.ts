@@ -12,7 +12,7 @@ import type { ConversationEntry } from "@sidecar/realtime";
 import { RUN_ORIGIN } from "@sidecar/runtime-contracts";
 import { ACT_KIND, normalizeSession, SESSION_STATUS, type Session } from "@sidecar/session";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
-import type { BrainAppActRequest } from "#shared/contracts";
+import type { BrainAppActRequest } from "#shared/messages/brain";
 import { type BrainActPerformerDependencies, createBrainActPerformer } from "./act-performer";
 
 const NOW = 1_800_000_000_000;

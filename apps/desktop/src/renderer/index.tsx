@@ -1,6 +1,6 @@
 import * as Sentry from "@sentry/electron/renderer";
 import { createRoot } from "react-dom/client";
-import { WINDOW_ROLE } from "#shared/wire/session";
+import { WINDOW_ROLE } from "#shared/messages/session";
 import { App } from "./app";
 import { IntroductionTakeover } from "./introduction/introduction-takeover";
 import { VoiceHost } from "./voice/voice-host";

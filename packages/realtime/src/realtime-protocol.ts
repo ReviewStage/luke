@@ -1,7 +1,9 @@
 import { LUKE_PERSONA } from "@sidecar/guide";
 import { maximumSessionMessageLength } from "@sidecar/session";
 import {
+  isOptionalWireString,
   isRecord,
+  isWireNumber,
   isWireString,
   text,
   type UnparsedWireValue,
@@ -573,6 +575,30 @@ export function isCalendarOnboardingSpeech(
 
 export function isBriefingSpeech(speech: ProactiveSpeechTurn): speech is BriefingSpeech {
   return speech.kind === BRIEFING_SPEECH_KIND;
+}
+
+/**
+ * Parses one turn as it arrives from outside this process. The kind decides
+ * which fields are read, and an unknown kind is refused rather than passed
+ * through: a turn the mouth cannot build events for must never reach it as a
+ * turn it will try to speak.
+ */
+export function isProactiveSpeechTurn(
+  value: UnparsedWireValue,
+): value is ProactiveSpeechTurn & WireRecord {
+  if (!isRecord(value) || !isWireNumber(value.decidedAt) || !Number.isFinite(value.decidedAt)) {
+    return false;
+  }
+  switch (value.kind) {
+    case BRIEFING_SPEECH_KIND:
+      return isWireString(value.briefing);
+    case ARRIVAL_SPEECH_KIND:
+      return isOptionalWireString(value.sessionTitle) && isOptionalWireString(value.talkKeyLabel);
+    case CALENDAR_ONBOARDING_SPEECH_KIND:
+      return true;
+    default:
+      return false;
+  }
 }
 
 /**

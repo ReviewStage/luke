@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { UPDATE_STATUS, type UpdateSnapshot } from "#shared/contracts";
+import { UPDATE_STATUS, type UpdateSnapshot } from "#shared/messages/update";
 import {
   type UpdaterEngineEvents,
   UpdateService,

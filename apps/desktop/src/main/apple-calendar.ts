@@ -11,6 +11,7 @@ import {
   meetingsFromBusyIntervals,
   type ObservedAccountCalendars,
 } from "@sidecar/calendar";
+import { APPLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
 import {
   isWireString,
   wireRecord as readWireRecord,
@@ -19,11 +20,7 @@ import {
   unparsedWire,
 } from "@sidecar/wire";
 import { app } from "electron";
-import {
-  APPLE_CALENDAR_ACCESS,
-  APPLE_CALENDAR_ID,
-  type AppleCalendarAccess,
-} from "#shared/apple-calendar";
+import { APPLE_CALENDAR_ACCESS, type AppleCalendarAccess } from "#shared/apple-calendar";
 
 const ACCESS_WORDS = new Set<string>(Object.values(APPLE_CALENDAR_ACCESS));
 

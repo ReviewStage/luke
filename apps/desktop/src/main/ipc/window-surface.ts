@@ -10,23 +10,27 @@ import {
 import { FEEDBACK_LIFECYCLE_EVENT } from "@sidecar/feedback";
 import { BrowserWindow, type IpcMain, type IpcMainEvent, type IpcMainInvokeEvent } from "electron";
 import { BRIDGE, channels } from "#shared/bridge";
-import type { MicrophoneRoute, MicrophoneStatus } from "#shared/contracts";
+import {
+  MICROPHONE_STATUS,
+  type MicrophoneRoute,
+  type MicrophoneStatus,
+} from "#shared/messages/audio";
 import type { MicrophoneRouteWatcher } from "../native/microphone-route";
 import { registerBridge } from "../register-bridge";
 import type { PanelManager } from "../window/panel-manager";
 
 /**
  * Which microphone answers a count can be built from. A total `Record` like
- * the bridges in `product-vocabulary.ts`, so a sixth status does not build
- * until someone has said whether the ask decided it — the three that map to
- * nothing are the point rather than an oversight.
+ * the bridges in `@sidecar/settings`, so a sixth status does not build until
+ * someone has said whether the ask decided it — the three that map to nothing
+ * are the point rather than an oversight.
  */
 const MICROPHONE_STATUS_COUNTED_AS = {
-  granted: PRODUCT_PERMISSION_RESULT.GRANTED,
-  denied: PRODUCT_PERMISSION_RESULT.DENIED,
-  "not-determined": undefined,
-  restricted: undefined,
-  unknown: undefined,
+  [MICROPHONE_STATUS.GRANTED]: PRODUCT_PERMISSION_RESULT.GRANTED,
+  [MICROPHONE_STATUS.DENIED]: PRODUCT_PERMISSION_RESULT.DENIED,
+  [MICROPHONE_STATUS.NOT_DETERMINED]: undefined,
+  [MICROPHONE_STATUS.RESTRICTED]: undefined,
+  [MICROPHONE_STATUS.UNKNOWN]: undefined,
 } satisfies Record<MicrophoneStatus, ProductPermissionResult | undefined>;
 
 export interface WindowSurfaceIpcDependencies {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS } from "@sidecar/feedback";
-import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "#shared/wire/account";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "#shared/messages/account";
 import {
   accountSignature,
   type FeedbackEntry,

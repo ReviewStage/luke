@@ -11,7 +11,7 @@ import {
   brainStateFromStored,
   responsesModelAnswer,
 } from "@sidecar/brain";
-import { isTerminalBrainRequestStatus } from "@sidecar/brain/requests";
+import { brainReplyWords, isTerminalBrainRequestStatus } from "@sidecar/brain/requests";
 import {
   type BareResponsesModel,
   bareModelAdapter,
@@ -25,11 +25,7 @@ import {
 import { QUEUE_MODE } from "@sidecar/runtime";
 import type { ModelResponse } from "@sidecar/runtime-contracts";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import {
-  type BrainReplyOffer,
-  type BrainRequestSnapshot,
-  brainReplyWords,
-} from "#shared/wire/brain";
+import type { BrainReplyOffer, BrainRequestSnapshot } from "#shared/messages/brain";
 import { operatorOverBrain } from "../gateway/testing";
 import { VoiceReceiver } from "../voice-receiver";
 import { BrainHost } from "./host";

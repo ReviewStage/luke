@@ -1,20 +1,24 @@
-import { BRAIN_REQUEST_ORIGIN, BRAIN_SUBMISSION_OUTCOME } from "@sidecar/brain/requests";
-import { type ConversationEntry, REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { MicrophoneStatus, VoiceHotkeyState } from "#shared/wire/audio";
 import {
   BRAIN_ASK_REFUSAL,
-  type BrainAskSubmissionResult,
-  type BrainRequestSnapshot,
-} from "#shared/wire/brain";
-import type { AppBootstrap } from "#shared/wire/session";
+  BRAIN_REQUEST_ORIGIN,
+  BRAIN_SUBMISSION_OUTCOME,
+} from "@sidecar/brain/requests";
+import { type ConversationEntry, REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  MICROPHONE_STATUS,
+  type MicrophoneStatus,
+  type VoiceHotkeyState,
+} from "#shared/messages/audio";
+import type { BrainAskSubmissionResult, BrainRequestSnapshot } from "#shared/messages/brain";
+import type { AppBootstrap } from "#shared/messages/session";
 import {
   IDLE_VOICE_VIEW,
   VOICE_COMMAND,
   VOICE_COMMAND_OUTCOME,
   type VoiceCommandOutcome,
   type VoiceView,
-} from "#shared/wire/voice-view";
+} from "#shared/messages/voice-view";
 import { useBootstrapRacedChannel } from "./use-bootstrap-raced-channel";
 import { VOICE_ERROR_NOTICE_MS } from "./voice/use-voice-session";
 import { VOICE_ACTIVITY_HANGOVER_MS, VOICE_ACTIVITY_THRESHOLD } from "./voice/voice-level-meter";
@@ -159,7 +163,9 @@ export function useVoiceView(): VoiceViewState {
   // below re-arms on every arrival rather than only on a changed number.
   const [levelReport, setLevelReport] = useState({ level: 0 });
   const level = levelReport.level;
-  const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneStatus>("not-determined");
+  const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneStatus>(
+    MICROPHONE_STATUS.NOT_DETERMINED,
+  );
   const [voiceHotkey, setVoiceHotkey] = useState<VoiceHotkeyState>();
   const [conversationHistory, setConversationHistory] = useState<readonly ConversationEntry[]>([]);
 

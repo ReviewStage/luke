@@ -8,7 +8,7 @@ import {
 } from "@sidecar/settings";
 import { ACT_RESULT_STATUS, isWireString } from "@sidecar/wire";
 import { BRIDGE, type BridgeArgumentsFor } from "#shared/bridge";
-import type { AppSettings } from "#shared/contracts";
+import type { AppSettings } from "#shared/messages/settings";
 import type { HostOperator } from "../gateway/host-operator";
 import type { MediaDuckController } from "../native/media-duck";
 import type { BridgeContext } from "../register-bridge";

@@ -6,6 +6,7 @@ import {
   storedConversationEntry,
 } from "@sidecar/realtime";
 import {
+  isOptionalWireString,
   isRecord,
   isWireBoolean,
   isWireString,
@@ -89,13 +90,11 @@ export function isVoiceCommand(value: UnparsedWireValue): value is VoiceCommand 
   return isWireString(value) && VOICE_COMMANDS.has(value);
 }
 
-const optionalString = (value: UnparsedWireValue): boolean =>
-  value === undefined || isWireString(value);
-
 export function isVoiceView(value: UnparsedWireValue): value is VoiceView & WireRecord {
   if (!isRecord(value)) return false;
   if (!isRealtimeStatus(value.voiceStatus)) return false;
-  if (!optionalString(value.voiceError) || !optionalString(value.voiceNotice)) return false;
+  if (!isOptionalWireString(value.voiceError) || !isOptionalWireString(value.voiceNotice))
+    return false;
   if (!isWireBoolean(value.talkOpening)) return false;
   const captions = value.lukeCaptions;
   if (captions !== undefined && !(Array.isArray(captions) && captions.every(isWireString))) {
@@ -110,6 +109,9 @@ export function isVoiceView(value: UnparsedWireValue): value is VoiceView & Wire
 /**
  * The exchange is live from the press to the end of the reply — the call
  * coming up, a turn being held, Luke speaking — and the media duck follows it.
+ * It is also the whole of the session's turn arbitration: the Realtime API
+ * answers one turn at a time, so while this stands nothing may open another,
+ * and a caller told it was refused decides what to show instead.
  */
 export function voiceExchangeActive(status: RealtimeStatus): boolean {
   return (

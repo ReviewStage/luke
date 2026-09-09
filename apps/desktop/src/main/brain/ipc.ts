@@ -3,6 +3,7 @@ import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_SUBMISSION_OUTCOME,
   BRAIN_SUBMISSION_REJECTION,
+  brainReplyWords,
   isTerminalBrainRequestStatus,
 } from "@sidecar/brain/requests";
 import {
@@ -13,14 +14,13 @@ import {
 import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import { BRIDGE } from "#shared/bridge";
-import {
-  type BrainAskSubmission,
-  type BrainAskSubmissionResult,
-  type BrainAskWait,
-  type BrainReplyClaimResult,
-  type BrainRequestSnapshot,
-  brainReplyWords,
-} from "#shared/wire/brain";
+import type {
+  BrainAskSubmission,
+  BrainAskSubmissionResult,
+  BrainAskWait,
+  BrainReplyClaimResult,
+  BrainRequestSnapshot,
+} from "#shared/messages/brain";
 import type { GatewayOperator } from "../gateway/operator";
 import { registerBridge } from "../register-bridge";
 

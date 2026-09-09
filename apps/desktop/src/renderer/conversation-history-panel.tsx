@@ -5,7 +5,7 @@ import {
   conversationEntryKey,
 } from "@sidecar/realtime";
 import { useEffect, useRef, useState } from "react";
-import { type BrainRequestSnapshot, brainRequestPending } from "#shared/wire/brain";
+import { type BrainRequestSnapshot, brainRequestPending } from "#shared/messages/brain";
 import { type AskHandler, AskLuke } from "./ask-luke";
 import { createHistoryTimeBreakFormatter, opensHistoryTimeBreak } from "./history-time-break";
 import { MarkdownMessage } from "./markdown-message";

@@ -43,7 +43,8 @@ import {
   BRAIN_ASK_PENDING_STATUS,
   type BrainAppActRequest,
   type BrainAskResult,
-} from "#shared/contracts";
+} from "#shared/messages/brain";
+import { voiceExchangeActive } from "#shared/messages/voice-view";
 import {
   type BuiltRealtimeSessionConfig,
   createAgentsRealtimeTransport,
@@ -1123,7 +1124,7 @@ export class RealtimeVoiceSession {
   #deliverHeldTurn(): void {
     const capture = this.#pressCapture;
     if (!capture || !this.#pressCommitPending) return;
-    if (this.#closed || !this.isConnected || this.#turnBusy) {
+    if (this.#closed || !this.isConnected || voiceExchangeActive(this.#status)) {
       this.#retirePressCapture();
       return;
     }
@@ -1133,19 +1134,6 @@ export class RealtimeVoiceSession {
     // A turn exactly as a live commit is: the developer opened it by holding
     // the key and spoke into it; only the delivery waited.
     this.#startResponse(pushToTalkCommitEvents());
-  }
-
-  /**
-   * Whether a turn is already under way in either direction.
-   *
-   * The Realtime API answers one turn at a time, so this is the whole of the
-   * arbitration: while a turn is open, nothing else starts one. Callers are
-   * told they were refused and decide what to show instead.
-   */
-  get #turnBusy(): boolean {
-    return (
-      this.#status === REALTIME_STATUS.LISTENING || this.#status === REALTIME_STATUS.RESPONDING
-    );
   }
 
   /**
@@ -1332,7 +1320,8 @@ export class RealtimeVoiceSession {
   speak(speech: ProactiveSpeechTurn): boolean {
     if (isArrivalSpeech(speech)) {
       const arrivalEvents = arrivalSpeechEvents(speech);
-      if (arrivalEvents.length === 0 || !this.isConnected || this.#turnBusy) return false;
+      if (arrivalEvents.length === 0 || !this.isConnected || voiceExchangeActive(this.#status))
+        return false;
       // No caption subject: the arrival speaks about no one observed session,
       // like an introduction beat, so no notice may stand under the housing
       // claiming it does.
@@ -1340,13 +1329,13 @@ export class RealtimeVoiceSession {
       return true;
     }
     if (isCalendarOnboardingSpeech(speech)) {
-      if (!this.isConnected || this.#turnBusy) return false;
+      if (!this.isConnected || voiceExchangeActive(this.#status)) return false;
       // On the arrival's own terms: words with no kind, recorded as none.
       this.#startResponse(calendarOnboardingSpeechEvents());
       return true;
     }
     const events = briefingSpeechEvents(speech);
-    if (events.length === 0 || !this.isConnected || this.#turnBusy) return false;
+    if (events.length === 0 || !this.isConnected || voiceExchangeActive(this.#status)) return false;
     this.#startResponse(events);
     // After the start, which clears the last reply's caption and kind: the
     // briefing's reply is the one now under way until it ends.
@@ -1364,7 +1353,7 @@ export class RealtimeVoiceSession {
    */
   speakIntroduction(line: IntroductionLine): boolean {
     const events = introductionSpeechEvents(line);
-    if (events.length === 0 || !this.isConnected || this.#turnBusy) return false;
+    if (events.length === 0 || !this.isConnected || voiceExchangeActive(this.#status)) return false;
     this.#startResponse(events);
     return true;
   }

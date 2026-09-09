@@ -14,7 +14,7 @@ import {
   type SessionProvider,
 } from "@sidecar/session";
 import { SESSION_URGENCY } from "@sidecar/surface";
-import type { AppBootstrap } from "#shared/wire/session";
+import type { AppBootstrap } from "#shared/messages/session";
 import {
   arrangeSessions,
   DEFAULT_SESSION_VIEW,

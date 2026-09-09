@@ -1,4 +1,4 @@
-import type { OutputAudioState } from "#shared/contracts";
+import type { OutputAudioState } from "#shared/messages/audio";
 import { NativeHelper, type NativeHelperProcess } from "./native-helper";
 
 /**

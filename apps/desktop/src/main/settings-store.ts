@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { APPLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
 import {
   CREDENTIAL_CONNECTION,
   CREDENTIAL_PROVIDER_LIST,
@@ -21,24 +22,25 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
-import { APPLE_CALENDAR_ID } from "#shared/apple-calendar";
 import {
-  ACCOUNT_PROVIDER,
   ACCOUNT_STATUS,
   type AccountProvider,
   type AccountSnapshot,
+  CREDENTIAL_SOURCE,
+  type CredentialSource,
+  isAccountProvider,
+  SECRET_STORAGE,
+  type SecretStorage,
+} from "#shared/messages/account";
+import {
   type AppSettings,
   CLI_CONNECTION,
   type CliConnection,
-  CREDENTIAL_SOURCE,
-  type CredentialSource,
-  SECRET_STORAGE,
-  type SecretStorage,
   type SettingsResetScope,
   type SettingsUpdateResult,
   VOICE_SOURCE,
   type VoiceSource,
-} from "#shared/contracts";
+} from "#shared/messages/settings";
 // The reader owns the shape it is fed: what this store resolves a stored
 // connection into is exactly what `readAppleCalendarConnection` promises it.
 import type { AppleCalendarConnection } from "./apple-calendar";
@@ -202,10 +204,6 @@ interface PersistedSettings extends StoredAppSettings {
 interface ResolvedApiKey {
   apiKey?: string;
   source: CredentialSource;
-}
-
-function isAccountProvider(value: UnparsedWireValue): value is AccountProvider {
-  return value === ACCOUNT_PROVIDER.GOOGLE || value === ACCOUNT_PROVIDER.GITHUB;
 }
 
 function storedAccount(record: WireRecord): PersistedSettings["account"] {

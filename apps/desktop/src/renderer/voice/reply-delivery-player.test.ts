@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { BRAIN_REQUEST_ORIGIN, type BrainRequestOrigin } from "@sidecar/brain/requests";
 import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
-import type { BrainReplyClaimResult, BrainReplyOffer } from "#shared/wire/brain";
+import type { BrainReplyClaimResult, BrainReplyOffer } from "#shared/messages/brain";
 import { ReplyDeliveryPlayer } from "./reply-delivery-player";
 
 interface Harness {

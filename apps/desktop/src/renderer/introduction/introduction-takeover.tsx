@@ -13,7 +13,8 @@ import {
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
-import type { AppBootstrap, DisplayDiagnostic } from "#shared/wire/session";
+import { MICROPHONE_STATUS } from "#shared/messages/audio";
+import type { AppBootstrap, DisplayDiagnostic } from "#shared/messages/session";
 import { Keycaps } from "../keycaps";
 import { usePrefersReducedMotion } from "../luke-face-mood";
 import { NotchWings } from "../notch-wings";
@@ -573,11 +574,11 @@ export function IntroductionTakeover({
         return () => setTourFlipId(undefined);
       }
       case INTRODUCTION_BEAT.MICROPHONE: {
-        if (bootstrap.microphoneStatus === "granted") {
+        if (bootstrap.microphoneStatus === MICROPHONE_STATUS.GRANTED) {
           dispatch(INTRODUCTION_EVENT.MICROPHONE_GRANTED);
           return;
         }
-        if (bootstrap.microphoneStatus !== "not-determined") {
+        if (bootstrap.microphoneStatus !== MICROPHONE_STATUS.NOT_DETERMINED) {
           // Denied before Luke ever asked: no dialog will appear, so there is
           // nothing to warn about; practice is skipped the same kind way.
           dispatch(INTRODUCTION_EVENT.MICROPHONE_DENIED_SAID);
@@ -595,7 +596,7 @@ export function IntroductionTakeover({
         void window.sidecar.requestMicrophone().then((status) => {
           if (beatRef.current !== INTRODUCTION_BEAT.MICROPHONE_DIALOG) return;
           dispatch(
-            status === "granted"
+            status === MICROPHONE_STATUS.GRANTED
               ? INTRODUCTION_EVENT.MICROPHONE_GRANTED
               : INTRODUCTION_EVENT.MICROPHONE_DENIED,
           );

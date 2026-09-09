@@ -1,6 +1,10 @@
-import { GOOGLE_CALENDAR_ID, GOOGLE_CALENDAR_NAME } from "@sidecar/calendar/vocabulary";
+import {
+  APPLE_CALENDAR_ID,
+  APPLE_CALENDAR_NAME,
+  GOOGLE_CALENDAR_ID,
+  GOOGLE_CALENDAR_NAME,
+} from "@sidecar/calendar/vocabulary";
 import { ProviderMark } from "@sidecar/panel";
-import { APPLE_CALENDAR_ID, APPLE_CALENDAR_NAME } from "#shared/apple-calendar";
 
 /** One connectable calendar source the gate offers, absent where the build cannot. */
 export interface CalendarGateSource {

@@ -1,4 +1,9 @@
-import { GOOGLE_CALENDAR_ID, GOOGLE_CALENDAR_NAME } from "@sidecar/calendar/vocabulary";
+import {
+  APPLE_CALENDAR_ID,
+  APPLE_CALENDAR_NAME,
+  GOOGLE_CALENDAR_ID,
+  GOOGLE_CALENDAR_NAME,
+} from "@sidecar/calendar/vocabulary";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_PROVIDER_ID,
@@ -21,10 +26,9 @@ import {
   settingGuideEntries,
 } from "@sidecar/settings";
 import { Fragment, useRef } from "react";
-import { APPLE_CALENDAR_ID, APPLE_CALENDAR_NAME } from "#shared/apple-calendar";
-import { CREDENTIAL_SOURCE } from "#shared/wire/account";
-import type { AppSettingsView } from "#shared/wire/settings";
-import { VOICE_SOURCE } from "#shared/wire/settings";
+import { CREDENTIAL_SOURCE } from "#shared/messages/account";
+import type { AppSettingsView } from "#shared/messages/settings";
+import { VOICE_SOURCE } from "#shared/messages/settings";
 import { FOCUS_FRAME_LIMIT } from "./credential-entry";
 import { ERRAND_TARGET_ATTRIBUTE } from "./luke-errand";
 import { searchTokens } from "./session-model";

@@ -9,9 +9,9 @@ import {
 } from "@sidecar/realtime";
 import { normalizeSession, SESSION_STATUS } from "@sidecar/session";
 import { APP_SETTING_DEFAULTS } from "@sidecar/settings";
-import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/wire/account";
-import type { VoiceBootstrap } from "#shared/wire/session";
-import { type AppSettings, appSettingsView, CLI_CONNECTION } from "#shared/wire/settings";
+import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/messages/account";
+import type { VoiceBootstrap } from "#shared/messages/session";
+import { type AppSettings, appSettingsView, CLI_CONNECTION } from "#shared/messages/settings";
 import { REPLY_KIND } from "./realtime-session";
 import {
   activeVoiceStream,

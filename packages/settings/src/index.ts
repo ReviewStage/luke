@@ -1,4 +1,8 @@
 export {
+  SETTINGS_VIEW_COUNTED_AS,
+  VOICE_SOURCE_COUNTED_AS,
+} from "./counted.js";
+export {
   ACCOUNT_PREFERENCE_FIELDS,
   type AccountPreferenceField,
   type AccountPreferences,

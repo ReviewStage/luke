@@ -1,11 +1,12 @@
 import {
   type BrainRequestOrigin,
   type BrainRequestRecord,
+  brainReplyWords,
   isTerminalBrainRequestStatus,
 } from "@sidecar/brain/requests";
 import { DeliveryLedger, type DeliveryOffer, type DeliveryRecord } from "@sidecar/runtime";
 import { DELIVERY_STATE } from "@sidecar/runtime-contracts";
-import { type BrainReplyClaimResult, brainReplyWords } from "#shared/wire/brain";
+import type { BrainReplyClaimResult } from "#shared/messages/brain";
 
 export interface BrainReplyDeliveriesOptions {
   nextDeliveryId: () => string;

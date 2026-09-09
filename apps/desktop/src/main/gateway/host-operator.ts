@@ -33,9 +33,9 @@ import {
   type WireValue,
 } from "@sidecar/wire";
 import type { AppleCalendarAccess } from "#shared/apple-calendar";
-import type { AppSettings, SettingsUpdateResult } from "#shared/contracts";
-import type { SpeechOffer, SpeechOutcome } from "#shared/wire/speech";
-import { isSpeechOffer } from "#shared/wire/speech";
+import type { AppSettings, SettingsUpdateResult } from "#shared/messages/settings";
+import type { SpeechOffer, SpeechOutcome } from "#shared/messages/speech";
+import { isSpeechOffer } from "#shared/messages/speech";
 import { RECEIVER_REPORT_KIND } from "../host/runtime-host";
 
 /**

@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { remoteRealtimeToolDefinitions } from "@sidecar/acts";
 import {
+  ARRIVAL_SPEECH_KIND,
   ASK_BRAIN_TOOL,
   BRIEFING_SPEECH_KIND,
   type BriefingSpeech,
   briefingSpeechEvents,
+  CALENDAR_ONBOARDING_SPEECH_KIND,
   CONTEXT_ITEM_KIND,
   cancelResponseEvents,
   clearInputAudioEvents,
@@ -14,6 +16,7 @@ import {
   inputAudioAppendEvents,
   inputAudioFormatUpdateEvents,
   isBriefingSpeech,
+  isProactiveSpeechTurn,
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
   outputSpeedUpdateEvents,
@@ -1252,4 +1255,22 @@ test("the reply that voices an outcome cannot itself call a tool", () => {
   assert.equal(response?.tool_choice, "none");
   assert.deepEqual(response?.tools, []);
   assert.equal(response?.instructions, undefined);
+});
+
+test("a proactive turn is read only in the kinds the mouth can speak", () => {
+  assert.equal(
+    isProactiveSpeechTurn({ kind: BRIEFING_SPEECH_KIND, briefing: "hi", decidedAt: 1 }),
+    true,
+  );
+  assert.equal(isProactiveSpeechTurn({ kind: ARRIVAL_SPEECH_KIND, decidedAt: 1 }), true);
+  assert.equal(
+    isProactiveSpeechTurn({ kind: ARRIVAL_SPEECH_KIND, sessionTitle: 7, decidedAt: 1 }),
+    false,
+  );
+  assert.equal(
+    isProactiveSpeechTurn({ kind: CALENDAR_ONBOARDING_SPEECH_KIND, decidedAt: 1 }),
+    true,
+  );
+  assert.equal(isProactiveSpeechTurn({ kind: "something-else", decidedAt: 1 }), false);
+  assert.equal(isProactiveSpeechTurn({ kind: BRIEFING_SPEECH_KIND, briefing: "hi" }), false);
 });

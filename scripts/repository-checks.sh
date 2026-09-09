@@ -230,7 +230,7 @@ if [[ -n "$package_app_imports" ]]; then
 fi
 
 # The renderer is a sandboxed browser context: it reaches the main process
-# through the preload bridge alone, so `#shared/bridge` and `#shared/wire/*`
+# through the preload bridge alone, so `#shared/bridge` and `#shared/messages/*`
 # are its widest doors. A `#main/` import compiles and bundles happily and then fails in the
 # browser, and a `node:` import does the same — neither is a mistake the type
 # checker or esbuild can report, because both are real modules that simply are

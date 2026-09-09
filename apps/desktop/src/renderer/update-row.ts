@@ -1,4 +1,4 @@
-import { UPDATE_STATUS, type UpdateSnapshot } from "#shared/wire/update";
+import { UPDATE_STATUS, type UpdateSnapshot } from "#shared/messages/update";
 
 /** The one act the row's button offers in each state. */
 export const UPDATE_ROW_ACTION = {

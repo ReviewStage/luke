@@ -7,7 +7,7 @@ import {
   type BridgeMethod,
   bridgeEntries,
 } from "#shared/bridge";
-import type { AppSettings, SettingsUpdateResult } from "#shared/contracts";
+import type { AppSettings, SettingsUpdateResult } from "#shared/messages/settings";
 import { type BridgeContext, registerBridgeEntry } from "./register-bridge";
 
 export class SettingsRefusal {

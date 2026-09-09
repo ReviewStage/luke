@@ -2,7 +2,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { BrainAgent, BrainRequestRecord, BrainSubmission } from "@sidecar/brain";
-import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
+import {
+  BRAIN_ASK_REFUSAL,
+  BRAIN_REQUEST_ORIGIN,
+  BRAIN_REQUEST_STATUS,
+  brainReplyWords,
+} from "@sidecar/brain/requests";
 import {
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
@@ -14,12 +19,7 @@ import { GatewayClient, InProcessTransport } from "@sidecar/runtime";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_EVENT, MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import { BRIDGE } from "#shared/bridge";
-import {
-  BRAIN_ASK_REFUSAL,
-  type BrainAskWait,
-  type BrainReplyClaimResult,
-  brainReplyWords,
-} from "#shared/wire/brain";
+import type { BrainAskWait, BrainReplyClaimResult } from "#shared/messages/brain";
 import type { ConversationOperations } from "../conversation-operations";
 import { createGatewayOperator } from "../gateway/operator";
 import { createGatewayService } from "../gateway/service";

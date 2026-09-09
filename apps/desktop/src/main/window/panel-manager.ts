@@ -15,7 +15,8 @@ import {
   systemPreferences,
   type WebContents,
 } from "electron";
-import { channels, type DisplayDiagnostic, type WindowMode } from "#shared/contracts";
+import { channels } from "#shared/bridge";
+import type { DisplayDiagnostic, WindowMode } from "#shared/messages/session";
 import { readMacScreenGeometry } from "../native/screen-geometry";
 import type { RunMode } from "../run-mode";
 import { dressMacWindow, hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";

@@ -1,4 +1,18 @@
-export type MicrophoneStatus = "not-determined" | "granted" | "denied" | "restricted" | "unknown";
+/**
+ * How far macOS's own microphone permission stands, in the media-access
+ * statuses Electron documents. Only `NOT_DETERMINED` is a state the panel may
+ * still ask from; `UNKNOWN` is the answer when the permission could not be
+ * read at all, which is neither a grant nor a refusal and is said as such.
+ */
+export const MICROPHONE_STATUS = {
+  NOT_DETERMINED: "not-determined",
+  GRANTED: "granted",
+  DENIED: "denied",
+  RESTRICTED: "restricted",
+  UNKNOWN: "unknown",
+} as const;
+
+export type MicrophoneStatus = (typeof MICROPHONE_STATUS)[keyof typeof MICROPHONE_STATUS];
 
 /**
  * Whether the Mac's output would let Luke be heard: the default output

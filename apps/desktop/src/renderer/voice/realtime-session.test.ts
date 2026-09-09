@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { BRAIN_ASK_PENDING_NOTE } from "@sidecar/brain/requests";
 import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/devtrace/vocabulary";
 import {
   ARRIVAL_SPEECH_KIND,
@@ -17,11 +18,7 @@ import {
 } from "@sidecar/realtime";
 import { ACT_RESULT_STATUS, isRecord, text, type WireRecord } from "@sidecar/wire";
 import type { JsonValue, ParsedJsonObject } from "@sidecar/wire/testing";
-import {
-  BRAIN_ASK_PENDING_NOTE,
-  BRAIN_ASK_PENDING_STATUS,
-  type BrainAskResult,
-} from "#shared/wire/brain";
+import { BRAIN_ASK_PENDING_STATUS, type BrainAskResult } from "#shared/messages/brain";
 import {
   asMediaStream,
   asMediaTrack,

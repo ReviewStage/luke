@@ -88,7 +88,7 @@ import {
   type SessionIdentity,
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { type BrainRequestSnapshot, brainRequestPending } from "#shared/wire/brain";
+import { type BrainRequestSnapshot, brainRequestPending } from "#shared/messages/brain";
 import { type BrainActPerformerDependencies, createBrainActPerformer } from "./act-performer";
 import { BrainHost } from "./host";
 import { type BrainIpcDependencies, followBrainRequests } from "./ipc";

@@ -21,11 +21,11 @@ import {
   ACCOUNT_STATUS,
   CREDENTIAL_SOURCE,
   SECRET_STORAGE,
-} from "#shared/wire/account";
-import type { AppSettingsView, SettingsUpdateResult } from "#shared/wire/settings";
-import { APP_SETTING_DEFAULTS, appSettingsView, CLI_CONNECTION } from "#shared/wire/settings";
-import type { UpdateSnapshot } from "#shared/wire/update";
-import { UPDATE_STATUS } from "#shared/wire/update";
+} from "#shared/messages/account";
+import type { AppSettingsView, SettingsUpdateResult } from "#shared/messages/settings";
+import { APP_SETTING_DEFAULTS, appSettingsView, CLI_CONNECTION } from "#shared/messages/settings";
+import type { UpdateSnapshot } from "#shared/messages/update";
+import { UPDATE_STATUS } from "#shared/messages/update";
 import { appSettingsWire, spokenSettingBridge } from "#testing/spoken-setting-bridge";
 import {
   APP_SETTING_ID,

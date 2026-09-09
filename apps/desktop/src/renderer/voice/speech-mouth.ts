@@ -1,6 +1,6 @@
 import type { ProactiveSpeechTurn, RealtimeStatus, ScheduledTimer } from "@sidecar/realtime";
 import { REALTIME_STATUS } from "@sidecar/realtime";
-import { SPEECH_OUTCOME, type SpeechOffer, type SpeechOutcome } from "#shared/wire/speech";
+import { SPEECH_OUTCOME, type SpeechOffer, type SpeechOutcome } from "#shared/messages/speech";
 
 /**
  * How long Luke's own call lingers once what it was opened for has been said.

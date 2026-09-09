@@ -12,7 +12,7 @@ import {
   isBriefingSpeech,
   REALTIME_STATUS,
 } from "@sidecar/realtime";
-import { SPEECH_OUTCOME, type SpeechOffer, type SpeechOutcome } from "#shared/wire/speech";
+import { SPEECH_OUTCOME, type SpeechOffer, type SpeechOutcome } from "#shared/messages/speech";
 import {
   ANNOUNCER_GRACE_MS,
   ANNOUNCER_LINGER_MS,

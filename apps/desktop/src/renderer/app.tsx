@@ -4,6 +4,7 @@ import {
   PRODUCT_SEARCH_SURFACE,
   PRODUCT_SURFACE_EVENT,
 } from "@sidecar/analytics";
+import { APPLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
 import type { CredentialProviderId } from "@sidecar/credentials/vocabulary";
 import {
   CREDENTIAL_PROVIDER_LIST,
@@ -39,12 +40,11 @@ import {
   useRef,
   useState,
 } from "react";
-import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "#shared/apple-calendar";
+import { APPLE_CALENDAR_ACCESS } from "#shared/apple-calendar";
 import { CONSENT_SERVICE_ID, type ConsentServiceId } from "#shared/consent-services";
-import type { AccountProvider, AccountSnapshot } from "#shared/wire/account";
-import { ACCOUNT_STATUS, CREDENTIAL_SOURCE } from "#shared/wire/account";
-import type { OutputAudioState } from "#shared/wire/audio";
-import type { ObservedAccountCalendars } from "#shared/wire/calendar";
+import type { AccountProvider, AccountSnapshot } from "#shared/messages/account";
+import { ACCOUNT_STATUS, CREDENTIAL_SOURCE } from "#shared/messages/account";
+import type { OutputAudioState } from "#shared/messages/audio";
 import type {
   AppBootstrap,
   DisplayDiagnostic,
@@ -52,15 +52,20 @@ import type {
   SessionRosterPayload,
   SupersetSignInSnapshot,
   WorkspaceProviderId,
-} from "#shared/wire/session";
+} from "#shared/messages/session";
 import {
   isWorkspaceProviderId,
   SUPERSET_SIGN_IN_STAGE,
   SUPERSET_WORKSPACE_PROVIDER_ID,
-} from "#shared/wire/session";
-import type { AppSettings, AppSettingsView, SettingsUpdateResult } from "#shared/wire/settings";
-import { appSettingsView } from "#shared/wire/settings";
-import type { UpdateSnapshot } from "#shared/wire/update";
+} from "#shared/messages/session";
+import type {
+  AppSettings,
+  AppSettingsView,
+  ObservedAccountCalendars,
+  SettingsUpdateResult,
+} from "#shared/messages/settings";
+import { appSettingsView } from "#shared/messages/settings";
+import type { UpdateSnapshot } from "#shared/messages/update";
 import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
 import type { CalendarGateControl } from "./calendar-gate";
 import { type ConsentConnectEntry, ConsentConnectSlot } from "./consent-connect-slot";
