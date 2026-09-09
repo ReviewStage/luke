@@ -755,9 +755,7 @@ Trust constraints:
   machine in a recording. That view retains every line the retention policy
   holds, its words whole, including session actions and the lines that outlived
   the last launch, until the developer clears it — the same thread on every
-  display's panel, relayed between windows through the main process — while
-  the 20 most recent lines enter model context, each cut there to its own
-  length bound, beside the brain's own working memory of its turns. There
+  display's panel, relayed between windows through the main process. There
   is no general masking module to consult and nothing that makes any other new
   component silent by construction, so what a recording may see is decided by
   what the panel draws or explicitly blocks — which makes drawing something
@@ -816,15 +814,14 @@ Trust constraints:
   Luke's own application data, never a provider's file, under a real retention
   policy replacing the old "dies with the app": every admitted line stands
   in the brain's store's own table until Delete conversation or the conversation
-  maintenance below removes it, and what the panel draws and the model is
-  handed is a projection over that record, the 200 most recent lines and
-  nothing older than a fortnight. Each line
+  maintenance below removes it, and what the panel draws is a projection over
+  that record, the 200 most recent lines and nothing older than a fortnight.
+  Each line
   carries an id its writer minted, and the store's append is idempotent on
   it: a window reports only the lines it added, never the whole thread, so a
   report can add to the thread and never replace it, a line delivered twice
-  is one line, and two deliberate identical utterances are two. What the
-  thread hands a model is the same bounded recent slice, riding beside the
-  brain's own working memory, and the Conversation tab's Delete conversation reaches the
+  is one line, and two deliberate identical utterances are two. The
+  Conversation tab's Delete conversation reaches the
   stored lines as well as the screen, behind the recovery archive the rule
   above describes, because a deletion that emptied only the view would leave
   the words on the machine with nothing left to draw them. The narrower thing is a durable
@@ -1021,7 +1018,8 @@ Trust constraints:
   feed address fixed by the build, an unauthenticated fetch carrying
   nothing about the user, their sessions, or their keys, on a timer of its
   own and at the press of the Updates row's button; never in a fixture or
-  capture run, and never in an unpackaged build. A newer build found by any
+  evidence run, behind the same run-mode gate, and never in an unpackaged
+  build. A newer build found by any
   check downloads at once, so the row can offer a restart instead of a wait,
   but what is fetched is only ever what this repository's own release
   pipeline published: the manifest carries the archive's sha512, the archive
@@ -1050,7 +1048,8 @@ Trust constraints:
 - The spoken introduction is the one moment Luke runs before the account gate,
   and it is bounded on every side. It plays on the first interactive launch,
   before any account exists, at most once to the end: a completion on file
-  never replays, and it never runs in a fixture or capture run. Its voice is
+  never replays, and the same run-mode gate keeps it from running in a fixture
+  or evidence run. Its voice is
   the introduction mint, an accountless endpoint on Luke's own service that
   issues one short-lived credential per call, keeps nothing about the caller
   but a hashed network address for its own daily caps (per caller and global
@@ -1240,13 +1239,6 @@ works in that subtree:
 | `packages/host/AGENTS.md` | The host's seams, why it draws nothing, and the one drain |
 | `packages/analytics/AGENTS.md` | The product-event allowlist and its `PRIVACY.md` obligation |
 | `packages/hosted/AGENTS.md` | The hosted wire boundary and its dependency direction |
-
-## Repository shape
-
-`apps/` holds only what is specific to a deployable: the Electron processes, the
-React surfaces, and the Vite site. Everything else is a package under
-`packages/`, named for the concern it holds, so `ls packages/` answers "what is
-this codebase made of" and an import specifier names what it depends on.
 
 ## Git workflow
 

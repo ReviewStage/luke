@@ -1,4 +1,6 @@
-# Database and auth workflow
+# Luke web server
+
+## Database and auth workflow
 
 Neon is provisioned through the Vercel integration. It supplies the pooled
 `DATABASE_URL` for application traffic and `DATABASE_URL_UNPOOLED` for
@@ -67,7 +69,7 @@ Google's callback is `${BETTER_AUTH_URL}/api/auth/callback/google`; GitHub's is
 `api/feedback.mjs` deliberately remains plain ESM so Vercel's builder has nothing
 to transpile.
 
-# Signing in on a Preview deployment
+## Signing in on a Preview deployment
 
 A Preview deployment answers on hostnames minted for the branch, so
 `server/auth-deployment.ts` reads the deployment's own address rather than
@@ -118,7 +120,7 @@ from production lands on the protected preview like any other request, so the
 browser needs that deployment's access cookie already; without it the dashboard
 reports the intercepted API call rather than the metrics.
 
-# Hosted voice
+## Hosted voice
 
 `api/voice/mint.ts` runs Luke's voice on the deployment's own OpenAI key for a
 signed-in desktop. It is an exact-path file, so Vercel's zero-config `api/`
@@ -183,7 +185,7 @@ one atomic upsert before each upstream call, checked against the ceilings in
 long they run; a spend limit on the OpenAI project behind the key is the
 backstop and should be configured with it.
 
-# Hosted brain inference
+## Hosted brain inference
 
 `api/brain/capabilities.ts` and the four routes under `api/brain/v2/` run
 Luke's brain on the deployment's own OpenAI key for a signed-in client that
@@ -224,7 +226,7 @@ nothing in a request can name one. Without `OPENAI_API_KEY` the routes answer
 503 like the rest of the hosted tier. The existing mint and device routes are
 untouched by these routes and keep their contracts for released clients.
 
-# Provider key vault
+## Provider key vault
 
 `api/vault/key.ts` and `api/vault/keys.ts` store, list, and delete the provider
 API keys a signed-in user syncs for server-side observation. Keys are encrypted
@@ -244,7 +246,7 @@ secret simply has no working vault, and no plaintext key can be stored
 accidentally. Set this variable in the Vercel project environment (production
 and any Preview that needs a working vault) alongside `DATABASE_URL`.
 
-# Hosted conversation store
+## Hosted conversation store
 
 The tables under `server/db/conversation-schema.ts`, `workspace-schema.ts`,
 `roster-schema.ts`, and `briefing-schema.ts` hold the hosted brain's
@@ -287,7 +289,7 @@ DATABASE_URL_UNPOOLED=postgresql://... pnpm --filter @luke/web db:migrate
 LUKE_STORE_TEST_DATABASE_URL=postgresql://... pnpm --filter @luke/web test:store
 ```
 
-# Phone push tokens
+## Phone push tokens
 
 `api/devices/token.ts` registers (POST) and forgets (DELETE) the push token of
 a phone signed into Luke. A token names one app installation and nothing else:
