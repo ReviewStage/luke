@@ -1,6 +1,6 @@
 import {
+  isCloudAgentProviderId,
   isRecord,
-  isVaultProviderId,
   isWireString,
   text,
   type UnparsedWireValue,
@@ -70,7 +70,7 @@ export async function handleVaultKeyStore(options: VaultKeyStoreOptions): Promis
   }
 
   const providerId = text(body.providerId);
-  if (!isVaultProviderId(providerId)) {
+  if (!isCloudAgentProviderId(providerId)) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }
 
@@ -126,7 +126,7 @@ export async function handleVaultKeysList(options: VaultKeysListOptions): Promis
   // rather than surfaced as a key that cannot be deleted or used.
   return jsonResponse(HOSTED_HTTP_STATUS.OK, {
     keys: rows
-      .filter((row) => isVaultProviderId(row.providerId))
+      .filter((row) => isCloudAgentProviderId(row.providerId))
       .map((row) => ({
         providerId: row.providerId,
         updatedAt: row.updatedAt.getTime(),
@@ -173,7 +173,7 @@ export async function handleVaultKeyDelete(options: VaultKeyDeleteOptions): Prom
   }
 
   const providerId = text(body.providerId);
-  if (!isVaultProviderId(providerId)) {
+  if (!isCloudAgentProviderId(providerId)) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }
 

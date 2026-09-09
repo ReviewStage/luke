@@ -3,6 +3,7 @@ export {
   type ActResult,
   type ActResultStatus,
   isActResult,
+  isActResultStatus,
   isUnknownActResult,
   UNKNOWN_ACT_STATUS,
   type UnknownActResult,

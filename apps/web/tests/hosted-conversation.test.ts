@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { type CloudFetch, VAULT_PROVIDER_ID, type WireRecord } from "../server/core";
+import { CLOUD_AGENT_PROVIDER_ID, type CloudFetch, type WireRecord } from "../server/core";
 import { executeConversationRead, providerReadsConversation } from "../server/hosted/act-execute";
 import {
   type ConversationReadOptions,
@@ -240,7 +240,7 @@ test("the conversation endpoint returns 429 after too many requests in the same 
 // --- The capability map mirrors the adapters exactly ---
 
 test("only Conductor's adapter carries the conversation read today", () => {
-  const supported = Object.values(VAULT_PROVIDER_ID).filter(providerReadsConversation);
+  const supported = Object.values(CLOUD_AGENT_PROVIDER_ID).filter(providerReadsConversation);
   assert.deepEqual(supported, ["conductor"]);
 });
 

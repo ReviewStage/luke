@@ -3,8 +3,9 @@ import {
   HOSTED_SERVICE_PATH,
   hostedErrorFromWire,
   hostedQuotaFromWire,
+  type RealtimeConnection,
 } from "@sidecar/hosted";
-import { REALTIME_MINT_OUTCOME, type RealtimeConnection } from "@sidecar/realtime";
+import { REALTIME_MINT_OUTCOME } from "@sidecar/realtime";
 import { isRecord, type UnparsedWireValue, unparsedWire } from "@sidecar/wire";
 import { type FetchLike, ServiceRealtimeCredentialMinter } from "./service-mint.js";
 

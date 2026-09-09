@@ -1,9 +1,9 @@
 import type { CloudFetch } from "../../../../packages/providers/src/shared/cloud-session-adapter.js";
 import {
+  CLOUD_AGENT_PROVIDER_ID,
+  type CloudAgentProviderId,
   type HostedWorkspaceAgentModels,
   type HostedWorkspaceProject,
-  VAULT_PROVIDER_ID,
-  type VaultProviderId,
   type WorkspaceProject,
   workspaceAgentModels,
 } from "../core.js";
@@ -75,7 +75,7 @@ export async function handleProjects(options: ProjectsOptions): Promise<Response
     rows.map((row) => [row.providerId, row.ciphertext]),
   );
 
-  const providers = Object.values(VAULT_PROVIDER_ID).filter(
+  const providers = Object.values(CLOUD_AGENT_PROVIDER_ID).filter(
     (providerId) =>
       actUnsupportedReason(REMOTE_SESSION_ACT.CREATE_WORKSPACE, providerId) === undefined &&
       ciphertextByProviderId.has(providerId),
@@ -123,7 +123,7 @@ export async function handleProjects(options: ProjectsOptions): Promise<Response
 }
 
 function toWireProject(
-  providerId: VaultProviderId,
+  providerId: CloudAgentProviderId,
   project: WorkspaceProject,
 ): HostedWorkspaceProject {
   const wireProject: HostedWorkspaceProject = {

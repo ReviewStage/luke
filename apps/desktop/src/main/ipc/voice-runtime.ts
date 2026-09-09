@@ -1,7 +1,8 @@
 import { PRODUCT_EVENT, type RecordProductEvent } from "@sidecar/analytics";
 import { CREDENTIAL_CONNECTION, CREDENTIAL_PROVIDERS } from "@sidecar/credentials";
 import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
-import type { RealtimeConnection, RealtimeDiagnostics } from "@sidecar/realtime";
+import type { RealtimeConnection } from "@sidecar/hosted";
+import type { RealtimeDiagnostics } from "@sidecar/realtime";
 import type {
   BrowserWindow,
   IpcMain,

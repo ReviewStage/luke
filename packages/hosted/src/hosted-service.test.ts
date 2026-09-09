@@ -12,10 +12,8 @@ import {
   hostedMintAnswerFromWire,
   isDevicePlatform,
   isPushEnvironment,
-  isVaultProviderId,
   PUSH_ENVIRONMENT,
   VAULT_KEY_MAX_LENGTH,
-  VAULT_PROVIDER_ID,
   vaultKeyIsStorable,
 } from "./hosted-service.js";
 
@@ -115,17 +113,6 @@ test("an expired or incomplete credential reads as no answer at all", () => {
   assert.equal(hostedMintAnswerFromWire(mintedWire({ expiresAt: NOW - 1 }), NOW), undefined);
   assert.equal(hostedMintAnswerFromWire(mintedWire({ value: "" }), NOW), undefined);
   assert.equal(hostedMintAnswerFromWire({ odd: true }, NOW), undefined);
-});
-
-test("a vault provider id is one of the accepted set and nothing shaped like one", () => {
-  for (const providerId of Object.values(VAULT_PROVIDER_ID)) {
-    assert.equal(isVaultProviderId(providerId), true);
-  }
-  assert.equal(isVaultProviderId("openai"), false);
-  assert.equal(isVaultProviderId("linear"), false);
-  assert.equal(isVaultProviderId(""), false);
-  assert.equal(isVaultProviderId(undefined), false);
-  assert.equal(isVaultProviderId({ providerId: "cursor" }), false);
 });
 
 test("a storable key is non-empty, whitespace-free, and bounded", () => {

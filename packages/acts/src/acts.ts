@@ -84,6 +84,12 @@ import {
   type RememberedFact,
   rememberedFactText,
 } from "./memory.js";
+
+/**
+ * One tool call as a validator is handed it: the act's own name and its
+ * arguments as the model wrote them. No call id — the id an answer travels
+ * back under belongs to the transport, which extends this with one.
+ */
 export interface RealtimeFunctionCall {
   name: string;
   argumentsJson: string;

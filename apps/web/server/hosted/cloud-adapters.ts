@@ -1,7 +1,7 @@
 import { ConductorSessionAdapter } from "../../../../packages/providers/src/conductor/adapter.js";
 import type { CloudFetch } from "../../../../packages/providers/src/shared/cloud-session-adapter.js";
-import type { SessionProviderAdapter, VaultProviderId } from "../core.js";
-import { VAULT_PROVIDER_ID } from "../core.js";
+import type { CloudAgentProviderId, SessionProviderAdapter } from "../core.js";
+import { CLOUD_AGENT_PROVIDER_ID } from "../core.js";
 
 /**
  * What a stateless invocation supplies to a cloud adapter: the caller's own
@@ -28,12 +28,12 @@ function baseOptions(seams: CloudAdapterSeams) {
 }
 
 const ADAPTER_BUILDERS = {
-  [VAULT_PROVIDER_ID.CONDUCTOR]: (seams) => new ConductorSessionAdapter(baseOptions(seams)),
-} satisfies Readonly<Record<VaultProviderId, AdapterBuilder>>;
+  [CLOUD_AGENT_PROVIDER_ID.CONDUCTOR]: (seams) => new ConductorSessionAdapter(baseOptions(seams)),
+} satisfies Readonly<Record<CloudAgentProviderId, AdapterBuilder>>;
 
 /** Constructs one provider's cloud adapter for a single stateless request. */
 export function cloudSessionAdapterFor(
-  providerId: VaultProviderId,
+  providerId: CloudAgentProviderId,
   seams: CloudAdapterSeams,
 ): SessionProviderAdapter {
   return ADAPTER_BUILDERS[providerId](seams);

@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ScriptedRealtimeTransport } from "@openai/agents-realtime/testing";
-import {
-  introductionSessionConfig,
-  type RealtimeConnection,
-  realtimeSessionConfig,
-} from "@sidecar/realtime";
+import type { RealtimeConnection } from "@sidecar/hosted";
+import { introductionSessionConfig, realtimeSessionConfig } from "@sidecar/realtime";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import {
   agentsRealtimeErrorMessage,

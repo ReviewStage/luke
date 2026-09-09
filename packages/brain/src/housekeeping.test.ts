@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { MEMORY_HOUSEKEEPING_OUTCOME, memoryFlushPrompt } from "@sidecar/memory";
 import { WORKSPACE_FILE_REFUSAL } from "@sidecar/runtime";
 import {
@@ -14,7 +15,6 @@ import { ResponsesContextEngine } from "./context-engine.js";
 import { HOUSEKEEPING_REFUSAL, runMemoryHousekeeping } from "./housekeeping.js";
 import {
   RESPONSES_ITEM_FORMAT,
-  RESPONSES_ITEM_TYPE,
   type ResponsesInputItem,
   responsesModelAnswer,
 } from "./responses-api.js";
@@ -27,7 +27,7 @@ const NOTE = `memory/${DAY}.md`;
 
 function message(text: string): WireRecord {
   return {
-    type: RESPONSES_ITEM_TYPE.MESSAGE,
+    type: RESPONSES_INPUT_ITEM_TYPE.MESSAGE,
     role: "assistant",
     content: [{ type: "output_text", text }],
   };
@@ -35,7 +35,7 @@ function message(text: string): WireRecord {
 
 function call(callId: string, name: string, args: WireRecord): WireRecord {
   return {
-    type: RESPONSES_ITEM_TYPE.FUNCTION_CALL,
+    type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
     call_id: callId,
     name,
     arguments: JSON.stringify(args),
@@ -121,7 +121,7 @@ function fakeWorkspace(files: Map<string, string>) {
 
 const CONTEXT: WireRecord[] = [
   {
-    type: RESPONSES_ITEM_TYPE.MESSAGE,
+    type: RESPONSES_INPUT_ITEM_TYPE.MESSAGE,
     role: "user",
     content: [{ type: "input_text", text: "we agreed on pnpm" }],
   },
@@ -195,7 +195,7 @@ test("a housekeeping write is refused for any other file or for an overwrite, an
   assert.deepEqual(workspace.writes, []);
   assert.equal(files.get("MEMORY.md"), "# MEMORY.md\n");
   const outputs = (model.inputs[1] ?? []).filter(
-    (item) => item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
+    (item) => item.type === RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
   );
   const reasons = outputs.map((item) => JSON.parse(String(item.output)).reason);
   assert.deepEqual(reasons, [

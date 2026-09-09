@@ -1,6 +1,6 @@
 import type { HostedVaultClient } from "@sidecar/account";
 import type { CredentialProviderId } from "@sidecar/credentials";
-import { isVaultProviderId, VAULT_PROVIDER_ID } from "@sidecar/hosted";
+import { CLOUD_AGENT_PROVIDER_ID, isCloudAgentProviderId } from "@sidecar/session";
 
 /** The signed-in account, by the names the tenant record may hold it under. */
 export interface VaultSyncAccount {
@@ -90,7 +90,7 @@ export class ProviderKeyVaultSync {
   /** A save landed locally; mirror it while the switch is on. */
   keySaved(providerId: CredentialProviderId, apiKey: string | undefined, syncOn: boolean) {
     return this.#enqueue(async () => {
-      if (!isVaultProviderId(providerId)) return;
+      if (!isCloudAgentProviderId(providerId)) return;
       const key = apiKey?.trim();
       if (!key) {
         // A cleared key clears its synced copy regardless of the switch: the
@@ -120,7 +120,7 @@ export class ProviderKeyVaultSync {
   apply(syncOn: boolean, options: { claim: boolean }): Promise<void> {
     return this.#enqueue(async () => {
       if (!syncOn) {
-        for (const providerId of Object.values(VAULT_PROVIDER_ID)) {
+        for (const providerId of Object.values(CLOUD_AGENT_PROVIDER_ID)) {
           await this.#vault.deleteKey(providerId);
         }
         return;
@@ -134,7 +134,7 @@ export class ProviderKeyVaultSync {
       // reconcile standing rather than orphaning it on the stronger name.
       if (!options.claim && tenant !== undefined && !accountAnswersTo(account, tenant)) return;
       let storedAny = false;
-      for (const providerId of Object.values(VAULT_PROVIDER_ID)) {
+      for (const providerId of Object.values(CLOUD_AGENT_PROVIDER_ID)) {
         if ((await this.#account())?.email !== account.email) return;
         const key = (await this.#readStoredApiKey(providerId))?.trim();
         if (key && (await this.#vault.storeKey(providerId, key))) storedAny = true;

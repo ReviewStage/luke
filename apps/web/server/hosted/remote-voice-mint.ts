@@ -1,10 +1,10 @@
 import {
+  CLOUD_AGENT_PROVIDER_ID,
+  type CloudAgentProviderId,
   CONTEXT_ITEM_KIND,
   contextItemId,
   type ObservedSession,
   remoteRealtimeClientSecretRequest,
-  VAULT_PROVIDER_ID,
-  type VaultProviderId,
 } from "../core.js";
 import { cloudSessionAdapterFor } from "./cloud-adapters.js";
 import { decryptProviderKey } from "./encryption.js";
@@ -147,9 +147,9 @@ async function observeCloudSessions(
     };
   }
 
-  const vaultProviders = Object.values(VAULT_PROVIDER_ID);
+  const cloudProviders = Object.values(CLOUD_AGENT_PROVIDER_ID);
   const results = await Promise.allSettled(
-    vaultProviders.map((providerId: VaultProviderId) =>
+    cloudProviders.map((providerId: CloudAgentProviderId) =>
       cloudSessionAdapterFor(providerId, {
         readApiKey: readApiKeyFor(providerId),
         ...(options.fetch ? { fetch: options.fetch } : undefined),
@@ -159,7 +159,7 @@ async function observeCloudSessions(
   );
 
   const sessions: ObservedSession[] = [];
-  for (const [i, providerId] of vaultProviders.entries()) {
+  for (const [i, providerId] of cloudProviders.entries()) {
     const result = results[i];
     if (result?.status !== "fulfilled") continue;
     for (const obs of result.value) {

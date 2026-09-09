@@ -31,9 +31,6 @@ export * from "../../../packages/acts/src/index.js";
 export * from "../../../packages/analytics/src/index.js";
 export * from "../../../packages/brain/src/index.js";
 export * from "../../../packages/hosted/src/index.js";
-// Both the acts table and the protocol name a function call; the protocol's
-// carries the call id the wire hands back, and is the one server code reads.
-export type { RealtimeFunctionCall } from "../../../packages/realtime/src/index.js";
 export * from "../../../packages/realtime/src/index.js";
 export * from "../../../packages/runtime-contracts/src/index.js";
 export * from "../../../packages/session/src/index.js";

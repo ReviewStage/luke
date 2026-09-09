@@ -1,25 +1,19 @@
 import {
-  HOSTED_ACT_RESULT,
-  type HostedActResult,
+  ACT_RESULT_STATUS,
+  type ActResultStatus,
+  type CloudAgentProviderId,
   type HostedActWorkspaceAnswer,
+  isCloudAgentProviderId,
   isRecord,
   parseWorkspaceAgentSelection,
   sessionMessageText,
   text,
   type UnparsedWireValue,
-  VAULT_PROVIDER_ID,
-  type VaultProviderId,
   type WorkspaceAgentSelection,
   workspaceNameText,
 } from "../core.js";
 import { decryptProviderKey } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
-
-const VAULT_PROVIDER_ID_SET: ReadonlySet<string> = new Set(Object.values(VAULT_PROVIDER_ID));
-
-function isVaultProviderId(value: string | undefined): value is VaultProviderId {
-  return value !== undefined && VAULT_PROVIDER_ID_SET.has(value);
-}
 
 /** Maximum length accepted for a provider project id. */
 const PROJECT_ID_MAX_LENGTH = 200;
@@ -40,7 +34,7 @@ function trimmedSecretOrUnavailable(secret: string | undefined): { secret: strin
 }
 
 export interface ActWorkspaceExecuteResult {
-  result: HostedActResult;
+  result: ActResultStatus;
   reason?: string;
   providerSessionId?: string;
 }
@@ -56,13 +50,13 @@ export interface ActWorkspaceOptions {
    * provider answers "unsupported" whether or not a key is stored — storing
    * a key would not enable the act.
    */
-  unsupportedReason: (providerId: VaultProviderId) => string | undefined;
+  unsupportedReason: (providerId: CloudAgentProviderId) => string | undefined;
   /**
    * Validates (via a fresh observation pass) and creates the workspace. The
    * implementation is provider-specific and injected by the route.
    */
   executeCreateWorkspace: (options: {
-    providerId: VaultProviderId;
+    providerId: CloudAgentProviderId;
     providerProjectId: string;
     name: string | undefined;
     task: string | undefined;
@@ -110,7 +104,7 @@ export async function handleActWorkspace(options: ActWorkspaceOptions): Promise<
   }
 
   const providerId = text(body.providerId);
-  if (!isVaultProviderId(providerId)) {
+  if (!isCloudAgentProviderId(providerId)) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }
 
@@ -147,7 +141,7 @@ export async function handleActWorkspace(options: ActWorkspaceOptions): Promise<
   const unsupported = unsupportedReason(providerId);
   if (unsupported) {
     const answer: HostedActWorkspaceAnswer = {
-      result: HOSTED_ACT_RESULT.UNSUPPORTED,
+      result: ACT_RESULT_STATUS.UNSUPPORTED,
       reason: unsupported,
     };
     return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
@@ -156,7 +150,7 @@ export async function handleActWorkspace(options: ActWorkspaceOptions): Promise<
   const keyRow = await readKey(userId, providerId);
   if (!keyRow) {
     const answer: HostedActWorkspaceAnswer = {
-      result: HOSTED_ACT_RESULT.REJECTED,
+      result: ACT_RESULT_STATUS.REJECTED,
       reason: "No provider key stored. Add a key for this provider in settings.",
     };
     return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);

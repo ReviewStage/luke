@@ -1,3 +1,4 @@
+import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { SESSION_APPLICATION_ID } from "./session-identity.js";
 
 export const PROVIDER_LOCATION_KIND = {
@@ -55,6 +56,33 @@ export const PROVIDER_IDENTITY_BY_ID = {
     location: PROVIDER_LOCATION_KIND.LOCAL,
   },
 } as const satisfies Readonly<Record<ProviderId, ProviderIdentity>>;
+
+/**
+ * The providers whose sessions live in a cloud service Luke observes on the
+ * user's behalf: the ones Settings lists as agents to hold a key for, and the
+ * ones the hosted vault accepts a key for. One vocabulary rather than two,
+ * because the two are the same fact — a key here buys cloud observation, and
+ * a provider that offers no cloud observation has nowhere for a key to be
+ * spent. Codex is absent deliberately: its cloud surface documents no
+ * key-scoped API and is observed through the user's own CLI instead, so there
+ * is no key to hold. A new entry needs a server-side observation strategy of
+ * its own before it can be added.
+ */
+export const CLOUD_AGENT_PROVIDER_ID = {
+  CONDUCTOR: PROVIDER_ID.CONDUCTOR,
+} as const satisfies Record<string, ProviderId>;
+
+export type CloudAgentProviderId =
+  (typeof CLOUD_AGENT_PROVIDER_ID)[keyof typeof CLOUD_AGENT_PROVIDER_ID];
+
+const CLOUD_AGENT_PROVIDER_IDS: ReadonlySet<string> = new Set(
+  Object.values(CLOUD_AGENT_PROVIDER_ID),
+);
+
+/** Whether an untrusted value names a provider whose sessions Luke observes in the cloud. */
+export function isCloudAgentProviderId(value: UnparsedWireValue): value is CloudAgentProviderId {
+  return isWireString(value) && CLOUD_AGENT_PROVIDER_IDS.has(value);
+}
 
 /**
  * The provider id the local Conductor workspace creator answers to. It names

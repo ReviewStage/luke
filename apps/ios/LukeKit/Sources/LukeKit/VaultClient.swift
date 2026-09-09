@@ -1,7 +1,7 @@
 import Foundation
 
 /// The cloud providers whose API keys the hosted vault accepts. Mirrors
-/// `VAULT_PROVIDER_ID` in `@sidecar/hosted`: the raw values are the wire ids
+/// `CLOUD_AGENT_PROVIDER_ID` in `@sidecar/session`: the raw values are the wire ids
 /// the vault endpoints take and answer with, and a provider added there needs
 /// an entry here before this app can offer it.
 public enum VaultProviderID: String, CaseIterable, Identifiable, Sendable {

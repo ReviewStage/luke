@@ -12,11 +12,11 @@ import {
   type BrainDelivery,
   type BrainStateStorage,
   brainStateRepositoryFromStorage,
-  RESPONSES_ITEM_TYPE,
   type ResponsesInputItem,
   responsesModelAnswer,
 } from "@sidecar/brain";
 import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testing";
+import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { CREDENTIAL_REFERENCE_KIND, memoryChildStore } from "@sidecar/runtime";
 import {
   CONVERSATION_KIND,
@@ -72,7 +72,7 @@ function answer(text: string) {
   const answered = responsesModelAnswer({
     output: [
       {
-        type: RESPONSES_ITEM_TYPE.MESSAGE,
+        type: RESPONSES_INPUT_ITEM_TYPE.MESSAGE,
         role: "assistant",
         content: [{ type: "output_text", text }],
       },
@@ -85,7 +85,7 @@ function answer(text: string) {
 
 function itemTexts(input: readonly ResponsesInputItem[]): string[] {
   return input.flatMap((item) => {
-    if (item.type !== RESPONSES_ITEM_TYPE.MESSAGE || !Array.isArray(item.content)) return [];
+    if (item.type !== RESPONSES_INPUT_ITEM_TYPE.MESSAGE || !Array.isArray(item.content)) return [];
     return item.content.flatMap((part) =>
       isRecord(part) && isWireString(part.text) ? [part.text] : [],
     );

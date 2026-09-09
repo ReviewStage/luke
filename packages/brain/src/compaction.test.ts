@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import {
   COMPACTION_SOURCE,
   CONTEXT_INPUT_KIND,
@@ -28,12 +29,7 @@ import {
   BRAIN_REQUEST_STATUS,
   BRAIN_SUBMISSION_OUTCOME,
 } from "./requests.js";
-import {
-  RESPONSES_ITEM_FORMAT,
-  RESPONSES_ITEM_TYPE,
-  responsesModelAnswer,
-  userMessageItem,
-} from "./responses-api.js";
+import { RESPONSES_ITEM_FORMAT, responsesModelAnswer, userMessageItem } from "./responses-api.js";
 import { TOOL_LOOP_RUNTIME, ToolLoopAgentRuntime } from "./runtime.js";
 import {
   type BrainPersistedState,
@@ -58,14 +54,19 @@ const CHECKPOINT = {
 } as const;
 
 function call(callId: string): WireRecord {
-  return { type: RESPONSES_ITEM_TYPE.FUNCTION_CALL, call_id: callId, name: "t", arguments: "{}" };
+  return {
+    type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
+    call_id: callId,
+    name: "t",
+    arguments: "{}",
+  };
 }
 function output(callId: string): WireRecord {
-  return { type: RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT, call_id: callId, output: "{}" };
+  return { type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT, call_id: callId, output: "{}" };
 }
 function assistant(text: string): WireRecord {
   return {
-    type: RESPONSES_ITEM_TYPE.MESSAGE,
+    type: RESPONSES_INPUT_ITEM_TYPE.MESSAGE,
     role: "assistant",
     content: [{ type: "output_text", text }],
   };
@@ -186,7 +187,7 @@ test("an explicit compaction is asked over the retained items alone, adopted who
   recorder.retained(2);
   const window = [
     userMessageItem("kept"),
-    { type: RESPONSES_ITEM_TYPE.COMPACTION, encrypted_content: "e" },
+    { type: RESPONSES_INPUT_ITEM_TYPE.COMPACTION, encrypted_content: "e" },
   ];
   let asked: readonly WireRecord[] = [];
   const model = adapter({
@@ -268,7 +269,7 @@ test("the recorder keeps every ingested input and fold as transcript events, rol
   assert.deepEqual(engine.checkpoint().items, [userMessageItem("ask")]);
   await recorder.ingest({
     kind: CONTEXT_INPUT_KIND.MODEL_OUTPUT,
-    items: [{ type: RESPONSES_ITEM_TYPE.COMPACTION, encrypted_content: "x" }],
+    items: [{ type: RESPONSES_INPUT_ITEM_TYPE.COMPACTION, encrypted_content: "x" }],
   });
   assert.equal(await recorder.compact(), 1);
   const kinds = recorder.pending().map((event) => event.kind);
@@ -355,7 +356,10 @@ test("a turn's inputs travel into the transcript with the checkpoint, and option
       return {
         outcome: MODEL_RESPONSE_OUTCOME.ANSWERED,
         items: [
-          { type: RESPONSES_ITEM_TYPE.COMPACTION, encrypted_content: `folded ${items.length}` },
+          {
+            type: RESPONSES_INPUT_ITEM_TYPE.COMPACTION,
+            encrypted_content: `folded ${items.length}`,
+          },
         ],
       };
     },
@@ -378,7 +382,7 @@ test("a turn's inputs travel into the transcript with the checkpoint, and option
     TRANSCRIPT_EVENT_KIND.COMPACTION,
   ]);
   assert.deepEqual(repository.state?.items, [
-    { type: RESPONSES_ITEM_TYPE.COMPACTION, encrypted_content: "folded 2" },
+    { type: RESPONSES_INPUT_ITEM_TYPE.COMPACTION, encrypted_content: "folded 2" },
   ]);
   await agent.stop();
 });

@@ -1,3 +1,4 @@
+import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import {
   type CheckpointFormat,
   CONTEXT_INPUT_KIND,
@@ -16,7 +17,6 @@ import {
   isCompactionItem,
   isUserMessageItem,
   RESPONSES_ITEM_FORMAT,
-  RESPONSES_ITEM_TYPE,
   type ResponsesInputItem,
   userMessageItem,
 } from "./responses-api.js";
@@ -178,17 +178,21 @@ export function pairedDanglingCalls(
 ): readonly ResponsesInputItem[] {
   const answered = new Set<string>();
   for (const item of items) {
-    if (item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT && isWireString(item.call_id)) {
+    if (
+      item.type === RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT &&
+      isWireString(item.call_id)
+    ) {
       answered.add(item.call_id);
     }
   }
   const dangling: ResponsesInputItem[] = [];
   for (const item of items) {
-    if (item.type !== RESPONSES_ITEM_TYPE.FUNCTION_CALL || !isWireString(item.call_id)) continue;
+    if (item.type !== RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL || !isWireString(item.call_id))
+      continue;
     if (answered.has(item.call_id)) continue;
     answered.add(item.call_id);
     dangling.push({
-      type: RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
+      type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
       call_id: item.call_id,
       output: outputFor(item.call_id),
     });

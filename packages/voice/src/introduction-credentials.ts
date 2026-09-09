@@ -1,5 +1,5 @@
-import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
-import { REALTIME_MINT_OUTCOME, type RealtimeConnection } from "@sidecar/realtime";
+import { HOSTED_SERVICE_PATH, type RealtimeConnection } from "@sidecar/hosted";
+import { REALTIME_MINT_OUTCOME } from "@sidecar/realtime";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { type FetchLike, ServiceRealtimeCredentialMinter } from "./service-mint.js";
 

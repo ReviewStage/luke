@@ -1,18 +1,20 @@
 import {
+  REALTIME_CALLS_PATH,
+  type RealtimeConnection,
+  realtimeCredentialIsUsable,
+} from "@sidecar/hosted";
+import {
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
-  REALTIME_CALLS_PATH,
   REALTIME_CLIENT_SECRETS_PATH,
   REALTIME_DEFAULTS,
   REALTIME_MINT_OUTCOME,
-  type RealtimeConnection,
   type RealtimeDiagnostics,
   type RealtimeMintOutcome,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
   realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
-  realtimeCredentialIsUsable,
 } from "@sidecar/realtime";
 import { positiveInteger, text, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 

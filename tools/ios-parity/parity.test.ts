@@ -29,19 +29,16 @@ import {
   PRODUCT_SETTING_VALUE,
 } from "@sidecar/analytics";
 import { APP_SETTING_ID } from "@sidecar/guide";
-import {
-  HOSTED_ACT_RESULT,
-  HOSTED_API_ERROR,
-  VAULT_KEY_MAX_LENGTH,
-  VAULT_PROVIDER_ID,
-} from "@sidecar/hosted";
+import { HOSTED_API_ERROR, VAULT_KEY_MAX_LENGTH } from "@sidecar/hosted";
 import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import {
+  CLOUD_AGENT_PROVIDER_ID,
   CONVERSATION_MESSAGE_AUTHOR,
   PROVIDER_ID,
   SESSION_CONTROL_KIND,
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
+import { ACT_RESULT_STATUS } from "@sidecar/wire";
 
 import {
   swiftEnumRawValues,
@@ -125,10 +122,10 @@ test("ProductProviderID is PROVIDER_ID", () => {
   );
 });
 
-test("VaultProviderID is VAULT_PROVIDER_ID", () => {
+test("VaultProviderID is CLOUD_AGENT_PROVIDER_ID", () => {
   assertSameSet(
     swiftEnumRawValues(swift(`${KIT}/VaultClient.swift`), "VaultProviderID"),
-    VAULT_PROVIDER_ID,
+    CLOUD_AGENT_PROVIDER_ID,
     "a vault provider the phone cannot name cannot be offered a key field",
   );
 });
@@ -141,10 +138,10 @@ test("HostedAPIError is HOSTED_API_ERROR", () => {
   );
 });
 
-test("ActResult is HOSTED_ACT_RESULT", () => {
+test("ActResult is ACT_RESULT_STATUS", () => {
   assertSameSet(
     swiftEnumRawValues(swift(`${KIT}/ActClient.swift`), "ActResult"),
-    HOSTED_ACT_RESULT,
+    ACT_RESULT_STATUS,
     "an act outcome the phone cannot name reads as a malformed answer",
   );
 });
