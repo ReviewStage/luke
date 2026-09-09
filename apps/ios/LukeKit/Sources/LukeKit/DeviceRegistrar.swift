@@ -91,20 +91,26 @@ public final class DeviceRegistrar {
 
     /// Forgets the row on the departing account's own token, handed in because
     /// the session has already let go of it. The generation moves at once, so
-    /// a register or heartbeat already past its guard installs nothing, and
-    /// the delete itself takes its turn in the queue, so a registration the
-    /// next sign-in asks for runs after it rather than racing it. The stored
-    /// row id goes first: the account is leaving whether or not the service
-    /// heard, and a row it still holds is re-keyed by the next registration.
+    /// a register or heartbeat already under way installs nothing, and the
+    /// stored row id goes now: the account is leaving whether or not the
+    /// service hears, and a row it still holds is re-keyed by the next
+    /// registration. The delete does not queue behind standing work — a
+    /// register waiting on a token refresh that is itself signing out would
+    /// have the sign-out waiting on this forget, and this forget on it — but
+    /// everything queued after it waits for it, so the next sign-in's
+    /// registration runs behind the delete rather than beside it.
     @discardableResult
     public func forget(accessToken: String) -> Task<Void, Never> {
         generation += 1
         pushAcknowledged = false
-        return enqueue {
-            guard let deviceId = self.deviceId else { return }
-            self.store.removeObject(forKey: Key.deviceId)
+        let deviceId = deviceId
+        store.removeObject(forKey: Key.deviceId)
+        let forgetting = Task { @MainActor in
+            guard let deviceId else { return }
             _ = try? await self.client.forget(deviceId: deviceId, accessToken: accessToken)
         }
+        task = forgetting
+        return forgetting
     }
 
     private func registerNow() async {
@@ -151,7 +157,8 @@ public final class DeviceRegistrar {
     /// One call at a time, in order, so a heartbeat cannot overtake the
     /// registration whose row id it needs and a registration cannot overtake
     /// the forget before it. Work queued under an account that has since
-    /// signed out finds no token and does nothing.
+    /// signed out finds no token, or answers into a generation that has
+    /// moved, and does nothing.
     private func enqueue(_ work: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
         let previous = task
         let next = Task { @MainActor in

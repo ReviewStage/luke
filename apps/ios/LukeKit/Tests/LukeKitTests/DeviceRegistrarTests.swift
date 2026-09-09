@@ -20,6 +20,9 @@ private final class RegistrarTokenSource: AccountTokenProviding {
     var token: String? = "at-1"
     var refreshedToken: String? = "at-2"
     var refreshes = 0
+    /// What a refresh does before it answers: the real session signs out on a
+    /// refresh the server rejects, and that sign-out forgets the device.
+    var onRefresh: (@MainActor () async -> Void)?
 
     func validAccessToken() async throws -> String {
         guard let token else { throw AccountSessionError.signedOut }
@@ -28,6 +31,7 @@ private final class RegistrarTokenSource: AccountTokenProviding {
 
     func refreshAccessToken() async throws -> String {
         refreshes += 1
+        await onRefresh?()
         guard let refreshedToken else { throw AccountSessionError.signedOut }
         token = refreshedToken
         return refreshedToken
@@ -292,6 +296,30 @@ final class DeviceRegistrarTests: XCTestCase {
 
         XCTAssertNil(subject.deviceId, "the row the late answer names was let go of at sign-out")
         XCTAssertEqual(http.sent.map(\.method), ["POST"], "nothing was registered, so nothing was forgotten")
+    }
+
+    func testASignOutFromInsideARefreshTheRegisterIsWaitingOnDoesNotDeadlock() async {
+        let store = makeStore()
+        let session = RegistrarTokenSource()
+        let http = RecordingHTTP(answers: [
+            (200, ["deviceId": deviceId]),
+            (401, ["error": "invalid-token"]),
+            (200, ["deleted": true]),
+        ])
+        let subject = registrar(store: store, http: http, session: session)
+        await subject.register().value
+
+        session.refreshedToken = nil
+        session.onRefresh = {
+            session.accountEmail = nil
+            session.token = nil
+            await subject.forget(accessToken: "departing").value
+        }
+        await subject.heartbeat().value
+
+        XCTAssertEqual(http.sent.map(\.method), ["POST", "PUT", "DELETE"])
+        XCTAssertEqual(http.sent[2].token, "Bearer departing")
+        XCTAssertNil(subject.deviceId)
     }
 
     func testARegisterAskedRightAfterAForgetRunsBehindIt() async {
