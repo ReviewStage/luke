@@ -1195,6 +1195,7 @@ works in that subtree:
 | `packages/providers/AGENTS.md` | Keeping `PRIVACY.md` and the README's agent table true to the adapters |
 | `packages/surface/AGENTS.md` | The shared surface vocabulary and its generated outputs |
 | `packages/realtime/AGENTS.md` | Why `protocol` and `tools` ship together |
+| `packages/gateway/AGENTS.md` | The protocol as the contract, its three doors, and injected authentication |
 | `packages/analytics/AGENTS.md` | The product-event allowlist and its `PRIVACY.md` obligation |
 | `packages/hosted/AGENTS.md` | The hosted wire boundary and its dependency direction |
 

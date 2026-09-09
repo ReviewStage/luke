@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import { WebSocket } from "ws";
+import { GatewayClient } from "./client.js";
+import { InvocationMemory, NODE_INVOCATION_REFUSAL } from "./invocations.js";
+import { NodeRegistry } from "./nodes.js";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_ERROR,
@@ -12,21 +17,17 @@ import {
   type NodeInvocation,
   nodeInvocationAnswerToWire,
   nodeInvocationFromWire,
-} from "@sidecar/runtime-contracts";
-import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
-import { WebSocket } from "ws";
-import { GatewayClient } from "./client.js";
-import { InvocationMemory, NODE_INVOCATION_REFUSAL } from "./invocations.js";
+} from "./protocol.js";
+import { type GatewayMethodTable, GatewayServer, gatewayError, gatewayOk } from "./server.js";
+import { TextLoopbackTransport } from "./testing.js";
+import { InProcessTransport } from "./transport.js";
 import {
   bearerAuthentication,
+  connectWebSocketGateway,
   GATEWAY_FRAME,
   WEB_SOCKET_GATEWAY_DEFAULTS,
   WebSocketTransport,
-} from "./local-host.js";
-import { connectWebSocketGateway } from "./local-transport.js";
-import { NodeRegistry } from "./nodes.js";
-import { type GatewayMethodTable, GatewayServer, gatewayError, gatewayOk } from "./server.js";
-import { InProcessTransport, TextLoopbackTransport } from "./transport.js";
+} from "./websocket.js";
 
 const TOKEN = "a-shared-secret";
 const OPERATOR: GatewayClientIdentity = {
@@ -368,7 +369,7 @@ test("a client that adopts a replaced host follows the new host's numbering from
   const oldServer = makeServer("old");
   const newServer = makeServer("new");
   let current = oldServer;
-  const sinks = new Set<(event: import("@sidecar/runtime-contracts").GatewayEvent) => void>();
+  const sinks = new Set<(event: import("./protocol.js").GatewayEvent) => void>();
   for (const server of [oldServer, newServer]) {
     server.subscribe((event) => {
       if (current !== server) return;
@@ -505,7 +506,7 @@ test("an event of the new host arriving during adoption is held and delivered af
   const newServer = makeServer();
   let current = oldServer;
   let wireUp = true;
-  const sinks = new Set<(event: import("@sidecar/runtime-contracts").GatewayEvent) => void>();
+  const sinks = new Set<(event: import("./protocol.js").GatewayEvent) => void>();
   for (const server of [oldServer, newServer]) {
     server.subscribe((event) => {
       if (current !== server || !wireUp) return;

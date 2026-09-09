@@ -6,7 +6,7 @@
  * shutdown never fabricates a completion for work it cut off, and an effect
  * whose outcome the cut left unknown stays unknown.
  */
-import type { ScheduledTimer } from "../timers.js";
+import type { ScheduledTimer } from "@sidecar/runtime-contracts";
 
 export const GATEWAY_SHUTDOWN_DEFAULTS = {
   DEADLINE_MS: 10_000,

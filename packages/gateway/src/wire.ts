@@ -4,9 +4,10 @@
  * not the shape its method takes, and read one event kind under a guard.
  */
 
-import { type GatewayClient, gatewayError } from "@sidecar/runtime";
-import { GATEWAY_ERROR, type GatewayEventKind } from "@sidecar/runtime-contracts";
 import type { WireValue } from "@sidecar/wire";
+import type { GatewayClient } from "./client.js";
+import { GATEWAY_ERROR, type GatewayEventKind } from "./protocol.js";
+import { gatewayError } from "./server.js";
 
 /** A value this build made, carried as the JSON it already is; every field of these shapes is a wire value. */
 export function carried<Value>(value: Value): WireValue {

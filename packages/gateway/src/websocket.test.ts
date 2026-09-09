@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { WebSocket } from "ws";
+import { GatewayClient } from "./client.js";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_ERROR,
@@ -10,18 +12,17 @@ import {
   GATEWAY_PROTOCOL_VERSION,
   type GatewayClientIdentity,
   type GatewayEvent,
-} from "@sidecar/runtime-contracts";
-import { WebSocket } from "ws";
-import { GatewayClient } from "./client.js";
+} from "./protocol.js";
+import { GatewayServer, gatewayError, gatewayOk } from "./server.js";
 import {
   bearerAuthentication,
+  connectWebSocketGateway,
   GATEWAY_REFUSAL_HEADER,
+  GATEWAY_UNREACHABLE,
   type GatewayAuthenticate,
   WEB_SOCKET_GATEWAY_DEFAULTS,
   WebSocketTransport,
-} from "./local-host.js";
-import { connectWebSocketGateway, GATEWAY_UNREACHABLE } from "./local-transport.js";
-import { GatewayServer, gatewayError, gatewayOk } from "./server.js";
+} from "./websocket.js";
 
 const TOKEN = "a-shared-secret";
 const OPERATOR: GatewayClientIdentity = {

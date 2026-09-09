@@ -14,6 +14,19 @@ export {
   registerBrainBuiltIns,
 } from "./builtins.js";
 export {
+  DELIVERY_STATE,
+  type DeliveryClaim,
+  type DeliveryClaimContext,
+  DeliveryLedger,
+  type DeliveryLedgerOptions,
+  type DeliveryOffer,
+  type DeliveryRecord,
+  type DeliveryState,
+  deliveryRecordToWire,
+  isTerminalDeliveryState,
+  TERMINAL_DELIVERY_STATES,
+} from "./delivery.js";
+export {
   EMBEDDING_BATCH_SIZE,
   HostedEmbeddingAdapter,
   OpenAiEmbeddingAdapter,

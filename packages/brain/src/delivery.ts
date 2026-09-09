@@ -1,5 +1,32 @@
-import { DELIVERY_STATE, type DeliveryState } from "@sidecar/runtime-contracts";
 import type { WireRecord } from "@sidecar/wire";
+
+/**
+ * Where one delivery to the ear stands. Queued is owed and not yet offered to
+ * any receiver; offered went to one receiver epoch and awaits its claim;
+ * claimed was granted its words, once; the three terminal states say how it
+ * ended. What the ledger guarantees is at most one grant to speak per
+ * delivery, never that the grant was audible.
+ */
+export const DELIVERY_STATE = {
+  QUEUED: "queued",
+  OFFERED: "offered",
+  CLAIMED: "claimed",
+  ACKNOWLEDGED: "acknowledged",
+  GRANTED_ON_CALL: "granted_on_call",
+  WITHDRAWN: "withdrawn",
+} as const;
+
+export type DeliveryState = (typeof DELIVERY_STATE)[keyof typeof DELIVERY_STATE];
+
+export const TERMINAL_DELIVERY_STATES: ReadonlySet<DeliveryState> = new Set<DeliveryState>([
+  DELIVERY_STATE.ACKNOWLEDGED,
+  DELIVERY_STATE.GRANTED_ON_CALL,
+  DELIVERY_STATE.WITHDRAWN,
+]);
+
+export function isTerminalDeliveryState(state: DeliveryState): boolean {
+  return TERMINAL_DELIVERY_STATES.has(state);
+}
 
 /**
  * One reply owed to the ear after its words already stand in History. Never

@@ -1,30 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { BrainAgent, BrainRequestRecord, BrainSubmission } from "@sidecar/brain";
+import { DeliveryLedger } from "@sidecar/brain";
 import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
-import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
-import {
-  type ChildRunService,
-  DeliveryLedger,
-  GATEWAY_SHUTDOWN_DEFAULTS,
-  GatewayClient,
-  type ResolvedConfiguration,
-  shutdownGateway,
-} from "@sidecar/runtime";
-import {
-  bearerAuthentication,
-  connectWebSocketGateway,
-  WEB_SOCKET_GATEWAY_DEFAULTS,
-  WebSocketTransport,
-} from "@sidecar/runtime/local-gateway";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_ERROR,
   GATEWAY_HANDSHAKE_HEADER,
   GATEWAY_METHOD,
-  MAIN_SESSION_KEY,
+  GATEWAY_SHUTDOWN_DEFAULTS,
+  GatewayClient,
   NODE_CAPABILITY_STATUS,
-} from "@sidecar/runtime-contracts";
+  shutdownGateway,
+} from "@sidecar/gateway";
+import {
+  bearerAuthentication,
+  connectWebSocketGateway,
+  WEB_SOCKET_GATEWAY_DEFAULTS,
+  WebSocketTransport,
+} from "@sidecar/gateway/websocket";
+import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
+import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
+import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import { isRecord, type WireValue } from "@sidecar/wire";
 import { CONVERSATION_DELETE_OUTCOME } from "../brain/conversation-deletion";
 import type { ConversationOperations } from "../conversation-operations";

@@ -5,6 +5,9 @@ import {
   type BrainAgentOptions,
   type BrainStateStorage,
   BrainStateStore,
+  DELIVERY_STATE,
+  DeliveryLedger,
+  type DeliveryRecord,
   responsesModelAnswer,
 } from "@sidecar/brain";
 import { isTerminalBrainRequestStatus } from "@sidecar/brain/requests";
@@ -18,8 +21,7 @@ import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
 } from "@sidecar/realtime";
-import { DeliveryLedger, type DeliveryRecord } from "@sidecar/runtime";
-import { DELIVERY_STATE, type ModelResponse } from "@sidecar/runtime-contracts";
+import type { ModelResponse } from "@sidecar/runtime-contracts";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { BrainHost } from "#main/brain/host";
 import { followBrainRequests } from "#main/brain/ipc";

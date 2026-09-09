@@ -1,3 +1,5 @@
+import type { MaybePromise } from "@sidecar/runtime-contracts";
+import { isWireNumber, type WireRecord, type WireValue } from "@sidecar/wire";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_ERROR,
@@ -15,9 +17,7 @@ import {
   type GatewayResponse,
   type GatewayRevision,
   isMutatingGatewayMethod,
-  type MaybePromise,
-} from "@sidecar/runtime-contracts";
-import { isWireNumber, type WireRecord, type WireValue } from "@sidecar/wire";
+} from "./protocol.js";
 import type { GatewayHostConnection } from "./transport.js";
 
 /** What one method answers: a result, or a typed error the envelope carries back. */

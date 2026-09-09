@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { GATEWAY_SHUTDOWN_DEFAULTS, shutdownGateway } from "@sidecar/runtime";
+import { GATEWAY_SHUTDOWN_DEFAULTS, shutdownGateway } from "@sidecar/gateway";
 import { drainMicrotasks } from "#testing/drain";
 import { seedWorkspaceThenStartMemory, shutdownStepsFlushingEvents } from "./lifecycle";
 

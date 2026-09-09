@@ -69,6 +69,9 @@ importers:
       '@sidecar/fixtures':
         specifier: workspace:*
         version: link:../../packages/fixtures
+      '@sidecar/gateway':
+        specifier: workspace:*
+        version: link:../../packages/gateway
       '@sidecar/guide':
         specifier: workspace:*
         version: link:../../packages/guide
@@ -503,6 +506,31 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
+  packages/gateway:
+    dependencies:
+      '@sidecar/runtime-contracts':
+        specifier: workspace:*
+        version: link:../runtime-contracts
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+      ws:
+        specifier: 8.21.3
+        version: 8.21.3
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      '@types/ws':
+        specifier: 8.18.1
+        version: 8.18.1
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
   packages/guide:
     dependencies:
       '@sidecar/wire':
@@ -710,16 +738,10 @@ importers:
       croner:
         specifier: 10.0.1
         version: 10.0.1
-      ws:
-        specifier: 8.21.3
-        version: 8.21.3
     devDependencies:
       '@types/node':
         specifier: 26.2.0
         version: 26.2.0
-      '@types/ws':
-        specifier: 8.18.1
-        version: 8.18.1
       tsx:
         specifier: 4.23.12
         version: 4.23.12

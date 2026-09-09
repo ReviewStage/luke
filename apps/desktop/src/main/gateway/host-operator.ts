@@ -3,11 +3,11 @@ import type { ProductEventName, ProductEventPropertiesFor } from "@sidecar/analy
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { CredentialProviderId } from "@sidecar/credentials";
 import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
+import type { GatewayCallResult, GatewayClient } from "@sidecar/gateway";
+import { carried, GATEWAY_EVENT, GATEWAY_METHOD, gatewayEventReader } from "@sidecar/gateway";
 import type { AppGuideSnapshot } from "@sidecar/guide";
 import type { RealtimeConnection } from "@sidecar/hosted";
 import type { ConversationEntry, RealtimeDiagnostics } from "@sidecar/realtime";
-import type { GatewayCallResult, GatewayClient } from "@sidecar/runtime";
-import { GATEWAY_EVENT, GATEWAY_METHOD } from "@sidecar/runtime-contracts";
 import type {
   ObservedWorkspaceProject,
   Session,
@@ -37,7 +37,6 @@ import type { AppSettings, SettingsUpdateResult } from "#shared/messages/setting
 import type { SpeechOffer, SpeechOutcome } from "#shared/messages/speech";
 import { isSpeechOffer } from "#shared/messages/speech";
 import { RECEIVER_REPORT_KIND } from "../host/runtime-host";
-import { carried, gatewayEventReader } from "./wire";
 
 /**
  * The desktop's client over the host's own vocabulary: the settings, account,

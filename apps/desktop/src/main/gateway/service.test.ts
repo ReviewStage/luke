@@ -1,25 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { BrainAgent, BrainRequestRecord, BrainSubmission } from "@sidecar/brain";
+import { DELIVERY_STATE, DeliveryLedger, type DeliveryState } from "@sidecar/brain";
 import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
-import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
-import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
 import {
-  DeliveryLedger,
-  GatewayClient,
-  InProcessTransport,
-  TextLoopbackTransport,
-} from "@sidecar/runtime";
-import {
-  DELIVERY_STATE,
-  type DeliveryState,
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
-  MAIN_SESSION_KEY,
+  GatewayClient,
+  InProcessTransport,
   NODE_CAPABILITY_STATUS,
-  type SessionKey,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/gateway";
+import { TextLoopbackTransport } from "@sidecar/gateway/testing";
+import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
+import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
+import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
 import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
 import { CONVERSATION_DELETE_OUTCOME } from "../brain/conversation-deletion";
 import type { ConversationOperations } from "../conversation-operations";

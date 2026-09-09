@@ -1,14 +1,15 @@
 import { ACT_KIND } from "@sidecar/acts";
 import { brainRequestRecordFromWire } from "@sidecar/brain/requests";
-import { type ConversationEntry, conversationEntryFromWire } from "@sidecar/realtime";
-import { GatewayClient, type GatewayTransport } from "@sidecar/runtime";
 import {
   GATEWAY_METHOD,
-  MAIN_SESSION_KEY,
+  GatewayClient,
+  type GatewayTransport,
   NODE_CAPABILITY_STATUS,
   type NodeCapabilityResult,
   type NodeInvocation,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/gateway";
+import { type ConversationEntry, conversationEntryFromWire } from "@sidecar/realtime";
+import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import {
   isRecord,
   isWireNumber,

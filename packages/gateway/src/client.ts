@@ -1,3 +1,4 @@
+import { isRecord, isWireNumber, type WireRecord, type WireValue } from "@sidecar/wire";
 import {
   GATEWAY_ERROR,
   GATEWAY_METHOD,
@@ -13,8 +14,7 @@ import {
   type GatewayResponse,
   gatewayReconnectAnswerFromWire,
   isMutatingGatewayMethod,
-} from "@sidecar/runtime-contracts";
-import { isRecord, isWireNumber, type WireRecord, type WireValue } from "@sidecar/wire";
+} from "./protocol.js";
 import type { GatewayTransport } from "./transport.js";
 
 export interface GatewayClientOptions {

@@ -1,11 +1,7 @@
 import { brainRequestRecordFromWire, isBrainRequestOrigin } from "@sidecar/brain/requests";
-import type { GatewayCallResult, GatewayClient } from "@sidecar/runtime";
-import {
-  GATEWAY_EVENT,
-  GATEWAY_METHOD,
-  MAIN_SESSION_KEY,
-  type SessionKey,
-} from "@sidecar/runtime-contracts";
+import type { GatewayCallResult, GatewayClient } from "@sidecar/gateway";
+import { GATEWAY_EVENT, GATEWAY_METHOD, gatewayEventReader } from "@sidecar/gateway";
+import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
 import { isRecord, isWireBoolean, isWireNumber, isWireString, type WireValue } from "@sidecar/wire";
 import {
   type BrainAskSubmission,
@@ -19,7 +15,6 @@ import {
 } from "#shared/messages/brain";
 import { CONVERSATION_DELETE_OUTCOME } from "../brain/conversation-deletion";
 import { REJECTED_SUBMISSION } from "../brain/ipc";
-import { gatewayEventReader } from "./wire";
 
 /**
  * The desktop's operator client: what the windows' IPC and the main

@@ -48,6 +48,7 @@
     "@sidecar/devtrace": "workspace:*",
     "@sidecar/feedback": "workspace:*",
     "@sidecar/fixtures": "workspace:*",
+    "@sidecar/gateway": "workspace:*",
     "@sidecar/guide": "workspace:*",
     "@sidecar/hosted": "workspace:*",
     "@sidecar/issues": "workspace:*",

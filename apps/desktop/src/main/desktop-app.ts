@@ -13,10 +13,10 @@ import {
 } from "@sidecar/analytics";
 import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidecar/feedback";
 import { fixtureSnapshot } from "@sidecar/fixtures";
+import { GATEWAY_CLIENT_ROLE, InProcessTransport, shutdownGateway } from "@sidecar/gateway";
 import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { peekLocalSessions } from "@sidecar/providers";
-import { InProcessTransport, shutdownGateway } from "@sidecar/runtime";
-import { GATEWAY_CLIENT_ROLE, MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
+import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { IntroductionRealtimeCredentialMinter } from "@sidecar/voice";

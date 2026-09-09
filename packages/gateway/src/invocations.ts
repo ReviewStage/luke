@@ -3,7 +3,7 @@ import {
   type NodeCapabilityResult,
   type NodeInvocation,
   type NodeInvocationAnswer,
-} from "@sidecar/runtime-contracts";
+} from "./protocol.js";
 
 /**
  * The two ledgers a node invocation crosses. The host's ledger holds every

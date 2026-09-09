@@ -1,7 +1,8 @@
 import type { BrainAgent } from "@sidecar/brain";
+import { DeliveryLedger } from "@sidecar/brain";
+import { GATEWAY_CLIENT_ROLE, GatewayClient, InProcessTransport } from "@sidecar/gateway";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
-import { DeliveryLedger, GatewayClient, InProcessTransport } from "@sidecar/runtime";
-import { GATEWAY_CLIENT_ROLE, MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
+import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import type { ConversationOperations } from "#main/conversation-operations";
 import { createGatewayOperator, type GatewayOperator } from "#main/gateway/operator";
 import {

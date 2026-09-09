@@ -1,3 +1,4 @@
+import { isIdentifier } from "@sidecar/runtime-contracts";
 import {
   isRecord,
   isWireBoolean,
@@ -7,7 +8,6 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
-import { isIdentifier } from "./identifiers.js";
 
 /**
  * The Gateway protocol: what a client asks the host and what the host tells
@@ -307,34 +307,6 @@ export type NodeCapabilityResult =
   | { status: typeof NODE_CAPABILITY_STATUS.UNAVAILABLE; capability: string; reason: string }
   | { status: typeof NODE_CAPABILITY_STATUS.FAILED; capability: string; reason: string }
   | { status: typeof NODE_CAPABILITY_STATUS.UNKNOWN; capability: string; reason: string };
-
-/**
- * Where one delivery to the ear stands. Queued is owed and not yet offered to
- * any receiver; offered went to one receiver epoch and awaits its claim;
- * claimed was granted its words, once; the three terminal states say how it
- * ended. What the ledger guarantees is at most one grant to speak per
- * delivery, never that the grant was audible.
- */
-export const DELIVERY_STATE = {
-  QUEUED: "queued",
-  OFFERED: "offered",
-  CLAIMED: "claimed",
-  ACKNOWLEDGED: "acknowledged",
-  GRANTED_ON_CALL: "granted_on_call",
-  WITHDRAWN: "withdrawn",
-} as const;
-
-export type DeliveryState = (typeof DELIVERY_STATE)[keyof typeof DELIVERY_STATE];
-
-export const TERMINAL_DELIVERY_STATES: ReadonlySet<DeliveryState> = new Set<DeliveryState>([
-  DELIVERY_STATE.ACKNOWLEDGED,
-  DELIVERY_STATE.GRANTED_ON_CALL,
-  DELIVERY_STATE.WITHDRAWN,
-]);
-
-export function isTerminalDeliveryState(state: DeliveryState): boolean {
-  return TERMINAL_DELIVERY_STATES.has(state);
-}
 
 function expectedRevisionFromWire(
   value: UnparsedWireValue,

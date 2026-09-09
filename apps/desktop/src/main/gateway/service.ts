@@ -1,5 +1,10 @@
 import type { BrainAgent, BrainRequestRecord } from "@sidecar/brain";
-import { BRAIN_DEFAULTS } from "@sidecar/brain";
+import {
+  BRAIN_DEFAULTS,
+  type DeliveryClaimContext,
+  type DeliveryLedger,
+  deliveryRecordToWire,
+} from "@sidecar/brain";
 import type { BrainRequestOrigin } from "@sidecar/brain/requests";
 import {
   BRAIN_SUBMISSION_OUTCOME,
@@ -11,15 +16,9 @@ import {
   isTerminalBrainRequestStatus,
 } from "@sidecar/brain/requests";
 import {
-  type ConversationEntry,
-  conversationEntryToWire,
-  maximumTypedAskLength,
-} from "@sidecar/realtime";
-import {
-  type ChildRunService,
-  type DeliveryClaimContext,
-  type DeliveryLedger,
-  deliveryRecordToWire,
+  GATEWAY_ERROR,
+  GATEWAY_EVENT,
+  GATEWAY_METHOD,
   type GatewayMethodContext,
   type GatewayMethodHandler,
   type GatewayMethodOutcome,
@@ -27,20 +26,23 @@ import {
   GatewayServer,
   gatewayError,
   gatewayOk,
+  invalid,
+  NODE_CAPABILITY_STATUS,
   NodeRegistry,
   nodeSnapshotToWire,
-  type ResolvedConfiguration,
-} from "@sidecar/runtime";
+} from "@sidecar/gateway";
+import {
+  type ConversationEntry,
+  conversationEntryToWire,
+  maximumTypedAskLength,
+} from "@sidecar/realtime";
+import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
 import {
   type ChildRunRecord,
   conversationRecordToWire,
-  GATEWAY_ERROR,
-  GATEWAY_EVENT,
-  GATEWAY_METHOD,
   isIdentifier,
   MAIN_SESSION_KEY,
   type MaybePromise,
-  NODE_CAPABILITY_STATUS,
   type SessionKey,
   sessionKey as toSessionKey,
 } from "@sidecar/runtime-contracts";
@@ -59,7 +61,6 @@ import type {
 import { publishAsk } from "../brain/ipc";
 import type { SettableConfigurationPatch } from "../brain/wiring";
 import type { ConversationOperations } from "../conversation-operations";
-import { invalid } from "./wire";
 
 /** The two parameters a Gateway method refuses by name; protocol diagnostics, never words a person reads. */
 const REFUSAL = {

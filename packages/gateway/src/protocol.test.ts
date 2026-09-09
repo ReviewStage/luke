@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
+import { GatewayClient } from "./client.js";
+import { NodeRegistry } from "./nodes.js";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_ERROR,
@@ -11,12 +14,10 @@ import {
   type GatewayEvent,
   gatewayReconnectAnswerFromWire,
   NODE_CAPABILITY_STATUS,
-} from "@sidecar/runtime-contracts";
-import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
-import { GatewayClient } from "./client.js";
-import { NodeRegistry } from "./nodes.js";
+} from "./protocol.js";
 import { GatewayServer, gatewayError, gatewayOk } from "./server.js";
-import { type GatewayTransport, InProcessTransport, TextLoopbackTransport } from "./transport.js";
+import { TextLoopbackTransport } from "./testing.js";
+import { type GatewayTransport, InProcessTransport } from "./transport.js";
 
 const OPERATOR: GatewayClientIdentity = {
   clientId: "operator",

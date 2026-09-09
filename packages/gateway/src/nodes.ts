@@ -1,9 +1,6 @@
-import {
-  type MaybePromise,
-  NODE_CAPABILITY_STATUS,
-  type NodeCapabilityResult,
-} from "@sidecar/runtime-contracts";
+import type { MaybePromise } from "@sidecar/runtime-contracts";
 import type { WireRecord, WireValue } from "@sidecar/wire";
+import { NODE_CAPABILITY_STATUS, type NodeCapabilityResult } from "./protocol.js";
 
 export type NodeCapabilityHandler = (params: WireRecord) => MaybePromise<WireValue | undefined>;
 

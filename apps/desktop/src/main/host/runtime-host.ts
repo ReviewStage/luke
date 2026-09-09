@@ -23,7 +23,12 @@ import {
   productSignInAge,
   type RecordProductEvent,
 } from "@sidecar/analytics";
-import { type BrainDelivery, type BrainMemoryAccess, EMBEDDING_BATCH_SIZE } from "@sidecar/brain";
+import {
+  type BrainDelivery,
+  type BrainMemoryAccess,
+  DeliveryLedger,
+  EMBEDDING_BATCH_SIZE,
+} from "@sidecar/brain";
 import { BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
 import {
   activeMeetingEnd,
@@ -41,6 +46,17 @@ import {
 } from "@sidecar/credentials";
 import { AgentTraceWriter, tracedModelAdapter } from "@sidecar/devtrace";
 import { isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
+import {
+  carried,
+  GATEWAY_EVENT,
+  GATEWAY_METHOD,
+  type GatewayMethodTable,
+  type GatewayShutdownSteps,
+  gatewayOk,
+  invalid,
+  NODE_CAPABILITY_STATUS,
+  NodeRegistry,
+} from "@sidecar/gateway";
 import {
   APP_SETTING_ID,
   type AppGuideSnapshot,
@@ -85,14 +101,9 @@ import {
 import {
   CREDENTIAL_REFERENCE_KIND,
   CronScheduler,
-  DeliveryLedger,
-  type GatewayMethodTable,
-  type GatewayShutdownSteps,
-  gatewayOk,
   HEARTBEAT_DEFAULTS,
   heartbeatJob,
   LANE,
-  NodeRegistry,
   ObservationLoop,
   ObservationSupervisor,
 } from "@sidecar/runtime";
@@ -100,12 +111,9 @@ import {
   CONVERSATION_KIND,
   type ConversationRecord,
   type EmbeddingAdapter,
-  GATEWAY_EVENT,
-  GATEWAY_METHOD,
   isIdentifier,
   isTerminalChildRunStatus,
   MAIN_SESSION_KEY,
-  NODE_CAPABILITY_STATUS,
   type SessionKey,
   sessionKey as toSessionKey,
 } from "@sidecar/runtime-contracts";
@@ -185,7 +193,6 @@ import { calendarOnboardingOwed } from "../calendar-onboarding-flow";
 import { conversationOperations, startHistoryMaintenance } from "../conversation-operations";
 import { NODE_CAPABILITY } from "../gateway/desktop-node";
 import { createGatewayService, type GatewayService, type GrantedWords } from "../gateway/service";
-import { carried, invalid } from "../gateway/wire";
 import { createSessionActPerformer, NodeAnswerLostError } from "../ipc/session-acts";
 import { wireMemoryMaintenance } from "../memory-maintenance";
 import { type OnboardingState, onboardingStateFile } from "../onboarding-state";

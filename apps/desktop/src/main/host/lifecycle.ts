@@ -1,4 +1,4 @@
-import type { GatewayShutdownSteps } from "@sidecar/runtime";
+import type { GatewayShutdownSteps } from "@sidecar/gateway";
 
 /**
  * Two moments of the runtime host's life where one concern must not decide

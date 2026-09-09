@@ -1,13 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { BrainRequestRecord } from "@sidecar/brain";
+import { DELIVERY_STATE, DeliveryLedger, type DeliveryRecord } from "@sidecar/brain";
 import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
   isTerminalBrainRequestStatus,
 } from "@sidecar/brain/requests";
-import { DeliveryLedger, type DeliveryRecord } from "@sidecar/runtime";
-import { DELIVERY_STATE } from "@sidecar/runtime-contracts";
 import type { BrainReplyClaimResult } from "#shared/messages/brain";
 import {
   type BrainReplyClaimContext,

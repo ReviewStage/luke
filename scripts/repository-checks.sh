@@ -38,6 +38,8 @@ required_files=(
     packages/CLAUDE.md
     packages/analytics/AGENTS.md
     packages/analytics/CLAUDE.md
+    packages/gateway/AGENTS.md
+    packages/gateway/CLAUDE.md
     packages/hosted/AGENTS.md
     packages/hosted/CLAUDE.md
     packages/providers/AGENTS.md
