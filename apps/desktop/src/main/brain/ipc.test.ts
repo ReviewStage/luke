@@ -20,6 +20,7 @@ import { GATEWAY_CLIENT_ROLE, GATEWAY_EVENT, MAIN_SESSION_KEY } from "@sidecar/r
 import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import { BRIDGE } from "#shared/bridge";
 import type { BrainAskWait, BrainReplyClaimResult } from "#shared/messages/brain";
+import { drainMicrotasks } from "#testing/drain";
 import type { ConversationOperations } from "../conversation-operations";
 import { createGatewayOperator } from "../gateway/operator";
 import { createGatewayService, type GrantedWords } from "../gateway/service";
@@ -223,7 +224,7 @@ test("a retired follower stops between two records, and the second waits for a l
   };
   let following = true;
   const publishing = publishRuns(agent, live, written.record, () => following);
-  await new Promise((resolve) => setImmediate(resolve));
+  await drainMicrotasks(1);
   assert.deepEqual(marked, ["run-1"]);
   following = false;
   holdMark?.();
@@ -369,15 +370,15 @@ test("following a brain relays every report, writes and marks the ended runs, an
     recordConversationEntry: written.record,
     broadcastRequests: (snapshots) => broadcasts.push(snapshots),
   });
-  await new Promise((resolve) => setImmediate(resolve));
-  await new Promise((resolve) => setImmediate(resolve));
+  await drainMicrotasks(1);
+  await drainMicrotasks(1);
   // The launch's interrupted run is written and relayed once it is read.
   assert.equal(broadcasts.length, 1);
   assert.equal(written.entries()[0]?.words, "That ask was interrupted before I could finish it.");
   assert.deepEqual(marked, ["run-1"]);
   listener?.([{ ...ready, historyRecordedAt: NOW + 2 }, record({ runId: "run-2" })]);
-  await new Promise((resolve) => setImmediate(resolve));
-  await new Promise((resolve) => setImmediate(resolve));
+  await drainMicrotasks(1);
+  await drainMicrotasks(1);
   assert.equal(broadcasts.length, 2);
   assert.equal(written.entries().length, 2);
   unfollow();
@@ -411,7 +412,7 @@ test("a retired follower relays nothing a late report carries", async () => {
   unfollow();
   releaseReady?.();
   listener?.([record()]);
-  await new Promise((resolve) => setImmediate(resolve));
+  await drainMicrotasks(1);
   assert.deepEqual(broadcasts, []);
   assert.deepEqual(written.recorded, []);
 });
@@ -602,7 +603,7 @@ function registered(live: () => BrainRequestRecord | undefined) {
     const before = deliveries.records().length;
     // SAFETY: the bridge reads only the sender off the event.
     sends.get(BRIDGE.ackBrainReply.channel)?.({ sender } as IpcMainEvent, runId, deliveryId, epoch);
-    await new Promise((resolve) => setImmediate(resolve));
+    await drainMicrotasks(1);
     if (deliveries.records().length < before) acknowledged.push(runId);
   };
   return {

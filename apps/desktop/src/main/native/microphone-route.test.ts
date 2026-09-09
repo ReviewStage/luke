@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { LID_STATE, MICROPHONE_TRANSPORT, type MicrophoneRoute } from "#shared/messages/audio";
+import { fakeNativeHelper } from "#testing/native-helper";
 import {
   MICROPHONE_ROUTE_PROBE,
   type MicrophoneRouteWatch,
   microphoneRouteWatcher,
   parseMicrophoneRouteLine,
 } from "./microphone-route";
-import type { NativeHelperProcess } from "./native-helper";
 
 test("a route line parses into its three facts", () => {
   assert.deepEqual(
@@ -45,41 +45,18 @@ interface Harness {
   watcher: MicrophoneRouteWatch;
   routes: MicrophoneRoute[];
   unavailable: () => number;
-  written: string[];
+  written: readonly string[];
   emit: (chunk: string) => void;
   die: () => void;
 }
 
 function harness(): Harness {
   const routes: MicrophoneRoute[] = [];
-  const written: string[] = [];
   let unavailable = 0;
-  let listener: ((chunk: string) => void) | undefined;
-  const exits: (() => void)[] = [];
-
-  const child: NativeHelperProcess = {
-    stdin: {
-      write: (chunk) => {
-        written.push(chunk);
-      },
-    },
-    stdout: {
-      setEncoding: () => undefined,
-      on: (_event, dataListener) => {
-        listener = dataListener;
-      },
-    },
-    on: (event, exitListener) => {
-      if (event === "exit") exits.push(exitListener);
-    },
-    removeAllListeners: () => {
-      exits.length = 0;
-    },
-    kill: () => undefined,
-  };
+  const helper = fakeNativeHelper();
 
   const watcher = microphoneRouteWatcher({
-    spawnHelper: () => child,
+    spawnHelper: () => helper.process,
     onRoute: (route) => {
       routes.push(route);
     },
@@ -92,11 +69,9 @@ function harness(): Harness {
     watcher,
     routes,
     unavailable: () => unavailable,
-    written,
-    emit: (chunk) => listener?.(chunk),
-    die: () => {
-      for (const exit of [...exits]) exit();
-    },
+    written: helper.written,
+    emit: helper.emit,
+    die: helper.exit,
   };
 }
 

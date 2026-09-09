@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { OutputAudioState } from "#shared/messages/audio";
+import { fakeNativeHelper } from "#testing/native-helper";
 import { type OutputVolumeWatch, outputVolumeWatcher, parseOutputLine } from "./output-volume";
 
 interface Harness {
@@ -13,31 +14,10 @@ interface Harness {
 
 function harness(spawnFails = false): Harness {
   const events: string[] = [];
-  let killed = false;
-  let onData: ((chunk: string) => void) | undefined;
-  const exits: (() => void)[] = [];
+  const helper = fakeNativeHelper();
 
   const watcher = outputVolumeWatcher({
-    spawnHelper: () =>
-      spawnFails
-        ? undefined
-        : {
-            stdout: {
-              setEncoding: () => undefined,
-              on: (_event, listener) => {
-                onData = listener;
-              },
-            },
-            on: (event, listener) => {
-              if (event === "exit") exits.push(listener);
-            },
-            removeAllListeners: () => {
-              exits.length = 0;
-            },
-            kill: () => {
-              killed = true;
-            },
-          },
+    spawnHelper: () => (spawnFails ? undefined : helper.process),
     onState: (state: OutputAudioState) =>
       events.push(`state:${state.muted ? 1 : 0}:${state.volume}`),
     onUnavailable: () => events.push("unavailable"),
@@ -46,11 +26,9 @@ function harness(spawnFails = false): Harness {
   return {
     watcher,
     events,
-    killed: () => killed,
-    emit: (chunk) => onData?.(chunk),
-    die: () => {
-      for (const exit of [...exits]) exit();
-    },
+    killed: helper.killed,
+    emit: helper.emit,
+    die: helper.exit,
   };
 }
 

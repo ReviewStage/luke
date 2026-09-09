@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
+import { temporaryDirectory } from "#testing/temporary-directory";
 import { arrivalBeatOwed, countsFirstAnnouncement } from "./arrival-flow";
 import { calendarOnboardingOwed } from "./calendar-onboarding-flow";
 import { shouldRunIntroduction } from "./introduction-flow";
@@ -12,10 +13,7 @@ const SIGNED_IN_AT = "2026-08-24T00:00:00.000Z";
 const LATER = "2026-08-24T00:05:00.000Z";
 
 function fileIn(t: TestContext) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "luke-onboarding-"));
-  t.after(() => {
-    fs.rmSync(root, { recursive: true, force: true });
-  });
+  const root = temporaryDirectory(t, "luke-onboarding-");
   return { root, file: onboardingStateFile(() => root) };
 }
 

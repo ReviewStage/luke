@@ -14,7 +14,6 @@ import {
   REALTIME_VOICE_SPEED,
 } from "@sidecar/realtime";
 import { PROVIDER_ID, type WorkspaceAgentSelection } from "@sidecar/session";
-import { VOICE_SOURCE } from "@sidecar/settings";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import {
   ACCOUNT_PROVIDER,
@@ -23,9 +22,10 @@ import {
   SECRET_STORAGE,
 } from "#shared/messages/account";
 import type { AppSettingsView, SettingsUpdateResult } from "#shared/messages/settings";
-import { APP_SETTING_DEFAULTS, appSettingsView, CLI_CONNECTION } from "#shared/messages/settings";
+import { appSettingsView } from "#shared/messages/settings";
 import type { UpdateSnapshot } from "#shared/messages/update";
 import { UPDATE_STATUS } from "#shared/messages/update";
+import { settingsView } from "#testing/settings-fixtures";
 import { appSettingsWire, spokenSettingBridge } from "#testing/spoken-setting-bridge";
 import {
   APP_SETTING_ID,
@@ -35,37 +35,16 @@ import {
 } from "./luke-guide";
 
 function settings(overrides: Partial<AppSettingsView> = {}): AppSettingsView {
-  // Object.assign rather than a spread: spreading a Partial marks every key it
-  // could carry optional, and the result stops being an AppSettingsView.
-  return Object.assign<AppSettingsView, Partial<AppSettingsView>>(
-    {
-      ...APP_SETTING_DEFAULTS,
-      credentialSources: {
-        [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.ENCRYPTED_FILE,
-        [CREDENTIAL_PROVIDER_ID.LINEAR]: CREDENTIAL_SOURCE.NONE,
-        [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
-      },
-      secretStorage: SECRET_STORAGE.UNKNOWN,
-      codexCloudConnection: CLI_CONNECTION.UNKNOWN,
-      showInDock: false,
-      voice: REALTIME_VOICE.CEDAR,
-      voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
-      voiceCaptions: false,
-      duckOtherMedia: true,
-      quietDuringMeetings: true,
-      announceSessions: true,
-      calendarSignInAvailable: false,
-      appleCalendarAvailable: false,
-      linearSignInAvailable: false,
-      calendarAccounts: [],
-      showOnAllDisplays: false,
-      formFactor: PANEL_FORM_FACTOR.BUBBLE,
-      voiceAvailable: true,
-      voiceSource: VOICE_SOURCE.ACCOUNT,
-      preferBuiltInMicrophone: true,
+  return settingsView({
+    credentialSources: {
+      [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.ENCRYPTED_FILE,
+      [CREDENTIAL_PROVIDER_ID.LINEAR]: CREDENTIAL_SOURCE.NONE,
+      [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
     },
-    overrides,
-  );
+    voiceAvailable: true,
+    preferBuiltInMicrophone: true,
+    ...overrides,
+  });
 }
 
 function idleUpdate(upToDate = false): UpdateSnapshot {

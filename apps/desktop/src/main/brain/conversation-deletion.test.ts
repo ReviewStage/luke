@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 import { MessageChannel } from "node:worker_threads";
 import zlib from "node:zlib";
 import {
@@ -40,6 +39,8 @@ import {
   serveRuntimeStore,
 } from "@sidecar/runtime-store";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { drainMicrotasks } from "#testing/drain";
+import { temporaryDirectory } from "#testing/temporary-directory";
 import { ConversationThread } from "../conversation-thread";
 import { operatorOverBrain } from "../gateway/testing";
 import {
@@ -97,10 +98,6 @@ function reply(text: string, ...before: WireRecord[]): ModelResponse {
   return answer;
 }
 
-async function settle(): Promise<void> {
-  for (let index = 0; index < 40; index += 1) await new Promise((resolve) => setImmediate(resolve));
-}
-
 /** The envelope repository as the store client builds it, with a switch that refuses writes. */
 function repository(client: RuntimeStoreClient) {
   const inner = client.brainStateRepository(MAIN_SESSION_KEY);
@@ -115,8 +112,8 @@ function repository(client: RuntimeStoreClient) {
   return repo;
 }
 
-function composed() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "luke-clear-"));
+function composed(t: TestContext) {
+  const root = temporaryDirectory(t, "luke-clear-");
   const channel = new MessageChannel();
   // SAFETY: a MessagePort posts and receives structured-clone values on the same events the port contract names.
   serveRuntimeStore(channel.port2 as unknown as RuntimeStorePort);
@@ -312,7 +309,6 @@ function composed() {
       await client.close();
       channel.port1.close();
       channel.port2.close();
-      fs.rmSync(root, { recursive: true, force: true });
     },
   };
 }
@@ -323,11 +319,11 @@ async function seeded(c: ReturnType<typeof composed>) {
   const client = heldClient();
   const agent = c.build(client);
   const first = await c.submit(agent, OLD_ASK);
-  await settle();
+  await drainMicrotasks(40);
   client.release(
     reply(OLD_REPLY, { type: "compaction", id: "cmp_1", encrypted_content: OLD_COMPACTION }),
   );
-  await settle();
+  await drainMicrotasks(40);
   assert.equal(agent.request(first)?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assert.ok(c.thread.entries().some((entry) => entry.words === OLD_REPLY));
   for (const word of [OLD_ASK, OLD_REPLY, OLD_COMPACTION]) assert.ok(c.rows().includes(word));
@@ -378,13 +374,13 @@ function assertNoneOf(words: readonly string[], surface: string): void {
 }
 
 test("a Clear under a held model answer fences the brain and the thread before any wait, keeps the line accepted after the press, archives what stood, and the next ask sees none of the old words", async (t) => {
-  const c = composed();
+  const c = composed(t);
   t.after(() => c.close());
   const { agent, client } = await seeded(c);
   // A second ask whose answer is still out when the press lands.
   c.tick();
   const late = await c.submit(agent, "second ask");
-  await settle();
+  await drainMicrotasks(40);
   const pressedAt = c.tick();
   const clearing = c.clear();
   // The fences are synchronous: the store already stands on the successor,
@@ -401,7 +397,7 @@ test("a Clear under a held model answer fences the brain and the thread before a
   );
   // The late answer lands on the fenced generation: recorded nowhere.
   client.release(reply(LATE_REPLY));
-  await settle();
+  await drainMicrotasks(40);
   assert.equal(await clearing, CONVERSATION_DELETE_OUTCOME.COMPLETE);
   // The late run went with its generation: revoked, and standing in no record.
   assert.equal(agent.request(late), undefined);
@@ -433,18 +429,18 @@ test("a Clear under a held model answer fences the brain and the thread before a
   assert.equal(content.includes(AFTER_WORDS), false);
   // The same agent works on from the successor: its next ask carries none of the old words.
   const next = await c.submit(agent, "what now");
-  await settle();
+  await drainMicrotasks(40);
   assertNoneOf(OLD_WORDS, client.inputs.at(-1) ?? "");
   assert.ok((client.inputs.at(-1) ?? "").includes(AFTER_WORDS));
   client.release(reply("fresh"));
-  await settle();
+  await drainMicrotasks(40);
   assert.equal(agent.request(next)?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assertNoneOf(OLD_WORDS, c.rows());
   await c.stop(agent);
 });
 
 test("a Clear whose rows the store will not remove answers refused, yet the old words reach no context, no window, and no later launch of the brain", async (t) => {
-  const c = composed();
+  const c = composed(t);
   t.after(() => c.close());
   const { agent, client } = await seeded(c);
   c.refuseErase(true);
@@ -463,23 +459,23 @@ test("a Clear whose rows the store will not remove answers refused, yet the old 
   // The same agent's next ask, and a rebuilt agent's — a credential change
   // landing now — both see none of the old words.
   await c.submit(agent, "again");
-  await settle();
+  await drainMicrotasks(40);
   assertNoneOf(OLD_WORDS, client.inputs.at(-1) ?? "");
   client.release(reply("ok"));
-  await settle();
+  await drainMicrotasks(40);
   await c.stop(agent);
   const rebuiltClient = heldClient();
   const rebuilt = c.build(rebuiltClient);
   await c.submit(rebuilt, "after a rebuild");
-  await settle();
+  await drainMicrotasks(40);
   assertNoneOf(OLD_WORDS, rebuiltClient.inputs.at(-1) ?? "");
   rebuiltClient.release(reply("ok"));
-  await settle();
+  await drainMicrotasks(40);
   await c.stop(rebuilt);
 });
 
 test("a Clear whose marker the disk refuses answers refused without touching the rows, and still fences every context; the next landed write replaces what the disk kept", async (t) => {
-  const c = composed();
+  const c = composed(t);
   t.after(() => c.close());
   const { agent, client } = await seeded(c);
   c.repo.refuse = true;
@@ -495,10 +491,10 @@ test("a Clear whose marker the disk refuses answers refused without touching the
   assert.deepEqual(c.thread.entries(), []);
   c.repo.refuse = false;
   const next = await c.submit(agent, "again");
-  await settle();
+  await drainMicrotasks(40);
   assertNoneOf(OLD_WORDS, client.inputs.at(-1) ?? "");
   client.release(reply("ok"));
-  await settle();
+  await drainMicrotasks(40);
   assert.equal(agent.request(next)?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   // The acceptance's write replaced the old generation on disk with the marker successor.
   assert.equal(c.standing()?.reset_cleared_at, pressedAt);
@@ -507,7 +503,7 @@ test("a Clear whose marker the disk refuses answers refused without touching the
 });
 
 test("a credential rebuild landing while the deletion waits on the disk builds over the successor, never the old checkpoint, and a second Clear during the first is harmless", async (t) => {
-  const c = composed();
+  const c = composed(t);
   t.after(() => c.close());
   const { agent, client } = await seeded(c);
   await c.stop(agent);
@@ -519,10 +515,10 @@ test("a credential rebuild landing while the deletion waits on the disk builds o
   const rebuilt = c.build(rebuiltClient);
   await rebuilt.ready();
   await c.submit(rebuilt, "during the wait");
-  await settle();
+  await drainMicrotasks(40);
   assertNoneOf(OLD_WORDS, rebuiltClient.inputs.at(-1) ?? "");
   rebuiltClient.release(reply("ok"));
-  await settle();
+  await drainMicrotasks(40);
   // A second press while the first still waits: another fence, no harm.
   c.tick();
   const second = c.clear();
@@ -536,7 +532,7 @@ test("a credential rebuild landing while the deletion waits on the disk builds o
 });
 
 test("a Clear whose marker the disk refused, followed by a Clear that lands, archives the lines still on disk under the cutoff the disk held before the press, never the refused press's own fence", async (t) => {
-  const c = composed();
+  const c = composed(t);
   t.after(() => c.close());
   const { agent } = await seeded(c);
   await c.stop(agent);

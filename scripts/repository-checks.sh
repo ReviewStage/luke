@@ -313,6 +313,20 @@ if [[ -n "$drawn_hosted_quota" ]]; then
     exit 1
 fi
 
+# A temporary directory, a microtask drain, a fake clock, a native-helper
+# process and a brain composition were each hand-rolled in several test files,
+# and every copy drifted: three temporary directories were never cleaned up and
+# four drains had settled on four different tick counts for the same wait. The
+# fixtures under apps/desktop/src/testing are the one copy of each, and these
+# two calls are how a hand-rolled one always begins.
+hand_rolled_fixtures=$(grep -rnaE --include='*.test.ts' --include='*.test.tsx' \
+    'mkdtemp|setImmediate' "$SIDECAR_REPO_ROOT/apps/desktop/src" || true)
+if [[ -n "$hand_rolled_fixtures" ]]; then
+    printf 'error: test files import #testing/temporary-directory and #testing/drain rather than hand-rolling them:\n%s\n' \
+        "$hand_rolled_fixtures" >&2
+    exit 1
+fi
+
 # BRIDGE is the one renderer-to-main declaration, and registerBridge is the
 # one place that may attach it to Electron. A handler registered beside its
 # domain logic would bypass the manifest's sender and wire guards.

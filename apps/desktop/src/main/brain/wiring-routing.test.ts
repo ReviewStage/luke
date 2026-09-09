@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 import {
   BRAIN_INPUT_MARKER,
   BRAIN_REQUEST_ORIGIN,
@@ -10,7 +7,6 @@ import {
   BRAIN_TURN_TRIGGER,
   BRAIN_WAKE_KIND,
   type BrainDelivery,
-  type BrainStateStorage,
   brainStateRepositoryFromStorage,
   type ResponsesInputItem,
   responsesModelAnswer,
@@ -34,6 +30,9 @@ import {
   type SessionProvider,
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
+import { MemoryBrainStorage } from "#testing/brain-harness";
+import { drainMicrotasks } from "#testing/drain";
+import { temporaryDirectory } from "#testing/temporary-directory";
 import { type BrainWiring, wireBrain } from "./wiring";
 
 /**
@@ -55,17 +54,6 @@ function session(id: string): Session {
     status: SESSION_STATUS.WORKING,
     lastActivityAt: 1_800_000_000_000,
   });
-}
-
-class MemoryStorage implements BrainStateStorage {
-  file: string | undefined;
-  read() {
-    return this.file;
-  }
-  write(contents: string) {
-    this.file = contents;
-    return true;
-  }
 }
 
 function answer(text: string) {
@@ -106,18 +94,6 @@ function pause(ms: number): Promise<void> {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
-function settle(): Promise<void> {
-  return new Promise((resolve) => {
-    let ticks = 0;
-    const tick = () => {
-      ticks += 1;
-      if (ticks > 60) resolve();
-      else setImmediate(tick);
-    };
-    tick();
-  });
-}
-
 interface Composed {
   wiring: BrainWiring;
   inputs: ResponsesInputItem[][];
@@ -140,7 +116,7 @@ interface Gate {
   release: () => void;
 }
 
-function composed(gate?: Gate): Composed {
+function composed(t: TestContext, gate?: Gate): Composed {
   const inputs: ResponsesInputItem[][] = [];
   const waiting: (() => void)[] = [];
   const client: BareResponsesModel = {
@@ -161,7 +137,7 @@ function composed(gate?: Gate): Composed {
     };
   }
   const model = bareModelAdapter(client);
-  const storages = new Map<SessionKey, MemoryStorage>();
+  const storages = new Map<SessionKey, MemoryBrainStorage>();
   const repositories = new Map<SessionKey, number>();
   const writes = new Map<SessionKey, number>();
   const ensured: Composed["ensured"] = [];
@@ -171,13 +147,13 @@ function composed(gate?: Gate): Composed {
   const roster: Session[] = [session("abc"), session("def")];
   let ids = 0;
   let builds = 0;
-  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "luke-wiring-"));
+  const workspace = temporaryDirectory(t, "luke-wiring-");
   const wiring = wireBrain({
     repositoryFor: (sessionKey) => {
       repositories.set(sessionKey, (repositories.get(sessionKey) ?? 0) + 1);
       let storage = storages.get(sessionKey);
       if (!storage) {
-        storage = new MemoryStorage();
+        storage = new MemoryBrainStorage();
         storages.set(sessionKey, storage);
       }
       const repository = brainStateRepositoryFromStorage(storage);
@@ -277,8 +253,8 @@ function composed(gate?: Gate): Composed {
   };
 }
 
-test("a roster look opens one conversation per observed session, each reading only its own transcript, and main reads notices instead", async () => {
-  const c = composed();
+test("a roster look opens one conversation per observed session, each reading only its own transcript, and main reads notices instead", async (t) => {
+  const c = composed(t);
   await c.wiring.rebuild();
   c.wiring.rosterLook();
   await until(() => c.inputs.length >= 2 && c.wiring.pendingNotices().length === 2);
@@ -322,7 +298,7 @@ test("a roster look opens one conversation per observed session, each reading on
   });
   assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
   await until(() => c.inputs.length >= 3);
-  await settle();
+  await drainMicrotasks(60);
   const mainInput = c.inputs[2] ?? [];
   const mainTexts = itemTexts(mainInput).join("\n");
   assert.ok(mainTexts.includes(BRAIN_INPUT_MARKER.ACTIVITY_NOTICES));
@@ -343,8 +319,8 @@ test("a roster look opens one conversation per observed session, each reading on
   await c.wiring.rebuild();
 });
 
-test("hooks route to the session's own conversation, main is never woken by one, and a held briefing returns to its source", async () => {
-  const c = composed();
+test("hooks route to the session's own conversation, main is never woken by one, and a held briefing returns to its source", async (t) => {
+  const c = composed(t);
   await c.wiring.rebuild();
   const abcKey = observedSessionKey(ABC);
   c.wiring.wake([
@@ -372,7 +348,7 @@ test("hooks route to the session's own conversation, main is never woken by one,
       .map((input) => itemTexts(input).join("\n"))
       .filter((text) => text.includes(BRAIN_INPUT_MARKER.HOLD_RELEASED));
   await until(() => releasesSoFar().length >= 2);
-  await settle();
+  await drainMicrotasks(60);
   const releases = releasesSoFar();
   assert.equal(releases.length, 2);
   assert.ok(releases.some((text) => text.includes("abc finished") && !text.includes("old news")));
@@ -383,8 +359,8 @@ test("hooks route to the session's own conversation, main is never woken by one,
   await c.wiring.rebuild();
 });
 
-test("a held briefing whose source conversation has stood down goes back to that conversation, reopened for it, never to main", async () => {
-  const c = composed();
+test("a held briefing whose source conversation has stood down goes back to that conversation, reopened for it, never to main", async (t) => {
+  const c = composed(t);
   await c.wiring.rebuild();
   const goneKey = observedSessionKey({ providerId: claude.id, providerSessionId: "gone" });
   c.wiring.releaseHeld([
@@ -398,7 +374,7 @@ test("a held briefing whose source conversation has stood down goes back to that
   // The release's turn ends and leaves its notice before anything is judged.
   await until(() => !(c.wiring.current(goneKey)?.busy() ?? true));
   await until(() => c.wiring.pendingNotices().length >= 1);
-  await settle();
+  await drainMicrotasks(60);
   // The source conversation is opened again for the briefing it decided:
   // it, not main, re-decides it, and the briefing is neither dropped nor
   // sent to another session's conversation.
@@ -412,9 +388,9 @@ test("a held briefing whose source conversation has stood down goes back to that
   await c.wiring.rebuild();
 });
 
-test("a session that leaves the roster while its analysis is held keeps its conversation until the analysis ends", async () => {
+test("a session that leaves the roster while its analysis is held keeps its conversation until the analysis ends", async (t) => {
   const gate: Gate = { holds: (texts) => texts.includes(SECRET("abc")), release: () => undefined };
-  const c = composed(gate);
+  const c = composed(t, gate);
   await c.wiring.rebuild();
   const abcKey = observedSessionKey(ABC);
   c.wiring.rosterLook();
@@ -427,7 +403,7 @@ test("a session that leaves the roster while its analysis is held keeps its conv
     1,
   );
   c.wiring.rosterLook();
-  await settle();
+  await drainMicrotasks(60);
   await pause(20);
   // Still standing: an analysis in flight is never cut mid-thought.
   assert.ok(c.wiring.current(abcKey));
@@ -441,8 +417,8 @@ test("a session that leaves the roster while its analysis is held keeps its conv
   await c.wiring.rebuild();
 });
 
-test("a hook for a session whose conversation is standing down waits for the close and builds one store, never a second on the same envelope", async () => {
-  const c = composed();
+test("a hook for a session whose conversation is standing down waits for the close and builds one store, never a second on the same envelope", async (t) => {
+  const c = composed(t);
   await c.wiring.rebuild();
   const abcKey = observedSessionKey(ABC);
   c.wiring.rosterLook();
@@ -466,7 +442,7 @@ test("a hook for a session whose conversation is standing down waits for the clo
     },
   ]);
   await until(() => c.wiring.pendingNotices().length === 3);
-  await settle();
+  await drainMicrotasks(60);
   // One conversation stands for abc, on the second store built for it; the
   // first was let go of before the second was opened.
   assert.ok(c.wiring.current(abcKey));
@@ -475,8 +451,8 @@ test("a hook for a session whose conversation is standing down waits for the clo
   await c.wiring.rebuild();
 });
 
-test("a rebuild landing while a conversation stands down leaves the closing host to its close, and the reopen owns the sole store", async () => {
-  const c = composed();
+test("a rebuild landing while a conversation stands down leaves the closing host to its close, and the reopen owns the sole store", async (t) => {
+  const c = composed(t);
   await c.wiring.rebuild();
   const abcKey = observedSessionKey(ABC);
   c.wiring.rosterLook();
@@ -494,7 +470,7 @@ test("a rebuild landing while a conversation stands down leaves the closing host
   // The rebuild built main's brain and def's, and nothing onto the host the
   // close was about to discard, where no retire could ever reach it; the
   // first envelope took no write after its conversation stood down.
-  await settle();
+  await drainMicrotasks(60);
   assert.equal(c.builds() - buildsBefore, 2);
   assert.equal(c.writes.get(abcKey) ?? 0, writesBefore);
   // Reopened for a hook, the session's conversation stands on a second store
@@ -515,8 +491,8 @@ test("a rebuild landing while a conversation stands down leaves the closing host
   await c.wiring.rebuild();
 });
 
-test("a conversation reopened while it stands down waits for the close and stands on its own new store", async () => {
-  const c = composed();
+test("a conversation reopened while it stands down waits for the close and stands on its own new store", async (t) => {
+  const c = composed(t);
   await c.wiring.rebuild();
   const threadKey = threadSessionKey("t-1");
   await c.wiring.openConversation(threadKey);
@@ -534,8 +510,8 @@ test("a conversation reopened while it stands down waits for the close and stand
   await c.wiring.rebuild();
 });
 
-test("two opens of one key landing in the same tick, a hook and a held briefing, build one store and list the conversation once", async () => {
-  const c = composed();
+test("two opens of one key landing in the same tick, a hook and a held briefing, build one store and list the conversation once", async (t) => {
+  const c = composed(t);
   await c.wiring.rebuild();
   const abcKey = observedSessionKey(ABC);
   assert.equal(c.repositories.get(abcKey), undefined);
@@ -565,19 +541,19 @@ test("two opens of one key landing in the same tick, a hook and a held briefing,
   await c.wiring.rebuild();
 });
 
-test("a heartbeat settles only when its turn has, so a scheduler's tick is over when its work is", async () => {
+test("a heartbeat settles only when its turn has, so a scheduler's tick is over when its work is", async (t) => {
   const gate: Gate = {
     holds: (texts) => texts.includes(BRAIN_INPUT_MARKER.HEARTBEAT),
     release: () => undefined,
   };
-  const c = composed(gate);
+  const c = composed(t, gate);
   await c.wiring.rebuild();
   let settled = false;
   const tick = c.wiring.heartbeat().then(() => {
     settled = true;
   });
   await until(() => c.inputs.length >= 1);
-  await settle();
+  await drainMicrotasks(60);
   // The review is under way and the tick still open.
   assert.equal(settled, false);
   gate.release();
@@ -587,9 +563,9 @@ test("a heartbeat settles only when its turn has, so a scheduler's tick is over 
   await c.wiring.rebuild();
 });
 
-test("one observed conversation waiting on its model neither blocks another nor main", async () => {
+test("one observed conversation waiting on its model neither blocks another nor main", async (t) => {
   const gate: Gate = { holds: (texts) => texts.includes(SECRET("def")), release: () => undefined };
-  const c = composed(gate);
+  const c = composed(t, gate);
   await c.wiring.rebuild();
   c.wiring.rosterLook();
   await until(() => c.inputs.length >= 2 && c.wiring.pendingNotices().length === 1);

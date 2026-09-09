@@ -21,6 +21,7 @@ import {
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import type { BrainAppActRequest } from "#shared/messages/brain";
+import { drainMicrotasks } from "#testing/drain";
 import { type BrainActPerformerDependencies, createBrainActPerformer } from "./act-performer";
 
 const NOW = 1_800_000_000_000;
@@ -235,7 +236,7 @@ test("two conversations remembering at once both land: each write is one whole r
       remember: async (ask) => {
         // The worker answers one request at a time; a beat's delay here shows
         // the performer never reads the list, computes, and writes it back.
-        await new Promise((resolve) => setImmediate(resolve));
+        await drainMicrotasks(1);
         facts = [...facts, { id: ask.id, words: ask.words }];
         return true;
       },
@@ -472,14 +473,14 @@ test("a cancel during the roster refresh or the defaults read settles the act, a
     void pending.then(() => {
       settled = true;
     });
-    await new Promise((resolve) => setImmediate(resolve));
+    await drainMicrotasks(1);
     assert.equal(settled, false);
     controller.abort();
     const outcome = await pending;
     assert.equal(outcome.status, ACT_RESULT_STATUS.REJECTED);
     assert.deepEqual(h.performed, []);
     release?.();
-    await new Promise((resolve) => setImmediate(resolve));
+    await drainMicrotasks(1);
     assert.deepEqual(h.performed, [], `${held}: the late read dispatched nothing`);
     assert.deepEqual(h.recorded, []);
   }

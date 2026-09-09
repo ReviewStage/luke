@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { fakeNativeHelper } from "#testing/native-helper";
 import { type TalkKeyWatch, talkKeyWatcher } from "./talk-key";
 
 interface Harness {
@@ -14,30 +15,12 @@ interface Harness {
 function harness(): Harness {
   const edges: string[] = [];
   const candidates: string[][] = [];
-  let killed = false;
-  let onData: ((chunk: string) => void) | undefined;
-  const exits: (() => void)[] = [];
+  const helper = fakeNativeHelper();
 
   const watcher = talkKeyWatcher({
     spawnHelper: (requested) => {
       candidates.push([...requested]);
-      return {
-        stdout: {
-          setEncoding: () => undefined,
-          on: (_event, listener) => {
-            onData = listener;
-          },
-        },
-        on: (event, listener) => {
-          if (event === "exit") exits.push(listener);
-        },
-        removeAllListeners: () => {
-          exits.length = 0;
-        },
-        kill: () => {
-          killed = true;
-        },
-      };
+      return helper.process;
     },
     onPress: () => edges.push("press"),
     onRelease: () => edges.push("release"),
@@ -49,11 +32,9 @@ function harness(): Harness {
     watcher,
     edges,
     candidates,
-    killed: () => killed,
-    emit: (chunk) => onData?.(chunk),
-    die: () => {
-      for (const exit of [...exits]) exit();
-    },
+    killed: helper.killed,
+    emit: helper.emit,
+    die: helper.exit,
   };
 }
 

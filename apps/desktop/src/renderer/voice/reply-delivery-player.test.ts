@@ -3,6 +3,7 @@ import test from "node:test";
 import { BRAIN_REQUEST_ORIGIN, type BrainRequestOrigin } from "@sidecar/brain/requests";
 import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
 import type { BrainReplyClaimResult, BrainReplyOffer } from "#shared/messages/brain";
+import { drainMicrotasks } from "#testing/drain";
 import { ReplyDeliveryPlayer } from "./reply-delivery-player";
 
 interface Harness {
@@ -85,8 +86,6 @@ function harness(): Harness {
   };
 }
 
-const tick = () => new Promise((resolve) => setImmediate(resolve));
-
 function granted(
   words: string,
   origin: BrainRequestOrigin = BRAIN_REQUEST_ORIGIN.TYPED,
@@ -99,10 +98,10 @@ test("an offer is claimed, the call opened, the words spoken once, and acknowled
   h.player.offer(offer("run-1"));
   assert.deepEqual(h.log, ["claim run-1@1"]);
   h.grant(granted("Two agents are waiting."));
-  await tick();
+  await drainMicrotasks(1);
   assert.deepEqual(h.log.slice(1), ["connect"]);
   h.connected(true);
-  await tick();
+  await drainMicrotasks(1);
   assert.deepEqual(h.log.slice(2), ["speak run-1: Two agents are waiting.", "speaking typed"]);
   assert.equal(h.player.active?.runId, "run-1");
   // The same offer again is the same offer; another run's ending is not this one's.
@@ -121,7 +120,7 @@ test("a Clear while the claim is out leaves the granted words unspoken, unshown,
   h.generation.current += 1;
   h.player.withdraw();
   h.grant(granted("Old words."));
-  await tick();
+  await drainMicrotasks(1);
   assert.deepEqual(h.log, ["claim run-1@1"]);
   assert.equal(h.player.pending, undefined);
   assert.equal(h.player.active, undefined);
@@ -131,12 +130,12 @@ test("a withdrawn generation while the call is opening leaves the words unspoken
   const h = harness();
   h.player.offer(offer("run-1"));
   h.grant(granted("Old words."));
-  await tick();
+  await drainMicrotasks(1);
   assert.deepEqual(h.log, ["claim run-1@1", "connect"]);
   // The generation ends — expiry, or a Clear from a panel — mid-connect.
   h.player.withdraw();
   h.connected(true);
-  await tick();
+  await drainMicrotasks(1);
   assert.deepEqual(h.log, ["claim run-1@1", "connect"]);
   // A new offer, of the new generation, is claimed afresh.
   h.player.offer(offer("run-2", 1));
@@ -148,7 +147,7 @@ test("a newer offer arriving during a claim retires the older attempt without sp
   h.player.offer(offer("run-1"));
   h.player.offer(offer("run-2"));
   h.grant(granted("First."));
-  await tick();
+  await drainMicrotasks(1);
   // The first grant is not spoken; the pending offer is now the second, claimed next.
   assert.deepEqual(h.log, ["claim run-1@1", "claim run-2@1"]);
 });
@@ -157,7 +156,7 @@ test("a refused claim empties the hand with nothing said", async () => {
   const h = harness();
   h.player.offer(offer("run-1"));
   h.grant({ granted: false });
-  await tick();
+  await drainMicrotasks(1);
   assert.deepEqual(h.log, ["claim run-1@1"]);
   assert.equal(h.player.pending, undefined);
 });
@@ -167,9 +166,9 @@ test("words the voice cannot say are shown once and acknowledged at once", async
   h.session.speaks = false;
   h.player.offer(offer("run-1"));
   h.grant(granted("Two agents are waiting."));
-  await tick();
+  await drainMicrotasks(1);
   h.connected(true);
-  await tick();
+  await drainMicrotasks(1);
   assert.deepEqual(h.log.slice(2), [
     "speak run-1: Two agents are waiting.",
     "notice Two agents are waiting.",
@@ -193,7 +192,7 @@ test("an offer waits for a quiet moment: not while the developer talks or a repl
   h.player.onStatus(REALTIME_STATUS.READY);
   assert.deepEqual(h.log, ["claim run-1@1"]);
   h.grant(granted("Now."));
-  await tick();
+  await drainMicrotasks(1);
   assert.deepEqual(h.log.slice(1), ["speak run-1: Now.", "speaking typed"]);
 });
 
@@ -201,9 +200,9 @@ test("the call ending under a delivered reply acknowledges it, so the next may b
   const h = harness();
   h.player.offer(offer("run-1"));
   h.grant(granted("Words."));
-  await tick();
+  await drainMicrotasks(1);
   h.connected(true);
-  await tick();
+  await drainMicrotasks(1);
   assert.equal(h.player.active?.runId, "run-1");
   h.session.status = REALTIME_STATUS.FAILED;
   h.player.onStatus(REALTIME_STATUS.FAILED);
@@ -215,9 +214,9 @@ test("a withdrawal while a delivered reply plays acknowledges nothing: the main 
   const h = harness();
   h.player.offer(offer("run-1"));
   h.grant(granted("Words."));
-  await tick();
+  await drainMicrotasks(1);
   h.connected(true);
-  await tick();
+  await drainMicrotasks(1);
   h.player.withdraw();
   h.player.onReplyEnded("run-1");
   assert.equal(h.log.filter((line) => line.startsWith("ack")).length, 0);
@@ -227,9 +226,9 @@ test("a delivered reply carries the origin of the ask it answers, so only a type
   const h = harness();
   h.player.offer(offer("run-s"));
   h.grant(granted("Later.", BRAIN_REQUEST_ORIGIN.SPOKEN));
-  await tick();
+  await drainMicrotasks(1);
   h.connected(true);
-  await tick();
+  await drainMicrotasks(1);
   assert.deepEqual(h.log.slice(2), ["speak run-s: Later.", "speaking spoken"]);
 });
 
@@ -244,16 +243,16 @@ test("a grant landing after the developer took the turn is held, not spoken over
   h.session.status = REALTIME_STATUS.LISTENING;
   h.player.onStatus(REALTIME_STATUS.LISTENING);
   h.grant(granted("Held words."));
-  await tick();
+  await drainMicrotasks(1);
   assert.deepEqual(h.log, ["claim run-1@1"]);
   h.session.status = REALTIME_STATUS.RESPONDING;
   h.player.onStatus(REALTIME_STATUS.RESPONDING);
-  await tick();
+  await drainMicrotasks(1);
   assert.deepEqual(h.log, ["claim run-1@1"]);
   // Their reply ends: the held grant is spoken, with no second claim.
   h.session.status = REALTIME_STATUS.READY;
   h.player.onStatus(REALTIME_STATUS.READY);
-  await tick();
+  await drainMicrotasks(1);
   assert.deepEqual(h.log.slice(1), ["speak run-1: Held words.", "speaking typed"]);
   assert.equal(h.player.active?.runId, "run-1");
 });
@@ -262,17 +261,17 @@ test("a grant whose call opened into the developer's turn is held through the co
   const h = harness();
   h.player.offer(offer("run-1"));
   h.grant(granted("Held words."));
-  await tick();
+  await drainMicrotasks(1);
   assert.deepEqual(h.log, ["claim run-1@1", "connect"]);
   // The call opens, but the developer is already talking on it.
   h.connected(true);
   h.session.status = REALTIME_STATUS.LISTENING;
-  await tick();
+  await drainMicrotasks(1);
   assert.deepEqual(h.log, ["claim run-1@1", "connect"]);
   h.player.onStatus(REALTIME_STATUS.RESPONDING);
   h.session.status = REALTIME_STATUS.READY;
   h.player.onStatus(REALTIME_STATUS.READY);
-  await tick();
+  await drainMicrotasks(1);
   assert.deepEqual(h.log.slice(2), ["speak run-1: Held words.", "speaking typed"]);
   assert.equal(h.log.filter((line) => line.startsWith("claim")).length, 1);
 });
@@ -286,10 +285,10 @@ test("a held grant is voided by a withdrawal: the next quiet status speaks nothi
   h.session.status = REALTIME_STATUS.RESPONDING;
   h.player.onStatus(REALTIME_STATUS.RESPONDING);
   h.grant(granted("Held words."));
-  await tick();
+  await drainMicrotasks(1);
   h.player.withdraw();
   h.session.status = REALTIME_STATUS.READY;
   h.player.onStatus(REALTIME_STATUS.READY);
-  await tick();
+  await drainMicrotasks(1);
   assert.deepEqual(h.log, ["claim run-1@1"]);
 });
