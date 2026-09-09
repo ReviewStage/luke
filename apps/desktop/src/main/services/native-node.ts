@@ -5,10 +5,10 @@ import { systemPreferences } from "electron";
 import { channels } from "#shared/bridge";
 import {
   MICROPHONE_STATUS,
-  type MicrophoneRoute,
   type MicrophoneStatus,
   type OutputAudioState,
 } from "#shared/messages/audio";
+import type { AppAudioSlice, AppStateStore } from "../app-state";
 import { runAppleCalendarHelper } from "../native/apple-calendar-helper";
 import { MediaDuckController } from "../native/media-duck";
 import {
@@ -31,7 +31,6 @@ const BRAIN_APP_ACT_TIMEOUT_MS = 10_000;
 
 /** What this machine's devices reach in the windows that draw for them. */
 export interface NativeNodeLinks {
-  broadcast: <Payload>(channel: string, payload: Payload) => void;
   /** The one window an app act is carried to; none open is a refusal, not a wait. */
   sendToPrimaryPanel: (channel: string, payload: BrainAppActRequest) => boolean;
 }
@@ -46,15 +45,24 @@ export interface NativeNodeCapabilities {
   ) => Promise<string>;
 }
 
+export interface NativeNodeDependencies {
+  config: DesktopConfig;
+  /** Where what these devices answer is written; the windows are told from it. */
+  state: AppStateStore;
+}
+
 export interface NativeNode extends DesktopService {
   link: (links: NativeNodeLinks) => void;
   readonly capabilities: NativeNodeCapabilities;
   readonly mediaDuck: MediaDuckController;
   setMediaDuckEnabled: (enabled: boolean) => void;
-  microphoneStatus: () => MicrophoneStatus;
+  /**
+   * Reads macOS's own answer now and writes it to the document. The
+   * permission is the system's to move, and it moves while Luke runs, so
+   * every reader takes it afresh rather than trusting what was written last.
+   */
+  refreshMicrophoneStatus: () => MicrophoneStatus;
   requestMicrophone: () => Promise<MicrophoneStatus>;
-  outputAudio: () => OutputAudioState | undefined;
-  microphoneRoute: () => MicrophoneRoute | undefined;
   microphoneRouteWatcher: () => MicrophoneRouteWatch | undefined;
   /** The panel's answer to an act it was carried, matched to the ask that is waiting. */
   answerAppAct: (requestId: string, answer: WireRecord) => void;
@@ -74,19 +82,29 @@ export interface NativeNode extends DesktopService {
  * where the developer would be heard from. None of it reads audio, and none
  * of it writes a device beyond the one duck.
  */
-export function createNativeNode(config: DesktopConfig): NativeNode {
+export function createNativeNode(dependencies: NativeNodeDependencies): NativeNode {
+  const { config, state } = dependencies;
   const links: LateRef<NativeNodeLinks> = lateRef("the native node's links");
   const mediaDuck = new MediaDuckController();
   const pendingAppActs = new Map<string, (answer: WireRecord) => void>();
-  let outputAudio: OutputAudioState | undefined;
   let outputVolumeWatcher: OutputVolumeWatch | undefined;
-  let microphoneRoute: MicrophoneRoute | undefined;
   let microphoneRouteWatcher: MicrophoneRouteWatch | undefined;
 
-  function microphoneStatus(): MicrophoneStatus {
+  /** One write of what this machine's own devices answer, into the one document. */
+  function writeAudio(patch: Partial<AppAudioSlice>): void {
+    state.update({ audio: { ...state.snapshot().audio, ...patch } });
+  }
+
+  function readMicrophoneStatus(): MicrophoneStatus {
     if (config.platform !== "darwin") return MICROPHONE_STATUS.GRANTED;
     // SAFETY: MicrophoneStatus mirrors Electron's documented media-access status union.
     return systemPreferences.getMediaAccessStatus("microphone") as MicrophoneStatus;
+  }
+
+  function refreshMicrophoneStatus(): MicrophoneStatus {
+    const status = readMicrophoneStatus();
+    writeAudio({ microphoneStatus: status });
+    return status;
   }
 
   function performAppAct(action: BrainAppActRequest["action"]): Promise<WireRecord> {
@@ -131,26 +149,22 @@ export function createNativeNode(config: DesktopConfig): NativeNode {
     },
     mediaDuck,
     setMediaDuckEnabled: (enabled) => mediaDuck.setEnabled(enabled),
-    microphoneStatus,
+    refreshMicrophoneStatus,
     requestMicrophone: async () => {
       if (config.platform !== "darwin") return MICROPHONE_STATUS.GRANTED;
-      if (microphoneStatus() === MICROPHONE_STATUS.NOT_DETERMINED) {
+      if (refreshMicrophoneStatus() === MICROPHONE_STATUS.NOT_DETERMINED) {
         await systemPreferences.askForMediaAccess("microphone");
       }
-      const status = microphoneStatus();
-      links.get().broadcast(channels.onMicrophoneStatusChanged, status);
-      return status;
+      return refreshMicrophoneStatus();
     },
-    outputAudio: () => outputAudio,
-    microphoneRoute: () => microphoneRoute,
     microphoneRouteWatcher: () => microphoneRouteWatcher,
     answerAppAct: (requestId, answer) => pendingAppActs.get(requestId)?.(answer),
     refusePendingActs,
     start: async () => {
+      refreshMicrophoneStatus();
       if (!config.runMode.observesProviders) return;
-      const send = (state: OutputAudioState | undefined) => {
-        outputAudio = state;
-        links.get().broadcast(channels.onOutputAudioChanged, state);
+      const send = (output: OutputAudioState | undefined) => {
+        writeAudio({ outputAudio: output });
       };
       outputVolumeWatcher = createOutputVolumeWatcher({
         onState: send,
@@ -159,10 +173,10 @@ export function createNativeNode(config: DesktopConfig): NativeNode {
       if (!outputVolumeWatcher.start()) outputVolumeWatcher = undefined;
       microphoneRouteWatcher = createMicrophoneRouteWatcher({
         onRoute: (route) => {
-          microphoneRoute = route;
+          writeAudio({ microphoneRoute: route });
         },
         onUnavailable: () => {
-          microphoneRoute = undefined;
+          writeAudio({ microphoneRoute: undefined });
         },
       });
       if (!microphoneRouteWatcher.start()) microphoneRouteWatcher = undefined;

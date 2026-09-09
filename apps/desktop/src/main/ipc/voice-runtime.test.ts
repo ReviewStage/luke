@@ -1,11 +1,12 @@
 /* oxlint-disable anti-slop/no-unknown-returns -- Fake Electron listeners deliberately retain the IPC boundary shape. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { VoiceReceiver } from "@sidecar/host";
+import { runModeFor, VoiceReceiver } from "@sidecar/host";
 import type { WireRecord } from "@sidecar/wire";
 import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import { BRIDGE, channels } from "#shared/bridge";
 import { VOICE_COMMAND, VOICE_COMMAND_OUTCOME } from "#shared/messages/voice-view";
+import { AppStateStore, initialAppState } from "../app-state";
 import type { PanelManager } from "../window/panel-manager";
 import { registerVoiceRuntimeIpc, type VoiceWindowSurface } from "./voice-runtime";
 
@@ -14,6 +15,23 @@ import { registerVoiceRuntimeIpc, type VoiceWindowSurface } from "./voice-runtim
  * window must be told at the fence, before the disk answers, and the panel
  * must hear the disk's answer and nothing sooner.
  */
+
+/** What the document is composed from; the Clear path reads none of it. */
+const RUN = {
+  launch: {
+    captureOutput: undefined,
+    profile: "idle",
+    fixtureName: undefined,
+    startPeeked: false,
+    startInSlot: false,
+    captureMode: false,
+    fixtureMode: false,
+  },
+  runMode: runModeFor({ capture: false, fixture: true }),
+  appVersion: "0.0.0",
+  packaged: false,
+  platform: "darwin",
+} as const;
 
 function fixture(clearConversation: () => Promise<boolean>) {
   const invokes = new Map<string, (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown>();
@@ -53,14 +71,13 @@ function fixture(clearConversation: () => Promise<boolean>) {
     panels,
     voiceWindow,
     receiver,
-    broadcast: () => undefined,
+    state: new AppStateStore(initialAppState(RUN, false)),
     openExternal: async () => undefined,
     mintRealtimeCredential: async () => undefined,
     // SAFETY: the Clear path never reads diagnostics; an inert record stands in for a minter's.
     realtimeDiagnostics: async () => ({}) as never,
     recordProductEvent: () => undefined,
     recordAgentTrace: () => undefined,
-    storeVoiceView: () => undefined,
     clearConversation,
     setShortcutCapturing: () => undefined,
   });

@@ -114,6 +114,18 @@ export interface UpdaterEngine {
   clearCachedUpdate(): Promise<void>;
 }
 
+/**
+ * Where the updater stands before it has learned anything: what the row
+ * draws at launch, and what the app state document begins with, from the one
+ * definition rather than two that have to agree.
+ */
+export function idleUpdateSnapshot(
+  currentVersion: string,
+  installSupported: boolean,
+): Extract<UpdateSnapshot, { status: typeof UPDATE_STATUS.IDLE }> {
+  return { status: UPDATE_STATUS.IDLE, currentVersion, installSupported, upToDate: false };
+}
+
 /** Where the last-run version is kept between launches, for the `updated` confirmation. */
 export interface LastRunVersionStore {
   read(): string | undefined;
@@ -397,7 +409,7 @@ export class UpdateService {
   }
 
   #idle(upToDate: boolean): UpdateSnapshot {
-    return { ...this.#base(UPDATE_STATUS.IDLE), upToDate };
+    return { ...idleUpdateSnapshot(this.#currentVersion, this.#engine !== undefined), upToDate };
   }
 
   #move(snapshot: UpdateSnapshot): void {

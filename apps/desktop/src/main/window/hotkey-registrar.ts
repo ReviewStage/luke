@@ -54,7 +54,18 @@ export interface HotkeyHost {
   /** How the panel stands now, so a key that summons into an open one knows. */
   modeFor(displayId: number): WindowMode;
   setMode(displayId: number, mode: WindowMode, requestFocus: boolean): void;
-  broadcast(channel: string, payload: UnparsedWireValue): void;
+  /**
+   * One key's registration moved, so what the renderers are teaching is
+   * written again. The raw accelerator is what travels, as in bootstrap: the
+   * renderer draws the chord as its separate keys and says it as one word,
+   * and only the accelerator produces both. An absence travels too, for the
+   * guide's sake: a chord that answers nothing must not be one Luke claims
+   * to have. Announced per rank rather than as the three together, because
+   * the talk key's own reapply leaves it unregistered while its helper
+   * starts: a whole-set announcement would tell every panel the chord had
+   * gone and tell it back a moment later.
+   */
+  hotkeyChanged(rank: HotkeyRank): void;
 }
 
 export interface HotkeyRegistrarOptions {
@@ -85,9 +96,6 @@ interface KeyState {
     taken: readonly (string | undefined)[],
   ) => readonly string[];
   readonly onPress: () => void;
-  readonly changedChannel: string;
-  /** A thunk, because the talk key's payload carries `#held`, which moves. */
-  readonly changedPayload: () => UnparsedWireValue;
   /**
    * The stored choice: a chord, the none token for a key deleted outright, or
    * absent while the defaults stand. The token needs no reading here — it
@@ -155,11 +163,6 @@ export class HotkeyRegistrar {
             // ends a turn.
             this.#sendTo(this.#voiceHostContents(), channels.onVoiceHotkeyRelease);
           },
-          changedChannel: channels.onVoiceHotkeyChanged,
-          changedPayload: () => ({
-            ...(this.talk ? { hotkey: this.talk } : undefined),
-            held: this.#held,
-          }),
           chosen: undefined,
           accelerator: undefined,
         },
@@ -169,8 +172,6 @@ export class HotkeyRegistrar {
         {
           candidates: askHotkeyCandidates,
           onPress: () => this.#summonAskField(),
-          changedChannel: channels.onAskHotkeyChanged,
-          changedPayload: () => this.ask,
           chosen: undefined,
           accelerator: undefined,
         },
@@ -180,8 +181,6 @@ export class HotkeyRegistrar {
         {
           candidates: stopHotkeyCandidates,
           onPress: () => this.#sendPress(channels.onStopHotkeyPress),
-          changedChannel: channels.onStopHotkeyChanged,
-          changedPayload: () => this.stop,
           chosen: undefined,
           accelerator: undefined,
         },
@@ -258,7 +257,7 @@ export class HotkeyRegistrar {
       // answers: the helper announces its own registration over stdout, and
       // every path without a helper is decided by the time `#register` returns.
       if (rank === HOTKEY_RANK.TALK && this.#talkKeyWatcher) continue;
-      this.#send(rank);
+      this.#host.hotkeyChanged(rank);
     }
   }
 
@@ -396,28 +395,16 @@ export class HotkeyRegistrar {
       onRelease: () => this.#sendTo(this.#voiceHostContents(), channels.onVoiceHotkeyRelease),
       onRegistered: (accelerator) => {
         state.accelerator = accelerator;
-        this.#send(HOTKEY_RANK.TALK);
+        this.#host.hotkeyChanged(HOTKEY_RANK.TALK);
       },
       onUnavailable: () => {
         this.#talkKeyWatcher = undefined;
         this.#registerWithElectron(HOTKEY_RANK.TALK);
-        this.#send(HOTKEY_RANK.TALK);
+        this.#host.hotkeyChanged(HOTKEY_RANK.TALK);
       },
     });
     if (this.#talkKeyWatcher.start(candidates)) return true;
     this.#talkKeyWatcher = undefined;
     return false;
-  }
-
-  /**
-   * Tells every renderer the key it should be teaching. The raw accelerator
-   * travels, as in bootstrap: the renderer draws the chord as its separate keys
-   * and says it as one word, and only the accelerator produces both. An absence
-   * travels too, for the guide's sake: a chord that answers nothing must not be
-   * one Luke claims to have.
-   */
-  #send(rank: HotkeyRank): void {
-    const state = this.#key(rank);
-    this.#host.broadcast(state.changedChannel, state.changedPayload());
   }
 }
