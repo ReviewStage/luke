@@ -302,10 +302,25 @@ copy from our database while the keys on this Mac stay; deleting a key
 deletes its synced copy too, and signed out nothing is ever synced. We store a synced key encrypted in our own
 database using AES-256-GCM with a server-only secret. The key is never
 returned to any caller: there is no endpoint that reads it back, and no code
-path that decrypts it for any purpose other than the observation or actions you
-explicitly request through that provider. The server-side use of these keys
-ships as a separate feature; this describes only the storage. Every synced key
-is deleted alongside your account if you delete that.
+path that decrypts it for any purpose other than observing your sessions or
+carrying the actions you explicitly request through that provider. Every
+synced key is deleted alongside your account if you delete that.
+
+**Scheduled observation of your Conductor sessions.** While you hold a synced
+Conductor key and have signed in within the last 7 days, our service reads
+your Conductor sessions on its own schedule, about once a minute, the same
+read-only pass the iOS app used to ask for on demand: your open workspaces,
+their chats, each chat's status, the agent kind running it, and the error
+line it stopped on. It never reads a chat's messages. We keep the latest
+roster it read, encrypted at rest with the same server-only secret as your
+keys, and beside it what changed since the pass before — a session that
+appeared or vanished, a status that moved, an error line that changed — so
+the phone and watch can show your sessions without asking Conductor again,
+and so Luke can later be woken by a change rather than by a clock. The
+roster and its changes are replaced on every pass; nothing older is kept.
+Observation stops, and the stored roster and changes are deleted, when you
+delete the synced key, when you have not signed in for 7 days, and alongside
+your account if you delete that.
 
 **Devices.** When you sign in on the Mac app, the iOS app, or the Apple Watch
 app, that installation registers itself with our service as one device row.
@@ -380,6 +395,8 @@ and email you signed it with, and any screenshots you attached.
   account access you supply. The synced-key vault holds Conductor keys only.
   Luke reads your sessions or issues, and sends something back
   only when you ask it to, such as a message you wrote or an issue you moved.
+  With a synced Conductor key, our service also reads your Conductor sessions
+  about once a minute on the schedule described above, under that key.
   If you open a Conductor session's screen in the iOS app, our service also
   reads that session's conversation from Conductor — your own messages and the
   agent's replies, not its tool activity — using the key you synced, and
@@ -418,8 +435,9 @@ Your settings, your conversation with Luke, his working memory, his workspace
 files, the things he remembers about you, local provider API keys, and
 calendar access stay on your Mac.
 Local keys and calendar access are encrypted in the macOS Keychain. Provider
-API keys you sync to the hosted service are stored encrypted in our own
-database, as described above. Your account information is held by our own
+API keys you sync to the hosted service, and the latest roster of your
+Conductor sessions with what changed since the pass before, are stored
+encrypted in our own database, as described above. Your account information is held by our own
 service, usage counts and recordings by PostHog, and crash reports by Sentry.
 
 ## Your choices

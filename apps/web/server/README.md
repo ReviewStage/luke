@@ -254,9 +254,11 @@ conversation per account: the conversation directory, the standing generation
 with its checkpoint items, cursors, inbox, runs, and action receipts, the
 conversation lines, the retained transcript and its compaction boundaries, the
 identity workspace and daily notes, the remembered facts, the latest roster
-snapshot, and the briefings. Every row is keyed by `user_id` and cascades with
-the user row, so `api/account/delete.ts` erases them with the account. No route
-reads or writes them yet; `server/hosted/store/` is the store the brain host
+snapshot with its diffs and pass record, and the briefings. Every row is
+keyed by `user_id` and cascades with the user row, so `api/account/delete.ts`
+erases them with the account. The roster tables are read and written by the
+scheduled observation below and the routes that serve it; nothing reads the
+conversation tables yet. `server/hosted/store/` is the store the brain host
 will compose against, implementing the storage contracts the desktop's SQLite
 store implements under `packages/brain/src/store`.
 
@@ -288,6 +290,61 @@ Postgres of your own:
 DATABASE_URL_UNPOOLED=postgresql://... pnpm --filter @luke/web db:migrate
 LUKE_STORE_TEST_DATABASE_URL=postgresql://... pnpm --filter @luke/web test:store
 ```
+
+## Scheduled Conductor observation
+
+`api/observation/tick.ts` is what Vercel's cron calls: `vercel.json` schedules
+it every minute (`* * * * *`) and gives it a 60-second function duration. The
+logic lives in `server/hosted/observation-tick.ts` and
+`server/hosted/observation-pass.ts`; the route hands them the deployment's
+seams and the account query. Vercel crons run only on production deployments.
+
+The tick needs `CRON_SECRET`, which Vercel sends as the bearer on every
+scheduled call once it is set in the project. Without it the route answers
+503 and the schedule is simply off, the same kill switch every other hosted
+endpoint keeps; a wrong bearer is 401, compared in constant time. It also
+needs `PROVIDER_KEY_ENCRYPTION_SECRET`, because a tick that cannot read a key
+must not run at all: a pass that read nothing would be written down as an
+account with nothing.
+
+Each tick first drops the snapshot, diffs, and pass record of every account
+that no longer holds a cloud provider key or has not been seen within the
+last 7 days, then lists up to 200 accounts that hold one and were seen —
+seen meaning a hosted bearer was minted for them, read as the latest
+`oauth_access_token` row's `created_at`, since every desktop and phone token
+is one and a refresh mints another; the devices table's `last_seen_at`
+replaces this once it lands — in order of their last attempted pass, never
+attempted first, so a provider that keeps refusing one account cannot starve
+the rest. It observes four accounts at a time inside a 50-second budget,
+starting a batch only while a whole 25-second pass deadline still fits, and
+counts a pass that outruns that deadline as failed rather than waiting on it;
+it answers `exhausted: true` when accounts remained, leaving them for the
+next minute.
+
+One account's pass is the same read-only Conductor fan-out the on-demand
+endpoint ran before — identity, projects, the user's open workspaces, each
+workspace's lifecycle and chats, each chat's status, one fixed query for agent
+kinds — on a plugin built for that pass alone under the account's decrypted
+key. The adapter retries a 429 on a doubling wait (500 ms, then 1, 2, 4
+seconds, or the provider's own `Retry-After` up to 8 seconds) out of one
+20-second budget per pass; past it the pass is rate limited and ends. A pass
+every provider answered whole replaces the account's `roster_snapshot` — the
+observations as reported, advertisements and projects included, sealed — and
+records the diff against the snapshot it replaced in `roster_diff`, sealed,
+where up to 20 wait for the brain host to consume; a pass any provider
+refused, rate limited, or failed leaves the previous snapshot standing and is
+recorded as failed in `observation_pass`. Nothing here decides anything: no
+model runs on the tick, no notification leaves, and the diff is written and
+left. Message cursors are not recorded by the pass, because observation never
+reads a chat's messages; the brain host's own reads will write them.
+
+`api/observe.ts` answers the stored snapshot, mapped onto the wire rows and
+dated with `observedAt`; a user with no snapshot yet is answered from a live
+pass that seeds one, and `?fresh=true` asks the provider again under the
+endpoint's per-user rate brake. The action routes under `api/actions/` admit
+each ask against the same stored snapshot instead of running a pass, seeding
+one the same way for a user who has none. `api/sessions/messages.ts` is
+unchanged and still runs its own fresh pass before the read.
 
 ## Devices
 

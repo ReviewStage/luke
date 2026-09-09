@@ -1,8 +1,7 @@
-import type { SessionProviderPlugin } from "@sidecar/session";
 import { WORKSPACE_TASK_SUPPORT } from "@sidecar/session";
 import type { CloudFetch } from "@sidecar/wire";
 import type { AdapterDiagnosticCallback } from "../shared/adapter-diagnostics.js";
-import { cloudPass } from "../shared/cloud-pass.js";
+import { type CloudSessionPlugin, cloudPass } from "../shared/cloud-pass.js";
 import { conductorActions } from "./actions.js";
 import {
   conductorConversationEnds,
@@ -22,6 +21,7 @@ export interface ConductorPluginOptions {
   fetch?: CloudFetch;
   now?: () => number;
   minimumRefreshIntervalMs?: number;
+  sleep?: (ms: number) => Promise<void>;
   onDiagnostic?: AdapterDiagnosticCallback;
 }
 
@@ -44,7 +44,7 @@ export interface ConductorPluginOptions {
  * `transcriptSince` read stays unanswered, so an observation pass judges a
  * cloud chat from what Conductor reports about it.
  */
-export function conductorPlugin(options: ConductorPluginOptions): SessionProviderPlugin {
+export function conductorPlugin(options: ConductorPluginOptions): CloudSessionPlugin {
   /**
    * What the identity read learned and the projects the latest pass listed.
    * A creation ask is honoured only against these, so it can never name a
@@ -72,6 +72,7 @@ export function conductorPlugin(options: ConductorPluginOptions): SessionProvide
     provider: CONDUCTOR_PROVIDER,
     observe: () => pass.run(),
     latest: () => pass.latest(),
+    lastObservationFailure: () => pass.lastFailure(),
 
     /**
      * Where Conductor will create a workspace: the projects the last pass

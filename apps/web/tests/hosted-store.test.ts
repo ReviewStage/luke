@@ -38,10 +38,15 @@ import {
   conversationLine,
   conversationRun,
   conversationSession,
+  oauthAccessToken,
+  oauthClient,
   observationCaptureCursor,
   observationCursor,
   observationInboxEntry,
+  observationPass,
   personalFact,
+  providerKey,
+  rosterDiff,
   rosterSnapshot,
   runtimeCheckpoint,
   transcriptEvent,
@@ -49,7 +54,7 @@ import {
   workspaceFile,
 } from "../server/db/schema";
 import { payloadKeyRing } from "../server/hosted/encryption";
-import { BRIEFING_STATE } from "../server/hosted/store";
+import { BRIEFING_STATE, MAXIMUM_PENDING_ROSTER_DIFFS } from "../server/hosted/store";
 import { loadBrainEnvelope, saveBrainEnvelope } from "../server/hosted/store/brain-envelope";
 import { userSeal } from "../server/hosted/store/database";
 import {
@@ -660,6 +665,122 @@ test("the roster snapshot is one sealed row per user, replaced whole", async () 
   assert.doesNotMatch(rows[0]?.sealedBody ?? "", /sessions/);
 });
 
+test("a pass advances the snapshot and its diff together, diffs wait sealed until consumed once, and the pending bound drops the oldest", async () => {
+  const { database, userId } = await conversationFor();
+  const { roster } = database.store;
+  await roster.advance(
+    userId,
+    { body: JSON.stringify({ first: true }), observedAt: NOW },
+    undefined,
+  );
+  assert.deepEqual(await roster.pendingDiffs(userId), []);
+
+  await roster.advance(
+    userId,
+    { body: JSON.stringify({ second: true }), observedAt: NOW + 1 },
+    { id: "diff-1", observedAt: NOW + 1, previousObservedAt: NOW, payload: "a session appeared" },
+  );
+  assert.equal((await roster.read(userId))?.observedAt, NOW + 1);
+  assert.deepEqual(await roster.pendingDiffs(userId), [
+    { id: "diff-1", observedAt: NOW + 1, previousObservedAt: NOW, payload: "a session appeared" },
+  ]);
+  const [row] = await database.db.select().from(rosterDiff).where(eq(rosterDiff.userId, userId));
+  assert.doesNotMatch(row?.sealedPayload ?? "", /appeared/);
+
+  assert.equal(await roster.consumeDiff(userId, "diff-1", NOW + 2), true);
+  assert.equal(await roster.consumeDiff(userId, "diff-1", NOW + 3), false);
+  assert.equal(await roster.consumeDiff(userId, "diff-missing", NOW + 3), false);
+  assert.deepEqual(await roster.pendingDiffs(userId), []);
+
+  for (let index = 0; index < MAXIMUM_PENDING_ROSTER_DIFFS + 3; index += 1) {
+    await roster.advance(
+      userId,
+      { body: "{}", observedAt: NOW + 10 + index },
+      {
+        id: `diff-${index + 10}`,
+        observedAt: NOW + 10 + index,
+        previousObservedAt: NOW + 9 + index,
+        payload: `change ${index}`,
+      },
+    );
+  }
+  const pending = await roster.pendingDiffs(userId);
+  assert.equal(pending.length, MAXIMUM_PENDING_ROSTER_DIFFS);
+  assert.equal(pending[0]?.id, "diff-13");
+  assert.equal(pending.at(-1)?.id, `diff-${MAXIMUM_PENDING_ROSTER_DIFFS + 12}`);
+  const rows = await database.db.select().from(rosterDiff).where(eq(rosterDiff.userId, userId));
+  assert.equal(
+    rows.length,
+    MAXIMUM_PENDING_ROSTER_DIFFS,
+    "the consumed diff was dropped with the oldest",
+  );
+
+  const other = await database.createUser();
+  assert.deepEqual(await roster.pendingDiffs(other), []);
+});
+
+test("a pass record moves the attempt every time, the whole read only on success, and forgetting reaches the keyless and the unseen", async () => {
+  const { database, userId } = await conversationFor();
+  const { roster } = database.store;
+  assert.equal(await roster.pass(userId), undefined);
+  await roster.recordPass(userId, { attemptedAt: NOW });
+  assert.deepEqual(await roster.pass(userId), { attemptedAt: NOW, observedAt: NOW });
+  await roster.recordPass(userId, { attemptedAt: NOW + 1, failure: "rate-limited" });
+  assert.deepEqual(await roster.pass(userId), {
+    attemptedAt: NOW + 1,
+    observedAt: NOW,
+    failure: "rate-limited",
+  });
+  await roster.recordPass(userId, { attemptedAt: NOW + 2 });
+  assert.deepEqual(await roster.pass(userId), { attemptedAt: NOW + 2, observedAt: NOW + 2 });
+
+  const keyed = await database.createUser();
+  const unseen = await database.createUser();
+  const [client] = await database.db
+    .insert(oauthClient)
+    .values({ id: `client-${keyed}`, clientId: `client-${keyed}`, redirectUris: [] })
+    .returning({ clientId: oauthClient.clientId });
+  assert.ok(client);
+  for (const id of [keyed, unseen]) {
+    await database.db
+      .insert(providerKey)
+      .values({ userId: id, providerId: "conductor", ciphertext: "sealed" });
+  }
+  await database.db.insert(oauthAccessToken).values([
+    {
+      id: `token-${keyed}`,
+      clientId: client.clientId,
+      userId: keyed,
+      scopes: [],
+      createdAt: new Date(NOW),
+    },
+    {
+      id: `token-${unseen}`,
+      clientId: client.clientId,
+      userId: unseen,
+      scopes: [],
+      createdAt: new Date(NOW - 1),
+    },
+  ]);
+  for (const id of [userId, keyed, unseen]) {
+    await roster.advance(
+      id,
+      { body: "{}", observedAt: NOW },
+      { id: "diff-1", observedAt: NOW, previousObservedAt: NOW - 1, payload: "x" },
+    );
+    await roster.recordPass(id, { attemptedAt: NOW });
+  }
+  await roster.forgetIneligible({ providerIds: ["conductor"], seenAfter: NOW });
+  for (const gone of [userId, unseen]) {
+    assert.equal(await roster.read(gone), undefined);
+    assert.deepEqual(await roster.pendingDiffs(gone), []);
+    assert.equal(await roster.pass(gone), undefined);
+  }
+  assert.equal((await roster.read(keyed))?.observedAt, NOW);
+  assert.equal((await roster.pendingDiffs(keyed)).length, 1);
+  assert.equal((await roster.pass(keyed))?.attemptedAt, NOW);
+});
+
 test("a briefing is offered once, claimed by one device once, settled only by its claimer or the push, and expired when its time comes", async () => {
   const { database, userId } = await conversationFor();
   const briefings = database.store.briefings;
@@ -745,7 +866,12 @@ test("deleting the user row cascades through every conversation table and leaves
     );
     await database.store.facts.replace(id, [{ id: "f-1", words: "a fact" }], NOW);
     await database.store.workspace.write(id, "USER.md", "# user", NOW);
-    await database.store.roster.write(id, { body: "{}", observedAt: NOW });
+    await database.store.roster.advance(
+      id,
+      { body: "{}", observedAt: NOW },
+      { id: "diff-1", observedAt: NOW, previousObservedAt: NOW - 1, payload: "x" },
+    );
+    await database.store.roster.recordPass(id, { attemptedAt: NOW });
     await database.store.briefings.insert(id, {
       id: "briefing-shared-id",
       sessionKey: MAIN_SESSION_KEY,
@@ -772,6 +898,8 @@ test("deleting the user row cascades through every conversation table and leaves
     personalFact,
     workspaceFile,
     rosterSnapshot,
+    rosterDiff,
+    observationPass,
     briefing,
   ];
   for (const table of tables) {

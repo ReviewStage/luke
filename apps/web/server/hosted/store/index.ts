@@ -36,8 +36,18 @@ import {
 import { type HostedStoreContext, userSeal } from "./database.js";
 import { type FactWrite, listFacts, replaceFacts, type StoredFact } from "./facts.js";
 import {
+  advanceRosterSnapshot,
+  consumeRosterDiff,
+  forgetObservationIneligible,
+  listPendingRosterDiffs,
+  type ObservationEligibility,
+  type ObservationPassRecord,
+  type RosterDiffInsert,
+  type RosterDiffRecord,
   type RosterSnapshotRecord,
+  readObservationPass,
   readRosterSnapshot,
+  recordObservationPass,
   writeRosterSnapshot,
 } from "./roster-snapshot.js";
 import { type RunAboutFields, recordRunAbout, runAbout } from "./run-about.js";
@@ -130,6 +140,18 @@ export interface HostedStore {
   roster: {
     read(userId: string): Promise<RosterSnapshotRecord | undefined>;
     write(userId: string, snapshot: RosterSnapshotRecord): Promise<void>;
+    /** Replaces the snapshot and records the diff against the one it replaced, in one transaction. */
+    advance(
+      userId: string,
+      snapshot: RosterSnapshotRecord,
+      diff: RosterDiffInsert | undefined,
+    ): Promise<void>;
+    pendingDiffs(userId: string): Promise<readonly RosterDiffRecord[]>;
+    consumeDiff(userId: string, id: string, now: number): Promise<boolean>;
+    pass(userId: string): Promise<ObservationPassRecord | undefined>;
+    recordPass(userId: string, attempt: { attemptedAt: number; failure?: string }): Promise<void>;
+    /** Drops the snapshot, diffs, and pass record of every user the schedule no longer runs for. */
+    forgetIneligible(eligibility: ObservationEligibility): Promise<void>;
   };
   briefings: {
     insert(userId: string, insert: BriefingInsert): Promise<boolean>;
@@ -203,6 +225,13 @@ export function hostedStore({ db, keys }: HostedStoreContext): HostedStore {
     roster: {
       read: (userId) => readRosterSnapshot(db, sealFor(userId), userId),
       write: (userId, snapshot) => writeRosterSnapshot(db, sealFor(userId), userId, snapshot),
+      advance: (userId, snapshot, diff) =>
+        advanceRosterSnapshot(db, sealFor(userId), userId, snapshot, diff),
+      pendingDiffs: (userId) => listPendingRosterDiffs(db, sealFor(userId), userId),
+      consumeDiff: (userId, id, now) => consumeRosterDiff(db, userId, id, now),
+      pass: (userId) => readObservationPass(db, userId),
+      recordPass: (userId, attempt) => recordObservationPass(db, userId, attempt),
+      forgetIneligible: (eligibility) => forgetObservationIneligible(db, eligibility),
     },
     briefings: {
       insert: (userId, insert) => insertBriefing(db, sealFor(userId), userId, insert),
@@ -224,7 +253,14 @@ export {
 export type { ConversationCreation } from "./conversations.js";
 export type { HostedStoreContext, HostedStoreDatabase } from "./database.js";
 export type { FactWrite, StoredFact } from "./facts.js";
-export type { RosterSnapshotRecord } from "./roster-snapshot.js";
+export {
+  MAXIMUM_PENDING_ROSTER_DIFFS,
+  type ObservationEligibility,
+  type ObservationPassRecord,
+  type RosterDiffInsert,
+  type RosterDiffRecord,
+  type RosterSnapshotRecord,
+} from "./roster-snapshot.js";
 export type { RunAboutFields } from "./run-about.js";
 export type { StoredCompactionBoundary, TranscriptListOptions } from "./transcript.js";
 export {

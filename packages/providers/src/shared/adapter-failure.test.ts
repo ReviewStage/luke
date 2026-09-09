@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ADAPTER_FAILURE, AdapterFailure, clearsObservedState } from "./adapter-failure.js";
+import {
+  ADAPTER_FAILURE,
+  AdapterFailure,
+  clearsObservedState,
+  endsPass,
+  tolerateItemFailure,
+} from "./adapter-failure.js";
 
 test("a rejected credential and nothing to observe with both clear observed state", () => {
   assert.equal(clearsObservedState(ADAPTER_FAILURE.UNAUTHORIZED), true);
@@ -9,6 +15,28 @@ test("a rejected credential and nothing to observe with both clear observed stat
 
 test("a failure that says nothing about the credential leaves the snapshot standing", () => {
   assert.equal(clearsObservedState(ADAPTER_FAILURE.TRANSIENT), false);
+  assert.equal(clearsObservedState(ADAPTER_FAILURE.RATE_LIMITED), false);
+});
+
+test("a rate limit ends the pass without clearing it, and one resource's transient failure is tolerated alone", async () => {
+  assert.equal(endsPass(ADAPTER_FAILURE.RATE_LIMITED), true);
+  assert.equal(endsPass(ADAPTER_FAILURE.TRANSIENT), false);
+  assert.equal(
+    await tolerateItemFailure(async () => {
+      throw new AdapterFailure(ADAPTER_FAILURE.TRANSIENT, "one status read failed");
+    }),
+    undefined,
+  );
+  const rateLimited = new AdapterFailure(
+    ADAPTER_FAILURE.RATE_LIMITED,
+    "the provider is rate limiting",
+  );
+  await assert.rejects(
+    tolerateItemFailure(async () => {
+      throw rateLimited;
+    }),
+    rateLimited,
+  );
 });
 
 test("every failure kind has an answer, so a new one cannot arrive undecided", () => {
@@ -20,6 +48,7 @@ test("every failure kind has an answer, so a new one cannot arrive undecided", (
     [ADAPTER_FAILURE.UNAUTHORIZED, true],
     [ADAPTER_FAILURE.UNAVAILABLE, true],
     [ADAPTER_FAILURE.TRANSIENT, false],
+    [ADAPTER_FAILURE.RATE_LIMITED, false],
   ]);
 });
 

@@ -5,13 +5,21 @@ import {
   advertisedControls,
   type CloudAgentProviderId,
   normalizeSessionDetail,
+  OBSERVE_QUERY,
+  type ObserveAnswer,
   type ObservedSession,
   type ObservedSessionControl,
 } from "../core.js";
 import { providerReadsConversation } from "./action-execute.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
+import {
+  keyedCloudProviderIds,
+  type ObservationStore,
+  observeAndSnapshot,
+  storedRoster,
+} from "./observation-pass.js";
+import type { ObservedRoster } from "./observed-roster.js";
 import { createRateBrake } from "./rate-brake.js";
-import { observeProviders, readApiKeyFor } from "./vault-keys.js";
 import type { HostedVaultRoute } from "./vault-route.js";
 
 const OBSERVE_RATE_LIMIT = {
@@ -31,15 +39,21 @@ export interface ObserveOptions
     HostedVaultRoute,
     "request" | "resolveUserId" | "encryptionSecret" | "readVaultKeys"
   > {
+  /** The store the snapshot is read from and, on a live pass, written to. */
+  store: (secret: string) => ObservationStore;
   /** Injected in tests; production uses the global fetch. */
   fetch?: CloudFetch;
   now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
 }
 
 /**
- * Observe-on-demand: decrypts the caller's vault keys, runs each cloud
- * adapter once (minimumRefreshIntervalMs: 0 bypasses the refresh debounce),
- * and returns a bounded roster. Nothing is stored between requests.
+ * The signed-in user's cloud roster: the snapshot the scheduled pass last
+ * stored, mapped onto the bounded wire rows. A live pass runs only where the
+ * caller asked for a fresh read — under the per-user brake, since a pass is
+ * the whole provider fan-out — or where no snapshot stands yet, and either
+ * way it is the same pass the schedule runs, stored the same way. A user with
+ * no cloud key has no roster to read or store and is answered empty.
  */
 export async function handleObserve(options: ObserveOptions): Promise<Response> {
   const { request, resolveUserId, encryptionSecret, readVaultKeys } = options;
@@ -61,33 +75,56 @@ export async function handleObserve(options: ObserveOptions): Promise<Response> 
     return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
   }
 
+  const rows = await readVaultKeys(userId);
+  if (keyedCloudProviderIds(rows).length === 0) {
+    return jsonResponse(HOSTED_HTTP_STATUS.OK, observeAnswer(undefined, undefined));
+  }
+
+  const store = options.store(secret);
+  const fresh =
+    new URL(request.url).searchParams.get(OBSERVE_QUERY.FRESH) === OBSERVE_QUERY.FRESH_VALUE;
+  if (!fresh) {
+    const stored = await storedRoster(store, userId);
+    if (stored) {
+      return jsonResponse(HOSTED_HTTP_STATUS.OK, observeAnswer(stored.roster, stored.observedAt));
+    }
+  }
+
   const now = (options.now ?? Date.now)();
   if (observeRateLimited(userId, now)) {
     return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   }
 
-  const rows = await readVaultKeys(userId);
-  const passes = await observeProviders({
-    readApiKey: readApiKeyFor(rows, secret),
-    read: (adapter) => adapter.observe(),
+  const outcome = await observeAndSnapshot({
+    userId,
+    rows,
+    secret,
+    store,
     seams: options,
+    now,
   });
+  return jsonResponse(HOSTED_HTTP_STATUS.OK, observeAnswer(outcome.roster, outcome.observedAt));
+}
 
+/** The roster as the wire carries it: every provider's observations as bounded rows, dated by the snapshot. */
+function observeAnswer(
+  roster: ObservedRoster | undefined,
+  observedAt: number | undefined,
+): ObserveAnswer {
   const sessions: ObservedSession[] = [];
-  for (const pass of passes) {
-    for (const observation of pass.answer ?? []) {
-      sessions.push(observedSessionForResponse(pass.providerId, observation));
+  for (const provider of roster?.providers ?? []) {
+    for (const observation of provider.observations) {
+      sessions.push(observedSessionForResponse(provider.providerId, observation));
     }
   }
-
-  return jsonResponse(HOSTED_HTTP_STATUS.OK, { sessions });
+  return { sessions, ...(observedAt !== undefined ? { observedAt } : undefined) };
 }
 
 /**
  * The actions an observation advertised, written onto its wire row. Each is
  * presence-only where it can be: what a control targets, or which workspace a
- * rename lands on, never travels — the action endpoints re-observe and rebuild
- * every write from their own fresh advertisement.
+ * rename lands on, never travels — the action endpoints admit against the
+ * same stored snapshot's own advertisement and build every write from it.
  */
 function writeAdvertisedActions(
   session: ObservedSession,
