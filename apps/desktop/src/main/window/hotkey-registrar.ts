@@ -55,10 +55,15 @@ export interface HotkeyHost {
   modeFor(displayId: number): WindowMode;
   setMode(displayId: number, mode: WindowMode, requestFocus: boolean): void;
   /**
-   * One key's registration moved. Announced per rank rather than as the three
-   * together, because the talk key's own reapply leaves it unregistered while
-   * its helper starts: a whole-set announcement would tell every panel the
-   * chord had gone and tell it back a moment later.
+   * One key's registration moved, so what the renderers are teaching is
+   * written again. The raw accelerator is what travels, as in bootstrap: the
+   * renderer draws the chord as its separate keys and says it as one word,
+   * and only the accelerator produces both. An absence travels too, for the
+   * guide's sake: a chord that answers nothing must not be one Luke claims
+   * to have. Announced per rank rather than as the three together, because
+   * the talk key's own reapply leaves it unregistered while its helper
+   * starts: a whole-set announcement would tell every panel the chord had
+   * gone and tell it back a moment later.
    */
   hotkeyChanged(rank: HotkeyRank): void;
 }
@@ -252,7 +257,7 @@ export class HotkeyRegistrar {
       // answers: the helper announces its own registration over stdout, and
       // every path without a helper is decided by the time `#register` returns.
       if (rank === HOTKEY_RANK.TALK && this.#talkKeyWatcher) continue;
-      this.#send(rank);
+      this.#host.hotkeyChanged(rank);
     }
   }
 
@@ -390,27 +395,16 @@ export class HotkeyRegistrar {
       onRelease: () => this.#sendTo(this.#voiceHostContents(), channels.onVoiceHotkeyRelease),
       onRegistered: (accelerator) => {
         state.accelerator = accelerator;
-        this.#send(HOTKEY_RANK.TALK);
+        this.#host.hotkeyChanged(HOTKEY_RANK.TALK);
       },
       onUnavailable: () => {
         this.#talkKeyWatcher = undefined;
         this.#registerWithElectron(HOTKEY_RANK.TALK);
-        this.#send(HOTKEY_RANK.TALK);
+        this.#host.hotkeyChanged(HOTKEY_RANK.TALK);
       },
     });
     if (this.#talkKeyWatcher.start(candidates)) return true;
     this.#talkKeyWatcher = undefined;
     return false;
-  }
-
-  /**
-   * Writes the key the renderers should be teaching. The raw accelerator
-   * travels, as in bootstrap: the renderer draws the chord as its separate keys
-   * and says it as one word, and only the accelerator produces both. An absence
-   * travels too, for the guide's sake: a chord that answers nothing must not be
-   * one Luke claims to have.
-   */
-  #send(rank: HotkeyRank): void {
-    this.#host.hotkeyChanged(rank);
   }
 }

@@ -90,20 +90,9 @@ export function createNativeNode(dependencies: NativeNodeDependencies): NativeNo
   let outputVolumeWatcher: OutputVolumeWatch | undefined;
   let microphoneRouteWatcher: MicrophoneRouteWatch | undefined;
 
-  /**
-   * One write of what this machine's own devices answer. An absence is
-   * written as the key's absence rather than as an explicit `undefined`, so
-   * a helper that went quiet and one that never spoke are the same document.
-   */
+  /** One write of what this machine's own devices answer, into the one document. */
   function writeAudio(patch: Partial<AppAudioSlice>): void {
-    const next: AppAudioSlice = { ...state.snapshot().audio, ...patch };
-    state.update({
-      audio: {
-        microphoneStatus: next.microphoneStatus,
-        ...(next.microphoneRoute ? { microphoneRoute: next.microphoneRoute } : undefined),
-        ...(next.outputAudio ? { outputAudio: next.outputAudio } : undefined),
-      },
-    });
+    state.update({ audio: { ...state.snapshot().audio, ...patch } });
   }
 
   function readMicrophoneStatus(): MicrophoneStatus {
