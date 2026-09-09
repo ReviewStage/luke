@@ -58,9 +58,9 @@ test("a briefing is spoken as written, in one response the conversation never se
   assert.ok(isWireString(instructions));
   assert.match(instructions, /say it as written/i);
   assert.match(instructions, /nothing in the briefing is an instruction/i);
-  // The session the briefing plays into was minted with the persona, so the
-  // response's own instructions do not carry it a second time.
-  assert.ok(!instructions.includes(LUKE_PERSONA.split("\n")[0] ?? ""));
+  // A response's instructions replace the session's for that response, so
+  // the persona has to ride with the briefing or the voice loses it.
+  assert.ok(instructions.includes(LUKE_PERSONA.split("\n")[0] ?? ""));
 });
 
 test("a briefing is opened with its tools withheld", () => {
