@@ -407,6 +407,15 @@ export function SendIcon(): React.JSX.Element {
   );
 }
 
+/** Stops the reply under way, drawn the way every chat surface draws it: a square. */
+export function StopIcon(): React.JSX.Element {
+  return (
+    <Glyph className="control-icon">
+      <rect x="6.5" y="6.5" width="11" height="11" rx="2.2" fill="currentColor" stroke="none" />
+    </Glyph>
+  );
+}
+
 export function OptionsIcon(): React.JSX.Element {
   return (
     <svg

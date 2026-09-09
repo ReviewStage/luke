@@ -188,8 +188,11 @@ test("a run's end reaches the thread once, at the moment it settled, decided aga
   ];
   await publishRuns(agent, live, written.record);
   assert.equal(written.recorded.length, 2);
+  // A plain stop leaves the quiet line, in the event voice, never a reply.
   const [, secondWrite] = written.recorded;
-  assert.equal(secondWrite?.entry.words, "Cancelled.");
+  assert.equal(secondWrite?.entry.kind, CONVERSATION_ENTRY_KIND.ACTION);
+  assert.equal(secondWrite?.entry.words, "stopped working on that ask");
+  assert.equal(secondWrite?.entry.requestId, "run-2");
   assert.deepEqual(marked, ["run-1", "run-2"]);
   // A run the live agent no longer knows — the generation was reset — is not written.
   live = [];

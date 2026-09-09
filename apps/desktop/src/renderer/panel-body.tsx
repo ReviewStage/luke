@@ -1,4 +1,4 @@
-import type { BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
+import { type BrainRequestSnapshot, brainRequestPending } from "@sidecar/brain/requests-wire";
 import {
   ACCOUNT_STATUS,
   type AccountProvider,
@@ -184,10 +184,10 @@ export interface PanelBodyProps {
   liveConversationEntries: readonly ConversationEntry[];
   /** Clears that same thread from the view, Luke's next context, and the stored file. */
   onClearConversationConversation: () => void;
-  /** The brain's runs, so Conversation draws an ask still being worked on beside its words. */
+  /** The brain's runs, so Conversation draws Luke's turn while one is going and the composer offers its stop. */
   brainRequests: readonly BrainRequestSnapshot[];
-  /** Cancels one of those runs at the developer's press. */
-  onCancelBrainRequest: (runId: string) => void;
+  /** Stops every run still going, at the composer's press. */
+  onStopThinking: () => void;
   /** Carries a typed ask to Luke's own conversation, answering why it could not go. */
   ask: AskHandler;
   /** Reports someone being part-way through an ask, so the panel holds for them. */
@@ -241,7 +241,7 @@ export function PanelBody({
   liveConversationEntries,
   onClearConversationConversation,
   brainRequests,
-  onCancelBrainRequest,
+  onStopThinking,
   ask,
   onAskEngaged,
   askShortcut,
@@ -258,6 +258,9 @@ export function PanelBody({
   onTabChange,
   settings,
 }: PanelBodyProps): React.JSX.Element {
+  // Whether a run of Luke's is still going, read from the same records
+  // Conversation draws the wait from, so the disc and the wait cannot disagree.
+  const thinking = brainRequests.some(brainRequestPending);
   const sessionListRef = useSessionReorderMotion();
   const rows = useRoster(list.sessions, sessionListRef);
   // The sheet floats over the list, so its height never reaches the panel's
@@ -362,9 +365,9 @@ export function PanelBody({
           live={liveConversationEntries}
           requests={brainRequests}
           now={now}
-          onCancelRequest={onCancelBrainRequest}
           ask={ask}
           onAskEngaged={onAskEngaged}
+          onStop={onStopThinking}
           {...(askShortcut ? { askShortcut } : undefined)}
         />
       ) : (
@@ -459,6 +462,8 @@ export function PanelBody({
             ask={ask}
             onEngagedChange={onAskEngaged}
             rowIndex={rows.length + 1}
+            thinking={thinking}
+            onStop={onStopThinking}
             {...(askShortcut ? { shortcut: askShortcut } : undefined)}
           />
         </SessionsPanel>

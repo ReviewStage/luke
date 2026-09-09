@@ -1312,6 +1312,16 @@ html[data-keyboard="true"] .row-application-button:focus-visible {
   height: 12px;
 }
 
+/* Luke's turn: while a run of his is still going the disc is its stop, in his
+   blue — the colour the surface gives something of his in progress — and lit
+   whatever the field holds. The disc alone carries the state: it neither grows
+   nor moves, nothing arrives around it, and a quick reply flickers nothing in
+   and out because no element ever arrives or leaves. */
+.ask-luke[data-turn="luke"] .ask-luke-send {
+  background: var(--voice-luke);
+  color: rgba(0, 0, 0, 0.82);
+}
+
 /* An ask on its way to a call that may still be opening: the disc breathes
    instead of a spinner arriving, because nothing in the pill may change size.
    It holds still under the same token as every other loop — a capture must
