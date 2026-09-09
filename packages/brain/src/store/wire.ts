@@ -1,8 +1,12 @@
+import { type AgentId, isIdentifier, type SessionKey } from "@sidecar/runtime/vocabulary";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import {
+  type AnyOperationParams,
   isStoreLifecycleName,
   isStoreOperationName,
-  type StoreLifecycleName,
+  type NoParams,
+  STORE_LIFECYCLE,
+  type StoreOpenOptions,
   type StoreOperationName,
 } from "./store-operations.js";
 
@@ -14,12 +18,16 @@ import {
  * `Worker` in the app.
  */
 
-export interface StoreRequest {
-  id: number;
-  name: StoreOperationName | StoreLifecycleName;
-  /** The operation's own parameters, which the sender typed against the table. */
-  params: unknown;
-}
+/**
+ * A request as either end holds it: an id, the name that selects what to do,
+ * and the parameters that name declares. The two lifecycle names are the two
+ * that are not operations — they make and unmake the store every operation
+ * runs against — so they carry their own parameters here.
+ */
+export type StoreRequest =
+  | { id: number; name: StoreOperationName; params: AnyOperationParams }
+  | { id: number; name: typeof STORE_LIFECYCLE.OPEN; params: StoreOpenOptions }
+  | { id: number; name: typeof STORE_LIFECYCLE.CLOSE; params: NoParams };
 
 export type StoreResponse =
   | { id: number; ok: true; result: UnparsedWireValue }
@@ -54,11 +62,43 @@ export function storeResponseFromWire(value: UnparsedWireValue): StoreResponse |
 /**
  * Reads a request off the channel. The envelope is the only thing to
  * establish: an id, and a name the operation table or the lifecycle holds.
- * The parameters belong to the operation the name selects, and the sender —
- * this build's own client — chose them.
+ * The parameters belong to the name the read admitted, and the sender — this
+ * build's own client — typed them against the same table.
  */
 export function storeRequestFromWire(value: UnparsedWireValue): StoreRequest | undefined {
   if (!isRecord(value) || !isWireNumber(value.id)) return undefined;
-  if (!isStoreOperationName(value.name) && !isStoreLifecycleName(value.name)) return undefined;
-  return { id: value.id, name: value.name, params: value.params };
+  if (isStoreOperationName(value.name)) {
+    // SAFETY: the name selects the operation whose parameters the sender typed.
+    return { id: value.id, name: value.name, params: value.params as AnyOperationParams };
+  }
+  if (!isStoreLifecycleName(value.name)) return undefined;
+  if (value.name === STORE_LIFECYCLE.CLOSE) {
+    return { id: value.id, name: STORE_LIFECYCLE.CLOSE, params: {} };
+  }
+  const params = storeOpenOptionsFromWire(value.params);
+  return params ? { id: value.id, name: STORE_LIFECYCLE.OPEN, params } : undefined;
+}
+
+/**
+ * The open's parameters, read rather than assumed. They are the one payload
+ * the worker acts on before any operation runs — they name the directory it
+ * opens a database in — so the read is here rather than at a `SAFETY:`
+ * comment's word.
+ */
+function storeOpenOptionsFromWire(value: UnparsedWireValue): StoreOpenOptions | undefined {
+  if (!isRecord(value)) return undefined;
+  const { agentRoot, workspaceDirectory, agentId, sessionKey, conversationName, now } = value;
+  if (!isWireString(agentRoot) || !isWireString(conversationName)) return undefined;
+  if (!isIdentifier(agentId) || !isIdentifier(sessionKey) || !isWireNumber(now)) return undefined;
+  if (workspaceDirectory !== undefined && !isWireString(workspaceDirectory)) return undefined;
+  // SAFETY: an identifier's brand is a compile-time tag, and the non-empty
+  // string `isIdentifier` establishes is the whole of its runtime shape.
+  return {
+    agentRoot,
+    ...(workspaceDirectory !== undefined ? { workspaceDirectory } : undefined),
+    agentId: agentId as AgentId,
+    sessionKey: sessionKey as SessionKey,
+    conversationName,
+    now,
+  };
 }

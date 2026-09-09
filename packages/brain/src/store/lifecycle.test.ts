@@ -494,10 +494,8 @@ test("the maintenance policy: protections, the idle-thread and stale rules, the 
       HISTORY_MAINTENANCE_DEFAULTS.maximumUnarchived,
       HISTORY_MAINTENANCE_DEFAULTS.maximumDiskBytes,
       HISTORY_MAINTENANCE_DEFAULTS.highWaterBytes,
-      HISTORY_MAINTENANCE_DEFAULTS.automaticReset,
-      HISTORY_MAINTENANCE_DEFAULTS.archiveExpiryMs,
     ],
-    [30 * DAY, 7 * DAY, 5_000, 10 * 1024 ** 3, 8 * 1024 ** 3, false, null],
+    [30 * DAY, 7 * DAY, 5_000, 10 * 1024 ** 3, 8 * 1024 ** 3],
   );
 });
 

@@ -91,7 +91,14 @@ export interface OpenStore {
 /** An operation that takes nothing beyond the open store. */
 export type NoParams = Record<string, never>;
 
-export type StoreOperation = (store: OpenStore, params: never) => unknown;
+/**
+ * What an operation answers: a structured-cloneable value, which every table
+ * entry narrows to its own type. Named here so the table's shape can be
+ * checked without widening any entry's own answer.
+ */
+export type StoreAnswer = boolean | number | string | undefined | object;
+
+export type StoreOperation = (store: OpenStore, params: never) => StoreAnswer;
 
 export const STORE_OPERATIONS = {
   "brain.load": (s, p: { sessionKey: SessionKey }): EnvelopeRead =>
@@ -193,13 +200,19 @@ export const STORE_OPERATIONS = {
 
 export type StoreOperationName = keyof typeof STORE_OPERATIONS;
 
-export const STORE_OPERATION_NAMES: readonly StoreOperationName[] = Object.keys(
-  STORE_OPERATIONS,
-) as StoreOperationName[];
+/** One operation's parameters and answer, read off the table by name. */
+export type OperationParams<Name extends StoreOperationName> = Parameters<
+  (typeof STORE_OPERATIONS)[Name]
+>[1];
+export type OperationResult<Name extends StoreOperationName> = ReturnType<
+  (typeof STORE_OPERATIONS)[Name]
+>;
+
+/** The parameters of some operation: what a request carries before its name selects one. */
+export type AnyOperationParams = OperationParams<StoreOperationName>;
 
 export function isStoreOperationName(value: UnparsedWireValue): value is StoreOperationName {
-  // SAFETY: value is a string; table membership is the whole vocabulary check.
-  return isWireString(value) && STORE_OPERATION_NAMES.includes(value as StoreOperationName);
+  return isWireString(value) && Object.hasOwn(STORE_OPERATIONS, value);
 }
 
 /**
@@ -214,8 +227,7 @@ export type StoreLifecycleName = (typeof STORE_LIFECYCLE)[keyof typeof STORE_LIF
 const STORE_LIFECYCLE_NAMES: readonly StoreLifecycleName[] = Object.values(STORE_LIFECYCLE);
 
 export function isStoreLifecycleName(value: UnparsedWireValue): value is StoreLifecycleName {
-  // SAFETY: value is a string; list membership is the whole vocabulary check.
-  return isWireString(value) && STORE_LIFECYCLE_NAMES.includes(value as StoreLifecycleName);
+  return isWireString(value) && STORE_LIFECYCLE_NAMES.some((name) => name === value);
 }
 
 export interface StoreOpenOptions {

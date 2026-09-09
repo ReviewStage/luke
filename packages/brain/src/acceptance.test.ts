@@ -68,12 +68,8 @@ import {
   type BrainRequestRecord,
 } from "./requests.js";
 import { ToolLoopAgentRuntime } from "./runtime.js";
-import {
-  type BrainPersistedState,
-  type BrainStateStorage,
-  BrainStateStore,
-  brainStateFromStored,
-} from "./state-store.js";
+import { BrainStateStore } from "./state-store.js";
+import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
 import { brainToolCatalog, hostedBrainToolCatalog, resolveTurnToolPolicy } from "./tools.js";
 import { BRAIN_TURN_KIND, runOriginOf } from "./turn.js";
 import { BRAIN_WAKE_KIND } from "./wake-events.js";
@@ -141,22 +137,6 @@ class FakeClock {
   cancel = (timer: ScheduledTimer): void => {
     this.timers.delete(timer);
   };
-}
-
-class Storage implements BrainStateStorage {
-  file: string | undefined;
-  refuse = false;
-  read() {
-    return this.file;
-  }
-  write(contents: string) {
-    if (this.refuse) return false;
-    this.file = contents;
-    return true;
-  }
-  stored(): BrainPersistedState | undefined {
-    return brainStateFromStored(this.file);
-  }
 }
 
 interface UpstreamCall {
@@ -267,7 +247,7 @@ const HOSTED: Transport = {
 
 interface Host {
   agent: BrainAgent;
-  storage: Storage;
+  repository: FakeBrainStateRepository;
   store: BrainStateStore;
   clock: FakeClock;
   performed: string[];
@@ -279,13 +259,13 @@ let ids = 0;
 function host(
   runtimeOver: (model: ModelAdapter) => AgentRuntime,
   model: ModelAdapter,
-  storage = new Storage(),
+  repository = fakeBrainStateRepository(),
   performer: () => Promise<WireRecord> = async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }),
   overrides: Partial<BrainAgentOptions> = {},
 ): Host {
   const clock = new FakeClock();
   const store = new BrainStateStore({
-    storage,
+    repository,
     createGenerationId: () => `gen-${++ids}`,
     now: () => clock.now,
   });
@@ -325,7 +305,7 @@ function host(
   });
   return {
     agent,
-    storage,
+    repository,
     store,
     clock,
     performed,
@@ -386,7 +366,7 @@ for (const transport of [KEYED, HOSTED]) {
     ).length;
     assert.equal(calls, 2);
     assert.equal(outputs, 2);
-    const stored = h.storage.stored();
+    const stored = h.repository.state;
     assert.equal(stored?.journal.length, 2);
     assert.equal(stored?.checkpointFormat, "tool-loop@1:openai-responses-input/1");
     await h.agent.stop();
@@ -396,15 +376,20 @@ for (const transport of [KEYED, HOSTED]) {
     let releaseSecond: (() => void) | undefined;
     const upstream = fakeUpstream([() => payload([actCall("call_1"), actCall("call_2")])]);
     let performedCount = 0;
-    const h = host(toolLoopRuntimeOver, transport.model(upstream), new Storage(), async () => {
-      performedCount += 1;
-      if (performedCount === 1) {
-        await new Promise<void>((resolve) => {
-          releaseSecond = resolve;
-        });
-      }
-      return { status: ACT_RESULT_STATUS.ACCEPTED };
-    });
+    const h = host(
+      toolLoopRuntimeOver,
+      transport.model(upstream),
+      fakeBrainStateRepository(),
+      async () => {
+        performedCount += 1;
+        if (performedCount === 1) {
+          await new Promise<void>((resolve) => {
+            releaseSecond = resolve;
+          });
+        }
+        return { status: ACT_RESULT_STATUS.ACCEPTED };
+      },
+    );
     const accepted = await h.agent.submitAsk({
       submissionId: "cancel-me",
       question: "send twice",
@@ -419,7 +404,7 @@ for (const transport of [KEYED, HOSTED]) {
     assert.equal(record?.performedActs, 1);
     assert.equal(h.performed.length, 1);
     // Every call in the stored memory is paired, the refused one included.
-    const items = h.storage.stored()?.items ?? [];
+    const items = h.repository.state?.items ?? [];
     const outputs = items.filter(
       (item) => item.type === RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
     );
@@ -454,19 +439,19 @@ for (const transport of [KEYED, HOSTED]) {
   });
 
   test(`${transport.name}: persistence interrupted before an act refuses the act; interrupted after it keeps the result and blocks the next`, async () => {
-    const storage = new Storage();
+    const repository = fakeBrainStateRepository();
     const upstream = fakeUpstream([
       () => payload([actCall("call_1")]),
       () => payload([message("done")]),
     ]);
-    const h = host(toolLoopRuntimeOver, transport.model(upstream), storage);
+    const h = host(toolLoopRuntimeOver, transport.model(upstream), repository);
     await h.agent.ready();
     // Acceptance and start land; the checkpoint before the act is refused.
     let writes = 0;
-    const original = storage.write.bind(storage);
-    storage.write = (contents) => {
+    const landed = repository.save;
+    repository.save = (state, transcript) => {
       writes += 1;
-      return writes === 3 ? false : original(contents);
+      return writes === 3 ? false : landed(state, transcript);
     };
     const record = await h.ask("send");
     assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
@@ -613,20 +598,20 @@ class ScriptedRuntime implements AgentRuntime {
 }
 
 test("a runtime that is not Responses drives the same host: acts journaled through the executor, checkpoint stored under its own stamp, refusals still the host's", async () => {
-  const storage = new Storage();
+  const repository = fakeBrainStateRepository();
   const runtime = new ScriptedRuntime([
     REALTIME_TOOL.SEND_SESSION_MESSAGE,
     "read_transcript",
     "not_a_tool",
   ]);
   const model = KEYED.model(fakeUpstream([]));
-  const h = host(() => runtime, model, storage);
+  const h = host(() => runtime, model, repository);
   const record = await h.ask("do the scripted thing");
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assert.equal(record?.text, "scripted reply after 3 tools");
   assert.equal(record?.performedActs, 1);
   assert.deepEqual(h.performed, [REALTIME_TOOL.SEND_SESSION_MESSAGE]);
-  const stored = storage.stored();
+  const stored = repository.state;
   assert.equal(stored?.checkpointFormat, "scripted@3:scripted-turns/1");
   assert.ok(stored?.items.every((item) => "scripted" in item));
   assert.equal(stored?.journal.length, 1);
@@ -642,7 +627,7 @@ test("a runtime that is not Responses drives the same host: acts journaled throu
   // read by the host and the act the policy allows carried through the same
   // executor, journaled while it ran and let go of once the turn committed.
   const observing = new ScriptedRuntime([REALTIME_TOOL.SEND_SESSION_MESSAGE]);
-  const o = host(() => observing, model, storage);
+  const o = host(() => observing, model, repository);
   await o.agent.ready();
   o.agent.wake([{ kind: BRAIN_WAKE_KIND.HOOK, identity: ABC, hookEvent: "Stop", atMs: NOW }]);
   await settle();
@@ -650,26 +635,26 @@ test("a runtime that is not Responses drives the same host: acts journaled throu
   for (const timer of [...o.clock.timers.values()]) timer.callback();
   await settle();
   assert.deepEqual(o.performed, [REALTIME_TOOL.SEND_SESSION_MESSAGE]);
-  assert.equal(storage.stored()?.cursors[claude.id]?.abc, "c1");
-  assert.equal(storage.stored()?.journal.length, 1, "the ask's journal alone stays");
+  assert.equal(repository.state?.cursors[claude.id]?.abc, "c1");
+  assert.equal(repository.state?.journal.length, 1, "the ask's journal alone stays");
   await o.agent.stop();
 });
 
 test("the Responses runtime refuses a valid checkpoint of the scripted runtime: turns are refused as incompatible, and the checkpoint, requests, and journal stay whole", async () => {
-  const storage = new Storage();
+  const repository = fakeBrainStateRepository();
   const scripted = host(
     () => new ScriptedRuntime([REALTIME_TOOL.SEND_SESSION_MESSAGE]),
     KEYED.model(fakeUpstream([])),
-    storage,
+    repository,
   );
   const first = await scripted.ask("scripted first");
   assert.equal(first?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   await scripted.agent.stop();
-  const before = storage.stored();
+  const before = repository.state;
   assert.ok(before);
 
   const upstream = fakeUpstream([() => payload([message("never asked")])]);
-  const responses = host(toolLoopRuntimeOver, KEYED.model(upstream), storage);
+  const responses = host(toolLoopRuntimeOver, KEYED.model(upstream), repository);
   await responses.agent.ready();
   assert.match(
     (await responses.agent.incompatibility()) ?? "",
@@ -691,7 +676,7 @@ test("the Responses runtime refuses a valid checkpoint of the scripted runtime: 
   await settle();
   assert.equal(upstream.calls.length, 0);
   // Nothing of the stored memory changed: same stamp, same items, same records, same journal.
-  const after = storage.stored();
+  const after = repository.state;
   assert.deepEqual(after?.checkpointFormat, before.checkpointFormat);
   assert.deepEqual(after?.items, before.items);
   assert.deepEqual(after?.requests, before.requests);
@@ -700,12 +685,12 @@ test("the Responses runtime refuses a valid checkpoint of the scripted runtime: 
   await responses.agent.stop();
 
   // The scripted runtime reads it again, and a Clear is the other way forward.
-  const again = host(() => new ScriptedRuntime([]), KEYED.model(fakeUpstream([])), storage);
+  const again = host(() => new ScriptedRuntime([]), KEYED.model(fakeUpstream([])), repository);
   assert.equal(await again.agent.incompatibility(), undefined);
   assert.equal((await again.ask("still scripted"))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   await again.store.clear(NOW + 10);
   await settle();
-  assert.equal(storage.stored()?.checkpointFormat, undefined);
+  assert.equal(repository.state?.checkpointFormat, undefined);
   await again.agent.stop();
 });
 
@@ -742,12 +727,12 @@ function heldIngestRuntime(model: ModelAdapter): AgentRuntime {
 }
 
 test("an ingest held across a cancel that resolves after the successor turn began lands on the retired engine, never in the context the next turn reads or keeps", async () => {
-  const storage = new Storage();
+  const repository = fakeBrainStateRepository();
   const upstream = fakeUpstream([
     () => payload([message("LATE_WORDS")]),
     () => payload([message("fresh reply")]),
   ]);
-  const h = host(heldIngestRuntime, KEYED.model(upstream), storage);
+  const h = host(heldIngestRuntime, KEYED.model(upstream), repository);
   HeldIngestEngine.hold = true;
   const accepted = await h.agent.submitAsk({
     submissionId: "held",
@@ -774,7 +759,7 @@ test("an ingest held across a cancel that resolves after the successor turn bega
     !JSON.stringify(shown).includes("LATE_WORDS"),
     "the successor never saw the late words",
   );
-  assert.ok(!(storage.file ?? "").includes("LATE_WORDS"), "the checkpoint never kept them");
+  assert.ok(!repository.words().includes("LATE_WORDS"), "the checkpoint never kept them");
   // A third turn reads the same context again, and still finds nothing of them.
   upstream.answers.push(() => payload([message("third")]));
   await h.ask("third");
@@ -783,18 +768,18 @@ test("an ingest held across a cancel that resolves after the successor turn bega
 });
 
 test("a model failure after a recorded act restores the context to the act's committed boundary: the act, its result, and the record survive and are read again", async () => {
-  const storage = new Storage();
+  const repository = fakeBrainStateRepository();
   const upstream = fakeUpstream([
     () => payload([actCall("call_1")]),
     () => new Response("", { status: 500 }),
     () => payload([message("after")]),
   ]);
-  const h = host(toolLoopRuntimeOver, KEYED.model(upstream), storage);
+  const h = host(toolLoopRuntimeOver, KEYED.model(upstream), repository);
   const failed = await h.ask("send then fail");
   assert.equal(failed?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(failed?.failure, BRAIN_REQUEST_FAILURE.MODEL);
   assert.equal(failed?.performedActs, 1);
-  const stored = storage.stored();
+  const stored = repository.state;
   assert.equal(stored?.journal.length, 1);
   assert.equal(
     stored?.journal[0]?.outputJson,
@@ -879,9 +864,15 @@ test("a keyed turn and a hosted turn send the same prompt upstream, built from t
     [HOSTED, hostedPreparation],
   ] as const) {
     const upstream = fakeUpstream([() => payload([message("Hello.")])]);
-    const h = host(toolLoopRuntimeOver, transport.model(upstream), new Storage(), undefined, {
-      prepareTurn: preparation.prepareTurn,
-    });
+    const h = host(
+      toolLoopRuntimeOver,
+      transport.model(upstream),
+      fakeBrainStateRepository(),
+      undefined,
+      {
+        prepareTurn: preparation.prepareTurn,
+      },
+    );
     const record = await h.ask("hello");
     assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
     const [call] = upstream.calls;
@@ -919,9 +910,15 @@ test("a conversation that starts fresh is primed once with the recent daily note
     () => payload([message("Noted.")]),
     () => payload([message("Again.")]),
   ]);
-  const h = host(toolLoopRuntimeOver, KEYED.model(upstream), new Storage(), undefined, {
-    primeFreshContext,
-  });
+  const h = host(
+    toolLoopRuntimeOver,
+    KEYED.model(upstream),
+    fakeBrainStateRepository(),
+    undefined,
+    {
+      primeFreshContext,
+    },
+  );
   assert.equal((await h.ask("first"))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assert.equal((await h.ask("second"))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   const opening = (index: number) => {

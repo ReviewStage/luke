@@ -96,11 +96,12 @@ export class StoreDatabase {
       // left for its step to alter.
       for (const statement of STORE_SCHEMA_STATEMENTS) this.#db.exec(statement);
       if (row) {
+        // A version the table names no steps for changed only what the
+        // current statements above already create, so it migrates by having
+        // nothing to do; the refusal that matters is a version this build
+        // does not know at all, raised above.
         for (let version = row.version + 1; version <= STORE_SCHEMA_VERSION; version += 1) {
-          const steps = STORE_SCHEMA_MIGRATIONS.get(version);
-          if (!steps) {
-            throw new Error(`runtime database cannot be migrated to schema version ${version}`);
-          }
+          const steps = STORE_SCHEMA_MIGRATIONS.get(version) ?? [];
           for (const step of steps) this.#db.prepare(step.sql).run(...step.params);
         }
       }

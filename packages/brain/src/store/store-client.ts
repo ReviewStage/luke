@@ -4,9 +4,10 @@ import type { UnparsedWireValue } from "@sidecar/wire";
 import type { BrainPersistedState, BrainStateLoad, BrainStateRepository } from "../state-store.js";
 import { EnvelopeTracker } from "./envelope.js";
 import {
+  type AnyOperationParams,
+  type OperationParams,
+  type OperationResult,
   STORE_LIFECYCLE,
-  STORE_OPERATION_NAMES,
-  type STORE_OPERATIONS,
   type StoreOpenOptions,
   type StoreOperationName,
 } from "./store-operations.js";
@@ -17,24 +18,21 @@ import {
   storeResponseFromWire,
 } from "./wire.js";
 
-type OperationParams<Name extends StoreOperationName> = Parameters<
-  (typeof STORE_OPERATIONS)[Name]
->[1];
-type OperationResult<Name extends StoreOperationName> = ReturnType<(typeof STORE_OPERATIONS)[Name]>;
-
-/** Every operation as a promise-returning method under its own name, derived from the table. */
-export type StoreCalls = {
-  [Name in StoreOperationName]: (params: OperationParams<Name>) => Promise<OperationResult<Name>>;
-};
-
 /**
  * The main thread's handle on the store: every operation is a message to the
- * worker and a promise of its answer. A worker that errors or exits settles
- * every request still out as rejected and refuses every later one, so a
- * caller never waits on a thread that is gone; what a rejected write means
+ * worker and a promise of its answer. One `ask` serves the whole table —
+ * the name it takes selects the parameters it demands and the answer it
+ * promises — so an operation is declared once, in the table, and neither end
+ * keeps a second list to forget a name in. A worker that errors or exits
+ * settles every request still out as rejected and refuses every later one, so
+ * a caller never waits on a thread that is gone; what a rejected write means
  * for the act it guarded is the caller's decision, as it always was.
  */
-export type StoreClient = StoreCalls & {
+export interface StoreClient {
+  ask<Name extends StoreOperationName>(
+    name: Name,
+    params: OperationParams<Name>,
+  ): Promise<OperationResult<Name>>;
   open(options: StoreOpenOptions): Promise<boolean>;
   close(): Promise<boolean>;
   /**
@@ -56,7 +54,7 @@ export type StoreClient = StoreCalls & {
   scheduledJobStore(): ScheduledJobStore;
   /** The child service's records and completions as a store, each written whole through the worker. */
   childStore(): ChildStore;
-};
+}
 
 export function storeClient(port: StorePort): StoreClient {
   const pending = new Map<
@@ -88,30 +86,39 @@ export function storeClient(port: StorePort): StoreClient {
   port.on("error", (error) => fail(error));
   port.on("exit", (code) => fail(new Error(`the brain's store worker exited with code ${code}`)));
 
-  const request = (name: StoreRequest["name"], params: unknown): Promise<UnparsedWireValue> => {
+  const send = (request: StoreRequest): Promise<UnparsedWireValue> => {
     if (failure) return Promise.reject(failure);
-    const id = nextId++;
     return new Promise((resolve, reject) => {
-      pending.set(id, { resolve, reject });
+      pending.set(request.id, { resolve, reject });
       try {
-        port.postMessage({ id, name, params });
+        port.postMessage(request);
       } catch (error) {
-        pending.delete(id);
+        pending.delete(request.id);
         reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
   };
 
-  const calls = {} as Record<StoreOperationName, (params: unknown) => Promise<UnparsedWireValue>>;
-  for (const name of STORE_OPERATION_NAMES) {
-    calls[name] = (params) => request(name, params);
-  }
+  const ask = <Name extends StoreOperationName>(
+    name: Name,
+    params: OperationParams<Name>,
+  ): Promise<OperationResult<Name>> =>
+    // SAFETY: the name selects both ends of one table entry — the parameters
+    // sent and the answer awaited — and the worker answers a request with
+    // exactly that entry's result. This is the one place the correlation
+    // TypeScript cannot express through an index is narrowed by hand, and it
+    // is narrowed once rather than per operation.
+    send({
+      id: nextId++,
+      name,
+      params: params as AnyOperationParams,
+    }) as Promise<OperationResult<Name>>;
 
   const brainStateRepository = (sessionKey: SessionKey): BrainStateRepository => {
     const tracker = new EnvelopeTracker();
     return {
       load: async (): Promise<BrainStateLoad> => {
-        const loaded = await client["brain.load"]({ sessionKey });
+        const loaded = await ask("brain.load", { sessionKey });
         tracker.observe(loaded);
         return loaded.state ? { state: loaded.state } : { unreadable: loaded.unreadable === true };
       },
@@ -120,35 +127,34 @@ export function storeClient(port: StorePort): StoreClient {
         transcript?: readonly TranscriptEvent[],
       ): Promise<boolean> => {
         const save = tracker.saveFor(state, transcript);
-        const landed = await client["brain.save"]({ sessionKey, save });
+        const landed = await ask("brain.save", { sessionKey, save });
         if (landed) tracker.landed(state);
         return landed;
       },
     };
   };
 
-  // SAFETY: every name of the table has a method above, built from the table's
-  // own keys, and each one answers with the result its operation declares;
-  // TypeScript cannot correlate a name with its own params and result through
-  // an index, which is the one place this file narrows by hand.
-  const client: StoreClient = {
-    ...(calls as unknown as StoreCalls),
-    open: (options) => request(STORE_LIFECYCLE.OPEN, options) as Promise<boolean>,
-    close: () => request(STORE_LIFECYCLE.CLOSE, {}) as Promise<boolean>,
+  return {
+    ask,
+    // SAFETY: the two lifecycle messages each answer whether they took effect.
+    open: (options) =>
+      send({ id: nextId++, name: STORE_LIFECYCLE.OPEN, params: options }) as Promise<boolean>,
+    // SAFETY: as above.
+    close: () =>
+      send({ id: nextId++, name: STORE_LIFECYCLE.CLOSE, params: {} }) as Promise<boolean>,
     brainStateRepository,
     scheduledJobStore: () => ({
-      list: () => client["jobs.list"]({}),
-      put: (job) => client["jobs.put"]({ job }),
-      delete: (id) => client["jobs.delete"]({ id }),
+      list: () => ask("jobs.list", {}),
+      put: (job) => ask("jobs.put", { job }),
+      delete: (id) => ask("jobs.delete", { id }),
     }),
     childStore: () => ({
-      listChildren: () => client["children.list"]({}),
-      putChild: (record) => client["children.put"]({ record }),
-      deleteChild: (childId) => client["children.delete"]({ childId }),
-      listCompletions: () => client["completions.list"]({}),
-      putCompletion: (completion) => client["completions.put"]({ completion }),
-      deleteCompletion: (completionId) => client["completions.delete"]({ completionId }),
+      listChildren: () => ask("children.list", {}),
+      putChild: (record) => ask("children.put", { record }),
+      deleteChild: (childId) => ask("children.delete", { childId }),
+      listCompletions: () => ask("completions.list", {}),
+      putCompletion: (completion) => ask("completions.put", { completion }),
+      deleteCompletion: (completionId) => ask("completions.delete", { completionId }),
     }),
   };
-  return client;
 }

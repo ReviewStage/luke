@@ -200,7 +200,7 @@ export function wireStore(dependencies: StoreWiringDependencies): StoreWiring {
         ? new ConversationThread({
             store: {
               appendHistory: (entries, now) =>
-                client()["history.append"]({ sessionKey, entries, now }),
+                client().ask("history.append", { sessionKey, entries, now }),
             },
             now: dependencies.now,
             onChanged: (entries, except) =>
@@ -216,14 +216,14 @@ export function wireStore(dependencies: StoreWiringDependencies): StoreWiring {
   const announce = () => dependencies.onDirectoryChanged(directory());
 
   const refreshDirectory = async (): Promise<void> => {
-    if (dependencies.persistent) stored = await client()["conversations.list"]({});
+    if (dependencies.persistent) stored = await client().ask("conversations.list", {});
     announce();
   };
 
   const restoreThread = async (sessionKey: SessionKey): Promise<void> => {
     const [entries, clearedAt] = await Promise.all([
-      client()["history.list"]({ sessionKey, now: dependencies.now() }),
-      client()["history.cutoff"]({ sessionKey }),
+      client().ask("history.list", { sessionKey, now: dependencies.now() }),
+      client().ask("history.cutoff", { sessionKey }),
     ]);
     thread(sessionKey).restore(entries, clearedAt);
   };
@@ -284,7 +284,7 @@ export function wireStore(dependencies: StoreWiringDependencies): StoreWiring {
 
   const unarchive = async (sessionKey: SessionKey): Promise<boolean> => {
     if (temporary.has(sessionKey) || !dependencies.persistent) return false;
-    const restored = await client()["conversations.unarchive"]({ sessionKey });
+    const restored = await client().ask("conversations.unarchive", { sessionKey });
     if (restored) await restoreThread(sessionKey);
     await refreshDirectory();
     return restored;
@@ -296,7 +296,7 @@ export function wireStore(dependencies: StoreWiringDependencies): StoreWiring {
   const refreshNotebook = async (): Promise<readonly NotebookEntry[]> => {
     if (!dependencies.persistent) return notebookEntries;
     try {
-      notebookEntries = await client()["notebook.list"]({ now: dependencies.now() });
+      notebookEntries = await client().ask("notebook.list", { now: dependencies.now() });
     } catch (error) {
       dependencies.report(
         `Could not read Luke's notebook: ${error instanceof Error ? error.message : String(error)}`,
@@ -320,9 +320,9 @@ export function wireStore(dependencies: StoreWiringDependencies): StoreWiring {
     }
   };
   const rememberNotebookEntry = (ask: { id: string; words: string; replaces?: string }) =>
-    mutateNotebook((store, now) => store["notebook.remember"]({ ...ask, now }));
+    mutateNotebook((store, now) => store.ask("notebook.remember", { ...ask, now }));
   const forgetNotebookEntry = (id: string) =>
-    mutateNotebook((store, now) => store["notebook.forget"]({ id, now }));
+    mutateNotebook((store, now) => store.ask("notebook.forget", { id, now }));
 
   const memoryJobs = memoryScheduledJobStore();
 
@@ -388,7 +388,7 @@ export function wireStore(dependencies: StoreWiringDependencies): StoreWiring {
         await unarchive(sessionKey);
         return stored.find((record) => record.sessionKey === sessionKey) ?? held;
       }
-      const created = await client()["conversations.create"]({
+      const created = await client().ask("conversations.create", {
         agentId: DEFAULT_AGENT_ID,
         sessionKey,
         name,
@@ -404,7 +404,7 @@ export function wireStore(dependencies: StoreWiringDependencies): StoreWiring {
       // Archiving preserves history, and a memory-held conversation has
       // nowhere to preserve it: the ask is refused and it is left as it was.
       if (temporary.has(sessionKey) || !dependencies.persistent) return false;
-      const archived = await client()["conversations.archive"]({
+      const archived = await client().ask("conversations.archive", {
         sessionKey,
         now: dependencies.now(),
         reason: ARCHIVE_REASON.USER,
@@ -415,7 +415,7 @@ export function wireStore(dependencies: StoreWiringDependencies): StoreWiring {
     historyCutoff: async (sessionKey) => {
       if (temporary.has(sessionKey) || !dependencies.persistent) return { value: undefined };
       try {
-        return { value: await client()["history.cutoff"]({ sessionKey }) };
+        return { value: await client().ask("history.cutoff", { sessionKey }) };
       } catch (error) {
         dependencies.report(
           `Could not read the conversation's cutoff: ${error instanceof Error ? error.message : String(error)}`,
@@ -429,7 +429,7 @@ export function wireStore(dependencies: StoreWiringDependencies): StoreWiring {
         return { published: true };
       }
       try {
-        return await client()["conversations.delete"]({
+        return await client().ask("conversations.delete", {
           sessionKey,
           now,
           keepSessionId,
@@ -447,7 +447,7 @@ export function wireStore(dependencies: StoreWiringDependencies): StoreWiring {
     runMaintenance: async (preserve) => {
       if (!dependencies.persistent) return undefined;
       try {
-        const report = await client()["maintenance.run"]({ now: dependencies.now(), preserve });
+        const report = await client().ask("maintenance.run", { now: dependencies.now(), preserve });
         if (report.unpublishedArchives.length > 0) {
           dependencies.report(
             `${report.unpublishedArchives.length} history archive(s) could not be published; the next launch retries`,

@@ -5,11 +5,15 @@ import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_SUBMISSION_OUTCOME,
   BRAIN_TOOL,
-  brainStateRepositoryFromStorage,
+  type BrainStateRepository,
   type ResponsesInputItem,
   responsesModelAnswer,
 } from "@sidecar/brain";
-import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testing";
+import {
+  type BareResponsesModel,
+  bareModelAdapter,
+  fakeBrainStateRepository,
+} from "@sidecar/brain/testing";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { MEMORY_HOUSEKEEPING_OUTCOME } from "@sidecar/memory";
 import type { ConversationEntry } from "@sidecar/realtime";
@@ -28,7 +32,6 @@ import {
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
 import { ACT_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
-import { MemoryBrainStorage } from "../testing/index.js";
 import { type BrainWiring, wireBrain } from "./wiring.js";
 
 /**
@@ -159,7 +162,7 @@ function composed(
     quietUntil: () => undefined,
   };
   const model = bareModelAdapter(client);
-  const storages = new Map<SessionKey, MemoryBrainStorage>();
+  const repositories = new Map<SessionKey, BrainStateRepository>();
   const children = new Map<string, ChildRunRecord>();
   const completions = new Map<string, ChildCompletionRecord>();
   const childStore: ChildStore = {
@@ -185,12 +188,12 @@ function composed(
   const wiring = wireBrain({
     childTimers: { schedule: clock.schedule, cancel: clock.cancel },
     repositoryFor: (sessionKey) => {
-      let storage = storages.get(sessionKey);
-      if (!storage) {
-        storage = new MemoryBrainStorage();
-        storages.set(sessionKey, storage);
+      let repository = repositories.get(sessionKey);
+      if (!repository) {
+        repository = fakeBrainStateRepository();
+        repositories.set(sessionKey, repository);
       }
-      return brainStateRepositoryFromStorage(storage);
+      return repository;
     },
     ensureObservedConversation: async (sessionKey, name) => {
       ensured.push({ sessionKey, name });

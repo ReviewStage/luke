@@ -67,41 +67,41 @@ test("the protocol answers every request once and serves the brain store, the th
     })),
     true,
   );
-  const appended = await client["history.append"]({
+  const appended = await client.ask("history.append", {
     sessionKey: MAIN_SESSION_KEY,
     entries: [line("hello", NOW, { eventId: "h" })],
     now: NOW,
   });
   assert.equal(appended.changed, true);
   assert.deepEqual(
-    await client["history.list"]({ sessionKey: MAIN_SESSION_KEY, now: NOW }),
+    await client.ask("history.list", { sessionKey: MAIN_SESSION_KEY, now: NOW }),
     appended.entries,
   );
-  const remembered = await client["notebook.remember"]({ id: "f", words: "w", now: NOW });
+  const remembered = await client.ask("notebook.remember", { id: "f", words: "w", now: NOW });
   assert.equal(remembered.ok, true);
   assert.deepEqual(
-    (await client["notebook.list"]({ now: NOW })).map((entry) => [entry.id, entry.words]),
+    (await client.ask("notebook.list", { now: NOW })).map((entry) => [entry.id, entry.words]),
     [["f", "w"]],
   );
   assert.equal(fs.existsSync(path.join(root, "workspace", "USER.md")), true);
-  const plan = await client["memory.plan-sync"]({ now: NOW });
+  const plan = await client.ask("memory.plan-sync", { now: NOW });
   assert.deepEqual(
     plan.changed.map((file) => file.path),
     ["USER.md"],
   );
-  await client["memory.apply-sync"]({
+  await client.ask("memory.apply-sync", {
     changed: plan.changed,
     removed: plan.removed,
     embeddings: [],
     now: NOW,
   });
-  assert.equal((await client["memory.search"]({ query: "w", now: NOW })).results.length, 1);
+  assert.equal((await client.ask("memory.search", { query: "w", now: NOW })).results.length, 1);
   assert.equal(
-    (await client["memory.get"]({ path: "USER.md", from: 1, lines: 1 }))?.text,
+    (await client.ask("memory.get", { path: "USER.md", from: 1, lines: 1 }))?.text,
     "# USER.md",
   );
   assert.deepEqual(
-    await client["history.search"]({
+    await client.ask("history.search", {
       sessionKeys: [MAIN_SESSION_KEY],
       query: "hello",
       limit: 5,
@@ -109,13 +109,19 @@ test("the protocol answers every request once and serves the brain store, the th
     }),
     [{ sessionKey: MAIN_SESSION_KEY, entry: appended.entries[0] }],
   );
-  const deleted = await client["conversations.delete"]({ sessionKey: MAIN_SESSION_KEY, now: NOW });
+  const deleted = await client.ask("conversations.delete", {
+    sessionKey: MAIN_SESSION_KEY,
+    now: NOW,
+  });
   assert.equal(deleted?.published, true);
-  assert.deepEqual(await client["history.list"]({ sessionKey: MAIN_SESSION_KEY, now: NOW }), []);
+  assert.deepEqual(
+    await client.ask("history.list", { sessionKey: MAIN_SESSION_KEY, now: NOW }),
+    [],
+  );
   assert.equal(await client.close(), true);
   // A request against a closed database is an error answer, not a hang.
   await assert.rejects(
-    client["history.list"]({ sessionKey: MAIN_SESSION_KEY, now: NOW }),
+    client.ask("history.list", { sessionKey: MAIN_SESSION_KEY, now: NOW }),
     /not open/,
   );
   close();
@@ -155,11 +161,11 @@ test("a worker that dies settles every pending request as rejected and refuses l
     },
   };
   const client = storeClient(port);
-  const pending = client["history.list"]({ sessionKey: MAIN_SESSION_KEY, now: NOW });
+  const pending = client.ask("history.list", { sessionKey: MAIN_SESSION_KEY, now: NOW });
   exit?.(1);
   await assert.rejects(pending, /exited with code 1/);
   await assert.rejects(
-    client["history.list"]({ sessionKey: MAIN_SESSION_KEY, now: NOW }),
+    client.ask("history.list", { sessionKey: MAIN_SESSION_KEY, now: NOW }),
     /exited with code 1/,
   );
 });
@@ -179,7 +185,7 @@ test("the real worker entry serves the same protocol on its own thread", async (
       conversationName: MAIN_CONVERSATION_NAME,
       now: NOW,
     });
-    const appended = await client["history.append"]({
+    const appended = await client.ask("history.append", {
       sessionKey: MAIN_SESSION_KEY,
       entries: [line("hi", NOW, { eventId: "x" })],
       now: NOW,

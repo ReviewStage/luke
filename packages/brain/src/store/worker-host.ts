@@ -1,10 +1,11 @@
 import type { UnparsedWireValue } from "@sidecar/wire";
 import {
+  type AnyOperationParams,
   type OpenStore,
   openStore,
   STORE_LIFECYCLE,
   STORE_OPERATIONS,
-  type StoreOpenOptions,
+  type StoreAnswer,
 } from "./store-operations.js";
 import {
   type StorePort,
@@ -22,11 +23,10 @@ import {
 export function serveStore(port: StorePort): void {
   let open: OpenStore | undefined;
 
-  const answer = (request: StoreRequest): unknown => {
+  const answer = (request: StoreRequest): StoreAnswer => {
     if (request.name === STORE_LIFECYCLE.OPEN) {
       open?.db.close();
-      // SAFETY: the open's parameters are the ones its own client method typed.
-      open = openStore(request.params as StoreOpenOptions);
+      open = openStore(request.params);
       return true;
     }
     if (request.name === STORE_LIFECYCLE.CLOSE) {
@@ -41,8 +41,8 @@ export function serveStore(port: StorePort): void {
     // narrowed by hand, and it is narrowed once rather than per operation.
     const operation = STORE_OPERATIONS[request.name] as (
       store: OpenStore,
-      params: unknown,
-    ) => unknown;
+      params: AnyOperationParams,
+    ) => StoreAnswer;
     return operation(open, request.params);
   };
 
@@ -51,7 +51,7 @@ export function serveStore(port: StorePort): void {
     if (!request) return;
     let response: StoreResponse;
     try {
-      // SAFETY: an operation's result is the structured-clone value its declared type describes.
+      // SAFETY: an operation's answer is the structured-clone value its declared type describes.
       response = { id: request.id, ok: true, result: answer(request) as UnparsedWireValue };
     } catch (error) {
       response = {

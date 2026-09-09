@@ -3,10 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { MessageChannel } from "node:worker_threads";
-<<<<<<< HEAD
-=======
 import { type StorePort, serveStore } from "@sidecar/brain/store";
->>>>>>> adb47079 (refactor(brain): fold runtime-store into brain/src/store)
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
 import { temporaryDirectory } from "@sidecar/runtime/testing";
 import {

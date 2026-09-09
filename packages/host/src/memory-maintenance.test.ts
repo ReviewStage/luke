@@ -94,7 +94,7 @@ async function harness(
   });
   const thread = threadSessionKey("11111111-1111-1111-1111-111111111111");
   const temporary = threadSessionKey("22222222-2222-2222-2222-222222222222");
-  await store["conversations.create"]({
+  await store.ask("conversations.create", {
     agentId: DEFAULT_AGENT_ID,
     sessionKey: thread,
     name: "Thread",

@@ -9,6 +9,7 @@ import {
   hostedBrainToolCatalog,
   toolLoopRuntimeOver,
 } from "@sidecar/brain";
+import { fakeBrainStateRepository } from "@sidecar/brain/testing";
 import {
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_OPERATION,
@@ -123,15 +124,8 @@ function composition() {
     follow: () => async () => undefined,
     publishEmpty: () => undefined,
   });
-  let file: string | undefined;
   const store = new BrainStateStore({
-    storage: {
-      read: () => file,
-      write: (contents) => {
-        file = contents;
-        return true;
-      },
-    },
+    repository: fakeBrainStateRepository(),
     createGenerationId: () => "gen-1",
   });
   const builds: string[] = [];

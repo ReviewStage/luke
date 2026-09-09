@@ -112,14 +112,14 @@ export function wireMemoryMaintenance(
     if (!eligible(sessionKey)) return undefined;
     return {
       read: async (generationId) => {
-        const state = await dependencies.client()["memory.flush-state.get"]({
+        const state = await dependencies.client().ask("memory.flush-state.get", {
           sessionKey,
           generationId,
         });
         return state && housekeepingCompleted(state.outcome) ? state.compactionCount : undefined;
       },
       write: async (generationId, compactionCount) => {
-        const recorded = await dependencies.client()["memory.flush-state.put"]({
+        const recorded = await dependencies.client().ask("memory.flush-state.put", {
           sessionKey,
           state: {
             generationId,

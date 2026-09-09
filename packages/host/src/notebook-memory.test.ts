@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-<<<<<<< HEAD
-=======
 import { type StorePort, serveStore, storeClient } from "@sidecar/brain/store";
->>>>>>> adb47079 (refactor(brain): fold runtime-store into brain/src/store)
 import { MEMORY_SOURCE, RETRIEVAL_MODE } from "@sidecar/memory";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
 import { temporaryDirectory } from "@sidecar/runtime/testing";
@@ -93,13 +90,13 @@ async function harness(t: TestContext, overrides: Partial<NotebookMemoryDependen
   });
   const thread = threadSessionKey("11111111-1111-1111-1111-111111111111");
   const temporary = threadSessionKey("22222222-2222-2222-2222-222222222222");
-  await store["conversations.create"]({
+  await store.ask("conversations.create", {
     agentId: DEFAULT_AGENT_ID,
     sessionKey: thread,
     name: "Thread",
     now: NOW,
   });
-  await store["conversations.create"]({
+  await store.ask("conversations.create", {
     agentId: DEFAULT_AGENT_ID,
     sessionKey: temporary,
     name: "Temp",
@@ -189,7 +186,7 @@ test("an embedding outage degrades an automatic provider to keyword-only, and th
 test("past-conversation results come from eligible conversations' History alone, never the asking one or a temporary thread", async (t) => {
   const h = await harness(t);
   await h.wiring.sync();
-  await h.store["history.append"]({
+  await h.store.ask("history.append", {
     sessionKey: MAIN_SESSION_KEY,
     entries: [
       {
@@ -201,7 +198,7 @@ test("past-conversation results come from eligible conversations' History alone,
     ],
     now: NOW,
   });
-  await h.store["history.append"]({
+  await h.store.ask("history.append", {
     sessionKey: h.thread,
     entries: [
       {
@@ -219,7 +216,7 @@ test("past-conversation results come from eligible conversations' History alone,
     ],
     now: NOW + 3,
   });
-  await h.store["history.append"]({
+  await h.store.ask("history.append", {
     sessionKey: h.temporary,
     entries: [
       {
@@ -260,7 +257,7 @@ test("a launch before any credential indexes keyword-only, and the first credent
   const first = await h.wiring.sync();
   assert.equal(first?.mode, RETRIEVAL_MODE.KEYWORD_ONLY);
   assert.equal(first?.embeddedChunks, 0);
-  assert.equal((await h.store["memory.status"]({})).embeddedChunks, 0);
+  assert.equal((await h.store.ask("memory.status", {})).embeddedChunks, 0);
   credential = embedding;
   const second = await h.wiring.sync();
   assert.equal(second?.mode, RETRIEVAL_MODE.HYBRID);
@@ -268,7 +265,7 @@ test("a launch before any credential indexes keyword-only, and the first credent
     second && second.indexedFiles > 0,
     "unchanged files are planned again for their vectors",
   );
-  const status = await h.store["memory.status"]({});
+  const status = await h.store.ask("memory.status", {});
   assert.ok(status.embeddedChunks > 0 && status.embeddedChunks === status.chunks);
   const third = await h.wiring.sync();
   assert.equal(third?.indexedFiles, 0, "once every chunk has a vector the files are left alone");
@@ -280,7 +277,7 @@ test("a transient embedding failure leaves keyword rows searchable and the next 
   const h = await harness(t, { embeddingAdapter: () => embedding });
   const failed = await h.wiring.sync();
   assert.equal(failed?.mode, RETRIEVAL_MODE.KEYWORD_ONLY);
-  assert.equal((await h.store["memory.status"]({})).embeddedChunks, 0);
+  assert.equal((await h.store.ask("memory.status", {})).embeddedChunks, 0);
   const access = h.wiring.accessFor(MAIN_SESSION_KEY);
   assert.ok(access);
   assert.equal(
@@ -292,7 +289,7 @@ test("a transient embedding failure leaves keyword rows searchable and the next 
   // A pass that fails after another pass stored vectors keeps every one of them.
   embedding.fail = false;
   await h.wiring.sync();
-  const before = (await h.store["memory.status"]({})).embeddedChunks;
+  const before = (await h.store.ask("memory.status", {})).embeddedChunks;
   assert.ok(before > 0);
   fs.writeFileSync(
     path.join(h.root, "workspace", "memory", "note.md"),
@@ -301,14 +298,14 @@ test("a transient embedding failure leaves keyword rows searchable and the next 
   embedding.fail = true;
   await h.wiring.sync();
   assert.equal(
-    (await h.store["memory.status"]({})).embeddedChunks,
+    (await h.store.ask("memory.status", {})).embeddedChunks,
     before,
     "a failed pass wipes no vector an earlier pass stored",
   );
   embedding.fail = false;
   const retried = await h.wiring.sync();
   assert.equal(retried?.mode, RETRIEVAL_MODE.HYBRID);
-  const status = await h.store["memory.status"]({});
+  const status = await h.store.ask("memory.status", {});
   assert.ok(status.embeddedChunks > 0 && status.embeddedChunks === status.chunks);
   h.close();
 });

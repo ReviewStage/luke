@@ -57,17 +57,17 @@ export interface NotebookMemoryDependencies {
 function notebookMemoryStore(client: StoreClient): NotebookMemoryStore {
   return {
     planMemorySync: (identity, now) =>
-      client["memory.plan-sync"]({ ...(identity ? { identity } : undefined), now }),
-    applyMemorySync: (apply) => client["memory.apply-sync"](apply),
-    searchMemory: (query) => client["memory.search"](query),
+      client.ask("memory.plan-sync", { ...(identity ? { identity } : undefined), now }),
+    applyMemorySync: (apply) => client.ask("memory.apply-sync", apply),
+    searchMemory: (query) => client.ask("memory.search", query),
     readMemory: (path, from, lines) =>
-      client["memory.get"]({
+      client.ask("memory.get", {
         path,
         ...(from !== undefined ? { from } : undefined),
         ...(lines !== undefined ? { lines } : undefined),
       }),
     searchHistory: (sessionKeys, query, limit, now) =>
-      client["history.search"]({ sessionKeys, query, limit, now }),
+      client.ask("history.search", { sessionKeys, query, limit, now }),
   };
 }
 

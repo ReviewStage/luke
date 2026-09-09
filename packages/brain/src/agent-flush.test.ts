@@ -24,7 +24,8 @@ import {
 } from "./requests.js";
 import { type ResponsesInputItem, responsesModelAnswer } from "./responses-api.js";
 import { ToolLoopAgentRuntime } from "./runtime.js";
-import { type BrainStateStorage, BrainStateStore } from "./state-store.js";
+import { BrainStateStore } from "./state-store.js";
+import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
 
 /**
  * The flush before compaction, at the host: a small window makes the soft
@@ -104,17 +105,6 @@ function adapterOf(model: FakeModel, compacts = false): ModelAdapter {
   };
 }
 
-class FakeStorage implements BrainStateStorage {
-  #record: string | undefined;
-  read() {
-    return this.#record;
-  }
-  write(contents: string) {
-    this.#record = contents;
-    return true;
-  }
-}
-
 async function settle(): Promise<void> {
   for (let index = 0; index < 30; index += 1) await new Promise((resolve) => setImmediate(resolve));
 }
@@ -136,13 +126,13 @@ class FakeMarkerStore implements BrainFlushMarkerStore {
 }
 
 interface Launch {
-  storage?: FakeStorage;
+  repository?: FakeBrainStateRepository;
   marker?: FakeMarkerStore;
   /** Whether the adapter compacts, so a context over the reserve folds in maintenance and the cycle moves. */
   compacts?: boolean;
 }
 
-/** An agent over the given storage and marker store, as one launch of the app would build it; a second call over the same is a relaunch. */
+/** An agent over the given repository and marker store, as one launch of the app would build it; a second call over the same is a relaunch. */
 function agentWith(
   hook: (input: BrainFlushInput) => Promise<MemoryHousekeepingResult>,
   launch: Launch = {},
@@ -155,9 +145,9 @@ function agentWith(
   });
   let ids = 0;
   const reports: string[] = [];
-  const storage = launch.storage ?? new FakeStorage();
+  const repository = launch.repository ?? fakeBrainStateRepository();
   const store = new BrainStateStore({
-    storage,
+    repository,
     createGenerationId: () => `gen-${Math.random().toString(36).slice(2)}`,
     now: () => NOW,
   });
@@ -179,7 +169,7 @@ function agentWith(
     beforeCompaction: hook,
     ...(launch.marker ? { flushMarker: launch.marker } : undefined),
   });
-  return { agent, model, reports, store, storage };
+  return { agent, model, reports, store, repository };
 }
 
 async function ask(agent: BrainAgent, question: string) {
@@ -269,7 +259,7 @@ test("restart: a flushed cycle is not flushed again after a relaunch, and a comp
   await first.agent.stop();
 
   // The relaunch: a new store over the same file, a new agent, the same marker table.
-  const second = agentWith(hook, { storage: first.storage, marker, compacts: true });
+  const second = agentWith(hook, { repository: first.repository, marker, compacts: true });
   await ask(second.agent, "still over the threshold");
   assert.equal(calls, 1, "cycle zero was flushed before the relaunch");
   assert.deepEqual(second.agent.flushCycle(), { compactionCount: 0, lastFlushCompactionCount: 0 });
@@ -279,7 +269,7 @@ test("restart: a flushed cycle is not flushed again after a relaunch, and a comp
   assert.equal(calls, 1, "cycle zero flushed once; the fold itself is not a flush");
   await second.agent.stop();
 
-  const third = agentWith(hook, { storage: first.storage, marker, compacts: true });
+  const third = agentWith(hook, { repository: first.repository, marker, compacts: true });
   assert.equal((await third.store.load()).compactionCount, 1, "the count rode on the envelope");
   await ask(third.agent, OVER_FLUSH_THRESHOLD);
   assert.equal(calls, 2, "cycle one is flushed once, after the relaunch");

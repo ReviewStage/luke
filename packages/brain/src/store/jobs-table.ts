@@ -13,6 +13,15 @@ import type { StoreDatabase } from "./database.js";
  * and a launch reads the last run from the payload through `nextRunAt`.
  */
 
+function parsed(payload: string): UnparsedWireValue | undefined {
+  try {
+    // SAFETY: JSON.parse returns a wire value; the reader is the validation.
+    return JSON.parse(payload) as UnparsedWireValue;
+  } catch {
+    return undefined;
+  }
+}
+
 export function listScheduledJobs(database: StoreDatabase): readonly ScheduledJob[] {
   // SAFETY: the payload column is text; the validator decides what it holds.
   const rows = database
@@ -20,21 +29,15 @@ export function listScheduledJobs(database: StoreDatabase): readonly ScheduledJo
     .all() as { payload: string }[];
   const jobs: ScheduledJob[] = [];
   for (const row of rows) {
-    let parsed: UnparsedWireValue;
-    try {
-      // SAFETY: JSON.parse returns a wire value; the reader is the validation.
-      parsed = JSON.parse(row.payload) as UnparsedWireValue;
-    } catch {
-      continue;
-    }
-    const job = scheduledJobFromWire(parsed);
+    const job = scheduledJobFromWire(parsed(row.payload));
     if (job) jobs.push(job);
   }
   return jobs;
 }
 
 export function putScheduledJob(database: StoreDatabase, job: ScheduledJob): boolean {
-  if (!scheduledJobFromWire(JSON.parse(JSON.stringify(job)))) return false;
+  const payload = JSON.stringify(job);
+  if (!scheduledJobFromWire(parsed(payload))) return false;
   database
     .prepare(
       `INSERT INTO scheduled_jobs (job_id, session_key, created_at, last_run_at, enabled, payload)
@@ -51,7 +54,7 @@ export function putScheduledJob(database: StoreDatabase, job: ScheduledJob): boo
       job.createdAt,
       job.lastRunAt ?? null,
       job.enabled ? 1 : 0,
-      JSON.stringify(job),
+      payload,
     );
   return true;
 }

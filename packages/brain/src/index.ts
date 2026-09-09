@@ -89,13 +89,9 @@ export {
   type BrainPersistedState,
   type BrainStateLoad,
   type BrainStateRepository,
-  type BrainStateStorage,
   BrainStateStore,
   type BrainTranscriptCursors,
   brainPersistedStateFromWire,
-  brainStateFromStored,
-  brainStateRecord,
-  brainStateRepositoryFromStorage,
   freshBrainState,
 } from "./state-store.js";
 export type { BrainChildAccess, BrainMemoryAccess } from "./tool-executor.js";

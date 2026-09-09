@@ -126,7 +126,7 @@ function composed(t: TestContext) {
   const thread = new ConversationThread({
     store: {
       appendHistory: (entries, now) =>
-        client["history.append"]({ sessionKey: MAIN_SESSION_KEY, entries, now }),
+        client.ask("history.append", { sessionKey: MAIN_SESSION_KEY, entries, now }),
     },
     now: () => clock,
     onChanged: (entries) => relayed.push(entries),
@@ -177,13 +177,13 @@ function composed(t: TestContext) {
       now: () => clock,
       fence: (at) => thread.fence(at),
       readCutoffBefore: async () => ({
-        value: await client["history.cutoff"]({ sessionKey: MAIN_SESSION_KEY }),
+        value: await client.ask("history.cutoff", { sessionKey: MAIN_SESSION_KEY }),
       }),
       fenceBrain: (at) => store.clear(at),
       erase: async (at, cutoffBefore) => {
         await eraseGate;
         if (refuseErase) return undefined;
-        const outcome = await client["conversations.delete"]({
+        const outcome = await client.ask("conversations.delete", {
           sessionKey: MAIN_SESSION_KEY,
           now: at,
           archiveId: `archive-${++ids}`,
@@ -265,8 +265,8 @@ function composed(t: TestContext) {
       now: clock,
     });
     thread.restore(
-      await client["history.list"]({ sessionKey: MAIN_SESSION_KEY, now: clock }),
-      await client["history.cutoff"]({ sessionKey: MAIN_SESSION_KEY }),
+      await client.ask("history.list", { sessionKey: MAIN_SESSION_KEY, now: clock }),
+      await client.ask("history.cutoff", { sessionKey: MAIN_SESSION_KEY }),
     );
   };
   return {
@@ -404,7 +404,7 @@ test("a Clear under a held model answer fences the brain and the thread before a
   assert.equal(standing?.reset_cleared_at, pressedAt);
   assertNoneOf(OLD_WORDS, c.rows());
   assert.deepEqual(
-    (await c.client["history.list"]({ sessionKey: MAIN_SESSION_KEY, now: c.now() })).map(
+    (await c.client.ask("history.list", { sessionKey: MAIN_SESSION_KEY, now: c.now() })).map(
       (entry) => entry.words,
     ),
     [AFTER_WORDS],
@@ -413,7 +413,7 @@ test("a Clear under a held model answer fences the brain and the thread before a
     c.thread.entries().map((entry) => entry.words),
     [AFTER_WORDS],
   );
-  assert.equal(await c.client["history.cutoff"]({ sessionKey: MAIN_SESSION_KEY }), pressedAt);
+  assert.equal(await c.client.ask("history.cutoff", { sessionKey: MAIN_SESSION_KEY }), pressedAt);
   // The archive holds exactly what stood at the press, compressed on disk.
   const [archive] = archivesOf(c.root);
   assert.ok(archive);
@@ -448,9 +448,9 @@ test("a Clear whose rows the store will not remove answers refused, yet the old 
   assert.ok(c.reports.some((report) => report.includes("could not be removed")));
   // The thread is fenced in memory and by the durable cutoff the marker raised.
   assert.deepEqual(c.thread.entries(), []);
-  assert.equal(await c.client["history.cutoff"]({ sessionKey: MAIN_SESSION_KEY }), pressedAt);
+  assert.equal(await c.client.ask("history.cutoff", { sessionKey: MAIN_SESSION_KEY }), pressedAt);
   assert.deepEqual(
-    await c.client["history.list"]({ sessionKey: MAIN_SESSION_KEY, now: c.now() }),
+    await c.client.ask("history.list", { sessionKey: MAIN_SESSION_KEY, now: c.now() }),
     [],
   );
   // The old checkpoint is gone from the database: the marker's successor
@@ -542,13 +542,13 @@ test("a Clear whose marker the disk refused, followed by a Clear that lands, arc
   c.repo.refuse = true;
   c.tick();
   assert.equal(await c.clear(), CONVERSATION_DELETE_OUTCOME.REFUSED);
-  assert.equal(await c.client["history.cutoff"]({ sessionKey: MAIN_SESSION_KEY }), undefined);
+  assert.equal(await c.client.ask("history.cutoff", { sessionKey: MAIN_SESSION_KEY }), undefined);
   c.repo.refuse = false;
   // The second press lands. Its archive must record the cutoff the disk
   // held before it — none — and not the first press's in-memory fence.
   const secondAt = c.tick();
   assert.equal(await c.clear(), CONVERSATION_DELETE_OUTCOME.COMPLETE);
-  assert.equal(await c.client["history.cutoff"]({ sessionKey: MAIN_SESSION_KEY }), secondAt);
+  assert.equal(await c.client.ask("history.cutoff", { sessionKey: MAIN_SESSION_KEY }), secondAt);
   const [archive] = archivesOf(c.root);
   assert.ok(archive);
   assert.equal(archive.historyLines, 2);

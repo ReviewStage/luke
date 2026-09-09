@@ -254,7 +254,7 @@ Trust constraints:
   An observed conversation's `announce` reaches the voice directly; main
   neither approves nor rewords it. Any conversation may delegate: the brain's
   `sessions_spawn` tool records a child (`agent:main:subagent:<uuid>`, kind
-  automation) in the runtime store before its receipt is answered, and the
+  automation) in the brain's store before its receipt is answered, and the
   child runs in a conversation of its own on the child lane, under the
   minimal prompt profile and OpenClaw `b7528507`'s child tool exclusions at
   its depth (delegation and session inspection go too at depth five), its
@@ -513,7 +513,8 @@ Trust constraints:
   is a product decision, not an implementation detail.
 - What the brain keeps is one generation per conversation, in one database
   under one writer, and the generation's shape is the retention rule for the
-  model's context alone. The database is the runtime store: one SQLite file
+  model's context alone. The database is the brain's store
+  (`packages/brain/src/store/`): one SQLite file
   per agent under Luke's own application data (`agents/main/agent.sqlite`),
   written only from its own worker thread, with a table for each kind of
   thing the envelope holds — the model's checkpoint items, the transcript
@@ -564,10 +565,10 @@ Trust constraints:
   generation that follows may
   observe the same provider files again, because the rule bounds how long a
   reading stands, not whether the source can be read. Within its life a
-  generation holds at most 200 records and its serialized file stays under 8
-  MiB: ended runs whose ends History has taken go first, each with its
+  generation holds at most 200 records: ended runs whose ends History has
+  taken go first, each with its
   journal, a new ask is refused at the door when nothing can go, and a write
-  that would still grow an envelope past a bound is refused rather than
+  that would still grow an envelope past the bound is refused rather than
   dropping a run still going or its journal.
 - The conversations are a directory, and the one operation the main process
   carries over it is Delete history, which no window can name either: the
@@ -668,7 +669,7 @@ Trust constraints:
   A build before this one promoted entries into that file behind HTML
   markers; they are left where they stand, since removing them would be a
   write to the notebook nobody asked for. Flush state lives in the
-  runtime store's own table. Forgetting names a notebook entry: the entry
+  brain's store's own table. Forgetting names a notebook entry: the entry
   and the provenance row beside it go, `USER.md` is written again, and the
   watcher's next reconcile takes its index rows with it; an id the notebook
   does not hold is refused rather than reported as erased. Deleting a conversation's history stays the separate,
@@ -797,7 +798,7 @@ Trust constraints:
   so storing it changes only how long it stands, not what it is. It lives in
   Luke's own application data, never a provider's file, under a real retention
   policy replacing the old "dies with the app": every admitted line stands
-  in the runtime store's own table until Delete history or the conversation
+  in the brain's store's own table until Delete history or the conversation
   maintenance below removes it, and what the panel draws and the model is
   handed is a projection over that record, the 200 most recent lines and
   nothing older than a fortnight. Each line
@@ -836,7 +837,7 @@ Trust constraints:
   about a session. Widening either — what may be stored, how long it stands,
   or where it may travel — is a product decision, not an implementation
   detail.
-- The notebook is searchable, and the index is derived. The runtime store
+- The notebook is searchable, and the index is derived. The brain's store
   keeps a disposable search index over `MEMORY.md`, `USER.md`, and the
   Markdown notes under `memory/` — sources, chunks of 400 tokens with 80 of
   overlap, an FTS5 shadow, and an embedding cache of at most 50,000 entries —

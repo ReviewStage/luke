@@ -10,6 +10,5 @@ export {
   BRAIN_HARNESS_NOW,
   brainHarness,
   heldModel,
-  MemoryBrainStorage,
 } from "./brain-harness.js";
 export { operatorOverBrain } from "./operator-over-brain.js";

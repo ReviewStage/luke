@@ -705,3 +705,52 @@ test("the observation inbox and capture cursors round-trip, amend whole, and cas
     .run("gen-inbox", 0, "bad", JSON.stringify({ id: "bad" }));
   assert.equal(loadBrainEnvelope(database, MAIN_SESSION_KEY).unreadable, true);
 });
+
+test("a database still carrying the retired memory tables opens with them dropped and everything else intact", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "luke-store-"));
+  const location = path.join(directory, "agent.sqlite");
+  const seeded = StoreDatabase.open(location);
+  createConversation(seeded, {
+    agentId: DEFAULT_AGENT_ID,
+    sessionKey: MAIN_SESSION_KEY,
+    name: "main",
+    now: NOW,
+  });
+  saveBrainEnvelope(seeded, MAIN_SESSION_KEY, {
+    kind: SAVE_KIND.REPLACE,
+    state: populatedState("gen-kept"),
+  });
+  appendHistory(seeded, MAIN_SESSION_KEY, [line("kept", NOW, { eventId: "k" })], NOW);
+  seeded.close();
+
+  // The shape a build before the memory tables went: their rows stand, and
+  // the version is the one before the migration that drops them.
+  const older = new DatabaseSync(location);
+  older.exec("CREATE TABLE memory_candidates (candidate_id TEXT PRIMARY KEY, words TEXT NOT NULL)");
+  older.prepare("INSERT INTO memory_candidates VALUES (?, ?)").run("c-1", "CANDIDATE_SECRET");
+  older.exec("UPDATE schema_version SET version = 9");
+  older.close();
+
+  const database = StoreDatabase.open(location);
+  // SAFETY: the query selects the one column its row type names.
+  const tables = database
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'memory_%'")
+    .all() as { name: string }[];
+  const names = new Set(tables.map((row) => row.name));
+  assert.equal(names.has("memory_candidates"), false);
+  // What the index and the flush marker still need stands untouched beside it.
+  assert.equal(names.has("memory_index_chunks"), true);
+  assert.equal(names.has("memory_flush_state"), true);
+  // SAFETY: as above.
+  const version = database.prepare("SELECT version FROM schema_version").get() as {
+    version: number;
+  };
+  assert.equal(version.version, STORE_SCHEMA_VERSION);
+  assert.equal(loadBrainEnvelope(database, MAIN_SESSION_KEY).state?.generationId, "gen-kept");
+  assert.deepEqual(
+    listHistory(database, MAIN_SESSION_KEY, NOW).map((entry) => entry.words),
+    ["kept"],
+  );
+  database.close();
+  fs.rmSync(directory, { recursive: true, force: true });
+});
