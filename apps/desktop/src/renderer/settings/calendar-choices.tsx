@@ -21,10 +21,17 @@ import { useSettingWrite } from "./use-setting-write";
 export function CalendarChoices({
   account,
   calendars,
+  stilled,
   onToggle,
 }: {
   account: CalendarAccount;
   calendars: readonly AccountCalendar[];
+  /**
+   * Whether the connection above is in the middle of an answer of its own. A
+   * checkbox pressed while its account's disconnect is in flight would write to
+   * a grant already leaving.
+   */
+  stilled?: boolean;
   onToggle: (calendarId: string, selected: boolean) => Promise<ActionResult>;
 }): React.JSX.Element {
   const { busy, rejection, run } = useSettingWrite(
@@ -49,7 +56,7 @@ export function CalendarChoices({
               <input
                 type="checkbox"
                 checked={selected}
-                disabled={busy}
+                disabled={busy || stilled === true}
                 aria-label={`Count meetings on ${calendar.label}`}
                 onChange={() => run({ calendarId: calendar.id, selected: !selected })}
               />

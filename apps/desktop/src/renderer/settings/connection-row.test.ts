@@ -5,10 +5,17 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { connectionInput, connectionVisibility } from "#testing/connection-fixtures";
 import { settingsView } from "#testing/settings-fixtures";
+import { SETTINGS_VIEW } from "../settings-views";
 import { CONFIRM_STAGE } from "./confirm-state";
 import { ConfirmSwap } from "./confirm-swap";
 import { ConnectionRow } from "./connection-row";
-import { CONNECTION_SCHEMA, type ConnectionInput } from "./connection-schema";
+import {
+  CONNECTION_LAYOUT,
+  CONNECTION_SCHEMA,
+  CONNECTION_SECTION,
+  type ConnectionInput,
+  type ConnectionSpec,
+} from "./connection-schema";
 
 function swap(stage: (typeof CONFIRM_STAGE)[keyof typeof CONFIRM_STAGE] | undefined): string {
   const asking = stage
@@ -131,4 +138,28 @@ test("what the latest pass reported is drawn as state rather than as an answer",
   assert.match(google, /calendar-account-name">person@example\.com</);
   assert.match(google, /Google would not answer for this account\./);
   assert.doesNotMatch(google, /role="alert"/);
+});
+
+test("what a row draws under its line is told when an answer of its own is running", () => {
+  // A checkbox pressed while its account's disconnect is in flight would write
+  // to a grant already leaving, so the body has to be able to still itself.
+  const told: boolean[] = [];
+  const spec: ConnectionSpec = {
+    id: "example",
+    layout: CONNECTION_LAYOUT.BLOCK,
+    page: SETTINGS_VIEW.CONNECTIONS,
+    section: CONNECTION_SECTION.INTEGRATIONS,
+    order: 1,
+    offered: () => true,
+    name: () => "Example",
+    status: () => ({ connected: true }),
+    actions: () => [],
+    body: (_input, settling) => {
+      told.push(settling);
+      return null;
+    },
+    haystack: [],
+  };
+  renderToStaticMarkup(createElement(ConnectionRow, { spec, input: connectionInput() }));
+  assert.deepEqual(told, [false], "nothing asked, nothing running");
 });

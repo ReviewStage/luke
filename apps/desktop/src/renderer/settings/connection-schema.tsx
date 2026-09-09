@@ -197,8 +197,14 @@ export interface ConnectionSpec {
   mark?: React.ReactNode;
   status: (input: ConnectionInput) => ConnectionStatus;
   actions: (input: ConnectionInput) => readonly ConnectionAction[];
-  /** More of the connection itself, drawn under its line and above its refusal. */
-  body?: (input: ConnectionInput) => React.ReactNode;
+  /**
+   * More of the connection itself, drawn under its line and above its refusal.
+   * `settling` is true while an answer the row gave is still running, which is
+   * what stills anything below the line that writes to the same thing — a
+   * checkbox pressed while its account's disconnect is in flight would write to
+   * a grant already leaving.
+   */
+  body?: (input: ConnectionInput, settling: boolean) => React.ReactNode;
   /** Why something a hand asked for was refused, beside the confirm's own answer. */
   refusal?: (input: ConnectionInput) => string | undefined;
   /**
@@ -472,12 +478,13 @@ function googleAccountConnection(account: CalendarAccount, order: number): Conne
         },
       },
     ],
-    body: (input) => (
+    body: (input, settling) => (
       <CalendarChoices
         account={account}
         calendars={
           input.calendar.choices.find((choice) => choice.accountId === account.id)?.calendars ?? []
         }
+        stilled={settling}
         onToggle={(calendarId, selected) =>
           input.calendar.onToggleCalendar(account.id, calendarId, selected)
         }
@@ -774,13 +781,14 @@ export const CONNECTION_SCHEMA: readonly ConnectionSpec[] = [
         },
       ];
     },
-    body: (input) => {
+    body: (input, settling) => {
       const account = input.settings.appleCalendar;
       if (!account || input.appleCalendar.revoked) return null;
       return (
         <CalendarChoices
           account={account}
           calendars={input.appleCalendar.choices}
+          stilled={settling}
           onToggle={input.appleCalendar.onToggleCalendar}
         />
       );

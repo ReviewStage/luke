@@ -177,7 +177,7 @@ export function ConnectionRow({
   const body = (
     <>
       {line}
-      {spec.body?.(input)}
+      {spec.body?.(input, confirm.busy)}
       {rejection}
       {children}
       {nested.map((child) => (
