@@ -33,7 +33,7 @@ export interface CalendarGateControl {
  * the first sign-in until it is answered. Unconnected, it asks; connected,
  * the caller hands in the settings page's own calendar block as `review`, so
  * the calendars read exactly as they do everywhere else, until Done confirms
- * the choice. Every button runs the same consent flow or bridge call the
+ * the choice. Every button runs the same consent flow or act the
  * settings rows do, and the gate falls on the answer the main process
  * records, never on anything decided here.
  */

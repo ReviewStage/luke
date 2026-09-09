@@ -7,6 +7,8 @@ import {
   conversationEntryKey,
 } from "@sidecar/session";
 import { useEffect, useRef, useState } from "react";
+import { ACT_KIND } from "#shared/messages/acts";
+import { tell } from "./act";
 import { type AskHandler, AskLuke } from "./ask-luke";
 import {
   createConversationTimeBreakFormatter,
@@ -113,7 +115,7 @@ function ConversationEntryRow({
                 // The line's own words as written, Markdown marks included, so
                 // a paste carries the structure the bubble drew — and never the
                 // structured model context behind an announcement.
-                window.sidecar.copyText(words);
+                tell(ACT_KIND.WINDOW_COPY_TEXT, { words });
                 setCopied(true);
               }}
             >

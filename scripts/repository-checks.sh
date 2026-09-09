@@ -361,14 +361,15 @@ if [[ -n "$hand_rolled_fixtures" ]]; then
     exit 1
 fi
 
-# BRIDGE is the one renderer-to-main declaration, and registerBridge is the
-# one place that may attach it to Electron. A handler registered beside its
-# domain logic would bypass the manifest's sender and wire guards.
+# BRIDGE is the one renderer-to-main declaration, and registerBridgeHost is
+# the one place that may attach it to Electron. A handler registered beside its
+# domain logic would bypass the manifest's sender and wire guards, and an act
+# registered on a channel of its own would bypass the router.
 direct_ipc_registration=$(grep -RnaE --include='*.ts' 'ipcMain\.(handle|on)\(' \
     "$SIDECAR_REPO_ROOT/apps/desktop/src" |
-    grep -v '/main/register-bridge.ts:' || true)
+    grep -v '/main/bridge-host.ts:' || true)
 if [[ -n "$direct_ipc_registration" ]]; then
-    printf 'error: Electron IPC handlers must be registered through registerBridge:\n%s\n' \
+    printf 'error: Electron IPC handlers must be registered through registerBridgeHost:\n%s\n' \
         "$direct_ipc_registration" >&2
     exit 1
 fi

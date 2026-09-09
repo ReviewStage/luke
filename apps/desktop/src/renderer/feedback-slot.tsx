@@ -2,6 +2,8 @@ import type { FeedbackImage } from "@sidecar/feedback";
 import { FEEDBACK_LIMITS } from "@sidecar/feedback";
 import { ImageIcon, WingFace as LukeFace, RemoveIcon } from "@sidecar/panel";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ACT_KIND } from "#shared/messages/acts";
+import { tell } from "./act";
 import { useStagedFocus } from "./credential-entry";
 import { CONFIRMATION_ENTRANCE_MS, type FeedbackConfirmation } from "./feedback-confirmation";
 import {
@@ -262,7 +264,7 @@ export function FeedbackSlot({
           onFocus={() => {
             // The shape is shown without stealing focus, and a field that
             // cannot be typed into is worse than no field.
-            window.sidecar.focusPanel();
+            tell(ACT_KIND.WINDOW_FOCUS_PANEL);
           }}
           // Enter is a new line in a note this size; Command-Enter sends.
           onKeyDown={fieldKeys}
@@ -289,7 +291,7 @@ export function FeedbackSlot({
             value={entry.name}
             disabled={busy}
             onChange={(event) => control.changeName(event.target.value)}
-            onFocus={() => window.sidecar.focusPanel()}
+            onFocus={() => tell(ACT_KIND.WINDOW_FOCUS_PANEL)}
             onKeyDown={fieldKeys}
           />
           <input
@@ -303,7 +305,7 @@ export function FeedbackSlot({
             value={entry.email}
             disabled={busy}
             onChange={(event) => control.changeEmail(event.target.value)}
-            onFocus={() => window.sidecar.focusPanel()}
+            onFocus={() => tell(ACT_KIND.WINDOW_FOCUS_PANEL)}
             onKeyDown={fieldKeys}
           />
         </div>

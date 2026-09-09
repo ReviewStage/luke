@@ -1,4 +1,3 @@
-import type { RecordProductEvent } from "@sidecar/analytics";
 import { APPLE_CALENDAR_ACCESS, CALENDAR_PRIVACY_PANE_URL } from "@sidecar/calendar/vocabulary";
 import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
 import {
@@ -7,14 +6,13 @@ import {
   type AppSettingField,
   SETTING_SIDE_EFFECT,
 } from "@sidecar/settings";
-import type { AppSettings } from "@sidecar/settings/wire";
-import { ACTION_RESULT_STATUS, isWireString } from "@sidecar/wire";
-import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
-import { BRIDGE, type BridgeArgumentsFor } from "#shared/bridge";
+import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import type { WebContents } from "electron";
+import { ACT_KIND, ACT_REFUSAL, type SettingUpdatePayload } from "#shared/messages/acts";
+import type { ActRows } from "../act-router";
 import type { HostOperator } from "../gateway/host-operator";
 import type { MediaDuckController } from "../native/media-duck";
-import { type BridgeContext, registerBridge } from "../register-bridge";
-import { type createSettingsHandler, SettingsRefusal } from "../settings-handler";
 import type { DockPresence } from "../window/dock-presence";
 import { HOTKEY_RANK, type HotkeyRegistrar } from "../window/hotkey-registrar";
 import type { PanelManager } from "../window/panel-manager";
@@ -27,13 +25,10 @@ import type { PanelManager } from "../window/panel-manager";
  * effects only this process has hands on: the login item, the Dock, the
  * displays, the form factor, the keys, the duck.
  */
-export interface SettingsRowsIpcDependencies {
-  ipcMain: Pick<IpcMain, "handle" | "on">;
-  trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
-  registerSettingHandler: ReturnType<typeof createSettingsHandler>;
+export interface SettingsRowsDependencies {
   host: HostOperator;
   /** The opaque token naming the window that asked, so the host's change event is not echoed back to it. */
-  reporterOf: (context: BridgeContext) => string;
+  reporterOf: (sender: WebContents) => string;
   /** The settings snapshot as this client last saw it, for the refusals worded here. */
   lastSettings: () => AppSettings | undefined;
   hotkeys: HotkeyRegistrar;
@@ -41,54 +36,71 @@ export interface SettingsRowsIpcDependencies {
   applyLoginItem: (openAtLogin: boolean) => void;
   panels: PanelManager;
   mediaDuck: MediaDuckController;
-  recordProductEvent: RecordProductEvent;
   /** Opens a page in the default browser; the address lives in this file. */
   openExternal: (url: string) => void;
 }
 
-export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencies): void {
-  const {
-    registerSettingHandler,
-    host,
-    reporterOf,
-    hotkeys,
-    dock,
-    applyLoginItem,
-    panels,
-    mediaDuck,
-  } = dependencies;
+/** Which kinds this file answers for: the settings writes and the connection rows beside them. */
+type SettingsActKind =
+  | typeof ACT_KIND.SETTING_UPDATE
+  | typeof ACT_KIND.SETTING_UPDATE_ENTRY
+  | typeof ACT_KIND.SETTINGS_RESET
+  | typeof ACT_KIND.CREDENTIAL_SET_API_KEY
+  | typeof ACT_KIND.CALENDAR_CONNECT_GOOGLE
+  | typeof ACT_KIND.CALENDAR_CANCEL_GOOGLE_SIGN_IN
+  | typeof ACT_KIND.CALENDAR_REOPEN_GOOGLE_SIGN_IN
+  | typeof ACT_KIND.CALENDAR_REMOVE_ACCOUNT
+  | typeof ACT_KIND.CALENDAR_CONNECT_APPLE
+  | typeof ACT_KIND.CALENDAR_DISCONNECT_APPLE
+  | typeof ACT_KIND.CALENDAR_APPLE_ACCESS_STATUS
+  | typeof ACT_KIND.CALENDAR_CANCEL_APPLE_CONNECT
+  | typeof ACT_KIND.CALENDAR_OPEN_SETTINGS
+  | typeof ACT_KIND.CALENDAR_REFRESH
+  | typeof ACT_KIND.CALENDAR_SET_SELECTED
+  | typeof ACT_KIND.TRACKER_CONNECT
+  | typeof ACT_KIND.TRACKER_CANCEL_SIGN_IN
+  | typeof ACT_KIND.TRACKER_REOPEN_SIGN_IN
+  | typeof ACT_KIND.TRACKER_DISCONNECT;
 
-  const refusal = async (reason: string): Promise<SettingsRefusal> => {
+export function settingsActRows(
+  dependencies: SettingsRowsDependencies,
+): Pick<ActRows, SettingsActKind> {
+  const { host, reporterOf, hotkeys, dock, applyLoginItem, panels, mediaDuck } = dependencies;
+
+  /** A refusal the row draws: the settings as they stand, and why the write did not happen. */
+  const refuse = async (reason: string): Promise<SettingsUpdateResult> => {
     const settings = dependencies.lastSettings() ?? (await host.settingsSnapshot());
     if (!settings) throw new Error(reason);
-    return new SettingsRefusal({ status: ACTION_RESULT_STATUS.REJECTED, settings, reason });
+    return { status: ACTION_RESULT_STATUS.REJECTED, settings, reason };
   };
 
-  // The renderer can replace or clear a provider's credential but never reads
-  // it back; the reply reports only where each key now comes from, and the key
-  // itself crosses once, to the host that keeps it.
-  registerSettingHandler(BRIDGE.setProviderApiKey, {
-    validate(providerId, apiKey) {
-      return { providerId, apiKey };
-    },
-    save: ({ providerId, apiKey }, context) =>
-      host.setProviderApiKey(providerId, apiKey, reporterOf(context)),
-    async apply(result, { providerId }) {
-      // The voice key is what the talk key is claimed for: once the host has
-      // rebuilt the voice on it, the key moves — claimed now that there is
-      // something to talk to, or given back now that there is not.
-      if (!result.reason && providerId === VOICE_CREDENTIAL_PROVIDER_ID) {
-        await hotkeys.reapply(HOTKEY_RANK.TALK);
-      }
-    },
-    refusal: "Could not save that API key on this system.",
-  });
+  /**
+   * One settings write. The host's change event is what every other window
+   * hears; the window that asked hears this answer and is skipped there. A
+   * host that could not be reached at all is worded over the last snapshot
+   * this client saw, and only a client with no snapshot either throws — which
+   * the router answers as the act's own refusal.
+   */
+  const write = async (
+    reason: string,
+    save: () => Promise<SettingsUpdateResult>,
+    apply?: (result: SettingsUpdateResult) => Promise<void> | void,
+  ): Promise<SettingsUpdateResult> => {
+    let saved: SettingsUpdateResult;
+    try {
+      saved = await save();
+    } catch {
+      return refuse(reason);
+    }
+    await apply?.(saved);
+    return saved;
+  };
 
   /** The side effects this process has hands on; the host applied its own before answering. */
   async function applyClientSettingSideEffect(
     field: AppSettingField,
     settings: AppSettings,
-    context: BridgeContext,
+    sender: WebContents,
     waitForDeferredEffects = false,
   ): Promise<void> {
     switch (APP_SETTING_SCHEMA[field].mainProcessSideEffect) {
@@ -96,7 +108,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
         applyLoginItem(settings.stored.openAtLogin);
         break;
       case SETTING_SIDE_EFFECT.DOCK:
-        dock.apply(settings.stored.showInDock, panels.displayIdFor(context.sender));
+        dock.apply(settings.stored.showInDock, panels.displayIdFor(sender));
         break;
       case SETTING_SIDE_EFFECT.DISPLAYS:
         panels.setShowOnAllDisplays(settings.stored.showOnAllDisplays);
@@ -132,67 +144,90 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     }
   }
 
-  registerSettingHandler(BRIDGE.updateSetting, {
-    async validate(...[field, value]: BridgeArgumentsFor<"updateSetting">) {
-      const parsed = APP_SETTING_SCHEMA[field].guard(value);
-      if (!parsed.valid) throw new Error("Bridge setting guard drift");
-      if (field === APP_SETTING_SCHEMA.askHotkey.field && isWireString(parsed.value)) {
-        if (hotkeys.reserve(parsed.value, HOTKEY_RANK.ASK) === HOTKEY_RANK.TALK) {
-          return refusal("That chord is reserved for the talk key.");
-        }
-      }
-      if (field === APP_SETTING_SCHEMA.stopHotkey.field && isWireString(parsed.value)) {
-        const owner = hotkeys.reserve(parsed.value, HOTKEY_RANK.STOP);
-        if (owner === HOTKEY_RANK.TALK || owner === HOTKEY_RANK.ASK) {
-          return refusal(
-            `That chord is reserved for the ${owner === HOTKEY_RANK.TALK ? "talk" : "ask"} key.`,
-          );
-        }
-      }
-      return { field, value: parsed.value };
-    },
-    save: ({ field, value }, context) =>
-      // SAFETY: the schema guard above validated this value for its field.
-      host.updateSetting(field, value as never, reporterOf(context)),
-    async apply(result, { field }, context) {
-      if (result.reason) return;
-      await applyClientSettingSideEffect(field, result.settings, context);
-    },
-    refusal: "Could not save that setting on this system.",
-  });
+  /**
+   * Which key a chord this write would claim is already spoken for, named the
+   * way the row will draw it. Read from the payload rather than a field and a
+   * value apart, because it is the field that says the value is a chord.
+   */
+  const chordHolder = (payload: SettingUpdatePayload): string | undefined => {
+    if (payload.field === APP_SETTING_SCHEMA.askHotkey.field) {
+      if (payload.value === undefined) return undefined;
+      return hotkeys.reserve(payload.value, HOTKEY_RANK.ASK) === HOTKEY_RANK.TALK
+        ? "talk"
+        : undefined;
+    }
+    if (payload.field !== APP_SETTING_SCHEMA.stopHotkey.field) return undefined;
+    if (payload.value === undefined) return undefined;
+    const owner = hotkeys.reserve(payload.value, HOTKEY_RANK.STOP);
+    if (owner === HOTKEY_RANK.TALK) return "talk";
+    return owner === HOTKEY_RANK.ASK ? "ask" : undefined;
+  };
 
-  registerSettingHandler(BRIDGE.updateSettingEntry, {
-    validate(...[field, key, value]: BridgeArgumentsFor<"updateSettingEntry">) {
-      return { field, key, value };
+  return {
+    // The renderer can replace or clear a provider's credential but never
+    // reads it back; the reply reports only where each key now comes from,
+    // and the key itself crosses once, to the host that keeps it.
+    [ACT_KIND.CREDENTIAL_SET_API_KEY]: ({ providerId, apiKey }, { sender }) =>
+      write(
+        ACT_REFUSAL[ACT_KIND.CREDENTIAL_SET_API_KEY],
+        () => host.setProviderApiKey(providerId, apiKey, reporterOf(sender)),
+        async (result) => {
+          // The voice key is what the talk key is claimed for: once the host
+          // has rebuilt the voice on it, the key moves — claimed now that
+          // there is something to talk to, or given back now that there is not.
+          if (!result.reason && providerId === VOICE_CREDENTIAL_PROVIDER_ID) {
+            await hotkeys.reapply(HOTKEY_RANK.TALK);
+          }
+        },
+      ),
+    [ACT_KIND.SETTING_UPDATE]: async (payload, { sender }) => {
+      const holder = chordHolder(payload);
+      if (holder) return refuse(`That chord is reserved for the ${holder} key.`);
+      return write(
+        ACT_REFUSAL[ACT_KIND.SETTING_UPDATE],
+        // SAFETY: the act's own schema parsed this value for this field.
+        () => host.updateSetting(payload.field, payload.value as never, reporterOf(sender)),
+        async (result) => {
+          if (result.reason) return;
+          await applyClientSettingSideEffect(payload.field, result.settings, sender);
+        },
+      );
     },
-    save: ({ field, key, value }, context) =>
-      // SAFETY: the bridge's entry guard validated this value; the host guards it again.
-      host.updateSettingEntry(field, key, value as never, reporterOf(context)),
-    async apply(result, { field }, context) {
-      if (result.reason) return;
-      await applyClientSettingSideEffect(field, result.settings, context);
-    },
-    refusal: "Could not save that setting on this system.",
-  });
-
-  registerSettingHandler(BRIDGE.resetSettings, {
-    validate(scope) {
-      return scope;
-    },
-    save: (scope, context) => host.resetSettings(scope, reporterOf(context)),
-    async apply(result, scope, context) {
-      if (result.reason) return;
-      for (const field of APP_SETTING_FIELDS) {
-        const definition = APP_SETTING_SCHEMA[field];
-        if (!("resetScope" in definition) || definition.resetScope !== scope) continue;
-        await applyClientSettingSideEffect(field, result.settings, context, true);
-      }
-    },
-    refusal: "Could not reset those settings on this system.",
-  });
-
-  registerConnectionRows(dependencies);
+    [ACT_KIND.SETTING_UPDATE_ENTRY]: ({ field, key, value }, { sender }) =>
+      write(
+        ACT_REFUSAL[ACT_KIND.SETTING_UPDATE_ENTRY],
+        // SAFETY: the act's own schema parsed this value for this field and key.
+        () => host.updateSettingEntry(field, key, value as never, reporterOf(sender)),
+        async (result) => {
+          if (result.reason) return;
+          await applyClientSettingSideEffect(field, result.settings, sender);
+        },
+      ),
+    [ACT_KIND.SETTINGS_RESET]: ({ scope }, { sender }) =>
+      write(
+        ACT_REFUSAL[ACT_KIND.SETTINGS_RESET],
+        () => host.resetSettings(scope, reporterOf(sender)),
+        async (result) => {
+          if (result.reason) return;
+          for (const field of APP_SETTING_FIELDS) {
+            const definition = APP_SETTING_SCHEMA[field];
+            if (!("resetScope" in definition) || definition.resetScope !== scope) continue;
+            await applyClientSettingSideEffect(field, result.settings, sender, true);
+          }
+        },
+      ),
+    ...connectionActRows(dependencies),
+  };
 }
+
+/** Which kinds the connection rows below answer for. */
+type ConnectionActKind = Exclude<
+  SettingsActKind,
+  | typeof ACT_KIND.SETTING_UPDATE
+  | typeof ACT_KIND.SETTING_UPDATE_ENTRY
+  | typeof ACT_KIND.SETTINGS_RESET
+  | typeof ACT_KIND.CREDENTIAL_SET_API_KEY
+>;
 
 /**
  * The Linear and calendar rows, proxied to the host that owns each grant: the
@@ -202,70 +237,62 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
  * runs here, at the host's ask through the native node, so the consent dialog
  * a connect raises is still raised on this machine by the press that asked for
  * it. The one address opened from here — the Privacy pane a row's press names
- * — is the client's own action.
+ * — is the client's own act.
  */
-function registerConnectionRows(
+function connectionActRows(
   dependencies: Pick<
-    SettingsRowsIpcDependencies,
-    "ipcMain" | "trustedSender" | "registerSettingHandler" | "host" | "reporterOf" | "openExternal"
+    SettingsRowsDependencies,
+    "host" | "reporterOf" | "lastSettings" | "openExternal"
   >,
-): void {
-  const { ipcMain, trustedSender, registerSettingHandler, host, reporterOf, openExternal } =
-    dependencies;
-  registerSettingHandler(BRIDGE.connectLinear, {
-    validate: () => undefined,
-    save: (_value, context) => host.connectLinear(reporterOf(context)),
-    refusal: "Could not connect Linear on this system.",
-  });
-  registerSettingHandler(BRIDGE.disconnectLinear, {
-    validate: () => undefined,
-    save: (_value, context) => host.disconnectLinear(reporterOf(context)),
-    refusal: "Could not disconnect Linear on this system.",
-  });
-  registerSettingHandler(BRIDGE.connectGoogleCalendar, {
-    validate: () => undefined,
-    save: (_value, context) => host.connectGoogleCalendar(reporterOf(context)),
-    refusal: "Could not connect Google Calendar on this system.",
-  });
-  registerSettingHandler(BRIDGE.removeCalendarAccount, {
-    validate(accountId) {
-      return accountId;
-    },
-    save: (accountId, context) => host.removeCalendarAccount(accountId, reporterOf(context)),
-    refusal: "Could not disconnect that account on this system.",
-  });
-  registerSettingHandler(BRIDGE.connectAppleCalendar, {
-    validate: () => undefined,
-    save: (_value, context) => host.connectAppleCalendar(reporterOf(context)),
-    refusal: "Could not connect Apple Calendar on this system.",
-  });
-  registerSettingHandler(BRIDGE.disconnectAppleCalendar, {
-    validate: () => undefined,
-    save: (_value, context) => host.disconnectAppleCalendar(reporterOf(context)),
-    refusal: "Could not disconnect Apple Calendar on this system.",
-  });
-  registerSettingHandler(BRIDGE.setCalendarSelected, {
-    validate(accountId, calendarId, selected) {
-      return { accountId, calendarId, selected };
-    },
-    save: ({ accountId, calendarId, selected }, context) =>
-      host.setCalendarSelected(accountId, calendarId, selected, reporterOf(context)),
-    refusal: "Could not save that calendar choice on this system.",
-  });
-  registerBridge(
-    BRIDGE,
-    {
-      cancelLinearSignIn: () => host.cancelLinearSignIn(),
-      reopenLinearSignIn: () => host.reopenLinearSignIn(),
-      cancelGoogleCalendarSignIn: () => host.cancelGoogleCalendarSignIn(),
-      reopenGoogleCalendarSignIn: () => host.reopenGoogleCalendarSignIn(),
-      cancelAppleCalendarConnect: () => host.cancelAppleCalendarConnect(),
-      async appleCalendarAccessStatus() {
-        return (await host.appleCalendarAccessStatus()) ?? APPLE_CALENDAR_ACCESS.NOT_DETERMINED;
-      },
-      refreshCalendars: () => host.refreshCalendars(),
-      openCalendarSettings: () => openExternal(CALENDAR_PRIVACY_PANE_URL),
-    },
-    { ipcMain, trustedSender },
-  );
+): Pick<ActRows, ConnectionActKind> {
+  const { host, reporterOf, openExternal } = dependencies;
+  const write = async (
+    reason: string,
+    save: () => Promise<SettingsUpdateResult>,
+  ): Promise<SettingsUpdateResult> => {
+    try {
+      return await save();
+    } catch {
+      const settings = dependencies.lastSettings() ?? (await host.settingsSnapshot());
+      if (!settings) throw new Error(reason);
+      return { status: ACTION_RESULT_STATUS.REJECTED, settings, reason };
+    }
+  };
+  return {
+    [ACT_KIND.TRACKER_CONNECT]: (_payload, { sender }) =>
+      write(ACT_REFUSAL[ACT_KIND.TRACKER_CONNECT], () => host.connectLinear(reporterOf(sender))),
+    [ACT_KIND.TRACKER_DISCONNECT]: (_payload, { sender }) =>
+      write(ACT_REFUSAL[ACT_KIND.TRACKER_DISCONNECT], () =>
+        host.disconnectLinear(reporterOf(sender)),
+      ),
+    [ACT_KIND.TRACKER_CANCEL_SIGN_IN]: () => host.cancelLinearSignIn(),
+    [ACT_KIND.TRACKER_REOPEN_SIGN_IN]: () => host.reopenLinearSignIn(),
+    [ACT_KIND.CALENDAR_CONNECT_GOOGLE]: (_payload, { sender }) =>
+      write(ACT_REFUSAL[ACT_KIND.CALENDAR_CONNECT_GOOGLE], () =>
+        host.connectGoogleCalendar(reporterOf(sender)),
+      ),
+    [ACT_KIND.CALENDAR_CANCEL_GOOGLE_SIGN_IN]: () => host.cancelGoogleCalendarSignIn(),
+    [ACT_KIND.CALENDAR_REOPEN_GOOGLE_SIGN_IN]: () => host.reopenGoogleCalendarSignIn(),
+    [ACT_KIND.CALENDAR_REMOVE_ACCOUNT]: ({ accountId }, { sender }) =>
+      write(ACT_REFUSAL[ACT_KIND.CALENDAR_REMOVE_ACCOUNT], () =>
+        host.removeCalendarAccount(accountId, reporterOf(sender)),
+      ),
+    [ACT_KIND.CALENDAR_CONNECT_APPLE]: (_payload, { sender }) =>
+      write(ACT_REFUSAL[ACT_KIND.CALENDAR_CONNECT_APPLE], () =>
+        host.connectAppleCalendar(reporterOf(sender)),
+      ),
+    [ACT_KIND.CALENDAR_DISCONNECT_APPLE]: (_payload, { sender }) =>
+      write(ACT_REFUSAL[ACT_KIND.CALENDAR_DISCONNECT_APPLE], () =>
+        host.disconnectAppleCalendar(reporterOf(sender)),
+      ),
+    [ACT_KIND.CALENDAR_CANCEL_APPLE_CONNECT]: () => host.cancelAppleCalendarConnect(),
+    [ACT_KIND.CALENDAR_APPLE_ACCESS_STATUS]: async () =>
+      (await host.appleCalendarAccessStatus()) ?? APPLE_CALENDAR_ACCESS.NOT_DETERMINED,
+    [ACT_KIND.CALENDAR_REFRESH]: () => host.refreshCalendars(),
+    [ACT_KIND.CALENDAR_OPEN_SETTINGS]: () => openExternal(CALENDAR_PRIVACY_PANE_URL),
+    [ACT_KIND.CALENDAR_SET_SELECTED]: ({ accountId, calendarId, selected }, { sender }) =>
+      write(ACT_REFUSAL[ACT_KIND.CALENDAR_SET_SELECTED], () =>
+        host.setCalendarSelected(accountId, calendarId, selected, reporterOf(sender)),
+      ),
+  };
 }

@@ -53,10 +53,10 @@ import {
 import type { AppSettings, AppSettingsView, SettingsUpdateResult } from "@sidecar/settings/wire";
 import { CLI_CONNECTION } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
-import type { AppBridge } from "#shared/bridge";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "#shared/messages/audio";
 import type { UpdateSnapshot } from "#shared/messages/update";
 import { UPDATE_STATUS } from "#shared/messages/update";
+import type { SettingWriteActs } from "./act";
 import { UPDATE_ROW_ACTION, type UpdateRowAction, updateRow } from "./update-row";
 
 export type { AppSettingId } from "@sidecar/settings";
@@ -697,8 +697,8 @@ function spokenWorkspaceAgentSelection(
 }
 
 /**
- * Carries one validated spoken settings change to the same bridge calls the
- * settings rows use, and returns the canonical action result. Human-readable
+ * Carries one validated spoken settings change to the same acts the settings
+ * rows mint, and returns the canonical action result. Human-readable
  * history belongs to the action's ACTIONS narration, not to a second result shape.
  * The store answers with the settings it actually holds either way, and
  * `onSettings` hands that snapshot back to the panel so the switch on screen
@@ -706,7 +706,7 @@ function spokenWorkspaceAgentSelection(
  * so a model or effort change composes against the selection actually stored.
  */
 export async function applySpokenSetting(
-  bridge: Pick<AppBridge, "updateSetting" | "updateSettingEntry">,
+  writer: SettingWriteActs,
   action: { setting: AppGuideSetting; value: string; effort?: string },
   onSettings: (settings: AppSettings) => void,
   current?: AppSettingsView,
@@ -725,7 +725,7 @@ export async function applySpokenSetting(
     if ("refusal" in composed) {
       return { status: ACTION_RESULT_STATUS.REJECTED, reason: composed.refusal };
     }
-    result = await bridge.updateSettingEntry(
+    result = await writer.updateSettingEntry(
       APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
       PROVIDER_ID.CONDUCTOR,
       composed.selection,
@@ -751,7 +751,7 @@ export async function applySpokenSetting(
         reason: "That setting cannot be changed from here.",
       };
     }
-    result = await bridge.updateSetting(field, value);
+    result = await writer.updateSetting(field, value);
   }
   onSettings(result.settings);
   if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {

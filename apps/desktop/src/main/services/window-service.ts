@@ -29,7 +29,6 @@ import { channels } from "#shared/bridge";
 import type { AppStateSnapshot, AppWindowFacts } from "#shared/messages/app-state";
 import { WINDOW_ROLE } from "#shared/messages/session";
 import type { AppStateStore } from "../app-state";
-import type { BridgeContext } from "../register-bridge";
 import { DockPresence } from "../window/dock-presence";
 import { HOTKEY_RANK, HotkeyRegistrar } from "../window/hotkey-registrar";
 import { IntroductionWindow } from "../window/introduction-window";
@@ -92,7 +91,7 @@ export interface WindowService extends DesktopService {
    * nothing about the window to anyone else, and the host records it beside
    * the change it produced.
    */
-  reporterOf: (context: BridgeContext) => string;
+  reporterOf: (sender: WebContents) => string;
   /** Only this build's own renderer may reach a bridge entry. */
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
   /** The one window an action only a renderer can perform is carried to; false when none is open. */
@@ -102,7 +101,7 @@ export interface WindowService extends DesktopService {
   recycleVoiceWindow: () => void;
   introductionMounted: () => void;
   /** A panel that finished painting, which is what the introduction's handoff waits for. */
-  notePanelReady: (context: BridgeContext) => void;
+  notePanelReady: (sender: WebContents) => void;
   finishIntroduction: (given: boolean) => Promise<void>;
   abandonIntroduction: () => Promise<void>;
 }
@@ -120,11 +119,11 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   const recordProductEvent = telemetry.recordProductEvent;
 
   const reporters = new WeakMap<WebContents, string>();
-  function reporterOf(context: BridgeContext): string {
-    const held = reporters.get(context.sender);
+  function reporterOf(sender: WebContents): string {
+    const held = reporters.get(sender);
     if (held) return held;
     const minted = randomUUID();
-    reporters.set(context.sender, minted);
+    reporters.set(sender, minted);
     return minted;
   }
 
@@ -449,8 +448,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     introductionMounted: () => {
       introductionRendererReady = true;
     },
-    notePanelReady: (context) => {
-      if (!resolveIntroductionPanelReady || !panels.owns(context.sender)) return;
+    notePanelReady: (sender) => {
+      if (!resolveIntroductionPanelReady || !panels.owns(sender)) return;
       resolveIntroductionPanelReady();
       resolveIntroductionPanelReady = undefined;
     },

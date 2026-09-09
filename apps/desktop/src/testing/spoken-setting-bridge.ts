@@ -12,13 +12,13 @@ import type {
   RuntimeStatus,
   SettingsUpdateResult,
 } from "@sidecar/settings/wire";
-import type { AppBridge } from "#shared/bridge";
+import type { SettingWriteActs } from "../renderer/act";
 
-export type SpokenSettingBridge = Pick<AppBridge, "updateSetting" | "updateSettingEntry">;
+export type SpokenSettingBridge = SettingWriteActs;
 
 /**
- * A fixture bridge as a test writes one: each carrier optional, and each stated
- * at its widest field rather than generically. The bridge's own methods are
+ * A fixture writer as a test writes one: each carrier optional, and each
+ * stated at its widest field rather than generically. The acts themselves are
  * generic in the field they name, and a concrete function is not assignable to
  * a generic signature — so the two are reconciled in one place instead of at
  * every fixture.
@@ -38,7 +38,7 @@ export interface SpokenSettingBridgeFixture {
   ) => Promise<SettingsUpdateResult>;
 }
 
-/** Names a fixture bridge with the same contract applySpokenSetting validates. */
+/** Names a fixture writer with the same contract applySpokenSetting validates. */
 export function spokenSettingBridge(fixture: SpokenSettingBridgeFixture): SpokenSettingBridge {
   // A carrier the fixture leaves out is one the test is asserting never runs.
   return {

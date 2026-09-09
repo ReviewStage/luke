@@ -7,6 +7,7 @@ import type { BrainAskSubmissionResult, BrainRequestSnapshot } from "@sidecar/br
 import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
 import { VOICE_ERROR_NOTICE_MS } from "@sidecar/voice/orchestrator";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ACT_KIND } from "#shared/messages/acts";
 import {
   IDLE_VOICE_VIEW,
   VOICE_COMMAND,
@@ -14,6 +15,7 @@ import {
   type VoiceCommandOutcome,
   type VoiceView,
 } from "#shared/messages/voice-view";
+import { act, tell } from "./act";
 import { useAppState } from "./use-app-state";
 import { VOICE_ACTIVITY_HANGOVER_MS, VOICE_ACTIVITY_THRESHOLD } from "./voice/voice-level-meter";
 import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
@@ -185,13 +187,13 @@ export function useVoiceView(): VoiceViewState {
   const askLuke = useCallback(
     async (text: string): Promise<string | undefined> =>
       askDraftReason(
-        await window.sidecar
-          .submitBrainAsk({
+        await act(ACT_KIND.BRAIN_SUBMIT_ASK, {
+          submission: {
             submissionId: crypto.randomUUID(),
             question: text,
             origin: BRAIN_REQUEST_ORIGIN.TYPED,
-          })
-          .catch((): BrainAskSubmissionResult | undefined => undefined),
+          },
+        }).catch((): BrainAskSubmissionResult | undefined => undefined),
       ),
     [],
   );
@@ -200,16 +202,16 @@ export function useVoiceView(): VoiceViewState {
   // must go.
   const brainRequests = state?.brain.runs ?? EMPTY_BRAIN_REQUESTS;
   const cancelBrainAsk = useCallback((runId: string) => {
-    void window.sidecar.cancelBrainAsk(runId).catch(() => undefined);
+    void act(ACT_KIND.BRAIN_CANCEL_ASK, { runId }).catch(() => undefined);
   }, []);
   const discardListening = useCallback(() => {
-    void window.sidecar.voiceCommand(VOICE_COMMAND.DISCARD_LISTENING);
+    tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.DISCARD_LISTENING });
   }, []);
   const stopSpeaking = useCallback(() => {
-    void window.sidecar.voiceCommand(VOICE_COMMAND.STOP_SPEAKING);
+    tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.STOP_SPEAKING });
   }, []);
   const requestMicrophoneAccess = useCallback(() => {
-    void window.sidecar.voiceCommand(VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS);
+    tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS });
   }, []);
   // The one failure the panel reports itself: the stored thread refusing to
   // go is the main process's answer to this press, not anything the voice
@@ -221,8 +223,7 @@ export function useVoiceView(): VoiceViewState {
     return () => window.clearTimeout(timer);
   }, [localError]);
   const clearConversationLines = useCallback(() => {
-    void window.sidecar
-      .voiceCommand(VOICE_COMMAND.CLEAR_CONVERSATION)
+    act(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.CLEAR_CONVERSATION })
       .catch((): VoiceCommandOutcome => VOICE_COMMAND_OUTCOME.REFUSED)
       .then((outcome) => {
         if (outcome === VOICE_COMMAND_OUTCOME.REFUSED) setLocalError(CLEAR_FAILED_REASON);

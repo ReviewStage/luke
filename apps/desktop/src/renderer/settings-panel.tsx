@@ -105,10 +105,12 @@ import {
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { Fragment, useEffect, useRef, useState } from "react";
+import { ACT_KIND } from "#shared/messages/acts";
 import type { MicrophoneStatus } from "#shared/messages/audio";
 import type { WorkspaceProviderId } from "#shared/messages/session";
 import { SUPERSET_WORKSPACE_PROVIDER_ID } from "#shared/messages/session";
 import type { UpdateSnapshot } from "#shared/messages/update";
+import { act, tell, updateSetting, updateSettingEntry } from "./act";
 import {
   CREDENTIAL_PLACEHOLDER,
   type CredentialEntryControl,
@@ -216,7 +218,7 @@ export interface SettingsWrites {
 }
 
 /**
- * The one way a settings row writes: through the bridge, answering the row
+ * The one way a settings row writes: through its own act, answering the row
  * with the store's own reply so a refusal lands where it was asked for. What
  * the rows then draw is the document, which carries the change to every
  * window including this one, so nothing here applies a snapshot — and with
@@ -224,9 +226,9 @@ export interface SettingsWrites {
  * rows the calendar gate borrows from it alike.
  */
 export const SETTINGS_WRITES: SettingsWrites = {
-  setting: (field, value) => window.sidecar.updateSetting(field, value),
-  entry: (field, key, value) => window.sidecar.updateSettingEntry(field, key, value),
-  reset: (scope) => window.sidecar.resetSettings(scope),
+  setting: (field, value) => updateSetting(field, value),
+  entry: (field, key, value) => updateSettingEntry(field, key, value),
+  reset: (scope) => act(ACT_KIND.SETTINGS_RESET, { scope }),
 };
 
 /**
@@ -698,7 +700,7 @@ function ProviderCredential({
               onFocus={() => {
                 // The panel can be showing without its window being key, and a
                 // field that cannot be typed into is worse than no field.
-                window.sidecar.focusPanel();
+                tell(ACT_KIND.WINDOW_FOCUS_PANEL);
               }}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && isSubmittable(entry)) control.commit();
@@ -1022,7 +1024,7 @@ function SelectRow<Value extends string | number>({
             onFocus={() => {
               // The panel can be showing without its window being key, and a
               // menu opened then would drop its first choice.
-              window.sidecar.focusPanel();
+              tell(ACT_KIND.WINDOW_FOCUS_PANEL);
             }}
           >
             {options.map((option) => (
@@ -2868,7 +2870,7 @@ function ShortcutRow({
             onFocus={() => {
               // The panel can be showing without its window being key, and a
               // recording no keystroke can reach would read as a dead control.
-              window.sidecar.focusPanel();
+              tell(ACT_KIND.WINDOW_FOCUS_PANEL);
             }}
             // Focus leaving takes the recording with it: whatever was pressed
             // instead is its own action, not a half-formed chord left armed.
@@ -3524,7 +3526,7 @@ function UpdatesSection({
         <button
           type="button"
           className="quiet-button"
-          onClick={() => window.sidecar.openChangelog()}
+          onClick={() => tell(ACT_KIND.UPDATE_OPEN_CHANGELOG)}
         >
           Open
           <ExternalIcon />

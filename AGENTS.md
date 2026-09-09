@@ -462,9 +462,9 @@ Trust constraints:
   place and in one order, so no caller can run the steps in another. What the desktop keeps for itself is the
   windows, the keys, the Dock, the login item, the media duck, the output
   and microphone watchers, the microphone permission, the updater, the
-  feedback courier, and the introduction; every bridge handler proxies to
-  the host through that one operator client, so the renderer and preload
-  contract is unchanged. Scheduling, tool decisions, history, provider
+  feedback courier, and the introduction; every act the bridge admits reaches
+  the host through that one operator client, or is performed by the desktop
+  itself where the capability is the client's own. Scheduling, tool decisions, history, provider
   operations, and delivery policy stay the host's; microphone, playback,
   window control, and OS opening stay the client's.
 - The native capabilities the brain's own acts reach (opening an address a
@@ -1026,7 +1026,8 @@ Trust constraints:
   race the binary swap. The row's button is also a press that can be asked
   of Luke, only in a turn the developer opened themselves: the ask is
   validated in the renderer against the one action the row currently offers and
-  lands on the same main-process guards the button's own press does, so it
+  lands on the same main-process guards the button's own press does, because it
+  is the same `ACT_KIND.UPDATE_*` act, so it
   reaches nothing the button does not — the check, the restart, or the fixed
   releases page in the browser. A transient network failure is silence for
   the next timed check; a download refused just after its check found the
@@ -1069,8 +1070,8 @@ Trust constraints:
   product decision, not an implementation detail.
 - Keep unsupported capabilities explicit; do not invent fallback controls.
 - Keep Electron renderers sandboxed with context isolation and narrow IPC: one
-  state channel in, and beside it only the named event channels a document's
-  version could not carry.
+  state channel in, one act channel out, and beside them only the named event
+  channels a document's version could not carry.
 - Commit only synthetic fixtures and repository-relative paths. This binds
   harder as Luke observes more: a fixture copied from a real session now carries
   a real title and branch.
