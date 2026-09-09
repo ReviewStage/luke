@@ -3,17 +3,10 @@ import {
   type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderSessionObservation,
-  type SessionProvider,
   SessionProviderAdapterBase,
   UNSUPPORTED_BY_OBSERVATION,
 } from "@sidecar/session";
-import type { SessionFileCandidate } from "./local-files.js";
-import {
-  type ObservationPass,
-  observationPass,
-  type RosterHolder,
-  rosterHolder,
-} from "./observation-pass.js";
+import { type RosterHolder, rosterHolder } from "./observation-pass.js";
 
 export interface LocalSessionAdapterOptions {
   now?: () => number;
@@ -69,41 +62,5 @@ export abstract class LocalSessionAdapter extends SessionProviderAdapterBase {
       status: ACT_RESULT_STATUS.UNSUPPORTED,
       reason: "This provider has no such control.",
     };
-  }
-}
-
-export abstract class LocalFileSessionAdapter<
-  Candidate extends SessionFileCandidate,
-  Parsed,
-> extends LocalSessionAdapter {
-  abstract override readonly provider: SessionProvider;
-
-  readonly #pass: ObservationPass;
-
-  protected constructor(options: LocalSessionAdapterOptions = {}) {
-    super(options);
-    this.#pass = observationPass<Candidate, Parsed>({
-      now: () => this.observationTime(),
-      discover: () => this.discover(),
-      prepare: (candidates) => this.prepare(candidates),
-      parse: (candidate) => this.parse(candidate),
-      observation: ({ candidate, parsed, now, activeSessionFreshnessMs }) =>
-        this.observation(candidate, parsed, now, activeSessionFreshnessMs),
-    });
-  }
-
-  protected abstract discover(): Promise<readonly Candidate[]>;
-  protected abstract parse(candidate: Candidate): Promise<Parsed>;
-  protected abstract observation(
-    candidate: Candidate,
-    parsed: Parsed,
-    now: number,
-    activeSessionFreshnessMs: number,
-  ): Promise<ProviderSessionObservation> | ProviderSessionObservation;
-
-  protected prepare(_candidates: readonly Candidate[]): Promise<void> | void {}
-
-  async observe(): Promise<readonly ProviderSessionObservation[]> {
-    return this.observed(await this.#pass.run());
   }
 }

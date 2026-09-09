@@ -7,14 +7,21 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import {
-  TRANSCRIPT_BOUNDS,
-  transcriptContentBlocks,
-  transcriptLine,
-  transcriptMessageText,
-} from "../shared/jsonl-transcript.js";
+import { TRANSCRIPT_BOUNDS, transcriptLine } from "../shared/jsonl-transcript.js";
 import { readDirectory, statDirectoryEntry } from "../shared/local-files.js";
-import { CLAUDE_TOOL_INPUT_KEYS } from "./records.js";
+import {
+  CLAUDE_CONTENT_TYPE,
+  CLAUDE_EVENT_TYPE,
+  CLAUDE_PROJECTS_DIRECTORY,
+  CLAUDE_RECORD_TYPE,
+  CLAUDE_SESSION_FILE_EXTENSION,
+  CLAUDE_SESSION_ID_PATTERN,
+  CLAUDE_SYSTEM_SUBTYPE,
+  CLAUDE_TOOL_INPUT_KEYS,
+  claudeContentBlocks,
+  claudeMessageText,
+  isClaudeToolResult,
+} from "./records.js";
 
 /**
  * On-demand reading of one Claude Code session's transcript, for a question
@@ -26,12 +33,6 @@ import { CLAUDE_TOOL_INPUT_KEYS } from "./records.js";
  * Nothing here is retained, watched, or written; a session is re-read the
  * next time it is asked about.
  */
-
-const CLAUDE_PROJECTS_DIRECTORY = "projects";
-const CLAUDE_SESSION_FILE_EXTENSION = ".jsonl";
-
-/** The same shape the observation hook accepts: the ids Claude Code mints. */
-const CLAUDE_SESSION_ID_PATTERN = /^[0-9a-fA-F-]{8,64}$/;
 
 function toolLine(block: WireRecord): string | undefined {
   const name = text(block.name);
@@ -50,7 +51,7 @@ function wordsFromContent(content: UnparsedWireValue): string | undefined {
   if (Array.isArray(content)) {
     const parts = content
       .filter(isRecord)
-      .filter((part) => part.type === "text")
+      .filter((part) => part.type === CLAUDE_CONTENT_TYPE.TEXT)
       .map((part) => text(part.text))
       .filter((part): part is string => part !== undefined);
     if (parts.length > 0) return parts.join(" ");
@@ -66,8 +67,8 @@ function wordsFromContent(content: UnparsedWireValue): string | undefined {
  * output rides `stdout`, `stderr`, or `content`.
  */
 function toolResultText(record: WireRecord): string | undefined {
-  for (const block of transcriptContentBlocks(record, true)) {
-    if (block.type !== "tool_result") continue;
+  for (const block of claudeContentBlocks(record)) {
+    if (block.type !== CLAUDE_CONTENT_TYPE.TOOL_RESULT) continue;
     const words = wordsFromContent(block.content);
     if (words) return words;
   }
@@ -81,46 +82,38 @@ function toolResultText(record: WireRecord): string | undefined {
   return undefined;
 }
 
-function isToolResult(record: WireRecord): boolean {
-  if (record.toolUseResult !== undefined) return true;
-  return transcriptContentBlocks(record, true).some((block) => block.type === "tool_result");
-}
-
 /** Renders one record into the lines a conversation can carry, oldest first. */
 export function linesFromClaudeRecord(record: WireRecord): string[] {
-  if (record.type === "user") {
-    if (isToolResult(record)) {
+  if (record.type === CLAUDE_EVENT_TYPE.USER) {
+    if (isClaudeToolResult(record)) {
       const answer = oneLine(toolResultText(record), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
       return answer ? [transcriptLine.toolResult(answer)] : [];
     }
-    const prompt = oneLine(
-      transcriptMessageText(record, true),
-      TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH,
-    );
+    const prompt = oneLine(claudeMessageText(record), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
     return prompt ? [transcriptLine.developer(prompt)] : [];
   }
-  if (record.type === "assistant") {
+  if (record.type === CLAUDE_EVENT_TYPE.ASSISTANT) {
     const lines: string[] = [];
-    const words = oneLine(
-      transcriptMessageText(record, true),
-      TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH,
-    );
+    const words = oneLine(claudeMessageText(record), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
     if (words) lines.push(transcriptLine.agent("Claude", words));
-    for (const block of transcriptContentBlocks(record, true)) {
-      if (block.type !== "tool_use") continue;
+    for (const block of claudeContentBlocks(record)) {
+      if (block.type !== CLAUDE_CONTENT_TYPE.TOOL_USE) continue;
       const line = toolLine(block);
       if (line) lines.push(line);
     }
     return lines;
   }
-  if (record.type === "system" && record.subtype === "api_error") {
+  if (
+    record.type === CLAUDE_RECORD_TYPE.SYSTEM &&
+    record.subtype === CLAUDE_SYSTEM_SUBTYPE.API_ERROR
+  ) {
     const error = record.error;
     const words = isRecord(error)
       ? oneLine(text(error.formatted) ?? text(error.message), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH)
       : undefined;
     return words ? [transcriptLine.error(words)] : [];
   }
-  if (record.type === "result") {
+  if (record.type === CLAUDE_EVENT_TYPE.RESULT) {
     const words = oneLine(text(record.result), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
     return words ? [`Result: ${words}`] : [];
   }

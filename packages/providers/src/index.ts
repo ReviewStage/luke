@@ -1,4 +1,4 @@
-export { ClaudeDesktopSessionApplicationReader } from "./claude-code/desktop-applications.js";
+export { claudeDesktopApplications } from "./claude-code/applications.js";
 export { CodexCloudSessionAdapter } from "./codex/cloud-adapter.js";
 export {
   ConductorLocalWorkspaceAdapter,

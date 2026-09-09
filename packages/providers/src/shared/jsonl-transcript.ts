@@ -16,7 +16,7 @@ import {
   type ProviderTranscriptSinceResult,
   transcriptReadTailBytes,
 } from "@sidecar/session";
-import { isRecord, isWireString, recordFromJsonLine, text, type WireRecord } from "@sidecar/wire";
+import { recordFromJsonLine, type WireRecord } from "@sidecar/wire";
 import {
   type FileWindow,
   fileStats,
@@ -42,37 +42,6 @@ export const TRANSCRIPT_BOUNDS = {
   /** A rendered tool call or its result: the gist, never the payload. */
   MAXIMUM_TOOL_LENGTH: 200,
 } as const;
-
-export function transcriptContentBlocks(
-  record: WireRecord,
-  fallbackToRecordContent: boolean,
-): WireRecord[] {
-  const message = record.message;
-  const content = isRecord(message)
-    ? message.content
-    : fallbackToRecordContent
-      ? record.content
-      : undefined;
-  return Array.isArray(content) ? content.filter(isRecord) : [];
-}
-
-export function transcriptMessageText(
-  record: WireRecord,
-  fallbackToRecordContent: boolean,
-): string | undefined {
-  const message = record.message;
-  const content = isRecord(message)
-    ? message.content
-    : fallbackToRecordContent
-      ? record.content
-      : undefined;
-  if (isWireString(content)) return text(content);
-  const parts = transcriptContentBlocks(record, fallbackToRecordContent)
-    .filter((block) => block.type === "text")
-    .map((block) => text(block.text))
-    .filter((part): part is string => part !== undefined);
-  return parts.length > 0 ? parts.join(" ") : undefined;
-}
 
 /**
  * Joins rendered lines into one rendering, or nothing when there are no lines

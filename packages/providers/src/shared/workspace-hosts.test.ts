@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { PROVIDER_ID, SESSION_STATUS } from "@sidecar/session";
-import { ClaudeDesktopSessionApplicationReader } from "../claude-code/desktop-applications.js";
+import { claudeDesktopApplications } from "../claude-code/applications.js";
 import { ConductorSessionApplicationReader } from "../conductor/session-applications.js";
 import { type WorkspaceHostRegistration, workspaceHostRegistrations } from "./workspace-hosts.js";
 
@@ -26,7 +26,7 @@ function registrations(directory: string, superset?: WorkspaceHostRegistration) 
     conductorApplications: new ConductorSessionApplicationReader({
       databasePath: path.join(directory, "conductor.db"),
     }),
-    claudeDesktopApplications: new ClaudeDesktopSessionApplicationReader({
+    claudeDesktopApplications: claudeDesktopApplications({
       sessionsDirectory: path.join(directory, "claude-code-sessions"),
     }),
   });

@@ -3,14 +3,13 @@ import path from "node:path";
 import {
   maximumSessionTitleLength,
   PROVIDER_ID,
-  type ProviderSessionObservation,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
   type SessionApplication,
 } from "@sidecar/session";
 import { text, unparsedWire, type WireRecord, wireRecord } from "@sidecar/wire";
+import { type HostClaims, hostClaims, type WorkspaceHostContexts } from "../shared/host-claims.js";
 import { readDirectory, readTextFile, statDirectoryEntry } from "../shared/local-files.js";
-import { WorkspaceHostSnapshot } from "../shared/workspace-host-snapshot.js";
 
 const CLAUDE_DESKTOP_APPLICATION_SUPPORT_DIRECTORY = "Claude";
 const CLAUDE_DESKTOP_SESSIONS_DIRECTORY = "claude-code-sessions";
@@ -91,10 +90,6 @@ interface ClaudeDesktopSessionContext {
   archived?: boolean;
 }
 
-export interface ClaudeDesktopSessionApplicationReaderOptions {
-  sessionsDirectory?: string;
-}
-
 export function defaultClaudeDesktopSessionsDirectory(): string {
   return path.join(
     os.homedir(),
@@ -112,45 +107,42 @@ export function defaultClaudeDesktopSessionsDirectory(): string {
  * own observation disappear. Only the app's own positive record that the user
  * archived a chat drops a row, and drops it whole.
  */
-export class ClaudeDesktopSessionApplicationSnapshot extends WorkspaceHostSnapshot<ClaudeDesktopSessionContext> {
-  protected override readonly applicationId = SESSION_APPLICATION_ID.CLAUDE;
-
-  protected override retains(context: ClaudeDesktopSessionContext): boolean {
-    return context.archived !== true;
-  }
-
-  protected override annotate(
-    observation: ProviderSessionObservation,
-    context: ClaudeDesktopSessionContext,
-    desktopSessions: ReadonlyMap<string, ClaudeDesktopSessionContext>,
-  ): ProviderSessionObservation {
-    // A sub-agent's inherited context addresses the ancestor chat, which is
-    // where its conversation is shown.
-    const link = context.desktopSessionId
-      ? claudeDesktopSessionLink(context.desktopSessionId)
-      : undefined;
-    const application: SessionApplication = {
-      id: SESSION_APPLICATION_ID.CLAUDE,
-      displayName: CLAUDE_DESKTOP_APPLICATION_NAME,
-      scope: SESSION_APPLICATION_SCOPE.SESSION,
-      ...(link ? { link } : undefined),
-    };
-    // The address fills the row's link only where nothing else gave one; the
-    // session normalization decides which linked mark a grouped row's press
-    // follows.
-    const detail =
-      link && !observation.detail?.link ? { ...observation.detail, link } : observation.detail;
-    // The app's title is what the user reads in its sidebar, so it titles the
-    // row here — but only on the chat itself, never inherited by a sub-agent,
-    // which would then read as the same conversation twice.
-    const title = desktopSessions.get(observation.providerSessionId)?.title;
-    return {
-      ...observation,
-      ...(title ? { title } : undefined),
-      ...(detail ? { detail } : undefined),
-      applications: [...(observation.applications ?? []), application],
-    };
-  }
+function claudeDesktopClaims(
+  contexts: WorkspaceHostContexts<ClaudeDesktopSessionContext>,
+): HostClaims {
+  return hostClaims<ClaudeDesktopSessionContext>({
+    applicationId: SESSION_APPLICATION_ID.CLAUDE,
+    contexts,
+    retains: (context) => context.archived !== true,
+    annotate({ observation, context, hostSessions }) {
+      // A sub-agent's inherited context addresses the ancestor chat, which is
+      // where its conversation is shown.
+      const link = context.desktopSessionId
+        ? claudeDesktopSessionLink(context.desktopSessionId)
+        : undefined;
+      const application: SessionApplication = {
+        id: SESSION_APPLICATION_ID.CLAUDE,
+        displayName: CLAUDE_DESKTOP_APPLICATION_NAME,
+        scope: SESSION_APPLICATION_SCOPE.SESSION,
+        ...(link ? { link } : undefined),
+      };
+      // The address fills the row's link only where nothing else gave one; the
+      // session normalization decides which linked mark a grouped row's press
+      // follows.
+      const detail =
+        link && !observation.detail?.link ? { ...observation.detail, link } : observation.detail;
+      // The app's title is what the user reads in its sidebar, so it titles the
+      // row here — but only on the chat itself, never inherited by a sub-agent,
+      // which would then read as the same conversation twice.
+      const title = hostSessions.get(observation.providerSessionId)?.title;
+      return {
+        ...observation,
+        ...(title ? { title } : undefined),
+        ...(detail ? { detail } : undefined),
+        applications: [...(observation.applications ?? []), application],
+      };
+    },
+  });
 }
 
 interface ParsedSessionRecord {
@@ -164,54 +156,42 @@ function sortedNames(entries: readonly { name: string }[]): string[] {
   return entries.map((entry) => entry.name).sort();
 }
 
+export interface ClaudeDesktopApplicationsOptions {
+  sessionsDirectory?: string;
+}
+
+/** One workspace manager's claims, and the empty claim a failed read stands in with. */
+export interface ClaudeDesktopApplications {
+  read(): Promise<HostClaims>;
+  readonly empty: HostClaims;
+}
+
 /**
  * Reads the Claude desktop app's own session store without opening any
  * transcript. An absent app, a store this build cannot read, or a failed
- * auxiliary read means an empty snapshot; failure can never make the
- * provider's observation disappear. Records are re-parsed only when their file
- * changes, because each one carries far more than the few fields read here.
+ * auxiliary read means an empty claim; failure can never make the provider's
+ * observation disappear. Records are re-parsed only when their file changes,
+ * because each one carries far more than the few fields read here.
  */
-export class ClaudeDesktopSessionApplicationReader {
-  readonly #sessionsDirectory: string;
-  readonly #records = new Map<string, ParsedSessionRecord>();
-
-  constructor(options: ClaudeDesktopSessionApplicationReaderOptions = {}) {
-    this.#sessionsDirectory = options.sessionsDirectory ?? defaultClaudeDesktopSessionsDirectory();
-  }
-
-  async read(): Promise<ClaudeDesktopSessionApplicationSnapshot> {
-    const filePaths = await this.#sessionFiles();
-    const contexts = new Map<string, ClaudeDesktopSessionContext>();
-    for (const filePath of filePaths) {
-      const record = await this.#record(filePath);
-      if (!record?.cliSessionId || !record.context) continue;
-      // An imported transcript can stand behind two records, one archived and
-      // one not; the open one is the one the app shows.
-      const standing = contexts.get(record.cliSessionId);
-      if (standing && standing.archived !== true && record.context.archived === true) continue;
-      contexts.set(record.cliSessionId, record.context);
-    }
-    for (const filePath of this.#records.keys()) {
-      if (!filePaths.has(filePath)) this.#records.delete(filePath);
-    }
-    return new ClaudeDesktopSessionApplicationSnapshot(
-      contexts.size > 0 ? new Map([[PROVIDER_ID.CLAUDE_CODE, contexts]]) : new Map(),
-    );
-  }
+export function claudeDesktopApplications(
+  options: ClaudeDesktopApplicationsOptions = {},
+): ClaudeDesktopApplications {
+  const sessionsDirectory = options.sessionsDirectory ?? defaultClaudeDesktopSessionsDirectory();
+  const records = new Map<string, ParsedSessionRecord>();
 
   /**
    * Every session record under `<account>/<organization>/`, each level read
    * with `lstat` so a link out of the store is never followed, and each
    * bounded so a runaway directory costs a bounded pass.
    */
-  async #sessionFiles(): Promise<ReadonlySet<string>> {
+  const sessionFiles = async (): Promise<ReadonlySet<string>> => {
     const filePaths = new Set<string>();
-    const accountNames = sortedNames(await readDirectory(this.#sessionsDirectory)).slice(
+    const accountNames = sortedNames(await readDirectory(sessionsDirectory)).slice(
       0,
       CLAUDE_DESKTOP_READER_DEFAULTS.MAXIMUM_ACCOUNT_DIRECTORIES,
     );
     for (const accountName of accountNames) {
-      const account = await statDirectoryEntry(this.#sessionsDirectory, accountName);
+      const account = await statDirectoryEntry(sessionsDirectory, accountName);
       if (!account?.stats.isDirectory()) continue;
       const organizationNames = sortedNames(await readDirectory(account.directoryPath)).slice(
         0,
@@ -235,12 +215,12 @@ export class ClaudeDesktopSessionApplicationReader {
       }
     }
     return filePaths;
-  }
+  };
 
-  async #record(filePath: string): Promise<ParsedSessionRecord | undefined> {
+  const recordAt = async (filePath: string): Promise<ParsedSessionRecord | undefined> => {
     const file = await statDirectoryEntry(path.dirname(filePath), path.basename(filePath));
     if (!file?.stats.isFile()) return undefined;
-    const cached = this.#records.get(filePath);
+    const cached = records.get(filePath);
     if (cached && cached.mtimeMs === file.stats.mtimeMs && cached.size === file.stats.size) {
       return cached;
     }
@@ -249,9 +229,33 @@ export class ClaudeDesktopSessionApplicationReader {
       size: file.stats.size,
       ...parseSessionRecord(await readTextFile(filePath)),
     };
-    this.#records.set(filePath, parsed);
+    records.set(filePath, parsed);
     return parsed;
-  }
+  };
+
+  return {
+    async read() {
+      const filePaths = await sessionFiles();
+      const contexts = new Map<string, ClaudeDesktopSessionContext>();
+      for (const filePath of filePaths) {
+        const record = await recordAt(filePath);
+        if (!record?.cliSessionId || !record.context) continue;
+        // An imported transcript can stand behind two records, one archived
+        // and one not; the open one is the one the app shows.
+        const standing = contexts.get(record.cliSessionId);
+        if (standing && standing.archived !== true && record.context.archived === true) continue;
+        contexts.set(record.cliSessionId, record.context);
+      }
+      for (const filePath of records.keys()) {
+        if (!filePaths.has(filePath)) records.delete(filePath);
+      }
+      return claudeDesktopClaims(
+        contexts.size > 0 ? new Map([[PROVIDER_ID.CLAUDE_CODE, contexts]]) : new Map(),
+      );
+    },
+
+    empty: claudeDesktopClaims(new Map()),
+  };
 }
 
 /**

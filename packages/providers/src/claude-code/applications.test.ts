@@ -12,10 +12,7 @@ import {
   SESSION_STATUS,
 } from "@sidecar/session";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
-import {
-  ClaudeDesktopSessionApplicationReader,
-  claudeDesktopSessionLink,
-} from "./desktop-applications.js";
+import { claudeDesktopApplications, claudeDesktopSessionLink } from "./applications.js";
 
 const TEST_ACCOUNT_DIRECTORY = "account-1";
 const TEST_ORGANIZATION_DIRECTORY = "organization-1";
@@ -74,11 +71,11 @@ test("composes the app's own continue route for a session it holds", () => {
 });
 
 test("an absent store annotates nothing", async (t) => {
-  const reader = new ClaudeDesktopSessionApplicationReader({
+  const applications = claudeDesktopApplications({
     sessionsDirectory: await temporarySessionsDirectory(t),
   });
   const observations = [observation("cli-1")];
-  const snapshot = await reader.read();
+  const snapshot = await applications.read();
   assert.equal(snapshot.enrich(PROVIDER_ID.CLAUDE_CODE, observations), observations);
 });
 
@@ -91,9 +88,9 @@ test("annotates a Claude Code session with the app, its address, and its title",
     isArchived: false,
     remoteMcpServersConfig: [{ name: "SECRET_SERVER" }],
   });
-  const reader = new ClaudeDesktopSessionApplicationReader({ sessionsDirectory });
+  const applications = claudeDesktopApplications({ sessionsDirectory });
 
-  const snapshot = await reader.read();
+  const snapshot = await applications.read();
   const enriched = snapshot.enrich(PROVIDER_ID.CLAUDE_CODE, [
     observation("cli-1"),
     observation("cli-unheld"),
@@ -124,9 +121,9 @@ test("keeps an address another app already gave the row", async (t) => {
     cliSessionId: "cli-1",
     title: "Held twice",
   });
-  const reader = new ClaudeDesktopSessionApplicationReader({ sessionsDirectory });
+  const applications = claudeDesktopApplications({ sessionsDirectory });
 
-  const [enriched] = (await reader.read()).enrich(PROVIDER_ID.CLAUDE_CODE, [
+  const [enriched] = (await applications.read()).enrich(PROVIDER_ID.CLAUDE_CODE, [
     observation("cli-1", {
       detail: { link: "conductor://workspace?id=ws&session=chat" },
       applications: [
@@ -155,9 +152,9 @@ test("drops a chat the user archived in the app", async (t) => {
     title: "Filed away",
     isArchived: true,
   });
-  const reader = new ClaudeDesktopSessionApplicationReader({ sessionsDirectory });
+  const applications = claudeDesktopApplications({ sessionsDirectory });
 
-  const enriched = (await reader.read()).enrich(PROVIDER_ID.CLAUDE_CODE, [
+  const enriched = (await applications.read()).enrich(PROVIDER_ID.CLAUDE_CODE, [
     observation("cli-1"),
     observation("cli-2"),
   ]);
@@ -181,9 +178,11 @@ test("an open record outranks an archived twin of the same transcript", async (t
     title: "Archived",
     isArchived: true,
   });
-  const reader = new ClaudeDesktopSessionApplicationReader({ sessionsDirectory });
+  const applications = claudeDesktopApplications({ sessionsDirectory });
 
-  const enriched = (await reader.read()).enrich(PROVIDER_ID.CLAUDE_CODE, [observation("cli-1")]);
+  const enriched = (await applications.read()).enrich(PROVIDER_ID.CLAUDE_CODE, [
+    observation("cli-1"),
+  ]);
 
   assert.equal(enriched.length, 1);
   assert.equal(enriched[0]?.title, "Open");
@@ -197,9 +196,11 @@ test("names the app without an address when its id is not one the handler takes"
     cliSessionId: "cli-1",
     title: "Oddly named",
   });
-  const reader = new ClaudeDesktopSessionApplicationReader({ sessionsDirectory });
+  const applications = claudeDesktopApplications({ sessionsDirectory });
 
-  const [enriched] = (await reader.read()).enrich(PROVIDER_ID.CLAUDE_CODE, [observation("cli-1")]);
+  const [enriched] = (await applications.read()).enrich(PROVIDER_ID.CLAUDE_CODE, [
+    observation("cli-1"),
+  ]);
 
   assert.deepEqual(enriched?.applications, [
     {
@@ -217,10 +218,13 @@ test("ignores files that are not session records", async (t) => {
   await writeStoreFile(sessionsDirectory, "local_broken.json", "{not json");
   await writeStoreFile(sessionsDirectory, "local_list.json", '["cli-1"]');
   await writeSessionRecord(sessionsDirectory, "notes.txt", { cliSessionId: "cli-1" });
-  const reader = new ClaudeDesktopSessionApplicationReader({ sessionsDirectory });
+  const applications = claudeDesktopApplications({ sessionsDirectory });
 
   const observations = [observation("cli-1")];
-  assert.equal((await reader.read()).enrich(PROVIDER_ID.CLAUDE_CODE, observations), observations);
+  assert.equal(
+    (await applications.read()).enrich(PROVIDER_ID.CLAUDE_CODE, observations),
+    observations,
+  );
 });
 
 test("annotates only local Claude Code observations", async (t) => {
@@ -229,8 +233,8 @@ test("annotates only local Claude Code observations", async (t) => {
     sessionId: "local_desk-1",
     cliSessionId: "cli-1",
   });
-  const reader = new ClaudeDesktopSessionApplicationReader({ sessionsDirectory });
-  const snapshot = await reader.read();
+  const applications = claudeDesktopApplications({ sessionsDirectory });
+  const snapshot = await applications.read();
 
   const codex = [observation("cli-1")];
   assert.equal(snapshot.enrich(PROVIDER_ID.CODEX, codex), codex);
@@ -247,9 +251,9 @@ test("a sub-agent inherits the app but not its parent's title", async (t) => {
     cliSessionId: "cli-parent",
     title: "Parent chat",
   });
-  const reader = new ClaudeDesktopSessionApplicationReader({ sessionsDirectory });
+  const applications = claudeDesktopApplications({ sessionsDirectory });
 
-  const enriched = (await reader.read()).enrich(PROVIDER_ID.CLAUDE_CODE, [
+  const enriched = (await applications.read()).enrich(PROVIDER_ID.CLAUDE_CODE, [
     observation("cli-parent"),
     observation("cli-child", { parentProviderSessionId: "cli-parent", title: "Child work" }),
   ]);
@@ -271,10 +275,13 @@ test("never follows a link out of the store", async (t) => {
   );
   await fs.mkdir(sessionsDirectory, { recursive: true });
   await fs.symlink(outside, path.join(sessionsDirectory, "linked-account"));
-  const reader = new ClaudeDesktopSessionApplicationReader({ sessionsDirectory });
+  const applications = claudeDesktopApplications({ sessionsDirectory });
 
   const observations = [observation("cli-1")];
-  assert.equal((await reader.read()).enrich(PROVIDER_ID.CLAUDE_CODE, observations), observations);
+  assert.equal(
+    (await applications.read()).enrich(PROVIDER_ID.CLAUDE_CODE, observations),
+    observations,
+  );
 });
 
 test("re-reads a record only when its file changes", async (t) => {
@@ -287,8 +294,8 @@ test("re-reads a record only when its file changes", async (t) => {
   // A whole second, so the stamp survives the round trip through `utimes`.
   const writtenAt = new Date("2026-08-11T23:44:00.000Z");
   await fs.utimes(filePath, writtenAt, writtenAt);
-  const reader = new ClaudeDesktopSessionApplicationReader({ sessionsDirectory });
-  await reader.read();
+  const applications = claudeDesktopApplications({ sessionsDirectory });
+  await applications.read();
 
   // Same size and mtime: the cached parse stands, so the new title is unseen.
   await fs.writeFile(
@@ -296,14 +303,19 @@ test("re-reads a record only when its file changes", async (t) => {
     JSON.stringify({ sessionId: "local_desk-1", cliSessionId: "cli-1", title: "Later title" }),
   );
   await fs.utimes(filePath, writtenAt, writtenAt);
-  let [enriched] = (await reader.read()).enrich(PROVIDER_ID.CLAUDE_CODE, [observation("cli-1")]);
+  let [enriched] = (await applications.read()).enrich(PROVIDER_ID.CLAUDE_CODE, [
+    observation("cli-1"),
+  ]);
   assert.equal(enriched?.title, "First title");
 
   await fs.utimes(filePath, writtenAt, new Date(writtenAt.getTime() + 5_000));
-  [enriched] = (await reader.read()).enrich(PROVIDER_ID.CLAUDE_CODE, [observation("cli-1")]);
+  [enriched] = (await applications.read()).enrich(PROVIDER_ID.CLAUDE_CODE, [observation("cli-1")]);
   assert.equal(enriched?.title, "Later title");
 
   await fs.rm(filePath);
   const observations = [observation("cli-1")];
-  assert.equal((await reader.read()).enrich(PROVIDER_ID.CLAUDE_CODE, observations), observations);
+  assert.equal(
+    (await applications.read()).enrich(PROVIDER_ID.CLAUDE_CODE, observations),
+    observations,
+  );
 });

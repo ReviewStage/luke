@@ -114,7 +114,7 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
 
   return {
     [PROVIDER_ID.CLAUDE_CODE]: {
-      adapter: locals.claudeCode,
+      adapter: pluginAsAdapter(locals.claudeCode),
       registerObservationHook: observationHookRegistration(
         installClaudeCodeObservationHooks,
         claudeInstallation,

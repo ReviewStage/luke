@@ -58,10 +58,10 @@ import {
 import {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticKind,
-  ClaudeDesktopSessionApplicationReader,
   CodexCloudSessionAdapter,
   ConductorLocalWorkspaceAdapter,
   ConductorSessionApplicationReader,
+  claudeDesktopApplications,
   ObservationHookRegistry,
   type ObservationSpoolWatcher,
   type ProviderRegistration,
@@ -429,7 +429,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     onDiagnostic: (kind, error) => reportAdapterDiagnostic(PROVIDER_ID.CODEX, kind, error),
   });
   const conductorSessionApplications = new ConductorSessionApplicationReader();
-  const claudeDesktopSessionApplications = new ClaudeDesktopSessionApplicationReader();
+  const claudeDesktopSessionApplications = claudeDesktopApplications();
   // The local counterpart of the cloud Conductor adapter's creation path: it
   // reads the repositories Conductor holds and creates a workspace in one by
   // handing Conductor's own creation deep link to the operating system, through
