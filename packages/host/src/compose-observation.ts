@@ -77,6 +77,7 @@ import {
   createSessionActionPerformer,
   type SessionActionPerformer,
 } from "./session-action-performer.js";
+import { createSessionRowActions } from "./session-row-actions.js";
 
 const SESSION_REFRESH_INTERVAL_MS = 60_000;
 
@@ -405,6 +406,20 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     recordProductEvent: settings.recordProductEvent,
   });
 
+  // A row's own send or press is admitted here, in the host, against the same
+  // roster the brain's actions are: a fresh pass first, then the sessions an
+  // action may name, so a control the provider withdrew a moment ago is
+  // refused rather than carried on the row's stale picture of it.
+  const rowActions = createSessionRowActions({
+    roster: {
+      read: async () => {
+        await loop.refresh();
+        return actableSessions();
+      },
+    },
+    performer: sessionActions,
+  });
+
   async function applyLocalSessionHooks(): Promise<void> {
     if (!runMode.observesProviders || options.registerProviderHooks === false) return;
     await Promise.all(
@@ -613,6 +628,16 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     [GATEWAY_METHOD.SESSION_OPEN_CHANGE]: async (params) => {
       if (!isSessionIdentity(params.identity)) return invalid("identity must name a session");
       return gatewayOk(carried(await sessionActions.openSessionChange(params.identity)));
+    },
+    [GATEWAY_METHOD.SESSION_SEND_MESSAGE]: async (params) => {
+      if (!isSessionIdentity(params.identity)) return invalid("identity must name a session");
+      if (!isWireString(params.text)) return invalid("text must be a string");
+      return gatewayOk(carried(await rowActions.sendMessage(params.identity, params.text)));
+    },
+    [GATEWAY_METHOD.SESSION_EXECUTE_CONTROL]: async (params) => {
+      if (!isSessionIdentity(params.identity)) return invalid("identity must name a session");
+      if (!isWireString(params.controlId)) return invalid("controlId must be a string");
+      return gatewayOk(carried(await rowActions.executeControl(params.identity, params.controlId)));
     },
     [GATEWAY_METHOD.WORKSPACE_PROJECTS]: async () =>
       gatewayOk({

@@ -37,5 +37,6 @@ export { createGatewayOperator, type GatewayOperator } from "./operator.js";
 export { type RunMode, runModeFor, sentryReportingEnabled } from "./run-mode.js";
 export { createGatewayService, type GrantedWords } from "./service.js";
 export { OPEN_REFUSAL, type SessionActionPerformer } from "./session-action-performer.js";
+export type { SessionRowActions } from "./session-row-actions.js";
 export { storeWorkerPath } from "./store-path.js";
 export { VoiceReceiver } from "./voice-receiver.js";

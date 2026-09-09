@@ -335,6 +335,11 @@ const SIGNATURE_STROKES = signatureStrokes();
  */
 const INTRODUCTION_REFUSAL = "The introduction takes no writes.";
 const INERT_WRITES: SessionWriteHandlers = {
+  sendMessage: async () => ({
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: INTRODUCTION_REFUSAL,
+  }),
+  runAction: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: INTRODUCTION_REFUSAL }),
   openChange: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: INTRODUCTION_REFUSAL }),
 };
 
@@ -342,6 +347,8 @@ function inertRow(row: SessionView): SessionView {
   return {
     ...row,
     openable: false,
+    canMessage: false,
+    actions: [],
     hasChange: false,
     applications: row.applications.map((application) => ({ ...application, openable: false })),
   };

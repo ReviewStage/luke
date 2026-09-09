@@ -18,12 +18,14 @@ import type { SupersetSignInSnapshot } from "@sidecar/providers/superset/sign-in
 import type { RealtimeDiagnostics } from "@sidecar/realtime";
 import type { SpeechOffer, SpeechOutcome } from "@sidecar/realtime/speech";
 import { isSpeechOffer } from "@sidecar/realtime/speech";
-import type {
-  ConversationEntry,
-  ObservedWorkspaceProject,
-  Session,
-  SessionApplicationId,
-  SessionIdentity,
+import {
+  type ConversationEntry,
+  isSessionWriteResult,
+  type ObservedWorkspaceProject,
+  type Session,
+  type SessionApplicationId,
+  type SessionIdentity,
+  type SessionWriteResult,
 } from "@sidecar/session";
 import type {
   AppSettingField,
@@ -141,6 +143,9 @@ export interface HostOperator {
     applicationId: SessionApplicationId,
   ): Promise<ActionResult>;
   openSessionChange(identity: SessionIdentity): Promise<ActionResult>;
+  /** The two writes a session's row asks for; the host admits each against the roster before any provider sees it. */
+  sendSessionMessage(identity: SessionIdentity, text: string): Promise<SessionWriteResult>;
+  executeSessionControl(identity: SessionIdentity, controlId: string): Promise<SessionWriteResult>;
   workspaceProjects(): Promise<readonly ObservedWorkspaceProject[]>;
   settleSpeech(id: string, outcome: SpeechOutcome): Promise<void>;
   /** The host mints the receiver epoch a voice renderer will name; a client that cannot reach it gets none. */
@@ -234,6 +239,16 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
   const actionResult = async (result: Promise<GatewayCallResult>): Promise<ActionResult> => {
     const answer = answered<ActionResult>(record(await result));
     return answer ?? { status: ACTION_RESULT_STATUS.REJECTED, reason: HOST_UNREACHABLE_REFUSAL };
+  };
+
+  // A write's answer is read against its own shape rather than restored by
+  // assertion: the host may answer unknown where a write's answer was lost,
+  // and a row must draw that as neither a failure nor a success.
+  const writeResult = async (result: Promise<GatewayCallResult>): Promise<SessionWriteResult> => {
+    const answer = record(await result);
+    return isSessionWriteResult(answer)
+      ? answer
+      : { status: ACTION_RESULT_STATUS.REJECTED, reason: HOST_UNREACHABLE_REFUSAL };
   };
 
   const supersetResult = async (
@@ -364,6 +379,17 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     openSessionChange: (identity) =>
       actionResult(client.call(GATEWAY_METHOD.SESSION_OPEN_CHANGE, { identity: { ...identity } })),
+    sendSessionMessage: (identity, text) =>
+      writeResult(
+        client.call(GATEWAY_METHOD.SESSION_SEND_MESSAGE, { identity: { ...identity }, text }),
+      ),
+    executeSessionControl: (identity, controlId) =>
+      writeResult(
+        client.call(GATEWAY_METHOD.SESSION_EXECUTE_CONTROL, {
+          identity: { ...identity },
+          controlId,
+        }),
+      ),
     workspaceProjects: async () =>
       answeredList<ObservedWorkspaceProject>(
         record(await client.call(GATEWAY_METHOD.WORKSPACE_PROJECTS))?.projects,

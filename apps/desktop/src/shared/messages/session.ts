@@ -8,8 +8,10 @@ export {
   type SupersetSignInSnapshot,
 } from "@sidecar/providers/superset/sign-in-stage";
 export {
+  isSessionWriteResult,
   isWorkspaceProviderId,
   type SessionOpenResult,
+  type SessionWriteResult,
   SUPERSET_WORKSPACE_PROVIDER_ID,
   type WorkspaceProviderId,
 } from "@sidecar/session";

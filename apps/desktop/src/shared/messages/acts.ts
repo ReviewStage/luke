@@ -25,9 +25,12 @@ import type { SupersetSignInSnapshot } from "@sidecar/providers/superset/sign-in
 import type { RealtimeDiagnostics } from "@sidecar/realtime";
 import {
   isSessionApplicationId,
+  isSessionWriteResult,
+  maximumSessionMessageLength,
   type Session,
   type SessionApplicationId,
   type SessionIdentity,
+  type SessionWriteResult,
 } from "@sidecar/session";
 import {
   APP_SETTING_SCHEMA,
@@ -113,6 +116,14 @@ export const ACT_KIND = {
   SESSION_OPEN: "session.open",
   SESSION_OPEN_APPLICATION: "session.openApplication",
   SESSION_OPEN_CHANGE: "session.openChange",
+  /**
+   * The two writes a session's own row mints — the follow-up typed into its
+   * composer and the press of a control its provider advertised — carried to
+   * the host, where `admit()` decides them against the roster it reads for
+   * itself before any provider sees them.
+   */
+  SESSION_SEND_MESSAGE: "session.sendMessage",
+  SESSION_EXECUTE_CONTROL: "session.executeControl",
   BRAIN_SUBMIT_ASK: "brain.submitAsk",
   BRAIN_WAIT_ASK: "brain.waitAsk",
   BRAIN_CANCEL_ASK: "brain.cancelAsk",
@@ -217,6 +228,17 @@ const CREDENTIAL_PROVIDER_IDS = Object.keys(CREDENTIAL_PROVIDERS).filter(isCrede
 /** The three opens that name one session and nothing else. */
 const oneSession = fields<{ identity: SessionIdentity }>({ identity: isSessionIdentity });
 
+/**
+ * The words a row's composer sends, admitted at their ends: admission trims
+ * and bounds them again in the host, so this only refuses what no bound could
+ * admit — nothing at all, or more than the message bound allows.
+ */
+const isComposedMessage = (value: UnparsedWireValue): boolean =>
+  isWireString(value) && value.trim().length > 0 && value.length <= maximumSessionMessageLength;
+
+/** A control's id as the roster advertised it, admitted as written so it matches the advertisement. */
+const isControlId = (value: UnparsedWireValue): boolean => exactId.read(value).ok;
+
 /** A setting and a value already parsed for it, which is the pair its field types. */
 export type SettingUpdatePayload = {
   [Field in Exclude<AppSettingField, KeyedAppSettingField>]: {
@@ -278,6 +300,7 @@ const answersSettings = wireResult<SettingsUpdateResult>();
 const answersAccount = wireResult<AccountSnapshot>();
 const answersSupersetSignIn = wireResult<SupersetSignInSnapshot | undefined>();
 const answersSessionOpen = wireResult<SessionOpenResult>();
+const answersSessionWrite = wireResult<SessionWriteResult>(isSessionWriteResult);
 
 /**
  * A press: a kind that carries nothing and answers nothing, which is what
@@ -451,6 +474,22 @@ export const ACT = {
     payload: oneSession,
     result: answersSessionOpen,
     refusal: "Could not open that pull request on this system.",
+  },
+  [ACT_KIND.SESSION_SEND_MESSAGE]: {
+    payload: fields<{ identity: SessionIdentity; text: string }>({
+      identity: isSessionIdentity,
+      text: isComposedMessage,
+    }),
+    result: answersSessionWrite,
+    refusal: "Could not send that message on this system.",
+  },
+  [ACT_KIND.SESSION_EXECUTE_CONTROL]: {
+    payload: fields<{ identity: SessionIdentity; controlId: string }>({
+      identity: isSessionIdentity,
+      controlId: isControlId,
+    }),
+    result: answersSessionWrite,
+    refusal: "Could not run that control on this system.",
   },
   [ACT_KIND.BRAIN_SUBMIT_ASK]: {
     payload: fields<{ submission: BrainAskSubmission }>({ submission: isBrainAskSubmission }),

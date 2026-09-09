@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ACTION_KIND,
   HOSTED_AGENT_ID,
   normalizeSession,
   PROVIDER_ID,
   PROVIDER_ID_LIST,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
+  SESSION_CONTROL_KIND,
   SESSION_LOCATION,
   SESSION_STATUS,
   SESSION_URGENCY,
@@ -15,6 +17,7 @@ import {
 } from "@sidecar/session";
 import { fixtureSnapshot } from "@sidecar/session/fixtures";
 import {
+  actsOnWorkspace,
   arrangeSessions,
   DEFAULT_SESSION_VIEW,
   fixtureSessions,
@@ -33,6 +36,7 @@ import {
   sessionTally,
   spokenSearchOutcome,
   toggledSessionFilters,
+  workspaceTrayActions,
   workspaceTrayChange,
 } from "./session-model";
 
@@ -199,6 +203,102 @@ test("a row is a control only where its provider gave an address", () => {
 // happening — there is no chip at the other end — so a provider that reported
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 // nothing must still leave the row reading as Working or Complete.
+test("a row offers writes only where its provider promised them", () => {
+  const stop = {
+    kind: ACTION_KIND.CONTROL,
+    id: "cancel-run",
+    label: "Stop this run",
+    controlKind: SESSION_CONTROL_KIND.STOP,
+  } as const;
+  const writable = normalizeSession(CONDUCTOR_PROVIDER, {
+    providerSessionId: "chat-writable",
+    title: "Fix the flaky test",
+    status: SESSION_STATUS.WORKING,
+    lastActivityAt: 1_000,
+    advertises: [{ kind: ACTION_KIND.MESSAGE }, stop],
+  });
+  const silent = liveSession(CONDUCTOR_PROVIDER, "chat-silent", SESSION_STATUS.COMPLETE);
+  const voice = normalizeSession(CODEX_PROVIDER, {
+    providerSessionId: "chat-voice",
+    title: "Talking it through",
+    status: SESSION_STATUS.WORKING,
+    lastActivityAt: 1_000,
+    realtimeVoice: true,
+    advertises: [{ kind: ACTION_KIND.MESSAGE }, stop],
+  });
+  const rows = liveRows(writable, silent, voice);
+  const writableRow = rows.find((row) => row.id === "chat-writable");
+  const silentRow = rows.find((row) => row.id === "chat-silent");
+  const voiceRow = rows.find((row) => row.id === "chat-voice");
+  assert.equal(writableRow?.canMessage, true);
+  assert.deepEqual(writableRow?.actions, [stop]);
+  // A session whose latest observation advertised nothing draws neither the
+  // composer nor a control: the row cannot promise what the host would refuse.
+  assert.equal(silentRow?.canMessage, false);
+  assert.deepEqual(silentRow?.actions, []);
+  // Nor does the voice's own realtime chat, whatever it advertises: the host
+  // admits a row's write against the sessions an action may name, and the
+  // voice's own are not among them.
+  assert.equal(voiceRow?.realtimeVoice, true);
+  assert.equal(voiceRow?.canMessage, false);
+  assert.deepEqual(voiceRow?.actions, []);
+
+  // The smoke fixture puts both on screen: a settled chat with the composer,
+  // and a working chat with the stop, so the evidence photographs each.
+  const composerRows = FIXTURE_SESSIONS.filter((row) => row.canMessage).map((row) => row.id);
+  assert.deepEqual(composerRows, ["conductor-opencode-session"]);
+  const stopRows = FIXTURE_SESSIONS.filter((row) =>
+    row.actions.some((action) => action.controlKind === SESSION_CONTROL_KIND.STOP),
+  ).map((row) => row.id);
+  assert.deepEqual(stopRows, ["conductor-cursor-agent"]);
+});
+
+test("a control aimed at the whole workspace is the tray header's, said once", () => {
+  const archive = (workspaceId: string) =>
+    ({
+      kind: ACTION_KIND.CONTROL,
+      id: "archive-workspace",
+      label: "Archive workspace",
+      controlKind: SESSION_CONTROL_KIND.ARCHIVE,
+      target: workspaceId,
+    }) as const;
+  const chat = (providerSessionId: string, workspaceId: string) =>
+    normalizeSession(CONDUCTOR_PROVIDER, {
+      providerSessionId,
+      title: `Chat ${providerSessionId}`,
+      status: SESSION_STATUS.COMPLETE,
+      lastActivityAt: 1_000,
+      workspace: { providerWorkspaceId: workspaceId, name: "lisbon-v2" },
+      advertises: [archive(workspaceId)],
+    });
+  const rows = liveRows(chat("chat-a", "ws-1"), chat("chat-b", "ws-1"));
+  for (const row of rows) {
+    assert.equal(row.actions.length, 1);
+    for (const action of row.actions) assert.equal(actsOnWorkspace(row, action), true);
+  }
+  // Two chats advertise the same archive; the header draws it once, carried
+  // through the first chat that advertised it so the write is admitted against
+  // that chat's own roster row.
+  const acts = workspaceTrayActions(rows);
+  assert.equal(acts.length, 1);
+  assert.equal(acts[0]?.action.id, "archive-workspace");
+  assert.equal(acts[0]?.session.id, rows[0]?.id);
+  // A control whose target is not the row's workspace stays the chat's own.
+  const own = liveRows(
+    normalizeSession(CONDUCTOR_PROVIDER, {
+      providerSessionId: "chat-c",
+      title: "Chat c",
+      status: SESSION_STATUS.WORKING,
+      lastActivityAt: 1_000,
+      workspace: { providerWorkspaceId: "ws-2", name: "porto" },
+      advertises: [
+        { ...archive("run-9"), id: "cancel-run", controlKind: SESSION_CONTROL_KIND.STOP },
+      ],
+    }),
+  );
+  assert.deepEqual(workspaceTrayActions(own), []);
+});
+
 test("the line under the title says the state when the provider said nothing", () => {
   const [bare] = liveRows(liveSession(CLAUDE_PROVIDER, "claude-quiet", SESSION_STATUS.WORKING));
   assert.equal(bare?.detail, "Working");

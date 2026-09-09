@@ -12,7 +12,7 @@ import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
 import { accountActRows } from "./account-session";
 import { brainActRows, brainReports } from "./brain";
-import { sessionOpenRows } from "./session-opens";
+import { sessionActRows } from "./session-acts";
 import { settingsActRows } from "./settings-rows";
 import { voiceRuntimeActRows, voiceRuntimeReports } from "./voice-runtime";
 import { windowSurfaceActRows, windowSurfaceReports } from "./window-surface";
@@ -90,12 +90,17 @@ export function registerDesktopIpc(services: DesktopServices): void {
       mediaDuck: native.mediaDuck,
       openExternal: (url) => void config.openExternal(url),
     }),
-    ...sessionOpenRows({
+    ...sessionActRows({
       performer: {
         openSession: (identity) => operator.host.openSession(identity),
         openSessionApplication: (identity, applicationId) =>
           operator.host.openSessionApplication(identity, applicationId),
         openSessionChange: (identity) => operator.host.openSessionChange(identity),
+      },
+      writes: {
+        sendMessage: (identity, text) => operator.host.sendSessionMessage(identity, text),
+        executeControl: (identity, controlId) =>
+          operator.host.executeSessionControl(identity, controlId),
       },
     }),
     ...windowSurfaceActRows({

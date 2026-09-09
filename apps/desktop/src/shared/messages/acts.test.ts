@@ -75,6 +75,39 @@ test("a session act names one session by the identity its provider reported", ()
   );
 });
 
+test("a row's write names one observed session and carries its words or its control id", () => {
+  const send = (payload: WireValue) => parsedAct({ kind: ACT_KIND.SESSION_SEND_MESSAGE, payload });
+  assert.ok(send({ identity: IDENTITY, text: "please add a test" }));
+  // The message is the developer's own words, refused where no bound could
+  // admit them: nothing at all, or past the message bound the host applies.
+  assert.equal(send({ identity: IDENTITY, text: "   " }), undefined);
+  assert.equal(
+    send({ identity: IDENTITY, text: "x".repeat(maximumTypedAskLength + 1) }),
+    undefined,
+  );
+  assert.equal(send({ identity: IDENTITY }), undefined);
+  assert.equal(
+    send({ identity: { providerId: "nope", providerSessionId: "s" }, text: "hi" }),
+    undefined,
+  );
+  // A route or an address never rides the act: the host reads the session's
+  // own route back out of its roster.
+  assert.equal(send({ identity: IDENTITY, text: "hi", link: "https://example.test" }), undefined);
+
+  const press = (payload: WireValue) =>
+    parsedAct({ kind: ACT_KIND.SESSION_EXECUTE_CONTROL, payload });
+  assert.ok(press({ identity: IDENTITY, controlId: "cancel-run" }));
+  // The id is admitted as the roster spelled it, so a padded or empty one
+  // names no advertised control.
+  assert.equal(press({ identity: IDENTITY, controlId: "" }), undefined);
+  assert.equal(press({ identity: IDENTITY, controlId: 7 }), undefined);
+  assert.equal(press({ identity: IDENTITY }), undefined);
+  assert.equal(
+    press({ identity: IDENTITY, controlId: "cancel-run", control: { id: "archive" } }),
+    undefined,
+  );
+});
+
 test("a brain ask is one submission with an id, bounded words, and an origin", () => {
   const submit = (submission: WireValue) =>
     parsedAct({ kind: ACT_KIND.BRAIN_SUBMIT_ASK, payload: { submission } });

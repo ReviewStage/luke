@@ -7,10 +7,11 @@ import {
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { AppSettingsView } from "@sidecar/settings/wire";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
-import type { WorkspaceProviderId } from "#shared/messages/session";
+import type { SessionWriteResult, WorkspaceProviderId } from "#shared/messages/session";
 import { isWorkspaceProviderId } from "#shared/messages/session";
 import { act, tell, updateSetting } from "./act";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
@@ -83,7 +84,7 @@ export interface SessionList {
 /**
  * The session roster as the panel sees it: how it is narrowed and ordered,
  * which of its two controls are offered and open, what the store remembers of
- * all that, and the two presses that leave for a provider.
+ * all that, the presses that open a session, and the writes a row hands on.
  */
 export function useSessionList(options: UseSessionListOptions): SessionList {
   const { state, liveSettings, settings, tab, dismissPanel, showSessionsTab } = options;
@@ -253,22 +254,42 @@ export function useSessionList(options: UseSessionListOptions): SessionList {
   }, [workspaceProjects, storedWorkspaceProvider, storedWorkspaceProjects]);
 
   /**
-   * The one act a row's chip can ask for, handed to the main process by
-   * session identity. Unlike opening the session, it leaves the panel up: a
-   * refusal lands back on the row that asked.
+   * The acts a row asks for by session identity, each leaving the panel up so
+   * its answer lands back on the row that asked. The two writes travel as one
+   * act each to the main process and on to the host, whose admission decides
+   * them against the roster it reads for itself; a refusal the channel itself
+   * raises — the host unreachable, the kind refused — is folded into the same
+   * answer shape, because a write's outcome belongs beside the field it left
+   * and never in a thrown error nothing draws.
    */
-  const writes: SessionWriteHandlers = useMemo(
-    () => ({
-      openChange: (session) =>
-        act(ACT_KIND.SESSION_OPEN_CHANGE, {
-          identity: {
-            providerId: session.providerId,
-            providerSessionId: session.id,
-          },
-        }),
-    }),
-    [],
-  );
+  const writes: SessionWriteHandlers = useMemo(() => {
+    const identityOf = (session: SessionView) => ({
+      providerId: session.providerId,
+      providerSessionId: session.id,
+    });
+    const answered = async (write: Promise<SessionWriteResult>): Promise<SessionWriteResult> => {
+      try {
+        return await write;
+      } catch (error) {
+        return {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: error instanceof Error ? error.message : String(error),
+        };
+      }
+    };
+    return {
+      sendMessage: (session, text) =>
+        answered(act(ACT_KIND.SESSION_SEND_MESSAGE, { identity: identityOf(session), text })),
+      runAction: (session, actionId) =>
+        answered(
+          act(ACT_KIND.SESSION_EXECUTE_CONTROL, {
+            identity: identityOf(session),
+            controlId: actionId,
+          }),
+        ),
+      openChange: (session) => act(ACT_KIND.SESSION_OPEN_CHANGE, { identity: identityOf(session) }),
+    };
+  }, []);
 
   // A sort chosen in the sheet puts the sheet away: an order is one choice of
   // two, made once. The fallback the render performs when a selection empties

@@ -79,6 +79,14 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.SESSION_OPEN_CHANGE,
     payload: { identity: IDENTITY },
   },
+  [ACT_KIND.SESSION_SEND_MESSAGE]: {
+    kind: ACT_KIND.SESSION_SEND_MESSAGE,
+    payload: { identity: IDENTITY, text: "please add a test for the retry" },
+  },
+  [ACT_KIND.SESSION_EXECUTE_CONTROL]: {
+    kind: ACT_KIND.SESSION_EXECUTE_CONTROL,
+    payload: { identity: IDENTITY, controlId: "cancel-run" },
+  },
   [ACT_KIND.BRAIN_SUBMIT_ASK]: {
     kind: ACT_KIND.BRAIN_SUBMIT_ASK,
     payload: { submission: { submissionId: "sub-1", question: "what needs me?", origin: "typed" } },

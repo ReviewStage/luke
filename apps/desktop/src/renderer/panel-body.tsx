@@ -20,6 +20,7 @@ import {
   sessionListRuns,
   sessionRunKeys,
   type WorkspaceTrayChange,
+  workspaceTrayActions,
   workspaceTrayChange,
 } from "./session-model";
 import {
@@ -40,7 +41,7 @@ import {
   runDrawsTray,
   SessionRow,
   type SessionWriteHandlers,
-  WorkspaceTrayChangeChip,
+  WorkspaceTrayActs,
 } from "./session-row-view";
 import {
   Highlighted,
@@ -70,9 +71,11 @@ import { useMeasuredHeight } from "./use-measured-height";
  * different tree.
  *
  * The header opens nothing — the rows are what press through to a provider's
- * window — but it does carry the one pull request the chats share, which
- * sits where the workspace is named once instead of on each row of the
- * branch. The header names the tray in the reading order the same way
+ * window — but it does carry the controls that belong to the workspace rather
+ * than to any one chat: an archive files away every chat in the tray, so its
+ * chip sits where the workspace is named once instead of on each row it
+ * would empty, and the one pull request the chats share sits beside it on the
+ * same reasoning. The header names the tray in the reading order the same way
  * it does on screen: the workspace once, then its chats. A tray is a member of the
  * arrival stack in its rows' stead: it fans in at its lead row's turn, and
  * the rows ride it rather than fanning a second time inside it. A wrapper
@@ -80,12 +83,17 @@ import { useMeasuredHeight } from "./use-measured-height";
  */
 function SessionRun({
   run,
+  sessions,
   change,
   highlight,
   writes,
   children,
 }: {
   run: SessionListRun;
+  /** The tray's living chats, in drawn order — what the header's controls are
+   * read from and carried through. A leaving row's session is already gone
+   * from the model, so it can neither offer a control nor carry one. */
+  sessions: readonly SessionView[];
   /** The workspace's one pull request, when the header carries it. Handed in
    * rather than read here, because the rows suppressing their own chips must
    * answer to the same reading. */
@@ -96,6 +104,7 @@ function SessionRun({
   children: React.ReactNode;
 }): React.JSX.Element {
   const tray = runDrawsTray(run);
+  const acts = tray ? workspaceTrayActions(sessions) : [];
   return (
     <section
       className={tray ? "workspace-tray" : "session-run"}
@@ -134,7 +143,9 @@ function SessionRun({
               </span>
             ) : null}
           </span>
-          {change ? <WorkspaceTrayChangeChip change={change} writes={writes} /> : null}
+          {acts.length > 0 || change ? (
+            <WorkspaceTrayActs acts={acts} {...(change ? { change } : undefined)} writes={writes} />
+          ) : null}
         </header>
       ) : null}
       {children}
@@ -176,7 +187,7 @@ export interface PanelBodyProps {
   onOpenSession: (session: SessionView) => void;
   /** Opens one exact app association without exposing its address to the renderer. */
   onOpenSessionApplication: (session: SessionView, applicationId: SessionApplicationId) => void;
-  /** Opens the pull request a row or tray header reports; the panel writes nothing else. */
+  /** A row's writes and its pull-request open, handed down to every row and tray header. */
   writes: SessionWriteHandlers;
   /** The conversation between the developer and Luke, this launch's and what survived the last. */
   conversationLines: readonly ConversationEntry[];
@@ -427,6 +438,7 @@ export function PanelBody({
                   <SessionRun
                     key={runKeys[at]}
                     run={run}
+                    sessions={living}
                     {...(change ? { change } : undefined)}
                     highlight={highlight}
                     writes={writes}

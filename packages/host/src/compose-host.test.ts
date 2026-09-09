@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ACTION_REFUSAL } from "@sidecar/actions";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_METHOD,
@@ -8,7 +9,7 @@ import {
   gatewayOk,
 } from "@sidecar/gateway";
 import { temporaryDirectory } from "@sidecar/runtime/testing";
-import { isRecord, lateRef } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, isRecord, lateRef } from "@sidecar/wire";
 import { composeHost } from "./compose-host.js";
 import { type Composer, mergeMethods } from "./composer.js";
 import { createHostKernel } from "./host-kernel.js";
@@ -114,5 +115,43 @@ test("the merge answers the bootstrap every concern contributes to, and starts a
   assert.equal(response.result.voiceAvailable, false);
   await host.stop({ deadlineMs: 0 });
   // A second stop is the quit arriving twice; it must not throw.
+  await host.stop({ deadlineMs: 0 });
+});
+
+test("a row's write reaches the host as a method and is refused for a session the roster does not hold", async (t) => {
+  const host = fixtureHost(temporaryDirectory(t));
+  await host.start();
+  const identity = { providerId: "conductor", providerSessionId: "chat-nobody-observed" };
+  const [sent, pressed] = await Promise.all([
+    host.server.handle(
+      {
+        protocolVersion: GATEWAY_PROTOCOL_VERSION,
+        id: "send-1",
+        method: GATEWAY_METHOD.SESSION_SEND_MESSAGE,
+        params: { identity, text: "hello" },
+        idempotencyKey: "send-1",
+      },
+      { clientId: "test", role: GATEWAY_CLIENT_ROLE.OPERATOR },
+    ),
+    host.server.handle(
+      {
+        protocolVersion: GATEWAY_PROTOCOL_VERSION,
+        id: "press-1",
+        method: GATEWAY_METHOD.SESSION_EXECUTE_CONTROL,
+        params: { identity, controlId: "cancel-run" },
+        idempotencyKey: "press-1",
+      },
+      { clientId: "test", role: GATEWAY_CLIENT_ROLE.OPERATOR },
+    ),
+  ]);
+  // A fixture host observes nothing, so admission's own roster refusal is the
+  // answer for both writes: the method is wired, and nothing past admission ran.
+  for (const response of [sent, pressed]) {
+    assert.ok(response.ok);
+    assert.deepEqual(response.result, {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: ACTION_REFUSAL.NO_SESSION,
+    });
+  }
   await host.stop({ deadlineMs: 0 });
 });
