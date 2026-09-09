@@ -84,17 +84,19 @@ import {
 } from "./memory.js";
 
 /**
- * Not exported, and this module holds no factory but {@link admit}: a value
- * carrying this key cannot be written down anywhere else, so a performer that
- * takes one is unreachable without admission having run. Deleting this privacy
- * is the only way to reintroduce the bug the whole file exists to prevent.
+ * Not exported, and this module holds no factory but {@link admit}: nothing
+ * elsewhere can spell this key, so no object literal is an admitted act and a
+ * payload never reaches a performer's parameter on its own. Exporting it would
+ * be the one way to reintroduce the bug the whole file exists to prevent.
  */
 const ADMITTED: unique symbol = Symbol("admitted act");
 
 /**
  * An act that ran the gauntlet, carrying the turn's origin for History to
- * record. The brand is a module-private symbol, so no literal, no cast, and no
- * other module can spell one.
+ * record. What the brand buys is that admission cannot be skipped by accident;
+ * a deliberate `as ValidatedAct` would still compile, since the admitted act is
+ * a subtype of its own payload, and that assertion appears nowhere in this
+ * repository — `validated-act.type-test.ts` says both in as many words.
  */
 export type ValidatedAct<Kind extends ActKind = ActKind> = CarriedAct<Kind> & {
   readonly [ADMITTED]: true;
@@ -219,11 +221,6 @@ export interface Refusal {
 
 function refuse(reason: string): Refusal {
   return { status: ACT_RESULT_STATUS.REJECTED, reason };
-}
-
-/** A refusal that also names what the roster the caller already read does offer. */
-function withDetail(reason: string, detail: string): Refusal {
-  return refuse(`${reason} ${detail}`);
 }
 
 /**
@@ -362,8 +359,6 @@ function namedOnce<Entry>(
     (named.length === 1 ? named[0] : undefined)
   );
 }
-
-const itself = (name: string): string => name;
 
 /**
  * Resolves a model the developer named — by the label the guide lists it
@@ -625,8 +620,12 @@ const admitCreateWorkspace: Admitter<typeof ACT_KIND.CREATE_WORKSPACE> = async (
   const agent =
     (spawnable === undefined || requestedAgent === undefined
       ? undefined
-      : namedOnce(spawnable, requestedAgent, itself, (name) => name.toLocaleLowerCase())) ??
-    project.defaultAgent;
+      : namedOnce(
+          spawnable,
+          requestedAgent,
+          (agentKind) => agentKind,
+          (name) => name.toLocaleLowerCase(),
+        )) ?? project.defaultAgent;
   if (spawnable && (!agent || !spawnable.includes(agent))) {
     return refuse(agent ? ACT_REFUSAL.NO_PROJECT_AGENT : ACT_REFUSAL.NAME_A_PROJECT_AGENT);
   }
@@ -895,7 +894,7 @@ const admitUpdate: Admitter<typeof ACT_KIND.UPDATE> = (fields, context) => {
   // One button, one act: only the press the row is actually drawing runs, so
   // the refusal is the row's own words plus what stands in the act's place.
   if (act !== update.button) {
-    return withDetail(update.detail, UPDATE_BUTTON_STANDING[update.button]);
+    return refuse(`${update.detail} ${UPDATE_BUTTON_STANDING[update.button]}`);
   }
   return { kind: ACT_KIND.UPDATE, act };
 };

@@ -69,7 +69,7 @@ const SESSION_LIST_FILTER_DESCRIPTION =
  * from those two axes and the whole-list scope. Which values narrow to
  * anything is the observed roster's question, answered on the phone.
  */
-export const REMOTE_SESSION_LIST_FILTER_VALUES: readonly string[] = [
+const REMOTE_SESSION_LIST_FILTER_VALUES: readonly string[] = [
   ...new Set<string>([SESSION_LIST_ALL, ...PROVIDER_ID_LIST, ...Object.values(SESSION_STATUS)]),
 ];
 
@@ -85,7 +85,7 @@ const SESSION_LIST_SORT_DESCRIPTION =
   `developer first, ${SESSION_LIST_SORT.RECENCY} puts what moved last first.`;
 
 const identifier = (description: string): Schema<string> =>
-  s.text({ max: maximumIdentifierLength, oneLine: true, description });
+  s.text({ max: maximumIdentifierLength, description });
 
 /** The identity fields every session act names its target by. */
 export const SESSION_IDENTITY_FIELDS = {
@@ -250,7 +250,7 @@ export const PANEL_FILTERS = filterValues(
   SESSION_LIST_FILTER_DESCRIPTION,
 ).optional();
 
-export const REMOTE_PANEL_FILTERS = filterValues(
+const REMOTE_PANEL_FILTERS = filterValues(
   REMOTE_SESSION_LIST_FILTER_VALUES,
   REMOTE_SESSION_LIST_FILTER_DESCRIPTION,
 ).optional();

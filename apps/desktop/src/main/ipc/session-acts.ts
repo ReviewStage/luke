@@ -101,17 +101,6 @@ export interface SessionActPerformerDependencies {
   recordProductEvent: RecordProductEvent;
 }
 
-/**
- * Whether the turn an act belongs to still stands, asked once more at the last
- * boundary before a provider effect. A brain-origin act arrives with one; a row
- * press, which is not a write and opens its turn and its effect in the same
- * breath, carries none. The performer asks it only after an await of its own
- * that stands between admission and the effect — the stored agent defaults read
- * before a create or a spawn — because an act whose turn ended during that read
- * must refuse rather than start the write.
- */
-export type ActExecutionGuard = ActGuard;
-
 export interface SessionActsIpcDependencies {
   ipcMain: Pick<IpcMain, "handle" | "on">;
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
@@ -130,10 +119,14 @@ export interface SessionActsIpcDependencies {
  * not a write and reaches them without the brain.
  */
 export interface SessionActPerformer {
-  perform(
-    action: CarriedSessionAct | CarriedIssueAct,
-    guard?: ActExecutionGuard,
-  ): Promise<WireRecord>;
+  /**
+   * The guard is asked once more at the last boundary before a provider
+   * effect. A brain-origin act arrives with one; a row press, which is not a
+   * write and opens its turn and its effect in the same breath, carries none.
+   * Only a create and a spawn ask it, because only they await a read of their
+   * own — the stored agent defaults — between admission and the write.
+   */
+  perform(action: CarriedSessionAct | CarriedIssueAct, guard?: ActGuard): Promise<WireRecord>;
   openSession(identity: SessionIdentity): Promise<SessionOpenResult>;
   openSessionApplication(
     identity: SessionIdentity,
@@ -391,7 +384,7 @@ export function createSessionActPerformer(
     name: string | undefined,
     task: string | undefined,
     namedSelection: WorkspaceAgentSelection | undefined,
-    guard: ActExecutionGuard | undefined,
+    guard: ActGuard | undefined,
   ): Promise<ProviderWorkspaceResult> => {
     if (!sendsNetwork) {
       return {
@@ -528,7 +521,7 @@ export function createSessionActPerformer(
     task: string | undefined,
     namedModel: string | undefined,
     namedEffort: string | undefined,
-    guard: ActExecutionGuard | undefined,
+    guard: ActGuard | undefined,
   ): Promise<WireRecord> => {
     const session = sessionRegistry.get(identity);
     if (!session) return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_SESSION };
@@ -734,7 +727,7 @@ export function createSessionActPerformer(
   // guard; the rest reach their adapter or the CLI with nothing awaited between.
   const performSessionAction = (
     action: CarriedSessionAct,
-    guard: ActExecutionGuard | undefined,
+    guard: ActGuard | undefined,
   ): Promise<WireRecord> =>
     dispatchByKind(action, {
       [ACT_KIND.MESSAGE]: (act) => sendMessage(act.identity, act.text),
