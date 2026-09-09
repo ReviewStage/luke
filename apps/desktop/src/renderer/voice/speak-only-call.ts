@@ -128,7 +128,9 @@ export type ResponseDoneEvent = Extract<
   { type: typeof REALTIME_SERVER_EVENT.RESPONSE_DONE }
 >;
 
-export interface SpeakOnlyCallCallbacks {
+export interface SpeakOnlyCallOptions extends RealtimeCallOptions {
+  /** The voice and the pace the call is configured at, read at each handshake. */
+  voice?: () => { voice?: string; speed?: number };
   /**
    * The words Luke is currently speaking, growing as they are generated, or
    * undefined once there is nothing being spoken. Each entry is one response's
@@ -164,11 +166,6 @@ export interface SpeakOnlyCallCallbacks {
    * backstop included.
    */
   onReplySettled?(): void;
-}
-
-export interface SpeakOnlyCallOptions extends RealtimeCallOptions, SpeakOnlyCallCallbacks {
-  /** The voice and the pace the call is configured at, read at each handshake. */
-  voice?: () => { voice?: string; speed?: number };
 }
 
 /**
@@ -355,29 +352,21 @@ export class SpeakOnlyCall<
    * read out as though it just happened.
    */
   speak(speech: ProactiveSpeechTurn): boolean {
-    if (speech.kind === ARRIVAL_SPEECH_KIND) {
-      const arrivalEvents = arrivalSpeechEvents(speech);
-      if (arrivalEvents.length === 0 || !this.isConnected || voiceExchangeActive(this.status))
-        return false;
-      // No caption subject: the arrival speaks about no one observed session,
-      // like an introduction beat, so no notice may stand under the housing
-      // claiming it does.
-      this.startResponse(arrivalEvents);
-      return true;
-    }
-    if (speech.kind === CALENDAR_ONBOARDING_SPEECH_KIND) {
-      if (!this.isConnected || voiceExchangeActive(this.status)) return false;
-      // On the arrival's own terms: words with no kind, recorded as none.
-      this.startResponse(calendarOnboardingSpeechEvents());
-      return true;
-    }
-    const events = briefingSpeechEvents(speech);
+    const arrival = speech.kind === ARRIVAL_SPEECH_KIND;
+    const onboarding = speech.kind === CALENDAR_ONBOARDING_SPEECH_KIND;
+    const events = arrival
+      ? arrivalSpeechEvents(speech)
+      : onboarding
+        ? calendarOnboardingSpeechEvents()
+        : briefingSpeechEvents(speech);
     if (events.length === 0 || !this.isConnected || voiceExchangeActive(this.status)) return false;
     this.startResponse(events);
-    // After the start, which clears the last reply's caption and kind: the
-    // briefing's reply is the one now under way until it ends.
-    this.#captionKind = REPLY_KIND.BRIEFING;
-    this.emitCaption();
+    // Only a briefing's words are the brain's, and the kind is set after the
+    // start, which clears the last reply's: the briefing's reply is the one
+    // under way until it ends. An onboarding beat takes no kind and no
+    // caption subject — it speaks about no observed session, so no notice may
+    // stand under the housing claiming it does.
+    if (!arrival && !onboarding) this.setCaptionKind(REPLY_KIND.BRIEFING);
     return true;
   }
 
@@ -451,7 +440,7 @@ export class SpeakOnlyCall<
     // is what ended a reply in the pause between its two sentences.
     if (this.#audioEndingsReported) return;
     if (!this.#generationDone) return;
-    this.finishResponse();
+    this.#finishResponse();
   }
 
   /**
@@ -499,7 +488,7 @@ export class SpeakOnlyCall<
   }
 
   protected override onCallLost(): void {
-    if (this.#captionKind !== undefined) this.discardCaption();
+    if (this.#captionKind !== undefined) this.#discardCaption();
   }
 
   protected override onTeardown(step: TeardownStep): void {
@@ -507,14 +496,14 @@ export class SpeakOnlyCall<
     // handover's write-back re-enters this call, and landing it here means
     // the roster it renders against still stands — and everything it wrote is
     // cleared with the rest below, so a retired call keeps nothing pending.
-    step(() => this.clearCaption());
+    step(() => this.#clearCaption());
     // What was said on the call goes with the call. The pending answers go too:
     // they were built from stores this teardown is emptying, and the next call
     // is filled from the app afresh before it takes a turn.
     this.#pendingInterruptions.clear();
     this.#responseOutstanding = false;
     this.#audioDrained = false;
-    this.clearToolState();
+    this.onTurnBoundary();
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#heardLuke = false;
@@ -609,7 +598,7 @@ export class SpeakOnlyCall<
         // owed holds the same way, in the mirror order: the write is under
         // way, the READY an ending would offer is the same edge, and the
         // `done` already gave the hold a clock of its own.
-        if (this.#responseOutstanding || this.toolFollowUpPending) {
+        if (this.#responseOutstanding || this.turnHolds) {
           this.#audioDrained = { responseId: event.responseId };
           this.armSettleTimer();
           return;
@@ -618,7 +607,7 @@ export class SpeakOnlyCall<
         // because this end guessed from a stretch of quiet. A pause between two
         // sentences is quiet too, and guessing ended the turn in the middle of
         // one — the meter and the face went with it while Luke talked on.
-        this.finishResponse();
+        this.#finishResponse();
         return;
       case REALTIME_SERVER_EVENT.RESPONSE_DONE:
         this.#responseDone(event);
@@ -643,7 +632,7 @@ export class SpeakOnlyCall<
           this.armSettleTimer();
           return;
         }
-        this.finishResponse();
+        this.#finishResponse();
     }
   }
 
@@ -659,17 +648,16 @@ export class SpeakOnlyCall<
     // Whatever this reply turns out to be below, the server has concluded
     // it: from here the conversation can take a new `response.create`.
     if (fresh) this.#responseOutstanding = false;
-    // A reply that asked for tools has not finished talking: the calls are
-    // answered and the reply resumes over their outcomes, so the turn stays
-    // open rather than ending on a reply that was only half made. A call
-    // that declared no tools has none to adopt, and reads such a reply as
-    // any other.
+    // A reply that asked for tool calls has not finished talking: a call that
+    // can answer them says so, and the turn stays open for the reply to
+    // resume over their outcomes rather than ending on one only half made.
+    // This call declared no tools, so such a reply reads as any other.
     if (event.calls.length > 0) {
-      if (this.adoptToolCalls(event, fresh)) return;
+      if (this.replyResumes(event, fresh)) return;
       // The spoken half's audio already drained — its ending deferred to
       // this `done`, and a reply owing no follow-up ends here, exactly
       // as the drain would have ended it.
-      if (fresh && this.currentReplyDrained()) this.finishResponse();
+      if (fresh && this.#currentReplyDrained()) this.#finishResponse();
       return;
     }
     if (!fresh) return;
@@ -681,7 +669,7 @@ export class SpeakOnlyCall<
     // Only a response that reported its output may end here: an unknown
     // is not a silence, and keeps the ordinary endings below.
     if (event.hasAudio === false) {
-      this.finishResponse();
+      this.#finishResponse();
       return;
     }
     // Generation is done; the reply is not. The turn ends when Luke stops
@@ -691,8 +679,8 @@ export class SpeakOnlyCall<
     // The server said the audio ran out before it said the reply was
     // over. That ending waited for this `done` — the conversation held
     // an active response until it — and lands now.
-    if (this.currentReplyDrained()) {
-      this.finishResponse();
+    if (this.#currentReplyDrained()) {
+      this.#finishResponse();
       return;
     }
     // The audio can run out before the event that says generation is over.
@@ -700,7 +688,7 @@ export class SpeakOnlyCall<
     // so waiting for another would hold the turn open until the settle
     // timeout — seconds of a meter and a face saying Luke is still talking.
     if (this.#remoteQuiet && !this.#audioEndingsReported) {
-      this.finishResponse();
+      this.#finishResponse();
       return;
     }
     this.armSettleTimer();
@@ -710,21 +698,24 @@ export class SpeakOnlyCall<
   protected onResponseCreated(_responseId: string): void {}
 
   /**
-   * Whether the calls a finished reply carried were adopted, so the turn now
-   * holds for the follow-up voicing their outcomes. A speak-only call
-   * declared no tools and adopts none.
+   * Whether the reply whose generation just finished has more to say — so the
+   * turn holds rather than ending here. Nothing a speak-only call is sent can
+   * resume: its replies end where their generation does.
    */
-  protected adoptToolCalls(_event: ResponseDoneEvent, _fresh: boolean): boolean {
+  protected replyResumes(_event: ResponseDoneEvent, _fresh: boolean): boolean {
     return false;
   }
 
-  /** Whether a follow-up voicing a reply's tool outcomes is still owed. */
-  protected get toolFollowUpPending(): boolean {
+  /** Whether the turn is still owed something, so the audio draining is not an ending. */
+  protected get turnHolds(): boolean {
     return false;
   }
 
-  /** Forgets whatever the turn's tool calls left behind, on every boundary. */
-  protected clearToolState(): void {}
+  /**
+   * A turn boundary crossed — a new reply, a finish, an interrupt, the
+   * teardown — where whatever the last turn left outstanding is spent.
+   */
+  protected onTurnBoundary(): void {}
 
   /** The turn now under way, as the boundary a late write is checked against. */
   protected get turnEpoch(): number {
@@ -739,7 +730,7 @@ export class SpeakOnlyCall<
   protected setCaptionKind(kind: ReplyKind | undefined, runId?: string): void {
     this.#captionKind = kind;
     this.#captionRunId = runId;
-    this.emitCaption();
+    this.#emitCaption();
   }
 
   protected startResponse(
@@ -766,7 +757,7 @@ export class SpeakOnlyCall<
     // waited on, this is the reply that answers or supersedes the wait.
     this.#responseOutstanding = true;
     this.#audioDrained = false;
-    this.clearToolState();
+    this.onTurnBoundary();
     this.#clearQuietTimer();
     this.#responseItemId = undefined;
     // Nothing has been confirmed for this turn yet: whatever `response.done`
@@ -779,7 +770,7 @@ export class SpeakOnlyCall<
     this.#turnEpoch += 1;
     // A new turn starts with a clean strip; a follow-up continuing the same
     // exchange keeps the words just said, and its own words stack under them.
-    if (!keepCaption) this.clearCaption();
+    if (!keepCaption) this.#clearCaption();
     this.clearSettleTimer();
     this.onResponseStarted(events);
     this.send(events);
@@ -790,14 +781,14 @@ export class SpeakOnlyCall<
   protected onResponseStarted(_events: readonly WireRecord[]): void {}
 
   /** Ends the turn once the reply is done, so the next one can start. */
-  protected finishResponse(): void {
+  #finishResponse(): void {
     this.#generationDone = false;
     // However the turn ended — the settle backstop included — whatever the
     // server still owed it is treated as concluded, so a `done` that never
     // comes cannot leave every later reply refused against it.
     this.#responseOutstanding = false;
     this.#audioDrained = false;
-    this.clearToolState();
+    this.onTurnBoundary();
     // The turn is over, and everything of it is spent — a write still in
     // flight from it finds this boundary and stands down, rather than opening
     // its follow-up out of a silence already declared.
@@ -809,7 +800,7 @@ export class SpeakOnlyCall<
     // The caption is of speech, and the speech is over. Whatever ended the
     // reply — the audio draining, an error, the settle timer — the words leave
     // with the meter and the face rather than lingering under a quiet capsule.
-    this.clearCaption();
+    this.#clearCaption();
     // Whatever ended the reply — an error, the settle timer, Luke simply
     // stopping — the next one has to be audible. Without this a reply that
     // failed before it started would leave Luke silenced with nothing to
@@ -836,7 +827,7 @@ export class SpeakOnlyCall<
     // The caption is cut with the audio, but handed over first. Generated text
     // runs slightly ahead of playback; History keeps that available transcript
     // so an interrupted announcement can still be recalled.
-    this.clearCaption();
+    this.#clearCaption();
     this.#interruptionSequence += 1;
     const cancellationEventId = `response_cancel_${this.#interruptionSequence}`;
     const clearEventId = `output_audio_clear_${this.#interruptionSequence}`;
@@ -878,7 +869,7 @@ export class SpeakOnlyCall<
     // active response above.
     this.#responseOutstanding = false;
     this.#audioDrained = false;
-    this.clearToolState();
+    this.onTurnBoundary();
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#heardLuke = false;
@@ -898,7 +889,7 @@ export class SpeakOnlyCall<
   #truncateEvents(truncationEventId: string): readonly WireRecord[] {
     const itemId = this.#responseItemId;
     const audibleSince = this.#audibleSince;
-    if (!itemId || audibleSince === undefined || this.currentReplyDrained()) return [];
+    if (!itemId || audibleSince === undefined || this.#currentReplyDrained()) return [];
     return truncateResponseEvents({
       itemId,
       audioEndMs: this.now() - audibleSince,
@@ -914,7 +905,7 @@ export class SpeakOnlyCall<
    * the current one's, and reading it as another's would hold the turn to
    * the settle backstop.
    */
-  protected currentReplyDrained(): boolean {
+  #currentReplyDrained(): boolean {
     if (this.#audioDrained === false) return false;
     const { responseId } = this.#audioDrained;
     return responseId === undefined || responseId === this.#activeResponseId;
@@ -924,7 +915,7 @@ export class SpeakOnlyCall<
   protected armSettleTimer(delayMs: number = REALTIME_SETTLE_TIMEOUT_MS): void {
     this.#settleTimer ??= setTimeout(() => {
       this.#settleTimer = undefined;
-      this.finishResponse();
+      this.#finishResponse();
     }, delayMs);
   }
 
@@ -940,7 +931,7 @@ export class SpeakOnlyCall<
     this.#quietTimer = undefined;
   }
 
-  protected clearCaption(): void {
+  #clearCaption(): void {
     // The kind is of the reply, so the reply ending takes it too: every path
     // that ends one clears the caption through here.
     if (this.#captionSegments.length === 0 && this.#captionKind === undefined) return;
@@ -961,7 +952,7 @@ export class SpeakOnlyCall<
   }
 
   /** Clears an undelivered briefing without admitting it to History. */
-  protected discardCaption(): void {
+  #discardCaption(): void {
     this.#captionSegments = [];
     this.#captionKind = undefined;
     this.#captionRunId = undefined;
@@ -974,7 +965,7 @@ export class SpeakOnlyCall<
     return this.#captionSegments.map((segment) => segment.text);
   }
 
-  protected emitCaption(): void {
+  #emitCaption(): void {
     this.options.onCaption(this.#captionTexts(), this.#captionKind);
   }
 
@@ -993,7 +984,7 @@ export class SpeakOnlyCall<
       this.#captionSegments.push({ itemId, text: delta });
       this.#captionSegments = this.#captionSegments.slice(-CAPTION_SEGMENT_LIMIT);
     }
-    this.emitCaption();
+    this.#emitCaption();
   }
 
   /**
@@ -1007,7 +998,7 @@ export class SpeakOnlyCall<
     const segment = this.#captionSegments.find((candidate) => candidate.itemId === itemId);
     if (!segment || segment.text === transcript) return;
     segment.text = transcript;
-    this.emitCaption();
+    this.#emitCaption();
   }
 
   /** Sends the pace change that waited out a reply, once nothing is speaking. */

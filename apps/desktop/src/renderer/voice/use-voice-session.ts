@@ -18,7 +18,6 @@ import {
   type RealtimeStatus,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
-  realtimeSessionConfig,
 } from "@sidecar/realtime";
 import {
   adoptConversationThread,
@@ -1018,15 +1017,16 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
 
   /**
    * The call now standing, whichever kind opened it — what a stop, a pace
-   * change, or the meter's report is for. With none open it is the
-   * developer's, which is who the next one belongs to.
+   * change, or the meter's report is for. None while neither is up: there is
+   * nothing being spoken over, and every one of those asks would be a no-op
+   * against an idle call anyway.
    */
   const liveCall = useCallback((): SpeakOnlyCall | undefined => {
     const conversation = conversationCall.current;
     if (conversation?.isConnected || conversation?.isConnecting) return conversation;
     const speakOnly = speakOnlyCall.current;
     if (speakOnly?.isConnected || speakOnly?.isConnecting) return speakOnly;
-    return conversation ?? speakOnly;
+    return undefined;
   }, []);
 
   /**

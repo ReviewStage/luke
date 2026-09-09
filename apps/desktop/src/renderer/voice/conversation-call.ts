@@ -37,7 +37,7 @@ import {
   type PressCaptureFactory,
   type PressCaptureSource,
 } from "./press-audio-capture";
-import { errorMessage, type TeardownStep } from "./realtime-call";
+import type { TeardownStep } from "./realtime-call";
 import {
   BRAIN_ASK_SETTLE_TIMEOUT_MS,
   REPLY_KIND,
@@ -540,7 +540,7 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
     };
   }
 
-  protected override adoptToolCalls(event: ResponseDoneEvent, fresh: boolean): boolean {
+  protected override replyResumes(event: ResponseDoneEvent, fresh: boolean): boolean {
     let batch: SdkToolBatch | undefined;
     if (fresh && event.responseId) {
       batch =
@@ -579,12 +579,12 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
     return true;
   }
 
-  protected override get toolFollowUpPending(): boolean {
+  protected override get turnHolds(): boolean {
     const batch = this.#toolBatch;
     return Boolean(batch?.responseDone && !batch.followUpStarted && batch.callIds.size > 0);
   }
 
-  protected override clearToolState(): void {
+  protected override onTurnBoundary(): void {
     this.#toolBatch = undefined;
     this.#toolCallResponseIds.clear();
   }
@@ -756,7 +756,7 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
       // the press is still waiting for goes on opening, the press is dropped —
       // there is nothing to capture with — and the refusal is shown beside it.
       if (this.closed || attempt !== this.attempt) return;
-      const message = error instanceof Error ? errorMessage(error) : String(error);
+      const message = error instanceof Error ? error.message : String(error);
       if (this.isConnected) {
         this.fail(message);
         return;
@@ -826,7 +826,7 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
       // Guarded like the open's own refusal: a sender that rejected because
       // its call was torn down mid-replace is not the live call's fault.
       if (!this.closed && attempt === this.attempt && this.isConnected) {
-        if (error instanceof Error) this.fail(errorMessage(error));
+        if (error instanceof Error) this.fail(error.message);
         else this.fail(String(error));
       }
       return;

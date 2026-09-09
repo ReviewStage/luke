@@ -17,9 +17,9 @@ import {
 } from "./agents-realtime-transport";
 
 /** Bounds the SDK's WebRTC handshake and initial session acknowledgement. */
-export const CONNECT_TIMEOUT_MS = 15_000;
+const CONNECT_TIMEOUT_MS = 15_000;
 
-export interface RealtimeCallCallbacks {
+export interface RealtimeCallOptions {
   onStatus(status: RealtimeStatus): void;
   onRemoteStream(stream: MediaStream | undefined): void;
   onError(message: string | undefined): void;
@@ -31,9 +31,6 @@ export interface RealtimeCallCallbacks {
    * outlives the bootstrap that says whether a trace is being written.
    */
   onWireEvent?: (direction: TraceDirection, event: WireRecord) => void;
-}
-
-export interface RealtimeCallOptions extends RealtimeCallCallbacks {
   requestConnection(): Promise<RealtimeConnection | undefined>;
   /** The SDK call seam, injectable so the complete transport can be tested without WebRTC. */
   createSdkTransport?: SdkTransportFactory;
@@ -46,10 +43,6 @@ export interface RealtimeCallOptions extends RealtimeCallCallbacks {
 
 /** Traps a teardown step's failure so the steps after it still run. */
 export type TeardownStep = (action: () => void) => void;
-
-export function errorMessage(error: Error): string {
-  return error.message;
-}
 
 /**
  * One Realtime call's transport: the handshake, the peer connection, the
@@ -218,7 +211,7 @@ export abstract class RealtimeCall<Options extends RealtimeCallOptions = Realtim
       // the handshake starts.
       if (this.#closed) return this.#abandonConnect();
       if (!(error instanceof Error)) return this.fail(String(error));
-      return this.fail(`Could not reach the main process: ${errorMessage(error)}`);
+      return this.fail(`Could not reach the main process: ${error.message}`);
     }
     if (this.#closed) return this.#abandonConnect();
     if (!connection) {
@@ -267,7 +260,7 @@ export abstract class RealtimeCall<Options extends RealtimeCallOptions = Realtim
     } catch (error) {
       if (this.#closed) return this.#abandonConnect();
       if (!(error instanceof Error)) return this.fail(String(error));
-      return this.fail(errorMessage(error));
+      return this.fail(error.message);
     }
   }
 
