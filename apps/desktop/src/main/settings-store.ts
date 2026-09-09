@@ -1194,12 +1194,10 @@ export class SettingsStore {
         reason: "That is not a calendar id.",
       };
     let missing: string | undefined;
-    // Only a Google account's list is decrypted, so only its edit costs the
-    // cache; this Mac's connection carries no grant to have cached.
-    let editedAccount = false;
+    const apple = accountId === APPLE_CALENDAR_ID;
     await this.#mutate(
       (persisted) => {
-        if (accountId === APPLE_CALENDAR_ID) {
+        if (apple) {
           const held = persisted.appleCalendar;
           if (!held) {
             missing = "Apple Calendar is not connected.";
@@ -1216,7 +1214,6 @@ export class SettingsStore {
         }
         const calendars = toggledCalendarSelection(held.calendars, id, selected);
         if (!calendars) return undefined;
-        editedAccount = true;
         return withCalendarAccounts(
           persisted,
           existing.map((account) =>
@@ -1224,9 +1221,9 @@ export class SettingsStore {
           ),
         );
       },
-      () => {
-        if (editedAccount) this.#forgetCalendarAccounts();
-      },
+      // Only a Google account's grant is decrypted, so only its edit costs the
+      // cache; this Mac's connection carries no grant to have cached.
+      apple ? undefined : () => this.#forgetCalendarAccounts(),
     );
     const settings = await this.snapshot();
     return missing
@@ -1334,9 +1331,13 @@ export class SettingsStore {
   /**
    * The one settings write: serialize, load, mutate, stamp, write, cache, and
    * invalidate. A mutator answering nothing means the stored value is already
-   * the one asked for, so nothing is written and no cache is dropped —
-   * `invalidate` runs only after a write actually landed, so a no-op change
-   * can never cost a Keychain read. Answers whether a write landed.
+   * the one asked for, so nothing is written. It runs exactly once per call,
+   * so it may record what it decided for its caller to read afterwards.
+   *
+   * `invalidate` drops the caches the write made stale, and runs only after
+   * one actually landed: dropping a decrypted value a no-op change did not
+   * disturb would cost a Keychain read for nothing. Answers whether a write
+   * landed.
    */
   async #mutate(
     mutate: (persisted: PersistedSettings) => PersistedSettings | undefined,
