@@ -31,7 +31,6 @@ import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
 import type { CalendarGateControl } from "./calendar-gate";
 import { ConsentConnectSlot } from "./consent-connect-slot";
 import { FeedbackSlot } from "./feedback-slot";
-import { KeySlot } from "./key-slot";
 import { LukeErrand } from "./luke-errand";
 import { buildLukeGuide } from "./luke-guide";
 import { MarkdownMessage } from "./markdown-message";
@@ -46,6 +45,7 @@ import {
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { applySessionReplay } from "./session-replay";
 import { focusSearchField } from "./session-search";
+import { KeySlot } from "./settings/key-slot";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings-panel";
 import { SETTINGS_SEARCH_INPUT_ID } from "./settings-search";
 import {
