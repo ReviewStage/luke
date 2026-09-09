@@ -501,8 +501,21 @@ test("the conversation directory lists what the user holds, creation is idempote
     NOW,
   );
   assert.equal((await database.store.conversations.list(userId))[1]?.sessionId, "gen-thread");
+  for (const sessionKey of [THREAD_KEY, MAIN_SESSION_KEY]) {
+    await database.store.briefings.insert(userId, {
+      id: `briefing-${sessionKey}`,
+      sessionKey,
+      words: "words",
+      decidedAt: NOW,
+      expiresAt: NOW + 1,
+    });
+  }
 
   assert.equal(await database.store.conversations.delete(userId, THREAD_KEY), true);
+  assert.deepEqual(
+    (await database.store.briefings.list(userId)).map((record) => record.sessionKey),
+    [MAIN_SESSION_KEY],
+  );
   assert.equal(await database.store.conversations.delete(userId, THREAD_KEY), false);
   assert.equal((await database.store.conversations.list(userId)).length, 1);
   for (const table of [conversationLine, transcriptEvent, compactionBoundary]) {

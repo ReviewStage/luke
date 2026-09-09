@@ -7,6 +7,7 @@ import {
   type SessionKey,
 } from "../../core.js";
 import {
+  briefing,
   compactionBoundary,
   conversation,
   conversationLine,
@@ -227,15 +228,25 @@ export async function clearConversationRows(
   await raiseConversationCutoff(db, userId, sessionKey, instant);
 }
 
-/** Removes the conversation and everything under it: lines, transcript, boundaries, and the standing generation with its rows. */
-export async function deleteConversation(
+/**
+ * Removes the conversation and everything under it: lines, transcript,
+ * boundaries, the standing generation with its rows, and the briefings it
+ * decided, which hang from the user rather than the conversation row and so
+ * go here rather than by cascade.
+ */
+export function deleteConversation(
   db: HostedStoreDatabase,
   userId: string,
   sessionKey: SessionKey,
 ): Promise<boolean> {
-  const removed = await db
-    .delete(conversation)
-    .where(and(eq(conversation.userId, userId), eq(conversation.sessionKey, sessionKey)))
-    .returning({ sessionKey: conversation.sessionKey });
-  return removed.length > 0;
+  return db.transaction(async (tx) => {
+    await tx
+      .delete(briefing)
+      .where(and(eq(briefing.userId, userId), eq(briefing.sessionKey, sessionKey)));
+    const removed = await tx
+      .delete(conversation)
+      .where(and(eq(conversation.userId, userId), eq(conversation.sessionKey, sessionKey)))
+      .returning({ sessionKey: conversation.sessionKey });
+    return removed.length > 0;
+  });
 }

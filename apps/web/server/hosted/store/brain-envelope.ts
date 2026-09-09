@@ -84,7 +84,25 @@ export async function standingGeneration(
  * token a writer names to replace it, so an unreadable generation can be
  * repaired by the store that loaded it and by nothing that did not.
  */
-export async function loadBrainEnvelope(
+/**
+ * Reads the envelope in one transaction under the conversation's row lock,
+ * so a save landing meanwhile is seen whole or not at all: a handle never
+ * observes one generation's items beside another's requests, and the delta
+ * its next save carries is composed against rows that all stood together.
+ */
+export function loadBrainEnvelope(
+  db: HostedStoreDatabase,
+  seal: UserSeal,
+  userId: string,
+  sessionKey: SessionKey,
+): Promise<EnvelopeRead> {
+  return db.transaction(async (tx) => {
+    if (!(await lockConversation(tx, userId, sessionKey))) return {};
+    return readBrainEnvelope(tx, seal, userId, sessionKey);
+  });
+}
+
+async function readBrainEnvelope(
   db: HostedStoreDatabase,
   seal: UserSeal,
   userId: string,
