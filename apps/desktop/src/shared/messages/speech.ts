@@ -64,11 +64,8 @@ export function isSpeechWithdrawal(
   return isRecord(value) && isWireString(value.id) && value.id.length > 0;
 }
 
+const SPEECH_OUTCOMES: ReadonlySet<string> = new Set(Object.values(SPEECH_OUTCOME));
+
 export function isSpeechOutcome(value: UnparsedWireValue): value is SpeechOutcome {
-  return (
-    value === SPEECH_OUTCOME.SPOKEN ||
-    value === SPEECH_OUTCOME.REFUSED ||
-    value === SPEECH_OUTCOME.HELD ||
-    value === SPEECH_OUTCOME.STALE
-  );
+  return isWireString(value) && SPEECH_OUTCOMES.has(value);
 }
