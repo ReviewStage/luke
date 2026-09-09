@@ -13,7 +13,7 @@ describeProviderContract(
       new ConductorSessionAdapter({
         readApiKey: input.readApiKey,
         baseUrl: "https://api.conductor.test",
-        fetch: input.api?.fetch,
+        fetch: input.api.fetch,
         now: input.now,
         minimumRefreshIntervalMs: input.minimumRefreshIntervalMs,
       }),

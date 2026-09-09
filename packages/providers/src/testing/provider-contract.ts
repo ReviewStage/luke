@@ -22,6 +22,7 @@ import {
 } from "@sidecar/session";
 import {
   type FakeCloudApi,
+  HTTP_STATUS,
   isJsonObject,
   type JsonObject,
   type JsonValue,
@@ -62,10 +63,14 @@ export interface ProviderFixtureInput {
   readonly minimumRefreshIntervalMs: number;
   /** Answers `undefined` for the no-key cases, and throws for the unreadable one. */
   readonly readApiKey: () => Promise<string | undefined>;
-  /** The fake backing this fixture's `api/` routes, for a key-observed provider. */
-  readonly api?: FakeCloudApi;
-  /** The fake backing this fixture's `cli/` files, for a CLI-observed provider. */
-  readonly run?: CliRun;
+  /**
+   * The fakes backing this fixture's recorded `api/` routes and `cli/`
+   * answers. Every provider is handed both, whatever it is observed by: each
+   * throws for a request or an invocation the fixture never recorded, so a
+   * provider that reaches somewhere new fails loudly rather than silently.
+   */
+  readonly api: FakeCloudApi;
+  readonly run: CliRun;
   /** Where the observation hook's spool stands for this case, or nowhere. */
   readonly hookEventsDirectory: () => string | undefined;
   /**
@@ -135,8 +140,6 @@ const REPLACEMENT_API_KEY = "contract-replacement-key";
 const REFRESH_INTERVAL_MS = 15_000;
 /** The one body key a POSTed read document rides under. */
 const READ_DOCUMENT_FIELD = "query";
-const HTTP_UNAUTHORIZED = 401;
-const HTTP_SERVER_ERROR = 500;
 const UNSUPPORTED_MESSAGE_TEXT = "This message must never reach a provider.";
 
 function observationFor(
@@ -281,10 +284,7 @@ export function describeProviderContract(
       now: () => now,
       minimumRefreshIntervalMs: options.minimumRefreshIntervalMs ?? 0,
       readApiKey: options.readApiKey ?? (async () => apiKey),
-      ...(observedByKey ? { api } : undefined),
-      // Every kind is handed the same recorded runner: a provider that spawns
-      // an invocation the fixture never recorded fails loudly rather than
-      // silently, whether or not it is the CLI-observed one.
+      api,
       run: cli.run,
       hookEventsDirectory: options.hookEventsDirectory ?? (() => undefined),
       sql: async (name) =>
@@ -525,9 +525,9 @@ export function describeProviderContract(
         const contract = await contractCase(t);
 
         const observed = await contract.plugin.observe();
-        contract.api.fail(HTTP_SERVER_ERROR);
+        contract.api.fail(HTTP_STATUS.SERVER_ERROR);
         const duringOutage = await contract.plugin.observe();
-        contract.api.fail(HTTP_UNAUTHORIZED);
+        contract.api.fail(HTTP_STATUS.UNAUTHORIZED);
         const afterRefusal = await contract.plugin.observe();
 
         assert.ok(observed.length > 0);
