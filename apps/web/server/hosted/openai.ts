@@ -5,7 +5,7 @@
  * off, the same kill switch the feedback endpoint uses.
  */
 
-import type { CloudFetch } from "@sidecar/wire";
+import { type CloudFetch, HTTP_METHOD } from "@sidecar/wire";
 import type {
   BrainCompactRequest,
   BrainEmbeddingsRequest,
@@ -14,6 +14,7 @@ import type {
   realtimeClientSecretRequest,
   remoteRealtimeClientSecretRequest,
 } from "../core.js";
+import { callAnswered, createAccountCall, fixedBearer } from "../core.js";
 // Type-only, so the value-level import the introduction handler takes from
 // this module never becomes a runtime cycle.
 import type { introductionClientSecretRequest } from "./introduction-mint.js";
@@ -48,11 +49,6 @@ export interface OpenAiUpstreamOptions {
   signal?: AbortSignal;
 }
 
-function upstreamSignal(timeoutMs: number, cancellation: AbortSignal | undefined): AbortSignal {
-  const timeout = AbortSignal.timeout(timeoutMs);
-  return cancellation ? AbortSignal.any([timeout, cancellation]) : timeout;
-}
-
 /**
  * Posts one build-fixed document to OpenAI, resolving to nothing on a network
  * fault so a caller answers 502 without ever holding an error that could name
@@ -63,21 +59,17 @@ export async function postOpenAi(
   body: OpenAiPostBody,
   options: OpenAiUpstreamOptions,
 ): Promise<Response | undefined> {
-  const send = options.fetch ?? ((input: string, init: RequestInit) => fetch(input, init));
-  try {
-    return await send(`${HOSTED_OPENAI_DEFAULTS.BASE_URL}${path}`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${options.apiKey}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(body),
-      signal: upstreamSignal(
-        options.timeoutMs ?? HOSTED_OPENAI_DEFAULTS.REQUEST_TIMEOUT_MS,
-        options.signal,
-      ),
-    });
-  } catch {
-    return undefined;
-  }
+  const call = createAccountCall({
+    baseUrl: HOSTED_OPENAI_DEFAULTS.BASE_URL,
+    credential: fixedBearer(options.apiKey),
+    fetch: options.fetch,
+    requestTimeoutMs: options.timeoutMs ?? HOSTED_OPENAI_DEFAULTS.REQUEST_TIMEOUT_MS,
+  });
+  const answer = await call.send({
+    method: HTTP_METHOD.POST,
+    path,
+    body: JSON.stringify(body),
+    signal: options.signal,
+  });
+  return callAnswered(answer) ? answer.response : undefined;
 }

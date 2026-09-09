@@ -1,12 +1,11 @@
+import type { CloudFetch, UnparsedWireValue, WireRecord } from "@sidecar/wire";
 import {
-  type CloudFetch,
-  positiveInteger,
-  text,
-  type UnparsedWireValue,
-  unparsedWire,
-  type WireRecord,
-  withoutTrailingSlash,
-} from "@sidecar/wire";
+  type AccountCall,
+  accountBearer,
+  type CallCredential,
+  createAccountCall,
+  fixedBearer,
+} from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
 import {
   type DeviceForgetAnswer,
@@ -23,12 +22,6 @@ import {
   deviceRegisterRequestSchema,
 } from "./device-wire.js";
 import { HOSTED_SERVICE_PATH } from "./service-paths.js";
-
-const DEVICE_DEFAULTS = {
-  REQUEST_TIMEOUT_MS: 10_000,
-} as const;
-
-const UNAUTHORIZED_STATUS = 401;
 
 export interface HostedDeviceClientOptions extends AccountToken {
   /** The hosted service origin, without a trailing slash. */
@@ -91,31 +84,20 @@ function forgetRecord(request: DeviceForgetRequest): WireRecord {
 /**
  * The desktop's side of the device record: register this installation at
  * sign-in, move its last-seen instant on a timer, and forget it at sign-out.
- * The shape follows the hosted vault client — token read fresh per ask, a 401
- * refreshed and retried once, every answer validated by the shared wire
+ * Every ask is the shared account call — the token read fresh per attempt, a
+ * 401 refreshed and retried once, every answer validated by the shared wire
  * contract — and a failure resolves to nothing, because no row press waits on
  * it: a registration that did not land is tried again by the next heartbeat.
  * A request the service would refuse by shape is refused here without
  * traveling at all.
  */
 export class HostedDeviceClient {
-  readonly #baseUrl: string;
-  readonly #readAccessToken: () => Promise<string | undefined>;
-  readonly #refreshAccount: () => Promise<void>;
-  readonly #fetch: CloudFetch;
-  readonly #requestTimeoutMs: number;
+  readonly #options: HostedDeviceClientOptions;
+  readonly #call: AccountCall;
 
   constructor(options: HostedDeviceClientOptions) {
-    const baseUrl = text(options.serviceBaseUrl);
-    if (!baseUrl) throw new Error("Hosted service base URL must not be empty");
-    this.#baseUrl = withoutTrailingSlash(baseUrl);
-    this.#readAccessToken = options.readAccessToken;
-    this.#refreshAccount = options.refreshAccount;
-    this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
-    this.#requestTimeoutMs = positiveInteger(
-      options.requestTimeoutMs,
-      DEVICE_DEFAULTS.REQUEST_TIMEOUT_MS,
-    );
+    this.#options = options;
+    this.#call = this.#callOn(accountBearer(options));
   }
 
   register(request: DeviceRegisterRequest): Promise<DeviceRegisterAnswer | undefined> {
@@ -154,41 +136,28 @@ export class HostedDeviceClient {
     );
   }
 
-  async #ask<Answer>(
+  #ask<Answer>(
     request: DeviceRequest,
     read: (payload: UnparsedWireValue) => Answer | undefined,
     departing?: DepartingCredential,
   ): Promise<Answer | undefined> {
-    const token = departing?.accessToken ?? (await this.#readAccessToken());
-    if (!token) return undefined;
-
-    let response = await this.#request(request, token);
-    if (response?.status === UNAUTHORIZED_STATUS && departing === undefined) {
-      await this.#refreshAccount().catch(() => undefined);
-      const refreshed = await this.#readAccessToken();
-      if (refreshed && refreshed !== token) {
-        response = await this.#request(request, refreshed);
-      }
-    }
-    if (!response?.ok) return undefined;
-
-    const payload = await response.json().catch(() => undefined);
-    return payload === undefined ? undefined : read(unparsedWire(payload));
+    const call = departing ? this.#callOn(fixedBearer(departing.accessToken)) : this.#call;
+    return call.ask(
+      {
+        method: request.method,
+        path: HOSTED_SERVICE_PATH.DEVICES,
+        body: JSON.stringify(request.body),
+      },
+      read,
+    );
   }
 
-  async #request(request: DeviceRequest, token: string): Promise<Response | undefined> {
-    try {
-      return await this.#fetch(`${this.#baseUrl}${HOSTED_SERVICE_PATH.DEVICES}`, {
-        method: request.method,
-        headers: {
-          authorization: `Bearer ${token}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(request.body),
-        signal: AbortSignal.timeout(this.#requestTimeoutMs),
-      });
-    } catch {
-      return undefined;
-    }
+  #callOn(credential: CallCredential): AccountCall {
+    return createAccountCall({
+      baseUrl: this.#options.serviceBaseUrl,
+      credential,
+      fetch: this.#options.fetch,
+      requestTimeoutMs: this.#options.requestTimeoutMs,
+    });
   }
 }
