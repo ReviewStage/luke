@@ -57,7 +57,6 @@ import {
 import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/messages/voice-view";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
 import { runAppleCalendarHelper } from "./apple-calendar";
-import { registerBrainIpc } from "./brain/ipc";
 import { DESKTOP_OPERATOR_CLIENT_ID } from "./gateway/desktop-node";
 import type { HostBootstrap, HostSessionReplay } from "./gateway/host-operator";
 import { wireGateway } from "./gateway/wiring";
@@ -70,6 +69,7 @@ import {
   shouldRunIntroduction,
 } from "./introduction-flow";
 import { registerAccountSessionIpc } from "./ipc/account-session";
+import { registerBrainIpc } from "./ipc/brain";
 import { registerSessionActsIpc } from "./ipc/session-acts";
 import { registerSettingsRowsIpc } from "./ipc/settings-rows";
 import { registerVoiceRuntimeIpc } from "./ipc/voice-runtime";

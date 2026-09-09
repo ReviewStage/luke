@@ -93,7 +93,7 @@ import {
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { type BrainActPerformerDependencies, createBrainActPerformer } from "./act-performer";
 import { BrainHost } from "./host";
-import { type BrainIpcDependencies, followBrainRequests } from "./ipc";
+import { type BrainPublicationDependencies, followBrainRequests } from "./publication";
 import {
   type ChildWiringDependencies,
   childName,
@@ -125,7 +125,7 @@ export interface BrainWiringDependencies extends ChildWiringDependencies {
   ) => boolean | Promise<boolean>;
   broadcastRequests: (snapshots: readonly BrainRequestSnapshot[]) => void;
   /** A run's end stands in History, written and marked: the moment its reply may be owed to the ear. */
-  onEndPublished?: BrainIpcDependencies["onEndPublished"];
+  onEndPublished?: BrainPublicationDependencies["onEndPublished"];
   /** A conversation's generation ended — reset, expired, or replaced — and its unspoken briefings and replies go with it. */
   onGenerationReplaced: (sessionKey: SessionKey) => void;
   acts: BrainActPerformerDependencies;

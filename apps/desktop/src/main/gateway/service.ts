@@ -58,7 +58,7 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
-import { publishAsk } from "../brain/ipc";
+import { publishAsk } from "../brain/publication";
 import type { SettableConfigurationPatch } from "../brain/wiring";
 import type { ConversationOperations } from "../conversation-operations";
 

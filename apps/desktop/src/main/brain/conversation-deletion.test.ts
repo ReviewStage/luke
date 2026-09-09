@@ -47,7 +47,7 @@ import {
   CONVERSATION_DELETE_OUTCOME,
   deleteConversationHistoryFlow,
 } from "./conversation-deletion";
-import { followBrainRequests } from "./ipc";
+import { followBrainRequests } from "./publication";
 
 /**
  * The Clear composed as the main process composes it: the real database and

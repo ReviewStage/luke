@@ -14,7 +14,7 @@ import { GATEWAY_EVENT, GATEWAY_METHOD, gatewayEventReader } from "@sidecar/gate
 import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
 import { isRecord, isWireBoolean, isWireNumber, isWireString, type WireValue } from "@sidecar/wire";
 import { CONVERSATION_DELETE_OUTCOME } from "../brain/conversation-deletion";
-import { REJECTED_SUBMISSION } from "../brain/ipc";
+import { REJECTED_SUBMISSION } from "../brain/publication";
 
 /**
  * The desktop's operator client: what the windows' IPC and the main

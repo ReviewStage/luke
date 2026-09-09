@@ -18,8 +18,8 @@ import {
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { admittedForTest } from "@sidecar/wire/testing";
 import { drainMicrotasks } from "#testing/drain";
-import type { SettingsStore } from "../settings-store";
-import { createSessionActPerformer } from "./session-acts";
+import { createSessionActPerformer } from "./session-act-performer";
+import type { SettingsStore } from "./settings-store";
 
 /*
  * The two acts that await something of their own between admission and the

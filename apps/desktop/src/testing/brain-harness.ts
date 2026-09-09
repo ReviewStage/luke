@@ -29,7 +29,7 @@ import {
 import type { ModelResponse } from "@sidecar/runtime-contracts";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { BrainHost } from "#main/brain/host";
-import { followBrainRequests } from "#main/brain/ipc";
+import { followBrainRequests } from "#main/brain/publication";
 import { deliverable, type GrantedWords, ledgerContext } from "#main/gateway/service";
 import { VoiceReceiver } from "#main/voice-receiver";
 import { operatorOverBrain } from "#testing/operator-over-brain";

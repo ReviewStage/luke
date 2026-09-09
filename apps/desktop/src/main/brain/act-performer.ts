@@ -26,7 +26,7 @@ import {
   workspaceAgentModels,
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS, isWireString, type WireRecord } from "@sidecar/wire";
-import type { SessionActPerformer } from "../ipc/session-acts";
+import type { SessionActPerformer } from "../session-act-performer";
 
 /** The developer's saved creation tie-breaks, as the projects context narrates them. */
 export interface WorkspaceCreationDefaults {
