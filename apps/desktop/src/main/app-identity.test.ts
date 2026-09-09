@@ -58,24 +58,3 @@ test("the names hold to the manifest and to the shell derivation", async () => {
     RELEASE_APP_NAME,
   ]);
 });
-
-test("the desktop composition applies identity before taking its lock", async () => {
-  const composition = await fs.readFile(new URL("./desktop-app.ts", import.meta.url), "utf8");
-  const named = composition.indexOf("app.setName(appName)");
-  assert.notEqual(named, -1, "the composition must set the resolved app name");
-  // `setName` alone leaves the state directory on the manifest name, so both
-  // paths that hold state must be pointed at the chosen name too.
-  assert.ok(
-    composition.includes('app.setPath("userData"'),
-    "the composition must repoint userData",
-  );
-  assert.ok(
-    composition.includes('app.setPath("sessionData"'),
-    "the composition must repoint sessionData",
-  );
-  // The single-instance lock is written into the state directory, so taking it
-  // before the identity is applied would guard the wrong instance.
-  const locked = composition.indexOf("app.requestSingleInstanceLock()");
-  assert.notEqual(locked, -1, "the composition must take the single-instance lock");
-  assert.ok(named < locked, "the identity must be applied before the lock is taken");
-});

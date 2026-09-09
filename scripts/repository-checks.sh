@@ -257,6 +257,20 @@ if [[ -n "$voice_replay_imports" ]]; then
     exit 1
 fi
 
+# A hosted quota is the service's own accounting, and the customer-facing panel
+# says only that voice is temporarily unavailable — never a number, a meter or a
+# reset time. The diagnostics the renderer receives carry the members, so the
+# rule is that nothing drawn reads them.
+drawn_hosted_quota=$(grep -rnaE --include='*.ts' --include='*.tsx' \
+    'requestHostedUsage|hostedUsage|<meter\b|quota\.(used|limit|remaining|resetsAt)' \
+    "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer" |
+    grep -vE '\.test\.tsx?:' || true)
+if [[ -n "$drawn_hosted_quota" ]]; then
+    printf 'error: hosted quota values must not reach the customer-facing renderer:\n%s\n' \
+        "$drawn_hosted_quota" >&2
+    exit 1
+fi
+
 # BRIDGE is the one renderer-to-main declaration, and registerBridge is the
 # one place that may attach it to Electron. A handler registered beside its
 # domain logic would bypass the manifest's sender and wire guards.
