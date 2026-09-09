@@ -300,6 +300,50 @@ test("two passes racing over one user record one transition once, and the later 
   });
 });
 
+test("when the earlier-started pass wins, the later one closes its own unfinished attempt as a whole read", async () => {
+  const store = memoryObservationStore();
+  const gated = (status: string, now: number) => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const outcome = observeAndSnapshot({
+      userId: "user-1",
+      rows: KEY_ROWS,
+      secret: SECRET,
+      store,
+      seams: {
+        fetch: async (url, init) => {
+          await gate;
+          return api(status).fetch(url, init);
+        },
+        now: () => now,
+      },
+      now,
+    });
+    return { outcome, release };
+  };
+  const earlier = gated(TEST_CONDUCTOR_STATUS.WORKING, TEST_TIME + 1_000);
+  const later = gated(TEST_CONDUCTOR_STATUS.WORKING, TEST_TIME + 2_000);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(store.passes.get("user-1")?.failure, CLOUD_OBSERVE_FAILURE.UNFINISHED);
+
+  earlier.release();
+  const won = await earlier.outcome;
+  assert.equal(won.complete, true);
+  assert.equal(store.snapshots.get("user-1")?.observedAt, TEST_TIME + 1_000);
+  later.release();
+  const lost = await later.outcome;
+
+  assert.equal(lost.complete, true);
+  assert.equal(lost.changed, false);
+  assert.equal(store.snapshots.get("user-1")?.observedAt, TEST_TIME + 1_000);
+  assert.deepEqual(store.passes.get("user-1"), {
+    attemptedAt: TEST_TIME + 2_000,
+    observedAt: TEST_TIME + 2_000,
+  });
+});
+
 test("a snapshot this build cannot open or read is replaced by the next whole pass, with no diff against it", async () => {
   for (const body of [UNOPENABLE_BODY, "not json", JSON.stringify({ version: 99 })]) {
     const store = memoryObservationStore();
