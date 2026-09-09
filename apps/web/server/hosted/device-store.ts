@@ -11,8 +11,10 @@ type DeviceDatabase = Pick<ReturnType<typeof createDatabase>, "transaction" | "d
  * installation id but kept its token takes the token off the old row in the
  * same transaction, so the row that can be addressed is always the one that
  * last said so. Every write is scoped to the account the bearer resolved to,
- * except that eviction, which is scoped to the token itself: the token now
- * belongs to whoever just presented it, whichever account held the old row.
+ * except that eviction, which is scoped to the token itself and runs only
+ * where the caller's own row takes the token in the same transaction: the
+ * token then belongs to whoever just presented it, whichever account held
+ * the old row, and a caller who takes nothing evicts nothing.
  */
 export function deviceSeams(database: DeviceDatabase): DeviceSeams {
   return {
@@ -68,6 +70,16 @@ export function deviceSeams(database: DeviceDatabase): DeviceSeams {
       }),
     touchDevice: (userId, heartbeat, now) =>
       database.transaction(async (transaction) => {
+        // The eviction runs only for a caller who holds the row the token is
+        // about to attach to, read inside the same transaction: otherwise a
+        // heartbeat naming a guessed id and another account's token would strip
+        // that account's token without ever taking it.
+        const held = await transaction
+          .select({ deviceId: devices.id })
+          .from(devices)
+          .where(and(eq(devices.userId, userId), eq(devices.id, heartbeat.deviceId)))
+          .limit(1);
+        if (held.length === 0) return false;
         if (heartbeat.push) {
           await transaction
             .update(devices)
