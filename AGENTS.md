@@ -124,9 +124,9 @@ Trust constraints:
   own advertisement of the acts its provider documents for it now, by
   `@sidecar/acts`'s `admit()` — the one function that mints the validated act,
   reading the roster for itself rather than taking a caller's copy of it — and
-  by nothing else anywhere: a provider adapter's write takes only what
-  admission minted, so no path reaches an adapter without it, and what an
-  adapter still answers for is its own route — the advertised control, spawn
+  by nothing else anywhere: a provider's write takes only what
+  admission minted, so no path reaches a provider without it, and what a
+  provider still answers for is its own route — the advertised control, spawn
   target, rename target, or listed project it reads back from its own latest
   pass — and the provider's documented shape.
   Observation passes stay read-only by construction; where a provider's
@@ -153,7 +153,7 @@ Trust constraints:
   judgment, never as something the developer asked. Every act still runs the
   same validation whoever opened the turn: a cancellation or a revoked run
   refuses it, a fresh roster read precedes it, its target has to be one the
-  roster holds, and the provider's documented adapter requirements stand. The
+  roster holds, and the provider's documented requirements stand. The
   one act not aimed at an
   existing session keeps the same shape: a new workspace, asked of Luke in
   conversation, lands only in a project its provider reported on the latest
@@ -194,7 +194,7 @@ Trust constraints:
   created opens itself the same way: the creation ask, already a
   developer-opened turn, is also the ask to be taken there, so the session id
   the provider's creation response named (the one thing read out of that
-  response that outlives the adapter, an identifier and never an address) is
+  response that outlives the write, an identifier and never an address) is
   held briefly, and the first observation pass to report that session with an
   address hands the address to the operating system exactly once, as a row
   press would. Nothing a model decided can start that wait, and a created
@@ -206,7 +206,7 @@ Trust constraints:
   agent for any identity the roster does not hold, is refused again in the
   main process for a session whose location is not this machine or whose
   provider is not connected, and reads the provider's own file through that
-  provider's adapter, bounded as the next rule says. The read performs
+  provider's own reader, bounded as the next rule says. The read performs
   nothing, reaches no provider, and answers only for a local session whose
   provider's transcript this build documents reading (Claude Code, Codex,
   and OMP today); a cloud session's conversation lives with its provider and
@@ -1065,8 +1065,8 @@ What Luke may show:
   the space beside the housing. This is the user's own data, on the user's own
   screen, and it is read-only.
 - Label a session by what its provider named it, falling back to the workspace
-  or repository only when there is no name yet. Do not compose a sentence in an
-  adapter; report the fields and let the surface word them.
+  or repository only when there is no name yet. Do not compose a sentence in a
+  provider; report the fields and let the surface word them.
 - A session's conversation itself is read in exactly one place, and the place
   is deliberate: in the open, at the developer's own press, never behind an
   observation pass, which reads no message of any chat. When the developer opens a
@@ -1081,13 +1081,16 @@ What Luke may show:
   pass, a timer of Luke's, or anything a model decided; read-only through the
   documented GET, whose only parameters are the fixed page bound, the cursor
   the endpoint's own previous answer handed back, and arithmetic offsets —
-  the endpoint pages only forward, so the screen's opening read seeks the
-  transcript's end with a bounded round of one-message position probes and
-  pages backward from it by offset, numbers the read composes that no stored
-  content can steer; paged to fixed budgets per ask; and stored nowhere — the
-  service assembles the page, answers, and keeps nothing, and the screen
-  holds it only while it stands open. What travels is only what
-  Conductor's own store attributes: the developer's sends and the agent's own
+  the endpoint pages only forward, so the screen's opening read walks to the
+  transcript's end a page at a time, beginning where a previous read of that
+  chat already reached and stopping at the first page that comes back short,
+  and its scroll back pages backward from there by offset: numbers the read
+  composes that no stored content can steer; paged to fixed budgets per ask;
+  and stored nowhere — the service assembles the page, answers, and keeps
+  nothing of it, and the screen holds it only while it stands open. A read
+  that outruns its page budget answers with the deepest page it reached and
+  lets the poll walk on, rather than spending an unbounded search on the end.
+  What travels is only what Conductor's own store attributes: the developer's sends and the agent's own
   words. A tool call, tool output, harness event, or any message whose author
   the store does not name is dropped whole rather than guessed at, and a
   message that does travel is never truncated — the bounds live on the page,
@@ -1203,7 +1206,7 @@ works in that subtree:
 |---|---|
 | `apps/desktop/src/renderer/AGENTS.md` | The sandbox rule, panel motion, brand artwork, and Luke's knowledge of himself |
 | `packages/AGENTS.md` | The acyclic package graph, the `.js` import rule, the Vercel doors, and how a barrel leaks |
-| `packages/providers/AGENTS.md` | Keeping `PRIVACY.md` and the README's agent table true to the adapters |
+| `packages/providers/AGENTS.md` | Keeping `PRIVACY.md` and the README's agent table true to the plugins |
 | `packages/surface/AGENTS.md` | The shared surface vocabulary and its generated outputs |
 | `packages/realtime/AGENTS.md` | Why `protocol` and `tools` ship together |
 | `packages/gateway/AGENTS.md` | The protocol as the contract, its three doors, and injected authentication |

@@ -1,10 +1,10 @@
 export { claudeDesktopApplications } from "./claude-code/applications.js";
 export { codexCloudPlugin } from "./codex/cloud.js";
+export { conductorApplications } from "./conductor/applications.js";
 export {
-  ConductorLocalWorkspaceAdapter,
-  ConductorRepositoryReader,
-} from "./conductor/local-workspace-adapter.js";
-export { ConductorSessionApplicationReader } from "./conductor/session-applications.js";
+  conductorLocalWorkspacePlugin,
+  conductorRepositories,
+} from "./conductor/local-workspaces.js";
 export { ObservationHookRegistry } from "./hook-registry.js";
 export { type LocalPeekOptions, peekLocalSessions } from "./local-peek.js";
 export {

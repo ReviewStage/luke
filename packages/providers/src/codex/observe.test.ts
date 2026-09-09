@@ -5,7 +5,6 @@ import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import {
   type ProviderSessionObservation,
-  pluginAsAdapter,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
   SESSION_COMPLETION_CAUSE,
@@ -846,9 +845,8 @@ test("a thread archived between passes leaves the roster and stays gone", async 
     threads: [{ id: "codex-live", lastActivityAt: TEST_TIME - 10_000 }],
   });
   const registry = new SessionRoster();
-  const adapter = pluginAsAdapter(plugin);
 
-  await registry.refresh(adapter);
+  await registry.refresh(plugin);
   assert.deepEqual(
     registry.list().map((session) => session.providerSessionId),
     ["codex-live"],
@@ -865,7 +863,7 @@ test("a thread archived between passes leaves the roster and stays gone", async 
     database.close();
   }
 
-  await registry.refresh(adapter);
+  await registry.refresh(plugin);
   assert.deepEqual(registry.list(), []);
 });
 

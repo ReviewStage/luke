@@ -5,7 +5,7 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { PROVIDER_ID, SESSION_STATUS } from "@sidecar/session";
 import { claudeDesktopApplications } from "../claude-code/applications.js";
-import { ConductorSessionApplicationReader } from "../conductor/session-applications.js";
+import { conductorApplications } from "../conductor/applications.js";
 import { type WorkspaceHostRegistration, workspaceHostRegistrations } from "./workspace-hosts.js";
 
 async function temporaryDirectory(t: TestContext): Promise<string> {
@@ -23,7 +23,7 @@ function registrations(directory: string, superset?: WorkspaceHostRegistration) 
       read: async () => (_providerId, observations) => observations,
       emptyEnrichment: (_providerId, observations) => observations,
     },
-    conductorApplications: new ConductorSessionApplicationReader({
+    conductorApplications: conductorApplications({
       databasePath: path.join(directory, "conductor.db"),
     }),
     claudeDesktopApplications: claudeDesktopApplications({

@@ -9,7 +9,9 @@ import {
   CLOUD_AGENT_PROVIDER_ID,
   type CloudAgentProviderId,
   type CloudFetch,
+  dispatchAct,
   dispatchByKind,
+  dispatchConversation,
   type HostedConversationAnswer,
   type HostedConversationMessage,
   normalizeSession,
@@ -26,11 +28,11 @@ import {
   type Refusal,
   RUN_ORIGIN,
   type SessionActKind,
-  type SessionProviderAdapter,
+  type SessionProviderPlugin,
   type WireRecord,
   workspaceAgentModels,
 } from "../core.js";
-import { cloudSessionAdapterFor } from "./cloud-adapters.js";
+import { cloudSessionPluginFor } from "./cloud-adapters.js";
 
 /**
  * The acts a remote client can ask of a cloud session: the session act kinds
@@ -102,15 +104,15 @@ export interface ActExecuteSeams {
 }
 
 /**
- * One adapter observed once for one act: the same re-observe-before-write
+ * One plugin observed once for one act: the same re-observe-before-write
  * discipline the desktop keeps in its observation registry, here as a fresh
- * pass on a request-scoped instance. The adapter swallows credential and
+ * pass on a request-scoped instance. The pass swallows credential and
  * network failures into an empty roster, so the pass watches its own fetch to
  * tell "the provider refused the key" and "the provider could not be reached"
  * apart from "the session is gone" when the act's target is missing.
  */
 interface ObservedActPass {
-  adapter: SessionProviderAdapter;
+  plugin: SessionProviderPlugin;
   observations: readonly ProviderSessionObservation[];
   unauthorized: boolean;
   unreachable: boolean;
@@ -133,13 +135,13 @@ async function observeForAct(
       throw error;
     }
   };
-  const adapter = cloudSessionAdapterFor(providerId, {
+  const plugin = cloudSessionPluginFor(providerId, {
     readApiKey: async () => apiKey,
     fetch: watchingFetch,
     ...(seams.now ? { now: seams.now } : undefined),
   });
-  const observations = await adapter.observe();
-  return { adapter, observations, ...pass };
+  const observations = await plugin.observe();
+  return { plugin, observations, ...pass };
 }
 
 /** Why an act's target was not in the fresh pass, as the user should hear it. */
@@ -181,7 +183,7 @@ function fromProviderResult(
  * phone's own press is the origin, which is recorded and never a permission.
  */
 function admissionOver(pass: ObservedActPass): AdmitContext {
-  const { provider } = pass.adapter;
+  const { provider } = pass.plugin;
   return {
     origin: RUN_ORIGIN.USER,
     roster: {
@@ -189,7 +191,7 @@ function admissionOver(pass: ObservedActPass): AdmitContext {
     },
     projects: {
       read: async () =>
-        pass.adapter.workspaceProjects().map((project) => ({
+        (pass.plugin.projects?.() ?? []).map((project) => ({
           ...project,
           providerId: provider.id,
           providerName: provider.displayName,
@@ -252,20 +254,28 @@ export async function executeSessionAct(options: {
   const admitted = await admit(request, admissionOver(pass));
   if (admitted.kind === undefined) return fromRefusal(providerId, pass, admitted);
 
-  const { adapter } = pass;
+  const { plugin } = pass;
   return dispatchByKind(admitted, {
     [ACT_KIND.MESSAGE]: async (act) =>
-      fromProviderResult(await adapter.sendMessage(providerSessionMessage(act))),
+      fromProviderResult(await dispatchAct(plugin, "message", providerSessionMessage(act))),
     [ACT_KIND.CONTROL]: async (act) =>
-      fromProviderResult(await adapter.executeControl(providerControlRequest(act))),
+      fromProviderResult(await dispatchAct(plugin, "control", providerControlRequest(act))),
     [ACT_KIND.ADD_AGENT]: async (act) =>
-      fromProviderResult(await adapter.spawnWorkspaceAgent(providerWorkspaceAgentRequest(act))),
+      fromProviderResult(
+        await dispatchAct(plugin, "spawnAgent", providerWorkspaceAgentRequest(act)),
+      ),
     [ACT_KIND.RENAME_SESSION]: async (act) =>
-      fromProviderResult(await adapter.renameSession(providerSessionRenameRequest(act))),
+      fromProviderResult(
+        await dispatchAct(plugin, "renameSession", providerSessionRenameRequest(act)),
+      ),
     [ACT_KIND.RENAME_WORKSPACE]: async (act) =>
-      fromProviderResult(await adapter.renameWorkspace(providerWorkspaceRenameRequest(act))),
+      fromProviderResult(
+        await dispatchAct(plugin, "renameWorkspace", providerWorkspaceRenameRequest(act)),
+      ),
     [ACT_KIND.CREATE_WORKSPACE]: async (act) =>
-      fromProviderResult(await adapter.createWorkspace(providerWorkspaceRequest(act))),
+      fromProviderResult(
+        await dispatchAct(plugin, "createWorkspace", providerWorkspaceRequest(act)),
+      ),
   });
 }
 
@@ -323,7 +333,7 @@ export async function executeConversationRead(options: {
     return { refused: missingTargetReason(providerId, pass, "Session not found.") };
   }
 
-  const result = await pass.adapter.readConversation({
+  const result = await dispatchConversation(pass.plugin, {
     providerSessionId,
     ...(afterMessageId ? { afterMessageId } : undefined),
     ...(beforeOffset !== undefined ? { beforeOffset } : undefined),

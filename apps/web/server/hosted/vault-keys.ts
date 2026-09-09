@@ -2,9 +2,9 @@ import {
   CLOUD_AGENT_PROVIDER_ID,
   type CloudAgentProviderId,
   type CloudFetch,
-  type SessionProviderAdapter,
+  type SessionProviderPlugin,
 } from "../core.js";
-import { cloudSessionAdapterFor } from "./cloud-adapters.js";
+import { cloudSessionPluginFor } from "./cloud-adapters.js";
 import { decryptProviderKey } from "./encryption.js";
 import type { VaultKeyRow } from "./vault-route.js";
 
@@ -48,20 +48,20 @@ export interface ProviderPassResult<Answer> {
 
 /**
  * Runs one read against each named provider at once, on a request-scoped
- * adapter holding that provider's own key. A provider that throws is one
+ * plugin holding that provider's own key. A provider that throws is one
  * whose leg answered nothing; it never fails the others.
  */
 export async function observeProviders<Answer>(options: {
   providerIds?: readonly CloudAgentProviderId[];
   readApiKey: (providerId: string) => () => Promise<string | undefined>;
-  read: (adapter: SessionProviderAdapter) => Promise<Answer>;
+  read: (plugin: SessionProviderPlugin) => Promise<Answer>;
   seams: ProviderPassSeams;
 }): Promise<ProviderPassResult<Answer>[]> {
   const providerIds = options.providerIds ?? Object.values(CLOUD_AGENT_PROVIDER_ID);
   const results = await Promise.allSettled(
     providerIds.map((providerId) =>
       options.read(
-        cloudSessionAdapterFor(providerId, {
+        cloudSessionPluginFor(providerId, {
           readApiKey: options.readApiKey(providerId),
           ...(options.seams.fetch ? { fetch: options.seams.fetch } : undefined),
           ...(options.seams.now ? { now: options.seams.now } : undefined),

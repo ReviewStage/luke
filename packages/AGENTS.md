@@ -14,7 +14,7 @@ module-private symbol, which nothing anywhere can spell, so `admit` is the one
 place the repository enters the admitted set and a signature that takes one says
 the gauntlet ran. Everything below it re-shapes what it already holds through
 `reshapeAdmitted`, which needs an admitted value to answer at all — which is how
-a provider adapter's write signature enforces the requirement rather than
+a provider's write signature enforces the requirement rather than
 restating it. The direction stays acts → session → wire, and `@sidecar/session`
 keeps the narrower act vocabulary an observation advertises with; the two are
 proven to be the same strings where `@sidecar/acts` declares the whole of it.

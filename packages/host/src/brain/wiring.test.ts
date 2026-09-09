@@ -55,7 +55,7 @@ function dependencies(overrides: Partial<BrainWiringDependencies> = {}) {
     },
     roster: () => ({ text: "", identities: [] }),
     standingContext: () => "",
-    adapterFor: () => undefined,
+    pluginFor: () => undefined,
     session: () => undefined,
     deliver: async () => undefined,
     model: () => undefined,

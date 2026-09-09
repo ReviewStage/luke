@@ -210,18 +210,24 @@ function composed(t: TestContext, gate?: Gate): Composed {
       sessions: roster,
     }),
     standingContext: () => "",
-    adapterFor: () => ({
-      readTranscriptSince: async (providerSessionId, cursor) => {
-        reads.push({ providerId: claude.id, providerSessionId });
-        // The transcript grows once; every later read from the cursor finds nothing new.
-        return {
-          status: ACT_RESULT_STATUS.ACCEPTED,
-          text: cursor === undefined ? SECRET(providerSessionId) : "",
-          cursor: `${providerSessionId}-1`,
-          truncated: false,
-        };
+    pluginFor: () => ({
+      provider: claude,
+      observe: async () => [],
+      latest: () => [],
+      reads: {
+        transcriptSince: async (providerSessionId: string, cursor?: string) => {
+          reads.push({ providerId: claude.id, providerSessionId });
+          // The transcript grows once; every later read from the cursor finds
+          // nothing new.
+          return {
+            status: ACT_RESULT_STATUS.ACCEPTED,
+            text: cursor === undefined ? SECRET(providerSessionId) : "",
+            cursor: `${providerSessionId}-1`,
+            truncated: false,
+          };
+        },
+        transcript: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED, transcript: "" }),
       },
-      readTranscript: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED, transcript: "" }),
     }),
     session: (identity) =>
       roster.find((held) => held.providerSessionId === identity.providerSessionId),

@@ -362,7 +362,7 @@ export class SupersetCli {
   // directory's organization name there is what made every act fail.
   async sendMessage(context: SupersetSessionContext, text: string): Promise<ProviderMessageResult> {
     // A chatless workspace row carries no terminal for a message to land in,
-    // and never advertises taking one; the adapter answers the same way
+    // and never advertises taking one; the CLI answers the same way
     // rather than improvising a way in.
     if (!context.terminalId)
       return {

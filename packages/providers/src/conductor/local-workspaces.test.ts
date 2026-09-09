@@ -6,16 +6,14 @@ import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import {
   ACT_RESULT_STATUS,
+  dispatchAct,
   ExternalOpenAnswerLostError,
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
 import { UNKNOWN_ACT_STATUS } from "@sidecar/wire";
 import { admittedForTest } from "@sidecar/wire/testing";
-import {
-  ConductorLocalWorkspaceAdapter,
-  ConductorRepositoryReader,
-} from "./local-workspace-adapter.js";
-import { conductorCreateWorkspaceLink } from "./session-applications.js";
+import { conductorCreateWorkspaceLink } from "./applications.js";
+import { conductorLocalWorkspacePlugin, conductorRepositories } from "./local-workspaces.js";
 
 /**
  * Conductor's own deep-link parser, faithful to the branch a create link
@@ -140,7 +138,7 @@ test("the repository reader reports open repositories with a root path", async (
   writeRepo(database, { id: "repo-empty-path", name: "empty", rootPath: "" });
   database.close();
 
-  const reader = new ConductorRepositoryReader({ databasePath });
+  const reader = conductorRepositories({ databasePath });
   const repositories = await reader.read();
   assert.deepEqual(
     repositories.map((repository) => repository.id),
@@ -157,7 +155,7 @@ test("the repository reader falls back for a schema without the hidden flag", as
   writeRepoWithoutHidden(database, { id: "repo-a", name: "a", rootPath: "/Users/dev/a" });
   database.close();
 
-  const reader = new ConductorRepositoryReader({ databasePath });
+  const reader = conductorRepositories({ databasePath });
   const repositories = await reader.read();
   assert.deepEqual(
     repositories.map((repository) => repository.id),
@@ -167,7 +165,7 @@ test("the repository reader falls back for a schema without the hidden flag", as
 
 test("an absent Conductor database reports no repositories", async (t) => {
   const databasePath = await temporaryDatabasePath(t);
-  const reader = new ConductorRepositoryReader({ databasePath });
+  const reader = conductorRepositories({ databasePath });
   assert.deepEqual(await reader.read(), []);
 });
 
@@ -182,13 +180,13 @@ test("refresh offers each repository as an optional-task project", async (t) => 
   });
   database.close();
 
-  const adapter = new ConductorLocalWorkspaceAdapter({
-    reader: new ConductorRepositoryReader({ databasePath }),
+  const plugin = conductorLocalWorkspacePlugin({
+    repositories: conductorRepositories({ databasePath }),
     openExternal: async () => {},
   });
-  assert.deepEqual(adapter.workspaceProjects(), []);
-  await adapter.refresh();
-  assert.deepEqual(adapter.workspaceProjects(), [
+  assert.deepEqual(plugin.projects?.() ?? [], []);
+  await plugin.refresh();
+  assert.deepEqual(plugin.projects?.() ?? [], [
     {
       providerProjectId: "repo-luke",
       repository: "luke",
@@ -206,14 +204,16 @@ test("creating a workspace fires Conductor's create link for the offered reposit
   database.close();
 
   const opened: string[] = [];
-  const adapter = new ConductorLocalWorkspaceAdapter({
-    reader: new ConductorRepositoryReader({ databasePath }),
+  const plugin = conductorLocalWorkspacePlugin({
+    repositories: conductorRepositories({ databasePath }),
     openExternal: async (url) => {
       opened.push(url);
     },
   });
-  await adapter.refresh();
-  const result = await adapter.createWorkspace(
+  await plugin.refresh();
+  const result = await dispatchAct(
+    plugin,
+    "createWorkspace",
     admittedForTest({
       providerProjectId: "repo-luke",
       providerTargetId: "/Users/dev/repos/luke",
@@ -256,16 +256,16 @@ test("a failed refresh empties the offer rather than keeping a stale one", async
       }
     },
   });
-  const adapter = new ConductorLocalWorkspaceAdapter({
-    reader: new ConductorRepositoryReader({ databasePath, sqlite }),
+  const plugin = conductorLocalWorkspacePlugin({
+    repositories: conductorRepositories({ databasePath, sqlite }),
     openExternal: async () => {},
   });
-  await adapter.refresh();
-  assert.equal(adapter.workspaceProjects().length, 1);
+  await plugin.refresh();
+  assert.equal((plugin.projects?.() ?? []).length, 1);
   // A non-ignorable read failure surfaces, and must leave nothing behind to
   // validate a later create against.
-  await assert.rejects(() => adapter.refresh());
-  assert.deepEqual(adapter.workspaceProjects(), []);
+  await assert.rejects(() => plugin.refresh());
+  assert.deepEqual(plugin.projects?.() ?? [], []);
 });
 
 test("creating a workspace with no task lands clean, with no send warning", async (t) => {
@@ -274,12 +274,16 @@ test("creating a workspace with no task lands clean, with no send warning", asyn
   writeRepo(database, { id: "repo-luke", name: "luke", rootPath: "/Users/dev/repos/luke" });
   database.close();
 
-  const adapter = new ConductorLocalWorkspaceAdapter({
-    reader: new ConductorRepositoryReader({ databasePath }),
+  const plugin = conductorLocalWorkspacePlugin({
+    repositories: conductorRepositories({ databasePath }),
     openExternal: async () => {},
   });
-  await adapter.refresh();
-  const result = await adapter.createWorkspace(admittedForTest({ providerProjectId: "repo-luke" }));
+  await plugin.refresh();
+  const result = await dispatchAct(
+    plugin,
+    "createWorkspace",
+    admittedForTest({ providerProjectId: "repo-luke" }),
+  );
   assert.equal(result.status, ACT_RESULT_STATUS.ACCEPTED);
   // Nothing was pre-filled, so there is nothing to press Return on.
   assert.ok(!("warning" in result && result.warning));
@@ -292,16 +296,18 @@ test("creating a workspace uses the offered root path, never the request's", asy
   database.close();
 
   const opened: string[] = [];
-  const adapter = new ConductorLocalWorkspaceAdapter({
-    reader: new ConductorRepositoryReader({ databasePath }),
+  const plugin = conductorLocalWorkspacePlugin({
+    repositories: conductorRepositories({ databasePath }),
     openExternal: async (url) => {
       opened.push(url);
     },
   });
-  await adapter.refresh();
+  await plugin.refresh();
   // A request naming a different target than the one offered is not the project
   // this pass reported, so it is refused rather than fired at a path of its own.
-  const result = await adapter.createWorkspace(
+  const result = await dispatchAct(
+    plugin,
+    "createWorkspace",
     admittedForTest({
       providerProjectId: "repo-luke",
       providerTargetId: "/etc/passwd",
@@ -319,14 +325,16 @@ test("creating a workspace in an unoffered project is unsupported", async (t) =>
   database.close();
 
   const opened: string[] = [];
-  const adapter = new ConductorLocalWorkspaceAdapter({
-    reader: new ConductorRepositoryReader({ databasePath }),
+  const plugin = conductorLocalWorkspacePlugin({
+    repositories: conductorRepositories({ databasePath }),
     openExternal: async (url) => {
       opened.push(url);
     },
   });
-  await adapter.refresh();
-  const result = await adapter.createWorkspace(
+  await plugin.refresh();
+  const result = await dispatchAct(
+    plugin,
+    "createWorkspace",
     admittedForTest({ providerProjectId: "repo-unknown" }),
   );
   assert.equal(result.status, ACT_RESULT_STATUS.UNSUPPORTED);
@@ -339,14 +347,18 @@ test("a failed open is reported as a rejection the user can act on", async (t) =
   writeRepo(database, { id: "repo-luke", name: "luke", rootPath: "/Users/dev/repos/luke" });
   database.close();
 
-  const adapter = new ConductorLocalWorkspaceAdapter({
-    reader: new ConductorRepositoryReader({ databasePath }),
+  const plugin = conductorLocalWorkspacePlugin({
+    repositories: conductorRepositories({ databasePath }),
     openExternal: async () => {
       throw new Error("no handler for conductor://");
     },
   });
-  await adapter.refresh();
-  const result = await adapter.createWorkspace(admittedForTest({ providerProjectId: "repo-luke" }));
+  await plugin.refresh();
+  const result = await dispatchAct(
+    plugin,
+    "createWorkspace",
+    admittedForTest({ providerProjectId: "repo-luke" }),
+  );
   assert.equal(result.status, ACT_RESULT_STATUS.REJECTED);
   assert.match(
     "reason" in result ? result.reason : "",
@@ -355,16 +367,17 @@ test("a failed open is reported as a rejection the user can act on", async (t) =
 });
 
 test("the local creator observes no sessions of its own", async () => {
-  const adapter = new ConductorLocalWorkspaceAdapter({ openExternal: async () => {} });
-  assert.deepEqual(await adapter.observe(), []);
+  const plugin = conductorLocalWorkspacePlugin({ openExternal: async () => {} });
+  assert.deepEqual(await plugin.observe(), []);
+  assert.deepEqual(plugin.latest(), []);
 });
 
 test("the local creator is named apart from cloud Conductor", () => {
-  const adapter = new ConductorLocalWorkspaceAdapter({ openExternal: async () => {} });
+  const plugin = conductorLocalWorkspacePlugin({ openExternal: async () => {} });
   // The name is what tells the two Conductors apart in the picker and out loud;
   // the id keeps them routed apart, and the two must not both read "Conductor".
-  assert.equal(adapter.provider.displayName, "Conductor (local)");
-  assert.notEqual(adapter.provider.id, "conductor");
+  assert.equal(plugin.provider.displayName, "Conductor (local)");
+  assert.notEqual(plugin.provider.id, "conductor");
 });
 
 test("a create whose deep link was handed to the machine and never answered is unknown, not refused", async (t) => {
@@ -372,14 +385,16 @@ test("a create whose deep link was handed to the machine and never answered is u
   const database = createReposDatabase(databasePath);
   writeRepo(database, { id: "repo-luke", name: "luke", rootPath: "/Users/dev/repos/luke" });
   database.close();
-  const adapter = new ConductorLocalWorkspaceAdapter({
-    reader: new ConductorRepositoryReader({ databasePath }),
+  const plugin = conductorLocalWorkspacePlugin({
+    repositories: conductorRepositories({ databasePath }),
     openExternal: async () => {
       throw new ExternalOpenAnswerLostError("the desktop went away before answering");
     },
   });
-  await adapter.refresh();
-  const result = await adapter.createWorkspace(
+  await plugin.refresh();
+  const result = await dispatchAct(
+    plugin,
+    "createWorkspace",
     admittedForTest({
       providerProjectId: "repo-luke",
       providerTargetId: "/Users/dev/repos/luke",
@@ -388,14 +403,16 @@ test("a create whose deep link was handed to the machine and never answered is u
   );
   // The link may have created the workspace: neither a refusal to report nor an act to repeat.
   assert.equal(result.status, UNKNOWN_ACT_STATUS);
-  const refused = new ConductorLocalWorkspaceAdapter({
-    reader: new ConductorRepositoryReader({ databasePath }),
+  const refused = conductorLocalWorkspacePlugin({
+    repositories: conductorRepositories({ databasePath }),
     openExternal: async () => {
       throw new Error("no handler for the scheme");
     },
   });
   await refused.refresh();
-  const rejected = await refused.createWorkspace(
+  const rejected = await dispatchAct(
+    refused,
+    "createWorkspace",
     admittedForTest({
       providerProjectId: "repo-luke",
       providerTargetId: "/Users/dev/repos/luke",
