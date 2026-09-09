@@ -10,6 +10,8 @@ import { FOCUS_FRAME_LIMIT, focusSeek } from "./focus-seek";
 function frames() {
   const pending = new Map<number, () => void>();
   let next = 1;
+  // SAFETY: The two frame functions are what this stands in for, and a test
+  // under Node has neither, so nothing else could be reading them.
   const globals = globalThis as unknown as {
     requestAnimationFrame: (callback: () => void) => number;
     cancelAnimationFrame: (handle: number) => void;
@@ -41,6 +43,8 @@ function frames() {
 function target(ready: boolean) {
   let acted = 0;
   return {
+    // SAFETY: The seek reads nothing off its target but what `ready` and `act`
+    // are handed, and both are the test's own here.
     element: { ready } as unknown as HTMLElement & { ready: boolean },
     get acted(): number {
       return acted;

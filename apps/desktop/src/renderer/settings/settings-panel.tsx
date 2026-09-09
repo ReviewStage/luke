@@ -51,6 +51,7 @@ import { pageResetControl } from "./reset";
 import { SchemaSettingRows } from "./schema-rows";
 import { ShortcutSection } from "./shortcuts-page";
 import { UpdatesSection } from "./updates";
+import { useConnectionInput } from "./use-connection-input";
 import { VoiceSection } from "./voice-page";
 import { SETTINGS_WRITES } from "./writes";
 
@@ -182,6 +183,20 @@ export function SettingsPanel({
         })),
       }
     : undefined;
+  // Everything the connection rows are judged from and acted through,
+  // assembled once for every page that draws one.
+  const connections = useConnectionInput({
+    ...(panelView ? { view: panelView } : undefined),
+    ...(settings ? { settings } : undefined),
+    account,
+    credentials,
+    calendar,
+    appleCalendar,
+    linear,
+    superset,
+    workspaceProviders,
+    panelOpen,
+  });
   // Built only while a query stands: an empty field searches nothing.
   const search =
     panelView && searchOpen && searchQuery !== ""
@@ -287,12 +302,9 @@ export function SettingsPanel({
         </section>
       ) : null}
 
-      {view === SETTINGS_VIEW.VOICE && settings && panelView && !search ? (
+      {view === SETTINGS_VIEW.VOICE && connections && panelView && !search ? (
         <VoiceSection
-          accountSignedIn={account.status === ACCOUNT_STATUS.SIGNED_IN}
-          credentials={credentials}
-          panelOpen={panelOpen}
-          settings={settings}
+          input={connections}
           view={panelView}
           writes={SETTINGS_WRITES}
           microphone={microphone}
@@ -312,29 +324,14 @@ export function SettingsPanel({
         />
       ) : null}
 
-      {view === SETTINGS_VIEW.CONNECTIONS && settings && panelView && !search ? (
+      {view === SETTINGS_VIEW.CONNECTIONS && connections && panelView && !search ? (
         <>
           {/* The one choice spanning every provider leads the page; the
               providers it chooses between follow. */}
           <WorkspacesSection view={panelView} writes={SETTINGS_WRITES} />
           <KeySyncSection view={panelView} writes={SETTINGS_WRITES} />
-          <CredentialsSection
-            settings={settings}
-            control={credentials}
-            panelOpen={panelOpen}
-            writes={SETTINGS_WRITES}
-            superset={superset}
-            workspaceProviders={workspaceProviders}
-          />
-          <IntegrationsSection
-            settings={settings}
-            view={panelView}
-            panelOpen={panelOpen}
-            writes={SETTINGS_WRITES}
-            calendar={calendar}
-            appleCalendar={appleCalendar}
-            linear={linear}
-          />
+          <CredentialsSection input={connections} />
+          <IntegrationsSection input={connections} view={panelView} writes={SETTINGS_WRITES} />
           {/* Whatever the page holds that stands under no heading of its
               own: the sections above draw their own members, and a setting
               added to this page with no section named lands here. */}

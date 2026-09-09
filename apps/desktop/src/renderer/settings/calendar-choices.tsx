@@ -1,6 +1,8 @@
 import type { AccountCalendar, CalendarAccount } from "@sidecar/settings/wire";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
+import type { ActionResult } from "@sidecar/wire";
 import { Fragment } from "react";
+import { useSettingWrite } from "./use-setting-write";
 
 /**
  * Which of a connection's calendars count, one checkbox each — checked
@@ -11,18 +13,24 @@ import { Fragment } from "react";
  * list no longer offers simply is not drawn — and never reaches a read
  * either way. The names drawn here are the user's own calendar names, on the
  * user's own screen.
+ *
+ * The write is this block's own, so one checkbox in flight stills the rest and
+ * the refusal lands under the calendars it was asked about rather than on a
+ * line shared with the connection's own actions.
  */
 export function CalendarChoices({
   account,
   calendars,
-  disabled,
   onToggle,
 }: {
   account: CalendarAccount;
   calendars: readonly AccountCalendar[];
-  disabled: boolean;
-  onToggle: (calendarId: string, selected: boolean) => void;
+  onToggle: (calendarId: string, selected: boolean) => Promise<ActionResult>;
 }): React.JSX.Element {
+  const { busy, rejection, run } = useSettingWrite(
+    ({ calendarId, selected }: { calendarId: string; selected: boolean }) =>
+      onToggle(calendarId, selected),
+  );
   return (
     <>
       {calendars.map((calendar, index) => {
@@ -41,15 +49,20 @@ export function CalendarChoices({
               <input
                 type="checkbox"
                 checked={selected}
-                disabled={disabled}
+                disabled={busy}
                 aria-label={`Count meetings on ${calendar.label}`}
-                onChange={() => onToggle(calendar.id, !selected)}
+                onChange={() => run({ calendarId: calendar.id, selected: !selected })}
               />
               <span className="calendar-choice-name">{calendar.label}</span>
             </label>
           </Fragment>
         );
       })}
+      {rejection ? (
+        <p className="error-message" role="alert">
+          {rejection}
+        </p>
+      ) : null}
     </>
   );
 }

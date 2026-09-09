@@ -52,7 +52,7 @@ export function ResetGroupButton({
  * are not settings, and its one resettable group, Workspaces, carries its own
  * control on its own heading instead.
  */
-const PAGE_RESET: Partial<Record<SettingsView, { scope: SettingsResetScope; label: string }>> = {
+const PAGE_RESET = {
   [SETTINGS_VIEW.VOICE]: { scope: SETTINGS_RESET_SCOPE.VOICE, label: "the Voice settings" },
   [SETTINGS_VIEW.APPEARANCE]: {
     scope: SETTINGS_RESET_SCOPE.APPEARANCE,
@@ -62,7 +62,7 @@ const PAGE_RESET: Partial<Record<SettingsView, { scope: SettingsResetScope; labe
     scope: SETTINGS_RESET_SCOPE.SHORTCUTS,
     label: "the keyboard shortcuts",
   },
-};
+} satisfies Partial<Record<SettingsView, { scope: SettingsResetScope; label: string }>>;
 
 /** The reset a page's header carries, absent while the page stands at its defaults. */
 export function pageResetControl(
@@ -70,7 +70,9 @@ export function pageResetControl(
   settings: AppSettingsView | undefined,
   writes: SettingsWrites,
 ): React.JSX.Element | undefined {
-  const group = PAGE_RESET[view];
-  if (!group || !settings || !settingsScopeChanged(settings, group.scope)) return undefined;
+  if (!(view in PAGE_RESET)) return undefined;
+  // SAFETY: `in` narrows the view to the pages the table names.
+  const group = PAGE_RESET[view as keyof typeof PAGE_RESET];
+  if (!settings || !settingsScopeChanged(settings, group.scope)) return undefined;
   return <ResetGroupButton scope={group.scope} label={group.label} onReset={writes.reset} />;
 }

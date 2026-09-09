@@ -10,11 +10,9 @@ import {
   SETTING_SECTION,
   type SettingsRowsInput,
 } from "@sidecar/settings";
-import type { AppSettingsView } from "@sidecar/settings/wire";
 import { VOICE_SOURCE, type VoiceSource } from "@sidecar/settings/wire";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import type { ActionResult } from "@sidecar/wire";
-import { type CredentialEntryControl, entryForProvider } from "../credential-entry";
 import { APP_SETTING_ID } from "../luke-guide";
 import {
   MICROPHONE_UNGRANTED_NOTE,
@@ -25,7 +23,9 @@ import {
   voiceSourceLabel,
 } from "../microphone-access";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-search";
-import { ProviderCredential } from "./connections-page";
+import { SETTINGS_VIEW } from "../settings-views";
+import { ConnectionRow } from "./connection-row";
+import { CONNECTION_SECTION, type ConnectionInput, connectionsFor } from "./connection-schema";
 import type { MicrophoneControl } from "./controls";
 import { AttentionMark } from "./marks";
 import { STORAGE_UNAVAILABLE_NOTE } from "./notes";
@@ -48,22 +48,17 @@ import type { SettingsWrites } from "./writes";
  * panel rather than being clipped by it.
  */
 export function VoiceSection({
-  accountSignedIn,
-  credentials,
-  panelOpen,
-  settings,
+  input,
   view,
   writes,
   microphone,
 }: {
-  accountSignedIn: boolean;
-  credentials: CredentialEntryControl;
-  panelOpen: boolean;
-  settings: AppSettingsView;
+  input: ConnectionInput;
   view: SettingsRowsInput;
   writes: SettingsWrites;
   microphone: MicrophoneControl;
 }): React.JSX.Element {
+  const settings = input.settings;
   const microphoneRow = microphoneAccessRow({
     voiceAvailable: microphone.voiceAvailable,
     status: microphone.status,
@@ -134,15 +129,8 @@ export function VoiceSection({
           </div>
         </section>
       ) : null}
-      {accountSignedIn ? (
-        <ProviderSection
-          rowIndex={2}
-          panelOpen={panelOpen}
-          storageLocked={settings.secretStorage === SECRET_STORAGE.UNAVAILABLE}
-          settings={settings}
-          credentials={credentials}
-          writes={writes}
-        />
+      {input.visibility.accountDrawn ? (
+        <ProviderSection rowIndex={2} input={input} writes={writes} />
       ) : null}
       {/* `ready` already folds the key in — a microphone with no voice to
           reach never reports itself ready — so the controls stand exactly
@@ -280,35 +268,22 @@ export function VoiceSourceToggle({
  * this section is only ever read and switched.
  */
 export function ProviderSection({
-  panelOpen,
-  storageLocked,
-  settings,
-  credentials,
+  input,
   writes,
   rowIndex,
 }: {
-  panelOpen: boolean;
+  input: ConnectionInput;
   /** Where the section stands in the page's arrival stagger, counted by the caller. */
   rowIndex: number;
-  /**
-   * Whether this system cannot store a key at all. The key half cannot be
-   * chosen or supplied then, and it says why rather than going quiet.
-   */
-  storageLocked: boolean;
-  settings: AppSettingsView;
-  /** The one credential being entered anywhere; the key row here uses it. */
-  credentials: CredentialEntryControl;
   writes: SettingsWrites;
 }): React.JSX.Element {
-  const keySource = settings.credentialSources[VOICE_CREDENTIAL_PROVIDER.id];
-  const keyStored = keySource !== CREDENTIAL_SOURCE.NONE;
-  const entering = entryForProvider(credentials, VOICE_CREDENTIAL_PROVIDER.id) !== undefined;
-  const hosted = settings.voiceSource === VOICE_SOURCE.ACCOUNT;
-  // Which half's contents stand below. The live one, except while a key is
-  // being entered: an entry in flight is that half being supplied, and the
-  // panel brought back around it has to find the field still drawn — the
-  // source itself does not move until the key lands.
-  const keyBody = !hosted || entering;
+  const settings = input.settings;
+  const credentials = input.credentials;
+  // Whether this system cannot store a key at all. The key half cannot be
+  // chosen or supplied then, and it says why rather than going quiet.
+  const storageLocked = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
+  const keyStored =
+    settings.credentialSources[VOICE_CREDENTIAL_PROVIDER.id] !== CREDENTIAL_SOURCE.NONE;
   return (
     <section className="settings-section" style={cssCustomProperties({ "--row-index": rowIndex })}>
       <h2>
@@ -325,17 +300,13 @@ export function ProviderSection({
         onChoose={(source) => writes.setting(APP_SETTING_SCHEMA.voiceSource.field, source)}
         onConnect={() => credentials.connect(VOICE_CREDENTIAL_PROVIDER.id)}
       />
-      {/* A key is a connection, so its half draws the credential row. The
-          account half is already fully described by the toggle. */}
-      {keyBody ? (
-        <ProviderCredential
-          provider={VOICE_CREDENTIAL_PROVIDER}
-          source={keySource}
-          storageUnavailable={storageLocked}
-          control={credentials}
-          panelOpen={panelOpen}
-        />
-      ) : null}
+      {/* A key is a connection, so its half draws the credential row — from the
+          same table every other connection is drawn from, which is also what
+          decides that the row stands while the key half is live or while a key
+          is being entered into it. */}
+      {connectionsFor(SETTINGS_VIEW.VOICE, CONNECTION_SECTION.VOICE_PROVIDER).map((spec) => (
+        <ConnectionRow key={spec.id} spec={spec} input={input} />
+      ))}
       {storageLocked ? <p className="settings-note">{STORAGE_UNAVAILABLE_NOTE}</p> : null}
     </section>
   );

@@ -4,6 +4,7 @@ import {
   CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_SOURCE,
+  VOICE_CREDENTIAL_PROVIDER,
 } from "@sidecar/credentials/vocabulary";
 import { APP_SETTING_SCHEMA, settingFieldForGuideId, settingGuideEntries } from "@sidecar/settings";
 import type { AppSettingsView } from "@sidecar/settings/wire";
@@ -200,9 +201,15 @@ test("the rows that are not settings are found by what they are", () => {
   const entries = settingsSearchEntries(everythingDrawn());
 
   // Every key row answers to "api key": the voice key on the Voice page and
-  // each cloud agent's under Connections.
-  const keys = labels(found(searchSettings(entries, "api key")));
-  assert.ok(keys.includes("OpenAI API key"));
+  // each cloud agent's under Connections. Each is named the way its own row
+  // names it, because a result reads the row's own name rather than a second
+  // record of it.
+  const keyRows = found(searchSettings(entries, "api key"));
+  assert.equal(
+    keyRows.find((entry) => entry.id === VOICE_CREDENTIAL_PROVIDER.id)?.page,
+    SETTINGS_VIEW.VOICE,
+  );
+  const keys = labels(keyRows);
   for (const provider of CLOUD_AGENT_PROVIDER_LIST) {
     assert.ok(keys.includes(provider.displayName), provider.displayName);
   }
