@@ -18,6 +18,20 @@ const DOCK_ICON_IMAGES = {
   "luke-icon-dark.png": "luke-icon-dark-512.png",
 };
 
+/** How both renderer bundles are built. Only their entries and their defines differ. */
+const RENDERER_BUNDLE = {
+  bundle: true,
+  platform: "browser",
+  format: "iife",
+  target: "chrome140",
+  jsx: "automatic",
+  minify: true,
+  plugins: sentryPlugins(),
+  define: { "process.env.NODE_ENV": '"production"' },
+  sourcemap: true,
+  logLevel: "info",
+};
+
 function sentryPlugins() {
   if (!process.env.SENTRY_AUTH_TOKEN) return [];
   return [
@@ -102,15 +116,9 @@ await Promise.all([
   build({
     entryPoints: [path.join(appRoot, "src/renderer/index.tsx")],
     outfile: path.join(outputRoot, "renderer/renderer.js"),
-    bundle: true,
-    platform: "browser",
-    format: "iife",
-    target: "chrome140",
-    jsx: "automatic",
-    minify: true,
-    plugins: sentryPlugins(),
+    ...RENDERER_BUNDLE,
     define: {
-      "process.env.NODE_ENV": '"production"',
+      ...RENDERER_BUNDLE.define,
       // The analytics project the screen recorder files into, from the
       // packaging environment rather than source, on the calendar secret's
       // terms above. A build without one records nothing at all — the same
@@ -118,15 +126,30 @@ await Promise.all([
       // unconfigured build cannot record into a stranger's project.
       PACKAGED_POSTHOG_PROJECT_API_KEY: JSON.stringify(process.env.POSTHOG_PROJECT_API_KEY ?? ""),
     },
-    sourcemap: true,
-    logLevel: "info",
+  }),
+  build({
+    // The hidden voice window's own bundle. It is a second entry rather than
+    // a role the panel's bundle branches on so that `App` and the
+    // session-replay client are unreachable from it by construction: the
+    // panel is the one surface that records, and a recording of a blank
+    // hidden window would be a session nobody consented to. Nothing here
+    // takes the recorder's project key, so a build could not configure one.
+    entryPoints: [path.join(appRoot, "src/renderer/voice/index.tsx")],
+    outfile: path.join(outputRoot, "renderer/voice.js"),
+    ...RENDERER_BUNDLE,
   }),
 ]);
 
-await fs.copyFile(
-  path.join(appRoot, "src/renderer/index.html"),
-  path.join(outputRoot, "renderer/index.html"),
-);
+await Promise.all([
+  fs.copyFile(
+    path.join(appRoot, "src/renderer/index.html"),
+    path.join(outputRoot, "renderer/index.html"),
+  ),
+  fs.copyFile(
+    path.join(appRoot, "src/renderer/voice/index.html"),
+    path.join(outputRoot, "renderer/voice.html"),
+  ),
+]);
 
 await Promise.all([
   ...Object.entries(DOCK_ICON_IMAGES).map(([name, source]) =>

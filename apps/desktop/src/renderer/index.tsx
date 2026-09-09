@@ -4,7 +4,6 @@ import { WINDOW_ROLE } from "#shared/messages/session";
 import { App } from "./app";
 import { IntroductionTakeover } from "./introduction/introduction-takeover";
 import { readAppState } from "./use-app-state";
-import { VoiceHost } from "./voice/voice-host";
 
 Sentry.init();
 
@@ -14,12 +13,14 @@ const root = createRoot(rootElement);
 
 // Which surface this window draws is the main process's answer, read with the
 // rest of the document before anything mounts: the introduction takeover must
-// not run the panel's hooks, the panel must not open the takeover's call, and
-// the hidden voice window draws nothing and records nothing. A state that
-// cannot be read draws nothing, never the panel. A takeover whose read fails
-// reports its own abandonment rather than drawing the panel fullscreen — and
-// if even that report is lost, the main process's mount deadline stands the
-// takeover down.
+// not run the panel's hooks, and the panel must not open the takeover's call.
+// The hidden voice window is not one of the two: it loads a bundle of its
+// own, which is what keeps `App` and the session-replay client out of a
+// window nobody consented to a recording of. A state that cannot be read
+// draws nothing, never the panel. A takeover whose read fails reports its own
+// abandonment rather than drawing the panel fullscreen — and if even that
+// report is lost, the main process's mount deadline stands the takeover
+// down.
 void (async () => {
   try {
     const state = await readAppState();
@@ -34,23 +35,17 @@ void (async () => {
       root.render(<IntroductionTakeover state={state} display={display} />);
       return;
     }
-    if (state.window.role === WINDOW_ROLE.VOICE) {
-      root.render(<VoiceHost />);
-      return;
-    }
     root.render(<App />);
   } catch (error) {
-    // A window whose state cannot be read mounts nothing. The panel is the
-    // one surface that records, so a fallback to it would let a voice window
-    // whose read failed start recording a blank window; and a panel in the
-    // same state is already broken, since it draws from the same read, so the
-    // fallback protected nothing.
+    // A window whose state cannot be read mounts nothing: a panel in that
+    // state is already broken, since it draws from the same read, so a
+    // fallback would protect nothing.
     //
-    // Which window this is cannot be known without that read, so the abandon
-    // is sent whatever this window turns out to be: the main process answers
-    // it only for the takeover it owns and refuses a panel's outright, and a
-    // takeover that stands down here rather than waiting out the mount
-    // deadline hands the screen back at once.
+    // Which of the two this is cannot be known without that read, so the
+    // abandon is sent whatever this window turns out to be: the main process
+    // answers it only for the takeover it owns and refuses a panel's
+    // outright, and a takeover that stands down here rather than waiting out
+    // the mount deadline hands the screen back at once.
     window.sidecar.abandonIntroduction("The window could not read its state.");
     console.error("The window's state could not be read; nothing is drawn.", error);
   }
