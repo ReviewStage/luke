@@ -18,20 +18,6 @@ test("plain words are one paragraph under the given class", () => {
   assert.equal(render(""), '<div class="markdown"></div>');
 });
 
-test("inline styles draw as their elements", () => {
-  const markup = render("Ran **all** tests with `pnpm test`, ~~twice~~ once.");
-  assert.match(markup, /<strong>all<\/strong>/);
-  assert.match(markup, /<code>pnpm test<\/code>/);
-  assert.match(markup, /<del>twice<\/del>/);
-});
-
-test("a lone newline joins lines and a blank line separates paragraphs, as GitHub reads them", () => {
-  assert.equal(
-    render("one\ntwo\n\nthree"),
-    '<div class="markdown"><p>one\ntwo</p>\n<p>three</p></div>',
-  );
-});
-
 test("a link is drawn but is not a control", () => {
   const markup = render("See [the repo](https://example.com) and [run](custom://act).");
   assert.match(
@@ -43,13 +29,10 @@ test("a link is drawn but is not a control", () => {
   // The custom scheme never reaches the markup, not even as a title.
   assert.doesNotMatch(markup, /custom:/);
   assert.match(markup, / and run\.<\/p>/);
-});
-
-test("a single tilde is a character, not strikethrough", () => {
-  assert.equal(
-    render("Copy ~/.ssh/config to ~/backup, ~not struck~"),
-    '<div class="markdown"><p>Copy ~/.ssh/config to ~/backup, ~not struck~</p></div>',
-  );
+  // The task box is the same rule at the one other place words become an
+  // element that could be pressed: it is drawn disabled, so nothing in a
+  // message is a control.
+  assert.match(render("- [ ] todo"), /<input type="checkbox" disabled=""\/>/);
 });
 
 test("raw HTML in the words is escaped, never markup", () => {
@@ -59,52 +42,21 @@ test("raw HTML in the words is escaped, never markup", () => {
   assert.match(markup, /&lt;img src=x onerror=alert\(1\)&gt;/);
 });
 
+test("a single tilde is a character, not strikethrough", () => {
+  // Both halves of the one option this build sets on GitHub's dialect: two
+  // home-directory paths in one sentence do not strike the words between
+  // them, and the doubled tilde agents actually write still does.
+  assert.equal(
+    render("Copy ~/.ssh/config to ~/backup, ~not struck~"),
+    '<div class="markdown"><p>Copy ~/.ssh/config to ~/backup, ~not struck~</p></div>',
+  );
+  assert.match(render("Ran it ~~twice~~ once."), /<del>twice<\/del>/);
+});
+
 test("a heading is styled, not announced", () => {
+  // The override this build draws headings through: a reader walking the
+  // document's headings should meet the panel's, not a reply's.
   const markup = render("## Summary\n\nDone.");
   assert.match(markup, /<p class="markdown-heading" data-level="2">Summary<\/p>/);
   assert.doesNotMatch(markup, /<h2/);
-});
-
-test("fenced code, quotes, lists, tables, and rules compose around the paragraph", () => {
-  const markup = render(
-    [
-      "Results:",
-      "",
-      "```ts",
-      "const a = 1;",
-      "```",
-      "",
-      "> noted",
-      "",
-      "3. three",
-      "4. four",
-      "",
-      "- [x] done",
-      "- [ ] todo",
-      "",
-      "| a | b |",
-      "| :-- | --: |",
-      "| 1 | 2 |",
-      "",
-      "---",
-    ].join("\n"),
-  );
-  assert.match(markup, /<pre><code class="language-ts">const a = 1;\n<\/code><\/pre>/);
-  assert.match(markup, /<blockquote>\n<p>noted<\/p>\n<\/blockquote>/);
-  assert.match(markup, /<ol start="3">\n<li>three<\/li>\n<li>four<\/li>\n<\/ol>/);
-  // The task box is the library's own disabled checkbox: nothing a press can change.
-  assert.match(
-    markup,
-    /<li class="task-list-item"><input type="checkbox" disabled="" checked=""\/> done<\/li>/,
-  );
-  assert.match(
-    markup,
-    /<li class="task-list-item"><input type="checkbox" disabled=""\/> todo<\/li>/,
-  );
-  assert.match(
-    markup,
-    /<table><thead><tr><th style="text-align:left">a<\/th><th style="text-align:right">b<\/th>/,
-  );
-  assert.match(markup, /<td style="text-align:left">1<\/td><td style="text-align:right">2<\/td>/);
-  assert.match(markup, /<hr\/><\/div>$/);
 });

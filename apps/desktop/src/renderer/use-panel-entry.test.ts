@@ -10,57 +10,81 @@ import {
   panelEntrySettles,
 } from "./use-panel-entry";
 
-test("ending an entry is what releases the hold it had on the panel", () => {
-  assert.equal(panelEntryReleased({ busy: false }, undefined), true);
-  assert.equal(panelEntryReleased(undefined, { busy: false }), false);
-  assert.equal(panelEntryReleased({ busy: false }, { busy: true }), false);
-  assert.equal(panelEntryReleased(undefined, undefined), false);
-});
+/** Nothing held, something held and idle, something held with a reply in flight. */
+const HELD = [
+  // A reply in flight is answering the entry underneath it, so nothing may
+  // replace it but ending it outright.
+  { entry: undefined, open: false },
+  { entry: { busy: false }, open: true },
+  { entry: { busy: true }, open: false },
+] as const;
 
-test("a reply in flight is not a moment to change the entry underneath it", () => {
-  assert.equal(panelEntryOpen(undefined), false);
-  assert.equal(panelEntryOpen({ busy: true }), false);
-  assert.equal(panelEntryOpen({ busy: false }), true);
-});
+/** Where giving up from each shape goes. */
+const CANCELS = [
+  // Giving up from inside the panel has no shape to put away.
+  { aside: false, restore: false, goes: PANEL_ENTRY_CANCEL.NONE },
+  { aside: false, restore: true, goes: PANEL_ENTRY_CANCEL.NONE },
+  // A key page that was opened, or a composer opened by voice, leaves entirely.
+  { aside: true, restore: false, goes: PANEL_ENTRY_CANCEL.LEAVE },
+  // A key started from the panel, or a note from settings, goes back there.
+  { aside: true, restore: true, goes: PANEL_ENTRY_CANCEL.RESTORE },
+] as const;
 
-test("giving up from the aside shape returns you where you were", () => {
-  assert.equal(
-    panelEntryCancel({ aside: true, restore: true }),
-    PANEL_ENTRY_CANCEL.RESTORE,
-    "a key started from the panel, or a note from settings, goes back there",
-  );
-  assert.equal(
-    panelEntryCancel({ aside: true, restore: false }),
-    PANEL_ENTRY_CANCEL.LEAVE,
-    "a key page that was opened, or a composer opened by voice, leaves entirely",
-  );
-  assert.equal(
-    panelEntryCancel({ aside: false, restore: true }),
-    PANEL_ENTRY_CANCEL.NONE,
-    "giving up from inside the panel has no shape to put away",
-  );
-});
+/** Whether a delivered send shows its answer and then takes the panel's leave. */
+const SETTLES = [
+  // Saved from inside the panel: no shape to restore, and no leave to schedule.
+  { aside: false, pointerInside: false, settles: false },
+  { aside: false, pointerInside: true, settles: false },
+  // With the pointer away, nothing else would ever ask this panel to close.
+  { aside: true, pointerInside: false, settles: true },
+  // The pointer is still on the button that was pressed, and will close by leaving.
+  { aside: true, pointerInside: true, settles: false },
+] as const;
 
-test("a reply that outlived its own entry is spent", () => {
-  assert.equal(panelEntryReply({ stillHeld: false, rejection: "taken" }), PANEL_ENTRY_REPLY.IGNORE);
-  assert.equal(panelEntryReply({ stillHeld: false }), PANEL_ENTRY_REPLY.IGNORE);
-});
+const REPLIES = [
+  // A reply that outlived its own entry is spent, whatever it says.
+  { stillHeld: false, rejection: undefined, means: PANEL_ENTRY_REPLY.IGNORE },
+  { stillHeld: false, rejection: "taken", means: PANEL_ENTRY_REPLY.IGNORE },
+  // Still that entry: refused or delivered, never both.
+  { stillHeld: true, rejection: undefined, means: PANEL_ENTRY_REPLY.DELIVER },
+  { stillHeld: true, rejection: "taken", means: PANEL_ENTRY_REPLY.REJECT },
+] as const;
 
-test("a send still held is refused or delivered, never both", () => {
-  assert.equal(panelEntryReply({ stillHeld: true, rejection: "taken" }), PANEL_ENTRY_REPLY.REJECT);
-  assert.equal(panelEntryReply({ stillHeld: true }), PANEL_ENTRY_REPLY.DELIVER);
-});
+test("the entry's five decisions, exhaustively", () => {
+  // Ending an entry is what releases the hold it had on the panel: an entry
+  // that ends with the pointer already away leaves the panel held by nothing,
+  // because the pointer cannot leave a second time.
+  for (const { entry: previous } of HELD) {
+    for (const { entry: next } of HELD) {
+      assert.equal(
+        panelEntryReleased(previous, next),
+        previous !== undefined && next === undefined,
+        `released ${previous?.busy} -> ${next?.busy}`,
+      );
+    }
+  }
 
-test("a delivered send from the aside shape settles only with the pointer away", () => {
-  assert.equal(panelEntrySettles({ aside: true, pointerInside: false }), true);
-  assert.equal(
-    panelEntrySettles({ aside: true, pointerInside: true }),
-    false,
-    "the pointer is still on the button that was pressed, and will close by leaving",
-  );
-  assert.equal(
-    panelEntrySettles({ aside: false, pointerInside: false }),
-    false,
-    "saved from inside the panel: there is no shape to restore, and no leave to schedule",
-  );
+  for (const { entry, open } of HELD) {
+    assert.equal(panelEntryOpen(entry), open, `open ${entry?.busy}`);
+  }
+
+  for (const { aside, restore, goes } of CANCELS) {
+    assert.equal(panelEntryCancel({ aside, restore }), goes, `aside=${aside} restore=${restore}`);
+  }
+
+  for (const { aside, pointerInside, settles } of SETTLES) {
+    assert.equal(
+      panelEntrySettles({ aside, pointerInside }),
+      settles,
+      `aside=${aside} pointerInside=${pointerInside}`,
+    );
+  }
+
+  for (const { stillHeld, rejection, means } of REPLIES) {
+    assert.equal(
+      panelEntryReply({ stillHeld, rejection }),
+      means,
+      `stillHeld=${stillHeld} rejection=${rejection}`,
+    );
+  }
 });

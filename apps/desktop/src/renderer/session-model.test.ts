@@ -10,6 +10,7 @@ import {
   SESSION_APPLICATION_SCOPE,
   SESSION_LOCATION,
   SESSION_STATUS,
+  type Session,
   type SessionProvider,
 } from "@sidecar/session";
 import { SESSION_URGENCY } from "@sidecar/surface";
@@ -23,6 +24,9 @@ import {
   SESSION_FILTER,
   SESSION_FILTER_AXIS,
   SESSION_SORT,
+  type SessionArrangement,
+  type SessionFilter,
+  type SessionView,
   sessionFiltersFromSpoken,
   sessionListRuns,
   sessionRunKeys,
@@ -59,6 +63,53 @@ function liveSession(
 
 const FIXTURE_SESSIONS = displaySessions(bootstrap(true), []);
 
+/** The smoke fixture's two local rows, in urgency order. */
+const LOCAL_IDS = ["claude-review", "codex-bootstrap"];
+/** Its four Conductor cloud chats, in urgency order. */
+const CLOUD_IDS = [
+  "conductor-chat-package",
+  "conductor-chat-tidy",
+  "conductor-cursor-agent",
+  "conductor-opencode-session",
+];
+
+/** The rows a live launch would draw for these sessions. */
+function liveRows(...sessions: readonly Session[]): readonly SessionView[] {
+  return displaySessions(bootstrap(false), sessions);
+}
+
+/**
+ * One chip as the list reports it. A chip that carries its provider's mark
+ * repeats its own filter as the mark id; a location or a kind carries none,
+ * and which is which is part of what the groups assert, so it is said rather
+ * than inferred.
+ */
+function chip(filter: SessionFilter, label: string, count: number) {
+  return { filter, label, count };
+}
+
+function markedChip(filter: SessionFilter, label: string, count: number) {
+  return { ...chip(filter, label, count), markId: filter };
+}
+
+/** The arrangement under test: the default view moved only where a test says. */
+function view(over: Partial<SessionArrangement> = {}): SessionArrangement {
+  return { ...DEFAULT_SESSION_VIEW, ...over };
+}
+
+/** The rows an arranged list leaves standing, in the order it puts them. */
+function idsOf(list: { sessions: readonly { id: string }[] }): string[] {
+  return list.sessions.map((session) => session.id);
+}
+
+/** The same, where the list is arranged here rather than held for more. */
+function shownIds(
+  sessions: readonly SessionView[],
+  over: Partial<SessionArrangement> = {},
+): string[] {
+  return idsOf(arrangeSessions(sessions, view(over)));
+}
+
 test("the most urgent sessions are listed first in either data source", () => {
   const fixtureUrgencies = displaySessions(bootstrap(true), []).map((session) => session.urgency);
   assert.deepEqual(fixtureUrgencies, [
@@ -70,11 +121,11 @@ test("the most urgent sessions are listed first in either data source", () => {
     SESSION_URGENCY.UNKNOWN,
   ]);
 
-  const live = displaySessions(bootstrap(false), [
+  const live = liveRows(
     liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.COMPLETE),
     liveSession(CLAUDE_PROVIDER, "claude-1", SESSION_STATUS.WORKING),
     liveSession(CODEX_PROVIDER, "codex-2", SESSION_STATUS.WAITING),
-  ]);
+  );
   assert.deepEqual(
     live.map((session) => session.id),
     ["codex-2", "claude-1", "codex-1"],
@@ -92,7 +143,7 @@ test("a row carries where its session runs, from either data source", () => {
   assert.equal(fixture.get("conductor-chat-tidy"), SESSION_LOCATION.CLOUD);
   assert.equal(fixture.get("codex-bootstrap"), SESSION_LOCATION.LOCAL);
 
-  const live = displaySessions(bootstrap(false), [
+  const live = liveRows(
     normalizeSession(CODEX_PROVIDER, {
       providerSessionId: "codex-cloud",
       title: "Session codex-cloud",
@@ -101,14 +152,14 @@ test("a row carries where its session runs, from either data source", () => {
       location: SESSION_LOCATION.CLOUD,
     }),
     liveSession(CLAUDE_PROVIDER, "claude-here", SESSION_STATUS.WORKING),
-  ]);
+  );
 
   assert.equal(live[0]?.location, SESSION_LOCATION.CLOUD);
   assert.equal(live[1]?.location, SESSION_LOCATION.LOCAL);
 });
 
 test("a row is a control only where its provider gave an address", () => {
-  const live = displaySessions(bootstrap(false), [
+  const live = liveRows(
     normalizeSession(CODEX_PROVIDER, {
       providerSessionId: "codex-addressed",
       title: "Session codex-addressed",
@@ -125,7 +176,7 @@ test("a row is a control only where its provider gave an address", () => {
       ],
     }),
     liveSession(CLAUDE_PROVIDER, "claude-unaddressed", SESSION_STATUS.WORKING),
-  ]);
+  );
 
   const addressed = live.find((session) => session.id === "codex-addressed");
   assert.equal(addressed?.openable, true);
@@ -153,13 +204,11 @@ test("a row is a control only where its provider gave an address", () => {
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 // nothing must still leave the row reading as Working or Complete.
 test("the line under the title says the state when the provider said nothing", () => {
-  const [bare] = displaySessions(bootstrap(false), [
-    liveSession(CLAUDE_PROVIDER, "claude-quiet", SESSION_STATUS.WORKING),
-  ]);
+  const [bare] = liveRows(liveSession(CLAUDE_PROVIDER, "claude-quiet", SESSION_STATUS.WORKING));
   assert.equal(bare?.detail, "Working");
   assert.equal(bare?.detail, bare?.label);
 
-  const [spoken] = displaySessions(bootstrap(false), [
+  const [spoken] = liveRows(
     normalizeSession(CODEX_PROVIDER, {
       providerSessionId: "codex-busy",
       title: "Session codex-busy",
@@ -167,7 +216,7 @@ test("the line under the title says the state when the provider said nothing", (
       lastActivityAt: 1_000,
       detail: { activity: "Running tests" },
     }),
-  ]);
+  );
   assert.equal(spoken?.detail, "Running tests");
 
   // The fixture's silent row proves the same fallback in the visual evidence.
@@ -176,7 +225,7 @@ test("the line under the title says the state when the provider said nothing", (
 });
 
 test("a row carries the pull request's number when its address names one", () => {
-  const live = displaySessions(bootstrap(false), [
+  const live = liveRows(
     normalizeSession(CODEX_PROVIDER, {
       providerSessionId: "codex-published",
       title: "Session codex-published",
@@ -191,7 +240,7 @@ test("a row carries the pull request's number when its address names one", () =>
       lastActivityAt: 1_000,
       detail: { change: "https://github.com/reviewstage/luke/pulls" },
     }),
-  ]);
+  );
 
   const published = live.find((session) => session.id === "codex-published");
   assert.equal(published?.hasChange, true);
@@ -211,7 +260,7 @@ test("a row carries the pull request's number when its address names one", () =>
 });
 
 test("a row carries the identifiers that tell it from its neighbours", () => {
-  const [live] = displaySessions(bootstrap(false), [
+  const [live] = liveRows(
     normalizeSession(CODEX_PROVIDER, {
       providerSessionId: "codex-checkout",
       title: "Session codex-checkout",
@@ -219,7 +268,7 @@ test("a row carries the identifiers that tell it from its neighbours", () => {
       lastActivityAt: 1_000,
       detail: { repository: "luke", branch: "dean/session-rows", model: "gpt-5.6-luna" },
     }),
-  ]);
+  );
   assert.equal(live?.repository, "luke");
   assert.equal(live?.branch, "dean/session-rows");
   assert.equal(live?.model, "gpt-5.6-luna");
@@ -308,69 +357,36 @@ test("the filters offered are grouped by axis, coarse to fine, counted", () => {
     {
       axis: SESSION_FILTER_AXIS.LOCATION,
       label: "Location",
-      options: [
-        { filter: SESSION_FILTER.LOCAL, label: "Local", count: 2 },
-        { filter: SESSION_FILTER.CLOUD, label: "Cloud", count: 4 },
-      ],
+      options: [chip(SESSION_FILTER.LOCAL, "Local", 2), chip(SESSION_FILTER.CLOUD, "Cloud", 4)],
     },
     {
       axis: SESSION_FILTER_AXIS.APP,
       label: "App",
       options: [
-        {
-          filter: SESSION_APPLICATION_ID.CHATGPT,
-          label: "ChatGPT",
-          count: 1,
-          markId: SESSION_APPLICATION_ID.CHATGPT,
-        },
-        {
-          filter: SESSION_APPLICATION_ID.CLAUDE,
-          label: "Claude",
-          count: 1,
-          markId: SESSION_APPLICATION_ID.CLAUDE,
-        },
-        {
-          filter: SESSION_APPLICATION_ID.CONDUCTOR,
-          label: "Conductor",
-          count: 5,
-          markId: SESSION_APPLICATION_ID.CONDUCTOR,
-        },
+        markedChip(SESSION_APPLICATION_ID.CHATGPT, "ChatGPT", 1),
+        markedChip(SESSION_APPLICATION_ID.CLAUDE, "Claude", 1),
+        markedChip(SESSION_APPLICATION_ID.CONDUCTOR, "Conductor", 5),
       ],
     },
     {
       axis: SESSION_FILTER_AXIS.AGENT,
       label: "Agent",
       options: [
-        {
-          filter: PROVIDER_ID.CLAUDE_CODE,
-          label: "Claude Code",
-          // The local Claude session and the Conductor cloud chat whose agent
-          // is Claude Code: the agent chip counts hosted chats too.
-          count: 2,
-          markId: PROVIDER_ID.CLAUDE_CODE,
-        },
-        { filter: PROVIDER_ID.CODEX, label: "Codex", count: 1, markId: PROVIDER_ID.CODEX },
+        // The local Claude session and the Conductor cloud chat whose agent
+        // is Claude Code: the agent chip counts hosted chats too.
+        markedChip(PROVIDER_ID.CLAUDE_CODE, "Claude Code", 2),
+        markedChip(PROVIDER_ID.CODEX, "Codex", 1),
         // The hosted agents the Conductor chats run: identity alone, keyed
         // by the hosted agent id the row's mark and chip share.
-        {
-          filter: HOSTED_AGENT_ID.CURSOR,
-          label: "Cursor",
-          count: 1,
-          markId: HOSTED_AGENT_ID.CURSOR,
-        },
-        {
-          filter: HOSTED_AGENT_ID.OPENCODE,
-          label: "OpenCode",
-          count: 1,
-          markId: HOSTED_AGENT_ID.OPENCODE,
-        },
+        markedChip(HOSTED_AGENT_ID.CURSOR, "Cursor", 1),
+        markedChip(HOSTED_AGENT_ID.OPENCODE, "OpenCode", 1),
       ],
     },
   ]);
 });
 
 test("the voice filter narrows to realtime voice chats and has a spoken name", () => {
-  const sessions = displaySessions(bootstrap(false), [
+  const sessions = liveRows(
     normalizeSession(CODEX_PROVIDER, {
       providerSessionId: "codex-voice",
       title: "Voice chat",
@@ -379,21 +395,20 @@ test("the voice filter narrows to realtime voice chats and has a spoken name", (
       realtimeVoice: true,
     }),
     liveSession(CODEX_PROVIDER, "codex-typed", SESSION_STATUS.COMPLETE),
-  ]);
+  );
 
   const list = arrangeSessions(sessions, DEFAULT_SESSION_VIEW);
   assert.deepEqual(list.groups, [
     {
       axis: SESSION_FILTER_AXIS.KIND,
       label: "Kind",
-      options: [{ filter: SESSION_FILTER.VOICE, label: "Voice", count: 1 }],
+      options: [chip(SESSION_FILTER.VOICE, "Voice", 1)],
     },
   ]);
   assert.deepEqual(
-    arrangeSessions(sessions, {
-      ...DEFAULT_SESSION_VIEW,
-      filters: [SESSION_FILTER.VOICE],
-    }).sessions.map((session) => session.id),
+    arrangeSessions(sessions, view({ filters: [SESSION_FILTER.VOICE] })).sessions.map(
+      (session) => session.id,
+    ),
     ["codex-voice"],
   );
   assert.deepEqual(sessionFiltersFromSpoken([SESSION_FILTER.VOICE]), [SESSION_FILTER.VOICE]);
@@ -445,25 +460,19 @@ test("every agent this build knows can be narrowed down to", () => {
   // the offer is compared as a set: every agent is reachable, wherever seated.
   assert.deepEqual([...offered].sort(), [...PROVIDER_ID_LIST].sort());
   for (const providerId of PROVIDER_ID_LIST) {
-    const narrowed = arrangeSessions(sessions, {
-      ...DEFAULT_SESSION_VIEW,
-      filters: [providerId],
-    });
+    const narrowed = arrangeSessions(sessions, view({ filters: [providerId] }));
     assert.deepEqual(narrowed.filters, [providerId]);
-    assert.deepEqual(
-      narrowed.sessions.map((session) => session.id),
-      [providerId],
-    );
+    assert.deepEqual(idsOf(narrowed), [providerId]);
   }
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a level with one answer is not offered as a choice", () => {
   // Two agents, both local: which agent is a real question, where it runs is not.
-  const local = displaySessions(bootstrap(false), [
+  const local = liveRows(
     liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
     liveSession(CLAUDE_PROVIDER, "claude-1", SESSION_STATUS.WORKING),
-  ]);
+  );
   assert.deepEqual(
     arrangeSessions(local, DEFAULT_SESSION_VIEW).groups.map((group) => ({
       axis: group.axis,
@@ -478,40 +487,23 @@ test("a level with one answer is not offered as a choice", () => {
   );
 
   // One agent, several sessions: nothing is a question at all.
-  const alone = displaySessions(bootstrap(false), [
+  const alone = liveRows(
     liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
     liveSession(CODEX_PROVIDER, "codex-2", SESSION_STATUS.COMPLETE),
-  ]);
+  );
   assert.deepEqual(arrangeSessions(alone, DEFAULT_SESSION_VIEW).groups, []);
 
   assert.deepEqual(arrangeSessions([], DEFAULT_SESSION_VIEW).groups, []);
 });
 
 test("a filter narrows the list without changing what is tracked", () => {
-  const cloud = arrangeSessions(FIXTURE_SESSIONS, {
-    ...DEFAULT_SESSION_VIEW,
-    filters: [SESSION_FILTER.CLOUD],
-  });
-  const agent = arrangeSessions(FIXTURE_SESSIONS, {
-    ...DEFAULT_SESSION_VIEW,
-    filters: [PROVIDER_ID.CLAUDE_CODE],
-  });
+  const cloud = arrangeSessions(FIXTURE_SESSIONS, view({ filters: [SESSION_FILTER.CLOUD] }));
+  const agent = arrangeSessions(FIXTURE_SESSIONS, view({ filters: [PROVIDER_ID.CLAUDE_CODE] }));
 
-  assert.deepEqual(
-    cloud.sessions.map((session) => session.id),
-    [
-      "conductor-chat-package",
-      "conductor-chat-tidy",
-      "conductor-cursor-agent",
-      "conductor-opencode-session",
-    ],
-  );
+  assert.deepEqual(idsOf(cloud), CLOUD_IDS);
   // The agent chip reaches the hosted chat too: the Conductor cloud chat
   // whose agent is Claude Code answers the Claude Code narrowing.
-  assert.deepEqual(
-    agent.sessions.map((session) => session.id),
-    ["claude-review", "conductor-chat-package"],
-  );
+  assert.deepEqual(idsOf(agent), ["claude-review", "conductor-chat-package"]);
   assert.deepEqual(cloud.filters, [SESSION_FILTER.CLOUD]);
   assert.equal(cloud.total, 6);
   assert.equal(agent.total, 6);
@@ -521,26 +513,18 @@ test("a filter narrows the list without changing what is tracked", () => {
 // across axes each is a further narrowing.
 test("filters on one axis widen each other and across axes narrow", () => {
   // Local and Cloud together is either place: the whole list.
-  const either = arrangeSessions(FIXTURE_SESSIONS, {
-    ...DEFAULT_SESSION_VIEW,
-    filters: [SESSION_FILTER.LOCAL, SESSION_FILTER.CLOUD],
-  });
+  const either = arrangeSessions(
+    FIXTURE_SESSIONS,
+    view({ filters: [SESSION_FILTER.LOCAL, SESSION_FILTER.CLOUD] }),
+  );
   assert.equal(either.sessions.length, 6);
 
   // Cloud beside Conductor is Conductor's cloud chats alone.
-  const both = arrangeSessions(FIXTURE_SESSIONS, {
-    ...DEFAULT_SESSION_VIEW,
-    filters: [SESSION_FILTER.CLOUD, SESSION_APPLICATION_ID.CONDUCTOR],
-  });
-  assert.deepEqual(
-    both.sessions.map((session) => session.id),
-    [
-      "conductor-chat-package",
-      "conductor-chat-tidy",
-      "conductor-cursor-agent",
-      "conductor-opencode-session",
-    ],
+  const both = arrangeSessions(
+    FIXTURE_SESSIONS,
+    view({ filters: [SESSION_FILTER.CLOUD, SESSION_APPLICATION_ID.CONDUCTOR] }),
   );
+  assert.deepEqual(idsOf(both), CLOUD_IDS);
   assert.deepEqual(both.filters, [SESSION_FILTER.CLOUD, SESSION_APPLICATION_ID.CONDUCTOR]);
 });
 
@@ -548,10 +532,12 @@ test("filters on one axis widen each other and across axes narrow", () => {
 // and the list correcting itself must not choose — so the selection falls
 // back whole.
 test("a combination no session answers falls back whole to everything", () => {
-  const emptied = arrangeSessions(FIXTURE_SESSIONS, {
-    ...DEFAULT_SESSION_VIEW,
-    filters: [SESSION_FILTER.LOCAL, SESSION_APPLICATION_ID.CONDUCTOR, HOSTED_AGENT_ID.CURSOR],
-  });
+  const emptied = arrangeSessions(
+    FIXTURE_SESSIONS,
+    view({
+      filters: [SESSION_FILTER.LOCAL, SESSION_APPLICATION_ID.CONDUCTOR, HOSTED_AGENT_ID.CURSOR],
+    }),
+  );
 
   assert.deepEqual(emptied.filters, []);
   assert.equal(emptied.sessions.length, 6);
@@ -568,13 +554,13 @@ test("a chip press toggles one value in and out of the selection", () => {
 });
 
 test("a filter whose last session has left falls back to showing everything", () => {
-  const noCloud = displaySessions(bootstrap(false), [
+  const noCloud = liveRows(
     liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
     liveSession(CLAUDE_PROVIDER, "claude-1", SESSION_STATUS.COMPLETE),
-  ]);
+  );
 
   for (const filter of [SESSION_FILTER.CLOUD, HOSTED_AGENT_ID.CURSOR]) {
-    const list = arrangeSessions(noCloud, { ...DEFAULT_SESSION_VIEW, filters: [filter] });
+    const list = arrangeSessions(noCloud, view({ filters: [filter] }));
     assert.deepEqual(list.filters, []);
     assert.equal(list.sessions.length, 2);
   }
@@ -586,29 +572,23 @@ test("a filter whose last session has left falls back to showing everything", ()
 // moment another appears the list stays on what the developer asked to watch
 // rather than widening out from under them.
 test("a filter that still matches survives even when no chip offers it", () => {
-  const codexOnly = displaySessions(bootstrap(false), [
+  const codexOnly = liveRows(
     liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
     liveSession(CODEX_PROVIDER, "codex-2", SESSION_STATUS.COMPLETE),
-  ]);
-  const narrowed = arrangeSessions(codexOnly, {
-    ...DEFAULT_SESSION_VIEW,
-    filters: [PROVIDER_ID.CODEX],
-  });
+  );
+  const narrowed = arrangeSessions(codexOnly, view({ filters: [PROVIDER_ID.CODEX] }));
 
   assert.deepEqual(narrowed.filters, [PROVIDER_ID.CODEX]);
   assert.equal(narrowed.sessions.length, 2);
   // No second agent yet, so no chips are offered — the filter outlives them.
   assert.deepEqual(narrowed.groups, []);
 
-  const withClaude = displaySessions(bootstrap(false), [
+  const withClaude = liveRows(
     liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
     liveSession(CODEX_PROVIDER, "codex-2", SESSION_STATUS.COMPLETE),
     liveSession(CLAUDE_PROVIDER, "claude-1", SESSION_STATUS.WORKING),
-  ]);
-  const still = arrangeSessions(withClaude, {
-    ...DEFAULT_SESSION_VIEW,
-    filters: [PROVIDER_ID.CODEX],
-  });
+  );
+  const still = arrangeSessions(withClaude, view({ filters: [PROVIDER_ID.CODEX] }));
 
   assert.deepEqual(still.filters, [PROVIDER_ID.CODEX]);
   assert.deepEqual(
@@ -622,16 +602,11 @@ test("a filter that still matches survives even when no chip offers it", () => {
 // that only looks unnarrowed. That write is safe exactly while arranging the
 // result again changes nothing.
 test("the selection the list settles on is one it would settle on again", () => {
-  const oneAgent = displaySessions(bootstrap(false), [
-    liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
-  ]);
+  const oneAgent = liveRows(liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING));
 
   for (const sessions of [oneAgent, []]) {
-    const first = arrangeSessions(sessions, {
-      ...DEFAULT_SESSION_VIEW,
-      filters: [HOSTED_AGENT_ID.CURSOR],
-    });
-    const second = arrangeSessions(sessions, { ...DEFAULT_SESSION_VIEW, filters: first.filters });
+    const first = arrangeSessions(sessions, view({ filters: [HOSTED_AGENT_ID.CURSOR] }));
+    const second = arrangeSessions(sessions, view({ filters: first.filters }));
 
     assert.deepEqual(first.filters, []);
     assert.deepEqual(second.filters, first.filters);
@@ -639,14 +614,14 @@ test("the selection the list settles on is one it would settle on again", () => 
 });
 
 test("a session from an unknown agent is counted but never filed under a guess", () => {
-  const unknown = displaySessions(bootstrap(false), [
+  const unknown = liveRows(
     liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
     liveSession(
       { id: "someone-else", displayName: "Someone Else" },
       "other-1",
       SESSION_STATUS.WORKING,
     ),
-  ]);
+  );
   const list = arrangeSessions(unknown, DEFAULT_SESSION_VIEW);
 
   assert.deepEqual(list.groups, []);
@@ -655,66 +630,43 @@ test("a session from an unknown agent is counted but never filed under a guess",
 
 test("the two orderings answer different questions about the same sessions", () => {
   const urgent = arrangeSessions(FIXTURE_SESSIONS, DEFAULT_SESSION_VIEW);
-  const recent = arrangeSessions(FIXTURE_SESSIONS, {
-    ...DEFAULT_SESSION_VIEW,
-    sort: SESSION_SORT.RECENCY,
-  });
+  const recent = arrangeSessions(FIXTURE_SESSIONS, view({ sort: SESSION_SORT.RECENCY }));
 
   // In either order Conductor's two chats sit together: under urgency the
   // working chat earns the seat and its finished sibling follows; under
   // recency the finished chat, seen last, leads and the working one follows.
-  assert.deepEqual(
-    urgent.sessions.map((session) => session.id),
-    [
-      "claude-review",
-      "codex-bootstrap",
-      "conductor-chat-package",
-      "conductor-chat-tidy",
-      "conductor-cursor-agent",
-      "conductor-opencode-session",
-    ],
-  );
-  assert.deepEqual(
-    recent.sessions.map((session) => session.id),
-    [
-      "conductor-chat-tidy",
-      "conductor-chat-package",
-      "codex-bootstrap",
-      "claude-review",
-      "conductor-cursor-agent",
-      "conductor-opencode-session",
-    ],
-  );
+  assert.deepEqual(idsOf(urgent), [...LOCAL_IDS, ...CLOUD_IDS]);
+  assert.deepEqual(idsOf(recent), [
+    "conductor-chat-tidy",
+    "conductor-chat-package",
+    "codex-bootstrap",
+    "claude-review",
+    "conductor-cursor-agent",
+    "conductor-opencode-session",
+  ]);
 });
 
 test("filtering leaves the chosen ordering in force", () => {
-  const recentCloud = arrangeSessions(FIXTURE_SESSIONS, {
-    ...DEFAULT_SESSION_VIEW,
-    filters: [SESSION_FILTER.CLOUD],
-    sort: SESSION_SORT.RECENCY,
-  });
-
-  assert.deepEqual(
-    recentCloud.sessions.map((session) => session.id),
-    [
-      "conductor-chat-tidy",
-      "conductor-chat-package",
-      "conductor-cursor-agent",
-      "conductor-opencode-session",
-    ],
+  const recentCloud = arrangeSessions(
+    FIXTURE_SESSIONS,
+    view({ filters: [SESSION_FILTER.CLOUD], sort: SESSION_SORT.RECENCY }),
   );
+
+  assert.deepEqual(idsOf(recentCloud), [
+    "conductor-chat-tidy",
+    "conductor-chat-package",
+    "conductor-cursor-agent",
+    "conductor-opencode-session",
+  ]);
 });
 
 test("sessions of one state are ordered by which moved most recently", () => {
-  const working = displaySessions(bootstrap(false), [
+  const working = liveRows(
     liveSession(CODEX_PROVIDER, "stale", SESSION_STATUS.WORKING, 1_000),
     liveSession(CLAUDE_PROVIDER, "fresh", SESSION_STATUS.WORKING, 9_000),
-  ]);
-
-  assert.deepEqual(
-    arrangeSessions(working, DEFAULT_SESSION_VIEW).sessions.map((session) => session.id),
-    ["fresh", "stale"],
   );
+
+  assert.deepEqual(shownIds(working), ["fresh", "stale"]);
 });
 
 const CONDUCTOR_PROVIDER = { id: PROVIDER_ID.CONDUCTOR, displayName: "Conductor" };
@@ -735,11 +687,11 @@ test("chats of one workspace sit together and read as one tray run", () => {
       workspace: { providerWorkspaceId: "workspace-lisbon", name: "lisbon-v2" },
     });
 
-  const rows = displaySessions(bootstrap(false), [
+  const rows = liveRows(
     chatOf("chat-asking", SESSION_STATUS.WAITING, 1_000),
     liveSession(CODEX_PROVIDER, "codex-between", SESSION_STATUS.WORKING, 5_000),
     chatOf("chat-finished", SESSION_STATUS.COMPLETE, 9_000),
-  ]);
+  );
   const arranged = arrangeSessions(rows, DEFAULT_SESSION_VIEW).sessions;
 
   // The finished chat would have sorted below the stranger; the run pulls it
@@ -767,7 +719,7 @@ test("an orchestrator workspace groups sessions from different providers", () =>
     managerName: "Superset",
     name: "power-vacation",
   };
-  const rows = displaySessions(bootstrap(false), [
+  const rows = liveRows(
     normalizeSession(CLAUDE_PROVIDER, {
       providerSessionId: "claude-chat",
       title: "Claude",
@@ -782,7 +734,7 @@ test("an orchestrator workspace groups sessions from different providers", () =>
       lastActivityAt: 1_000,
       workspace,
     }),
-  ]);
+  );
 
   assert.deepEqual(
     sessionListRuns(arrangeSessions(rows, DEFAULT_SESSION_VIEW).sessions).map((run) => run.indexes),
@@ -800,7 +752,7 @@ test("sessions Superset manages earn a chip and can be narrowed to", () => {
     managerName: "Superset",
     name: "power-vacation",
   };
-  const rows = displaySessions(bootstrap(false), [
+  const rows = liveRows(
     normalizeSession(CLAUDE_PROVIDER, {
       providerSessionId: "claude-managed",
       title: "Claude",
@@ -809,7 +761,7 @@ test("sessions Superset manages earn a chip and can be narrowed to", () => {
       workspace,
     }),
     liveSession(CODEX_PROVIDER, "codex-loose", SESSION_STATUS.WORKING, 1_000),
-  ]);
+  );
   const list = arrangeSessions(rows, DEFAULT_SESSION_VIEW);
   assert.equal(rows[0]?.workspace?.managerName, "Superset");
 
@@ -817,39 +769,21 @@ test("sessions Superset manages earn a chip and can be narrowed to", () => {
     {
       axis: SESSION_FILTER_AXIS.APP,
       label: "App",
-      options: [
-        {
-          filter: SESSION_FILTER.SUPERSET,
-          label: "Superset",
-          count: 1,
-          markId: SESSION_FILTER.SUPERSET,
-        },
-      ],
+      options: [markedChip(SESSION_FILTER.SUPERSET, "Superset", 1)],
     },
     {
       axis: SESSION_FILTER_AXIS.AGENT,
       label: "Agent",
       options: [
-        {
-          filter: PROVIDER_ID.CLAUDE_CODE,
-          label: "Claude Code",
-          count: 1,
-          markId: PROVIDER_ID.CLAUDE_CODE,
-        },
-        { filter: PROVIDER_ID.CODEX, label: "Codex", count: 1, markId: PROVIDER_ID.CODEX },
+        markedChip(PROVIDER_ID.CLAUDE_CODE, "Claude Code", 1),
+        markedChip(PROVIDER_ID.CODEX, "Codex", 1),
       ],
     },
   ]);
 
-  const narrowed = arrangeSessions(rows, {
-    ...DEFAULT_SESSION_VIEW,
-    filters: [SESSION_FILTER.SUPERSET],
-  });
+  const narrowed = arrangeSessions(rows, view({ filters: [SESSION_FILTER.SUPERSET] }));
   assert.deepEqual(narrowed.filters, [SESSION_FILTER.SUPERSET]);
-  assert.deepEqual(
-    narrowed.sessions.map((session) => session.id),
-    ["claude-managed"],
-  );
+  assert.deepEqual(idsOf(narrowed), ["claude-managed"]);
   assert.equal(narrowed.total, 2);
 
   // The spoken vocabulary is the chips' own, so the same word narrows by voice.
@@ -857,7 +791,7 @@ test("sessions Superset manages earn a chip and can be narrowed to", () => {
 });
 
 test("an app filter matches annotations as well as a namesake provider", () => {
-  const rows = displaySessions(bootstrap(false), [
+  const rows = liveRows(
     normalizeSession(CODEX_PROVIDER, {
       providerSessionId: "codex-conductor",
       title: "A long Codex title that still keeps its application marks",
@@ -880,35 +814,29 @@ test("an app filter matches annotations as well as a namesake provider", () => {
     }),
     liveSession(CONDUCTOR_PROVIDER, "conductor-native", SESSION_STATUS.WORKING, 2_000),
     liveSession(CLAUDE_PROVIDER, "claude-loose", SESSION_STATUS.WORKING, 1_000),
-  ]);
+  );
   const list = arrangeSessions(rows, DEFAULT_SESSION_VIEW);
 
   assert.deepEqual(
     list.groups
       .flatMap((group) => group.options)
       .find((option) => option.filter === SESSION_APPLICATION_ID.CONDUCTOR),
-    {
-      filter: SESSION_APPLICATION_ID.CONDUCTOR,
-      label: "Conductor",
-      count: 2,
-      markId: SESSION_APPLICATION_ID.CONDUCTOR,
-    },
+    markedChip(SESSION_APPLICATION_ID.CONDUCTOR, "Conductor", 2),
   );
   assert.deepEqual(
-    arrangeSessions(rows, {
-      ...DEFAULT_SESSION_VIEW,
-      filters: [SESSION_APPLICATION_ID.CONDUCTOR],
-    }).sessions.map((session) => session.id),
+    arrangeSessions(rows, view({ filters: [SESSION_APPLICATION_ID.CONDUCTOR] })).sessions.map(
+      (session) => session.id,
+    ),
     ["codex-conductor", "conductor-native"],
   );
   // The report's rule for the app axis: an agent chip beside Conductor's is a
   // further narrowing, so Codex + Conductor is Codex chats associated with
   // Conductor — never Conductor's own chats as well.
   assert.deepEqual(
-    arrangeSessions(rows, {
-      ...DEFAULT_SESSION_VIEW,
-      filters: [PROVIDER_ID.CODEX, SESSION_APPLICATION_ID.CONDUCTOR],
-    }).sessions.map((session) => session.id),
+    arrangeSessions(
+      rows,
+      view({ filters: [PROVIDER_ID.CODEX, SESSION_APPLICATION_ID.CONDUCTOR] }),
+    ).sessions.map((session) => session.id),
     ["codex-conductor"],
   );
   assert.deepEqual(sessionFiltersFromSpoken([SESSION_APPLICATION_ID.CHATGPT]), [
@@ -927,10 +855,10 @@ test("a Superset chip counting every session is not offered", () => {
       lastActivityAt: 1_000,
       workspace: { providerWorkspaceId: "workspace-superset", scopeId: "superset" },
     });
-  const rows = displaySessions(bootstrap(false), [
+  const rows = liveRows(
     managed(CLAUDE_PROVIDER, "claude-managed"),
     managed(CODEX_PROVIDER, "codex-managed"),
-  ]);
+  );
 
   assert.deepEqual(
     arrangeSessions(rows, DEFAULT_SESSION_VIEW)
@@ -954,10 +882,7 @@ test("a lone chat is a run of one, and namesake workspaces never join", () => {
       workspace: { providerWorkspaceId: workspaceId, name: "lisbon-v2" },
     });
 
-  const rows = displaySessions(bootstrap(false), [
-    chatOf("chat-one", "workspace-one"),
-    chatOf("chat-two", "workspace-two"),
-  ]);
+  const rows = liveRows(chatOf("chat-one", "workspace-one"), chatOf("chat-two", "workspace-two"));
   const arranged = arrangeSessions(rows, DEFAULT_SESSION_VIEW).sessions;
 
   assert.deepEqual(
@@ -987,49 +912,43 @@ test("a tray's shared pull request is said once, through the chat that reported 
 
   // Every chat reporting the one change collapses to one header chip, opened
   // through the first chat that reported it.
-  const shared = displaySessions(bootstrap(false), [
-    chatOf("chat-one", changeUrl),
-    chatOf("chat-two", changeUrl),
-  ]);
+  const shared = liveRows(chatOf("chat-one", changeUrl), chatOf("chat-two", changeUrl));
   const hoisted = workspaceTrayChange(shared);
   assert.equal(hoisted?.session.id, "chat-one");
   assert.equal(hoisted?.changeNumber, 245);
 
   // A single reporting chat is trivially the workspace's one change, even
   // when its address names no number for the chip to wear.
-  const lone = displaySessions(bootstrap(false), [
+  const lone = liveRows(
     chatOf("chat-one", "https://github.com/example/luke/pulls"),
     chatOf("chat-two"),
-  ]);
+  );
   const loneHoisted = workspaceTrayChange(lone);
   assert.equal(loneHoisted?.session.id, "chat-one");
   assert.equal(loneHoisted?.changeNumber, undefined);
 
   // Two chats naming different numbers are two changes; the header offering
   // one would hide the other, so each stays on its own row.
-  const differing = displaySessions(bootstrap(false), [
+  const differing = liveRows(
     chatOf("chat-one", changeUrl),
     chatOf("chat-two", "https://github.com/example/luke/pull/246"),
-  ]);
+  );
   assert.equal(workspaceTrayChange(differing), undefined);
 
   // Reports the numbers cannot compare may be one change or two, and the
   // header must not gamble on which; they stay on their rows.
-  const unnumbered = displaySessions(bootstrap(false), [
+  const unnumbered = liveRows(
     chatOf("chat-one", changeUrl),
     chatOf("chat-two", "https://github.com/example/luke/pulls"),
-  ]);
+  );
   assert.equal(workspaceTrayChange(unnumbered), undefined);
 
   // A tray with no reported change offers no chip at all.
-  assert.equal(
-    workspaceTrayChange(displaySessions(bootstrap(false), [chatOf("chat-one")])),
-    undefined,
-  );
+  assert.equal(workspaceTrayChange(liveRows(chatOf("chat-one"))), undefined);
 });
 
 test("a row carries its workspace by name, falling back to the id", () => {
-  const [named] = displaySessions(bootstrap(false), [
+  const [named] = liveRows(
     normalizeSession(CONDUCTOR_PROVIDER, {
       providerSessionId: "chat-named",
       title: "Chat named",
@@ -1037,10 +956,10 @@ test("a row carries its workspace by name, falling back to the id", () => {
       lastActivityAt: 1_000,
       workspace: { providerWorkspaceId: "workspace-1", name: "lisbon-v2" },
     }),
-  ]);
+  );
   assert.deepEqual(named?.workspace, { id: "workspace-1", name: "lisbon-v2" });
 
-  const [unnamed] = displaySessions(bootstrap(false), [
+  const [unnamed] = liveRows(
     normalizeSession(CONDUCTOR_PROVIDER, {
       providerSessionId: "chat-unnamed",
       title: "Chat unnamed",
@@ -1048,17 +967,15 @@ test("a row carries its workspace by name, falling back to the id", () => {
       lastActivityAt: 1_000,
       workspace: { providerWorkspaceId: "workspace-2" },
     }),
-  ]);
+  );
   assert.deepEqual(unnamed?.workspace, { id: "workspace-2", name: "workspace-2" });
 
-  const [ungrouped] = displaySessions(bootstrap(false), [
-    liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
-  ]);
+  const [ungrouped] = liveRows(liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING));
   assert.equal(ungrouped?.workspace, undefined);
 });
 
 test("a query keeps only rows saying every word, wherever each word lands", () => {
-  const rows = displaySessions(bootstrap(false), [
+  const rows = liveRows(
     normalizeSession(CLAUDE_PROVIDER, {
       providerSessionId: "parser",
       title: "Rework the parser",
@@ -1072,17 +989,14 @@ test("a query keeps only rows saying every word, wherever each word lands", () =
       status: SESSION_STATUS.WORKING,
       lastActivityAt: 2_000,
     }),
-  ]);
+  );
 
   // The words match together across fields — the ticket sits on the branch and
   // the noun in the title — and case never matters: a query is typed, not
   // quoted back at the row.
-  const found = arrangeSessions(rows, { ...DEFAULT_SESSION_VIEW, query: "Parser LUKE-123" });
+  const found = arrangeSessions(rows, view({ query: "Parser LUKE-123" }));
 
-  assert.deepEqual(
-    found.sessions.map((session) => session.id),
-    ["parser"],
-  );
+  assert.deepEqual(idsOf(found), ["parser"]);
   assert.equal(found.total, 2);
   assert.deepEqual(found.search, {
     tokens: ["parser", "luke-123"],
@@ -1092,7 +1006,7 @@ test("a query keeps only rows saying every word, wherever each word lands", () =
 });
 
 test("a query is read against everything the row can say", () => {
-  const rows = displaySessions(bootstrap(false), [
+  const rows = liveRows(
     normalizeSession(CONDUCTOR_PROVIDER, {
       providerSessionId: "chat",
       title: "Chat chat",
@@ -1102,22 +1016,18 @@ test("a query is read against everything the row can say", () => {
       workspace: { providerWorkspaceId: "workspace-1", name: "lisbon-v2" },
     }),
     liveSession(CODEX_PROVIDER, "other", SESSION_STATUS.WORKING),
-  ]);
+  );
 
   // The repository, the model on the mark's hover, the workspace the row is a
   // chat of, the agent's own name, and the failure worded under the title.
   for (const query of ["sidecar", "OPUS", "lisbon", "conductor", "build broke"]) {
-    const found = arrangeSessions(rows, { ...DEFAULT_SESSION_VIEW, query });
-    assert.deepEqual(
-      found.sessions.map((session) => session.id),
-      ["chat"],
-      `query: ${query}`,
-    );
+    const found = arrangeSessions(rows, view({ query }));
+    assert.deepEqual(idsOf(found), ["chat"], `query: ${query}`);
   }
 });
 
 test("a query finds a session by its status word, even under a busy detail line", () => {
-  const rows = displaySessions(bootstrap(false), [
+  const rows = liveRows(
     normalizeSession(CLAUDE_PROVIDER, {
       providerSessionId: "busy",
       title: "Rework the parser",
@@ -1132,26 +1042,20 @@ test("a query finds a session by its status word, even under a busy detail line"
       lastActivityAt: 2_000,
       detail: { activity: "Holding for an approval" },
     }),
-  ]);
+  );
 
   // Both detail lines are spent on the provider's own words, so the status
   // word appears nowhere the row draws — the query still answers for the
   // state, and answers for it alone: "working" leaves the waiting row out.
-  const working = arrangeSessions(rows, { ...DEFAULT_SESSION_VIEW, query: "working" });
-  assert.deepEqual(
-    working.sessions.map((session) => session.id),
-    ["busy"],
-  );
+  const working = arrangeSessions(rows, view({ query: "working" }));
+  assert.deepEqual(idsOf(working), ["busy"]);
 
-  const waiting = arrangeSessions(rows, { ...DEFAULT_SESSION_VIEW, query: "needs you" });
-  assert.deepEqual(
-    waiting.sessions.map((session) => session.id),
-    ["stuck"],
-  );
+  const waiting = arrangeSessions(rows, view({ query: "needs you" }));
+  assert.deepEqual(idsOf(waiting), ["stuck"]);
 });
 
 test("a spoken search is told exactly what the list will show", () => {
-  const rows = displaySessions(bootstrap(false), [
+  const rows = liveRows(
     normalizeSession(CLAUDE_PROVIDER, {
       providerSessionId: "parser",
       title: "Rework the parser",
@@ -1164,24 +1068,20 @@ test("a spoken search is told exactly what the list will show", () => {
       status: SESSION_STATUS.WORKING,
       lastActivityAt: 2_000,
     }),
-  ]);
+  );
 
-  assert.deepEqual(spokenSearchOutcome(rows, { ...DEFAULT_SESSION_VIEW, query: "parser" }), {
+  assert.deepEqual(spokenSearchOutcome(rows, view({ query: "parser" })), {
     matches: 1,
   });
   // An emptied search answers with its honest zero rather than a refusal —
   // and when the filter in force is what hides the matches, the note says so
   // the way the list's own empty state does.
-  assert.deepEqual(spokenSearchOutcome(rows, { ...DEFAULT_SESSION_VIEW, query: "zanzibar" }), {
+  assert.deepEqual(spokenSearchOutcome(rows, view({ query: "zanzibar" })), {
     matches: 0,
     note: "No sessions match those words.",
   });
   assert.deepEqual(
-    spokenSearchOutcome(rows, {
-      ...DEFAULT_SESSION_VIEW,
-      filters: [PROVIDER_ID.CODEX],
-      query: "parser",
-    }),
+    spokenSearchOutcome(rows, view({ filters: [PROVIDER_ID.CODEX], query: "parser" })),
     {
       matches: 0,
       note: "No shown sessions match, but the filter in force hides 1 session that would.",
@@ -1190,14 +1090,14 @@ test("a spoken search is told exactly what the list will show", () => {
 });
 
 test("a blank query is no search at all", () => {
-  const list = arrangeSessions(FIXTURE_SESSIONS, { ...DEFAULT_SESSION_VIEW, query: "   " });
+  const list = arrangeSessions(FIXTURE_SESSIONS, view({ query: " " }));
 
   assert.equal(list.search, undefined);
   assert.equal(list.sessions.length, FIXTURE_SESSIONS.length);
 });
 
 test("a query that matches nothing empties the list and says so", () => {
-  const list = arrangeSessions(FIXTURE_SESSIONS, { ...DEFAULT_SESSION_VIEW, query: "zanzibar" });
+  const list = arrangeSessions(FIXTURE_SESSIONS, view({ query: "zanzibar" }));
 
   // The one narrowing allowed to empty the list: "nothing matches" is a
   // search's honest answer, where a filter falling to nothing is a stale
@@ -1212,7 +1112,7 @@ test("a query that matches nothing empties the list and says so", () => {
 });
 
 test("a query reads within the filter and counts what the filter hides", () => {
-  const rows = displaySessions(bootstrap(false), [
+  const rows = liveRows(
     normalizeSession(CLAUDE_PROVIDER, {
       providerSessionId: "claude-alpha",
       title: "Alpha rework",
@@ -1226,25 +1126,20 @@ test("a query reads within the filter and counts what the filter hides", () => {
       lastActivityAt: 2_000,
     }),
     liveSession(CODEX_PROVIDER, "codex-other", SESSION_STATUS.WORKING, 3_000),
-  ]);
-
-  const narrowed = arrangeSessions(rows, {
-    ...DEFAULT_SESSION_VIEW,
-    filters: [PROVIDER_ID.CLAUDE_CODE],
-    query: "alpha",
-  });
-  assert.deepEqual(
-    narrowed.sessions.map((session) => session.id),
-    ["claude-alpha"],
   );
+
+  const narrowed = arrangeSessions(
+    rows,
+    view({ filters: [PROVIDER_ID.CLAUDE_CODE], query: "alpha" }),
+  );
+  assert.deepEqual(idsOf(narrowed), ["claude-alpha"]);
   // The Codex match is not shown, but it is never swallowed either.
   assert.deepEqual(narrowed.search, { tokens: ["alpha"], searched: 1, beyondFilter: 1 });
 
-  const emptied = arrangeSessions(rows, {
-    ...DEFAULT_SESSION_VIEW,
-    filters: [PROVIDER_ID.CLAUDE_CODE],
-    query: "cleanup",
-  });
+  const emptied = arrangeSessions(
+    rows,
+    view({ filters: [PROVIDER_ID.CLAUDE_CODE], query: "cleanup" }),
+  );
   assert.deepEqual(emptied.sessions, []);
   assert.deepEqual(emptied.search, { tokens: ["cleanup"], searched: 1, beyondFilter: 1 });
 });
@@ -1252,21 +1147,17 @@ test("a query reads within the filter and counts what the filter hides", () => {
 test("searching leaves the chosen ordering and the workspace seating in force", () => {
   // The same word finds the native Conductor chats and a Codex chat carrying
   // Conductor's app association, all in the order the sort chose.
-  const recent = arrangeSessions(FIXTURE_SESSIONS, {
-    ...DEFAULT_SESSION_VIEW,
-    sort: SESSION_SORT.RECENCY,
-    query: "conductor",
-  });
-  assert.deepEqual(
-    recent.sessions.map((session) => session.id),
-    [
-      "conductor-chat-tidy",
-      "conductor-chat-package",
-      "codex-bootstrap",
-      "conductor-cursor-agent",
-      "conductor-opencode-session",
-    ],
+  const recent = arrangeSessions(
+    FIXTURE_SESSIONS,
+    view({ sort: SESSION_SORT.RECENCY, query: "conductor" }),
   );
+  assert.deepEqual(idsOf(recent), [
+    "conductor-chat-tidy",
+    "conductor-chat-package",
+    "codex-bootstrap",
+    "conductor-cursor-agent",
+    "conductor-opencode-session",
+  ]);
 
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The native chats stay one tray run; the annotated Codex chat stays loose.
@@ -1351,7 +1242,7 @@ test("an unsplit workspace and a lone fading chat both keep the workspace key", 
 // mark, the agent chip, and the search all reach it by the agent, while the
 // provider identity stays what the host observed it as.
 test("a hosted chat carries its agent for the mark, the chips, and the search", () => {
-  const rows = displaySessions(bootstrap(false), [
+  const rows = liveRows(
     normalizeSession(
       { id: PROVIDER_ID.CONDUCTOR, displayName: "Conductor" },
       {
@@ -1364,26 +1255,17 @@ test("a hosted chat carries its agent for the mark, the chips, and the search", 
       },
     ),
     liveSession(CODEX_PROVIDER, "codex-loose", SESSION_STATUS.WORKING, 1_000),
-  ]);
+  );
 
   assert.equal(rows[0]?.agentId, PROVIDER_ID.CLAUDE_CODE);
   assert.equal(rows[0]?.agent, "Claude Code");
   assert.equal(rows[0]?.providerId, PROVIDER_ID.CONDUCTOR);
 
-  const narrowed = arrangeSessions(rows, {
-    ...DEFAULT_SESSION_VIEW,
-    filters: [PROVIDER_ID.CLAUDE_CODE],
-  });
-  assert.deepEqual(
-    narrowed.sessions.map((session) => session.id),
-    ["conductor-claude"],
-  );
+  const narrowed = arrangeSessions(rows, view({ filters: [PROVIDER_ID.CLAUDE_CODE] }));
+  assert.deepEqual(idsOf(narrowed), ["conductor-claude"]);
 
-  const found = arrangeSessions(rows, { ...DEFAULT_SESSION_VIEW, query: "claude" });
-  assert.deepEqual(
-    found.sessions.map((session) => session.id),
-    ["conductor-claude"],
-  );
+  const found = arrangeSessions(rows, view({ query: "claude" }));
+  assert.deepEqual(idsOf(found), ["conductor-claude"]);
 
   // The wing counts the chat under the app holding it — here the hosting
   // provider itself, since no app association was reported — not the agent.

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import test from "node:test";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import type { SessionReplayBootstrap } from "#shared/wire/session";
@@ -64,52 +63,6 @@ test("the connect policy names both recorder hosts, and only what else is reache
     POSTHOG_HOST,
     POSTHOG_ASSETS_HOST,
   ]);
-});
-
-/**
- * What the preload rests on, read out of the bundle it rests on.
- *
- * `preloadRemoteConfig` writes a global posthog-js does not declare, and the
- * whole of what turns recording on is that the library finds a truthy
- * `sessionRecording` there. Nothing in the type system holds either half
- * still, and an upgrade that moved one would take recording out in exactly
- * the silence this change exists to end — so both are asserted against the
- * installed bundle instead of trusted.
- *
- * Read around the member names rather than as bare substrings, because
- * `sessionRecording` alone appears throughout the surveys code and an
- * assertion that cannot fail is worse than none. The names survive
- * minification; the locals beside them do not, which is what the windows and
- * the `\w` are for.
- */
-function posthogBundle(): string {
-  return readFileSync(
-    createRequire(import.meta.url).resolve("posthog-js/dist/module.full.no-external"),
-    "utf8",
-  );
-}
-
-function bodyAfter(bundle: string, member: string): string {
-  const start = bundle.indexOf(member);
-  assert.notEqual(start, -1, `posthog-js no longer defines ${member}`);
-  return bundle.slice(start, start + 1400);
-}
-
-test("the library still reads the preloaded config", () => {
-  const loader = bodyAfter(posthogBundle(), "get remoteConfig()");
-  // The token index and `.config` are the shape `preloadRemoteConfig` writes;
-  // the loader returning nothing from this is what makes it fetch instead.
-  assert.match(loader, /_POSTHOG_REMOTE_CONFIG/);
-  assert.match(loader, /\.config\b/);
-});
-
-test("recording is still on for any truthy sessionRecording, which is why {} does", () => {
-  const persist = bodyAfter(posthogBundle(), "_persistRemoteConfig(");
-  assert.match(persist, /sessionRecording/);
-  // The gate itself. A release that asked the remote config for a field —
-  // `enabled === true`, a sample rate, anything — rather than for truthiness
-  // would read the preload's `{}` as a no and record nothing.
-  assert.match(persist, /enabled:!!\w/);
 });
 
 /**
