@@ -20,11 +20,23 @@ unsupported. A provider gains an act only by overriding the matching protected
 route or delivery seam and preserving every trust constraint in root
 `CLAUDE.md`. Transcript reading belongs inside the adapter.
 
+Every provider passes one contract suite. `describeProviderContract` in
+`@sidecar/providers/testing` states the trust constraints as tests over
+recorded fixtures under `packages/session/fixtures/providers/<provider>/`,
+each case naming the sentence of root `CLAUDE.md` it holds a provider to. A
+provider is added by recording its fixtures and calling the suite; an act is
+added by declaring its answer in `advertised` or `unadvertised`, and the suite
+fails on an act kind neither list names. The golden answers are committed in
+one canonical formatting — sorted keys, two-space indent, a trailing newline —
+which `repository-checks.sh` enforces and Biome is kept away from;
+`LUKE_UPDATE_FIXTURES=1` records them, and `check.sh` never sets it.
+
 Capabilities stay with their owning package in explicit, exhaustive maps:
 credentials in `@sidecar/credentials`, analytics connections in
 `@sidecar/analytics` and the desktop bridge, hooks and adapter registration in
-this package, fixture coverage in `@sidecar/fixtures`, workspace presentation
-in the surface that offers it, and Superset agent kinds in `@sidecar/superset`.
+this package, fixture coverage in `@sidecar/fixtures` and the recorded
+provider fixtures beside `@sidecar/session`, workspace presentation in the
+surface that offers it, and Superset agent kinds in `@sidecar/superset`.
 Provider marks and CSS are presentation owned by their surfaces, not identity.
 
 Add a provider identity and its adapter together, then update every applicable

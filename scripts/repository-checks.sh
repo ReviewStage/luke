@@ -159,6 +159,48 @@ if [[ -n "$extensionless_imports" ]]; then
     exit 1
 fi
 
+# Every provider passes one contract suite, and its recorded answers are the
+# ruler. A golden is written by the suite itself in one canonical formatting —
+# object keys sorted at every depth, two-space indent, a trailing newline — so
+# a hand edit is a claim about a provider's behaviour that no provider made.
+# Biome is kept off the fixture tree for the same reason, which leaves this as
+# the only thing that would notice.
+node --input-type=module -e '
+  import { readdir, readFile } from "node:fs/promises";
+  import path from "node:path";
+  const root = path.join(process.argv[1], "packages/session/fixtures/providers");
+  const sorted = (value) =>
+    `${JSON.stringify(
+      value,
+      (_key, entry) =>
+        typeof entry !== "object" || entry === null || Array.isArray(entry)
+          ? entry
+          : Object.fromEntries(Object.keys(entry).sort().map((key) => [key, entry[key]])),
+      2,
+    )}\n`;
+  const drifted = [];
+  for (const provider of await readdir(root)) {
+    const goldenDirectory = path.join(root, provider, "golden");
+    const names = await readdir(goldenDirectory).catch(() => []);
+    for (const name of names) {
+      const filePath = path.join(goldenDirectory, name);
+      const recorded = await readFile(filePath, "utf8");
+      const canonical = name.endsWith(".json")
+        ? sorted(JSON.parse(recorded))
+        : recorded.endsWith("\n")
+          ? recorded
+          : `${recorded}\n`;
+      if (recorded !== canonical) drifted.push(path.relative(process.argv[1], filePath));
+    }
+  }
+  if (drifted.length > 0) {
+    process.stderr.write(
+      `error: a recorded golden is not in the formatting the contract suite writes (record it with LUKE_UPDATE_FIXTURES=1 rather than editing it):\n${drifted.join("\n")}\n`,
+    );
+    process.exit(1);
+  }
+' "$SIDECAR_REPO_ROOT"
+
 # docs/DESIGN.md admits one native motion on the surface: the History thread's
 # stamp column, scrolled in by the thread's own sideways scroll and put back by
 # scroll snapping, because only the browser sees the fingers lift. Everything
