@@ -41,6 +41,20 @@ export interface RealtimeCallOptions {
   now?: () => number;
 }
 
+/**
+ * One named handler per server event a call acts on, each narrowed to its own
+ * event. The table is deliberately partial: a call answers the events its own
+ * kind of turn-taking needs, and everything else the parser kept — an event
+ * type this build knows but this call has no use for — is simply unhandled.
+ * What a subclass adds or overrides is visible as the keys it spreads over its
+ * parent's, rather than as arms interleaved in one switch.
+ */
+export type RealtimeServerEventHandlers = {
+  [Type in ParsedRealtimeServerEvent["type"]]?: (
+    event: Extract<ParsedRealtimeServerEvent, { type: Type }>,
+  ) => void;
+};
+
 /** Traps a teardown step's failure so the steps after it still run. */
 export type TeardownStep = (action: () => void) => void;
 
@@ -75,6 +89,7 @@ export abstract class RealtimeCall<Options extends RealtimeCallOptions = Realtim
    * to stand for the call, so the token is what does.
    */
   #attempt = Symbol("connect-attempt");
+  #handlers: RealtimeServerEventHandlers | undefined;
 
   constructor(options: Options) {
     this.options = options;
@@ -100,8 +115,12 @@ export abstract class RealtimeCall<Options extends RealtimeCallOptions = Realtim
     details: SdkToolCallDetails | undefined,
   ): Promise<WireRecord>;
 
-  /** Acts on one parsed server event, in the terms this kind of call keeps. */
-  protected abstract handleEvent(event: ParsedRealtimeServerEvent): void;
+  /**
+   * The server events this kind of call acts on, as one handler each. Built
+   * once per call: the handlers close over `this` and never change, and a
+   * table rebuilt per event would allocate one on every frame of speech.
+   */
+  protected abstract handlers(): RealtimeServerEventHandlers;
 
   /** Runs once the channel is open and the call has reported itself ready. */
   protected onChannelOpen(): void {}
@@ -305,7 +324,11 @@ export abstract class RealtimeCall<Options extends RealtimeCallOptions = Realtim
     }
     const event = parseRealtimeServerEvent(record);
     if (!event) return;
-    this.handleEvent(event);
+    this.#handlers ??= this.handlers();
+    const handler = this.#handlers[event.type];
+    // SAFETY: the table is keyed by event type, so the handler found under
+    // this event's own type is the one narrowed to it.
+    (handler as ((narrowed: typeof event) => void) | undefined)?.(event);
   }
 
   async close(): Promise<void> {

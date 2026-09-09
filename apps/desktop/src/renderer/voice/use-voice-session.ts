@@ -54,16 +54,12 @@ import {
 import { hostedVoiceUnavailableNote } from "../microphone-access";
 import { useStateWithRef } from "../use-state-with-ref";
 import { outputSilent } from "../volume-hint";
+import { REPLY_KIND, type ReplyKind } from "./captions";
 import { ConversationCall } from "./conversation-call";
 import { HistoryReporter, withPendingLines } from "./history-reporter";
 import { openPreferredMicrophone } from "./microphone-choice";
 import { ReplyDeliveryPlayer } from "./reply-delivery-player";
-import {
-  REPLY_KIND,
-  type ReplyKind,
-  SpeakOnlyCall,
-  type SpeakOnlyCallOptions,
-} from "./speak-only-call";
+import { SpeakOnlyCall, type SpeakOnlyCallOptions } from "./speak-only-call";
 import { SpeechMouth } from "./speech-mouth";
 import { startVoiceLevelMeter } from "./voice-level-meter";
 

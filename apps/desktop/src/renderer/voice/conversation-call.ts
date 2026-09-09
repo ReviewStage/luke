@@ -9,11 +9,7 @@ import {
   briefingSpeechEvents,
   clearInputAudioEvents,
   functionCallFollowUpEvents,
-  inputAudioAppendEvents,
-  inputAudioFormatUpdateEvents,
   type ParsedRealtimeFunctionCall,
-  type ParsedRealtimeServerEvent,
-  PressAudioBuffer,
   pushToTalkCommitEvents,
   REALTIME_CLIENT_EVENT,
   REALTIME_SERVER_EVENT,
@@ -31,30 +27,18 @@ import {
 } from "@sidecar/wire";
 import { voiceExchangeActive } from "#shared/messages/voice-view";
 import type { BuiltRealtimeSessionConfig, SdkToolCallDetails } from "./agents-realtime-transport";
+import { REPLY_KIND } from "./captions";
 import { MICROPHONE_PROCESSING } from "./microphone-choice";
-import {
-  createPressCaptureSource,
-  type PressCaptureFactory,
-  type PressCaptureSource,
-} from "./press-audio-capture";
-import type { TeardownStep } from "./realtime-call";
+import type { PressCaptureFactory } from "./press-audio-capture";
+import { type MicrophoneSender, PressTurnCapture } from "./press-turn-capture";
+import type { RealtimeServerEventHandlers, TeardownStep } from "./realtime-call";
 import {
   BRAIN_ASK_SETTLE_TIMEOUT_MS,
-  REPLY_KIND,
   type ResponseDoneEvent,
   SpeakOnlyCall,
   type SpeakOnlyCallOptions,
 } from "./speak-only-call";
-
-/**
- * One press's words on their way through a handshake: the capture reading the
- * device — absent once the press was released — and the buffer holding what
- * it has heard until the data channel can carry it.
- */
-interface PressCaptureState {
-  source: PressCaptureSource | undefined;
-  buffer: PressAudioBuffer;
-}
+import { ToolFollowUp } from "./tool-follow-up";
 
 /**
  * Carries one app act the brain decided — a settings change, the panel shown,
@@ -65,17 +49,6 @@ interface PressCaptureState {
  * composer, and what it holds leaves only by its own Send button.
  */
 export type AppActionCarrier = (action: BrainAppActRequest["action"]) => Promise<WireRecord>;
-
-/**
- * The browser pieces a call runs on, each stated as the members this file
- * touches rather than as its whole `RTC*` type. A real connection satisfies
- * these; the whole browser types do not work the other way, because the
- * thirty-odd members no test can supply would mean the injection point could
- * only ever take the real thing — which is the opposite of why it exists.
- */
-export interface MicrophoneSender {
-  replaceTrack(next: MediaStreamTrack | null): Promise<void>;
-}
 
 export interface ConversationCallOptions extends SpeakOnlyCallOptions {
   /**
@@ -138,15 +111,6 @@ function askQuestion(argumentsJson: string): string | undefined {
   }
 }
 
-interface SdkToolBatch {
-  responseId: string;
-  callIds: Set<string>;
-  outputCallIds: Set<string>;
-  epoch: number;
-  responseDone: boolean;
-  followUpStarted: boolean;
-}
-
 /**
  * Drives one Realtime conversation the developer can speak on: the speak-only
  * call with a capture device and the voice's one tool added.
@@ -178,35 +142,18 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
   #silenceTrack: MediaStreamTrack | undefined;
   /** The device being reopened, held so two presses cannot open it twice. */
   #acquiring: Promise<void> | undefined;
-  /**
-   * The words the press has spoken while its call is still connecting: a local
-   * PCM capture off the press's own device, buffered until the data channel
-   * can carry them as appends. It belongs to exactly one connect attempt —
-   * created only while a press holds a turn, discarded on every path that ends
-   * the attempt — so no press can leave audio behind for a later connection.
-   *
-   * The seam between the captured words and the live WebRTC track is decided
-   * deliberately: the whole of the turn the press opened travels as appends,
-   * and the track joins the sender only when that turn is over. Appends ride
-   * the ordered data channel while the track rides RTP, and the server writes
-   * one input buffer in arrival order — so any turn that mixed the two would
-   * have an unorderable seam where a late append lands after the first live
-   * frames and words swap, double, or drop. On one channel every chunk lands
-   * exactly once, in capture order, with the commit behind the last of them.
-   * Handing over between turns is safe because every turn opens by clearing
-   * the buffer: there is nothing across that seam to double.
-   */
-  #pressCapture: PressCaptureState | undefined;
-  /**
-   * A press released while the call was still connecting, with words already
-   * captured. The turn it held is over — the capture stops reading and the
-   * device closes at the release — but what it heard is owed a delivery:
-   * flushed and committed once this attempt's channel opens, and discarded
-   * with the attempt if it never does.
-   */
-  #pressCommitPending = false;
-  /** Whether the turn now under way travels as appends rather than the track. */
-  #listeningOnAppends = false;
+  /** The words a press speaks while its call is still connecting. */
+  #press = new PressTurnCapture({
+    send: (events) => this.send(events),
+    createSource: this.options.createPressCapture,
+    device: () => {
+      const stream = this.#stream;
+      const track = this.#microphone;
+      if (!stream || !track) return undefined;
+      return { stream, track, sender: this.#microphoneSender };
+    },
+    connected: () => this.isConnected,
+  });
   /**
    * A press of the talk key that arrived before there was a call to press
    * against. The microphone opens only once the call is up, so such a press is
@@ -214,16 +161,17 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
    */
   #pendingTurn = false;
   /**
-   * Whether an armed reply's calls are being answered and the follow-up
-   * voicing their outcomes is still owed. The turn holds through the writes
-   * — a READY offered mid-write is the edge the announcer rides, and a reply
-   * taken there bumps the epoch and abandons the follow-up — so the audio
-   * draining then is remembered rather than an ending. Lowered by whatever
-   * reply comes next, the finish that ends the hold, or the interrupt of a
-   * developer moving on.
+   * The calls an armed reply asked for, and whether the follow-up voicing
+   * their outcomes is still owed. The turn holds through the writes — a READY
+   * offered mid-write is the edge the announcer rides, and a reply taken
+   * there bumps the epoch and abandons the follow-up — so the audio draining
+   * then is remembered rather than an ending.
    */
-  #toolBatch: SdkToolBatch | undefined;
-  #toolCallResponseIds = new Map<string, string>();
+  #tools = new ToolFollowUp({
+    epoch: () => this.turnEpoch,
+    connected: () => this.isConnected,
+    openFollowUp: () => this.startResponse(functionCallFollowUpEvents(), { keepCaption: true }),
+  });
 
   /**
    * Whether the call that is up — or coming up — is one the developer can take
@@ -278,22 +226,18 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
   endTurn(commit: boolean): void {
     if (!this.isConnected) {
       this.#pendingTurn = false;
-      const capture = this.#pressCapture;
-      if (commit && capture && !capture.buffer.isEmpty) {
+      if (commit && this.#press.active && !this.#press.empty) {
         // The press already spoke, so its words are owed a delivery once this
         // attempt's channel opens. The press no longer holds a turn, though:
-        // the capture stops reading and the device closes this instant — the
-        // sealed words wait in memory, not on an open microphone.
-        capture.source?.stop();
-        capture.source = undefined;
-        this.#pressCommitPending = true;
+        // the capture stops reading and the device closes this instant.
+        this.#press.seal();
         this.#releaseMicrophone();
         return;
       }
       // Nothing was captured toward this press — the device never arrived,
       // or nothing was said into it — so the turn it was owed is dropped, as
       // committing it would ask the server to answer an empty buffer.
-      this.#retirePressCapture();
+      this.#press.reset();
       this.#releaseMicrophone();
       return;
     }
@@ -304,8 +248,8 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
     // now, connected as we are, and a discard lets the whole turn go.
     if (!this.#microphone) {
       this.#pendingTurn = false;
-      if (commit && this.#pressCommitPending) this.#deliverHeldTurn();
-      else this.#retirePressCapture();
+      if (commit && this.#press.commitPending) this.#deliverHeldTurn();
+      else this.#press.reset();
       return;
     }
     this.stopListening(commit);
@@ -320,7 +264,7 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
    * delivery — so the meter rides until the reply to it begins.
    */
   get turnPending(): boolean {
-    return this.#pendingTurn || this.#pressCommitPending;
+    return this.#pendingTurn || this.#press.commitPending;
   }
 
   /**
@@ -331,7 +275,7 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
   dropPendingTurn(): void {
     this.#pendingTurn = false;
     // The words captured toward the dropped press go with it.
-    this.#retirePressCapture();
+    this.#press.reset();
     // A device already opened for that press has no turn left to serve, and
     // nobody is talking into it: it closes now, not on any clock.
     if (this.status !== REALTIME_STATUS.LISTENING) this.#releaseMicrophone();
@@ -368,13 +312,13 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
    */
   stopListening(commit: boolean): void {
     if (!this.#microphone || this.status !== REALTIME_STATUS.LISTENING) return;
-    if (this.#listeningOnAppends) {
+    if (this.#press.onAppends) {
       // The captured turn ends here whichever way, and the seam settles with
       // it: the capture stops and the track joins the sender, so every turn
       // after this one rides WebRTC as before. The device itself is kept
       // exactly as a track turn keeps it — through the reply, released in
       // the quiet after it — for the same shared-hardware reason.
-      this.#retirePressCapture();
+      this.#press.reset();
       this.#microphone.enabled = false;
       if (!commit) {
         this.send(clearInputAudioEvents());
@@ -435,13 +379,13 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
     // turn is over. A press whose device is still opening falls back to the
     // acquire, and its turn opens when the device arrives.
     if (this.#pendingTurn) {
-      if (this.#pressCapture && this.#microphone) {
+      if (this.#press.active && this.#microphone) {
         this.#pendingTurn = false;
         this.#beginAppendsTurn();
       } else {
         this.#acquireMicrophone();
       }
-    } else if (this.#pressCommitPending) {
+    } else if (this.#press.commitPending) {
       // The press was released mid-handshake. Its words go as the turn it
       // held — one tick later, because the caller re-feeds the roster and
       // the guide right after this connect resolves, and the reply to those
@@ -455,7 +399,7 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
     // failing path runs has already discarded them, and this clears the
     // delivery they were owed.
     this.#pendingTurn = false;
-    this.#pressCommitPending = false;
+    this.#press.reset();
   }
 
   protected override onStatusChanged(status: RealtimeStatus): void {
@@ -484,7 +428,7 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
     // it — and the channel is already down, so retirement hands no track to a
     // sender: there is no call left to carry it, and the words the capture
     // still held die with the attempt.
-    step(() => this.#retirePressCapture());
+    step(() => this.#press.reset());
     this.#microphone = undefined;
     this.#microphoneSender = undefined;
     this.#silenceTrack = undefined;
@@ -501,26 +445,29 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
   }
 
   protected override onRawRecord(record: WireRecord): void {
-    this.#observeSdkToolCall(record);
+    this.#tools.observe(record);
   }
 
-  protected override handleEvent(event: ParsedRealtimeServerEvent): void {
-    switch (event.type) {
-      case REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_DELTA:
+  /**
+   * The developer's own half of the exchange, over the speak-only call's
+   * table: only a call with a capture device can be told what was heard on it.
+   */
+  protected override handlers(): RealtimeServerEventHandlers {
+    return {
+      ...super.handlers(),
+      [REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_DELTA]: (event) => {
         this.options.onSpokenAskDelta?.(event.itemId, event.delta);
-        return;
-      case REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED:
+      },
+      [REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED]: (event) => {
         this.options.onSpokenAsk?.(event.transcript, event.itemId);
-        return;
-      case REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_FAILED:
+      },
+      [REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_FAILED]: (event) => {
         this.options.onSpokenAskFailed?.(event.itemId);
-        return;
-      case REALTIME_SERVER_EVENT.INPUT_AUDIO_BUFFER_COMMITTED:
+      },
+      [REALTIME_SERVER_EVENT.INPUT_AUDIO_BUFFER_COMMITTED]: (event) => {
         this.options.onSpokenAskCommitted?.(event.itemId);
-        return;
-      default:
-        super.handleEvent(event);
-    }
+      },
+    };
   }
 
   protected override onResponseStarted(events: readonly WireRecord[]): void {
@@ -530,63 +477,36 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
   }
 
   protected override onResponseCreated(responseId: string): void {
-    this.#toolBatch = {
-      responseId,
-      callIds: new Set(),
-      outputCallIds: new Set(),
-      epoch: this.turnEpoch,
-      responseDone: false,
-      followUpStarted: false,
-    };
+    this.#tools.opened(responseId);
   }
 
   protected override replyResumes(event: ResponseDoneEvent, fresh: boolean): boolean {
-    let batch: SdkToolBatch | undefined;
-    if (fresh && event.responseId) {
-      batch =
-        this.#toolBatch?.responseId === event.responseId
-          ? this.#toolBatch
-          : {
-              responseId: event.responseId,
-              callIds: new Set<string>(),
-              outputCallIds: new Set<string>(),
-              epoch: this.turnEpoch,
-              responseDone: false,
-              followUpStarted: false,
-            };
-    }
-    if (batch && batch.responseId === event.responseId) {
-      this.#toolBatch = batch;
-      batch.responseDone = true;
-      for (const call of event.calls) {
-        batch.callIds.add(call.callId);
-        this.#toolCallResponseIds.set(call.callId, batch.responseId);
-      }
-    }
-    if (!batch) return false;
-    // The turn now holds for the follow-up, because the READY an
-    // ending here would offer while the brain thinks is the edge the
-    // queue rides — a briefing taken there bumps the epoch, and the
-    // follow-up voicing the answer stands down against it, the
-    // developer's answer abandoned for a briefing. The hold is the
-    // ask's, so it gets a clock of its own, long enough for a brain
-    // turn that reads and acts before it answers — while an ask that
-    // hangs past even that still meets a backstop, because a turn
+    const resumes = this.#tools.done({
+      responseId: event.responseId,
+      callIds: event.calls.map((call) => call.callId),
+      fresh,
+    });
+    if (!resumes) return false;
+    // The turn now holds for the follow-up, because the READY an ending here
+    // would offer while the brain thinks is the edge the queue rides — a
+    // briefing taken there bumps the epoch, and the follow-up voicing the
+    // answer stands down against it, the developer's answer abandoned for a
+    // briefing. The hold is the ask's, so it gets a clock of its own, long
+    // enough for a brain turn that reads and acts before it answers — while
+    // an ask that hangs past even that still meets a backstop, because a turn
     // that never ends is worse than one that ends early.
     this.clearSettleTimer();
     this.armSettleTimer(BRAIN_ASK_SETTLE_TIMEOUT_MS);
-    this.#startToolFollowUpIfReady();
+    this.#tools.startIfReady();
     return true;
   }
 
   protected override get turnHolds(): boolean {
-    const batch = this.#toolBatch;
-    return Boolean(batch?.responseDone && !batch.followUpStarted && batch.callIds.size > 0);
+    return this.#tools.holds;
   }
 
   protected override onTurnBoundary(): void {
-    this.#toolBatch = undefined;
-    this.#toolCallResponseIds.clear();
+    this.#tools.reset();
   }
 
   protected override async executeTool(
@@ -603,48 +523,14 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
     if (argumentsJson === undefined) {
       return { status: ACT_RESULT_STATUS.REJECTED, reason: "The tool arguments were malformed." };
     }
-    const responseId = this.#toolCallResponseIds.get(callId);
-    const batch = responseId === this.#toolBatch?.responseId ? this.#toolBatch : undefined;
     // Only the reply now under way may ask the brain: a cancelled reply's
     // late call — the developer already talked over it — is answered with a
     // refusal rather than an ask the developer moved on from.
-    const current = Boolean(batch && batch.epoch === this.turnEpoch && batch.callIds.has(callId));
-    return this.#toolCallOutput({ name, callId, argumentsJson }, current);
+    return this.#toolCallOutput({ name, callId, argumentsJson }, this.#tools.current(callId));
   }
 
   protected override onToolOutputSent(callId: string): void {
-    const responseId = this.#toolCallResponseIds.get(callId);
-    const batch = responseId === this.#toolBatch?.responseId ? this.#toolBatch : undefined;
-    if (!batch?.callIds.has(callId)) return;
-    batch.outputCallIds.add(callId);
-    this.#startToolFollowUpIfReady();
-  }
-
-  #observeSdkToolCall(record: WireRecord): void {
-    if (record.type !== "response.output_item.done") return;
-    const item = isRecord(record.item) ? record.item : undefined;
-    if (item?.type !== "function_call") return;
-    const responseId = text(record.response_id);
-    const callId = text(item.call_id);
-    if (!responseId || !callId) return;
-    this.#toolCallResponseIds.set(callId, responseId);
-    const batch = this.#toolBatch;
-    if (batch?.responseId === responseId) batch.callIds.add(callId);
-  }
-
-  #startToolFollowUpIfReady(): void {
-    const batch = this.#toolBatch;
-    if (
-      !batch?.responseDone ||
-      batch.followUpStarted ||
-      batch.epoch !== this.turnEpoch ||
-      !this.isConnected ||
-      [...batch.callIds].some((callId) => !batch.outputCallIds.has(callId))
-    ) {
-      return;
-    }
-    batch.followUpStarted = true;
-    this.startResponse(functionCallFollowUpEvents(), { keepCaption: true });
+    this.#tools.outputSent(callId);
   }
 
   /**
@@ -795,18 +681,18 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
       // appends — the track joins the sender only when that turn is over. A
       // press already let go of leaves nothing to capture for, so the device
       // closes as fast as it arrived.
-      if (this.#pendingTurn) this.#beginPressCapture();
+      if (this.#pendingTurn) this.#press.begin();
       else this.#releaseMicrophone();
       return;
     }
-    if (this.#pendingTurn && this.#pressCapture) {
+    if (this.#pendingTurn && this.#press.active) {
       // The device arrived connected, for a re-press over sealed words — the
       // channel opened while it was still on its way. The turn it re-opened
       // still owes those words, and a track turn would start by clearing
       // them: so the turn opens as the captured turn it began as, resuming
       // capture on the device that just arrived, and the track joins the
       // sender at the seam as every captured turn's does.
-      this.#beginPressCapture();
+      this.#press.begin();
       this.#pendingTurn = false;
       this.#beginAppendsTurn();
       return;
@@ -861,101 +747,17 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
   }
 
   /**
-   * Starts capturing the press's words, when there is a press to capture for.
-   * Harmless to ask again: it runs only while a press holds a turn with the
-   * device already open and nothing already reading it — every other moment
-   * it does nothing. Its two callers are the device arriving mid-connect, and
-   * the device arriving connected for a re-press over sealed words: either
-   * way the turn it feeds travels as appends.
-   */
-  #beginPressCapture(): void {
-    if (!this.#pendingTurn) return;
-    if (this.#pressCapture?.source || this.closed) return;
-    const stream = this.#stream;
-    const microphone = this.#microphone;
-    if (!stream || !microphone) return;
-    // A press landing again over words a release already sealed re-opens the
-    // same turn: the delivery the release was owed is superseded — this
-    // press's own release decides afresh — and capture resumes into the same
-    // buffer, so neither press's words are lost.
-    this.#pressCommitPending = false;
-    const capture: PressCaptureState = this.#pressCapture ?? {
-      source: undefined,
-      buffer: new PressAudioBuffer(),
-    };
-    const buffer = capture.buffer;
-    this.#pressCapture = capture;
-    capture.source = (this.options.createPressCapture ?? createPressCaptureSource)(
-      stream,
-      (chunk) => {
-        // A chunk from a capture this call has already let go of belongs
-        // to no turn and goes nowhere.
-        if (this.#pressCapture !== capture) return;
-        if (this.#listeningOnAppends) {
-          this.send(inputAudioAppendEvents(chunk));
-          return;
-        }
-        buffer.push(chunk);
-      },
-    );
-    // The capture reads the track, and a disabled track reads as silence to
-    // every consumer — so the track is open exactly while the capture is. The
-    // sender carries no track yet, so nothing reaches the network.
-    microphone.enabled = true;
-  }
-
-  /**
-   * Ends the press capture, discarding whatever it still holds, and hands the
-   * device's track to the sender so the turns after the seam ride WebRTC as
-   * every turn did before it. Every path out of the captured-turn machinery
-   * ends here — the seam settling, a discarded press, a failed attempt — so
-   * none of them can leave the capture reading the device.
-   */
-  #retirePressCapture(): void {
-    const capture = this.#pressCapture;
-    this.#pressCapture = undefined;
-    this.#listeningOnAppends = false;
-    this.#pressCommitPending = false;
-    capture?.source?.stop();
-    // The track was open for the capture to read; nothing reads it now, so it
-    // closes until a turn opens it.
-    if (capture?.source && this.#microphone) this.#microphone.enabled = false;
-    if (capture && this.isConnected && this.#microphoneSender && this.#microphone) {
-      void this.#microphoneSender.replaceTrack(this.#microphone).catch(() => undefined);
-    }
-  }
-
-  /**
    * Opens the turn a still-held press has been capturing: `startListening` in
-   * every respect but the transport. The words captured so far flush behind a
-   * clean buffer, and the capture keeps appending live from here — the track
-   * stays off the sender, because the whole of this turn travels on the one
-   * ordered channel.
+   * every respect but the transport.
    */
   #beginAppendsTurn(): void {
-    const capture = this.#pressCapture;
-    if (!capture || !this.#microphone) {
+    if (!this.#press.active || !this.#microphone) {
       this.#acquireMicrophone();
       return;
     }
-    this.#flushHeldAudio(capture);
-    this.#listeningOnAppends = true;
+    this.#press.openTurn();
     this.bumpTurnEpoch();
     this.setStatus(REALTIME_STATUS.LISTENING);
-  }
-
-  /**
-   * Sends one captured turn's opening, in the one order the service accepts
-   * it: the format the appends are to be read as, then a clear, then the
-   * held audio. Appends ahead of either are read against whatever the last
-   * turn left behind.
-   */
-  #flushHeldAudio(capture: PressCaptureState): void {
-    this.send(inputAudioFormatUpdateEvents());
-    this.send(clearInputAudioEvents());
-    for (const chunk of capture.buffer.drain()) {
-      this.send(inputAudioAppendEvents(chunk));
-    }
   }
 
   /**
@@ -967,15 +769,12 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
    * that yielded are discarded rather than queued behind it.
    */
   #deliverHeldTurn(): void {
-    const capture = this.#pressCapture;
-    if (!capture || !this.#pressCommitPending) return;
+    if (!this.#press.active || !this.#press.commitPending) return;
     if (this.closed || !this.isConnected || voiceExchangeActive(this.status)) {
-      this.#retirePressCapture();
+      this.#press.reset();
       return;
     }
-    this.#pressCommitPending = false;
-    this.#flushHeldAudio(capture);
-    this.#retirePressCapture();
+    if (!this.#press.deliverSealed()) return;
     // A turn exactly as a live commit is: the developer opened it by holding
     // the key and spoke into it; only the delivery waited.
     this.startResponse(pushToTalkCommitEvents());

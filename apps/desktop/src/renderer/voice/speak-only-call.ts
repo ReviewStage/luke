@@ -1,12 +1,9 @@
 import {
   ARRIVAL_SPEECH_KIND,
   arrivalSpeechEvents,
-  BRIEFING_SPEECH_KIND,
   briefingSpeechEvents,
   CALENDAR_ONBOARDING_SPEECH_KIND,
   calendarOnboardingSpeechEvents,
-  cancelResponseEvents,
-  clearOutputAudioEvents,
   type IntroductionLine,
   introductionSpeechEvents,
   outputSpeedUpdateEvents,
@@ -16,12 +13,18 @@ import {
   REALTIME_STATUS,
   type RealtimeStatus,
   realtimeSessionConfig,
-  truncateResponseEvents,
 } from "@sidecar/realtime";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { voiceExchangeActive } from "#shared/messages/voice-view";
 import type { BuiltRealtimeSessionConfig, SdkToolCallDetails } from "./agents-realtime-transport";
-import { RealtimeCall, type RealtimeCallOptions, type TeardownStep } from "./realtime-call";
+import { CaptionStrip, REPLY_KIND, type ReplyKind } from "./captions";
+import { type InterruptedSpan, Interruption } from "./interruption";
+import {
+  RealtimeCall,
+  type RealtimeCallOptions,
+  type RealtimeServerEventHandlers,
+  type TeardownStep,
+} from "./realtime-call";
 
 /**
  * How long a finished generation may go on playing before the turn is ended
@@ -41,39 +44,6 @@ export const REALTIME_SETTLE_TIMEOUT_MS = 20_000;
 export const BRAIN_ASK_SETTLE_TIMEOUT_MS = 60_000;
 
 /**
- * Whose words the caption is showing: a briefing the brain decided to give,
- * or a reply to the developer. History records the two differently.
- */
-export const REPLY_KIND = {
-  BRIEFING: BRIEFING_SPEECH_KIND,
-  REPLY: "reply",
-} as const;
-
-export type ReplyKind = (typeof REPLY_KIND)[keyof typeof REPLY_KIND];
-
-/** Bounds interruption events whose successful requests receive no matching acknowledgement. */
-const MAXIMUM_PENDING_INTERRUPTIONS = 24;
-
-const INTERRUPTION_EVENT_KIND = {
-  CANCELLATION: "cancellation",
-  AUDIO_CLEAR: "audio-clear",
-  TRUNCATION: "truncation",
-} as const;
-
-type InterruptionEventKind = (typeof INTERRUPTION_EVENT_KIND)[keyof typeof INTERRUPTION_EVENT_KIND];
-
-const NO_ACTIVE_RESPONSE_CANCELLATION = /^Cancellation failed:\s*no active response\b/i;
-
-/**
- * The server refusing to trim a reply past its own end. The trim measures how
- * long the reply was audible on a wall clock, which outruns the audio itself
- * when a stop lands at the reply's very end — the words all played, the clock
- * kept counting. A reply refused this way was heard whole, so the record the
- * trim would have corrected is already right.
- */
-const TRUNCATION_PAST_AUDIO_END = /^Audio content of \d+ms is already shorter than\b/i;
-
-/**
  * The backstop for a reply whose ending never arrives.
  *
  * `output_audio_buffer.stopped` is what actually ends a reply now, so this only
@@ -85,14 +55,6 @@ const TRUNCATION_PAST_AUDIO_END = /^Audio content of \d+ms is already shorter th
  * the same.
  */
 export const REMOTE_QUIET_MS = 2_500;
-
-/**
- * How many back-to-back responses the caption keeps on screen at once. Two is
- * the shape the surface stacks — the words just settled and the words now
- * arriving — and a third response starting simply retires the oldest, the way
- * a long reply's oldest lines already roll up under the shape.
- */
-export const CAPTION_SEGMENT_LIMIT = 2;
 
 /**
  * What a call Luke opens for himself declares at the API. The empty tool list
@@ -189,15 +151,11 @@ export class SpeakOnlyCall<
   get microphoneCall(): boolean {
     return false;
   }
-  /**
-   * Cancel, clear, and trim requests not yet answered with an error, by their
-   * stamped names. Their errors belong to the reply that was interrupted, so
-   * they must never finish a newer turn; only the redundant-cancel race and a
-   * trim refused for asking past the audio's end stay quiet, while every
-   * genuine refusal is still reported.
-   */
-  #pendingInterruptions = new Map<string, InterruptionEventKind>();
-  #interruptionSequence = 0;
+  /** Cutting a reply off, and the refusals that answer the cut. */
+  #interruption = new Interruption({
+    send: (events) => this.send(events),
+    onError: (message) => this.options.onError(message),
+  });
   /**
    * Whether the model has finished producing the reply. It is not the same as
    * the reply being over: `response.done` says generation is complete, and the
@@ -271,30 +229,11 @@ export class SpeakOnlyCall<
    */
   #activeResponseId: string | undefined;
   #audibleSince: number | undefined;
-  /**
-   * The words of the turn being spoken, as far as they have arrived — one
-   * segment per output item, oldest first, each remembering which item spoke
-   * it. A turn that speaks twice back-to-back — a second message item, or the
-   * follow-up after a tool call — starts a new segment rather than running
-   * its words onto the last one's, and an item's own final transcript can
-   * still land on its own segment after the turn has moved on. Kept here
-   * rather than in the caller so every path that ends a reply — finishing,
-   * being talked over, the call dropping — clears the words with it, and a
-   * caption can never outlive the speech it captions.
-   */
-  #captionSegments: { itemId: string | undefined; text: string }[] = [];
-  /**
-   * Whether the words under way are a briefing or a reply, for History to
-   * record as such. Set only when the words were decided by the brain and
-   * cleared wherever the caption is, so it can never outlive the reply.
-   */
-  #captionKind: ReplyKind | undefined;
-  /**
-   * The brain run whose end the reply under way is voicing, when it is one.
-   * Set with the kind and cleared wherever the caption is, so it is exactly
-   * as long-lived as the reply it names and no other reply can inherit it.
-   */
-  #captionRunId: string | undefined;
+  /** The words of the reply under way, and whose they are. */
+  #captions = new CaptionStrip({
+    onCaption: (texts, kind) => this.options.onCaption(texts, kind),
+    onReplyEnded: (texts, kind, runId) => this.options.onReplyEnded?.(texts, kind, runId),
+  });
   /**
    * Whether this call has ever reported a reply's audio running out. Once it
    * has, silence stops being evidence of anything: the server says when Luke is
@@ -488,7 +427,7 @@ export class SpeakOnlyCall<
   }
 
   protected override onCallLost(): void {
-    if (this.#captionKind !== undefined) this.#discardCaption();
+    if (this.#captions.kinded) this.#captions.discard();
   }
 
   protected override onTeardown(step: TeardownStep): void {
@@ -496,11 +435,11 @@ export class SpeakOnlyCall<
     // handover's write-back re-enters this call, and landing it here means
     // the roster it renders against still stands — and everything it wrote is
     // cleared with the rest below, so a retired call keeps nothing pending.
-    step(() => this.#clearCaption());
+    step(() => this.#captions.end());
     // What was said on the call goes with the call. The pending answers go too:
     // they were built from stores this teardown is emptying, and the next call
     // is filled from the app afresh before it takes a turn.
-    this.#pendingInterruptions.clear();
+    this.#interruption.reset();
     this.#responseOutstanding = false;
     this.#audioDrained = false;
     this.onTurnBoundary();
@@ -518,12 +457,12 @@ export class SpeakOnlyCall<
     this.clearSettleTimer();
   }
 
-  protected handleEvent(event: ParsedRealtimeServerEvent): void {
-    switch (event.type) {
-      case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED:
+  protected handlers(): RealtimeServerEventHandlers {
+    return {
+      [REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED]: (event) => {
         if (event.itemId) this.#responseItemId = event.itemId;
-        return;
-      case REALTIME_SERVER_EVENT.RESPONSE_CREATED:
+      },
+      [REALTIME_SERVER_EVENT.RESPONSE_CREATED]: (event) => {
         // Only a reply the call is still waiting on may be adopted. A
         // confirmation arriving after the developer stopped or took the turn is
         // the cancelled reply's own, landing late — the stop raced the server's
@@ -540,18 +479,18 @@ export class SpeakOnlyCall<
           this.onResponseCreated(event.responseId);
         }
         this.unsilenceLuke();
-        return;
-      case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA:
+      },
+      [REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA]: (event) => {
         // Only the reply being spoken may write the caption. A cancelled reply's
         // transcript keeps arriving after the interrupt that cleared it — the
         // server had already produced it — and without this check a late piece
         // would draw the words Luke was just stopped from saying, or splice them
         // onto the next reply's.
         if (event.itemId === this.#responseItemId && event.delta) {
-          this.#appendCaptionDelta(event.itemId, event.delta);
+          this.#captions.append(event.itemId, event.delta);
         }
-        return;
-      case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE:
+      },
+      [REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE]: (event) => {
         // The server's own rendering of the whole item, which the deltas only
         // approximate: a delta lost to the channel would otherwise leave a hole
         // in the sentence for as long as it stayed up. It lands on the segment
@@ -559,10 +498,10 @@ export class SpeakOnlyCall<
         // and a cancelled reply's `done`, the likeliest straggler of all, finds
         // its segments cleared and writes nothing.
         if (event.transcript) {
-          this.#settleCaptionTranscript(event.itemId, event.transcript);
+          this.#captions.settle(event.itemId, event.transcript);
         }
-        return;
-      case REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STARTED:
+      },
+      [REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STARTED]: (event) => {
         // Audio flowing again says the drain the turn remembered was the
         // pause between two things the reply had to say, not its ending.
         // Left standing, the stale drain lets the `done` end the turn under
@@ -581,8 +520,8 @@ export class SpeakOnlyCall<
           this.clearSettleTimer();
           this.armSettleTimer();
         }
-        return;
-      case REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED:
+      },
+      [REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED]: (event) => {
         this.#audioEndingsReported = true;
         // The audio can run out while the server still owes the reply its
         // `done` — generation finishing and playback finishing have no fixed
@@ -608,17 +547,17 @@ export class SpeakOnlyCall<
         // sentences is quiet too, and guessing ended the turn in the middle of
         // one — the meter and the face went with it while Luke talked on.
         this.#finishResponse();
-        return;
-      case REALTIME_SERVER_EVENT.RESPONSE_DONE:
+      },
+      [REALTIME_SERVER_EVENT.RESPONSE_DONE]: (event) => {
         this.#responseDone(event);
-        return;
-      case REALTIME_SERVER_EVENT.ERROR:
+      },
+      [REALTIME_SERVER_EVENT.ERROR]: (event) => {
         // Only Luke's own trim can draw a past-the-end refusal, the service
         // clamps and truncates anyway, and it names no event this could match
         // it by — `error.event_id` is null on the wire. Recognized by its
         // sentence and never shown.
-        if (TRUNCATION_PAST_AUDIO_END.test(event.message)) return;
-        if (this.#interruptionError(event)) return;
+        if (Interruption.pastAudioEnd(event.message)) return;
+        if (this.#interruption.error(event)) return;
         this.options.onError(event.message);
         // An error can arrive *instead of* `response.done` — an empty push-to-talk
         // commit is the common case — which would otherwise leave the call
@@ -633,7 +572,8 @@ export class SpeakOnlyCall<
           return;
         }
         this.#finishResponse();
-    }
+      },
+    };
   }
 
   #responseDone(event: ResponseDoneEvent): void {
@@ -728,9 +668,7 @@ export class SpeakOnlyCall<
 
   /** Marks whose words the reply under way is speaking, and redraws. */
   protected setCaptionKind(kind: ReplyKind | undefined, runId?: string): void {
-    this.#captionKind = kind;
-    this.#captionRunId = runId;
-    this.#emitCaption();
+    this.#captions.mark(kind, runId);
   }
 
   protected startResponse(
@@ -770,7 +708,7 @@ export class SpeakOnlyCall<
     this.#turnEpoch += 1;
     // A new turn starts with a clean strip; a follow-up continuing the same
     // exchange keeps the words just said, and its own words stack under them.
-    if (!keepCaption) this.#clearCaption();
+    if (!keepCaption) this.#captions.end();
     this.clearSettleTimer();
     this.onResponseStarted(events);
     this.send(events);
@@ -800,7 +738,7 @@ export class SpeakOnlyCall<
     // The caption is of speech, and the speech is over. Whatever ended the
     // reply — the audio draining, an error, the settle timer — the words leave
     // with the meter and the face rather than lingering under a quiet capsule.
-    this.#clearCaption();
+    this.#captions.end();
     // Whatever ended the reply — an error, the settle timer, Luke simply
     // stopping — the next one has to be audible. Without this a reply that
     // failed before it started would leave Luke silenced with nothing to
@@ -827,33 +765,11 @@ export class SpeakOnlyCall<
     // The caption is cut with the audio, but handed over first. Generated text
     // runs slightly ahead of playback; History keeps that available transcript
     // so an interrupted announcement can still be recalled.
-    this.#clearCaption();
-    this.#interruptionSequence += 1;
-    const cancellationEventId = `response_cancel_${this.#interruptionSequence}`;
-    const clearEventId = `output_audio_clear_${this.#interruptionSequence}`;
-    const truncationEventId = `item_truncate_${this.#interruptionSequence}`;
-    const truncateEvents = this.#truncateEvents(truncationEventId);
-    const cancelGeneration = this.#responseOutstanding;
-    const interruptionCount = (cancelGeneration ? 2 : 1) + (truncateEvents.length > 0 ? 1 : 0);
-    while (this.#pendingInterruptions.size + interruptionCount > MAXIMUM_PENDING_INTERRUPTIONS) {
-      const [oldest] = this.#pendingInterruptions.keys();
-      if (oldest === undefined) break;
-      this.#pendingInterruptions.delete(oldest);
-    }
-    if (cancelGeneration) {
-      this.#pendingInterruptions.set(cancellationEventId, INTERRUPTION_EVENT_KIND.CANCELLATION);
-      this.#pendingInterruptions.set(clearEventId, INTERRUPTION_EVENT_KIND.AUDIO_CLEAR);
-      this.send(cancelResponseEvents({ cancellationEventId, clearEventId }));
-    } else {
-      this.#pendingInterruptions.set(clearEventId, INTERRUPTION_EVENT_KIND.AUDIO_CLEAR);
-      this.send(clearOutputAudioEvents(clearEventId));
-    }
-    // Then correct what Luke believes he said, or the next answer is free to
-    // refer back to a sentence that never reached the room.
-    if (truncateEvents.length > 0) {
-      this.#pendingInterruptions.set(truncationEventId, INTERRUPTION_EVENT_KIND.TRUNCATION);
-      this.send(truncateEvents);
-    }
+    this.#captions.end();
+    this.#interruption.cut({
+      cancelGeneration: this.#responseOutstanding,
+      truncate: this.#interruptedSpan(),
+    });
     // The trim was this reply's last word: forgetting its item here is what
     // stops the transcript still trailing in — the server had produced it
     // before the cancel landed — from ever matching the caption again.
@@ -886,15 +802,11 @@ export class SpeakOnlyCall<
    * held for its `done`, so a trim measured from it would ask past the end
    * and be refused.
    */
-  #truncateEvents(truncationEventId: string): readonly WireRecord[] {
+  #interruptedSpan(): InterruptedSpan | undefined {
     const itemId = this.#responseItemId;
     const audibleSince = this.#audibleSince;
-    if (!itemId || audibleSince === undefined || this.#currentReplyDrained()) return [];
-    return truncateResponseEvents({
-      itemId,
-      audioEndMs: this.now() - audibleSince,
-      truncationEventId,
-    });
+    if (!itemId || audibleSince === undefined || this.#currentReplyDrained()) return undefined;
+    return { itemId, audioEndMs: this.now() - audibleSince };
   }
 
   /**
@@ -931,100 +843,11 @@ export class SpeakOnlyCall<
     this.#quietTimer = undefined;
   }
 
-  #clearCaption(): void {
-    // The kind is of the reply, so the reply ending takes it too: every path
-    // that ends one clears the caption through here.
-    if (this.#captionSegments.length === 0 && this.#captionKind === undefined) return;
-    // Every path that ends a reply passes here, so this is where its words
-    // are handed over before they are let go: the one moment they are both
-    // final and still known.
-    const texts = this.#captionTexts();
-    const kind = this.#captionKind;
-    const runId = this.#captionRunId;
-    this.#captionSegments = [];
-    this.#captionKind = undefined;
-    this.#captionRunId = undefined;
-    // A reply that said nothing leaves no words to hand over — unless it was
-    // voicing a run's end, whose ending is owed to the delivery it was granted
-    // under however little of it was heard.
-    if (texts || runId !== undefined) this.options.onReplyEnded?.(texts ?? [], kind, runId);
-    this.options.onCaption(undefined, undefined);
-  }
-
-  /** Clears an undelivered briefing without admitting it to History. */
-  #discardCaption(): void {
-    this.#captionSegments = [];
-    this.#captionKind = undefined;
-    this.#captionRunId = undefined;
-    this.options.onCaption(undefined, undefined);
-  }
-
-  /** What the caption currently says, or undefined with nothing to say. */
-  #captionTexts(): readonly string[] | undefined {
-    if (this.#captionSegments.length === 0) return undefined;
-    return this.#captionSegments.map((segment) => segment.text);
-  }
-
-  #emitCaption(): void {
-    this.options.onCaption(this.#captionTexts(), this.#captionKind);
-  }
-
-  /**
-   * Grows the caption with the words just generated. The current item's words
-   * grow its own segment; an item taking over from another — the reply's
-   * second message, or the follow-up after a tool call — starts a segment of
-   * its own, so two responses stack instead of running together. Only the
-   * newest {@link CAPTION_SEGMENT_LIMIT} stay up.
-   */
-  #appendCaptionDelta(itemId: string | undefined, delta: string): void {
-    const last = this.#captionSegments.at(-1);
-    if (last && last.itemId === itemId) {
-      last.text += delta;
-    } else {
-      this.#captionSegments.push({ itemId, text: delta });
-      this.#captionSegments = this.#captionSegments.slice(-CAPTION_SEGMENT_LIMIT);
-    }
-    this.#emitCaption();
-  }
-
-  /**
-   * Lands an item's final transcript on the segment its deltas built — even
-   * after a later item has taken the turn on, which is what keeps a settled
-   * response's words whole while the next one streams under them. A transcript
-   * whose item holds no segment is a cancelled reply's straggler, and writes
-   * nothing.
-   */
-  #settleCaptionTranscript(itemId: string | undefined, transcript: string): void {
-    const segment = this.#captionSegments.find((candidate) => candidate.itemId === itemId);
-    if (!segment || segment.text === transcript) return;
-    segment.text = transcript;
-    this.#emitCaption();
-  }
-
   /** Sends the pace change that waited out a reply, once nothing is speaking. */
   #flushPendingSpeed(): void {
     const speed = this.#pendingSpeed;
     if (speed === undefined) return;
     this.#pendingSpeed = undefined;
     this.send(outputSpeedUpdateEvents(speed));
-  }
-
-  /**
-   * Handles an error answering one interruption without letting an old reply's
-   * failure finish the new turn that interrupted it. The documented
-   * no-active-response race is quiet; every other refusal still reaches the
-   * developer as a real voice error.
-   */
-  #interruptionError(event: { message: string; eventId?: string; errorType?: string }): boolean {
-    if (event.eventId === undefined) return false;
-    const kind = this.#pendingInterruptions.get(event.eventId);
-    if (kind === undefined) return false;
-    this.#pendingInterruptions.delete(event.eventId);
-    const benignCancellation =
-      kind === INTERRUPTION_EVENT_KIND.CANCELLATION &&
-      event.errorType === "invalid_request_error" &&
-      NO_ACTIVE_RESPONSE_CANCELLATION.test(event.message);
-    if (!benignCancellation) this.options.onError(event.message);
-    return true;
   }
 }
