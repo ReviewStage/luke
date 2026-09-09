@@ -11,6 +11,7 @@ import {
   type ModelUsage,
   type ToolSchema,
 } from "@sidecar/runtime/vocabulary";
+import { joinReplyMessages } from "@sidecar/session";
 import {
   isRecord,
   isWireString,
@@ -219,7 +220,7 @@ export function brainResponsesOutput(payload: UnparsedWireValue): BrainResponses
   return {
     items,
     functionCalls,
-    outputText: texts.join("").trim(),
+    outputText: joinReplyMessages(texts),
     compacted,
     ...(inputTokens !== undefined ? { inputTokens } : undefined),
     ...(status ? { status } : undefined),

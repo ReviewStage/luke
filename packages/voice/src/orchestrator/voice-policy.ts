@@ -3,6 +3,7 @@ import { REALTIME_STATUS, type RealtimeStatus, type RealtimeVoice } from "@sidec
 import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
+  joinReplyMessages,
   streamingConversationEntry,
 } from "@sidecar/session";
 import { REPLY_KIND, type ReplyKind } from "./voice-call.js";
@@ -71,10 +72,20 @@ export function lukeCaptionsToShow(input: {
     (input.captionsEnabled || input.outputSilent) &&
     input.status === REALTIME_STATUS.RESPONDING
   ) {
-    return input.captions;
+    return input.captions?.slice(-CAPTION_SEGMENT_LIMIT);
   }
   return undefined;
 }
+
+/**
+ * How many back-to-back responses the housing's caption keeps on screen at
+ * once. Two is the shape the surface stacks — the words just settled and the
+ * words now arriving — and a third response starting simply retires the
+ * oldest from view, the way a long reply's oldest lines already roll up under
+ * the shape. A limit on the drawing alone: the call keeps every segment of
+ * the reply, so what Conversation records and streams is the whole of it.
+ */
+export const CAPTION_SEGMENT_LIMIT = 2;
 
 /**
  * Whether a talk-key press has a call to open before the session is asked. A
@@ -159,13 +170,19 @@ export function spokenAskPreviewSurvives(status: RealtimeStatus): boolean {
  * the developer's spoken turns as the service transcribes them, then the
  * reply or announcement as its words are generated — the ask precedes its
  * answer. Presentation only, so each line mirrors exactly what its own
- * recording path will keep: a briefing settles as an announcement, and any
- * other caption settles as a reply.
+ * recording path will keep: a briefing settles as an announcement, any
+ * other caption settles as a reply, and a reply of several messages keeps
+ * each as a paragraph of the one line. A reply voicing a brain run's end draws
+ * no line: the main process wrote that reply into the thread from the record
+ * when the run ended, before the words were granted to any voice, so its
+ * settled line already stands and a live one under it would say the same
+ * words twice. The caption under the housing still carries the speech.
  */
 export function liveConversationEntries(input: {
   spokenAskPreviews: ReadonlyMap<string, string>;
   captions: readonly string[] | undefined;
   kind: ReplyKind | undefined;
+  runId: string | undefined;
 }): readonly ConversationEntry[] {
   const lines: ConversationEntry[] = [];
   for (const words of input.spokenAskPreviews.values()) {
@@ -173,10 +190,10 @@ export function liveConversationEntries(input: {
     if (ask) lines.push(ask);
   }
   const briefing = input.kind === REPLY_KIND.BRIEFING;
-  if (input.captions) {
+  if (input.captions && input.runId === undefined) {
     const speech = streamingConversationEntry(
       briefing ? CONVERSATION_ENTRY_KIND.ANNOUNCEMENT : CONVERSATION_ENTRY_KIND.REPLY,
-      input.captions.join(" "),
+      joinReplyMessages(input.captions),
     );
     if (speech) lines.push(speech);
   }

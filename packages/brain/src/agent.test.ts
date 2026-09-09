@@ -1225,7 +1225,7 @@ test("an ask during a client quiet ends as an honest failure with no effects, an
   assert.equal(h.performed.length, 0);
 });
 
-test("the final answer's text is the reply: a preface before a tool call does not survive an empty final answer, and a shortfall with words is kept beside them", async () => {
+test("the reply is everything the model said across the run: a preface before a tool call survives an empty final answer, joins a spoken one as its own paragraph, and a shortfall with words is kept beside them", async () => {
   const h = harness();
   h.client.answers.push(
     answered([message("Let me look."), call("c1", BRAIN_TOOL.LIST_SESSIONS, {})]),
@@ -1233,8 +1233,16 @@ test("the final answer's text is the reply: a preface before a tool call does no
   );
   const silent = await ask(h, "look");
   assert.equal(silent?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  assert.equal(silent?.text, undefined);
-  assert.equal(h.traces[0]?.outputText, undefined);
+  assert.equal(silent?.text, "Let me look.");
+  assert.equal(h.traces[0]?.outputText, "Let me look.");
+
+  h.client.answers.push(
+    answered([message("Looking now."), call("c2", BRAIN_TOOL.LIST_SESSIONS, {})]),
+    answered([message("Two agents are waiting.")]),
+  );
+  const spoken = await ask(h, "look again");
+  assert.equal(spoken?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  assert.equal(spoken?.text, "Looking now.\n\nTwo agents are waiting.");
 
   const partial = responsesModelAnswer({
     output: [message("Half of")],
@@ -1246,8 +1254,8 @@ test("the final answer's text is the reply: a preface before a tool call does no
   const short = await ask(h, "explain at length");
   assert.equal(short?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assert.equal(short?.text, "Half of");
-  assert.equal(h.traces[1]?.outputText, "Half of");
-  assert.equal(h.traces[1]?.incomplete, "incomplete: max_output_tokens");
+  assert.equal(h.traces[2]?.outputText, "Half of");
+  assert.equal(h.traces[2]?.incomplete, "incomplete: max_output_tokens");
 });
 
 test("a stop during a held initial bootstrap settles at once; the open finishing afterwards is retired exactly once, and a dispose that never settles holds nothing", async () => {
@@ -1369,10 +1377,11 @@ test("an ask arriving while the model is thinking is steered into that run and a
   gated.open();
   await settle();
   // Words steered in after the model had already answered are not lost: the
-  // run asks once more with them, and that reply is the run's.
-  assert.equal((await h.agent.waitAsk(first, 1))?.text, "Both answered.");
+  // run asks once more with them, and the run's reply is everything it said,
+  // the answer it had already given and the one that took both in.
+  assert.equal((await h.agent.waitAsk(first, 1))?.text, "First alone.\n\nBoth answered.");
   assert.equal((await h.agent.waitAsk(second, 1))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  assert.equal(h.agent.request(second)?.text, "Both answered.");
+  assert.equal(h.agent.request(second)?.text, "First alone.\n\nBoth answered.");
   assert.equal(inner.inputs.length, 2);
   const asks = (inner.inputs[1] ?? []).filter(
     (item) =>
@@ -1426,7 +1435,7 @@ test("a steered ask cancelled before the run ends is settled cancelled and takes
   assert.equal((await h.agent.cancelAsk(second))?.status, BRAIN_REQUEST_STATUS.CANCELLED);
   gated.open();
   await settle();
-  assert.equal((await h.agent.waitAsk(first, 1))?.text, "Reply.");
+  assert.equal((await h.agent.waitAsk(first, 1))?.text, "First.\n\nReply.");
   assert.equal(h.agent.request(second)?.status, BRAIN_REQUEST_STATUS.CANCELLED);
   assert.equal(h.agent.request(second)?.text, undefined);
 });
@@ -1546,8 +1555,8 @@ test("a steered companion shares the run's persistence failure: a final write th
   assert.equal(companion?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(companion?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
   // The reply that formed still travels on both, as the record's own words.
-  assert.equal(primary?.text, "Reply for both.");
-  assert.equal(companion?.text, "Reply for both.");
+  assert.equal(primary?.text, "First alone.\n\nReply for both.");
+  assert.equal(companion?.text, "First alone.\n\nReply for both.");
 });
 
 test("a rider settles when the shared turn dies to a thrown hook after its checkpoint, and none is left running", async () => {

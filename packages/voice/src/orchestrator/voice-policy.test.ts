@@ -21,18 +21,19 @@ test("the live lines mirror exactly what their recording paths will keep", () =>
       ["item-1", "how is the checkout agent"],
       ["item-2", "and the deploy?"],
     ]),
-    captions: ["Checkout is", "nearly done."],
+    captions: ["Looking now.", "Checkout is nearly done."],
     kind: undefined,
+    runId: undefined,
   });
 
-  // The asks precede the answer, and the reply's segments join into the one
-  // line onReplyEnded will record.
+  // The asks precede the answer, and the reply's messages join into the one
+  // line onReplyEnded will record, each kept whole as its own paragraph.
   assert.deepEqual(
     lines.map((line) => ({ kind: line.kind, words: line.words })),
     [
       { kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK, words: "how is the checkout agent" },
       { kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK, words: "and the deploy?" },
-      { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Checkout is nearly done." },
+      { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Looking now.\n\nCheckout is nearly done." },
     ],
   );
   // A line still growing has not happened yet, so none is stamped.
@@ -45,6 +46,7 @@ test("a briefing's live line settles as an announcement", () => {
       spokenAskPreviews: new Map(),
       captions: ["Claude Code finished checkout-service."],
       kind: REPLY_KIND.BRIEFING,
+      runId: undefined,
     }),
     [
       {
@@ -52,6 +54,21 @@ test("a briefing's live line settles as an announcement", () => {
         words: "Claude Code finished checkout-service.",
       },
     ],
+  );
+});
+
+test("a reply voicing a run's end draws no live line, because its settled line already stands", () => {
+  // The main process wrote the reply from the record when the run ended, so a
+  // live line under it would print the same words twice. The spoken asks
+  // still stream, since nothing has recorded them yet.
+  assert.deepEqual(
+    liveConversationEntries({
+      spokenAskPreviews: new Map([["item-1", "how is the checkout agent"]]),
+      captions: ["Looking now.", "Checkout is nearly done."],
+      kind: REPLY_KIND.REPLY,
+      runId: "run-1",
+    }).map((line) => ({ kind: line.kind, words: line.words })),
+    [{ kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK, words: "how is the checkout agent" }],
   );
 });
 
@@ -111,6 +128,15 @@ test("Luke's captions are offered only on his turn, and only with a reason to re
     undefined,
     "a caption that raced a status change must not be drawn on the developer's turn",
   );
+  assert.deepEqual(
+    lukeCaptionsToShow({
+      ...shown,
+      captions: ["Sentence 1.", "Sentence 2.", "Sentence 3.", "Sentence 4."],
+    }),
+    ["Sentence 3.", "Sentence 4."],
+    "the housing draws only the newest segments; the reply itself keeps them all",
+  );
+  assert.equal(lukeCaptionsToShow({ ...shown, captions: [] })?.length, 0);
   assert.equal(
     lukeCaptionsToShow({ ...shown, captionsEnabled: false }),
     undefined,
