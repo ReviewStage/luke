@@ -26,11 +26,10 @@ import { createGatewayOperator, type GatewayOperator } from "./operator";
 
 /**
  * The Gateway boundary as the desktop client composes it: one operator over
- * the transport the supervisor (or, in a fixture run, the in-process host)
- * hands it, the host's events relayed to the windows that draw them, and
- * this process's native capabilities served as one node on the same
- * connection. The runtime itself stands on the other side of the transport;
- * nothing here composes a store, a brain, or an observation.
+ * the transport it is handed, the host's events relayed to the windows that
+ * draw them, and this process's native capabilities served as one node on
+ * the same connection. The runtime itself stands on the other side of the
+ * transport; nothing here composes a store, a brain, or an observation.
  */
 export interface GatewayWiringDependencies {
   transport: GatewayTransport;

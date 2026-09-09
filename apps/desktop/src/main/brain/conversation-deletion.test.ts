@@ -40,9 +40,9 @@ import {
 } from "@sidecar/runtime-store";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { drainMicrotasks } from "#testing/drain";
+import { operatorOverBrain } from "#testing/operator-over-brain";
 import { temporaryDirectory } from "#testing/temporary-directory";
 import { ConversationThread } from "../conversation-thread";
-import { operatorOverBrain } from "../gateway/testing";
 import {
   CONVERSATION_DELETE_OUTCOME,
   deleteConversationHistoryFlow,

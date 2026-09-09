@@ -7,9 +7,7 @@ import {
   GATEWAY_ERROR,
   GATEWAY_HANDSHAKE_HEADER,
   GATEWAY_HANDSHAKE_REFUSAL,
-  GATEWAY_METHOD,
   GATEWAY_PROTOCOL_VERSION,
-  type GatewayBuildIdentity,
   type GatewayClientIdentity,
   type GatewayClientRole,
   type GatewayHandshakeRefusal,
@@ -23,7 +21,6 @@ import {
 } from "@sidecar/runtime-contracts";
 import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import { type WebSocket, WebSocketServer } from "ws";
-import { GATEWAY_LOOPBACK_HOST } from "./discovery.js";
 import {
   NODE_INVOCATION_REFUSAL,
   PendingInvocations,
@@ -35,18 +32,20 @@ import type { GatewayHostConnection } from "./transport.js";
 
 /**
  * The Gateway on a socket: the protocol's envelopes carried as text over a
- * WebSocket bound to the loopback address on a port the system picks. The
- * handshake decides everything before a request is read: the token, compared
- * in constant time and never accepted from an address; the protocol version,
- * refused outright when it differs; and the build, which when it differs
- * leaves the connection standing in a drain-only posture where only a hello,
- * a reconnection, and the shutdown answer, so a newer build can ask an older
- * Gateway to leave without operating it. Every refusal is one typed header on
- * the response, and the token never reaches a log line here or anywhere.
+ * WebSocket the host binds. This is the transport that crosses a machine
+ * boundary, so the handshake decides everything before a request is read.
+ * Two of those decisions are the protocol's own and stay here: a host no
+ * longer admitting refuses outright, and so does a client speaking another
+ * protocol version. Who is asking is not the protocol's to know, and is
+ * injected: `authenticate` reads the handshake's own headers and answers the
+ * identity it recognizes or the refusal it earns, so a loopback binding can
+ * compare a shared secret and a server can bind an account's bearer without
+ * this file learning either. Every refusal is one typed header on the
+ * response, and no credential reaches a log line here or anywhere.
  */
 export const GATEWAY_REFUSAL_HEADER = "x-luke-gateway-refusal";
 
-export const LOCAL_GATEWAY_FRAME = {
+export const GATEWAY_FRAME = {
   REQUEST: "request",
   RESPONSE: "response",
   EVENT: "event",
@@ -55,37 +54,44 @@ export const LOCAL_GATEWAY_FRAME = {
   ANSWER: "answer",
 } as const;
 
-export interface LocalGatewayHostOptions {
+/** Who the credential says is asking, or the one refusal the handshake earns for it. */
+export type GatewayAdmission =
+  | { admitted: GatewayClientIdentity }
+  | {
+      refusal:
+        | typeof GATEWAY_HANDSHAKE_REFUSAL.UNAUTHORIZED
+        | typeof GATEWAY_HANDSHAKE_REFUSAL.MALFORMED;
+    };
+
+export type GatewayAuthenticate = (
+  headers: Readonly<Record<string, string | string[] | undefined>>,
+) => Promise<GatewayAdmission> | GatewayAdmission;
+
+export interface WebSocketTransportOptions {
   server: GatewayServer;
-  token: string;
-  build: GatewayBuildIdentity;
+  authenticate: GatewayAuthenticate;
   /** The largest frame a client may send; `ws` closes the connection on a larger one. */
   maximumFrameBytes?: number;
   report?: (message: string) => void;
 }
 
-export const LOCAL_GATEWAY_DEFAULTS = {
+export const WEB_SOCKET_GATEWAY_DEFAULTS = {
   MAXIMUM_FRAME_BYTES: 4 * 1024 * 1024,
+  /** Where a binding that names no host listens: this machine alone. */
+  HOST: "127.0.0.1",
+  /** The port the system picks. */
+  PORT: 0,
 } as const;
-
-/** What a build-mismatched client may still do: see the host, and ask it to leave. */
-const DRAIN_ONLY_METHODS: ReadonlySet<string> = new Set([
-  GATEWAY_METHOD.HELLO,
-  GATEWAY_METHOD.RECONNECT,
-  GATEWAY_METHOD.SHUTDOWN,
-]);
 
 const REFUSAL_STATUS = {
   [GATEWAY_HANDSHAKE_REFUSAL.UNAUTHORIZED]: 401,
   [GATEWAY_HANDSHAKE_REFUSAL.UNSUPPORTED_VERSION]: 426,
-  [GATEWAY_HANDSHAKE_REFUSAL.INCOMPATIBLE_BUILD]: 409,
   [GATEWAY_HANDSHAKE_REFUSAL.SHUTTING_DOWN]: 503,
   [GATEWAY_HANDSHAKE_REFUSAL.MALFORMED]: 400,
 } as const satisfies Record<GatewayHandshakeRefusal, number>;
 
 interface AdmittedClient {
   identity: GatewayClientIdentity;
-  drainOnly: boolean;
   /** The asks out on this socket; closed with it, so every unanswered ask reads unavailable and uncertain. */
   pending: PendingInvocations;
   connection: GatewayHostConnection;
@@ -100,38 +106,65 @@ function headerValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? (value.length === 1 ? value[0] : undefined) : value;
 }
 
-function tokenMatches(presented: string | undefined, expected: string): boolean {
-  if (presented === undefined) return false;
-  const bearer = presented.startsWith("Bearer ") ? presented.slice("Bearer ".length) : undefined;
-  if (bearer === undefined) return false;
-  const a = Buffer.from(bearer, "utf8");
-  const b = Buffer.from(expected, "utf8");
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
 function isClientRole(value: string | undefined): value is GatewayClientRole {
   return value === GATEWAY_CLIENT_ROLE.OPERATOR || value === GATEWAY_CLIENT_ROLE.NODE;
 }
 
-export class LocalGatewayHost {
-  readonly #options: LocalGatewayHostOptions;
+/** The identity a client declares on the handshake, read against the protocol's own vocabulary. */
+function gatewayClientFromHeaders(
+  headers: Readonly<Record<string, string | string[] | undefined>>,
+): GatewayClientIdentity | undefined {
+  const clientId = headerValue(headers[GATEWAY_HANDSHAKE_HEADER.CLIENT_ID]);
+  const role = headerValue(headers[GATEWAY_HANDSHAKE_HEADER.CLIENT_ROLE]);
+  return isIdentifier(clientId) && isClientRole(role) ? { clientId, role } : undefined;
+}
+
+function bearerMatches(presented: string | undefined, expected: string): boolean {
+  if (presented === undefined || !presented.startsWith("Bearer ")) return false;
+  const a = Buffer.from(presented.slice("Bearer ".length), "utf8");
+  const b = Buffer.from(expected, "utf8");
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
+ * The authentication a shared secret makes: the presented bearer compared in
+ * constant time against the expected one, and the identity taken from the
+ * handshake's own headers, because a secret both sides hold says nothing
+ * about which client is holding it.
+ */
+export function bearerAuthentication(expected: string): GatewayAuthenticate {
+  return (headers) => {
+    if (!bearerMatches(headerValue(headers[GATEWAY_HANDSHAKE_HEADER.AUTHORIZATION]), expected)) {
+      return { refusal: GATEWAY_HANDSHAKE_REFUSAL.UNAUTHORIZED };
+    }
+    const admitted = gatewayClientFromHeaders(headers);
+    return admitted ? { admitted } : { refusal: GATEWAY_HANDSHAKE_REFUSAL.MALFORMED };
+  };
+}
+
+export class WebSocketTransport {
+  readonly #options: WebSocketTransportOptions;
   readonly #http = http.createServer((_request, response) => {
     response.writeHead(404).end();
   });
   readonly #sockets: WebSocketServer;
   readonly #clients = new Map<WebSocket, AdmittedClient>();
+  /** The raw sockets whose credential is still being checked; `ws` owns none of them yet. */
+  readonly #handshaking = new Set<Duplex>();
   readonly #closedListeners = new Set<(client: GatewayClientIdentity) => void>();
   #unsubscribe: (() => void) | undefined;
   #admitting = true;
   #connections = 0;
 
-  constructor(options: LocalGatewayHostOptions) {
+  constructor(options: WebSocketTransportOptions) {
     this.#options = options;
     this.#sockets = new WebSocketServer({
       noServer: true,
-      maxPayload: options.maximumFrameBytes ?? LOCAL_GATEWAY_DEFAULTS.MAXIMUM_FRAME_BYTES,
+      maxPayload: options.maximumFrameBytes ?? WEB_SOCKET_GATEWAY_DEFAULTS.MAXIMUM_FRAME_BYTES,
     });
-    this.#http.on("upgrade", (request, socket, head) => this.#upgrade(request, socket, head));
+    this.#http.on("upgrade", (request, socket, head) => {
+      void this.#upgrade(request, socket, head);
+    });
     this.#sockets.on("headers", (headers) => {
       for (const [name, value] of Object.entries(this.handshakeHeaders())) {
         headers.push(`${name}: ${value}`);
@@ -139,21 +172,23 @@ export class LocalGatewayHost {
     });
   }
 
-  /** Binds the loopback address on an ephemeral port and answers it; nothing is published here. */
-  listen(): Promise<number> {
+  /** Binds the address and answers the port it listens on; nothing is published here. */
+  bind(
+    port: number = WEB_SOCKET_GATEWAY_DEFAULTS.PORT,
+    host: string = WEB_SOCKET_GATEWAY_DEFAULTS.HOST,
+  ): Promise<number> {
     return new Promise((resolve, reject) => {
       this.#http.once("error", reject);
-      this.#http.listen(0, GATEWAY_LOOPBACK_HOST, () => {
+      this.#http.listen(port, host, () => {
         this.#http.off("error", reject);
         // SAFETY: a TCP server that is listening answers an AddressInfo, never a pipe path.
         const address = this.#http.address() as AddressInfo;
         this.#unsubscribe = this.#options.server.subscribe((event) => {
           const frame = JSON.stringify({
-            kind: LOCAL_GATEWAY_FRAME.EVENT,
+            kind: GATEWAY_FRAME.EVENT,
             envelope: eventToWire(event),
           });
-          for (const [socket, client] of this.#clients) {
-            if (client.drainOnly) continue;
+          for (const socket of this.#clients.keys()) {
             if (socket.readyState === socket.OPEN) socket.send(frame);
           }
         });
@@ -186,6 +221,11 @@ export class LocalGatewayHost {
     this.#unsubscribe = undefined;
     for (const socket of [...this.#clients.keys()]) socket.close(1001, "the host is leaving");
     this.#clients.clear();
+    // A socket whose credential is still being checked belongs to nobody
+    // else, and the HTTP server counts it: leaving it open would hold this
+    // close open behind a credential authority that may never answer.
+    for (const socket of [...this.#handshaking]) socket.destroy();
+    this.#handshaking.clear();
     await new Promise<void>((resolve) => {
       this.#sockets.close(() => {
         this.#http.close(() => resolve());
@@ -193,8 +233,22 @@ export class LocalGatewayHost {
     });
   }
 
-  #upgrade(request: http.IncomingMessage, socket: Duplex, head: Buffer): void {
-    const decision = this.#admission(request.headers);
+  async #upgrade(request: http.IncomingMessage, socket: Duplex, head: Buffer): Promise<void> {
+    // Until `handleUpgrade` hands the socket to `ws`, nothing else listens on
+    // it: a client that drops while its credential is being checked would
+    // emit an unhandled error and take the host process with it.
+    const absorb = (): void => {
+      socket.destroy();
+    };
+    socket.on("error", absorb);
+    this.#handshaking.add(socket);
+    let decision: HandshakeDecision;
+    try {
+      decision = await this.#admission(request.headers);
+    } finally {
+      this.#handshaking.delete(socket);
+    }
+    if (socket.destroyed) return;
     if ("refusal" in decision) {
       const { refusal } = decision;
       socket.write(
@@ -203,6 +257,7 @@ export class LocalGatewayHost {
       socket.destroy();
       return;
     }
+    socket.off("error", absorb);
     this.#sockets.handleUpgrade(request, socket, head, (webSocket) => {
       this.#admit(webSocket, decision.admitted);
     });
@@ -225,7 +280,7 @@ export class LocalGatewayHost {
         const answered = client.pending.open(invocation);
         socket.send(
           JSON.stringify({
-            kind: LOCAL_GATEWAY_FRAME.INVOCATION,
+            kind: GATEWAY_FRAME.INVOCATION,
             envelope: nodeInvocationToWire(invocation),
           }),
           (error) => {
@@ -250,40 +305,44 @@ export class LocalGatewayHost {
   }
 
   /** Decides the handshake from its headers alone: the client admitted, or the one refusal it earns. */
-  #admission(headers: http.IncomingHttpHeaders): HandshakeDecision {
+  async #admission(headers: http.IncomingHttpHeaders): Promise<HandshakeDecision> {
     if (!this.#admitting) return { refusal: GATEWAY_HANDSHAKE_REFUSAL.SHUTTING_DOWN };
-    if (
-      !tokenMatches(
-        headerValue(headers[GATEWAY_HANDSHAKE_HEADER.AUTHORIZATION]),
-        this.#options.token,
-      )
-    ) {
-      return { refusal: GATEWAY_HANDSHAKE_REFUSAL.UNAUTHORIZED };
-    }
+    // An authentication that failed to decide has authorized no one, so a
+    // thrown credential check is the refusal rather than a dangling socket.
+    const authenticated = await this.#authenticate(headers);
+    if ("refusal" in authenticated) return authenticated;
+    // Read again: a host that closed its admissions while this handshake was
+    // authenticating is one that has started to leave, and must admit no new
+    // socket behind it.
+    if (!this.#admitting) return { refusal: GATEWAY_HANDSHAKE_REFUSAL.SHUTTING_DOWN };
     const protocolVersion = Number(headerValue(headers[GATEWAY_HANDSHAKE_HEADER.PROTOCOL_VERSION]));
     if (protocolVersion !== GATEWAY_PROTOCOL_VERSION) {
       return { refusal: GATEWAY_HANDSHAKE_REFUSAL.UNSUPPORTED_VERSION };
     }
-    const buildVersion = headerValue(headers[GATEWAY_HANDSHAKE_HEADER.BUILD_VERSION]);
-    const clientId = headerValue(headers[GATEWAY_HANDSHAKE_HEADER.CLIENT_ID]);
-    const role = headerValue(headers[GATEWAY_HANDSHAKE_HEADER.CLIENT_ROLE]);
-    if (buildVersion === undefined || !isIdentifier(clientId) || !isClientRole(role)) {
-      return { refusal: GATEWAY_HANDSHAKE_REFUSAL.MALFORMED };
-    }
-    const admitted: Omit<AdmittedClient, "connection"> = {
-      identity: { clientId, role },
-      drainOnly: buildVersion !== this.#options.build.buildVersion,
-      pending: new PendingInvocations(),
-      closedListeners: new Set(),
+    return {
+      admitted: {
+        identity: authenticated.admitted,
+        pending: new PendingInvocations(),
+        closedListeners: new Set(),
+      },
     };
-    return { admitted };
   }
 
-  /** The headers a 101 answer carries, so the client learns the host's build on the same handshake. */
+  async #authenticate(headers: http.IncomingHttpHeaders): Promise<GatewayAdmission> {
+    try {
+      return await this.#options.authenticate(headers);
+    } catch (error) {
+      this.#options.report?.(
+        `a Gateway handshake could not be authenticated: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return { refusal: GATEWAY_HANDSHAKE_REFUSAL.UNAUTHORIZED };
+    }
+  }
+
+  /** The headers a 101 answer carries, so the client learns the host's protocol on the same handshake. */
   handshakeHeaders() {
     return {
-      [GATEWAY_HANDSHAKE_HEADER.PROTOCOL_VERSION]: String(this.#options.build.protocolVersion),
-      [GATEWAY_HANDSHAKE_HEADER.BUILD_VERSION]: this.#options.build.buildVersion,
+      [GATEWAY_HANDSHAKE_HEADER.PROTOCOL_VERSION]: String(GATEWAY_PROTOCOL_VERSION),
     };
   }
 
@@ -322,7 +381,7 @@ export class LocalGatewayHost {
     }
     if (!isRecord(value) || !isRecord(value.envelope)) return;
     const envelope = value.envelope;
-    if (value.kind === LOCAL_GATEWAY_FRAME.ANSWER) {
+    if (value.kind === GATEWAY_FRAME.ANSWER) {
       // An answer settles only an ask this same socket was sent; another
       // socket's answer, or one for an ask already settled or never made,
       // lands nowhere.
@@ -330,7 +389,7 @@ export class LocalGatewayHost {
       if (answer) client.pending.answer(answer);
       return;
     }
-    if (value.kind !== LOCAL_GATEWAY_FRAME.REQUEST) return;
+    if (value.kind !== GATEWAY_FRAME.REQUEST) return;
     const request = gatewayRequestFromWire(envelope);
     let response: GatewayResponse;
     if (!request) {
@@ -344,27 +403,17 @@ export class LocalGatewayHost {
         },
         revision: this.#options.server.revision(),
       };
-    } else if (client.drainOnly && !DRAIN_ONLY_METHODS.has(request.method)) {
-      response = {
-        id: request.id,
-        ok: false,
-        error: {
-          code: GATEWAY_ERROR.INCOMPATIBLE_BUILD,
-          message: `this Gateway is build ${this.#options.build.buildVersion}; a client of another build may only ask it to leave`,
-        },
-        revision: this.#options.server.revision(),
-      };
     } else {
       response = await this.#options.server.handle(request, client.identity, client.connection);
     }
     if (socket.readyState !== socket.OPEN) return;
     socket.send(
-      JSON.stringify({ kind: LOCAL_GATEWAY_FRAME.RESPONSE, envelope: responseToWire(response) }),
+      JSON.stringify({ kind: GATEWAY_FRAME.RESPONSE, envelope: responseToWire(response) }),
     );
   }
 }
 
-export function responseToWire(response: GatewayResponse): WireRecord {
+function responseToWire(response: GatewayResponse): WireRecord {
   const revision = {
     configuration: response.revision.configuration,
     sequence: response.revision.sequence,

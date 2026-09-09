@@ -152,29 +152,19 @@ longer read or written, so that conversation, that memory, and those
 remembered things start over; the files stay where they were until you remove
 them.
 
-Luke's runtime runs as a process of its own, the Gateway, so that closing or
-reloading the panel, or the desktop app crashing, does not stop his work: the
-Gateway holds your settings and the encrypted credentials (decrypted there,
-under the same Keychain entry the desktop used), your account's session, your
-conversation and its memory, the observation of your sessions and calendars,
-and the scheduled reviews; the desktop app draws, listens, speaks, and holds
-the keys, and asks the Gateway for everything else over a connection that never
-leaves your Mac (the loopback address, on a port chosen at each start),
-authenticated by a random token made fresh each time the Gateway starts. The
-token is written to one file under Luke's application data
-(`gateway/discovery.json`) that only your user account can read, is never put
-in an address or a log, and is withdrawn when the Gateway stops; a record a
-crash left behind names a process that no longer exists, and is ignored. The
-Gateway starts when Luke launches and stops when you quit Luke, and nothing
-else: it is not installed to run at login and does not run on after you quit,
-and quitting cancels what was running and writes down what did not finish
-rather than finishing it on paper. Nothing about you crosses that connection
-that the panel did not already draw, except the short-lived voice credential
-the Gateway mints for a call; no stored key, token, or account secret travels
-in any answer or event. The three things the desktop still does on this
-machine at the Gateway's ask are opening an address you or Luke asked to open,
-carrying an act to the panel, and running the Calendar helper behind macOS's
-own consent dialog.
+Luke's runtime runs inside the app, and can run on a server you connect to
+instead; either way it holds your settings and the encrypted credentials
+(decrypted where it runs, under the same Keychain entry), your account's
+session, your conversation and its memory, the observation of your sessions
+and calendars, and the scheduled reviews, while the part that draws listens,
+speaks, holds the keys, and asks the runtime for everything else. Nothing
+about you crosses that boundary that the panel did not already draw, except
+the short-lived voice credential the runtime mints for a call; no stored key,
+token, or account secret travels in any answer or event. Quitting Luke cancels
+what was running and writes down what did not finish rather than finishing it
+on paper. The three things the app still does on this machine at the runtime's
+ask are opening an address you or Luke asked to open, carrying an act to the
+panel, and running the Calendar helper behind macOS's own consent dialog.
 
 **Things Luke remembers about you.** During a conversation you start, Luke may
 silently save a concise preference, personal fact, goal, or recurring constraint

@@ -198,7 +198,7 @@ export class InProcessTransport extends ServerBoundTransport {
   }
 }
 
-export interface LoopbackTransportOptions {
+export interface TextLoopbackTransportOptions {
   /** Delays each response by this many milliseconds, on the clock given, so a late answer can be tested. */
   responseDelayMs?: number;
   schedule?: (work: () => void, delayMs: number) => void;
@@ -218,8 +218,8 @@ function throughText(value: WireValue): WireValue {
  * taken down and brought back, and told to drop the next events, so a
  * client's gap detection and reconnection can be exercised.
  */
-export class LoopbackTransport extends ServerBoundTransport {
-  readonly #options: LoopbackTransportOptions;
+export class TextLoopbackTransport extends ServerBoundTransport {
+  readonly #options: TextLoopbackTransportOptions;
   #dropNext = 0;
   #repeatNextInvocation = 0;
   /** The events the server emitted while the transport was down, or that were dropped: the gap the client must find. */
@@ -228,7 +228,7 @@ export class LoopbackTransport extends ServerBoundTransport {
   constructor(
     server: GatewayServer,
     identity: GatewayClientIdentity,
-    options: LoopbackTransportOptions = {},
+    options: TextLoopbackTransportOptions = {},
   ) {
     super(server, identity);
     this.#options = options;

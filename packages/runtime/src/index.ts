@@ -63,30 +63,6 @@ export {
   deliveryRecordToWire,
 } from "./gateway/delivery.js";
 export {
-  createGatewayToken,
-  discoveryMatchesBuild,
-  GATEWAY_DISCOVERY_DIRECTORY_MODE,
-  GATEWAY_DISCOVERY_FILE_MODE,
-  GATEWAY_LOOPBACK_HOST,
-  type GatewayDiscoveryRecord,
-  gatewayDiscoveryFromWire,
-  gatewayDiscoveryToWire,
-  publishGatewayDiscovery,
-  readGatewayDiscovery,
-  withdrawGatewayDiscovery,
-} from "./gateway/discovery.js";
-export {
-  acquireGatewayInstanceLock,
-  acquireGatewayInstanceLockWaiting,
-  GATEWAY_LOCK_WAIT_DEFAULTS,
-  type GatewayLockAcquisition,
-  type GatewayLockHolder,
-  type GatewayLockOptions,
-  type GatewayLockWaitOptions,
-  processIsAlive,
-  readGatewayLockHolder,
-} from "./gateway/instance-lock.js";
-export {
   INVOCATION_MEMORY_DEFAULTS,
   InvocationMemory,
   NODE_INVOCATION_REFUSAL,
@@ -126,28 +102,11 @@ export {
   shutdownGateway,
 } from "./gateway/shutdown.js";
 export {
-  GATEWAY_ATTACH_FAILURE,
-  GATEWAY_ATTACH_OUTCOME,
-  GATEWAY_ATTACHMENT,
-  GATEWAY_CONNECT_FAILURE,
-  GATEWAY_SUPERVISOR_DEFAULTS,
-  type GatewayAttachFailure,
-  type GatewayAttachment,
-  type GatewayAttachOutcome,
-  type GatewayAttachResult,
-  type GatewayConnectFailure,
-  type GatewayConnection,
-  type GatewayConnectResult,
-  type GatewaySpawnedProcess,
-  GatewaySupervisor,
-  type GatewaySupervisorPorts,
-} from "./gateway/supervisor.js";
-export {
   type GatewayEventSink,
   type GatewayTransport,
   InProcessTransport,
-  LoopbackTransport,
-  type LoopbackTransportOptions,
+  TextLoopbackTransport,
+  type TextLoopbackTransportOptions,
 } from "./gateway/transport.js";
 export { HEARTBEAT_DEFAULTS, heartbeatJob } from "./heartbeat.js";
 export {

@@ -335,7 +335,9 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
       await held.close().catch(() => undefined);
     },
     brainStateRepository: (sessionKey = MAIN_SESSION_KEY) =>
-      temporary.has(sessionKey) ? memoryRepository() : client().brainStateRepository(sessionKey),
+      dependencies.persistent && !temporary.has(sessionKey)
+        ? client().brainStateRepository(sessionKey)
+        : memoryRepository(),
     open: async () => {
       const agentRoot = dependencies.agentRoot();
       dependencies.ensureDirectory(agentRoot);
