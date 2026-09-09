@@ -4,8 +4,6 @@ import {
   briefingSpeechEvents,
   CALENDAR_ONBOARDING_SPEECH_KIND,
   calendarOnboardingSpeechEvents,
-  cancelResponseEvents,
-  clearOutputAudioEvents,
   type IntroductionLine,
   introductionSpeechEvents,
   outputSpeedUpdateEvents,
@@ -15,12 +13,12 @@ import {
   REALTIME_STATUS,
   type RealtimeStatus,
   realtimeSessionConfig,
-  truncateResponseEvents,
 } from "@sidecar/realtime";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { voiceExchangeActive } from "#shared/messages/voice-view";
 import type { BuiltRealtimeSessionConfig, SdkToolCallDetails } from "./agents-realtime-transport";
 import { CaptionStrip, REPLY_KIND, type ReplyKind } from "./captions";
+import { type InterruptedSpan, Interruption } from "./interruption";
 import { RealtimeCall, type RealtimeCallOptions, type TeardownStep } from "./realtime-call";
 
 /**
@@ -39,28 +37,6 @@ export const REALTIME_SETTLE_TIMEOUT_MS = 20_000;
  * and this is the backstop under that.
  */
 export const BRAIN_ASK_SETTLE_TIMEOUT_MS = 60_000;
-
-/** Bounds interruption events whose successful requests receive no matching acknowledgement. */
-const MAXIMUM_PENDING_INTERRUPTIONS = 24;
-
-const INTERRUPTION_EVENT_KIND = {
-  CANCELLATION: "cancellation",
-  AUDIO_CLEAR: "audio-clear",
-  TRUNCATION: "truncation",
-} as const;
-
-type InterruptionEventKind = (typeof INTERRUPTION_EVENT_KIND)[keyof typeof INTERRUPTION_EVENT_KIND];
-
-const NO_ACTIVE_RESPONSE_CANCELLATION = /^Cancellation failed:\s*no active response\b/i;
-
-/**
- * The server refusing to trim a reply past its own end. The trim measures how
- * long the reply was audible on a wall clock, which outruns the audio itself
- * when a stop lands at the reply's very end — the words all played, the clock
- * kept counting. A reply refused this way was heard whole, so the record the
- * trim would have corrected is already right.
- */
-const TRUNCATION_PAST_AUDIO_END = /^Audio content of \d+ms is already shorter than\b/i;
 
 /**
  * The backstop for a reply whose ending never arrives.
@@ -170,15 +146,11 @@ export class SpeakOnlyCall<
   get microphoneCall(): boolean {
     return false;
   }
-  /**
-   * Cancel, clear, and trim requests not yet answered with an error, by their
-   * stamped names. Their errors belong to the reply that was interrupted, so
-   * they must never finish a newer turn; only the redundant-cancel race and a
-   * trim refused for asking past the audio's end stay quiet, while every
-   * genuine refusal is still reported.
-   */
-  #pendingInterruptions = new Map<string, InterruptionEventKind>();
-  #interruptionSequence = 0;
+  /** Cutting a reply off, and the refusals that answer the cut. */
+  #interruption = new Interruption({
+    send: (events) => this.send(events),
+    onError: (message) => this.options.onError(message),
+  });
   /**
    * Whether the model has finished producing the reply. It is not the same as
    * the reply being over: `response.done` says generation is complete, and the
@@ -462,7 +434,7 @@ export class SpeakOnlyCall<
     // What was said on the call goes with the call. The pending answers go too:
     // they were built from stores this teardown is emptying, and the next call
     // is filled from the app afresh before it takes a turn.
-    this.#pendingInterruptions.clear();
+    this.#interruption.reset();
     this.#responseOutstanding = false;
     this.#audioDrained = false;
     this.onTurnBoundary();
@@ -579,8 +551,8 @@ export class SpeakOnlyCall<
         // clamps and truncates anyway, and it names no event this could match
         // it by — `error.event_id` is null on the wire. Recognized by its
         // sentence and never shown.
-        if (TRUNCATION_PAST_AUDIO_END.test(event.message)) return;
-        if (this.#interruptionError(event)) return;
+        if (Interruption.pastAudioEnd(event.message)) return;
+        if (this.#interruption.error(event)) return;
         this.options.onError(event.message);
         // An error can arrive *instead of* `response.done` — an empty push-to-talk
         // commit is the common case — which would otherwise leave the call
@@ -788,32 +760,10 @@ export class SpeakOnlyCall<
     // runs slightly ahead of playback; History keeps that available transcript
     // so an interrupted announcement can still be recalled.
     this.#captions.end();
-    this.#interruptionSequence += 1;
-    const cancellationEventId = `response_cancel_${this.#interruptionSequence}`;
-    const clearEventId = `output_audio_clear_${this.#interruptionSequence}`;
-    const truncationEventId = `item_truncate_${this.#interruptionSequence}`;
-    const truncateEvents = this.#truncateEvents(truncationEventId);
-    const cancelGeneration = this.#responseOutstanding;
-    const interruptionCount = (cancelGeneration ? 2 : 1) + (truncateEvents.length > 0 ? 1 : 0);
-    while (this.#pendingInterruptions.size + interruptionCount > MAXIMUM_PENDING_INTERRUPTIONS) {
-      const [oldest] = this.#pendingInterruptions.keys();
-      if (oldest === undefined) break;
-      this.#pendingInterruptions.delete(oldest);
-    }
-    if (cancelGeneration) {
-      this.#pendingInterruptions.set(cancellationEventId, INTERRUPTION_EVENT_KIND.CANCELLATION);
-      this.#pendingInterruptions.set(clearEventId, INTERRUPTION_EVENT_KIND.AUDIO_CLEAR);
-      this.send(cancelResponseEvents({ cancellationEventId, clearEventId }));
-    } else {
-      this.#pendingInterruptions.set(clearEventId, INTERRUPTION_EVENT_KIND.AUDIO_CLEAR);
-      this.send(clearOutputAudioEvents(clearEventId));
-    }
-    // Then correct what Luke believes he said, or the next answer is free to
-    // refer back to a sentence that never reached the room.
-    if (truncateEvents.length > 0) {
-      this.#pendingInterruptions.set(truncationEventId, INTERRUPTION_EVENT_KIND.TRUNCATION);
-      this.send(truncateEvents);
-    }
+    this.#interruption.cut({
+      cancelGeneration: this.#responseOutstanding,
+      truncate: this.#interruptedSpan(),
+    });
     // The trim was this reply's last word: forgetting its item here is what
     // stops the transcript still trailing in — the server had produced it
     // before the cancel landed — from ever matching the caption again.
@@ -846,15 +796,11 @@ export class SpeakOnlyCall<
    * held for its `done`, so a trim measured from it would ask past the end
    * and be refused.
    */
-  #truncateEvents(truncationEventId: string): readonly WireRecord[] {
+  #interruptedSpan(): InterruptedSpan | undefined {
     const itemId = this.#responseItemId;
     const audibleSince = this.#audibleSince;
-    if (!itemId || audibleSince === undefined || this.#currentReplyDrained()) return [];
-    return truncateResponseEvents({
-      itemId,
-      audioEndMs: this.now() - audibleSince,
-      truncationEventId,
-    });
+    if (!itemId || audibleSince === undefined || this.#currentReplyDrained()) return undefined;
+    return { itemId, audioEndMs: this.now() - audibleSince };
   }
 
   /**
@@ -897,24 +843,5 @@ export class SpeakOnlyCall<
     if (speed === undefined) return;
     this.#pendingSpeed = undefined;
     this.send(outputSpeedUpdateEvents(speed));
-  }
-
-  /**
-   * Handles an error answering one interruption without letting an old reply's
-   * failure finish the new turn that interrupted it. The documented
-   * no-active-response race is quiet; every other refusal still reaches the
-   * developer as a real voice error.
-   */
-  #interruptionError(event: { message: string; eventId?: string; errorType?: string }): boolean {
-    if (event.eventId === undefined) return false;
-    const kind = this.#pendingInterruptions.get(event.eventId);
-    if (kind === undefined) return false;
-    this.#pendingInterruptions.delete(event.eventId);
-    const benignCancellation =
-      kind === INTERRUPTION_EVENT_KIND.CANCELLATION &&
-      event.errorType === "invalid_request_error" &&
-      NO_ACTIVE_RESPONSE_CANCELLATION.test(event.message);
-    if (!benignCancellation) this.options.onError(event.message);
-    return true;
   }
 }
