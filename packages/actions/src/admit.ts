@@ -171,6 +171,8 @@ export const ACTION_REFUSAL = {
   NO_APP_ADDRESS: "No app carries an exact address for that session.",
   NO_PROJECT: "No listed project matches that identity.",
   MANY_PROJECTS: "More than one listed project matches; name the project and host.",
+  NO_TARGET:
+    "No listed project carries that target; a target_id is named only as the projects list gives it, and a project listed without one takes none.",
   NO_PROJECT_AGENT: "That project lists no such agent to start.",
   NAME_A_PROJECT_AGENT: "Name one of the agents that project lists for a new workspace.",
   PROJECT_NAMES_ITSELF: "That project names its own workspaces.",
@@ -577,12 +579,30 @@ const admitCreateWorkspace: Admitter<typeof ACTION_KIND.CREATE_WORKSPACE> = asyn
   const providerId = textArgument(fields, "provider_id");
   const projectId = textArgument(fields, "project_id");
   const targetId = textArgument(fields, "target_id");
-  let matchingProjects = listed.filter(
+  const namedProjects = listed.filter(
     (candidate) =>
       (!providerId || candidate.providerId === providerId) &&
-      (!projectId || candidate.providerProjectId === projectId) &&
-      (!targetId || candidate.providerTargetId === targetId),
+      (!projectId || candidate.providerProjectId === projectId),
   );
+  // A target picks out a host among the projects the ask named — one
+  // repository a provider reports on several hosts under one project id — so
+  // it narrows only where a listed project carries one. A project listed
+  // without a target has no host to pick, and a target the ask invented for it
+  // cannot hide it: the action still carries the listed entry's own identity
+  // and never the ask's word. Where the named projects do carry targets and
+  // none is the one asked for, the refusal names the target, so the correction
+  // is said rather than guessed at or sent on to a target-less twin.
+  let matchingProjects = namedProjects;
+  if (targetId) {
+    const onTarget = namedProjects.filter((candidate) => candidate.providerTargetId === targetId);
+    matchingProjects =
+      onTarget.length > 0
+        ? onTarget
+        : namedProjects.filter((candidate) => candidate.providerTargetId === undefined);
+    if (matchingProjects.length === 0 && namedProjects.length > 0) {
+      return refuse(ACTION_REFUSAL.NO_TARGET);
+    }
+  }
   // The saved defaults settle only what the ask left unnamed: no provider
   // named sends a still-ambiguous ask to the default provider while it is
   // offering, and no project named sends it on to that provider's chosen
