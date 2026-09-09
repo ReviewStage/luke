@@ -4,6 +4,7 @@ import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import {
   normalizeSession,
   type ProviderTranscriptSinceResult,
+  SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type SessionIdentity,
 } from "@sidecar/session";
@@ -363,6 +364,86 @@ test("a conversation that looks at one session reads only it, and a repeated unc
   h.agent.rosterLook();
   await settle();
   assert.equal(h.client.inputs.length, 2);
+});
+
+test("a session the developer is speaking with wakes nothing until the exchange ends, and stays on the roster throughout", async () => {
+  let live = true;
+  let text = `${TRANSCRIPT_SECRET} said aloud`;
+  const h = harness({
+    observes: { kind: LOOK_SUBJECT.SESSION, identity: ABC },
+    roster: () => ({
+      text: "roster",
+      identities: [ABC],
+      sessions: [
+        session("abc", {
+          status: SESSION_STATUS.WORKING,
+          ...(live ? { realtimeVoiceLive: true } : undefined),
+        }),
+      ],
+    }),
+    readTranscriptSince: async () => ({
+      status: ACTION_RESULT_STATUS.ACCEPTED,
+      text,
+      cursor: `abc-${text.length}`,
+      truncated: false,
+    }),
+  });
+  // Neither the look nor the provider's own hook opens an inference over an
+  // exchange being heard first-hand, and nothing is captured to open one later.
+  h.agent.rosterLook();
+  await settle();
+  await h.agent.wake([
+    {
+      ...edge(ABC),
+      session: session("abc", { status: SESSION_STATUS.WORKING, realtimeVoiceLive: true }),
+    },
+  ]);
+  await settle();
+  assert.equal(h.client.inputs.length, 0);
+  assert.equal(h.repository.state?.inbox.length ?? 0, 0);
+
+  // The exchange over, the next look reads the session again.
+  live = false;
+  text = "assistant: back to typing";
+  h.client.answers.push(answered([message("")]));
+  h.agent.rosterLook();
+  await settle();
+  assert.equal(h.client.inputs.length, 1);
+  assert.ok(itemText((h.client.inputs[0] ?? [])[0]).includes("back to typing"));
+  await h.agent.stop();
+});
+
+test("a wake's session summary carries the hold and the completion cause beside the status", async () => {
+  const h = harness();
+  await h.agent.wake([
+    {
+      ...edge(ABC),
+      hookEvent: "PermissionRequest",
+      session: session("abc", { holdingForDeveloper: true }),
+    },
+    {
+      ...edge(DEF),
+      session: session("def", {
+        status: SESSION_STATUS.COMPLETE,
+        completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED,
+      }),
+    },
+  ]);
+  await h.clock.advance(NOW + 3_000);
+  await settle();
+  const opening = itemText(
+    itemsOfType(h.client.inputs[0] ?? [], RESPONSES_INPUT_ITEM_TYPE.MESSAGE)[0],
+  );
+  const body = wireRecord(unparsedWire(JSON.parse(opening.slice(opening.indexOf("\n") + 1))));
+  assert.ok(Array.isArray(body?.events));
+  const [holding, closed] = body.events.map((event) =>
+    wireRecord(unparsedWire(wireRecord(unparsedWire(event))?.session)),
+  );
+  assert.equal(holding?.status, SESSION_STATUS.WAITING);
+  assert.equal(holding?.holding_for_developer, true);
+  assert.equal(closed?.status, SESSION_STATUS.COMPLETE);
+  assert.equal(closed?.completion_cause, SESSION_COMPLETION_CAUSE.SESSION_CLOSED);
+  await h.agent.stop();
 });
 
 test("a relaunch does not run an ask that was only queued, and runs a captured observation without rereading it", async () => {

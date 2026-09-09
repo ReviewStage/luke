@@ -6,6 +6,7 @@ import {
   type ObservedWorkspaceProject,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
+  SESSION_COMPLETION_CAUSE,
   SESSION_LOCATION,
   SESSION_STATUS,
   WORKSPACE_TASK_SUPPORT,
@@ -362,6 +363,77 @@ test("the roster says what a session is doing and where, in the attention update
   assert.match(bareText, /in repository luke/);
   assert.doesNotMatch(bareText, /running/);
   assert.doesNotMatch(bareText, /error:/);
+});
+
+test("the roster tells a wait holding for the developer from an idle one, and a closed chat from a finished turn, in fixed words", () => {
+  const holding = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    {
+      providerSessionId: "session-holding",
+      title: "checkout-service",
+      status: SESSION_STATUS.WAITING,
+      lastActivityAt: OBSERVED_AT,
+      holdingForDeveloper: true,
+      detail: { activity: "Bash: rm -rf build" },
+    },
+  );
+  const idle = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    {
+      providerSessionId: "session-idle",
+      title: "checkout-service",
+      status: SESSION_STATUS.WAITING,
+      lastActivityAt: OBSERVED_AT,
+    },
+  );
+  const holdingText = sessionContextText([holding]);
+  const idleText = sessionContextText([idle]);
+  // The hold is a fixed phrase beside the provider's own bounded activity,
+  // never the provider's wording of the permission itself.
+  assert.match(holdingText, /waiting — updated just now — holding for your permission or answer/);
+  assert.match(holdingText, /running Bash: rm -rf build/);
+  assert.match(idleText, /waiting/);
+  assert.doesNotMatch(idleText, /holding/);
+
+  const closed = normalizeSession(
+    { id: "codex", displayName: "Codex" },
+    {
+      providerSessionId: "session-closed",
+      title: "checkout-service",
+      status: SESSION_STATUS.COMPLETE,
+      completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED,
+      lastActivityAt: OBSERVED_AT,
+    },
+  );
+  const finished = normalizeSession(
+    { id: "codex", displayName: "Codex" },
+    {
+      providerSessionId: "session-finished",
+      title: "checkout-service",
+      status: SESSION_STATUS.COMPLETE,
+      completionCause: SESSION_COMPLETION_CAUSE.WORK_FINISHED,
+      lastActivityAt: OBSERVED_AT,
+    },
+  );
+  const untold = normalizeSession(
+    { id: "codex", displayName: "Codex" },
+    {
+      providerSessionId: "session-untold",
+      title: "checkout-service",
+      status: SESSION_STATUS.COMPLETE,
+      lastActivityAt: OBSERVED_AT,
+    },
+  );
+  const closedText = sessionContextText([closed]);
+  const finishedText = sessionContextText([finished]);
+  const untoldText = sessionContextText([untold]);
+  assert.match(closedText, /complete — updated just now — the chat was closed/);
+  assert.doesNotMatch(closedText, /finished its work/);
+  assert.match(finishedText, /complete — updated just now — finished its work/);
+  assert.doesNotMatch(finishedText, /closed/);
+  // A provider that could not say why leaves the line at its status alone.
+  assert.match(untoldText, /complete/);
+  assert.doesNotMatch(untoldText, /closed|finished/);
 });
 
 test("the roster says which sessions have a pull request, never an address", () => {

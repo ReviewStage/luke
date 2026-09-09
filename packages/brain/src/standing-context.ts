@@ -4,7 +4,9 @@ import {
   advertisedActionFor,
   advertisedControls,
   type ObservedWorkspaceProject,
+  SESSION_COMPLETION_CAUSE,
   type Session,
+  type SessionCompletionCause,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceTaskSupport,
   workspaceProjectSelectionId,
@@ -143,13 +145,35 @@ function sessionAgeText(lastActivityAt: number, now: number): SessionAgeText {
 }
 
 /**
- * The checkout, current tool, and reported failure a session's line carries —
- * the same bounded about-fields the panel draws, worded as short labelled
- * phrases so Luke can say what a session is doing or stuck on rather than
- * only that it works or waits.
+ * How a waiting session that cannot continue without the developer reads: one
+ * fixed phrase, never the provider's own words for the permission, approval,
+ * or question it reported. A waiting session whose adapter could not tell
+ * carries no phrase and reads as waiting alone, so an idle turn end and a
+ * tool call holding for permission are told apart on the line itself.
+ */
+const HOLDING_FOR_DEVELOPER_TEXT = "holding for your permission or answer";
+
+/**
+ * Why a complete session became complete, where its provider could say. A
+ * chat the developer closed is not a turn that finished, and the two are news
+ * of different kinds: one is work to report, the other the developer's own
+ * hand. A provider that could not tell reports no cause and says nothing here.
+ */
+const COMPLETION_CAUSE_TEXT = {
+  [SESSION_COMPLETION_CAUSE.WORK_FINISHED]: "finished its work",
+  [SESSION_COMPLETION_CAUSE.SESSION_CLOSED]: "the chat was closed",
+} as const satisfies Record<SessionCompletionCause, string>;
+
+/**
+ * The checkout, current tool, reported failure, hold, and completion cause a
+ * session's line carries — the same bounded about-fields the panel draws,
+ * worded as short labelled phrases so Luke can say what a session is doing or
+ * stuck on rather than only that it works or waits.
  */
 function sessionAboutText(session: Session): readonly string[] {
   return [
+    ...(session.holdingForDeveloper === true ? [HOLDING_FOR_DEVELOPER_TEXT] : []),
+    ...(session.completionCause ? [COMPLETION_CAUSE_TEXT[session.completionCause]] : []),
     ...(session.detail.branch
       ? [`on branch ${session.detail.branch}`]
       : session.detail.repository
@@ -175,7 +199,8 @@ function sessionSpokenName(session: Session): string {
  * Renders the session roster the conversation is allowed to know about.
  *
  * These are the same bounded, redacted fields the panel already draws —
- * provider, title, status, when last seen, repository or branch,
+ * provider, title, status, when last seen, whether a wait holds for the
+ * developer, why a complete chat ended, repository or branch,
  * current tool, and reported error — plus the
  * workspace a chat belongs to when its provider groups them, the apps that
  * independently associate themselves with it, what each session can be asked to do, and the

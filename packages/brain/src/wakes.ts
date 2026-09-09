@@ -2,6 +2,7 @@ import {
   type ProviderTranscriptSinceResult,
   SESSION_LOCATION,
   SESSION_STATUS,
+  type Session,
   type SessionIdentity,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
@@ -132,8 +133,10 @@ export class WakeCapture {
    * Settles once the capture has landed or been refused.
    */
   wake(events: readonly BrainWakeEvent[]): Promise<void> {
-    if (this.#seam.stopped() || events.length === 0) return Promise.resolve();
-    return this.#capture(events).then((captured) => {
+    if (this.#seam.stopped()) return Promise.resolve();
+    const heard = events.filter((event) => !event.session || !developerSpeakingWith(event.session));
+    if (heard.length === 0) return Promise.resolve();
+    return this.#capture(heard).then((captured) => {
       if (this.#seam.stopped()) return;
       const generation = this.#seam.generation();
       if (!generation) return;
@@ -317,6 +320,7 @@ export class WakeCapture {
       if (subject.kind === LOOK_SUBJECT.SESSION && !sameIdentity(subject.identity, identity)) {
         return [];
       }
+      if (developerSpeakingWith(session)) return [];
       const readBefore = cursors.cursor(identity) !== undefined;
       const live =
         session.status === SESSION_STATUS.WORKING || session.status === SESSION_STATUS.WAITING;
@@ -362,6 +366,18 @@ export class WakeCapture {
   }
 }
 
+/**
+ * A session the developer is speaking with first-hand wakes nothing: its turn
+ * boundaries are the rhythm of a conversation being heard as it happens, and a
+ * briefing read over them would talk over the very exchange it reports. The
+ * hook and the look are dropped rather than held, so the exchange ending never
+ * replays what happened inside it; the session stays on the roster and in the
+ * standing context throughout, because the developer may still ask about it.
+ */
+function developerSpeakingWith(session: Session): boolean {
+  return session.realtimeVoiceLive === true;
+}
+
 /** A session as the roster showed it at a look, in the fields a change would move; never a transcript. */
 function lookFingerprint(event: BrainWakeEvent): string {
   const session = event.session;
@@ -369,6 +385,8 @@ function lookFingerprint(event: BrainWakeEvent): string {
     session
       ? [
           session.status,
+          session.holdingForDeveloper === true,
+          session.completionCause ?? null,
           session.lastActivityAt,
           session.detail.activity ?? null,
           session.detail.error ?? null,

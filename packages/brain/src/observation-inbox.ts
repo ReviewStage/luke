@@ -119,6 +119,8 @@ export function sessionSummary(session: Session): WireRecord {
     provider_name: session.provider.displayName,
     title: session.title,
     status: session.status,
+    ...(session.holdingForDeveloper === true ? { holding_for_developer: true } : undefined),
+    ...(session.completionCause ? { completion_cause: session.completionCause } : undefined),
     ...(session.workspace?.name ? { workspace: session.workspace.name } : undefined),
     ...(session.detail.error ? { error: session.detail.error } : undefined),
     ...(session.detail.activity ? { activity: session.detail.activity } : undefined),
