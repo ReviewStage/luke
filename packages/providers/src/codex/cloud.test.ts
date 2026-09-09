@@ -4,6 +4,8 @@ import {
   ACT_KIND,
   advertisedActFor,
   CLI_CONNECTION,
+  dispatchAct,
+  dispatchRead,
   SESSION_LOCATION,
   SESSION_STATUS,
   UNSUPPORTED_BY_OBSERVATION,
@@ -16,7 +18,7 @@ import {
 } from "../shared/adapter-diagnostics.js";
 import { ADAPTER_FAILURE, AdapterFailure } from "../shared/adapter-failure.js";
 import { CLI_ADAPTER_DEFAULTS, type CliRun } from "../shared/cli-pass.js";
-import { CodexCloudSessionAdapter } from "./cloud-adapter.js";
+import { type CodexCloudPlugin, codexCloudPlugin } from "./cloud.js";
 
 const TEST_TIME = Date.parse("2026-08-18T02:45:00.000Z");
 const SECRET_PROMPT_TEXT = "SECRET_PROMPT_TEXT";
@@ -84,7 +86,7 @@ interface FakeCliBehavior {
   createdTaskId?: string;
 }
 
-/** Serves the two invocations the adapter is allowed to make, recording each. */
+/** Serves the two invocations the plugin is allowed to make, recording each. */
 function fakeCodexCli(behavior: FakeCliBehavior) {
   const invocations: RecordedInvocation[] = [];
   const run: CliRun = async (binary, argv) => {
@@ -136,15 +138,15 @@ function fakeCodexCli(behavior: FakeCliBehavior) {
   return { run, invocations };
 }
 
-function adapterFor(
+function pluginFor(
   run: CliRun,
   overrides: {
     now?: () => number;
     minimumRefreshIntervalMs?: number;
     onDiagnostic?: AdapterDiagnosticCallback;
   } = {},
-): CodexCloudSessionAdapter {
-  return new CodexCloudSessionAdapter({
+): CodexCloudPlugin {
+  return codexCloudPlugin({
     run,
     now: overrides.now ?? (() => TEST_TIME),
     minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
@@ -155,14 +157,14 @@ function adapterFor(
 test("a programming error during observation reports a pass-failure diagnostic", async () => {
   const diagnostics: [string, Error][] = [];
   const bug = new TypeError("tasks is not iterable");
-  const adapter = adapterFor(
+  const plugin = pluginFor(
     async () => {
       throw bug;
     },
     { onDiagnostic: (kind, error) => diagnostics.push([kind, error]) },
   );
 
-  await assert.rejects(() => adapter.observe(), bug);
+  await assert.rejects(() => plugin.observe(), bug);
   assert.deepEqual(diagnostics, [[ADAPTER_DIAGNOSTIC_KIND.PASS_FAILURE, bug]]);
 });
 
@@ -174,9 +176,9 @@ test("observes cloud tasks as cloud sessions labelled by their environment's rep
       { id: "task-new", status: TEST_STATUS.PENDING, updatedAt: TEST_TIME - 5_000 },
     ],
   });
-  const adapter = adapterFor(run);
+  const plugin = pluginFor(run);
 
-  const observations = await adapter.observe();
+  const observations = await plugin.observe();
 
   assert.equal(observations.length, 2);
   const [newest, oldest] = observations;
@@ -203,7 +205,7 @@ test("observes cloud tasks as cloud sessions labelled by their environment's rep
 
 test("never surfaces the prompt-derived task title", async () => {
   const { run } = fakeCodexCli({ tasks: [{ id: "task-1", updatedAt: TEST_TIME }] });
-  const observations = await adapterFor(run).observe();
+  const observations = await pluginFor(run).observe();
 
   assert.equal(JSON.stringify(observations).includes(SECRET_PROMPT_TEXT), false);
 });
@@ -219,7 +221,7 @@ test("maps every documented task state and refuses to guess at unknown ones", as
     ],
   });
 
-  const observations = await adapterFor(run).observe();
+  const observations = await pluginFor(run).observe();
 
   assert.deepEqual(
     observations.map((observation) => observation.status),
@@ -239,7 +241,7 @@ test("labels a task with no environment label as an unnamed workspace", async ()
     tasks: [{ id: "task-1", omitEnvironmentLabel: true, updatedAt: TEST_TIME }],
   });
 
-  const observations = await adapterFor(run).observe();
+  const observations = await pluginFor(run).observe();
 
   assert.equal(observations[0]?.title, "workspace");
 });
@@ -247,7 +249,7 @@ test("labels a task with no environment label as an unnamed workspace", async ()
 test("observes nothing while the CLI is signed out, and never asks for the list", async () => {
   const { run, invocations } = fakeCodexCli({ loggedIn: false });
 
-  const observations = await adapterFor(run).observe();
+  const observations = await pluginFor(run).observe();
 
   assert.deepEqual(observations, []);
   assert.deepEqual(
@@ -259,7 +261,7 @@ test("observes nothing while the CLI is signed out, and never asks for the list"
 test("observes nothing on a machine without the CLI", async () => {
   const { run } = fakeCodexCli({ binaryMissing: true });
 
-  const observations = await adapterFor(run).observe();
+  const observations = await pluginFor(run).observe();
 
   assert.deepEqual(observations, []);
 });
@@ -267,106 +269,111 @@ test("observes nothing on a machine without the CLI", async () => {
 test("clears observed state when the login goes away", async () => {
   const behavior: FakeCliBehavior = { tasks: [{ id: "task-1", updatedAt: TEST_TIME }] };
   const { run } = fakeCodexCli(behavior);
-  const adapter = adapterFor(run);
+  const plugin = pluginFor(run);
 
-  assert.equal((await adapter.observe()).length, 1);
+  assert.equal((await plugin.observe()).length, 1);
   behavior.loggedIn = false;
-  assert.deepEqual(await adapter.observe(), []);
+  assert.deepEqual(await plugin.observe(), []);
 });
 
 test("keeps the last snapshot across a failed or unreadable list", async () => {
   const behavior: FakeCliBehavior = { tasks: [{ id: "task-1", updatedAt: TEST_TIME }] };
   const { run } = fakeCodexCli(behavior);
-  const adapter = adapterFor(run);
+  const plugin = pluginFor(run);
 
-  const first = await adapter.observe();
+  const first = await plugin.observe();
   assert.equal(first.length, 1);
 
   behavior.listExitCode = 2;
-  assert.deepEqual(await adapter.observe(), first);
+  assert.deepEqual(await plugin.observe(), first);
 
   behavior.listExitCode = 0;
   behavior.listStdout = "not json at all";
-  assert.deepEqual(await adapter.observe(), first);
+  assert.deepEqual(await plugin.observe(), first);
 });
 
 test("refreshes on its own cadence rather than on every tick", async () => {
   let now = TEST_TIME;
   const { run, invocations } = fakeCodexCli({ tasks: [] });
-  const adapter = adapterFor(run, {
+  const plugin = pluginFor(run, {
     now: () => now,
     minimumRefreshIntervalMs: CLI_ADAPTER_DEFAULTS.MINIMUM_REFRESH_INTERVAL_MS,
   });
 
-  await adapter.observe();
-  await adapter.observe();
+  await plugin.observe();
+  await plugin.observe();
   assert.equal(invocations.length, 2);
 
   now += CLI_ADAPTER_DEFAULTS.MINIMUM_REFRESH_INTERVAL_MS;
-  await adapter.observe();
+  await plugin.observe();
   assert.equal(invocations.length, 4);
 });
 
 test("reports what each pass learned about the CLI login, and only that", async () => {
   const behavior: FakeCliBehavior = { tasks: [] };
   const { run } = fakeCodexCli(behavior);
-  const adapter = adapterFor(run);
+  const plugin = pluginFor(run);
 
   // Before a pass has asked, the honest answer is that nothing was checked.
-  assert.equal(adapter.connection(), CLI_CONNECTION.UNKNOWN);
+  assert.equal(plugin.connection(), CLI_CONNECTION.UNKNOWN);
 
-  await adapter.observe();
-  assert.equal(adapter.connection(), CLI_CONNECTION.CONNECTED);
+  await plugin.observe();
+  assert.equal(plugin.connection(), CLI_CONNECTION.CONNECTED);
 
   behavior.loggedIn = false;
-  await adapter.observe();
-  assert.equal(adapter.connection(), CLI_CONNECTION.SIGNED_OUT);
+  await plugin.observe();
+  assert.equal(plugin.connection(), CLI_CONNECTION.SIGNED_OUT);
 
   behavior.loggedIn = true;
   behavior.binaryMissing = true;
-  await adapter.observe();
-  assert.equal(adapter.connection(), CLI_CONNECTION.CLI_MISSING);
+  await plugin.observe();
+  assert.equal(plugin.connection(), CLI_CONNECTION.CLI_MISSING);
 
   behavior.binaryMissing = false;
-  await adapter.observe();
-  assert.equal(adapter.connection(), CLI_CONNECTION.CONNECTED);
+  await plugin.observe();
+  assert.equal(plugin.connection(), CLI_CONNECTION.CONNECTED);
 
   // A list that ran and failed says nothing about the login behind it.
   behavior.listExitCode = 2;
-  await adapter.observe();
-  assert.equal(adapter.connection(), CLI_CONNECTION.CONNECTED);
+  await plugin.observe();
+  assert.equal(plugin.connection(), CLI_CONNECTION.CONNECTED);
 });
 
 test("answers unsupported for every act but the creation its provider documents", async () => {
   const { run } = fakeCodexCli({ tasks: [{ id: "task-1", updatedAt: TEST_TIME }] });
-  const adapter = adapterFor(run);
-  await adapter.observe();
+  const plugin = pluginFor(run);
+  await plugin.observe();
 
+  const unsupported = { status: "unsupported", reason: UNSUPPORTED_BY_OBSERVATION };
   assert.deepEqual(
-    await adapter.sendMessage(admittedForTest({ providerSessionId: "task-1", text: "hello" })),
-    {
-      status: "unsupported",
-      reason: "This provider does not take messages.",
-    },
+    await dispatchAct(
+      plugin,
+      "message",
+      admittedForTest({ providerSessionId: "task-1", text: "hello" }),
+    ),
+    unsupported,
   );
   assert.deepEqual(
-    await adapter.executeControl(
+    await dispatchAct(
+      plugin,
+      "control",
       admittedForTest({
         providerSessionId: "task-1",
         control: { kind: ACT_KIND.CONTROL, id: "stop", label: "Stop" },
       }),
     ),
-    { status: "unsupported", reason: "This provider has no such control." },
+    unsupported,
   );
   assert.deepEqual(
-    await adapter.spawnWorkspaceAgent(admittedForTest({ providerSessionId: "task-1", agent: "x" })),
-    {
-      status: "unsupported",
-      reason: "This provider cannot add agents.",
-    },
+    await dispatchAct(
+      plugin,
+      "spawnAgent",
+      admittedForTest({ providerSessionId: "task-1", agent: "x" }),
+    ),
+    unsupported,
   );
   // A cloud task's conversation lives with its provider and is never fetched.
-  assert.deepEqual(await adapter.readTranscript("task-1"), {
+  assert.deepEqual(await dispatchRead(plugin, "transcript", "task-1"), {
     status: "unsupported",
     reason: "This provider keeps no transcript this build can read.",
   });
@@ -386,12 +393,12 @@ test("offers one creation target per observed environment, and none signed out",
     ],
   };
   const { run } = fakeCodexCli(behavior);
-  const adapter = adapterFor(run);
+  const plugin = pluginFor(run);
 
   // The label stands in where the list reported no id — which is what real
   // accounts return — and the id is preferred where one exists.
-  await adapter.observe();
-  assert.deepEqual(adapter.workspaceProjects(), [
+  await plugin.observe();
+  assert.deepEqual(plugin.projects?.() ?? [], [
     {
       providerProjectId: "reviewstage/luke",
       repository: "luke",
@@ -402,8 +409,8 @@ test("offers one creation target per observed environment, and none signed out",
   ]);
 
   behavior.loggedIn = false;
-  await adapter.observe();
-  assert.deepEqual(adapter.workspaceProjects(), []);
+  await plugin.observe();
+  assert.deepEqual(plugin.projects?.() ?? [], []);
 });
 
 test("creates a task in an observed environment through the documented command", async () => {
@@ -411,10 +418,12 @@ test("creates a task in an observed environment through the documented command",
     tasks: [{ id: "task-1", updatedAt: TEST_TIME }],
     createdTaskId: "task-created-9",
   });
-  const adapter = adapterFor(run);
-  await adapter.observe();
+  const plugin = pluginFor(run);
+  await plugin.observe();
 
-  const result = await adapter.createWorkspace(
+  const result = await dispatchAct(
+    plugin,
+    "createWorkspace",
     admittedForTest({
       providerProjectId: "reviewstage/luke",
       task: "Fix the flaky login test",
@@ -436,20 +445,26 @@ test("creates a task in an observed environment through the documented command",
 test("refuses a creation the latest pass did not offer or cannot honour", async () => {
   const behavior: FakeCliBehavior = { tasks: [{ id: "task-1", updatedAt: TEST_TIME }] };
   const { run, invocations } = fakeCodexCli(behavior);
-  const adapter = adapterFor(run);
-  await adapter.observe();
+  const plugin = pluginFor(run);
+  await plugin.observe();
   const invocationsAfterObserve = invocations.length;
 
   // An environment the pass never reported names nowhere a creation could go.
   assert.deepEqual(
-    await adapter.createWorkspace(admittedForTest({ providerProjectId: "env-9", task: "Fix it" })),
+    await dispatchAct(
+      plugin,
+      "createWorkspace",
+      admittedForTest({ providerProjectId: "env-9", task: "Fix it" }),
+    ),
     {
       status: "unsupported",
       reason: UNSUPPORTED_BY_OBSERVATION,
     },
   );
   // Codex names tasks itself, so a chosen name is refused rather than dropped.
-  const named = await adapter.createWorkspace(
+  const named = await dispatchAct(
+    plugin,
+    "createWorkspace",
     admittedForTest({
       providerProjectId: "reviewstage/luke",
       name: "My workspace",
@@ -458,7 +473,9 @@ test("refuses a creation the latest pass did not offer or cannot honour", async 
   );
   assert.equal(named.status, "rejected");
   // The task is the whole creation; without one there is nothing to start.
-  const taskless = await adapter.createWorkspace(
+  const taskless = await dispatchAct(
+    plugin,
+    "createWorkspace",
     admittedForTest({ providerProjectId: "reviewstage/luke" }),
   );
   assert.equal(taskless.status, "rejected");
@@ -468,7 +485,9 @@ test("refuses a creation the latest pass did not offer or cannot honour", async 
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // A CLI that refuses the request is reported as a rejection, not a success.
   behavior.execExitCode = 2;
-  const refused = await adapter.createWorkspace(
+  const refused = await dispatchAct(
+    plugin,
+    "createWorkspace",
     admittedForTest({
       providerProjectId: "reviewstage/luke",
       task: "Fix it",
@@ -479,7 +498,9 @@ test("refuses a creation the latest pass did not offer or cannot honour", async 
   // A login gone since the pass refuses at the moment of the act.
   behavior.execExitCode = 0;
   behavior.loggedIn = false;
-  const signedOut = await adapter.createWorkspace(
+  const signedOut = await dispatchAct(
+    plugin,
+    "createWorkspace",
     admittedForTest({
       providerProjectId: "reviewstage/luke",
       task: "Fix it",
@@ -491,12 +512,14 @@ test("refuses a creation the latest pass did not offer or cannot honour", async 
 test("a login lost at the moment of an act clears observed state immediately", async () => {
   const behavior: FakeCliBehavior = { tasks: [{ id: "task-1", updatedAt: TEST_TIME }] };
   const { run } = fakeCodexCli(behavior);
-  const adapter = adapterFor(run);
-  await adapter.observe();
-  assert.equal(adapter.workspaceProjects().length, 1);
+  const plugin = pluginFor(run);
+  await plugin.observe();
+  assert.equal((plugin.projects?.() ?? []).length, 1);
 
   behavior.loggedIn = false;
-  const rejected = await adapter.createWorkspace(
+  const rejected = await dispatchAct(
+    plugin,
+    "createWorkspace",
     admittedForTest({
       providerProjectId: "reviewstage/luke",
       task: "Fix it",
@@ -504,10 +527,10 @@ test("a login lost at the moment of an act clears observed state immediately", a
   );
 
   assert.equal(rejected.status, "rejected");
-  assert.equal(adapter.connection(), CLI_CONNECTION.SIGNED_OUT);
+  assert.equal(plugin.connection(), CLI_CONNECTION.SIGNED_OUT);
   // The write's probe already said the login is gone; the projects offered
   // under it must not outlive it by even a pass.
-  assert.deepEqual(adapter.workspaceProjects(), []);
+  assert.deepEqual(plugin.projects?.() ?? [], []);
 });
 
 test("sweeps a bounded few pages for environments, on its own slower cadence", async () => {
@@ -521,14 +544,14 @@ test("sweeps a bounded few pages for environments, on its own slower cadence", a
       { tasks: [{ id: "t3", updatedAt: TEST_TIME - 2, environmentLabel: "reviewstage/docs" }] },
     ],
   });
-  const adapter = adapterFor(run);
+  const plugin = pluginFor(run);
 
-  await adapter.observe();
+  await plugin.observe();
 
   // Environments from every swept page are offered, newest first, and the
   // sweep followed exactly the cursors the CLI handed back — each one token.
   assert.deepEqual(
-    adapter.workspaceProjects().map((project) => project.providerProjectId),
+    (plugin.projects?.() ?? []).map((project) => project.providerProjectId),
     ["reviewstage/luke", "reviewstage/site", "reviewstage/docs"],
   );
   const listArgv = invocations.filter((invocation) => invocation.argv[1] === "list");
@@ -539,12 +562,12 @@ test("sweeps a bounded few pages for environments, on its own slower cadence", a
 
   // A pass inside the sweep interval reads the newest page alone and keeps
   // the sweep's offer standing.
-  await adapter.observe();
+  await plugin.observe();
   assert.equal(
     invocations.filter((invocation) => invocation.argv[1] === "list").length,
     listArgv.length + 1,
   );
-  assert.equal(adapter.workspaceProjects().length, 3);
+  assert.equal((plugin.projects?.() ?? []).length, 3);
 });
 
 test("a sweep stops at its page bound however deep the history goes", async () => {
@@ -560,7 +583,7 @@ test("a sweep stops at its page bound however deep the history goes", async () =
   }));
   const { run, invocations } = fakeCodexCli({ pages: endlessPages });
 
-  await adapterFor(run).observe();
+  await pluginFor(run).observe();
 
   assert.equal(invocations.filter((invocation) => invocation.argv[1] === "list").length, 5);
 });
@@ -578,7 +601,7 @@ test("carries the CLI's diff counts and leaves a zero summary unreported", async
     ],
   });
 
-  const observations = await adapterFor(run).observe();
+  const observations = await pluginFor(run).observe();
 
   assert.deepEqual(observations[0]?.detail?.diff, {
     filesChanged: 3,
@@ -586,7 +609,7 @@ test("carries the CLI's diff counts and leaves a zero summary unreported", async
     linesRemoved: 4,
   });
   // The zero summary of a task still working rides to the normalizer, which
-  // drops it — the adapter reports the provider's counts, nothing more.
+  // drops it — the plugin reports the provider's counts, nothing more.
   assert.deepEqual(observations[1]?.detail?.diff, {
     filesChanged: 0,
     linesAdded: 0,

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ACT_RESULT_STATUS, UNSUPPORTED_BY_OBSERVATION } from "@sidecar/wire";
 import { admittedForTest } from "@sidecar/wire/testing";
+import type { ProviderTranscriptSinceResult } from "./act-results.js";
 import { ACT_KIND, SESSION_CONTROL_KIND } from "./advertised-acts.js";
 import {
   type ProviderControlRequest,
@@ -278,6 +279,34 @@ test("an act no observer holds answers unsupported once", async () => {
     ),
     { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: "No provider observer supports that act." },
   );
+});
+
+test("a transcript read stops at the observer that holds the session", async () => {
+  const asked: string[] = [];
+  const reader = (name: string, answer: ProviderTranscriptSinceResult): SessionProviderPlugin => ({
+    provider: { id: "merged", displayName: "merged" },
+    observe: async () => [],
+    latest: () => [],
+    reads: {
+      transcriptSince: async () => {
+        asked.push(name);
+        return answer;
+      },
+    },
+  });
+  // The first observer refuses in its own words — a compressed rollout it can
+  // see but cannot render — and that refusal is the session's own answer, so
+  // the second observer is never asked for a transcript it does not hold.
+  const merged = mergePlugins({ id: "merged", displayName: "Merged" }, [
+    reader("local", { status: ACT_RESULT_STATUS.REJECTED, reason: "compressed" }),
+    reader("cloud", { status: ACT_RESULT_STATUS.ACCEPTED, text: "cloud words", truncated: false }),
+  ]);
+
+  assert.deepEqual(await merged.reads?.transcriptSince?.("session-1"), {
+    status: ACT_RESULT_STATUS.REJECTED,
+    reason: "compressed",
+  });
+  assert.deepEqual(asked, ["local"]);
 });
 
 test("merging an observer of another provider is refused outright", () => {

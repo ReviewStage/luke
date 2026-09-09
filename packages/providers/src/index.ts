@@ -1,5 +1,5 @@
 export { claudeDesktopApplications } from "./claude-code/applications.js";
-export { CodexCloudSessionAdapter } from "./codex/cloud-adapter.js";
+export { codexCloudPlugin } from "./codex/cloud.js";
 export {
   ConductorLocalWorkspaceAdapter,
   ConductorRepositoryReader,
