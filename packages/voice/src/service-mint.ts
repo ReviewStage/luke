@@ -56,7 +56,7 @@ export interface ServiceMintAuthorization {
   refreshAccount: () => Promise<void>;
 }
 
-export interface ServiceMintOptions {
+interface ServiceMintOptions {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   /** The mint endpoint's path under that origin. */
@@ -85,7 +85,7 @@ export interface ServiceMintOptions {
  * diagnostics say why — including the day's allowance, which is what the
  * refusal a spent quota answers with is diagnosed from.
  */
-export class ServiceRealtimeCredentialMinter implements RealtimeCredentialMinter {
+class ServiceRealtimeCredentialMinter implements RealtimeCredentialMinter {
   readonly #endpoint: string;
   readonly #logLabel: string;
   readonly #malformedDetail: string;
@@ -265,15 +265,16 @@ export class ServiceRealtimeCredentialMinter implements RealtimeCredentialMinter
   }
 }
 
-export interface HostedRealtimeCredentialOptions extends ServiceMintAuthorization {
-  /** The hosted service origin, without a trailing slash. */
-  serviceBaseUrl: string;
-  voice?: string;
-  speed?: number;
-  fetch?: CloudFetch;
-  now?: () => number;
-  requestTimeoutMs?: number;
-}
+/**
+ * What a caller says about a mint; the endpoint, its label, and whether it
+ * carries an identity at all are the build's own.
+ */
+type RealtimeCredentialOptions = Omit<
+  ServiceMintOptions,
+  "servicePath" | "logLabel" | "malformedDetail" | "authorization"
+>;
+
+export type HostedRealtimeCredentialOptions = RealtimeCredentialOptions & ServiceMintAuthorization;
 
 /**
  * The signed-in account's voice mint, for a developer who has not connected
@@ -292,15 +293,7 @@ export function hostedRealtimeCredentialMinter(
   });
 }
 
-export interface IntroductionRealtimeCredentialOptions {
-  /** The hosted service origin, without a trailing slash. */
-  serviceBaseUrl: string;
-  voice?: string;
-  speed?: number;
-  fetch?: CloudFetch;
-  now?: () => number;
-  requestTimeoutMs?: number;
-}
+export type IntroductionRealtimeCredentialOptions = RealtimeCredentialOptions;
 
 /**
  * The one-time onboarding introduction's mint, before any account exists. The

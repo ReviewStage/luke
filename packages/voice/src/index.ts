@@ -24,6 +24,4 @@ export {
   introductionRealtimeCredentialMinter,
   type RealtimeCredentialMinter,
   type ServiceMintAuthorization,
-  type ServiceMintOptions,
-  ServiceRealtimeCredentialMinter,
 } from "./service-mint.js";
