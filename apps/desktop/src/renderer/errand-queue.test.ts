@@ -11,7 +11,6 @@ import {
   errandWait,
   finishErrand,
   flushErrands,
-  foldErrandHolds,
   landErrand,
   NOTHING_HELD,
   nextErrand,
@@ -20,7 +19,6 @@ import {
 import { ERRAND_TARGET, ERRAND_WAIT } from "./luke-errand";
 import { APP_SETTING_ID } from "./luke-guide";
 import { PANEL_TAB } from "./panel-tabs";
-import { SESSION_FILTER, SESSION_SORT } from "./session-model";
 import { SETTINGS_VIEW } from "./settings-views";
 
 const settings = (captions: boolean) => settingsView({ voiceCaptions: captions });
@@ -128,23 +126,7 @@ test("a panel that has gone draws everything the run was still holding", () => {
   assert.ok(errandRunIdle(flushed.run));
 });
 
-test("holds folded together keep the last snapshot and every part of the view", () => {
-  assert.deepEqual(
-    foldErrandHolds([
-      { settings: CAPTIONS_ON, view: { filters: [SESSION_FILTER.CLOUD] } },
-      { view: { sort: SESSION_SORT.RECENCY } },
-      { settings: CAPTIONS_OFF },
-    ]),
-    {
-      settings: CAPTIONS_OFF,
-      view: { filters: [SESSION_FILTER.CLOUD], sort: SESSION_SORT.RECENCY },
-    },
-  );
-  assert.deepEqual(foldErrandHolds([]), NOTHING_HELD);
-  assert.deepEqual(foldErrandHolds([NOTHING_HELD, NOTHING_HELD]), NOTHING_HELD);
-});
-
-test("an action with nowhere to land leaves the run to the next one", () => {
+test("an act with nowhere to land leaves the run to the next one", () => {
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The guide's ids travel as plain text, so an action can name a control this
   // build does not draw. It is over the moment it is taken up.

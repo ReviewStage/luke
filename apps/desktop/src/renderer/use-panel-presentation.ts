@@ -15,37 +15,6 @@ import {
 } from "./panel-state";
 
 /**
- * Whether a pointer leave should schedule a close. The slot and the composer
- * stay put — someone is in the middle of writing, often in a browser — and a
- * key or ask being typed holds the panel the same way. A panel whose shape
- * has just receded out from under the pointer stays too: entering a settings
- * page shorter than the one it replaces shrinks the shape past a resting
- * hand, and that is the shape leaving the pointer, not the pointer leaving
- * the shape. An untravelled leave is the same physics from the other side: a
- * pointer that has not moved since the shape took it cannot have left it, so
- * the leave is the shape's own doing — a greeting expanding under a resting
- * cursor, a window standing up beneath one — and closing on it would collapse
- * a panel nobody dismissed.
- */
-export function pointerLeaveSchedules(input: {
-  presentation: PanelPresentation;
-  hold: boolean;
-  receded: boolean;
-  travelled: boolean;
-}): boolean {
-  if (input.presentation === PANEL_PRESENTATION.CAPSULE) return false;
-  if (input.presentation === PANEL_PRESENTATION.SLOT) return false;
-  if (input.presentation === PANEL_PRESENTATION.FEEDBACK) return false;
-  if (
-    input.presentation === PANEL_PRESENTATION.PANEL &&
-    (input.hold || input.receded || !input.travelled)
-  ) {
-    return false;
-  }
-  return true;
-}
-
-/**
  * How long a marked recede is still travelling: exit plus shape, the same
  * clock the collapse spends. Until it has passed, the vacated footprint still
  * answers hit tests — the surface and the panel's clip spring down behind the
@@ -53,76 +22,6 @@ export function pointerLeaveSchedules(input: {
  * ground the shape is about to leave.
  */
 export const RECEDE_SETTLE_MS = MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SURFACE;
-
-/**
- * Whether the shape shrinking marks the pointer as left behind. Only the
- * panel follows its content down under a resting pointer — the slot and the
- * composer never close by leaving anyway — and only a pointer actually on
- * the shape can be left by it: a shrink with the pointer already away has
- * nobody to protect, and marking it would swallow a later, genuine leave.
- */
-export function recedeArms(input: {
-  presentation: PanelPresentation;
-  pointerInside: boolean;
-}): boolean {
-  return input.presentation === PANEL_PRESENTATION.PANEL && input.pointerInside;
-}
-
-/**
- * Whether a pointer confirmed over the panel's content releases the recede
- * mark. Only once the recede has settled: while the spring is still
- * travelling, the vacated footprint itself answers as content, so a twitch
- * during the shrink would spend the protection one frame before the leave it
- * exists for.
- */
-export function recedeReleases(input: { recededAt: number; now: number }): boolean {
-  return input.now - input.recededAt >= RECEDE_SETTLE_MS;
-}
-
-/** What the leave timer does when it fires, reading the shape as it is now. */
-export const POINTER_LEAVE_FIRE = {
-  IGNORE: "ignore",
-  CAPSULE: "capsule",
-  COLLAPSE: "collapse",
-} as const;
-
-export type PointerLeaveFire = (typeof POINTER_LEAVE_FIRE)[keyof typeof POINTER_LEAVE_FIRE];
-
-export function pointerLeaveFires(input: {
-  presentation: PanelPresentation;
-  hold: boolean;
-}): PointerLeaveFire {
-  if (input.presentation === PANEL_PRESENTATION.PEEK) return POINTER_LEAVE_FIRE.CAPSULE;
-  if (input.presentation === PANEL_PRESENTATION.PANEL) {
-    return input.hold ? POINTER_LEAVE_FIRE.IGNORE : POINTER_LEAVE_FIRE.COLLAPSE;
-  }
-  return POINTER_LEAVE_FIRE.IGNORE;
-}
-
-/** Hovering the capsule peeks; any other shape is already answering the pointer. */
-export function pointerEnterPeeks(presentation: PanelPresentation): boolean {
-  return presentation === PANEL_PRESENTATION.CAPSULE;
-}
-
-/**
- * Whether closing to the capsule keeps the settings tab. A half-written key
- * or note is what someone is in the middle of; the list is not.
- */
-export function capsuleKeepsTab(composerHeld: boolean): boolean {
-  return composerHeld;
-}
-
-/**
- * Letting go of the ask field while the pointer is already away has to
- * release the hold the caret had — the pointer cannot leave a second time.
- */
-export function askDisengageLeaves(input: {
-  wasEngaged: boolean;
-  engaged: boolean;
-  pointerInside: boolean;
-}): boolean {
-  return input.wasEngaged && !input.engaged && !input.pointerInside;
-}
 
 function usePointerPassthrough(
   onHitRegionEnter: () => void,
@@ -312,7 +211,7 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
     // it resets either way.
     if (next === PANEL_PRESENTATION.CAPSULE) {
       host.onCapsuleList();
-      if (!capsuleKeepsTab(host.composerHeld())) host.onCapsuleTab();
+      if (!host.composerHeld()) host.onCapsuleTab();
     }
   }, []);
 
@@ -367,7 +266,9 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
     // cannot land between a recede and the leave it explains — the surface
     // covers the pointer for that whole stretch, so no enter fires there.
     recededAt.current = undefined;
-    if (!pointerEnterPeeks(presentationRef.current)) return;
+    // Hovering the capsule peeks; any other shape is already answering the
+    // pointer.
+    if (presentationRef.current !== PANEL_PRESENTATION.CAPSULE) return;
     hoverTimer.current = window.setTimeout(() => {
       hoverTimer.current = undefined;
       if (presentationRef.current === PANEL_PRESENTATION.CAPSULE) {
@@ -384,24 +285,31 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
       // and the next one is the pointer's own action again.
       const receded = recededAt.current !== undefined;
       recededAt.current = undefined;
-      if (
-        !pointerLeaveSchedules({
-          presentation: presentationRef.current,
-          hold: heldAgainstPointer(),
-          receded,
-          travelled,
-        })
-      ) {
+      // The slot and the composer stay put — someone is in the middle of
+      // writing, often in a browser — and a key or ask being typed holds the
+      // panel the same way. A panel whose shape has just receded out from
+      // under the pointer stays too: entering a settings page shorter than
+      // the one it replaces shrinks the shape past a resting hand, and that
+      // is the shape leaving the pointer, not the pointer leaving the shape.
+      // An untravelled leave is the same physics from the other side: a
+      // pointer that has not moved since the shape took it cannot have left
+      // it, so the leave is the shape's own doing — a greeting expanding
+      // under a resting cursor, a window standing up beneath one — and
+      // closing on it would collapse a panel nobody dismissed.
+      const drawn = presentationRef.current;
+      if (drawn === PANEL_PRESENTATION.CAPSULE) return;
+      if (drawn === PANEL_PRESENTATION.SLOT) return;
+      if (drawn === PANEL_PRESENTATION.FEEDBACK) return;
+      if (drawn === PANEL_PRESENTATION.PANEL && (heldAgainstPointer() || receded || !travelled)) {
         return;
       }
       hoverTimer.current = window.setTimeout(() => {
         hoverTimer.current = undefined;
-        const fire = pointerLeaveFires({
-          presentation: presentationRef.current,
-          hold: heldAgainstPointer(),
-        });
-        if (fire === POINTER_LEAVE_FIRE.CAPSULE) applyPresentation(PANEL_PRESENTATION.CAPSULE);
-        else if (fire === POINTER_LEAVE_FIRE.COLLAPSE) void changeMode(false);
+        const fired = presentationRef.current;
+        if (fired === PANEL_PRESENTATION.PEEK) applyPresentation(PANEL_PRESENTATION.CAPSULE);
+        else if (fired === PANEL_PRESENTATION.PANEL && !heldAgainstPointer()) {
+          void changeMode(false);
+        }
       }, LEAVE_DELAY_MS);
     },
     [applyPresentation, cancelHover, changeMode, heldAgainstPointer],
@@ -409,13 +317,12 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
 
   const changeAskEngagement = useCallback(
     (engaged: boolean) => {
-      const leave = askDisengageLeaves({
-        wasEngaged: askEngaged.current,
-        engaged,
-        pointerInside: pointerInside.current,
-      });
+      // Letting go of the field while the pointer is already away has to
+      // release the hold the caret had — the pointer cannot leave a second
+      // time.
+      const leaves = askEngaged.current && !engaged && !pointerInside.current;
       askEngaged.current = engaged;
-      if (leave) onHitRegionLeave();
+      if (leaves) onHitRegionLeave();
     },
     [onHitRegionLeave],
   );
@@ -435,20 +342,26 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
     void changeMode(true);
   }, [changeMode]);
 
+  // Only the panel follows its content down under a resting pointer — the
+  // slot and the composer never close by leaving anyway — and only a pointer
+  // actually on the shape can be left by it: a shrink with the pointer
+  // already away has nobody to protect, and marking it would swallow a later,
+  // genuine leave.
   const panelReceded = useCallback(() => {
-    const arms = recedeArms({
-      presentation: presentationRef.current,
-      pointerInside: pointerInside.current,
-    });
-    if (arms) recededAt.current = performance.now();
+    if (presentationRef.current !== PANEL_PRESENTATION.PANEL) return;
+    if (!pointerInside.current) return;
+    recededAt.current = performance.now();
   }, []);
 
+  // A pointer confirmed over the panel's content releases the mark, but only
+  // once the recede has settled: while the spring is still travelling, the
+  // vacated footprint itself answers as content, so a twitch during the
+  // shrink would spend the protection one frame before the leave it exists
+  // for.
   const onPointerOverPanel = useCallback(() => {
     const marked = recededAt.current;
     if (marked === undefined) return;
-    if (recedeReleases({ recededAt: marked, now: performance.now() })) {
-      recededAt.current = undefined;
-    }
+    if (performance.now() - marked >= RECEDE_SETTLE_MS) recededAt.current = undefined;
   }, []);
 
   const presentationOf = useCallback(() => presentationRef.current, []);

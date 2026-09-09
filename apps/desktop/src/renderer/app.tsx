@@ -14,14 +14,18 @@ import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE, voiceHotkeyLabel } from "@sideca
 import type { AppSettingsView, ObservedAccountCalendars } from "@sidecar/settings/wire";
 import { appSettingsView } from "@sidecar/settings/wire";
 import { MOTION_DURATION_MS } from "@sidecar/surface";
-import { cssCustomProperties } from "@sidecar/surface/react-css";
+import {
+  cssCustomProperties,
+  SURFACE_PROPERTY,
+  type SurfaceProperty,
+} from "@sidecar/surface/react-css";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { type AppStateSnapshot, sessionReplayBootstrap } from "#shared/messages/app-state";
 import type { DisplayDiagnostic, SupersetSignInSnapshot } from "#shared/messages/session";
 import { SUPERSET_SIGN_IN_STAGE, SUPERSET_WORKSPACE_PROVIDER_ID } from "#shared/messages/session";
-import { act, tell, updateSetting, updateSettingEntry } from "./act";
+import { act, tell, updateSetting } from "./act";
 import { useAppActionCarrier } from "./app-action-carrier";
 import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
 import type { CalendarGateControl } from "./calendar-gate";
@@ -75,8 +79,8 @@ import {
 
 function notchStyle(display: DisplayDiagnostic): CSSProperties {
   return cssCustomProperties({
-    "--notch-top-inset": `${display.notch.topInset}px`,
-    "--notch-housing-width": `${display.notch.housingWidth}px`,
+    [SURFACE_PROPERTY.NOTCH_TOP_INSET]: `${display.notch.topInset}px`,
+    [SURFACE_PROPERTY.NOTCH_HOUSING_WIDTH]: `${display.notch.housingWidth}px`,
   });
 }
 
@@ -85,10 +89,12 @@ function surfaceHeightStyle(
   slotHeight: number | undefined,
   feedbackHeight: number | undefined,
 ): CSSProperties {
-  const properties: Record<string, string> = {};
-  if (panelHeight !== undefined) properties["--panel-height"] = `${panelHeight}px`;
-  if (slotHeight !== undefined) properties["--slot-height"] = `${slotHeight}px`;
-  if (feedbackHeight !== undefined) properties["--feedback-height"] = `${feedbackHeight}px`;
+  const properties: Partial<Record<SurfaceProperty, string>> = {};
+  if (panelHeight !== undefined) properties[SURFACE_PROPERTY.PANEL_HEIGHT] = `${panelHeight}px`;
+  if (slotHeight !== undefined) properties[SURFACE_PROPERTY.SLOT_HEIGHT] = `${slotHeight}px`;
+  if (feedbackHeight !== undefined) {
+    properties[SURFACE_PROPERTY.FEEDBACK_HEIGHT] = `${feedbackHeight}px`;
+  }
   return cssCustomProperties(properties);
 }
 

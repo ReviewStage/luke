@@ -1,15 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  comparableBaseline,
-  nextDepartures,
-  parseMilliseconds,
-  parsePixels,
-  planReorder,
-  rosterRows,
-  wingSlotOffset,
-  withoutDeparture,
-} from "./session-motion";
+import { parseMilliseconds, parsePixels, planReorder, rosterRows } from "./session-motion";
 
 const tops = (entries: Record<string, number>) => new Map(Object.entries(entries));
 
@@ -20,17 +11,6 @@ test("a row found somewhere new travels back by exactly the distance it moved", 
   // `a` moved down 75px, so it starts 75px up — where it was — and vice versa.
   assert.equal(plan.travels.get("a"), -75);
   assert.equal(plan.travels.get("b"), 75);
-});
-
-test("a measurement in a new basis compares against nothing", () => {
-  // The wing's strip stacked reads every mark at one seat and spread reads
-  // each at its own, so the capsule unfolding into the peek would otherwise
-  // plan a travel for the lead mark by the strip's own inset — a hop to the
-  // left and back that nothing on screen had made.
-  const stacked = tops({ a: 0, b: 0 });
-  assert.equal(comparableBaseline(stacked, "false", "true"), undefined);
-  assert.equal(comparableBaseline(stacked, "false", "false"), stacked);
-  assert.equal(comparableBaseline(stacked, undefined, undefined), stacked);
 });
 
 test("a row that kept its place is left alone", () => {
@@ -78,12 +58,6 @@ test("the fan distance reads as pixels, and an unset token as none", () => {
   assert.equal(parsePixels(""), 0);
 });
 
-test("a session missing from the new list becomes a departure holding its slot", () => {
-  const drawn = rosterRows(sessions("a", "b", "c"), []);
-  const departures = nextDepartures(drawn, sessions("a", "c"), []);
-  assert.deepEqual(departures, [{ item: { id: "b" }, index: 1 }]);
-});
-
 test("a departure is drawn in the slot it held, marked leaving", () => {
   const rows = rosterRows(sessions("a", "c"), [{ item: { id: "b" }, index: 1 }]);
   assert.deepEqual(
@@ -113,71 +87,4 @@ test("several departures keep their order among the living rows", () => {
     rows.map((row) => row.item.id),
     ["a", "b", "c", "d"],
   );
-});
-
-test("a session returning mid-fade is alive again rather than a departure", () => {
-  const departures = [{ item: { id: "b" }, index: 1 }];
-  const drawn = rosterRows(sessions("a", "c"), departures);
-  assert.deepEqual(nextDepartures(drawn, sessions("a", "b", "c"), departures), []);
-});
-
-test("a departure expiring steps the ones below it up a slot", () => {
-  // From [a, b, c, d, e], b and d left: b holds slot 1 and d slot 3. When b is
-  // let go, d must still sit between c and e rather than jump past the end.
-  const departures = [
-    { item: { id: "b" }, index: 1 },
-    { item: { id: "d" }, index: 3 },
-  ];
-  const remaining = withoutDeparture(departures, "b");
-  assert.deepEqual(remaining, [{ item: { id: "d" }, index: 2 }]);
-  assert.deepEqual(
-    rosterRows(sessions("a", "c", "e"), remaining).map((row) => row.item.id),
-    ["a", "c", "d", "e"],
-  );
-});
-
-test("a departure expiring leaves the ones above it in place", () => {
-  const departures = [
-    { item: { id: "b" }, index: 1 },
-    { item: { id: "d" }, index: 3 },
-  ];
-  assert.deepEqual(withoutDeparture(departures, "d"), [{ item: { id: "b" }, index: 1 }]);
-});
-
-test("letting go of a session that is not departing changes nothing", () => {
-  const departures = [{ item: { id: "b" }, index: 1 }];
-  assert.deepEqual(withoutDeparture(departures, "x"), departures);
-});
-
-test("a departure still fading is kept while another begins", () => {
-  const departures = [{ item: { id: "b" }, index: 1 }];
-  const drawn = rosterRows(sessions("a", "c"), departures);
-  const next = nextDepartures(drawn, sessions("a"), departures);
-  assert.deepEqual(next, [
-    { item: { id: "b" }, index: 1 },
-    { item: { id: "c" }, index: 2 },
-  ]);
-});
-
-test("a mark's seat is invariant to the wing's bound moving under it", () => {
-  // A morph grows the wing 88px. The marks are anchored beside the housing,
-  // so the offset must not read that growth as a travel and animate the whole
-  // strip across the wing.
-  // SAFETY: The two fields below are every property the offset reads.
-  const capsule = { offsetLeft: 9, offsetParent: { clientWidth: 36 } } as unknown as HTMLElement;
-  // SAFETY: The same shape at the peek's own bound.
-  const peek = { offsetLeft: 9, offsetParent: { clientWidth: 124 } } as unknown as HTMLElement;
-  assert.equal(wingSlotOffset(capsule, true), wingSlotOffset(peek, true));
-});
-
-test("a stacked strip reports one seat, so a reorder at rest is no travel", () => {
-  // Every mark is drawn on the first slot while the strip is stacked. Reading
-  // the laid-out seat instead would spring the new lead mark in from a slot
-  // past the capsule's own side, which the wing does not clip.
-  // SAFETY: `offsetLeft` is every property the offset reads.
-  const lead = { offsetLeft: 9 } as unknown as HTMLElement;
-  // SAFETY: The seat the flex strip lays out for the second mark.
-  const second = { offsetLeft: 30 } as unknown as HTMLElement;
-  assert.equal(wingSlotOffset(lead, false), wingSlotOffset(second, false));
-  assert.notEqual(wingSlotOffset(lead, true), wingSlotOffset(second, true));
 });

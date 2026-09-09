@@ -113,22 +113,6 @@ export function restingMotion(context: FaceContext): FaceMotion | undefined {
 }
 
 /**
- * What the face plays: the rest if it has one, the gesture if it does not, and
- * stillness if it has neither. A rest owns the face outright, because each of
- * the three says something that is true right now — and the microphone ones
- * carry the face's colour, which is the only report the capsule makes of an open
- * microphone. Deciding it here rather than in an effect that runs afterwards is
- * what keeps a microphone opened mid gesture from going untinted until the
- * gesture runs out.
- */
-export function playedMotion(
-  resting: FaceMotion | undefined,
-  gesture: FaceMotion | undefined,
-): FaceMotion | undefined {
-  return resting ?? gesture;
-}
-
-/**
  * What the face has already reacted to. Sessions arriving and finishing are
  * counted, because one arrival is the same news as any other; the ones asking
  * for a person are remembered by id, because three still asking is not the news
@@ -339,27 +323,6 @@ export interface FacePlay {
 }
 
 /**
- * Everything the drawing is told, from the two things the model holds.
- *
- * Each gesture gets its own play, so each one is drawn afresh and each one is
- * therefore played. A rest keeps one play throughout, so its loop is never
- * rebuilt underneath itself — and a gesture the rest is covering is not being
- * played at all, so it does not get one either. Counting that one would restart
- * the microphone's tilt at a session it is meant to ignore, and again a frame
- * later when the rest dropped it.
- */
-export function facePlay(
-  resting: FaceMotion | undefined,
-  gesture: PlayingGesture | undefined,
-): FacePlay {
-  return {
-    motion: playedMotion(resting, gesture?.motion),
-    repeat: resting !== undefined,
-    play: resting === undefined ? (gesture?.play ?? 0) : 0,
-  };
-}
-
-/**
  * What Luke is playing: a rest, a gesture that has the face for one play, or
  * nothing at all. Gestures always give the face back — nothing here can leave it
  * stuck saying something that has stopped being true — and what they give it
@@ -463,5 +426,23 @@ export function useFaceMotion(context: FaceContext, still: boolean, hovered = fa
   // Held still, the face is simply the drawing: the stylesheet stops every loop,
   // and asking for no motion at all stops the poses changing underneath it.
   if (still) return { repeat: false, play: 0 };
-  return facePlay(resting, gesture);
+  // The rest if there is one, the gesture if there is not, and stillness if
+  // there is neither. A rest owns the face outright, because each of the
+  // three says something that is true right now — and the microphone ones
+  // carry the face's colour, which is the only report the capsule makes of an
+  // open microphone. Deciding it here rather than in an effect that runs
+  // afterwards is what keeps a microphone opened mid gesture from going
+  // untinted until the gesture runs out.
+  //
+  // Each gesture gets its own play, so each one is drawn afresh and each one
+  // is therefore played. A rest keeps one play throughout, so its loop is
+  // never rebuilt underneath itself — and a gesture the rest is covering is
+  // not being played at all, so it does not get one either. Counting that one
+  // would restart the microphone's tilt at a session it is meant to ignore,
+  // and again a frame later when the rest dropped it.
+  return {
+    motion: resting ?? gesture?.motion,
+    repeat: resting !== undefined,
+    play: resting === undefined ? (gesture?.play ?? 0) : 0,
+  };
 }

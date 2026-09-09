@@ -259,17 +259,6 @@ export interface ErrandBeats {
 }
 
 /**
- * Whether there is a flight to run at all. Read off the shape token itself
- * rather than off the total the beats add up to: a capture run zeroes the
- * tokens and reduced motion leaves each of them a millisecond, and three of
- * those summed would clear a floor that every one of them individually asked
- * to stay under. Neither wants a face crossing the panel at any speed.
- */
-export function errandFlies(tokens: ErrandTokens): boolean {
-  return tokens.surfaceMs >= STILL_MS;
-}
-
-/**
  * The flight's shape in time: out on the surface's own spring, a beat on the
  * control, and the same journey back. Nothing is written in milliseconds here
  * — every number is derived from a token — which is how a capture run and
@@ -357,7 +346,7 @@ function driftEase(progress: number): number {
  * landing is chosen — all of it when no words have been measured yet, and
  * whatever is left of it once some have.
  */
-export function captionRoom(input: {
+function captionRoom(input: {
   /** Whether a caption block is drawn right now. */
   drawn: boolean;
   /** Whether Luke holds the turn, which is when one can still appear. */
@@ -369,40 +358,6 @@ export function captionRoom(input: {
 }): number {
   if (!input.drawn && !input.speaking) return 0;
   return Math.max(0, input.max - input.size);
-}
-
-/**
- * Where a scroller has to sit for the landing to still be visible once that
- * room is taken. Nothing if it already is; otherwise the least scrolling that
- * clears it — and never so much that the control's own top leaves the view,
- * because a switch you can see the bottom of is worse than one sitting low.
- */
-export function errandScrollTop(input: {
-  scrollTop: number;
-  view: { top: number; bottom: number };
-  target: { top: number; bottom: number };
-  room: number;
-}): number {
-  const above = input.target.top - input.view.top;
-  if (above < 0) return input.scrollTop + above;
-  const below = input.target.bottom - (input.view.bottom - Math.max(0, input.room));
-  if (below <= 0) return input.scrollTop;
-  return input.scrollTop + Math.min(below, above);
-}
-
-/**
- * The shape as it will still be by the time the flight is over.
- *
- * A drift bounded by the shape as drawn is bounded by a shape that may be
- * about to get smaller: the captions take their room out of the panel while
- * Luke talks and give every pixel of it back when he stops, and a reply
- * ending mid-flight is the ordinary case rather than a strange one. The room
- * comes off the foot, so the settled shape is the drawn one less the block —
- * measured against that, the drift stays over black through the shrink
- * instead of being left on the desktop by it.
- */
-export function errandSettledBound(bound: ErrandBox, captionSize: number): ErrandBox {
-  return { ...bound, height: Math.max(0, bound.height - Math.max(0, captionSize)) };
 }
 
 /** The largest sway that keeps `base + sway * direction` between two edges. */
@@ -552,12 +507,14 @@ function keepInView(stage: HTMLElement, target: HTMLElement, room: number): void
     if (overflow !== "auto" && overflow !== "scroll") continue;
     const view = node.getBoundingClientRect();
     const box = target.getBoundingClientRect();
-    node.scrollTop = errandScrollTop({
-      scrollTop: node.scrollTop,
-      view: { top: pinnedViewTop(node, view.top), bottom: view.bottom },
-      target: { top: box.top, bottom: box.bottom },
-      room,
-    });
+    // Nothing to do if the landing is already visible once that room is
+    // taken; otherwise the least scrolling that clears it — and never so much
+    // that the control's own top leaves the view, because a switch you can
+    // see the bottom of is worse than one sitting low.
+    const above = box.top - pinnedViewTop(node, view.top);
+    const below = box.bottom - (view.bottom - Math.max(0, room));
+    if (above < 0) node.scrollTop += above;
+    else if (below > 0) node.scrollTop += Math.min(below, above);
     return;
   }
 }
@@ -667,7 +624,13 @@ export function LukeErrand({ errand, onLanded, onReturned }: LukeErrandProps): R
       // token, so it shares the reader.
       fanLimit: parsePixels(token(MOTION_TOKEN.ROW_FAN_LIMIT)),
     };
-    if (!errandFlies(tokens)) return returnHome();
+    // Whether there is a flight to run at all, read off the shape token
+    // itself rather than off the total the beats add up to: a capture run
+    // zeroes the tokens and reduced motion leaves each of them a millisecond,
+    // and three of those summed would clear a floor that every one of them
+    // individually asked to stay under. Neither wants a face crossing the
+    // panel at any speed.
+    if (tokens.surfaceMs < STILL_MS) return returnHome();
     const beats = errandBeats(tokens, errand.wait);
     const spring = token(MOTION_TOKEN.SPRING).trim() || "ease";
     const springFast = token(MOTION_TOKEN.SPRING_FAST).trim() || "ease";
@@ -745,10 +708,17 @@ export function LukeErrand({ errand, onLanded, onReturned }: LukeErrandProps): R
       const surface = stage.querySelector<HTMLElement>(
         `[${HIT_REGION_ATTRIBUTE}="${HIT_REGION.SURFACE}"]`,
       );
-      const bound = errandSettledBound(
-        errandBound(stageBox, (surface ?? stage).getBoundingClientRect()),
-        captionSize,
-      );
+      // A drift bounded by the shape as drawn is bounded by a shape that may
+      // be about to get smaller: the captions take their room out of the
+      // panel while Luke talks and give every pixel of it back when he stops,
+      // and a reply ending mid-flight is the ordinary case rather than a
+      // strange one. The room comes off the foot, so the settled shape is the
+      // drawn one less the block.
+      const drawnBound = errandBound(stageBox, (surface ?? stage).getBoundingClientRect());
+      const bound: ErrandBox = {
+        ...drawnBound,
+        height: Math.max(0, drawnBound.height - Math.max(0, captionSize)),
+      };
       const drift = errandDrift(journey, beats, bound);
       // A control drawn exactly where the face is has no journey to make.
       if (drift.length === 0) return returnHome();

@@ -114,26 +114,7 @@ export function nextErrand(run: ErrandRun) {
 }
 
 /**
- * Several holds drawn as one. The newest snapshot is the only true one — they
- * are cumulative, so the last carries every change made before it — while the
- * view patches are folded in the order they were chosen, because each names
- * only the part of the view it changed.
- */
-export function foldErrandHolds(holds: readonly ErrandHold[]): ErrandHold {
-  let settings: AppSettingsView | undefined;
-  let view: Partial<SessionArrangement> | undefined;
-  for (const hold of holds) {
-    if (hold.settings !== undefined) settings = hold.settings;
-    if (hold.view !== undefined) view = { ...view, ...hold.view };
-  }
-  return {
-    ...(settings === undefined ? undefined : { settings }),
-    ...(view === undefined ? undefined : { view }),
-  };
-}
-
-/**
- * The tap has landed: what the action in the air was holding is drawn, and it is
+ * The tap has landed: what the act in the air was holding is drawn, and it is
  * left holding nothing, so the end of its own flight draws it no second time.
  */
 export function landErrand(run: ErrandRun) {
@@ -173,10 +154,23 @@ export function flushErrands(run: ErrandRun) {
     ...(run.flying === undefined ? [] : [run.flying.hold]),
     ...run.waiting.map((pending) => pending.hold),
   ];
-  return { run: EMPTY_ERRAND_RUN, hold: foldErrandHolds(held) } satisfies {
-    run: ErrandRun;
-    hold: ErrandHold;
-  };
+  // The newest settings snapshot is the only true one — they are cumulative,
+  // so the last carries every change made before it — while the view patches
+  // fold in the order they were chosen, because each names only the part of
+  // the view it changed.
+  let settings: AppSettingsView | undefined;
+  let view: Partial<SessionArrangement> | undefined;
+  for (const hold of held) {
+    if (hold.settings !== undefined) settings = hold.settings;
+    if (hold.view !== undefined) view = { ...view, ...hold.view };
+  }
+  return {
+    run: EMPTY_ERRAND_RUN,
+    hold: {
+      ...(settings === undefined ? undefined : { settings }),
+      ...(view === undefined ? undefined : { view }),
+    },
+  } satisfies { run: ErrandRun; hold: ErrandHold };
 }
 
 /**

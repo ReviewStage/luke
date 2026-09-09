@@ -1,5 +1,5 @@
 import { VOICE_CAPTION_MAX_HEIGHT } from "@sidecar/surface";
-import { cssCustomProperties } from "@sidecar/surface/react-css";
+import { cssCustomProperties, SURFACE_PROPERTY } from "@sidecar/surface/react-css";
 import { type CSSProperties, type RefObject, useEffect, useRef, useState } from "react";
 import { parsePixels } from "./session-motion";
 import {
@@ -47,7 +47,7 @@ function captionSizeStyle(
 ): CSSProperties {
   if (!textHeight) return {};
   return cssCustomProperties({
-    "--caption-size": `${captionBlockSize(textHeight, volumeHint, padding)}px`,
+    [SURFACE_PROPERTY.CAPTION_SIZE]: `${captionBlockSize(textHeight, volumeHint, padding)}px`,
   });
 }
 

@@ -11,11 +11,9 @@ import {
   chooseAside,
   type FaceContext,
   type FaceObservation,
-  facePlay,
   faceYieldsToMeter,
   HOVER_ASIDES,
   noticedMotion,
-  playedMotion,
   restingMotion,
   SPEECH_TURN,
   speechFaceInputs,
@@ -171,28 +169,6 @@ test("a gesture says nothing a rest or a moment already says", () => {
   );
 });
 
-test("a rest takes the face back from a gesture at once, and keeps it", () => {
-  // The rest can change under a gesture that is already playing, and the
-  // microphone is what matters most: the capsule reports an open microphone
-  // through the face's colour, and only these two motions carry it, so not even
-  // a session asking for you may hold the face over one.
-  for (const gesture of [...asidePool(true).map((aside) => aside.motion), FACE_MOTION.WAITING]) {
-    assert.equal(playedMotion(FACE_MOTION.LISTENING, gesture), FACE_MOTION.LISTENING);
-    assert.equal(playedMotion(FACE_MOTION.TALKING, gesture), FACE_MOTION.TALKING);
-    // Asleep is a rest like the others: a sleeping face does not wink.
-    assert.equal(playedMotion(FACE_MOTION.SLEEPING, gesture), FACE_MOTION.SLEEPING);
-    // With nothing resting, the gesture is what there is.
-    assert.equal(playedMotion(undefined, gesture), gesture);
-  }
-});
-
-test("with neither a rest nor a gesture the face is still", () => {
-  assert.equal(playedMotion(undefined, undefined), undefined);
-  for (const resting of Object.values(FACE_MOTION)) {
-    assert.equal(playedMotion(resting, undefined), resting);
-  }
-});
-
 test("a moment is sampled by weight, and the smallest gesture is most of the pool", () => {
   const idle = asidePool(false);
   const weight = idle.reduce((sum, aside) => sum + aside.weight, 0);
@@ -232,35 +208,6 @@ test("a hover earns a trick, and the trick says nothing about the sessions", () 
   assert.ok(flyoff, "the flyoff is what the hover was built for");
   assert.ok((flyoff?.weight ?? 0) / total > 0.4, "the flyoff has to be the usual trick");
   assert.equal(chooseAside(HOVER_ASIDES, 0), FACE_MOTION.FLYOFF);
-});
-
-test("a gesture the rest is covering is not a play", () => {
-  const gesture = { motion: FACE_MOTION.WAITING, play: 7 };
-  // Nothing resting: the gesture is what is drawn, and it carries its own play
-  // so that being asked for one motion twice plays it twice.
-  assert.deepEqual(facePlay(undefined, gesture), {
-    motion: FACE_MOTION.WAITING,
-    repeat: false,
-    play: 7,
-  });
-  // A rest on the face: the gesture is not being played, and counting it would
-  // rebuild the drawing — restarting the rest's own loop — at a session the rest
-  // is meant to be ignoring, and again a frame later when the rest dropped it.
-  for (const resting of [
-    FACE_MOTION.LISTENING,
-    FACE_MOTION.TALKING,
-    FACE_MOTION.SLEEPING,
-    FACE_MOTION.HUSHED,
-  ]) {
-    assert.deepEqual(facePlay(resting, gesture), { motion: resting, repeat: true, play: 0 });
-    assert.deepEqual(facePlay(resting, undefined), { motion: resting, repeat: true, play: 0 });
-  }
-  // Still: nothing drawn, nothing repeating, and one play for all of stillness.
-  assert.deepEqual(facePlay(undefined, undefined), {
-    motion: undefined,
-    repeat: false,
-    play: 0,
-  });
 });
 
 test("the sway is offered only while there is work for it to mean", () => {

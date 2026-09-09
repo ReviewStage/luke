@@ -13,7 +13,6 @@ import type { AppStateSnapshot } from "#shared/messages/app-state";
 import type { WorkspaceProviderId } from "#shared/messages/session";
 import { isWorkspaceProviderId } from "#shared/messages/session";
 import { act, tell, updateSetting } from "./act";
-import type { SessionWriteHandlers } from "./panel-body";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import {
   type ArrangedSessions,
@@ -28,6 +27,7 @@ import {
   sessionTally,
 } from "./session-model";
 import { SESSION_OPTIONS_CONTROL_ID, SESSION_OPTIONS_ID } from "./session-parts";
+import type { SessionWriteHandlers } from "./session-row-view";
 import { focusSearchField, SESSION_SEARCH_INPUT_ID } from "./session-search";
 import type { WorkspaceProviderOption } from "./settings-panel";
 
