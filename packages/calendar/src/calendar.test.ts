@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { UnparsedWireValue } from "@sidecar/wire";
 import {
   activeMeetingEnd,
   CALENDAR_LOOKAHEAD_MS,
   MAXIMUM_CALENDAR_MEETINGS,
   meetingsFromBusyIntervals,
   nextMeetingBoundary,
-} from "@sidecar/calendar";
-import type { UnparsedWireValue } from "@sidecar/wire";
+} from "./calendar.js";
 
 /** Noon UTC on a fixed Monday, so every expectation is a plain number. */
 const NOW = Date.UTC(2026, 7, 17, 12, 0, 0);

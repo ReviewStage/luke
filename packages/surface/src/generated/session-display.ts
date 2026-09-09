@@ -2,23 +2,17 @@
 // the tables in that script and re-run it.
 //
 // How urgently the surface treats a row — not the provider-observed condition
-// in SESSION_STATUS. Both value sets contain the literal "working"; the brand
-// keeps one from typechecking as the other. Labels and order live here so the
-// marketing mock cannot advertise a different sentence or a different top row
-// than the product draws.
-
-type SessionUrgencyBrand<T extends string> = T & { readonly __brand: "SessionUrgency" };
-
-function sessionUrgencyBrand<T extends string>(value: T): SessionUrgencyBrand<T> {
-  // SAFETY: brands an urgency literal at the vocabulary boundary.
-  return value as SessionUrgencyBrand<T>;
-}
+// in SESSION_STATUS. Each literal carries the `urgency-` prefix so no urgency
+// value can be passed where a session status is expected, and the CSS
+// `data-state` selectors read the same prefix. Labels and order live here so
+// the marketing mock cannot advertise a different sentence or a different top
+// row than the product draws.
 
 export const SESSION_URGENCY = {
-  WORKING: sessionUrgencyBrand("working"),
-  ATTENTION: sessionUrgencyBrand("attention"),
-  COMPLETE: sessionUrgencyBrand("complete"),
-  UNKNOWN: sessionUrgencyBrand("unknown"),
+  WORKING: "urgency-working",
+  ATTENTION: "urgency-attention",
+  COMPLETE: "urgency-complete",
+  UNKNOWN: "urgency-unknown",
 } as const;
 
 export type SessionUrgency = (typeof SESSION_URGENCY)[keyof typeof SESSION_URGENCY];
@@ -32,11 +26,7 @@ export const URGENCY_LABEL = {
 
 /** The sentence a row states for this urgency when the provider reported nothing else. */
 export function urgencyLabel(urgency: SessionUrgency): string {
-  // A branded key cannot index a typed record, so the table reads back as
-  // optional however total it is; the throw is what makes it a string again.
-  const label = URGENCY_LABEL[urgency];
-  if (label === undefined) throw new Error(`Unknown session urgency: ${String(urgency)}`);
-  return label;
+  return URGENCY_LABEL[urgency];
 }
 
 /** The urgency order the surface reads top-down and the badge collapses to. */

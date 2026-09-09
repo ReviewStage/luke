@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { RUN_ORIGIN, type RunOrigin, type ToolSchema } from "@sidecar/runtime-contracts";
+import type { RunOrigin, ToolSchema } from "@sidecar/runtime-contracts";
 import type { AgentConfiguration, ResolvedConfiguration } from "./configuration.js";
 import { PROMPT_PROFILE, type PromptFacts, type PromptProfile } from "./prompt.js";
 import type { SkillDescriptor } from "./registry.js";
@@ -32,17 +32,7 @@ export interface RunDescription {
 
 /** Ordinary conversation, observation, heartbeat, and continuation runs use the full profile; a child gets minimal. */
 export function promptProfileFor(run: RunDescription): PromptProfile {
-  if (run.child) return PROMPT_PROFILE.MINIMAL;
-  switch (run.origin) {
-    case RUN_ORIGIN.USER:
-    case RUN_ORIGIN.OBSERVATION:
-    case RUN_ORIGIN.HEARTBEAT:
-    case RUN_ORIGIN.CRON:
-    case RUN_ORIGIN.CHILD:
-    case RUN_ORIGIN.CHILD_COMPLETION:
-    case RUN_ORIGIN.MAINTENANCE:
-      return PROMPT_PROFILE.FULL;
-  }
+  return run.child ? PROMPT_PROFILE.MINIMAL : PROMPT_PROFILE.FULL;
 }
 
 export interface GatherOptions {
@@ -84,10 +74,10 @@ export function bootstrapNamesFor(run: RunDescription) {
 export async function gatherPromptFacts(options: GatherOptions): Promise<PromptFacts> {
   const configuration: AgentConfiguration = options.configuration.configuration;
   const profile = promptProfileFor(options.run);
-  const bootstrapFiles: readonly BootstrapFile[] =
-    profile === PROMPT_PROFILE.NONE
-      ? []
-      : await readBootstrapFiles(configuration.workspaceDirectory, bootstrapNamesFor(options.run));
+  const bootstrapFiles: readonly BootstrapFile[] = await readBootstrapFiles(
+    configuration.workspaceDirectory,
+    bootstrapNamesFor(options.run),
+  );
   const discovered = options.skills ?? (await discoverSkills(configuration.skillRoots));
   const skills = eligibleSkills(discovered, configuration.agentId);
   const executionDirectory =

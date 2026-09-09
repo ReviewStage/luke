@@ -422,15 +422,9 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
    */
   const acts = createBrainActPerformer(dependencies.acts);
 
-  // The lanes are one scheduler over every conversation: hooks are enabled
-  // in every observing build, so the hook reservation stands inside the cron
-  // budget from the start.
-  const lanes = new LaneScheduler(
-    laneConfiguration({
-      hooksEnabled: true,
-      ...(dependencies.parallelism ? { parallelism: dependencies.parallelism() } : undefined),
-    }),
-  );
+  // The lanes are one scheduler over every conversation, each lane its own
+  // budget and never one cap over Luke as a whole.
+  const lanes = new LaneScheduler(laneConfiguration(dependencies.parallelism?.()));
 
   // What the observed conversations did, for main's next turn: taken when
   // that turn opens, handed back if it fails, bounded so a quiet main never

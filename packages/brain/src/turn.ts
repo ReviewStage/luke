@@ -6,7 +6,6 @@ import {
   type ToolPolicyLayers,
 } from "@sidecar/runtime";
 import { RUN_ORIGIN, type RunOrigin } from "@sidecar/runtime-contracts";
-import type { WireRecord } from "@sidecar/wire";
 import type { Generation } from "./generation.js";
 import type { SteeredDeliveries } from "./steered-deliveries.js";
 import type { RecordingContextEngine } from "./transcript-recorder.js";
@@ -191,8 +190,3 @@ export const BRAIN_TURN_KIND = {
 export type BrainTurnDescription =
   | { readonly kind: typeof BRAIN_TURN_KIND.TURN; readonly trigger: BrainTurnTrigger }
   | { readonly kind: typeof BRAIN_TURN_KIND.MAINTENANCE };
-
-export interface DispatchOutcome {
-  callId: string;
-  output: WireRecord;
-}

@@ -9,7 +9,6 @@ import {
 import {
   boundedAgentKinds,
   boundedText,
-  maximumSessionApplications,
   maximumSessionDetailLength,
   maximumSessionTitleLength,
   requiredText,
@@ -40,6 +39,14 @@ import {
   type SessionCompletionCause,
   type SessionStatus,
 } from "./session-status.js";
+
+/**
+ * Every app this build can recognize at once, and no more: the bound exists to
+ * refuse an unbounded roster decoration, not to drop the newest association on
+ * a chat every manager holds, so it follows the value set rather than sitting
+ * on a literal the next app silently overflows.
+ */
+const maximumSessionApplications = SESSION_APPLICATION_ID_LIST.length;
 
 function normalizeStatus(status: SessionStatus): SessionStatus {
   if (!Object.values(SESSION_STATUS).includes(status)) {

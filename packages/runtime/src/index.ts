@@ -37,7 +37,6 @@ export {
   type CronScheduleKind,
   CronScheduler,
   type CronSchedulerOptions,
-  cronScheduleFromWire,
   jobDue,
   memoryScheduledJobStore,
   nextRunAt,
@@ -53,7 +52,6 @@ export {
   type GatewayClientEventListener,
   type GatewayClientOptions,
   helloSequence,
-  unwrapResponse,
 } from "./gateway/client.js";
 export {
   type DeliveryClaim,
@@ -160,7 +158,6 @@ export {
   LANE_LIST,
   type Lane,
   type LaneConfiguration,
-  type LaneConfigurationInputs,
   type LaneGroup,
   LaneScheduler,
   type LaneSnapshot,
@@ -174,7 +171,6 @@ export {
 } from "./observation-loop.js";
 export {
   type BuiltPrompt,
-  bootstrapFilesForProfile,
   buildSystemPrompt,
   type ExecutionDirectoryFacts,
   PROMPT_DIAGNOSTIC,
@@ -239,29 +235,22 @@ export {
   type ToolExecution,
 } from "./registry.js";
 export {
-  bootstrapNamesFor,
   type GatherOptions,
   gatherPromptFacts,
-  promptProfileFor,
   type RunDescription,
 } from "./runtime-facts.js";
 export {
   discoverSkills,
   eligibleSkills,
   loadSkill,
-  MAXIMUM_SKILL_CHARS,
-  parseSkillFrontMatter,
   SKILL_FILE,
   type SkillLoad,
   skillDescriptorFrom,
 } from "./skills.js";
 export type { ScheduledTimer } from "./timers.js";
 export {
-  CHILD_DEPTH_CAP,
-  CHILD_TOOL_EXCLUSIONS,
   type ChildPolicyContext,
   type ConfiguredToolPolicyLayer,
-  childToolPolicy,
   type EffectiveToolPolicy,
   GROUP_PREFIX,
   resolveToolPolicy,
@@ -281,7 +270,6 @@ export {
   DAILY_NOTES_DIRECTORY,
   type DailyNote,
   dailyNoteName,
-  isWorkspaceFile,
   parseDailyNoteName,
   readBootstrapFiles,
   readWorkspaceFile,

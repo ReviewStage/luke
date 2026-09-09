@@ -11,14 +11,13 @@ import { type BootstrapFile, CHILD_BOOTSTRAP_FILES, WORKSPACE_FILE } from "./wor
  * conversation and everything below it changes per turn, so a provider's
  * prefix cache sees the same bytes until a workspace file actually changes.
  * The same builder answers the live run and the diagnostics view, so what a
- * developer inspects is what the model was sent. The order and the three
- * profiles follow OpenClaw `b7528507` (`docs/concepts/system-prompt.md`).
+ * developer inspects is what the model was sent. The order and the profiles
+ * follow OpenClaw `b7528507` (`docs/concepts/system-prompt.md`).
  */
 
 export const PROMPT_PROFILE = {
   FULL: "full",
   MINIMAL: "minimal",
-  NONE: "none",
 } as const;
 
 export type PromptProfile = (typeof PROMPT_PROFILE)[keyof typeof PROMPT_PROFILE];
@@ -240,7 +239,7 @@ const HEADINGS = {
   [PROMPT_SECTION.RUNTIME]: "Runtime",
 } as const satisfies Record<PromptSectionId, string>;
 
-/** The files a profile injects: everything gathered for full, AGENTS.md alone for minimal, none for none. */
+/** The files a profile injects: everything gathered for full, AGENTS.md alone for minimal. */
 export function bootstrapFilesForProfile(
   files: readonly BootstrapFile[],
   profile: PromptProfile,
@@ -250,8 +249,6 @@ export function bootstrapFilesForProfile(
       return files;
     case PROMPT_PROFILE.MINIMAL:
       return files.filter((file) => CHILD_BOOTSTRAP_FILES.includes(file.name));
-    case PROMPT_PROFILE.NONE:
-      return [];
   }
 }
 
@@ -323,29 +320,20 @@ export function buildSystemPrompt(facts: PromptFacts): BuiltPrompt {
     });
   }
   const sections: PromptSection[] = [];
-  if (facts.profile === PROMPT_PROFILE.NONE) {
-    sections.push({
-      id: PROMPT_SECTION.IDENTITY,
-      heading: HEADINGS[PROMPT_SECTION.IDENTITY],
-      text: facts.identity,
-      stable: true,
-    });
-  } else {
-    let stable = true;
-    for (const id of PROMPT_SECTION_ORDER) {
-      if (id === FIRST_DYNAMIC_SECTION) stable = false;
-      if (facts.profile === PROMPT_PROFILE.MINIMAL && !MINIMAL_SECTIONS.has(id)) {
-        diagnostics.push({
-          kind: PROMPT_DIAGNOSTIC.SECTION_OMITTED,
-          subject: id,
-          detail: "omitted by the minimal profile",
-        });
-        continue;
-      }
-      const text = sectionText(id, facts, files);
-      if (!text) continue;
-      sections.push({ id, heading: HEADINGS[id], text, stable });
+  let stable = true;
+  for (const id of PROMPT_SECTION_ORDER) {
+    if (id === FIRST_DYNAMIC_SECTION) stable = false;
+    if (facts.profile === PROMPT_PROFILE.MINIMAL && !MINIMAL_SECTIONS.has(id)) {
+      diagnostics.push({
+        kind: PROMPT_DIAGNOSTIC.SECTION_OMITTED,
+        subject: id,
+        detail: "omitted by the minimal profile",
+      });
+      continue;
     }
+    const text = sectionText(id, facts, files);
+    if (!text) continue;
+    sections.push({ id, heading: HEADINGS[id], text, stable });
   }
   const render = (section: PromptSection) => `# ${section.heading}\n\n${section.text}`;
   const stablePrefix = sections

@@ -152,14 +152,6 @@ export function searchTranscript(
   return storedEvents(rows);
 }
 
-export function countTranscript(database: RuntimeDatabase, sessionKey: SessionKey): number {
-  // SAFETY: COUNT(*) is one integer column named `count`.
-  const row = database
-    .prepare("SELECT COUNT(*) AS count FROM transcript_events WHERE session_key = ?")
-    .get(sessionKey) as { count: number };
-  return row.count;
-}
-
 export interface StoredCompactionBoundary {
   transcriptSequence: number;
   sessionId?: string;

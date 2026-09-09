@@ -1,12 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  PRODUCT_EVENT,
-  PRODUCT_EVENT_CLIENT,
-  PRODUCT_EVENT_CLIENT_HEADER,
-  PRODUCT_SESSION_COUNT_BUCKET,
-  type ProductEvent,
-} from "@sidecar/analytics";
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import {
   HTTP_STATUS,
@@ -14,6 +7,13 @@ import {
   recordedRequest,
   recordingFetch,
 } from "@sidecar/wire/testing";
+import {
+  PRODUCT_EVENT,
+  PRODUCT_EVENT_CLIENT,
+  PRODUCT_EVENT_CLIENT_HEADER,
+  PRODUCT_SESSION_COUNT_BUCKET,
+  type ProductEvent,
+} from "./product-events.js";
 import { ProductEventSender, type ProductEventSenderOptions } from "./sender.js";
 
 const BASE_URL = "https://luke.test";

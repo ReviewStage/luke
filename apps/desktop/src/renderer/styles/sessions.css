@@ -556,7 +556,7 @@
   text-align: left;
 }
 
-.session-row[data-state="attention"] {
+.session-row[data-state="urgency-attention"] {
   border-color: color-mix(in srgb, var(--accent) 30%, transparent);
   background: color-mix(in srgb, var(--accent) 9%, transparent);
 }
@@ -573,7 +573,7 @@ button.session-row:hover {
   background: var(--raised);
 }
 
-button.session-row[data-state="attention"]:hover {
+button.session-row[data-state="urgency-attention"]:hover {
   border-color: color-mix(in srgb, var(--accent) 46%, transparent);
   background: color-mix(in srgb, var(--accent) 15%, transparent);
 }
@@ -833,7 +833,7 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.workspace-tray .session-row[data-state="attention"] {
+.workspace-tray .session-row[data-state="urgency-attention"] {
   background: color-mix(in srgb, var(--accent) 9%, transparent);
 }
 
@@ -846,13 +846,13 @@ html[data-keyboard="true"] button.session-row:focus-visible {
    rule it pins by exactly the tray class, so the grounds those rules raise
    still land while the border colour stays the seam's own. */
 .workspace-tray button.session-row:hover,
-.workspace-tray button.session-row[data-state="attention"]:hover,
+.workspace-tray button.session-row[data-state="urgency-attention"]:hover,
 .workspace-tray
   .session-row[data-actions][data-openable]:hover:not(
     :has(.row-action:hover, .row-application-button:hover)
   ),
 .workspace-tray
-  .session-row[data-actions][data-openable][data-state="attention"]:hover:not(
+  .session-row[data-actions][data-openable][data-state="urgency-attention"]:hover:not(
     :has(.row-action:hover, .row-application-button:hover)
   ),
 .workspace-tray
@@ -860,7 +860,7 @@ html[data-keyboard="true"] button.session-row:focus-visible {
     :has(.row-application-button:hover, .row-action:hover)
   ),
 .workspace-tray
-  .session-row[data-application-controls][data-openable][data-state="attention"]:hover:not(
+  .session-row[data-application-controls][data-openable][data-state="urgency-attention"]:hover:not(
     :has(.row-application-button:hover, .row-action:hover)
   ) {
   border-color: rgba(255, 255, 255, 0.05);
@@ -887,14 +887,14 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   white-space: nowrap;
 }
 
-.session-row[data-state="attention"] .row-doing {
+.session-row[data-state="urgency-attention"] .row-doing {
   color: var(--accent);
   font-weight: 560;
 }
 
 /* A session nothing is known about has nothing urgent to say, so its line sits
    back with the identifier under it. */
-.session-row[data-state="unknown"] .row-doing {
+.session-row[data-state="urgency-unknown"] .row-doing {
   color: var(--text-tertiary);
 }
 
@@ -1069,7 +1069,7 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   background: var(--raised);
 }
 
-.session-row[data-actions][data-openable][data-state="attention"]:hover:not(
+.session-row[data-actions][data-openable][data-state="urgency-attention"]:hover:not(
   :has(.row-action:hover, .row-application-button:hover)
 ) {
   border-color: color-mix(in srgb, var(--accent) 46%, transparent);
@@ -1103,7 +1103,7 @@ html[data-keyboard="true"] button.row-main:focus-visible {
   background: var(--raised);
 }
 
-.session-row[data-application-controls][data-openable][data-state="attention"]:hover:not(
+.session-row[data-application-controls][data-openable][data-state="urgency-attention"]:hover:not(
   :has(.row-application-button:hover, .row-action:hover)
 ) {
   border-color: color-mix(in srgb, var(--accent) 46%, transparent);

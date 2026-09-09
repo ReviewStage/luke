@@ -1,9 +1,8 @@
-import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 
 /** Small enough to send in full on every conversation. */
 export const maximumRememberedFactLength = 240;
 export const maximumRememberedFacts = 32;
-const maximumRememberedFactIdLength = 128;
 
 export interface RememberedFact {
   id: string;
@@ -18,28 +17,8 @@ export function rememberedFactText(value: UnparsedWireValue): string | undefined
   return words.length > 0 ? words : undefined;
 }
 
-export function isRememberedFact(value: UnparsedWireValue): value is RememberedFact & WireRecord {
-  const words = isRecord(value) ? rememberedFactText(value.words) : undefined;
-  return (
-    isRecord(value) &&
-    isWireString(value.id) &&
-    value.id.length > 0 &&
-    value.id.length <= maximumRememberedFactIdLength &&
-    /^[A-Za-z0-9-]+$/.test(value.id) &&
-    words !== undefined &&
-    words === value.words
-  );
-}
-
 export function holdsRememberedFact(facts: readonly RememberedFact[], id: string): boolean {
   return facts.some((fact) => fact.id === id);
-}
-
-export function withoutRememberedFact(
-  facts: readonly RememberedFact[],
-  id: string,
-): readonly RememberedFact[] {
-  return facts.filter((fact) => fact.id !== id);
 }
 
 /** Renders the complete bounded memory list as reply context, never authority to act. */

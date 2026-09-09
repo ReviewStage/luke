@@ -359,9 +359,9 @@ Trust constraints:
   the set to 60,000, and a cut is named in the prompt and the diagnostics
   rather than hidden. Ordinary conversation, observation, and heartbeat runs
   use the full profile; a child run gets the minimal one, `AGENTS.md` alone
-  and none of the parent's persona or notebook files; the none profile is an
-  identity line. Daily notes under `memory/` are never in an ordinary prompt:
-  they are read on demand and primed when a conversation starts fresh.
+  and none of the parent's persona or notebook files. Daily notes under
+  `memory/` are never in an ordinary prompt: they are read on demand and
+  primed when a conversation starts fresh.
   Skills are listed by name, description, and location, and a skill's
   instructions are loaded on demand from a listed location and no other.
   Notes found where a run executes are a section of their own, apart from the

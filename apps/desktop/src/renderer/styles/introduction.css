@@ -368,7 +368,7 @@
    plain dark card. */
 .introduction-stage:not([data-settled="true"])
   .introduction-rows
-  .session-row[data-state="attention"] {
+  .session-row[data-state="urgency-attention"] {
   background: color-mix(in srgb, var(--accent) 9%, var(--surface-overlay));
 }
 

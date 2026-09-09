@@ -118,16 +118,16 @@
 }
 
 /* Any element that carries a session state gets its accent from one place. */
-.mock [data-state="working"] {
+.mock [data-state="urgency-working"] {
   --accent: var(--state-working);
 }
-.mock [data-state="attention"] {
+.mock [data-state="urgency-attention"] {
   --accent: var(--state-attention);
 }
-.mock [data-state="complete"] {
+.mock [data-state="urgency-complete"] {
   --accent: var(--state-complete);
 }
-.mock [data-state="unknown"] {
+.mock [data-state="urgency-unknown"] {
   --accent: var(--state-idle);
 }
 
@@ -655,7 +655,7 @@
   text-align: left;
 }
 
-.mock .session-row[data-state="attention"] {
+.mock .session-row[data-state="urgency-attention"] {
   border-color: color-mix(in srgb, var(--accent) 30%, transparent);
   background: color-mix(in srgb, var(--accent) 9%, transparent);
 }
@@ -735,12 +735,12 @@
   white-space: nowrap;
 }
 
-.mock .session-row[data-state="attention"] .row-doing {
+.mock .session-row[data-state="urgency-attention"] .row-doing {
   color: var(--accent);
   font-weight: 560;
 }
 
-.mock .session-row[data-state="unknown"] .row-doing {
+.mock .session-row[data-state="urgency-unknown"] .row-doing {
   color: var(--text-tertiary);
 }
 

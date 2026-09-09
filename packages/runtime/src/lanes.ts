@@ -22,8 +22,6 @@ export const LANE = {
   CRON_NESTED: "cron-nested",
   /** A provider hook's dispatch into a conversation; shares the cron inner budget. */
   HOOK_DISPATCH: "hook-dispatch",
-  /** Work one conversation asks of another. */
-  NESTED: "nested",
   /** Background memory and plugin completions. */
   BACKGROUND: "background",
 } as const;
@@ -39,9 +37,8 @@ export const LANE_DEFAULTS = {
   CRON: 8,
   /** The one budget cron inner work and hook dispatch share. */
   CRON_HOOK_BUDGET: 8,
-  /** What hook dispatch is guaranteed inside that budget while hooks are enabled. */
+  /** What hook dispatch is guaranteed inside that budget. */
   HOOK_RESERVATION: 1,
-  NESTED: 1,
   BACKGROUND: 3,
 } as const;
 
@@ -69,49 +66,28 @@ export interface LaneConfiguration {
   readonly groups: Readonly<Record<string, LaneGroup>>;
 }
 
-export interface LaneConfigurationInputs {
-  parallelism?: number;
-  hooksEnabled: boolean;
-  /**
-   * How many hook dispatches are running as the configuration is published.
-   * Disabling hooks with dispatches still running keeps the shared group
-   * standing, without its reservation, until a later publication sees none:
-   * cron inner work must not expand back to the whole budget while hook work
-   * still counts against it.
-   */
-  activeHooks?: number;
-}
-
 /**
  * The defaults for a machine, following OpenClaw's Gateway lane setup. Hook
- * dispatch is zero-wide while hooks are disabled, and a clean hooks-off
- * publication installs no group at all, so cron inner work keeps the whole
- * budget.
+ * registration converges at every launch rather than answering to a
+ * preference, so hook dispatch always stands and always holds its
+ * reservation inside the shared cron budget.
  */
-export function laneConfiguration(inputs: LaneConfigurationInputs): LaneConfiguration {
-  const hookWidth = inputs.hooksEnabled ? LANE_DEFAULTS.CRON_HOOK_BUDGET : 0;
-  const retainInFlightHookBudget = !inputs.hooksEnabled && (inputs.activeHooks ?? 0) > 0;
+export function laneConfiguration(parallelism?: number): LaneConfiguration {
   const widths = {
-    [LANE.AGENT]: agentLaneWidth(inputs.parallelism),
+    [LANE.AGENT]: agentLaneWidth(parallelism),
     [LANE.CHILD]: LANE_DEFAULTS.CHILD,
     [LANE.CRON]: LANE_DEFAULTS.CRON,
     [LANE.CRON_NESTED]: LANE_DEFAULTS.CRON_HOOK_BUDGET,
-    [LANE.HOOK_DISPATCH]: hookWidth,
-    [LANE.NESTED]: LANE_DEFAULTS.NESTED,
+    [LANE.HOOK_DISPATCH]: LANE_DEFAULTS.CRON_HOOK_BUDGET,
     [LANE.BACKGROUND]: LANE_DEFAULTS.BACKGROUND,
   } satisfies LaneWidths;
-  const groups: Record<string, LaneGroup> =
-    inputs.hooksEnabled || retainInFlightHookBudget
-      ? {
-          [CRON_HOOK_GROUP]: {
-            budget: LANE_DEFAULTS.CRON_HOOK_BUDGET,
-            members: [LANE.CRON_NESTED, LANE.HOOK_DISPATCH],
-            ...(inputs.hooksEnabled
-              ? { reservations: { [LANE.HOOK_DISPATCH]: LANE_DEFAULTS.HOOK_RESERVATION } }
-              : undefined),
-          },
-        }
-      : {};
+  const groups = {
+    [CRON_HOOK_GROUP]: {
+      budget: LANE_DEFAULTS.CRON_HOOK_BUDGET,
+      members: [LANE.CRON_NESTED, LANE.HOOK_DISPATCH],
+      reservations: { [LANE.HOOK_DISPATCH]: LANE_DEFAULTS.HOOK_RESERVATION },
+    },
+  } satisfies Record<string, LaneGroup>;
   return { widths, groups };
 }
 
@@ -129,29 +105,15 @@ export interface LaneSnapshot {
 /**
  * The scheduler over the lanes. `run` admits work when its lane has a free
  * slot and every group the lane belongs to has one it may take, and queues it
- * otherwise, in arrival order per lane; `configure` replaces every width and
- * group in one step and then drains, so a change can never let two lanes
- * dispatch up to their individual widths before the group bounding them
- * exists. Work already admitted keeps running whatever the new widths say;
- * a lane narrowed below its active count simply admits nothing until enough
- * of it ends.
+ * otherwise, in arrival order per lane.
  */
 export class LaneScheduler {
-  #configuration: LaneConfiguration;
+  readonly #configuration: LaneConfiguration;
   readonly #active = new Map<Lane, number>();
   readonly #waiting: Waiting[] = [];
 
   constructor(configuration: LaneConfiguration) {
     this.#configuration = configuration;
-  }
-
-  get configuration(): LaneConfiguration {
-    return this.#configuration;
-  }
-
-  configure(configuration: LaneConfiguration): void {
-    this.#configuration = configuration;
-    this.#drain();
   }
 
   snapshot(lane: Lane): LaneSnapshot {
