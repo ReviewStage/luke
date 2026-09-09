@@ -92,14 +92,17 @@ function settingsWriter(
   return {
     refuse,
     async write(kind, save, apply) {
-      let saved: SettingsUpdateResult;
       try {
-        saved = await save();
+        const saved = await save();
+        // The apply is inside the same reach as the write: a side effect this
+        // process could not carry leaves the row's switch describing
+        // something that did not happen, so the row is answered a refusal it
+        // can redraw from rather than a write that only half landed.
+        await apply?.(saved);
+        return saved;
       } catch {
         return refuse(ACT[kind].refusal);
       }
-      await apply?.(saved);
-      return saved;
     },
   };
 }

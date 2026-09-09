@@ -151,7 +151,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     ...brainReports({ operator: operator.operator, isVoice: (s) => voiceWindow.owns(s) }),
     // The voice window's appends to the conversation, carried to the host's
     // store under this window's opaque reporter, and relayed back to every
-    // other panel's History by the host's change event.
+    // other panel's Conversation by the host's change event.
     appendConversationLines: (context, entries) =>
       operator.host.appendConversation(entries, windows.reporterOf(context.sender)),
     settleSpeech: (context, id, outcome) => {

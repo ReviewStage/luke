@@ -10,36 +10,13 @@ import {
 import {
   type BrainAppActionAnswer,
   type BrainAppActionRequest,
-  type BrainAskSubmission,
-  type BrainAskSubmissionResult,
-  type BrainAskWait,
-  type BrainReplyClaimResult,
   type BrainReplyOffer,
-  type BrainRequestSnapshot,
-  isBrainAskSubmission,
-  isBrainAskSubmissionResult,
-  isBrainAskWait,
-  isBrainReplyClaimResult,
   isBrainReplyOffer,
-  isBrainRequestSnapshot,
   isReceiverEpoch,
 } from "@sidecar/brain/requests-wire";
-import type { AppleCalendarAccess } from "@sidecar/calendar/vocabulary";
-import type { AccountProvider, AccountSnapshot } from "@sidecar/credentials/snapshot";
-import { isAccountProvider } from "@sidecar/credentials/snapshot";
-import { type CredentialProviderId, isCredentialProviderId } from "@sidecar/credentials/vocabulary";
 import { type AgentWireTrace, isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
-import {
-  type FeedbackKind,
-  type FeedbackResult,
-  type FeedbackSubmission,
-  feedbackSubmission,
-  isFeedbackKind,
-} from "@sidecar/feedback";
 import { type AppGuideSnapshot, isAppGuideSnapshot } from "@sidecar/guide";
-import type { RealtimeConnection } from "@sidecar/hosted";
-import type { SupersetSignInSnapshot } from "@sidecar/providers/superset/sign-in-stage";
-import { type RealtimeDiagnostics, voiceExchangeActive } from "@sidecar/realtime";
+import { voiceExchangeActive } from "@sidecar/realtime";
 import {
   isSpeechOffer,
   isSpeechOutcome,
@@ -50,24 +27,6 @@ import {
 } from "@sidecar/realtime/speech";
 import { type ConversationEntry, storedConversationEntry } from "@sidecar/session";
 import {
-  APP_SETTING_SCHEMA,
-  type AppSettingField,
-  type AppSettingValue,
-  isAppSettingField,
-  isKeyedAppSettingField,
-  isSettingEntryKey,
-  isSettingsResetScope,
-  type KeyedAppSettingField,
-  type SettingEntryValue,
-  type SettingsResetScope,
-  settingEntryGuard,
-} from "@sidecar/settings";
-import type { SettingsUpdateResult } from "@sidecar/settings/wire";
-import type { WindowMode } from "@sidecar/surface";
-import {
-  type ActionResult,
-  isActionResult,
-  isOptionalWireString,
   isRecord,
   isUnitLevel,
   isWireBoolean,
@@ -80,10 +39,8 @@ import { type AppStateSnapshot, isAppStateSnapshot } from "./messages/app-state"
 import { isSessionIdentity } from "./messages/session";
 import {
   isVoiceCommand,
-  isVoiceCommandOutcome,
   isVoiceView,
   type VoiceCommand,
-  type VoiceCommandOutcome,
   type VoiceView,
 } from "./messages/voice-view";
 import { isWireValue, wireResult as result, type WireGuard } from "./messages/wire-guard";
