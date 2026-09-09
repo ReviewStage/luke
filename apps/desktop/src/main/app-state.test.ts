@@ -9,10 +9,12 @@ import {
   type AppState,
   type AppStateChange,
   AppStateStore,
+  bootstrapPatch,
   initialAppState,
   sessionReplayBootstrap,
 } from "./app-state";
 import { fanOutAppState } from "./app-state-channels";
+import type { HostBootstrap } from "./gateway/host-operator";
 
 /**
  * The document and the one path out of it. What is proven here is what the
@@ -269,6 +271,56 @@ test("a voice window that went away leaves every panel an idle voice", () => {
     if (channel === channels.onVoiceViewChanged) sent.push(payload);
   });
   assert.deepEqual(sent, [IDLE_VOICE_VIEW]);
+});
+
+const BOOT: HostBootstrap = {
+  settings: SETTINGS,
+  account: inert(),
+  sessions: [],
+  sessionsSettled: false,
+  announcementsHeld: false,
+  conversationHistory: [],
+  workspaceProjects: [],
+  calendars: [],
+  calendarOnboardingOwed: false,
+  supersetInstalled: true,
+  supersetConnected: false,
+  sessionReplay: { permitted: true, accountId: "person" },
+  receiverEpoch: 7,
+  voiceAvailable: true,
+  agentTraceEnabled: true,
+};
+
+test("a host bootstrap lands in the document as the host answered it", () => {
+  const app = store();
+  app.update(bootstrapPatch(app.snapshot(), BOOT));
+  const held = app.snapshot();
+  assert.equal(held.run.agentTraceEnabled, true);
+  assert.equal(held.superset.installed, true);
+  assert.equal(held.voice.epoch, 7);
+  assert.equal(held.sessions.settled, false);
+  assert.equal(held.conversation.cleared, true);
+  assert.deepEqual(held.sessionReplay, { permitted: true, accountId: "person", halted: false });
+});
+
+test("a halt outlives every host read until the host's own event stands it down", () => {
+  const app = store();
+  app.update(bootstrapPatch(app.snapshot(), BOOT));
+  app.update({ sessionReplay: { ...app.snapshot().sessionReplay, halted: true } });
+  // The account is going and the host still answers `permitted` until its
+  // store has caught up; a window bootstrapping in that window must not
+  // restart a recording that was stood down.
+  app.update(bootstrapPatch(app.snapshot(), BOOT));
+  assert.equal(app.snapshot().sessionReplay.halted, true);
+  assert.equal(sessionReplayBootstrap(app.snapshot()).permitted, false);
+});
+
+test("a run that observes nothing is settled whatever the host answered", () => {
+  const quiet = new AppStateStore(
+    initialAppState({ ...RUN, runMode: runModeFor({ capture: false, fixture: true }) }, false),
+  );
+  quiet.update(bootstrapPatch(quiet.snapshot(), BOOT));
+  assert.equal(quiet.snapshot().sessions.settled, true);
 });
 
 test("recording is what the host permitted less what an account's end stood down", () => {

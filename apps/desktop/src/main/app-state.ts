@@ -12,6 +12,7 @@ import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import type { SessionReplayBootstrap, SessionRosterPayload } from "#shared/messages/session";
 import type { UpdateSnapshot } from "#shared/messages/update";
 import type { VoiceView } from "#shared/messages/voice-view";
+import type { HostBootstrap } from "./gateway/host-operator";
 import type { DesktopConfig } from "./services/desktop-config";
 import { idleUpdateSnapshot } from "./update-service";
 
@@ -202,6 +203,42 @@ export class AppStateStore {
       this.#listeners.delete(listener);
     };
   }
+}
+
+/**
+ * One host bootstrap as a patch of this document. What each slice carries is
+ * the host's own answer; the three readings of it are this client's. A run
+ * that observes nothing is settled from the start. The trace gate is a fact
+ * of the run rather than of the launch's arguments. And a halt outlives a
+ * host read: the account it was raised for is going, the host still answers
+ * `permitted` until its own change event lands, and only that event stands
+ * the halt down.
+ */
+export function bootstrapPatch(held: AppState, boot: HostBootstrap): AppStatePatch {
+  return {
+    run: { ...held.run, agentTraceEnabled: boot.agentTraceEnabled },
+    settings: boot.settings,
+    account: boot.account,
+    sessions: {
+      roster: { sessions: boot.sessions },
+      settled: !held.run.observesProviders || boot.sessionsSettled,
+      workspaceProjects: boot.workspaceProjects,
+    },
+    calendars: boot.calendars,
+    superset: {
+      ...held.superset,
+      installed: boot.supersetInstalled,
+      connected: boot.supersetConnected,
+    },
+    voice: { ...held.voice, epoch: boot.receiverEpoch },
+    conversation: {
+      entries: boot.conversationHistory,
+      cleared: boot.conversationHistory.length === 0,
+    },
+    announcements: { held: boot.announcementsHeld },
+    onboarding: { calendarOwed: boot.calendarOnboardingOwed },
+    sessionReplay: { ...boot.sessionReplay, halted: held.sessionReplay.halted },
+  };
 }
 
 /** What this run may record, as the renderer is handed it. */

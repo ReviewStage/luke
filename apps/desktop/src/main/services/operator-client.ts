@@ -6,7 +6,7 @@ import { HOST_OPERATOR_CLIENT_ID } from "@sidecar/host";
 import type { AppSettings } from "@sidecar/settings/wire";
 import { type LateRef, lateRef } from "@sidecar/wire";
 import { channels } from "#shared/bridge";
-import type { AppStateStore } from "../app-state";
+import { type AppStateStore, bootstrapPatch } from "../app-state";
 import type { HostBootstrap, HostOperator } from "../gateway/host-operator";
 import { wireGateway } from "../gateway/wiring";
 import type { DesktopConfig } from "./desktop-config";
@@ -89,39 +89,9 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
     node: dependencies.node,
   });
 
-  /**
-   * One host bootstrap, written into the document whole. What each slice
-   * carries is the host's own answer; the two derivations are this client's:
-   * a run that observes nothing is settled from the start, and the trace gate
-   * is a fact of the run rather than of the launch's arguments.
-   */
   function adoptBootstrap(boot: HostBootstrap): void {
     voiceAvailable = boot.voiceAvailable;
-    const held = state.snapshot();
-    state.update({
-      run: { ...held.run, agentTraceEnabled: boot.agentTraceEnabled },
-      settings: boot.settings,
-      account: boot.account,
-      sessions: {
-        roster: { sessions: boot.sessions },
-        settled: !held.run.observesProviders || boot.sessionsSettled,
-        workspaceProjects: boot.workspaceProjects,
-      },
-      calendars: boot.calendars,
-      superset: {
-        ...held.superset,
-        installed: boot.supersetInstalled,
-        connected: boot.supersetConnected,
-      },
-      voice: { ...held.voice, epoch: boot.receiverEpoch },
-      conversation: {
-        entries: boot.conversationHistory,
-        cleared: boot.conversationHistory.length === 0,
-      },
-      announcements: { held: boot.announcementsHeld },
-      onboarding: { calendarOwed: boot.calendarOnboardingOwed },
-      sessionReplay: { ...boot.sessionReplay, halted: false },
-    });
+    state.update(bootstrapPatch(state.snapshot(), boot));
   }
 
   // What the host tells its clients, written to the document the windows are
