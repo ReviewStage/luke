@@ -28,16 +28,30 @@ export {
 export { ACCESS_TOKEN_EXPIRY_SLACK_MS } from "./expiry.js";
 export { LinearCredentials } from "./linear/credentials.js";
 export {
+  exchangeLinearCode,
   type LinearGrant,
-  LinearSignIn,
+  linearSignIn,
   linearSignInConfig,
 } from "./linear/oauth.js";
 export { LinearIssueTracker } from "./linear/tracker.js";
+export {
+  LOOPBACK_CONSENT_CANCELLED,
+  type LoopbackAuthorization,
+  type LoopbackConsent,
+  type LoopbackConsentCard,
+  type LoopbackConsentOptions,
+  type LoopbackConsentOutcome,
+  type LoopbackConsentPages,
+  type LoopbackConsentReasons,
+  type LoopbackExchange,
+  loopbackConsent,
+} from "./loopback-consent.js";
 export {
   accountLoopbackPage,
   LOOPBACK_CONNECTION_SOURCE,
   LOOPBACK_PAGE_TONE,
   type LoopbackConnectionSource,
+  type LoopbackPageTone,
 } from "./loopback-page.js";
 export { codeChallenge, createCodeVerifier } from "./pkce.js";
 export { singleFlight } from "./single-flight.js";

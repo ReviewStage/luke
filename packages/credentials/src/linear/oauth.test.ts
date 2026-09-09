@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import http from "node:http";
 import test from "node:test";
 import type { JsonObject } from "@sidecar/wire/testing";
 import {
@@ -8,93 +6,27 @@ import {
   jsonResponse,
   type RecordedRequest,
   recordingFetch,
-  requestBody,
 } from "@sidecar/wire/testing";
 import {
+  exchangeLinearCode,
   LINEAR_AUTHORIZATION_URL,
   LINEAR_REDIRECT_URIS,
   LINEAR_REFRESH_STATUS,
   LINEAR_REVOKE_URL,
   LINEAR_SCOPES,
   LINEAR_TOKEN_URL,
-  LinearSignIn,
+  linearSignIn,
   linearSignInConfig,
   refreshLinearGrant,
   revokeLinearGrant,
 } from "./oauth.js";
 
-/** What a token-exchange test reads back off the request it recorded. */
-interface ExchangeRequest {
-  url: string;
-  authorization: string | undefined;
-  body: string | undefined;
-}
-
 const CLIENT_ID = "6f0a2c1e9b3d4f5a";
 const NOW = 1_760_000_000_000;
+const REDIRECT_URI = "http://127.0.0.1:47821/linear/callback";
 
 function environment(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   return { LINEAR_OAUTH_CLIENT_ID: CLIENT_ID, ...overrides };
-}
-
-/**
- * Follows the redirect the browser would make, code and all. On its own
- * connection every time: the loopback binds one of a few registered ports
- * rather than an ephemeral one, so a pooled socket left over from an earlier
- * flow would be reused against a server that has since closed.
- */
-/** One callback in flight: when the sign-in claimed it, and what it answered. */
-interface PendingCallback {
-  claimed: Promise<void>;
-  answered: Promise<CallbackAnswer>;
-}
-
-/** What the loopback answered, once it has answered. */
-interface CallbackAnswer {
-  status: number;
-  body: string;
-}
-
-/**
- * Sends one loopback callback. `claimed` settles when the connection has been
- * accepted, which is the moment the sign-in owns the request: a test that
- * cancels afterwards is testing what happens to a claimed callback rather than
- * racing the connect against a sleep.
- */
-function answerCallback(
-  authorizationUrl: string,
-  parameters: Record<string, string>,
-): PendingCallback {
-  const redirectUri = new URL(authorizationUrl).searchParams.get("redirect_uri");
-  assert.ok(redirectUri, "the authorization URL names the loopback redirect");
-  const callback = new URL(redirectUri);
-  for (const [name, value] of Object.entries(parameters)) {
-    callback.searchParams.set(name, value);
-  }
-  let claim: (() => void) | undefined;
-  const claimed = new Promise<void>((resolve) => {
-    claim = resolve;
-  });
-  const answered = new Promise<CallbackAnswer>((resolve, reject) => {
-    const request = http.get({ ...urlParts(callback), agent: false }, (response) => {
-      let body = "";
-      response.setEncoding("utf8");
-      response.on("data", (chunk: string) => {
-        body += chunk;
-      });
-      response.on("end", () => resolve({ status: response.statusCode ?? 0, body }));
-    });
-    request.on("socket", (socket) => socket.on("connect", () => claim?.()));
-    request.on("error", (error) => {
-      claim?.();
-      reject(error);
-    });
-  });
-  return { claimed, answered };
-}
-
-function urlParts(url: URL) {
-  return { host: url.hostname, port: url.port, path: `${url.pathname}${url.search}` };
 }
 
 function grantResponse(overrides: JsonObject = {}): Response {
@@ -106,26 +38,6 @@ function grantResponse(overrides: JsonObject = {}): Response {
     scope: LINEAR_SCOPES,
     ...overrides,
   });
-}
-
-function signInWith(respond: (request: RecordedRequest) => Response) {
-  const opened: string[] = [];
-  const { fetch: fakeFetch, requests } = recordingFetch(respond);
-  const signIn = new LinearSignIn({
-    openExternal: (url) => opened.push(url),
-    environment: environment(),
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    fetchImplementation: fakeFetch as typeof globalThis.fetch,
-    now: () => NOW,
-  });
-  return { signIn, opened, requests };
-}
-
-/** The browser is opened synchronously with the flow; wait for the loopback. */
-async function openedUrl(opened: readonly string[]): Promise<URL> {
-  while (opened.length === 0) await new Promise((resolve) => setImmediate(resolve));
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  return new URL(opened[0] as string);
 }
 
 test("the sign-in carries its registration, and the environment may replace it", () => {
@@ -146,15 +58,20 @@ test("the sign-in carries its registration, and the environment may replace it",
   );
 });
 
-test("runs Linear's documented public-client flow end to end", async () => {
-  const { signIn, opened, requests } = signInWith(() => grantResponse());
+test("the consent page is Linear's own, as the developer rather than as an app", async () => {
+  const opened: string[] = [];
+  const signIn = linearSignIn({
+    openExternal: (url) => opened.push(url),
+    environment: environment(),
+    now: () => NOW,
+  });
 
   const pending = signIn.signIn();
-  const authorization = await openedUrl(opened);
+  // The browser is opened once the loopback is listening; wait for the URL.
+  while (opened.length === 0) await new Promise((resolve) => setImmediate(resolve));
+  // SAFETY: The loop above returns only once the first URL was recorded.
+  const authorization = new URL(opened[0] as string);
 
-  // The page is Linear's own, asking for the two scopes the two acts need,
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // with PKCE and as the developer rather than as an app of Luke's own.
   assert.equal(authorization.origin + authorization.pathname, LINEAR_AUTHORIZATION_URL);
   assert.equal(authorization.searchParams.get("client_id"), CLIENT_ID);
   assert.equal(authorization.searchParams.get("scope"), LINEAR_SCOPES);
@@ -164,173 +81,71 @@ test("runs Linear's documented public-client flow end to end", async () => {
   assert.equal(authorization.searchParams.get("prompt"), "consent");
   // Linear matches the redirect against what the application registered, so
   // the flow may only ever use an address that registration carries.
-  const redirectUri = authorization.searchParams.get("redirect_uri") ?? "";
   assert.ok(
-    LINEAR_REDIRECT_URIS.includes(redirectUri),
-    `${redirectUri} is one of the registered redirects`,
+    LINEAR_REDIRECT_URIS.includes(authorization.searchParams.get("redirect_uri") ?? ""),
+    "the authorization URL names one of the registered redirects",
   );
 
-  const state = authorization.searchParams.get("state") ?? "";
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const answered = await answerCallback(opened[0] as string, { state, code: "auth-code" }).answered;
-  assert.equal(answered.status, 200);
-  assert.match(answered.body, /connected/i);
+  signIn.cancel();
+  assert.deepEqual(await pending, { reason: "Sign-in was cancelled." });
+});
 
-  assert.deepEqual(await pending, {
+test("the exchange trades the code for a grant, and carries no secret", async () => {
+  const { fetch: fakeFetch, requests } = recordingFetch(() => grantResponse());
+  const grant = await exchangeLinearCode(
+    { clientId: CLIENT_ID },
+    { code: "auth-code", redirectUri: REDIRECT_URI, codeVerifier: "v" },
+    // SAFETY: Recording fetch matches globalThis.fetch for test harness injection.
+    { fetchImplementation: fakeFetch as typeof globalThis.fetch, now: () => NOW },
+  );
+  assert.deepEqual(grant, {
     accessToken: "lin_oauth_access",
     refreshToken: "lin_oauth_refresh",
     expiresAt: NOW + 86_400_000,
   });
 
-  // The exchange went to Linear's token endpoint carrying the verifier whose
-  // hash the authorization page was shown — the PKCE contract, checkable here.
-  assert.equal(requests.length, 1);
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+  // SAFETY: The exchange above recorded exactly one request.
   const exchange = requests[0] as RecordedRequest;
   assert.equal(exchange.url, LINEAR_TOKEN_URL);
   const body = new URLSearchParams(exchange.body ?? "");
   assert.equal(body.get("grant_type"), "authorization_code");
   assert.equal(body.get("code"), "auth-code");
-  assert.equal(body.get("redirect_uri"), redirectUri);
+  assert.equal(body.get("redirect_uri"), REDIRECT_URI);
+  assert.equal(body.get("code_verifier"), "v");
   // No secret travels: PKCE is what protects a public client, and a secret
   // every installed copy carried would protect nothing the verifier does not.
   assert.equal(body.get("client_secret"), null);
-  const verifier = body.get("code_verifier") ?? "";
-  const challenge = createHash("sha256").update(verifier).digest("base64url");
-  assert.equal(authorization.searchParams.get("code_challenge"), challenge);
 });
 
-test("a redirect with the wrong state is refused without ending the wait", async () => {
-  const { signIn, opened } = signInWith(() => grantResponse());
+test("every way the exchange can fail is a sentence, never a throw", async () => {
+  const config = { clientId: CLIENT_ID };
+  const input = { code: "auth-code", redirectUri: REDIRECT_URI, codeVerifier: "v" };
 
-  const pending = signIn.signIn();
-  const authorization = await openedUrl(opened);
-  const state = authorization.searchParams.get("state") ?? "";
-
-  // A stray or forged request is answered 404 and the flow keeps waiting.
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const forged = await answerCallback(opened[0] as string, { state: "not-it", code: "stolen" })
-    .answered;
-  assert.equal(forged.status, 404);
-
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const genuine = await answerCallback(opened[0] as string, { state, code: "auth-code" }).answered;
-  assert.equal(genuine.status, 200);
-  assert.equal("accessToken" in (await pending), true);
-});
-
-test("the first valid callback exclusively claims the one-time code exchange", async () => {
-  let finishExchange: ((response: Response) => void) | undefined;
-  const exchangeResponse = new Promise<Response>((resolve) => {
-    finishExchange = resolve;
-  });
-  const opened: string[] = [];
-  const requests: ExchangeRequest[] = [];
-  const exchangeFetchImpl = async (input: RequestInfo | URL, init?: RequestInit) => {
-    requests.push({
-      url: String(input),
-      authorization: new Headers(init?.headers).get("authorization") ?? undefined,
-      body: requestBody(init?.body),
-    });
-    return exchangeResponse;
-  };
-  const signIn = new LinearSignIn({
-    openExternal: (url) => opened.push(url),
-    environment: environment(),
+  const { fetch: refusing } = recordingFetch(() => jsonResponse({}, HTTP_STATUS.UNAUTHORIZED));
+  assert.deepEqual(
     // SAFETY: Recording fetch matches globalThis.fetch for test harness injection.
-    fetchImplementation: exchangeFetchImpl as typeof globalThis.fetch,
-    now: () => NOW,
-  });
+    await exchangeLinearCode(config, input, {
+      fetchImplementation: refusing as typeof globalThis.fetch,
+    }),
+    { reason: "Linear refused the sign-in exchange." },
+  );
 
-  const pending = signIn.signIn();
-  const authorization = await openedUrl(opened);
-  const state = authorization.searchParams.get("state") ?? "";
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const first = answerCallback(opened[0] as string, { state, code: "auth-code" }).answered;
-  while (requests.length === 0) await new Promise((resolve) => setImmediate(resolve));
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const duplicate = await answerCallback(opened[0] as string, { state, code: "auth-code" })
-    .answered;
-  assert.equal(duplicate.status, 404);
-  assert.equal(requests.length, 1);
+  const { fetch: tokenless } = recordingFetch(() => jsonResponse({ expires_in: 86_400 }));
+  assert.deepEqual(
+    // SAFETY: Recording fetch matches globalThis.fetch for test harness injection.
+    await exchangeLinearCode(config, input, {
+      fetchImplementation: tokenless as typeof globalThis.fetch,
+    }),
+    { reason: "Linear answered the sign-in without a token." },
+  );
 
-  finishExchange?.(grantResponse());
-  assert.equal((await first).status, 200);
-  assert.equal("accessToken" in (await pending), true);
-});
-
-test("a refusal from Linear is an answer, not an exchange", async () => {
-  const { signIn, opened, requests } = signInWith(() => grantResponse());
-
-  const pending = signIn.signIn();
-  const authorization = await openedUrl(opened);
-  const state = authorization.searchParams.get("state") ?? "";
-
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const answered = await answerCallback(opened[0] as string, { state, error: "access_denied" })
-    .answered;
-  assert.equal(answered.status, 200);
-  assert.match(answered.body, /didn’t complete/i);
-  assert.deepEqual(await pending, { reason: "Linear did not grant access." });
-  assert.deepEqual(requests, []);
-});
-
-test("an abandoned sign-in times out instead of listening forever", async () => {
-  const signIn = new LinearSignIn({
-    openExternal: () => undefined,
-    environment: environment(),
-    timeoutMs: 20,
-  });
-
-  const outcome = await signIn.signIn();
-  assert.ok("reason" in outcome && /timed out/i.test(outcome.reason));
-});
-
-test("a claimed callback is allowed to finish after the waiting timeout", async () => {
-  let finishExchange: ((response: Response) => void) | undefined;
-  const exchangeResponse = new Promise<Response>((resolve) => {
-    finishExchange = resolve;
-  });
-  const opened: string[] = [];
-  const signIn = new LinearSignIn({
-    openExternal: (url) => opened.push(url),
-    environment: environment(),
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    fetchImplementation: (() => exchangeResponse) as typeof globalThis.fetch,
-    now: () => NOW,
-    // Long enough that the callback below reliably connects before the wait
-    // expires. A 20ms window raced the connect on a loaded machine, and the
-    // sign-in closed its listener out from under a request it had not yet
-    // claimed — which is the opposite of what this test is about.
-    timeoutMs: 200,
-  });
-
-  const pending = signIn.signIn();
-  const authorization = await openedUrl(opened);
-  const state = authorization.searchParams.get("state") ?? "";
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const callback = answerCallback(opened[0] as string, { state, code: "auth-code" });
-  // Claimed first, then past the wait, and only then cancelled: the point is
-  // that cancelling does not abandon a callback already in hand.
-  await callback.claimed;
-  await new Promise((resolve) => setTimeout(resolve, 250));
-  signIn.cancel();
-  finishExchange?.(grantResponse());
-
-  assert.equal((await callback.answered).status, 200);
-  assert.equal("accessToken" in (await pending), true);
-});
-
-test("one sign-in at a time", async () => {
-  const { signIn, opened } = signInWith(() => grantResponse());
-
-  const first = signIn.signIn();
-  await openedUrl(opened);
-  const second = await signIn.signIn();
-  assert.deepEqual(second, { reason: "A sign-in is already waiting in your browser." });
-
-  signIn.cancel();
-  assert.deepEqual(await first, { reason: "Sign-in was cancelled." });
+  assert.deepEqual(
+    await exchangeLinearCode(config, input, {
+      // SAFETY: Rejected fetch matches globalThis.fetch for test harness injection.
+      fetchImplementation: (() => Promise.reject(new Error("offline"))) as typeof globalThis.fetch,
+    }),
+    { reason: "The sign-in exchange with Linear did not complete." },
+  );
 });
 
 test("a refresh answer without its rotated refresh token is not persisted", async () => {

@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-import http from "node:http";
 import {
   ACT_RESULT_STATUS,
   isRecord,
@@ -7,24 +5,21 @@ import {
   isWireString,
   type UnparsedWireValue,
 } from "@sidecar/wire";
-// The same landing page the Luke account sign-in leaves the browser on, and the
-// same RFC 7636 arithmetic every other flow here uses: no two of Luke's consent
-// trips dress their tabs differently, and none can drift into a weaker verifier
-// than the others.
+// The one consent trip every provider Luke asks consent of runs: the loopback,
+// the PKCE, and the landing page are all its, so no two of Luke's sign-ins can
+// drift into different servers, weaker verifiers, or differently dressed tabs.
 import {
-  accountLoopbackPage,
-  LOOPBACK_CONNECTION_SOURCE,
-  LOOPBACK_PAGE_TONE,
-} from "../loopback-page.js";
-import { codeChallenge, createCodeVerifier } from "../pkce.js";
+  type LoopbackConsent,
+  type LoopbackConsentOutcome,
+  loopbackConsent,
+} from "../loopback-consent.js";
+import { LOOPBACK_CONNECTION_SOURCE } from "../loopback-page.js";
 
 /**
  * The sign-in behind the Linear row: Linear's own OAuth flow for a public
- * client, run the way it documents one — an authorization page opened in the
- * user's browser, a code handed back on a loopback redirect that never leaves
- * this machine, and a PKCE-verified exchange at Linear's token endpoint. No
- * client secret is involved at all: Linear makes it optional under PKCE, and
- * a secret every installed copy carries protects nothing that the verifier
+ * client, run the way it documents one, on the shared loopback consent trip.
+ * No client secret is involved at all: Linear makes it optional under PKCE,
+ * and a secret every installed copy carries protects nothing that the verifier
  * does not already protect.
  *
  * The flow exists only in a run holding the registration — the client id
@@ -102,33 +97,7 @@ export const LINEAR_REDIRECT_URIS: readonly string[] = LOOPBACK_PORTS.map(
   (port) => `http://${LOOPBACK_HOST}:${port}${CALLBACK_PATH}`,
 );
 
-/** Long enough to find the right workspace; not an open door all afternoon. */
-const SIGN_IN_TIMEOUT_MS = 180_000;
-
 const TOKEN_REQUEST_TIMEOUT_MS = 10_000;
-
-/**
- * What the browser tab shows once the flow is over, drawn as the same card
- * every other loopback landing draws. Every string is fixed by the build, and
- * nothing the redirect carried is ever interpolated.
- */
-function signInPage(granted: boolean): string {
-  return granted
-    ? accountLoopbackPage({
-        tone: LOOPBACK_PAGE_TONE.SETTLED,
-        badge: "Connected",
-        title: "Connected to Linear",
-        body: "You can close this tab and return to Luke.",
-        source: LOOPBACK_CONNECTION_SOURCE.LINEAR,
-      })
-    : accountLoopbackPage({
-        tone: LOOPBACK_PAGE_TONE.ATTENTION,
-        badge: "Not connected",
-        title: "Sign-in didn’t complete",
-        body: "You can close this tab and try again from Luke.",
-        source: LOOPBACK_CONNECTION_SOURCE.LINEAR,
-      });
-}
 
 /**
  * One connected Linear workspace's credentials. The refresh token is absent
@@ -143,7 +112,7 @@ export interface LinearGrant {
   expiresAt: number;
 }
 
-export type LinearSignInOutcome = LinearGrant | { reason: string };
+export type LinearSignInOutcome = LoopbackConsentOutcome<LinearGrant>;
 
 export interface LinearSignInOptions {
   /**
@@ -183,208 +152,101 @@ export function grantFrom(payload: UnparsedWireValue, now: number): LinearGrant 
 }
 
 /**
- * Runs one sign-in from button press to grant. One at a time: a second press
- * while the browser tab is open is answered with why, rather than a second tab
- * racing the first for the loopback port.
+ * Trades the code for a grant at Linear's token endpoint. No client secret
+ * travels: PKCE is what protects a public client.
  */
-export class LinearSignIn {
-  readonly #options: LinearSignInOptions;
-  #running = false;
-  /** Ends the flow now waiting, when there is one — the cancel button's way in. */
-  #abandon: (() => void) | undefined;
-  /** Reopens the waiting flow's own consent page — the lost-tab way back in. */
-  #reopen: (() => void) | undefined;
-
-  constructor(options: LinearSignInOptions) {
-    this.#options = options;
-  }
-
-  async signIn(): Promise<LinearSignInOutcome> {
-    const config = linearSignInConfig(this.#options.environment);
-    if (!config) return { reason: "Sign-in is not configured in this build." };
-    if (this.#running) return { reason: "A sign-in is already waiting in your browser." };
-    this.#running = true;
-    try {
-      return await this.#run(config);
-    } finally {
-      this.#running = false;
-      this.#abandon = undefined;
-      this.#reopen = undefined;
-    }
-  }
-
-  /**
-   * Ends the flow now waiting, if any. The browser tab is left where it is —
-   * closing another app's window is not Luke's to do — but the loopback stops
-   * listening, so a grant given after this lands nowhere.
-   */
-  cancel(): void {
-    this.#abandon?.();
-  }
-
-  /**
-   * Opens the waiting flow's consent page again — the very URL, state and
-   * challenge included, the flow is already listening for — for a tab lost
-   * behind other windows or closed by mistake. With no flow waiting there is
-   * no page to reopen, and nothing happens.
-   */
-  reopen(): void {
-    this.#reopen?.();
-  }
-
-  async #run(config: LinearSignInConfig): Promise<LinearSignInOutcome> {
-    const verifier = createCodeVerifier();
-    const challenge = codeChallenge(verifier);
-    const state = randomUUID();
-
-    let finish: (outcome: LinearSignInOutcome) => void = () => undefined;
-    const outcome = new Promise<LinearSignInOutcome>((resolve) => {
-      finish = resolve;
+export async function exchangeLinearCode(
+  config: LinearSignInConfig,
+  input: { code: string; redirectUri: string; codeVerifier: string },
+  options: { fetchImplementation?: typeof fetch; now?: () => number } = {},
+): Promise<LinearSignInOutcome> {
+  const body = new URLSearchParams({
+    code: input.code,
+    client_id: config.clientId,
+    redirect_uri: input.redirectUri,
+    grant_type: "authorization_code",
+    code_verifier: input.codeVerifier,
+  });
+  try {
+    const fetchImplementation = options.fetchImplementation ?? fetch;
+    const response = await fetchImplementation(LINEAR_TOKEN_URL, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+      signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
     });
-    // Assigned once a registered port has bound, before the browser is opened
-    // — no request can arrive ahead of it.
-    let redirectUri = "";
-    let callbackClaimed = false;
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-
-    const server = http.createServer((request, response) => {
-      const url = new URL(request.url ?? "/", `http://${LOOPBACK_HOST}`);
-      // Anything that is not this flow's own redirect — another path, a stray
-      // request, a state this run never issued — is refused without ending
-      // the wait: the real redirect may still be on its way.
-      if (url.pathname !== CALLBACK_PATH || url.searchParams.get("state") !== state) {
-        response.writeHead(404, { "content-type": "text/plain" }).end("Not found");
-        return;
-      }
-      if (callbackClaimed) {
-        response.writeHead(404, { "content-type": "text/plain" }).end("Not found");
-        return;
-      }
-      callbackClaimed = true;
-      if (timeout) clearTimeout(timeout);
-      this.#abandon = undefined;
-      const refused = url.searchParams.get("error");
-      const code = url.searchParams.get("code");
-      if (refused || !code) {
-        response
-          .writeHead(200, { "content-type": "text/html; charset=utf-8" })
-          .end(signInPage(false));
-        finish({ reason: "Linear did not grant access." });
-        return;
-      }
-      void this.#exchange(config, code, verifier, redirectUri).then((exchanged) => {
-        response
-          .writeHead(200, { "content-type": "text/html; charset=utf-8" })
-          .end(signInPage(!("reason" in exchanged)));
-        finish(exchanged);
-      });
-    });
-
-    const port = await this.#bind(server);
-    if (port === undefined) {
-      return { reason: "Luke could not open a sign-in callback on this machine." };
-    }
-    redirectUri = `http://${LOOPBACK_HOST}:${port}${CALLBACK_PATH}`;
-
-    const authorization = new URL(LINEAR_AUTHORIZATION_URL);
-    authorization.searchParams.set("client_id", config.clientId);
-    authorization.searchParams.set("redirect_uri", redirectUri);
-    authorization.searchParams.set("response_type", "code");
-    authorization.searchParams.set("scope", LINEAR_SCOPES);
-    authorization.searchParams.set("code_challenge", challenge);
-    authorization.searchParams.set("code_challenge_method", "S256");
-    // Everything Luke does on a board, he does as the developer who asked:
-    // an issue moves under their name and a comment carries it. `user` is
-    // Linear's default, and saying so keeps a changed default from quietly
-    // turning Luke into an actor of his own.
-    authorization.searchParams.set("actor", "user");
-    // Consent every time, so reconnecting after withdrawing the grant in
-    // Linear actually asks again rather than silently reissuing.
-    authorization.searchParams.set("prompt", "consent");
-    authorization.searchParams.set("state", state);
-
-    timeout = setTimeout(() => {
-      finish({ reason: "Sign-in timed out. Try again from the Linear row." });
-    }, this.#options.timeoutMs ?? SIGN_IN_TIMEOUT_MS);
-    timeout.unref();
-    this.#abandon = () => finish({ reason: "Sign-in was cancelled." });
-    this.#reopen = () => this.#options.openExternal(authorization.toString());
-
-    try {
-      this.#options.openExternal(authorization.toString());
-      return await outcome;
-    } finally {
-      clearTimeout(timeout);
-      server.close();
-      // The browser keeps its connection alive after the redirect, and a
-      // socket it holds open would keep this port bound — which, on a
-      // registered port rather than an ephemeral one, is the next sign-in's
-      // port. Ending those connections is what makes the flow repeatable.
-      server.closeAllConnections();
-      // The server holds the process open only while the flow is live; a
-      // browser tab left forever must not be what keeps Luke running.
-      server.unref();
-    }
+    if (!response.ok) return { reason: "Linear refused the sign-in exchange." };
+    const grant = grantFrom(await response.json(), (options.now ?? Date.now)());
+    if (!grant) return { reason: "Linear answered the sign-in without a token." };
+    return grant;
+  } catch {
+    return { reason: "The sign-in exchange with Linear did not complete." };
   }
+}
 
-  /**
-   * Binds the first registered port that is free. A port already held is the
-   * ordinary case — another copy of Luke, or another app — and not a failure
-   * until every registered address has been tried, because a port Linear was
-   * never told about would fail at the redirect instead.
-   */
-  async #bind(server: http.Server): Promise<number | undefined> {
-    for (const port of LOOPBACK_PORTS) {
-      const bound = await new Promise<boolean>((resolve) => {
-        const failed = (): void => {
-          server.removeListener("error", failed);
-          // A server that failed to bind is closed before the next address is
-          // tried, so no attempt inherits the last one's half-open state.
-          server.close(() => resolve(false));
-        };
-        server.once("error", failed);
-        // The loopback answers this machine alone: Linear's redirect lands in
-        // the user's own browser, which hands the code straight back across
-        // localhost.
-        server.listen(port, LOOPBACK_HOST, () => {
-          server.removeListener("error", failed);
-          resolve(true);
-        });
-      });
-      if (bound) return port;
-    }
-    return undefined;
+/**
+ * Runs one sign-in from button press to grant. A build whose registration was
+ * stripped offers a flow that says so rather than one whose consent page could
+ * not be built.
+ */
+export function linearSignIn(options: LinearSignInOptions): LoopbackConsent<LinearGrant> {
+  const config = linearSignInConfig(options.environment);
+  if (!config) {
+    return {
+      signIn: async () => ({ reason: "Sign-in is not configured in this build." }),
+      cancel: () => undefined,
+      reopen: () => undefined,
+    };
   }
-
-  async #exchange(
-    config: LinearSignInConfig,
-    code: string,
-    verifier: string,
-    redirectUri: string,
-  ): Promise<LinearSignInOutcome> {
-    const body = new URLSearchParams({
-      code,
-      client_id: config.clientId,
-      redirect_uri: redirectUri,
-      grant_type: "authorization_code",
-      code_verifier: verifier,
-    });
-    try {
-      const fetchImplementation = this.#options.fetchImplementation ?? fetch;
-      const response = await fetchImplementation(LINEAR_TOKEN_URL, {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: body.toString(),
-        signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
-      });
-      if (!response.ok) return { reason: "Linear refused the sign-in exchange." };
-      const grant = grantFrom(await response.json(), (this.#options.now ?? Date.now)());
-      if (!grant) return { reason: "Linear answered the sign-in without a token." };
-      return grant;
-    } catch {
-      return { reason: "The sign-in exchange with Linear did not complete." };
-    }
-  }
+  return loopbackConsent<LinearGrant>({
+    ports: LOOPBACK_PORTS,
+    callbackPath: CALLBACK_PATH,
+    source: LOOPBACK_CONNECTION_SOURCE.LINEAR,
+    pages: {
+      granted: {
+        badge: "Connected",
+        title: "Connected to Linear",
+        body: "You can close this tab and return to Luke.",
+      },
+      notGranted: {
+        badge: "Not connected",
+        title: "Sign-in didn’t complete",
+        body: "You can close this tab and try again from Luke.",
+      },
+    },
+    reasons: {
+      refused: "Linear did not grant access.",
+      timedOut: "Sign-in timed out. Try again from the Linear row.",
+    },
+    authorizationUrl: ({ state, redirectUri, codeChallenge }) => {
+      const authorization = new URL(LINEAR_AUTHORIZATION_URL);
+      authorization.searchParams.set("client_id", config.clientId);
+      authorization.searchParams.set("redirect_uri", redirectUri);
+      authorization.searchParams.set("response_type", "code");
+      authorization.searchParams.set("scope", LINEAR_SCOPES);
+      authorization.searchParams.set("code_challenge", codeChallenge);
+      authorization.searchParams.set("code_challenge_method", "S256");
+      // Everything Luke does on a board, he does as the developer who asked:
+      // an issue moves under their name and a comment carries it. `user` is
+      // Linear's default, and saying so keeps a changed default from quietly
+      // turning Luke into an actor of his own.
+      authorization.searchParams.set("actor", "user");
+      // Consent every time, so reconnecting after withdrawing the grant in
+      // Linear actually asks again rather than silently reissuing.
+      authorization.searchParams.set("prompt", "consent");
+      authorization.searchParams.set("state", state);
+      return authorization.toString();
+    },
+    exchange: (input) =>
+      exchangeLinearCode(config, input, {
+        ...(options.fetchImplementation
+          ? { fetchImplementation: options.fetchImplementation }
+          : undefined),
+        ...(options.now ? { now: options.now } : undefined),
+      }),
+    openExternal: options.openExternal,
+    ...(options.timeoutMs === undefined ? undefined : { timeoutMs: options.timeoutMs }),
+  });
 }
 
 /**
