@@ -3,6 +3,7 @@ import {
   BRAIN_INPUT_MARKER,
   BRAIN_TURN_KIND,
   BRAIN_TURN_TRIGGER,
+  BRAIN_WAKE_KIND,
   BRAIN_WORKSPACE_SEEDS,
   BrainAgent,
   type BrainDelivery,
@@ -37,6 +38,7 @@ import {
   housekeepingFellShort,
   type MemoryHousekeepingResult,
 } from "@sidecar/memory";
+import type { ObservedSpoolEvent } from "@sidecar/providers";
 import type { ConversationEntry } from "@sidecar/realtime";
 import {
   type BuiltPrompt,
@@ -1015,4 +1017,33 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       return runtimeDescriptor.create(model, engineDescriptor);
     },
   };
+}
+
+/**
+ * Turns one provider's batch of spool events into wakes. Every hook event
+ * wakes the brain — the brain decides what matters, so nothing is filtered
+ * here — and each wake carries the session as the registry holds it at that
+ * moment, when it holds it at all: a hook can land for a session the poll has
+ * not yet seen, and the brain still hears that it moved.
+ */
+export function wakeEventsFromHooks(
+  providerId: string,
+  hookEvents: readonly ObservedSpoolEvent<string>[],
+  registry: { get(identity: SessionIdentity): Session | undefined },
+  now: number,
+): readonly BrainWakeEvent[] {
+  return hookEvents.map((hookEvent) => {
+    const identity: SessionIdentity = {
+      providerId,
+      providerSessionId: hookEvent.providerSessionId,
+    };
+    const session = registry.get(identity);
+    return {
+      kind: BRAIN_WAKE_KIND.HOOK,
+      identity,
+      hookEvent: hookEvent.event,
+      ...(session ? { session } : undefined),
+      atMs: Number.isFinite(hookEvent.atMs) ? hookEvent.atMs : now,
+    };
+  });
 }

@@ -78,7 +78,7 @@ export interface RuntimeStoreWiring {
   /** The client, started on first use; the worker's answers stand behind every method below. */
   client: () => RuntimeStoreClient;
   /** One conversation's thread, relayed between windows through this process; created on first use. */
-  thread: (sessionKey?: SessionKey) => ConversationThread<HistoryReporter>;
+  thread: (sessionKey?: SessionKey) => ConversationThread;
   /** A conversation's envelope, for the brain wiring to build its writer on: the store's, or memory alone where nothing is kept on disk. */
   brainStateRepository: (sessionKey?: SessionKey) => BrainStateRepository;
   /** Opens the database for this launch. */
@@ -174,7 +174,7 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
     return runtimeStore;
   };
 
-  const threads = new Map<SessionKey, ConversationThread<HistoryReporter>>();
+  const threads = new Map<SessionKey, ConversationThread>();
   const temporary = new Map<SessionKey, ConversationRecord>();
   let stored: readonly ConversationRecord[] = [];
 
@@ -182,7 +182,7 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
   const memoryThread = (sessionKey: SessionKey) => {
     const store = new MemoryHistoryStore();
     memoryStores.set(sessionKey, store);
-    return new ConversationThread<HistoryReporter>({
+    return new ConversationThread({
       store,
       now: dependencies.now,
       onChanged: (entries, except) => dependencies.onHistoryChanged(sessionKey, entries, except),
@@ -190,14 +190,12 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
     });
   };
 
-  const thread = (
-    sessionKey: SessionKey = MAIN_SESSION_KEY,
-  ): ConversationThread<HistoryReporter> => {
+  const thread = (sessionKey: SessionKey = MAIN_SESSION_KEY): ConversationThread => {
     let held = threads.get(sessionKey);
     if (held) return held;
     held =
       dependencies.persistent && !temporary.has(sessionKey)
-        ? new ConversationThread<HistoryReporter>({
+        ? new ConversationThread({
             store: {
               appendHistory: (entries, now) => client().appendHistory(sessionKey, entries, now),
             },

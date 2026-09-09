@@ -23,7 +23,7 @@ import {
   productSignInAge,
   type RecordProductEvent,
 } from "@sidecar/analytics";
-import type { BrainDelivery } from "@sidecar/brain";
+import { type BrainDelivery, type BrainMemoryAccess, EMBEDDING_BATCH_SIZE } from "@sidecar/brain";
 import { BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
 import {
   activeMeetingEnd,
@@ -49,6 +49,12 @@ import {
   isAppGuideSnapshot,
 } from "@sidecar/guide";
 import { ISSUE_TRACKER_ID, normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
+import {
+  type MemorySyncReport,
+  NotebookMemory,
+  RETRIEVAL_MODE,
+  type RetrievalMode,
+} from "@sidecar/memory";
 import {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticKind,
@@ -92,6 +98,8 @@ import {
 } from "@sidecar/runtime";
 import {
   CONVERSATION_KIND,
+  type ConversationRecord,
+  type EmbeddingAdapter,
   GATEWAY_ERROR,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
@@ -102,7 +110,7 @@ import {
   type SessionKey,
   sessionKey as toSessionKey,
 } from "@sidecar/runtime-contracts";
-import type { RuntimeStorePort } from "@sidecar/runtime-store";
+import type { RuntimeStoreClient, RuntimeStorePort } from "@sidecar/runtime-store";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   CreatedWorkspaceOpenTracker,
@@ -150,7 +158,7 @@ import {
   supersetPressedLink,
 } from "@sidecar/superset";
 import { LinearCredentials, LinearIssueTracker, LinearSignIn } from "@sidecar/trackers";
-import { VoiceCapabilityAssembler } from "@sidecar/voice";
+import { type VoiceCapabilityApplication, VoiceCapabilityAssembler } from "@sidecar/voice";
 import {
   ACT_RESULT_STATUS,
   isRecord,
@@ -174,23 +182,20 @@ import {
 } from "../apple-calendar";
 import { arrivalBeatOwed, countsFirstAnnouncement } from "../arrival-flow";
 import type { WorkspaceCreationDefaults } from "../brain/act-performer";
-import { wakeEventsFromHooks } from "../brain/flow";
 import { BrainReplyDeliveries } from "../brain/reply-delivery";
-import { wireBrain } from "../brain/wiring";
+import { wakeEventsFromHooks, wireBrain } from "../brain/wiring";
 import { calendarOnboardingOwed } from "../calendar-onboarding-flow";
 import { conversationOperations, startHistoryMaintenance } from "../conversation-operations";
 import { NODE_CAPABILITY } from "../gateway/desktop-node";
 import { createGatewayService, type GatewayService } from "../gateway/service";
 import { createSessionActPerformer, NodeAnswerLostError } from "../ipc/session-acts";
 import { wireMemoryMaintenance } from "../memory-maintenance";
-import { wireMemory } from "../memory-wiring";
 import { type OnboardingState, onboardingStateFile } from "../onboarding-state";
 import { ProviderKeyVaultSync, type VaultSyncAccount } from "../provider-key-vault-sync";
 import type { RunMode } from "../run-mode";
 import { agentRootPath } from "../runtime-store-path";
 import { wireRuntimeStore } from "../runtime-store-wiring";
 import { type SecretCipher, SettingsStore } from "../settings-store";
-import { transitionVoiceCredential } from "../voice/credential-transition";
 import { type OnboardingBeatKind, SpeechArbiter } from "../voice/speech-arbiter";
 import { VoiceReceiver } from "../voice-receiver";
 import { seedWorkspaceThenStartMemory, shutdownStepsFlushingEvents } from "./lifecycle";
@@ -301,6 +306,97 @@ function wire<Value>(value: Value): WireValue {
   // SAFETY: the shapes carried here (settings, snapshots, rosters, offers) are the structured-clone payloads the windows already receive; each is JSON data.
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The protocol carries JSON; the domain type is set aside at this one boundary.
   return value as unknown as WireValue;
+}
+
+/**
+ * One credential transition, from the seams this host owns: the brain
+ * wiring's synchronous retire, the assembler's application, and the rebuild
+ * that installs what the applied capability allows. The retire is immediate,
+ * so no run keeps the old source's authority past the transition's first
+ * await. The rebuild belongs to the current application alone, asked at the
+ * moment of use rather than read off the answer: a newer transition can begin
+ * between the assembler's publication and this continuation, and it has
+ * already retired the wiring, so a rebuild on the older one's behalf would be
+ * the newest thing the host was asked for and would install the retired
+ * source over the selection still being read. An overtaken transition builds
+ * nothing and leaves the host empty for the newer one to fill. Answers
+ * whether this transition was the one that installed.
+ */
+export interface VoiceCredentialTransitionSeams {
+  retire: () => void;
+  apply: () => Promise<VoiceCapabilityApplication>;
+  rebuild: () => Promise<void>;
+}
+
+export async function transitionVoiceCredential(
+  seams: VoiceCredentialTransitionSeams,
+): Promise<boolean> {
+  seams.retire();
+  const applied = await seams.apply();
+  if (!applied.latest || !applied.isCurrent()) return false;
+  await seams.rebuild();
+  return true;
+}
+
+/** The notebook's index as the host holds it, and what a run without one still answers. */
+interface MemoryWiring {
+  /** Syncs once and starts watching; a run with nothing on disk does neither. */
+  start: () => Promise<void>;
+  stop: () => void;
+  /** One reconcile of the index against the files; a call during a pass earns one follow-on pass under the adapter standing then. */
+  sync: () => Promise<MemorySyncReport | undefined>;
+  /** The brain's memory tools for one conversation. */
+  accessFor: (sessionKey: SessionKey) => BrainMemoryAccess | undefined;
+  /** The retrieval mode the last sync settled on. */
+  mode: () => RetrievalMode;
+}
+
+/** A run without a notebook: nothing on disk to index, so nothing to search. */
+const INERT_MEMORY_WIRING: MemoryWiring = {
+  start: async () => undefined,
+  stop: () => undefined,
+  sync: async () => undefined,
+  accessFor: () => undefined,
+  mode: () => RETRIEVAL_MODE.KEYWORD_ONLY,
+};
+
+export interface NotebookMemoryDependencies {
+  client: () => RuntimeStoreClient;
+  /** The embedding adapter the credential policy built, or nothing when no credential stands. */
+  embeddingAdapter: () => EmbeddingAdapter | undefined;
+  /** Hears every credential change that may have replaced the adapter; the index is synced again so keyword-only chunks gain their vectors. */
+  onEmbeddingAdapterChanged?: (listener: () => void) => void;
+  /** The agent's identity workspace, watched for the notebook's files. */
+  workspaceDirectory: () => string;
+  conversationDirectory: () => readonly ConversationRecord[];
+  isTemporary: (sessionKey: SessionKey) => boolean;
+  now: () => number;
+  report: (message: string) => void;
+  /** Hears every completed sync, so the notebook's cached entries can be read again after a hand edit. */
+  onSynced?: () => void;
+}
+
+/**
+ * The notebook's index as the host wires it: the memory package's host over
+ * the store's worker and the embedding adapter the credential policy built.
+ * This composes only; the sync and the search live in `NotebookMemory`.
+ */
+export function composeNotebookMemory(dependencies: NotebookMemoryDependencies): NotebookMemory {
+  const memory = new NotebookMemory({
+    store: dependencies.client,
+    embeddingAdapter: dependencies.embeddingAdapter,
+    embeddingBatchSize: EMBEDDING_BATCH_SIZE,
+    workspaceDirectory: dependencies.workspaceDirectory,
+    conversationDirectory: dependencies.conversationDirectory,
+    isTemporary: dependencies.isTemporary,
+    now: dependencies.now,
+    report: dependencies.report,
+    ...(dependencies.onSynced ? { onSynced: dependencies.onSynced } : undefined),
+  });
+  dependencies.onEmbeddingAdapterChanged?.(() => {
+    void memory.sync();
+  });
+  return memory;
 }
 
 export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
@@ -1059,19 +1155,20 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
 
   const agentWorkspacePath = () => path.join(agentRootPath(stateRoot), AGENT_WORKSPACE_DIRECTORY);
 
-  const memoryWiring = wireMemory({
-    persistent: runMode.observesProviders,
-    client: runtimeStoreWiring.client,
-    embeddingAdapter: () => voiceCapabilities.embeddingAdapter,
-    workspaceDirectory: agentWorkspacePath,
-    conversationDirectory: () => runtimeStoreWiring.directory(),
-    isTemporary: runtimeStoreWiring.isTemporary,
-    now,
-    report,
-    onSynced: () => {
-      void runtimeStoreWiring.refreshNotebook();
-    },
-  });
+  const memoryWiring: MemoryWiring = !runMode.observesProviders
+    ? INERT_MEMORY_WIRING
+    : composeNotebookMemory({
+        client: runtimeStoreWiring.client,
+        embeddingAdapter: () => voiceCapabilities.embeddingAdapter,
+        workspaceDirectory: agentWorkspacePath,
+        conversationDirectory: () => runtimeStoreWiring.directory(),
+        isTemporary: runtimeStoreWiring.isTemporary,
+        now,
+        report,
+        onSynced: () => {
+          void runtimeStoreWiring.refreshNotebook();
+        },
+      });
   const memoryMaintenance = wireMemoryMaintenance({
     persistent: runMode.observesProviders,
     client: runtimeStoreWiring.client,
