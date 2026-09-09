@@ -19,6 +19,8 @@ import {
 import {
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
+  type AppSettingField,
+  type AppSettingValue,
   isKeyedAppSettingField,
   settingEntryGuard,
   VOICE_HOTKEY_NONE,
@@ -27,7 +29,12 @@ import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { type UnparsedWireValue, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { ACCOUNT_STATUS, CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/messages/account";
 import { appSettingsView, SETTINGS_RESET_SCOPE, VOICE_SOURCE } from "#shared/messages/settings";
-import { type SecretCipher, SettingsStore, type SettingsStoreOptions } from "./settings-store";
+import {
+  apiKeyRejection,
+  type SecretCipher,
+  SettingsStore,
+  type SettingsStoreOptions,
+} from "./settings-store";
 
 const TEST_API_KEY = "conductor-live-key";
 const SETTINGS_FILE_NAME = "settings.json";
@@ -261,6 +268,128 @@ async function readSettingsFile(directory: string): Promise<string> {
   return fs.readFile(path.join(directory, SETTINGS_FILE_NAME), "utf8");
 }
 
+/**
+ * A value each setting can hold that is not the value it falls back to, so a
+ * write can be told from the state it replaced. The table is total over
+ * `APP_SETTING_FIELDS`, so a setting added without one fails to compile rather
+ * than going quietly untested.
+ */
+const SAMPLE_VALUE = {
+  openAtLogin: false,
+  showInDock: true,
+  voice: REALTIME_VOICE.MARIN,
+  voiceSpeed: REALTIME_VOICE_SPEED.QUICK,
+  voiceCaptions: true,
+  voiceHotkey: "Shift+Command+L",
+  askHotkey: "Control+Alt+K",
+  stopHotkey: "Control+Alt+P",
+  duckOtherMedia: false,
+  voiceSource: VOICE_SOURCE.ACCOUNT,
+  preferBuiltInMicrophone: false,
+  announceSessions: false,
+  quietDuringMeetings: false,
+  syncProviderKeys: false,
+  showOnAllDisplays: true,
+  formFactor: PANEL_FORM_FACTOR.NOTCH,
+  sessionFilters: [SESSION_FILTER.LOCAL, PROVIDER_ID.CODEX],
+  sessionSearchQuery: "review",
+  defaultWorkspaceProvider: PROVIDER_ID.CONDUCTOR,
+  workspaceAgentDefaults: { [PROVIDER_ID.CONDUCTOR]: { agent: "claude", model: "sonnet" } },
+  workspaceProjectDefaults: { [PROVIDER_ID.CONDUCTOR]: "project-one" },
+} satisfies { [Field in AppSettingField]: NonNullable<AppSettingValue<Field>> };
+
+/**
+ * The settings a snapshot resolves rather than reports: what the panel draws
+ * for them comes from the environment, or from what this run could actually
+ * do, so only their own tests below can state it. What the file holds for them
+ * is still the table's business.
+ */
+const RESOLVED_FIELDS = new Set<AppSettingField>([
+  APP_SETTING_SCHEMA.voice.field,
+  APP_SETTING_SCHEMA.voiceSpeed.field,
+  APP_SETTING_SCHEMA.voiceSource.field,
+  APP_SETTING_SCHEMA.formFactor.field,
+]);
+
+/** A number is no setting's shape, so one file corrupts every field at once. */
+const CORRUPT_VALUE = 7;
+
+test("every setting starts at its default, survives a reopen, and can be cleared", async (t) => {
+  for (const field of APP_SETTING_FIELDS) {
+    const fallback = APP_SETTING_SCHEMA[field].guard(undefined).value;
+    const sample = SAMPLE_VALUE[field];
+    const directory = await temporaryDirectory(t);
+    const store = storeIn(directory);
+
+    assert.deepEqual(await store.get(field), fallback, `${field} did not start at its default`);
+
+    const written = await store.set(field, sample);
+    assert.equal(written.reason, undefined, field);
+    assert.deepEqual(await store.get(field), sample, field);
+    assert.deepEqual(
+      await storeIn(directory).get(field),
+      sample,
+      `${field} did not survive a reopen`,
+    );
+    if (!RESOLVED_FIELDS.has(field)) {
+      assert.deepEqual(
+        appSettingsView(written.settings)[field],
+        sample,
+        `${field} was not drawn as it was stored`,
+      );
+    }
+
+    // Clearing is the absence of a choice, not a stored empty value, so a
+    // setting that can be unset reads as unset again from a reopened file.
+    if (APP_SETTING_SCHEMA[field].guard(undefined).valid) {
+      await store.set(field, undefined);
+      assert.deepEqual(
+        await storeIn(directory).get(field),
+        fallback,
+        `${field} did not clear back to its default`,
+      );
+    }
+  }
+});
+
+test("every setting reads as its default when the file holds a shape it cannot be", async (t) => {
+  for (const field of APP_SETTING_FIELDS) {
+    const directory = await temporaryDirectory(t);
+    await fs.writeFile(
+      path.join(directory, SETTINGS_FILE_NAME),
+      JSON.stringify({ version: 2, apiKeys: {}, [field]: CORRUPT_VALUE }),
+      "utf8",
+    );
+
+    assert.deepEqual(
+      await storeIn(directory).get(field),
+      APP_SETTING_SCHEMA[field].guard(undefined).value,
+      `${field} honoured a value it cannot hold`,
+    );
+  }
+});
+
+test("no setting's write reaches the cipher, and none disturbs a stored key", async (t) => {
+  for (const field of APP_SETTING_FIELDS) {
+    const directory = await temporaryDirectory(t);
+    const cipher = countingCipher();
+    const store = storeIn(directory, { cipher });
+    await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+    const protectingTheKey = { ...cipher.calls };
+
+    await store.set(field, SAMPLE_VALUE[field]);
+
+    // A preference is not a credential, so choosing one must reach the
+    // Keychain not at all — and never raise its permission dialog.
+    assert.deepEqual(cipher.calls, protectingTheKey, `${field} reached the cipher`);
+    assert.equal(
+      await storeIn(directory).readApiKey(CONDUCTOR),
+      TEST_API_KEY,
+      `${field} disturbed a stored key`,
+    );
+  }
+});
+
 test("stores an API key encrypted, private to the owner, and never in a snapshot", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
@@ -365,149 +494,6 @@ test("clears a stored key", async (t) => {
   assert.equal((await readSettingsFile(directory)).includes(CONDUCTOR), false);
 });
 
-test("captions are off until switched on, and the choice survives a reopen", async (t) => {
-  const directory = await temporaryDirectory(t);
-  // A preference is not a credential, so choosing it must reach the Keychain
-  // not at all.
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-
-  assert.equal(appSettingsView(await store.snapshot()).voiceCaptions, false);
-  const enabled = await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true);
-
-  assert.equal(appSettingsView(enabled.settings).voiceCaptions, true);
-  assert.equal(appSettingsView(await storeIn(directory).snapshot()).voiceCaptions, true);
-  assert.equal(cipher.calls.isAvailable, 0);
-  assert.equal(cipher.calls.encrypt, 0);
-});
-
-test("switching captions never disturbs a stored key", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
-
-  await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true);
-  const off = await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, false);
-
-  assert.equal(appSettingsView(off.settings).voiceCaptions, false);
-  assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
-});
-
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("a corrupt captions value reads as off rather than switching them on", async (t) => {
-  const directory = await temporaryDirectory(t);
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, voiceCaptions: "yes" }),
-    "utf8",
-  );
-
-  assert.equal(appSettingsView(await storeIn(directory).snapshot()).voiceCaptions, false);
-});
-
-test("other media is quieted until asked otherwise, and the choice survives a reopen", async (t) => {
-  const directory = await temporaryDirectory(t);
-  // A preference is not a credential, so choosing it must reach the Keychain
-  // not at all.
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-
-  assert.equal(appSettingsView(await store.snapshot()).duckOtherMedia, true);
-  const disabled = await store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, false);
-
-  assert.equal(appSettingsView(disabled.settings).duckOtherMedia, false);
-  assert.equal(appSettingsView(await storeIn(directory).snapshot()).duckOtherMedia, false);
-  assert.equal(cipher.calls.isAvailable, 0);
-  assert.equal(cipher.calls.encrypt, 0);
-});
-
-test("switching the media duck never disturbs a stored key", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
-
-  await store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, false);
-  const on = await store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, true);
-
-  assert.equal(appSettingsView(on.settings).duckOtherMedia, true);
-  assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
-});
-
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("a corrupt media duck value reads as the default rather than as off", async (t) => {
-  const directory = await temporaryDirectory(t);
-  // The mirror of the captions rule: each lands on its own default, and this
-  // one's default is on.
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, duckOtherMedia: "no" }),
-    "utf8",
-  );
-
-  assert.equal(appSettingsView(await storeIn(directory).snapshot()).duckOtherMedia, true);
-});
-
-test("the microphone preference persists, defaults on, and shrugs off corruption", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-
-  assert.equal(appSettingsView(await store.snapshot()).preferBuiltInMicrophone, true);
-  const disabled = await store.set(APP_SETTING_SCHEMA.preferBuiltInMicrophone.field, false);
-
-  assert.equal(appSettingsView(disabled.settings).preferBuiltInMicrophone, false);
-  assert.equal(appSettingsView(await storeIn(directory).snapshot()).preferBuiltInMicrophone, false);
-});
-
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("a corrupt microphone preference reads as the default rather than as off", async (t) => {
-  const directory = await temporaryDirectory(t);
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, preferBuiltInMicrophone: "no" }),
-    "utf8",
-  );
-
-  assert.equal(appSettingsView(await storeIn(directory).snapshot()).preferBuiltInMicrophone, true);
-});
-
-test("the session filter selection starts unset and survives a reopen", async (t) => {
-  const directory = await temporaryDirectory(t);
-  // A view preference is not a credential, so storing it must reach the
-  // Keychain not at all.
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-
-  assert.equal(appSettingsView(await store.snapshot()).sessionFilters, undefined);
-  const chosen = [SESSION_FILTER.LOCAL, PROVIDER_ID.CODEX];
-  const narrowed = await store.set(APP_SETTING_SCHEMA.sessionFilters.field, chosen);
-
-  assert.deepEqual(appSettingsView(narrowed.settings).sessionFilters, chosen);
-  assert.deepEqual(appSettingsView(await storeIn(directory).snapshot()).sessionFilters, chosen);
-  assert.equal(cipher.calls.isAvailable, 0);
-  assert.equal(cipher.calls.encrypt, 0);
-});
-
-test("clearing the session filter selection reads as unset after a reopen", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-  await store.set(APP_SETTING_SCHEMA.sessionFilters.field, [SESSION_FILTER.CLOUD]);
-
-  const cleared = await store.set(APP_SETTING_SCHEMA.sessionFilters.field, undefined);
-
-  assert.equal(appSettingsView(cleared.settings).sessionFilters, undefined);
-  assert.equal(appSettingsView(await storeIn(directory).snapshot()).sessionFilters, undefined);
-});
-
-test("storing the session filter selection never disturbs a stored key", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
-
-  await store.set(APP_SETTING_SCHEMA.sessionFilters.field, [SESSION_FILTER.VOICE]);
-
-  assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
-});
-
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a stored selection keeps only the filters this build recognizes", async (t) => {
   const directory = await temporaryDirectory(t);
@@ -528,75 +514,11 @@ test("a stored selection keeps only the filters this build recognizes", async (t
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("a corrupt session filter value reads as unset rather than narrowing the list", async (t) => {
-  const directory = await temporaryDirectory(t);
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, sessionFilters: "local" }),
-    "utf8",
-  );
-
-  assert.equal(appSettingsView(await storeIn(directory).snapshot()).sessionFilters, undefined);
-});
-
-test("the session search query starts unset and survives a reopen as typed", async (t) => {
-  const directory = await temporaryDirectory(t);
-  // A view preference is not a credential, so storing it must reach the
-  // Keychain not at all.
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-
-  assert.equal(appSettingsView(await store.snapshot()).sessionSearchQuery, undefined);
-  const held = await store.set(APP_SETTING_SCHEMA.sessionSearchQuery.field, "Fix CI  on main");
-
-  assert.equal(appSettingsView(held.settings).sessionSearchQuery, "Fix CI  on main");
-  assert.equal(
-    appSettingsView(await storeIn(directory).snapshot()).sessionSearchQuery,
-    "Fix CI  on main",
-  );
-  assert.equal(cipher.calls.isAvailable, 0);
-  assert.equal(cipher.calls.encrypt, 0);
-});
-
-test("clearing the session search query reads as unset after a reopen", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-  await store.set(APP_SETTING_SCHEMA.sessionSearchQuery.field, "conductor");
-
-  const cleared = await store.set(APP_SETTING_SCHEMA.sessionSearchQuery.field, undefined);
-
-  assert.equal(appSettingsView(cleared.settings).sessionSearchQuery, undefined);
-  assert.equal(appSettingsView(await storeIn(directory).snapshot()).sessionSearchQuery, undefined);
-});
-
-test("storing the session search query never disturbs a stored key", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
-
-  await store.set(APP_SETTING_SCHEMA.sessionSearchQuery.field, "review");
-
-  assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
-});
-
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a stored query of nothing but whitespace reads as unset rather than narrowing", async (t) => {
   const directory = await temporaryDirectory(t);
   await fs.writeFile(
     path.join(directory, SETTINGS_FILE_NAME),
     JSON.stringify({ version: 2, apiKeys: {}, sessionSearchQuery: "   " }),
-    "utf8",
-  );
-
-  assert.equal(appSettingsView(await storeIn(directory).snapshot()).sessionSearchQuery, undefined);
-});
-
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("a corrupt session search query reads as unset rather than refilling the field", async (t) => {
-  const directory = await temporaryDirectory(t);
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, sessionSearchQuery: 7 }),
     "utf8",
   );
 
@@ -752,93 +674,6 @@ test("a calendar account never disturbs a stored key, nor a key an account", asy
   assert.equal((await reopened.readCalendarAccounts()).length, 1);
 });
 
-test("announcements wait out meetings until asked otherwise, and the choice survives a reopen", async (t) => {
-  const directory = await temporaryDirectory(t);
-  // A preference is not a credential, so choosing it must reach the Keychain
-  // not at all — and the shallow reader main asks on every announcement pass
-  // must answer from the file alone.
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-
-  assert.equal(appSettingsView(await store.snapshot()).quietDuringMeetings, true);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.quietDuringMeetings.field), true);
-  const disabled = await store.set(APP_SETTING_SCHEMA.quietDuringMeetings.field, false);
-
-  assert.equal(appSettingsView(disabled.settings).quietDuringMeetings, false);
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.quietDuringMeetings.field), false);
-  assert.equal(appSettingsView(await storeIn(directory).snapshot()).quietDuringMeetings, false);
-  assert.equal(cipher.calls.isAvailable, 0);
-  assert.equal(cipher.calls.encrypt, 0);
-});
-
-test("switching the meeting quiet never disturbs a stored key", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
-
-  await store.set(APP_SETTING_SCHEMA.quietDuringMeetings.field, false);
-  const on = await store.set(APP_SETTING_SCHEMA.quietDuringMeetings.field, true);
-
-  assert.equal(appSettingsView(on.settings).quietDuringMeetings, true);
-  assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
-});
-
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("a corrupt meeting quiet value reads as the default rather than as off", async (t) => {
-  const directory = await temporaryDirectory(t);
-  // The media duck's rule: this one's default is on, so nonsense lands on on.
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, quietDuringMeetings: "no" }),
-    "utf8",
-  );
-
-  assert.equal(appSettingsView(await storeIn(directory).snapshot()).quietDuringMeetings, true);
-});
-
-test("announcements speak until switched off by hand, and the quiet survives a reopen", async (t) => {
-  const directory = await temporaryDirectory(t);
-  // The switch is read on every announcement pass, so like the meeting quiet
-  // it must answer from the file alone and never reach the Keychain.
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-
-  assert.equal(appSettingsView(await store.snapshot()).announceSessions, true);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.announceSessions.field), true);
-  const quiet = await store.set(APP_SETTING_SCHEMA.announceSessions.field, false);
-
-  assert.equal(appSettingsView(quiet.settings).announceSessions, false);
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.announceSessions.field), false);
-  assert.equal(appSettingsView(await storeIn(directory).snapshot()).announceSessions, false);
-  assert.equal(cipher.calls.isAvailable, 0);
-  assert.equal(cipher.calls.encrypt, 0);
-});
-
-test("switching announcements never disturbs a stored key", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
-
-  await store.set(APP_SETTING_SCHEMA.announceSessions.field, false);
-  const on = await store.set(APP_SETTING_SCHEMA.announceSessions.field, true);
-
-  assert.equal(appSettingsView(on.settings).announceSessions, true);
-  assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
-});
-
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("a corrupt announce value reads as the default rather than as silence", async (t) => {
-  const directory = await temporaryDirectory(t);
-  // This one's default is on: nonsense must not silence Luke.
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, announceSessions: "yes" }),
-    "utf8",
-  );
-
-  assert.equal(appSettingsView(await storeIn(directory).snapshot()).announceSessions, true);
-});
-
 test("keeps each provider's key, environment fallback, and reported source separate", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory, {
@@ -925,14 +760,16 @@ test("prefers a stored key over one from the environment", async (t) => {
   assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
 });
 
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("rejects a key that cannot be sent as an authorization header", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  assert.match((await store.setApiKey(CONDUCTOR, "short")).reason ?? "", /too short/);
-  assert.match((await store.setApiKey(CONDUCTOR, "key with spaces")).reason ?? "", /unsupported/);
-  assert.match((await store.setApiKey(CONDUCTOR, "k".repeat(513))).reason ?? "", /too long/);
+  for (const candidate of ["short", "key with spaces", "k".repeat(513)]) {
+    // The store answers with the rule's own reason rather than one of its
+    // own, and a refused key leaves the file it would have been written to
+    // uncreated.
+    assert.equal((await store.setApiKey(CONDUCTOR, candidate)).reason, apiKeyRejection(candidate));
+  }
   assert.equal(await store.readApiKey(CONDUCTOR), undefined);
   await assert.rejects(() => readSettingsFile(directory), /ENOENT/);
 });
@@ -1089,40 +926,6 @@ test("carries a key belonging to a provider this build does not know", async (t)
   );
 });
 
-test("keeps Luke out of the Dock until asked, and remembers the answer", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-
-  assert.equal(appSettingsView(await store.snapshot()).showInDock, false);
-
-  const { settings, reason } = await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
-
-  assert.equal(reason, undefined);
-  assert.equal(appSettingsView(settings).showInDock, true);
-  assert.deepEqual(
-    JSON.parse(await readSettingsFile(directory)),
-    expectedPersistedSettings({
-      showInDock: true,
-    }),
-  );
-  // The choice outlives the run that heard it.
-  assert.equal(appSettingsView(await storeIn(directory).snapshot()).showInDock, true);
-});
-
-test("changes the Dock preference without touching the cipher", async (t) => {
-  // A preference is not a credential, so storing one must never be the reason
-  // the Keychain dialog appears.
-  const directory = await temporaryDirectory(t);
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-
-  const { settings } = await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
-
-  assert.equal(appSettingsView(settings).showInDock, true);
-  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-  assert.equal(appSettingsView(settings).secretStorage, SECRET_STORAGE.UNKNOWN);
-});
-
 test("decides the Dock icon from the file alone, never the keychain", async (t) => {
   // The icon is drawn at launch from this answer, so a locked or slow
   // Keychain — which decrypting a stored key can wait on — must not be able to
@@ -1141,42 +944,6 @@ test("decides the Dock icon from the file alone, never the keychain", async (t) 
 
   assert.equal(await store.get(APP_SETTING_SCHEMA.showInDock.field), true);
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-});
-
-test("keeps Luke out of the Dock when the file says something a boolean is not", async (t) => {
-  const directory = await temporaryDirectory(t);
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, showInDock: "always" }),
-  );
-
-  assert.equal(appSettingsView(await storeIn(directory).snapshot()).showInDock, false);
-});
-
-test("reports the default voice until one is chosen", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-
-  assert.equal(appSettingsView(await store.snapshot()).voice, REALTIME_DEFAULTS.VOICE);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
-});
-
-test("stores the chosen voice plainly and reads it back from a new store instance", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-
-  const { settings, reason } = await store.set(
-    APP_SETTING_SCHEMA.voice.field,
-    REALTIME_VOICE.MARIN,
-  );
-
-  assert.equal(reason, undefined);
-  assert.equal(appSettingsView(settings).voice, REALTIME_VOICE.MARIN);
-  // A preference is not a credential, so choosing one never reaches the
-  // Keychain — and never raises its permission dialog.
-  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.voice.field), REALTIME_VOICE.MARIN);
 });
 
 test("prefers the chosen voice over the environment, and the environment over the default", async (t) => {
@@ -1208,35 +975,6 @@ test("ignores a stored or environment voice this build does not offer", async (t
 
   assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
   assert.equal(appSettingsView(await store.snapshot()).voice, REALTIME_DEFAULTS.VOICE);
-});
-
-test("reports the natural pace until one is chosen", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-
-  assert.equal(appSettingsView(await store.snapshot()).voiceSpeed, REALTIME_DEFAULTS.SPEED);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.voiceSpeed.field), undefined);
-});
-
-test("stores the chosen pace plainly and reads it back from a new store instance", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-
-  const { settings, reason } = await store.set(
-    APP_SETTING_SCHEMA.voiceSpeed.field,
-    REALTIME_VOICE_SPEED.QUICK,
-  );
-
-  assert.equal(reason, undefined);
-  assert.equal(appSettingsView(settings).voiceSpeed, REALTIME_VOICE_SPEED.QUICK);
-  // A preference is not a credential, so choosing one never reaches the
-  // Keychain — and never raises its permission dialog.
-  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-  assert.equal(
-    await storeIn(directory).get(APP_SETTING_SCHEMA.voiceSpeed.field),
-    REALTIME_VOICE_SPEED.QUICK,
-  );
 });
 
 test("prefers the chosen pace over the environment, and the environment over the default", async (t) => {
@@ -1409,49 +1147,6 @@ test("skips a guarded account preference apply after account sign-out", async (t
   assert.equal(await store.accountPreferencesSyncBaseline(account.email), undefined);
 });
 
-test("reports no talk-key chord until one is chosen", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-
-  assert.equal(await store.get(APP_SETTING_SCHEMA.voiceHotkey.field), undefined);
-  assert.equal(appSettingsView(await store.snapshot()).voiceHotkey, undefined);
-});
-
-test("stores the chosen talk-key chord plainly and reads it back from a new store instance", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-
-  const { settings, reason } = await store.set(
-    APP_SETTING_SCHEMA.voiceHotkey.field,
-    "Shift+Command+L",
-  );
-
-  assert.equal(reason, undefined);
-  assert.equal(appSettingsView(settings).voiceHotkey, "Shift+Command+L");
-  // A preference is not a credential, so choosing one never reaches the
-  // Keychain — and never raises its permission dialog.
-  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-  assert.equal(
-    await storeIn(directory).get(APP_SETTING_SCHEMA.voiceHotkey.field),
-    "Shift+Command+L",
-  );
-});
-
-test("clearing the talk-key chord returns to no choice at all", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-
-  await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Shift+Command+L");
-  const { settings } = await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, undefined);
-
-  assert.equal(appSettingsView(settings).voiceHotkey, undefined);
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // Absent from the file rather than stored as an empty value: reset is the
-  // absence of a choice, and a reopened store must read it the same way.
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.voiceHotkey.field), undefined);
-});
-
 test("stores a deleted talk key as the none token and reads it back", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
@@ -1471,113 +1166,24 @@ test("stores a deleted talk key as the none token and reads it back", async (t) 
   );
 });
 
-test("ignores a stored talk-key chord this build cannot register", async (t) => {
-  const directory = await temporaryDirectory(t);
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, voiceHotkey: "F13" }),
-  );
-  const store = storeIn(directory);
-
-  // A hand-edited chord the registrars would refuse is dropped rather than
-  // carried: honouring it would claim a key nothing was ever told about.
-  assert.equal(await store.get(APP_SETTING_SCHEMA.voiceHotkey.field), undefined);
-  assert.equal(appSettingsView(await store.snapshot()).voiceHotkey, undefined);
-});
-
-test("stores the chosen ask-key chord on the talk key's terms and reads it back", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-
-  assert.equal(await store.get(APP_SETTING_SCHEMA.askHotkey.field), undefined);
-  assert.equal(appSettingsView(await store.snapshot()).askHotkey, undefined);
-
-  const { settings, reason } = await store.set(APP_SETTING_SCHEMA.askHotkey.field, "Control+Alt+K");
-
-  assert.equal(reason, undefined);
-  assert.equal(appSettingsView(settings).askHotkey, "Control+Alt+K");
-  // A preference is not a credential, so choosing one never reaches the
-  // Keychain — and never raises its permission dialog.
-  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.askHotkey.field), "Control+Alt+K");
-});
-
-test("clearing the ask-key chord returns to no choice at all", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-
-  await store.set(APP_SETTING_SCHEMA.askHotkey.field, "Control+Alt+K");
-  const { settings } = await store.set(APP_SETTING_SCHEMA.askHotkey.field, undefined);
-
-  assert.equal(appSettingsView(settings).askHotkey, undefined);
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // Absent from the file rather than stored as an empty value: reset is the
-  // absence of a choice, and a reopened store must read it the same way.
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.askHotkey.field), undefined);
-});
-
-test("ignores a stored ask-key chord this build cannot register", async (t) => {
-  const directory = await temporaryDirectory(t);
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, askHotkey: "F13" }),
-  );
-  const store = storeIn(directory);
-
-  // A hand-edited chord the registrar would refuse is dropped rather than
-  // carried: honouring it would claim a key nothing was ever told about.
-  assert.equal(await store.get(APP_SETTING_SCHEMA.askHotkey.field), undefined);
-  assert.equal(appSettingsView(await store.snapshot()).askHotkey, undefined);
-});
-
-test("stores the chosen stop-key chord on the other keys' terms and reads it back", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-
-  assert.equal(await store.get(APP_SETTING_SCHEMA.stopHotkey.field), undefined);
-  assert.equal(appSettingsView(await store.snapshot()).stopHotkey, undefined);
-
-  const { settings, reason } = await store.set(
+test("ignores a stored chord this build cannot register", async (t) => {
+  for (const field of [
+    APP_SETTING_SCHEMA.voiceHotkey.field,
+    APP_SETTING_SCHEMA.askHotkey.field,
     APP_SETTING_SCHEMA.stopHotkey.field,
-    "Control+Alt+X",
-  );
+  ]) {
+    const directory = await temporaryDirectory(t);
+    await fs.writeFile(
+      path.join(directory, SETTINGS_FILE_NAME),
+      JSON.stringify({ version: 2, apiKeys: {}, [field]: "F13" }),
+    );
+    const store = storeIn(directory);
 
-  assert.equal(reason, undefined);
-  assert.equal(appSettingsView(settings).stopHotkey, "Control+Alt+X");
-  // A preference is not a credential, so choosing one never reaches the
-  // Keychain — and never raises its permission dialog.
-  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.stopHotkey.field), "Control+Alt+X");
-});
-
-test("clearing the stop-key chord returns to no choice at all", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-
-  await store.set(APP_SETTING_SCHEMA.stopHotkey.field, "Control+Alt+X");
-  const { settings } = await store.set(APP_SETTING_SCHEMA.stopHotkey.field, undefined);
-
-  assert.equal(appSettingsView(settings).stopHotkey, undefined);
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // Absent from the file rather than stored as an empty value: reset is the
-  // absence of a choice, and a reopened store must read it the same way.
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.stopHotkey.field), undefined);
-});
-
-test("ignores a stored stop-key chord this build cannot register", async (t) => {
-  const directory = await temporaryDirectory(t);
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, stopHotkey: "F13" }),
-  );
-  const store = storeIn(directory);
-
-  // A hand-edited chord the registrar would refuse is dropped rather than
-  // carried: honouring it would claim a key nothing was ever told about.
-  assert.equal(await store.get(APP_SETTING_SCHEMA.stopHotkey.field), undefined);
-  assert.equal(appSettingsView(await store.snapshot()).stopHotkey, undefined);
+    // A hand-edited chord the registrars would refuse is dropped rather than
+    // carried: honouring it would claim a key nothing was ever told about.
+    assert.equal(await store.get(field), undefined, field);
+    assert.equal(appSettingsView(await store.snapshot())[field], undefined, field);
+  }
 });
 
 test("the three Luke keys survive each other's writes", async (t) => {
@@ -1594,90 +1200,19 @@ test("the three Luke keys survive each other's writes", async (t) => {
   assert.equal(await reopened.get(APP_SETTING_SCHEMA.stopHotkey.field), "Control+Alt+X");
 });
 
-test("the talk-key chord and a stored key survive each other's writes", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
+test("a stored key and a chosen preference survive each other's writes", async (t) => {
+  for (const field of APP_SETTING_FIELDS) {
+    const directory = await temporaryDirectory(t);
+    const store = storeIn(directory);
 
-  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
-  await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Control+Alt+Space");
-  await store.setApiKey(CONDUCTOR, "conductor-replacement-key");
+    await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+    await store.set(field, SAMPLE_VALUE[field]);
+    await store.setApiKey(CONDUCTOR, "conductor-replacement-key");
 
-  const reopened = storeIn(directory);
-  assert.equal(await reopened.readApiKey(CONDUCTOR), "conductor-replacement-key");
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voiceHotkey.field), "Control+Alt+Space");
-});
-
-test("keeps Luke to the main display until asked, and remembers the answer", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-
-  assert.equal(appSettingsView(await store.snapshot()).showOnAllDisplays, false);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.showOnAllDisplays.field), false);
-
-  const { settings, reason } = await store.set(APP_SETTING_SCHEMA.showOnAllDisplays.field, true);
-
-  assert.equal(reason, undefined);
-  assert.equal(appSettingsView(settings).showOnAllDisplays, true);
-  // The choice outlives the run that heard it.
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.showOnAllDisplays.field), true);
-});
-
-test("changes the displays preference without touching the cipher", async (t) => {
-  // A preference is not a credential, so storing one must never be the reason
-  // the Keychain dialog appears.
-  const directory = await temporaryDirectory(t);
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-
-  const { settings } = await store.set(APP_SETTING_SCHEMA.showOnAllDisplays.field, true);
-
-  assert.equal(appSettingsView(settings).showOnAllDisplays, true);
-  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-});
-
-test("keeps Luke to the main display when the file says something a boolean is not", async (t) => {
-  const directory = await temporaryDirectory(t);
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, showOnAllDisplays: "every one of them" }),
-  );
-
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.showOnAllDisplays.field), false);
-});
-
-test("draws the bubble until a form is chosen, and remembers the choice", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-
-  assert.equal(appSettingsView(await store.snapshot()).formFactor, PANEL_FORM_FACTOR.BUBBLE);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.formFactor.field), undefined);
-
-  const { settings, reason } = await store.set(
-    APP_SETTING_SCHEMA.formFactor.field,
-    PANEL_FORM_FACTOR.NOTCH,
-  );
-
-  assert.equal(reason, undefined);
-  assert.equal(appSettingsView(settings).formFactor, PANEL_FORM_FACTOR.NOTCH);
-  // The choice outlives the run that heard it.
-  assert.equal(
-    await storeIn(directory).get(APP_SETTING_SCHEMA.formFactor.field),
-    PANEL_FORM_FACTOR.NOTCH,
-  );
-});
-
-test("changes the form without touching the cipher", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-
-  const { settings } = await store.set(
-    APP_SETTING_SCHEMA.formFactor.field,
-    PANEL_FORM_FACTOR.NOTCH,
-  );
-
-  assert.equal(appSettingsView(settings).formFactor, PANEL_FORM_FACTOR.NOTCH);
-  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+    const reopened = storeIn(directory);
+    assert.equal(await reopened.readApiKey(CONDUCTOR), "conductor-replacement-key");
+    assert.deepEqual(await reopened.get(field), SAMPLE_VALUE[field], `${field} did not survive`);
+  }
 });
 
 test("ignores a stored form this build does not draw", async (t) => {
@@ -1692,51 +1227,6 @@ test("ignores a stored form this build does not draw", async (t) => {
     appSettingsView(await storeIn(directory).snapshot()).formFactor,
     PANEL_FORM_FACTOR.BUBBLE,
   );
-});
-
-test("asks each time until a default workspace provider is chosen, and remembers the choice", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-
-  // Unset on purpose: the default is always a choice the user made — by hand
-  // or by their first creation — never one made for them.
-  assert.equal(appSettingsView(await store.snapshot()).defaultWorkspaceProvider, undefined);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field), undefined);
-
-  const { settings, reason } = await store.set(
-    APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
-    PROVIDER_ID.CONDUCTOR,
-  );
-
-  assert.equal(reason, undefined);
-  assert.equal(appSettingsView(settings).defaultWorkspaceProvider, PROVIDER_ID.CONDUCTOR);
-  // The choice outlives the run that heard it.
-  assert.equal(
-    await storeIn(directory).get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
-    PROVIDER_ID.CONDUCTOR,
-  );
-
-  // Clearing is returning to asking each time, not storing an answer.
-  const cleared = await store.set(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, undefined);
-  assert.equal(appSettingsView(cleared.settings).defaultWorkspaceProvider, undefined);
-  assert.equal(
-    await storeIn(directory).get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
-    undefined,
-  );
-});
-
-test("changes the default workspace provider without touching the cipher", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-
-  const { settings } = await store.set(
-    APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
-    PROVIDER_ID.CODEX,
-  );
-
-  assert.equal(appSettingsView(settings).defaultWorkspaceProvider, PROVIDER_ID.CODEX);
-  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
 });
 
 test("ignores a stored default provider this build does not know", async (t) => {
@@ -1777,52 +1267,6 @@ test("stores Superset workspace and agent defaults without touching credentials"
   );
 });
 
-test("starts new workspaces on the provider's defaults until a pairing is chosen", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-
-  assert.equal(appSettingsView(await store.snapshot()).workspaceAgentDefaults, undefined);
-  assert.equal(await readWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
-
-  const chosen = { agent: "claude", model: "sonnet", effort: "max" };
-  const { settings, reason } = await setWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR, chosen);
-
-  assert.equal(reason, undefined);
-  assert.deepEqual(appSettingsView(settings).workspaceAgentDefaults, {
-    [PROVIDER_ID.CONDUCTOR]: chosen,
-  });
-  // The choice outlives the run that heard it.
-  assert.deepEqual(
-    await readWorkspaceAgentDefault(storeIn(directory), PROVIDER_ID.CONDUCTOR),
-    chosen,
-  );
-
-  // Clearing returns that one provider to its own defaults.
-  const cleared = await setWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR, undefined);
-  assert.equal(appSettingsView(cleared.settings).workspaceAgentDefaults, undefined);
-  assert.equal(
-    await readWorkspaceAgentDefault(storeIn(directory), PROVIDER_ID.CONDUCTOR),
-    undefined,
-  );
-});
-
-test("changes a workspace agent pairing without touching the cipher", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-
-  const { settings } = await setWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR, {
-    agent: "codex",
-    model: "gpt-5.6-sol",
-  });
-
-  assert.deepEqual(appSettingsView(settings).workspaceAgentDefaults?.[PROVIDER_ID.CONDUCTOR], {
-    agent: "codex",
-    model: "gpt-5.6-sol",
-  });
-  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-});
-
 test("lets the first creation choose each provider's project until one is chosen", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
@@ -1855,19 +1299,6 @@ test("lets the first creation choose each provider's project until one is chosen
     await readWorkspaceProjectDefault(storeIn(directory), PROVIDER_ID.CONDUCTOR),
     undefined,
   );
-});
-
-test("changes a default project without touching the cipher", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-
-  const { settings } = await setWorkspaceProjectDefault(store, PROVIDER_ID.CODEX, "proj-2");
-
-  assert.deepEqual(appSettingsView(settings).workspaceProjectDefaults, {
-    [PROVIDER_ID.CODEX]: "proj-2",
-  });
-  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
 });
 
 test("keeps one provider's default project apart from another's", async (t) => {
@@ -2070,19 +1501,6 @@ test("ignores a stored pairing this build's table does not list", async (t) => {
   const store = storeIn(directory);
   assert.equal(await readWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
   assert.equal(appSettingsView(await store.snapshot()).workspaceAgentDefaults, undefined);
-});
-
-test("the voice and a stored key survive each other's writes", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-
-  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
-  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN);
-  await store.setApiKey(CONDUCTOR, "conductor-replacement-key");
-
-  const reopened = storeIn(directory);
-  assert.equal(await reopened.readApiKey(CONDUCTOR), "conductor-replacement-key");
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voice.field), REALTIME_VOICE.MARIN);
 });
 
 test("recovers from a corrupt settings file", async (t) => {
