@@ -15,7 +15,6 @@ import type { AdminUserAccount, AdminUserDetail } from "../server/admin/admin-us
 import type { AdminUserList, AdminUserListRow } from "../server/admin/admin-users";
 import {
   ADMIN_DAY_PARAM,
-  ADMIN_HTTP_STATUS,
   ADMIN_METRICS_SCOPE,
   ADMIN_METRICS_SCOPE_PARAM,
   ADMIN_METRICS_WINDOW,
@@ -30,6 +29,8 @@ import {
 import { accountInitials, accountLabel } from "./account-initials";
 import { GitHubMark, GoogleMark } from "./account-marks";
 import { calendarWeeks, DAYS_PER_WEEK, lastWeeks, monthLabels } from "./activity-calendar";
+import { SIGN_IN_CHOSEN } from "./admin/prefs";
+import { type AdminReader, adminReadFailure, useAdminRead } from "./admin/use-admin-read";
 import {
   ANIMATION_ROSTER,
   ANIMATION_SWATCH,
@@ -39,7 +40,6 @@ import {
   formatCycleSeconds,
   indexAnimationAssets,
 } from "./admin-animations";
-import { settleRead } from "./admin-refresh";
 import {
   SIDEBAR_ICON_SLOT,
   SIDEBAR_PILL_INSET,
@@ -207,43 +207,6 @@ function plainLeftClick(event: React.MouseEvent): boolean {
 }
 
 /**
- * The site's session cookie is shared with the sign-in flow the desktop app
- * opens in this browser, so the first visit to this page would otherwise land
- * already signed in — on a session the maintainer never chose to spend here.
- * The dashboard opens only after a sign-in pressed on this page once; the
- * press is remembered locally, and from then on an existing session resumes
- * the way it does on any signed-in page. Signing out takes the press back with
- * the session, or the next cookie earned elsewhere on the site would open the
- * dashboard on a consent the maintainer gave once and then withdrew.
- */
-const SIGN_IN_CHOSEN_STORAGE_KEY = "luke-admin-sign-in-chosen";
-
-function signInChosenHere(): boolean {
-  try {
-    return window.localStorage.getItem(SIGN_IN_CHOSEN_STORAGE_KEY) !== null;
-  } catch {
-    return false;
-  }
-}
-
-function rememberSignInChosen(): void {
-  try {
-    window.localStorage.setItem(SIGN_IN_CHOSEN_STORAGE_KEY, "true");
-  } catch {
-    // Storage refused: the card simply asks again on the next visit.
-  }
-}
-
-function forgetSignInChosen(): void {
-  try {
-    window.localStorage.removeItem(SIGN_IN_CHOSEN_STORAGE_KEY);
-  } catch {
-    // Storage refused: the key outlives the session, and the card is the only
-    // thing lost — the endpoint still answers 401 to a request with no cookie.
-  }
-}
-
-/**
  * Whether the sidebar was left collapsed, remembered the way the sign-in
  * press is: locally, as the presence of a key, so a browser that refuses
  * storage simply opens expanded every visit.
@@ -302,26 +265,8 @@ interface ViewerAccount {
 const PLAIN_BUTTON =
   "inline-flex min-h-11 cursor-pointer items-center justify-center rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium transition-colors duration-150 hover:bg-muted disabled:cursor-default disabled:opacity-60 disabled:hover:bg-card";
 
-/**
- * What the fetch resolved to: the gate's refusals stay distinct here, and a
- * ready answer carries the one failure a later refresh may have landed on it.
- */
-type DashboardState =
-  | { status: "loading" }
-  | { status: "signed-out" }
-  | { status: "forbidden" }
-  | { status: "error"; detail: string }
-  | {
-      status: "ready";
-      metrics: AdminMetrics;
-      question: string;
-      refreshFailure: string | undefined;
-    };
-
-const ERROR_DETAIL = {
-  UNAVAILABLE: "The service did not answer. It may be briefly unavailable — try again shortly.",
-  PROTECTED:
-    "The request was redirected before it reached the dashboard. A preview deployment behind Vercel Deployment Protection intercepts the API call; disable protection for this deployment, or use a production URL.",
+/** What each endpoint says when it refuses for no reason of the gate's own. */
+const ENDPOINT_ERROR = {
   METRICS: "The metrics endpoint did not answer. Try again shortly.",
   USERS: "The users endpoint did not answer. Try again shortly.",
   ACCOUNT: "The account endpoint did not answer. Try again shortly.",
@@ -2330,7 +2275,7 @@ function SignInCard(): React.JSX.Element {
       setFailed(true);
       return;
     }
-    rememberSignInChosen();
+    SIGN_IN_CHOSEN.write(true);
   };
 
   return (
@@ -2415,57 +2360,34 @@ function ForbiddenCard({
   );
 }
 
-/** What one answer from the metrics endpoint means, with the gate's refusals kept distinct. */
-async function readDashboardState(response: Response, question: string): Promise<DashboardState> {
-  // A followed cross-origin redirect means something sat in front of the API —
-  // a preview's deployment protection is the usual culprit — so the body is a
-  // login page, not JSON.
-  if (response.redirected) return { status: "error", detail: ERROR_DETAIL.PROTECTED };
-  if (response.status === ADMIN_HTTP_STATUS.UNAUTHORIZED) return { status: "signed-out" };
-  if (response.status === ADMIN_HTTP_STATUS.FORBIDDEN) return { status: "forbidden" };
-  if (response.status === ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE) {
-    return { status: "error", detail: ERROR_DETAIL.UNAVAILABLE };
-  }
-  if (!response.ok) return { status: "error", detail: ERROR_DETAIL.METRICS };
-  // SAFETY: a 200 from the admin metrics endpoint is an AdminMetrics body by its contract.
-  return {
-    status: "ready",
-    metrics: (await response.json()) as AdminMetrics,
-    question,
-    refreshFailure: undefined,
-  };
-}
+// SAFETY: a 200 from the admin metrics endpoint is an AdminMetrics body by its contract.
+const readMetrics: AdminReader<AdminMetrics> = async (response) =>
+  (await response.json()) as AdminMetrics;
 
-/** What the detail fetch resolved to: the overview's states plus a gone account. */
-type DetailState =
-  | { status: "loading" }
-  | { status: "signed-out" }
-  | { status: "forbidden" }
-  | { status: "missing" }
-  | { status: "error"; detail: string }
-  | {
-      status: "ready";
-      detail: AdminUserDetail;
-      question: string;
-      refreshFailure: string | undefined;
-    };
+// SAFETY: a 200 from the admin user endpoint is an AdminUserDetail body by its contract.
+const readUserDetail: AdminReader<AdminUserDetail> = async (response) =>
+  (await response.json()) as AdminUserDetail;
 
-async function readDetailState(response: Response, question: string): Promise<DetailState> {
-  if (response.redirected) return { status: "error", detail: ERROR_DETAIL.PROTECTED };
-  if (response.status === ADMIN_HTTP_STATUS.UNAUTHORIZED) return { status: "signed-out" };
-  if (response.status === ADMIN_HTTP_STATUS.FORBIDDEN) return { status: "forbidden" };
-  if (response.status === ADMIN_HTTP_STATUS.NOT_FOUND) return { status: "missing" };
-  if (response.status === ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE) {
-    return { status: "error", detail: ERROR_DETAIL.UNAVAILABLE };
-  }
-  if (!response.ok) return { status: "error", detail: ERROR_DETAIL.ACCOUNT };
-  // SAFETY: a 200 from the admin user endpoint is an AdminUserDetail body by its contract.
-  return {
-    status: "ready",
-    detail: (await response.json()) as AdminUserDetail,
-    question,
-    refreshFailure: undefined,
-  };
+/** The failed read's own card, with the retry every screen offers on it. */
+function AdminErrorCard({
+  detail,
+  refreshing,
+  onRetry,
+}: {
+  detail: string;
+  refreshing: boolean;
+  onRetry: () => void;
+}): React.JSX.Element {
+  return (
+    <Centered title="Could not load">
+      {detail}
+      <div className="mt-6">
+        <button type="button" className={PLAIN_BUTTON} onClick={onRetry} disabled={refreshing}>
+          {refreshing ? "Trying…" : "Try again"}
+        </button>
+      </div>
+    </Centered>
+  );
 }
 
 /** A linked provider's row value drawn as its label where the page knows one. */
@@ -2630,35 +2552,9 @@ function UserDetailPage({
   );
 }
 
-/** What the day fetch resolved to, in the overview's own vocabulary. */
-type DayState =
-  | { status: "loading" }
-  | { status: "signed-out" }
-  | { status: "forbidden" }
-  | { status: "error"; detail: string }
-  | {
-      status: "ready";
-      detail: AdminDayDetail;
-      question: string;
-      refreshFailure: string | undefined;
-    };
-
-async function readDayState(response: Response, question: string): Promise<DayState> {
-  if (response.redirected) return { status: "error", detail: ERROR_DETAIL.PROTECTED };
-  if (response.status === ADMIN_HTTP_STATUS.UNAUTHORIZED) return { status: "signed-out" };
-  if (response.status === ADMIN_HTTP_STATUS.FORBIDDEN) return { status: "forbidden" };
-  if (response.status === ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE) {
-    return { status: "error", detail: ERROR_DETAIL.UNAVAILABLE };
-  }
-  if (!response.ok) return { status: "error", detail: ERROR_DETAIL.DAY };
-  // SAFETY: a 200 from the admin day endpoint is an AdminDayDetail body by its contract.
-  return {
-    status: "ready",
-    detail: (await response.json()) as AdminDayDetail,
-    question,
-    refreshFailure: undefined,
-  };
-}
+// SAFETY: a 200 from the admin day endpoint is an AdminDayDetail body by its contract.
+const readDayDetail: AdminReader<AdminDayDetail> = async (response) =>
+  (await response.json()) as AdminDayDetail;
 
 /**
  * The day's accounts, busiest first as the endpoint orders them. The shared
@@ -2843,30 +2739,9 @@ function DayDetailPage({
   );
 }
 
-/** What the roster fetch resolved to, in the overview's own vocabulary. */
-type UsersState =
-  | { status: "loading" }
-  | { status: "signed-out" }
-  | { status: "forbidden" }
-  | { status: "error"; detail: string }
-  | { status: "ready"; list: AdminUserList; question: string; refreshFailure: string | undefined };
-
-async function readUsersState(response: Response, question: string): Promise<UsersState> {
-  if (response.redirected) return { status: "error", detail: ERROR_DETAIL.PROTECTED };
-  if (response.status === ADMIN_HTTP_STATUS.UNAUTHORIZED) return { status: "signed-out" };
-  if (response.status === ADMIN_HTTP_STATUS.FORBIDDEN) return { status: "forbidden" };
-  if (response.status === ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE) {
-    return { status: "error", detail: ERROR_DETAIL.UNAVAILABLE };
-  }
-  if (!response.ok) return { status: "error", detail: ERROR_DETAIL.USERS };
-  // SAFETY: a 200 from the admin users endpoint is an AdminUserList body by its contract.
-  return {
-    status: "ready",
-    list: (await response.json()) as AdminUserList,
-    question,
-    refreshFailure: undefined,
-  };
-}
+// SAFETY: a 200 from the admin users endpoint is an AdminUserList body by its contract.
+const readUserList: AdminReader<AdminUserList> = async (response) =>
+  (await response.json()) as AdminUserList;
 
 /**
  * The account fields both admin tables' rows carry — the shared columns'
@@ -3407,85 +3282,30 @@ function UsersScreen({
   /** Applied around every answer but the gate's own cards, which stand alone. */
   frame: (content: React.JSX.Element) => React.JSX.Element;
 }): React.JSX.Element {
-  const [state, setState] = useState<UsersState>(() =>
-    signInChosenHere() ? { status: "loading" } : { status: "signed-out" },
-  );
-  const [refreshing, setRefreshing] = useState(false);
-  const inFlight = useRef<AbortController>(null);
-
   // What the box holds and what the service was asked to search for, apart:
   // the query redraws on every keystroke and filters the loaded rows at once,
-  // while the debounce below commits it into the term the roster is refetched
-  // under, so the whole account table is not scanned per keystroke. Typing
-  // rides the address bar in place, so a searched roster is shareable without
-  // the back button walking keystrokes.
+  // while the read's own debounce commits it into the address the roster is
+  // refetched under, so the whole account table is not scanned per keystroke.
+  // Typing rides the address bar in place, so a searched roster is shareable
+  // without the back button walking keystrokes.
   const [query, setQuery] = useState(searchFromLocation);
-  const [search, setSearch] = useState(() => searchTerm(searchFromLocation()));
   const changeQuery = (next: string) => {
     setQuery(next);
     window.history.replaceState(null, "", searchHref(next.trim()));
   };
   useEffect(() => {
-    const timer = window.setTimeout(() => setSearch(searchTerm(query)), SEARCH_DEBOUNCE_MS);
-    return () => window.clearTimeout(timer);
-  }, [query]);
-  useEffect(() => {
-    const onPopState = () => {
-      const restored = searchFromLocation();
-      setQuery(restored);
-      setSearch(searchTerm(restored));
-    };
+    const onPopState = () => setQuery(searchFromLocation());
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
-  // The same withdrawal the detail screen lands: this screen renders in the
-  // overview's place with a ready answer of its own, so the parent's sign-out
-  // alone would leave the roster on screen after the consent behind it left.
-  const signOut = async () => {
-    inFlight.current?.abort();
-    setRefreshing(false);
-    await onSignOut();
-    setState({ status: "signed-out" });
-  };
-
-  const load = useCallback(() => {
-    if (!signInChosenHere()) {
-      setState({ status: "signed-out" });
-      return;
-    }
-    inFlight.current?.abort();
-    const controller = new AbortController();
-    inFlight.current = controller;
-    setState((current) => (current.status === "ready" ? current : { status: "loading" }));
-    setRefreshing(true);
-    const path = windowedReadPath(USERS_PATH, hideAdmins, windowDays, search);
-    void (async () => {
-      try {
-        const next = await readUsersState(
-          await fetch(path, {
-            headers: { accept: "application/json" },
-            signal: controller.signal,
-          }),
-          path,
-        );
-        if (!controller.signal.aborted) setState((current) => settleRead(current, next, path));
-      } catch {
-        if (!controller.signal.aborted) {
-          setState((current) =>
-            settleRead(current, { status: "error", detail: ERROR_DETAIL.USERS }, path),
-          );
-        }
-      } finally {
-        if (!controller.signal.aborted) setRefreshing(false);
-      }
-    })();
-  }, [hideAdmins, search, windowDays]);
-
-  useEffect(() => {
-    load();
-    return () => inFlight.current?.abort();
-  }, [load]);
+  const { state, refreshing, reload, withdraw, revise } = useAdminRead(
+    windowedReadPath(USERS_PATH, hideAdmins, windowDays, searchTerm(query)),
+    readUserList,
+    ENDPOINT_ERROR.USERS,
+    { debounceMs: SEARCH_DEBOUNCE_MS },
+  );
+  const signOut = () => void withdraw(onSignOut);
 
   // The star answers the press at once, while one write chain per account
   // carries the newest intent to the service: presses faster than the network
@@ -3495,49 +3315,43 @@ function UsersScreen({
   // back only when no newer press has spoken since.
   const favoriteIntents = useRef(new Map<string, boolean>());
   const favoriteWriting = useRef(new Set<string>());
-  const toggleFavorite = useCallback((id: string, favorite: boolean) => {
-    const draw = (value: boolean) =>
-      setState((current) =>
-        current.status === "ready"
-          ? {
-              ...current,
-              list: {
-                ...current.list,
-                rows: current.list.rows.map((row) =>
-                  row.id === id ? { ...row, favorite: value } : row,
-                ),
-              },
+  const toggleFavorite = useCallback(
+    (id: string, favorite: boolean) => {
+      const draw = (value: boolean) =>
+        revise((list) => ({
+          ...list,
+          rows: list.rows.map((row) => (row.id === id ? { ...row, favorite: value } : row)),
+        }));
+      draw(favorite);
+      favoriteIntents.current.set(id, favorite);
+      if (favoriteWriting.current.has(id)) return;
+      favoriteWriting.current.add(id);
+      void (async () => {
+        try {
+          for (;;) {
+            const want = favoriteIntents.current.get(id);
+            if (want === undefined) return;
+            favoriteIntents.current.delete(id);
+            let landed = false;
+            try {
+              const response = await fetch(
+                `${FAVORITE_PATH}?${ADMIN_USER_ID_PARAM}=${encodeURIComponent(id)}`,
+                { method: want ? "PUT" : "DELETE", headers: { accept: "application/json" } },
+              );
+              landed = response.ok;
+            } catch {
+              landed = false;
             }
-          : current,
-      );
-    draw(favorite);
-    favoriteIntents.current.set(id, favorite);
-    if (favoriteWriting.current.has(id)) return;
-    favoriteWriting.current.add(id);
-    void (async () => {
-      try {
-        for (;;) {
-          const want = favoriteIntents.current.get(id);
-          if (want === undefined) return;
-          favoriteIntents.current.delete(id);
-          let landed = false;
-          try {
-            const response = await fetch(
-              `${FAVORITE_PATH}?${ADMIN_USER_ID_PARAM}=${encodeURIComponent(id)}`,
-              { method: want ? "PUT" : "DELETE", headers: { accept: "application/json" } },
-            );
-            landed = response.ok;
-          } catch {
-            landed = false;
+            if (landed) draw(want);
+            else if (!favoriteIntents.current.has(id)) draw(!want);
           }
-          if (landed) draw(want);
-          else if (!favoriteIntents.current.has(id)) draw(!want);
+        } finally {
+          favoriteWriting.current.delete(id);
         }
-      } finally {
-        favoriteWriting.current.delete(id);
-      }
-    })();
-  }, []);
+      })();
+    },
+    [revise],
+  );
 
   switch (state.status) {
     case "loading":
@@ -3548,44 +3362,52 @@ function UsersScreen({
           windowDays={windowDays}
           onWindowDaysChange={onWindowDaysChange}
           account={account}
-          onSignOut={() => void signOut()}
+          onSignOut={signOut}
         />,
       );
     case "signed-out":
       return <SignInCard />;
     case "forbidden":
-      return <ForbiddenCard email={account?.email} onSignOut={() => void signOut()} />;
+      return <ForbiddenCard email={account?.email} onSignOut={signOut} />;
+    case "missing":
     case "error":
       return frame(
-        <Centered title="Could not load">
-          {state.detail}
-          <div className="mt-6">
-            <button type="button" className={PLAIN_BUTTON} onClick={load} disabled={refreshing}>
-              {refreshing ? "Trying…" : "Try again"}
-            </button>
-          </div>
-        </Centered>,
+        <AdminErrorCard
+          detail={adminReadFailure(state, ENDPOINT_ERROR.USERS)}
+          refreshing={refreshing}
+          onRetry={reload}
+        />,
       );
     case "ready":
       return frame(
         <UsersPage
-          list={state.list}
+          list={state.value}
           refreshFailure={state.refreshFailure}
           hideAdmins={hideAdmins}
           onHideAdminsChange={onHideAdminsChange}
           windowDays={windowDays}
           onWindowDaysChange={onWindowDaysChange}
           account={account}
-          onSignOut={() => void signOut()}
+          onSignOut={signOut}
           onOpenAccount={onOpenAccount}
           onToggleFavorite={toggleFavorite}
           query={query}
           onQueryChange={changeQuery}
           refreshing={refreshing}
-          onRefresh={load}
+          onRefresh={reload}
         />,
       );
   }
+}
+
+/** One account's read address, with the default window riding as no param. */
+function accountReadPath(id: string, windowDays: AdminMetricsWindow): string {
+  const params = new URLSearchParams();
+  params.set(ADMIN_USER_ID_PARAM, id);
+  if (windowDays !== ADMIN_METRICS_WINDOW_DEFAULT) {
+    params.set(ADMIN_METRICS_WINDOW_PARAM, String(windowDays));
+  }
+  return `${USER_DETAIL_PATH}?${params.toString()}`;
 }
 
 function UserDetailScreen({
@@ -3606,76 +3428,13 @@ function UserDetailScreen({
   /** Applied around every answer but the gate's own cards, which stand alone. */
   frame: (content: React.JSX.Element) => React.JSX.Element;
 }): React.JSX.Element {
-  const [state, setState] = useState<DetailState>(() =>
-    signInChosenHere() ? { status: "loading" } : { status: "signed-out" },
+  const { state, refreshing, reload, withdraw } = useAdminRead(
+    accountReadPath(id, windowDays),
+    readUserDetail,
+    ENDPOINT_ERROR.ACCOUNT,
+    { keeps: (shown) => shown.account.id === id },
   );
-  const [refreshing, setRefreshing] = useState(false);
-  const inFlight = useRef<AbortController>(null);
-
-  // The parent's sign-out resets the overview, but this screen renders in the
-  // overview's place and holds a ready answer of its own — left alone, the
-  // account's identity and usage would stand on screen after the consent
-  // behind them was withdrawn. So the withdrawal lands here too: the open
-  // read is dropped first, for the same reason the overview drops its own.
-  const signOut = async () => {
-    inFlight.current?.abort();
-    setRefreshing(false);
-    await onSignOut();
-    setState({ status: "signed-out" });
-  };
-
-  const load = useCallback(() => {
-    // The same local consent the overview asks for: a deep link into an
-    // account page still opens on the sign-in card until a sign-in has been
-    // pressed on this page once.
-    if (!signInChosenHere()) {
-      setState({ status: "signed-out" });
-      return;
-    }
-    inFlight.current?.abort();
-    const controller = new AbortController();
-    inFlight.current = controller;
-    // A refresh keeps the page it is refreshing; a different account — the
-    // browser's own back and forward can swap ids without passing the
-    // overview — must not stand dimmed behind the other account's read.
-    setState((current) =>
-      current.status === "ready" && current.detail.account.id === id
-        ? current
-        : { status: "loading" },
-    );
-    setRefreshing(true);
-    const params = new URLSearchParams();
-    params.set(ADMIN_USER_ID_PARAM, id);
-    if (windowDays !== ADMIN_METRICS_WINDOW_DEFAULT) {
-      params.set(ADMIN_METRICS_WINDOW_PARAM, String(windowDays));
-    }
-    const path = `${USER_DETAIL_PATH}?${params.toString()}`;
-    void (async () => {
-      try {
-        const next = await readDetailState(
-          await fetch(path, {
-            headers: { accept: "application/json" },
-            signal: controller.signal,
-          }),
-          path,
-        );
-        if (!controller.signal.aborted) setState((current) => settleRead(current, next, path));
-      } catch {
-        if (!controller.signal.aborted) {
-          setState((current) =>
-            settleRead(current, { status: "error", detail: ERROR_DETAIL.ACCOUNT }, path),
-          );
-        }
-      } finally {
-        if (!controller.signal.aborted) setRefreshing(false);
-      }
-    })();
-  }, [id, windowDays]);
-
-  useEffect(() => {
-    load();
-    return () => inFlight.current?.abort();
-  }, [load]);
+  const signOut = () => void withdraw(onSignOut);
 
   switch (state.status) {
     case "loading":
@@ -3684,14 +3443,14 @@ function UserDetailScreen({
           windowDays={windowDays}
           onWindowDaysChange={onWindowDaysChange}
           account={account}
-          onSignOut={() => void signOut()}
+          onSignOut={signOut}
           onBack={onBack}
         />,
       );
     case "signed-out":
       return <SignInCard />;
     case "forbidden":
-      return <ForbiddenCard email={account?.email} onSignOut={() => void signOut()} />;
+      return <ForbiddenCard email={account?.email} onSignOut={signOut} />;
     case "missing":
       return frame(
         <Centered title="No such account">
@@ -3705,27 +3464,20 @@ function UserDetailScreen({
       );
     case "error":
       return frame(
-        <Centered title="Could not load">
-          {state.detail}
-          <div className="mt-6">
-            <button type="button" className={PLAIN_BUTTON} onClick={load} disabled={refreshing}>
-              {refreshing ? "Trying…" : "Try again"}
-            </button>
-          </div>
-        </Centered>,
+        <AdminErrorCard detail={state.detail} refreshing={refreshing} onRetry={reload} />,
       );
     case "ready":
       return frame(
         <UserDetailPage
-          detail={state.detail}
+          detail={state.value}
           refreshFailure={state.refreshFailure}
           windowDays={windowDays}
           onWindowDaysChange={onWindowDaysChange}
           account={account}
-          onSignOut={() => void signOut()}
+          onSignOut={signOut}
           onBack={onBack}
           refreshing={refreshing}
-          onRefresh={load}
+          onRefresh={reload}
         />,
       );
   }
@@ -3759,68 +3511,13 @@ function DayDetailScreen({
   /** Applied around every answer but the gate's own cards, which stand alone. */
   frame: (content: React.JSX.Element) => React.JSX.Element;
 }): React.JSX.Element {
-  const [state, setState] = useState<DayState>(() =>
-    signInChosenHere() ? { status: "loading" } : { status: "signed-out" },
+  const { state, refreshing, reload, withdraw } = useAdminRead(
+    dayReadPath(day, hideAdmins),
+    readDayDetail,
+    ENDPOINT_ERROR.DAY,
+    { keeps: (shown) => shown.day === day },
   );
-  const [refreshing, setRefreshing] = useState(false);
-  const inFlight = useRef<AbortController>(null);
-
-  // The same withdrawal the detail screen lands: this screen renders in the
-  // overview's place with a ready answer of its own, so the parent's sign-out
-  // alone would leave the day's roster on screen after the consent behind it
-  // left.
-  const signOut = async () => {
-    inFlight.current?.abort();
-    setRefreshing(false);
-    await onSignOut();
-    setState({ status: "signed-out" });
-  };
-
-  const load = useCallback(() => {
-    // The same local consent the overview asks for: a deep link into a day
-    // page still opens on the sign-in card until a sign-in has been pressed
-    // on this page once.
-    if (!signInChosenHere()) {
-      setState({ status: "signed-out" });
-      return;
-    }
-    inFlight.current?.abort();
-    const controller = new AbortController();
-    inFlight.current = controller;
-    // A refresh keeps the page it is refreshing; a different day — the
-    // browser's own back and forward can swap days without passing the
-    // overview — must not stand dimmed behind the other day's read.
-    setState((current) =>
-      current.status === "ready" && current.detail.day === day ? current : { status: "loading" },
-    );
-    setRefreshing(true);
-    const path = dayReadPath(day, hideAdmins);
-    void (async () => {
-      try {
-        const next = await readDayState(
-          await fetch(path, {
-            headers: { accept: "application/json" },
-            signal: controller.signal,
-          }),
-          path,
-        );
-        if (!controller.signal.aborted) setState((current) => settleRead(current, next, path));
-      } catch {
-        if (!controller.signal.aborted) {
-          setState((current) =>
-            settleRead(current, { status: "error", detail: ERROR_DETAIL.DAY }, path),
-          );
-        }
-      } finally {
-        if (!controller.signal.aborted) setRefreshing(false);
-      }
-    })();
-  }, [day, hideAdmins]);
-
-  useEffect(() => {
-    load();
-    return () => inFlight.current?.abort();
-  }, [load]);
+  const signOut = () => void withdraw(onSignOut);
 
   switch (state.status) {
     case "loading":
@@ -3830,38 +3527,36 @@ function DayDetailScreen({
           hideAdmins={hideAdmins}
           onHideAdminsChange={onHideAdminsChange}
           account={account}
-          onSignOut={() => void signOut()}
+          onSignOut={signOut}
           onBack={onBack}
         />,
       );
     case "signed-out":
       return <SignInCard />;
     case "forbidden":
-      return <ForbiddenCard email={account?.email} onSignOut={() => void signOut()} />;
+      return <ForbiddenCard email={account?.email} onSignOut={signOut} />;
+    case "missing":
     case "error":
       return frame(
-        <Centered title="Could not load">
-          {state.detail}
-          <div className="mt-6">
-            <button type="button" className={PLAIN_BUTTON} onClick={load} disabled={refreshing}>
-              {refreshing ? "Trying…" : "Try again"}
-            </button>
-          </div>
-        </Centered>,
+        <AdminErrorCard
+          detail={adminReadFailure(state, ENDPOINT_ERROR.DAY)}
+          refreshing={refreshing}
+          onRetry={reload}
+        />,
       );
     case "ready":
       return frame(
         <DayDetailPage
-          detail={state.detail}
+          detail={state.value}
           refreshFailure={state.refreshFailure}
           hideAdmins={hideAdmins}
           onHideAdminsChange={onHideAdminsChange}
           account={account}
-          onSignOut={() => void signOut()}
+          onSignOut={signOut}
           onBack={onBack}
           onOpenAccount={onOpenAccount}
           refreshing={refreshing}
-          onRefresh={load}
+          onRefresh={reload}
         />,
       );
   }
@@ -3994,11 +3689,6 @@ function AnimationsPage({
 }
 
 export function AdminDashboard(): React.JSX.Element {
-  // A first visit is signed-out from the very first frame: it never fetches,
-  // so a loading state would pose as a request that is not in flight.
-  const [state, setState] = useState<DashboardState>(() =>
-    signInChosenHere() ? { status: "loading" } : { status: "signed-out" },
-  );
   // Admin accounts are the maintainers' own; their traffic reads as noise in
   // every count, so admins start hidden and the toggle is the explicit ask to
   // include them, remembered across visits. The scope is the server's filter —
@@ -4008,8 +3698,6 @@ export function AdminDashboard(): React.JSX.Element {
     rememberAdminsHidden(hide);
     setHideAdmins(hide);
   };
-  const [refreshing, setRefreshing] = useState(false);
-  const inFlight = useRef<AbortController>(null);
   const session = authClient.useSession();
   const account = session.data?.user;
 
@@ -4056,69 +3744,25 @@ export function AdminDashboard(): React.JSX.Element {
     });
   };
 
-  const load = useCallback(() => {
-    // A session earned elsewhere on the site does not open the dashboard by
-    // itself: until a sign-in has been pressed on this page once, the card is
-    // the answer, whatever cookie the browser holds.
-    if (!signInChosenHere()) {
-      setState({ status: "signed-out" });
-      return;
-    }
-    // One read at a time: a scope flipped twice, or a refresh pressed on a slow
-    // answer, would otherwise leave two in flight and let the older one land
-    // last and overwrite the newer.
-    inFlight.current?.abort();
-    const controller = new AbortController();
-    inFlight.current = controller;
-    // Only a read with nothing to replace clears the page. A refetch — the
-    // scope toggle, the refresh button — keeps the last answer up until the
-    // next one arrives, because blanking a read page for a press that changes
-    // one filter throws away the reader's place and reads as a fault.
-    setState((current) => (current.status === "ready" ? current : { status: "loading" }));
-    setRefreshing(true);
-    const path = windowedReadPath(METRICS_PATH, hideAdmins, windowDays);
-    void (async () => {
-      try {
-        const next = await readDashboardState(
-          await fetch(path, {
-            headers: { accept: "application/json" },
-            signal: controller.signal,
-          }),
-          path,
-        );
-        if (!controller.signal.aborted) setState((current) => settleRead(current, next, path));
-      } catch {
-        if (!controller.signal.aborted) {
-          setState((current) =>
-            settleRead(current, { status: "error", detail: ERROR_DETAIL.METRICS }, path),
-          );
-        }
-      } finally {
-        if (!controller.signal.aborted) setRefreshing(false);
-      }
-    })();
-  }, [hideAdmins, windowDays]);
-
-  useEffect(() => {
-    // The dashboard's read waits while another view is open; coming back
-    // re-runs it, which refreshes the numbers while the last answer stands
-    // dimmed the way any refetch does.
-    if (view.kind !== "dashboard") return;
-    load();
-    return () => inFlight.current?.abort();
-  }, [load, view.kind]);
-
-  const signOut = async () => {
-    // The header stays live through a refetch, so this press can land on an open
-    // read. It is dropped first: an answer that left carrying the old cookie
-    // would otherwise resolve behind the sign-out and put the dashboard back up
-    // on a consent that was just withdrawn.
-    inFlight.current?.abort();
-    setRefreshing(false);
-    await authClient.signOut();
-    forgetSignInChosen();
-    setState({ status: "signed-out" });
-  };
+  // The dashboard's read waits while another view is open; coming back re-runs
+  // it, which refreshes the numbers while the last answer stands dimmed the
+  // way any refetch does. It is the shell's own read because the animations
+  // view, which fetches nothing, honors the refusals it already holds.
+  const metrics = useAdminRead(
+    windowedReadPath(METRICS_PATH, hideAdmins, windowDays),
+    readMetrics,
+    ENDPOINT_ERROR.METRICS,
+    { enabled: view.kind === "dashboard" },
+  );
+  const withdrawSession = metrics.withdraw;
+  const signOut = useCallback(
+    () =>
+      withdrawSession(async () => {
+        await authClient.signOut();
+        SIGN_IN_CHOSEN.write(false);
+      }),
+    [withdrawSession],
+  );
 
   const viewer: ViewerAccount | undefined = account
     ? { name: account.name, email: account.email, image: account.image ?? undefined }
@@ -4178,8 +3822,8 @@ export function AdminDashboard(): React.JSX.Element {
     // already holds and otherwise stands on the local sign-in press alone,
     // which the artwork — committed in the repository, observed from nobody —
     // is content with.
-    if (state.status === "signed-out") return <SignInCard />;
-    if (state.status === "forbidden") {
+    if (metrics.state.status === "signed-out") return <SignInCard />;
+    if (metrics.state.status === "forbidden") {
       return <ForbiddenCard email={account?.email} onSignOut={() => void signOut()} />;
     }
     return shell(
@@ -4203,7 +3847,7 @@ export function AdminDashboard(): React.JSX.Element {
     );
   }
 
-  switch (state.status) {
+  switch (metrics.state.status) {
     case "loading":
       return shell(
         "dashboard",
@@ -4220,32 +3864,30 @@ export function AdminDashboard(): React.JSX.Element {
       return <SignInCard />;
     case "forbidden":
       return <ForbiddenCard email={account?.email} onSignOut={() => void signOut()} />;
+    case "missing":
     case "error":
       return shell(
         "dashboard",
-        <Centered title="Could not load">
-          {state.detail}
-          <div className="mt-6">
-            <button type="button" className={PLAIN_BUTTON} onClick={load} disabled={refreshing}>
-              {refreshing ? "Trying…" : "Try again"}
-            </button>
-          </div>
-        </Centered>,
+        <AdminErrorCard
+          detail={adminReadFailure(metrics.state, ENDPOINT_ERROR.METRICS)}
+          refreshing={metrics.refreshing}
+          onRetry={metrics.reload}
+        />,
       );
     case "ready":
       return shell(
         "dashboard",
         <Dashboard
-          metrics={state.metrics}
-          refreshFailure={state.refreshFailure}
+          metrics={metrics.state.value}
+          refreshFailure={metrics.state.refreshFailure}
           hideAdmins={hideAdmins}
           onHideAdminsChange={changeHideAdmins}
           windowDays={windowDays}
           onWindowDaysChange={changeWindow}
           account={viewer}
           onSignOut={() => void signOut()}
-          refreshing={refreshing}
-          onRefresh={load}
+          refreshing={metrics.refreshing}
+          onRefresh={metrics.reload}
           onOpenAccount={openAccount}
           onOpenDay={openDay}
         />,

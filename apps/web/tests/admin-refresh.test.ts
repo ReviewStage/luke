@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { settleRead } from "../src/admin-refresh";
+import { settleRead } from "../src/admin/use-admin-read";
 
 type ScreenState =
   | { status: "loading" }
