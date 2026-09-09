@@ -23,6 +23,7 @@ export {
   PRODUCT_SURFACE_EVENT,
   PRODUCT_UPDATE_ACTION,
   type ProductAccountAction,
+  type ProductAskOutcome,
   type ProductCredentialSource,
   type ProductDiagnosticKind,
   type ProductEvent,

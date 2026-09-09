@@ -5,7 +5,7 @@ import {
 } from "@sidecar/brain/requests";
 import type { BrainAskSubmissionResult, BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
 import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
-import { VOICE_ERROR_NOTICE_MS } from "@sidecar/voice/orchestrator";
+import { NoticeStrip } from "@sidecar/voice/orchestrator";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import {
@@ -39,9 +39,56 @@ export function askDraftReason(result: BrainAskSubmissionResult | undefined): st
     : BRAIN_ASK_REFUSAL[result.reason];
 }
 
+/**
+ * Carries one typed ask to the brain and answers the composer with the reason
+ * it was refused, or nothing when it was accepted. A refusal is the one
+ * outcome nobody hears: the reply that would have said it never starts, so
+ * the sentence is landed where the reply would have — on the caption strip,
+ * in the notice tone, on the strip's own clock — and a fixed sentence it is,
+ * never composed with the ask. An accepted ask outdates whatever refusal the
+ * strip was still reading, since the reply beginning is now the answer.
+ */
+export async function submitTypedAsk(input: {
+  submit: () => Promise<BrainAskSubmissionResult>;
+  strip: NoticeStrip;
+}): Promise<string | undefined> {
+  const reason = askDraftReason(
+    await input.submit().catch((): BrainAskSubmissionResult | undefined => undefined),
+  );
+  input.strip.showNotice(reason);
+  return reason;
+}
+
 /** What the strip says when the stored thread could not be deleted. */
 export const CLEAR_FAILED_REASON =
   "Conversation was cleared from view, but its file could not be fully erased. Try again.";
+
+/**
+ * The two lines the panel puts on the strip itself: a fault and a notice the
+ * main process answered to this panel's own press, which the voice window
+ * never saw and so never reports.
+ */
+export interface PanelStripLines {
+  error: string | undefined;
+  notice: string | undefined;
+}
+
+const NO_PANEL_STRIP_LINES: PanelStripLines = { error: undefined, notice: undefined };
+
+/**
+ * The view the panel draws: the voice window's report, with the panel's own
+ * strip lines standing over the report's for as long as they last. Each line
+ * displaces only its own slot, so a refusal never hides a fault, and a report
+ * the panel adds nothing to is handed on as the same object.
+ */
+export function panelVoiceView(reported: VoiceView, strip: PanelStripLines): VoiceView {
+  if (strip.error === undefined && strip.notice === undefined) return reported;
+  return {
+    ...reported,
+    voiceError: strip.error ?? reported.voiceError,
+    voiceNotice: strip.notice ?? reported.voiceNotice,
+  };
+}
 
 /**
  * How long a voice has been active, read off the relayed levels with the
@@ -121,8 +168,9 @@ export interface VoiceViewState {
   /**
    * A typed ask to Luke, submitted to the brain in the main process and
    * answered with whether it was accepted into a run: nothing when it was, a
-   * reason when it was not, so the composer keeps a refused draft. The reply
-   * arrives later, in the thread and in the voice.
+   * reason when it was not, so the composer keeps a refused draft. The reason
+   * is already on the strip in `view` by the time it is answered; the reply
+   * to an accepted ask arrives later, in the thread and in the voice.
    */
   askLuke: (text: string) => Promise<string | undefined>;
   /** Every run the brain holds, for Conversation to draw a pending ask beside its words. */
@@ -184,20 +232,34 @@ export function useVoiceView(): VoiceViewState {
     if (!turnLive) setVoiceActive(false);
   }, [turnLive]);
 
+  // The panel's own strip lines, on the same clock the voice window's strip
+  // keeps, because they share the box the developer reads them in. The strip
+  // reports each change into React state, so the view below re-composes on a
+  // line arriving or expiring.
+  const [stripLines, setStripLines] = useState(NO_PANEL_STRIP_LINES);
+  const [strip] = useState(() => {
+    const created: NoticeStrip = new NoticeStrip({
+      onChanged: () => setStripLines({ error: created.error, notice: created.notice }),
+    });
+    return created;
+  });
+  useEffect(() => () => strip.stop(), [strip]);
   // One submission id per press of Send: the id is what makes a retry of
   // this very ask the same run and a second deliberate ask a new one.
   const askLuke = useCallback(
-    async (text: string): Promise<string | undefined> =>
-      askDraftReason(
-        await act(ACT_KIND.BRAIN_SUBMIT_ASK, {
-          submission: {
-            submissionId: crypto.randomUUID(),
-            question: text,
-            origin: BRAIN_REQUEST_ORIGIN.TYPED,
-          },
-        }).catch((): BrainAskSubmissionResult | undefined => undefined),
-      ),
-    [],
+    (text: string): Promise<string | undefined> =>
+      submitTypedAsk({
+        strip,
+        submit: () =>
+          act(ACT_KIND.BRAIN_SUBMIT_ASK, {
+            submission: {
+              submissionId: crypto.randomUUID(),
+              question: text,
+              origin: BRAIN_REQUEST_ORIGIN.TYPED,
+            },
+          }),
+      }),
+    [strip],
   );
   // Every version of the document carries the whole list the standing brain
   // holds: a run absent from it is one no current brain can find, so its row
@@ -215,25 +277,19 @@ export function useVoiceView(): VoiceViewState {
   const requestMicrophoneAccess = useCallback(() => {
     tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS });
   }, []);
-  // The one failure the panel reports itself: the stored thread refusing to
-  // go is the main process's answer to this press, not anything the voice
-  // window saw, so it borrows the strip here on the strip's own clock.
-  const [localError, setLocalError] = useState<string>();
-  useEffect(() => {
-    if (localError === undefined) return;
-    const timer = window.setTimeout(() => setLocalError(undefined), VOICE_ERROR_NOTICE_MS);
-    return () => window.clearTimeout(timer);
-  }, [localError]);
+  // The stored thread refusing to go is the main process's answer to this
+  // press, not anything the voice window saw, so it is the panel's own fault
+  // to report.
   const clearConversationLines = useCallback(() => {
     act(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.CLEAR_CONVERSATION })
       .catch((): VoiceCommandOutcome => VOICE_COMMAND_OUTCOME.REFUSED)
       .then((outcome) => {
-        if (outcome === VOICE_COMMAND_OUTCOME.REFUSED) setLocalError(CLEAR_FAILED_REASON);
+        if (outcome === VOICE_COMMAND_OUTCOME.REFUSED) strip.showError(CLEAR_FAILED_REASON);
       });
-  }, []);
+  }, [strip]);
 
   return {
-    view: localError === undefined ? view : { ...view, voiceError: localError },
+    view: panelVoiceView(view, stripLines),
     speaking: view.voiceStatus === REALTIME_STATUS.RESPONDING,
     voiceTurn: waveformVoice(view.voiceStatus),
     level,
