@@ -232,7 +232,9 @@ export async function clearConversationRows(
  * Removes the conversation and everything under it: lines, transcript,
  * boundaries, the standing generation with its rows, and the briefings it
  * decided, which hang from the user rather than the conversation row and so
- * go here rather than by cascade.
+ * go here rather than by cascade. The conversation's row lock is taken first,
+ * so a briefing being recorded meanwhile lands before the delete and goes
+ * with it, or after and is refused.
  */
 export function deleteConversation(
   db: HostedStoreDatabase,
@@ -240,6 +242,7 @@ export function deleteConversation(
   sessionKey: SessionKey,
 ): Promise<boolean> {
   return db.transaction(async (tx) => {
+    if (!(await lockConversation(tx, userId, sessionKey))) return false;
     await tx
       .delete(briefing)
       .where(and(eq(briefing.userId, userId), eq(briefing.sessionKey, sessionKey)));

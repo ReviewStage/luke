@@ -1,6 +1,7 @@
 import { and, asc, eq, gt, inArray, lte } from "drizzle-orm";
-import { isWireString, type UnparsedWireValue } from "../../core.js";
+import { isWireString, type SessionKey, type UnparsedWireValue } from "../../core.js";
 import { briefing } from "../../db/schema.js";
+import { lockConversation } from "./conversations.js";
 import type { HostedStoreDatabase, UserSeal } from "./database.js";
 
 /**
@@ -33,7 +34,7 @@ const OPEN_STATES: readonly BriefingState[] = [BRIEFING_STATE.OFFERED, BRIEFING_
 
 export interface BriefingInsert {
   readonly id: string;
-  readonly sessionKey: string;
+  readonly sessionKey: SessionKey;
   readonly runId?: string;
   readonly words: string;
   readonly decidedAt: number;
@@ -42,7 +43,7 @@ export interface BriefingInsert {
 
 export interface BriefingRecord {
   readonly id: string;
-  readonly sessionKey: string;
+  readonly sessionKey: SessionKey;
   readonly runId?: string;
   readonly words: string;
   readonly decidedAt: number;
@@ -56,7 +57,8 @@ export interface BriefingRecord {
 function recordFromRow(seal: UserSeal, row: typeof briefing.$inferSelect): BriefingRecord {
   return {
     id: row.id,
-    sessionKey: row.sessionKey,
+    // SAFETY: the column holds the key the conversation row lock admitted when the briefing was recorded.
+    sessionKey: row.sessionKey as SessionKey,
     ...(row.runId !== null ? { runId: row.runId } : undefined),
     words: seal.open(row.sealedWords),
     decidedAt: row.decidedAt,
@@ -68,28 +70,37 @@ function recordFromRow(seal: UserSeal, row: typeof briefing.$inferSelect): Brief
   };
 }
 
-/** Records a briefing the brain decided, offered from the moment it lands; an id already recorded is one briefing. */
-export async function insertBriefing(
+/**
+ * Records a briefing the brain decided, offered from the moment it lands; an
+ * id already recorded is one briefing. It runs under the conversation's row
+ * lock, the same lock the conversation's delete takes, so a briefing is
+ * recorded only for a conversation that still stands and a delete under way
+ * either takes it or was never raced.
+ */
+export function insertBriefing(
   db: HostedStoreDatabase,
   seal: UserSeal,
   userId: string,
   insert: BriefingInsert,
 ): Promise<boolean> {
-  const inserted = await db
-    .insert(briefing)
-    .values({
-      id: insert.id,
-      userId,
-      sessionKey: insert.sessionKey,
-      runId: insert.runId ?? null,
-      sealedWords: seal.seal(insert.words),
-      decidedAt: insert.decidedAt,
-      expiresAt: insert.expiresAt,
-      state: BRIEFING_STATE.OFFERED,
-    })
-    .onConflictDoNothing()
-    .returning({ id: briefing.id });
-  return inserted.length > 0;
+  return db.transaction(async (tx) => {
+    if (!(await lockConversation(tx, userId, insert.sessionKey))) return false;
+    const inserted = await tx
+      .insert(briefing)
+      .values({
+        id: insert.id,
+        userId,
+        sessionKey: insert.sessionKey,
+        runId: insert.runId ?? null,
+        sealedWords: seal.seal(insert.words),
+        decidedAt: insert.decidedAt,
+        expiresAt: insert.expiresAt,
+        state: BRIEFING_STATE.OFFERED,
+      })
+      .onConflictDoNothing()
+      .returning({ id: briefing.id });
+    return inserted.length > 0;
+  });
 }
 
 /** One device takes the briefing: only while it is offered and not yet due to expire, and only once. */

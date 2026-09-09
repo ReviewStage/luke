@@ -673,7 +673,16 @@ test("a briefing is offered once, claimed by one device once, settled only by it
   };
   assert.equal(await briefings.insert(userId, offered), true);
   assert.equal(await briefings.insert(userId, offered), false);
+  assert.equal(
+    await briefings.insert(userId, { ...offered, id: "briefing-orphan", sessionKey: THREAD_KEY }),
+    false,
+  );
   const other = await database.createUser();
+  await database.store.conversations.create(other, {
+    sessionKey: MAIN_SESSION_KEY,
+    name: MAIN_CONVERSATION_NAME,
+    now: NOW,
+  });
   assert.equal(await briefings.insert(other, offered), true);
   assert.equal((await briefings.list(other)).length, 1);
   assert.deepEqual(await briefings.list(userId, BRIEFING_STATE.OFFERED), [
