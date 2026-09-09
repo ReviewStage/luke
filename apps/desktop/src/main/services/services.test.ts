@@ -185,7 +185,7 @@ test("the host service reads its links by name rather than answering nothing", a
   await host.stop();
 });
 
-test("the updater's timers are handles the stop takes back, and a restart drains the runtime first", async (t) => {
+test("the updater's timers are handles the stop takes back, and a restart tears down first", async (t) => {
   const stateRoot = await temporaryDirectory(t);
   const order: string[] = [];
   const snapshots: string[] = [];
@@ -205,8 +205,8 @@ test("the updater's timers are handles the stop takes back, and a restart drains
     },
     recordProductEvent: () => undefined,
     engine,
-    drainHost: async () => {
-      order.push("drain");
+    beforeRestart: async () => {
+      order.push("teardown");
     },
     broadcastUpdate: (update) => snapshots.push(update.status),
   });
@@ -215,9 +215,10 @@ test("the updater's timers are handles the stop takes back, and a restart drains
   events.onDownloaded("9.9.9");
   updates.install();
   await drainMicrotasks(2);
-  // The restart into a downloaded build swaps this executable, so the runtime
-  // is drained before Squirrel is let anywhere near it.
-  assert.deepEqual(order, ["drain", "install"]);
+  // The restart into a downloaded build swaps this executable, so everything
+  // owed is given back before Squirrel is let anywhere near it — and given
+  // back first, so the installer's own quit is not the one held open.
+  assert.deepEqual(order, ["teardown", "install"]);
   assert.ok(snapshots.length > 0, "no update state ever reached the windows");
   await updates.stop();
   await updates.stop();
@@ -264,4 +265,50 @@ test("a launch suspended on one of its waits opens nothing once a quit has been 
   // And by now the drain has finished, so its own state is back to owing
   // nothing — a signal that says nothing about whether a quit was asked for.
   assert.equal(host.drainOwed(), false);
+});
+
+test("a quit arriving after the teardown finished is not held back, so an install is not aborted", async () => {
+  // The regression this pins: holding every `before-quit` open aborts the
+  // update, because Squirrel's own quit is the one that reaches the
+  // installer. The updater runs the teardown itself and hands over only once
+  // it has finished, so what the entry reads is whether one has finished.
+  const order: string[] = [];
+  let stopped = false;
+  let stopping: Promise<void> | undefined;
+  const all = [
+    {
+      name: "host",
+      start: async () => undefined,
+      stop: async () => {
+        order.push("drain");
+      },
+    },
+  ];
+  const teardown = (): Promise<void> => {
+    if (!stopping) {
+      stopping = stopInReverse(all, () => undefined).finally(() => {
+        stopping = undefined;
+        stopped = true;
+      });
+    }
+    return stopping;
+  };
+  // The entry's own rule, as `registerQuit` applies it.
+  const beforeQuit = (): "held" | "through" => {
+    if (stopped) return "through";
+    void teardown();
+    return "held";
+  };
+
+  await teardown();
+  order.push("install");
+  assert.equal(beforeQuit(), "through");
+  assert.deepEqual(order, ["drain", "install"]);
+
+  // And the explicit Quit, which arrives with nothing torn down yet, is held
+  // exactly once.
+  stopped = false;
+  assert.equal(beforeQuit(), "held");
+  await stopping;
+  assert.equal(beforeQuit(), "through");
 });

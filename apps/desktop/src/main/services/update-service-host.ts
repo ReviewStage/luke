@@ -22,8 +22,16 @@ export interface UpdateServiceHostDependencies {
    * run, and a platform Squirrel does not serve all have nothing to install.
    */
   engine: UpdaterEngine | undefined;
-  /** The one drain, which a restart into a downloaded build must not swap this executable over. */
-  drainHost: () => Promise<void>;
+  /**
+   * The whole quit's teardown, awaited before Squirrel is let near this
+   * executable. It is the teardown and not the host's drain alone for two
+   * reasons: the restart must not swap the binary over runtime work still
+   * going, and the install's own quit must not be the one `before-quit`
+   * holds back — a prevented `before-quit` aborts the install, so everything
+   * owed has to be given back, and seen to be given back, before the
+   * installer asks to leave.
+   */
+  beforeRestart: () => Promise<void>;
   /** Every state the row draws, carried to the windows that draw it. */
   broadcastUpdate: (update: UpdateSnapshot) => void;
 }
@@ -60,7 +68,7 @@ export function createUpdateServiceHost(
         : {
             ...engine,
             quitAndInstall: () => {
-              void dependencies.drainHost().finally(() => engine.quitAndInstall());
+              void dependencies.beforeRestart().finally(() => engine.quitAndInstall());
             },
           },
     lastRunVersion: {

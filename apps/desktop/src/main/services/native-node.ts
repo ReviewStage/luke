@@ -58,6 +58,14 @@ export interface NativeNode extends DesktopService {
   microphoneRouteWatcher: () => MicrophoneRouteWatch | undefined;
   /** The panel's answer to an act it was carried, matched to the ask that is waiting. */
   answerAppAct: (requestId: string, answer: WireRecord) => void;
+  /**
+   * Refuses every act still waiting on a panel. Asked for at the top of the
+   * quit rather than left to this service's own stop: the panels are going,
+   * so nothing can answer one, and the host's drain runs first and would
+   * otherwise wait out the act's own clock for a promise that was never
+   * going to settle.
+   */
+  refusePendingActs: () => void;
 }
 
 /**
@@ -106,6 +114,13 @@ export function createNativeNode(config: DesktopConfig): NativeNode {
     });
   }
 
+  function refusePendingActs(): void {
+    for (const settle of pendingAppActs.values()) {
+      settle({ status: ACT_RESULT_STATUS.REJECTED, reason: "Luke is quitting." });
+    }
+    pendingAppActs.clear();
+  }
+
   return {
     name: "native",
     link: (next) => links.set(next),
@@ -130,6 +145,7 @@ export function createNativeNode(config: DesktopConfig): NativeNode {
     microphoneRoute: () => microphoneRoute,
     microphoneRouteWatcher: () => microphoneRouteWatcher,
     answerAppAct: (requestId, answer) => pendingAppActs.get(requestId)?.(answer),
+    refusePendingActs,
     start: async () => {
       if (!config.runMode.observesProviders) return;
       const send = (state: OutputAudioState | undefined) => {
@@ -157,13 +173,9 @@ export function createNativeNode(config: DesktopConfig): NativeNode {
       microphoneRouteWatcher?.stop();
       microphoneRouteWatcher = undefined;
       mediaDuck.stop();
-      // An act still waiting on a panel that is going away is refused rather
-      // than left open: the host journals a refusal, and never a promise that
-      // outlives the window it was asked of.
-      for (const settle of pendingAppActs.values()) {
-        settle({ status: ACT_RESULT_STATUS.REJECTED, reason: "Luke is quitting." });
-      }
-      pendingAppActs.clear();
+      // Ordinarily the quit has already refused these; a stop reached any
+      // other way still leaves no act waiting on a window that is gone.
+      refusePendingActs();
     },
   };
 }

@@ -39,6 +39,9 @@ import type { OperatorClient } from "./operator-client";
 import type { DesktopService } from "./service";
 import type { TelemetryService } from "./telemetry-service";
 
+/** How long a display change is let settle before the panels are laid out over it. */
+const DISPLAY_SETTLE_MS = 100;
+
 export interface WindowServiceDependencies {
   config: DesktopConfig;
   native: NativeNode;
@@ -181,20 +184,21 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   let introductionRendererReady = false;
   let resolveIntroductionPanelReady: (() => void) | undefined;
   /**
-   * The takeover's own waits — the render deadline, the handoff, the fade
-   * that hands the panel back — held so the quit can take them back. Each
-   * acts on a window or the keys when it fires, so one landing after the
-   * teardown would re-open the takeover or re-claim the talk key the
-   * teardown had just given back.
+   * Every wait this service schedules — the takeover's render deadline,
+   * handoff, and fade, and the settling a display change waits out — held so
+   * the quit can take them back. Each opens a window or claims the keys when
+   * it fires, and the teardown now runs for seconds with the drain behind
+   * it, so one landing afterwards would re-open what the teardown had just
+   * given back.
    */
-  const introductionWaits = new Set<ReturnType<typeof setTimeout>>();
-  function afterIntroductionDelay(delayMs: number, run: () => void): void {
+  const pendingWaits = new Set<ReturnType<typeof setTimeout>>();
+  function afterDelay(delayMs: number, run: () => void): void {
     const wait = setTimeout(() => {
-      introductionWaits.delete(wait);
+      pendingWaits.delete(wait);
       if (!launchStanding()) return;
       run();
     }, delayMs);
-    introductionWaits.add(wait);
+    pendingWaits.add(wait);
   }
   const introductionMinter = introductionRealtimeCredentialMinter({
     serviceBaseUrl: config.hostedServiceBaseUrl,
@@ -219,11 +223,11 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     await Promise.race([
       panelReady,
       new Promise<void>((resolve) => {
-        afterIntroductionDelay(INTRODUCTION_HANDOFF_READY_MS, resolve);
+        afterDelay(INTRODUCTION_HANDOFF_READY_MS, resolve);
       }),
     ]);
     resolveIntroductionPanelReady = undefined;
-    afterIntroductionDelay(INTRODUCTION_FADE_MS, () => {
+    afterDelay(INTRODUCTION_FADE_MS, () => {
       introductionWindow.close();
       void hotkeys.reapply(HOTKEY_RANK.TALK);
     });
@@ -293,18 +297,17 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   }
 
   function handleDisplayChange(): void {
-    setTimeout(
-      () =>
-        void (async () => {
-          await panels.refreshGeometry();
-          if (introductionWindow.active) {
-            introductionWindow.reposition();
-            return;
-          }
-          panels.reconcile();
-        })(),
-      100,
-    );
+    afterDelay(DISPLAY_SETTLE_MS, () => {
+      void (async () => {
+        await panels.refreshGeometry();
+        if (!launchStanding()) return;
+        if (introductionWindow.active) {
+          introductionWindow.reposition();
+          return;
+        }
+        panels.reconcile();
+      })();
+    });
   }
 
   const handleSecondInstance = (_event: Electron.Event, argv: string[]): void => {
@@ -402,7 +405,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       }
       if (giveIntroduction) {
         introductionWindow.open();
-        afterIntroductionDelay(INTRODUCTION_RENDER_DEADLINE_MS, () => {
+        afterDelay(INTRODUCTION_RENDER_DEADLINE_MS, () => {
           if (!introductionWindow.active || introductionRendererReady) return;
           config.report("Introduction abandoned: the takeover never reported mounting.");
           void abandonIntroduction();
@@ -435,8 +438,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       powerMonitor.removeListener("resume", wakeHandlers.resume);
       powerMonitor.removeListener("unlock-screen", wakeHandlers["unlock-screen"]);
       powerMonitor.removeListener("user-did-become-active", wakeHandlers["user-did-become-active"]);
-      for (const wait of introductionWaits) clearTimeout(wait);
-      introductionWaits.clear();
+      for (const wait of pendingWaits) clearTimeout(wait);
+      pendingWaits.clear();
       hotkeys.release();
       voiceWindow.closeForGood();
       panels.clearCollapseTimers();

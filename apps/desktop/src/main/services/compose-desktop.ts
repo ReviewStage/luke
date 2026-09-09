@@ -25,7 +25,20 @@ export interface DesktopServices {
   readonly operator: OperatorClient;
   readonly windows: WindowService;
   start: () => Promise<void>;
+  /**
+   * Everything owed, given back once: the windows, the operator, the host's
+   * drain, the machine's own watchers. Asked for by the explicit Quit, by a
+   * launch that could not stand up, and by the updater before it lets
+   * Squirrel replace this binary.
+   */
   stop: () => Promise<void>;
+  /**
+   * Whether a stop has run to its end. The entry reads it to decide whether
+   * to hold a quit back: the first ask is held so the teardown can finish,
+   * and every quit after it — including the installer's own — is let
+   * through, because a prevented `before-quit` aborts an update.
+   */
+  stopped: () => boolean;
 }
 
 /**
@@ -76,7 +89,7 @@ export function composeDesktop(config: DesktopConfig): DesktopServices {
       config.packaged && config.runMode.sendsNetwork && config.platform === "darwin"
         ? createElectronUpdaterEngine()
         : undefined,
-    drainHost: () => host.drain(),
+    beforeRestart: () => teardown(),
     broadcastUpdate: (update) => windows.broadcast(channels.onUpdateChanged, update),
   });
 
@@ -114,6 +127,27 @@ export function composeDesktop(config: DesktopConfig): DesktopServices {
   const machine = [keychain, telemetry, native] as const;
   const all: readonly DesktopService[] = [...machine, host, operator, updates, windows];
   let stopping: Promise<void> | undefined;
+  let stopped = false;
+
+  // Two paths ask for the teardown — the explicit Quit, a launch that could
+  // not stand up — and the updater asks for it before the install. All three
+  // are handed the one under way rather than a second pass over services
+  // already stopped.
+  function teardown(): Promise<void> {
+    quitting = true;
+    // An act still waiting on a panel is refused before the host drains: the
+    // panels are going, so nothing can answer one, and the drain would
+    // otherwise wait out the act's own clock for a promise that was never
+    // going to settle.
+    native.refusePendingActs();
+    if (!stopping) {
+      stopping = stopInReverse(all, config.report).finally(() => {
+        stopping = undefined;
+        stopped = true;
+      });
+    }
+    return stopping;
+  }
 
   return {
     config,
@@ -132,17 +166,7 @@ export function composeDesktop(config: DesktopConfig): DesktopServices {
       await updates.start();
       await windows.start();
     },
-    // Two paths ask for the quit's teardown — the explicit Quit and a launch
-    // that could not stand up — and both are handed the one under way rather
-    // than a second pass over services already stopped.
-    stop: () => {
-      quitting = true;
-      if (!stopping) {
-        stopping = stopInReverse(all, config.report).finally(() => {
-          stopping = undefined;
-        });
-      }
-      return stopping;
-    },
+    stop: teardown,
+    stopped: () => stopped,
   };
 }

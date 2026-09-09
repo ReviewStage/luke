@@ -52,17 +52,6 @@ export interface HostService extends DesktopService {
    * what the launch checks is the composition's own quitting flag.
    */
   drainOwed: () => boolean;
-  /**
-   * The one drain, made once whichever path asks for it: the explicit Quit,
-   * or the updater's restart into a downloaded build, which swaps this
-   * executable and must not do it over runtime work still going. The drain
-   * itself is the host's, in one place and in one order — admissions closed,
-   * every run and child under way cancelled, a bounded wait, and what did not
-   * settle counted from the persisted envelopes and left for the next
-   * launch's recovery rather than finished on paper. Every later ask is
-   * handed the drain already under way rather than a second one.
-   */
-  drain: () => Promise<void>;
 }
 
 export interface HostServiceDependencies {
@@ -138,7 +127,6 @@ export function createHostService(dependencies: HostServiceDependencies): HostSe
     server: host.server,
     link: (next) => links.set(next),
     drainOwed: () => state === HOST_DRAIN.OWED,
-    drain,
     // The drain is owed from before the start rather than after it, because
     // the start opens the store and arms the scheduler, the hooks, and the
     // observation before it answers, and a Quit in that window must cancel
@@ -151,6 +139,16 @@ export function createHostService(dependencies: HostServiceDependencies): HostSe
       })();
       await standup;
     },
+    /**
+     * The one drain, made once whichever path asks for it: the explicit Quit,
+     * or the updater's restart into a downloaded build, which swaps this
+     * executable and must not do it over runtime work still going. The drain
+     * itself is the host's, in one place and in one order — admissions
+     * closed, every run and child under way cancelled, a bounded wait, and
+     * what did not settle counted from the persisted envelopes and left for
+     * the next launch's recovery rather than finished on paper. Every later
+     * ask is handed the drain already under way rather than a second one.
+     */
     stop: drain,
   };
 }
