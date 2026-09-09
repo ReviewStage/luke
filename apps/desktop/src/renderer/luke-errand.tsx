@@ -9,9 +9,9 @@ import { HIT_REGION, HIT_REGION_ATTRIBUTE, PANEL_PRESENTATION } from "./panel-st
 import { parseMilliseconds, parsePixels, STILL_MS } from "./session-motion";
 
 /**
- * Luke signing his own work: a control that changed because he was asked to
- * change it is tapped in the open, because a switch that flips with nobody
- * near it reads as a glitch rather than as an answer.
+ * Luke signing his own work: a switch that flips with nobody near it reads as
+ * a glitch rather than as an answer, so a control Luke was asked to change is
+ * tapped in the open.
  *
  * **There is only ever one Luke on screen.** The strip's own face is held
  * invisible for exactly as long as the flight lasts, so what crosses the panel

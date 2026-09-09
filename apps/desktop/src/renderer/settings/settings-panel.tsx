@@ -257,9 +257,10 @@ export function SettingsPanel({
       ) : null}
 
       {view === SETTINGS_VIEW.ROOT && !search ? (
-        /* A newer release waiting is marked on the tab rather than moved
-           here: a section that changed places as its own check found news
-           would rearrange the page under the hand that pressed it. */
+        /* A newer release waiting is marked on the tab rather than given a
+           section of its own here: a section that changed places as its own
+           check found news would rearrange the page under the hand that
+           pressed it. */
         <section
           className="settings-section settings-index"
           style={cssCustomProperties({ "--row-index": 1 })}
