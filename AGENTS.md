@@ -313,8 +313,11 @@ Trust constraints:
   configuration, not a construction: `packages/runtime` names its built-in
   agent runtimes, model adapters, context engines, and memory providers in
   one `BUILTINS` table, whose ids a duplicate cannot enter and whose pairings
-  a type rules out rather than a run-time refusal; the build compiles its own
-  parts in and loads nothing dynamically; an agent's configuration names
+  a type rules out rather than a run-time refusal — a vector provider that
+  named no embedding adapter, and a tool that carries acts or writes the
+  workspace yet claims to speak, are each unrepresentable rather than
+  rejected; the build compiles its own parts in and loads nothing
+  dynamically; an agent's configuration names
   entries by id and its credential by reference alone (the value stays in the
   encrypted credential store), resolves against that table into a frozen
   snapshot each turn reads whole, and is republished atomically or not at all.

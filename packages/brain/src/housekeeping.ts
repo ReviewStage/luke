@@ -148,7 +148,7 @@ export async function runMemoryHousekeeping(
   options: MemoryHousekeepingOptions,
 ): Promise<MemoryHousekeepingResult> {
   const schemas = brainToolCatalog()
-    .filter((tool) => HOUSEKEEPING_TOOLS.has(tool.id))
+    .filter((tool) => HOUSEKEEPING_TOOLS.has(tool.schema.name))
     .map((tool) => tool.schema);
   let writes = 0;
   const tools: ToolExecutor = {

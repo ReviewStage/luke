@@ -1,23 +1,12 @@
 /**
  * The runtime's vocabulary: the identities it keeps apart, the storage
  * contracts a durable owner of conversation state satisfies, the execution
- * seams a host composes over, and the records delegation keeps. Node-free by
+ * seams a host composes over, the records delegation keeps, and the one
+ * scheduler handle. A re-export door and nothing else, Node-free by
  * construction, because packages below the runtime — realtime, hosted,
  * voice, devtrace, memory — import this door and not the barrel, which
  * reaches `node:fs` and croner.
  */
-
-/**
- * What a scheduler hands back so the same schedule can be cancelled. A
- * browser answers with a number, Node with a timer object, and a test with
- * whatever it keys its own map by — so the handle is only ever handed back,
- * never read. One type at the bottom of the graph, so a schedule made in one
- * package is cancellable in another.
- */
-export type ScheduledTimer = number | object;
-
-/** One day in milliseconds, for every age, half-life, and lookback measured in days. */
-export const DAY_MS = 24 * 60 * 60 * 1000;
 
 export {
   CHILD_CLEANUP,
@@ -145,3 +134,4 @@ export {
   TRANSCRIPT_EVENT_KIND,
   type TranscriptEvent,
 } from "./storage.js";
+export { DAY_MS, type ScheduledTimer } from "./timers.js";

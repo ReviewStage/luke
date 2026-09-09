@@ -25,7 +25,7 @@ import {
   type SessionKey,
   threadSessionKey,
 } from "./identifiers.js";
-import type { ScheduledTimer } from "./vocabulary.js";
+import type { ScheduledTimer } from "./timers.js";
 
 /**
  * The child service over a synthetic executor and deliverer: the limits, the

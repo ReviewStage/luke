@@ -3,7 +3,7 @@ import test from "node:test";
 import { REALTIME_TOOL, type RealtimeFunctionCall } from "@sidecar/acts";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import type { ScheduledTimer } from "@sidecar/realtime";
-import { RESPONSES_ITEM_FORMAT } from "@sidecar/runtime";
+import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import {
   CHILD_CLEANUP,
   CHILD_CONTEXT_MODE,
@@ -58,7 +58,7 @@ import {
   isTerminalBrainRequestStatus,
 } from "./requests.js";
 import { type ResponsesInputItem, responsesModelAnswer } from "./responses-api.js";
-import { TOOL_LOOP_RUNTIME, ToolLoopAgentRuntime } from "./runtime.js";
+import { ToolLoopAgentRuntime } from "./runtime.js";
 import {
   BRAIN_STATE_BOUNDS,
   type BrainPersistedState,

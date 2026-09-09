@@ -75,15 +75,31 @@ export const TOOL_EFFECT = {
 
 export type ToolEffect = (typeof TOOL_EFFECT)[keyof typeof TOOL_EFFECT];
 
-/** A tool as the catalog holds it: its schema as a model is offered it, where it runs, and what it does. */
-export interface ToolDescriptor {
-  readonly id: string;
+/**
+ * Where a tool runs and what it does. A performer carries acts and a
+ * workspace tool writes the agent's own files, so neither can be the tool
+ * that speaks: only a host tool may, and the union is what says so rather
+ * than a check something has to remember to run.
+ */
+export type ToolPlacement =
+  | { readonly execution: typeof TOOL_EXECUTION.HOST; readonly effect: ToolEffect }
+  | {
+      readonly execution: typeof TOOL_EXECUTION.PERFORMER | typeof TOOL_EXECUTION.WORKSPACE;
+      readonly effect: typeof TOOL_EFFECT.READ | typeof TOOL_EFFECT.WRITE;
+    };
+
+/**
+ * A tool as the catalog holds it: its schema as a model is offered it, where
+ * it runs, and what it does. The schema's name is the tool's whole identity —
+ * it is both what a model is offered and what dispatch looks up — because a
+ * descriptor carrying a second name could be offered under one and
+ * dispatched under the other.
+ */
+export type ToolDescriptor = {
   readonly schema: ToolSchema;
-  readonly execution: ToolExecution;
-  readonly effect: ToolEffect;
   /** Groups the policy may name in place of the tool: `group:read`, `group:acts`, and so on. */
   readonly groups: readonly string[];
-}
+} & ToolPlacement;
 
 export interface SkillDescriptor {
   readonly id: string;
@@ -256,18 +272,15 @@ function refused(refusal: ConfigurationRefusal): ConfigurationOutcome {
  * not hold: every name a build spells is checked by the derived id unions.
  */
 export function resolveConfiguration(names: AgentConfiguration): ConfigurationOutcome {
-  // The table read by wire-shaped id rather than by key, which is what lets a
-  // name no built-in holds be looked up at all.
-  const runtimes: readonly string[] = BUILTINS.agentRuntimeIds;
-  const engines: readonly string[] = BUILTINS.contextEngineIds;
-  const providers: Readonly<Record<string, BuiltinMemoryProvider>> = BUILTINS.memoryProviders;
-  const adapters: Readonly<Record<string, BuiltinModelAdapter>> = BUILTINS.modelAdapters;
-  const adapter = adapters[names.modelAdapterId];
+  // Read through the declared shape rather than the const literal, which is
+  // what lets a name no built-in holds be looked up at all.
+  const table: Builtins = BUILTINS;
+  const adapter = table.modelAdapters[names.modelAdapterId];
   if (
-    !runtimes.includes(names.agentRuntimeId) ||
-    !engines.includes(names.contextEngineId) ||
+    !table.agentRuntimeIds.includes(names.agentRuntimeId) ||
+    !table.contextEngineIds.includes(names.contextEngineId) ||
     !adapter ||
-    (names.memoryProviderId !== undefined && !providers[names.memoryProviderId])
+    (names.memoryProviderId !== undefined && !table.memoryProviders[names.memoryProviderId])
   ) {
     return refused(CONFIGURATION_REFUSAL.UNKNOWN_ID);
   }

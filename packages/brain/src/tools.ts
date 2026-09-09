@@ -7,6 +7,7 @@ import {
   TOOL_EFFECT,
   TOOL_EXECUTION,
   type ToolDescriptor,
+  type ToolPlacement,
   type ToolPolicy,
   type ToolPolicyLayers,
 } from "@sidecar/runtime";
@@ -387,13 +388,12 @@ const BRAIN_ONLY_DESCRIPTORS = {
     effect: TOOL_EFFECT.READ,
     groups: [TOOL_GROUP.MEMORY, TOOL_GROUP.READ],
   },
-} as const satisfies Record<BrainToolName, Pick<ToolDescriptor, "execution" | "effect" | "groups">>;
+} as const satisfies Record<BrainToolName, ToolPlacement & { groups: readonly string[] }>;
 
 function actDescriptor(definition: ActToolDefinition): ToolDescriptor {
   const family = realtimeToolFamily(definition.name);
   if (family === undefined) throw new TypeError(`${definition.name} is not an act`);
   return {
-    id: definition.name,
     schema: toolSchemaFromDefinition(definition),
     execution: TOOL_EXECUTION.PERFORMER,
     effect: TOOL_EFFECT.WRITE,
@@ -405,7 +405,6 @@ function brainOnlyDescriptor(definition: ActToolDefinition): ToolDescriptor {
   const name = definition.name;
   if (!isBrainOnlyTool(name)) throw new TypeError(`${name} is not a brain tool`);
   return {
-    id: name,
     schema: toolSchemaFromDefinition(definition),
     ...BRAIN_ONLY_DESCRIPTORS[name],
   };
@@ -463,5 +462,7 @@ export function brainToolSchemas(policy: EffectiveToolPolicy): readonly ToolSche
  * service advertised; the trace viewer renders a turn's tools from it.
  */
 export function hostedBrainToolCatalog(): ReadonlyMap<string, ResponsesToolDefinition> {
-  return new Map(brainToolCatalog().map((tool) => [tool.id, responsesToolDefinition(tool.schema)]));
+  return new Map(
+    brainToolCatalog().map((tool) => [tool.schema.name, responsesToolDefinition(tool.schema)]),
+  );
 }

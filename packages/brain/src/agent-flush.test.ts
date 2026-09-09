@@ -6,7 +6,7 @@ import {
   MEMORY_HOUSEKEEPING_OUTCOME,
   type MemoryHousekeepingResult,
 } from "@sidecar/memory";
-import { RESPONSES_ITEM_FORMAT } from "@sidecar/runtime";
+import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import {
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
@@ -23,7 +23,7 @@ import {
   BRAIN_SUBMISSION_OUTCOME,
 } from "./requests.js";
 import { type ResponsesInputItem, responsesModelAnswer } from "./responses-api.js";
-import { TOOL_LOOP_RUNTIME, ToolLoopAgentRuntime } from "./runtime.js";
+import { ToolLoopAgentRuntime } from "./runtime.js";
 import { type BrainStateStorage, BrainStateStore } from "./state-store.js";
 
 /**

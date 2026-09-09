@@ -105,6 +105,7 @@ export {
   type BuiltinModelAdapterId,
   CONFIGURATION_OUTCOME,
   CONFIGURATION_REFUSAL,
+  type ConfigurationOutcome,
   type ConfigurationRefusal,
   ConfigurationStore,
   CREDENTIAL_REFERENCE_KIND,
@@ -125,6 +126,7 @@ export {
   type ToolDescriptor,
   type ToolEffect,
   type ToolExecution,
+  type ToolPlacement,
 } from "./registry.js";
 export {
   discoverSkills,

@@ -36,7 +36,7 @@ import {
   isIdentifier,
   MAIN_SESSION_KEY,
   sessionKey as toSessionKey,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { VOICE_SOURCE } from "@sidecar/settings";
 import { ACT_RESULT_STATUS, isRecord, UNKNOWN_ACT_STATUS, type WireRecord } from "@sidecar/wire";
 import { wireBrain } from "./brain/wiring.js";

@@ -6,7 +6,7 @@ import {
   RETRIEVAL_MODE,
   type RetrievalMode,
 } from "@sidecar/memory";
-import type { ConversationRecord, EmbeddingAdapter, SessionKey } from "@sidecar/runtime-contracts";
+import type { ConversationRecord, EmbeddingAdapter, SessionKey } from "@sidecar/runtime/vocabulary";
 import type { RuntimeStoreClient } from "@sidecar/runtime-store";
 
 /** The notebook's index as the host holds it, and what a run without one still answers. */

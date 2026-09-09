@@ -50,8 +50,6 @@ import { outputStatus } from "./tool-results.js";
  * over an engine of that format.
  */
 
-export { TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
-
 /** What the model is told about a call the guard refused to dispatch. */
 const LOOP_GUARD_REFUSAL_REASON = "not run: the loop guard ended this run";
 const LOOP_GUARD_MARKER = "[loop guard]";

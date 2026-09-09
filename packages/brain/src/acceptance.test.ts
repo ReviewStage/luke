@@ -24,6 +24,7 @@ import {
   RESPONSES_ITEM_FORMAT,
   recentDailyNotes,
   seedWorkspace,
+  TOOL_LOOP_RUNTIME,
 } from "@sidecar/runtime";
 import {
   type AgentRuntime,
@@ -66,7 +67,7 @@ import {
   BRAIN_SUBMISSION_REJECTION,
   type BrainRequestRecord,
 } from "./requests.js";
-import { TOOL_LOOP_RUNTIME, ToolLoopAgentRuntime } from "./runtime.js";
+import { ToolLoopAgentRuntime } from "./runtime.js";
 import {
   type BrainPersistedState,
   type BrainStateStorage,

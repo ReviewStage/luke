@@ -1,4 +1,4 @@
-import { RESPONSES_ITEM_FORMAT } from "@sidecar/runtime";
+import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import {
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
@@ -8,7 +8,6 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
 import { BRAIN_MAXIMUM_OUTPUT_TOKENS, failed } from "./model-adapter-shared.js";
-import { TOOL_LOOP_RUNTIME } from "./runtime.js";
 
 /** The two things a bare transport answers: an inference, and when it is quiet. */
 export interface BareResponsesModel {

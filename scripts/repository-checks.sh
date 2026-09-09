@@ -103,6 +103,43 @@ if [[ -n "$engines_drift" ]]; then
     exit 1
 fi
 
+# The runtime keeps two doors: the barrel, which reaches `node:fs` and croner,
+# and `@sidecar/runtime/vocabulary`, which the packages below the runtime import
+# so neither reaches a renderer bundle or a web function. The split only holds
+# while no name leaves through both — a name behind two doors is a name a
+# consumer can reach through the wrong one, and `export *` silently drops one of
+# them where the web server's `core.ts` opens both.
+node --input-type=module -e '
+  import { readFile } from "node:fs/promises";
+  import path from "node:path";
+  const directory = path.join(process.argv[1], "packages/runtime/src");
+  const exported = async (file) => {
+    const text = await readFile(path.join(directory, file), "utf8");
+    const names = new Set();
+    for (const block of text.matchAll(/export\s+(?:type\s+)?\{([^}]*)\}/g)) {
+      for (const specifier of block[1].split(",")) {
+        const name = specifier.trim().replace(/^type\s+/, "").split(/\s+as\s+/).pop();
+        if (name) names.add(name.trim());
+      }
+    }
+    for (const declaration of text.matchAll(
+      /export\s+(?:declare\s+)?(?:const|function|class|interface|type|enum)\s+(\w+)/g,
+    )) {
+      names.add(declaration[1]);
+    }
+    return names;
+  };
+  const barrel = await exported("index.ts");
+  const vocabulary = await exported("vocabulary.ts");
+  const both = [...vocabulary].filter((name) => barrel.has(name)).sort();
+  if (both.length > 0) {
+    process.stderr.write(
+      `error: these names leave @sidecar/runtime through both doors: ${both.join(", ")}\n`,
+    );
+    process.exit(1);
+  }
+' "$SIDECAR_REPO_ROOT"
+
 # The brand artwork has one source and three sets of committed outputs cut from
 # it: the SVGs, the face the renderer draws, and the motions it plays. If the
 # copies no longer match the source, one of them is telling a story the artwork

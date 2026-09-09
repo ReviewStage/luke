@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { MEMORY_HOUSEKEEPING_OUTCOME, memoryFlushPrompt } from "@sidecar/memory";
-import { RESPONSES_ITEM_FORMAT, WORKSPACE_FILE_REFUSAL } from "@sidecar/runtime";
+import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME, WORKSPACE_FILE_REFUSAL } from "@sidecar/runtime";
 import {
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
@@ -14,7 +14,7 @@ import type { WireRecord } from "@sidecar/wire";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { HOUSEKEEPING_REFUSAL, runMemoryHousekeeping } from "./housekeeping.js";
 import { type ResponsesInputItem, responsesModelAnswer } from "./responses-api.js";
-import { TOOL_LOOP_RUNTIME, ToolLoopAgentRuntime } from "./runtime.js";
+import { ToolLoopAgentRuntime } from "./runtime.js";
 import { BRAIN_TOOL } from "./tools.js";
 
 const IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOOP_RUNTIME.VERSION };

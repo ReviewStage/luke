@@ -9,10 +9,9 @@ import {
   TOOL_POLICY_ORDER,
 } from "./tool-policy.js";
 
-function tool(id: string, groups: readonly string[]): ToolDescriptor {
+function tool(name: string, groups: readonly string[]): ToolDescriptor {
   return {
-    id,
-    schema: { name: id, description: id, parameters: {} },
+    schema: { name, description: name, parameters: {} },
     execution: TOOL_EXECUTION.HOST,
     effect: TOOL_EFFECT.READ,
     groups,
@@ -31,13 +30,13 @@ const CATALOG: readonly ToolDescriptor[] = [
 ];
 
 const names = (policy: ReturnType<typeof resolveToolPolicy>) =>
-  policy.allowed.map((entry) => entry.id);
+  policy.allowed.map((entry) => entry.schema.name);
 
 test("no layers offer the whole catalog in order", () => {
   const policy = resolveToolPolicy(CATALOG, {});
   assert.deepEqual(
     names(policy),
-    CATALOG.map((entry) => entry.id),
+    CATALOG.map((entry) => entry.schema.name),
   );
   assert.deepEqual(policy.denied, []);
 });

@@ -27,7 +27,6 @@ import {
   LOOK_SUBJECT,
   resolveTurnToolPolicy,
   runOriginOf,
-  TOOL_LOOP_RUNTIME,
   toolLoopRuntimeOver,
 } from "@sidecar/brain";
 import { type BrainRequestSnapshot, brainRequestPending } from "@sidecar/brain/requests-wire";
@@ -64,6 +63,7 @@ import {
   recentDailyNotes,
   type SkillDescriptor,
   seedWorkspace,
+  TOOL_LOOP_RUNTIME,
   type WorkspaceSeeding,
   writeWorkspaceFile,
 } from "@sidecar/runtime";

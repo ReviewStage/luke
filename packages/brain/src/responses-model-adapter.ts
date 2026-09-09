@@ -1,5 +1,5 @@
 import { HOSTED_BRAIN_OPERATION, type HostedBrainOperation } from "@sidecar/hosted";
-import { RESPONSES_ITEM_FORMAT } from "@sidecar/runtime";
+import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import {
   MODEL_RESPONSE_OUTCOME,
   type ModelAdapter,
@@ -12,7 +12,6 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { HTTP_STATUS, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import { type Failure, type Normalized, payloadOf, throttled } from "./model-adapter-shared.js";
-import { TOOL_LOOP_RUNTIME } from "./runtime.js";
 
 /**
  * One model adapter over the two transports that speak the Responses item

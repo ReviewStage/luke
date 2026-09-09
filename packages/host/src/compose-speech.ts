@@ -15,7 +15,7 @@ import {
   CALENDAR_ONBOARDING_SPEECH_KIND,
 } from "@sidecar/realtime";
 import { isSpeechOutcome, SPEECH_OUTCOME, type SpeechOutcome } from "@sidecar/realtime/speech";
-import { isIdentifier } from "@sidecar/runtime-contracts";
+import { isIdentifier } from "@sidecar/runtime/vocabulary";
 import { isWireNumber } from "@sidecar/wire";
 import { arrivalBeatOwed, countsFirstAnnouncement } from "./arrival-flow.js";
 import type { AccountComposer } from "./compose-account.js";

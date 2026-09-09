@@ -7,7 +7,7 @@ import {
 } from "@sidecar/wire";
 import { Cron } from "croner";
 import { MAIN_SESSION_KEY, type SessionKey } from "./identifiers.js";
-import type { ScheduledTimer } from "./vocabulary.js";
+import type { ScheduledTimer } from "./timers.js";
 
 /**
  * The durable scheduler. A job names a conversation and a schedule — a cron

@@ -2400,7 +2400,7 @@ export class BrainAgent {
       trigger: plan.trigger,
       origin: runOriginOf(plan.trigger),
       runtime,
-      tools: policy?.allowed.map((tool) => tool.id) ?? [],
+      tools: policy?.allowed.map((tool) => tool.schema.name) ?? [],
       promptChars: preparation?.prompt.length ?? 0,
       ...(gathering.inputTokens !== undefined ? { inputTokens: gathering.inputTokens } : undefined),
       transcriptBytes,

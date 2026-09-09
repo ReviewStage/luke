@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
-import { RESPONSES_ITEM_FORMAT } from "@sidecar/runtime";
+import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import {
   COMPACTION_SOURCE,
   CONTEXT_INPUT_KIND,
@@ -31,7 +31,7 @@ import {
   BRAIN_SUBMISSION_OUTCOME,
 } from "./requests.js";
 import { responsesModelAnswer, userMessageItem } from "./responses-api.js";
-import { TOOL_LOOP_RUNTIME, ToolLoopAgentRuntime } from "./runtime.js";
+import { ToolLoopAgentRuntime } from "./runtime.js";
 import {
   type BrainPersistedState,
   type BrainStateRepository,

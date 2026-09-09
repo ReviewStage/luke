@@ -83,9 +83,9 @@ function matches(pattern: string, name: string): boolean {
 function expand(entry: string, catalog: readonly ToolDescriptor[]): readonly string[] {
   if (entry.startsWith(GROUP_PREFIX)) {
     const group = entry.slice(GROUP_PREFIX.length);
-    return catalog.filter((tool) => tool.groups.includes(group)).map((tool) => tool.id);
+    return catalog.filter((tool) => tool.groups.includes(group)).map((tool) => tool.schema.name);
   }
-  return catalog.filter((tool) => matches(entry, tool.id)).map((tool) => tool.id);
+  return catalog.filter((tool) => matches(entry, tool.schema.name)).map((tool) => tool.schema.name);
 }
 
 export interface ToolDenial {
@@ -158,7 +158,7 @@ export function resolveToolPolicy(
   turn?: ToolPolicy,
 ): EffectiveToolPolicy {
   const denied: ToolDenial[] = [];
-  let standing: ReadonlySet<string> = new Set(catalog.map((tool) => tool.id));
+  let standing: ReadonlySet<string> = new Set(catalog.map((tool) => tool.schema.name));
   for (const layer of TOOL_POLICY_ORDER) {
     const policy = layer === TOOL_POLICY_LAYER.TURN ? turn : layers[layer];
     if (policy) standing = applyLayer(standing, policy, layer, catalog, denied);
@@ -166,8 +166,8 @@ export function resolveToolPolicy(
       standing = applyLayer(standing, childToolPolicy(child), layer, catalog, denied);
     }
   }
-  const allowed = catalog.filter((tool) => standing.has(tool.id));
-  const names = new Set(allowed.map((tool) => tool.id));
+  const allowed = catalog.filter((tool) => standing.has(tool.schema.name));
+  const names = new Set(allowed.map((tool) => tool.schema.name));
   const deniedBy = new Map<string, ToolPolicyLayer>();
   for (const denial of denied) {
     if (!deniedBy.has(denial.tool)) deniedBy.set(denial.tool, denial.layer);
