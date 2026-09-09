@@ -6,7 +6,6 @@ import test from "node:test";
 import { MEMORY_SOURCE, RETRIEVAL_MODE } from "@sidecar/memory";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
 import {
-  type AgentRuntime,
   type ConversationRecord,
   conversationKindOf,
   DEFAULT_AGENT_ID,
@@ -15,8 +14,6 @@ import {
   MAIN_SESSION_KEY,
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
-  RUN_END_REASON,
-  type RuntimeRunRequest,
   type SessionKey,
   threadSessionKey,
 } from "@sidecar/runtime-contracts";
@@ -25,7 +22,7 @@ import {
   type RuntimeStorePort,
   serveRuntimeStore,
 } from "@sidecar/runtime-store";
-import { isRecord, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import { isRecord, type WireRecord } from "@sidecar/wire";
 import { type MemoryWiringDependencies, wireMemory } from "./memory-wiring";
 
 const NOW = 1_800_000_000_000;
@@ -84,39 +81,6 @@ function adapter(
   return built;
 }
 
-/** A runtime with no model: the subrun searches once and summarizes the first result's snippet. */
-function recallRuntime(): AgentRuntime {
-  // SAFETY: the subrun calls openContext and start alone; the fake supplies exactly those.
-  return {
-    openContext: async () => ({ context: { dispose: () => undefined }, bootstrap: {} }),
-    start: (request: RuntimeRunRequest) => ({
-      runId: request.runId,
-      steer: () => false,
-      cancel: () => undefined,
-      done: (async () => {
-        const searched = await request.tools.execute(
-          {
-            callId: "c1",
-            name: "memory_search",
-            argumentsJson: JSON.stringify({ query: "tuesday" }),
-          },
-          { runId: request.runId, isRevoked: () => false, signal: request.signal },
-        );
-        // SAFETY: the executor answered JSON.stringify output; the record check below validates it as wire.
-        const output = JSON.parse(searched.outputJson) as UnparsedWireValue;
-        const first =
-          isRecord(output) && Array.isArray(output.results) && isRecord(output.results[0])
-            ? output.results[0]
-            : undefined;
-        return {
-          reason: RUN_END_REASON.COMPLETED,
-          text: first ? `Recalled: ${String(first.snippet)}` : "NONE",
-        };
-      })(),
-    }),
-  } as unknown as AgentRuntime;
-}
-
 async function harness(overrides: Partial<MemoryWiringDependencies> = {}) {
   const root = agentRoot();
   const { store, close } = client();
@@ -157,12 +121,9 @@ async function harness(overrides: Partial<MemoryWiringDependencies> = {}) {
     client: () => store,
     embeddingAdapter: () => embedding,
     workspaceDirectory: () => path.join(root, "workspace"),
-    createRuntime: recallRuntime,
     conversationDirectory: () => records,
     isTemporary: (sessionKey) => sessionKey === temporary,
-    historyLines: (sessionKey) => history.get(sessionKey) ?? [],
     now: () => NOW + 10,
-    createId: () => "id",
     report: (message) => reports.push(message),
     ...overrides,
   });
@@ -224,21 +185,6 @@ test("an embedding outage degrades an automatic provider to keyword-only, and th
   });
   assert.equal(searched.mode, RETRIEVAL_MODE.KEYWORD_ONLY);
   assert.equal(resultsOf(searched).length, 1);
-  h.close();
-});
-
-test("an explicitly selected provider's failure leaves the search unavailable rather than degraded", async () => {
-  const failing = adapter({ fail: true });
-  const h = await harness({ embeddingAdapter: () => failing, embeddingSelection: "openai" });
-  await h.wiring.sync();
-  const access = h.wiring.accessFor(MAIN_SESSION_KEY);
-  assert.ok(access);
-  const searched = await access.search({
-    query: "frankfurt",
-    signal: new AbortController().signal,
-  });
-  assert.equal(searched.mode, RETRIEVAL_MODE.UNAVAILABLE);
-  assert.equal(resultsOf(searched).length, 0);
   h.close();
 });
 
@@ -305,48 +251,6 @@ test("past-conversation results come from eligible conversations' History alone,
   assert.deepEqual(
     threadHits.map((hit) => hit.path),
     [`conversation:${MAIN_SESSION_KEY}`],
-  );
-  assert.equal(h.wiring.recallFor(h.temporary), undefined, "a temporary thread runs no recall");
-  h.close();
-});
-
-test("recall: a trusted hit answers without a subrun, a question about the past escalates, and repeating it neither reruns nor writes anything", async () => {
-  const h = await harness();
-  await h.wiring.sync();
-  const recall = h.wiring.recallFor(MAIN_SESSION_KEY);
-  assert.ok(recall);
-  const signal = new AbortController().signal;
-  // "frankfurt" is in the notebook: trusted memory has a strong hit, so no subrun runs and nothing is summarized.
-  assert.equal(
-    await recall({ query: "where is the frankfurt cluster", runId: "r1", signal }),
-    undefined,
-  );
-  const before = fs.readFileSync(path.join(h.root, "workspace", "MEMORY.md"), "utf8");
-  const summary = await recall({
-    query: "what did we decide about espresso?",
-    runId: "r2",
-    signal,
-  });
-  assert.equal(
-    summary,
-    "Recalled: # MEMORY.md Deploys go out on Tuesday afternoons. The staging cluster lives in Frankfurt.",
-  );
-  const repeated = await recall({
-    query: "what did we decide about espresso?",
-    runId: "r3",
-    signal,
-  });
-  assert.equal(repeated, summary);
-  assert.equal(
-    fs.readFileSync(path.join(h.root, "workspace", "MEMORY.md"), "utf8"),
-    before,
-    "nothing was written",
-  );
-  assert.equal((await h.store.memoryIndexStatus()).sources, 1, "nothing was indexed by the recall");
-  assert.equal(
-    (await h.store.listNotebookEntries(NOW)).length,
-    0,
-    "no entry was remembered by the recall",
   );
   h.close();
 });

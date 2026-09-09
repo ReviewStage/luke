@@ -59,13 +59,14 @@
  * into USER.md under the same id and empties the table; nothing writes it
  * any more.
  *
- * Memory maintenance keeps the short-term candidates consolidation ranks, one
- * row per candidate holding the record as the sweep wrote it; the ingestion
- * cursors and seen-message hashes that keep a History line from being learned
- * twice; the tombstones of forgotten sources, which a scan refuses to
- * relearn; the preimage of every MEMORY.md rewrite, so a consolidation is
- * reversible; and each conversation's last flush, so a flush runs once per
- * compaction cycle.
+ * Memory maintenance keeps each conversation's last flush, so a flush runs
+ * once per compaction cycle.
+ *
+ * Version 10 drops the tables a nightly consolidation sweep kept — its
+ * short-term candidates, ingestion cursors and seen-message hashes, source
+ * tombstones, and MEMORY.md rewrite preimages. Nothing reads or writes them
+ * any more, and the notebook's files are the source of truth they were
+ * derived from.
  *
  * The schema is versioned by the `schema_version` table. A database at a
  * version this build does not know is refused rather than migrated by guess.
@@ -96,7 +97,7 @@ const MEMORY_FLUSH_STATE_TABLE = `CREATE TABLE IF NOT EXISTS memory_flush_state 
     flushed_at INTEGER NOT NULL
   )`;
 
-export const RUNTIME_SCHEMA_VERSION = 9;
+export const RUNTIME_SCHEMA_VERSION = 10;
 
 /**
  * How a database at an earlier version is brought to this one, in order. Each
@@ -173,6 +174,16 @@ export const RUNTIME_SCHEMA_MIGRATIONS: ReadonlyMap<number, readonly SchemaMigra
         // carrying a marker no cycle can claim.
         { sql: "DROP TABLE memory_flush_state", params: [] },
         { sql: MEMORY_FLUSH_STATE_TABLE, params: [] },
+      ],
+    ],
+    [
+      10,
+      [
+        { sql: "DROP TABLE IF EXISTS memory_candidates", params: [] },
+        { sql: "DROP TABLE IF EXISTS memory_ingestion_cursors", params: [] },
+        { sql: "DROP TABLE IF EXISTS memory_ingested_messages", params: [] },
+        { sql: "DROP TABLE IF EXISTS memory_forgotten_sources", params: [] },
+        { sql: "DROP TABLE IF EXISTS memory_rewrites", params: [] },
       ],
     ],
   ]);
@@ -407,44 +418,6 @@ export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
     dims INTEGER,
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (provider, model, hash)
-  )`,
-  `CREATE TABLE IF NOT EXISTS memory_candidates (
-    key TEXT PRIMARY KEY,
-    path TEXT NOT NULL,
-    status TEXT NOT NULL,
-    origin TEXT NOT NULL,
-    source_session_key TEXT,
-    source_event_id TEXT,
-    last_seen_at INTEGER NOT NULL,
-    payload TEXT NOT NULL
-  )`,
-  `CREATE INDEX IF NOT EXISTS memory_candidates_by_source ON memory_candidates(source_session_key)`,
-  `CREATE TABLE IF NOT EXISTS memory_ingestion_cursors (
-    session_key TEXT PRIMARY KEY,
-    last_recorded_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
-  )`,
-  `CREATE TABLE IF NOT EXISTS memory_ingested_messages (
-    session_key TEXT NOT NULL,
-    hash TEXT NOT NULL,
-    ingested_at INTEGER NOT NULL,
-    PRIMARY KEY (session_key, hash)
-  )`,
-  `CREATE TABLE IF NOT EXISTS memory_forgotten_sources (
-    source_kind TEXT NOT NULL,
-    source_id TEXT NOT NULL,
-    forgotten_at INTEGER NOT NULL,
-    reason TEXT NOT NULL,
-    PRIMARY KEY (source_kind, source_id)
-  )`,
-  `CREATE TABLE IF NOT EXISTS memory_rewrites (
-    id TEXT PRIMARY KEY,
-    path TEXT NOT NULL,
-    phase TEXT NOT NULL,
-    previous TEXT NOT NULL,
-    next_hash TEXT NOT NULL,
-    candidate_keys TEXT NOT NULL,
-    created_at INTEGER NOT NULL
   )`,
   MEMORY_FLUSH_STATE_TABLE,
 ];

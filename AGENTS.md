@@ -626,7 +626,7 @@ Trust constraints:
   may remove is a product decision, not an implementation detail, and
   `PRIVACY.md` says each in as many words.
 - The notebook maintains itself, and every maintenance write is bounded,
-  reviewable, and reversible. Three things write it without an ask. The
+  reviewable, and reversible. Two things write it without an ask. The
   pre-compaction flush, following OpenClaw `b7528507`'s memory flush: once
   per compaction cycle, 4,000 tokens under the compaction threshold or once
   the retained transcript crosses 2 MiB, an eligible conversation (main or a
@@ -651,41 +651,19 @@ Trust constraints:
   The reset capture: Start fresh on an
   eligible conversation runs the same turn first, its outcome reported
   honestly and never deciding the reset, which proceeds either way; Clear,
-  Delete history, Archive, and a forget run no capture. The consolidation
-  sweep: one managed daily job at 03:00 local time, on the background lane,
-  runs light, REM, and deep phases following OpenClaw's dreaming design.
-  Light stages the History lines of eligible conversations since each
-  conversation's cursor, each line hashed so it is learned once, recalled
-  context stripped and secrets and identifiers redacted first, with its
-  origin kept (the developer's ask, Luke's reply, or system: an act's
-  narration or a child's relayed words), beside the lines of the recent
-  dated notes; REM reflects on recurring themes and writes nothing durable;
-  deep ranks the staged candidates by the pinned six weighted signals and
-  gates (score 0.75, three recalls, three distinct queries, at most ten
-  promotions, 14-day recency half-life, 30-day maximum age), re-reads each
-  candidate's source immediately before publishing and skips one that is
-  gone, asks one tool-free model call for additions, merges, and
-  supersessions, validates the answer (one operation per candidate, prior
-  entries exact and unique, a merge only of an entry saying the same thing,
-  a supersession only along a named lineage, every candidate's source
-  reference present, at most 25% of prior entries lost, the file within its
-  20,000-character bootstrap budget), and falls back to the deterministic
-  append-only path when the model is unavailable or the plan fails. An
-  external or system origin never promotes however often it recurs. Only
-  `MEMORY.md` takes promotions, written on the store's worker behind a check
-  that the file still reads as the plan was built over it, with the preimage
-  recorded first, and the Dream Diary goes to `DREAMS.md`, which is never a
-  promotion source. Candidates, cursors, seen hashes, tombstones, rewrite
-  preimages, and flush state live in the runtime store's own tables.
-  Forgetting is source-aware: naming notebook entries, candidate keys, or
-  conversations removes the entries, the candidates, the `MEMORY.md`
-  promotions their markers attribute to them, and the index rows, tombstones
-  the sources so no later scan relearns them, and clears the recall caches;
-  a promoted entry whose marker a hand edit removed cannot be attributed and
-  is reported as a limitation rather than claimed erased. Deleting a
-  conversation's history stays the separate, recoverable operation. Widening
-  what the flush may write, what consolidation ingests or promotes, or what
-  a forget reaches is a product decision, not an implementation detail, and
+  Delete history, Archive, and a forget run no capture. Nothing else writes
+  the notebook on its own: no scheduled job reads a conversation's lines to
+  learn from them, and no model call rewrites `MEMORY.md`, which from here
+  changes only under the developer's own hand or Luke's own notebook tools.
+  A build before this one promoted entries into that file behind HTML
+  markers; they are left where they stand, since removing them would be a
+  write to the notebook nobody asked for. Flush state lives in the
+  runtime store's own table. Forgetting names a notebook entry: the entry
+  and the provenance row beside it go, `USER.md` is written again, and the
+  watcher's next reconcile takes its index rows with it; an id the notebook
+  does not hold is refused rather than reported as erased. Deleting a conversation's history stays the separate,
+  recoverable operation. Widening what the flush may write, or what a forget
+  reaches, is a product decision, not an implementation detail, and
   `PRIVACY.md` says each in as many words.
 - Counting is three streams with three different guarantees, and the
   difference is the thing to keep straight. Only the first carries the
@@ -859,25 +837,18 @@ Trust constraints:
   which also runs the cosine similarity; only the chunks with no cached vector
   travel to the embedding adapter, OpenAI's embeddings on the developer's own
   key or the hosted contract's `embed` operation on the account, and a sync
-  or search that cannot have embeddings degrades to keyword-only under the
-  automatic provider selection and says so, while an explicitly selected
-  provider's failure reads as unavailable. The files are watched and
+  or search that cannot have embeddings degrades to keyword-only and says
+  so. The files are watched and
   reconciled 1,500 ms after a change, and a rebuild drops every derived row.
   The brain reads the index through `memory_search` and `memory_get`, reads
   answering only for paths inside the notebook root, each result carrying
-  its path, line range, score, and provenance. A developer's ask in main or a
-  private thread first consults trusted memory deterministically and, when it
-  reads like a question about the past, runs one bounded recall subrun — the
-  two memory tools and nothing else, 15 seconds, a summary cut to 220
-  characters, two recent asks and one reply as input, cached 15 seconds, and
-  stood down for a minute after three consecutive timeouts — whose summary is
-  ephemeral context for that one turn and is written nowhere, so recall never
-  promotes its own output into memory. Past-conversation recall reads the
+  its path, line range, score, and provenance, and nothing runs a search of
+  its own behind a turn. A search may surface the
   retained History lines of eligible conversations (main and the developer's
   private threads of the same agent, never the asking conversation, a
   temporary thread, an observed session's conversation, a child, a cron or
   heartbeat conversation, or another agent's) and indexes no transcript.
-  Widening what is indexed, what recall may read, or where an embedding
+  Widening what is indexed, what a search may read, or where an embedding
   travels is a product decision, not an implementation detail, and
   `PRIVACY.md` says each in as many words.
 - The development trace is the one place Luke's own agent traffic may reach a

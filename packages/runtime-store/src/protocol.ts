@@ -1,12 +1,4 @@
-import type {
-  CandidateSeed,
-  CandidateStatus,
-  ConsolidationPhase,
-  EmbeddingModelIdentity,
-  IndexedFileWrite,
-  MemoryCandidate,
-  MemoryReadResult,
-} from "@sidecar/memory";
+import type { EmbeddingModelIdentity, IndexedFileWrite, MemoryReadResult } from "@sidecar/memory";
 import type { ConversationEntry } from "@sidecar/realtime";
 import type { ScheduledJob } from "@sidecar/runtime";
 import type {
@@ -25,6 +17,7 @@ import type { ConversationCreation } from "./conversations-table.js";
 import type { BrainStateSave } from "./envelope.js";
 import type { HistorySearchHit } from "./history-table.js";
 import type { MaintenanceReport } from "./maintenance-run.js";
+import type { FlushState } from "./memory-flush-table.js";
 import type {
   EmbeddingWrite,
   MemoryApplyReport,
@@ -33,17 +26,6 @@ import type {
   MemorySearchOutcome,
   MemorySearchQuery,
 } from "./memory-index-table.js";
-import type {
-  CandidateStagingReport,
-  FlushState,
-  ForgottenSource,
-  ForgottenSourceKind,
-  MemoryForgetAsk,
-  MemoryForgetReport,
-  MemoryRewriteAsk,
-  MemoryRewriteOutcome,
-  MemoryRewriteRecord,
-} from "./memory-maintenance-table.js";
 import type { NotebookEntry, NotebookMutation } from "./notebook-table.js";
 
 /**
@@ -71,22 +53,8 @@ export const RUNTIME_STORE_METHOD = {
   MEMORY_GET: "memory.get",
   MEMORY_REBUILD: "memory.rebuild",
   MEMORY_STATUS: "memory.status",
-  MEMORY_CANDIDATES_STAGE: "memory.candidates.stage",
-  MEMORY_CANDIDATES_LIST: "memory.candidates.list",
-  MEMORY_CANDIDATES_STATUS: "memory.candidates.status",
-  MEMORY_CANDIDATES_RECONCILE: "memory.candidates.reconcile",
-  MEMORY_PHASE_HITS: "memory.phase-hits",
-  MEMORY_INGESTION_CURSOR: "memory.ingestion.cursor",
-  MEMORY_INGESTION_SEEN: "memory.ingestion.seen",
-  MEMORY_INGESTION_ADVANCE: "memory.ingestion.advance",
-  MEMORY_TOMBSTONES_LIST: "memory.tombstones.list",
-  MEMORY_TOMBSTONE: "memory.tombstone",
-  MEMORY_DURABLE_READ: "memory.durable.read",
-  MEMORY_REWRITE_PUBLISH: "memory.rewrite.publish",
-  MEMORY_REWRITES_LIST: "memory.rewrites.list",
   MEMORY_FLUSH_STATE_GET: "memory.flush-state.get",
   MEMORY_FLUSH_STATE_PUT: "memory.flush-state.put",
-  MEMORY_FORGET: "memory.forget",
   CONVERSATIONS_LIST: "conversations.list",
   CONVERSATION_CREATE: "conversations.create",
   CONVERSATION_ARCHIVE: "conversations.archive",
@@ -184,66 +152,6 @@ export interface RuntimeStoreMethods {
     params: Record<string, never>;
     result: MemoryIndexStatus;
   };
-  [RUNTIME_STORE_METHOD.MEMORY_CANDIDATES_STAGE]: {
-    params: { seeds: readonly CandidateSeed[]; now: number };
-    result: CandidateStagingReport;
-  };
-  [RUNTIME_STORE_METHOD.MEMORY_CANDIDATES_LIST]: {
-    params: { status?: CandidateStatus };
-    result: readonly MemoryCandidate[];
-  };
-  [RUNTIME_STORE_METHOD.MEMORY_CANDIDATES_STATUS]: {
-    params: { keys: readonly string[]; status: CandidateStatus; now: number };
-    result: number;
-  };
-  [RUNTIME_STORE_METHOD.MEMORY_CANDIDATES_RECONCILE]: {
-    params: { now: number };
-    result: number;
-  };
-  [RUNTIME_STORE_METHOD.MEMORY_PHASE_HITS]: {
-    params: { phase: ConsolidationPhase; keys: readonly string[]; now: number };
-    result: number;
-  };
-  [RUNTIME_STORE_METHOD.MEMORY_INGESTION_CURSOR]: {
-    params: { sessionKey: SessionKey };
-    result: number;
-  };
-  [RUNTIME_STORE_METHOD.MEMORY_INGESTION_SEEN]: {
-    params: { sessionKey: SessionKey; hashes: readonly string[] };
-    result: readonly string[];
-  };
-  [RUNTIME_STORE_METHOD.MEMORY_INGESTION_ADVANCE]: {
-    params: {
-      sessionKey: SessionKey;
-      lastRecordedAt: number;
-      hashes: readonly string[];
-      now: number;
-    };
-    result: boolean;
-  };
-  [RUNTIME_STORE_METHOD.MEMORY_TOMBSTONES_LIST]: {
-    params: Record<string, never>;
-    result: readonly ForgottenSource[];
-  };
-  [RUNTIME_STORE_METHOD.MEMORY_TOMBSTONE]: {
-    params: {
-      sources: readonly { kind: ForgottenSourceKind; id: string; reason: string }[];
-      now: number;
-    };
-    result: number;
-  };
-  [RUNTIME_STORE_METHOD.MEMORY_DURABLE_READ]: {
-    params: { name: string };
-    result: { content: string; hash: string } | undefined;
-  };
-  [RUNTIME_STORE_METHOD.MEMORY_REWRITE_PUBLISH]: {
-    params: { ask: MemoryRewriteAsk; now: number };
-    result: MemoryRewriteOutcome;
-  };
-  [RUNTIME_STORE_METHOD.MEMORY_REWRITES_LIST]: {
-    params: Record<string, never>;
-    result: readonly MemoryRewriteRecord[];
-  };
   [RUNTIME_STORE_METHOD.MEMORY_FLUSH_STATE_GET]: {
     params: { sessionKey: SessionKey; generationId: string };
     result: FlushState | undefined;
@@ -251,10 +159,6 @@ export interface RuntimeStoreMethods {
   [RUNTIME_STORE_METHOD.MEMORY_FLUSH_STATE_PUT]: {
     params: { sessionKey: SessionKey; state: FlushState };
     result: boolean;
-  };
-  [RUNTIME_STORE_METHOD.MEMORY_FORGET]: {
-    params: { ask: MemoryForgetAsk; now: number };
-    result: MemoryForgetReport;
   };
   [RUNTIME_STORE_METHOD.CONVERSATIONS_LIST]: {
     params: Record<string, never>;

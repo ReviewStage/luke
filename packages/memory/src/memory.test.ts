@@ -3,7 +3,16 @@ import test from "node:test";
 import { MAIN_SESSION_KEY, threadSessionKey } from "@sidecar/runtime-contracts";
 import { chunkMarkdown } from "./chunking.js";
 import { MEMORY_ORIGIN, MEMORY_SOURCE, type MemoryProvenance } from "./contracts.js";
-import { MEMORY_SEARCH_DEFAULTS, RECALL_DEFAULTS } from "./defaults.js";
+import { MEMORY_QUERY_MAXIMUM_CHARS, MEMORY_SEARCH_DEFAULTS } from "./defaults.js";
+import { isMaintenanceEligibleConversation, isRecallEligibleConversation } from "./eligibility.js";
+import {
+  isAppendOnlyRewrite,
+  isDailyNotePathForDay,
+  MEMORY_FLUSH_DEFAULTS,
+  memoryFlushPrompt,
+  memoryFlushThreshold,
+  shouldRunMemoryFlush,
+} from "./flush.js";
 import {
   appendNotebookEntry,
   parseNotebook,
@@ -13,25 +22,16 @@ import {
 import {
   bm25RankToScore,
   buildFtsQuery,
+  cosineSimilarity,
   datedNoteDay,
   decayedScore,
   defaultRankingOptions,
   isEvergreenMemoryPath,
   mergeHybridResults,
   mmrRerank,
+  parseEmbedding,
   selectHybridSearchResults,
 } from "./ranking.js";
-import {
-  boundRecentTurns,
-  ConversationRecall,
-  conversationRunsRecall,
-  hasRecallIntent,
-  isRecallEligibleConversation,
-  RECALL_DECISION,
-  RECALL_STATUS,
-  summarizeRecallReply,
-} from "./recall.js";
-import { cosineSimilarity, parseEmbedding } from "./vectors.js";
 
 const NOW = Date.UTC(2026, 8, 8);
 
@@ -58,18 +58,7 @@ test("the pinned retrieval defaults match OpenClaw b7528507", () => {
     ],
     [400, 80, 1500, 6, 0.35, 0.7, 0.3, 4, 0.7, 30, 50_000],
   );
-  assert.deepEqual(
-    [
-      RECALL_DEFAULTS.TIMEOUT_MS,
-      RECALL_DEFAULTS.MAXIMUM_SUMMARY_CHARS,
-      RECALL_DEFAULTS.RECENT_USER_TURNS,
-      RECALL_DEFAULTS.RECENT_ASSISTANT_TURNS,
-      RECALL_DEFAULTS.CACHE_TTL_MS,
-      RECALL_DEFAULTS.CIRCUIT_BREAKER_MAXIMUM_TIMEOUTS,
-      RECALL_DEFAULTS.CIRCUIT_BREAKER_COOLDOWN_MS,
-    ],
-    [15_000, 220, 2, 1, 15_000, 3, 60_000],
-  );
+  assert.equal(MEMORY_QUERY_MAXIMUM_CHARS, 480);
 });
 
 test("chunking keeps whole lines within the budget, carries overlap, and numbers lines from one", () => {
@@ -272,7 +261,7 @@ test("notebook entries are the bullets under the remembered heading and nothing 
   assert.equal(removeNotebookEntry(removed, "never there"), removed);
 });
 
-test("recall eligibility: main and private threads of the same agent, never the current, temporary, observed, or a child", () => {
+test("search eligibility: main and private threads of the same agent, never the current, temporary, observed, or a child", () => {
   const current = { sessionKey: MAIN_SESSION_KEY, agentId: "main" };
   const thread = threadSessionKey("11111111-1111-1111-1111-111111111111");
   assert.equal(
@@ -317,180 +306,71 @@ test("recall eligibility: main and private threads of the same agent, never the 
       false,
       key,
     );
-    assert.equal(
-      conversationRunsRecall({ sessionKey: ineligibleKey, agentId: "main", temporary: false }),
-      false,
-      key,
-    );
+    assert.equal(isMaintenanceEligibleConversation(ineligibleKey, false), false, key);
   }
-  assert.equal(
-    conversationRunsRecall({ sessionKey: MAIN_SESSION_KEY, agentId: "main", temporary: false }),
-    true,
-  );
+  assert.equal(isMaintenanceEligibleConversation(MAIN_SESSION_KEY, false), true);
 });
 
-test("recall intent reads questions about the past and nothing else", () => {
-  assert.equal(hasRecallIntent("what did we decide about the deploy window?"), true);
-  assert.equal(hasRecallIntent("do you remember the branch name?"), true);
-  assert.equal(hasRecallIntent("open the second session"), false);
-  assert.equal(hasRecallIntent("   "), false);
-});
-
-test("recent turns are bounded to two asks of 220 and one reply of 180 characters", () => {
-  const bounded = boundRecentTurns([
-    { role: "user", text: "a".repeat(300) },
-    { role: "assistant", text: "b".repeat(300) },
-    { role: "user", text: "c" },
-    { role: "assistant", text: "d" },
-    { role: "user", text: "e" },
-  ]);
+test("the pinned flush defaults match OpenClaw b7528507", () => {
   assert.deepEqual(
-    bounded.map((turn) => [turn.role, turn.text.length]),
     [
-      ["user", 1],
-      ["user", 1],
-      ["assistant", 1],
+      MEMORY_FLUSH_DEFAULTS.SOFT_THRESHOLD_TOKENS,
+      MEMORY_FLUSH_DEFAULTS.FORCE_TRANSCRIPT_BYTES,
+      MEMORY_FLUSH_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
     ],
+    [4_000, 2 * 1024 * 1024, 2_000],
   );
-  assert.equal(boundRecentTurns([{ role: "user", text: "a".repeat(300) }])[0]?.text.length, 220);
+});
+
+test("the flush fires a soft margin under the compaction threshold, on the byte trigger, and once per cycle", () => {
+  assert.equal(memoryFlushThreshold(400_000, 20_000), 376_000);
+  assert.equal(memoryFlushThreshold(10_000, 2_500), 7_500 - 3_750);
+  const base = {
+    contextWindowTokens: 400_000,
+    reserveTokens: 20_000,
+    transcriptBytes: 1_000,
+    compactionCount: 0,
+  };
+  assert.equal(shouldRunMemoryFlush({ ...base, contextTokens: 375_999 }), false);
+  assert.equal(shouldRunMemoryFlush({ ...base, contextTokens: 376_000 }), true);
   assert.equal(
-    boundRecentTurns([{ role: "assistant", text: "b".repeat(300) }])[0]?.text.length,
-    180,
+    shouldRunMemoryFlush({ ...base, contextTokens: 376_000, lastFlushCompactionCount: 0 }),
+    false,
+    "flushed already in this cycle",
+  );
+  assert.equal(
+    shouldRunMemoryFlush({
+      ...base,
+      contextTokens: 376_000,
+      compactionCount: 1,
+      lastFlushCompactionCount: 0,
+    }),
+    true,
+    "a new cycle flushes again",
+  );
+  assert.equal(
+    shouldRunMemoryFlush({ ...base, contextTokens: 100, transcriptBytes: 2 * 1024 * 1024 }),
+    true,
+    "the byte trigger flushes whatever the count",
   );
 });
 
-test("a recall summary is one line, cut to 220, and NONE means nothing", () => {
-  assert.equal(summarizeRecallReply("NONE"), "");
-  assert.equal(summarizeRecallReply("  none "), "");
-  assert.equal(summarizeRecallReply("a\nb   c"), "a b c");
-  assert.equal(summarizeRecallReply("x".repeat(500)).length, 220);
-});
-
-test("recall: trusted hit answers without a subrun, intent escalates, cache holds for 15s, timeouts trip the breaker", async () => {
-  let now = NOW;
-  let subruns = 0;
-  let strong = true;
-  let hang = false;
-  const recall = new ConversationRecall({
-    now: () => now,
-    timeoutMs: 50,
-    trustedMemory: async () => ({ strongHit: strong }),
-    subrun: async ({ signal }) => {
-      subruns += 1;
-      if (!hang) return "We decided on tuesday deploys.";
-      await new Promise<void>((_, reject) =>
-        signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true }),
-      );
-      return undefined;
-    },
-  });
-  const ask = {
-    sessionKey: MAIN_SESSION_KEY,
-    agentId: "main",
-    query: "what did we decide about deploys?",
-    recentTurns: [],
-  };
-  const hit = await recall.recall(ask);
-  assert.equal(hit.decision, RECALL_DECISION.TRUSTED_MEMORY_HIT);
-  assert.equal(hit.status, RECALL_STATUS.SKIPPED);
-  assert.equal(subruns, 0);
-
-  strong = false;
-  const plain = await recall.recall({ ...ask, query: "open the first session" });
-  assert.equal(plain.decision, RECALL_DECISION.NO_RECALL_INTENT);
-  assert.equal(subruns, 0);
-
-  const escalated = await recall.recall(ask);
-  assert.equal(escalated.status, RECALL_STATUS.OK);
-  assert.equal(escalated.summary, "We decided on tuesday deploys.");
-  assert.equal(subruns, 1);
-  const cached = await recall.recall(ask);
-  assert.equal(cached.cached, true);
-  assert.equal(subruns, 1, "a repeated recall inside the window runs no subrun");
-  now += RECALL_DEFAULTS.CACHE_TTL_MS + 1;
-  await recall.recall(ask);
-  assert.equal(subruns, 2, "and runs again once the cache has lapsed");
-
-  hang = true;
-  for (let i = 0; i < 3; i += 1) {
-    const timedOut = await recall.recall({ ...ask, query: `what did we say earlier ${i}` });
-    assert.equal(timedOut.status, RECALL_STATUS.TIMEOUT);
-  }
-  assert.equal(recall.consecutiveTimeouts(), 3);
-  const tripped = await recall.recall({ ...ask, query: "what did we say earlier 9" });
-  assert.equal(tripped.status, RECALL_STATUS.UNAVAILABLE);
-  assert.equal(subruns, 5, "the open breaker runs no subrun");
-  now += RECALL_DEFAULTS.CIRCUIT_BREAKER_COOLDOWN_MS;
-  hang = false;
-  const recovered = await recall.recall({ ...ask, query: "what did we say earlier 10" });
-  assert.equal(recovered.status, RECALL_STATUS.OK);
-});
-
-test("recall: a run outlived by an invalidation settles only its own registration, so its successor stays shared", async () => {
-  const pending: Array<{ started: Promise<void>; finish: (reply: string) => void }> = [];
-  const recall = new ConversationRecall({
-    trustedMemory: async () => ({ strongHit: false }),
-    subrun: () =>
-      new Promise<string | undefined>((resolve) => {
-        pending.push({ started: Promise.resolve(), finish: resolve });
-      }),
-  });
-  const ask = {
-    sessionKey: MAIN_SESSION_KEY,
-    agentId: "main",
-    query: "what did we decide about deploys?",
-    recentTurns: [],
-  };
-  // Every step between a recall's entry and its subrun call is a microtask,
-  // so a few macrotask turns settle whatever a recall was going to start.
-  const settle = async () => {
-    for (let i = 0; i < 4; i += 1) await new Promise<void>((resolve) => setImmediate(resolve));
-  };
-  const subrunStarted = async (count: number) => {
-    await settle();
-    assert.equal(pending.length, count);
-  };
-
-  const a = recall.recall(ask);
-  await subrunStarted(1);
-  recall.invalidate();
-  const b = recall.recall(ask);
-  await subrunStarted(2);
-  pending[0]?.finish("A's answer.");
-  assert.equal((await a).summary, "A's answer.");
-
-  const c = recall.recall(ask);
-  await settle();
-  assert.equal(pending.length, 2, "C shares B's run rather than opening a third");
-  pending[1]?.finish("B's answer.");
-  assert.equal((await b).summary, "B's answer.");
-  assert.equal((await c).summary, "B's answer.");
-  const cached = await recall.recall(ask);
-  assert.equal(cached.cached, true, "B ran under the current epoch, so its answer is cached");
-  assert.equal(cached.summary, "B's answer.");
-  assert.equal(pending.length, 2);
-});
-
-test("a subrun that returns nothing because the timeout cut it counts as a timeout, not as nothing found", async () => {
-  let lookups = 0;
-  const recall = new ConversationRecall({
-    timeoutMs: 20,
-    trustedMemory: async () => {
-      lookups += 1;
-      return { strongHit: false };
-    },
-    // A cancelled tool loop ends quietly with no text rather than throwing.
-    subrun: ({ signal }) =>
-      new Promise<string | undefined>((resolve) =>
-        signal.addEventListener("abort", () => resolve(undefined), { once: true }),
-      ),
-  });
-  const ask = { sessionKey: MAIN_SESSION_KEY, agentId: "main", recentTurns: [] };
-  const quiet = await recall.recall({ ...ask, query: "what did we decide about deploys?" });
-  assert.equal(quiet.status, RECALL_STATUS.TIMEOUT);
-  assert.equal(recall.consecutiveTimeouts(), 1);
-  assert.equal(lookups, 1);
-  const plain = await recall.recall({ ...ask, query: "open the first session" });
-  assert.equal(plain.decision, RECALL_DECISION.NO_RECALL_INTENT);
-  assert.equal(lookups, 1, "an ask with no recall intent consults trusted memory not at all");
+test("a housekeeping write is bounded to today's note and to appending", () => {
+  assert.equal(isDailyNotePathForDay("memory/2026-09-08.md", "2026-09-08"), true);
+  assert.equal(isDailyNotePathForDay("memory/2026-09-08-standup.md", "2026-09-08"), true);
+  assert.equal(isDailyNotePathForDay("memory/2026-09-07.md", "2026-09-08"), false);
+  assert.equal(isDailyNotePathForDay("MEMORY.md", "2026-09-08"), false);
+  assert.equal(isAppendOnlyRewrite("", "- new\n"), true);
+  assert.equal(isAppendOnlyRewrite("- old\n", "- old\n- new\n"), true);
+  assert.equal(isAppendOnlyRewrite("- old", "- old\n- new\n"), true);
+  assert.equal(isAppendOnlyRewrite("- old\n", "- new\n"), false);
+  assert.equal(isAppendOnlyRewrite("- old\n", "- ol"), false);
+  const prompt = memoryFlushPrompt("2026-09-08");
+  assert.equal(prompt.notePath, "memory/2026-09-08.md");
+  assert.match(prompt.ask, /memory\/2026-09-08\.md/u);
+  assert.ok(
+    prompt.system.includes(
+      "Treat workspace bootstrap and reference files such as MEMORY.md, SOUL.md, USER.md, and AGENTS.md as read-only during this turn; never overwrite, replace, or edit them.",
+    ),
+  );
 });

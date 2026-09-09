@@ -48,7 +48,6 @@ import {
   isAppGuideSnapshot,
 } from "@sidecar/guide";
 import { ISSUE_TRACKER_ID, normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
-import { CONSOLIDATION_DEFAULTS, consolidationJob } from "@sidecar/memory";
 import {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticKind,
@@ -83,6 +82,7 @@ import {
   type GatewayShutdownSteps,
   gatewayError,
   gatewayOk,
+  HEARTBEAT_DEFAULTS,
   heartbeatJob,
   LANE,
   NodeRegistry,
@@ -1073,12 +1073,9 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     client: runtimeStoreWiring.client,
     embeddingAdapter: () => voiceCapabilities.embeddingAdapter,
     workspaceDirectory: agentWorkspacePath,
-    createRuntime: () => brainWiring.createRuntime(),
     conversationDirectory: () => runtimeStoreWiring.directory(),
     isTemporary: runtimeStoreWiring.isTemporary,
-    historyLines: (sessionKey) => runtimeStoreWiring.thread(sessionKey).entries(),
     now,
-    createId,
     report,
     onSynced: () => {
       void runtimeStoreWiring.refreshNotebook();
@@ -1089,15 +1086,11 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     client: runtimeStoreWiring.client,
     createRuntime: () => brainWiring.createRuntime(),
     workspaceDirectory: agentWorkspacePath,
-    conversationDirectory: () => runtimeStoreWiring.directory(),
     isTemporary: runtimeStoreWiring.isTemporary,
-    historyLines: (sessionKey) => runtimeStoreWiring.thread(sessionKey).entries(),
-    background: (work) => brainWiring.lanes.run(LANE.BACKGROUND, work),
     now,
     createId,
     report,
     onNotebookChanged: () => {
-      memoryWiring.clearRecallCaches();
       void memoryWiring.sync();
     },
   });
@@ -1159,7 +1152,6 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
       runMode.observesProviders && runMode.sendsNetwork && accountCapabilitiesActive(),
     dropBriefings: () => speechArbiter.dropBriefings(),
     memory: (sessionKey) => memoryWiring.accessFor(sessionKey),
-    recall: (sessionKey) => memoryWiring.recallFor(sessionKey),
     beforeCompaction: (sessionKey) => memoryMaintenance.flushHookFor(sessionKey),
     flushMarker: (sessionKey) => memoryMaintenance.flushMarkerFor(sessionKey),
     beforeReset: (sessionKey, items) => memoryMaintenance.captureBeforeReset(sessionKey, items),
@@ -1173,21 +1165,17 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
   });
   let stopHistoryMaintenance: (() => void) | undefined;
 
-  const managedJobRuns: ReadonlyMap<string, () => Promise<void>> = new Map([
-    [
-      CONSOLIDATION_DEFAULTS.JOB_ID,
-      async () => {
-        await memoryMaintenance.runConsolidation();
-      },
-    ],
-  ]);
   const cronScheduler = new CronScheduler({
     store: runtimeStoreWiring.scheduledJobStore(),
     coordinate: (work) => brainWiring.lanes.run(LANE.CRON, work),
+    // The heartbeat is the only job this build schedules. A row of any other
+    // id is one a build before this one left behind — the nightly memory
+    // consolidation, until now — and running it as a heartbeat would be a
+    // turn nothing asked for, so it is removed instead.
     run: async (job) => {
-      const managed = managedJobRuns.get(job.id);
-      if (managed) {
-        await managed();
+      if (job.id !== HEARTBEAT_DEFAULTS.JOB_ID) {
+        report(`A scheduled job this build does not run was removed: ${job.id}`);
+        await cronScheduler.remove(job.id);
         return;
       }
       await brainWiring.heartbeat(job.sessionKey);
@@ -2440,7 +2428,6 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
       });
       await cronScheduler.start();
       await cronScheduler.ensure(heartbeatJob(now()));
-      await cronScheduler.ensure(consolidationJob(now()));
     }
     void settleCalendarOnboardingIfConnected();
     void settingsStore.snapshot();

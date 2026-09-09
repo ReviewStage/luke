@@ -152,17 +152,9 @@ interface TurnPlanBase {
   generation: Generation;
 }
 
-/** A developer's ask carries their own words, for the recall that precedes the inference; no other turn has any. */
-export interface AskTurnPlan extends TurnPlanBase {
-  trigger: typeof BRAIN_TURN_TRIGGER.ASK;
-  question: string;
+export interface TurnPlan extends TurnPlanBase {
+  trigger: BrainTurnTrigger;
 }
-
-export interface OtherTurnPlan extends TurnPlanBase {
-  trigger: Exclude<BrainTurnTrigger, typeof BRAIN_TURN_TRIGGER.ASK>;
-}
-
-export type TurnPlan = AskTurnPlan | OtherTurnPlan;
 
 /** The generation a turn opened in, the context it runs over, and the one signal every wait of the turn settles on. */
 export interface TurnContext {

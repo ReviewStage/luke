@@ -4,7 +4,7 @@ import {
   realtimeToolFamily,
 } from "@sidecar/acts";
 import { BRAIN_TURN_AUTHORITY, type BrainTurnAuthority } from "@sidecar/hosted";
-import { RECALL_DEFAULTS } from "@sidecar/memory";
+import { MEMORY_QUERY_MAXIMUM_CHARS } from "@sidecar/memory";
 import {
   type ChildPolicyContext,
   type EffectiveToolPolicy,
@@ -85,7 +85,7 @@ export const TOOL_GROUP = {
 
 /** The most results one memory search answers, and the longest query it takes. */
 export const maximumMemorySearchResults = 20;
-export const maximumMemoryQueryLength = RECALL_DEFAULTS.MAXIMUM_QUERY_CHARS;
+export const maximumMemoryQueryLength = MEMORY_QUERY_MAXIMUM_CHARS;
 
 /** The most of a child task's words a spawn carries; a task is a brief, not a transcript. */
 export const maximumChildTaskLength = 8_000;
@@ -275,8 +275,8 @@ const BRAIN_ONLY_TOOLS: readonly RealtimeToolWireDefinition[] = [
       "Mandatory recall step: search your notebook — MEMORY.md, USER.md, and the notes under " +
       "memory/ — before answering anything about prior work, decisions, dates, people, " +
       "preferences, or todos. Each result names its file, line range, score, and provenance; " +
-      "the answer names the retrieval mode it actually ran in (hybrid, keyword-only, or " +
-      "unavailable) and a note when it was not hybrid. Say you checked when confidence is low.",
+      "the answer names the retrieval mode it actually ran in (hybrid or keyword-only) and a " +
+      "note when it was not hybrid. Say you checked when confidence is low.",
     parameters: {
       type: "object",
       properties: {
