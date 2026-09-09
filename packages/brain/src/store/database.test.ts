@@ -616,21 +616,211 @@ test("the checkpoint stamp lives on the generation: an empty foreign checkpoint 
   );
 });
 
-test("a database from before the rename is refused at the door, and a newer one is never guessed at", () => {
+test("a database from before the rename opens with its lines, archives, and requests carried under the new names, and a newer one is never guessed at", () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "luke-runtime-store-"));
   const location = path.join(directory, "agent.sqlite");
-  StoreDatabase.open(location).close();
-  const earlier = new DatabaseSync(location);
-  earlier.exec("UPDATE schema_version SET version = 10");
-  earlier.close();
-  assert.throws(
-    () => StoreDatabase.open(location),
-    new RegExp(`schema version 10, not ${STORE_SCHEMA_VERSION}`, "u"),
+  const seeded = StoreDatabase.open(location);
+  createConversation(seeded, {
+    agentId: DEFAULT_AGENT_ID,
+    sessionKey: MAIN_SESSION_KEY,
+    name: "main",
+    now: NOW,
+  });
+  saveBrainEnvelope(seeded, MAIN_SESSION_KEY, {
+    kind: SAVE_KIND.REPLACE,
+    state: populatedState("gen-kept"),
+  });
+  appendConversation(seeded, MAIN_SESSION_KEY, [line("kept", NOW, { eventId: "k" })], NOW);
+  raiseConversationCutoff(seeded, MAIN_SESSION_KEY, NOW - 1);
+  seeded.close();
+
+  // The shape version 10 wrote: the same rows under the old table and column names.
+  const older = new DatabaseSync(location);
+  older.exec(
+    "ALTER TABLE conversations RENAME COLUMN next_conversation_sequence TO next_history_sequence",
   );
+  older.exec(
+    "ALTER TABLE conversations RENAME COLUMN conversation_cleared_at TO history_cleared_at",
+  );
+  older.exec("ALTER TABLE requests RENAME COLUMN performed_actions TO performed_acts");
+  older.exec("ALTER TABLE requests RENAME COLUMN unknown_actions TO unknown_acts");
+  older.exec("ALTER TABLE requests RENAME COLUMN conversation_recorded_at TO history_recorded_at");
+  older.exec("ALTER TABLE conversation_events RENAME TO history_events");
+  older.exec("ALTER TABLE conversation_archives RENAME TO history_archives");
+  older.exec("ALTER TABLE history_archives RENAME COLUMN conversation_lines TO history_lines");
+  older.exec("UPDATE schema_version SET version = 10");
+  older.close();
+
+  const database = StoreDatabase.open(location);
+  // SAFETY: the schema_version table has one integer column.
+  const version = database.prepare("SELECT version FROM schema_version").get() as {
+    version: number;
+  };
+  assert.equal(version.version, STORE_SCHEMA_VERSION);
+  // SAFETY: sqlite_master's name column is text.
+  const names = new Set(
+    (database.prepare("SELECT name FROM sqlite_master").all() as { name: string }[]).map(
+      (row) => row.name,
+    ),
+  );
+  for (const gone of ["history_events", "history_archives", "history_events_by_key"]) {
+    assert.equal(names.has(gone), false, gone);
+  }
+  for (const stands of [
+    "conversation_events",
+    "conversation_archives",
+    "conversation_events_by_key",
+    "conversation_events_by_time",
+    "conversation_events_once_published",
+  ]) {
+    assert.equal(names.has(stands), true, stands);
+  }
+  assert.equal(loadBrainEnvelope(database, MAIN_SESSION_KEY).state?.generationId, "gen-kept");
+  assert.deepEqual(
+    listConversation(database, MAIN_SESSION_KEY, NOW).map((entry) => entry.words),
+    ["kept"],
+  );
+  assert.equal(conversationClearedAt(database, MAIN_SESSION_KEY), NOW - 1);
+  // The renamed table keeps its constraints: a second publication of the same line is one line.
+  assert.equal(
+    appendConversation(database, MAIN_SESSION_KEY, [line("kept", NOW, { eventId: "k" })], NOW)
+      .changed,
+    false,
+  );
+  database.close();
+  // Reopening at the current version is a no-op, and a newer database is refused.
+  StoreDatabase.open(location).close();
   const newer = new DatabaseSync(location);
   newer.exec("UPDATE schema_version SET version = 99");
   newer.close();
   assert.throws(() => StoreDatabase.open(location), /schema version 99/u);
+  fs.rmSync(directory, { recursive: true, force: true });
+});
+
+test("a version-1 database is walked forward: its item-tagged generation gains the legacy stamp and its row the later columns", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "luke-store-"));
+  const location = path.join(directory, "agent.sqlite");
+  const raw = new DatabaseSync(location);
+  raw.exec(`CREATE TABLE schema_version (version INTEGER NOT NULL)`);
+  raw.exec(`INSERT INTO schema_version (version) VALUES (1)`);
+  raw.exec(`CREATE TABLE agents (agent_id TEXT PRIMARY KEY, created_at INTEGER NOT NULL)`);
+  raw.exec(`CREATE TABLE conversations (
+    session_key TEXT PRIMARY KEY, agent_id TEXT NOT NULL REFERENCES agents(agent_id),
+    name TEXT NOT NULL, created_at INTEGER NOT NULL,
+    next_history_sequence INTEGER NOT NULL DEFAULT 1, history_cleared_at INTEGER)`);
+  raw.exec(`CREATE TABLE conversation_sessions (
+    session_id TEXT PRIMARY KEY, session_key TEXT NOT NULL REFERENCES conversations(session_key),
+    created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL,
+    reset_cleared_at INTEGER, reset_generation_id TEXT)`);
+  raw.exec(`CREATE TABLE runtime_checkpoints (
+    session_id TEXT NOT NULL REFERENCES conversation_sessions(session_id) ON DELETE CASCADE,
+    sequence INTEGER NOT NULL, format TEXT NOT NULL, item TEXT NOT NULL,
+    PRIMARY KEY (session_id, sequence))`);
+  raw.prepare("INSERT INTO agents VALUES (?, ?)").run("main", NOW);
+  raw
+    .prepare(
+      "INSERT INTO conversations (session_key, agent_id, name, created_at) VALUES (?, ?, ?, ?)",
+    )
+    .run(MAIN_SESSION_KEY, "main", "main", NOW);
+  const lifetime = 14 * 24 * 60 * 60 * 1000;
+  raw
+    .prepare(
+      "INSERT INTO conversation_sessions (session_id, session_key, created_at, expires_at) VALUES (?, ?, ?, ?)",
+    )
+    .run("gen-old", MAIN_SESSION_KEY, NOW, NOW + lifetime);
+  raw
+    .prepare("INSERT INTO runtime_checkpoints VALUES (?, ?, ?, ?)")
+    .run(
+      "gen-old",
+      0,
+      "openai-responses-input/1",
+      JSON.stringify({ type: "message", role: "user", content: "x" }),
+    );
+  raw.close();
+
+  const database = StoreDatabase.open(location);
+  const loaded = loadBrainEnvelope(database, MAIN_SESSION_KEY);
+  assert.equal(loaded.state?.checkpointFormat, "tool-loop@1:openai-responses-input/1");
+  assert.equal(loaded.state?.items.length, 1);
+  // SAFETY: the schema_version table has one integer column.
+  const version = database.prepare("SELECT version FROM schema_version").get() as {
+    version: number;
+  };
+  assert.equal(version.version, STORE_SCHEMA_VERSION);
+  // SAFETY: the columns version 3 and 11 gave the conversation row.
+  const migrated = database
+    .prepare(
+      "SELECT kind, last_activity_at, next_conversation_sequence FROM conversations WHERE session_key = ?",
+    )
+    .get(MAIN_SESSION_KEY) as {
+    kind: string;
+    last_activity_at: number;
+    next_conversation_sequence: number;
+  };
+  assert.equal(migrated.kind, "main");
+  assert.equal(migrated.last_activity_at, NOW);
+  assert.equal(migrated.next_conversation_sequence, 1);
+  assert.deepEqual(
+    appendConversation(
+      database,
+      MAIN_SESSION_KEY,
+      [line("first", NOW, { eventId: "f" })],
+      NOW,
+    ).entries.map((entry) => entry.words),
+    ["first"],
+  );
+  database.close();
+  StoreDatabase.open(location).close();
+  fs.rmSync(directory, { recursive: true, force: true });
+});
+
+test("a database still carrying the retired memory tables opens with them dropped and everything else intact", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "luke-store-"));
+  const location = path.join(directory, "agent.sqlite");
+  const seeded = StoreDatabase.open(location);
+  createConversation(seeded, {
+    agentId: DEFAULT_AGENT_ID,
+    sessionKey: MAIN_SESSION_KEY,
+    name: "main",
+    now: NOW,
+  });
+  saveBrainEnvelope(seeded, MAIN_SESSION_KEY, {
+    kind: SAVE_KIND.REPLACE,
+    state: populatedState("gen-kept"),
+  });
+  appendConversation(seeded, MAIN_SESSION_KEY, [line("kept", NOW, { eventId: "k" })], NOW);
+  seeded.close();
+
+  // The shape a build before the memory tables went: their rows stand under
+  // the pre-rename table names, and the version is the one before the
+  // migration that drops them.
+  const older = new DatabaseSync(location);
+  older.exec("CREATE TABLE memory_candidates (candidate_id TEXT PRIMARY KEY, words TEXT NOT NULL)");
+  older.prepare("INSERT INTO memory_candidates VALUES (?, ?)").run("c-1", "CANDIDATE_SECRET");
+  older.exec("ALTER TABLE conversation_events RENAME TO history_events");
+  older.exec("UPDATE schema_version SET version = 9");
+  older.close();
+
+  const database = StoreDatabase.open(location);
+  // SAFETY: the query selects the one column its row type names.
+  const tables = database
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'memory_%'")
+    .all() as { name: string }[];
+  const names = new Set(tables.map((row) => row.name));
+  assert.equal(names.has("memory_candidates"), false);
+  assert.equal(names.has("memory_index_chunks"), true);
+  assert.equal(names.has("memory_flush_state"), true);
+  // SAFETY: as above.
+  const version = database.prepare("SELECT version FROM schema_version").get() as {
+    version: number;
+  };
+  assert.equal(version.version, STORE_SCHEMA_VERSION);
+  assert.equal(loadBrainEnvelope(database, MAIN_SESSION_KEY).state?.generationId, "gen-kept");
+  assert.deepEqual(
+    listConversation(database, MAIN_SESSION_KEY, NOW).map((entry) => entry.words),
+    ["kept"],
+  );
+  database.close();
   fs.rmSync(directory, { recursive: true, force: true });
 });
 

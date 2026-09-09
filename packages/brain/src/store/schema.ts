@@ -68,23 +68,24 @@
  * `conversation_events` for its lines and `conversation_archives` for the
  * recovery payloads of deleted conversations, with the conversation row's
  * sequence, cutoff, and the request's recorded-at column named to match.
- * Version 11 carries nothing across that rename: a database from before it
- * is refused at the door rather than opened onto tables whose columns it
- * lacks, and no step exists to carry it over.
- *
- * The conversation's own tables are named for what they hold:
- * `conversation_events` for its lines and `conversation_archives` for the
- * recovery payloads of deleted conversations, with the conversation row's
- * sequence, cutoff, and the request's recorded-at column named to match.
- * Version 11 carries nothing across that rename: a database from before it
- * is refused at the door rather than opened onto tables whose columns it
- * lacks, and no step exists to carry it over.
+ * Version 11 renames them in place: a database from before it keeps every
+ * line, archive, and request it held, under the new names.
  *
  * The schema is versioned by the `schema_version` table. A database at a
  * version this build does not know is refused rather than migrated by guess.
  */
 
 import type { SQLInputValue } from "node:sqlite";
+
+/**
+ * The stamp version 2 writes onto a checkpoint stored before stamps existed:
+ * every such checkpoint was the tool-loop runtime's first version over the
+ * Responses input array, because nothing else ever wrote one. Pinned history,
+ * so it is a literal rather than composed from this build's own ids — a
+ * runtime or item format renamed later must not change what a decade-old row
+ * is said to be.
+ */
+const LEGACY_CHECKPOINT_FORMAT_TAG = "tool-loop@1:openai-responses-input/1";
 
 /**
  * One flush marker per conversation: the generation and compaction count the
@@ -102,13 +103,11 @@ const MEMORY_FLUSH_STATE_TABLE = `CREATE TABLE IF NOT EXISTS memory_flush_state 
 export const STORE_SCHEMA_VERSION = 11;
 
 /**
- * The earliest version this build opens. The rename at 11 carried nothing
- * across: a database from before it still holds the old table and column
- * names, and `CREATE TABLE IF NOT EXISTS` cannot rename a column on a table
- * that already stands, so opening one would fail at its first write. It is
- * refused at the door instead, and there is no step that carries it over.
+ * The earliest version this build opens. Every version since the first has a
+ * step below or changed nothing a step must carry, so no database a released
+ * build wrote is refused for its age.
  */
-export const STORE_SCHEMA_FLOOR = 11;
+export const STORE_SCHEMA_FLOOR = 1;
 
 /**
  * How a database at an earlier version is brought to this one, in order. Each
@@ -121,10 +120,164 @@ export const STORE_SCHEMA_FLOOR = 11;
 export interface SchemaMigrationStep {
   sql: string;
   params: readonly SQLInputValue[];
+  /**
+   * Runs the step only where the named table, or the named column of it,
+   * stands. A rename must be skipped on a database that never had the old
+   * name — one created at a version whose current statements already made the
+   * table under the new one — and SQLite's DDL carries no condition of its own.
+   */
+  onlyIf?: { table: string; column?: string };
 }
 
-export const STORE_SCHEMA_MIGRATIONS: ReadonlyMap<number, readonly SchemaMigrationStep[]> =
-  new Map();
+const CONVERSATION_EVENTS_INDEXES: readonly string[] = [
+  `CREATE UNIQUE INDEX IF NOT EXISTS conversation_events_by_key
+    ON conversation_events(session_key, event_key)`,
+  `CREATE INDEX IF NOT EXISTS conversation_events_by_time
+    ON conversation_events(session_key, recorded_at, sequence)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS conversation_events_once_published
+    ON conversation_events(session_key, request_id, kind) WHERE request_id IS NOT NULL`,
+];
+
+/**
+ * The rename at 11. The current statements have already created the new
+ * tables empty where none stood, so a table under the old name is carried
+ * over by dropping that empty stand-in and renaming the old one into its
+ * place; a column is renamed on the table that already stands. Each step is
+ * guarded on the old name, so a database whose tables were created under the
+ * new names has nothing to do here.
+ */
+const RENAME_TO_CONVERSATION_STEPS: readonly SchemaMigrationStep[] = [
+  {
+    sql: "ALTER TABLE conversations RENAME COLUMN next_history_sequence TO next_conversation_sequence",
+    params: [],
+    onlyIf: { table: "conversations", column: "next_history_sequence" },
+  },
+  {
+    sql: "ALTER TABLE conversations RENAME COLUMN history_cleared_at TO conversation_cleared_at",
+    params: [],
+    onlyIf: { table: "conversations", column: "history_cleared_at" },
+  },
+  {
+    sql: "ALTER TABLE requests RENAME COLUMN performed_acts TO performed_actions",
+    params: [],
+    onlyIf: { table: "requests", column: "performed_acts" },
+  },
+  {
+    sql: "ALTER TABLE requests RENAME COLUMN unknown_acts TO unknown_actions",
+    params: [],
+    onlyIf: { table: "requests", column: "unknown_acts" },
+  },
+  {
+    sql: "ALTER TABLE requests RENAME COLUMN history_recorded_at TO conversation_recorded_at",
+    params: [],
+    onlyIf: { table: "requests", column: "history_recorded_at" },
+  },
+  { sql: "DROP TABLE conversation_events", params: [], onlyIf: { table: "history_events" } },
+  {
+    sql: "ALTER TABLE history_events RENAME TO conversation_events",
+    params: [],
+    onlyIf: { table: "history_events" },
+  },
+  { sql: "DROP INDEX IF EXISTS history_events_by_key", params: [] },
+  { sql: "DROP INDEX IF EXISTS history_events_by_time", params: [] },
+  { sql: "DROP INDEX IF EXISTS history_events_once_published", params: [] },
+  ...CONVERSATION_EVENTS_INDEXES.map((sql) => ({ sql, params: [] })),
+  { sql: "DROP TABLE conversation_archives", params: [], onlyIf: { table: "history_archives" } },
+  {
+    sql: "ALTER TABLE history_archives RENAME TO conversation_archives",
+    params: [],
+    onlyIf: { table: "history_archives" },
+  },
+  {
+    sql: "ALTER TABLE conversation_archives RENAME COLUMN history_lines TO conversation_lines",
+    params: [],
+    onlyIf: { table: "conversation_archives", column: "history_lines" },
+  },
+];
+
+export const STORE_SCHEMA_MIGRATIONS: ReadonlyMap<number, readonly SchemaMigrationStep[]> = new Map(
+  [
+    [
+      2,
+      [
+        { sql: "ALTER TABLE conversation_sessions ADD COLUMN checkpoint_format TEXT", params: [] },
+        {
+          sql: `UPDATE conversation_sessions SET checkpoint_format = ?
+       WHERE checkpoint_format IS NULL
+         AND EXISTS (SELECT 1 FROM runtime_checkpoints WHERE runtime_checkpoints.session_id = conversation_sessions.session_id)`,
+          params: [LEGACY_CHECKPOINT_FORMAT_TAG],
+        },
+      ],
+    ],
+    [
+      3,
+      [
+        { sql: "ALTER TABLE runtime_checkpoints DROP COLUMN format", params: [] },
+        {
+          sql: "ALTER TABLE conversations ADD COLUMN kind TEXT NOT NULL DEFAULT 'main'",
+          params: [],
+        },
+        { sql: "ALTER TABLE conversations ADD COLUMN archived_at INTEGER", params: [] },
+        { sql: "ALTER TABLE conversations ADD COLUMN archive_reason TEXT", params: [] },
+        { sql: "ALTER TABLE conversations ADD COLUMN pinned_at INTEGER", params: [] },
+        {
+          sql: "ALTER TABLE conversations ADD COLUMN last_activity_at INTEGER NOT NULL DEFAULT 0",
+          params: [],
+        },
+        {
+          sql: "ALTER TABLE conversations ADD COLUMN next_transcript_sequence INTEGER NOT NULL DEFAULT 1",
+          params: [],
+        },
+        // The lines stand under the current statements' table on a database
+        // that never had the pre-11 name, and under that name on one that did;
+        // the second statement recomputes over the old table where it stands.
+        {
+          sql: `UPDATE conversations SET last_activity_at = MAX(
+         created_at,
+         COALESCE((SELECT MAX(recorded_at) FROM conversation_events WHERE conversation_events.session_key = conversations.session_key), 0),
+         COALESCE((SELECT MAX(created_at) FROM conversation_sessions WHERE conversation_sessions.session_key = conversations.session_key), 0)
+       )`,
+          params: [],
+        },
+        {
+          sql: `UPDATE conversations SET last_activity_at = MAX(
+         created_at,
+         COALESCE((SELECT MAX(recorded_at) FROM history_events WHERE history_events.session_key = conversations.session_key), 0),
+         COALESCE((SELECT MAX(created_at) FROM conversation_sessions WHERE conversation_sessions.session_key = conversations.session_key), 0)
+       )`,
+          params: [],
+          onlyIf: { table: "history_events" },
+        },
+      ],
+    ],
+    [
+      9,
+      [
+        {
+          sql: "ALTER TABLE conversation_sessions ADD COLUMN compaction_count INTEGER NOT NULL DEFAULT 0",
+          params: [],
+        },
+        // The flush marker is keyed by the generation it was written under
+        // from this version on; rows from before it name no generation and
+        // were read by nothing, so the table starts over rather than
+        // carrying a marker no cycle can claim.
+        { sql: "DROP TABLE memory_flush_state", params: [] },
+        { sql: MEMORY_FLUSH_STATE_TABLE, params: [] },
+      ],
+    ],
+    [
+      10,
+      [
+        { sql: "DROP TABLE IF EXISTS memory_candidates", params: [] },
+        { sql: "DROP TABLE IF EXISTS memory_ingestion_cursors", params: [] },
+        { sql: "DROP TABLE IF EXISTS memory_ingested_messages", params: [] },
+        { sql: "DROP TABLE IF EXISTS memory_forgotten_sources", params: [] },
+        { sql: "DROP TABLE IF EXISTS memory_rewrites", params: [] },
+      ],
+    ],
+    [11, RENAME_TO_CONVERSATION_STEPS],
+  ],
+);
 
 export const STORE_SCHEMA_STATEMENTS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS schema_version (
@@ -234,12 +387,7 @@ export const STORE_SCHEMA_STATEMENTS: readonly string[] = [
     payload TEXT NOT NULL,
     PRIMARY KEY (session_key, sequence)
   )`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS conversation_events_by_key
-    ON conversation_events(session_key, event_key)`,
-  `CREATE INDEX IF NOT EXISTS conversation_events_by_time
-    ON conversation_events(session_key, recorded_at, sequence)`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS conversation_events_once_published
-    ON conversation_events(session_key, request_id, kind) WHERE request_id IS NOT NULL`,
+  ...CONVERSATION_EVENTS_INDEXES,
   `CREATE TABLE IF NOT EXISTS transcript_events (
     session_key TEXT NOT NULL REFERENCES conversations(session_key),
     sequence INTEGER NOT NULL,
