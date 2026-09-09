@@ -1155,9 +1155,8 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
 
   const agentWorkspacePath = () => path.join(agentRootPath(stateRoot), AGENT_WORKSPACE_DIRECTORY);
 
-  const memoryWiring: MemoryWiring = !runMode.observesProviders
-    ? INERT_MEMORY_WIRING
-    : composeNotebookMemory({
+  const memoryWiring: MemoryWiring = runMode.observesProviders
+    ? composeNotebookMemory({
         client: runtimeStoreWiring.client,
         embeddingAdapter: () => voiceCapabilities.embeddingAdapter,
         workspaceDirectory: agentWorkspacePath,
@@ -1168,7 +1167,8 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         onSynced: () => {
           void runtimeStoreWiring.refreshNotebook();
         },
-      });
+      })
+    : INERT_MEMORY_WIRING;
   const memoryMaintenance = wireMemoryMaintenance({
     persistent: runMode.observesProviders,
     client: runtimeStoreWiring.client,

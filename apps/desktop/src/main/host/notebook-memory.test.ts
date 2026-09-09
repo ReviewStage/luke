@@ -28,7 +28,7 @@ import { composeNotebookMemory, type NotebookMemoryDependencies } from "./runtim
 const NOW = 1_800_000_000_000;
 
 function agentRoot() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "luke-memory-wiring-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "luke-notebook-memory-"));
   fs.mkdirSync(path.join(root, "workspace", "memory"), { recursive: true });
   fs.writeFileSync(
     path.join(root, "workspace", "MEMORY.md"),

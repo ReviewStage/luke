@@ -580,11 +580,7 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
       const claim: BrainReplyClaimResult = granted.granted
         ? { granted: true, words: granted.words.words, origin: granted.words.origin }
         : { granted: false };
-      return gatewayOk(
-        claim.granted
-          ? { granted: true, words: claim.words, origin: claim.origin }
-          : { granted: false },
-      );
+      return gatewayOk({ ...claim });
     }),
     [GATEWAY_METHOD.DELIVERY_ACKNOWLEDGE]: reading((read) => {
       const emptied = deliveries.acknowledge(

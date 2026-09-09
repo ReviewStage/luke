@@ -27,9 +27,6 @@ import type { PanelManager } from "../window/panel-manager";
  * effects only this process has hands on: the login item, the Dock, the
  * displays, the form factor, the keys, the duck.
  */
-const CALENDAR_PRIVACY_PANE_URL =
-  "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars";
-
 export interface SettingsRowsIpcDependencies {
   ipcMain: Pick<IpcMain, "handle" | "on">;
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
@@ -51,8 +48,6 @@ export interface SettingsRowsIpcDependencies {
 
 export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencies): void {
   const {
-    ipcMain,
-    trustedSender,
     registerSettingHandler,
     host,
     reporterOf,
@@ -61,7 +56,6 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     applyLoginItem,
     panels,
     mediaDuck,
-    openExternal,
   } = dependencies;
 
   const refusal = async (reason: string): Promise<SettingsRefusal> => {
@@ -197,15 +191,11 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     refusal: "Could not reset those settings on this system.",
   });
 
-  registerConnectionRows({
-    ipcMain,
-    trustedSender,
-    registerSettingHandler,
-    host,
-    reporterOf,
-    openExternal,
-  });
+  registerConnectionRows(dependencies);
 }
+
+const CALENDAR_PRIVACY_PANE_URL =
+  "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars";
 
 /**
  * The Linear and calendar rows, proxied to the host that owns each grant: the
@@ -217,14 +207,12 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
  * it. The one address opened from here — the Privacy pane a row's press names
  * — is the client's own act.
  */
-function registerConnectionRows(dependencies: {
-  ipcMain: Pick<IpcMain, "handle" | "on">;
-  trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
-  registerSettingHandler: ReturnType<typeof createSettingsHandler>;
-  host: HostOperator;
-  reporterOf: (context: BridgeContext) => string;
-  openExternal: (url: string) => void;
-}): void {
+function registerConnectionRows(
+  dependencies: Pick<
+    SettingsRowsIpcDependencies,
+    "ipcMain" | "trustedSender" | "registerSettingHandler" | "host" | "reporterOf" | "openExternal"
+  >,
+): void {
   const { ipcMain, trustedSender, registerSettingHandler, host, reporterOf, openExternal } =
     dependencies;
   registerSettingHandler(BRIDGE.connectLinear, {
