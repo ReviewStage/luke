@@ -162,8 +162,18 @@ function SessionRowActions({
         // The draft has become the session's; the field emptying for the next
         // message is the whole confirmation, so no line repeats it.
         setDraft("");
-      } else {
+      } else if (
+        result.status === ACTION_RESULT_STATUS.REJECTED ||
+        result.status === ACTION_RESULT_STATUS.UNSUPPORTED
+      ) {
         // The draft stays: a refused message is still the user's words.
+        setFeedback(feedbackFor(result));
+      } else {
+        // An unknown outcome was handed on and its answer lost: the words may
+        // already be the session's, so the field empties as for an acceptance
+        // — a draft left standing would be sent twice by the next Enter — and
+        // the line says what is known.
+        setDraft("");
         setFeedback(feedbackFor(result));
       }
     } finally {

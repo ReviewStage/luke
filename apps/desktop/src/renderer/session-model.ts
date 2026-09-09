@@ -575,8 +575,13 @@ export function observedSessions(sessions: readonly Session[]): readonly Session
         lastActivityAt: session.lastActivityAt,
         openable: session.detail.link !== undefined,
         ...(openApplication ? { openApplication: openApplication.displayName } : undefined),
-        canMessage: advertisedActionFor(session, ACTION_KIND.MESSAGE) !== undefined,
-        actions: advertisedControls(session),
+        // The host admits a row's write against the sessions an action may
+        // name, which leaves out the voice's own realtime chats, so a voice
+        // row draws no write it would only be refused.
+        canMessage:
+          session.realtimeVoice !== true &&
+          advertisedActionFor(session, ACTION_KIND.MESSAGE) !== undefined,
+        actions: session.realtimeVoice === true ? [] : advertisedControls(session),
         hasChange: session.detail.change !== undefined,
         ...(changeNumber !== undefined ? { changeNumber } : undefined),
         // A workspace the provider left unnamed still groups its chats; the

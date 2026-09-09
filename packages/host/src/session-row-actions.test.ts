@@ -11,7 +11,7 @@ import {
   type SessionProviderPlugin,
   SessionRoster,
 } from "@sidecar/session";
-import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS } from "@sidecar/wire";
 import { createSessionActionPerformer } from "./session-action-performer.js";
 import { createSessionRowActions } from "./session-row-actions.js";
 
@@ -115,7 +115,7 @@ function fixture() {
     performer,
   });
   const recorded: Recorded = { messages, controls };
-  return { rowActions, recorded, rosterReads: () => rosterReads };
+  return { rowActions, recorded, rosterReads: () => rosterReads, roster: registry };
 }
 
 test("a message typed on a row reaches its provider only after a fresh roster read", async () => {
@@ -179,4 +179,22 @@ test("an empty or overlong message is refused rather than cut", async () => {
     reason: ACTION_REFUSAL.MESSAGE_BOUND,
   });
   assert.equal(f.recorded.messages.length, 0);
+});
+
+test("a performed write whose answer cannot be read is unknown, never a refusal to retry", async () => {
+  const f = fixture();
+  const performed: string[] = [];
+  const rowActions = createSessionRowActions({
+    roster: { read: async () => f.roster.list() },
+    performer: {
+      async perform(action) {
+        performed.push(action.kind);
+        // SAFETY: this is the mis-shaped answer under test, which a performer's erased record type admits.
+        return { outcome: "sent" } as never;
+      },
+    },
+  });
+  const result = await rowActions.sendMessage(IDENTITY, "hello");
+  assert.deepEqual(performed, [ACTION_KIND.MESSAGE]);
+  assert.equal(result.status, UNKNOWN_ACTION_STATUS);
 });

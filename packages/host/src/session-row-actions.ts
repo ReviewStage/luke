@@ -11,7 +11,7 @@ import {
   type SessionIdentity,
   type SessionWriteResult,
 } from "@sidecar/session";
-import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS } from "@sidecar/wire";
 import type { SessionActionPerformer } from "./session-action-performer.js";
 
 /**
@@ -42,9 +42,8 @@ export interface SessionRowActions {
   executeControl(identity: SessionIdentity, controlId: string): Promise<SessionWriteResult>;
 }
 
-const REFUSAL = {
-  UNREADABLE_ANSWER: "That session's provider answered in a shape this build cannot read.",
-} as const;
+const UNREADABLE_ANSWER =
+  "The write was handed on, and its provider answered in a shape this build cannot read.";
 
 export function createSessionRowActions(
   dependencies: SessionRowActionsDependencies,
@@ -57,9 +56,12 @@ export function createSessionRowActions(
       return { status: ACTION_RESULT_STATUS.REJECTED, reason: admitted.reason };
     }
     const result = await performer.perform(admitted);
+    // The performer has run by here, so an answer this build cannot read is
+    // not a refusal: the effect may have happened, and the row must neither
+    // call it failed nor repeat it.
     return isSessionWriteResult(result)
       ? result
-      : { status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSAL.UNREADABLE_ANSWER };
+      : { status: UNKNOWN_ACTION_STATUS, reason: UNREADABLE_ANSWER };
   };
 
   // The fields are keyed by the action's own schema names — the dialect

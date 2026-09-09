@@ -218,15 +218,30 @@ test("a row offers writes only where its provider promised them", () => {
     advertises: [{ kind: ACTION_KIND.MESSAGE }, stop],
   });
   const silent = liveSession(CONDUCTOR_PROVIDER, "chat-silent", SESSION_STATUS.COMPLETE);
-  const rows = liveRows(writable, silent);
+  const voice = normalizeSession(CODEX_PROVIDER, {
+    providerSessionId: "chat-voice",
+    title: "Talking it through",
+    status: SESSION_STATUS.WORKING,
+    lastActivityAt: 1_000,
+    realtimeVoice: true,
+    advertises: [{ kind: ACTION_KIND.MESSAGE }, stop],
+  });
+  const rows = liveRows(writable, silent, voice);
   const writableRow = rows.find((row) => row.id === "chat-writable");
   const silentRow = rows.find((row) => row.id === "chat-silent");
+  const voiceRow = rows.find((row) => row.id === "chat-voice");
   assert.equal(writableRow?.canMessage, true);
   assert.deepEqual(writableRow?.actions, [stop]);
   // A session whose latest observation advertised nothing draws neither the
   // composer nor a control: the row cannot promise what the host would refuse.
   assert.equal(silentRow?.canMessage, false);
   assert.deepEqual(silentRow?.actions, []);
+  // Nor does the voice's own realtime chat, whatever it advertises: the host
+  // admits a row's write against the sessions an action may name, and the
+  // voice's own are not among them.
+  assert.equal(voiceRow?.realtimeVoice, true);
+  assert.equal(voiceRow?.canMessage, false);
+  assert.deepEqual(voiceRow?.actions, []);
 
   // The smoke fixture puts both on screen: a settled chat with the composer,
   // and a working chat with the stop, so the evidence photographs each.
