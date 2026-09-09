@@ -37,6 +37,11 @@ export interface ObservationPassInput<Candidate extends SessionFileCandidate, Pa
     readonly candidate: Candidate;
     readonly parsed: Parsed;
     readonly now: number;
+    /**
+     * The window the build fixes, handed over rather than imported so a
+     * provider's own status lattice reads it from the pass that dated the
+     * observation and cannot decay against a different clock.
+     */
     readonly activeSessionFreshnessMs: number;
   }): Promise<ProviderSessionObservation | undefined> | ProviderSessionObservation | undefined;
 }

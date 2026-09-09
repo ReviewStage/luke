@@ -221,8 +221,6 @@ export interface JsonlTranscriptInput {
   locate(providerSessionId: string): Promise<string | undefined>;
   /** The attributed lines one stored record yields, or none. */
   lines(record: WireRecord): readonly string[];
-  readTailBytes?: number;
-  maximumRenderedLength?: number;
 }
 
 export interface JsonlTranscriptReader {
@@ -233,12 +231,13 @@ export interface JsonlTranscriptReader {
 /**
  * Every on-demand read of a JSONL-backed transcript: the bounded tail read,
  * the cursor arithmetic, the path cache an incremental read walks by, and the
- * bounds every rendering is held to. A provider supplies only where its
+ * bounds every rendering is held to — the tail the build fixes, and the
+ * per-line cuts, with no bound on the total, so a reader sees the whole
+ * rendering the tail it read produces. A provider supplies only where its
  * records live and what one of them says; nothing here opens a file for
  * writing, and the rendering is kept nowhere.
  */
 export function jsonlTranscriptReader(input: JsonlTranscriptInput): JsonlTranscriptReader {
-  const readTailBytes = input.readTailBytes ?? TRANSCRIPT_BOUNDS.READ_TAIL_BYTES;
   const paths = new TranscriptPathCache();
   return {
     async read(providerSessionId) {
@@ -247,10 +246,9 @@ export function jsonlTranscriptReader(input: JsonlTranscriptInput): JsonlTranscr
       // every wake and is what the path cache exists for.
       const filePath = await input.locate(providerSessionId);
       if (filePath === undefined) return TRANSCRIPT_NOT_FOUND;
-      const tail = await readTail(filePath, readTailBytes);
+      const tail = await readTail(filePath, TRANSCRIPT_BOUNDS.READ_TAIL_BYTES);
       const transcript = boundedTranscript(
         tailRecords(tail).flatMap((record) => input.lines(record)),
-        input.maximumRenderedLength,
       );
       return transcript === undefined
         ? TRANSCRIPT_NOT_FOUND
@@ -262,12 +260,9 @@ export function jsonlTranscriptReader(input: JsonlTranscriptInput): JsonlTranscr
         input.locate(providerSessionId),
       );
       if (filePath === undefined) return TRANSCRIPT_NOT_FOUND;
-      const since = await readRecordsSince(filePath, cursor, readTailBytes);
+      const since = await readRecordsSince(filePath, cursor, TRANSCRIPT_BOUNDS.READ_TAIL_BYTES);
       return {
         status: ACT_RESULT_STATUS.ACCEPTED,
-        // The rendering is unbounded in total, like a tail read with no
-        // maximum: the window the read loaded and the per-line cuts are the
-        // bounds.
         text: boundedTranscript(since.records.flatMap((record) => input.lines(record))) ?? "",
         cursor: since.cursor,
         truncated: since.truncated,

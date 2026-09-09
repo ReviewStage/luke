@@ -12,11 +12,11 @@ import {
   type SessionStatus,
 } from "@sidecar/session";
 import { isRecord, isWireString, oneLine, text, type WireRecord } from "@sidecar/wire";
+import { localSessionStatus } from "../shared/hook-status.js";
+import { type JsonlTranscriptReader, jsonlTranscriptReader } from "../shared/jsonl-transcript.js";
 import {
   discoverSessionFiles,
   LOCAL_ADAPTER_DEFAULTS,
-  LocalFileSessionAdapter,
-  localSessionStatus,
   readDirectory,
   readHead,
   readTail,
@@ -24,8 +24,8 @@ import {
   statDirectoryEntry,
   tailRecords,
   workspaceLabel,
-} from "../shared/local-session-adapter.js";
-import { type JsonlTranscriptReader, jsonlTranscriptReader } from "../shared/jsonl-transcript.js";
+} from "../shared/local-files.js";
+import { LocalFileSessionAdapter } from "../shared/local-session-adapter.js";
 import {
   defaultOmpHome,
   OMP_CONTENT_TYPE,

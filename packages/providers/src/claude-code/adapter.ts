@@ -21,12 +21,14 @@ import {
   wholeNumber,
 } from "@sidecar/wire";
 import {
-  discoverSessionFiles,
   type HookStatusRefinement,
   hookRefinedStatus,
-  LOCAL_ADAPTER_DEFAULTS,
-  LocalFileSessionAdapter,
   localSessionStatus,
+} from "../shared/hook-status.js";
+import { type JsonlTranscriptReader, jsonlTranscriptReader } from "../shared/jsonl-transcript.js";
+import {
+  discoverSessionFiles,
+  LOCAL_ADAPTER_DEFAULTS,
   readDirectory,
   readHead,
   readTail,
@@ -35,8 +37,8 @@ import {
   statDirectoryEntry,
   tailRecords,
   workspaceLabel,
-} from "../shared/local-session-adapter.js";
-import { type JsonlTranscriptReader, jsonlTranscriptReader } from "../shared/jsonl-transcript.js";
+} from "../shared/local-files.js";
+import { LocalFileSessionAdapter } from "../shared/local-session-adapter.js";
 import {
   CLAUDE_HOOK_EVENT,
   type ClaudeHookEvent,
@@ -93,7 +95,6 @@ const CLAUDE_CONTENT_TYPE = {
   TOOL_USE: "tool_use",
 } as const;
 
-/** Tool inputs whose value names the work, in the order they read best. */
 const CLAUDE_ADAPTER_DEFAULTS = {
   MAXIMUM_PROJECT_DIRECTORIES: 200,
   /**

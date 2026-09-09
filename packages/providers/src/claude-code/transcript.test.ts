@@ -5,8 +5,46 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { OMISSION_MARKER } from "@sidecar/session";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
+import {
+  boundedTranscript,
+  jsonlTranscriptReader,
+  TRANSCRIPT_BOUNDS,
+} from "../shared/jsonl-transcript.js";
+import { readTail, tailRecords } from "../shared/local-files.js";
 import { ClaudeCodeSessionAdapter } from "./adapter.js";
-import { readClaudeSessionTranscript } from "./transcript.js";
+import { claudeTranscriptFilePath, linesFromClaudeRecord } from "./transcript.js";
+
+/**
+ * The reader the adapter builds, built here too: what is under test is where
+ * a session's records live and what one of them renders as, which is all a
+ * provider supplies.
+ */
+function claudeTranscripts(claudeHome: string) {
+  return jsonlTranscriptReader({
+    locate: (providerSessionId) => claudeTranscriptFilePath(claudeHome, providerSessionId),
+    lines: linesFromClaudeRecord,
+  });
+}
+
+async function readClaudeSessionTranscript(request: {
+  claudeHome: string;
+  providerSessionId: string;
+}): Promise<string | undefined> {
+  const result = await claudeTranscripts(request.claudeHome).read(request.providerSessionId);
+  return result.status === "accepted" ? result.transcript : undefined;
+}
+
+/** The rendered lines a session's records yield, for a test of the cut itself. */
+async function claudeTranscriptLines(
+  claudeHome: string,
+  providerSessionId: string,
+): Promise<readonly string[]> {
+  const filePath = await claudeTranscriptFilePath(claudeHome, providerSessionId);
+  assert.ok(filePath);
+  return tailRecords(await readTail(filePath, TRANSCRIPT_BOUNDS.READ_TAIL_BYTES)).flatMap(
+    linesFromClaudeRecord,
+  );
+}
 
 const TEST_SESSION_ID = "3f9a1b2c-4d5e-6789-abcd-ef0123456789";
 const CLAUDE_PROJECTS_DIRECTORY = "projects";
@@ -82,11 +120,9 @@ test("keeps the newest turns when the rendering is cut, and says so", async (t) 
   }));
   await writeTranscript(claudeHome, TEST_SESSION_ID, records);
 
-  const rendered = await readClaudeSessionTranscript({
-    claudeHome,
-    providerSessionId: TEST_SESSION_ID,
-    maximumRenderedLength: 400,
-  });
+  // The cut is `boundedTranscript`'s, so it is asked for where it lives: a
+  // read the build performs never cuts a rendering at all.
+  const rendered = boundedTranscript(await claudeTranscriptLines(claudeHome, TEST_SESSION_ID), 400);
 
   assert.ok(rendered);
   assert.ok(rendered.startsWith(`${OMISSION_MARKER}\n`));
