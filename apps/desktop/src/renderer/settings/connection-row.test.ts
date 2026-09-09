@@ -13,12 +13,14 @@ import { CONNECTION_SCHEMA, type ConnectionInput } from "./connection-schema";
 function swap(stage: (typeof CONFIRM_STAGE)[keyof typeof CONFIRM_STAGE] | undefined): string {
   const asking = stage
     ? {
-        question: "Delete the Acme API key?",
-        stage,
-        verb: "Delete",
-        running: "Deleting…",
-        onKeep: () => undefined,
-        onAct: () => undefined,
+        confirm: {
+          question: "Delete the Acme API key?",
+          stage,
+          verb: "Delete",
+          running: "Deleting…",
+          onKeep: () => undefined,
+          onAct: () => undefined,
+        },
       }
     : undefined;
   return renderToStaticMarkup(

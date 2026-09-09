@@ -258,7 +258,7 @@ const CODEX_CLOUD_STATUS = {
 };
 
 /** Whether this system has been asked for encrypted storage and refused. */
-function storageUnavailable(input: ConnectionInput): boolean {
+export function storageUnavailable(input: ConnectionInput): boolean {
   return input.settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
 }
 
@@ -835,7 +835,14 @@ export function connectionsFor(
   ).toSorted((left, right) => left.order - right.order);
 }
 
-/** Every connection a query can find right now, whatever section draws it. */
+/**
+ * Every connection a query can find right now, whatever section draws it, in
+ * the order the table claims rather than the order the literal happens to be
+ * written in — so a row inserted in the wrong place reads wrong on the page and
+ * in the results together, rather than only in one of them.
+ */
 export function offeredConnections(visibility: ConnectionVisibility): readonly ConnectionSpec[] {
-  return CONNECTION_SCHEMA.filter((spec) => spec.offered(visibility));
+  return CONNECTION_SCHEMA.filter((spec) => spec.offered(visibility)).toSorted(
+    (left, right) => left.order - right.order,
+  );
 }

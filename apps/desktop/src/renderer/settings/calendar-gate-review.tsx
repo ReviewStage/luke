@@ -1,8 +1,6 @@
-import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { microphoneAccessRow } from "../microphone-access";
 import { CalendarIntegrations } from "./connections-page";
 import type { SettingsPanelProps } from "./settings-panel";
-import { useConnectionInput } from "./use-connection-input";
+import { settingsRowsInput, useConnectionInput } from "./use-connection-input";
 import { SETTINGS_WRITES } from "./writes";
 
 /**
@@ -22,24 +20,7 @@ export function CalendarGateReview({
     ...(snapshot
       ? {
           settings: snapshot,
-          view: {
-            settings: snapshot,
-            voiceControlsDrawn: microphoneAccessRow({
-              voiceAvailable: settings.microphone.voiceAvailable,
-              status: settings.microphone.status,
-            }).ready,
-            accountDrawn: settings.account.status === ACCOUNT_STATUS.SIGNED_IN,
-            superset: {
-              installed: settings.superset.installed,
-              connected: settings.superset.connected,
-              agents: settings.superset.agents,
-            },
-            workspaceProviders: settings.workspaceProviders.map((option) => ({
-              id: option.id,
-              name: option.name,
-              offersProjects: option.projects.length > 0,
-            })),
-          },
+          view: settingsRowsInput({ ...settings, settings: snapshot }),
         }
       : undefined),
     account: settings.account,

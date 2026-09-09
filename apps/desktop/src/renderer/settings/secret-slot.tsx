@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { tell } from "../act";
 import { useStagedFocus } from "../credential-entry";
-import { DestinationNote } from "../destination-note";
+import { type Destination, DestinationNote } from "../destination-note";
 
 /** What any secret being entered holds, whichever flow is entering it. */
 export interface SecretEntry {
@@ -12,14 +12,6 @@ export interface SecretEntry {
   busy: boolean;
   /** Why the last attempt was refused, if it was. */
   rejection?: string;
-}
-
-/** Where to go and get one, for a secret with a page that hands them out. */
-export interface SecretDestination {
-  lead: string;
-  destination: string;
-  /** What else has to be true of the page, for the one issuer that has more to say. */
-  trail?: string;
 }
 
 /**
@@ -67,7 +59,7 @@ export function SecretSlot({
   /** What the empty field says, which is what the stored secret decides. */
   placeholder: string;
   /** Where to go and get one, absent for a secret with no page to fetch it from. */
-  hint?: SecretDestination;
+  hint?: Destination;
   /** The word on the confirm, and its word while it runs. */
   verb: string;
   running: string;

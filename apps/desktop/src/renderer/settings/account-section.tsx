@@ -78,12 +78,14 @@ export function AccountSection({
           </span>
         </span>
         <ConfirmSwap
-          question={`Sign out of ${account.email}?`}
-          stage={signOut.stage}
-          verb="Sign out"
-          running="Signing out…"
-          onKeep={signOut.keep}
-          onAct={signOut.run}
+          confirm={{
+            question: `Sign out of ${account.email}?`,
+            stage: signOut.stage,
+            verb: "Sign out",
+            running: "Signing out…",
+            onKeep: signOut.keep,
+            onAct: signOut.run,
+          }}
         >
           <button
             type="button"
@@ -102,12 +104,14 @@ export function AccountSection({
           <strong>Delete account</strong>
         </span>
         <ConfirmSwap
-          question={`Delete the account ${account.email}? This cannot be undone.`}
-          stage={deletion.stage}
-          verb="Delete account"
-          running="Deleting…"
-          onKeep={deletion.keep}
-          onAct={deletion.run}
+          confirm={{
+            question: `Delete the account ${account.email}? This cannot be undone.`,
+            stage: deletion.stage,
+            verb: "Delete account",
+            running: "Deleting…",
+            onKeep: deletion.keep,
+            onAct: deletion.run,
+          }}
         >
           <button
             type="button"

@@ -8,7 +8,7 @@ import type { ActionResult } from "@sidecar/wire";
 import { useEffect, useRef, useState } from "react";
 import type { CredentialEntryControl } from "../credential-entry";
 import type { FeedbackEntryControl } from "../feedback-entry";
-import { microphoneAccessRow, voiceAttentionNote } from "../microphone-access";
+import { voiceAttentionNote } from "../microphone-access";
 import { PANEL_TAB, panelPanelId, panelTabId } from "../panel-tabs";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import {
@@ -50,7 +50,7 @@ import { pageResetControl } from "./reset";
 import { SchemaSettingRows } from "./schema-rows";
 import { ShortcutSection } from "./shortcuts-page";
 import { UpdatesSection } from "./updates";
-import { useConnectionInput } from "./use-connection-input";
+import { settingsRowsInput, useConnectionInput } from "./use-connection-input";
 import { VoiceSection } from "./voice-page";
 import { SETTINGS_WRITES } from "./writes";
 
@@ -163,24 +163,7 @@ export function SettingsPanel({
   // by the search corpus alike, so a result never leads to a page without
   // its row.
   const panelView: SettingsRowsInput | undefined = settings
-    ? {
-        settings,
-        voiceControlsDrawn: microphoneAccessRow({
-          voiceAvailable: microphone.voiceAvailable,
-          status: microphone.status,
-        }).ready,
-        accountDrawn: account.status === ACCOUNT_STATUS.SIGNED_IN,
-        superset: {
-          installed: superset.installed,
-          connected: superset.connected,
-          agents: superset.agents,
-        },
-        workspaceProviders: workspaceProviders.map((option) => ({
-          id: option.id,
-          name: option.name,
-          offersProjects: option.projects.length > 0,
-        })),
-      }
+    ? settingsRowsInput({ settings, account, microphone, superset, workspaceProviders })
     : undefined;
   // Everything the connection rows are judged from and acted through,
   // assembled once for every page that draws one.

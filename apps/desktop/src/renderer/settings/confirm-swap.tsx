@@ -21,6 +21,22 @@ function answerOrder(index: number): React.CSSProperties {
   return cssCustomProperties({ "--answer-index": index });
 }
 
+/**
+ * A question and the two answers it takes. One object rather than six props
+ * that only mean anything together: a question with no word on its answer is
+ * not a state a line can be in.
+ */
+export interface SwapQuestion {
+  /** What is being asked, in the words a hand and a reader both get. */
+  question: string;
+  stage: ConfirmStage;
+  /** The dangerous answer's word, and its word while it runs. */
+  verb: string;
+  running: string;
+  onKeep: () => void;
+  onAct: () => void;
+}
+
 /** Where focus goes back to once an answer has been given: the line itself. */
 const RETURNABLE = "button:not([disabled]), select:not([disabled])";
 
@@ -41,29 +57,16 @@ const RETURNABLE = "button:not([disabled]), select:not([disabled])";
  * never be given.
  */
 export function ConfirmSwap({
-  question,
-  stage = CONFIRM_STAGE.RESTING,
-  verb,
-  running,
-  onKeep,
-  onAct,
+  confirm,
   children,
 }: {
-  /**
-   * What is being asked, in the words a hand and a reader both get: "Delete the
-   * OpenAI API key?". Absent while the line has no confirming action to offer.
-   */
-  question?: string;
-  stage?: ConfirmStage;
-  /** The dangerous answer's word, and its word while it runs. */
-  verb?: string;
-  running?: string;
-  onKeep?: () => void;
-  onAct?: () => void;
+  /** The question, absent while the line has no confirming action to offer. */
+  confirm?: SwapQuestion;
   /** The controls the confirm stands in for. */
   children: React.ReactNode;
 }): React.JSX.Element {
-  const asked = question !== undefined && confirmAsked(stage);
+  const stage = confirm?.stage ?? CONFIRM_STAGE.RESTING;
+  const asked = confirm !== undefined && confirmAsked(stage);
   const acting = stage === CONFIRM_STAGE.ACTING;
   const keep = useRef<HTMLButtonElement | null>(null);
   const controls = useRef<HTMLSpanElement | null>(null);
@@ -85,7 +88,7 @@ export function ConfirmSwap({
   const keepPressed = () => {
     if (!confirmWithdrawable(stage)) return;
     returnFocus.current = true;
-    onKeep?.();
+    confirm?.onKeep();
   };
 
   return (
@@ -99,13 +102,13 @@ export function ConfirmSwap({
       >
         {children}
       </span>
-      {question !== undefined ? (
+      {confirm ? (
         /* The group carries the question, so the two answers are read as
            answers rather than as a Cancel and a Delete that could belong to
            anything on the line. */
         <fieldset
           className="settings-actions credential-confirm"
-          aria-label={question}
+          aria-label={confirm.question}
           data-drawn={String(asked)}
           aria-hidden={!asked}
           inert={!asked}
@@ -137,10 +140,10 @@ export function ConfirmSwap({
             disabled={acting}
             onClick={() => {
               returnFocus.current = true;
-              onAct?.();
+              confirm.onAct();
             }}
           >
-            {acting ? running : verb}
+            {acting ? confirm.running : confirm.verb}
           </button>
         </fieldset>
       ) : null}

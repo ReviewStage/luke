@@ -7,36 +7,44 @@ import {
   CONNECTION_CONTROL,
   CONNECTION_LAYOUT,
   type ConnectionAction,
+  type ConnectionControl,
   type ConnectionInput,
   type ConnectionSpec,
 } from "./connection-schema";
 
-/** The glyph each control wears, which is what says how it reads on the line. */
-const CONTROL_GLYPH = {
-  [CONNECTION_CONTROL.EDIT]: <PencilIcon />,
-  [CONNECTION_CONTROL.REFRESH]: <RefreshIcon />,
-  [CONNECTION_CONTROL.TRASH]: <TrashIcon />,
-};
+/**
+ * How each control is drawn: its class, and the glyph it wears where a glyph is
+ * what it wears at all. One table, because a control's dress and its shape are
+ * one statement about it.
+ */
+interface ControlDress {
+  className: string;
+  /** Absent for the one control that wears a word instead. */
+  glyph?: React.JSX.Element;
+}
 
-/** The class each control wears, beside the glyph. */
-const CONTROL_CLASS = {
-  [CONNECTION_CONTROL.WORD]: "quiet-button",
-  [CONNECTION_CONTROL.EDIT]: "icon-button",
-  [CONNECTION_CONTROL.REFRESH]: "icon-button",
-  [CONNECTION_CONTROL.TRASH]: "icon-button credential-remove",
-};
+const CONTROL_DRESS = {
+  [CONNECTION_CONTROL.WORD]: { className: "quiet-button" },
+  [CONNECTION_CONTROL.EDIT]: { className: "icon-button", glyph: <PencilIcon /> },
+  [CONNECTION_CONTROL.REFRESH]: { className: "icon-button", glyph: <RefreshIcon /> },
+  [CONNECTION_CONTROL.TRASH]: {
+    className: "icon-button credential-remove",
+    glyph: <TrashIcon />,
+  },
+} satisfies Record<ConnectionControl, ControlDress>;
 
-function ConnectionControl({
+function ActionControl({
   action,
   onPress,
 }: {
   action: ConnectionAction;
   onPress: () => void;
 }): React.JSX.Element {
+  const dress: ControlDress = CONTROL_DRESS[action.control];
   return (
     <button
       type="button"
-      className={CONTROL_CLASS[action.control]}
+      className={dress.className}
       disabled={action.disabled ?? false}
       aria-label={action.label}
       {...(action.title !== undefined ? { title: action.title } : undefined)}
@@ -45,7 +53,7 @@ function ConnectionControl({
         : undefined)}
       onClick={onPress}
     >
-      {action.control === CONNECTION_CONTROL.WORD ? action.word : CONTROL_GLYPH[action.control]}
+      {dress.glyph ?? action.word}
     </button>
   );
 }
@@ -93,20 +101,32 @@ export function ConnectionRow({
       <ConfirmSwap
         {...(question
           ? {
-              question: question.question,
-              stage: confirm.stage,
-              verb: question.verb,
-              running: question.running,
-              onKeep: confirm.keep,
-              onAct: confirm.run,
+              confirm: {
+                question: question.question,
+                stage: confirm.stage,
+                verb: question.verb,
+                running: question.running,
+                onKeep: confirm.keep,
+                onAct: confirm.run,
+              },
             }
           : undefined)}
       >
         {actions.map((action) => (
-          <ConnectionControl
+          <ActionControl
             key={action.label}
             action={action}
-            onPress={action === confirming ? confirm.ask : (action.run ?? (() => undefined))}
+            onPress={
+              action === confirming
+                ? confirm.ask
+                : () => {
+                    // Pressing another control on the line is a new intention,
+                    // so whatever the last answer was refused for stops being
+                    // drawn under it — the way asking again clears it.
+                    confirm.clear();
+                    action.run?.();
+                  }
+            }
           />
         ))}
       </ConfirmSwap>

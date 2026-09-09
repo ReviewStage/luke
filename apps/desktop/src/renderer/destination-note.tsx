@@ -11,16 +11,20 @@ import { ExternalIcon } from "@sidecar/panel";
  * main process owns every address — a key page is opened by provider id, and
  * the Superset page is the one its waiting flow built.
  */
+/** Where to go, and what else has to be true of the page when it gets there. */
+export interface Destination {
+  lead: string;
+  destination: string;
+  trail?: string;
+}
+
 export function DestinationNote({
   lead,
   destination,
   trail,
   disabled,
   onOpen,
-}: {
-  lead: string;
-  destination: string;
-  trail?: string;
+}: Destination & {
   disabled: boolean;
   onOpen: () => void;
 }): React.JSX.Element {

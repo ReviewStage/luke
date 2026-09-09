@@ -1,4 +1,3 @@
-import { SECRET_STORAGE } from "@sidecar/credentials/vocabulary";
 import { CloudIcon, FolderIcon, KeyIcon, PlugIcon } from "@sidecar/panel";
 import {
   SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
@@ -8,15 +7,15 @@ import {
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { SETTINGS_VIEW } from "../settings-views";
 import { ConnectionRow } from "./connection-row";
-import { CONNECTION_SECTION, type ConnectionInput, connectionsFor } from "./connection-schema";
+import {
+  CONNECTION_SECTION,
+  type ConnectionInput,
+  connectionsFor,
+  storageUnavailable,
+} from "./connection-schema";
 import { STORAGE_UNAVAILABLE_NOTE } from "./notes";
 import { SchemaSettingRows } from "./schema-rows";
 import type { SettingsWrites } from "./writes";
-
-/** Whether this system has been asked for encrypted storage and refused it. */
-function storageUnavailable(input: ConnectionInput): boolean {
-  return input.settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
-}
 
 /** Every connection in one section, drawn by the one component that draws one. */
 function ConnectionRows({
