@@ -11,7 +11,13 @@ import {
   type SessionProvider,
   SessionRoster,
 } from "@sidecar/session";
-import { maximumSessionLinkLength, supportsSessionControl } from "./session.js";
+import {
+  ACT_KIND,
+  advertisedActFor,
+  advertisedControl,
+  advertisedControls,
+} from "./advertised-acts.js";
+import { maximumSessionLinkLength } from "./bounds.js";
 
 const codex: SessionProvider = { id: "codex", displayName: "Codex" };
 const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
@@ -55,7 +61,9 @@ test("normalizes provider observations without conflating provider-local identit
     observation("run:42", 100, {
       title: "  Implement the shared session core  ",
       parentProviderSessionId: "  run:parent  ",
-      controls: [{ id: TEST_CONTROL_WITH_WHITESPACE, label: " Open workspace " }],
+      advertises: [
+        { kind: ACT_KIND.CONTROL, id: TEST_CONTROL_WITH_WHITESPACE, label: " Open workspace " },
+      ],
     }),
   );
   roster.replaceProvider(claude, [observation("run:42", 90)]);
@@ -66,9 +74,11 @@ test("normalizes provider observations without conflating provider-local identit
   );
   assert.equal(session.title, "Implement the shared session core");
   assert.equal(session.parentProviderSessionId, "run:parent");
-  assert.deepEqual(session.controls, [{ id: TEST_CONTROL.OPEN, label: "Open workspace" }]);
-  assert.equal(supportsSessionControl(session, TEST_CONTROL.OPEN), true);
-  assert.equal(supportsSessionControl(session, TEST_CONTROL.INTERRUPT), false);
+  assert.deepEqual(advertisedControls(session), [
+    { kind: ACT_KIND.CONTROL, id: TEST_CONTROL.OPEN, label: "Open workspace" },
+  ]);
+  assert.notEqual(advertisedControl(session, TEST_CONTROL.OPEN), undefined);
+  assert.equal(advertisedControl(session, TEST_CONTROL.INTERRUPT), undefined);
   assert.equal(roster.list().length, 2);
 });
 
@@ -149,23 +159,30 @@ test("a session takes messages only when its adapter said so explicitly", () => 
   const identity = { providerId: codex.id, providerSessionId: "run:message" };
 
   roster.replaceProvider(codex, [observation("run:message", 100)]);
-  assert.equal(roster.get(identity)?.canReceiveMessage, false);
+  assert.deepEqual(roster.get(identity)?.advertises, []);
 
-  roster.replaceProvider(codex, [observation("run:message", 100, { canReceiveMessage: true })]);
-  assert.equal(roster.get(identity)?.canReceiveMessage, true);
+  roster.replaceProvider(codex, [
+    observation("run:message", 100, { advertises: [{ kind: ACT_KIND.MESSAGE }] }),
+  ]);
+  assert.deepEqual(roster.get(identity)?.advertises, [{ kind: ACT_KIND.MESSAGE }]);
 });
 
 test("the agents a session can start are the latest pass's word", () => {
   const roster = new SessionRoster();
   const identity = { providerId: codex.id, providerSessionId: "run:spawn" };
 
+  const agentsFor = (session: Session | undefined): readonly string[] =>
+    session ? (advertisedActFor(session, ACT_KIND.ADD_AGENT)?.agents ?? []) : [];
+
   roster.replaceProvider(codex, [observation("run:spawn", 100)]);
-  assert.deepEqual(roster.get(identity)?.spawnableAgents, []);
+  assert.deepEqual(agentsFor(roster.get(identity)), []);
 
   roster.replaceProvider(codex, [
-    observation("run:spawn", 100, { spawnableAgents: ["claude", "cursor"] }),
+    observation("run:spawn", 100, {
+      advertises: [{ kind: ACT_KIND.ADD_AGENT, agents: ["claude", "cursor"] }],
+    }),
   ]);
-  assert.deepEqual(roster.get(identity)?.spawnableAgents, ["claude", "cursor"]);
+  assert.deepEqual(agentsFor(roster.get(identity)), ["claude", "cursor"]);
 });
 
 test("keeps only the addresses Luke would open, and never a shortened one", () => {

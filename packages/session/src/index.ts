@@ -1,129 +1,17 @@
 export { ACT_RESULT_STATUS } from "@sidecar/wire";
-export { AGENT_IDENTITY, agentIdentityFor } from "./agent-identities.js";
-export { CompositeSessionProviderAdapter } from "./composite-provider-adapter.js";
-export {
-  ObservationLoop,
-  type ObservationLoopOptions,
-  ObservationSupervisor,
-} from "./observation-loop.js";
-export {
-  CLI_CONNECTION,
-  type CliConnection,
-  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
-  CONVERSATION_MESSAGE_AUTHOR,
-  type ConversationMessageAuthor,
-  ExternalOpenAnswerLostError,
-  HOSTED_AGENT_ID,
-  HOSTED_AGENT_ID_LIST,
-  type HostedAgentId,
-  isHostedAgentId,
-  isProviderId,
-  isWorkspaceProviderId,
-  maximumObservedWorkspaceProjects,
-  maximumWorkspaceNameLength,
-  normalizeObservedWorkspaceProjects,
-  type ObservedWorkspaceProject,
-  PROVIDER_ID,
-  PROVIDER_ID_LIST,
-  PROVIDER_IDENTITY_BY_ID,
-  PROVIDER_LOCATION_KIND,
-  type ProviderActResult,
-  type ProviderControlRequest,
-  type ProviderControlResult,
-  type ProviderConversationMessage,
-  type ProviderConversationRequest,
-  type ProviderConversationResult,
-  type ProviderId,
-  type ProviderIdentity,
-  type ProviderLocationKind,
-  type ProviderMessageResult,
-  type ProviderSessionMessage,
-  type ProviderSessionRenameRequest,
-  type ProviderTranscriptResult,
-  type ProviderTranscriptSinceReading,
-  type ProviderTranscriptSinceResult,
-  type ProviderWorkspaceAgentRequest,
-  type ProviderWorkspaceRenameRequest,
-  type ProviderWorkspaceRequest,
-  type ProviderWorkspaceResult,
-  providerTranscriptResult,
-  providerTranscriptSinceResult,
-  type SessionProviderAdapter,
-  SessionProviderAdapterBase,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
-  staleWorkspaceProjectDefaults,
-  WORKSPACE_TASK_SUPPORT,
-  type WorkspaceAgentDefaults,
-  type WorkspaceAgentKindSelection,
-  type WorkspaceAgentModels,
-  type WorkspaceAgentSelection,
-  type WorkspaceProject,
-  type WorkspaceProviderId,
-  type WorkspaceTaskSupport,
-  workspaceNameText,
-  workspaceProjectSelectionId,
-} from "./providers.js";
-export {
-  agedStatus,
-  boundedText,
-  isSessionApplicationId,
-  maximumSessionApplications,
-  maximumSessionDetailLength,
-  maximumSessionMessageLength,
-  maximumSessionSubjectLength,
-  maximumSessionTitleLength,
-  normalizeSession,
-  normalizeSessionDetail,
-  normalizeSessionIdentity,
-  OBSERVATION_WINDOW,
-  type ProviderSessionObservation,
-  SESSION_APPLICATION_ID,
-  SESSION_APPLICATION_ID_LIST,
-  SESSION_APPLICATION_SCOPE,
-  SESSION_COMPLETION_CAUSE,
-  SESSION_CONTROL_KIND,
-  SESSION_LOCATION,
-  SESSION_STATUS,
-  type Session,
-  type SessionApplication,
-  type SessionApplicationId,
-  type SessionApplicationScope,
-  type SessionCompletionCause,
-  type SessionControl,
-  type SessionControlKind,
-  type SessionDetail,
-  type SessionDiffSummary,
-  type SessionIdentity,
-  type SessionLocation,
-  type SessionProvider,
-  type SessionStatus,
-  type SessionWorkspace,
-  sessionChangeNumber,
-  sessionMessageText,
-  supportsSessionControl,
-  transcriptReadTailBytes,
-  UNKNOWN_WORKSPACE_LABEL,
-} from "./session.js";
-export {
-  isSessionFilter,
-  matchesFilterSelection,
-  SESSION_FILTER,
-  SESSION_FILTER_AXIS,
-  type SessionFilter,
-  type SessionFilterAxis,
-  sessionFilterAxis,
-} from "./session-filter.js";
-export { SessionRoster, type SessionRosterListener } from "./session-registry.js";
-export {
-  isListedWorkspaceAgentModel,
-  isWorkspaceAgentSelection,
-  parseWorkspaceAgentKindSelection,
-  parseWorkspaceAgentSelection,
-  WORKSPACE_AGENT_MODELS,
-  workspaceAgentModelLabel,
-  workspaceAgentModels,
-} from "./workspace-agents.js";
-export {
-  CREATED_WORKSPACE_OPEN_WINDOW_MS,
-  CreatedWorkspaceOpenTracker,
-} from "./workspace-opens.js";
+export * from "./act-results.js";
+export * from "./advertised-acts.js";
+export * from "./agent-identities.js";
+export * from "./bounds.js";
+export * from "./composite-provider-adapter.js";
+export * from "./normalize.js";
+export * from "./provider-contract.js";
+export * from "./provider-identity.js";
+export * from "./session-filter.js";
+export * from "./session-identity.js";
+export * from "./session-registry.js";
+export * from "./session-shape.js";
+export * from "./session-status.js";
+export * from "./workspace-agents.js";
+export * from "./workspace-opens.js";
+export * from "./workspace-projects.js";

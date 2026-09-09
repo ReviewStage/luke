@@ -1,5 +1,5 @@
-import { HOSTED_AGENT_ID, PROVIDER_ID, PROVIDER_IDENTITY_BY_ID } from "./providers.js";
-import type { SessionProvider } from "./session.js";
+import { HOSTED_AGENT_ID, PROVIDER_ID, PROVIDER_IDENTITY_BY_ID } from "./provider-identity.js";
+import type { SessionProvider } from "./session-identity.js";
 
 function providerIdentity(providerId: keyof typeof PROVIDER_IDENTITY_BY_ID): SessionProvider {
   const { id, displayName } = PROVIDER_IDENTITY_BY_ID[providerId];

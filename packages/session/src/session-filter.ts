@@ -1,10 +1,15 @@
-import { type HostedAgentId, isHostedAgentId, isProviderId, type ProviderId } from "./providers.js";
+import {
+  type HostedAgentId,
+  isHostedAgentId,
+  isProviderId,
+  type ProviderId,
+} from "./provider-identity.js";
 import {
   isSessionApplicationId,
   SESSION_APPLICATION_ID,
   SESSION_LOCATION,
   type SessionApplicationId,
-} from "./session.js";
+} from "./session-identity.js";
 
 /**
  * One narrowing a session list can hold: a place work runs, the realtime voice

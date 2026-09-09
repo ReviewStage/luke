@@ -135,7 +135,7 @@ test("observes a settled OMP session and labels it by its project", async (t) =>
   assert.equal(observations[0]?.lastActivityAt, Date.parse("2026-08-20T11:59:00.000Z"));
   assert.equal(observations[0]?.detail?.repository, "luke");
   assert.equal(observations[0]?.detail?.model, "grok-4.6");
-  assert.equal(observations[0]?.controls, undefined);
+  assert.equal(observations[0]?.advertises, undefined);
 });
 
 test("titles a session from the header when the slot is empty", async (t) => {

@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { SESSION_TOOL_KIND } from "@sidecar/acts";
 import {
+  ACT_KIND,
+  type AdvertisedControl,
   normalizeSession,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
   SESSION_STATUS,
-  type SessionControl,
 } from "@sidecar/session";
 import {
   adoptConversationThread,
@@ -187,7 +188,7 @@ test("an act's line records the ask in words, with the identity it named", () =>
   assert.equal(message.words, 'sent a message to "checkout-service": "please add tests"');
   assert.deepEqual(message.identity, identity);
 
-  const control: SessionControl = { id: "retry", label: "Retry" };
+  const control: AdvertisedControl = { kind: ACT_KIND.CONTROL, id: "retry", label: "Retry" };
   assert.equal(
     sessionActConversationEntry(
       { kind: SESSION_TOOL_KIND.CONTROL, identity, control },

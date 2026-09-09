@@ -1,4 +1,5 @@
-import type { Session, SessionIdentity } from "./session.js";
+import type { SessionIdentity } from "./session-identity.js";
+import type { Session } from "./session-shape.js";
 
 /**
  * How long a created workspace stays worth opening. The identity arrives the

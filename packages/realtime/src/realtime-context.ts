@@ -1,5 +1,8 @@
 import { DAY_MS } from "@sidecar/runtime-contracts";
 import {
+  ACT_KIND,
+  advertisedActFor,
+  advertisedControls,
   type ObservedWorkspaceProject,
   SESSION_LOCATION,
   type Session,
@@ -47,9 +50,11 @@ function sessionCapabilityText(session: Session, recency: SessionRecency): strin
   const openableApplications = session.applications.filter(
     (application) => application.link !== undefined,
   );
+  const controls = advertisedControls(session);
+  const addAgent = advertisedActFor(session, ACT_KIND.ADD_AGENT);
   const capabilities = [
     `provider_id=${session.providerId} provider_session_id=${session.providerSessionId}`,
-    `messages=${session.canReceiveMessage}`,
+    `messages=${advertisedActFor(session, ACT_KIND.MESSAGE) !== undefined}`,
     `open=${Boolean(session.detail.link)}`,
     ...(openableApplications.length > 0
       ? [
@@ -62,17 +67,15 @@ function sessionCapabilityText(session: Session, recency: SessionRecency): strin
     ...(recency.mostRecentForProvider ? ["most_recent_for_provider=true"] : []),
     ...(recency.mostRecentOpenableForProvider ? ["most_recent_openable_for_provider=true"] : []),
     ...(session.detail.change ? ["pull_request=true"] : []),
-    ...(session.controls.length > 0
-      ? [
-          `controls=${session.controls.map((control) => `${control.label} (${control.id})`).join(", ")}`,
-        ]
+    ...(controls.length > 0
+      ? [`controls=${controls.map((control) => `${control.label} (${control.id})`).join(", ")}`]
       : []),
-    ...(session.spawnableAgents.length > 0 ? [`agents=${session.spawnableAgents.join(", ")}`] : []),
+    ...(addAgent ? [`agents=${addAgent.agents.join(", ")}`] : []),
     // Each capability travels as a fact and never a target: the identity is
     // what a rename ask names, and what it lands on stays resolved from
     // observed state on the machine.
-    ...(session.canRename ? ["chat can be renamed"] : []),
-    ...(session.renameTarget ? ["workspace can be renamed"] : []),
+    ...(advertisedActFor(session, ACT_KIND.RENAME_SESSION) ? ["chat can be renamed"] : []),
+    ...(advertisedActFor(session, ACT_KIND.RENAME_WORKSPACE) ? ["workspace can be renamed"] : []),
   ];
   return capabilities.join("; ");
 }

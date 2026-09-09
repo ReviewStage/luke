@@ -120,7 +120,9 @@ Trust constraints:
   it, or the same two acts asked of Luke, out loud or typed into his own
   composer, in a conversation the user is holding, each through the
   provider's own documented endpoint under the same user-supplied credential,
-  and each validated against the observed roster before an adapter sees it.
+  and each validated against the observed roster, and against that session's
+  own advertisement of the acts its provider documents for it now, before an
+  adapter sees it.
   Observation passes stay read-only by construction; where a provider's
   documented read answers only a POSTed query (Conductor's transcripts view,
   like Linear's GraphQL), observation sends a read document fixed by the

@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ISSUE_TRACKER_ID, normalizeTrackedIssue } from "@sidecar/issues";
 import {
+  ACT_KIND,
   maximumWorkspaceNameLength,
   normalizeSession,
   type ObservedWorkspaceProject,
   PROVIDER_ID_LIST,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
+  SESSION_CONTROL_KIND,
   SESSION_LOCATION,
   SESSION_STATUS,
   WORKSPACE_TASK_SUPPORT,
@@ -35,8 +37,15 @@ function actionableSession() {
       title: "Conductor: luke",
       status: SESSION_STATUS.WAITING,
       lastActivityAt: DECIDED_AT,
-      canReceiveMessage: true,
-      controls: [{ id: "cancel-run", label: "Stop this run", kind: "stop" }],
+      advertises: [
+        { kind: ACT_KIND.MESSAGE },
+        {
+          kind: ACT_KIND.CONTROL,
+          id: "cancel-run",
+          label: "Stop this run",
+          controlKind: SESSION_CONTROL_KIND.STOP,
+        },
+      ],
       detail: { link: "https://app.conductor.build/sessions/conductor-1" },
     },
   );
@@ -63,7 +72,12 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
     {
       kind: "control",
       identity: { providerId: "conductor", providerSessionId: "conductor-1" },
-      control: { id: "cancel-run", label: "Stop this run", kind: "stop" },
+      control: {
+        kind: ACT_KIND.CONTROL,
+        id: "cancel-run",
+        label: "Stop this run",
+        controlKind: SESSION_CONTROL_KIND.STOP,
+      },
     },
   );
   // The open action carries the identity and nothing else: the address stays
@@ -271,7 +285,7 @@ test("an added agent may carry a model, only of the asked-for kind", () => {
       title: "bucharest-v1",
       status: SESSION_STATUS.WAITING,
       lastActivityAt: DECIDED_AT,
-      spawnableAgents: ["claude", "cursor"],
+      advertises: [{ kind: ACT_KIND.ADD_AGENT, agents: ["claude", "cursor"] }],
     },
   );
   const identity = '"provider_id":"conductor","provider_session_id":"chat-1"';
@@ -466,7 +480,7 @@ test("another agent can only be added as a kind the session's own entry lists", 
       title: "bucharest-v1",
       status: SESSION_STATUS.WAITING,
       lastActivityAt: DECIDED_AT,
-      spawnableAgents: ["claude", "codex", "cursor"],
+      advertises: [{ kind: ACT_KIND.ADD_AGENT, agents: ["claude", "codex", "cursor"] }],
     },
   );
   const roster = [spawning, actionableSession()];

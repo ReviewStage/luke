@@ -37,6 +37,7 @@ import {
   workspaceProjectContextText,
 } from "@sidecar/realtime";
 import {
+  ACT_KIND,
   normalizeSession,
   type ObservedWorkspaceProject,
   SESSION_APPLICATION_ID,
@@ -886,7 +887,7 @@ test("the roster says which agent kinds a session can start", () => {
       title: "bucharest-v1",
       status: SESSION_STATUS.WAITING,
       lastActivityAt: DECIDED_AT,
-      spawnableAgents: ["claude", "codex", "cursor"],
+      advertises: [{ kind: ACT_KIND.ADD_AGENT, agents: ["claude", "codex", "cursor"] }],
     },
   );
 

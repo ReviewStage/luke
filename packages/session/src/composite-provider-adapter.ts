@@ -1,24 +1,27 @@
 import { ACT_RESULT_STATUS, type UnknownActResult } from "@sidecar/wire";
+import type {
+  ProviderActResult,
+  ProviderControlResult,
+  ProviderConversationResult,
+  ProviderMessageResult,
+  ProviderTranscriptResult,
+  ProviderTranscriptSinceResult,
+  ProviderWorkspaceResult,
+} from "./act-results.js";
 import {
-  type ProviderActResult,
   type ProviderControlRequest,
-  type ProviderControlResult,
   type ProviderConversationRequest,
-  type ProviderConversationResult,
-  type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderSessionRenameRequest,
-  type ProviderTranscriptResult,
-  type ProviderTranscriptSinceResult,
   type ProviderWorkspaceAgentRequest,
   type ProviderWorkspaceRenameRequest,
   type ProviderWorkspaceRequest,
-  type ProviderWorkspaceResult,
   type SessionProviderAdapter,
   SessionProviderAdapterBase,
-  type WorkspaceProject,
-} from "./providers.js";
-import type { ProviderSessionObservation, SessionProvider } from "./session.js";
+} from "./provider-contract.js";
+import type { SessionProvider } from "./session-identity.js";
+import type { ProviderSessionObservation } from "./session-shape.js";
+import type { WorkspaceProject } from "./workspace-projects.js";
 
 export interface CompositeProviderAdapterOptions {
   provider: SessionProvider;

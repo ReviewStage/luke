@@ -2,7 +2,6 @@ import {
   CONTEXT_ITEM_KIND,
   contextItemId,
   type ObservedSession,
-  type ObservedSessionControl,
   remoteRealtimeClientSecretRequest,
   VAULT_PROVIDER_ID,
   type VaultProviderId,
@@ -10,7 +9,7 @@ import {
 import { cloudSessionAdapterFor } from "./cloud-adapters.js";
 import { decryptProviderKey } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
-import type { VaultKeyRow } from "./observe.js";
+import { type VaultKeyRow, writeAdvertisedActs } from "./observe.js";
 import type { FetchLike } from "./openai.js";
 import type { HostedSpend } from "./quota.js";
 import { remoteSessionContextText } from "./remote-context.js";
@@ -177,21 +176,7 @@ async function observeCloudSessions(
         session.lastActivityAt = obs.lastActivityAt;
         session.observedAt = obs.lastActivityAt;
       }
-      if (obs.canReceiveMessage) session.canReceiveMessage = true;
-      const controls = obs.controls
-        ?.map((c): ObservedSessionControl => {
-          const control: ObservedSessionControl = { id: c.id, label: c.label };
-          if (c.kind) control.kind = c.kind;
-          return control;
-        })
-        .filter((c) => c.id && c.label);
-      if (controls && controls.length > 0) session.controls = controls;
-      const spawnableAgents = obs.spawnableAgents?.filter((a) => a.length > 0);
-      if (spawnableAgents && spawnableAgents.length > 0) {
-        session.spawnableAgents = [...spawnableAgents];
-      }
-      if (obs.canRename) session.canRename = true;
-      if (obs.renameTarget) session.canRenameWorkspace = true;
+      writeAdvertisedActs(session, obs);
       sessions.push(session);
     }
   }

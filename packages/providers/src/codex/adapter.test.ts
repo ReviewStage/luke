@@ -189,7 +189,7 @@ test("observes a Codex thread under the name Codex gave it", async (t) => {
   assert.equal(observations[0]?.providerSessionId, "codex-active");
   assert.equal(observations[0]?.title, "Release stage-cli to npm");
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
-  assert.equal(observations[0]?.controls, undefined);
+  assert.equal(observations[0]?.advertises, undefined);
   assert.deepEqual(observations[0]?.detail, {
     repository: "luke",
     branch: "codex/bump-version",

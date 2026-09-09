@@ -1,26 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ACT_KIND,
+  type AdvertisedAct,
+  advertisedActFor,
+  advertisedControls,
+  maximumSessionDetailLength,
   normalizeSession,
   SESSION_STATUS,
   type Session,
-  type SessionStatus,
-  sessionChangeNumber,
 } from "@sidecar/session";
 
 const TEST_NOW = Date.parse("2026-08-16T12:00:00.000Z");
-const _DAY_MS = 24 * 60 * 60 * 1000;
-
-function _session(
-  providerSessionId: string,
-  status: SessionStatus,
-  lastActivityAt: number,
-): Session {
-  return normalizeSession(
-    { id: "codex", displayName: "Codex" },
-    { providerSessionId, title: "Implement the shared session core", status, lastActivityAt },
-  );
-}
 
 test("the grouping manager's mark leads the row and the press follows it", () => {
   const normalized = normalizeSession(
@@ -157,27 +148,6 @@ test("the Claude app's own scheme is an address a row may open", () => {
   assert.equal(normalized.applications[0]?.link, "claude://claude.ai/epitaxy/local_desk-1");
 });
 
-test("reads the pull request's number off every host's address shape", () => {
-  assert.equal(sessionChangeNumber("https://github.com/reviewstage/luke/pull/245"), 245);
-  assert.equal(
-    sessionChangeNumber("https://gitlab.com/reviewstage/group/sidecar-web/-/merge_requests/3"),
-    3,
-  );
-  assert.equal(
-    sessionChangeNumber("https://bitbucket.org/reviewstage/sidecar-native/pull-requests/9"),
-    9,
-  );
-});
-
-test("an address whose tail names no number yields none rather than a guess", () => {
-  assert.equal(sessionChangeNumber("https://github.com/reviewstage/luke/pulls"), undefined);
-  assert.equal(
-    sessionChangeNumber("https://github.com/reviewstage/luke/pull/245/files"),
-    undefined,
-  );
-  assert.equal(sessionChangeNumber("not an address"), undefined);
-});
-
 test("keeps a sound diff summary and drops a suspect or empty one whole", () => {
   const withDiff = (diff: Parameters<typeof normalizeSession>[1]["detail"]) =>
     normalizeSession(
@@ -265,4 +235,110 @@ test("a developer hold rides a waiting session and is dropped on any other statu
     },
   );
   assert.equal(working.holdingForDeveloper, undefined);
+});
+
+function advertising(advertises: readonly AdvertisedAct[]): Session {
+  return normalizeSession(
+    { id: "conductor", displayName: "Conductor" },
+    {
+      providerSessionId: "chat-1",
+      title: "Advertised acts",
+      status: SESSION_STATUS.WAITING,
+      lastActivityAt: TEST_NOW,
+      advertises,
+    },
+  );
+}
+
+test("a control needs an id, and the same id twice is a contradiction", () => {
+  assert.throws(() => advertising([{ kind: ACT_KIND.CONTROL, id: "  ", label: "Stop" }]), {
+    message: "control id must not be empty",
+  });
+  assert.throws(
+    () =>
+      advertising([
+        { kind: ACT_KIND.CONTROL, id: "stop", label: "Stop" },
+        { kind: ACT_KIND.CONTROL, id: "stop", label: "Halt" },
+      ]),
+    { message: "Duplicate session control: stop" },
+  );
+});
+
+test("a control's label falls back to its id, and its target is bounded", () => {
+  const [control] = advertisedControls(
+    advertising([{ kind: ACT_KIND.CONTROL, id: "stop", label: "   ", target: "t".repeat(400) }]),
+  );
+
+  assert.equal(control?.label, "stop");
+  assert.equal(control?.target?.length, maximumSessionDetailLength);
+});
+
+test("a control kind this build does not know is dropped, the control kept", () => {
+  const [control] = advertisedControls(
+    advertising([
+      // SAFETY: a provider naming a kind this build never learned is exactly
+      // what the drop exists for, so the test has to be able to say one.
+      { kind: ACT_KIND.CONTROL, id: "stop", label: "Stop", controlKind: "detonate" as never },
+    ]),
+  );
+
+  assert.deepEqual(control, { kind: ACT_KIND.CONTROL, id: "stop", label: "Stop" });
+});
+
+test("an add-agent whose kinds all fall outside their bound advertises nothing", () => {
+  assert.equal(
+    advertisedActFor(
+      advertising([{ kind: ACT_KIND.ADD_AGENT, agents: ["   "] }]),
+      ACT_KIND.ADD_AGENT,
+    ),
+    undefined,
+  );
+  assert.deepEqual(
+    advertisedActFor(
+      advertising([{ kind: ACT_KIND.ADD_AGENT, agents: ["claude", "a".repeat(80)] }]),
+      ACT_KIND.ADD_AGENT,
+    ),
+    { kind: ACT_KIND.ADD_AGENT, agents: ["claude"] },
+  );
+});
+
+test("a workspace rename with nothing to rename advertises nothing", () => {
+  assert.equal(
+    advertisedActFor(
+      advertising([{ kind: ACT_KIND.RENAME_WORKSPACE, target: "   " }]),
+      ACT_KIND.RENAME_WORKSPACE,
+    ),
+    undefined,
+  );
+});
+
+test("a singleton kind advertised twice keeps the first, and carries nothing else", () => {
+  const session = advertising([
+    { kind: ACT_KIND.RENAME_SESSION },
+    { kind: ACT_KIND.RENAME_SESSION },
+    { kind: ACT_KIND.MESSAGE },
+    { kind: ACT_KIND.ADD_AGENT, agents: ["claude"] },
+    { kind: ACT_KIND.ADD_AGENT, agents: ["codex"] },
+  ]);
+
+  assert.deepEqual(session.advertises, [
+    { kind: ACT_KIND.RENAME_SESSION },
+    { kind: ACT_KIND.MESSAGE },
+    { kind: ACT_KIND.ADD_AGENT, agents: ["claude"] },
+  ]);
+});
+
+test("an unadvertised session advertises nothing rather than nothing at all", () => {
+  assert.deepEqual(
+    normalizeSession(
+      { id: "codex", displayName: "Codex" },
+      {
+        providerSessionId: "run-1",
+        title: "Nothing advertised",
+        status: SESSION_STATUS.WORKING,
+        lastActivityAt: TEST_NOW,
+      },
+    ).advertises,
+    [],
+  );
 });

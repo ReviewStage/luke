@@ -168,6 +168,11 @@ export {
   laneConfiguration,
 } from "./lanes.js";
 export {
+  ObservationLoop,
+  type ObservationLoopOptions,
+  ObservationSupervisor,
+} from "./observation-loop.js";
+export {
   type BuiltPrompt,
   bootstrapFilesForProfile,
   buildSystemPrompt,
