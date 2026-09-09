@@ -1,4 +1,5 @@
-import { NativeHelper, type NativeHelperProcess } from "./native-helper";
+import { LINE_UNAVAILABLE, type LineWatcher, lineWatcher, type ParsedLine } from "./line-watcher";
+import type { NativeHelperProcess } from "./native-helper";
 
 /**
  * What the helper says about itself on its first line, and what it streams
@@ -13,6 +14,12 @@ export const TALK_KEY_EVENT = {
   UNAVAILABLE: "unavailable",
 } as const;
 
+/** One thing the helper reported about the chord it was given. */
+export type TalkKeyEdge =
+  | { kind: "down" }
+  | { kind: "up" }
+  | { kind: "registered"; accelerator: string };
+
 export interface TalkKeyEdges {
   onPress(): void;
   onRelease(): void;
@@ -26,12 +33,25 @@ export interface TalkKeyEdges {
   onUnavailable(): void;
 }
 
-/** Only the parts of a child process this needs, so a test can supply them. */
-export type TalkKeyProcess = NativeHelperProcess;
-
 export interface TalkKeyWatcherOptions extends TalkKeyEdges {
   /** Injectable so the reader can be exercised without a Mac or a binary. */
-  spawnHelper?: (candidates: readonly string[]) => TalkKeyProcess;
+  spawnHelper?: (candidates: readonly string[]) => NativeHelperProcess;
+}
+
+export interface TalkKeyWatch {
+  /**
+   * Starts the helper, reporting whether it could be launched at all. A `true`
+   * here is not yet a registered key — that arrives on the helper's first line,
+   * through `onRegistered`.
+   */
+  start(candidates: readonly string[]): boolean;
+  /**
+   * Stops the helper, reporting when its process is actually gone. The answer
+   * matters to a successor — the system releases the chord with the process,
+   * not with the kill that asked for it, so a new helper that claims a chord
+   * this one still holds would be refused.
+   */
+  stop(): Promise<void>;
 }
 
 /**
@@ -40,6 +60,16 @@ export interface TalkKeyWatcherOptions extends TalkKeyEdges {
  * signal cannot wedge every later change of the talk key.
  */
 const EXIT_WAIT_MS = 1000;
+
+export function parseTalkKeyLine(line: string): ParsedLine<TalkKeyEdge> {
+  if (line === TALK_KEY_EVENT.DOWN) return { kind: "down" };
+  if (line === TALK_KEY_EVENT.UP) return { kind: "up" };
+  if (line.startsWith(`${TALK_KEY_EVENT.REGISTERED} `)) {
+    return { kind: "registered", accelerator: line.slice(TALK_KEY_EVENT.REGISTERED.length + 1) };
+  }
+  if (line.startsWith(TALK_KEY_EVENT.UNAVAILABLE)) return LINE_UNAVAILABLE;
+  return undefined;
+}
 
 /**
  * Watches the talk key being held down and let go of, from whatever app is
@@ -51,75 +81,30 @@ const EXIT_WAIT_MS = 1000;
  * for nothing else: it is told one chord and can see no other key, which is
  * what keeps hold-to-talk from costing the user an Accessibility grant.
  */
-export class TalkKeyWatcher {
-  readonly #options: TalkKeyWatcherOptions;
-  #helper: NativeHelper | undefined;
-  #done = false;
+export function talkKeyWatcher(options: TalkKeyWatcherOptions): TalkKeyWatch {
+  let watch: LineWatcher | undefined;
 
-  constructor(options: TalkKeyWatcherOptions) {
-    this.#options = options;
-  }
-
-  /**
-   * Starts the helper, reporting whether it could be launched at all. A `true`
-   * here is not yet a registered key — that arrives on the helper's first line,
-   * through `onRegistered`.
-   */
-  start(candidates: readonly string[]): boolean {
-    const helper = new NativeHelper({
-      binary: "mac-talk-key",
-      arguments: candidates,
-      output: "lines",
-      ...(this.#options.spawnHelper
-        ? { spawnProcess: () => this.#options.spawnHelper?.(candidates) }
-        : undefined),
-    });
-    helper.onLine((line) => this.#handle(line));
-    helper.onExit(() => this.#unavailable());
-    if (!helper.start()) {
-      this.#unavailable();
-      return false;
-    }
-    this.#helper = helper;
-    return true;
-  }
-
-  /**
-   * Stops the helper, reporting when its process is actually gone. Detached
-   * before killing: this exit is the app's own doing, and reporting it as the
-   * key becoming unavailable would stand up a fallback during shutdown. The
-   * answer matters to a successor — the system releases the chord with the
-   * process, not with the kill that asked for it, so a new helper that claims
-   * a chord this one still holds would be refused.
-   */
-  stop(): Promise<void> {
-    const helper = this.#helper;
-    this.#helper = undefined;
-    this.#done = true;
-    return helper?.stop(EXIT_WAIT_MS) ?? Promise.resolve();
-  }
-
-  #handle(line: string): void {
-    if (this.#done) return;
-    if (line === TALK_KEY_EVENT.DOWN) {
-      this.#options.onPress();
-      return;
-    }
-    if (line === TALK_KEY_EVENT.UP) {
-      this.#options.onRelease();
-      return;
-    }
-    if (line.startsWith(`${TALK_KEY_EVENT.REGISTERED} `)) {
-      this.#options.onRegistered(line.slice(TALK_KEY_EVENT.REGISTERED.length + 1));
-      return;
-    }
-    if (line.startsWith(TALK_KEY_EVENT.UNAVAILABLE)) this.#unavailable();
-  }
-
-  #unavailable(): void {
-    if (this.#done) return;
-    this.#done = true;
-    this.#helper = undefined;
-    this.#options.onUnavailable();
-  }
+  return {
+    start(candidates: readonly string[]): boolean {
+      const { spawnHelper } = options;
+      watch = lineWatcher<TalkKeyEdge>({
+        binary: "mac-talk-key",
+        arguments: candidates,
+        parse: parseTalkKeyLine,
+        onState: (edge) => {
+          if (edge.kind === "down") options.onPress();
+          else if (edge.kind === "up") options.onRelease();
+          else options.onRegistered(edge.accelerator);
+        },
+        onUnavailable: options.onUnavailable,
+        unavailableLineEnds: true,
+        exitWaitMs: EXIT_WAIT_MS,
+        ...(spawnHelper ? { spawnProcess: () => spawnHelper(candidates) } : undefined),
+      });
+      return watch.start();
+    },
+    stop(): Promise<void> {
+      return watch?.stop() ?? Promise.resolve();
+    },
+  };
 }

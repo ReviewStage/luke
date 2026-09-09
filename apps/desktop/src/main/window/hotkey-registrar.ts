@@ -8,7 +8,7 @@ import type { UnparsedWireValue } from "@sidecar/wire";
 import { type BrowserWindow, globalShortcut, type WebContents } from "electron";
 import { channels } from "#shared/bridge";
 import type { WindowMode } from "#shared/messages/session";
-import { type TalkKeyEdges, TalkKeyWatcher } from "../native/talk-key";
+import { type TalkKeyEdges, talkKeyWatcher } from "../native/talk-key";
 
 /**
  * The three Luke keys, in the order they outrank one another. Talk takes any
@@ -142,8 +142,7 @@ export class HotkeyRegistrar {
     this.#hasCredentials = options.hasCredentials;
     this.#recordProductEvent = options.recordProductEvent;
     this.#shortcut = options.shortcut ?? globalShortcut;
-    this.#createTalkKeyWatcher =
-      options.createTalkKeyWatcher ?? ((edges) => new TalkKeyWatcher(edges));
+    this.#createTalkKeyWatcher = options.createTalkKeyWatcher ?? talkKeyWatcher;
     this.#keys = new Map<HotkeyRank, KeyState>([
       [
         HOTKEY_RANK.TALK,

@@ -15,7 +15,7 @@ import {
   type MicrophoneRoute,
   type MicrophoneStatus,
 } from "#shared/messages/audio";
-import type { MicrophoneRouteWatcher } from "../native/microphone-route";
+import type { MicrophoneRouteWatch } from "../native/microphone-route";
 import { registerBridge } from "../register-bridge";
 import type { PanelManager } from "../window/panel-manager";
 
@@ -39,7 +39,7 @@ export interface WindowSurfaceIpcDependencies {
   panels: PanelManager;
   requestMicrophone: () => Promise<MicrophoneStatus>;
   microphoneRoute: () => MicrophoneRoute | undefined;
-  microphoneRouteWatcher: () => MicrophoneRouteWatcher | undefined;
+  microphoneRouteWatcher: () => MicrophoneRouteWatch | undefined;
   recordProductEvent: RecordProductEvent;
 }
 

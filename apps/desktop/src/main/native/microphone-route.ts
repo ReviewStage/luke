@@ -5,7 +5,8 @@ import {
   type MicrophoneRoute,
   type MicrophoneTransport,
 } from "#shared/messages/audio";
-import { NativeHelper, type NativeHelperProcess } from "./native-helper";
+import { lineWatcher } from "./line-watcher";
+import type { NativeHelperProcess } from "./native-helper";
 
 /** The one word the helper takes; its one line is read by the parser below. */
 export const MICROPHONE_ROUTE_PROBE = "probe";
@@ -17,12 +18,25 @@ export interface MicrophoneRouteEdges {
   onUnavailable(): void;
 }
 
-/** Only the parts of a child process this needs, so a test can supply them. */
-export type MicrophoneRouteProcess = NativeHelperProcess;
-
 export interface MicrophoneRouteWatcherOptions extends MicrophoneRouteEdges {
   /** Injectable so the reader can be exercised without a Mac or a binary. */
-  spawnHelper?: () => MicrophoneRouteProcess | undefined;
+  spawnHelper?: () => NativeHelperProcess | undefined;
+}
+
+export interface MicrophoneRouteWatch {
+  /**
+   * Starts the helper, reporting whether it could be launched at all. A `true`
+   * is not yet a readable route — that arrives on the helper's first line.
+   */
+  start(): boolean;
+  /**
+   * Asks for a fresh read. The lid can close without any device changing, so
+   * the app probes when a press is about to choose a device; the answer rides
+   * the same line every change does.
+   */
+  probe(): void;
+  /** Stops the helper. Nothing succeeds it during shutdown, so no one waits. */
+  stop(): void;
 }
 
 /**
@@ -32,67 +46,30 @@ export interface MicrophoneRouteWatcherOptions extends MicrophoneRouteEdges {
  * answer decides is bounded to one act: which device the renderer asks the
  * browser to open when a press takes a turn.
  */
-export class MicrophoneRouteWatcher {
-  readonly #options: MicrophoneRouteWatcherOptions;
-  #helper: NativeHelper | undefined;
-  #done = false;
+export function microphoneRouteWatcher(
+  options: MicrophoneRouteWatcherOptions,
+): MicrophoneRouteWatch {
+  const { spawnHelper } = options;
+  const watch = lineWatcher<MicrophoneRoute>({
+    binary: "mac-microphone-route",
+    input: "pipe",
+    parse: parseMicrophoneRouteLine,
+    onState: options.onRoute,
+    onUnavailable: options.onUnavailable,
+    // The helper writes no refusal of its own; only its death withdraws a route.
+    unavailableLineEnds: true,
+    ...(spawnHelper ? { spawnProcess: spawnHelper } : undefined),
+  });
 
-  constructor(options: MicrophoneRouteWatcherOptions) {
-    this.#options = options;
-  }
-
-  /**
-   * Starts the helper, reporting whether it could be launched at all. A `true`
-   * is not yet a readable route — that arrives on the helper's first line.
-   */
-  start(): boolean {
-    const helper = new NativeHelper({
-      binary: "mac-microphone-route",
-      input: "pipe",
-      output: "lines",
-      ...(this.#options.spawnHelper ? { spawnProcess: this.#options.spawnHelper } : undefined),
-    });
-    helper.onLine((line) => {
-      if (this.#done) return;
-      const route = parseMicrophoneRouteLine(line);
-      if (route) this.#options.onRoute(route);
-    });
-    helper.onExit(() => this.#unavailable());
-    if (!helper.start()) {
-      this.#unavailable();
-      return false;
-    }
-    this.#helper = helper;
-    return true;
-  }
-
-  /**
-   * Asks for a fresh read. The lid can close without any device changing, so
-   * the app probes when a press is about to choose a device; the answer rides
-   * the same line every change does.
-   */
-  probe(): void {
-    if (this.#done) return;
-    this.#helper?.writeLine(MICROPHONE_ROUTE_PROBE);
-  }
-
-  /**
-   * Stops the helper. Detached before killing: this exit is the app's own
-   * doing, and nothing succeeds a watcher during shutdown, so no one waits.
-   */
-  stop(): void {
-    const helper = this.#helper;
-    this.#helper = undefined;
-    this.#done = true;
-    void helper?.stop();
-  }
-
-  #unavailable(): void {
-    if (this.#done) return;
-    this.#done = true;
-    this.#helper = undefined;
-    this.#options.onUnavailable();
-  }
+  return {
+    start: () => watch.start(),
+    probe: () => {
+      watch.send(MICROPHONE_ROUTE_PROBE);
+    },
+    stop: () => {
+      void watch.stop();
+    },
+  };
 }
 
 const TRANSPORT_WORDS: readonly MicrophoneTransport[] = Object.values(MICROPHONE_TRANSPORT);

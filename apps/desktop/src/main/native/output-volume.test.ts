@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { OutputAudioState } from "#shared/messages/audio";
-import { OutputVolumeWatcher, parseOutputLine } from "./output-volume";
+import { type OutputVolumeWatch, outputVolumeWatcher, parseOutputLine } from "./output-volume";
 
 interface Harness {
-  watcher: OutputVolumeWatcher;
+  watcher: OutputVolumeWatch;
   events: string[];
   killed: () => boolean;
   emit: (chunk: string) => void;
@@ -17,7 +17,7 @@ function harness(spawnFails = false): Harness {
   let onData: ((chunk: string) => void) | undefined;
   const exits: (() => void)[] = [];
 
-  const watcher = new OutputVolumeWatcher({
+  const watcher = outputVolumeWatcher({
     spawnHelper: () =>
       spawnFails
         ? undefined

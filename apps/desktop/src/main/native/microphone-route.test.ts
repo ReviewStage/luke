@@ -3,10 +3,11 @@ import test from "node:test";
 import { LID_STATE, MICROPHONE_TRANSPORT, type MicrophoneRoute } from "#shared/messages/audio";
 import {
   MICROPHONE_ROUTE_PROBE,
-  type MicrophoneRouteProcess,
-  MicrophoneRouteWatcher,
+  type MicrophoneRouteWatch,
+  microphoneRouteWatcher,
   parseMicrophoneRouteLine,
 } from "./microphone-route";
+import type { NativeHelperProcess } from "./native-helper";
 
 test("a route line parses into its three facts", () => {
   assert.deepEqual(
@@ -41,7 +42,7 @@ test("a line outside the vocabulary is dropped rather than guessed at", () => {
 });
 
 interface Harness {
-  watcher: MicrophoneRouteWatcher;
+  watcher: MicrophoneRouteWatch;
   routes: MicrophoneRoute[];
   unavailable: () => number;
   written: string[];
@@ -56,7 +57,7 @@ function harness(): Harness {
   let listener: ((chunk: string) => void) | undefined;
   const exits: (() => void)[] = [];
 
-  const child: MicrophoneRouteProcess = {
+  const child: NativeHelperProcess = {
     stdin: {
       write: (chunk) => {
         written.push(chunk);
@@ -77,7 +78,7 @@ function harness(): Harness {
     kill: () => undefined,
   };
 
-  const watcher = new MicrophoneRouteWatcher({
+  const watcher = microphoneRouteWatcher({
     spawnHelper: () => child,
     onRoute: (route) => {
       routes.push(route);
@@ -136,7 +137,7 @@ test("a helper that dies withdraws the route rather than freezing it", () => {
 
 test("a watcher that cannot spawn says so once", () => {
   let unavailable = 0;
-  const watcher = new MicrophoneRouteWatcher({
+  const watcher = microphoneRouteWatcher({
     spawnHelper: () => undefined,
     onRoute: () => undefined,
     onUnavailable: () => {
