@@ -50,18 +50,18 @@ export interface BrainTransportOptions {
  * credential — a key the developer typed, or the signed-in account's token,
  * which is refreshed once when the first attempt is refused.
  */
-export abstract class BrainTransport {
-  protected readonly baseUrl: string;
-  protected readonly now: () => number;
+abstract class BrainTransport {
+  readonly #baseUrl: string;
+  readonly #now: () => number;
   readonly #fetch: CloudFetch;
   readonly #requestTimeoutMs: number;
 
   protected constructor(options: BrainTransportOptions) {
     const baseUrl = text(options.baseUrl);
     if (!baseUrl) throw new Error("Brain transport base URL must not be empty");
-    this.baseUrl = withoutTrailingSlash(baseUrl);
+    this.#baseUrl = withoutTrailingSlash(baseUrl);
     this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
-    this.now = options.now ?? Date.now;
+    this.#now = options.now ?? Date.now;
     this.#requestTimeoutMs = positiveInteger(options.requestTimeoutMs, BRAIN_REQUEST_TIMEOUT_MS);
   }
 
@@ -71,15 +71,18 @@ export abstract class BrainTransport {
   /** The authorization header for one attempt, or nothing when there is no credential to send. */
   protected abstract authorization(): Promise<string | undefined>;
 
-  /** A fresh authorization for one retry of a refused attempt, or nothing to let the refusal stand. */
-  protected retryUnauthorized(_used: string): Promise<string | undefined> {
-    return Promise.resolve(undefined);
+  /** Asks whoever owns the credential to renew it; a transport with nothing to renew does nothing. */
+  protected renewCredential(): Promise<void> {
+    return Promise.resolve();
   }
 
   /**
    * One authorized request. No credential at all and a fetch that did not
    * complete are already ends, named by kind; every status is the caller's to
-   * read, including the refusal that outlived a refreshed credential.
+   * read, including the refusal that outlived a renewed credential.
+   *
+   * A refusal is retried exactly once, and only on a credential that actually
+   * changed: retrying the same one would only repeat the no.
    */
   async send(
     path: string,
@@ -93,10 +96,11 @@ export abstract class BrainTransport {
     if (!(response instanceof Response) || response.status !== HTTP_STATUS.UNAUTHORIZED) {
       return response;
     }
-    const refreshed = await this.retryUnauthorized(authorization);
-    return refreshed === undefined
+    await this.renewCredential();
+    const renewed = await this.authorization();
+    return renewed === undefined || renewed === authorization
       ? response
-      : this.#attempt(path, method, refreshed, body, signal);
+      : this.#attempt(path, method, renewed, body, signal);
   }
 
   /**
@@ -112,15 +116,15 @@ export abstract class BrainTransport {
         ? hostedQuotaSchema.parse(unparsedWire(record.quota))
         : undefined;
     const resetsAt = quota?.resetsAt;
-    if (resetsAt !== undefined && resetsAt > this.now()) {
+    if (resetsAt !== undefined && resetsAt > this.#now()) {
       return {
         until: resetsAt,
-        message: `${this.label} are out of today's allowance; pausing for ${Math.round((resetsAt - this.now()) / 1000)}s`,
+        message: `${this.label} are out of today's allowance; pausing for ${Math.round((resetsAt - this.#now()) / 1000)}s`,
       };
     }
     const waitMs = rateLimitWaitMs(response.headers.get(RETRY_AFTER_HEADER));
     return {
-      until: this.now() + waitMs,
+      until: this.#now() + waitMs,
       message: `${this.label} are rate limited; pausing for ${Math.round(waitMs / 1000)}s`,
     };
   }
@@ -133,7 +137,7 @@ export abstract class BrainTransport {
     signal: AbortSignal | undefined,
   ): Promise<Response | Failure> {
     try {
-      return await this.#fetch(`${this.baseUrl}${path}`, {
+      return await this.#fetch(`${this.#baseUrl}${path}`, {
         method,
         headers: {
           authorization,
@@ -207,14 +211,9 @@ export class HostedBrainTransport extends BrainTransport {
     return capabilities;
   }
 
-  protected override async retryUnauthorized(used: string): Promise<string | undefined> {
-    // Routine expiry of an hour-lived token inside a day-lived app: refresh and
-    // retry once. A retry on the same token would only repeat the no.
-    await this.#refreshAccount().catch(() => undefined);
-    const refreshed = await this.#readAccessToken();
-    if (!refreshed) return undefined;
-    const authorization = bearer(refreshed);
-    return authorization === used ? undefined : authorization;
+  /** Routine expiry of an hour-lived token inside a day-lived app; a refresh that itself fails leaves the refusal standing. */
+  protected override renewCredential(): Promise<void> {
+    return this.#refreshAccount().catch(() => undefined);
   }
 
   protected async authorization(): Promise<string | undefined> {

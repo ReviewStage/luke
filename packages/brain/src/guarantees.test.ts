@@ -483,10 +483,9 @@ test("an ask's reply is its final text, and announce is refused inside one", asy
  */
 test("a brain call is addressed to the developer's own key or to Luke's own service, and reports neither", async () => {
   const addressed: string[] = [];
-  const answer = () => Promise.resolve(Response.json({}));
   const fetch = (url: string) => {
     addressed.push(url);
-    return answer();
+    return Promise.resolve(Response.json({}));
   };
   const keyed = new KeyedBrainTransport({
     baseUrl: "https://api.openai.test/v1",
