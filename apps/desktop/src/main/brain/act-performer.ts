@@ -108,6 +108,12 @@ export function createBrainActPerformer(
 ): BrainActPerformer {
   const admissionContext = (execution: BrainActExecution): AdmitContext => {
     const issues = dependencies.trackedIssues();
+    // The roster and the projects an act is admitted against are two readings
+    // of one observation pass, so the pass runs once per act however many of
+    // them admission asks for. An act that asks for neither — an issue act, a
+    // setting — observes nothing at all.
+    let pass: Promise<void> | undefined;
+    const observed = () => (pass ??= dependencies.refreshSessions());
     return {
       origin: execution.origin,
       guard: execution,
@@ -116,12 +122,15 @@ export function createBrainActPerformer(
       // refresh's late answer dispatches nothing.
       roster: {
         read: async () => {
-          await dependencies.refreshSessions();
+          await observed();
           return dependencies.sessions();
         },
       },
       projects: {
-        read: async () => dependencies.workspaceProjects(),
+        read: async () => {
+          await observed();
+          return dependencies.workspaceProjects();
+        },
         defaults: () => dependencies.workspaceDefaults(),
         agentModels: workspaceAgentModels,
       },

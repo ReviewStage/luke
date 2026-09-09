@@ -407,6 +407,41 @@ test("an act is validated against the roster as refreshed inside the turn, not a
   assert.deepEqual(performed, []);
 });
 
+test("a creation is admitted against the projects the same pass reported, and the pass runs once", async () => {
+  let projects: readonly ObservedWorkspaceProject[] = [];
+  let passes = 0;
+  const { acts, performed } = performer({
+    workspaceProjects: () => projects,
+    refreshSessions: async () => {
+      passes += 1;
+      // The project is only offered once an observation pass has run.
+      projects = [LISTED_PROJECT];
+    },
+  });
+  const created = await acts.perform(CREATE_CALL, LIVE);
+  assert.equal(created.status, ACT_RESULT_STATUS.ACCEPTED);
+  assert.equal(passes, 1);
+  assert.deepEqual(
+    performed.map((act) => act.kind),
+    [ACT_KIND.CREATE_WORKSPACE],
+  );
+});
+
+test("an issue act observes nothing: no pass runs for an act the roster cannot answer for", async () => {
+  let passes = 0;
+  const { acts } = performer({
+    refreshSessions: async () => {
+      passes += 1;
+    },
+  });
+  const refused = await acts.perform(
+    { name: REALTIME_TOOL.COMMENT_ON_ISSUE, argumentsJson: "{}" },
+    LIVE,
+  );
+  assert.equal(refused.status, ACT_RESULT_STATUS.REJECTED);
+  assert.equal(passes, 0);
+});
+
 test("a cancel during the roster refresh or the defaults read settles the act, and the late read dispatches nothing", async () => {
   for (const held of ["refreshSessions", "workspaceDefaults"] as const) {
     let release: (() => void) | undefined;
