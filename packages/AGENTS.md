@@ -28,6 +28,12 @@ which both parses the untrusted value and emits the JSON Schema a model is
 shown for it. A hand-written parser beside a hand-written schema is two
 statements of the same rule that can drift.
 
+`@sidecar/wire` is also the base every layer's lifecycle is written in —
+`IDisposable`, `DisposableStore`, `toDisposable`, `Event`, and `Emitter` — so a
+listener's unsubscribe, a watcher's teardown, and the store that ends both are
+one shape wherever they are held, and adopting it adds no edge: every package
+but `packages/panel` already depends on wire.
+
 ## The graph is acyclic, and stays that way
 
 Every package declares exactly the packages its own sources reach, and the

@@ -9,6 +9,7 @@ export {
   type UnknownActionResult,
 } from "./action-result.js";
 export { type Admitted, reshapeAdmitted } from "./admitted.js";
+export { Emitter, type Event } from "./event.js";
 export {
   type CloudFetch,
   HTTP_STATUS,
@@ -38,6 +39,12 @@ export {
   withoutTrailingSlash,
 } from "./json.js";
 export { type LateRef, lateRef } from "./late-ref.js";
+export {
+  DisposableStore,
+  disposeAll,
+  type IDisposable,
+  toDisposable,
+} from "./lifecycle.js";
 export {
   type ArrayOptions,
   type BoundedTextOptions,
