@@ -216,7 +216,7 @@ struct WorkspaceCreatorSheet: View {
             stored.effort == nil || option.efforts.contains(stored.effort ?? "")
         {
             agentKind = stored.agent
-            modelId = stored.model
+            modelId = stored.model ?? ""
             effort = stored.effort
         } else {
             agentKind = nil
