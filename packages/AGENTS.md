@@ -36,9 +36,12 @@ but `packages/panel` already depends on wire.
 
 ## The graph is acyclic, and stays that way
 
-Every package declares exactly the packages its own sources reach, and the
-graph has no cycles, checked by `pnpm --recursive run typecheck` from a clean
-`node_modules`, which resolves workspace links strictly.
+Every package declares exactly the packages its own sources reach by bare
+specifier — not one reached only through `apps/web/server/core.ts`'s relative
+doors, which pull a package into the compiler's graph without asking the
+resolver for it — and the graph has no cycles, checked by
+`pnpm --recursive run typecheck` from a clean `node_modules`, which resolves
+workspace links strictly.
 
 Adding a package means adding a `package.json` and a `tsconfig.json` copied
 from any sibling, a barrel at `src/index.ts`, and the dependencies its imports

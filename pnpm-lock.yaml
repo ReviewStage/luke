@@ -75,9 +75,6 @@ importers:
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../../packages/hosted
-      '@sidecar/memory':
-        specifier: workspace:*
-        version: link:../../packages/memory
       '@sidecar/panel':
         specifier: workspace:*
         version: link:../../packages/panel
@@ -171,9 +168,6 @@ importers:
       '@sidecar/brain':
         specifier: workspace:*
         version: link:../../packages/brain
-      '@sidecar/credentials':
-        specifier: workspace:*
-        version: link:../../packages/credentials
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../../packages/hosted

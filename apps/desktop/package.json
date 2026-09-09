@@ -50,7 +50,6 @@
     "@sidecar/guide": "workspace:*",
     "@sidecar/host": "workspace:*",
     "@sidecar/hosted": "workspace:*",
-    "@sidecar/memory": "workspace:*",
     "@sidecar/panel": "workspace:*",
     "@sidecar/providers": "workspace:*",
     "@sidecar/realtime": "workspace:*",

@@ -20,6 +20,11 @@
  * the ones reached only through another package, so a package pulled in for
  * compilation alone cannot silently collide with a name a door above it
  * already exports.
+ *
+ * A door here reaches its package for the compiler, not the resolver: it
+ * satisfies Vercel's relative import graph, never a bare specifier `apps/web`
+ * code imports, so `apps/web`'s `package.json` need not declare a dependency
+ * on a package reached only through this file.
  */
 import "../../../packages/credentials/src/credential-providers.js";
 import "../../../packages/guide/src/index.js";
