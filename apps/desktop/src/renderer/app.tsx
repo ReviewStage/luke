@@ -1,14 +1,17 @@
+import type { AccountProvider, AccountSnapshot } from "@sidecar/account/snapshot";
+import { ACCOUNT_STATUS } from "@sidecar/account/snapshot";
 import { ACT_KIND, dispatchByKind } from "@sidecar/acts";
 import {
   PRODUCT_PANEL_SOURCE,
   PRODUCT_SEARCH_SURFACE,
   PRODUCT_SURFACE_EVENT,
 } from "@sidecar/analytics";
-import { APPLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
+import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
 import type { CredentialProviderId } from "@sidecar/credentials/vocabulary";
 import {
   CREDENTIAL_PROVIDER_LIST,
   CREDENTIAL_PROVIDERS,
+  CREDENTIAL_SOURCE,
   isCredentialProviderId,
 } from "@sidecar/credentials/vocabulary";
 import type { FeedbackImage, FeedbackKind } from "@sidecar/feedback";
@@ -28,6 +31,13 @@ import {
   voiceHotkeyLabel,
   voiceHotkeyToShow,
 } from "@sidecar/settings";
+import type {
+  AppSettings,
+  AppSettingsView,
+  ObservedAccountCalendars,
+  SettingsUpdateResult,
+} from "@sidecar/settings/wire";
+import { appSettingsView } from "@sidecar/settings/wire";
 import { MOTION_DURATION_MS, VOICE_CAPTION_MAX_HEIGHT } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
@@ -40,10 +50,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { APPLE_CALENDAR_ACCESS } from "#shared/apple-calendar";
 import { CONSENT_SERVICE_ID, type ConsentServiceId } from "#shared/consent-services";
-import type { AccountProvider, AccountSnapshot } from "#shared/messages/account";
-import { ACCOUNT_STATUS, CREDENTIAL_SOURCE } from "#shared/messages/account";
 import type { OutputAudioState } from "#shared/messages/audio";
 import type {
   AppBootstrap,
@@ -58,13 +65,6 @@ import {
   SUPERSET_SIGN_IN_STAGE,
   SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "#shared/messages/session";
-import type {
-  AppSettings,
-  AppSettingsView,
-  ObservedAccountCalendars,
-  SettingsUpdateResult,
-} from "#shared/messages/settings";
-import { appSettingsView } from "#shared/messages/settings";
 import type { UpdateSnapshot } from "#shared/messages/update";
 import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
 import type { CalendarGateControl } from "./calendar-gate";

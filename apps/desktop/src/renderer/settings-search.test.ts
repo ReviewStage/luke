@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CLOUD_AGENT_PROVIDER_LIST, CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
+import {
+  CLOUD_AGENT_PROVIDER_LIST,
+  CREDENTIAL_PROVIDER_ID,
+  CREDENTIAL_SOURCE,
+} from "@sidecar/credentials/vocabulary";
 import { APP_SETTING_SCHEMA, settingFieldForGuideId, settingGuideEntries } from "@sidecar/settings";
-import { CREDENTIAL_SOURCE } from "#shared/messages/account";
-import type { AppSettingsView } from "#shared/messages/settings";
-import { VOICE_SOURCE } from "#shared/messages/settings";
+import type { AppSettingsView } from "@sidecar/settings/wire";
+import { VOICE_SOURCE } from "@sidecar/settings/wire";
 import { settingsView } from "#testing/settings-fixtures";
 import {
   type SettingsSearchEntry,

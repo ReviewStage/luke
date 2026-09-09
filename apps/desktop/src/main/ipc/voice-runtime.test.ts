@@ -1,11 +1,11 @@
 /* oxlint-disable anti-slop/no-unknown-returns -- Fake Electron listeners deliberately retain the IPC boundary shape. */
 import assert from "node:assert/strict";
 import test from "node:test";
+import { VoiceReceiver } from "@sidecar/host";
 import type { WireRecord } from "@sidecar/wire";
 import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import { BRIDGE, channels } from "#shared/bridge";
 import { VOICE_COMMAND, VOICE_COMMAND_OUTCOME } from "#shared/messages/voice-view";
-import { VoiceReceiver } from "../voice-receiver";
 import type { PanelManager } from "../window/panel-manager";
 import { registerVoiceRuntimeIpc, type VoiceWindowSurface } from "./voice-runtime";
 

@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.js"
+    ".": "./src/index.js",
+    "./testing": "./src/testing/index.js"
   },
   "types": "./src/index.ts",
   "scripts": {
@@ -12,6 +13,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
+    "@sidecar/runtime-contracts": "workspace:*",
     "@sidecar/session": "workspace:*",
     "@sidecar/surface": "workspace:*"
   },

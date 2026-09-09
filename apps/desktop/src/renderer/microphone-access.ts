@@ -1,6 +1,6 @@
 import { REALTIME_MINT_OUTCOME, type RealtimeDiagnostics } from "@sidecar/realtime";
+import { VOICE_SOURCE, type VoiceSource } from "@sidecar/settings/wire";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "#shared/messages/audio";
-import { VOICE_SOURCE, type VoiceSource } from "#shared/messages/settings";
 
 /**
  * Why voice as a whole is off: nothing it can run on stands — no signed-in

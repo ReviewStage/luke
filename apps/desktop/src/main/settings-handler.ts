@@ -1,3 +1,4 @@
+import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import {
@@ -7,7 +8,6 @@ import {
   type BridgeMethod,
   bridgeEntries,
 } from "#shared/bridge";
-import type { AppSettings, SettingsUpdateResult } from "#shared/messages/settings";
 import { type BridgeContext, registerBridgeEntry } from "./register-bridge";
 
 export class SettingsRefusal {

@@ -381,10 +381,14 @@ Trust constraints:
   the workspace files, and the runtime package that composes it knows the
   files' names and bounds but none of their words, which the brain supplies.
 - Every client reaches the judgment through one boundary, the Gateway
-  protocol in `runtime-contracts` (`protocol.ts`): versioned request,
+  protocol in `packages/gateway` (`protocol.ts`): versioned request,
   response, and event envelopes, a fixed method vocabulary whose every entry
-  says whether it mutates, and typed error codes. The host side
-  (`GatewayServer` in `packages/runtime`, composed as the desktop's
+  says whether it mutates, and typed error codes. That package is the
+  contract and its runtime together — the protocol, the server, the client,
+  the transports, and the node registry — and the socket binding keeps a door
+  of its own (`@sidecar/gateway/websocket`), because it reaches `ws` and
+  `node:http` and a bundle that only wants the vocabulary must not resolve
+  them. The host side (`GatewayServer`, composed as `@sidecar/host`'s
   `GatewayService`) owns the idempotency ledger (every mutating method
   carries an idempotency key; the same key finds the first answer, the same
   key with other parameters is a conflict, never a second effect), the
@@ -419,7 +423,13 @@ Trust constraints:
   credential the host minted. Widening the method vocabulary, the event set,
   or what a node may be asked is a product decision, not an implementation
   detail.
-- The host is what composes and owns the runtime, and it draws nothing: the
+- The host is what composes and owns the runtime, and it draws nothing. It is
+  `packages/host` (`composeHost`), which imports no `electron`, `react`, or
+  DOM API: everything of the machine arrives as a seam it is handed rather
+  than reads, and the two files that needed one were split at that line — the
+  `ipcMain` registrations stayed in `apps/desktop/src/main/ipc/`, and
+  resolving this Mac's EventKit helper bundle stayed in
+  `apps/desktop/src/main/native/`. What it owns is the
   settings store and its cipher (so the credentials are decrypted where the
   host runs, under the same app name and Keychain entry), the account
   session and its refresh, the provider-key vault sync, the counted events,
@@ -435,7 +445,8 @@ Trust constraints:
   process today and reaches it over the in-process transport; a process on
   the other side of the socket is the same host reached over another
   transport, and nothing above the transport changes, because the desktop is
-  one operator client either way. What the desktop keeps for itself is the
+  one operator client either way. The whole quit is `Host.stop()`, in one
+  place and in one order, so no caller can run the steps in another. What the desktop keeps for itself is the
   windows, the keys, the Dock, the login item, the media duck, the output
   and microphone watchers, the microphone permission, the updater, the
   feedback courier, and the introduction; every bridge handler proxies to
@@ -1195,6 +1206,8 @@ works in that subtree:
 | `packages/providers/AGENTS.md` | Keeping `PRIVACY.md` and the README's agent table true to the adapters |
 | `packages/surface/AGENTS.md` | The shared surface vocabulary and its generated outputs |
 | `packages/realtime/AGENTS.md` | Why `protocol` and `tools` ship together |
+| `packages/gateway/AGENTS.md` | The protocol as the contract, its three doors, and injected authentication |
+| `packages/host/AGENTS.md` | The host's seams, why it draws nothing, and the one drain |
 | `packages/analytics/AGENTS.md` | The product-event allowlist and its `PRIVACY.md` obligation |
 | `packages/hosted/AGENTS.md` | The hosted wire boundary and its dependency direction |
 

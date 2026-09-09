@@ -4,8 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.js",
-    "./local-gateway": "./src/local-gateway.js"
+    ".": "./src/index.js"
   },
   "types": "./src/index.ts",
   "scripts": {
@@ -15,12 +14,10 @@
   "dependencies": {
     "@sidecar/runtime-contracts": "workspace:*",
     "@sidecar/wire": "workspace:*",
-    "croner": "10.0.1",
-    "ws": "8.21.3"
+    "croner": "10.0.1"
   },
   "devDependencies": {
     "@types/node": "26.2.0",
-    "@types/ws": "8.18.1",
     "tsx": "4.23.12",
     "typescript": "7.0.2"
   }

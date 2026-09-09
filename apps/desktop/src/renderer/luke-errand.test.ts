@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ACCOUNT_STATUS } from "@sidecar/account/snapshot";
 import { SESSION_LIST_ALL } from "@sidecar/acts";
 import {
   APP_PANEL_TAB,
@@ -7,7 +8,6 @@ import {
   type AppGuideSetting,
   SESSION_LIST_SORT,
 } from "@sidecar/guide";
-import { ACCOUNT_STATUS } from "#shared/messages/account";
 import { UPDATE_STATUS } from "#shared/messages/update";
 import { settingsView } from "#testing/settings-fixtures";
 import {

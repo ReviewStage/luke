@@ -5,6 +5,11 @@ import {
   BRAIN_SUBMISSION_OUTCOME,
   brainReplyWords,
 } from "@sidecar/brain/requests";
+import {
+  BRAIN_ASK_PENDING_STATUS,
+  type BrainAskResult,
+  brainRequestPending,
+} from "@sidecar/brain/requests-wire";
 import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
 import {
   type ArrivalSpeech,
@@ -28,6 +33,7 @@ import {
 } from "@sidecar/realtime";
 import { SESSION_STATUS, type Session } from "@sidecar/session";
 import { TALK_KEY_RELEASE, talkKeyRelease, voiceHotkeyLabel } from "@sidecar/settings";
+import { type AppSettingsView, appSettingsView } from "@sidecar/settings/wire";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -36,13 +42,7 @@ import {
   type OutputAudioState,
   type VoiceHotkeyState,
 } from "#shared/messages/audio";
-import {
-  BRAIN_ASK_PENDING_STATUS,
-  type BrainAskResult,
-  brainRequestPending,
-} from "#shared/messages/brain";
 import type { VoiceBootstrap } from "#shared/messages/session";
-import { type AppSettingsView, appSettingsView } from "#shared/messages/settings";
 import {
   VOICE_COMMAND,
   type VoiceView,

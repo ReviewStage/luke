@@ -1,3 +1,4 @@
+import type { RunMode } from "@sidecar/host";
 import {
   DEFAULT_PANEL_FORM_FACTOR,
   MOTION_DURATION_MS,
@@ -18,7 +19,6 @@ import {
 import { channels } from "#shared/bridge";
 import type { DisplayDiagnostic, WindowMode } from "#shared/messages/session";
 import { readMacScreenGeometry } from "../native/screen-geometry";
-import type { RunMode } from "../run-mode";
 import { dressMacWindow, hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
 
 export interface PanelDuck {

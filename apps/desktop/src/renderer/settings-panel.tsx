@@ -1,3 +1,5 @@
+import type { AccountSnapshot } from "@sidecar/account/snapshot";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@sidecar/account/snapshot";
 import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import {
   APPLE_CALENDAR_ID,
@@ -5,13 +7,15 @@ import {
   GOOGLE_CALENDAR_ID,
   GOOGLE_CALENDAR_NAME,
 } from "@sidecar/calendar/vocabulary";
-import type { CredentialProvider } from "@sidecar/credentials/vocabulary";
+import type { CredentialProvider, CredentialSource } from "@sidecar/credentials/vocabulary";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_CONNECTION,
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDERS,
+  CREDENTIAL_SOURCE,
   providerRunsSessionsInCloud,
+  SECRET_STORAGE,
   VOICE_CREDENTIAL_PROVIDER,
 } from "@sidecar/credentials/vocabulary";
 import { FEEDBACK_KIND, type FeedbackKind } from "@sidecar/feedback";
@@ -75,24 +79,6 @@ import {
   VOICE_HOTKEY_NONE,
   voiceHotkeyLabel,
 } from "@sidecar/settings";
-import {
-  DEFAULT_PANEL_FORM_FACTOR,
-  isPanelFormFactor,
-  type PanelFormFactor,
-} from "@sidecar/surface";
-import { cssCustomProperties } from "@sidecar/surface/react-css";
-import { ACT_RESULT_STATUS, type ActResult } from "@sidecar/wire";
-import { Fragment, useEffect, useRef, useState } from "react";
-import type { AccountSnapshot, CredentialSource } from "#shared/messages/account";
-import {
-  ACCOUNT_PROVIDER,
-  ACCOUNT_STATUS,
-  CREDENTIAL_SOURCE,
-  SECRET_STORAGE,
-} from "#shared/messages/account";
-import type { MicrophoneStatus } from "#shared/messages/audio";
-import type { WorkspaceProviderId } from "#shared/messages/session";
-import { SUPERSET_WORKSPACE_PROVIDER_ID } from "#shared/messages/session";
 import type {
   AccountCalendar,
   AppSettingField,
@@ -104,14 +90,25 @@ import type {
   ObservedAccountCalendars,
   SettingEntryValue,
   SettingsResetScope,
-} from "#shared/messages/settings";
+} from "@sidecar/settings/wire";
 import {
   CLI_CONNECTION,
   type CliConnection,
   SETTINGS_RESET_SCOPE,
   VOICE_SOURCE,
   type VoiceSource,
-} from "#shared/messages/settings";
+} from "@sidecar/settings/wire";
+import {
+  DEFAULT_PANEL_FORM_FACTOR,
+  isPanelFormFactor,
+  type PanelFormFactor,
+} from "@sidecar/surface";
+import { cssCustomProperties } from "@sidecar/surface/react-css";
+import { ACT_RESULT_STATUS, type ActResult } from "@sidecar/wire";
+import { Fragment, useEffect, useRef, useState } from "react";
+import type { MicrophoneStatus } from "#shared/messages/audio";
+import type { WorkspaceProviderId } from "#shared/messages/session";
+import { SUPERSET_WORKSPACE_PROVIDER_ID } from "#shared/messages/session";
 import type { UpdateSnapshot } from "#shared/messages/update";
 import {
   CREDENTIAL_PLACEHOLDER,

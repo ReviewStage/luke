@@ -1,13 +1,16 @@
-import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
+import {
+  CREDENTIAL_PROVIDER_ID,
+  CREDENTIAL_SOURCE,
+  SECRET_STORAGE,
+} from "@sidecar/credentials/vocabulary";
 import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
-import { PANEL_FORM_FACTOR } from "@sidecar/surface";
-import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/messages/account";
 import {
   APP_SETTING_DEFAULTS,
   type AppSettingsView,
   CLI_CONNECTION,
   VOICE_SOURCE,
-} from "#shared/messages/settings";
+} from "@sidecar/settings/wire";
+import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 
 /**
  * A settings snapshot with every member at a stated value, so a test is told

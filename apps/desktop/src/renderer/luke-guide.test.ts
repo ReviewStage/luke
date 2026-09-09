@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@sidecar/account/snapshot";
+import {
+  CREDENTIAL_PROVIDER_ID,
+  CREDENTIAL_SOURCE,
+  SECRET_STORAGE,
+} from "@sidecar/credentials/vocabulary";
 import {
   APP_SETTING_KIND,
   APP_UPDATE_ACT,
@@ -14,15 +19,9 @@ import {
   REALTIME_VOICE_SPEED,
 } from "@sidecar/realtime";
 import { PROVIDER_ID, type WorkspaceAgentSelection } from "@sidecar/session";
+import type { AppSettingsView, SettingsUpdateResult } from "@sidecar/settings/wire";
+import { appSettingsView } from "@sidecar/settings/wire";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
-import {
-  ACCOUNT_PROVIDER,
-  ACCOUNT_STATUS,
-  CREDENTIAL_SOURCE,
-  SECRET_STORAGE,
-} from "#shared/messages/account";
-import type { AppSettingsView, SettingsUpdateResult } from "#shared/messages/settings";
-import { appSettingsView } from "#shared/messages/settings";
 import type { UpdateSnapshot } from "#shared/messages/update";
 import { UPDATE_STATUS } from "#shared/messages/update";
 import { settingsView } from "#testing/settings-fixtures";

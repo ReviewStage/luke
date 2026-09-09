@@ -1,14 +1,23 @@
 import { ACT_KIND } from "@sidecar/acts";
 import { brainRequestRecordFromWire } from "@sidecar/brain/requests";
-import { type ConversationEntry, conversationEntryFromWire } from "@sidecar/realtime";
-import { GatewayClient, type GatewayTransport } from "@sidecar/runtime";
+import type { BrainAppActRequest } from "@sidecar/brain/requests-wire";
 import {
   GATEWAY_METHOD,
-  MAIN_SESSION_KEY,
+  GatewayClient,
+  type GatewayTransport,
   NODE_CAPABILITY_STATUS,
   type NodeCapabilityResult,
   type NodeInvocation,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/gateway";
+import {
+  createGatewayOperator,
+  type GatewayOperator,
+  HOST_NATIVE_NODE_ID,
+  HOST_NODE_CAPABILITY,
+  HOST_NODE_CAPABILITY_LIST,
+} from "@sidecar/host";
+import { type ConversationEntry, conversationEntryFromWire } from "@sidecar/realtime";
+import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import {
   isRecord,
   isWireNumber,
@@ -18,11 +27,8 @@ import {
 } from "@sidecar/wire";
 import type { WebContents } from "electron";
 import { channels } from "#shared/bridge";
-import type { BrainAppActRequest } from "#shared/messages/brain";
 import type { ConversationHistoryPayload } from "#shared/messages/session";
-import { DESKTOP_NATIVE_NODE_ID, NODE_CAPABILITY, NODE_CAPABILITY_LIST } from "./desktop-node";
 import { createHostOperator, type HostOperator } from "./host-operator";
-import { createGatewayOperator, type GatewayOperator } from "./operator";
 
 /**
  * The Gateway boundary as the desktop client composes it: one operator over
@@ -144,12 +150,12 @@ export function wireGateway(dependencies: GatewayWiringDependencies): GatewayWir
       reason,
     });
     switch (invocation.capability) {
-      case NODE_CAPABILITY.OPEN_EXTERNAL: {
+      case HOST_NODE_CAPABILITY.OPEN_EXTERNAL: {
         if (!isWireString(invocation.params.url)) return failed("open needs a url");
         await dependencies.node.openExternal(invocation.params.url);
         return { status: NODE_CAPABILITY_STATUS.OK, value: undefined };
       }
-      case NODE_CAPABILITY.PANEL_APP_ACT: {
+      case HOST_NODE_CAPABILITY.PANEL_APP_ACT: {
         const action = invocation.params.action;
         if (!isCarriedAppAction(action)) return failed("the act is not one a panel performs");
         return {
@@ -157,7 +163,7 @@ export function wireGateway(dependencies: GatewayWiringDependencies): GatewayWir
           value: await dependencies.node.performAppAct(action),
         };
       }
-      case NODE_CAPABILITY.APPLE_CALENDAR_HELPER: {
+      case HOST_NODE_CAPABILITY.APPLE_CALENDAR_HELPER: {
         const helperArguments = invocation.params.arguments;
         if (
           !Array.isArray(helperArguments) ||
@@ -190,8 +196,8 @@ export function wireGateway(dependencies: GatewayWiringDependencies): GatewayWir
     attached: async () => {
       await client.adoptHost();
       const result = await client.call(GATEWAY_METHOD.NODE_REGISTER, {
-        nodeId: DESKTOP_NATIVE_NODE_ID,
-        capabilities: [...NODE_CAPABILITY_LIST],
+        nodeId: HOST_NATIVE_NODE_ID,
+        capabilities: [...HOST_NODE_CAPABILITY_LIST],
       });
       if (!result.ok) report(`the native node could not register: ${result.error.message}`);
       return result.ok;

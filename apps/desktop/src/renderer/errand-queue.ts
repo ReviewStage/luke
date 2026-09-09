@@ -1,4 +1,4 @@
-import type { AppSettingsView } from "#shared/messages/settings";
+import type { AppSettingsView } from "@sidecar/settings/wire";
 import { ERRAND_WAIT, type ErrandTarget, type ErrandWait } from "./luke-errand";
 import type { PanelTab } from "./panel-tabs";
 import type { SessionArrangement } from "./session-model";

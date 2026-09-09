@@ -1,9 +1,15 @@
+import type { UnparsedWireValue } from "@sidecar/wire";
+
 export const ACCOUNT_PROVIDER = {
   GOOGLE: "google",
   GITHUB: "github",
 } as const;
 
 export type AccountProvider = (typeof ACCOUNT_PROVIDER)[keyof typeof ACCOUNT_PROVIDER];
+
+export function isAccountProvider(value: UnparsedWireValue): value is AccountProvider {
+  return value === ACCOUNT_PROVIDER.GOOGLE || value === ACCOUNT_PROVIDER.GITHUB;
+}
 
 export const ACCOUNT_STATUS = {
   SIGNED_OUT: "signed-out",

@@ -1,3 +1,9 @@
+import {
+  ACCOUNT_STATUS,
+  type AccountProvider,
+  type AccountSnapshot,
+} from "@sidecar/account/snapshot";
+import type { BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
 import { SessionRow as PanelSessionRow, ProviderMark } from "@sidecar/panel";
 import type { ConversationEntry } from "@sidecar/realtime";
 import {
@@ -10,12 +16,6 @@ import { SESSION_URGENCY } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { useCallback, useState } from "react";
-import {
-  ACCOUNT_STATUS,
-  type AccountProvider,
-  type AccountSnapshot,
-} from "#shared/messages/account";
-import type { BrainRequestSnapshot } from "#shared/messages/brain";
 import type { SessionOpenResult } from "#shared/messages/session";
 import { type AskHandler, AskLuke } from "./ask-luke";
 import { CalendarGate, type CalendarGateControl } from "./calendar-gate";

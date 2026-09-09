@@ -4,6 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import * as Sentry from "@sentry/electron/main";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/account/snapshot";
 import {
   PRODUCT_CREDENTIAL_SOURCE,
   PRODUCT_EVENT,
@@ -11,13 +12,30 @@ import {
   productSessionCountBucket,
   type RecordProductEvent,
 } from "@sidecar/analytics";
+import type { BrainAppActRequest } from "@sidecar/brain/requests-wire";
 import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidecar/feedback";
 import { fixtureSnapshot } from "@sidecar/fixtures";
+import { GATEWAY_CLIENT_ROLE, InProcessTransport } from "@sidecar/gateway";
 import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
+import {
+  composeHost,
+  HOST_OPERATOR_CLIENT_ID,
+  INTRODUCTION_FADE_MS,
+  INTRODUCTION_HANDOFF_READY_MS,
+  INTRODUCTION_PEEK_FRESH_MS,
+  INTRODUCTION_RENDER_DEADLINE_MS,
+  jsonStateFile,
+  onboardingStateFile,
+  runModeFor,
+  runtimeStoreWorkerPath,
+  sentryReportingEnabled,
+  shouldRunIntroduction,
+} from "@sidecar/host";
 import { peekLocalSessions } from "@sidecar/providers";
-import { InProcessTransport, shutdownGateway } from "@sidecar/runtime";
-import { GATEWAY_CLIENT_ROLE, MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
+import type { SpeechOutcome } from "@sidecar/realtime/speech";
+import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
+import type { AppSettings } from "@sidecar/settings/wire";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { IntroductionRealtimeCredentialMinter } from "@sidecar/voice";
 import { ACT_RESULT_STATUS, text, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
@@ -38,43 +56,29 @@ import {
   type WebContents,
 } from "electron";
 import { BRIDGE, channels } from "#shared/bridge";
-import { ACCOUNT_STATUS, type AccountSnapshot } from "#shared/messages/account";
 import {
   MICROPHONE_STATUS,
   type MicrophoneRoute,
   type MicrophoneStatus,
   type OutputAudioState,
 } from "#shared/messages/audio";
-import type { BrainAppActRequest } from "#shared/messages/brain";
 import {
   type AppBootstrap,
   type SessionReplayBootstrap,
   type VoiceBootstrap,
   WINDOW_ROLE,
 } from "#shared/messages/session";
-import type { AppSettings } from "#shared/messages/settings";
-import type { SpeechOutcome } from "#shared/messages/speech";
 import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/messages/voice-view";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
-import { runAppleCalendarHelper } from "./apple-calendar";
-import { registerBrainIpc } from "./brain/ipc";
-import { DESKTOP_OPERATOR_CLIENT_ID } from "./gateway/desktop-node";
 import type { HostBootstrap, HostSessionReplay } from "./gateway/host-operator";
 import { wireGateway } from "./gateway/wiring";
-import { composeRuntimeHost } from "./host/runtime-host";
-import {
-  INTRODUCTION_FADE_MS,
-  INTRODUCTION_HANDOFF_READY_MS,
-  INTRODUCTION_PEEK_FRESH_MS,
-  INTRODUCTION_RENDER_DEADLINE_MS,
-  shouldRunIntroduction,
-} from "./introduction-flow";
 import { registerAccountSessionIpc } from "./ipc/account-session";
+import { registerBrainIpc } from "./ipc/brain";
 import { registerSessionActsIpc } from "./ipc/session-acts";
 import { registerSettingsRowsIpc } from "./ipc/settings-rows";
 import { registerVoiceRuntimeIpc } from "./ipc/voice-runtime";
 import { registerWindowSurfaceIpc } from "./ipc/window-surface";
-import { jsonStateFile } from "./json-state-file";
+import { runAppleCalendarHelper } from "./native/apple-calendar-helper";
 import { MediaDuckController } from "./native/media-duck";
 import {
   microphoneRouteWatcher as createMicrophoneRouteWatcher,
@@ -84,10 +88,7 @@ import {
   outputVolumeWatcher as createOutputVolumeWatcher,
   type OutputVolumeWatch,
 } from "./native/output-volume";
-import { onboardingStateFile } from "./onboarding-state";
 import { type BridgeContext, registerBridge, registerBridgeEntry } from "./register-bridge";
-import { runModeFor, sentryReportingEnabled } from "./run-mode";
-import { runtimeStoreWorkerPath } from "./runtime-store-path";
 import { createSettingsHandler } from "./settings-handler";
 import { createElectronUpdaterEngine } from "./update-installer";
 import { UPDATE_ENDPOINT, type UpdaterEngine, UpdateService } from "./update-service";
@@ -385,8 +386,8 @@ function trustedSender(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
  * brain's turn open in the host.
  */
 function performBrainAppAct(action: BrainAppActRequest["action"]): Promise<WireRecord> {
-  const host = panels.primaryPanel();
-  if (!host) {
+  const panel = panels.primaryPanel();
+  if (!panel) {
     return Promise.resolve({
       status: ACT_RESULT_STATUS.REJECTED,
       reason: "No panel is open to carry that.",
@@ -404,7 +405,7 @@ function performBrainAppAct(action: BrainAppActRequest["action"]): Promise<WireR
       resolve(answer);
     });
     const request: BrainAppActRequest = { requestId, action };
-    host.webContents.send(channels.onBrainAppAct, request);
+    panel.webContents.send(channels.onBrainAppAct, request);
   });
 }
 
@@ -415,7 +416,7 @@ function performBrainAppAct(action: BrainAppActRequest["action"]): Promise<WireR
  * worker is never asked for. Either way this process is one operator over
  * one transport, and one node.
  */
-const runtimeHost = composeRuntimeHost({
+const host = composeHost({
   stateRoot: app.getPath("userData"),
   runMode,
   appVersion: app.getVersion(),
@@ -441,8 +442,8 @@ const runtimeHost = composeRuntimeHost({
   // is the one drain, in `before-quit`.
   onShutdownRequested: () => app.quit(),
 });
-const transport = new InProcessTransport(runtimeHost.service.server, {
-  clientId: DESKTOP_OPERATOR_CLIENT_ID,
+const transport = new InProcessTransport(host.server, {
+  clientId: HOST_OPERATOR_CLIENT_ID,
   role: GATEWAY_CLIENT_ROLE.OPERATOR,
 });
 const gateway = wireGateway({
@@ -953,63 +954,35 @@ let draining: Promise<void> | undefined;
 const STANDUP_DRAIN_WAIT_MS = 5_000;
 
 /**
- * How long the drain waits on the store's own close. Past it the process
- * leaves and the operating system reclaims the worker: what did not settle
- * was already counted and persisted, so the next launch recovers it, and a
- * store that never answers must not wedge this process on the
- * single-instance lock. With the standup wait and the coordinator's own
- * deadline, the whole quit is bounded at twenty seconds.
- */
-const HOST_CLOSE_WAIT_MS = 5_000;
-
-function after(delayMs: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, delayMs));
-}
-
-/**
  * The one drain, made once whichever path asks for it: the explicit Quit, or
  * the updater's restart into a downloaded build, which swaps this executable
- * and must not do it over runtime work still going. Admissions close, every
- * run and child under way is cancelled, the publication is given a bounded
- * wait, and what did not settle is counted from the persisted envelopes and
- * left for the next launch's recovery rather than finished on paper. Every
- * later ask is handed the drain already under way rather than a second one.
+ * and must not do it over runtime work still going. The drain itself is the
+ * host's, in one place and in one order — admissions closed, every run and
+ * child under way cancelled, a bounded wait, and what did not settle counted
+ * from the persisted envelopes and left for the next launch's recovery rather
+ * than finished on paper. Every later ask is handed the drain already under
+ * way rather than a second one.
  */
 function drainHostOnce(): Promise<void> {
   if (hostDrain === HOST_DRAIN.OWED) {
     hostDrain = HOST_DRAIN.UNDER_WAY;
-    draining = drainHost().finally(() => {
-      hostDrain = HOST_DRAIN.NOTHING_OWED;
-    });
+    // A drain that overtook the standup it interrupted would close the store
+    // and then have `start` reopen it and re-arm the scheduler, the hooks,
+    // and the observation behind the close, which is the one thing a quit
+    // must not leave running. With the host's own two bounds, the whole quit
+    // is bounded at twenty seconds.
+    draining = Promise.race([
+      hostStandup.catch(() => undefined),
+      new Promise<void>((resolve) => {
+        setTimeout(resolve, STANDUP_DRAIN_WAIT_MS);
+      }),
+    ])
+      .then(() => host.stop())
+      .finally(() => {
+        hostDrain = HOST_DRAIN.NOTHING_OWED;
+      });
   }
   return draining ?? Promise.resolve();
-}
-
-async function drainHost(): Promise<void> {
-  // A drain that overtook the standup it interrupted would close the store
-  // and then have `start` reopen it and re-arm the scheduler, the hooks, and
-  // the observation behind the close, which is the one thing a quit must not
-  // leave running.
-  await Promise.race([hostStandup.catch(() => undefined), after(STANDUP_DRAIN_WAIT_MS)]);
-  // A drain that cannot finish still says so and still closes the store: what
-  // it could not settle is what the next launch marks interrupted, and a quit
-  // must leave either way rather than on an unhandled failure.
-  try {
-    const outcome = await shutdownGateway(runtimeHost.shutdownSteps);
-    report(
-      `shutting down: ${outcome.settled ? "settled" : "unsettled"}, ${outcome.cancelled.length} cancelled, ${outcome.unresolved} unresolved`,
-    );
-  } catch (error) {
-    report(`the drain did not finish: ${error instanceof Error ? error.message : String(error)}`);
-  }
-  const closed = runtimeHost.close().catch((error: Error) => {
-    report(`the runtime did not close cleanly: ${error.message}`);
-  });
-  const closedInTime = await Promise.race([
-    closed.then(() => true),
-    after(HOST_CLOSE_WAIT_MS).then(() => false),
-  ]);
-  if (!closedInTime) report("the runtime did not close in time; leaving it to the exit");
 }
 
 function drainingEngine(engine: UpdaterEngine): UpdaterEngine {
@@ -1065,7 +1038,7 @@ export function startDesktopApp(): void {
       // window must cancel that work rather than have it killed mid-write.
       hostDrain = HOST_DRAIN.OWED;
       hostStandup = (async () => {
-        await runtimeHost.start();
+        await host.start();
         await onAttached();
       })();
       try {
@@ -1138,8 +1111,8 @@ export function startDesktopApp(): void {
             return;
           }
           if (argv.includes("--expanded")) {
-            const host = panels.primaryPanel();
-            const displayId = host ? panels.displayIdFor(host.webContents) : undefined;
+            const panel = panels.primaryPanel();
+            const displayId = panel ? panels.displayIdFor(panel.webContents) : undefined;
             if (displayId !== undefined) panels.setMode(displayId, "expanded", true);
             return;
           }
