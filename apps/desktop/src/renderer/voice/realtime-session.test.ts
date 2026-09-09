@@ -792,7 +792,7 @@ test("a press during the handshake opens the turn it was asking for", async () =
   // it starts. The press opens the device beside the mint and is captured
   // from the moment it answers, so the turn opens on those words — as
   // appends, with the track joining the sender only when the turn is over.
-  context.session.toggleTurn();
+  context.session.beginTurn();
   await context.session.connect();
 
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
@@ -801,25 +801,6 @@ test("a press during the handshake opens the turn it was asking for", async () =
   // the sender stays empty, so nothing rides the network before the commit.
   assert.equal(context.microphoneEnabled(), true);
   assert.deepEqual(context.replacedTracks(), []);
-});
-
-test("pressing twice during the handshake leaves no turn open", async () => {
-  const context = harness({ connectionDelayMs: 5 });
-
-  context.session.toggleTurn();
-  const opening = context.session.connect();
-  // Pressing again before the call is up cannot send anything — the microphone
-  // has not opened yet — so it takes back the press rather than queueing a turn
-  // that would commit an empty buffer.
-  context.session.toggleTurn();
-  await opening;
-
-  assert.equal(context.session.status, REALTIME_STATUS.READY);
-  assert.equal(context.microphoneEnabled(), false);
-  assert.deepEqual(
-    context.sent.filter((event) => event.type === REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_COMMIT),
-    [],
-  );
 });
 
 test("words spoken into the handshake are carried into the turn it opens", async () => {
@@ -946,15 +927,17 @@ test("the words a failed attempt captured die with it", async () => {
   );
 });
 
-test("pressing twice during the handshake takes the words back with the press", async () => {
+test("a press let go over captured words before the call is up, discarding, takes them back", async () => {
   const context = harness({ connectionDelayMs: 5 });
 
-  context.session.toggleTurn();
+  context.session.beginTurn();
   const opening = context.session.connect();
   await deviceArrives();
   context.pressCaptures[0]?.feed([1]);
-  context.session.toggleTurn();
-  // The cancelled turn takes its words and its device with it.
+  // A discard while the handshake is still out has no channel to seal the
+  // words toward, so the turn takes them and its device with it rather than
+  // owing a delivery to the call that is about to come up.
+  context.session.endTurn(false);
   assert.equal(context.pressCaptures[0]?.stopped, true);
   assert.equal(context.microphoneStopped(), true);
   await opening;
@@ -1139,7 +1122,7 @@ test("a speak-only call captures nothing, however long a press waits", async () 
 test("a press does not outlive the call it failed to open", async () => {
   const context = harness({ connection: undefined });
 
-  context.session.toggleTurn();
+  context.session.beginTurn();
   assert.equal(await context.session.connect(), false);
   assert.equal(context.session.status, REALTIME_STATUS.UNAVAILABLE);
 
@@ -1154,9 +1137,8 @@ test("a press does not outlive the call it failed to open", async () => {
 test("a reply that runs out before the model says so still ends", async () => {
   const context = harness();
   await context.session.connect();
-  context.session.toggleTurn();
-  await deviceArrives();
-  context.session.toggleTurn();
+  await holdTurn(context);
+  context.session.endTurn(true);
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 
   // Playback finishing and generation finishing have no fixed order. The meter
@@ -1440,9 +1422,8 @@ test("a call that never reports an ending still ends its replies", async () => {
 test("a pause mid-reply is not the reply running out", async () => {
   const context = harness();
   await context.session.connect();
-  context.session.toggleTurn();
-  await deviceArrives();
-  context.session.toggleTurn();
+  await holdTurn(context);
+  context.session.endTurn(true);
 
   // Long enough between two sentences for the meter to call it quiet, and then
   // he carries on. Ending here would take the meter and the face down with Luke
@@ -1507,9 +1488,8 @@ test("the quiet before Luke starts is not Luke going quiet", () => {
 test("a reply is not over when the model stops producing it", async () => {
   const context = harness();
   await context.session.connect();
-  context.session.toggleTurn();
-  await deviceArrives();
-  context.session.toggleTurn();
+  await holdTurn(context);
+  context.session.endTurn(true);
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 
   // `response.done` says generation finished. The audio it produced is still
@@ -1524,9 +1504,8 @@ test("a reply is not over when the model stops producing it", async () => {
 test("quiet before the model has finished is a pause, not the end", async () => {
   const context = harness();
   await context.session.connect();
-  context.session.toggleTurn();
-  await deviceArrives();
-  context.session.toggleTurn();
+  await holdTurn(context);
+  context.session.endTurn(true);
 
   // Luke draws breath mid-sentence; the reply is still coming.
   context.session.reportRemoteAudioIdle();
@@ -1537,9 +1516,8 @@ test("quiet before the model has finished is a pause, not the end", async () => 
 test("a finished response returns the session to ready", async () => {
   const context = harness();
   await context.session.connect();
-  context.session.toggleTurn();
-  await deviceArrives();
-  context.session.toggleTurn();
+  await holdTurn(context);
+  context.session.endTurn(true);
 
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
   context.session.reportRemoteAudioIdle();
@@ -1716,9 +1694,8 @@ test("an unexpected channel close releases the microphone", async () => {
 test("an error instead of response.done still frees the turn", async () => {
   const context = harness();
   await context.session.connect();
-  context.session.toggleTurn();
-  await deviceArrives();
-  context.session.toggleTurn();
+  await holdTurn(context);
+  context.session.endTurn(true);
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 
   // An empty push-to-talk commit reports an error with no matching done.
@@ -2130,8 +2107,8 @@ test("a turn opens from an empty buffer and the key ends it", async () => {
   await context.session.connect();
   const sentAfterConnect = context.sent.length;
 
-  // One key: press to open a turn, press again to send it.
-  context.session.toggleTurn();
+  // One key: held to open a turn, released to send it.
+  context.session.beginTurn();
   await deviceArrives();
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
   assert.equal(context.microphoneEnabled(), true);
@@ -2141,7 +2118,7 @@ test("a turn opens from an empty buffer and the key ends it", async () => {
     [REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_CLEAR],
   );
 
-  context.session.toggleTurn();
+  context.session.endTurn(true);
   assert.equal(context.microphoneEnabled(), false);
   assert.deepEqual(
     context.sent.slice(sentAfterConnect).map((event) => event.type),
@@ -2315,16 +2292,15 @@ test("taking the turn silences Luke rather than only stopping generation", async
   const context = harness();
   await context.session.connect();
   context.deliverRemoteTrack();
-  context.session.toggleTurn();
-  await deviceArrives();
-  context.session.toggleTurn();
+  await holdTurn(context);
+  context.session.endTurn(true);
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
   // Audible once the server says the reply is under way, rather than when it
   // was asked for: until then anything arriving belongs to whatever came before.
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
   assert.equal(context.lukeAudible(), true);
 
-  context.session.toggleTurn();
+  context.session.beginTurn();
 
   // Cancelling stops the model producing more; it does not stop what is already
   // on its way down the connection. Only this end can — and at the press, not
@@ -2334,7 +2310,7 @@ test("taking the turn silences Luke rather than only stopping generation", async
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
 
   // The next reply has to be audible again.
-  context.session.toggleTurn();
+  context.session.endTurn(true);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
   assert.equal(context.lukeAudible(), true);
 });
@@ -2342,14 +2318,12 @@ test("taking the turn silences Luke rather than only stopping generation", async
 test("taking the turn cuts Luke off mid-reply", async () => {
   const context = harness();
   await context.session.connect();
-  context.session.toggleTurn();
-  await deviceArrives();
-  context.session.toggleTurn();
+  await holdTurn(context);
+  context.session.endTurn(true);
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
   context.sent.length = 0;
 
-  context.session.toggleTurn();
-  await deviceArrives();
+  await holdTurn(context);
 
   // The developer's turn always wins: the reply is stopped, not queued behind.
   assert.deepEqual(

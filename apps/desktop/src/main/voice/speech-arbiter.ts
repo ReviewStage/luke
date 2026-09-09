@@ -115,10 +115,6 @@ export class SpeechArbiter {
     this.#options = options;
   }
 
-  get quiet(): boolean {
-    return this.#quiet;
-  }
-
   get pendingCount(): number {
     return this.#pending.length;
   }

@@ -86,8 +86,7 @@ const CONDUCTOR_DEFAULT_CHOICE = "Conductor's default";
 
 /** What the guide needs from the app to describe the current state of it. */
 export interface LukeGuideInput {
-  /** Optional only for pure callers that predate accounts; the app always supplies it. */
-  account?: AccountSnapshot;
+  account: AccountSnapshot;
   settings: AppSettingsView;
   /** Where the build stands, for the guide's Updates entry. */
   update: UpdateSnapshot;
@@ -349,7 +348,7 @@ function updateGuideEntry(update: UpdateSnapshot): AppGuideUpdate {
  * conversation always describes the app as it is, not as it launched.
  */
 export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
-  const account = input.account ?? { status: ACCOUNT_STATUS.SIGNED_OUT };
+  const { account } = input;
   const facts: AppGuideFact[] = [
     {
       label: "What Luke is",

@@ -841,37 +841,6 @@ export class RealtimeVoiceSession {
     this.stopListening(commit);
   }
 
-  toggleTurn(): void {
-    // Until the device this press opens is live — and, before the call is up,
-    // the call too — there is no turn to take yet: the press is remembered
-    // and applied the moment there is. A second press cancels the first
-    // rather than queueing another, because two presses have always meant a
-    // turn opened and closed, and one that held nothing is one with nothing
-    // to send. A connected speak-only call is the waiting case too: Luke's
-    // own call cannot take a turn, so the press waits for the one that can.
-    if (!this.isConnected || !this.#microphone) {
-      this.#pendingTurn = !this.#pendingTurn;
-      if (this.#pendingTurn) {
-        // The same early cut a held press makes: the reply stops at the
-        // press, and the turn opens when the device arrives.
-        this.stopSpeaking();
-        this.#acquireMicrophone();
-      } else {
-        // The second press takes back the first: the words captured toward
-        // the cancelled turn go with it, and so does the device they were
-        // being read from.
-        this.#retirePressCapture();
-        if (this.#status !== REALTIME_STATUS.LISTENING) this.#releaseMicrophone();
-      }
-      return;
-    }
-    if (this.#status === REALTIME_STATUS.LISTENING) {
-      this.stopListening(true);
-      return;
-    }
-    this.startListening();
-  }
-
   /** Whether a call is being opened, so a press has something to wait for. */
   get isConnecting(): boolean {
     return this.#connecting !== undefined;
@@ -1123,28 +1092,23 @@ export class RealtimeVoiceSession {
       this.#acquireMicrophone();
       return;
     }
-    this.#flushHeldAudio(capture, "opened live");
+    this.#flushHeldAudio(capture);
     this.#listeningOnAppends = true;
     this.#turnEpoch += 1;
     this.#setStatus(REALTIME_STATUS.LISTENING);
   }
 
   /**
-   * Sends one captured turn's opening: the format the appends must be read
-   * as, a clean buffer, then everything the capture has held — and one line
-   * of diagnostics, because whether the held words actually left this machine
-   * is exactly what a report of Luke not hearing them needs answered. How
-   * much audio and nothing else: the words themselves stay out of the log.
+   * Sends one captured turn's opening, in the one order the service accepts
+   * it: the format the appends are to be read as, then a clear, then the
+   * held audio. Appends ahead of either are read against whatever the last
+   * turn left behind.
    */
-  #flushHeldAudio(capture: PressCaptureState, _how: string): void {
-    const _heldMs = Math.round(capture.buffer.bufferedMs);
-    const _droppedMs = Math.round(capture.buffer.droppedMs);
+  #flushHeldAudio(capture: PressCaptureState): void {
     this.#send(inputAudioFormatUpdateEvents());
     this.#send(clearInputAudioEvents());
-    let _appends = 0;
     for (const chunk of capture.buffer.drain()) {
       this.#send(inputAudioAppendEvents(chunk));
-      _appends += 1;
     }
   }
 
@@ -1164,7 +1128,7 @@ export class RealtimeVoiceSession {
       return;
     }
     this.#pressCommitPending = false;
-    this.#flushHeldAudio(capture, "delivered sealed");
+    this.#flushHeldAudio(capture);
     this.#retirePressCapture();
     // A turn exactly as a live commit is: the developer opened it by holding
     // the key and spoke into it; only the delivery waited.
@@ -2063,8 +2027,6 @@ export class RealtimeVoiceSession {
         this.#armSettleTimer();
         return;
       }
-      case REALTIME_SERVER_EVENT.CONVERSATION_ITEM_DELETED:
-        return;
       case REALTIME_SERVER_EVENT.ERROR:
         // Only Luke's own trim can draw a past-the-end refusal, the service
         // clamps and truncates anyway, and it names no event this could match

@@ -74,6 +74,7 @@ function idleUpdate(upToDate = false): UpdateSnapshot {
 
 function guideInput(overrides: Partial<LukeGuideInput> = {}): LukeGuideInput {
   return {
+    account: { status: ACCOUNT_STATUS.SIGNED_OUT },
     settings: settings(),
     update: idleUpdate(),
     voiceAvailable: true,

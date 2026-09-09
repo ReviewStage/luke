@@ -103,10 +103,6 @@ export class DeliveryLedger<Words> {
     return delivery;
   }
 
-  state(runId: string): DeliveryState | undefined {
-    return this.#deliveries.get(runId)?.state;
-  }
-
   records(): readonly DeliveryRecord[] {
     return [...this.#deliveries.values()].map((delivery) => ({ ...delivery }));
   }
