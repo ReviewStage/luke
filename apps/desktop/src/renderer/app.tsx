@@ -14,8 +14,7 @@ import {
   CREDENTIAL_SOURCE,
   isCredentialProviderId,
 } from "@sidecar/credentials/vocabulary";
-import type { FeedbackImage, FeedbackKind } from "@sidecar/feedback";
-import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "@sidecar/feedback";
+import { FEEDBACK_KIND, feedbackKindForLifecycleEvent } from "@sidecar/feedback";
 import { APP_UPDATE_ACTION, FEEDBACK_COMPOSER_KIND } from "@sidecar/guide";
 import { WingFace as LukeFace } from "@sidecar/panel";
 import { REALTIME_STATUS } from "@sidecar/realtime";
@@ -78,20 +77,7 @@ import {
   nextErrand,
   type PendingErrand,
 } from "./errand-queue";
-import {
-  confirmationHoldMs,
-  type FeedbackConfirmation,
-  feedbackConfirmation,
-} from "./feedback-confirmation";
-import {
-  accountSignature,
-  type FeedbackEntry,
-  type FeedbackEntryControl,
-  IMAGE_REFUSAL,
-  isSendable,
-  openedFeedbackEntry,
-} from "./feedback-entry";
-import { encodeFeedbackImage } from "./feedback-images";
+import { accountSignature, openedFeedbackEntry } from "./feedback-entry";
 import { FeedbackSlot } from "./feedback-slot";
 import { KeySlot } from "./key-slot";
 import { type Errand, errandTargets, LukeErrand } from "./luke-errand";
@@ -150,8 +136,9 @@ import {
 import { SupersetSignInSlot } from "./superset-sign-in-slot";
 import { UPDATE_ROW_ACTION, updateRow } from "./update-row";
 import { appSettingsNow, appStateNow, useAppState } from "./use-app-state";
+import { useFeedbackComposer } from "./use-feedback-composer";
 import { useMeasuredHeight } from "./use-measured-height";
-import { panelEntryOpen, usePanelEntry } from "./use-panel-entry";
+import { type PanelEntrySurface, panelEntryOpen, usePanelEntry } from "./use-panel-entry";
 import { usePanelPresentation } from "./use-panel-presentation";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
 import { useStateWithRef } from "./use-state-with-ref";
@@ -164,13 +151,6 @@ import {
   volumeHintDismissed,
   volumeHintText,
 } from "./volume-hint";
-
-/**
- * How long the settings tab keeps saying a note to the founders was sent. Long
- * enough to be read on the way back from the Send button, short enough that
- * the line is gone before anyone wonders whether it is stuck.
- */
-const FEEDBACK_NOTICE_MS = 6_000;
 
 /**
  * How long a changed search query waits before it is stored. The query moves
@@ -371,16 +351,6 @@ export function App(): React.JSX.Element {
   );
   const settings = heldSettings ?? liveSettings;
   const [errand, setErrand] = useState<Errand>();
-  const [feedbackNotice, setFeedbackNotice] = useState<string>();
-  /**
-   * The landing being played in the composer's shape after a send, keyed by
-   * play so a second send restarts the swoop rather than reusing a finished
-   * one. Undefined is the composer as it always was.
-   */
-  const [feedbackConfirming, setFeedbackConfirming] = useState<{
-    confirmation: FeedbackConfirmation;
-    play: number;
-  }>();
   // Counts for nothing except having changed: each tick re-renders the rows so
   // their "how long ago" labels stay honest while they are on screen.
   const [, setClock] = useState(0);
@@ -433,29 +403,6 @@ export function App(): React.JSX.Element {
    * sign-in being waited out. One shape, three occupants, never together.
    */
   const slotOccupant = useRef<SlotOccupant>(PANEL_STAND_DOWN.KEY);
-  const feedbackNoticeTimer = useRef<number | undefined>(undefined);
-  /**
-   * The landing the latest send drew, held so the confirmation's hold waits
-   * out the same gesture the slot is playing. The initial flip is fixed
-   * because it is never played: a landing is always drawn again on delivery.
-   */
-  const feedbackLanding = useRef(feedbackConfirmation(() => 0));
-  /** Counts confirmations so each landing's swoop is replayed, not reused. */
-  const feedbackConfirmPlays = useRef(0);
-  const feedbackConfirmTimer = useRef<number | undefined>(undefined);
-  /**
-   * The panel's deferred return, held for as long as the confirmation plays.
-   * Running it is the confirmation ending on time; dropping it is the shape
-   * being asked for again — or left — before the celebration finished.
-   */
-  const feedbackFinish = useRef<(() => void) | undefined>(undefined);
-  /**
-   * The words a spoken open asked to start the note with, waiting for the
-   * composer's lifecycle event to consume them. A ref rather than an event
-   * payload because the lifecycle channel carries names alone — and only ever
-   * the developer's own words, under the spoken tool's contract.
-   */
-  const spokenFeedbackDraft = useRef<string | undefined>(undefined);
   /**
    * How many errands Luke has run. Carried with each one so that asking for
    * the same control twice flies twice, exactly as a repeated face gesture is
@@ -808,6 +755,27 @@ export function App(): React.JSX.Element {
     setSettingsView(standDownPage.current);
     expand();
   }, [changeTab, expand, setSettingsView]);
+
+  /** Records where leaving whatever stands in the panel's place comes back to. */
+  const rememberStandDownPage = useCallback((page: SettingsView) => {
+    standDownPage.current = page;
+  }, []);
+
+  /**
+   * The panel every composer stands down from and comes back to, gathered
+   * once so each composer's hook is handed the same one.
+   */
+  const panelEntrySurface: PanelEntrySurface = {
+    pointerInside: pointerIsInside,
+    presentation: presentationOf,
+    onReleasedWhileAway: onHitRegionLeave,
+    cancelHover,
+    applyPresentation,
+    restorePanel,
+    leave,
+    settle,
+    heldRef: feedbackHeld,
+  };
 
   /**
    * The selection as last stored, so only a change of selection writes.
@@ -1261,228 +1229,14 @@ export function App(): React.JSX.Element {
     });
   }, [workspaceProjects, storedWorkspaceProvider, storedWorkspaceProjects]);
 
-  /**
-   * Says a send landed, and stops saying it once it has been readable. Long
-   * enough to be read on the way back from the Send button, short enough that
-   * the line is gone before anyone wonders whether it is stuck.
-   */
-  const showFeedbackNotice = useCallback((notice: string) => {
-    if (feedbackNoticeTimer.current !== undefined) {
-      window.clearTimeout(feedbackNoticeTimer.current);
-    }
-    setFeedbackNotice(notice);
-    feedbackNoticeTimer.current = window.setTimeout(() => {
-      feedbackNoticeTimer.current = undefined;
-      setFeedbackNotice(undefined);
-    }, FEEDBACK_NOTICE_MS);
-  }, []);
-
-  useEffect(() => () => window.clearTimeout(feedbackNoticeTimer.current), []);
-
-  /**
-   * Ends the confirmation without restoring anything: the shape was asked for
-   * again, or left, so the finish it held is dropped rather than run.
-   */
-  const dropFeedbackConfirmation = useCallback(() => {
-    if (feedbackConfirmTimer.current !== undefined) {
-      window.clearTimeout(feedbackConfirmTimer.current);
-      feedbackConfirmTimer.current = undefined;
-    }
-    feedbackFinish.current = undefined;
-    setFeedbackConfirming(undefined);
-  }, []);
-
-  useEffect(() => () => window.clearTimeout(feedbackConfirmTimer.current), []);
-
-  // A confirmation lives exactly as long as the shape it is drawn in: the
-  // presentation moving on ends it and drops the unrun finish it held.
-  useEffect(() => {
-    if (presentation === PANEL_PRESENTATION.FEEDBACK) return;
-    dropFeedbackConfirmation();
-  }, [presentation, dropFeedbackConfirmation]);
-
   const stillMotion = usePrefersReducedMotion();
 
-  const feedbackEntry = usePanelEntry<FeedbackEntry>({
-    aside: PANEL_PRESENTATION.FEEDBACK,
-    restoresPanel: (held) => held.fromPanel === true,
-    isSendable,
-    send: async (sending) => {
-      const name = sending.name.trim();
-      const email = sending.email.trim();
-      try {
-        const result = await act(ACT_KIND.FEEDBACK_SEND, {
-          submission: {
-            kind: sending.kind,
-            message: sending.message.trim(),
-            ...(name ? { name } : undefined),
-            ...(email ? { email } : undefined),
-            images: sending.images,
-          },
-        });
-        if (!result.delivered) {
-          return { rejection: result.reason ?? "Could not send that. Try again." };
-        }
-        return {};
-      } catch {
-        return { rejection: "Could not send that. Try again." };
-      }
-    },
-    onDelivered: () => {
-      showFeedbackNotice("Sent — thank you!");
-      // The landing plays in the shape the note left from: Luke swoops down
-      // beside the thank-you and plays this send's flip of the coin. The pick
-      // is held on a ref so the hold below waits out the same gesture.
-      const confirmation = feedbackConfirmation();
-      feedbackLanding.current = confirmation;
-      feedbackConfirmPlays.current += 1;
-      setFeedbackConfirming({
-        confirmation,
-        play: feedbackConfirmPlays.current,
-      });
-    },
-    afterDelivery: (finish) => {
-      feedbackFinish.current = finish;
-      const { motion } = feedbackLanding.current;
-      if (feedbackConfirmTimer.current !== undefined) {
-        window.clearTimeout(feedbackConfirmTimer.current);
-      }
-      feedbackConfirmTimer.current = window.setTimeout(
-        () => {
-          feedbackConfirmTimer.current = undefined;
-          setFeedbackConfirming(undefined);
-          const held = feedbackFinish.current;
-          feedbackFinish.current = undefined;
-          held?.();
-        },
-        confirmationHoldMs({ motion, still: stillMotion }),
-      );
-    },
-    pointerInside: pointerIsInside,
-    presentation: presentationOf,
-    onReleasedWhileAway: onHitRegionLeave,
-    cancelHover,
-    applyPresentation,
-    restorePanel,
-    leave,
-    settle,
-    heldRef: feedbackHeld,
+  const feedback = useFeedbackComposer({
+    surface: panelEntrySurface,
+    presentation,
+    stillMotion,
+    rememberStandDownPage,
   });
-
-  /**
-   * Opens the composer for a kind — from the section's own buttons or asked of
-   * Luke out loud — and stands the panel down to its shape,
-   * the way beginning a key entry stands it down to the slot: writing one
-   * note is one action. What opening does to a note already there is
-   * {@link openedFeedbackEntry}'s to decide — a half-written note is brought
-   * back rather than discarded, and a starting draft lands only in an empty
-   * one. Reports whether the draft was placed, so the spoken path can say
-   * what it found; where leaving returns you follows the latest ask, not the
-   * first.
-   */
-  const beginFeedback = useCallback(
-    (kind: FeedbackKind, fromPanel: boolean, draft?: string): boolean => {
-      setFeedbackNotice(undefined);
-      // The Feedback section is on the front page, so that is where leaving
-      // the composer — or the thank-you the send lands in — comes back to.
-      standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.FEEDBACK });
-      // Asking to write again is the confirmation's end: the composer takes
-      // the shape back, and the return the landing held is dropped unrun.
-      dropFeedbackConfirmation();
-      const opened = openedFeedbackEntry(feedbackEntry.latest(), {
-        kind,
-        fromPanel,
-        ...(draft !== undefined ? { draft } : undefined),
-        // A fresh note starts signed with the account; a note already there
-        // keeps its fields as its author left them, cleared ones included.
-        signature: accountSignature(appStateNow()?.account),
-      });
-      if (opened.entry) feedbackEntry.apply(opened.entry);
-      feedbackEntry.standDown();
-      return opened.drafted;
-    },
-    [dropFeedbackConfirmation, feedbackEntry.apply, feedbackEntry.latest, feedbackEntry.standDown],
-  );
-
-  /**
-   * Leaves the shape and keeps the draft — Escape's meaning here. A note is
-   * longer than a key, and a key is the only thing Escape is allowed to
-   * discard; the way back in is the same button, now reading "keep writing".
-   * Where it returns you is where the composer was last asked for from: the
-   * panel, or — from a spoken ask — nothing at all.
-   */
-  const dismissFeedback = useCallback(() => {
-    if (presentationOf() !== PANEL_PRESENTATION.FEEDBACK) return;
-    // Escape during the landing skips the celebration, never the return: the
-    // finish the confirmation held runs now instead of later.
-    if (feedbackFinish.current) {
-      const finish = feedbackFinish.current;
-      dropFeedbackConfirmation();
-      finish();
-      return;
-    }
-    if (feedbackEntry.latest()?.fromPanel === true) restorePanel();
-    else leave();
-  }, [dropFeedbackConfirmation, feedbackEntry.latest, leave, presentationOf, restorePanel]);
-
-  /**
-   * Takes picked or pasted files aboard. Encoding happens here on the user's
-   * machine — scaled and re-written where a screenshot would not fit the
-   * request a submission has to travel as — and what could not come is said
-   * beside the field rather than dropped in silence.
-   */
-  const attachFeedbackImages = useCallback(
-    async (files: readonly File[]) => {
-      const current = feedbackEntry.latest();
-      if (!panelEntryOpen(current)) return;
-      const room = FEEDBACK_LIMITS.MAX_IMAGES - current.images.length;
-      const taken = files.slice(0, Math.max(0, room));
-      const encoded: FeedbackImage[] = [];
-      let refused = false;
-      for (const file of taken) {
-        const image = await encodeFeedbackImage(file);
-        if (image) encoded.push(image);
-        else refused = true;
-      }
-      // Read again after the awaits: typing meanwhile replaced the entry
-      // object, and Cancel or a send may have ended it altogether.
-      const latest = feedbackEntry.latest();
-      if (!panelEntryOpen(latest)) return;
-      const rejection = refused
-        ? IMAGE_REFUSAL.UNREADABLE
-        : files.length > room
-          ? IMAGE_REFUSAL.FULL
-          : undefined;
-      feedbackEntry.apply({
-        ...latest,
-        images: [...latest.images, ...encoded].slice(0, FEEDBACK_LIMITS.MAX_IMAGES),
-        rejection,
-      });
-    },
-    [feedbackEntry.apply, feedbackEntry.latest],
-  );
-
-  const feedbackControl: FeedbackEntryControl = {
-    entry: feedbackEntry.entry,
-    ...(feedbackNotice ? { notice: feedbackNotice } : undefined),
-    // The section's own buttons are the panel asking, so leaving returns there.
-    begin: (kind) => beginFeedback(kind, true),
-    changeMessage: (message) => feedbackEntry.patch({ message }),
-    changeName: (name) => feedbackEntry.patch({ name }),
-    changeEmail: (email) => feedbackEntry.patch({ email }),
-    attach: (files) => void attachFeedbackImages(files),
-    removeImage: (index) => {
-      const current = feedbackEntry.latest();
-      if (!panelEntryOpen(current)) return;
-      feedbackEntry.apply({
-        ...current,
-        images: current.images.filter((_, held) => held !== index),
-      });
-    },
-    dismiss: dismissFeedback,
-    cancel: feedbackEntry.cancel,
-    commit: feedbackEntry.commit,
-  };
 
   /**
    * Moves the talk key, or resets it when no chord is named. The key the row
@@ -1784,20 +1538,20 @@ export function App(): React.JSX.Element {
           // nothing here sends: the note leaves only by the Send button's own
           // press.
           const kind = FEEDBACK_KIND_FOR_COMPOSER[action.composer];
-          const drafted = openedFeedbackEntry(feedbackEntry.latest(), {
+          const drafted = openedFeedbackEntry(feedback.latest(), {
             kind,
             fromPanel: false,
             ...(action.draft === undefined ? undefined : { draft: action.draft }),
             signature: accountSignature(appStateNow()?.account),
           }).drafted;
-          spokenFeedbackDraft.current = action.draft;
+          feedback.holdSpokenDraft(action.draft);
           try {
             await act(ACT_KIND.FEEDBACK_SUMMON, { kind });
           } catch (error) {
             // The composer is not coming, so the event that would consume the
             // draft is not coming either; a stale one must not season some
             // later spoken request.
-            spokenFeedbackDraft.current = undefined;
+            feedback.holdSpokenDraft(undefined);
             throw error;
           }
           return {
@@ -1928,7 +1682,8 @@ export function App(): React.JSX.Element {
       changeMode,
       deferSettings,
       drawErrandHold,
-      feedbackEntry.latest,
+      feedback.holdSpokenDraft,
+      feedback.latest,
       presentationOf,
       publishGuide,
       sessionView,
@@ -2200,17 +1955,22 @@ export function App(): React.JSX.Element {
       // open left waiting is taken up here, then forgotten.
       const feedbackKind = feedbackKindForLifecycleEvent(eventName);
       if (feedbackKind) {
-        const draft = spokenFeedbackDraft.current;
-        spokenFeedbackDraft.current = undefined;
         changeTab(PANEL_TAB.SETTINGS);
-        beginFeedback(feedbackKind, false, draft);
+        feedback.begin(feedbackKind, false, feedback.takeSpokenDraft());
       }
     });
     return () => {
       cancelHover();
       removeLifecycle();
     };
-  }, [applyAuthoritativeMode, beginFeedback, cancelHover, changeTab, summonAsk]);
+  }, [
+    applyAuthoritativeMode,
+    cancelHover,
+    changeTab,
+    feedback.begin,
+    feedback.takeSpokenDraft,
+    summonAsk,
+  ]);
 
   // A Superset sign-in carried through to the end gives the panel back around
   // the newly connected service. Only the wait's own slot is answered: a
@@ -2322,7 +2082,7 @@ export function App(): React.JSX.Element {
       // note is longer than a key, and a key is the only thing Escape is
       // allowed to discard.
       if (presentation === PANEL_PRESENTATION.FEEDBACK) {
-        dismissFeedback();
+        feedback.dismiss();
         return;
       }
       if (presentation !== PANEL_PRESENTATION.PANEL) return;
@@ -2354,7 +2114,7 @@ export function App(): React.JSX.Element {
     changeTab,
     closeSearch,
     closeSettingsSearch,
-    dismissFeedback,
+    feedback.dismiss,
     discardListening,
     openSearch,
     openSettingsSearch,
@@ -2689,7 +2449,7 @@ export function App(): React.JSX.Element {
               updates,
               settings,
               credentials,
-              feedback: feedbackControl,
+              feedback: feedback.control,
               panelOpen,
               workspaceProviders: workspaceProviderOptions,
               calendar: {
@@ -2814,10 +2574,10 @@ export function App(): React.JSX.Element {
       ) : null}
       {/* The panel stood down to the composer, on the same terms. */}
       <FeedbackSlot
-        control={feedbackControl}
+        control={feedback.control}
         drawn={feedbackOpen}
         measure={feedbackElement}
-        confirming={feedbackConfirming}
+        confirming={feedback.confirming}
         still={stillMotion}
       />
       <NotchWings

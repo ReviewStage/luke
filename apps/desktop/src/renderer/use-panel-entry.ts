@@ -118,6 +118,13 @@ export interface PanelEntryHost {
   heldRef: { current: boolean };
 }
 
+/**
+ * The panel a composer stands down from, without the shape it stands down to.
+ * A hook that owns one composer knows its own aside; what it is handed is
+ * everything about the panel it is leaving and coming back to.
+ */
+export type PanelEntrySurface = Omit<PanelEntryHost, "aside">;
+
 export interface UsePanelEntryOptions<T extends PanelEntryBase> extends PanelEntryHost {
   /**
    * Whether giving up from the aside shape returns to the panel. A key page
