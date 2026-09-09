@@ -29,6 +29,7 @@ export {
   type VectorHit,
 } from "./contracts.js";
 export {
+  ESTIMATED_CHARS_PER_TOKEN,
   MEMORY_QUERY_MAXIMUM_CHARS,
   MEMORY_SEARCH_DEFAULTS,
   RETRIEVAL_MODE,

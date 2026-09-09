@@ -9,7 +9,7 @@ import {
   productEventFromWire,
 } from "@sidecar/analytics";
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
-import { positiveInteger, text } from "@sidecar/wire";
+import { type CloudFetch, positiveInteger, text, withoutTrailingSlash } from "@sidecar/wire";
 
 const PRODUCT_EVENT_DEFAULTS = {
   REQUEST_TIMEOUT_MS: 10_000,
@@ -33,8 +33,6 @@ const UNAUTHORIZED_STATUS = 401;
 /** The one discriminator the day marker dedups on; the day itself is the key. */
 const DAY_ACTIVE_KEY = "day";
 
-type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
-
 export interface ProductEventSenderOptions {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
@@ -44,15 +42,11 @@ export interface ProductEventSenderOptions {
   sends: boolean;
   readAccessToken: () => Promise<string | undefined>;
   refreshAccount: () => Promise<void>;
-  fetch?: FetchLike;
+  fetch?: CloudFetch;
   now?: () => number;
   requestTimeoutMs?: number;
   flushIntervalMs?: number;
   queueLimit?: number;
-}
-
-function withoutTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value.slice(0, -1) : value;
 }
 
 /**
@@ -79,7 +73,7 @@ export class ProductEventSender {
   readonly #sends: boolean;
   readonly #readAccessToken: () => Promise<string | undefined>;
   readonly #refreshAccount: () => Promise<void>;
-  readonly #fetch: FetchLike;
+  readonly #fetch: CloudFetch;
   readonly #now: () => number;
   readonly #requestTimeoutMs: number;
   readonly #flushIntervalMs: number;

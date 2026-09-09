@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   ACT_KIND,
+  ACT_REFUSAL,
   type ActGuard,
   type CarriedIssueAct,
   type CarriedSessionAct,
@@ -137,16 +138,19 @@ export interface SessionActPerformer {
 }
 
 const REFUSAL = {
-  NO_SESSION: "No observed session matches that identity.",
-  NO_ISSUE: "No tracked issue matches that identity.",
+  // The sentences `admit` already says for these. The performer refuses the
+  // same three things at the last boundary before an effect, and a refusal
+  // worded twice is a refusal that drifts.
+  NO_SESSION: ACT_REFUSAL.NO_SESSION,
+  NO_ISSUE: ACT_REFUSAL.NO_ISSUE,
+  NO_ADDRESS: ACT_REFUSAL.NO_ADDRESS,
+  TURN_OVER: ACT_REFUSAL.TURN_OVER,
   PROVIDER_ABSENT: "That session's provider is not connected.",
-  NO_ADDRESS: "That session has no address to open.",
   NO_APP_ADDRESS: "That session has no address to open in that app.",
   NO_CHANGE: "That session reports no pull request.",
   OPEN_FAILED: "The system could not open that session.",
   OPEN_APP_FAILED: "The system could not open that session in the selected app.",
   OPEN_CHANGE_FAILED: "The system could not open that pull request.",
-  TURN_OVER: "Not run: the turn that asked for this act ended before it could start.",
 } as const;
 
 export function createSessionActPerformer(

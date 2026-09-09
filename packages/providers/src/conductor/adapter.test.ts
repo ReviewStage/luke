@@ -6,6 +6,7 @@ import {
   advertisedActFor,
   advertisedControls,
   SESSION_STATUS,
+  UNSUPPORTED_BY_OBSERVATION,
 } from "@sidecar/session";
 import type { JsonObject, JsonValue } from "@sidecar/wire/testing";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
@@ -1810,7 +1811,7 @@ test("refuses to archive a workspace no row advertised, before any request exist
 
   assert.deepEqual(result, {
     status: "unsupported",
-    reason: "That act is not supported by the latest observation.",
+    reason: UNSUPPORTED_BY_OBSERVATION,
   });
   assert.equal(api.requests.length, requestsBefore);
 });
@@ -1912,7 +1913,7 @@ test("refuses a chat rename for a session no pass observed, before any request e
 
   assert.deepEqual(result, {
     status: "unsupported",
-    reason: "That act is not supported by the latest observation.",
+    reason: UNSUPPORTED_BY_OBSERVATION,
   });
   assert.equal(api.requests.length, requestsBefore);
 });
@@ -1943,7 +1944,7 @@ test("refuses a rename for a session no pass observed, before any request exists
 
   assert.deepEqual(result, {
     status: "unsupported",
-    reason: "That act is not supported by the latest observation.",
+    reason: UNSUPPORTED_BY_OBSERVATION,
   });
   assert.equal(api.requests.length, requestsBefore);
 });
@@ -2131,7 +2132,7 @@ test("refuses a creation ask for a project the last pass did not list", async ()
   // No request exists for a project observation did not see.
   assert.deepEqual(unlisted, {
     status: "unsupported",
-    reason: "That act is not supported by the latest observation.",
+    reason: UNSUPPORTED_BY_OBSERVATION,
   });
   assert.equal(api.requests.length, requestsBefore);
 
@@ -2342,11 +2343,11 @@ test("refuses to start an agent the row never listed, before any request exists"
 
   assert.deepEqual(unlisted, {
     status: "unsupported",
-    reason: "That act is not supported by the latest observation.",
+    reason: UNSUPPORTED_BY_OBSERVATION,
   });
   assert.deepEqual(unobserved, {
     status: "unsupported",
-    reason: "That act is not supported by the latest observation.",
+    reason: UNSUPPORTED_BY_OBSERVATION,
   });
   assert.equal(api.requests.length, requestsBefore);
 });
@@ -2613,7 +2614,7 @@ test("refuses a conversation read for anything the latest pass did not stand beh
 
   assert.deepEqual(unobserved, {
     status: "unsupported",
-    reason: "That act is not supported by the latest observation.",
+    reason: UNSUPPORTED_BY_OBSERVATION,
   });
   assert.deepEqual(badCursor, {
     status: "rejected",

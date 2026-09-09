@@ -1,10 +1,10 @@
 import {
+  type CloudFetch,
   introductionSessionConfig,
   type RealtimeSessionOptions,
   text as trimmedText,
 } from "../core.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
-import type { FetchLike } from "./openai.js";
 import type { IntroductionSpend } from "./quota.js";
 import {
   mintRealtimeConnection,
@@ -74,7 +74,7 @@ export interface IntroductionMintOptions {
   /** A deployment-configured model override; the shared default otherwise. */
   model?: string;
   spend: () => Promise<IntroductionSpend>;
-  fetch?: FetchLike;
+  fetch?: CloudFetch;
   now?: () => number;
   timeoutMs?: number;
 }

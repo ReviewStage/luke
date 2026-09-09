@@ -7,6 +7,7 @@ import {
   type SessionDiffSummary,
   type SessionStatus,
   sessionMessageText,
+  UNSUPPORTED_BY_OBSERVATION,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
 } from "@sidecar/session";
@@ -231,7 +232,7 @@ export class CodexCloudSessionAdapter extends CliSessionAdapter {
     if (!project)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: UNSUPPORTED_BY_OBSERVATION,
       };
 
     // Codex names tasks itself from the prompt; a name the user typed has

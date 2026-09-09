@@ -13,14 +13,12 @@ import {
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
 } from "@sidecar/runtime-contracts";
-import { positiveInteger, text } from "@sidecar/wire";
+import { type CloudFetch, HTTP_STATUS, positiveInteger, text } from "@sidecar/wire";
 import {
   BRAIN_REQUEST_TIMEOUT_MS,
-  type FetchLike,
   failed,
   HostedServiceCalls,
   HTTP_METHOD,
-  HTTP_STATUS,
   notServed,
   payloadOf,
   RETRY_AFTER_HEADER,
@@ -55,7 +53,7 @@ export const EMBEDDING_BATCH_SIZE = HOSTED_BRAIN_EMBED_BOUNDS.MAXIMUM_TEXTS;
 
 export interface OpenAiEmbeddingAdapterOptions {
   apiKey: string;
-  fetch?: FetchLike;
+  fetch?: CloudFetch;
   now?: () => number;
   requestTimeoutMs?: number;
 }
@@ -63,7 +61,7 @@ export interface OpenAiEmbeddingAdapterOptions {
 /** The model and endpoint are fixed by the build: the index stores vectors under one model, and a key chooses none. */
 export class OpenAiEmbeddingAdapter implements EmbeddingAdapter {
   readonly #apiKey: string;
-  readonly #fetch: FetchLike;
+  readonly #fetch: CloudFetch;
   readonly #now: () => number;
   readonly #timeoutMs: number;
   #dimensions: number | undefined;
@@ -135,7 +133,7 @@ export interface HostedEmbeddingAdapterOptions {
   serviceBaseUrl: string;
   readAccessToken: () => Promise<string | undefined>;
   refreshAccount: () => Promise<void>;
-  fetch?: FetchLike;
+  fetch?: CloudFetch;
   now?: () => number;
   requestTimeoutMs?: number;
 }

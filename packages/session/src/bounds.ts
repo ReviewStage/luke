@@ -2,6 +2,15 @@ import { text, type UnparsedWireValue } from "@sidecar/wire";
 import { isOpenableSessionLink, SESSION_LINK_SCHEME } from "./session-identity.js";
 import type { SessionDiffSummary } from "./session-shape.js";
 
+/**
+ * Stands where the front of a transcript was cut, so a reader — a model or a
+ * row — knows it is holding a tail rather than the whole conversation. One
+ * marker for every cut: the brain's bounded read and a provider adapter's own
+ * rendering both say the same thing, so nothing downstream has to recognize
+ * two spellings of the same fact.
+ */
+export const OMISSION_MARKER = "[… earlier transcript omitted …]";
+
 export const maximumSessionTitleLength = 160;
 /** An agent kind is a short identifier, never a sentence. */
 export const maximumSpawnableAgentLength = 40;

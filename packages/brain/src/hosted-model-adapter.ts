@@ -22,15 +22,20 @@ import {
   type ModelResponse,
   type ModelTokenCount,
 } from "@sidecar/runtime-contracts";
-import { type UnparsedWireValue, unparsedWire, type WireRecord, wireRecord } from "@sidecar/wire";
+import {
+  type CloudFetch,
+  HTTP_STATUS,
+  type UnparsedWireValue,
+  unparsedWire,
+  type WireRecord,
+  wireRecord,
+} from "@sidecar/wire";
 import { COMPACTION_POLICY } from "./compaction.js";
 import {
   type Failure,
-  type FetchLike,
   failed,
   HostedServiceCalls,
   HTTP_METHOD,
-  HTTP_STATUS,
   type Normalized,
   notServed,
   payloadOf,
@@ -55,7 +60,7 @@ export interface HostedModelAdapterOptions {
   serviceBaseUrl: string;
   readAccessToken: () => Promise<string | undefined>;
   refreshAccount: () => Promise<void>;
-  fetch?: FetchLike;
+  fetch?: CloudFetch;
   now?: () => number;
   requestTimeoutMs?: number;
   report?: (message: string) => void;

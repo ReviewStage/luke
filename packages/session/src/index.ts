@@ -1,4 +1,4 @@
-export { ACT_RESULT_STATUS } from "@sidecar/wire";
+export { ACT_RESULT_STATUS, UNSUPPORTED_BY_OBSERVATION } from "@sidecar/wire";
 export * from "./act-results.js";
 export * from "./advertised-acts.js";
 export * from "./agent-identities.js";

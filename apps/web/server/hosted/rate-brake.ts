@@ -13,18 +13,25 @@ export interface RateBrakeConfig {
   maxTrackedUsers: number;
 }
 
-export function createRateBrake(config: RateBrakeConfig): (userId: string, now: number) => boolean {
+/**
+ * Whether this ask puts the caller over the window. `weight` is what the ask
+ * costs — one request by default, or the events a batch carries — so a single
+ * oversized batch is braked on arrival rather than on the one after it.
+ */
+export type RateBrake = (userId: string, now: number, weight?: number) => boolean;
+
+export function createRateBrake(config: RateBrakeConfig): RateBrake {
   const recentUsers = new Map<string, { windowStart: number; count: number }>();
-  return (userId, now) => {
+  return (userId, now, weight = 1) => {
     const held = recentUsers.get(userId);
     if (!held || now - held.windowStart >= config.windowMs) {
       if (recentUsers.size >= config.maxTrackedUsers) {
         recentUsers.clear();
       }
-      recentUsers.set(userId, { windowStart: now, count: 1 });
-      return false;
+      recentUsers.set(userId, { windowStart: now, count: weight });
+      return weight > config.maxRequestsPerWindow;
     }
-    held.count += 1;
+    held.count += weight;
     return held.count > config.maxRequestsPerWindow;
   };
 }

@@ -8,6 +8,15 @@ export const ACT_RESULT_STATUS = {
 
 export type ActResultStatus = (typeof ACT_RESULT_STATUS)[keyof typeof ACT_RESULT_STATUS];
 
+/**
+ * The one sentence an adapter answers an act its target's latest observation
+ * did not advertise. It is written once because it is one refusal: the latest
+ * read is what says which acts a provider documents for a session or an issue
+ * now, and an act that outran that read is refused the same way whoever was
+ * asked.
+ */
+export const UNSUPPORTED_BY_OBSERVATION = "That act is not supported by the latest observation.";
+
 const ACT_RESULT_STATUSES: ReadonlySet<string> = new Set(Object.values(ACT_RESULT_STATUS));
 
 /** Whether an untrusted value names one of the three statuses an act can end in. */

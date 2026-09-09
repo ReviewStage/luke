@@ -104,11 +104,11 @@ export class SpeechMouth {
   #ownReply = false;
   /** Until when the developer keeps the floor, as the injected clock reads it. */
   #holdUntil = 0;
-  #holdTimer: unknown;
-  #lingerTimer: unknown;
+  #holdTimer: ScheduledTimer | undefined;
+  #lingerTimer: ScheduledTimer | undefined;
   /** How many times the offer now in hand has tried to open Luke's own call. */
   #connectAttempts = 0;
-  #retryTimer: unknown;
+  #retryTimer: ScheduledTimer | undefined;
   /**
    * Whether the hold, as the panel last drew it, is standing. Read by nothing
    * that decides whether to speak: the main process is the authority on the
@@ -343,24 +343,23 @@ export class SpeechMouth {
     }, delayMs);
   }
 
-  #cancelHold(): void {
-    if (this.#holdTimer === undefined) return;
+  /** Stops one timer and answers the handle a stopped timer holds. */
+  #cancelTimer(handle: ScheduledTimer | undefined): undefined {
+    if (handle === undefined) return undefined;
     // SAFETY: The handle is whatever `schedule ?? setTimeout` returned, and the
     // fallbacks are paired — a handle from `setTimeout` can only reach
     // `clearTimeout`. The cast satisfies that signature; nothing reads it as a
     // number.
-    (this.#options.cancel ?? clearTimeout)(this.#holdTimer as number);
-    this.#holdTimer = undefined;
+    (this.#options.cancel ?? clearTimeout)(handle as number);
+    return undefined;
+  }
+
+  #cancelHold(): void {
+    this.#holdTimer = this.#cancelTimer(this.#holdTimer);
   }
 
   #cancelRetry(): void {
-    if (this.#retryTimer === undefined) return;
-    // SAFETY: The handle is whatever `schedule ?? setTimeout` returned, and the
-    // fallbacks are paired — a handle from `setTimeout` can only reach
-    // `clearTimeout`. The cast satisfies that signature; nothing reads it as a
-    // number.
-    (this.#options.cancel ?? clearTimeout)(this.#retryTimer as number);
-    this.#retryTimer = undefined;
+    this.#retryTimer = this.#cancelTimer(this.#retryTimer);
   }
 
   #armLinger(): void {
@@ -374,13 +373,7 @@ export class SpeechMouth {
   }
 
   #cancelLinger(): void {
-    if (this.#lingerTimer === undefined) return;
-    // SAFETY: The handle is whatever `schedule ?? setTimeout` returned, and the
-    // fallbacks are paired — a handle from `setTimeout` can only reach
-    // `clearTimeout`. The cast satisfies that signature; nothing reads it as a
-    // number.
-    (this.#options.cancel ?? clearTimeout)(this.#lingerTimer as number);
-    this.#lingerTimer = undefined;
+    this.#lingerTimer = this.#cancelTimer(this.#lingerTimer);
   }
 
   #closeOwnCall(): void {

@@ -31,11 +31,6 @@ export interface ApnsCredentials {
   bundleId: string;
 }
 
-function trimmedText(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-  return trimmed || undefined;
-}
-
 /**
  * Reads the credential, or nothing when any part is missing. A dashboard
  * often stores a multi-line key with its newlines escaped, so the two-character
@@ -44,10 +39,10 @@ function trimmedText(value: string | undefined): string | undefined {
 export function apnsCredentialsFromEnvironment(
   environment: Readonly<Record<string, string | undefined>>,
 ): ApnsCredentials | undefined {
-  const teamId = trimmedText(environment[APNS_ENVIRONMENT.TEAM_ID]);
-  const keyId = trimmedText(environment[APNS_ENVIRONMENT.KEY_ID]);
-  const privateKey = trimmedText(environment[APNS_ENVIRONMENT.PRIVATE_KEY])?.replace(/\\n/g, "\n");
-  const bundleId = trimmedText(environment[APNS_ENVIRONMENT.BUNDLE_ID]);
+  const teamId = text(environment[APNS_ENVIRONMENT.TEAM_ID]);
+  const keyId = text(environment[APNS_ENVIRONMENT.KEY_ID]);
+  const privateKey = text(environment[APNS_ENVIRONMENT.PRIVATE_KEY])?.replace(/\\n/g, "\n");
+  const bundleId = text(environment[APNS_ENVIRONMENT.BUNDLE_ID]);
   if (!teamId || !keyId || !privateKey || !bundleId) return undefined;
   return { teamId, keyId, privateKey, bundleId };
 }

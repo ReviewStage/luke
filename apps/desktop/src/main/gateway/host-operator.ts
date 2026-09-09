@@ -38,6 +38,7 @@ import type { AppSettings, SettingsUpdateResult } from "#shared/messages/setting
 import type { SpeechOffer, SpeechOutcome } from "#shared/messages/speech";
 import { isSpeechOffer } from "#shared/messages/speech";
 import { RECEIVER_REPORT_KIND } from "../host/runtime-host";
+import { carried, onGatewayEvent } from "./wire";
 
 /**
  * The desktop's client over the host's own vocabulary: the settings, account,
@@ -204,13 +205,6 @@ function answeredList<Value>(value: UnparsedWireValue): readonly Value[] {
   return Array.isArray(value) ? value.flatMap((entry) => answered<Value>(entry) ?? []) : [];
 }
 
-/** One domain value of this client's, carried to the host as the JSON it already is. */
-function carried<Value>(value: Value): WireValue {
-  // SAFETY: the values carried here (settings values, guide snapshots, History entries, event properties) are the structured-clone payloads the bridge already guarded; each is JSON data.
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The protocol carries JSON; the domain type is set aside at this one boundary.
-  return value as unknown as WireValue;
-}
-
 export function createHostOperator(options: HostOperatorOptions): HostOperator {
   const { client } = options;
 
@@ -250,11 +244,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     kind: GatewayEventKind,
     read: (payload: WireValue) => Payload | undefined,
     listener: (payload: Payload) => void,
-  ) =>
-    client.on(kind, (event) => {
-      const payload = read(event.payload);
-      if (payload !== undefined) listener(payload);
-    });
+  ) => onGatewayEvent(client, kind, read, listener);
 
   const wireReporter = (reporter: string) => ({ reporter });
 

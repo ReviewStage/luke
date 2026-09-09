@@ -16,7 +16,14 @@ import {
   realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
 } from "@sidecar/realtime";
-import { positiveInteger, text, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
+import {
+  type CloudFetch,
+  positiveInteger,
+  text,
+  unparsedWire,
+  type WireBoundaryInput,
+  withoutTrailingSlash,
+} from "@sidecar/wire";
 
 export const OPENAI_ENVIRONMENT = {
   API_KEY: "OPENAI_API_KEY",
@@ -30,24 +37,18 @@ const OPENAI_DEFAULTS = {
   REQUEST_TIMEOUT_MS: 10_000,
 } as const;
 
-type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
-
 export interface OpenAiRealtimeCredentialOptions {
   apiKey: string;
   model?: string;
   voice?: string;
   speed?: number;
   baseUrl?: string;
-  fetch?: FetchLike;
+  fetch?: CloudFetch;
   now?: () => number;
   requestTimeoutMs?: number;
 }
 
 export type OpenAiRealtimeMinterOptions = Omit<OpenAiRealtimeCredentialOptions, "apiKey">;
-
-function withoutTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value.slice(0, -1) : value;
-}
 
 /**
  * The launch environment's voice, honoured only when it is one Luke offers.
@@ -94,7 +95,7 @@ export class OpenAiRealtimeCredentialMinter {
   readonly #configuredSpeed: number;
   #speed: number;
   readonly #baseUrl: string;
-  readonly #fetch: FetchLike;
+  readonly #fetch: CloudFetch;
   readonly #now: () => number;
   readonly #requestTimeoutMs: number;
   #lastOutcome: RealtimeMintOutcome = REALTIME_MINT_OUTCOME.NOT_ATTEMPTED;

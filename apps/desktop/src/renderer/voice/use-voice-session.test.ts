@@ -175,25 +175,13 @@ test("a typed ask, or an output that would swallow the reply, captions whatever 
 });
 
 test("a latched press is the release's to answer, and does not open a second call", () => {
-  assert.deepEqual(talkKeyPress({ latched: true, microphoneCall: false }), {
-    deferToRelease: true,
-    openCall: false,
-  });
-  assert.deepEqual(talkKeyPress({ latched: true, microphoneCall: true }), {
-    deferToRelease: true,
-    openCall: false,
-  });
+  assert.deepEqual(talkKeyPress({ latched: true, microphoneCall: false }), { openCall: false });
+  assert.deepEqual(talkKeyPress({ latched: true, microphoneCall: true }), { openCall: false });
 });
 
 test("a press against no microphone call has to open one, and the meter answers the press", () => {
-  assert.deepEqual(talkKeyPress({ latched: false, microphoneCall: false }), {
-    deferToRelease: false,
-    openCall: true,
-  });
-  assert.deepEqual(talkKeyPress({ latched: false, microphoneCall: true }), {
-    deferToRelease: false,
-    openCall: false,
-  });
+  assert.deepEqual(talkKeyPress({ latched: false, microphoneCall: false }), { openCall: true });
+  assert.deepEqual(talkKeyPress({ latched: false, microphoneCall: true }), { openCall: false });
 });
 
 test("the press-wait meter rides a handshake and a pending takeover, nothing else", () => {

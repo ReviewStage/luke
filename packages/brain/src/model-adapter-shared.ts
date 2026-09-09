@@ -10,7 +10,14 @@ import {
   MODEL_RESPONSE_OUTCOME,
   type ModelFailure,
 } from "@sidecar/runtime-contracts";
-import { positiveInteger, text, type UnparsedWireValue } from "@sidecar/wire";
+import {
+  type CloudFetch,
+  HTTP_STATUS,
+  positiveInteger,
+  text,
+  type UnparsedWireValue,
+  withoutTrailingSlash,
+} from "@sidecar/wire";
 
 /** The output budget one inference is asked for, the same on every transport: the hosted contract's ceiling. */
 export const BRAIN_MAXIMUM_OUTPUT_TOKENS = HOSTED_BRAIN_OPTION_BOUNDS.MAXIMUM_OUTPUT_TOKENS;
@@ -22,14 +29,6 @@ export const BRAIN_REQUEST_TIMEOUT_MS = 90_000;
  * What the two Responses adapters share: the statuses they read off a
  * transport, the cooldown a rate limit earns, and the shapes of a failure.
  */
-
-export const HTTP_STATUS = {
-  UNAUTHORIZED: 401,
-  FORBIDDEN: 403,
-  NOT_FOUND: 404,
-  METHOD_NOT_ALLOWED: 405,
-  TOO_MANY_REQUESTS: 429,
-} as const;
 
 export const HTTP_METHOD = {
   GET: "GET",
@@ -59,12 +58,6 @@ export function rateLimitWaitMs(retryAfter: string | null): number {
   const seconds = Number(retryAfter);
   if (!Number.isFinite(seconds) || seconds <= 0) return BRAIN_RATE_LIMIT_COOLDOWN_MS;
   return Math.min(Math.round(seconds * 1000), BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS);
-}
-
-export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
-
-export function withoutTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value.slice(0, -1) : value;
 }
 
 /** The per-request timeout, joined with the run's own cancellation when the inference belongs to one. */
@@ -117,7 +110,7 @@ export interface HostedServiceCallOptions {
   serviceBaseUrl: string;
   readAccessToken: () => Promise<string | undefined>;
   refreshAccount: () => Promise<void>;
-  fetch?: FetchLike;
+  fetch?: CloudFetch;
   requestTimeoutMs?: number;
 }
 
@@ -133,7 +126,7 @@ export class HostedServiceCalls {
   readonly #baseUrl: string;
   readonly #readAccessToken: () => Promise<string | undefined>;
   readonly #refreshAccount: () => Promise<void>;
-  readonly #fetch: FetchLike;
+  readonly #fetch: CloudFetch;
   readonly #requestTimeoutMs: number;
 
   constructor(options: HostedServiceCallOptions) {

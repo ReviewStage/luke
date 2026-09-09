@@ -1,6 +1,7 @@
 import {
   CLOUD_AGENT_PROVIDER_ID,
   type CloudAgentProviderId,
+  type CloudFetch,
   CONTEXT_ITEM_KIND,
   contextItemId,
   type ObservedSession,
@@ -10,7 +11,6 @@ import { cloudSessionAdapterFor } from "./cloud-adapters.js";
 import { decryptProviderKey } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import { type VaultKeyRow, writeAdvertisedActs } from "./observe.js";
-import type { FetchLike } from "./openai.js";
 import type { HostedSpend } from "./quota.js";
 import { remoteSessionContextText } from "./remote-context.js";
 import { mintRealtimeConnection, voiceMintPreferences } from "./voice-mint.js";
@@ -35,7 +35,7 @@ export interface RemoteVoiceMintOptions {
   spend: (userId: string) => Promise<HostedSpend>;
   encryptionSecret: string | undefined;
   readVaultKeys: (userId: string) => Promise<VaultKeyRow[]>;
-  fetch?: FetchLike;
+  fetch?: CloudFetch;
   now?: () => number;
   timeoutMs?: number;
 }

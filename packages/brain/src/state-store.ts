@@ -1,5 +1,11 @@
 import { checkpointFormatFromTag, type TranscriptEvent } from "@sidecar/runtime-contracts";
-import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import {
+  isInstant,
+  isRecord,
+  isWireNumber,
+  isWireString,
+  type UnparsedWireValue,
+} from "@sidecar/wire";
 import { type BrainJournalEntry, brainJournalEntryFromWire } from "./journal.js";
 import { type BrainObservationEntry, brainObservationEntryFromWire } from "./observation-inbox.js";
 import {
@@ -117,7 +123,7 @@ export function brainPersistedStateFromWire(
 ): BrainPersistedState | undefined {
   if (!isRecord(value) || value.version !== BRAIN_STATE_VERSION) return undefined;
   if (!isWireString(value.generationId) || value.generationId.length === 0) return undefined;
-  if (!instant(value.createdAt) || !instant(value.expiresAt)) return undefined;
+  if (!isInstant(value.createdAt) || !isInstant(value.expiresAt)) return undefined;
   // The lifetime is the build's, not the file's: an envelope claiming any
   // other span was not written by this rule and is not given one now.
   if (value.expiresAt - value.createdAt !== BRAIN_GENERATION_LIFETIME_MS) return undefined;
@@ -213,14 +219,10 @@ function checkpointFormatTagFromWire(value: UnparsedWireValue): string | undefin
 /** The marker as stored, nothing when absent, and null when present but unreadable. */
 function resetMarkerFromWire(value: UnparsedWireValue): BrainResetMarker | undefined | null {
   if (value === undefined) return undefined;
-  if (!isRecord(value) || !instant(value.clearedAt)) return null;
+  if (!isRecord(value) || !isInstant(value.clearedAt)) return null;
   if (value.generationId === undefined) return { clearedAt: value.clearedAt };
   if (!isWireString(value.generationId) || value.generationId.length === 0) return null;
   return { clearedAt: value.clearedAt, generationId: value.generationId };
-}
-
-function instant(value: UnparsedWireValue): value is number {
-  return isWireNumber(value) && Number.isFinite(value) && value >= 0;
 }
 
 /** The record the state persists as. */

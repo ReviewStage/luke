@@ -7,6 +7,7 @@ import {
   text,
   type UnparsedWireValue,
   unparsedWire,
+  withoutTrailingSlash,
 } from "@sidecar/wire";
 import type { FetchLike } from "./client.js";
 
@@ -35,10 +36,6 @@ interface AccountPreferencesRequest {
   method: "GET" | "PUT";
   path: string;
   body?: Record<string, UnparsedWireValue>;
-}
-
-function withoutTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value.slice(0, -1) : value;
 }
 
 function accountPreferencesAnswerFromWire(

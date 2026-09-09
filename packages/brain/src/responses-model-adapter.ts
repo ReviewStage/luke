@@ -9,14 +9,8 @@ import {
   type ModelResponse,
   type ModelTokenCount,
 } from "@sidecar/runtime-contracts";
-import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
-import {
-  type Failure,
-  HTTP_STATUS,
-  type Normalized,
-  payloadOf,
-  throttled,
-} from "./model-adapter-shared.js";
+import { HTTP_STATUS, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import { type Failure, type Normalized, payloadOf, throttled } from "./model-adapter-shared.js";
 import { RESPONSES_ITEM_FORMAT } from "./responses-api.js";
 import { TOOL_LOOP_RUNTIME } from "./runtime.js";
 

@@ -20,6 +20,7 @@ import {
   SessionProviderAdapterBase,
   sessionMessageText,
   UNKNOWN_WORKSPACE_LABEL,
+  UNSUPPORTED_BY_OBSERVATION,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentSelection,
   type WorkspaceProject,
@@ -389,7 +390,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     if (!observation || !advertisedActFor(observation, ACT_KIND.MESSAGE)) {
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: UNSUPPORTED_BY_OBSERVATION,
       };
     }
 
@@ -413,7 +414,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     if (!route)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: UNSUPPORTED_BY_OBSERVATION,
       };
     return this.#postWrite(apiKey, route);
   }
@@ -443,7 +444,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     if (!advertised)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: UNSUPPORTED_BY_OBSERVATION,
       };
 
     const apiKey = await this.#readApiKey().catch(() => undefined);
@@ -453,7 +454,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     if (!route)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: UNSUPPORTED_BY_OBSERVATION,
       };
     return this.#postWrite(apiKey, route);
   }
@@ -474,7 +475,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     if (!observation)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: UNSUPPORTED_BY_OBSERVATION,
       };
     // The advertised list — not the caller's word — is what the route is
     // built from, so an agent kind is only ever one the last pass promised.
@@ -483,7 +484,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     if (!agent)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: UNSUPPORTED_BY_OBSERVATION,
       };
 
     const name = request.name === undefined ? undefined : workspaceNameText(request.name);
@@ -513,7 +514,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     if (!route)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: UNSUPPORTED_BY_OBSERVATION,
       };
 
     const apiKey = await this.#readApiKey().catch(() => undefined);
@@ -557,7 +558,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     if (!renameWorkspace)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: UNSUPPORTED_BY_OBSERVATION,
       };
 
     const name = workspaceNameText(request.name);
@@ -576,7 +577,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     if (!route)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: UNSUPPORTED_BY_OBSERVATION,
       };
 
     const apiKey = await this.#readApiKey().catch(() => undefined);
@@ -613,7 +614,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     if (!observation || !advertisedActFor(observation, ACT_KIND.RENAME_SESSION))
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: UNSUPPORTED_BY_OBSERVATION,
       };
 
     const name = workspaceNameText(request.name);
@@ -628,7 +629,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     if (!route)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: UNSUPPORTED_BY_OBSERVATION,
       };
 
     const apiKey = await this.#readApiKey().catch(() => undefined);
@@ -668,7 +669,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     if (!project)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: UNSUPPORTED_BY_OBSERVATION,
       };
 
     const name = request.name === undefined ? undefined : workspaceNameText(request.name);
@@ -709,7 +710,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     if (!route)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: UNSUPPORTED_BY_OBSERVATION,
       };
     const created = await this.#postWriteDetailed(apiKey, route, WRITE_SUBJECT.PROJECT);
     if (created.outcome.status !== ACT_RESULT_STATUS.ACCEPTED) {

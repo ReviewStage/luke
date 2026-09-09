@@ -1,4 +1,5 @@
 import type { SessionIdentity } from "@sidecar/session";
+import { NestedMap } from "./nested-map.js";
 import type { BrainTranscriptCursors } from "./state-store.js";
 
 /**
@@ -9,23 +10,18 @@ import type { BrainTranscriptCursors } from "./state-store.js";
  * again rather than skipped — but they are no part of any checkpoint format.
  */
 export class TranscriptCursors {
-  #cursors: Map<string, Map<string, string>>;
+  #cursors: NestedMap<string>;
 
   constructor(cursors: BrainTranscriptCursors = {}) {
     this.#cursors = cursorMap(cursors);
   }
 
   cursor(identity: SessionIdentity): string | undefined {
-    return this.#cursors.get(identity.providerId)?.get(identity.providerSessionId);
+    return this.#cursors.get(identity.providerId, identity.providerSessionId);
   }
 
   setCursor(identity: SessionIdentity, cursor: string): void {
-    let provider = this.#cursors.get(identity.providerId);
-    if (!provider) {
-      provider = new Map();
-      this.#cursors.set(identity.providerId, provider);
-    }
-    provider.set(identity.providerSessionId, cursor);
+    this.#cursors.set(identity.providerId, identity.providerSessionId, cursor);
   }
 
   /** Forgets the cursors of sessions the roster no longer holds, so the map cannot grow forever. */
@@ -39,12 +35,15 @@ export class TranscriptCursors {
       }
       provider.add(identity.providerSessionId);
     }
-    for (const [providerId, sessions] of this.#cursors) {
+    const dropped: [string, string][] = [];
+    for (const [providerId, sessions] of this.#cursors.groups()) {
       const keptSessions = kept.get(providerId);
       for (const providerSessionId of sessions.keys()) {
-        if (!keptSessions?.has(providerSessionId)) sessions.delete(providerSessionId);
+        if (!keptSessions?.has(providerSessionId)) dropped.push([providerId, providerSessionId]);
       }
-      if (sessions.size === 0) this.#cursors.delete(providerId);
+    }
+    for (const [providerId, providerSessionId] of dropped) {
+      this.#cursors.delete(providerId, providerSessionId);
     }
   }
 
@@ -54,7 +53,7 @@ export class TranscriptCursors {
 
   persisted(): BrainTranscriptCursors {
     const record: Record<string, Record<string, string>> = {};
-    for (const [providerId, sessions] of this.#cursors) {
+    for (const [providerId, sessions] of this.#cursors.groups()) {
       if (sessions.size === 0) continue;
       record[providerId] = Object.fromEntries(sessions);
     }
@@ -62,11 +61,12 @@ export class TranscriptCursors {
   }
 }
 
-function cursorMap(cursors: BrainTranscriptCursors): Map<string, Map<string, string>> {
-  return new Map(
-    Object.entries(cursors).map(([providerId, sessions]) => [
-      providerId,
-      new Map(Object.entries(sessions)),
-    ]),
-  );
+function cursorMap(cursors: BrainTranscriptCursors): NestedMap<string> {
+  const map = new NestedMap<string>();
+  for (const [providerId, sessions] of Object.entries(cursors)) {
+    for (const [providerSessionId, cursor] of Object.entries(sessions)) {
+      map.set(providerId, providerSessionId, cursor);
+    }
+  }
+  return map;
 }

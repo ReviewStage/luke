@@ -1,3 +1,4 @@
+import { type CloudFetch, text } from "@sidecar/wire";
 import type { FeedbackResult, FeedbackSubmission } from "./submission.js";
 
 const FEEDBACK_ENVIRONMENT = {
@@ -23,17 +24,10 @@ const FEEDBACK_REFUSAL = {
   REFUSED: "The feedback service could not take this right now. Try again in a moment.",
 } as const;
 
-type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
-
 export interface FeedbackDeliveryOptions {
   url?: string;
-  fetch?: FetchLike;
+  fetch?: CloudFetch;
   requestTimeoutMs?: number;
-}
-
-function trimmedText(value: string | undefined): string | undefined {
-  const normalized = value?.trim();
-  return normalized || undefined;
 }
 
 /**
@@ -45,11 +39,11 @@ function trimmedText(value: string | undefined): string | undefined {
  */
 export class FeedbackDelivery {
   readonly #url: string;
-  readonly #fetch: FetchLike;
+  readonly #fetch: CloudFetch;
   readonly #requestTimeoutMs: number;
 
   constructor(options: FeedbackDeliveryOptions = {}) {
-    this.#url = trimmedText(options.url) ?? FEEDBACK_DEFAULTS.URL;
+    this.#url = text(options.url) ?? FEEDBACK_DEFAULTS.URL;
     this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
     this.#requestTimeoutMs = options.requestTimeoutMs ?? FEEDBACK_DEFAULTS.REQUEST_TIMEOUT_MS;
   }
@@ -90,7 +84,7 @@ export class FeedbackDelivery {
 export function feedbackDeliveryFromEnvironment(
   options: FeedbackDeliveryOptions = {},
 ): FeedbackDelivery {
-  const url = trimmedText(options.url) ?? trimmedText(process.env[FEEDBACK_ENVIRONMENT.URL]);
+  const url = text(options.url) ?? text(process.env[FEEDBACK_ENVIRONMENT.URL]);
   const deliveryOptions = url ? { ...options, url } : options;
   return new FeedbackDelivery(deliveryOptions);
 }

@@ -9,15 +9,20 @@ import {
   vaultKeysListAnswerFromWire,
 } from "@sidecar/hosted";
 import type { CloudAgentProviderId } from "@sidecar/session";
-import { positiveInteger, text, type UnparsedWireValue, unparsedWire } from "@sidecar/wire";
+import {
+  type CloudFetch,
+  positiveInteger,
+  text,
+  type UnparsedWireValue,
+  unparsedWire,
+  withoutTrailingSlash,
+} from "@sidecar/wire";
 
 const VAULT_DEFAULTS = {
   REQUEST_TIMEOUT_MS: 10_000,
 } as const;
 
 const UNAUTHORIZED_STATUS = 401;
-
-type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
 export interface HostedVaultClientOptions {
   /** The hosted service origin, without a trailing slash. */
@@ -31,7 +36,7 @@ export interface HostedVaultClientOptions {
    * never as a fresh bearer to carry the old account's payload under.
    */
   readAccountKey?: () => Promise<string | undefined>;
-  fetch?: FetchLike;
+  fetch?: CloudFetch;
   requestTimeoutMs?: number;
 }
 
@@ -39,10 +44,6 @@ interface VaultRequest {
   method: "POST" | "GET" | "DELETE";
   path: string;
   body?: Record<string, string>;
-}
-
-function withoutTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value.slice(0, -1) : value;
 }
 
 /**
@@ -59,7 +60,7 @@ export class HostedVaultClient {
   readonly #readAccessToken: () => Promise<string | undefined>;
   readonly #refreshAccount: () => Promise<void>;
   readonly #readAccountKey?: () => Promise<string | undefined>;
-  readonly #fetch: FetchLike;
+  readonly #fetch: CloudFetch;
   readonly #requestTimeoutMs: number;
 
   constructor(options: HostedVaultClientOptions) {

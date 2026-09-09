@@ -5,19 +5,23 @@ import {
   REASONING_EFFORT,
   type ReasoningEffort,
 } from "@sidecar/runtime-contracts";
-import { positiveInteger, text, type WireRecord } from "@sidecar/wire";
+import {
+  type CloudFetch,
+  HTTP_STATUS,
+  positiveInteger,
+  text,
+  type WireRecord,
+  withoutTrailingSlash,
+} from "@sidecar/wire";
 import { COMPACTION_POLICY } from "./compaction.js";
 import {
   BRAIN_MAXIMUM_OUTPUT_TOKENS,
   BRAIN_REQUEST_TIMEOUT_MS,
-  type FetchLike,
   failed,
-  HTTP_STATUS,
   RETRY_AFTER_HEADER,
   rateLimitWaitMs,
   requestFault,
   requestSignal,
-  withoutTrailingSlash,
 } from "./model-adapter-shared.js";
 import {
   BRAIN_RESPONSES_COMPACT_PATH,
@@ -72,7 +76,7 @@ export interface OpenAiModelAdapterOptions {
   model?: string;
   baseUrl?: string;
   reasoningEffort?: ReasoningEffort;
-  fetch?: FetchLike;
+  fetch?: CloudFetch;
   now?: () => number;
   requestTimeoutMs?: number;
   report?: (message: string) => void;
@@ -93,7 +97,7 @@ class OpenAiTransport implements ResponsesTransport<undefined> {
   readonly #apiKey: string;
   readonly #baseUrl: string;
   readonly #reasoningEffort: ReasoningEffort;
-  readonly #fetch: FetchLike;
+  readonly #fetch: CloudFetch;
   readonly #now: () => number;
   readonly #requestTimeoutMs: number;
 

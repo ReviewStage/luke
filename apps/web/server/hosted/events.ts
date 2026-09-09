@@ -1,4 +1,5 @@
 import {
+  type CloudFetch,
   PRODUCT_EVENT_CLIENT_HEADER,
   PRODUCT_EVENT_CLIENT_LIB,
   type ProductEventBatch,
@@ -9,13 +10,13 @@ import {
 } from "../core.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import {
-  type FetchLike,
   type PosthogBatch,
   type PosthogBatchItem,
   type PosthogPerson,
   type PosthogUpstreamOptions,
   postPosthogBatch,
 } from "./posthog.js";
+import { createRateBrake } from "./rate-brake.js";
 
 /**
  * Records what the signed-in desktop counted about its own use. The desktop
@@ -57,18 +58,11 @@ const RATE_LIMIT = {
  */
 const MAXIMUM_EVENT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
-const recentUsers = new Map<string, { windowStart: number; count: number }>();
-
-function rateLimited(userId: string, events: number, now: number): boolean {
-  const held = recentUsers.get(userId);
-  if (!held || now - held.windowStart >= RATE_LIMIT.WINDOW_MS) {
-    if (recentUsers.size >= RATE_LIMIT.MAX_TRACKED_USERS) recentUsers.clear();
-    recentUsers.set(userId, { windowStart: now, count: events });
-    return events > RATE_LIMIT.MAX_EVENTS_PER_WINDOW;
-  }
-  held.count += events;
-  return held.count > RATE_LIMIT.MAX_EVENTS_PER_WINDOW;
-}
+const rateLimited = createRateBrake({
+  windowMs: RATE_LIMIT.WINDOW_MS,
+  maxRequestsPerWindow: RATE_LIMIT.MAX_EVENTS_PER_WINDOW,
+  maxTrackedUsers: RATE_LIMIT.MAX_TRACKED_USERS,
+});
 
 export interface EventsOptions {
   request: Request;
@@ -82,7 +76,7 @@ export interface EventsOptions {
    * deployment that would rather PostHog held neither; the counts still land.
    */
   readPerson?: (userId: string) => Promise<PosthogPerson | undefined>;
-  fetch?: FetchLike;
+  fetch?: CloudFetch;
   now?: () => number;
   timeoutMs?: number;
 }
@@ -173,7 +167,7 @@ export async function handleEvents(options: EventsOptions): Promise<Response> {
   }
 
   const now = (options.now ?? Date.now)();
-  if (rateLimited(userId, events.length, now)) {
+  if (rateLimited(userId, now, events.length)) {
     return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   }
 

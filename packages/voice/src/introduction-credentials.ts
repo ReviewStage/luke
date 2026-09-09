@@ -1,7 +1,7 @@
 import { HOSTED_SERVICE_PATH, type RealtimeConnection } from "@sidecar/hosted";
 import { REALTIME_MINT_OUTCOME } from "@sidecar/realtime";
-import type { UnparsedWireValue } from "@sidecar/wire";
-import { type FetchLike, ServiceRealtimeCredentialMinter } from "./service-mint.js";
+import type { CloudFetch, UnparsedWireValue } from "@sidecar/wire";
+import { ServiceRealtimeCredentialMinter } from "./service-mint.js";
 
 const RATE_LIMITED_STATUS = 429;
 const UNAVAILABLE_STATUS = 503;
@@ -11,7 +11,7 @@ export interface IntroductionRealtimeCredentialOptions {
   serviceBaseUrl: string;
   voice?: string;
   speed?: number;
-  fetch?: FetchLike;
+  fetch?: CloudFetch;
   now?: () => number;
   requestTimeoutMs?: number;
 }

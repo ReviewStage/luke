@@ -20,6 +20,7 @@ import {
 } from "#shared/messages/brain";
 import { CONVERSATION_DELETE_OUTCOME } from "../brain/conversation-deletion";
 import { REJECTED_SUBMISSION } from "../brain/ipc";
+import { onGatewayEvent } from "./wire";
 
 /**
  * The desktop's operator client: what the windows' IPC and the main
@@ -89,11 +90,7 @@ export function createGatewayOperator(options: GatewayOperatorOptions): GatewayO
     kind: GatewayEvent["kind"],
     read: (payload: WireValue) => Payload | undefined,
     listener: (payload: Payload) => void,
-  ) =>
-    client.on(kind, (event) => {
-      const payload = read(event.payload);
-      if (payload !== undefined) listener(payload);
-    });
+  ) => onGatewayEvent(client, kind, read, listener);
   return {
     client,
     submit: async (submission, sessionKey = MAIN_SESSION_KEY) =>

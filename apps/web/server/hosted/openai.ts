@@ -5,6 +5,7 @@
  * off, the same kill switch the feedback endpoint uses.
  */
 
+import type { CloudFetch } from "@sidecar/wire";
 import type {
   BrainCompactRequest,
   BrainEmbeddingsRequest,
@@ -29,8 +30,6 @@ export const HOSTED_OPENAI_DEFAULTS = {
   REQUEST_TIMEOUT_MS: 15_000,
 } as const;
 
-export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
-
 /** Build-fixed documents the hosted tier POSTs to OpenAI. */
 export type OpenAiPostBody =
   | ReturnType<typeof realtimeClientSecretRequest>
@@ -43,7 +42,7 @@ export type OpenAiPostBody =
 
 export interface OpenAiUpstreamOptions {
   apiKey: string;
-  fetch?: FetchLike;
+  fetch?: CloudFetch;
   timeoutMs?: number;
   /** The caller's own cancellation, when the runtime carries one; the upstream call is dropped with it. */
   signal?: AbortSignal;

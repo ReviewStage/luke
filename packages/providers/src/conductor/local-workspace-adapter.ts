@@ -6,6 +6,7 @@ import {
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
   SessionProviderAdapterBase,
+  UNSUPPORTED_BY_OBSERVATION,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
 } from "@sidecar/session";
@@ -244,7 +245,7 @@ export class ConductorLocalWorkspaceAdapter extends SessionProviderAdapterBase {
     if (!rootPath)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: UNSUPPORTED_BY_OBSERVATION,
       };
     const link = conductorCreateWorkspaceLink(rootPath, request.task);
     try {

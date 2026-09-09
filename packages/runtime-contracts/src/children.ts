@@ -1,7 +1,7 @@
 import {
+  isInstant,
   isRecord,
   isWireBoolean,
-  isWireNumber,
   isWireString,
   type UnparsedWireValue,
 } from "@sidecar/wire";
@@ -133,12 +133,8 @@ export interface ChildRunRecord {
   readonly archivedAt?: number;
 }
 
-function instant(value: UnparsedWireValue): value is number {
-  return isWireNumber(value) && Number.isFinite(value) && value >= 0;
-}
-
 function optionalInstant(value: UnparsedWireValue): value is number | undefined {
-  return value === undefined || instant(value);
+  return value === undefined || isInstant(value);
 }
 
 function optionalString(value: UnparsedWireValue): value is string | undefined {
@@ -163,7 +159,7 @@ export function childRunRecordFromWire(value: UnparsedWireValue): ChildRunRecord
   }
   if (!isIdentifier(value.childRunId) || !isWireString(value.task)) return undefined;
   if (!optionalString(value.requesterRunId) || !optionalString(value.label)) return undefined;
-  if (!instant(value.depth) || !Number.isInteger(value.depth)) return undefined;
+  if (!isInstant(value.depth) || !Number.isInteger(value.depth)) return undefined;
   if (!optionalString(value.model) || !optionalString(value.contextNote)) return undefined;
   if (!isChildContextMode(value.requestedContext) || !isChildContextMode(value.context)) {
     return undefined;
@@ -172,10 +168,10 @@ export function childRunRecordFromWire(value: UnparsedWireValue): ChildRunRecord
   const allowed = stringList(value.policy.allowed);
   const denied = stringList(value.policy.denied);
   if (!allowed || !denied) return undefined;
-  if (!instant(value.timeoutMs) || !isChildCleanup(value.cleanup)) return undefined;
+  if (!isInstant(value.timeoutMs) || !isChildCleanup(value.cleanup)) return undefined;
   if (!isIdentifier(value.completionDestination)) return undefined;
   if (!isWireBoolean(value.expectsCompletion)) return undefined;
-  if (!isChildRunStatus(value.status) || !instant(value.acceptedAt)) return undefined;
+  if (!isChildRunStatus(value.status) || !isInstant(value.acceptedAt)) return undefined;
   if (!optionalInstant(value.startedAt) || !optionalInstant(value.settledAt)) return undefined;
   if (!optionalInstant(value.archivedAt)) return undefined;
   if (!optionalString(value.resultText) || !optionalString(value.failureDetail)) return undefined;
@@ -283,8 +279,8 @@ export function childCompletionRecordFromWire(
   if (!isIdentifier(value.completionId) || !isIdentifier(value.childId)) return undefined;
   if (!isIdentifier(value.destination) || !isChildRunStatus(value.status)) return undefined;
   if (!optionalString(value.resultText) || !optionalString(value.failureDetail)) return undefined;
-  if (!instant(value.createdAt) || !isCompletionDeliveryStatus(value.delivery)) return undefined;
-  if (!instant(value.attempts) || !Number.isInteger(value.attempts)) return undefined;
+  if (!isInstant(value.createdAt) || !isCompletionDeliveryStatus(value.delivery)) return undefined;
+  if (!isInstant(value.attempts) || !Number.isInteger(value.attempts)) return undefined;
   if (!optionalInstant(value.firstAttemptAt) || !optionalInstant(value.nextAttemptAt)) {
     return undefined;
   }

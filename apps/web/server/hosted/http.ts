@@ -1,3 +1,4 @@
+import { HTTP_STATUS } from "@sidecar/wire";
 import type { HostedApiError, HostedQuota } from "../core.js";
 
 /**
@@ -9,14 +10,13 @@ import type { HostedApiError, HostedQuota } from "../core.js";
 
 export { HOSTED_API_ERROR, type HostedApiError } from "../core.js";
 
+/** The wire boundary's statuses, plus the ones only a route answers with. */
 export const HOSTED_HTTP_STATUS = {
+  ...HTTP_STATUS,
   OK: 200,
   ACCEPTED: 202,
   BAD_REQUEST: 400,
-  UNAUTHORIZED: 401,
-  METHOD_NOT_ALLOWED: 405,
   PAYLOAD_TOO_LARGE: 413,
-  TOO_MANY_REQUESTS: 429,
   BAD_GATEWAY: 502,
   SERVICE_UNAVAILABLE: 503,
 } as const;

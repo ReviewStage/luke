@@ -1,6 +1,6 @@
 import {
+  isInstant,
   isRecord,
-  isWireNumber,
   isWireString,
   type UnparsedWireValue,
   type WireRecord,
@@ -124,20 +124,16 @@ export interface ConversationRecord {
   readonly temporary?: boolean;
 }
 
-function instant(value: UnparsedWireValue): value is number {
-  return isWireNumber(value) && Number.isFinite(value) && value >= 0;
-}
-
 export function conversationRecordFromWire(
   value: UnparsedWireValue,
 ): ConversationRecord | undefined {
   if (!isRecord(value)) return undefined;
   if (!isWireString(value.sessionKey) || value.sessionKey.length === 0) return undefined;
   if (!isConversationKind(value.kind) || !isWireString(value.name)) return undefined;
-  if (!instant(value.createdAt) || !instant(value.lastActivityAt)) return undefined;
-  if (value.archivedAt !== undefined && !instant(value.archivedAt)) return undefined;
+  if (!isInstant(value.createdAt) || !isInstant(value.lastActivityAt)) return undefined;
+  if (value.archivedAt !== undefined && !isInstant(value.archivedAt)) return undefined;
   if (value.archiveReason !== undefined && !isArchiveReason(value.archiveReason)) return undefined;
-  if (value.pinnedAt !== undefined && !instant(value.pinnedAt)) return undefined;
+  if (value.pinnedAt !== undefined && !isInstant(value.pinnedAt)) return undefined;
   if (value.sessionId !== undefined && !isWireString(value.sessionId)) return undefined;
   if (value.temporary !== undefined && value.temporary !== true) return undefined;
   // SAFETY: the session key is a non-empty string; the constructor's check is the one made above.
@@ -219,11 +215,11 @@ export function historyArchiveRecordFromWire(
   if (!isWireString(value.archiveId) || value.archiveId.length === 0) return undefined;
   if (!isWireString(value.sessionKey) || value.sessionKey.length === 0) return undefined;
   if (!isConversationKind(value.kind) || !isWireString(value.name)) return undefined;
-  if (!instant(value.createdAt) || !instant(value.deletedAt)) return undefined;
+  if (!isInstant(value.createdAt) || !isInstant(value.deletedAt)) return undefined;
   if (!isArchiveEncoding(value.encoding) || !isWireString(value.sha256)) return undefined;
-  if (!instant(value.byteLength) || !isWireString(value.fileName)) return undefined;
-  if (value.publishedAt !== undefined && !instant(value.publishedAt)) return undefined;
-  if (!instant(value.historyLines) || !instant(value.transcriptEvents)) return undefined;
+  if (!isInstant(value.byteLength) || !isWireString(value.fileName)) return undefined;
+  if (value.publishedAt !== undefined && !isInstant(value.publishedAt)) return undefined;
+  if (!isInstant(value.historyLines) || !isInstant(value.transcriptEvents)) return undefined;
   return {
     archiveId: value.archiveId,
     // SAFETY: a non-empty string, checked above, is what the session key constructor admits.

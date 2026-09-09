@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
+import { OMISSION_MARKER } from "@sidecar/session";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import { ClaudeCodeSessionAdapter } from "./adapter.js";
 
@@ -101,8 +102,8 @@ test("keeps the newest turns when the rendering is cut, and says so", async (t) 
   });
 
   assert.ok(rendered);
-  assert.ok(rendered.startsWith("[earlier turns omitted]\n"));
-  assert.ok(rendered.length <= 400 + "[earlier turns omitted]\n".length);
+  assert.ok(rendered.startsWith(`${OMISSION_MARKER}\n`));
+  assert.ok(rendered.length <= 400 + OMISSION_MARKER.length + 1);
   assert.ok(rendered.includes("prompt number 39"), "the newest turn survives the cut");
   assert.ok(!rendered.includes("prompt number 0 "), "the oldest turn is what goes");
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -127,7 +128,7 @@ test("renders every line uncut when no rendered length is asked for", async (t) 
 
   assert.ok(rendered);
   assert.ok(rendered.length > 8_000, "the old whole-rendering cap no longer applies");
-  assert.ok(!rendered.includes("[earlier turns omitted]"));
+  assert.ok(!rendered.includes(OMISSION_MARKER));
   assert.equal(rendered.split("\n").length, 400);
   assert.ok(rendered.startsWith("Developer: prompt number 0 "));
   assert.ok(rendered.includes("prompt number 399"));

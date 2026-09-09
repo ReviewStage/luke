@@ -16,6 +16,7 @@ import {
   type SessionStatus,
   sessionMessageText,
   UNKNOWN_WORKSPACE_LABEL,
+  UNSUPPORTED_BY_OBSERVATION,
 } from "@sidecar/session";
 import { recordFromJsonLine, resolveOptions, type WireRecord } from "@sidecar/wire";
 
@@ -228,7 +229,7 @@ export abstract class LocalSessionAdapter extends SessionProviderAdapterBase {
     if (!observation || !advertisedActFor(observation, ACT_KIND.MESSAGE)) {
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That act is not supported by the latest observation.",
+        reason: UNSUPPORTED_BY_OBSERVATION,
       };
     }
     const text = sessionMessageText(message.text);

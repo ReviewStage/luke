@@ -1,3 +1,4 @@
+import { ESTIMATED_CHARS_PER_TOKEN } from "@sidecar/memory";
 import {
   COMPACTION_SOURCE,
   type CompactionOptions,
@@ -8,7 +9,6 @@ import {
   type RuntimeCompaction,
 } from "@sidecar/runtime-contracts";
 import type { WireRecord } from "@sidecar/wire";
-import { ESTIMATED_CHARS_PER_TOKEN } from "./context-engine.js";
 
 /**
  * The one component that decides when the context folds and how. The
