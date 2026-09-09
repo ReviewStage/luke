@@ -8,6 +8,7 @@ import {
   CompositeSessionProviderAdapter,
   PROVIDER_ID,
   type ProviderId,
+  pluginAsAdapter,
   type SessionProviderAdapter,
 } from "@sidecar/session";
 import { CLAUDE_HOOK_EVENT, installClaudeCodeObservationHooks } from "./claude-code/hooks.js";
@@ -145,6 +146,6 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
     },
     // OMP's JSONL recordings already say whose move it is: message roles,
     // unmatched tool_execution_start, and session_exit. No observation hook.
-    [PROVIDER_ID.OMP]: { adapter: locals.omp },
+    [PROVIDER_ID.OMP]: { adapter: pluginAsAdapter(locals.omp) },
   } satisfies Readonly<Record<ProviderId, ProviderRegistration>>;
 }
