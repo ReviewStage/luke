@@ -49,6 +49,7 @@ import {
   PROVIDER_ID,
   PROVIDER_ID_LIST,
   type ProviderId,
+  rosterRelevantSessions,
   type Session,
   type SessionIdentity,
   type SessionProviderPlugin,
@@ -111,7 +112,7 @@ export interface ObservationComposer extends Composer {
   pluginFor: (providerId: string) => SessionProviderPlugin | undefined;
   session: (identity: SessionIdentity) => Session | undefined;
   observedSessionCount: () => number;
-  /** The roster a client draws: the same relevance gate every broadcast passes. */
+  /** The roster a client draws: the sessions still worth a row, the same gate every broadcast passes. */
   rosterForClients: () => readonly Session[];
   rosterSettled: () => boolean;
   offeredWorkspaceProjects: () => readonly ObservedWorkspaceProject[];
@@ -119,7 +120,7 @@ export interface ObservationComposer extends Composer {
   broadcastWorkspaceProjects: () => Promise<void>;
   readSupersetWorkspaceHost: () => Promise<WorkspaceHostEnrichment>;
   refreshCredentialAdapter: (providerId: CredentialProviderId) => void;
-  /** The sessions an action may name: the roster less the voice's own. */
+  /** The sessions an action may name: the drawn roster less the voice's own. */
   actableSessions: () => readonly Session[];
   roster: () => BrainRoster;
   workspaceProjects: () => readonly ObservedWorkspaceProject[];
@@ -530,9 +531,25 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     },
   });
 
+  /**
+   * The roster keeps every observation whole, and the adapters age out and cap
+   * nothing, so this one gate is where a session that settled long ago stops
+   * being a row. Every client-facing read passes through it: the broadcast,
+   * the bootstrap and roster method, and the sessions an action may name, so
+   * the panel, the voice, and admission see one roster. The pass announces
+   * every run whether or not anything moved, so a session that crosses its
+   * horizon between observations leaves on the next broadcast.
+   */
+  function relevantSessions(sessions: readonly Session[]): readonly Session[] {
+    return rosterRelevantSessions(sessions, now());
+  }
+
   function broadcastSessions(sessions: readonly Session[]): void {
     rosterBroadcast = true;
-    kernel.emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: carried(sessions), settled: true });
+    kernel.emit(GATEWAY_EVENT.SESSIONS_CHANGED, {
+      sessions: carried(relevantSessions(sessions)),
+      settled: true,
+    });
   }
 
   function countObservedSessions(sessions: readonly Session[]): void {
@@ -572,11 +589,15 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
   }
 
   function actableSessions(): readonly Session[] {
-    return sessionRegistry.list().filter((session) => session.realtimeVoice !== true);
+    return relevantSessions(sessionRegistry.list()).filter(
+      (session) => session.realtimeVoice !== true,
+    );
   }
 
   function rosterForClients(): readonly Session[] {
-    return runMode.observesProviders && account.capabilitiesActive() ? sessionRegistry.list() : [];
+    return runMode.observesProviders && account.capabilitiesActive()
+      ? relevantSessions(sessionRegistry.list())
+      : [];
   }
 
   const methods: GatewayMethodTable = {
