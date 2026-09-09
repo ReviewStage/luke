@@ -1,5 +1,5 @@
+import type { RunMode } from "@sidecar/host";
 import { BrowserWindow, type WebContents } from "electron";
-import type { RunMode } from "../run-mode";
 import { hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
 
 export interface VoiceWindowOptions {

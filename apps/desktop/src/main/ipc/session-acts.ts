@@ -1,9 +1,9 @@
+import { OPEN_REFUSAL, type SessionActPerformer } from "@sidecar/host";
 import type { SessionApplicationId, SessionIdentity, SessionOpenResult } from "@sidecar/session";
 import { ACT_RESULT_STATUS, type WireValue } from "@sidecar/wire";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { BRIDGE, type Bridge, type BridgeMethod } from "#shared/bridge";
 import { type BridgeContext, registerBridgeEntry } from "../register-bridge";
-import { OPEN_REFUSAL, type SessionActPerformer } from "../session-act-performer";
 
 export interface SessionActsIpcDependencies {
   ipcMain: Pick<IpcMain, "handle" | "on">;

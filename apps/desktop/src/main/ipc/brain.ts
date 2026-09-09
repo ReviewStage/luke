@@ -4,11 +4,11 @@ import type {
   BrainAskWait,
   BrainReplyClaimResult,
 } from "@sidecar/brain/requests-wire";
+import type { GatewayOperator } from "@sidecar/host";
+import { REJECTED_SUBMISSION } from "@sidecar/host";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import { BRIDGE } from "#shared/bridge";
-import { REJECTED_SUBMISSION } from "../brain/publication";
-import type { GatewayOperator } from "../gateway/operator";
 import { registerBridge } from "../register-bridge";
 
 /** The two kinds of window that may submit, and which origin each may claim. */

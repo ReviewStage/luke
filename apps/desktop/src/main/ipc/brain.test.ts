@@ -1,25 +1,29 @@
 /* oxlint-disable anti-slop/no-unknown-returns -- Fake Electron listeners deliberately retain the IPC boundary shape. */
+
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { BrainAgent, BrainRequestRecord } from "@sidecar/brain";
 import { DeliveryLedger } from "@sidecar/brain";
 import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
 import type { BrainAskWait, BrainReplyClaimResult } from "@sidecar/brain/requests-wire";
+import { drainMicrotasks } from "@sidecar/fixtures/testing";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
   GatewayClient,
   InProcessTransport,
 } from "@sidecar/gateway";
+import type { ConversationOperations } from "@sidecar/host";
+import {
+  createGatewayOperator,
+  createGatewayService,
+  type GrantedWords,
+  VoiceReceiver,
+} from "@sidecar/host";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import { BRIDGE } from "#shared/bridge";
-import { drainMicrotasks } from "#testing/drain";
-import type { ConversationOperations } from "../conversation-operations";
-import { createGatewayOperator } from "../gateway/operator";
-import { createGatewayService, type GrantedWords } from "../gateway/service";
-import { VoiceReceiver } from "../voice-receiver";
 import { registerBrainIpc } from "./brain";
 
 const NOW = 1_800_000_000_000;

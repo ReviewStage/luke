@@ -7,6 +7,7 @@ import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import type { GatewayCallResult, GatewayClient } from "@sidecar/gateway";
 import { carried, GATEWAY_EVENT, GATEWAY_METHOD, gatewayEventReader } from "@sidecar/gateway";
 import type { AppGuideSnapshot } from "@sidecar/guide";
+import { RECEIVER_REPORT_KIND } from "@sidecar/host";
 import type { RealtimeConnection } from "@sidecar/hosted";
 import type { ConversationEntry, RealtimeDiagnostics } from "@sidecar/realtime";
 import type { SpeechOffer, SpeechOutcome } from "@sidecar/realtime/speech";
@@ -36,7 +37,6 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import { RECEIVER_REPORT_KIND } from "../host/runtime-host";
 
 /**
  * The desktop's client over the host's own vocabulary: the settings, account,

@@ -75,6 +75,9 @@ importers:
       '@sidecar/guide':
         specifier: workspace:*
         version: link:../../packages/guide
+      '@sidecar/host':
+        specifier: workspace:*
+        version: link:../../packages/host
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../../packages/hosted
@@ -489,6 +492,9 @@ importers:
 
   packages/fixtures:
     dependencies:
+      '@sidecar/runtime-contracts':
+        specifier: workspace:*
+        version: link:../runtime-contracts
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
@@ -537,6 +543,94 @@ importers:
         specifier: workspace:*
         version: link:../wire
     devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/host:
+    dependencies:
+      '@sidecar/account':
+        specifier: workspace:*
+        version: link:../account
+      '@sidecar/acts':
+        specifier: workspace:*
+        version: link:../acts
+      '@sidecar/analytics':
+        specifier: workspace:*
+        version: link:../analytics
+      '@sidecar/brain':
+        specifier: workspace:*
+        version: link:../brain
+      '@sidecar/calendar':
+        specifier: workspace:*
+        version: link:../calendar
+      '@sidecar/credentials':
+        specifier: workspace:*
+        version: link:../credentials
+      '@sidecar/devtrace':
+        specifier: workspace:*
+        version: link:../devtrace
+      '@sidecar/gateway':
+        specifier: workspace:*
+        version: link:../gateway
+      '@sidecar/guide':
+        specifier: workspace:*
+        version: link:../guide
+      '@sidecar/hosted':
+        specifier: workspace:*
+        version: link:../hosted
+      '@sidecar/issues':
+        specifier: workspace:*
+        version: link:../issues
+      '@sidecar/memory':
+        specifier: workspace:*
+        version: link:../memory
+      '@sidecar/providers':
+        specifier: workspace:*
+        version: link:../providers
+      '@sidecar/realtime':
+        specifier: workspace:*
+        version: link:../realtime
+      '@sidecar/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      '@sidecar/runtime-contracts':
+        specifier: workspace:*
+        version: link:../runtime-contracts
+      '@sidecar/runtime-store':
+        specifier: workspace:*
+        version: link:../runtime-store
+      '@sidecar/session':
+        specifier: workspace:*
+        version: link:../session
+      '@sidecar/settings':
+        specifier: workspace:*
+        version: link:../settings
+      '@sidecar/superset':
+        specifier: workspace:*
+        version: link:../superset
+      '@sidecar/surface':
+        specifier: workspace:*
+        version: link:../surface
+      '@sidecar/trackers':
+        specifier: workspace:*
+        version: link:../trackers
+      '@sidecar/voice':
+        specifier: workspace:*
+        version: link:../voice
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@sidecar/fixtures':
+        specifier: workspace:*
+        version: link:../fixtures
       '@types/node':
         specifier: 26.2.0
         version: 26.2.0

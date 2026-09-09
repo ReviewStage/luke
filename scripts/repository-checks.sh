@@ -40,6 +40,8 @@ required_files=(
     packages/analytics/CLAUDE.md
     packages/gateway/AGENTS.md
     packages/gateway/CLAUDE.md
+    packages/host/AGENTS.md
+    packages/host/CLAUDE.md
     packages/hosted/AGENTS.md
     packages/hosted/CLAUDE.md
     packages/providers/AGENTS.md
@@ -319,12 +321,15 @@ fi
 # process and a brain composition were each hand-rolled in several test files,
 # and every copy drifted: three temporary directories were never cleaned up and
 # four drains had settled on four different tick counts for the same wait. The
-# fixtures under apps/desktop/src/testing are the one copy of each, and these
-# two calls are how a hand-rolled one always begins.
+# first three live in @sidecar/fixtures/testing, because the host's tests are in
+# a package and a package cannot reach into an app; the rest are under
+# apps/desktop/src/testing. These two calls are how a hand-rolled one always
+# begins.
 hand_rolled_fixtures=$(grep -rnaE --include='*.test.ts' --include='*.test.tsx' \
-    'mkdtemp|setImmediate' "$SIDECAR_REPO_ROOT/apps/desktop/src" || true)
+    'mkdtemp|setImmediate' \
+    "$SIDECAR_REPO_ROOT/apps/desktop/src" "$SIDECAR_REPO_ROOT/packages/host/src" || true)
 if [[ -n "$hand_rolled_fixtures" ]]; then
-    printf 'error: test files import #testing/temporary-directory and #testing/drain rather than hand-rolling them:\n%s\n' \
+    printf 'error: test files import temporaryDirectory and drainMicrotasks from @sidecar/fixtures/testing rather than hand-rolling them:\n%s\n' \
         "$hand_rolled_fixtures" >&2
     exit 1
 fi

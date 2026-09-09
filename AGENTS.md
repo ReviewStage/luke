@@ -1196,6 +1196,7 @@ works in that subtree:
 | `packages/surface/AGENTS.md` | The shared surface vocabulary and its generated outputs |
 | `packages/realtime/AGENTS.md` | Why `protocol` and `tools` ship together |
 | `packages/gateway/AGENTS.md` | The protocol as the contract, its three doors, and injected authentication |
+| `packages/host/AGENTS.md` | The host's seams, why it draws nothing, and the one drain |
 | `packages/analytics/AGENTS.md` | The product-event allowlist and its `PRIVACY.md` obligation |
 | `packages/hosted/AGENTS.md` | The hosted wire boundary and its dependency direction |
 

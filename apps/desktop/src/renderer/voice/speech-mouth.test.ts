@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { FakeClock } from "@sidecar/fixtures/testing";
 import type { BriefingSpeech, ProactiveSpeechTurn, RealtimeStatus } from "@sidecar/realtime";
 import {
   BRIEFING_SPEECH_KIND,
@@ -8,7 +9,6 @@ import {
   REALTIME_STATUS,
 } from "@sidecar/realtime";
 import { SPEECH_OUTCOME, type SpeechOffer, type SpeechOutcome } from "@sidecar/realtime/speech";
-import { FakeClock } from "#testing/fake-clock";
 import {
   ANNOUNCER_GRACE_MS,
   ANNOUNCER_LINGER_MS,

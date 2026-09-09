@@ -17,6 +17,20 @@ import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidec
 import { fixtureSnapshot } from "@sidecar/fixtures";
 import { GATEWAY_CLIENT_ROLE, InProcessTransport, shutdownGateway } from "@sidecar/gateway";
 import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
+import {
+  composeRuntimeHost,
+  HOST_OPERATOR_CLIENT_ID,
+  INTRODUCTION_FADE_MS,
+  INTRODUCTION_HANDOFF_READY_MS,
+  INTRODUCTION_PEEK_FRESH_MS,
+  INTRODUCTION_RENDER_DEADLINE_MS,
+  jsonStateFile,
+  onboardingStateFile,
+  runModeFor,
+  runtimeStoreWorkerPath,
+  sentryReportingEnabled,
+  shouldRunIntroduction,
+} from "@sidecar/host";
 import { peekLocalSessions } from "@sidecar/providers";
 import type { SpeechOutcome } from "@sidecar/realtime/speech";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
@@ -56,25 +70,15 @@ import {
 } from "#shared/messages/session";
 import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/messages/voice-view";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
-import { runAppleCalendarHelper } from "./apple-calendar";
-import { DESKTOP_OPERATOR_CLIENT_ID } from "./gateway/desktop-node";
 import type { HostBootstrap, HostSessionReplay } from "./gateway/host-operator";
 import { wireGateway } from "./gateway/wiring";
-import { composeRuntimeHost } from "./host/runtime-host";
-import {
-  INTRODUCTION_FADE_MS,
-  INTRODUCTION_HANDOFF_READY_MS,
-  INTRODUCTION_PEEK_FRESH_MS,
-  INTRODUCTION_RENDER_DEADLINE_MS,
-  shouldRunIntroduction,
-} from "./introduction-flow";
 import { registerAccountSessionIpc } from "./ipc/account-session";
 import { registerBrainIpc } from "./ipc/brain";
 import { registerSessionActsIpc } from "./ipc/session-acts";
 import { registerSettingsRowsIpc } from "./ipc/settings-rows";
 import { registerVoiceRuntimeIpc } from "./ipc/voice-runtime";
 import { registerWindowSurfaceIpc } from "./ipc/window-surface";
-import { jsonStateFile } from "./json-state-file";
+import { runAppleCalendarHelper } from "./native/apple-calendar-helper";
 import { MediaDuckController } from "./native/media-duck";
 import {
   microphoneRouteWatcher as createMicrophoneRouteWatcher,
@@ -84,10 +88,7 @@ import {
   outputVolumeWatcher as createOutputVolumeWatcher,
   type OutputVolumeWatch,
 } from "./native/output-volume";
-import { onboardingStateFile } from "./onboarding-state";
 import { type BridgeContext, registerBridge, registerBridgeEntry } from "./register-bridge";
-import { runModeFor, sentryReportingEnabled } from "./run-mode";
-import { runtimeStoreWorkerPath } from "./runtime-store-path";
 import { createSettingsHandler } from "./settings-handler";
 import { createElectronUpdaterEngine } from "./update-installer";
 import { UPDATE_ENDPOINT, type UpdaterEngine, UpdateService } from "./update-service";
@@ -442,7 +443,7 @@ const runtimeHost = composeRuntimeHost({
   onShutdownRequested: () => app.quit(),
 });
 const transport = new InProcessTransport(runtimeHost.service.server, {
-  clientId: DESKTOP_OPERATOR_CLIENT_ID,
+  clientId: HOST_OPERATOR_CLIENT_ID,
   role: GATEWAY_CLIENT_ROLE.OPERATOR,
 });
 const gateway = wireGateway({

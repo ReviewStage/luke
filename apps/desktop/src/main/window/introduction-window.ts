@@ -1,5 +1,5 @@
+import type { RunMode } from "@sidecar/host";
 import { BrowserWindow, screen, type WebContents } from "electron";
-import type { RunMode } from "../run-mode";
 import { dressMacWindow, hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
 
 export interface IntroductionWindowOptions {

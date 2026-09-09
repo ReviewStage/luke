@@ -1,6 +1,6 @@
+import type { RunMode } from "@sidecar/host";
 import type { BrowserWindow } from "electron";
 import { keepWindowStationary } from "../native/stationary-window";
-import type { RunMode } from "../run-mode";
 
 /**
  * The one posture every renderer window of Luke's runs under. The panels and
