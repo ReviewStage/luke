@@ -72,14 +72,12 @@ export type ConversationReporter = string;
 export type ConversationErasure = Pick<DeletionOutcome, "published">;
 
 export interface StoreWiring {
-  /** The client, started on first use; the worker's answers stand behind every method below. */
   client: () => StoreClient;
   /** One conversation's thread, relayed between windows through this process; created on first use. */
   thread: (sessionKey?: SessionKey) => ConversationThread;
   /** A conversation's envelope, for the brain wiring to build its writer on: the store's, or memory alone where nothing is kept on disk. */
   brainStateRepository: (sessionKey?: SessionKey) => BrainStateRepository;
   open: () => Promise<void>;
-  /** Restores every stored conversation's thread, its cutoff, and the notebook's entries, once opened. */
   restore: () => Promise<void>;
   /**
    * The notebook's entries as last read from the worker — the facts Luke
@@ -88,7 +86,6 @@ export interface StoreWiring {
    * whenever the notebook's files are reconciled.
    */
   rememberedFacts: () => readonly RememberedFact[];
-  /** Reads the notebook again, reconciling a hand edit, and answers its entries. */
   refreshNotebook: () => Promise<readonly NotebookEntry[]>;
   /**
    * The notebook's two writes. Each is one request to the worker, which
@@ -112,9 +109,7 @@ export interface StoreWiring {
     recordedAt?: number,
     sessionKey?: SessionKey,
   ) => Promise<boolean>;
-  /** The directory as this process holds it: stored conversations and the memory-held ones of this run. */
   directory: () => readonly ConversationRecord[];
-  /** Whether the key names a conversation the directory lists right now. */
   holds: (sessionKey: SessionKey) => boolean;
   /** Whether the key names a conversation held in memory alone for this run, which is never a recall source. */
   isTemporary: (sessionKey: SessionKey) => boolean;
@@ -155,9 +150,7 @@ export interface StoreWiring {
     keepSessionId: string | undefined,
     cutoffBefore: number | undefined,
   ) => Promise<ConversationErasure | undefined>;
-  /** One maintenance pass, with the conversations that must be kept whatever their age. */
   runMaintenance: (preserve: readonly SessionKey[]) => Promise<MaintenanceReport | undefined>;
-  /** Refreshes the directory from the store and tells every window. */
   refreshDirectory: () => Promise<void>;
 }
 

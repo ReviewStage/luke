@@ -8,24 +8,17 @@ import type { SettingsView } from "./settings-views";
  * The order Luke signs his own work in, when one reply asked for more than one
  * act.
  *
- * A reply may carry several tool calls, and they are answered one after
- * another with nothing between them but a couple of IPC round trips — far
- * inside the beat an errand waits before it sets off. So the actions arrive as a
- * burst and the flights cannot: there is only ever one Luke on screen, one
- * panel, and one settings page drawn at a time, and each of those is something
- * a second action would take out from under the first. Handed straight to the
- * flight, the second action ends the first mid-air: the mark never leaves the
- * strip, both controls flip at once, and only the last action is seen being done
- * — which is the whole of what an errand is for.
- *
- * So the actions queue and the flights run in turn. Each action carries what it is
- * holding back — the settings snapshot the store answered with, or the
- * narrowing a spoken ask chose — so a hold belongs to the action that caught it
- * rather than to whichever flight happens to be out, and each is drawn on its
- * own tap. Each also carries where it has to be seen, so the panel is turned
- * to a page when the action that needs it comes up rather than when it was asked
- * for: a page turned at the ask would take the first action's control off screen
- * before Luke ever reached it.
+ * A reply's actions arrive as a burst and the flights cannot: there is only
+ * ever one Luke on screen, one panel, and one settings page drawn at a time,
+ * and each of those is something a second action would take out from under the
+ * first. So the actions queue and the flights run in turn. Each action carries
+ * what it is holding back — the settings snapshot the store answered with, or
+ * the narrowing a spoken ask chose — so a hold belongs to the action that
+ * caught it rather than to whichever flight happens to be out. Each also
+ * carries where it has to be seen, so the panel is turned to a page when the
+ * action that needs it comes up rather than when it was asked for: a page
+ * turned at the ask would take the first action's control off screen before
+ * Luke ever reached it.
  *
  * Two flights in sequence cost more than one, and that is the deliberate
  * choice. A chained flight waits only a beat, and the panel stays up across

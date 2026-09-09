@@ -95,15 +95,10 @@ export function useAppActionCarrier(options: UseAppActionCarrierOptions): void {
   );
 
   /**
-   * The spoken asks about Luke himself. A settings change goes through the
-   * same bridge calls the settings rows use, and the snapshot that comes back
-   * redraws the panel's switches; showing the panel is the capsule's press
-   * with a tab — or, already open, that tab's own press — and optionally a
-   * narrowing, chosen out loud; opening the composer follows the spoken-ask
-   * path. All were validated against their fixed
+   * The spoken asks about Luke himself. All were validated against their fixed
    * vocabularies before they arrive here, so this only performs and reports.
    *
-   * A settings change and a change of view are also the two actions nobody
+   * A settings change and a change of view are the two actions nobody
    * watched anyone make, so both end by showing the control that moved and
    * sending Luke to it. A settings change stands the panel up on the Settings
    * tab to do it: the switch is the whole report, and a switch flipped behind

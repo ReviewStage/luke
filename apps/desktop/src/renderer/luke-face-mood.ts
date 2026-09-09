@@ -160,16 +160,13 @@ export interface WeightedAside {
 }
 
 /**
- * Gestures Luke makes for no reason at all, and how often each is worth making.
- * They are what keeps a permanent fixture from reading as a dead one — a face
- * that never moves is a screenshot — and between them the face is simply still.
- *
- * Weights rather than a rotation, because these are not equals. Half the pool is
- * the blink, which is the smallest thing the face can do and the only one whose
- * job is just to be alive; the loud ones sit at the bottom, rare enough to stay
- * surprises — the duck behind the housing turns up about once every ten minutes.
- * Nothing here means anything: what does is chosen by `restingMotion` or fired
- * by `noticedMotion` at something that just changed.
+ * Gestures Luke makes for no reason at all, weighted rather than rotated
+ * because these are not equals: the blink is half the pool and the loud ones
+ * sit at the bottom, rare enough to stay surprises. They are what keeps a
+ * permanent fixture from reading as a dead one — a face that never moves is a
+ * screenshot — and between them the face is simply still. Nothing here means
+ * anything: what does is chosen by `restingMotion` or fired by `noticedMotion`
+ * at something that just changed.
  *
  * The same gesture twice running is allowed, and has to be. Two blinks a
  * half-minute apart is what a calm face does, and forbidding a repeat would

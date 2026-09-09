@@ -106,11 +106,6 @@ export function windowSurfaceActRows(
   };
 }
 
-/**
- * What one window reports about its own surface. The pointer interception is
- * the window's own hit-testing, and the counting channel below is the one
- * thing the renderer counts for itself.
- */
 export function windowSurfaceReports(
   dependencies: Pick<WindowSurfaceDependencies, "recordProductEvent">,
 ): Pick<ReportHandlers, "setPointerInterception" | "recordSurfaceEvent"> {
@@ -121,9 +116,9 @@ export function windowSurfaceReports(
       });
     },
     /**
-     * The one counting channel the renderer has, and the narrowest thing in
-     * this file. Every other event is emitted where its act happens, in this
-     * process; these are surface motion no main-process handler can see.
+     * The one counting channel the renderer has. Every other event is emitted
+     * where its act happens, in this process; these are surface motion no
+     * main-process handler can see.
      *
      * Two gates rather than one. `isProductSurfaceEventName` is the narrowing
      * that matters: it refuses every name outside the surface set, so a

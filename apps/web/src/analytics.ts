@@ -46,6 +46,10 @@ let client: Promise<PostHog | undefined> | undefined;
  * inert rather than broken — the same kill switch the recording endpoint has,
  * so a preview deployment or a local run measures nothing without being
  * configured to.
+ *
+ * Called from every page the site builds, not only the landing one: a funnel
+ * that saw the landing page alone would undercount everyone who arrived by a
+ * link.
  */
 export function startSiteAnalytics(): void {
   const projectApiKey = PROJECT_API_KEY;

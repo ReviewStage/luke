@@ -43,7 +43,6 @@ interface NotchWingsProps {
   voiceActive?: boolean;
   fixtureSpeaking: boolean;
   hasAudioSignal: boolean;
-  /** A pressed talk key still waiting for the call it asked to open. */
   voiceOpening: boolean;
   /** Whether announcements are held, by the announce switch off or a meeting — the face sleeps on it. */
   announcementsHeld: boolean;

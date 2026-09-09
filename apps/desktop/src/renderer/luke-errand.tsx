@@ -9,18 +9,9 @@ import { HIT_REGION, HIT_REGION_ATTRIBUTE, PANEL_PRESENTATION } from "./panel-st
 import { parseMilliseconds, parsePixels, STILL_MS } from "./session-motion";
 
 /**
- * Luke signing his own work.
- *
- * A setting or a view changes two ways: a hand on the control, or Luke acting
- * on something asked of him. The control answers identically either way — and
- * a switch that flips with nobody near it reads as a glitch rather than as an
- * answer. So Luke goes and does it in the open: he leaves the strip under the
- * housing, dives to the very control that changed, taps it, and floats back.
- *
- * The dive and the tap are the whole of the emphasis. The way home is the
- * quietest motion that still reads as something moving under its own power,
- * because by then the point has been made and all that is left is to get out
- * of the way of the control he was pointing at.
+ * Luke signing his own work: a control that changed because he was asked to
+ * change it is tapped in the open, because a switch that flips with nobody
+ * near it reads as a glitch rather than as an answer.
  *
  * **There is only ever one Luke on screen.** The strip's own face is held
  * invisible for exactly as long as the flight lasts, so what crosses the panel

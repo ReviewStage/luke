@@ -58,7 +58,7 @@ function record(overrides: Partial<BrainRequestRecord> = {}): BrainRequestRecord
 function registered(live: () => BrainRequestRecord | undefined) {
   // SAFETY: the rows read senders by identity alone; two distinct inert objects are two windows.
   const voiceSender = {} as WebContents;
-  // SAFETY: as above, the panel.
+  // SAFETY: an inert object distinct from the one above, so the rows read it as a second window.
   const panelSender = {} as WebContents;
   let ids = 0;
   const deliveries = new DeliveryLedger<GrantedWords>({
