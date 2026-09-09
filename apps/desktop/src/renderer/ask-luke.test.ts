@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { AskLuke, STOP_LABEL } from "./ask-luke";
 
 /** The label as static markup carries it: the apostrophe escaped, as React writes attributes. */
-const STOP_LABEL_MARKUP = STOP_LABEL.replace("'", "&#x27;");
+const STOP_LABEL_MARKUP = STOP_LABEL.replaceAll("'", "&#x27;");
 
 const props = {
   ask: async () => undefined,
