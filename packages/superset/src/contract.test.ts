@@ -3,17 +3,13 @@ import {
   PROVIDER_OBSERVATION,
   supersetHostDb,
 } from "@sidecar/providers/testing";
-import { ACT_KIND, adapterAsPlugin } from "@sidecar/session";
-import { SupersetCli, SupersetWorkspaceAdapter } from "./cli.js";
-import { SupersetWorkspaceReader } from "./workspaces.js";
-
-/** The organization the fixture's host database is filed under. */
-const FIXTURE_ORGANIZATION_ID = "fixture-organization";
+import { ACT_KIND } from "@sidecar/session";
+import { supersetPlugin } from "./plugin.js";
 
 describeProviderContract(
   async (input) => {
     await supersetHostDb(input.home, await input.sql("host"));
-    const cli = new SupersetCli({
+    const plugin = supersetPlugin({
       homeDirectory: input.home,
       run: async (executable, argv) => {
         throw new Error(`observation spawned ${executable} ${argv.join(" ")}`);
@@ -21,23 +17,14 @@ describeProviderContract(
       query: async (executable, argv) => {
         throw new Error(`observation spawned ${executable} ${argv.join(" ")}`);
       },
-      organizationId: async () => FIXTURE_ORGANIZATION_ID,
     });
-    const adapter = new SupersetWorkspaceAdapter(cli);
-    const reader = new SupersetWorkspaceReader({ homeDirectory: input.home });
-    const shim = adapterAsPlugin(adapter);
     return {
-      ...shim,
-      // Superset's rows are handed to the adapter by the host-state read
-      // rather than read inside it, so the pass under test is both halves.
+      ...plugin,
+      // Superset's rows come from the host-state read its `refresh` performs,
+      // so the pass under test is that read and the roster it publishes.
       async observe() {
-        const snapshot = await reader.read();
-        await adapter.refresh(
-          undefined,
-          false,
-          snapshot.workspaceRowObservations(FIXTURE_ORGANIZATION_ID),
-        );
-        return shim.observe();
+        await plugin.refresh(undefined);
+        return plugin.observe();
       },
     };
   },

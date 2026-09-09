@@ -3,21 +3,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import {
-  ACT_RESULT_STATUS,
-  PROVIDER_ID,
-  SESSION_STATUS,
-  UNSUPPORTED_BY_OBSERVATION,
-} from "@sidecar/session";
-import { isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, PROVIDER_ID, UNSUPPORTED_BY_OBSERVATION } from "@sidecar/session";
 import { admittedForTest } from "@sidecar/wire/testing";
-import {
-  isSupersetControlId,
-  SUPERSET_CONTROL_ID,
-  SupersetCli,
-  SupersetWorkspaceAdapter,
-} from "./cli.js";
-import type { SupersetSessionContext } from "./workspaces.js";
+import { SupersetCli } from "./cli.js";
+import { isSupersetControlId, SUPERSET_CONTROL_ID } from "./vocabulary.js";
+import type { SupersetSessionContext } from "./wire.js";
 
 async function connectedHome(t: TestContext): Promise<string> {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), "luke-superset-cli-"));
@@ -30,20 +20,9 @@ async function connectedHome(t: TestContext): Promise<string> {
   return home;
 }
 
+/** The real configuration read: the home above already wrote the file. */
 function testCliOptions(homeDirectory: string) {
-  return {
-    homeDirectory,
-    organizationId: async () => {
-      try {
-        const parsed: UnparsedWireValue = JSON.parse(
-          await fs.readFile(path.join(homeDirectory, "config.json"), "utf8"),
-        );
-        return isRecord(parsed) ? text(parsed.organizationId) : undefined;
-      } catch {
-        return undefined;
-      }
-    },
-  };
+  return { homeDirectory };
 }
 
 const CONTEXT: SupersetSessionContext = {
@@ -62,7 +41,7 @@ test("recognizes only controls owned by Superset", () => {
   assert.equal(isSupersetControlId("provider-native-control"), false);
 });
 
-test("login state uses only the injected organization-id answer", async (t) => {
+test("login state is the organization Superset's own configuration names", async (t) => {
   const home = await connectedHome(t);
   const cli = new SupersetCli(testCliOptions(home));
   assert.equal(await cli.activeOrganization(), "org-1");
@@ -281,27 +260,6 @@ test("a chatless workspace context takes the delete but never a message", async 
   ]);
 });
 
-test("the workspace adapter reports the rows it was refreshed with", async (t) => {
-  const home = await connectedHome(t);
-  const cli = new SupersetCli({ ...testCliOptions(home), query: async () => "[]" });
-  const adapter = new SupersetWorkspaceAdapter(cli);
-  const row = {
-    providerSessionId: "workspace-1",
-    title: "power-vacation",
-    status: SESSION_STATUS.COMPLETE,
-    lastActivityAt: 100,
-    standing: true,
-  };
-
-  assert.deepEqual(await adapter.observe(), []);
-  // Observation reads host state, which needs no login, so the rows stand
-  // while the CLI is signed out — only their acts wait for the connection.
-  await adapter.refresh(undefined, false, [row]);
-  assert.deepEqual(await adapter.observe(), [row]);
-  await adapter.refresh(undefined, false, []);
-  assert.deepEqual(await adapter.observe(), []);
-});
-
 test("a CLI failure becomes a bounded rejection", async (t) => {
   const home = await connectedHome(t);
   const cli = new SupersetCli({
@@ -428,52 +386,6 @@ test("lists a project once when the local machine is also a listed host", async 
       ["project-2", "host-studio"],
     ],
   );
-});
-
-test("reuses recently discovered workspace projects", async (t) => {
-  const home = await connectedHome(t);
-  let projectQueries = 0;
-  const cli = new SupersetCli({
-    ...testCliOptions(home),
-    query: async (_executable, arguments_) => {
-      if (arguments_[0] === "projects") {
-        projectQueries += 1;
-        return JSON.stringify([{ id: "project-1", name: "Luke" }]);
-      }
-      if (arguments_[0] === "agents") return JSON.stringify([{ presetId: "codex" }]);
-      return "[]";
-    },
-  });
-  const adapter = new SupersetWorkspaceAdapter(cli);
-
-  await adapter.refresh("codex", true, []);
-  await adapter.refresh("codex", true, []);
-
-  assert.equal(projectQueries, 1);
-  assert.equal(adapter.workspaceProjects()[0]?.defaultAgent, "codex");
-});
-
-test("retries workspace discovery after an empty result", async (t) => {
-  const home = await connectedHome(t);
-  let projectQueries = 0;
-  const cli = new SupersetCli({
-    ...testCliOptions(home),
-    query: async (_executable, arguments_) => {
-      if (arguments_[0] === "projects") {
-        projectQueries += 1;
-        return projectQueries === 1 ? "[]" : JSON.stringify([{ id: "project-1", name: "Luke" }]);
-      }
-      if (arguments_[0] === "agents") return JSON.stringify([{ presetId: "codex" }]);
-      return "[]";
-    },
-  });
-  const adapter = new SupersetWorkspaceAdapter(cli);
-
-  await adapter.refresh("codex", true, []);
-  await adapter.refresh("codex", true, []);
-
-  assert.equal(projectQueries, 2);
-  assert.equal(adapter.workspaceProjects()[0]?.providerProjectId, "project-1");
 });
 
 test("creates on an observed remote host and preserves success when opening fails", async (t) => {

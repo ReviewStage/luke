@@ -7,11 +7,8 @@ import {
   ACT_RESULT_STATUS,
   type ProviderControlResult,
   type ProviderMessageResult,
-  type ProviderSessionObservation,
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
-  SessionProviderAdapterBase,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
   UNSUPPORTED_BY_OBSERVATION,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
@@ -24,49 +21,15 @@ import {
   type WireRecord,
   wireRecord,
 } from "@sidecar/wire";
+import { activeOrganizationId } from "./config.js";
 import type { SupersetOrganizationChoice } from "./sign-in-stage.js";
-import type { SupersetSessionContext } from "./workspaces.js";
-
-export const SUPERSET_CONTROL_ID = {
-  DELETE_WORKSPACE: "superset-delete-workspace",
-} as const;
-
-export function isSupersetControlId(controlId: string): boolean {
-  return Object.values(SUPERSET_CONTROL_ID).some((candidate) => candidate === controlId);
-}
-
-const SUPERSET_QUERY_OUTPUT_LIMIT = 64 * 1024;
-const SUPERSET_ORGANIZATION_LIMIT = 20;
-const SUPERSET_TARGET_LIMIT = 20;
-const SUPERSET_PROJECT_LIMIT = 50;
-const SUPERSET_FAILURE_REASON_LIMIT = 300;
-const SUPERSET_PROJECT_REFRESH_INTERVAL_MS = 60_000;
-/** How long any one CLI invocation may run before it is given up on. */
-const SUPERSET_INVOCATION_TIMEOUT_MS = 30_000;
-const LOCAL_TARGET_ID = "local";
-const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "gu");
-
-function supersetFailureReason(error: UnparsedWireValue, fallback: string): string {
-  const record = wireRecord(error);
-  const stderr = record ? text(record.stderr) : undefined;
-  if (!stderr) return fallback;
-  const reason = stderr
-    .replace(ANSI_ESCAPE_PATTERN, "")
-    .split(/\r?\n/u)
-    .map((line) => line.trim())
-    .find(Boolean)
-    ?.replace(/^error:\s*/iu, "")
-    .split("")
-    .map((character) => {
-      const code = character.charCodeAt(0);
-      return code >= 32 && code !== 127 ? character : " ";
-    })
-    .join("")
-    .replace(/\s+/gu, " ")
-    .slice(0, SUPERSET_FAILURE_REASON_LIMIT)
-    .trim();
-  return reason || fallback;
-}
+import {
+  SUPERSET_CONTROL_ID,
+  SUPERSET_LIMIT,
+  SUPERSET_LOCAL_TARGET_ID,
+  supersetFailureReason,
+} from "./vocabulary.js";
+import type { SupersetSessionContext } from "./wire.js";
 
 /**
  * The stderr a failed invocation attached to what it threw, whether the runner
@@ -109,8 +72,8 @@ async function defaultCommandRunner(
   const result = await boundedInvocation({
     binary: executable,
     arguments: arguments_,
-    timeoutMs: SUPERSET_INVOCATION_TIMEOUT_MS,
-    maximumOutputBytes: SUPERSET_QUERY_OUTPUT_LIMIT,
+    timeoutMs: SUPERSET_LIMIT.INVOCATION_TIMEOUT_MS,
+    maximumOutputBytes: SUPERSET_LIMIT.QUERY_OUTPUT_BYTES,
   });
   if (result.exitCode !== 0) {
     throw failedSupersetInvocation(executable, result.stderr);
@@ -122,7 +85,8 @@ export interface SupersetCliOptions {
   run?: SupersetCommandRunner;
   query?: SupersetQueryRunner;
   uniqueId?: () => string;
-  organizationId?: () => Promise<string | undefined>;
+  /** Overridable for tests through the file it reads, never through a process. */
+  activeOrganizationId?: () => Promise<string | undefined>;
 }
 
 export class SupersetCli {
@@ -130,31 +94,14 @@ export class SupersetCli {
   readonly #run: SupersetCommandRunner;
   readonly #query: SupersetQueryRunner;
   readonly #uniqueId: () => string;
-  readonly #organizationId: () => Promise<string | undefined>;
+  readonly #activeOrganizationId: () => Promise<string | undefined>;
 
   constructor(options: SupersetCliOptions) {
     this.#homeDirectory = options.homeDirectory;
     this.#run = options.run ?? defaultCommandRunner;
     this.#uniqueId = options.uniqueId ?? randomUUID;
-    this.#organizationId =
-      options.organizationId ??
-      (async () => {
-        const result = await boundedInvocation({
-          binary: "/usr/bin/plutil",
-          arguments: [
-            "-extract",
-            "organizationId",
-            "raw",
-            "-o",
-            "-",
-            path.join(this.#homeDirectory, "config.json"),
-          ],
-          timeoutMs: 2_000,
-          maximumOutputBytes: SUPERSET_QUERY_OUTPUT_LIMIT,
-        });
-        if (result.exitCode !== 0) return undefined;
-        return result.stdout;
-      });
+    this.#activeOrganizationId =
+      options.activeOrganizationId ?? (() => activeOrganizationId(this.#homeDirectory));
     this.#query =
       options.query ??
       (async (executable, arguments_, timeoutMs) => {
@@ -162,7 +109,7 @@ export class SupersetCli {
           binary: executable,
           arguments: arguments_,
           timeoutMs,
-          maximumOutputBytes: SUPERSET_QUERY_OUTPUT_LIMIT,
+          maximumOutputBytes: SUPERSET_LIMIT.QUERY_OUTPUT_BYTES,
         });
         if (result.exitCode !== 0) {
           throw failedSupersetInvocation(executable, result.stderr);
@@ -182,7 +129,7 @@ export class SupersetCli {
   async activeOrganization(): Promise<string | undefined> {
     if (!(await this.installed())) return undefined;
     try {
-      return (await this.#organizationId())?.trim() || undefined;
+      return (await this.#activeOrganizationId())?.trim() || undefined;
     } catch {
       return undefined;
     }
@@ -221,7 +168,7 @@ export class SupersetCli {
       await this.#query(
         this.executable,
         ["organization", "switch", choice.slug, "--json"],
-        SUPERSET_INVOCATION_TIMEOUT_MS,
+        SUPERSET_LIMIT.INVOCATION_TIMEOUT_MS,
       );
       return this.connected();
     } catch {
@@ -234,10 +181,10 @@ export class SupersetCli {
       const output = await this.#query(
         this.executable,
         ["organization", "list", "--json"],
-        SUPERSET_INVOCATION_TIMEOUT_MS,
+        SUPERSET_LIMIT.INVOCATION_TIMEOUT_MS,
       );
       const values = envelopeValues(unparsedWire(JSON.parse(output)));
-      return values.slice(0, SUPERSET_ORGANIZATION_LIMIT).flatMap((value) => {
+      return values.slice(0, SUPERSET_LIMIT.ORGANIZATIONS).flatMap((value) => {
         if (!isRecord(value)) return [];
         const id = text(value.id);
         const name = text(value.name);
@@ -263,8 +210,8 @@ export class SupersetCli {
     // machine the user is sitting at, which the rows already say by wearing
     // no cloud badge, so annotating it would state the default.
     const targets: readonly { id: string; name?: string; arguments_: readonly string[] }[] = [
-      { id: LOCAL_TARGET_ID, arguments_: ["--local"] },
-      ...hosts.slice(0, SUPERSET_TARGET_LIMIT).flatMap((host) => {
+      { id: SUPERSET_LOCAL_TARGET_ID, arguments_: ["--local"] },
+      ...hosts.slice(0, SUPERSET_LIMIT.TARGETS).flatMap((host) => {
         const id = text(host.id);
         const name = text(host.name) ?? id;
         return id && name ? [{ id, name, arguments_: ["--host", id] }] : [];
@@ -286,7 +233,7 @@ export class SupersetCli {
         ];
         const selectedDefault =
           defaultAgent && agents.includes(defaultAgent) ? defaultAgent : undefined;
-        return projectRows.slice(0, SUPERSET_PROJECT_LIMIT).flatMap((row) => {
+        return projectRows.slice(0, SUPERSET_LIMIT.PROJECTS).flatMap((row) => {
           const id = text(row.id);
           const name = text(row.name);
           if (!id || !name) return [];
@@ -343,7 +290,7 @@ export class SupersetCli {
     const branch = this.#branchName(request.name ?? request.task);
     const name = request.name ?? branch;
     const targetArguments =
-      request.providerTargetId === LOCAL_TARGET_ID
+      request.providerTargetId === SUPERSET_LOCAL_TARGET_ID
         ? ["--local"]
         : ["--host", request.providerTargetId];
     const arguments_ = [
@@ -368,7 +315,11 @@ export class SupersetCli {
         reason: UNSUPPORTED_BY_OBSERVATION,
       };
     try {
-      const output = await this.#query(this.executable, arguments_, SUPERSET_INVOCATION_TIMEOUT_MS);
+      const output = await this.#query(
+        this.executable,
+        arguments_,
+        SUPERSET_LIMIT.INVOCATION_TIMEOUT_MS,
+      );
       const parsed = unparsedWire(JSON.parse(output));
       const envelope = wireRecord(parsed);
       // The CLI answers a creation with `{ workspace, alreadyExists }`, so the
@@ -382,7 +333,7 @@ export class SupersetCli {
           "workspaces",
           "open",
           workspaceId,
-          ...(request.providerTargetId === LOCAL_TARGET_ID
+          ...(request.providerTargetId === SUPERSET_LOCAL_TARGET_ID
             ? []
             : ["--host", request.providerTargetId]),
           "--json",
@@ -535,7 +486,9 @@ export class SupersetCli {
   async #records(arguments_: readonly string[]): Promise<readonly WireRecord[]> {
     try {
       const parsed = unparsedWire(
-        JSON.parse(await this.#query(this.executable, arguments_, SUPERSET_INVOCATION_TIMEOUT_MS)),
+        JSON.parse(
+          await this.#query(this.executable, arguments_, SUPERSET_LIMIT.INVOCATION_TIMEOUT_MS),
+        ),
       );
       const values = envelopeValues(parsed);
       return values.flatMap((value) => {
@@ -556,65 +509,5 @@ export class SupersetCli {
       .slice(0, 40)
       .replace(/-+$/gu, "");
     return `luke-${slug || "session"}-${this.#uniqueId().slice(0, 8)}`;
-  }
-}
-
-export class SupersetWorkspaceAdapter extends SessionProviderAdapterBase {
-  readonly provider = { id: SUPERSET_WORKSPACE_PROVIDER_ID, displayName: "Superset" };
-  readonly #cli: SupersetCli;
-  #projects: readonly WorkspaceProject[] = [];
-  #projectsRefreshedAt: number | undefined;
-  #defaultAgent: string | undefined;
-  #workspaceRows: readonly ProviderSessionObservation[] = [];
-
-  constructor(cli: SupersetCli) {
-    super();
-    this.#cli = cli;
-  }
-
-  /**
-   * The chatless workspaces the latest host-state read reported, exactly as
-   * the snapshot decorated them. They are handed in by `refresh` rather than
-   * read here so that this adapter observes the same pass everything else
-   * validated against — and so a plain registry refresh after an act commits
-   * the same decorated shape the observation loop does.
-   */
-  async observe(): Promise<readonly ProviderSessionObservation[]> {
-    return this.#workspaceRows;
-  }
-
-  async refresh(
-    defaultAgent: string | undefined,
-    connected: boolean,
-    workspaceRows: readonly ProviderSessionObservation[],
-  ): Promise<void> {
-    // The rows are observation, not an act: host state reads without a login,
-    // so they stand — undecorated with acts — however the connection looks.
-    this.#workspaceRows = workspaceRows;
-    if (!connected) {
-      this.#projects = [];
-      this.#projectsRefreshedAt = undefined;
-      this.#defaultAgent = defaultAgent;
-      return;
-    }
-    const now = Date.now();
-    if (
-      defaultAgent === this.#defaultAgent &&
-      this.#projectsRefreshedAt !== undefined &&
-      now - this.#projectsRefreshedAt < SUPERSET_PROJECT_REFRESH_INTERVAL_MS
-    ) {
-      return;
-    }
-    this.#projects = await this.#cli.workspaceProjects(defaultAgent);
-    this.#defaultAgent = defaultAgent;
-    this.#projectsRefreshedAt = this.#projects.length > 0 ? now : undefined;
-  }
-
-  override workspaceProjects(): readonly WorkspaceProject[] {
-    return this.#projects;
-  }
-
-  override createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult> {
-    return this.#cli.createWorkspace(request);
   }
 }

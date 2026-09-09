@@ -16,8 +16,8 @@ import {
   SESSION_STATUS,
   SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "@sidecar/session";
-import { SUPERSET_CONTROL_ID } from "./cli.js";
-import { SupersetWorkspaceReader, supersetPressedLink } from "./workspaces.js";
+import { supersetHostState } from "./reader.js";
+import { SUPERSET_CONTROL_ID } from "./vocabulary.js";
 
 async function temporarySupersetHome(t: TestContext): Promise<string> {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-superset-"));
@@ -87,7 +87,7 @@ test("reads live host databases and enriches an exact provider session", async (
   `);
   database.close();
 
-  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const snapshot = await supersetHostState({ homeDirectory: home });
   assert.deepEqual(snapshot.context(PROVIDER_ID.CODEX, "session-1"), {
     providerId: PROVIDER_ID.CODEX,
     providerSessionId: "session-1",
@@ -174,7 +174,7 @@ test("binds Cursor's agents CLI under Superset's own name for it", async (t) => 
   `);
   database.close();
 
-  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const snapshot = await supersetHostState({ homeDirectory: home });
   const context = snapshot.context(HOSTED_AGENT_ID.CURSOR, "cli-session");
   assert.equal(context?.workspaceId, "workspace-1");
   assert.equal(
@@ -209,7 +209,7 @@ test("matches a chat Superset recorded no session id for by its worktree", async
   `);
   database.close();
 
-  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const snapshot = await supersetHostState({ homeDirectory: home });
   const observation = {
     providerSessionId: "ses_grok",
     title: "Add Grok Bot support",
@@ -290,7 +290,7 @@ test("carries directory matches into the next snapshot until enrichment re-decid
   `);
   database.close();
 
-  const reader = new SupersetWorkspaceReader({ homeDirectory: home });
+  const read = () => supersetHostState({ homeDirectory: home });
   const observation = {
     providerSessionId: "ses_grok",
     title: "Add Grok Bot support",
@@ -298,12 +298,12 @@ test("carries directory matches into the next snapshot until enrichment re-decid
     lastActivityAt: 100,
     directory: "/Users/test/.superset/worktrees/repo-1/parallel-hippopotamus",
   };
-  const first = await reader.read();
+  const first = await read();
   first.enrich(HOSTED_AGENT_ID.OPENCODE, [observation], "host-local");
 
   // A drawn row keeps advertising its acts until the next enrichment pass
   // commits, so the fresh snapshot must answer them before that pass runs.
-  const second = await reader.read();
+  const second = await read();
   assert.equal(
     second.actableContext(HOSTED_AGENT_ID.OPENCODE, "ses_grok", "host-local"),
     undefined,
@@ -331,7 +331,7 @@ test("carries directory matches into the next snapshot until enrichment re-decid
   const archived = await writeHostDatabase(home, "host-local");
   archived.exec("UPDATE workspaces SET archived_at = 300");
   archived.close();
-  const third = await reader.read();
+  const third = await read();
   third.adoptDirectoryMatches(first);
   assert.equal(third.actableContext(HOSTED_AGENT_ID.OPENCODE, "ses_grok", "host-local"), undefined);
 });
@@ -348,7 +348,7 @@ test("path matching claims only live worktrees, never the main checkout or an ar
   `);
   database.close();
 
-  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const snapshot = await supersetHostState({ homeDirectory: home });
   for (const directory of [
     "/Users/test/luke",
     "/Users/test/.superset/worktrees/repo-1/filed-away",
@@ -384,7 +384,7 @@ test("binds Superset's grok agents to Grok Build sessions", async (t) => {
   `);
   database.close();
 
-  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const snapshot = await supersetHostState({ homeDirectory: home });
   const context = snapshot.context(HOSTED_AGENT_ID.GROK_BUILD, "grok-session");
   assert.equal(context?.workspaceId, "workspace-1");
 });
@@ -408,7 +408,7 @@ test("keeps the newest duplicate binding across host databases", async (t) => {
     database.close();
   }
 
-  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const snapshot = await supersetHostState({ homeDirectory: home });
   assert.equal(
     snapshot.context(PROVIDER_ID.CLAUDE_CODE, "shared-session")?.workspaceId,
     "workspace-host-new",
@@ -428,7 +428,7 @@ test("advertises Superset actions only after the CLI is connected", async (t) =>
     );
   `);
   database.close();
-  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const snapshot = await supersetHostState({ homeDirectory: home });
   const observation = {
     providerSessionId: "session-1",
     title: "Implement integration",
@@ -480,13 +480,13 @@ test("advertises Superset actions only after the CLI is connected", async (t) =>
 
 test("treats missing and drifted Superset state as no enrichment", async (t) => {
   const home = await temporarySupersetHome(t);
-  const empty = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const empty = await supersetHostState({ homeDirectory: home });
   assert.equal(empty.context(PROVIDER_ID.CODEX, "session-1"), undefined);
 
   const database = await writeHostDatabase(home, "host-drifted");
   database.exec("CREATE TABLE future_workspaces (id TEXT PRIMARY KEY)");
   database.close();
-  const drifted = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const drifted = await supersetHostState({ homeDirectory: home });
   assert.equal(drifted.context(PROVIDER_ID.CODEX, "session-1"), undefined);
 });
 
@@ -503,7 +503,7 @@ test("does not attach unknown Superset agent kinds to a Luke provider", async (t
   `);
   database.close();
 
-  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const snapshot = await supersetHostState({ homeDirectory: home });
   assert.equal(snapshot.context(PROVIDER_ID.CODEX, "session-1"), undefined);
 });
 
@@ -520,7 +520,7 @@ test("reports a chatless workspace as its own standing, settled row", async (t) 
   `);
   database.close();
 
-  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const snapshot = await supersetHostState({ homeDirectory: home });
   // Signed out, the row still observes — host state needs no login — but
   // advertises no act, the same posture a bound chat's enrichment keeps.
   assert.deepEqual(snapshot.workspaceRowObservations(undefined), [
@@ -597,7 +597,7 @@ test("keeps the main checkout, archived, and chat-bound workspaces off the works
   `);
   database.close();
 
-  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const snapshot = await supersetHostState({ homeDirectory: home });
   // Only the truly idle worktree earns a row: the main checkout is the user's
   // own working copy, the archived one Superset already filed away, and any
   // agent terminal — even one Luke cannot map, which could be mid-turn
@@ -636,7 +636,7 @@ test("a host database without the workspace columns loses only the chatless rows
   `);
   database.close();
 
-  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const snapshot = await supersetHostState({ homeDirectory: home });
   assert.equal(snapshot.context(PROVIDER_ID.CODEX, "session-1")?.workspaceId, "workspace-1");
   assert.deepEqual(snapshot.workspaceRowObservations("host-local"), []);
 });
@@ -654,7 +654,7 @@ test("attaches Superset's Gemini terminals to Gemini CLI rows", async (t) => {
   `);
   database.close();
 
-  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const snapshot = await supersetHostState({ homeDirectory: home });
   assert.equal(
     snapshot.context(HOSTED_AGENT_ID.GEMINI_CLI, "session-1")?.workspaceId,
     "workspace-1",
@@ -680,7 +680,7 @@ test("prefers the live binding a resumed chat's terminal moved to", async (t) =>
   `);
   database.close();
 
-  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const snapshot = await supersetHostState({ homeDirectory: home });
   assert.equal(snapshot.context(PROVIDER_ID.CLAUDE_CODE, "session-1")?.terminalId, "terminal-live");
   assert.equal(
     snapshot.enrich(PROVIDER_ID.CLAUDE_CODE, [
@@ -711,7 +711,7 @@ test("two live bindings for one chat resolve to the freshest event", async (t) =
   `);
   database.close();
 
-  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const snapshot = await supersetHostState({ homeDirectory: home });
   assert.equal(snapshot.context(PROVIDER_ID.CLAUDE_CODE, "session-1")?.terminalId, "terminal-b");
 });
 
@@ -729,7 +729,7 @@ test("a chat whose every binding ended keeps its workspace and loses the termina
   `);
   database.close();
 
-  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const snapshot = await supersetHostState({ homeDirectory: home });
   assert.equal(snapshot.context(PROVIDER_ID.CLAUDE_CODE, "session-1")?.terminalId, undefined);
   const [enriched] = snapshot.enrich(
     PROVIDER_ID.CLAUDE_CODE,
@@ -748,27 +748,4 @@ test("a chat whose every binding ended keeps its workspace and loses the termina
   assert.equal(enriched?.workspace?.providerWorkspaceId, "workspace-1");
   assert.equal(advertisedActFor(enriched ?? {}, ACT_KIND.MESSAGE), undefined);
   assert.equal(enriched?.detail?.link, "superset://v2-workspace/workspace-1");
-});
-
-test("a press mints a focus request only onto a bound terminal address", () => {
-  assert.equal(
-    supersetPressedLink("superset://v2-workspace/workspace-1?terminalId=terminal-1", "focus-1"),
-    "superset://v2-workspace/workspace-1?terminalId=terminal-1&focusRequestId=focus-1",
-  );
-  // A repeated press replaces the nonce rather than stacking a second one.
-  assert.equal(
-    supersetPressedLink(
-      "superset://v2-workspace/workspace-1?terminalId=terminal-1&focusRequestId=focus-1",
-      "focus-2",
-    ),
-    "superset://v2-workspace/workspace-1?terminalId=terminal-1&focusRequestId=focus-2",
-  );
-  assert.equal(
-    supersetPressedLink("superset://v2-workspace/workspace-1", "focus-1"),
-    "superset://v2-workspace/workspace-1",
-  );
-  assert.equal(
-    supersetPressedLink("https://github.com/example/luke/pull/42", "focus-1"),
-    "https://github.com/example/luke/pull/42",
-  );
 });

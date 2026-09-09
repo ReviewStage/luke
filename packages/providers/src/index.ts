@@ -17,7 +17,11 @@ export {
   type AdapterDiagnosticCallback,
   type AdapterDiagnosticKind,
 } from "./shared/adapter-diagnostics.js";
-export { canIgnoreFilesystemError, readDirectory } from "./shared/local-files.js";
+export {
+  canIgnoreFilesystemError,
+  readDirectory,
+  readTextFile,
+} from "./shared/local-files.js";
 export {
   canIgnoreSqliteError,
   defaultSqliteModule,
