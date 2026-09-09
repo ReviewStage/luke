@@ -17,7 +17,7 @@ import type { RuntimeStoreClient } from "@sidecar/runtime-store";
 import type { WireRecord } from "@sidecar/wire";
 
 /**
- * Memory maintenance as the desktop wires it: the pre-compaction flush hook
+ * Memory maintenance as the host wires it: the pre-compaction flush hook
  * and flush marker each eligible conversation's brain is handed, the capture
  * run before an eligible private conversation starts fresh. Every model call
  * is a workspace-only

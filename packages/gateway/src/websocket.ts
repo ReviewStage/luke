@@ -3,13 +3,7 @@ import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
 import { isIdentifier } from "@sidecar/runtime-contracts";
-import {
-  isRecord,
-  isWireString,
-  type UnparsedWireValue,
-  type WireRecord,
-  type WireValue,
-} from "@sidecar/wire";
+import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { WebSocket, WebSocketServer } from "ws";
 import {
   InvocationMemory,
@@ -33,7 +27,9 @@ import {
   type GatewayResponse,
   gatewayEventFromWire,
   gatewayRequestFromWire,
+  gatewayRequestToWire,
   gatewayResponseFromWire,
+  gatewayResponseToWire,
   type NodeCapabilityResult,
   type NodeInvocation,
   nodeInvocationAnswerFromWire,
@@ -422,24 +418,9 @@ export class WebSocketTransport {
     }
     if (socket.readyState !== socket.OPEN) return;
     socket.send(
-      JSON.stringify({ kind: GATEWAY_FRAME.RESPONSE, envelope: responseToWire(response) }),
+      JSON.stringify({ kind: GATEWAY_FRAME.RESPONSE, envelope: gatewayResponseToWire(response) }),
     );
   }
-}
-
-function responseToWire(response: GatewayResponse): WireRecord {
-  const revision = {
-    configuration: response.revision.configuration,
-    sequence: response.revision.sequence,
-  };
-  return response.ok
-    ? {
-        id: response.id,
-        ok: true,
-        ...(response.result !== undefined ? { result: response.result } : undefined),
-        revision,
-      }
-    : { id: response.id, ok: false, error: { ...response.error }, revision };
 }
 
 /**
@@ -471,21 +452,6 @@ export type GatewayConnectResult =
 
 function isRefusal(value: string | undefined): value is GatewayHandshakeRefusal {
   return Object.values(GATEWAY_HANDSHAKE_REFUSAL).some((held) => held === value);
-}
-
-function requestToWire(request: GatewayRequest): WireValue {
-  return {
-    protocolVersion: request.protocolVersion,
-    id: request.id,
-    method: request.method,
-    params: request.params,
-    ...(request.idempotencyKey !== undefined
-      ? { idempotencyKey: request.idempotencyKey }
-      : undefined),
-    ...(request.expectedRevision !== undefined
-      ? { expectedRevision: { ...request.expectedRevision } }
-      : undefined),
-  };
 }
 
 function disconnected(id: string): GatewayResponse {
@@ -524,7 +490,7 @@ export class WebSocketGatewayConnection implements GatewayTransport {
       this.#socket.send(
         JSON.stringify({
           kind: GATEWAY_FRAME.REQUEST,
-          envelope: requestToWire(request),
+          envelope: gatewayRequestToWire(request),
         }),
         (error) => {
           if (!error) return;

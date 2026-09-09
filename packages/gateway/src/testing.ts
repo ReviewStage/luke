@@ -7,8 +7,11 @@ import {
   type GatewayRequest,
   type GatewayResponse,
   gatewayEventFromWire,
+  gatewayRefusal,
   gatewayRequestFromWire,
+  gatewayRequestToWire,
   gatewayResponseFromWire,
+  gatewayResponseToWire,
   type NodeCapabilityResult,
   type NodeInvocation,
   nodeCapabilityResultFromWire,
@@ -18,7 +21,7 @@ import {
 } from "./protocol.js";
 import type { GatewayServer } from "./server.js";
 import { eventToWire } from "./server.js";
-import { gatewayRefusal, ServerBoundTransport } from "./transport.js";
+import { ServerBoundTransport } from "./transport.js";
 
 /**
  * The transport a test carries the protocol over. It is here rather than
@@ -64,7 +67,7 @@ export class TextLoopbackTransport extends ServerBoundTransport {
   }
 
   protected async carryRequest(request: GatewayRequest): Promise<GatewayResponse> {
-    const carried = gatewayRequestFromWire(throughText(requestToWire(request)));
+    const carried = gatewayRequestFromWire(throughText(gatewayRequestToWire(request)));
     if (!carried) {
       return gatewayRefusal(
         request.id,
@@ -78,7 +81,7 @@ export class TextLoopbackTransport extends ServerBoundTransport {
       const schedule = this.#options.schedule ?? ((work, ms) => setTimeout(work, ms));
       await new Promise<void>((resolve) => schedule(resolve, delay));
     }
-    const parsed = gatewayResponseFromWire(throughText(responseToWire(response)));
+    const parsed = gatewayResponseFromWire(throughText(gatewayResponseToWire(response)));
     return (
       parsed ??
       gatewayRefusal(
@@ -134,34 +137,4 @@ export class TextLoopbackTransport extends ServerBoundTransport {
   missed(): readonly GatewayEvent[] {
     return [...this.#missed];
   }
-}
-
-function requestToWire(request: GatewayRequest): WireValue {
-  return {
-    protocolVersion: request.protocolVersion,
-    id: request.id,
-    method: request.method,
-    params: request.params,
-    ...(request.idempotencyKey !== undefined
-      ? { idempotencyKey: request.idempotencyKey }
-      : undefined),
-    ...(request.expectedRevision !== undefined
-      ? { expectedRevision: { ...request.expectedRevision } }
-      : undefined),
-  };
-}
-
-function responseToWire(response: GatewayResponse): WireValue {
-  const revision = {
-    configuration: response.revision.configuration,
-    sequence: response.revision.sequence,
-  };
-  return response.ok
-    ? {
-        id: response.id,
-        ok: true,
-        ...(response.result !== undefined ? { result: response.result } : undefined),
-        revision,
-      }
-    : { id: response.id, ok: false, error: { ...response.error }, revision };
 }

@@ -17,8 +17,8 @@ import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
 import { REJECTED_SUBMISSION } from "./brain/publication.js";
 
 /**
- * The desktop's operator client: what the windows' IPC and the main
- * process's own surfaces reach the host through. Each method is one protocol
+ * The host's operator client: what a client's own surfaces — the windows'
+ * IPC, and the main process itself — reach the host through. Each method is one protocol
  * call, its parameters composed here and its answer parsed with the same
  * readers the bridge trusts, so a shape the host answered that this build
  * cannot read is a refusal rather than a guess. Nothing here holds brain
@@ -73,7 +73,7 @@ function claimFromWire(result: GatewayCallResult): BrainReplyClaimResult {
   return { granted: true, words, origin };
 }
 
-/** The operator is one typed surface over a client the desktop shares with its host operator; the client is made once. */
+/** The operator is one typed surface over a client a caller shares with its host operator; the client is made once. */
 export interface GatewayOperatorOptions {
   client: GatewayClient;
 }

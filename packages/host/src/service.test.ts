@@ -18,6 +18,7 @@ import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
 import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
 import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
 import type { ConversationOperations } from "./conversation-operations.js";
+import { HOST_NATIVE_NODE_ID } from "./node-capabilities.js";
 import { createGatewayOperator } from "./operator.js";
 import { createGatewayService, type GrantedWords } from "./service.js";
 import { VoiceReceiver } from "./voice-receiver.js";
@@ -358,7 +359,7 @@ for (const kind of ["in-process", "loopback"] as const) {
     assert.equal(recordOf(missing.result).status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
     const opened: string[] = [];
     f.service.nodes.register({
-      nodeId: "desktop-native",
+      nodeId: HOST_NATIVE_NODE_ID,
       capabilities: {
         "os.openExternal": (params) => {
           opened.push(String(params.url));

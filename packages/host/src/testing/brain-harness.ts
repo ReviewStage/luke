@@ -87,7 +87,7 @@ export function brainHarness() {
     thread = appendConversationThreadEntry(thread, entry, NOW + 1000, at);
     return true;
   };
-  // The delivery owner and the receiver, composed as desktop-app composes
+  // The delivery owner and the receiver, composed as the host composes
   // them: every report is observed before it is broadcast, every published
   // end is offered to a ready receiver, and readiness flushes what waited.
   const deliveries = new DeliveryLedger<GrantedWords>({

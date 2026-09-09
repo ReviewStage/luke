@@ -7,11 +7,10 @@ import {
 import {
   GATEWAY_ERROR,
   type GatewayClientIdentity,
-  type GatewayErrorCode,
   type GatewayEvent,
   type GatewayRequest,
   type GatewayResponse,
-  type GatewayRevision,
+  gatewayRefusal,
   type NodeCapabilityResult,
   type NodeInvocation,
 } from "./protocol.js";
@@ -48,15 +47,6 @@ export interface GatewayHostConnection {
   connectionId: string;
   invoke(invocation: NodeInvocation): Promise<NodeCapabilityResult>;
   onClosed(listener: () => void): () => void;
-}
-
-export function gatewayRefusal(
-  id: string,
-  code: GatewayErrorCode,
-  message: string,
-  revision: GatewayRevision = { configuration: 0, sequence: 0 },
-): GatewayResponse {
-  return { id, ok: false, error: { code, message }, revision };
 }
 
 /**

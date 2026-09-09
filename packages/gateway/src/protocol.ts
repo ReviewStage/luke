@@ -329,6 +329,52 @@ function expectedRevisionFromWire(
   return revision;
 }
 
+/**
+ * The two envelopes on their way out, beside the readers that take them back
+ * in. Every transport that carries the protocol as text writes them the same
+ * way, so an explicitly absent field leaves rather than travelling as null:
+ * the readers refuse a shape they never sent.
+ */
+export function gatewayRequestToWire(request: GatewayRequest): WireRecord {
+  return {
+    protocolVersion: request.protocolVersion,
+    id: request.id,
+    method: request.method,
+    params: request.params,
+    ...(request.idempotencyKey !== undefined
+      ? { idempotencyKey: request.idempotencyKey }
+      : undefined),
+    ...(request.expectedRevision !== undefined
+      ? { expectedRevision: { ...request.expectedRevision } }
+      : undefined),
+  };
+}
+
+export function gatewayResponseToWire(response: GatewayResponse): WireRecord {
+  const revision = {
+    configuration: response.revision.configuration,
+    sequence: response.revision.sequence,
+  };
+  return response.ok
+    ? {
+        id: response.id,
+        ok: true,
+        ...(response.result !== undefined ? { result: response.result } : undefined),
+        revision,
+      }
+    : { id: response.id, ok: false, error: { ...response.error }, revision };
+}
+
+/** A refusal the protocol itself answers, for a request no handler ever saw. */
+export function gatewayRefusal(
+  id: string,
+  code: GatewayErrorCode,
+  message: string,
+  revision: GatewayRevision = { configuration: 0, sequence: 0 },
+): GatewayResponse {
+  return { id, ok: false, error: { code, message }, revision };
+}
+
 export function gatewayRequestFromWire(value: UnparsedWireValue): GatewayRequest | undefined {
   if (!isRecord(value)) return undefined;
   if (!isWireNumber(value.protocolVersion) || !isIdentifier(value.id)) return undefined;

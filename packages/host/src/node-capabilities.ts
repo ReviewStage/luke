@@ -9,8 +9,8 @@
  * The names live behind their own door so a client can register a node
  * without resolving the host it is registering with.
  */
-export const HOST_OPERATOR_CLIENT_ID = "desktop-operator";
-export const HOST_NATIVE_NODE_ID = "desktop-native";
+export const HOST_OPERATOR_CLIENT_ID = "operator";
+export const HOST_NATIVE_NODE_ID = "native";
 
 export const HOST_NODE_CAPABILITY = {
   /** Hands an address to the operating system, as a row press does. */

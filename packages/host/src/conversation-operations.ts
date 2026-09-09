@@ -8,7 +8,7 @@ import type { BrainWiring } from "./brain/wiring.js";
 import type { RuntimeStoreWiring } from "./store-wiring.js";
 
 /**
- * The conversation operations the desktop carries out over the two wirings,
+ * The conversation operations the host carries out over the two wirings,
  * each on a key the directory lists: the directory itself, one conversation's
  * thread, and Delete history — the recoverable deletion the panel's Clear is,
  * in the order its own module states.

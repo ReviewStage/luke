@@ -953,39 +953,36 @@ let draining: Promise<void> | undefined;
  */
 const STANDUP_DRAIN_WAIT_MS = 5_000;
 
-function after(delayMs: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, delayMs));
-}
-
 /**
  * The one drain, made once whichever path asks for it: the explicit Quit, or
  * the updater's restart into a downloaded build, which swaps this executable
- * and must not do it over runtime work still going. Admissions close, every
- * run and child under way is cancelled, the publication is given a bounded
- * wait, and what did not settle is counted from the persisted envelopes and
- * left for the next launch's recovery rather than finished on paper. Every
- * later ask is handed the drain already under way rather than a second one.
+ * and must not do it over runtime work still going. The drain itself is the
+ * host's, in one place and in one order — admissions closed, every run and
+ * child under way cancelled, a bounded wait, and what did not settle counted
+ * from the persisted envelopes and left for the next launch's recovery rather
+ * than finished on paper. Every later ask is handed the drain already under
+ * way rather than a second one.
  */
 function drainHostOnce(): Promise<void> {
   if (hostDrain === HOST_DRAIN.OWED) {
     hostDrain = HOST_DRAIN.UNDER_WAY;
-    draining = drainHost().finally(() => {
-      hostDrain = HOST_DRAIN.NOTHING_OWED;
-    });
+    // A drain that overtook the standup it interrupted would close the store
+    // and then have `start` reopen it and re-arm the scheduler, the hooks,
+    // and the observation behind the close, which is the one thing a quit
+    // must not leave running. With the host's own two bounds, the whole quit
+    // is bounded at twenty seconds.
+    draining = Promise.race([
+      hostStandup.catch(() => undefined),
+      new Promise<void>((resolve) => {
+        setTimeout(resolve, STANDUP_DRAIN_WAIT_MS);
+      }),
+    ])
+      .then(() => host.stop())
+      .finally(() => {
+        hostDrain = HOST_DRAIN.NOTHING_OWED;
+      });
   }
   return draining ?? Promise.resolve();
-}
-
-async function drainHost(): Promise<void> {
-  // A drain that overtook the standup it interrupted would close the store
-  // and then have `start` reopen it and re-arm the scheduler, the hooks, and
-  // the observation behind the close, which is the one thing a quit must not
-  // leave running.
-  await Promise.race([hostStandup.catch(() => undefined), after(STANDUP_DRAIN_WAIT_MS)]);
-  // The drain itself is the host's, in one place and in one order, and it is
-  // bounded on both halves: with the standup wait above, the whole quit is
-  // bounded at twenty seconds.
-  await host.stop();
 }
 
 function drainingEngine(engine: UpdaterEngine): UpdaterEngine {

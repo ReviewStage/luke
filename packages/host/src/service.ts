@@ -69,7 +69,7 @@ const REFUSAL = {
 } as const;
 
 /**
- * The host side of the desktop's Gateway: every capability the protocol
+ * The host side of the Gateway: every capability the protocol
  * names, answered over the wirings that already own it. The service composes
  * nothing new about the brain, the store, or the notebook; it is the one
  * boundary a client crosses to reach them, and the one place their changes

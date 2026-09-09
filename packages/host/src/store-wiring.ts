@@ -28,7 +28,7 @@ import type { CutoffBefore } from "./brain/conversation-deletion.js";
 import { ConversationThread, MemoryHistoryStore } from "./conversation-thread.js";
 
 /**
- * The runtime store as the desktop composes it: one database under the
+ * The runtime store as the host composes it: one database under the
  * agent's own directory, spoken to on its own worker thread so the main
  * thread never waits on the disk. It holds every conversation's envelope,
  * thread, and transcript, the notebook's provenance and search index, and

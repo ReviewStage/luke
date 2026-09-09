@@ -214,14 +214,16 @@ import { VoiceReceiver } from "./voice-receiver.js";
 /**
  * Luke's runtime as one host: everything that executes, persists, schedules,
  * observes, or holds an account, composed once over an explicit state root
- * and reached only through the Gateway server it returns. It draws nothing
- * and touches no window: what a window must learn leaves as a host event,
- * and what only this machine's desktop can do — open an address, carry an
- * act to a panel, run the EventKit helper — is asked of the native node by
- * name and answers a typed unavailable when no node is connected. The same
- * composition runs in the Gateway process for a live run and in the desktop
- * process, memory-only and network-silent, for a fixture or capture run; the
- * client code path is one either way.
+ * and reached only through the Gateway server it answers with. It draws
+ * nothing and touches no window: what a window must learn leaves as a host
+ * event, and what only the machine a client runs on can do — open an
+ * address, carry an act to a panel, run the EventKit helper — is asked of
+ * the native node by name and answers a typed unavailable when no node is
+ * connected. The desktop composes this in its own process and reaches it
+ * over the in-process transport, keeping nothing on disk and sending nothing
+ * for a fixture or capture run; a process on the other side of a socket is
+ * the same composition over another transport, and the client code path is
+ * one either way.
  */
 export interface HostSeams {
   /** Luke's own application-state root, given explicitly: never derived from the hosting process's profile. */
@@ -529,7 +531,7 @@ export function composeHost(options: HostSeams): Host {
     },
   });
   // The hook spool and every provider script live under the explicit state
-  // root, the same directory the desktop always kept them in.
+  // root, the same directory Luke always kept them in.
   const observationHooks = new ObservationHookRegistry(userData);
   const providerRegistry = providerRegistrations({
     readApiKey: (providerId) => settingsStore.readApiKey(providerId),
@@ -897,7 +899,7 @@ export function composeHost(options: HostSeams): Host {
   }
   /**
    * The one onboarding write, taking the moment it records and merging it over
-   * the record as it stands on disk — the desktop process writes the
+   * the record as it stands on disk — the client writes the
    * introduction's own moment into the same file. Every moment lives in one
    * record, so each write reconciles both beats; the gate event stays fenced
    * on a changed answer, so writing an arrival moment cannot tell the renderer
