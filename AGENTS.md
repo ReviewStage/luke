@@ -1081,13 +1081,16 @@ What Luke may show:
   pass, a timer of Luke's, or anything a model decided; read-only through the
   documented GET, whose only parameters are the fixed page bound, the cursor
   the endpoint's own previous answer handed back, and arithmetic offsets —
-  the endpoint pages only forward, so the screen's opening read seeks the
-  transcript's end with a bounded round of one-message position probes and
-  pages backward from it by offset, numbers the read composes that no stored
-  content can steer; paged to fixed budgets per ask; and stored nowhere — the
-  service assembles the page, answers, and keeps nothing, and the screen
-  holds it only while it stands open. What travels is only what
-  Conductor's own store attributes: the developer's sends and the agent's own
+  the endpoint pages only forward, so the screen's opening read walks to the
+  transcript's end a page at a time, beginning where a previous read of that
+  chat already reached and stopping at the first page that comes back short,
+  and its scroll back pages backward from there by offset: numbers the read
+  composes that no stored content can steer; paged to fixed budgets per ask;
+  and stored nowhere — the service assembles the page, answers, and keeps
+  nothing of it, and the screen holds it only while it stands open. A read
+  that outruns its page budget answers with the deepest page it reached and
+  lets the poll walk on, rather than spending an unbounded search on the end.
+  What travels is only what Conductor's own store attributes: the developer's sends and the agent's own
   words. A tool call, tool output, harness event, or any message whose author
   the store does not name is dropped whole rather than guessed at, and a
   message that does travel is never truncated — the bounds live on the page,
