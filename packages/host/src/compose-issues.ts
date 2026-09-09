@@ -9,9 +9,7 @@ import { carried, GATEWAY_METHOD, type GatewayMethodTable, gatewayOk } from "@si
 import { ObservationLoop } from "@sidecar/runtime";
 import { ISSUE_TRACKER_ID, normalizeTrackedIssue, type TrackedIssue } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import type { SettingsComposer } from "./compose-settings.js";
-import type { Composer } from "./composer.js";
-import type { HostKernel } from "./host-kernel.js";
+import type { Composer, ComposerContext } from "./composer.js";
 import { reporterOf } from "./wire-helpers.js";
 
 /** A board changes at the pace of hands, not of models; a minute is current. */
@@ -27,9 +25,7 @@ export interface IssuesComposer extends Composer {
   stopObservation: () => void;
 }
 
-export interface IssuesDependencies {
-  kernel: HostKernel;
-  settings: SettingsComposer;
+export interface IssuesDependencies extends ComposerContext {
   observationGate: () => boolean;
 }
 

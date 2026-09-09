@@ -31,9 +31,7 @@ import {
   AppleCalendarReader,
 } from "./apple-calendar.js";
 import { calendarOnboardingOwed } from "./calendar-onboarding-flow.js";
-import type { SettingsComposer } from "./compose-settings.js";
-import type { Composer } from "./composer.js";
-import type { HostKernel } from "./host-kernel.js";
+import type { Composer, ComposerContext } from "./composer.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { type OnboardingState, onboardingStateFile } from "./onboarding-state.js";
 import type { OnboardingBeatKind } from "./voice/speech-arbiter.js";
@@ -86,9 +84,7 @@ export interface CalendarsComposer extends Composer {
   link: (links: CalendarsLinks) => void;
 }
 
-export interface CalendarsDependencies {
-  kernel: HostKernel;
-  settings: SettingsComposer;
+export interface CalendarsDependencies extends ComposerContext {
   observationGate: () => boolean;
 }
 

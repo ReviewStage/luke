@@ -1,4 +1,12 @@
 import type { GatewayMethod, GatewayMethodTable } from "@sidecar/gateway";
+import type { SettingsComposer } from "./compose-settings.js";
+import type { HostKernel } from "./host-kernel.js";
+
+/** What every composer built over the settings composer is handed. */
+export interface ComposerContext {
+  kernel: HostKernel;
+  settings: SettingsComposer;
+}
 
 /** One concern of the host: the Gateway methods it answers, and its own lifecycle. */
 export interface Composer {

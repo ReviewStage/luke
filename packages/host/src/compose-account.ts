@@ -23,9 +23,7 @@ import {
 import { VOICE_SOURCE_COUNTED_AS } from "@sidecar/settings";
 import { VoiceCapabilityAssembler } from "@sidecar/voice";
 import { lateRef } from "@sidecar/wire";
-import type { SettingsComposer } from "./compose-settings.js";
-import type { Composer } from "./composer.js";
-import type { HostKernel } from "./host-kernel.js";
+import type { Composer, ComposerContext } from "./composer.js";
 import { transitionVoiceCredential } from "./voice-credential-transition.js";
 
 const ACCOUNT_CLIENT_ID = "luke-desktop";
@@ -61,10 +59,7 @@ export interface AccountComposer extends Composer {
   link: (links: AccountLinks) => void;
 }
 
-export interface AccountDependencies {
-  kernel: HostKernel;
-  settings: SettingsComposer;
-}
+export type AccountDependencies = ComposerContext;
 
 export function composeAccount(dependencies: AccountDependencies): AccountComposer {
   const { kernel, settings } = dependencies;
