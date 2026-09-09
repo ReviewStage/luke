@@ -59,9 +59,18 @@ export interface ActInput<Request> {
   readonly observation: ProviderSessionObservation;
 }
 
-/** A user-asked creation, in a project the latest pass reported. */
+/**
+ * A user-asked creation, in a project the latest pass reported. `project` is
+ * the offered project itself, resolved by both the ask's project id and the
+ * target it named, because a provider may offer one repository on several
+ * hosts and the target is what tells those apart. The agent kind the ask
+ * carried rides along for a provider whose creation takes one; whether it is
+ * a kind that project permits is the handler's own check, since only the
+ * provider knows what its endpoint accepts.
+ */
 export interface WorkspaceCreationInput {
   readonly project: WorkspaceProject;
+  readonly agent?: string;
   readonly name?: string;
   readonly task?: string;
   readonly agentSelection?: WorkspaceAgentSelection;
@@ -228,9 +237,17 @@ const ACT_DISPATCHERS: ActDispatchers = {
   },
 
   async createWorkspace(plugin, request) {
+    // The target is part of resolving *which* project, not a field to pass
+    // along: a provider may report one repository on several hosts under one
+    // project id, and a creation that named a host must land on that host's.
     const project = plugin
       .projects?.()
-      .find((candidate) => candidate.providerProjectId === request.providerProjectId);
+      .find(
+        (candidate) =>
+          candidate.providerProjectId === request.providerProjectId &&
+          (request.providerTargetId === undefined ||
+            candidate.providerTargetId === request.providerTargetId),
+      );
     if (!project) return unsupportedByObservation;
 
     const name = request.name === undefined ? undefined : workspaceNameText(request.name);
@@ -261,6 +278,7 @@ const ACT_DISPATCHERS: ActDispatchers = {
     if (!handler) return unsupportedByObservation;
     return handler({
       project,
+      ...(request.agent === undefined ? undefined : { agent: request.agent }),
       ...(name === undefined ? undefined : { name }),
       ...(task === undefined ? undefined : { task }),
       ...(request.agentSelection === undefined
@@ -367,6 +385,12 @@ export const ACT_REQUEST_FROM: ActRequestFrom = {
   }),
   createWorkspace: (input) => ({
     providerProjectId: input.project.providerProjectId,
+    // Read back off the offered project, never the ask: a re-dispatch acts on
+    // the target the pass reported.
+    ...(input.project.providerTargetId === undefined
+      ? undefined
+      : { providerTargetId: input.project.providerTargetId }),
+    ...(input.agent === undefined ? undefined : { agent: input.agent }),
     ...(input.name === undefined ? undefined : { name: input.name }),
     ...(input.task === undefined ? undefined : { task: input.task }),
     ...(input.agentSelection === undefined ? undefined : { agentSelection: input.agentSelection }),

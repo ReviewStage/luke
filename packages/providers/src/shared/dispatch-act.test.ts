@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   ACT_KIND,
+  ACT_REQUEST_FROM,
   ACT_RESULT_STATUS,
   type AdvertisedControl,
   adapterAsPlugin,
@@ -30,6 +31,7 @@ import {
   type SessionProviderPlugin,
   UNSUPPORTED_BY_OBSERVATION,
   WORKSPACE_TASK_SUPPORT,
+  type WorkspaceCreationInput,
   type WorkspaceProject,
 } from "@sidecar/session";
 import { jsonResponse, type RecordedRequest, recordingFetch } from "@sidecar/wire/testing";
@@ -72,6 +74,22 @@ const NO_TASK_PROJECT: WorkspaceProject = {
   taskSupport: WORKSPACE_TASK_SUPPORT.NONE,
 };
 
+/**
+ * The same repository offered on two hosts under one project id, which is how
+ * Superset and Conductor's local creator both report a repository they can
+ * reach in more than one place.
+ */
+const HOSTED_PROJECT: WorkspaceProject = {
+  ...PROJECT,
+  providerProjectId: "project-hosted",
+  providerTargetId: "host-a",
+};
+
+const OTHER_HOST_PROJECT: WorkspaceProject = {
+  ...HOSTED_PROJECT,
+  providerTargetId: "host-b",
+};
+
 const OBSERVATION: ProviderSessionObservation = {
   providerSessionId: SESSION_ID,
   title: "luke",
@@ -105,7 +123,7 @@ class StubAdapter extends CloudSessionAdapter {
   }
 
   override workspaceProjects(): readonly WorkspaceProject[] {
-    return [PROJECT, REQUIRED_TASK_PROJECT, NO_TASK_PROJECT];
+    return [PROJECT, REQUIRED_TASK_PROJECT, NO_TASK_PROJECT, HOSTED_PROJECT, OTHER_HOST_PROJECT];
   }
 
   protected override messageRoute(providerSessionId: string, text: string) {
@@ -435,5 +453,106 @@ test("a plugin naming no conversation read answers identically to the base", asy
   assert.deepEqual(
     await dispatchConversation(withoutReads, { providerSessionId: SESSION_ID }),
     await base.adapter.readConversation({ providerSessionId: SESSION_ID }),
+  );
+});
+
+/**
+ * Both providers that report a project per host — Superset, and Conductor's
+ * local workspace creator — resolve a creation against the project id *and*
+ * the target the ask named, and the target the create fires against is read
+ * back off the offered project rather than trusted from the ask. `dispatchAct`
+ * resolves the same way, so what a handler is handed is the offered project
+ * itself; a creation aimed at one host can never land on whichever project
+ * happened to share the id. The surviving cloud base still matches on the id
+ * alone, which is why these read the resolution rather than the request it
+ * would issue.
+ */
+async function recordedCreations(): Promise<{
+  plugin: SessionProviderPlugin;
+  created: WorkspaceCreationInput[];
+}> {
+  const { plugin } = await observedPlugin();
+  const created: WorkspaceCreationInput[] = [];
+  return {
+    plugin: {
+      ...plugin,
+      acts: {
+        ...plugin.acts,
+        createWorkspace: async (input) => {
+          created.push(input);
+          return { status: ACT_RESULT_STATUS.ACCEPTED };
+        },
+      },
+    },
+    created,
+  };
+}
+
+test("a creation resolves the project by the target the ask named", async () => {
+  const { plugin, created } = await recordedCreations();
+
+  const result = await dispatchAct(plugin, "createWorkspace", {
+    providerProjectId: HOSTED_PROJECT.providerProjectId,
+    providerTargetId: "host-b",
+  });
+
+  assert.equal(result.status, ACT_RESULT_STATUS.ACCEPTED);
+  assert.deepEqual(
+    created.map((input) => input.project),
+    [OTHER_HOST_PROJECT],
+  );
+});
+
+test("a creation naming a target no project reported is offered nowhere to create", async () => {
+  const { plugin, created } = await recordedCreations();
+
+  assert.deepEqual(
+    await dispatchAct(plugin, "createWorkspace", {
+      providerProjectId: HOSTED_PROJECT.providerProjectId,
+      providerTargetId: "host-never-reported",
+    }),
+    { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: UNSUPPORTED_BY_OBSERVATION },
+  );
+  assert.deepEqual(created, []);
+});
+
+test("a creation naming no target still reaches the project that shares its id", async () => {
+  const { plugin, created } = await recordedCreations();
+
+  await dispatchAct(plugin, "createWorkspace", {
+    providerProjectId: HOSTED_PROJECT.providerProjectId,
+  });
+
+  assert.deepEqual(
+    created.map((input) => input.project),
+    [HOSTED_PROJECT],
+  );
+});
+
+test("the agent kind an ask carried reaches the handler that documents taking one", async () => {
+  const { plugin, created } = await recordedCreations();
+
+  await dispatchAct(plugin, "createWorkspace", {
+    providerProjectId: HOSTED_PROJECT.providerProjectId,
+    agent: "claude",
+    task: "start here",
+  });
+
+  assert.deepEqual(created, [{ project: HOSTED_PROJECT, agent: "claude", task: "start here" }]);
+});
+
+test("the ask a creation input was built from carries the offered target and the agent kind", () => {
+  assert.deepEqual(
+    ACT_REQUEST_FROM.createWorkspace({
+      project: HOSTED_PROJECT,
+      agent: "claude",
+      task: "start here",
+    }),
+    {
+      providerProjectId: HOSTED_PROJECT.providerProjectId,
+      providerTargetId: "host-a",
+      agent: "claude",
+      task: "start here",
+    },
   );
 });
