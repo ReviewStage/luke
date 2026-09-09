@@ -199,7 +199,13 @@ export const CREATE_WORKSPACE_REQUEST = record({
   project_id: s
     .text({ description: "The project ID; omit it to create in that provider's default project." })
     .optional(),
-  target_id: s.text({ description: "The target ID." }).optional(),
+  target_id: s
+    .text({
+      description:
+        "The target ID of the host, exactly as the projects list gives it, and only for a " +
+        "project whose line carries a target_id; a project listed without one takes none.",
+    })
+    .optional(),
   agent: AGENT_KIND.optional(),
   name: WORKSPACE_NAME.describe(
     "The workspace's name: the developer's own when they chose one, otherwise a short, " +

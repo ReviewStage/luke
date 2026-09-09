@@ -334,6 +334,15 @@ test("lands only in a project its provider reported on the latest observation pa
   // Every identifier the action carries is the listed project's, never the ask's.
   assert.equal(admitted.providerId, LISTED_PROJECT.providerId);
   assert.equal(admitted.providerProjectId, LISTED_PROJECT.providerProjectId);
+  // A target the ask invents for a project listed without one names no host
+  // to pick, so it neither hides the project nor rides the action.
+  const targeted = await admit(
+    { kind: ACTION_KIND.CREATE_WORKSPACE, fields: { project_id: "luke", target_id: "default" } },
+    context(),
+  );
+  assert.ok(targeted.kind === ACTION_KIND.CREATE_WORKSPACE);
+  assert.equal(targeted.providerProjectId, LISTED_PROJECT.providerProjectId);
+  assert.equal(targeted.providerTargetId, undefined);
 });
 
 test("each project says whether it takes a task, needs one, or takes none", async () => {

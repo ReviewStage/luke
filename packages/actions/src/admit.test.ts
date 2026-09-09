@@ -22,6 +22,7 @@ import {
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import {
   ACTION_FAMILY,
+  ACTION_REFUSAL,
   ACTIONS,
   REALTIME_TOOL,
   type RealtimeFunctionCall,
@@ -447,6 +448,104 @@ test("an implicit project resolves only when the latest roster has one match", a
   assert.equal(ambiguous.status, ACTION_RESULT_STATUS.REJECTED);
   // SAFETY: Refused session-tool actions carry a reason string this assertion inspects.
   assert.match((ambiguous as { reason?: string }).reason ?? "", /More than one listed project/);
+});
+
+test("a target names a host only where the listed project carries one", async () => {
+  const localTwin: ObservedWorkspaceProject = {
+    ...OFFERED_PROJECT,
+    providerId: "conductor-local",
+    providerName: "Conductor (local)",
+    providerProjectId: "repo-7",
+    providerTargetId: "/Users/me/conductor/repos/luke",
+  };
+  const hosted = (target: string): ObservedWorkspaceProject => ({
+    ...OFFERED_PROJECT,
+    providerId: "superset",
+    providerName: "Superset",
+    providerTargetId: target,
+    targetName: target,
+  });
+  const noModels = () => [];
+
+  // A cloud project lists no target, so a target the ask invents for it — the
+  // words the sibling lines' target_id invites — cannot hide the project it
+  // named by provider and id.
+  for (const invented of ["default", "luke", "cloud", "proj-1"]) {
+    assert.deepEqual(
+      await sessionToolAction(
+        messageCall(
+          `{"provider_id":"conductor","project_id":"proj-1","target_id":"${invented}"}`,
+          REALTIME_TOOL.CREATE_WORKSPACE,
+        ),
+        [],
+        [OFFERED_PROJECT, localTwin],
+        noModels,
+        "conductor",
+      ),
+      { kind: "create-workspace", providerId: "conductor", providerProjectId: "proj-1" },
+    );
+  }
+
+  // A target the list gives picks out the project that carries it, ahead of
+  // the default provider's target-less twin.
+  assert.deepEqual(
+    await sessionToolAction(
+      messageCall(`{"target_id":"${localTwin.providerTargetId}"}`, REALTIME_TOOL.CREATE_WORKSPACE),
+      [],
+      [OFFERED_PROJECT, localTwin],
+      noModels,
+      "conductor",
+    ),
+    {
+      kind: "create-workspace",
+      providerId: "conductor-local",
+      providerProjectId: "repo-7",
+      providerTargetId: localTwin.providerTargetId,
+    },
+  );
+
+  // One repository on two hosts under one project id: the target chooses the
+  // host, and a host the list never gave is refused by name rather than
+  // guessed at or sent on to the target-less default.
+  const hosts = [hosted("local"), hosted("studio")];
+  assert.deepEqual(
+    await sessionToolAction(
+      messageCall(
+        '{"provider_id":"superset","project_id":"proj-1","target_id":"studio"}',
+        REALTIME_TOOL.CREATE_WORKSPACE,
+      ),
+      [],
+      hosts,
+    ),
+    {
+      kind: "create-workspace",
+      providerId: "superset",
+      providerProjectId: "proj-1",
+      providerTargetId: "studio",
+    },
+  );
+  const unlisted = await sessionToolAction(
+    messageCall(
+      '{"provider_id":"superset","project_id":"proj-1","target_id":"host-old"}',
+      REALTIME_TOOL.CREATE_WORKSPACE,
+    ),
+    [],
+    hosts,
+  );
+  assert.equal(unlisted.status, ACTION_RESULT_STATUS.REJECTED);
+  // SAFETY: Refused session-tool actions carry a reason string this assertion inspects.
+  assert.equal((unlisted as { reason?: string }).reason, ACTION_REFUSAL.NO_TARGET);
+  const wrongHostOnly = await sessionToolAction(
+    messageCall(
+      '{"provider_id":"conductor-local","target_id":"/Users/me/elsewhere"}',
+      REALTIME_TOOL.CREATE_WORKSPACE,
+    ),
+    [],
+    [OFFERED_PROJECT, localTwin],
+  );
+  assert.equal(wrongHostOnly.status, ACTION_RESULT_STATUS.REJECTED);
+  // SAFETY: Refused session-tool actions carry a reason string this assertion inspects.
+  assert.equal((wrongHostOnly as { reason?: string }).reason, ACTION_REFUSAL.NO_TARGET);
 });
 
 test("the saved defaults settle what a creation ask leaves unnamed", async () => {
