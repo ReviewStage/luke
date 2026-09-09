@@ -18,7 +18,7 @@ import { ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import type { DisplayDiagnostic } from "#shared/messages/session";
-import { act } from "../act";
+import { act, tell } from "../act";
 import { Keycaps } from "../keycaps";
 import { NotchWings } from "../notch-wings";
 import { SessionRow, type SessionWriteHandlers } from "../panel-body";
@@ -31,6 +31,7 @@ import {
 } from "../session-model";
 import { parseMilliseconds, useSessionReorderMotion } from "../session-motion";
 import { useSignInFaceCycle } from "../sign-in-gate";
+import { appStateNow } from "../use-app-state";
 import { useMeasuredHeight } from "../use-measured-height";
 import { usePrefersReducedMotion } from "../use-reduced-motion";
 import { ConversationCall } from "../voice/conversation-call";
@@ -380,12 +381,35 @@ const LANDED_BEATS: ReadonlySet<IntroductionBeat> = new Set([
 /**
  * The two closing beats: the panel stood down to the capsule — gated wings,
  * the real sign-in Luke at the wing spot — which is exactly the compact
- * signed-out panel the handoff swaps in beneath.
+ * signed-out panel the handoff draws in its place.
  */
 const STANDING_DOWN_BEATS: ReadonlySet<IntroductionBeat> = new Set([
   INTRODUCTION_BEAT.STAND_DOWN,
   INTRODUCTION_BEAT.DONE,
 ]);
+
+/**
+ * The introduction as the panel window draws it, over the whole of the display
+ * that window stands on.
+ *
+ * The document is read once, at the mount: the takeover is a scripted flight
+ * rather than a surface that follows state, so it subscribes to nothing — a
+ * roster arriving mid-beat must not re-run the beat it arrived during. A panel
+ * always stands on a display, so a state naming none is the read having
+ * failed rather than a state worth drawing, and the ordinary signed-out panel
+ * stands in its place rather than a fullscreen surface with nothing on it.
+ */
+export function IntroductionTakeover(): React.JSX.Element | null {
+  const [state] = useState(appStateNow);
+  const display = state?.window.display;
+  useEffect(() => {
+    if (state !== undefined && display === undefined) {
+      tell(ACT_KIND.INTRODUCTION_ABANDON, { reason: "The takeover's state named no display." });
+    }
+  }, [state, display]);
+  if (!state || display === undefined) return null;
+  return <IntroductionFlight state={state} display={display} />;
+}
 
 /**
  * The one-time fullscreen introduction. Entirely spoken: the script's lines
@@ -399,16 +423,10 @@ const STANDING_DOWN_BEATS: ReadonlySet<IntroductionBeat> = new Set([
  * wings, the sign-in gate — so the handoff to the real panel changes nothing
  * the developer can see.
  */
-export function IntroductionTakeover({
+function IntroductionFlight({
   state,
   display,
 }: {
-  /**
-   * The document as it stood when this window mounted, read once. The
-   * takeover is a scripted flight rather than a surface that follows state,
-   * so it subscribes to nothing: a roster arriving mid-beat must not re-run
-   * the beat it arrived during.
-   */
   state: AppStateSnapshot;
   /** The display this takeover covers, which the voice window alone lacks. */
   display: DisplayDiagnostic;
@@ -430,8 +448,6 @@ export function IntroductionTakeover({
   const [tourFlipId, setTourFlipId] = useState<string | undefined>(undefined);
   const [captions, setCaptions] = useState<readonly string[] | undefined>(undefined);
   const [flightStyle, setFlightStyle] = useState<CSSProperties>({});
-  /** Whether the handoff's fade is running — the real panel is drawn beneath. */
-  const [handoffFading, setHandoffFading] = useState(false);
   /** The drawn keycaps mirror the developer's own hands on the talk key. */
   const [talkHeld, setTalkHeld] = useState(false);
 
@@ -600,9 +616,6 @@ export function IntroductionTakeover({
   // the dark, the account landing that completes it from anywhere, and the
   // talk key the main process routes here for the introduction's duration.
   useEffect(() => {
-    // Tells the main process this surface mounted: the deadline that abandons
-    // a takeover whose renderer never drew is measured against this report.
-    window.sidecar.introductionMounted();
     const session = ensureSession();
     let gone = false;
     // The dark is the one moment with room to be patient: a mint that failed
@@ -873,17 +886,12 @@ export function IntroductionTakeover({
       case INTRODUCTION_BEAT.DONE: {
         void sessionRef.current?.close();
         audioRef.current?.dispose();
-        // Everything stays drawn, frozen, while the real panel stands up
-        // behind this window; the answer to this report is the moment the
-        // gate is drawn beneath, and only then does the fade run — so the
-        // sessions dissolve into the sign-in rather than vanishing first.
-        let gone = false;
-        void act(ACT_KIND.INTRODUCTION_COMPLETE, { given: givenRef.current }).then(() => {
-          if (!gone) setHandoffFading(true);
-        });
-        return () => {
-          gone = true;
-        };
+        // What the stand-down leaves drawn is the identical compact signed-out
+        // panel the app itself draws, so reporting the ending here — and
+        // handing this window back to the panel it always was — changes
+        // nothing on screen.
+        void act(ACT_KIND.INTRODUCTION_COMPLETE, { given: givenRef.current });
+        return;
       }
       default:
         return;
@@ -895,7 +903,10 @@ export function IntroductionTakeover({
   // the one island that reclaims it under a hovering pointer — the panel
   // window's own hit-region idiom, read off forwarded moves rather than
   // element handlers. Clicks land on the panel, never through it, and the
-  // desktop around it stays the developer's.
+  // desktop around it stays the developer's. Nothing is restored on the way
+  // out: the window this ran in is the panel, and what it intercepts once the
+  // takeover has ended is `leaveTakeover`'s answer, not this effect's last
+  // word on a window that used to be destroyed.
   const flown = FLOWN_BEATS.has(beat);
   useEffect(() => {
     if (!flown) return;
@@ -920,7 +931,6 @@ export function IntroductionTakeover({
     return () => {
       window.removeEventListener("mousemove", handleMove);
       document.documentElement.removeEventListener("mouseleave", handleLeave);
-      window.sidecar.setPointerInterception(true);
     };
   }, [flown]);
 
@@ -991,7 +1001,6 @@ export function IntroductionTakeover({
       className="app-stage introduction-stage"
       data-beat={beat}
       data-flown={String(flown)}
-      data-fading={String(handoffFading)}
       data-settled={String(surfaceSettled)}
       data-lifted={String(rows.length > 0)}
       data-notch={String(display.notch.hasNotch)}

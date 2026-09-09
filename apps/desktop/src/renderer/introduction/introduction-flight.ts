@@ -1,11 +1,11 @@
 import { CAPSULE_SIDE_WIDTH } from "@sidecar/surface";
 
 /**
- * Where the flight lands, in the takeover window's own coordinates. The
- * takeover covers the whole display, so the capsule and the panel it aims at
- * are the ones the panel window will draw at the same screen positions the
- * moment the introduction ends — computed from the same generated geometry
- * the real surfaces are cut from, so the landing and the handoff line up.
+ * Where the flight lands, in the takeover's own coordinates. The takeover
+ * covers the whole display, so the capsule and the panel it aims at are the
+ * ones the same window will draw at the same screen positions the moment the
+ * introduction ends — computed from the same generated geometry the real
+ * surfaces are cut from, so the landing and the handoff line up.
  */
 
 /** Mirrors `--wing-inset` in base.css: the face's inset from the capsule's edge. */
@@ -16,7 +16,7 @@ const WING_FACE_SIZE = 18;
 const CAPSULE_MIN_HEIGHT = 32;
 
 export interface IntroductionStageGeometry {
-  /** The takeover window's width — the whole display's. */
+  /** The takeover's width — the whole display's. */
   viewportWidth: number;
   /** The resolved housing width, 0 where the display has none. */
   housingWidth: number;

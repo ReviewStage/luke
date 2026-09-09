@@ -4,11 +4,11 @@ import { keepWindowStationary } from "../native/stationary-window";
 
 /**
  * The one posture every renderer window of Luke's runs under. The panels and
- * the introduction takeover load the same bundle with the same reach, so the
+ * the hidden voice window load the same bundle with the same reach, so the
  * sandbox and the navigation refusals live here once: a hardening fix applied
- * to one window class must not silently leave the other — least of all the
- * takeover, the one window that runs before the account gate — on the old
- * posture.
+ * to one window class must not silently leave the other on the old posture.
+ * The introduction runs in a panel, so what runs before the account gate is
+ * hardened by the same call as everything after it.
  */
 export function hardenedWebPreferences(input: {
   preloadPath: string;

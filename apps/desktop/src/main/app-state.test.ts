@@ -60,6 +60,20 @@ test("a fresh document is version zero and carries this launch's own facts", () 
   assert.equal(state.audio.microphoneStatus, MICROPHONE_STATUS.NOT_DETERMINED);
 });
 
+test("nothing is introducing itself until the launch's own gate says so", () => {
+  const app = store();
+  assert.equal(app.snapshot().introduction.playing, false);
+  app.update({ introduction: { playing: true } });
+  assert.equal(app.snapshot().introduction.playing, true);
+  // The standing is the whole of the takeover, so the ending is a write to it
+  // and a second ending is no write at all.
+  const versionAtEnding = app.snapshot().version + 1;
+  app.update({ introduction: { playing: false } });
+  app.update({ introduction: { playing: false } });
+  assert.equal(app.snapshot().introduction.playing, false);
+  assert.equal(app.snapshot().version, versionAtEnding);
+});
+
 test("one slice patched bumps the version once and announces once", () => {
   const app = store();
   let announced = 0;

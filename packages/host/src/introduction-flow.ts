@@ -1,8 +1,9 @@
 /**
- * When the one-time spoken introduction runs, and how long its takeover has
- * for each beat of the handoff. The decisions are pure so they can be tested
- * without Electron; the takeover window and the wiring that acts on them live
- * in the desktop's window service and window/introduction-window.
+ * When the one-time spoken introduction runs, how far back a session it
+ * detects may have moved, and how long its handoff waits. The decisions are
+ * pure so they can be tested without Electron; the takeover is a fullscreen
+ * mode of the panel, and the wiring that acts on these lives in the desktop's
+ * window service.
  */
 
 /**
@@ -14,28 +15,15 @@
 export const INTRODUCTION_PEEK_FRESH_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
- * How long the handoff waits for the real panel's renderer to report ready
- * before the takeover fades anyway: the crossfade must land on a drawn gate,
- * not a window still loading, but a panel that never reports must not hold
- * the introduction open forever.
+ * How long the handoff waits for the panel beneath the takeover to report
+ * being drawn before the window follows anyway.
+ *
+ * The panel draws its capsule at the notch inside the surface the takeover
+ * still covers, so the window shrinking to that capsule's own bounds
+ * afterwards moves nothing on screen. A panel that never reports must not
+ * leave a window covering the whole display, which is what bounds the wait.
  */
 export const INTRODUCTION_HANDOFF_READY_MS = 2_000;
-
-/**
- * How long the takeover's fade runs once the panel beneath is ready — the
- * window is destroyed only after it, so the sessions dissolve into the gate
- * rather than vanishing with the window.
- */
-export const INTRODUCTION_FADE_MS = 600;
-
-/**
- * How long the takeover has to report that it mounted before the launch
- * abandons it. A takeover whose renderer never drew is a fullscreen window
- * swallowing every click with nothing on it — the one failure this feature
- * must not be able to reach — and every ordinary ending is that renderer's
- * own report, so the deadline is the main process's to keep.
- */
-export const INTRODUCTION_RENDER_DEADLINE_MS = 15_000;
 
 /**
  * Whether this launch gives the introduction. Only a launch that requires an

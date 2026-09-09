@@ -266,12 +266,6 @@ export const BRIDGE = {
     args: args<[AgentWireTrace]>((v) => v.length === 1 && isAgentWireTrace(v[0])),
   }),
   notifyReady: entry({ kind: "send", channel: "app:renderer-ready", args: noArgs }),
-  /** The takeover surface reporting it mounted, which its abandon deadline measures. */
-  introductionMounted: entry({
-    kind: "send",
-    channel: "app:introduction-mounted",
-    args: noArgs,
-  }),
   recordSurfaceEvent: entry({
     kind: "send",
     channel: "app:record-surface-event",

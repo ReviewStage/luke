@@ -3,9 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { PRODUCT_EVENT } from "@sidecar/analytics";
 import {
-  INTRODUCTION_FADE_MS,
   INTRODUCTION_HANDOFF_READY_MS,
-  INTRODUCTION_RENDER_DEADLINE_MS,
   onboardingStateFile,
   shouldRunIntroduction,
 } from "@sidecar/host";
@@ -31,7 +29,6 @@ import { WINDOW_ROLE } from "#shared/messages/session";
 import type { AppStateStore } from "../app-state";
 import { DockPresence } from "../window/dock-presence";
 import { HOTKEY_RANK, HotkeyRegistrar } from "../window/hotkey-registrar";
-import { IntroductionWindow } from "../window/introduction-window";
 import { PanelManager } from "../window/panel-manager";
 import { VoiceWindow } from "../window/voice-window";
 import type { DesktopConfig } from "./desktop-config";
@@ -62,7 +59,6 @@ export interface WindowServiceDependencies {
 export interface WindowService extends DesktopService {
   readonly panels: PanelManager;
   readonly voiceWindow: VoiceWindow;
-  readonly introductionWindow: IntroductionWindow;
   readonly hotkeys: HotkeyRegistrar;
   readonly dock: DockPresence;
   /** The takeover's own bounded mint, the one voice that stands with no account behind it. */
@@ -73,9 +69,6 @@ export interface WindowService extends DesktopService {
    * One `app:state` per window, each composed with that window's own facts.
    * The one place the document becomes a push, so what a window is told and
    * what `app:state-request` answers it are the same document read twice.
-   * The introduction takeover is deliberately not among them: it reads the
-   * document once, before it mounts, and its own beats are what carry it from
-   * there.
    */
   publishAppState: () => void;
   /**
@@ -99,19 +92,24 @@ export interface WindowService extends DesktopService {
   applyLoginItem: (openAtLogin: boolean) => void;
   reapplyTalkHotkey: () => void;
   recycleVoiceWindow: () => void;
-  introductionMounted: () => void;
-  /** A panel that finished painting, which is what the introduction's handoff waits for. */
+  /** A panel that finished painting, which is what the takeover's handoff waits for. */
   notePanelReady: (sender: WebContents) => void;
-  finishIntroduction: (given: boolean) => Promise<void>;
-  abandonIntroduction: () => Promise<void>;
+  /**
+   * The introduction's one ending, whichever way the takeover reported it.
+   * `given` records the completion, so an introduction that was never given
+   * plays for real on a later launch.
+   */
+  endIntroduction: (given: boolean) => Promise<void>;
+  /** Whether the introduction holds the panel — what every takeover-only answer gates on. */
+  introductionPlaying: () => boolean;
 }
 
 /**
  * Everything this process draws or claims from the machine on the windows'
- * behalf: the panels, the hidden voice window, the one-time introduction, the
- * keys, the Dock, the login item, the media permissions, and the display and
- * power changes the panels answer. It is the one concern that opens a window,
- * and it opens none until `start`.
+ * behalf: the panels — the one-time introduction among them, as a fullscreen
+ * mode of one — the hidden voice window, the keys, the Dock, the login item,
+ * the media permissions, and the display and power changes the panels answer.
+ * It is the one concern that opens a window, and it opens none until `start`.
  */
 export function createWindowService(dependencies: WindowServiceDependencies): WindowService {
   const { config, state, native, telemetry, operator, launchStanding } = dependencies;
@@ -149,20 +147,12 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     // moving, and both ride the snapshot a window is handed: the document is
     // re-announced so every window is handed one again.
     onWindowFactsChanged: () => state.touch(),
-  });
-  const introductionWindow = new IntroductionWindow({
-    runMode,
-    preloadPath,
-    rendererHtmlPath,
-    rendererUrl,
-    onGone: (reason) => {
+    onTakeoverGone: (reason) => {
       config.report(`Introduction abandoned: ${reason}`);
-      void abandonIntroduction();
-    },
-    onClosed: () => {
-      if (panels.standing === 0) config.quit();
+      void endIntroduction(false);
     },
   });
+  const introductionPlaying = () => state.snapshot().introduction.playing;
   /**
    * The hidden window that holds the live conversation. Its receiver epochs
    * are the host's: each load asks the host to begin one, and a close or
@@ -194,6 +184,11 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   const voiceWindowWanted = runMode.registersGlobalKeys || runMode.sendsNetwork;
 
   function raiseVoiceWindow(): void {
+    // Not while the introduction plays: its own call runs in the panel it
+    // took, so a second window standing by with no account behind it has
+    // nothing to hold and no credential it should be able to ask for. The
+    // ending raises it.
+    if (introductionPlaying()) return;
     if (voiceWindowWanted && panels.standing > 0) voiceWindow.open();
   }
 
@@ -219,7 +214,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       (displayId !== undefined ? panels.display(displayId) : undefined) ??
       screen.getPrimaryDisplay();
     return {
-      role: introductionWindow.owns(sender) ? WINDOW_ROLE.INTRODUCTION : WINDOW_ROLE.PANEL,
+      role: WINDOW_ROLE.PANEL,
       mode: displayId !== undefined ? panels.modeFor(displayId) : panels.initialMode,
       display: panels.diagnostic(display),
     };
@@ -241,15 +236,12 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     if (voice) sendTo(voice.webContents, channel, payload);
   }
 
-  let introductionRendererReady = false;
-  let resolveIntroductionPanelReady: (() => void) | undefined;
   /**
-   * Every wait this service schedules — the takeover's render deadline,
-   * handoff, and fade, and the settling a display change waits out — held so
-   * the quit can take them back. Each opens a window or claims the keys when
-   * it fires, and the teardown now runs for seconds with the drain behind
-   * it, so one landing afterwards would re-open what the teardown had just
-   * given back.
+   * Every wait this service schedules — the takeover's handoff and the
+   * settling a display change waits out — held so the quit can take them
+   * back. Each opens a window or claims the keys when it fires, and the
+   * teardown now runs for seconds with the drain behind it, so one landing
+   * afterwards would re-open what the teardown had just given back.
    */
   const pendingWaits = new Set<ReturnType<typeof setTimeout>>();
   function afterDelay(delayMs: number, run: () => void): void {
@@ -269,8 +261,32 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   });
   const onboarding = onboardingStateFile(() => config.stateRoot, config.report);
 
-  async function finishIntroduction(given: boolean): Promise<void> {
-    if (!introductionWindow.active || !launchStanding()) return;
+  /**
+   * Whether the takeover's window is waiting for the panel to be drawn under
+   * it. The window keeps the display until then: the panel draws its capsule
+   * at the notch inside the very surface the takeover covers, so the window
+   * shrinking to that capsule's own bounds afterwards moves nothing on
+   * screen — where letting it shrink first would clip the stand-down into a
+   * capsule before the panel had drawn one.
+   */
+  let awaitingPanel = false;
+
+  function handOverToPanel(): void {
+    if (!awaitingPanel) return;
+    awaitingPanel = false;
+    panels.leaveTakeover();
+  }
+
+  /**
+   * The introduction's one ending, however the takeover reported it: the
+   * sign-off spoken to its end, or a takeover that cannot be given at all.
+   * The standing goes down first, so nothing granted against it — the keyless
+   * talk key, the accountless mint, the takeover's own reports — outlives the
+   * ending; the window follows the panel that draws in its place.
+   * Idempotent through that standing: a second ending finds nothing playing.
+   */
+  async function endIntroduction(given: boolean): Promise<void> {
+    if (!introductionPlaying() || !launchStanding()) return;
     if (given) {
       onboarding.update((current) => ({
         ...current,
@@ -278,32 +294,12 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       }));
       recordProductEvent(PRODUCT_EVENT.INTRODUCTION_COMPLETE, {});
     }
-    introductionWindow.retire();
-    const panelReady = new Promise<void>((resolve) => {
-      resolveIntroductionPanelReady = resolve;
-    });
-    panels.reconcile();
+    state.update({ introduction: { playing: false } });
+    awaitingPanel = true;
+    // A panel that never reports being drawn must not leave a window covering
+    // the whole display, so the window follows anyway once the wait is spent.
+    afterDelay(INTRODUCTION_HANDOFF_READY_MS, handOverToPanel);
     raiseVoiceWindow();
-    await Promise.race([
-      panelReady,
-      new Promise<void>((resolve) => {
-        afterDelay(INTRODUCTION_HANDOFF_READY_MS, resolve);
-      }),
-    ]);
-    resolveIntroductionPanelReady = undefined;
-    afterDelay(INTRODUCTION_FADE_MS, () => {
-      introductionWindow.close();
-      void hotkeys.reapply(HOTKEY_RANK.TALK);
-    });
-  }
-
-  async function abandonIntroduction(): Promise<void> {
-    if (!introductionWindow.active || !launchStanding()) return;
-    introductionWindow.retire();
-    panels.reconcile();
-    raiseVoiceWindow();
-    panels.showInactiveAll();
-    introductionWindow.close();
     await hotkeys.reapply(HOTKEY_RANK.TALK);
   }
 
@@ -313,10 +309,13 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     // with no account credential behind it; otherwise a voice stands only when
     // the host says one does.
     hasCredentials: (rank) =>
-      operator.voiceAvailable() || (rank === HOTKEY_RANK.TALK && introductionWindow.active),
+      operator.voiceAvailable() || (rank === HOTKEY_RANK.TALK && introductionPlaying()),
     recordProductEvent: (name, properties) => recordProductEvent(name, properties),
     host: {
-      voiceHost: () => introductionWindow.current() ?? voiceWindow.current(),
+      // While the introduction plays, its own call runs in the panel window
+      // it took: the takeover holds the microphone and the beats, so the key
+      // has to reach the surface that answers it.
+      voiceHost: () => (introductionPlaying() ? panels.primaryPanel() : voiceWindow.current()),
       primaryPanel: () => panels.primaryPanel(),
       displayIdFor: (sender) => panels.displayIdFor(sender),
       modeFor: (displayId) => panels.modeFor(displayId),
@@ -348,9 +347,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
 
   function configurePermissions(): void {
     const ownWindow = (webContents: Electron.WebContents) =>
-      panels.owns(webContents) ||
-      introductionWindow.owns(webContents) ||
-      voiceWindow.owns(webContents);
+      panels.owns(webContents) || voiceWindow.owns(webContents);
     session.defaultSession.setPermissionCheckHandler(
       (webContents, permission, _origin, details) =>
         webContents !== null &&
@@ -376,11 +373,11 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       void (async () => {
         await panels.refreshGeometry();
         if (!launchStanding()) return;
-        if (introductionWindow.active) {
-          introductionWindow.reposition();
-          return;
-        }
         panels.reconcile();
+        // A takeover follows its display: the reconcile above moved its
+        // window somewhere it can stand, and re-taking covers whichever
+        // display that window now stands on.
+        if (introductionPlaying()) panels.enterTakeover();
       })();
     });
   }
@@ -390,8 +387,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       // A second launch already in flight when the quit landed must not raise
       // panels over a client whose keys and windows are already given back.
       if (!launchStanding()) return;
-      if (introductionWindow.active) {
-        introductionWindow.reposition();
+      if (introductionPlaying()) {
+        panels.enterTakeover();
         return;
       }
       if (argv.includes("--expanded")) {
@@ -419,7 +416,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     name: "windows",
     panels,
     voiceWindow,
-    introductionWindow,
     hotkeys,
     dock,
     introductionMinter,
@@ -445,16 +441,11 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       voiceWindow.close();
       raiseVoiceWindow();
     },
-    introductionMounted: () => {
-      introductionRendererReady = true;
-    },
     notePanelReady: (sender) => {
-      if (!resolveIntroductionPanelReady || !panels.owns(sender)) return;
-      resolveIntroductionPanelReady();
-      resolveIntroductionPanelReady = undefined;
+      if (panels.owns(sender)) handOverToPanel();
     },
-    finishIntroduction,
-    abandonIntroduction,
+    endIntroduction,
+    introductionPlaying,
     start: async () => {
       // The introduction plays only on a host actually reached: a launch that
       // cannot reach its runtime knows nothing of the account and must not
@@ -480,22 +471,24 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
           settings?.stored.duckOtherMedia ?? APP_SETTING_SCHEMA.duckOtherMedia.default,
         );
       }
-      if (giveIntroduction) {
-        introductionWindow.open();
-        afterDelay(INTRODUCTION_RENDER_DEADLINE_MS, () => {
-          if (!introductionWindow.active || introductionRendererReady) return;
-          config.report("Introduction abandoned: the takeover never reported mounting.");
-          void abandonIntroduction();
-        });
-      }
       panels.setShowOnAllDisplays(settings?.stored.showOnAllDisplays === true);
       panels.setFormFactor(settings?.stored.formFactor ?? DEFAULT_PANEL_FORM_FACTOR);
       hotkeys.setChosen(HOTKEY_RANK.TALK, settings?.stored.voiceHotkey);
       hotkeys.setChosen(HOTKEY_RANK.ASK, settings?.stored.askHotkey);
       hotkeys.setChosen(HOTKEY_RANK.STOP, settings?.stored.stopHotkey);
+      // The standing is written before the first window opens, so the panel's
+      // own renderer reads it in the state it bootstraps from and draws the
+      // takeover rather than the panel and then the takeover.
+      if (giveIntroduction) state.update({ introduction: { playing: true } });
       await hotkeys.reapply(HOTKEY_RANK.TALK);
       if (!launchStanding()) return;
-      if (!introductionWindow.active) panels.reconcile();
+      panels.reconcile();
+      // No panel anywhere is nothing to take the screen with, so there is no
+      // introduction to run and the ordinary launch stands. Taking it
+      // reconciles again, to the one display it covers.
+      if (giveIntroduction && panels.enterTakeover() === undefined) {
+        state.update({ introduction: { playing: false } });
+      }
       raiseVoiceWindow();
       configurePermissions();
 
@@ -517,13 +510,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       powerMonitor.removeListener("user-did-become-active", wakeHandlers["user-did-become-active"]);
       for (const wait of pendingWaits) clearTimeout(wait);
       pendingWaits.clear();
-      // The takeover's handoff waits on a panel or a clock, and the quit just
-      // took the clock away: settling it here is what lets
-      // `finishIntroduction` return, so the renderer's own invoke does not
-      // stay open for the rest of the quit. What it goes on to do is the
-      // fade, which schedules nothing once the launch is down.
-      resolveIntroductionPanelReady?.();
-      resolveIntroductionPanelReady = undefined;
       hotkeys.release();
       voiceWindow.closeForGood();
       panels.clearCollapseTimers();

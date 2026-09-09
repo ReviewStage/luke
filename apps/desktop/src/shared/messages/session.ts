@@ -33,14 +33,14 @@ export function isSessionIdentity(value: UnparsedWireValue): boolean {
 
 /**
  * Which surface a window exists to draw. Every window loads the same renderer
- * bundle, so the role is what tells the one fullscreen introduction takeover
- * and the hidden voice window apart from the panel windows — decided in the
- * main process by which window asked, never by anything the renderer could
- * claim about itself.
+ * bundle, so the role is what tells the hidden voice window apart from the
+ * panel windows — decided in the main process by which window asked, never by
+ * anything the renderer could claim about itself. The spoken introduction is
+ * not one of them: it is a fullscreen mode of the panel, and the document's
+ * own `introduction` slice is what says so.
  */
 export const WINDOW_ROLE = {
   PANEL: "panel",
-  INTRODUCTION: "introduction",
   /** The one hidden window that will hold the live conversation; it draws nothing. */
   VOICE: "voice",
 } as const;
