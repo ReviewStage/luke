@@ -58,8 +58,7 @@ export interface AdminUserListRow {
    * all been pruned and which never touched the hosted tier.
    */
   lastSeenAt: number | null;
-  voiceCalls: number;
-  attentionReviews: number;
+  calls: number;
   /** Whether the viewing admin starred this account, theirs alone to see. */
   favorite: boolean;
 }

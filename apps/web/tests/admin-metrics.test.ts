@@ -81,8 +81,8 @@ test("the usage series is zero-filled and totalled across the window", () => {
     source({
       usage: {
         byDay: new Map([
-          ["2026-08-17", { voiceCalls: 3, attentionReviews: 41 }],
-          ["2026-08-10", { voiceCalls: 5, attentionReviews: 0 }],
+          ["2026-08-17", { calls: 44 }],
+          ["2026-08-10", { calls: 5 }],
         ]),
         activeUsersToday: 2,
         activeUsersWindow: 9,
@@ -94,13 +94,11 @@ test("the usage series is zero-filled and totalled across the window", () => {
   );
 
   assert.equal(metrics.featureUsage.daily.length, ADMIN_METRICS_WINDOW_DEFAULT);
-  assert.equal(metrics.featureUsage.voiceCallsToday, 3);
-  assert.equal(metrics.featureUsage.attentionReviewsToday, 41);
-  assert.equal(metrics.featureUsage.voiceCallsWindow, 8);
-  assert.equal(metrics.featureUsage.attentionReviewsWindow, 41);
+  assert.equal(metrics.featureUsage.callsToday, 44);
+  assert.equal(metrics.featureUsage.callsWindow, 49);
   assert.equal(metrics.featureUsage.activeUsersWindow, 9);
   const emptyDay = metrics.featureUsage.daily.find((day) => day.day === "2026-08-01");
-  assert.deepEqual(emptyDay, { day: "2026-08-01", voiceCalls: 0, attentionReviews: 0 });
+  assert.deepEqual(emptyDay, { day: "2026-08-01", calls: 0 });
 });
 
 test("the signup series is zero-filled over the same window", () => {
@@ -174,8 +172,8 @@ test("a trend is the trailing run beside the run immediately before it", () => {
       },
       usage: {
         byDay: new Map([
-          ["2026-08-12", { voiceCalls: 4, attentionReviews: 1 }],
-          ["2026-08-05", { voiceCalls: 2, attentionReviews: 0 }],
+          ["2026-08-12", { calls: 5 }],
+          ["2026-08-05", { calls: 2 }],
         ]),
         activeUsersToday: 0,
         activeUsersWindow: 3,
@@ -208,8 +206,8 @@ test("a 7-day window narrows the series while its trend still sees the week befo
       },
       usage: {
         byDay: new Map([
-          ["2026-08-16", { voiceCalls: 3, attentionReviews: 1 }],
-          ["2026-08-05", { voiceCalls: 2, attentionReviews: 0 }],
+          ["2026-08-16", { calls: 4 }],
+          ["2026-08-05", { calls: 2 }],
         ]),
         activeUsersToday: 0,
         activeUsersWindow: 1,
@@ -224,8 +222,7 @@ test("a 7-day window narrows the series while its trend still sees the week befo
   assert.equal(metrics.users.dailySignups.length, ADMIN_METRICS_WINDOW.WEEK);
   assert.equal(metrics.featureUsage.daily.length, ADMIN_METRICS_WINDOW.WEEK);
   assert.equal(metrics.users.newInWindow, 2);
-  assert.equal(metrics.featureUsage.voiceCallsWindow, 3);
-  assert.equal(metrics.featureUsage.attentionReviewsWindow, 1);
+  assert.equal(metrics.featureUsage.callsWindow, 4);
   assert.deepEqual(metrics.users.signupTrend, { days: ADMIN_TREND_DAYS, recent: 2, prior: 5 });
   assert.deepEqual(metrics.featureUsage.usageTrend, {
     days: ADMIN_TREND_DAYS,
@@ -369,9 +366,7 @@ test("the most active accounts pass through the builder untouched", () => {
       admin: false,
       activeDays: 12,
       lastActiveDay: "2026-08-17",
-      voiceCalls: 3,
-      attentionReviews: 40,
-      total: 43,
+      calls: 43,
     },
   ];
   const metrics = buildAdminMetrics(
@@ -382,10 +377,9 @@ test("the most active accounts pass through the builder untouched", () => {
   assert.deepEqual(metrics.featureUsage.topUsers, topUsers);
 });
 
-test("the daily ceilings are reported from the hosted quota, not restated", () => {
+test("the daily ceiling is reported from the hosted quota, not restated", () => {
   const metrics = buildAdminMetrics(source(), NOON_UTC, ADMIN_METRICS_WINDOW_DEFAULT);
-  assert.equal(metrics.reliability.voiceDailyLimit, HOSTED_DAILY_LIMIT);
-  assert.equal(metrics.reliability.attentionDailyLimit, HOSTED_DAILY_LIMIT);
+  assert.equal(metrics.reliability.dailyLimit, HOSTED_DAILY_LIMIT);
   assert.equal(metrics.windowDays, ADMIN_METRICS_WINDOW_DEFAULT);
   assert.equal(metrics.generatedAt, NOON_UTC);
 });

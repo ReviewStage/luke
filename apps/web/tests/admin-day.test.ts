@@ -30,9 +30,7 @@ function daySource(overrides: Partial<AdminDaySource> = {}): AdminDaySource {
         email: "ada@example.com",
         image: null,
         admin: false,
-        voiceCalls: 24,
-        attentionReviews: 12,
-        total: 36,
+        calls: 36,
       },
       {
         id: "user-3",
@@ -40,22 +38,20 @@ function daySource(overrides: Partial<AdminDaySource> = {}): AdminDaySource {
         email: "grace@example.com",
         image: null,
         admin: false,
-        voiceCalls: 1,
-        attentionReviews: 3,
-        total: 4,
+        calls: 4,
       },
     ],
-    totals: { accounts: 2, voiceCalls: 25, attentionReviews: 15 },
+    totals: { accounts: 2, calls: 40 },
     ...overrides,
   };
 }
 
-test("the builder stamps the day and bound, and totals fold from the day's own sums", () => {
+test("the builder stamps the day and bound over the day's own totals", () => {
   const detail = buildAdminDayDetail(daySource(), NOON_UTC, DAY);
   assert.equal(detail.generatedAt, NOON_UTC);
   assert.equal(detail.day, DAY);
   assert.equal(detail.limit, ADMIN_DAY_ACCOUNTS_LIMIT);
-  assert.deepEqual(detail.totals, { accounts: 2, voiceCalls: 25, attentionReviews: 15, total: 40 });
+  assert.deepEqual(detail.totals, { accounts: 2, calls: 40 });
   assert.deepEqual(detail.accounts, [...daySource().accounts]);
 });
 
@@ -151,7 +147,7 @@ test("the gate answers 405, 401, 403, 400, and 200 as distinct outcomes", async 
   const body = (await ok.json()) as AdminDayDetail;
   assert.equal(body.generatedAt, NOON_UTC);
   assert.equal(body.day, DAY);
-  assert.equal(body.totals.total, 40);
+  assert.equal(body.totals.calls, 40);
 });
 
 test("the day is read at the scope the request asked for, defaulting to non-admins", async () => {
@@ -213,17 +209,13 @@ test("a quiet day is an ordinary answer with empty rows, never a 404", async () 
     request: dayRequest(),
     resolveViewer: async () => ADMIN_VIEWER,
     readDay: async (day, now) =>
-      buildAdminDayDetail(
-        { accounts: [], totals: { accounts: 0, voiceCalls: 0, attentionReviews: 0 } },
-        now,
-        day,
-      ),
+      buildAdminDayDetail({ accounts: [], totals: { accounts: 0, calls: 0 } }, now, day),
   });
   assert.equal(response.status, 200);
   // SAFETY: handleAdminDay answered 200, whose body is an AdminDayDetail document.
   const body = (await response.json()) as AdminDayDetail;
   assert.deepEqual(body.accounts, []);
-  assert.deepEqual(body.totals, { accounts: 0, voiceCalls: 0, attentionReviews: 0, total: 0 });
+  assert.deepEqual(body.totals, { accounts: 0, calls: 0 });
 });
 
 test("a seam that throws is a 503 refusal rather than a crash", async () => {

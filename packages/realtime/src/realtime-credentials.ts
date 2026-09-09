@@ -209,7 +209,6 @@ export interface RealtimeDiagnostics {
   quota?: {
     used: number;
     limit: number;
-    remaining: number;
     resetsAt: number;
   };
 }

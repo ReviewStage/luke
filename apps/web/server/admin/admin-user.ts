@@ -67,8 +67,7 @@ export interface AdminUserAllTime {
   activeDays: number;
   firstActiveDay: string | null;
   lastActiveDay: string | null;
-  voiceCalls: number;
-  attentionReviews: number;
+  calls: number;
 }
 
 /**
@@ -110,8 +109,7 @@ export interface AdminUserDetail {
      * longer" rather than posing a truncation as the exact count.
      */
     currentStreakDays: number;
-    voiceCallsWindow: number;
-    attentionReviewsWindow: number;
+    callsWindow: number;
     quotaLimitedDaysWindow: number;
     allTime: AdminUserAllTime;
   };
@@ -127,30 +125,19 @@ export function buildAdminUserDetail(
   // The trends read the byDay map through their own trailing keys, like the
   // overview's, so a 7-day view still compares against the week before it.
   const trendKeys = lastNDayKeys(now, ADMIN_TREND_DAYS * 2);
-  const trendTotals = trendKeys.map((day) => {
-    const row = source.usage.byDay.get(day);
-    return (row?.voiceCalls ?? 0) + (row?.attentionReviews ?? 0);
-  });
+  const trendTotals = trendKeys.map((day) => source.usage.byDay.get(day)?.calls ?? 0);
 
-  const daily = dayKeys.map((day) => {
-    const row = source.usage.byDay.get(day);
-    return {
-      day,
-      voiceCalls: row?.voiceCalls ?? 0,
-      attentionReviews: row?.attentionReviews ?? 0,
-    };
-  });
+  const daily = dayKeys.map((day) => ({
+    day,
+    calls: source.usage.byDay.get(day)?.calls ?? 0,
+  }));
 
-  const calendarDaily = calendarDayKeys(now).map((day) => {
-    const row = source.usage.calendarByDay.get(day);
-    return {
-      day,
-      voiceCalls: row?.voiceCalls ?? 0,
-      attentionReviews: row?.attentionReviews ?? 0,
-    };
-  });
+  const calendarDaily = calendarDayKeys(now).map((day) => ({
+    day,
+    calls: source.usage.calendarByDay.get(day)?.calls ?? 0,
+  }));
 
-  const activeFlags = daily.map((day) => day.voiceCalls + day.attentionReviews > 0);
+  const activeFlags = daily.map((day) => day.calls > 0);
   let streakEnd = activeFlags.length - 1;
   if (!activeFlags[streakEnd]) streakEnd -= 1;
   let currentStreakDays = 0;
@@ -172,8 +159,7 @@ export function buildAdminUserDetail(
         ADMIN_TREND_DAYS,
       ),
       currentStreakDays,
-      voiceCallsWindow: sum(daily.map((day) => day.voiceCalls)),
-      attentionReviewsWindow: sum(daily.map((day) => day.attentionReviews)),
+      callsWindow: sum(daily.map((day) => day.calls)),
       quotaLimitedDaysWindow: source.usage.quotaLimitedDaysWindow,
       allTime: source.usage.allTime,
     },

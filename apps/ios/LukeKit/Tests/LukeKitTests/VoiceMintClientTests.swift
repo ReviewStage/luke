@@ -155,7 +155,7 @@ final class VoiceMintClientResponseTests: XCTestCase {
     private func validPayload() -> [String: Any] {
         [
             "connection": connectionBlock(),
-            "quota": ["used": 1, "limit": 10, "remaining": 9, "resetsAt": 0],
+            "quota": ["used": 1, "limit": 10, "resetsAt": 0],
             "context": contextBlock(),
         ]
     }

@@ -218,8 +218,7 @@ export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_E
 export interface HostedQuota {
   used: number;
   limit: number;
-  remaining: number;
-  /** When the day's counters reset, as epoch milliseconds. */
+  /** When the day's counter resets, as epoch milliseconds. */
   resetsAt: number;
 }
 
@@ -233,11 +232,9 @@ export function hostedQuotaFromWire(value: UnparsedWireValue): HostedQuota | und
   if (!isRecord(value)) return undefined;
   const used = nonNegativeWholeNumber(value.used);
   const limit = nonNegativeWholeNumber(value.limit);
-  const remaining = nonNegativeWholeNumber(value.remaining);
   const resetsAt = nonNegativeWholeNumber(value.resetsAt);
-  if (used === undefined || limit === undefined || remaining === undefined) return undefined;
-  if (resetsAt === undefined) return undefined;
-  return { used, limit, remaining, resetsAt };
+  if (used === undefined || limit === undefined || resetsAt === undefined) return undefined;
+  return { used, limit, resetsAt };
 }
 
 /**

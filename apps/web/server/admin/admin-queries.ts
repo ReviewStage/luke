@@ -1,5 +1,6 @@
 import {
   and,
+  asc,
   count,
   desc,
   eq,
@@ -135,8 +136,7 @@ async function readUsageMetrics(
     database
       .select({
         day: hostedUsage.day,
-        voiceCalls: sum(hostedUsage.voiceCalls),
-        attentionReviews: sum(hostedUsage.attentionReviews),
+        calls: sum(hostedUsage.calls),
       })
       .from(hostedUsage)
       .innerJoin(user, eq(hostedUsage.userId, user.id))
@@ -166,44 +166,31 @@ async function readUsageMetrics(
         role: user.role,
         activeDays: count(),
         lastActiveDay: sql<string>`max(${hostedUsage.day})`,
-        voiceCalls: sum(hostedUsage.voiceCalls),
-        attentionReviews: sum(hostedUsage.attentionReviews),
+        calls: sum(hostedUsage.calls),
       })
       .from(hostedUsage)
       .innerJoin(user, eq(hostedUsage.userId, user.id))
       .where(and(gte(hostedUsage.day, windowStartDay), scopeCondition(scope)))
       .groupBy(user.id, user.name, user.email, user.image, user.role)
-      .orderBy(
-        desc(count()),
-        desc(sql`sum(${hostedUsage.voiceCalls}) + sum(${hostedUsage.attentionReviews})`),
-      )
+      .orderBy(desc(count()), desc(sum(hostedUsage.calls)))
       .limit(ADMIN_TOP_USERS_LIMIT),
   ]);
 
   const byDay = new Map<string, AdminUsageDay>();
   for (const row of usageRows) {
-    byDay.set(row.day, {
-      voiceCalls: toNumber(row.voiceCalls),
-      attentionReviews: toNumber(row.attentionReviews),
-    });
+    byDay.set(row.day, { calls: toNumber(row.calls) });
   }
 
-  const topUsers: AdminTopUser[] = topUserRows.map((row) => {
-    const voiceCalls = toNumber(row.voiceCalls);
-    const attentionReviews = toNumber(row.attentionReviews);
-    return {
-      id: row.id,
-      name: row.name,
-      email: row.email,
-      image: row.image,
-      admin: isAdminRole(row.role),
-      activeDays: toNumber(row.activeDays),
-      lastActiveDay: row.lastActiveDay,
-      voiceCalls,
-      attentionReviews,
-      total: voiceCalls + attentionReviews,
-    };
-  });
+  const topUsers: AdminTopUser[] = topUserRows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    image: row.image,
+    admin: isAdminRole(row.role),
+    activeDays: toNumber(row.activeDays),
+    lastActiveDay: row.lastActiveDay,
+    calls: toNumber(row.calls),
+  }));
 
   return {
     byDay,
@@ -272,16 +259,13 @@ async function readRetentionMetrics(
 }
 
 /**
- * Either meter past its daily ceiling — the row a spend was refused on. The
+ * The counter past its daily ceiling — the row a spend was refused on. The
  * spend that lands exactly on the limit is still allowed, and a refused
  * attempt still increments, so only a count strictly past the limit proves a
  * refusal happened.
  */
-function ceilingReached(): SQL<unknown> | undefined {
-  return or(
-    gt(hostedUsage.voiceCalls, HOSTED_DAILY_LIMIT),
-    gt(hostedUsage.attentionReviews, HOSTED_DAILY_LIMIT),
-  );
+function ceilingReached(): SQL<unknown> {
+  return gt(hostedUsage.calls, HOSTED_DAILY_LIMIT);
 }
 
 async function readReliabilityMetrics(
@@ -414,16 +398,14 @@ export async function readAdminUserSource(
       database
         .select({
           day: hostedUsage.day,
-          voiceCalls: hostedUsage.voiceCalls,
-          attentionReviews: hostedUsage.attentionReviews,
+          calls: hostedUsage.calls,
         })
         .from(hostedUsage)
         .where(and(eq(hostedUsage.userId, input.userId), gte(hostedUsage.day, fetchStartDay))),
       database
         .select({
           day: hostedUsage.day,
-          voiceCalls: hostedUsage.voiceCalls,
-          attentionReviews: hostedUsage.attentionReviews,
+          calls: hostedUsage.calls,
         })
         .from(hostedUsage)
         .where(and(eq(hostedUsage.userId, input.userId), gte(hostedUsage.day, calendarStartDay))),
@@ -432,8 +414,7 @@ export async function readAdminUserSource(
           activeDays: count(),
           firstActiveDay: sql<string | null>`min(${hostedUsage.day})`,
           lastActiveDay: sql<string | null>`max(${hostedUsage.day})`,
-          voiceCalls: sum(hostedUsage.voiceCalls),
-          attentionReviews: sum(hostedUsage.attentionReviews),
+          calls: sum(hostedUsage.calls),
         })
         .from(hostedUsage)
         .where(eq(hostedUsage.userId, input.userId)),
@@ -454,18 +435,12 @@ export async function readAdminUserSource(
 
   const byDay = new Map<string, AdminUsageDay>();
   for (const usageRow of windowRows) {
-    byDay.set(usageRow.day, {
-      voiceCalls: usageRow.voiceCalls,
-      attentionReviews: usageRow.attentionReviews,
-    });
+    byDay.set(usageRow.day, { calls: usageRow.calls });
   }
 
   const calendarByDay = new Map<string, AdminUsageDay>();
   for (const usageRow of calendarRows) {
-    calendarByDay.set(usageRow.day, {
-      voiceCalls: usageRow.voiceCalls,
-      attentionReviews: usageRow.attentionReviews,
-    });
+    calendarByDay.set(usageRow.day, { calls: usageRow.calls });
   }
 
   return {
@@ -485,8 +460,7 @@ export async function readAdminUserSource(
         activeDays: toNumber(allTimeRow?.activeDays),
         firstActiveDay: allTimeRow?.firstActiveDay ?? null,
         lastActiveDay: allTimeRow?.lastActiveDay ?? null,
-        voiceCalls: toNumber(allTimeRow?.voiceCalls),
-        attentionReviews: toNumber(allTimeRow?.attentionReviews),
+        calls: toNumber(allTimeRow?.calls),
       },
       quotaLimitedDaysWindow: toNumber(quotaRow?.value),
     },
@@ -498,7 +472,8 @@ export async function readAdminUserSource(
  * holds one row per account per day, so each bounded row is already the
  * account's whole day and needs no aggregation; the totals ride their own
  * aggregate read because the rows are cut at the bound. Busiest first, with
- * voice breaking ties so equal days keep a stable order across refreshes.
+ * the account id breaking ties so equally busy accounts keep a stable order
+ * across refreshes.
  * Like the account detail, this has no probe and no empty fallback: a
  * database that does not answer throws into the handler's 503.
  */
@@ -516,22 +491,17 @@ export async function readAdminDaySource(
         email: user.email,
         image: user.image,
         role: user.role,
-        voiceCalls: hostedUsage.voiceCalls,
-        attentionReviews: hostedUsage.attentionReviews,
+        calls: hostedUsage.calls,
       })
       .from(hostedUsage)
       .innerJoin(user, eq(hostedUsage.userId, user.id))
       .where(kept)
-      .orderBy(
-        desc(sql`${hostedUsage.voiceCalls} + ${hostedUsage.attentionReviews}`),
-        desc(hostedUsage.voiceCalls),
-      )
+      .orderBy(desc(hostedUsage.calls), asc(user.id))
       .limit(ADMIN_DAY_ACCOUNTS_LIMIT),
     database
       .select({
         accounts: count(),
-        voiceCalls: sum(hostedUsage.voiceCalls),
-        attentionReviews: sum(hostedUsage.attentionReviews),
+        calls: sum(hostedUsage.calls),
       })
       .from(hostedUsage)
       .innerJoin(user, eq(hostedUsage.userId, user.id))
@@ -545,14 +515,11 @@ export async function readAdminDaySource(
       email: row.email,
       image: row.image,
       admin: isAdminRole(row.role),
-      voiceCalls: row.voiceCalls,
-      attentionReviews: row.attentionReviews,
-      total: row.voiceCalls + row.attentionReviews,
+      calls: row.calls,
     })),
     totals: {
       accounts: toNumber(totalsRow?.accounts),
-      voiceCalls: toNumber(totalsRow?.voiceCalls),
-      attentionReviews: toNumber(totalsRow?.attentionReviews),
+      calls: toNumber(totalsRow?.calls),
     },
   };
 }
@@ -613,8 +580,7 @@ export async function readAdminUsersSource(
         createdAt: user.createdAt,
         activeDays: sql<number | string | null>`count(${hostedUsage.day})`,
         lastActiveDay: sql<string | null>`max(${hostedUsage.day})`,
-        voiceCalls: sum(hostedUsage.voiceCalls),
-        attentionReviews: sum(hostedUsage.attentionReviews),
+        calls: sum(hostedUsage.calls),
         // At most one star row joins per account, so aggregating its presence
         // leaves the usage aggregates' fan-out untouched.
         favorite: sql<boolean>`bool_or(${adminFavorite.adminId} is not null)`,
@@ -658,8 +624,7 @@ export async function readAdminUsersSource(
         sessionSeenByUser.get(row.id) ?? null,
         lastUsageDayByUser.get(row.id) ?? null,
       ),
-      voiceCalls: toNumber(row.voiceCalls),
-      attentionReviews: toNumber(row.attentionReviews),
+      calls: toNumber(row.calls),
       favorite: row.favorite === true,
     })),
   };

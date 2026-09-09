@@ -159,7 +159,7 @@ test("the emergency ceiling is surfaced only as temporary unavailability", () =>
     hostedVoiceUnavailableNote(
       diagnostics({
         lastOutcome: REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED,
-        quota: { used: 5_001, limit: 5_000, remaining: 0, resetsAt: 1_800_003_600_000 },
+        quota: { used: 5_001, limit: 5_000, resetsAt: 1_800_003_600_000 },
       }),
     ),
     HOSTED_VOICE_UNAVAILABLE_NOTE,

@@ -3,22 +3,14 @@ import type { HostedQuota } from "../core.js";
 import type { createDatabase } from "../db/index.js";
 import { hostedUsage, introductionUsage } from "../db/usage-schema.js";
 
-/** The two things the hosted tier spends, each metered on its own ceiling. */
-export const HOSTED_METER = {
-  VOICE_CALL: "voice-call",
-  ATTENTION_REVIEW: "attention-review",
-} as const;
-
-export type HostedMeter = (typeof HOSTED_METER)[keyof typeof HOSTED_METER];
-
+/**
+ * The free tier's daily ceiling, spent by every hosted operation alike — a
+ * voice call opened and a brain turn weighed come out of the same allowance.
+ * A product knob, not an implementation detail: the OpenAI project budget
+ * behind the key is the backstop it exists to keep distant.
+ */
 export const HOSTED_DAILY_LIMIT = 5_000;
 
-/**
- * The free tier's daily ceilings. Product knobs, not implementation details:
- * a voice call is a conversation opened or an announcement spoken, and an
- * attention review is one session update weighed. The OpenAI project budget
- * behind the key is the backstop these ceilings exist to keep distant.
- */
 /* The quota shape is the wire contract's, imported rather than restated, so
    the endpoint and the desktop reading it cannot drift. */
 export type { HostedQuota } from "../core.js";
@@ -26,16 +18,6 @@ export type { HostedQuota } from "../core.js";
 export interface HostedSpend {
   allowed: boolean;
   quota: HostedQuota;
-}
-
-/** Where one meter stands on one day, worded once for the spend and the read. */
-function meterStanding(used: number, day: string): HostedQuota {
-  return {
-    used,
-    limit: HOSTED_DAILY_LIMIT,
-    remaining: Math.max(0, HOSTED_DAILY_LIMIT - used),
-    resetsAt: utcDayEnd(day),
-  };
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -53,7 +35,7 @@ export function utcDayEnd(dayKey: string): number {
 type UsageDatabase = Pick<ReturnType<typeof createDatabase>, "insert">;
 
 /**
- * Spends one use of a meter and answers whether it fit inside the day. The
+ * Spends one hosted use and answers whether it fit inside the day. The
  * increment is a single atomic upsert taken before the upstream call, so two
  * racing requests cannot both be the last allowed use: whichever lands second
  * is refused. A refused attempt still counts — the counter
@@ -61,31 +43,22 @@ type UsageDatabase = Pick<ReturnType<typeof createDatabase>, "insert">;
  */
 export async function spendHostedMeter(
   database: UsageDatabase,
-  input: { userId: string; meter: HostedMeter; now: number },
+  input: { userId: string; now: number },
 ): Promise<HostedSpend> {
   const day = utcDayKey(input.now);
-  const spendsVoice = input.meter === HOSTED_METER.VOICE_CALL;
   const [row] = await database
     .insert(hostedUsage)
-    .values({
-      userId: input.userId,
-      day,
-      voiceCalls: spendsVoice ? 1 : 0,
-      attentionReviews: spendsVoice ? 0 : 1,
-    })
+    .values({ userId: input.userId, day, calls: 1 })
     .onConflictDoUpdate({
       target: [hostedUsage.userId, hostedUsage.day],
-      set: spendsVoice
-        ? { voiceCalls: sql`${hostedUsage.voiceCalls} + 1` }
-        : { attentionReviews: sql`${hostedUsage.attentionReviews} + 1` },
+      set: { calls: sql`${hostedUsage.calls} + 1` },
     })
     .returning();
   if (!row) throw new Error("The usage upsert returned no row.");
 
-  const used = spendsVoice ? row.voiceCalls : row.attentionReviews;
   return {
-    allowed: used <= HOSTED_DAILY_LIMIT,
-    quota: meterStanding(used, day),
+    allowed: row.calls <= HOSTED_DAILY_LIMIT,
+    quota: { used: row.calls, limit: HOSTED_DAILY_LIMIT, resetsAt: utcDayEnd(day) },
   };
 }
 
