@@ -1,25 +1,13 @@
-export {
-  ConversationThread,
-  type ConversationThreadOptions,
-  conversationEntryBelongsToConversation,
-  rebaseSpokenTurnMarks,
-  type SpokenTurnMark,
-} from "./conversation-thread.js";
-export { HistoryReporter, type TakenLines, withPendingLines } from "./history-reporter.js";
+export { askBrain, type BrainAskContext } from "./brain-ask.js";
+export { ConversationThread, type ConversationThreadOptions } from "./conversation-thread.js";
+export { NoticeStrip, VOICE_ERROR_NOTICE_MS } from "./notice-strip.js";
 export {
   ReplyDeliveryPlayer,
   type ReplyDeliveryPlayerOptions,
   type ReplyDeliverySession,
 } from "./reply-delivery-player.js";
-export {
-  ANNOUNCER_GRACE_MS,
-  ANNOUNCER_LINGER_MS,
-  ANNOUNCER_RETRY_DELAY_MS,
-  MAXIMUM_CONNECT_ATTEMPTS,
-  SpeechMouth,
-  type SpeechMouthOptions,
-  type SpeechMouthSession,
-} from "./speech-mouth.js";
+export { SpeechMouth, type SpeechMouthOptions, type SpeechMouthSession } from "./speech-mouth.js";
+export type { VoiceBridge } from "./voice-bridge.js";
 export {
   type ConversationVoiceCall,
   REPLY_KIND,
@@ -29,32 +17,12 @@ export {
 export {
   type ConversationCallHooks,
   type SpeakOnlyCallHooks,
-  type VoiceBridge,
   type VoiceConversationSlice,
-  type VoiceExchangeOpening,
   VoiceOrchestrator,
   type VoiceOrchestratorDeps,
   type VoiceState,
   type VoiceSurroundings,
-  type VoiceViewReport,
 } from "./voice-orchestrator.js";
-export {
-  activeVoiceStream,
-  liveConversationEntries,
-  liveSpeedApplies,
-  lukeCaptionsToShow,
-  spokenAskPreviewSurvives,
-  talkKeyPress,
-  talkOpeningHolds,
-  typedAskHolds,
-  VOICE_ERROR_NOTICE_MS,
-  VOICE_RESTART,
-  type VoiceRestart,
-  type VoiceRestartDecision,
-  voiceRestartAction,
-} from "./voice-policy.js";
-export {
-  VOICE_READINESS_PART,
-  VoiceReadiness,
-  type VoiceReadinessPart,
-} from "./voice-readiness.js";
+export { activeVoiceStream } from "./voice-policy.js";
+export { VOICE_READINESS_PART, type VoiceReadinessPart } from "./voice-readiness.js";
+export type { VoiceExchangeOpening, VoiceViewReport } from "./voice-view-reporter.js";

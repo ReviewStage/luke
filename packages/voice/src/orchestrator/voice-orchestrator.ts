@@ -1,20 +1,5 @@
-import {
-  BRAIN_ASK_PENDING_NOTE,
-  BRAIN_ASK_REFUSAL,
-  BRAIN_REQUEST_ORIGIN,
-  BRAIN_SUBMISSION_OUTCOME,
-  brainReplyWords,
-} from "@sidecar/brain/requests";
-import {
-  BRAIN_ASK_PENDING_STATUS,
-  type BrainAskResult,
-  type BrainAskSubmission,
-  type BrainAskSubmissionResult,
-  type BrainAskWait,
-  type BrainReplyClaimResult,
-  type BrainReplyOffer,
-  brainRequestPending,
-} from "@sidecar/brain/requests-wire";
+import { BRAIN_REQUEST_ORIGIN } from "@sidecar/brain/requests";
+import type { BrainAskResult, BrainReplyOffer } from "@sidecar/brain/requests-wire";
 import {
   ARRIVAL_SPEECH_KIND,
   type ArrivalSpeech,
@@ -24,7 +9,7 @@ import {
   type RealtimeVoiceSpeed,
   voiceExchangeActive,
 } from "@sidecar/realtime";
-import type { SpeechOffer, SpeechOutcome } from "@sidecar/realtime/speech";
+import type { SpeechOffer } from "@sidecar/realtime/speech";
 import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import {
   announcementConversationEntry,
@@ -34,10 +19,12 @@ import {
   type Session,
 } from "@sidecar/session";
 import { TALK_KEY_RELEASE, talkKeyRelease, voiceHotkeyLabel } from "@sidecar/settings";
-import { ACT_RESULT_STATUS } from "@sidecar/wire";
+import { askBrain } from "./brain-ask.js";
 import { ConversationThread } from "./conversation-thread.js";
+import { NoticeStrip } from "./notice-strip.js";
 import { ReplyDeliveryPlayer } from "./reply-delivery-player.js";
 import { SpeechMouth } from "./speech-mouth.js";
+import type { VoiceBridge } from "./voice-bridge.js";
 import {
   type ConversationVoiceCall,
   REPLY_KIND,
@@ -53,53 +40,15 @@ import {
   talkKeyPress,
   talkOpeningHolds,
   typedAskHolds,
-  VOICE_ERROR_NOTICE_MS,
   VOICE_RESTART,
   voiceRestartAction,
 } from "./voice-policy.js";
 import { VoiceReadiness, type VoiceReadinessPart } from "./voice-readiness.js";
-
-/**
- * What a panel needs to draw the live conversation and cannot derive or read
- * elsewhere. Reported whole on every edge; the main process writes it to the
- * document every panel reads.
- */
-export interface VoiceViewReport {
-  voiceStatus: RealtimeStatus;
-  voiceError: string | undefined;
-  voiceNotice: string | undefined;
-  talkOpening: boolean;
-  lukeCaptions: readonly string[] | undefined;
-  liveConversationEntries: readonly ConversationEntry[];
-}
-
-/**
- * Who opened the exchange this edge began, as facts rather than as the
- * counted name: Luke's own speak-only call has no microphone, and only the
- * composer says typed in advance. Present on the rising edge alone, so a turn
- * walking from connecting through responding is counted once.
- */
-export interface VoiceExchangeOpening {
-  microphoneCall: boolean;
-  typedAsk: boolean;
-}
-
-/** Everything the orchestrator asks of the process that hosts it. */
-export interface VoiceBridge {
-  reportView(view: VoiceViewReport, exchange: VoiceExchangeOpening | undefined): void;
-  reportReady(epoch: number): void;
-  /** Persists appended lines with the store that owns the thread; answers whether it took them. */
-  appendConversation(entries: readonly ConversationEntry[]): Promise<boolean>;
-  settleSpeech(id: string, outcome: SpeechOutcome): void;
-  submitBrainAsk(submission: BrainAskSubmission): Promise<BrainAskSubmissionResult>;
-  waitBrainAsk(runId: string, epoch: number): Promise<BrainAskWait>;
-  claimBrainReply(runId: string, deliveryId: string, epoch: number): Promise<BrainReplyClaimResult>;
-  ackBrainReply(runId: string, deliveryId: string, epoch: number): void;
-  /** Asks the system for the microphone, answering whether it is granted. */
-  requestMicrophone(): Promise<boolean>;
-  /** The neutral note said when the hosted service's emergency brake refuses a call. */
-  hostedUnavailableNote(): Promise<string | undefined>;
-}
+import {
+  type VoiceExchangeOpening,
+  type VoiceViewReport,
+  VoiceViewReporter,
+} from "./voice-view-reporter.js";
 
 /**
  * What the orchestrator reads rather than owns: the settings that shape a
@@ -167,18 +116,6 @@ export interface ConversationCallHooks<Stream> extends SpeakOnlyCallHooks<Stream
   onSpokenAskCommitted(itemId: string): void;
 }
 
-/** Whether two reports say the same thing, which is when neither is worth sending. */
-function sameVoiceView(left: VoiceViewReport, right: VoiceViewReport): boolean {
-  return (
-    left.voiceStatus === right.voiceStatus &&
-    left.voiceError === right.voiceError &&
-    left.voiceNotice === right.voiceNotice &&
-    left.talkOpening === right.talkOpening &&
-    left.lukeCaptions === right.lukeCaptions &&
-    left.liveConversationEntries === right.liveConversationEntries
-  );
-}
-
 /**
  * The words of the reply under way and whose they are, held as one value so
  * a live History line can never file a caption under a different reply.
@@ -192,7 +129,13 @@ export interface VoiceOrchestratorDeps<Stream> {
   createConversationCall(hooks: ConversationCallHooks<Stream>): ConversationVoiceCall;
   createSpeakOnlyCall(hooks: SpeakOnlyCallHooks<Stream>): SpeakOnlyVoiceCall;
   bridge: VoiceBridge;
+  /** The wall clock the thread stamps its lines with. */
   now?: () => number;
+  /**
+   * A monotonic reading, which is what a held key is measured against: how
+   * long a press lasted must not answer to a clock the system can move.
+   */
+  elapsed?: () => number;
   schedule?: (callback: () => void, delayMs: number) => ScheduledTimer;
   cancel?: (timer: ScheduledTimer) => void;
   newEventId?: () => string;
@@ -213,6 +156,10 @@ export class VoiceOrchestrator<Stream> {
   readonly #bridge: VoiceBridge;
   readonly #thread: ConversationThread;
   readonly #readiness: VoiceReadiness;
+  /** The two lines the strip draws when there is no speech to draw, and their shared clock. */
+  readonly #strip: NoticeStrip;
+  /** What leaves for every panel to draw, and the rules about when. */
+  readonly #reporter: VoiceViewReporter;
   readonly #listeners = new Set<(state: VoiceState<Stream>) => void>();
 
   #surroundings: VoiceSurroundings = NO_SURROUNDINGS;
@@ -229,8 +176,6 @@ export class VoiceOrchestrator<Stream> {
   #replyPlayer: ReplyDeliveryPlayer | undefined;
 
   #status: RealtimeStatus = REALTIME_STATUS.IDLE;
-  #error: string | undefined;
-  #notice: string | undefined;
   /**
    * A pressed talk key still waiting for the call it asked to open. The meter
    * is drawn from this rather than from the connection, because the press is
@@ -253,8 +198,6 @@ export class VoiceOrchestrator<Stream> {
   #talkPressedAt: number | undefined;
   /** Whether a tap has left a turn open for a later press to end. */
   #talkLatched = false;
-  /** Whether the exchange the count last saw was still standing. */
-  #exchangeCounted = false;
   /**
    * Whether the exchange about to open was opened by the composer. The typed
    * caption cannot answer for it: that is set once the words are away, which
@@ -273,19 +216,24 @@ export class VoiceOrchestrator<Stream> {
   #heardSpeed: RealtimeVoiceSpeed | undefined;
   #restartDue = false;
 
-  #errorTimer: ScheduledTimer | undefined;
-  #noticeTimer: ScheduledTimer | undefined;
   #state: VoiceState<Stream> = { meterStream: undefined, remoteStream: undefined };
-  #reported: VoiceViewReport | undefined;
   #live: readonly ConversationEntry[] = [];
   #liveFrom: { previews: ReadonlyMap<string, string>; caption: VoiceCaption } | undefined;
-  #reportQueued = false;
-  #stopped = false;
 
   constructor(deps: VoiceOrchestratorDeps<Stream>) {
     this.#deps = deps;
     this.#bridge = deps.bridge;
     this.#readiness = new VoiceReadiness((epoch) => deps.bridge.reportReady(epoch));
+    this.#strip = new NoticeStrip({
+      onChanged: () => this.#report(),
+      schedule: deps.schedule,
+      cancel: deps.cancel,
+    });
+    this.#reporter = new VoiceViewReporter({
+      compose: () => this.#view(),
+      opening: () => this.#opening(),
+      report: (view, exchange) => deps.bridge.reportView(view, exchange),
+    });
     this.#thread = new ConversationThread({
       append: (entries) => deps.bridge.appendConversation(entries),
       onChanged: () => this.#report(),
@@ -371,7 +319,7 @@ export class VoiceOrchestrator<Stream> {
    * and applied when it comes up.
    */
   async beginTalk(): Promise<void> {
-    this.#talkPressedAt = this.#now();
+    this.#talkPressedAt = this.#elapsed();
     // An ask whose send never landed leaves its mark behind; the key is the
     // other way in, so this press is what clears it.
     this.#typedExchange = false;
@@ -393,7 +341,7 @@ export class VoiceOrchestrator<Stream> {
       const granted = await this.#bridge.requestMicrophone();
       if (!granted) {
         // Said where the device failure used to land it: the caption strip.
-        this.#setError(
+        this.#strip.showError(
           "The talk key needs the microphone. Allow it in System Settings, " +
             "under Privacy & Security, Microphone — or type to Luke instead.",
         );
@@ -422,7 +370,7 @@ export class VoiceOrchestrator<Stream> {
     // the emergency ceiling private and surface only temporary unavailability.
     if (call.status === REALTIME_STATUS.UNAVAILABLE) {
       const unavailable = await this.#bridge.hostedUnavailableNote();
-      if (unavailable) this.#setNotice(unavailable);
+      if (unavailable) this.#strip.showNotice(unavailable);
     }
   }
 
@@ -439,7 +387,7 @@ export class VoiceOrchestrator<Stream> {
     // ended by Escape leaves the key still down.
     if (pressedAt === undefined) return;
     const release = talkKeyRelease({
-      heldMs: this.#now() - pressedAt,
+      heldMs: this.#elapsed() - pressedAt,
       latched: this.#talkLatched,
     });
     if (release === TALK_KEY_RELEASE.LATCH) {
@@ -535,11 +483,8 @@ export class VoiceOrchestrator<Stream> {
 
   /** Puts away whichever calls this window still holds, and lets go of every clock. */
   async stop(): Promise<void> {
-    this.#stopped = true;
-    this.#clearTimer(this.#errorTimer);
-    this.#errorTimer = undefined;
-    this.#clearTimer(this.#noticeTimer);
-    this.#noticeTimer = undefined;
+    this.#reporter.stop();
+    this.#strip.stop();
     this.#thread.stop();
     await this.#closeCalls();
   }
@@ -551,10 +496,20 @@ export class VoiceOrchestrator<Stream> {
       onStatus: (status) => this.#setStatus(status),
       onRemoteStream: (stream) => this.#setRemoteStream(stream),
       onLocalStream: (stream) => this.#setLocalStream(stream),
-      onError: (message) => this.#setError(message),
+      onError: (message) => this.#strip.showError(message),
       onCaption: (texts, kind) => this.#setCaption(texts, kind),
       onReplyEnded: (texts, kind, runId) => this.#replyEnded(texts, kind, runId),
-      askBrain: (question, submissionId) => this.#askBrain(question, submissionId),
+      askBrain: (question, submissionId) =>
+        askBrain(
+          {
+            bridge: this.#bridge,
+            thread: this.#thread,
+            epoch: () => this.#epoch ?? 0,
+            withdrawals: () => this.#replyWithdrawals,
+          },
+          question,
+          submissionId,
+        ),
       onSpokenAsk: (transcript, itemId) => this.#thread.rememberSpokenAsk(transcript, itemId),
       onSpokenAskDelta: (itemId, delta) => this.#thread.previewSpokenAsk(itemId, delta),
       onSpokenAskFailed: (itemId) => this.#thread.dropPreview(itemId),
@@ -585,7 +540,7 @@ export class VoiceOrchestrator<Stream> {
         if (heard()) this.#setRemoteStream(stream);
       },
       onError: (message) => {
-        if (heard()) this.#setError(message);
+        if (heard()) this.#strip.showError(message);
       },
       onCaption: (texts, kind) => this.#setCaption(texts, kind),
       onReplyEnded: (texts, kind, runId) => this.#replyEnded(texts, kind, runId),
@@ -631,8 +586,7 @@ export class VoiceOrchestrator<Stream> {
    */
   async #startConversation(): Promise<boolean> {
     await this.#thread.waitForContext();
-    this.#setError(undefined);
-    this.#setNotice(undefined);
+    this.#strip.clear();
     this.#standDownSpeakOnlyCall();
     return this.#ensureConversationCall().connect();
   }
@@ -643,7 +597,7 @@ export class VoiceOrchestrator<Stream> {
    * is what opens a capture device; a call opened for a typed ask never asks.
    */
   async #startMicrophone(): Promise<void> {
-    this.#setError(undefined);
+    this.#strip.showError(undefined);
     const call = this.#ensureConversationCall();
     if (!(await this.#bridge.requestMicrophone())) {
       // The press that asked for this is still waiting for a call that is now
@@ -672,14 +626,13 @@ export class VoiceOrchestrator<Stream> {
       (session) => session.status === SESSION_STATUS.WORKING && session.realtimeVoice !== true,
     );
     // The chord read as the document holds it: a key deleted or refused its
-    // chord is absent there, so no beat can name one that no longer answers.
-    const suggestsKey = held.voiceAvailable === true && held.talkKey !== undefined;
+    // chord is absent there, so no beat can name one that no longer answers,
+    // and a beat is only offered the key while voice could actually take it.
+    const talkKey = held.voiceAvailable === true ? held.talkKey : undefined;
     return {
       ...speech,
       ...(working ? { sessionTitle: working.title } : undefined),
-      ...(suggestsKey && held.talkKey !== undefined
-        ? { talkKeyLabel: voiceHotkeyLabel(held.talkKey) }
-        : undefined),
+      ...(talkKey === undefined ? undefined : { talkKeyLabel: voiceHotkeyLabel(talkKey) }),
     };
   }
 
@@ -750,12 +703,12 @@ export class VoiceOrchestrator<Stream> {
       claim: (offer) => this.#bridge.claimBrainReply(offer.runId, offer.deliveryId, offer.epoch),
       acknowledge: (offer) =>
         this.#bridge.ackBrainReply(offer.runId, offer.deliveryId, offer.epoch),
-      showNotice: (words) => this.#setNotice(words),
+      showNotice: (words) => this.#strip.showNotice(words),
       // Only a typed ask's reply is the composer's exchange: it counts as one
       // and holds the caption the composer asked for. A spoken ask answered
       // late is the spoken exchange it always was.
       onSpeaking: (origin) => {
-        this.#setNotice(undefined);
+        this.#strip.showNotice(undefined);
         if (origin !== BRAIN_REQUEST_ORIGIN.TYPED) return;
         this.#typedExchange = true;
         this.#typedAsk = true;
@@ -764,51 +717,6 @@ export class VoiceOrchestrator<Stream> {
       conversationGeneration: () => this.#thread.generation,
     });
     return this.#replyPlayer;
-  }
-
-  /**
-   * The voice's one tool: the developer's words go to the brain in the main
-   * process, which reads, decides, and acts behind its own validators. The
-   * tool call's id is the submission, so a call the service repeats finds the
-   * run it already has. The reply the follow-up then speaks was recorded by
-   * the main process at the run's end, so the words that end here are not
-   * recorded again.
-   */
-  async #askBrain(question: string, submissionId: string): Promise<BrainAskResult> {
-    // The turn this ask belongs to is the one committed when the ask was
-    // made, read before the acceptance is awaited: a turn committed while the
-    // brain is deciding is somebody else's words.
-    const spokenTurn = this.#thread.latestTurn;
-    const submitted = await this.#bridge.submitBrainAsk({
-      submissionId,
-      question,
-      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-    });
-    if (submitted.outcome !== BRAIN_SUBMISSION_OUTCOME.ACCEPTED) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: BRAIN_ASK_REFUSAL[submitted.reason] };
-    }
-    this.#thread.tieTurnToRun(spokenTurn, submitted.runId);
-    // The wait names this load's receiver epoch: the words come back for this
-    // call to say only if the main process grants them to it, once, with the
-    // end already in History. The moment is captured first: a Clear or a
-    // withdrawn generation while the wait is held means words granted to it
-    // are not said — the follow-up hears the pending note, and History holds
-    // nothing of the thread they answered.
-    const generation = this.#thread.generation;
-    const withdrawals = this.#replyWithdrawals;
-    const waited = await this.#bridge.waitBrainAsk(submitted.runId, this.#epoch ?? 0);
-    if (!waited.record) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: BRAIN_ASK_REFUSAL.absent };
-    }
-    const moved = generation !== this.#thread.generation || withdrawals !== this.#replyWithdrawals;
-    if (brainRequestPending(waited.record) || !waited.speak || moved) {
-      return { status: BRAIN_ASK_PENDING_STATUS, note: BRAIN_ASK_PENDING_NOTE };
-    }
-    return {
-      status: ACT_RESULT_STATUS.ACCEPTED,
-      briefing: brainReplyWords(waited.record) ?? "",
-      runId: waited.record.runId,
-    };
   }
 
   #replyEnded(
@@ -858,10 +766,7 @@ export class VoiceOrchestrator<Stream> {
     // An exchange going live outranks the notice clock: the conversation has
     // moved on, and a fault the turn hid must not come back once the words
     // finish.
-    if (voiceExchangeActive(status)) {
-      this.#setError(undefined);
-      this.#setNotice(undefined);
-    }
+    if (voiceExchangeActive(status)) this.#strip.clear();
     // The mouth paces itself by the status too: READY is when the offer in
     // hand can speak and when an empty hand starts the walk toward closing
     // the call Luke opened for himself.
@@ -937,75 +842,44 @@ export class VoiceOrchestrator<Stream> {
     this.#report();
   }
 
-  /**
-   * The strip an error is drawn on takes no pointer, so nothing but time can
-   * dismiss it: a fault left up would sit on the desktop all afternoon. A new
-   * error re-arms the clock — it is a new thing to read.
-   */
-  #setError(message: string | undefined): void {
-    this.#error = message;
-    this.#clearTimer(this.#errorTimer);
-    this.#errorTimer =
-      message === undefined
-        ? undefined
-        : this.#schedule(() => {
-            this.#errorTimer = undefined;
-            this.#error = undefined;
-            this.#report();
-          }, VOICE_ERROR_NOTICE_MS);
-    this.#report();
-  }
-
-  /** The notice leaves on the same clock the error does: it shares the strip. */
-  #setNotice(message: string | undefined): void {
-    this.#notice = message;
-    this.#clearTimer(this.#noticeTimer);
-    this.#noticeTimer =
-      message === undefined
-        ? undefined
-        : this.#schedule(() => {
-            this.#noticeTimer = undefined;
-            this.#notice = undefined;
-            this.#report();
-          }, VOICE_ERROR_NOTICE_MS);
-    this.#report();
-  }
-
   // — what leaves —
 
   /**
-   * One report per edge, coalesced so that two facts moving together are one
-   * snapshot rather than two. The view goes to the main process, which hands
-   * it to every panel; the two streams go to the surface, which is the only
-   * thing that can play or meter one.
+   * Something moved. Which stream the surface should be playing and metering
+   * is settled here, because a listener is what re-reads it; whether the view
+   * moved with it is the reporter's to settle.
    */
   #report(): void {
-    if (this.#stopped || this.#reportQueued) return;
-    this.#reportQueued = true;
-    queueMicrotask(() => {
-      this.#reportQueued = false;
-      if (this.#stopped) return;
-      this.#flush();
-    });
+    this.#publishStreams();
+    this.#reporter.touch();
   }
 
-  #flush(): void {
+  /**
+   * The meter listens to whoever holds the turn, and the audio element plays
+   * whatever the call put there. The snapshot is replaced only when one of
+   * the two changed, so a reader subscribed to it re-renders for nothing.
+   */
+  #publishStreams(): void {
     const meterStream = activeVoiceStream({
       status: this.#status,
       local: this.#localStream,
       remote: this.#remoteStream,
     });
     if (
-      meterStream !== this.#state.meterStream ||
-      this.#remoteStream !== this.#state.remoteStream
+      meterStream === this.#state.meterStream &&
+      this.#remoteStream === this.#state.remoteStream
     ) {
-      this.#state = { meterStream, remoteStream: this.#remoteStream };
-      for (const listener of [...this.#listeners]) listener(this.#state);
+      return;
     }
-    const view: VoiceViewReport = {
+    this.#state = { meterStream, remoteStream: this.#remoteStream };
+    for (const listener of [...this.#listeners]) listener(this.#state);
+  }
+
+  #view(): VoiceViewReport {
+    return {
       voiceStatus: this.#status,
-      voiceError: this.#error,
-      voiceNotice: this.#notice,
+      voiceError: this.#strip.error,
+      voiceNotice: this.#strip.notice,
       talkOpening: this.#talkOpening,
       lukeCaptions: lukeCaptionsToShow({
         captionsEnabled: this.#surroundings.captionsEnabled,
@@ -1016,24 +890,15 @@ export class VoiceOrchestrator<Stream> {
       }),
       liveConversationEntries: this.#liveEntries(),
     };
-    // The view is reported on its own edges alone. Every report becomes a
-    // version of the document this window itself reads, so a report the view
-    // did not move would be answered by a delivery that asked for another.
-    if (this.#reported !== undefined && sameVoiceView(this.#reported, view)) return;
-    this.#reported = view;
-    const active = voiceExchangeActive(this.#status);
-    const rising = active && !this.#exchangeCounted;
-    this.#exchangeCounted = active;
-    if (!rising) {
-      this.#bridge.reportView(view, undefined);
-      return;
-    }
-    const opening: VoiceExchangeOpening = {
+  }
+
+  #opening(): VoiceExchangeOpening {
+    const opening = {
       microphoneCall: this.#conversationCall?.microphoneCall === true,
       typedAsk: this.#typedExchange,
     };
     this.#typedExchange = false;
-    this.#bridge.reportView(view, opening);
+    return opening;
   }
 
   /**
@@ -1056,19 +921,7 @@ export class VoiceOrchestrator<Stream> {
     return this.#live;
   }
 
-  #now(): number {
-    return (this.#deps.now ?? Date.now)();
-  }
-
-  #schedule(callback: () => void, delayMs: number): ScheduledTimer {
-    return (this.#deps.schedule ?? setTimeout)(callback, delayMs);
-  }
-
-  #clearTimer(timer: ScheduledTimer | undefined): void {
-    if (timer === undefined) return;
-    // SAFETY: the handle is whatever `schedule ?? setTimeout` returned, and
-    // the fallbacks are paired — a handle from `setTimeout` can only reach
-    // `clearTimeout`.
-    (this.#deps.cancel ?? clearTimeout)(timer as never);
+  #elapsed(): number {
+    return this.#deps.elapsed?.() ?? performance.now();
   }
 }

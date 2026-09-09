@@ -1,14 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
-import type {
-  ConversationCallHooks,
-  SpeakOnlyCallHooks,
-  VoiceBridge,
-  VoiceExchangeOpening,
-  VoiceViewReport,
-} from "./voice-orchestrator.js";
+import type { VoiceBridge } from "./voice-bridge.js";
+import type { ConversationCallHooks, SpeakOnlyCallHooks } from "./voice-orchestrator.js";
 import { VoiceOrchestrator } from "./voice-orchestrator.js";
+import type { VoiceExchangeOpening, VoiceViewReport } from "./voice-view-reporter.js";
 
 /** A call that does nothing but say what it was told and answer for its status. */
 class FakeCall {
@@ -18,7 +14,7 @@ class FakeCall {
   turns = 0;
   closes = 0;
   constructor(
-    readonly hooks: SpeakOnlyCallHooks<string>,
+    readonly hooks: Partial<ConversationCallHooks<string>> & SpeakOnlyCallHooks<string>,
     readonly developers: boolean,
   ) {}
   get microphoneCall() {
@@ -167,6 +163,25 @@ test("a press the microphone is refused opens no turn and says why", async () =>
 
   assert.equal(calls.conversation?.turns, 0);
   assert.match(String(reports.at(-1)?.view.voiceError), /needs the microphone/);
+});
+
+test("the meter is pointed at whoever holds the turn, and the element at Luke", async () => {
+  const { subject, calls } = orchestrator();
+  const seen: (string | undefined)[][] = [];
+  subject.subscribe((state) => seen.push([state.meterStream, state.remoteStream]));
+  await subject.beginTalk();
+  const conversation = calls.conversation;
+  assert.ok(conversation);
+  conversation.hooks.onLocalStream?.("mic");
+  conversation.hooks.onRemoteStream("luke");
+  conversation.settle(REALTIME_STATUS.LISTENING);
+  assert.deepEqual(seen.at(-1), ["mic", "luke"]);
+  conversation.settle(REALTIME_STATUS.RESPONDING);
+  assert.deepEqual(seen.at(-1), ["luke", "luke"]);
+  // Between turns the meter listens to nobody, but the element keeps the
+  // stream Luke's voice would arrive on.
+  conversation.settle(REALTIME_STATUS.READY);
+  assert.deepEqual(seen.at(-1), [undefined, "luke"]);
 });
 
 test("a Clear retires the latch, so the next press opens a turn rather than ending one", async () => {
