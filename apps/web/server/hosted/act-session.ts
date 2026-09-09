@@ -123,7 +123,7 @@ const WORKSPACE_FIELDS = s.record(
 
 /**
  * One session-scoped act request: every act a mobile row asks of an observed
- * session shares these gates — bearer auth, a vault provider id, a bounded
+ * session shares these gates — bearer auth, a cloud-agent provider id, a bounded
  * session id, the act's own bounded fields, the unsupported answer before a
  * key is required, and the stored key decrypted only for a request that
  * passed everything else. Only the act's fields and its plan differ, so they
@@ -154,7 +154,7 @@ export interface SessionActOptions<Fields, Target>
  * the answer the caller gets instead. The gates and their order are the same
  * for a session act and a workspace creation: the method, the encryption
  * secret this deployment must hold, the bearer, a body that is a record, and
- * a provider the vault accepts a key for.
+ * a cloud-agent provider the vault accepts a key for.
  */
 interface ActAdmission {
   userId: string;
