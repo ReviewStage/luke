@@ -45,6 +45,15 @@ export interface PanelManagerOptions {
    * announced again for the window to be handed one.
    */
   onWindowFactsChanged?: () => void;
+  /**
+   * The renderer behind a fullscreen takeover died, hung, or never loaded. A
+   * dead renderer leaves its window standing, and a window standing over the
+   * whole display with nothing drawn on it is the one failure a takeover must
+   * not be able to reach — the desktop, the menu bar, and every other app are
+   * behind it. An ordinary panel's renderer going is the panel's own affair
+   * and nothing here answers for it.
+   */
+  onTakeoverGone?: (reason: string) => void;
 }
 
 /**
@@ -77,6 +86,7 @@ export class PanelManager {
   readonly #rendererUrl: string;
   readonly #onAllClosed: (() => void) | undefined;
   readonly #onWindowFactsChanged: (() => void) | undefined;
+  readonly #onTakeoverGone: ((reason: string) => void) | undefined;
   readonly initialMode: WindowMode;
   /**
    * One panel window per display Luke stands on, keyed by the display's id, each
@@ -97,6 +107,13 @@ export class PanelManager {
   /** The chosen form for displays without a housing, mirrored the same way. */
   #panelFormFactor: PanelFormFactor = DEFAULT_PANEL_FORM_FACTOR;
   #nativeScreens = new Map<number, NativeNotchGeometry>();
+  /**
+   * The display a fullscreen mode of the panel currently covers, absent when
+   * none does. It is the whole standing of a takeover here: the mode changes,
+   * the layout, and the reconciler all read it, so a takeover cannot be
+   * half-held.
+   */
+  #takeover: number | undefined;
 
   constructor(options: PanelManagerOptions) {
     this.#runMode = options.runMode;
@@ -106,6 +123,7 @@ export class PanelManager {
     this.#rendererUrl = options.rendererUrl;
     this.#onAllClosed = options.onAllClosed;
     this.#onWindowFactsChanged = options.onWindowFactsChanged;
+    this.#onTakeoverGone = options.onTakeoverGone;
     this.initialMode = initialWindowMode(options.runMode, options.argv ?? process.argv);
   }
 
@@ -152,6 +170,10 @@ export class PanelManager {
    * on one monitor is no reason to resize the capsule on another.
    */
   setMode(displayId: number, mode: WindowMode, requestFocus: boolean): WindowMode {
+    // A takeover is the whole of its display for as long as it holds it, and
+    // every way a mode is asked for — the talk key, the tray, a second launch
+    // — arrives here, so the refusal belongs here and nowhere else.
+    if (this.#takeover === displayId) return this.modeFor(displayId);
     this.#modes.set(displayId, mode);
     const window = this.#windows.get(displayId);
     if (!window || window.isDestroyed()) return mode;
@@ -298,6 +320,92 @@ export class PanelManager {
   }
 
   /**
+   * Puts one panel window over the whole of its display for as long as a
+   * fullscreen mode runs in it. The window is the panel's own, so a takeover
+   * cannot strand the user: quitting, reconciling, and the display watch all
+   * still answer, and a renderer that dies, hangs, or never loads hands the
+   * display back through `onTakeoverGone`.
+   *
+   * Idempotent, and re-taking is how a takeover follows the screen: it reads
+   * the primary panel and its display afresh, so a window rebound to another
+   * display, or one whose display changed resolution, covers what is there
+   * now. Only the fit is re-applied — a re-take is a display change, and one
+   * that reclaimed the pointer or the keyboard would take back what a landed
+   * takeover has already handed to the developer. Answers the display id it
+   * took, or `undefined` when no panel stands anywhere — the caller then
+   * skips the takeover entirely rather than creating a window for it.
+   */
+  enterTakeover(): number | undefined {
+    const window = this.primaryPanel();
+    if (!window) return undefined;
+    const displayId = this.displayIdFor(window.webContents);
+    if (displayId === undefined) return undefined;
+    const display = this.display(displayId);
+    if (!display) return undefined;
+    const taking = this.#takeover === undefined;
+    this.#takeover = displayId;
+    // The display's own bounds rather than AppKit's fullscreen: this window is
+    // frameless, transparent and declared unfullscreenable, and a Space of its
+    // own would animate the transition and hand back a frame nothing here
+    // chose. Resizing in place covers the menu bar's strip, which is where a
+    // flight that lands on the housing has to draw.
+    window.setBounds(display.bounds);
+    if (taking) {
+      window.setAlwaysOnTop(true, "screen-saver");
+      // The takeover is the whole surface, so it starts by intercepting
+      // everything; what it hands back once it has landed is its own to say,
+      // through the same pointer interception every panel keeps.
+      window.setIgnoreMouseEvents(false);
+      window.setFocusable(this.#runMode.takesFocus);
+      this.#raiseTakeover(window, displayId);
+    }
+    // One document-wide standing cannot be drawn twice, so the panel set
+    // collapses to the display the takeover covers: this takes down any panel
+    // the stored choice raised on another display, and `leaveTakeover`
+    // honours that choice again.
+    this.reconcile();
+    return displayId;
+  }
+
+  /**
+   * Brings the takeover forward, once it has something to show. A window born
+   * `show: false` has not painted yet, and a transparent surface put over the
+   * whole display before its first frame is a blank sheet swallowing every
+   * click — so the raise waits for the paint, exactly as the takeover's own
+   * window used to.
+   */
+  #raiseTakeover(window: BrowserWindow, displayId: number): void {
+    if (window.isVisible()) {
+      this.#focusWindow(window);
+      return;
+    }
+    window.once("ready-to-show", () => {
+      if (window.isDestroyed() || this.#takeover !== displayId) return;
+      this.#focusWindow(window);
+    });
+  }
+
+  /**
+   * Returns the takeover's window to the mode it held — its bounds among
+   * them, laid out by the same reconcile every other caller goes through, so
+   * the stored choice of displays stands again. Idempotent, and safe to call
+   * for a window that has since gone.
+   */
+  leaveTakeover(): void {
+    const displayId = this.#takeover;
+    if (displayId === undefined) return;
+    this.#takeover = undefined;
+    const window = this.#windows.get(displayId);
+    if (window && !window.isDestroyed()) {
+      window.setAlwaysOnTop(true, "pop-up-menu");
+      window.setIgnoreMouseEvents(true, { forward: true });
+      window.setFocusable(this.modeFor(displayId) === "expanded" && this.#runMode.takesFocus);
+    }
+    this.reconcile();
+    this.showInactiveAll();
+  }
+
+  /**
    * Whether a spoken exchange is live, as the main process derives it from the
    * voice window's report. One answer for every display: the exchange lives
    * in no panel, so no panel's coming or going can change it, and the media
@@ -356,6 +464,15 @@ export class PanelManager {
    * on the main display regardless, where its fixture housing is pinned.
    */
   #effectiveDisplayIds(): number[] {
+    // A takeover covers the display it took, and a second panel standing on
+    // another monitor for the duration of a one-time fullscreen mode is a
+    // surface nobody asked for. The stored choice is honoured again by the
+    // reconcile inside `leaveTakeover`. A takeover whose display has gone
+    // pins nothing: the ordinary answer is what moves its window somewhere it
+    // can stand, and the takeover travels with it.
+    if (this.#takeover !== undefined && this.display(this.#takeover) !== undefined) {
+      return [this.#takeover];
+    }
     if (this.#runMode.takesFocus && this.#showOnAllDisplays) {
       return screen.getAllDisplays().map((display) => display.id);
     }
@@ -382,6 +499,9 @@ export class PanelManager {
   #position(displayId: number): void {
     const window = this.#windows.get(displayId);
     if (!window || window.isDestroyed()) return;
+    // A takeover's bounds are the display's, and nothing that lays out a
+    // capsule may resize it out from under itself.
+    if (this.#takeover === displayId) return;
     const display = this.display(displayId);
     // A window whose display has gone is the reconciler's to take down, not
     // this function's to guess a home for.
@@ -409,6 +529,11 @@ export class PanelManager {
     this.#windows.set(toDisplayId, window);
     this.#modes.set(toDisplayId, this.modeFor(fromDisplayId));
     this.#modes.delete(fromDisplayId);
+    // A takeover names a display and this window has just changed which one
+    // it stands on, so the takeover travels with it rather than being
+    // released and taken afresh — which would reclaim the pointer and the
+    // keyboard a landed takeover has already handed back.
+    if (this.#takeover === fromDisplayId) this.#takeover = toDisplayId;
     // The timer's closure names the old display; the reposition below redraws
     // whatever a cancelled collapse would have.
     this.#clearCollapseTimer(fromDisplayId);
@@ -483,6 +608,28 @@ export class PanelManager {
     this.#configure(window);
     window.setIgnoreMouseEvents(true, { forward: true });
     refuseForeignNavigation(window, this.#rendererUrl);
+    // Electron leaves the window standing when its renderer goes, so nothing
+    // below fires for a dead takeover; the `closed` handler answers only a
+    // window that actually went away. Answered for the takeover alone,
+    // because it is the only panel whose blank window covers the screen.
+    const takeoverGone = (reason: string) => {
+      if (this.#takeover === undefined || this.#windows.get(this.#takeover) !== window) return;
+      this.#onTakeoverGone?.(reason);
+      // Handing the display back leaves the window standing with a dead
+      // renderer behind it, and a panel nobody can draw in is no way back:
+      // the same window is loaded again, which is what raising a fresh panel
+      // did before the takeover shared the panel's own.
+      if (!window.isDestroyed()) window.webContents.reload();
+    };
+    window.webContents.on("render-process-gone", (_event, details) => {
+      takeoverGone(`its renderer went: ${details.reason}`);
+    });
+    window.on("unresponsive", () => {
+      takeoverGone("its renderer stopped responding");
+    });
+    window.webContents.on("did-fail-load", (_event, _code, description) => {
+      takeoverGone(`it failed to load: ${description}`);
+    });
     window.once("ready-to-show", () => {
       if (this.#runMode.takesFocus && !window.isDestroyed()) window.showInactive();
     });
@@ -496,6 +643,10 @@ export class PanelManager {
         this.#windows.delete(id);
         this.#modes.delete(id);
         this.#clearCollapseTimer(id);
+        // A takeover is its window's, so a window that went down some other
+        // way takes the takeover with it: a display left pinned with nothing
+        // standing on it would have the reconciler raise the takeover again.
+        if (this.#takeover === id) this.#takeover = undefined;
       }
       if (this.#windows.size === 0) this.#onAllClosed?.();
     });

@@ -23,11 +23,6 @@
   transition: opacity var(--duration-quick) var(--motion-exit);
 }
 
-.introduction-stage[data-fading="true"] {
-  opacity: 0;
-  transition: opacity var(--duration-shape) var(--motion-exit);
-}
-
 /* The panel's own row-arrival vocabulary hides rows until the presentation
    declares them arrived; before the flight the introduction has no
    presentation, so its rows simply stand once their own staging lands them. */

@@ -30,7 +30,7 @@ import { windowSurfaceActRows, windowSurfaceReports } from "./window-surface";
 export function registerDesktopIpc(services: DesktopServices): void {
   const { config, state, telemetry, native, updates, operator, windows } = services;
   const { runMode, launch } = config;
-  const { panels, voiceWindow, introductionWindow, hotkeys, dock, introductionMinter } = windows;
+  const { panels, voiceWindow, hotkeys, dock, introductionMinter } = windows;
   const recordProductEvent = telemetry.recordProductEvent;
 
   /**
@@ -50,10 +50,10 @@ export function registerDesktopIpc(services: DesktopServices): void {
     openExternal: config.openExternal,
     // While the takeover stands and no voice stands on the host yet, the
     // introduction's bounded mint answers; the moment the account lands, the
-    // host's own credential wins even before the takeover has faded.
+    // host's own credential wins the moment it stands.
     mintRealtimeCredential: async () => {
       if (operator.voiceAvailable()) return operator.host.mintRealtimeCredential();
-      if (!introductionWindow.active) return undefined;
+      if (!windows.introductionPlaying()) return undefined;
       const credential = await introductionMinter.mint();
       if (credential) {
         recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {
@@ -63,7 +63,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       return credential;
     },
     realtimeDiagnostics: async () => {
-      if (!operator.voiceAvailable() && introductionWindow.active) {
+      if (!operator.voiceAvailable() && windows.introductionPlaying()) {
         return introductionMinter.diagnostics();
       }
       return (await operator.host.realtimeDiagnostics()) ?? introductionMinter.diagnostics();
@@ -122,7 +122,8 @@ export function registerDesktopIpc(services: DesktopServices): void {
     [ACT_KIND.ONBOARDING_COMPLETE_CALENDAR]: () => operator.host.completeCalendarOnboarding(),
     // The introduction's one-shot keyless read of this machine's local
     // sessions: the same read-only observe every pass runs, once, with no hook
-    // registration and no credential, answered only to the takeover window.
+    // registration and no credential, answered only while the takeover holds
+    // the panel that is asking.
     [ACT_KIND.INTRODUCTION_PEEK_SESSIONS]: async (_payload, { introduction }) => {
       if (!introduction || !runMode.observesProviders) return [];
       const now = Date.now();
@@ -133,12 +134,12 @@ export function registerDesktopIpc(services: DesktopServices): void {
     },
     [ACT_KIND.INTRODUCTION_COMPLETE]: async ({ given }, { introduction }) => {
       if (!introduction) return;
-      await windows.finishIntroduction(given === true);
+      await windows.endIntroduction(given === true);
     },
     [ACT_KIND.INTRODUCTION_ABANDON]: ({ reason }, { introduction }) => {
       if (!introduction) return;
       config.report(`Introduction abandoned: ${reason}`);
-      void windows.abandonIntroduction();
+      void windows.endIntroduction(false);
     },
     [ACT_KIND.FEEDBACK_SEND]: ({ submission }) => telemetry.deliverFeedback(submission),
     [ACT_KIND.WINDOW_COPY_TEXT]: ({ words }) => clipboard.writeText(words),
@@ -164,10 +165,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
     // The development trace is the host's: a tapped wire event crosses to its
     // writer, which alone knows whether this run records anything.
     recordAgentTrace: (_context, trace) => operator.host.recordAgentTrace(trace),
-    introductionMounted: (context) => {
-      if (!introductionWindow.owns(context.sender)) return;
-      windows.introductionMounted();
-    },
     notifyReady: async (context) => {
       windows.notePanelReady(context.sender);
       if (!launch.captureOutput) return;
@@ -193,7 +190,10 @@ export function registerDesktopIpc(services: DesktopServices): void {
       sender,
       panel: panels.owns(sender),
       voice: voiceWindow.owns(sender),
-      introduction: introductionWindow.owns(sender),
+      // The introduction is a fullscreen mode of the panel rather than a
+      // window of its own, so what a takeover-only row is owed is the
+      // standing the document holds and the panel asking under it.
+      introduction: windows.introductionPlaying() && panels.owns(sender),
     }),
     router: createActRouter(rows),
     reports,

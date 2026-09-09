@@ -18,10 +18,8 @@ export { composeHost, type Host } from "./compose-host.js";
 export type { ConversationOperations } from "./conversation-operations.js";
 export type { HostSeams } from "./host-kernel.js";
 export {
-  INTRODUCTION_FADE_MS,
   INTRODUCTION_HANDOFF_READY_MS,
   INTRODUCTION_PEEK_FRESH_MS,
-  INTRODUCTION_RENDER_DEADLINE_MS,
   shouldRunIntroduction,
 } from "./introduction-flow.js";
 export { jsonStateFile } from "./json-state-file.js";

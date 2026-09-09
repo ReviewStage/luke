@@ -40,7 +40,9 @@ there is no second write path to add one on.
 
 Two renderers run under the same rule, and they are two bundles rather than
 one bundle branching on a role. The panel's is `renderer/index.tsx`, which
-draws the panel or the introduction takeover; the hidden voice window's is
+draws the panel — or the spoken introduction, a fullscreen mode of the panel
+drawn instead of `App` while `state.introduction.playing`, not a window of its
+own; the hidden voice window's is
 `renderer/voice/index.tsx`, and everything it mounts lives under
 `renderer/voice/`: the calls, the microphone, the level meter, the element
 Luke's voice plays through, and the hook that drives `VoiceOrchestrator`

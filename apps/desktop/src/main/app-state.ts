@@ -166,6 +166,9 @@ export function initialAppState(
     conversation: { entries: [], cleared: false },
     announcements: { held: false },
     onboarding: { calendarOwed: false },
+    // Nothing plays until the launch's own gate says so; the window service
+    // is the one writer of this slice.
+    introduction: { playing: false },
     sessionReplay: { permitted: runMode.sendsNetwork, halted: false },
     guide: EMPTY_APP_GUIDE,
   };

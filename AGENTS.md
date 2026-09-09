@@ -1057,12 +1057,14 @@ Trust constraints:
   and capped at the panel's own visible depth however many sessions stand on
   screen. Detection is the keyless local peek — the same read-only observe
   every pass runs, once, with no hook registration and no credential, and
-  answered only to the takeover window, which draws every fresh session it
-  reports in a list that scrolls like the panel's own. The microphone is
+  answered only to the panel the takeover holds, which draws every fresh
+  session it reports in a list that scrolls like the panel's own. The
+  microphone is
   asked for at its own beat through the system's real dialog, the talk key is
   routed to the takeover for the introduction's duration, and the spoken
-  sign-off is where the introduction ends: the takeover closes, the ordinary
-  signed-out panel stands up with its own gate, and observation,
+  sign-off is where the introduction ends: the takeover ends, the panel leaves
+  the display it took and stands up as the ordinary
+  signed-out panel with its own gate, and observation,
   announcements, and every other capability still release only through the
   ordinary account gate when the sign-in itself lands. An introduction
   that cannot speak stands down to the ordinary signed-out launch and writes

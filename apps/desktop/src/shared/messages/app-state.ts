@@ -151,6 +151,17 @@ export interface AppState {
   conversation: AppConversationSlice;
   announcements: { held: boolean };
   onboarding: { calendarOwed: boolean };
+  /**
+   * Whether the one-time spoken introduction holds a panel, true from the
+   * launch's own decision until the ending is taken. It is the takeover's
+   * whole standing: what the panel draws on, what the talk key's keyless
+   * claim is granted against, what the accountless mint is answered against,
+   * and what every takeover-only report is validated against. There is no
+   * second flag anywhere; a stale one would be a fullscreen surface nobody
+   * can dismiss. The display it covers is deliberately not here — that is a
+   * fact the window standing on it answers for, and it rides the snapshot.
+   */
+  introduction: { playing: boolean };
   sessionReplay: AppSessionReplaySlice;
   guide: AppGuideSnapshot;
 }

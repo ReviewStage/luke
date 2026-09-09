@@ -1,8 +1,8 @@
 /**
  * The introduction's sound: a bell when the face completes, a sweep when the
  * dark lifts, and a small chime at the landing. Everything is synthesized
- * here — no asset, no network, nothing read — and it exists only on the
- * introduction window: the panel keeps its standing rule that Luke's voice is
+ * here — no asset, no network, nothing read — and it exists only for the
+ * introduction: the panel keeps its standing rule that Luke's voice is
  * the one thing the app plays. A muted or silenced output skips the whole
  * instrument rather than playing into it, for the same reason captions are
  * the speech there. The introduction never runs in a fixture or capture run,

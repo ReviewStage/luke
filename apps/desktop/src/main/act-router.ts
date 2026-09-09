@@ -12,8 +12,9 @@ import {
 
 /**
  * Who is asking, as this process alone can tell: which window sent the act,
- * and which of the three surfaces that window is. A renderer cannot claim any
- * of it — the standing is read from the windows this process opened.
+ * and which surface that window is drawing. A renderer cannot claim any of it
+ * — the standing is read from the windows this process opened and what the
+ * document says is running in them.
  */
 export interface ActSender {
   sender: WebContents;
@@ -21,7 +22,11 @@ export interface ActSender {
   panel: boolean;
   /** The hidden window the conversation lives in, and the one receiver of replies. */
   voice: boolean;
-  /** The one-time introduction takeover, which stands before any account exists. */
+  /**
+   * A panel the one-time introduction is holding, which stands before any
+   * account exists. The takeover is a fullscreen mode of the panel, so this
+   * is `panel` and the introduction's own standing together.
+   */
   introduction: boolean;
 }
 
