@@ -15,6 +15,7 @@ import {
   type WorkspaceProject,
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
+import { drainMicrotasks } from "#testing/drain";
 import type { SettingsStore } from "../settings-store";
 import { createSessionActPerformer } from "./session-acts";
 
@@ -128,17 +129,13 @@ const SPAWN: CarriedSessionAct = {
   agent: "claude",
 };
 
-async function settleMicrotasks(): Promise<void> {
-  for (let index = 0; index < 10; index += 1) await new Promise((resolve) => setImmediate(resolve));
-}
-
 test("a create whose turn ends while the stored defaults are read never reaches the provider", async () => {
   const adapter = new FakeAdapter();
   const settings = heldSettings();
   const performer = deeperPerformer(adapter, settings.store);
   let revoked = false;
   const pending = performer.perform(CREATE, { isRevoked: () => revoked });
-  await settleMicrotasks();
+  await drainMicrotasks(10);
   assert.equal(settings.reads(), 1);
   assert.deepEqual(adapter.creates, []);
   revoked = true;
@@ -155,7 +152,7 @@ test("a spawn whose turn ends while the stored defaults are read never reaches t
   const performer = deeperPerformer(adapter, settings.store);
   let revoked = false;
   const pending = performer.perform(SPAWN, { isRevoked: () => revoked });
-  await settleMicrotasks();
+  await drainMicrotasks(10);
   assert.equal(settings.reads(), 1);
   assert.deepEqual(adapter.spawns, []);
   revoked = true;
@@ -175,18 +172,18 @@ test("a create whose turn is cancelled while the stored defaults are read settle
     isRevoked: () => controller.signal.aborted,
     signal: controller.signal,
   });
-  await settleMicrotasks();
+  await drainMicrotasks(10);
   assert.equal(settings.reads(), 1);
   controller.abort();
   // Settles without the read being released.
   const result = await pending;
   assert.equal(result.status, ACT_RESULT_STATUS.REJECTED);
   settings.release();
-  await settleMicrotasks();
+  await drainMicrotasks(10);
   assert.deepEqual(adapter.creates, []);
   // A row's own press carries no signal and waits the read out, as before.
   const direct = performer.perform(CREATE, { isRevoked: () => false });
-  await settleMicrotasks();
+  await drainMicrotasks(10);
   settings.release();
   assert.equal((await direct).status, ACT_RESULT_STATUS.ACCEPTED);
 });
@@ -198,14 +195,14 @@ test("a create and a spawn whose turn still stands after the read land on the pr
   const live = { isRevoked: () => false };
 
   const creating = performer.perform(CREATE, live);
-  await settleMicrotasks();
+  await drainMicrotasks(10);
   settings.release();
   assert.equal((await creating).status, ACT_RESULT_STATUS.ACCEPTED);
   assert.equal(adapter.creates.length, 1);
   assert.equal(adapter.creates[0]?.task, "add tests");
 
   const spawning = performer.perform(SPAWN, live);
-  await settleMicrotasks();
+  await drainMicrotasks(10);
   settings.release();
   assert.equal((await spawning).status, ACT_RESULT_STATUS.ACCEPTED);
   assert.equal(adapter.spawns.length, 1);
@@ -217,7 +214,7 @@ test("a row-shaped call with no guard still lands, because a press is its own tu
   const settings = heldSettings();
   const performer = deeperPerformer(adapter, settings.store);
   const creating = performer.perform(CREATE);
-  await settleMicrotasks();
+  await drainMicrotasks(10);
   settings.release();
   assert.equal((await creating).status, ACT_RESULT_STATUS.ACCEPTED);
   assert.equal(adapter.creates.length, 1);

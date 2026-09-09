@@ -1,19 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SESSION_LIST_ALL } from "@sidecar/acts";
-import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import {
   APP_PANEL_TAB,
   APP_SETTING_KIND,
   type AppGuideSetting,
   SESSION_LIST_SORT,
 } from "@sidecar/guide";
-import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
-import { PANEL_FORM_FACTOR } from "@sidecar/surface";
-import { ACCOUNT_STATUS, CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/messages/account";
-import type { AppSettingsView } from "#shared/messages/settings";
-import { APP_SETTING_DEFAULTS, CLI_CONNECTION, VOICE_SOURCE } from "#shared/messages/settings";
+import { ACCOUNT_STATUS } from "#shared/messages/account";
 import { UPDATE_STATUS } from "#shared/messages/update";
+import { settingsView } from "#testing/settings-fixtures";
 import {
   captionRoom,
   ERRAND_TARGET,
@@ -33,38 +29,9 @@ import {
 import { APP_SETTING_ID, buildLukeGuide, isAppSettingId, type LukeGuideInput } from "./luke-guide";
 import { SETTING_PAGE, SETTINGS_PAGE_LABEL } from "./settings-views";
 
-function settings(): AppSettingsView {
-  return {
-    ...APP_SETTING_DEFAULTS,
-    credentialSources: {
-      [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.NONE,
-      [CREDENTIAL_PROVIDER_ID.LINEAR]: CREDENTIAL_SOURCE.NONE,
-      [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
-    },
-    secretStorage: SECRET_STORAGE.UNKNOWN,
-    codexCloudConnection: CLI_CONNECTION.UNKNOWN,
-    showInDock: false,
-    voice: REALTIME_VOICE.CEDAR,
-    voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
-    voiceCaptions: false,
-    duckOtherMedia: true,
-    quietDuringMeetings: true,
-    announceSessions: true,
-    calendarSignInAvailable: false,
-    linearSignInAvailable: false,
-    appleCalendarAvailable: false,
-    voiceAvailable: false,
-    voiceSource: VOICE_SOURCE.ACCOUNT,
-    preferBuiltInMicrophone: false,
-    calendarAccounts: [],
-    showOnAllDisplays: false,
-    formFactor: PANEL_FORM_FACTOR.BUBBLE,
-  };
-}
-
 const guideInput: LukeGuideInput = {
   account: { status: ACCOUNT_STATUS.SIGNED_OUT },
-  settings: settings(),
+  settings: settingsView(),
   update: {
     status: UPDATE_STATUS.IDLE,
     currentVersion: "0.3.8",

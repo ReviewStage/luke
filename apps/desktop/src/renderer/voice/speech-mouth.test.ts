@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type {
-  BriefingSpeech,
-  ProactiveSpeechTurn,
-  RealtimeStatus,
-  ScheduledTimer,
-} from "@sidecar/realtime";
+import type { BriefingSpeech, ProactiveSpeechTurn, RealtimeStatus } from "@sidecar/realtime";
 import {
   BRIEFING_SPEECH_KIND,
   CALENDAR_ONBOARDING_SPEECH_KIND,
@@ -13,6 +8,7 @@ import {
   REALTIME_STATUS,
 } from "@sidecar/realtime";
 import { SPEECH_OUTCOME, type SpeechOffer, type SpeechOutcome } from "#shared/messages/speech";
+import { FakeClock } from "#testing/fake-clock";
 import {
   ANNOUNCER_GRACE_MS,
   ANNOUNCER_LINGER_MS,
@@ -99,45 +95,12 @@ function fakeSession(): FakeSession {
   return session;
 }
 
-interface Timers {
-  schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
-  cancel: (timer: ScheduledTimer) => void;
-  fire: () => void;
-  armed: () => number;
-  delays: number[];
-}
-
-function fakeTimers(): Timers {
-  const pending = new Map<ScheduledTimer, () => void>();
-  const delays: number[] = [];
-  let key = 0;
-  return {
-    schedule: (callback, delayMs) => {
-      delays.push(delayMs);
-      key += 1;
-      pending.set(key, callback);
-      return key;
-    },
-    cancel: (timer) => {
-      pending.delete(timer);
-    },
-    fire: () => {
-      for (const [id, callback] of [...pending]) {
-        pending.delete(id);
-        callback();
-      }
-    },
-    armed: () => pending.size,
-    delays,
-  };
-}
-
 interface Settlement {
   id: string;
   outcome: SpeechOutcome;
 }
 
-function mouth(session: FakeSession, timers: Timers, now = () => 1_000) {
+function mouth(session: FakeSession, timers: FakeClock, now = () => 1_000) {
   const settled: Settlement[] = [];
   const subject = new SpeechMouth({
     session: () => session,
@@ -151,7 +114,7 @@ function mouth(session: FakeSession, timers: Timers, now = () => 1_000) {
 
 test("an offer arriving into silence opens Luke's own call, is spoken, and settles SPOKEN", async () => {
   const session = fakeSession();
-  const timers = fakeTimers();
+  const timers = new FakeClock();
   const { subject, settled } = mouth(session, timers);
 
   subject.offer(offer("a"));
@@ -166,7 +129,7 @@ test("an offer arriving into silence opens Luke's own call, is spoken, and settl
 
 test("offers speak one per reply, in order, on one call", async () => {
   const session = fakeSession();
-  const timers = fakeTimers();
+  const timers = new FakeClock();
   const { subject, settled } = mouth(session, timers);
 
   subject.offer(offer("a"));
@@ -191,7 +154,7 @@ test("offers speak one per reply, in order, on one call", async () => {
 
 test("the same offer again is the same offer", async () => {
   const session = fakeSession();
-  const timers = fakeTimers();
+  const timers = new FakeClock();
   const { subject, settled } = mouth(session, timers);
 
   subject.offer(offer("a"));
@@ -206,7 +169,7 @@ test("an offer whose deadline passed settles STALE without speaking", () => {
   const session = fakeSession();
   session.setStatus(REALTIME_STATUS.RESPONDING);
   session.microphone = true;
-  const timers = fakeTimers();
+  const timers = new FakeClock();
   let now = 10_000;
   const { subject, settled } = mouth(session, timers, () => now);
 
@@ -223,14 +186,14 @@ test("an offer whose deadline passed settles STALE without speaking", () => {
   assert.deepEqual(spokenIds(session), []);
   assert.deepEqual(settled, [{ id: "a", outcome: SPEECH_OUTCOME.STALE }]);
   // The retry clock armed mid-reply fires into an empty hand and says nothing.
-  timers.fire();
+  timers.fireAll();
   assert.deepEqual(spokenIds(session), []);
   assert.equal(settled.length, 1);
 });
 
 test("withdraw drops an unspoken offer without a settle and leaves a begun reply alone", async () => {
   const session = fakeSession();
-  const timers = fakeTimers();
+  const timers = new FakeClock();
   const { subject, settled } = mouth(session, timers);
 
   subject.offer(offer("beat", { kind: CALENDAR_ONBOARDING_SPEECH_KIND, decidedAt: 1_000 }));
@@ -254,7 +217,7 @@ test("withdraw drops an unspoken offer without a settle and leaves a begun reply
 
 test("the call Luke opened lingers for stragglers, then closes itself", async () => {
   const session = fakeSession();
-  const timers = fakeTimers();
+  const timers = new FakeClock();
   const { subject } = mouth(session, timers);
 
   subject.offer(offer("a"));
@@ -274,7 +237,7 @@ test("the call Luke opened lingers for stragglers, then closes itself", async ()
 
   session.setStatus(REALTIME_STATUS.READY);
   subject.onStatus(REALTIME_STATUS.READY);
-  timers.fire();
+  timers.fireAll();
   assert.equal(session.closes, 1);
 });
 
@@ -282,7 +245,7 @@ test("an offer riding the developer's call never closes it", () => {
   const session = fakeSession();
   session.microphone = true;
   session.setStatus(REALTIME_STATUS.READY);
-  const timers = fakeTimers();
+  const timers = new FakeClock();
   const { subject } = mouth(session, timers);
 
   subject.offer(offer("a"));
@@ -293,14 +256,14 @@ test("an offer riding the developer's call never closes it", () => {
   subject.onStatus(REALTIME_STATUS.READY);
   // No linger is ever armed against the developer's own call.
   assert.equal(timers.armed(), 0);
-  timers.fire();
+  timers.fireAll();
   assert.equal(session.closes, 0);
 });
 
 test("a refused call keeps the offer and speaks it on the retry", async () => {
   const session = fakeSession();
   session.connectOpens = false;
-  const timers = fakeTimers();
+  const timers = new FakeClock();
   const { subject, settled } = mouth(session, timers);
 
   subject.offer(offer("a"));
@@ -315,7 +278,7 @@ test("a refused call keeps the offer and speaks it on the retry", async () => {
 
   // The rate limit lifted; the retry delivers the same offer.
   session.connectOpens = true;
-  timers.fire();
+  timers.fireAll();
   await Promise.resolve();
   assert.equal(session.connects, 2);
   assert.deepEqual(spokenIds(session), ["a"]);
@@ -325,14 +288,14 @@ test("a refused call keeps the offer and speaks it on the retry", async () => {
 test("an offer that outlives its attempts settles REFUSED, not retried into a loop", async () => {
   const session = fakeSession();
   session.connectOpens = false;
-  const timers = fakeTimers();
+  const timers = new FakeClock();
   const { subject, settled } = mouth(session, timers);
 
   subject.offer(offer("a"));
   await Promise.resolve();
   subject.onStatus(REALTIME_STATUS.UNAVAILABLE);
   for (let attempt = 1; attempt < MAXIMUM_CONNECT_ATTEMPTS; attempt += 1) {
-    timers.fire();
+    timers.fireAll();
     await Promise.resolve();
     subject.onStatus(REALTIME_STATUS.UNAVAILABLE);
   }
@@ -342,7 +305,7 @@ test("an offer that outlives its attempts settles REFUSED, not retried into a lo
   // and no clock is left ticking for it.
   assert.deepEqual(settled, [{ id: "a", outcome: SPEECH_OUTCOME.REFUSED }]);
   assert.equal(timers.armed(), 0);
-  timers.fire();
+  timers.fireAll();
   await Promise.resolve();
   assert.equal(session.connects, MAXIMUM_CONNECT_ATTEMPTS);
 
@@ -356,13 +319,13 @@ test("an offer that outlives its attempts settles REFUSED, not retried into a lo
 test("an offer arriving right after a refused one is kept, not refused with it", async () => {
   const session = fakeSession();
   session.connectOpens = false;
-  const timers = fakeTimers();
+  const timers = new FakeClock();
   const { subject, settled } = mouth(session, timers);
 
   subject.offer(offer("a"));
   await Promise.resolve();
   for (let attempt = 1; attempt < MAXIMUM_CONNECT_ATTEMPTS; attempt += 1) {
-    timers.fire();
+    timers.fireAll();
     await Promise.resolve();
   }
   assert.equal(session.connects, MAXIMUM_CONNECT_ATTEMPTS);
@@ -380,7 +343,7 @@ test("an offer stranded by a call that ended is picked up by the retry clock", a
   const session = fakeSession();
   session.microphone = true;
   session.setStatus(REALTIME_STATUS.RESPONDING);
-  const timers = fakeTimers();
+  const timers = new FakeClock();
   const { subject } = mouth(session, timers);
 
   // Arrives mid-reply on the developer's call and waits its turn.
@@ -393,7 +356,7 @@ test("an offer stranded by a call that ended is picked up by the retry clock", a
   subject.onStatus(REALTIME_STATUS.IDLE);
   assert.equal(timers.armed(), 1);
 
-  timers.fire();
+  timers.fireAll();
   await Promise.resolve();
   assert.equal(session.connects, 1);
   assert.deepEqual(spokenIds(session), ["a"]);
@@ -403,7 +366,7 @@ test("an offer refused mid-reply keeps a clock of its own beside the READY edge"
   const session = fakeSession();
   session.microphone = true;
   session.setStatus(REALTIME_STATUS.RESPONDING);
-  const timers = fakeTimers();
+  const timers = new FakeClock();
   const { subject } = mouth(session, timers);
 
   // Arrives mid-reply and is refused the turn. The READY edge is the
@@ -417,13 +380,13 @@ test("an offer refused mid-reply keeps a clock of its own beside the READY edge"
   // The edge never lands; the clock fires into a call that has since settled
   // and the offer is spoken rather than stranded.
   session.setStatus(REALTIME_STATUS.READY);
-  timers.fire();
+  timers.fireAll();
   assert.deepEqual(spokenIds(session), ["a"]);
 });
 
 test("quiet beginning cuts the reply mid-sentence, closes Luke's own call, and hands back the unspoken offer HELD", async () => {
   const session = fakeSession();
-  const timers = fakeTimers();
+  const timers = new FakeClock();
   const { subject, settled } = mouth(session, timers);
 
   // Mid-briefing on Luke's own call, with the next offer waiting behind it.
@@ -459,7 +422,7 @@ test("an offer arriving under a hold the panel still draws is spoken, not handed
   // The arbiter offers only once the quiet has ended; the panel's copy of
   // the hold lands a render later. The offer is the fresher word.
   const session = fakeSession();
-  const timers = fakeTimers();
+  const timers = new FakeClock();
   const { subject, settled } = mouth(session, timers);
 
   subject.setHeld(true);
@@ -473,7 +436,7 @@ test("an offer arriving under a hold the panel still draws is spoken, not handed
 
 test("a hold beginning over an unspoken offer settles it HELD and opens no call", async () => {
   const session = fakeSession();
-  const timers = fakeTimers();
+  const timers = new FakeClock();
   const { subject, settled } = mouth(session, timers);
 
   session.connectOpens = false;
@@ -491,7 +454,7 @@ test("quiet beginning never touches the developer's own call", () => {
   const session = fakeSession();
   session.microphone = true;
   session.setStatus(REALTIME_STATUS.RESPONDING);
-  const timers = fakeTimers();
+  const timers = new FakeClock();
   const { subject, settled } = mouth(session, timers);
 
   // Waiting out the developer's reply when the quiet lands.
@@ -513,7 +476,7 @@ test("quiet beginning never touches the developer's own call", () => {
 test("an offer waits out the developer's floor after Luke answers them", () => {
   const session = fakeSession();
   session.microphone = true;
-  const timers = fakeTimers();
+  const timers = new FakeClock();
   let now = 1_000;
   const { subject } = mouth(session, timers, () => now);
 
@@ -532,12 +495,12 @@ test("an offer waits out the developer's floor after Luke answers them", () => {
 
   // Half the window passes in silence; the offer still may not speak.
   now = 1_000 + ANNOUNCER_GRACE_MS / 2;
-  timers.fire();
+  timers.fireAll();
   assert.deepEqual(spokenIds(session), []);
 
   // The developer left the pause empty; the waiting offer takes it.
   now = 1_000 + ANNOUNCER_GRACE_MS;
-  timers.fire();
+  timers.fireAll();
   assert.deepEqual(spokenIds(session), ["a"]);
 
   // The next offer keeps its own readout after the first one ends.
@@ -550,7 +513,7 @@ test("an offer waits out the developer's floor after Luke answers them", () => {
 test("the developer speaking inside the window keeps the floor theirs", () => {
   const session = fakeSession();
   session.microphone = true;
-  const timers = fakeTimers();
+  const timers = new FakeClock();
   let now = 1_000;
   const { subject } = mouth(session, timers, () => now);
 
@@ -570,12 +533,12 @@ test("the developer speaking inside the window keeps the floor theirs", () => {
   subject.onStatus(REALTIME_STATUS.RESPONDING);
   session.setStatus(REALTIME_STATUS.READY);
   subject.onStatus(REALTIME_STATUS.READY);
-  timers.fire();
+  timers.fireAll();
   assert.deepEqual(spokenIds(session), []);
 
   // Only the pause after the second answer, left empty, is spoken into.
   now = 1_000 + ANNOUNCER_GRACE_MS / 2 + ANNOUNCER_GRACE_MS;
-  timers.fire();
+  timers.fireAll();
   assert.deepEqual(spokenIds(session), ["s"]);
 });
 
@@ -583,7 +546,7 @@ test("the retry clock respects the developer's floor", () => {
   const session = fakeSession();
   session.microphone = true;
   session.setStatus(REALTIME_STATUS.RESPONDING);
-  const timers = fakeTimers();
+  const timers = new FakeClock();
   let now = 1_000;
   const { subject } = mouth(session, timers, () => now);
 
@@ -594,17 +557,17 @@ test("the retry clock respects the developer's floor", () => {
 
   // Every armed clock firing inside the window still finds the floor held.
   now = 1_000 + ANNOUNCER_GRACE_MS - 1;
-  timers.fire();
+  timers.fireAll();
   assert.deepEqual(spokenIds(session), []);
 
   now = 1_000 + ANNOUNCER_GRACE_MS;
-  timers.fire();
+  timers.fireAll();
   assert.deepEqual(spokenIds(session), ["a"]);
 });
 
 test("an offer on Luke's own call speaks without the developer's window", async () => {
   const session = fakeSession();
-  const timers = fakeTimers();
+  const timers = new FakeClock();
   const { subject } = mouth(session, timers);
 
   // Nobody is conversing: the window guards the developer's next ask, and
@@ -618,7 +581,7 @@ test("an offer on Luke's own call speaks without the developer's window", async 
 test("the developer taking the turn stands the grace clock down", () => {
   const session = fakeSession();
   session.microphone = true;
-  const timers = fakeTimers();
+  const timers = new FakeClock();
   let now = 1_000;
   const { subject } = mouth(session, timers, () => now);
 
@@ -639,15 +602,15 @@ test("the developer taking the turn stands the grace clock down", () => {
   session.setStatus(REALTIME_STATUS.RESPONDING);
   subject.onStatus(REALTIME_STATUS.RESPONDING);
   now = 1_000 + ANNOUNCER_GRACE_MS * 2;
-  timers.fire();
+  timers.fireAll();
   assert.deepEqual(spokenIds(session), []);
 
   // The answer's own end opens the next window, on a clock of its own.
   session.setStatus(REALTIME_STATUS.READY);
   subject.onStatus(REALTIME_STATUS.READY);
-  timers.fire();
+  timers.fireAll();
   assert.deepEqual(spokenIds(session), []);
   now = 1_000 + ANNOUNCER_GRACE_MS * 3;
-  timers.fire();
+  timers.fireAll();
   assert.deepEqual(spokenIds(session), ["a"]);
 });

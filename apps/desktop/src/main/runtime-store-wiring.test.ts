@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { MessageChannel } from "node:worker_threads";
@@ -14,6 +13,7 @@ import {
   threadSessionKey,
 } from "@sidecar/runtime-contracts";
 import { type RuntimeStorePort, serveRuntimeStore } from "@sidecar/runtime-store";
+import { temporaryDirectory } from "#testing/temporary-directory";
 import { wireRuntimeStore } from "./runtime-store-wiring";
 
 /**
@@ -76,8 +76,7 @@ function wiring(root: string) {
 const LINE = { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "kept for good" } as const;
 
 test("a listed conversation and its lines survive the next launch; archiving keeps the thread readable and main cannot be archived", async (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "luke-wiring-"));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const root = temporaryDirectory(t, "luke-wiring-");
   const first = wiring(root);
   t.after(() => first.close());
   await first.wired.open();
@@ -127,8 +126,7 @@ test("a listed conversation and its lines survive the next launch; archiving kee
 });
 
 test("an erasure takes what stood at the instant it was asked at; a line recorded after the press is the conversation's next line", async (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "luke-wiring-"));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const root = temporaryDirectory(t, "luke-wiring-");
   const c = wiring(root);
   t.after(() => c.close());
   await c.wired.open();

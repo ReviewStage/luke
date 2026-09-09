@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { drainMicrotasks } from "#testing/drain";
 import { DOCK_ICON_FILES, DockPresence, type DockTile } from "./dock-presence";
 
 function harness(options: { visible?: boolean; ignoreFirstHide?: boolean } = {}) {
@@ -70,8 +71,8 @@ function harness(options: { visible?: boolean; ignoreFirstHide?: boolean } = {})
 test("a hide macOS ignores is asked again until the Dock matches", async () => {
   const context = harness({ visible: true, ignoreFirstHide: true });
   context.presence.apply(false, 7);
-  await new Promise((resolve) => setImmediate(resolve));
-  await new Promise((resolve) => setImmediate(resolve));
+  await drainMicrotasks(1);
+  await drainMicrotasks(1);
 
   assert.equal(context.hideAttempts(), 2);
   assert.equal(context.isVisible(), false);
@@ -82,7 +83,7 @@ test("a hide macOS ignores is asked again until the Dock matches", async () => {
 test("a show puts Luke's face back on the tile the show forgot", async () => {
   const context = harness({ visible: false });
   context.presence.apply(true);
-  await new Promise((resolve) => setImmediate(resolve));
+  await drainMicrotasks(1);
 
   assert.equal(context.isVisible(), true);
   assert.deepEqual(context.icons(), [DOCK_ICON_FILES.LIGHT]);

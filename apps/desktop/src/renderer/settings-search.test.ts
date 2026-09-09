@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CLOUD_AGENT_PROVIDER_LIST, CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
-import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import { APP_SETTING_SCHEMA, settingFieldForGuideId, settingGuideEntries } from "@sidecar/settings";
-import { PANEL_FORM_FACTOR } from "@sidecar/surface";
-import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/messages/account";
+import { CREDENTIAL_SOURCE } from "#shared/messages/account";
 import type { AppSettingsView } from "#shared/messages/settings";
-import { APP_SETTING_DEFAULTS, CLI_CONNECTION, VOICE_SOURCE } from "#shared/messages/settings";
+import { VOICE_SOURCE } from "#shared/messages/settings";
+import { settingsView } from "#testing/settings-fixtures";
 import {
   type SettingsSearchEntry,
   type SettingsSearchInput,
@@ -17,35 +16,7 @@ import {
 import { SETTINGS_VIEW } from "./settings-views";
 
 function settings(overrides: Partial<AppSettingsView> = {}): AppSettingsView {
-  return Object.assign<AppSettingsView, Partial<AppSettingsView>>(
-    {
-      ...APP_SETTING_DEFAULTS,
-      credentialSources: {
-        [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.NONE,
-        [CREDENTIAL_PROVIDER_ID.LINEAR]: CREDENTIAL_SOURCE.NONE,
-        [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
-      },
-      secretStorage: SECRET_STORAGE.UNKNOWN,
-      codexCloudConnection: CLI_CONNECTION.UNKNOWN,
-      voiceAvailable: true,
-      voiceSource: VOICE_SOURCE.ACCOUNT,
-      showInDock: false,
-      voice: REALTIME_VOICE.CEDAR,
-      voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
-      voiceCaptions: false,
-      duckOtherMedia: true,
-      preferBuiltInMicrophone: true,
-      quietDuringMeetings: true,
-      announceSessions: true,
-      calendarSignInAvailable: false,
-      appleCalendarAvailable: false,
-      linearSignInAvailable: false,
-      calendarAccounts: [],
-      showOnAllDisplays: false,
-      formFactor: PANEL_FORM_FACTOR.BUBBLE,
-    },
-    overrides,
-  );
+  return settingsView({ voiceAvailable: true, preferBuiltInMicrophone: true, ...overrides });
 }
 
 function searchInput(overrides: Partial<SettingsSearchInput> = {}): SettingsSearchInput {

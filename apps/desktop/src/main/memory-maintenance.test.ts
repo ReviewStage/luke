@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 import { MEMORY_HOUSEKEEPING_OUTCOME } from "@sidecar/memory";
 import { recentDailyNotes } from "@sidecar/runtime";
 import {
@@ -19,6 +18,7 @@ import {
   type RuntimeStorePort,
   serveRuntimeStore,
 } from "@sidecar/runtime-store";
+import { temporaryDirectory } from "#testing/temporary-directory";
 import { type MemoryMaintenanceDependencies, wireMemoryMaintenance } from "./memory-maintenance";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -76,10 +76,11 @@ function fakeRuntime(answer: (prompt: string, input: string) => string | undefin
 }
 
 async function harness(
+  t: TestContext,
   answer: (prompt: string, input: string) => string | undefined = () => "stored.",
   overrides: Partial<MemoryMaintenanceDependencies> = {},
 ) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "luke-memory-maintenance-"));
+  const root = temporaryDirectory(t, "luke-memory-maintenance-");
   const workspace = path.join(root, "workspace");
   fs.mkdirSync(path.join(workspace, "memory"), { recursive: true });
   fs.writeFileSync(
@@ -135,8 +136,8 @@ async function harness(
   };
 }
 
-test("the flush hook and the reset capture exist only for main and durable private threads, and a fresh conversation is primed with today's and yesterday's notes, slugged variants included", async () => {
-  const h = await harness();
+test("the flush hook and the reset capture exist only for main and durable private threads, and a fresh conversation is primed with today's and yesterday's notes, slugged variants included", async (t) => {
+  const h = await harness(t);
   assert.ok(h.maintenance.flushHookFor(MAIN_SESSION_KEY));
   assert.ok(h.maintenance.flushHookFor(h.thread));
   assert.equal(h.maintenance.flushHookFor(h.temporary), undefined);
@@ -147,7 +148,7 @@ test("the flush hook and the reset capture exist only for main and durable priva
   const empty = await h.maintenance.captureBeforeReset(MAIN_SESSION_KEY, []);
   assert.equal(empty.outcome, MEMORY_HOUSEKEEPING_OUTCOME.NOTHING_TO_STORE);
   // A capture whose model fails is reported as failed, never as done.
-  const failing = await harness(() => undefined);
+  const failing = await harness(t, () => undefined);
   const failed = await failing.maintenance.captureBeforeReset(MAIN_SESSION_KEY, [
     { type: "message" },
   ]);
@@ -164,8 +165,8 @@ test("the flush hook and the reset capture exist only for main and durable priva
   h.close();
 });
 
-test("the flush marker is kept per conversation under the generation the brain names, and a new generation reads none", async () => {
-  const h = await harness();
+test("the flush marker is kept per conversation under the generation the brain names, and a new generation reads none", async (t) => {
+  const h = await harness(t);
   const marker = h.maintenance.flushMarkerFor(MAIN_SESSION_KEY);
   assert.ok(marker);
   assert.equal(await marker.read("gen-1"), undefined);

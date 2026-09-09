@@ -9,6 +9,7 @@ import {
   isBriefingSpeech,
 } from "@sidecar/realtime";
 import { SPEECH_OUTCOME } from "#shared/messages/speech";
+import { FakeClock } from "#testing/fake-clock";
 import {
   MAXIMUM_PENDING_BRIEFINGS,
   SPEECH_DECISION,
@@ -23,11 +24,11 @@ function delivery(briefing: string, decidedAt = 1_000): BrainDelivery {
 interface Harness {
   arbiter: SpeechArbiter;
   traces: SpeechTraceRecord[];
-  clock: { now: number };
+  clock: FakeClock;
 }
 
 function harness(now = 1_000): Harness {
-  const clock = { now };
+  const clock = new FakeClock(now);
   const traces: SpeechTraceRecord[] = [];
   let id = 0;
   const arbiter = new SpeechArbiter({

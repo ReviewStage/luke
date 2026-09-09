@@ -18,6 +18,7 @@ import {
 import { REASONING_EFFORT } from "@sidecar/runtime-contracts";
 import { APP_SETTING_SCHEMA, VOICE_SOURCE, type VoiceSource } from "@sidecar/settings";
 import { VoiceCapabilityAssembler, type VoiceSettings } from "@sidecar/voice";
+import { drainMicrotasks } from "#testing/drain";
 import { BrainHost } from "../brain/host";
 import { transitionVoiceCredential } from "./runtime-host";
 
@@ -71,10 +72,6 @@ class HeldSettings implements VoiceSettings {
     assert.ok(gate, "no read is held");
     gate();
   }
-}
-
-async function settle(): Promise<void> {
-  for (let index = 0; index < 20; index += 1) await new Promise((resolve) => setImmediate(resolve));
 }
 
 /**
@@ -270,7 +267,7 @@ for (const held of Object.values(HELD_READ)) {
     const c = composition();
     c.settings.holdNext = held;
     const older = c.transition();
-    await settle();
+    await drainMicrotasks(20);
     c.settings.source = VOICE_SOURCE.ACCOUNT;
     assert.equal(await c.transition(), true);
     assertHostedSet(c);
@@ -288,7 +285,7 @@ for (const held of Object.values(HELD_READ)) {
     });
     assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
     const runId = accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
-    await settle();
+    await drainMicrotasks(20);
     assert.equal(hostedAgent.request(runId)?.status, BRAIN_REQUEST_STATUS.RUNNING);
 
     // The older read answers now, with the key source it was started under.
@@ -318,7 +315,7 @@ test("the reverse order holds too: a late account read never overrides a newer k
   c.settings.source = VOICE_SOURCE.ACCOUNT;
   c.settings.holdNext = HELD_READ.SOURCE;
   const older = c.transition();
-  await settle();
+  await drainMicrotasks(20);
   c.settings.source = VOICE_SOURCE.KEY;
   assert.equal(await c.transition(), true);
   assert.equal(c.assembler.voiceSource, VOICE_SOURCE.KEY);
@@ -341,7 +338,7 @@ test("a late read cannot resurrect a capability the newer transition removed", a
   assert.ok(c.host.current());
   c.settings.holdNext = HELD_READ.SOURCE;
   const older = c.transition();
-  await settle();
+  await drainMicrotasks(20);
   // The key is removed and the account signed out: nothing may stand.
   c.settings.key = undefined;
   c.gate.accountSignedIn = false;
@@ -364,7 +361,7 @@ test("a late read cannot resurrect a capability the newer transition removed", a
   // A closed gate is the same removal from the other side.
   c.settings.holdNext = HELD_READ.SOURCE;
   const heldAgain = c.transition();
-  await settle();
+  await drainMicrotasks(20);
   c.gate.credentialsUsable = false;
   assert.equal(await c.transition(), true);
   c.settings.release();

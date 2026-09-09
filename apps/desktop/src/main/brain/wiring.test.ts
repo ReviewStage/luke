@@ -4,6 +4,7 @@ import { BRAIN_WAKE_KIND, type BrainStateRepository } from "@sidecar/brain";
 import { CREDENTIAL_REFERENCE_KIND, memoryChildStore } from "@sidecar/runtime";
 import { MAIN_SESSION_KEY, threadSessionKey } from "@sidecar/runtime-contracts";
 import { normalizeSession, SESSION_STATUS, type Session } from "@sidecar/session";
+import { drainMicrotasks } from "#testing/drain";
 import { type BrainWiringDependencies, wakeEventsFromHooks, wireBrain } from "./wiring";
 
 /**
@@ -78,10 +79,10 @@ test("with no model to run on, a rebuild opens no conversation and loads no stor
   assert.deepEqual(brains.busyConversations(), []);
   // Asking for a store is what opens one, and only the one asked for.
   brains.store();
-  await new Promise((resolve) => setImmediate(resolve));
+  await drainMicrotasks(1);
   assert.deepEqual(loads, [MAIN_SESSION_KEY]);
   await brains.openConversation(threadSessionKey("t-1"));
-  await new Promise((resolve) => setImmediate(resolve));
+  await drainMicrotasks(1);
   assert.deepEqual(loads, [MAIN_SESSION_KEY, threadSessionKey("t-1")]);
   assert.equal(brains.current(threadSessionKey("t-1")), undefined);
   await brains.closeConversation(threadSessionKey("t-1"));

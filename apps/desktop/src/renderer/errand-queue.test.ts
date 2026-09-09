@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
-import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
-import { PANEL_FORM_FACTOR } from "@sidecar/surface";
-import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/messages/account";
-import type { AppSettingsView } from "#shared/messages/settings";
-import { APP_SETTING_DEFAULTS, CLI_CONNECTION, VOICE_SOURCE } from "#shared/messages/settings";
+import { settingsView } from "#testing/settings-fixtures";
 import {
   armErrand,
   EMPTY_ERRAND_RUN,
@@ -29,35 +24,7 @@ import { PANEL_TAB } from "./panel-tabs";
 import { SESSION_FILTER, SESSION_SORT } from "./session-model";
 import { SETTINGS_VIEW } from "./settings-views";
 
-/** A settings snapshot, told apart from the next only by the switch that moved. */
-function settings(captions: boolean): AppSettingsView {
-  return {
-    ...APP_SETTING_DEFAULTS,
-    credentialSources: {
-      [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.NONE,
-      [CREDENTIAL_PROVIDER_ID.LINEAR]: CREDENTIAL_SOURCE.NONE,
-      [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
-    },
-    secretStorage: SECRET_STORAGE.UNKNOWN,
-    codexCloudConnection: CLI_CONNECTION.UNKNOWN,
-    showInDock: false,
-    voice: REALTIME_VOICE.CEDAR,
-    voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
-    voiceCaptions: captions,
-    duckOtherMedia: true,
-    quietDuringMeetings: true,
-    announceSessions: true,
-    calendarSignInAvailable: false,
-    linearSignInAvailable: false,
-    appleCalendarAvailable: false,
-    voiceAvailable: false,
-    voiceSource: VOICE_SOURCE.ACCOUNT,
-    preferBuiltInMicrophone: false,
-    calendarAccounts: [],
-    showOnAllDisplays: false,
-    formFactor: PANEL_FORM_FACTOR.BUBBLE,
-  };
-}
+const settings = (captions: boolean) => settingsView({ voiceCaptions: captions });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 /** A settings change, as the carrier arms one. */

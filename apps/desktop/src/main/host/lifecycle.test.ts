@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { GATEWAY_SHUTDOWN_DEFAULTS, shutdownGateway } from "@sidecar/runtime";
+import { drainMicrotasks } from "#testing/drain";
 import { seedWorkspaceThenStartMemory, shutdownStepsFlushingEvents } from "./lifecycle";
 
 test("a workspace seed that fails is reported and the memory index still starts, after the seed and not before", async () => {
@@ -70,7 +71,7 @@ test("the flush begins as admissions close and is waited for before the unresolv
     });
   });
   const report = shutdownGateway(steps, { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS });
-  await new Promise((resolve) => setImmediate(resolve));
+  await drainMicrotasks(1);
   assert.deepEqual(order, ["close", "flush:start", "cancel", "settled"]);
   settleFlush?.();
   const outcome = await report;

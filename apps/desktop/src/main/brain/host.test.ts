@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { BrainAgent } from "@sidecar/brain";
+import { drainMicrotasks } from "#testing/drain";
 import { BrainHost } from "./host";
 
 /** An agent whose stop the test releases, recording the order things happened in. */
@@ -67,7 +68,7 @@ test("overlapping transitions install only the latest agent, once every earlier 
     return c.agent;
   });
   assert.equal(brains.current(), undefined);
-  await new Promise((resolve) => setImmediate(resolve));
+  await drainMicrotasks(1);
   assert.ok(!log.includes("build b") && !log.includes("build c"));
   a.release();
   await Promise.all([second, third]);

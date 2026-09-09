@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 import { MEMORY_SOURCE, RETRIEVAL_MODE } from "@sidecar/memory";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
 import {
@@ -23,12 +22,13 @@ import {
   serveRuntimeStore,
 } from "@sidecar/runtime-store";
 import { isRecord, type WireRecord } from "@sidecar/wire";
+import { temporaryDirectory } from "#testing/temporary-directory";
 import { composeNotebookMemory, type NotebookMemoryDependencies } from "./runtime-host";
 
 const NOW = 1_800_000_000_000;
 
-function agentRoot() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "luke-notebook-memory-"));
+function agentRoot(t: TestContext) {
+  const root = temporaryDirectory(t, "luke-notebook-memory-");
   fs.mkdirSync(path.join(root, "workspace", "memory"), { recursive: true });
   fs.writeFileSync(
     path.join(root, "workspace", "MEMORY.md"),
@@ -81,8 +81,8 @@ function adapter(
   return built;
 }
 
-async function harness(overrides: Partial<NotebookMemoryDependencies> = {}) {
-  const root = agentRoot();
+async function harness(t: TestContext, overrides: Partial<NotebookMemoryDependencies> = {}) {
+  const root = agentRoot(t);
   const { store, close } = client();
   await store.open({
     agentRoot: root,
@@ -133,8 +133,8 @@ function resultsOf(answer: WireRecord): WireRecord[] {
   return Array.isArray(answer.results) ? answer.results.filter(isRecord) : [];
 }
 
-test("a sync indexes the notebook with vectors, a search runs hybrid, and a hand edit is picked up by the next sync", async () => {
-  const h = await harness();
+test("a sync indexes the notebook with vectors, a search runs hybrid, and a hand edit is picked up by the next sync", async (t) => {
+  const h = await harness(t);
   const first = await h.wiring.sync();
   assert.equal(first?.mode, RETRIEVAL_MODE.HYBRID);
   assert.ok(first && first.embeddedChunks > 0 && first.embeddedChunks === first.indexedChunks);
@@ -166,9 +166,9 @@ test("a sync indexes the notebook with vectors, a search runs hybrid, and a hand
   h.close();
 });
 
-test("an embedding outage degrades an automatic provider to keyword-only, and the search says so", async () => {
+test("an embedding outage degrades an automatic provider to keyword-only, and the search says so", async (t) => {
   const failing = adapter({ fail: true });
-  const h = await harness({ embeddingAdapter: () => failing });
+  const h = await harness(t, { embeddingAdapter: () => failing });
   const report = await h.wiring.sync();
   assert.equal(report?.mode, RETRIEVAL_MODE.KEYWORD_ONLY);
   assert.ok(report?.note?.includes("embeddings are down"));
@@ -187,8 +187,8 @@ test("an embedding outage degrades an automatic provider to keyword-only, and th
   h.close();
 });
 
-test("past-conversation results come from eligible conversations' History alone, never the asking one or a temporary thread", async () => {
-  const h = await harness();
+test("past-conversation results come from eligible conversations' History alone, never the asking one or a temporary thread", async (t) => {
+  const h = await harness(t);
   await h.wiring.sync();
   await h.store.appendHistory(
     MAIN_SESSION_KEY,
@@ -254,10 +254,10 @@ test("past-conversation results come from eligible conversations' History alone,
   h.close();
 });
 
-test("a launch before any credential indexes keyword-only, and the first credentialed sync backfills the vectors without an edit", async () => {
+test("a launch before any credential indexes keyword-only, and the first credentialed sync backfills the vectors without an edit", async (t) => {
   const embedding = adapter();
   let credential: EmbeddingAdapter | undefined;
-  const h = await harness({ embeddingAdapter: () => credential });
+  const h = await harness(t, { embeddingAdapter: () => credential });
   const first = await h.wiring.sync();
   assert.equal(first?.mode, RETRIEVAL_MODE.KEYWORD_ONLY);
   assert.equal(first?.embeddedChunks, 0);
@@ -276,9 +276,9 @@ test("a launch before any credential indexes keyword-only, and the first credent
   h.close();
 });
 
-test("a transient embedding failure leaves keyword rows searchable and the next sync retries the vectors", async () => {
+test("a transient embedding failure leaves keyword rows searchable and the next sync retries the vectors", async (t) => {
   const embedding = adapter({ fail: true });
-  const h = await harness({ embeddingAdapter: () => embedding });
+  const h = await harness(t, { embeddingAdapter: () => embedding });
   const failed = await h.wiring.sync();
   assert.equal(failed?.mode, RETRIEVAL_MODE.KEYWORD_ONLY);
   assert.equal((await h.store.memoryIndexStatus()).embeddedChunks, 0);

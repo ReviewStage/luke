@@ -1,14 +1,10 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 import {
   BRAIN_INPUT_MARKER,
   BRAIN_REQUEST_ORIGIN,
   BRAIN_SUBMISSION_OUTCOME,
   BRAIN_TOOL,
-  type BrainStateStorage,
   brainStateRepositoryFromStorage,
   type ResponsesInputItem,
   responsesModelAnswer,
@@ -17,7 +13,7 @@ import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testin
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { MEMORY_HOUSEKEEPING_OUTCOME } from "@sidecar/memory";
 import type { ConversationEntry } from "@sidecar/realtime";
-import { type ChildStore, CREDENTIAL_REFERENCE_KIND, type ScheduledTimer } from "@sidecar/runtime";
+import { type ChildStore, CREDENTIAL_REFERENCE_KIND } from "@sidecar/runtime";
 import {
   CHILD_CONTEXT_MODE,
   CHILD_RUN_STATUS,
@@ -31,6 +27,10 @@ import {
   type SessionKey,
 } from "@sidecar/runtime-contracts";
 import { ACT_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
+import { MemoryBrainStorage } from "#testing/brain-harness";
+import { drainMicrotasks } from "#testing/drain";
+import { FakeClock } from "#testing/fake-clock";
+import { temporaryDirectory } from "#testing/temporary-directory";
 import { type BrainWiring, wireBrain } from "./wiring";
 
 /**
@@ -65,29 +65,6 @@ async function waitFor(condition: () => boolean, timeoutMs = 10_000): Promise<vo
   while (!condition()) {
     if (Date.now() > deadline) throw new Error("the condition did not hold in time");
     await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-}
-
-function settle(rounds = 3): Promise<void> {
-  return new Promise((resolve) => {
-    let ticks = 0;
-    const tick = () => {
-      ticks += 1;
-      if (ticks > 60 * rounds) resolve();
-      else setImmediate(tick);
-    };
-    tick();
-  });
-}
-
-class MemoryStorage implements BrainStateStorage {
-  file: string | undefined;
-  read() {
-    return this.file;
-  }
-  write(contents: string) {
-    this.file = contents;
-    return true;
   }
 }
 
@@ -147,11 +124,12 @@ interface Composed {
   ensured: { sessionKey: SessionKey; name: string }[];
   archived: SessionKey[];
   history: Map<SessionKey, ConversationEntry[]>;
-  /** The child service's timers, held rather than fired, so an archive delay never outlives the test. */
-  timers: Map<ScheduledTimer, { callback: () => void; delayMs: number }>;
+  /** The child service's clock, its timers held rather than fired, so an archive delay never outlives the test. */
+  clock: FakeClock;
 }
 
 function composed(
+  t: TestContext,
   script: Script,
   overrides: Partial<Parameters<typeof wireBrain>[0]> = {},
 ): Composed {
@@ -183,7 +161,7 @@ function composed(
     quietUntil: () => undefined,
   };
   const model = bareModelAdapter(client);
-  const storages = new Map<SessionKey, MemoryStorage>();
+  const storages = new Map<SessionKey, MemoryBrainStorage>();
   const children = new Map<string, ChildRunRecord>();
   const completions = new Map<string, ChildCompletionRecord>();
   const childStore: ChildStore = {
@@ -204,23 +182,14 @@ function composed(
   const archived: SessionKey[] = [];
   const history = new Map<SessionKey, ConversationEntry[]>();
   let ids = 0;
-  const timers = new Map<ScheduledTimer, { callback: () => void; delayMs: number }>();
-  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "luke-children-"));
+  const clock = new FakeClock();
+  const workspace = temporaryDirectory(t, "luke-children-");
   const wiring = wireBrain({
-    childTimers: {
-      schedule: (callback, delayMs) => {
-        const handle: ScheduledTimer = {};
-        timers.set(handle, { callback, delayMs });
-        return handle;
-      },
-      cancel: (timer) => {
-        timers.delete(timer);
-      },
-    },
+    childTimers: { schedule: clock.schedule, cancel: clock.cancel },
     repositoryFor: (sessionKey) => {
       let storage = storages.get(sessionKey);
       if (!storage) {
-        storage = new MemoryStorage();
+        storage = new MemoryBrainStorage();
         storages.set(sessionKey, storage);
       }
       return brainStateRepositoryFromStorage(storage);
@@ -297,7 +266,7 @@ function composed(
     ensured,
     archived,
     history,
-    timers,
+    clock,
   };
 }
 
@@ -329,8 +298,8 @@ async function ask(c: Composed, question: string, submissionId = "s-1"): Promise
   return accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
 }
 
-test("a spawn from main runs the child in its own conversation at depth one and hands the completion back to main as its own turn", async () => {
-  const c = composed(delegatingScript());
+test("a spawn from main runs the child in its own conversation at depth one and hands the completion back to main as its own turn", async (t) => {
+  const c = composed(t, delegatingScript());
   await c.wiring.rebuild();
   const runId = await ask(c, "look into the last commit");
   await waitFor(() =>
@@ -381,20 +350,20 @@ test("a spawn from main runs the child in its own conversation at depth one and 
   assert.equal(completionTurns.length, 1);
   // The child's conversation stands for an hour after its end, then archives.
   const hour = 60 * 60 * 1000;
-  const archive = [...c.timers.values()].find(
+  const archive = [...c.clock.timers.values()].find(
     (timer) => timer.delayMs > hour - 10_000 && timer.delayMs <= hour,
   );
   assert.ok(archive, "the archive is armed for an hour after the end");
   assert.deepEqual(c.archived, []);
   archive.callback();
-  await settle();
+  await drainMicrotasks(180);
   assert.deepEqual(c.archived, [child.childSessionKey]);
   assert.equal(c.wiring.current(child.childSessionKey), undefined);
   c.wiring.retire();
   await c.wiring.rebuild();
 });
 
-test("a child spawning a child counts one deeper, and at the depth cap the delegation tools are gone", async () => {
+test("a child spawning a child counts one deeper, and at the depth cap the delegation tools are gone", async (t) => {
   // Every child spawns another until refused; the last child answers text.
   const script: Script = (seen) => {
     if (seen.texts.includes(BRAIN_INPUT_MARKER.DEVELOPER_ASK) && seen.outputs.length === 0) {
@@ -408,7 +377,7 @@ test("a child spawning a child counts one deeper, and at the depth cap the deleg
     }
     return textAnswer("ok");
   };
-  const c = composed(script);
+  const c = composed(t, script);
   await c.wiring.rebuild();
   await ask(c, "go deep");
   await waitFor(
@@ -435,7 +404,7 @@ test("a child spawning a child counts one deeper, and at the depth cap the deleg
   await c.wiring.rebuild();
 });
 
-test("a fork carries the requester's context into the child and an isolated child sees none of it", async () => {
+test("a fork carries the requester's context into the child and an isolated child sees none of it", async (t) => {
   const script: Script = (seen) => {
     if (seen.answeringTool) return textAnswer("ok");
     if (seen.lastInput.includes(BRAIN_INPUT_MARKER.CHILD_COMPLETION)) return textAnswer("reviewed");
@@ -451,11 +420,11 @@ test("a fork carries the requester's context into the child and an isolated chil
     }
     return textAnswer(MAIN_SECRET);
   };
-  const c = composed(script);
+  const c = composed(t, script);
   await c.wiring.rebuild();
   // Main first says something memorable, so its context holds a secret to fork.
   const first = await ask(c, "remember this", "s-0");
-  await settle();
+  await drainMicrotasks(180);
   await c.wiring.current()?.waitAsk(first, 1);
   await ask(c, "now fork a child", "s-fork");
   await waitFor(() =>
@@ -482,7 +451,7 @@ test("a fork carries the requester's context into the child and an isolated chil
   await c.wiring.rebuild();
 });
 
-test("Start fresh cancels a conversation's descendants first, and their cancellation is a completion owed to it", async () => {
+test("Start fresh cancels a conversation's descendants first, and their cancellation is a completion owed to it", async (t) => {
   let releaseChild: (() => void) | undefined;
   const script: Script = (seen) => {
     if (seen.texts.includes(BRAIN_INPUT_MARKER.DEVELOPER_ASK) && seen.outputs.length === 0) {
@@ -490,7 +459,7 @@ test("Start fresh cancels a conversation's descendants first, and their cancella
     }
     return textAnswer("ok");
   };
-  const c = composed((seen, calls) => {
+  const c = composed(t, (seen, calls) => {
     if (seen.texts.includes(BRAIN_INPUT_MARKER.SUBAGENT_TASK)) {
       // The child's model call never answers until released: the child stays running.
       return new Promise<ScriptedAnswer>((_resolve, reject) => {
@@ -520,14 +489,14 @@ test("Start fresh cancels a conversation's descendants first, and their cancella
   await c.wiring.rebuild();
 });
 
-test("a reset capture that was skipped reports nothing, while one that failed is said so; the reset proceeds either way", async () => {
+test("a reset capture that was skipped reports nothing, while one that failed is said so; the reset proceeds either way", async (t) => {
   for (const [outcome, reported] of [
     [MEMORY_HOUSEKEEPING_OUTCOME.SKIPPED, false],
     [MEMORY_HOUSEKEEPING_OUTCOME.FAILED, true],
   ] as const) {
     const reports: string[] = [];
     let captures = 0;
-    const c = composed(() => textAnswer("ok"), {
+    const c = composed(t, () => textAnswer("ok"), {
       report: (message) => {
         reports.push(message);
       },
