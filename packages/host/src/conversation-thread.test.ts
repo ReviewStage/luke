@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { HistoryAppendOutcome } from "@sidecar/runtime/vocabulary";
+import type { ConversationAppendOutcome } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import {
   ConversationThread,
   type ConversationThreadStore,
-  MemoryHistoryStore,
+  MemoryConversationStore,
 } from "./conversation-thread.js";
 
 const NOW = 1_800_000_000_000;
@@ -18,10 +18,10 @@ function line(words: string, recordedAt: number, eventId = words): ConversationE
 class HeldStore implements ConversationThreadStore {
   held: readonly ConversationEntry[] = [];
   pending: (() => void)[] = [];
-  appendHistory(entries: readonly ConversationEntry[]) {
+  appendConversation(entries: readonly ConversationEntry[]) {
     const snapshot = [...this.held, ...entries];
     this.held = snapshot;
-    return new Promise<HistoryAppendOutcome<ConversationEntry>>((resolve) => {
+    return new Promise<ConversationAppendOutcome<ConversationEntry>>((resolve) => {
       this.pending.push(() => resolve({ changed: true, entries: snapshot }));
     });
   }
@@ -73,7 +73,7 @@ test("an append whose answer arrives after a Clear installs nothing, and the lin
 
 test("a store that refuses answers false, and a run without a store keeps the thread in memory under the same rules", async () => {
   const refusing: ConversationThreadStore = {
-    appendHistory: () => Promise.reject(new Error("worker gone")),
+    appendConversation: () => Promise.reject(new Error("worker gone")),
   };
   const reports: string[] = [];
   const stored = new ConversationThread({
@@ -87,7 +87,7 @@ test("a store that refuses answers false, and a run without a store keeps the th
 
   const broadcasts: (readonly ConversationEntry[])[] = [];
   const memory = new ConversationThread({
-    store: new MemoryHistoryStore(),
+    store: new MemoryConversationStore(),
     now: () => NOW,
     onChanged: (e) => broadcasts.push(e),
   });

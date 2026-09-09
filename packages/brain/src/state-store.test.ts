@@ -39,9 +39,9 @@ function complete(): BrainPersistedState {
         startedAt: NOW + 1,
         settledAt: NOW + 2,
         text: "Nothing much.",
-        performedActs: 0,
-        unknownActs: 0,
-        historyRecordedAt: NOW + 3,
+        performedActions: 0,
+        unknownActions: 0,
+        conversationRecordedAt: NOW + 3,
       },
     ],
     journal: [
@@ -67,7 +67,7 @@ function terminal(index: number, overrides: Partial<BrainPersistedState["request
     submissionId: `sub-${index}`,
     acceptedAt: NOW + index,
     settledAt: NOW + index + 1,
-    historyRecordedAt: NOW + index + 2,
+    conversationRecordedAt: NOW + index + 2,
     ...overrides,
   };
 }
@@ -458,7 +458,7 @@ test("load admits a file only within its bounds and rewrites the disk to match w
   const overfull = fakeBrainStateRepository({
     ...freshBrainState("gen-1", NOW),
     requests: Array.from({ length: MAXIMUM_TERMINAL_REQUESTS + 1 }, (_, index) =>
-      terminal(index, { historyRecordedAt: undefined }),
+      terminal(index, { conversationRecordedAt: undefined }),
     ),
   });
   assert.equal((await make(overfull).load()).requests.length, 0);
@@ -484,7 +484,7 @@ test("the record count is a hard bound: admission closes at capacity and a write
   });
   const lease = store.lease();
   await store.load();
-  const unpublished = (index: number) => terminal(index, { historyRecordedAt: undefined });
+  const unpublished = (index: number) => terminal(index, { conversationRecordedAt: undefined });
   assert.equal(store.admits("gen-1"), true);
   assert.equal(
     await store.write(lease, "gen-1", (state) => ({
@@ -517,7 +517,7 @@ test("the record count is a hard bound: admission closes at capacity and a write
     await store.write(lease, "gen-1", (state) => ({
       ...state,
       requests: state.requests.map((record) =>
-        record.runId === "run-0" ? { ...record, historyRecordedAt: NOW } : record,
+        record.runId === "run-0" ? { ...record, conversationRecordedAt: NOW } : record,
       ),
     })),
     true,

@@ -109,7 +109,7 @@ struct ContentView: View {
         signInError = nil
         // Begun-versus-landed is the funnel; which provider is deliberately
         // not counted, the same omission the desktop makes.
-        events.record(.accountAct(.signInStart))
+        events.record(.accountAction(.signInStart))
 
         let pkce = PKCE()
         // Prefix state with provider so tryluke.dev/sign-in can skip the
@@ -133,7 +133,7 @@ struct ContentView: View {
                 defer { pendingProvider = nil }
                 if let asError = error as? ASWebAuthenticationSessionError,
                    asError.code == .canceledLogin {
-                    events.record(.accountAct(.signInCancel))
+                    events.record(.accountAction(.signInCancel))
                     return
                 }
                 if let error {
@@ -182,7 +182,7 @@ private struct SignedInView: View {
         rosterClient: RosterClient(serviceURL: AccountConstants.serviceURL)
     )
 
-    private let actClient = ActClient(baseURL: AccountConstants.serviceURL)
+    private let actionClient = ActionClient(baseURL: AccountConstants.serviceURL)
     private let projectsClient = ProjectsClient(serviceURL: AccountConstants.serviceURL)
 
     var body: some View {
@@ -220,7 +220,7 @@ private struct SignedInView: View {
             ProfileSheet(identity: identity)
         }
         .sheet(isPresented: $creatorShown) {
-            WorkspaceCreatorSheet(actClient: actClient, projectsClient: projectsClient) {
+            WorkspaceCreatorSheet(actionClient: actionClient, projectsClient: projectsClient) {
                 creatorShown = false
                 // The list is the one place the new workspace appears, so a
                 // session screen still stacked above it pops as well.
@@ -303,7 +303,7 @@ private struct SignedInView: View {
 /// The account surface the header avatar opens, drawn with the system's own
 /// sheet vocabulary — inline title, close button, grouped list: the photo
 /// large at the top center, the account it belongs to, the provider keys,
-/// and at the very bottom the one account act, signing out, over the build's
+/// and at the very bottom the one account action, signing out, over the build's
 /// own version.
 private struct ProfileSheet: View {
     @Environment(AccountSession.self) private var session
@@ -347,8 +347,8 @@ private struct ProfileSheet: View {
                     Button("Sign out", role: .destructive) {
                         Task {
                             // Flushed before the sign-out clears the token,
-                            // or the act would wait for a sign-in to report.
-                            events.record(.accountAct(.signOut))
+                            // or the action would wait for a sign-in to report.
+                            events.record(.accountAction(.signOut))
                             await events.flush().value
                             await session.signOut()
                         }

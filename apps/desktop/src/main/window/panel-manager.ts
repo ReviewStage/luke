@@ -200,10 +200,10 @@ export class PanelManager {
   }
 
   /**
-   * The one panel an act aimed at the panel itself lands on — a settings
+   * The one panel an action aimed at the panel itself lands on — a settings
    * change the brain asks for, the panel expanded from a second launch: the
    * main display's window when Luke stands there, else the first window
-   * standing anywhere, so an act about the app has one drawn surface to
+   * standing anywhere, so an action about the app has one drawn surface to
    * answer from rather than one per display.
    */
   primaryPanel(): BrowserWindow | undefined {

@@ -35,7 +35,7 @@ export type BrainStateStoreOptions = {
  * generation that has since been replaced, expired, or cleared lands nowhere.
  * The store holds the envelope in memory between writes, and answers whether
  * each write reached storage, because the caller decides what a failed
- * checkpoint means for the act it guards.
+ * checkpoint means for the action it guards.
  *
  * The store also owns the generation's two ends. Every generation is stamped
  * with a deadline at birth that no write moves, but by default nothing
@@ -167,7 +167,7 @@ export class BrainStateStore {
 
   /**
    * Whether the generation named is the one that stands: the fence every
-   * late arrival is checked against — a model answer, an act's result, a
+   * late arrival is checked against — a model answer, an action's result, a
    * delivery claim, a history line — before it may have an effect. A
    * generation replaced, expired, or cleared never stands again, and it
    * stops standing the instant the replacement, expiry, or Clear is asked
@@ -203,7 +203,7 @@ export class BrainStateStore {
    * empty one in its place at once, and answers whether it did. The fence is
    * synchronous: by the time this returns, the old generation stands nowhere
    * in memory and every listener has heard the successor, so a turn holding
-   * a model answer, a read, or an act's preparation finds itself revoked
+   * a model answer, a read, or an action's preparation finds itself revoked
    * before any disk is waited on. The write that carries the successor to
    * the file, replacing the old content, is queued behind the writes already
    * out; a disk that refuses it is reported, and the old content stays on
@@ -231,7 +231,7 @@ export class BrainStateStore {
    */
 
   /**
-   * A turn's or an act's checkpoint: the working context, cursors, and
+   * A turn's or an action's checkpoint: the working context, cursors, and
    * journal this turn owns become the committed ones, together with the run's
    * own accounting when a run owns the turn, and the inbox loses exactly the
    * entries the turn consumed. Nothing else changes: every other record stays

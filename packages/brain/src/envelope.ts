@@ -232,7 +232,7 @@ function resetMarkerFromWire(value: UnparsedWireValue): BrainResetMarker | undef
  * however old it is, and a run still going is never eligible at all.
  */
 export function brainRequestPrunable(record: BrainRequestRecord): boolean {
-  return isTerminalBrainRequestStatus(record.status) && record.historyRecordedAt !== undefined;
+  return isTerminalBrainRequestStatus(record.status) && record.conversationRecordedAt !== undefined;
 }
 
 /** An envelope held to its bound, and which runs were let go to get there. */

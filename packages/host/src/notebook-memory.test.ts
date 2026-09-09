@@ -109,7 +109,7 @@ async function harness(t: TestContext, overrides: Partial<NotebookMemoryDependen
     createdAt: NOW,
     lastActivityAt: NOW,
   }));
-  const history = new Map<SessionKey, ConversationEntry[]>();
+  const linesByKey = new Map<SessionKey, ConversationEntry[]>();
   const embedding = adapter();
   const reports: string[] = [];
   const wiring = composeNotebookMemory({
@@ -122,7 +122,7 @@ async function harness(t: TestContext, overrides: Partial<NotebookMemoryDependen
     report: (message) => reports.push(message),
     ...overrides,
   });
-  return { root, store, close, wiring, thread, temporary, history, embedding, reports };
+  return { root, store, close, wiring, thread, temporary, linesByKey, embedding, reports };
 }
 
 function resultsOf(answer: WireRecord): WireRecord[] {
@@ -183,10 +183,10 @@ test("an embedding outage degrades an automatic provider to keyword-only, and th
   h.close();
 });
 
-test("past-conversation results come from eligible conversations' History alone, never the asking one or a temporary thread", async (t) => {
+test("past-conversation results come from eligible conversations' Conversation alone, never the asking one or a temporary thread", async (t) => {
   const h = await harness(t);
   await h.wiring.sync();
-  await h.store.ask("history.append", {
+  await h.store.ask("conversation.append", {
     sessionKey: MAIN_SESSION_KEY,
     entries: [
       {
@@ -198,7 +198,7 @@ test("past-conversation results come from eligible conversations' History alone,
     ],
     now: NOW,
   });
-  await h.store.ask("history.append", {
+  await h.store.ask("conversation.append", {
     sessionKey: h.thread,
     entries: [
       {
@@ -216,7 +216,7 @@ test("past-conversation results come from eligible conversations' History alone,
     ],
     now: NOW + 3,
   });
-  await h.store.ask("history.append", {
+  await h.store.ask("conversation.append", {
     sessionKey: h.temporary,
     entries: [
       {

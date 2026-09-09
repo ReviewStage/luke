@@ -36,7 +36,7 @@ test("removing the capability under five outstanding runs leaves every run inter
       (entry) => entry.runId === runId,
     );
     assert.equal(kept?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
-    assert.ok(kept?.historyRecordedAt !== undefined, `${runId} marked`);
+    assert.ok(kept?.conversationRecordedAt !== undefined, `${runId} marked`);
     assert.ok(kept?.askRecordedAt !== undefined);
     assert.equal(
       c.thread().filter((e) => e.kind === CONVERSATION_ENTRY_KIND.REPLY && e.requestId === runId)
@@ -188,7 +188,7 @@ test("a run ending long after its wait is offered once, to a ready receiver, onl
   assert.equal(c.replies(runId).length, 1);
 });
 
-test("a refused History write keeps the reply unoffered and ungranted until the write recovers, then it is offered once", async () => {
+test("a refused Conversation write keeps the reply unoffered and ungranted until the write recovers, then it is offered once", async () => {
   const c = brainHarness();
   const client = heldModel();
   await c.host.replace(() => c.build(client));
@@ -209,9 +209,9 @@ test("a refused History write keeps the reply unoffered and ungranted until the 
   await drainMicrotasks();
   // Ended, but the thread refused the line: unmarked, not offered, and the
   // asking call is not granted the words either — nothing is said before
-  // History holds it.
+  // Conversation holds it.
   assert.equal(agent.request(spoken.runId)?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  assert.equal(agent.request(spoken.runId)?.historyRecordedAt, undefined);
+  assert.equal(agent.request(spoken.runId)?.conversationRecordedAt, undefined);
   const waited = await c.waitOnCall(spoken.runId, epoch);
   assert.equal(waited.speak, false);
   assert.equal(c.offers.length, 0);
@@ -366,7 +366,7 @@ test("a launch that finds ended runs restores their words and speaks none of the
   assert.deepEqual(next.thread(), []);
   for (const record of next.host.current()?.requests() ?? []) {
     assert.equal(record.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
-    assert.ok(record.historyRecordedAt !== undefined);
+    assert.ok(record.conversationRecordedAt !== undefined);
     assert.equal(brainReplyWords(record), "That ask was interrupted before I could finish it.");
   }
 });

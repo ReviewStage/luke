@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  ACT_KIND,
-  advertisedActFor,
+  ACTION_KIND,
+  advertisedActionFor,
   CLI_CONNECTION,
-  dispatchAct,
+  dispatchAction,
   dispatchRead,
   SESSION_LOCATION,
   SESSION_STATUS,
@@ -190,7 +190,7 @@ test("observes cloud tasks as cloud sessions labelled by their environment's rep
   assert.equal(newest.lastActivityAt, TEST_TIME - 5_000);
   assert.equal(newest.detail?.repository, "luke");
   assert.equal(newest.detail?.link, "https://chatgpt.com/codex/tasks/task-new");
-  assert.equal(advertisedActFor(newest, ACT_KIND.MESSAGE), undefined);
+  assert.equal(advertisedActionFor(newest, ACTION_KIND.MESSAGE), undefined);
   assert.equal(oldest.providerSessionId, "task-old");
   assert.equal(oldest.status, SESSION_STATUS.COMPLETE);
   // The pass is exactly the two build-fixed invocations, in order.
@@ -339,14 +339,14 @@ test("reports what each pass learned about the CLI login, and only that", async 
   assert.equal(plugin.connection(), CLI_CONNECTION.CONNECTED);
 });
 
-test("answers unsupported for every act but the creation its provider documents", async () => {
+test("answers unsupported for every action but the creation its provider documents", async () => {
   const { run } = fakeCodexCli({ tasks: [{ id: "task-1", updatedAt: TEST_TIME }] });
   const plugin = pluginFor(run);
   await plugin.observe();
 
   const unsupported = { status: "unsupported", reason: UNSUPPORTED_BY_OBSERVATION };
   assert.deepEqual(
-    await dispatchAct(
+    await dispatchAction(
       plugin,
       "message",
       admittedForTest({ providerSessionId: "task-1", text: "hello" }),
@@ -354,18 +354,18 @@ test("answers unsupported for every act but the creation its provider documents"
     unsupported,
   );
   assert.deepEqual(
-    await dispatchAct(
+    await dispatchAction(
       plugin,
       "control",
       admittedForTest({
         providerSessionId: "task-1",
-        control: { kind: ACT_KIND.CONTROL, id: "stop", label: "Stop" },
+        control: { kind: ACTION_KIND.CONTROL, id: "stop", label: "Stop" },
       }),
     ),
     unsupported,
   );
   assert.deepEqual(
-    await dispatchAct(
+    await dispatchAction(
       plugin,
       "spawnAgent",
       admittedForTest({ providerSessionId: "task-1", agent: "x" }),
@@ -421,7 +421,7 @@ test("creates a task in an observed environment through the documented command",
   const plugin = pluginFor(run);
   await plugin.observe();
 
-  const result = await dispatchAct(
+  const result = await dispatchAction(
     plugin,
     "createWorkspace",
     admittedForTest({
@@ -451,7 +451,7 @@ test("refuses a creation the latest pass did not offer or cannot honour", async 
 
   // An environment the pass never reported names nowhere a creation could go.
   assert.deepEqual(
-    await dispatchAct(
+    await dispatchAction(
       plugin,
       "createWorkspace",
       admittedForTest({ providerProjectId: "env-9", task: "Fix it" }),
@@ -462,7 +462,7 @@ test("refuses a creation the latest pass did not offer or cannot honour", async 
     },
   );
   // Codex names tasks itself, so a chosen name is refused rather than dropped.
-  const named = await dispatchAct(
+  const named = await dispatchAction(
     plugin,
     "createWorkspace",
     admittedForTest({
@@ -473,7 +473,7 @@ test("refuses a creation the latest pass did not offer or cannot honour", async 
   );
   assert.equal(named.status, "rejected");
   // The task is the whole creation; without one there is nothing to start.
-  const taskless = await dispatchAct(
+  const taskless = await dispatchAction(
     plugin,
     "createWorkspace",
     admittedForTest({ providerProjectId: "reviewstage/luke" }),
@@ -485,7 +485,7 @@ test("refuses a creation the latest pass did not offer or cannot honour", async 
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // A CLI that refuses the request is reported as a rejection, not a success.
   behavior.execExitCode = 2;
-  const refused = await dispatchAct(
+  const refused = await dispatchAction(
     plugin,
     "createWorkspace",
     admittedForTest({
@@ -495,10 +495,10 @@ test("refuses a creation the latest pass did not offer or cannot honour", async 
   );
   assert.equal(refused.status, "rejected");
 
-  // A login gone since the pass refuses at the moment of the act.
+  // A login gone since the pass refuses at the moment of the action.
   behavior.execExitCode = 0;
   behavior.loggedIn = false;
-  const signedOut = await dispatchAct(
+  const signedOut = await dispatchAction(
     plugin,
     "createWorkspace",
     admittedForTest({
@@ -509,7 +509,7 @@ test("refuses a creation the latest pass did not offer or cannot honour", async 
   assert.equal(signedOut.status, "rejected");
 });
 
-test("a login lost at the moment of an act clears observed state immediately", async () => {
+test("a login lost at the moment of an action clears observed state immediately", async () => {
   const behavior: FakeCliBehavior = { tasks: [{ id: "task-1", updatedAt: TEST_TIME }] };
   const { run } = fakeCodexCli(behavior);
   const plugin = pluginFor(run);
@@ -517,7 +517,7 @@ test("a login lost at the moment of an act clears observed state immediately", a
   assert.equal((plugin.projects?.() ?? []).length, 1);
 
   behavior.loggedIn = false;
-  const rejected = await dispatchAct(
+  const rejected = await dispatchAction(
     plugin,
     "createWorkspace",
     admittedForTest({

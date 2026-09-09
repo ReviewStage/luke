@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { BrainAskResult } from "@sidecar/brain/requests-wire";
 import { REALTIME_CLIENT_EVENT, REALTIME_SERVER_EVENT, REALTIME_STATUS } from "@sidecar/realtime";
-import { ACT_RESULT_STATUS } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import {
   armDeveloperTurn,
   askBrainDone,
@@ -118,7 +118,7 @@ test("a reply hands its words back as it ends, whole and once", async () => {
   context.session.stopSpeaking();
 
   // A reply the brain was not asked for is neither a briefing nor an answer:
-  // History records it as plain words.
+  // Conversation records it as plain words.
   assert.deepEqual(context.replyEndings, [
     { texts: ["The checkout work is done."], kind: undefined },
   ]);
@@ -788,7 +788,7 @@ test("a stop that races the reply's confirmation still holds", async () => {
   assert.deepEqual(context.asked, []);
   assert.deepEqual(toolOutputs(context, before), [
     {
-      status: ACT_RESULT_STATUS.REJECTED,
+      status: ACTION_RESULT_STATUS.REJECTED,
       reason: "That turn is over; ask again if it still matters.",
     },
   ]);

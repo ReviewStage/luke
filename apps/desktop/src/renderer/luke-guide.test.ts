@@ -8,7 +8,7 @@ import {
 } from "@sidecar/credentials/vocabulary";
 import {
   APP_SETTING_KIND,
-  APP_UPDATE_ACT,
+  APP_UPDATE_ACTION,
   APP_UPDATE_WAIT,
   type AppGuideSetting,
 } from "@sidecar/guide";
@@ -313,7 +313,7 @@ test("the facts describe creating a workspace, so Luke does not deny the capabil
 
   assert.match(rendered, /Creating workspaces/);
   // The defaults a nameless ask falls back to are their own fact, beside the
-  // act they steer.
+  // action they steer.
   assert.match(rendered, /"label":"Workspace creation defaults"/);
   // The refusal shape rides with the offer: only reported projects exist.
   assert.match(rendered, /Only reported projects/);
@@ -550,7 +550,7 @@ test("a model and its effort named in one change land as one stored pairing", as
   });
 
   // Nothing chosen yet — the state the effort entry does not exist in — and
-  // the pair still lands whole, in one act riding one bridge call.
+  // the pair still lands whole, in one action riding one bridge call.
   const unset = settings();
   const model = guideSetting(APP_SETTING_ID.WORKSPACE_AGENT_MODEL, guideInput({ settings: unset }));
   const outcome = await applySpokenSetting(
@@ -804,7 +804,7 @@ test("the sessions list fact offers the filter, order, and clear to a spoken ask
   );
 
   assert.ok(fact);
-  // The list's acts are what a spoken ask is validated against; the chip
+  // The list's actions are what a spoken ask is validated against; the chip
   // choreography behind them is the surface's to show.
   assert.match(fact.detail, /filters by location, kind, app, and agent/);
   assert.match(fact.detail, /spoken ask can filter, sort, or clear/);
@@ -961,12 +961,12 @@ test("the guide's update entry reads from the same row the settings page draws",
   assert.deepEqual(entry(idleUpdate()), {
     version: "0.3.8",
     detail: "The latest release has not been checked for yet.",
-    button: APP_UPDATE_ACT.CHECK,
+    button: APP_UPDATE_ACTION.CHECK,
   });
   assert.deepEqual(entry(idleUpdate(true)), {
     version: "0.3.8",
     detail: "This is the latest release.",
-    button: APP_UPDATE_ACT.CHECK,
+    button: APP_UPDATE_ACTION.CHECK,
   });
   assert.deepEqual(
     entry({
@@ -978,7 +978,7 @@ test("the guide's update entry reads from the same row the settings page draws",
     {
       version: "0.3.8",
       detail: "Version 0.3.9 is downloaded.",
-      button: APP_UPDATE_ACT.RESTART,
+      button: APP_UPDATE_ACTION.RESTART,
     },
   );
   assert.deepEqual(
@@ -1005,7 +1005,7 @@ test("the guide's update entry reads from the same row the settings page draws",
     {
       version: "0.3.8",
       detail: "This build updates by hand: the releases page has the latest.",
-      button: APP_UPDATE_ACT.DOWNLOAD,
+      button: APP_UPDATE_ACTION.DOWNLOAD,
     },
   );
 });

@@ -30,8 +30,8 @@ final class ProductEventsTests: XCTestCase {
         XCTAssertEqual(ProductEvent.accountSignIn.name, "account:sign_in")
         XCTAssertTrue(ProductEvent.accountSignIn.wireProperties(appVersion: "0.1.1").isEmpty)
         XCTAssertEqual(
-            ProductEvent.accountAct(.signOut).wireProperties(appVersion: "0.1.1") as? [String: String],
-            ["account_act": "sign_out"]
+            ProductEvent.accountAction(.signOut).wireProperties(appVersion: "0.1.1") as? [String: String],
+            ["account_action": "sign_out"]
         )
 
         let observe = ProductEvent.sessionObserve(provider: .claudeCode, sessions: .few)
@@ -39,11 +39,11 @@ final class ProductEventsTests: XCTestCase {
         XCTAssertEqual(observe.wireProperties(appVersion: "0.1.1")["provider_id"] as? String, "claude-code")
         XCTAssertEqual(observe.wireProperties(appVersion: "0.1.1")["session_count"] as? Int, 2)
 
-        let act = ProductEvent.sessionActSend(provider: .conductor, act: .messageSend)
-        XCTAssertEqual(act.name, "session:act_send")
+        let action = ProductEvent.sessionActionSend(provider: .conductor, action: .messageSend)
+        XCTAssertEqual(action.name, "session:action_send")
         XCTAssertEqual(
-            act.wireProperties(appVersion: "0.1.1") as? [String: String],
-            ["provider_id": "conductor", "session_act": "message_send"]
+            action.wireProperties(appVersion: "0.1.1") as? [String: String],
+            ["provider_id": "conductor", "session_action": "message_send"]
         )
 
         let update = ProductEvent.settingUpdate(setting: .voiceSpeed, value: .set)

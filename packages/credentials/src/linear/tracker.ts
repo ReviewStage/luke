@@ -1,5 +1,5 @@
 import {
-  ACT_RESULT_STATUS,
+  ACTION_RESULT_STATUS,
   ISSUE_ACTION_KIND,
   type IssueTracker,
   type IssueTrackerAdapter,
@@ -68,7 +68,7 @@ const LINEAR_READ_ASSIGNED_ISSUES = `query AssignedIssues($first: Int!) {
   }
 }`;
 
-/** The two writes Linear documents for the two acts Luke can be asked for. */
+/** The two writes Linear documents for the two actions Luke can be asked for. */
 const LINEAR_WRITE = {
   [ISSUE_ACTION_KIND.SET_STATE]: `mutation SetIssueState($id: String!, $stateId: String!) {
   issueUpdate(id: $id, input: { stateId: $stateId }) { success }
@@ -124,7 +124,7 @@ function transitionsFrom(node: WireRecord, currentStateId: string): IssueTransit
 }
 
 /**
- * Reads the issues Linear lists for the user, and carries the two acts the
+ * Reads the issues Linear lists for the user, and carries the two actions the
  * user can ask of one, through Linear's own GraphQL API under the user's own
  * key. With no key it observes nothing and issues no request at all.
  */
@@ -191,7 +191,7 @@ export class LinearIssueTracker implements IssueTrackerAdapter {
     const accessToken = await this.#readAccessToken();
     if (!accessToken)
       return {
-        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        status: ACTION_RESULT_STATUS.UNSUPPORTED,
         reason: UNSUPPORTED_BY_OBSERVATION,
       };
 
@@ -208,31 +208,31 @@ export class LinearIssueTracker implements IssueTrackerAdapter {
             "commentCreate",
           ] as const);
 
-    // What became of the act is an answer for the conversation, never a
+    // What became of the action is an answer for the conversation, never a
     // throw: the developer asked for something, and the reply has to say.
     let payload: GraphQlPayload;
     try {
       payload = await this.#post(accessToken, document, variables);
     } catch {
       return {
-        status: ACT_RESULT_STATUS.REJECTED,
+        status: ACTION_RESULT_STATUS.REJECTED,
         reason: "The request to Linear did not complete.",
       };
     }
     if (payload.errors) {
       return {
-        status: ACT_RESULT_STATUS.REJECTED,
+        status: ACTION_RESULT_STATUS.REJECTED,
         reason: "Linear rejected that change.",
       };
     }
     const result = isRecord(payload.data) ? payload.data[resultField] : undefined;
     if (!isRecord(result) || result.success !== true) {
       return {
-        status: ACT_RESULT_STATUS.REJECTED,
+        status: ACTION_RESULT_STATUS.REJECTED,
         reason: "Linear did not confirm that change.",
       };
     }
-    return { status: ACT_RESULT_STATUS.ACCEPTED };
+    return { status: ACTION_RESULT_STATUS.ACCEPTED };
   }
 
   async #post(

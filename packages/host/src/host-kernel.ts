@@ -5,7 +5,7 @@ import type { WireValue } from "@sidecar/wire";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import type { RunMode } from "./run-mode.js";
 import type { GatewayService } from "./service.js";
-import { NodeAnswerLostError } from "./session-act-performer.js";
+import { NodeAnswerLostError } from "./session-action-performer.js";
 import type { SecretCipher } from "./settings-store.js";
 import { agentRootPath } from "./store-path.js";
 
@@ -67,9 +67,9 @@ export interface HostKernel {
   setService: (service: GatewayService) => void;
   /**
    * An address a host-owned flow needs opened: the native node's. No node
-   * connected is a refusal the act reports as not done; a node that took the
+   * connected is a refusal the action reports as not done; a node that took the
    * ask and vanished before answering is the lost-answer error, which every
-   * caller that journals an act records as unknown rather than failed.
+   * caller that journals an action records as unknown rather than failed.
    */
   openExternalThroughNode: (url: string) => Promise<void>;
   reportOpenFailure: (error: Error) => void;

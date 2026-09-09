@@ -1,13 +1,13 @@
 export {
-  ACT_RESULT_STATUS,
-  type ActResult,
-  type ActResultStatus,
-  isActResult,
-  isActResultStatus,
-  UNKNOWN_ACT_STATUS,
+  ACTION_RESULT_STATUS,
+  type ActionResult,
+  type ActionResultStatus,
+  isActionResult,
+  isActionResultStatus,
+  UNKNOWN_ACTION_STATUS,
   UNSUPPORTED_BY_OBSERVATION,
-  type UnknownActResult,
-} from "./act-result.js";
+  type UnknownActionResult,
+} from "./action-result.js";
 export { type Admitted, reshapeAdmitted } from "./admitted.js";
 export {
   type CloudFetch,

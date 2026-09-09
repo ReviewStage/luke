@@ -26,7 +26,7 @@ struct WatchVoiceView: View {
     // line lands, when the page appears, and at midnight, and at no other
     // time, because nothing else can change what a date should say.
     @State private var now = Date()
-    private let actClient = ActClient(baseURL: AccountConstants.serviceURL)
+    private let actionClient = ActionClient(baseURL: AccountConstants.serviceURL)
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -37,9 +37,9 @@ struct WatchVoiceView: View {
             model.voice = voice
             model.speed = speed
             model.prepare(
-                accountSession: accountSession, thread: conversation, actContext: makeActContext
+                accountSession: accountSession, thread: conversation, actionContext: makeActionContext
             )
-            // The roster the acts are validated against is the list's own,
+            // The roster the actions are validated against is the list's own,
             // refreshed as this page opens so a session archived since the
             // list last polled is not offered as somewhere to act.
             await store.load()
@@ -73,19 +73,19 @@ struct WatchVoiceView: View {
     /// An open or a list ask is held for the reply to finish rather than
     /// performed at once: the page moving mid-sentence would close the call
     /// still speaking the words that announce it.
-    private func makeActContext() -> VoiceActContext {
-        VoiceActContext(
+    private func makeActionContext() -> VoiceActionContext {
+        VoiceActionContext(
             mintedTools: model.mintedTools,
             sessions: store.sessions,
             projects: model.projects,
             defaults: model.defaults,
-            actClient: actClient,
+            actionClient: actionClient,
             accessToken: { [accountSession] in try await accountSession.validAccessToken() },
-            count: { [events] act, providerId in
+            count: { [events] action, providerId in
                 // A provider id the shared vocabulary has not answered for is
                 // left uncounted rather than sent to be refused.
                 guard let provider = ProductProviderID(rawValue: providerId) else { return }
-                events.record(.sessionActSend(provider: provider, act: act))
+                events.record(.sessionActionSend(provider: provider, action: action))
             },
             refreshRoster: { [store] in await store.load() },
             // One page, so the last open a reply names is the one taken.

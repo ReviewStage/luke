@@ -25,7 +25,7 @@ export interface ObservedAccountCalendars {
   /**
    * True when the source itself has withdrawn the access — the System
    * Settings switch turned off — as opposed to a read that merely failed.
-   * The row then offers Connect again, because reconnecting is the only act
+   * The row then offers Connect again, because reconnecting is the only action
    * left to offer.
    */
   revoked?: boolean;

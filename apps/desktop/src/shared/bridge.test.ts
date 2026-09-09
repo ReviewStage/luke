@@ -3,7 +3,7 @@ import test from "node:test";
 import { maximumTypedAskLength } from "@sidecar/session";
 import { BRIDGE } from "./bridge";
 
-test("act bridge entries reject legacy and malformed outcomes", () => {
+test("action bridge entries reject legacy and malformed outcomes", () => {
   for (const entry of [BRIDGE.disconnectSuperset]) {
     const guard = entry.result;
     assert.ok(guard);
@@ -18,8 +18,8 @@ test("act bridge entries reject legacy and malformed outcomes", () => {
   }
 });
 
-test("a conversation history report carries only well-formed history lines", () => {
-  const guard = BRIDGE.appendConversationHistory.args;
+test("a conversation report carries only well-formed conversation lines", () => {
+  const guard = BRIDGE.appendConversationLines.args;
   const ask = { kind: "typed-ask", words: "how is it going?", recordedAt: 1 };
   const announcement = {
     kind: "announcement",
@@ -104,8 +104,8 @@ test("a run is waited on, cancelled, and listed by its own record shape", () => 
     revision: 1,
     acceptedAt: 1,
     startedAt: 2,
-    performedActs: 0,
-    unknownActs: 0,
+    performedActions: 0,
+    unknownActions: 0,
   };
   assert.equal(BRIDGE.cancelBrainAsk.kind, "invoke");
   assert.equal(BRIDGE.cancelBrainAsk.args(["run-1"]), true);
@@ -182,8 +182,8 @@ test("a reported guide is refused whole when any entry is malformed", () => {
   assert.equal(guard([{ facts: [] }]), false);
 });
 
-test("an app act pushed to the renderer never carries a memory write", () => {
-  const guard = BRIDGE.onBrainAppAct.result;
+test("an app action pushed to the renderer never carries a memory write", () => {
+  const guard = BRIDGE.onBrainAppAction.result;
   assert.ok(guard);
   assert.equal(guard({ requestId: "r1", action: { kind: "panel", tab: "sessions" } }), true);
   assert.equal(guard({ requestId: "r1", action: { kind: "remember", words: "x" } }), false);

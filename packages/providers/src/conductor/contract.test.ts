@@ -1,4 +1,4 @@
-import { ACT_KIND } from "@sidecar/session";
+import { ACTION_KIND } from "@sidecar/session";
 import { describeProviderContract, PROVIDER_OBSERVATION } from "../testing/index.js";
 import { conductorPlugin } from "./index.js";
 
@@ -24,11 +24,11 @@ describeProviderContract(
     absentSessionId: "6c1f2f14-9a0b-4c2d-8e3f-000000000000",
     absentProjectId: "project-unreported",
     advertised: [
-      ACT_KIND.MESSAGE,
-      ACT_KIND.CONTROL,
-      ACT_KIND.ADD_AGENT,
-      ACT_KIND.RENAME_SESSION,
-      ACT_KIND.RENAME_WORKSPACE,
+      ACTION_KIND.MESSAGE,
+      ACTION_KIND.CONTROL,
+      ACTION_KIND.ADD_AGENT,
+      ACTION_KIND.RENAME_SESSION,
+      ACTION_KIND.RENAME_WORKSPACE,
     ],
     unadvertised: [],
     targetedControlId: "archive-workspace",

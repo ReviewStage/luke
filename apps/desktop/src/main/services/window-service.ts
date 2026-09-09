@@ -95,7 +95,7 @@ export interface WindowService extends DesktopService {
   reporterOf: (context: BridgeContext) => string;
   /** Only this build's own renderer may reach a bridge entry. */
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
-  /** The one window an act only a renderer can perform is carried to; false when none is open. */
+  /** The one window an action only a renderer can perform is carried to; false when none is open. */
   sendToPrimaryPanel: <Payload>(channel: string, payload: Payload) => boolean;
   applyLoginItem: (openAtLogin: boolean) => void;
   reapplyTalkHotkey: () => void;

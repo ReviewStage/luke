@@ -40,8 +40,8 @@ function record(overrides: Partial<BrainRequestRecord> = {}): BrainRequestRecord
     startedAt: NOW + 1,
     settledAt: NOW + 2,
     text: "Two agents are waiting.",
-    performedActs: 0,
-    unknownActs: 0,
+    performedActions: 0,
+    unknownActions: 0,
     askRecordedAt: NOW,
     ...overrides,
   };
@@ -171,7 +171,7 @@ function crossedWire(record: BrainRequestRecord): BrainRequestRecord {
 }
 
 test("a claim is granted only to the voice window, for the epoch the offer went to, while that epoch stands", async () => {
-  const ended = record({ historyRecordedAt: NOW + 2 });
+  const ended = record({ conversationRecordedAt: NOW + 2 });
   const f = registered(() => ended);
   const first = f.receiver.begin();
   f.receiver.markReady(first);
@@ -211,8 +211,8 @@ test("a claim is granted only to the voice window, for the epoch the offer went 
   assert.deepEqual(f.acknowledged, ["run-1"]);
 });
 
-test("a wait grants the asking call the words only for the current voice renderer, once, and only after History holds them", async () => {
-  let live = record({ status: BRAIN_REQUEST_STATUS.RUNNING, historyRecordedAt: undefined });
+test("a wait grants the asking call the words only for the current voice renderer, once, and only after Conversation holds them", async () => {
+  let live = record({ status: BRAIN_REQUEST_STATUS.RUNNING, conversationRecordedAt: undefined });
   const f = registered(() => live);
   const epoch = f.receiver.begin();
   f.receiver.markReady(epoch);
@@ -223,11 +223,11 @@ test("a wait grants the asking call the words only for the current voice rendere
     record: crossedWire(live),
     speak: false,
   });
-  // Ended but not yet in History — the write was refused — the call is not granted.
-  live = record({ historyRecordedAt: undefined });
+  // Ended but not yet in Conversation — the write was refused — the call is not granted.
+  live = record({ conversationRecordedAt: undefined });
   assert.equal((await f.wait(f.voiceSender, "run-1", epoch)).speak, false);
-  // In History now. A panel, or a renderer naming a stale epoch, is not granted and consumes nothing.
-  live = record({ historyRecordedAt: NOW + 2 });
+  // In Conversation now. A panel, or a renderer naming a stale epoch, is not granted and consumes nothing.
+  live = record({ conversationRecordedAt: NOW + 2 });
   assert.equal((await f.wait(f.panelSender, "run-1", epoch)).speak, false);
   assert.equal((await f.wait(f.voiceSender, "run-1", epoch - 1)).speak, false);
   // The offer path had already offered it; the call's grant withdraws that offer.

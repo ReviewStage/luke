@@ -1,7 +1,7 @@
-import type { CarriedAppAct } from "@sidecar/acts";
+import type { CarriedAppAction } from "@sidecar/actions";
 import { maximumTypedAskLength } from "@sidecar/session";
 import {
-  type ACT_RESULT_STATUS,
+  type ACTION_RESULT_STATUS,
   isRecord,
   isWireBoolean,
   isWireNumber,
@@ -23,9 +23,9 @@ import {
 
 /**
  * What crosses the bridge between the brain in the main process and the
- * windows. The brain decides and acts on its own side; what reaches a
+ * windows. The brain decides and actions on its own side; what reaches a
  * renderer is the record of a run it submitted or is drawing, and the few app
- * acts only a renderer can perform. A briefing travels as a speech offer
+ * actions only a renderer can perform. A briefing travels as a speech offer
  * instead, from the speech arbiter that decides when it may be said.
  */
 
@@ -93,9 +93,9 @@ export const BRAIN_ASK_PENDING_STATUS = "pending";
  * the voice can say instead.
  */
 export type BrainAskResult =
-  | { status: typeof ACT_RESULT_STATUS.ACCEPTED; briefing: string; runId: string }
+  | { status: typeof ACTION_RESULT_STATUS.ACCEPTED; briefing: string; runId: string }
   | { status: typeof BRAIN_ASK_PENDING_STATUS; note: string }
-  | { status: typeof ACT_RESULT_STATUS.REJECTED; reason: string };
+  | { status: typeof ACTION_RESULT_STATUS.REJECTED; reason: string };
 
 /**
  * One ended run whose reply the main process offers the voice window to
@@ -129,7 +129,7 @@ export function isBrainReplyOffer(value: UnparsedWireValue): value is BrainReply
  * What a wait on a spoken ask comes back with: the record as it then stands,
  * or nothing for a run the brain does not know, and whether the call that
  * asked has been granted the words. `speak` is true only for an ended run
- * whose end already stands in History and whose one grant this wait took; a
+ * whose end already stands in Conversation and whose one grant this wait took; a
  * run still going, or one whose words another path holds, is not the
  * call's to say.
  */
@@ -168,10 +168,10 @@ export function isBrainReplyClaimResult(value: UnparsedWireValue): boolean {
  * button — already validated against the guide in the main process. The
  * renderer performs it and answers by `requestId`.
  */
-export interface BrainAppActRequest {
+export interface BrainAppActionRequest {
   requestId: string;
-  action: Exclude<CarriedAppAct, { kind: "remember" | "forget" }>;
+  action: Exclude<CarriedAppAction, { kind: "remember" | "forget" }>;
 }
 
 /** The renderer's answer to one app act: what became of it, as the brain reads outcomes. */
-export type BrainAppActAnswer = WireRecord;
+export type BrainAppActionAnswer = WireRecord;

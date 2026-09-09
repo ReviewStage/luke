@@ -6,7 +6,7 @@ import UIKit
 
 // MARK: - Observable session state
 
-/// Where a spoken act asked to take the developer once Luke has finished
+/// Where a spoken action asked to take the developer once Luke has finished
 /// saying so: a session's own screen, or the list narrowed as asked. Held
 /// until the reply settles, because moving the screen mid-sentence would
 /// close the call that is still speaking.
@@ -39,11 +39,11 @@ private final class VoiceSessionModel {
     /// told there is nowhere.
     private(set) var projects: ProjectsAnswer?
     /// The New Workspace choices this device remembers, read at the moment a
-    /// call opens or an act lands.
+    /// call opens or an action lands.
     let defaults = WorkspaceCreationDefaults()
     var thread: VoiceConversationThread?
     private var session: RealtimeSession?
-    private var makeActContext: (@MainActor () -> VoiceActContext)?
+    private var makeActionContext: (@MainActor () -> VoiceActionContext)?
     // Kept while this screen is alive so a direct press can reopen a socket
     // after the three-minute idle close. An idle edge itself never remints.
     private var reconnectCallback: (@MainActor (_ startWithTurn: Bool) async -> Void)?
@@ -53,12 +53,12 @@ private final class VoiceSessionModel {
 
     func start(
         accountSession: AccountSession,
-        actContext: @escaping @MainActor () -> VoiceActContext,
+        actionContext: @escaping @MainActor () -> VoiceActionContext,
         startWithTurn: Bool = false
     ) async {
         guard session == nil else { return }
         errorMessage = nil
-        makeActContext = actContext
+        makeActionContext = actionContext
 
         let mintVoice = voice.rawValue
         let mintSpeed = speed.multiplier
@@ -98,13 +98,13 @@ private final class VoiceSessionModel {
             },
             onSessionTools: { [weak self] names in self?.mintedTools = names },
             dispatchToolCall: { [weak self] name, arguments, _ in
-                guard let self, let makeActContext = self.makeActContext else {
+                guard let self, let makeActionContext = self.makeActionContext else {
                     return #"{"error":"not authorized"}"#
                 }
                 return await dispatchVoiceToolCall(
                     name: name,
                     arguments: arguments,
-                    context: makeActContext()
+                    context: makeActionContext()
                 )
             },
             contextItems: { [weak self] in
@@ -134,7 +134,7 @@ private final class VoiceSessionModel {
         reconnectCallback = { [weak self, weak accountSession] startWithTurn in
             guard let accountSession else { return }
             await self?.start(
-                accountSession: accountSession, actContext: actContext, startWithTurn: startWithTurn
+                accountSession: accountSession, actionContext: actionContext, startWithTurn: startWithTurn
             )
         }
         let s = RealtimeSession(options: opts)
@@ -202,9 +202,9 @@ private final class VoiceSessionModel {
     func changeVoice(_ newVoice: RealtimeVoice, accountSession: AccountSession) async {
         guard newVoice != voice else { return }
         voice = newVoice
-        guard session != nil, let makeActContext else { return }
+        guard session != nil, let makeActionContext else { return }
         stop()
-        await start(accountSession: accountSession, actContext: makeActContext)
+        await start(accountSession: accountSession, actionContext: makeActionContext)
     }
 
     func changeSpeed(_ newSpeed: RealtimeVoiceSpeed) {
@@ -261,7 +261,7 @@ struct VoiceView: View {
     @Environment(ProductEventSender.self) private var events
     @Environment(SessionsStore.self) private var store
     @State private var model = VoiceSessionModel()
-    private let actClient = ActClient(baseURL: AccountConstants.serviceURL)
+    private let actionClient = ActionClient(baseURL: AccountConstants.serviceURL)
     @State private var isPressing = false
     @State private var isLatched = false
     @State private var pressBeganAt: TimeInterval?
@@ -289,7 +289,7 @@ struct VoiceView: View {
 
     var body: some View {
         ZStack {
-            conversationHistory
+            conversationLines
             bottomControls
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -314,11 +314,11 @@ struct VoiceView: View {
             model.thread = conversation
             model.voice = voice
             model.speed = speed
-            // The roster the acts are validated against is the list's own,
+            // The roster the actions are validated against is the list's own,
             // refreshed as the call opens so a session archived since the
             // list last drew is not offered as somewhere to act.
             async let roster: Void = store.refresh(account: accountSession, events: events)
-            await model.start(accountSession: accountSession, actContext: makeActContext)
+            await model.start(accountSession: accountSession, actionContext: makeActionContext)
             await roster
         }
         .onChange(of: voice) { _, newVoice in
@@ -346,19 +346,19 @@ struct VoiceView: View {
     /// An open or a list ask is held for the reply to finish rather than
     /// performed at once: the screen moving mid-sentence would close the call
     /// still speaking the words that announce it.
-    private func makeActContext() -> VoiceActContext {
-        VoiceActContext(
+    private func makeActionContext() -> VoiceActionContext {
+        VoiceActionContext(
             mintedTools: model.mintedTools,
             sessions: store.sessions,
             projects: model.projects,
             defaults: model.defaults,
-            actClient: actClient,
+            actionClient: actionClient,
             accessToken: { [accountSession] in try await accountSession.validAccessToken() },
-            count: { [events] act, providerId in
+            count: { [events] action, providerId in
                 // A provider id the shared vocabulary has not answered for is
                 // left uncounted rather than sent to be refused.
                 guard let provider = ProductProviderID(rawValue: providerId) else { return }
-                events.record(.sessionActSend(provider: provider, act: act))
+                events.record(.sessionActionSend(provider: provider, action: action))
             },
             refreshRoster: { [store, accountSession, events] in
                 await store.refresh(account: accountSession, events: events)
@@ -430,7 +430,7 @@ struct VoiceView: View {
         }
     }
 
-    private var conversationHistory: some View {
+    private var conversationLines: some View {
         // The scroll view stands even before anything is said: it is what
         // carries the keyboard's interactive swipe-down, and an empty state
         // that replaced it would leave the composer with no way to swipe.

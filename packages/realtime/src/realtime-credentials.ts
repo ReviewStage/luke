@@ -1,4 +1,4 @@
-import { remoteRealtimeToolDefinitions } from "@sidecar/acts";
+import { remoteRealtimeToolDefinitions } from "@sidecar/actions";
 import type { RealtimeCredential } from "@sidecar/hosted";
 import { isRecord, text, type UnparsedWireValue, wholeNumber } from "@sidecar/wire";
 import { PRESS_AUDIO_SAMPLE_RATE } from "./press-audio.js";
@@ -84,7 +84,7 @@ export function realtimeSessionConfig(options: RealtimeSessionOptions = {}) {
         format: { type: "audio/pcm", rate: PRESS_AUDIO_SAMPLE_RATE },
         turn_detection: null,
         // The developer's spoken turns come back as text, so their own words
-        // can enter the conversation history beside Luke's. The audio already
+        // can enter the conversation beside Luke's. The audio already
         // travels to this same service to be heard at all.
         transcription: { model: REALTIME_DEFAULTS.TRANSCRIPTION_MODEL },
       },
@@ -109,9 +109,9 @@ export function realtimeClientSecretRequest(options: RealtimeSessionOptions = {}
 /**
  * Builds the request body for a mobile Realtime mint. The session config
  * matches the desktop's audio format and turn detection, but the call still
- * carries the roster itself and acts through its own tools, so it keeps the
- * instructions that resolve agents from that roster and the acts the mobile
- * act endpoints serve.
+ * carries the roster itself and actions through its own tools, so it keeps the
+ * instructions that resolve agents from that roster and the actions the mobile
+ * action endpoints serve.
  */
 export function remoteRealtimeClientSecretRequest(options: RealtimeSessionOptions = {}) {
   return {

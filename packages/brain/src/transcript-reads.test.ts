@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { OMISSION_MARKER } from "@sidecar/session";
-import { ACT_RESULT_STATUS, isWireString, unparsedWire, wireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, isWireString, unparsedWire, wireRecord } from "@sidecar/wire";
 import {
   ABC,
   answered,
@@ -27,7 +27,7 @@ import { BRAIN_TOOL } from "./tools.js";
 test("read_transcript answers a bounded tail for an observed session and refuses the rest", async () => {
   const h = harness({
     readTranscript: async () => ({
-      status: ACT_RESULT_STATUS.ACCEPTED,
+      status: ACTION_RESULT_STATUS.ACCEPTED,
       transcript: `${"x".repeat(FULL_TRANSCRIPT_CHARS * 2)}END`,
     }),
   });
@@ -54,7 +54,7 @@ test("read_transcript answers a bounded tail for an observed session and refuses
   assert.ok(read && isWireString(read.output));
   const record = wireRecord(unparsedWire(JSON.parse(read.output)));
   assert.ok(record);
-  assert.equal(record.status, ACT_RESULT_STATUS.ACCEPTED);
+  assert.equal(record.status, ACTION_RESULT_STATUS.ACCEPTED);
   assert.equal(record.truncated, true);
   assert.ok(isWireString(record.transcript));
   assert.ok(record.transcript.startsWith(OMISSION_MARKER));
@@ -67,7 +67,7 @@ test("read_transcript answers a bounded tail for an observed session and refuses
 test("a delta longer than its bound is cut from the front and marked truncated", async () => {
   const h = harness({
     readTranscriptSince: async () => ({
-      status: ACT_RESULT_STATUS.ACCEPTED,
+      status: ACTION_RESULT_STATUS.ACCEPTED,
       text: `${"y".repeat(DELTA_PER_SESSION_CHARS * 2)}TAIL`,
       truncated: false,
     }),

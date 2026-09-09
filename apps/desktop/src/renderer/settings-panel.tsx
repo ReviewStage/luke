@@ -103,7 +103,7 @@ import {
   type PanelFormFactor,
 } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
-import { ACT_RESULT_STATUS, type ActResult } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { Fragment, useEffect, useRef, useState } from "react";
 import type { MicrophoneStatus } from "#shared/messages/audio";
 import type { WorkspaceProviderId } from "#shared/messages/session";
@@ -189,7 +189,7 @@ export interface MicrophoneControl {
 }
 
 /**
- * Where the app stands against the latest release, and the acts the row can
+ * Where the app stands against the latest release, and the actions the row can
  * take about that: ask the release manifest now, restart into a build already
  * downloaded, or — where installing in place is impossible or has failed —
  * open the releases page in the browser. A newer build downloads itself when
@@ -206,13 +206,13 @@ export interface UpdateControl {
 }
 
 export interface SettingsWrites {
-  setting(field: AppSettingField, value: AppSettingValue<AppSettingField>): Promise<ActResult>;
+  setting(field: AppSettingField, value: AppSettingValue<AppSettingField>): Promise<ActionResult>;
   entry(
     field: KeyedAppSettingField,
     key: string,
     value: SettingEntryValue<KeyedAppSettingField> | undefined,
-  ): Promise<ActResult>;
-  reset(scope: SettingsResetScope): Promise<ActResult>;
+  ): Promise<ActionResult>;
+  reset(scope: SettingsResetScope): Promise<ActionResult>;
 }
 
 /**
@@ -256,7 +256,7 @@ export interface ShortcutControl {
    * defaults when omitted. The store answers with why when it refuses, and
    * the row is where that answer belongs.
    */
-  onVoiceHotkeyChange: (accelerator: string | undefined) => Promise<ActResult>;
+  onVoiceHotkeyChange: (accelerator: string | undefined) => Promise<ActionResult>;
   /** The ask key as registered, an accelerator on the talk key's terms. */
   askHotkey?: string;
   /** Whether a chosen ask chord is stored, on the talk key's terms. */
@@ -268,7 +268,7 @@ export interface ShortcutControl {
    * defaults when omitted, on the talk key's terms: the store answers with
    * why when it refuses, and the row is where that answer belongs.
    */
-  onAskHotkeyChange: (accelerator: string | undefined) => Promise<ActResult>;
+  onAskHotkeyChange: (accelerator: string | undefined) => Promise<ActionResult>;
   /** The stop key as registered, an accelerator on the talk key's terms. */
   stopHotkey?: string;
   /** Whether a chosen stop chord is stored, on the other rows' terms. */
@@ -280,7 +280,7 @@ export interface ShortcutControl {
    * default when omitted, on the other rows' terms: the store answers with
    * why when it refuses, and the row is where that answer belongs.
    */
-  onStopHotkeyChange: (accelerator: string | undefined) => Promise<ActResult>;
+  onStopHotkeyChange: (accelerator: string | undefined) => Promise<ActionResult>;
   /**
    * Whether a recording control has the keyboard. While one does, no Luke
    * key may act on its own press: the chord arriving is an entry, not an ask.
@@ -300,7 +300,7 @@ export interface SettingsPanelProps {
    * Asks the service to erase the account, resolving to why when it refuses —
    * the row keeps drawing the account it still has, with the answer under it.
    */
-  onDeleteAccount: () => Promise<ActResult>;
+  onDeleteAccount: () => Promise<ActionResult>;
   /**
    * Which settings page is showing: the front page, or one of the pages a
    * front-page row opens. Held by the app rather than here because Escape
@@ -426,7 +426,7 @@ function ProviderCredential({
    */
   children?: React.ReactNode;
 }): React.JSX.Element {
-  // Deleting is the one act that begins and ends on this line, question and
+  // Deleting is the one action that begins and ends on this line, question and
   // answer both. Entering a credential does not: it can leave for the slot and
   // come back, so it is held above.
   const [heldRemoval, setHeldRemoval] = useState<RemovalStage>(REMOVAL_STAGE.RESTING);
@@ -536,7 +536,7 @@ function ProviderCredential({
 
   const removeKey = async () => {
     setHeldRemoval(REMOVAL_STAGE.CLEARING);
-    const reason = actRejection(await control.remove(provider.id));
+    const reason = actionRejection(await control.remove(provider.id));
     returnFocus.current = true;
     setRemovalRejection(reason);
     // Answered either way. A refusal is an answer too, and asking again is a
@@ -823,7 +823,7 @@ function ResetGroupButton({
   scope: SettingsResetScope;
   /** The group as the button names it aloud: "the Voice page's settings". */
   label: string;
-  onReset: (scope: SettingsResetScope) => Promise<ActResult>;
+  onReset: (scope: SettingsResetScope) => Promise<ActionResult>;
 }): React.JSX.Element {
   const { busy, rejection, run } = useSettingWrite(onReset);
   return (
@@ -859,7 +859,7 @@ function ResetGroupButton({
  */
 function useSettingWrite<Value>(
   // biome-ignore lint/suspicious/noConfusingVoidType: the voice and pace cannot be refused, so those writes answer void
-  onChange: (value: Value) => void | Promise<ActResult>,
+  onChange: (value: Value) => void | Promise<ActionResult>,
 ) {
   const [busy, setBusy] = useState(false);
   const [rejection, setRejection] = useState<string>();
@@ -868,7 +868,7 @@ function useSettingWrite<Value>(
     if (!(reply instanceof Promise)) return;
     setBusy(true);
     void reply.then((result) => {
-      setRejection(result.status === ACT_RESULT_STATUS.ACCEPTED ? undefined : result.reason);
+      setRejection(result.status === ACTION_RESULT_STATUS.ACCEPTED ? undefined : result.reason);
       setBusy(false);
     });
   };
@@ -879,8 +879,8 @@ function useSettingWrite<Value>(
   };
 }
 
-function actRejection(result: ActResult): string | undefined {
-  return result.status === ACT_RESULT_STATUS.ACCEPTED ? undefined : result.reason;
+function actionRejection(result: ActionResult): string | undefined {
+  return result.status === ACTION_RESULT_STATUS.ACCEPTED ? undefined : result.reason;
 }
 
 /**
@@ -913,7 +913,7 @@ function SwitchRow({
    * and where it stands.
    */
   disabled?: boolean;
-  onChange: (enabled: boolean) => Promise<ActResult>;
+  onChange: (enabled: boolean) => Promise<ActionResult>;
 }): React.JSX.Element {
   const { busy, rejection, run } = useSettingWrite(onChange);
   return (
@@ -996,7 +996,7 @@ function SelectRow<Value extends string | number>({
    */
   busy?: boolean;
   // biome-ignore lint/suspicious/noConfusingVoidType: the voice and pace cannot be refused, so those writes answer void
-  onChange: (value: Value) => void | Promise<ActResult>;
+  onChange: (value: Value) => void | Promise<ActionResult>;
 }): React.JSX.Element {
   const { busy, rejection, run } = useSettingWrite(onChange);
   return (
@@ -1153,7 +1153,7 @@ function WorkspaceAgentRow({
   onChange: (
     providerId: ProviderId,
     selection: WorkspaceAgentSelection | undefined,
-  ) => Promise<ActResult>;
+  ) => Promise<ActionResult>;
 }): React.JSX.Element {
   // The table's models flattened in its own order, each remembering its
   // agent's effort levels, so the select's indices are as stable as the build
@@ -1482,18 +1482,18 @@ function KeySyncSection({
 export interface CalendarControl {
   /** Each connected account's calendars, as last observed. */
   choices: readonly ObservedAccountCalendars[];
-  /** True while another entry holds the slot, which refuses a second act. */
+  /** True while another entry holds the slot, which refuses a second action. */
   held: boolean;
   /** True while a sign-in is waiting on the browser. */
   connecting: boolean;
   /** Stands the panel down and opens Google's consent page. */
   onSignIn: () => void;
-  onRemoveAccount: (accountId: string) => Promise<ActResult>;
+  onRemoveAccount: (accountId: string) => Promise<ActionResult>;
   onToggleCalendar: (
     accountId: string,
     calendarId: string,
     selected: boolean,
-  ) => Promise<ActResult>;
+  ) => Promise<ActionResult>;
   /**
    * Runs one calendar observation pass now, over every source. Block-level
    * because the pass is, though only the Apple row draws the button today.
@@ -1639,8 +1639,8 @@ function CalendarAccountRow({
   calendars: readonly AccountCalendar[];
   /** Why the latest pass could not read the account, when it could not. */
   failure?: string;
-  onRemove: () => Promise<ActResult>;
-  onToggle: (calendarId: string, selected: boolean) => Promise<ActResult>;
+  onRemove: () => Promise<ActionResult>;
+  onToggle: (calendarId: string, selected: boolean) => Promise<ActionResult>;
 }): React.JSX.Element {
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1648,14 +1648,14 @@ function CalendarAccountRow({
 
   const removeAccount = async () => {
     setBusy(true);
-    setRejection(actRejection(await onRemove()));
+    setRejection(actionRejection(await onRemove()));
     setBusy(false);
     setAsking(false);
   };
 
   const toggleCalendar = async (calendarId: string, selected: boolean) => {
     setBusy(true);
-    setRejection(actRejection(await onToggle(calendarId, selected)));
+    setRejection(actionRejection(await onToggle(calendarId, selected)));
     setBusy(false);
   };
 
@@ -1681,7 +1681,7 @@ function CalendarAccountRow({
         disabled={busy}
         onToggle={(calendarId, selected) => void toggleCalendar(calendarId, selected)}
       />
-      {/* An act just refused, else what the latest pass reported — a revoked
+      {/* An action just refused, else what the latest pass reported — a revoked
           grant surfaces on its own row, not in a log. */}
       {(rejection ?? failure) ? <p className="error-message">{rejection ?? failure}</p> : null}
     </div>
@@ -1692,18 +1692,18 @@ function CalendarAccountRow({
 export interface AppleCalendarControl {
   /** This Mac's calendars, as last observed. */
   choices: readonly AccountCalendar[];
-  /** True while another entry holds the slot, which refuses a second act. */
+  /** True while another entry holds the slot, which refuses a second action. */
   held: boolean;
   /** True while the system's consent dialog is up. */
   connecting: boolean;
   /** Stands the panel down so macOS's own dialog is not covered by it. */
   onSignIn: () => void;
-  onDisconnect: () => Promise<ActResult>;
-  onToggleCalendar: (calendarId: string, selected: boolean) => Promise<ActResult>;
+  onDisconnect: () => Promise<ActionResult>;
+  onToggleCalendar: (calendarId: string, selected: boolean) => Promise<ActionResult>;
   /**
    * True when the System Settings switch has been turned off: the stored
    * connection stands, but the row offers Connect again — reconnecting is
-   * the only act left, and refresh or disconnect would both be acts on a
+   * the only action left, and refresh or disconnect would both be acts on a
    * grant that is gone.
    */
   revoked: boolean;
@@ -1736,14 +1736,14 @@ function AppleCalendarRow({
 
   const disconnect = async () => {
     setBusy(true);
-    setRejection(actRejection(await appleCalendar.onDisconnect()));
+    setRejection(actionRejection(await appleCalendar.onDisconnect()));
     setBusy(false);
     setAsking(false);
   };
 
   const toggleCalendar = async (calendarId: string, selected: boolean) => {
     setBusy(true);
-    setRejection(actRejection(await appleCalendar.onToggleCalendar(calendarId, selected)));
+    setRejection(actionRejection(await appleCalendar.onToggleCalendar(calendarId, selected)));
     setBusy(false);
   };
 
@@ -1819,7 +1819,7 @@ function AppleCalendarRow({
           onToggle={(calendarId, selected) => void toggleCalendar(calendarId, selected)}
         />
       ) : null}
-      {/* Only an act just refused: a pass that could not read surfaces as
+      {/* Only an action just refused: a pass that could not read surfaces as
           the row's own state — a withdrawn grant is the Connect button
           standing again — never as standing red text. */}
       {rejection ? <p className="error-message">{rejection}</p> : null}
@@ -1879,7 +1879,7 @@ export function CalendarIntegrations({
             <span className="settings-actions">
               {/* The consent page does the connecting: the same word every
                   other integration's row uses, and a second account is the
-                  same act worded for what it adds. */}
+                  same action worded for what it adds. */}
               <button
                 type="button"
                 className="quiet-button"
@@ -1938,13 +1938,13 @@ export function CalendarIntegrations({
 
 /** What the Linear row can be asked for, which is connecting and ending it. */
 export interface LinearControl {
-  /** True while another entry holds the slot, which refuses a second act. */
+  /** True while another entry holds the slot, which refuses a second action. */
   held: boolean;
   /** True while a sign-in is waiting on the browser. */
   connecting: boolean;
   /** Stands the panel down and opens Linear's consent page. */
   onSignIn: () => void;
-  onDisconnect: () => Promise<ActResult>;
+  onDisconnect: () => Promise<ActionResult>;
 }
 
 export interface SupersetControl {
@@ -1954,10 +1954,10 @@ export interface SupersetControl {
   connecting: boolean;
   onConnect: () => void;
   /** Runs the CLI's own documented sign-out, withdrawing the stored login. */
-  onDisconnect: () => Promise<ActResult>;
+  onDisconnect: () => Promise<ActionResult>;
   agents: readonly string[];
   defaultAgent?: string;
-  onDefaultAgentChange: (agent: string | undefined) => Promise<ActResult>;
+  onDefaultAgentChange: (agent: string | undefined) => Promise<ActionResult>;
 }
 
 /**
@@ -2017,7 +2017,7 @@ function SupersetIntegration({
 
   const disconnect = async () => {
     setBusy(true);
-    setRejection(actRejection(await control.onDisconnect()));
+    setRejection(actionRejection(await control.onDisconnect()));
     setBusy(false);
     setAsking(false);
   };
@@ -2061,7 +2061,7 @@ function SupersetIntegration({
               {/* The pencil is the credential rows' word for editing a
                   connection that already stands. Here the connection is the
                   CLI's own login, so editing it is signing in again — the
-                  same act the Connect button runs, which is how the CLI
+                  same action the Connect button runs, which is how the CLI
                   switches organizations. */}
               <button
                 type="button"
@@ -2154,7 +2154,7 @@ function SupersetIntegration({
 /**
  * The issue tracker: connected by signing in with Linear, never by a pasted
  * credential, and drawn at all only in a build that carries the OAuth client
- * the sign-in runs on — a row whose one act cannot run is not a row.
+ * the sign-in runs on — a row whose one action cannot run is not a row.
  */
 function LinearIntegration({
   settings,
@@ -2176,7 +2176,7 @@ function LinearIntegration({
 
   const disconnect = async () => {
     setBusy(true);
-    setRejection(actRejection(await linear.onDisconnect()));
+    setRejection(actionRejection(await linear.onDisconnect()));
     setBusy(false);
     setAsking(false);
   };
@@ -2763,7 +2763,7 @@ function ShortcutRow({
   defaultKey: string;
   /** Why the key answers nothing right now, absent while it answers. */
   attention?: string;
-  onChange: (accelerator: string | undefined) => Promise<ActResult>;
+  onChange: (accelerator: string | undefined) => Promise<ActionResult>;
   onCapture: (capturing: boolean) => void;
 }): React.JSX.Element {
   const [recording, setRecording] = useState(false);
@@ -2786,7 +2786,7 @@ function ShortcutRow({
 
   const apply = async (accelerator: string | undefined) => {
     setBusy(true);
-    setRejection(actRejection(await onChange(accelerator)));
+    setRejection(actionRejection(await onChange(accelerator)));
     setBusy(false);
   };
 
@@ -2871,7 +2871,7 @@ function ShortcutRow({
               window.sidecar.focusPanel();
             }}
             // Focus leaving takes the recording with it: whatever was pressed
-            // instead is its own act, not a half-formed chord left armed.
+            // instead is its own action, not a half-formed chord left armed.
             onBlur={() => setRecording(false)}
             onKeyDown={(event) => {
               // A key that repeats is being held through the chord, not
@@ -3023,7 +3023,7 @@ type AccountAsk = (typeof ACCOUNT_ASK)[keyof typeof ACCOUNT_ASK];
  *
  * Pressing the half that is already live does nothing. Pressing the other
  * either switches to a key already stored, or — with none — begins the entry
- * that would store one, which is the same act the row's Connect was: a source
+ * that would store one, which is the same action the row's Connect was: a source
  * you have not supplied yet has to be supplied before it can be chosen.
  */
 function VoiceSourceToggle({
@@ -3039,7 +3039,7 @@ function VoiceSourceToggle({
   keyStored: boolean;
   /** Whether this system can hold a key, which decides whether it can at all. */
   storageLocked: boolean;
-  onChoose: (source: VoiceSource) => Promise<ActResult>;
+  onChoose: (source: VoiceSource) => Promise<ActionResult>;
   /** Begins the entry, which stands the panel down to the slot. */
   onConnect: () => void;
 }): React.JSX.Element {
@@ -3193,7 +3193,7 @@ function AccountSection({
 }: {
   account: Extract<AccountSnapshot, { status: typeof ACCOUNT_STATUS.SIGNED_IN }>;
   onSignOut: () => Promise<void>;
-  onDeleteAccount: () => Promise<ActResult>;
+  onDeleteAccount: () => Promise<ActionResult>;
   panelOpen: boolean;
 }): React.JSX.Element {
   // Signing out asks first, the way deleting a key does: getting back in costs
@@ -3239,7 +3239,7 @@ function AccountSection({
     setBusy(true);
     setRejection(undefined);
     void onDeleteAccount().then((result) => {
-      setRejection(actRejection(result));
+      setRejection(actionRejection(result));
       setBusy(false);
       setAsking(ACCOUNT_ASK.NONE);
     });

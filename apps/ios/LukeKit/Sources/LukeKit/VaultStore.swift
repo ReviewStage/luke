@@ -12,7 +12,7 @@ public protocol AccountTokenProviding: AnyObject {
     func refreshAccessToken() async throws -> String
 }
 
-/// Holds what the vault last answered and runs the three acts against it.
+/// Holds what the vault last answered and runs the three actions against it.
 /// Every call carries the account's bearer token and follows the same
 /// 401 → refresh → retry discipline the sign-in path uses.
 @MainActor
@@ -27,7 +27,7 @@ public final class VaultStore {
     /// so entries answer only under the account that earned them — a new
     /// sign-in reads nothing until its own load lands.
     private var entriesAccount: String?
-    /// Bumped by every act that makes the standing entries newer than any
+    /// Bumped by every action that makes the standing entries newer than any
     /// answer still in flight, so a slow list response cannot resurrect a
     /// key that was just deleted or hide one that was just stored.
     private var answerGeneration = 0
@@ -57,7 +57,7 @@ public final class VaultStore {
         do {
             try await refreshEntries()
         } catch {
-            // An act that landed while this load traveled has fresher word on
+            // An action that landed while this load traveled has fresher word on
             // whether the vault answers; its state stands.
             if gen == answerGeneration { loadError = VaultStore.message(for: error) }
         }
@@ -69,11 +69,11 @@ public final class VaultStore {
     public func store(key: String, for provider: VaultProviderID) async throws {
         let account = session.accountEmail
         try await authorized { try await self.client.storeKey(key, for: provider, accessToken: $0) }
-        // The act was the asking account's; entries standing under a sign-in
+        // The action was the asking account's; entries standing under a sign-in
         // that changed hands mid-flight are not its to touch.
         guard session.accountEmail == account, entriesAccount == account else { return }
         answerGeneration += 1
-        // The vault just answered an act, so a standing load failure is stale.
+        // The vault just answered an action, so a standing load failure is stale.
         loadError = nil
         // Upserted locally so the row can say a key stands even when the list
         // round-trip below does not land.
@@ -123,7 +123,7 @@ public final class VaultStore {
     private func refreshEntries() async throws {
         let gen = answerGeneration
         let entries = try await authorized { try await self.client.listKeys(accessToken: $0) }
-        // A newer act, or another account's sign-in, landed while this answer
+        // A newer action, or another account's sign-in, landed while this answer
         // traveled; its state wins.
         guard gen == answerGeneration, entriesAccount == session.accountEmail else { return }
         entriesByProvider = Dictionary(
@@ -136,7 +136,7 @@ public final class VaultStore {
     /// Every step that could pick up a different account's credential — the
     /// initial token read, the 401 retry's refresh, the replay — re-checks
     /// that the account still stands, because a retry that changed hands
-    /// mid-flight would carry one account's act (and a pasted key) into
+    /// mid-flight would carry one account's action (and a pasted key) into
     /// another account's vault.
     private func authorized<T>(_ call: (String) async throws -> T) async throws -> T {
         guard let account = session.accountEmail else { throw AccountSessionError.signedOut }

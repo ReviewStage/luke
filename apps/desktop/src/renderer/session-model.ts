@@ -1,4 +1,4 @@
-import { SESSION_LIST_ALL } from "@sidecar/acts";
+import { SESSION_LIST_ALL } from "@sidecar/actions";
 import { SESSION_LIST_SORT, type SessionListSort } from "@sidecar/guide";
 import {
   HOSTED_AGENT_ID_LIST,
@@ -489,7 +489,7 @@ function bySort(sort: SessionSort): (first: SessionView, second: SessionView) =>
  * drawing them, so nothing in one is openable: the pull-request chip is still
  * drawn where the fixture says a live session would have it — the evidence has
  * to show it — but a fixture run cannot reach a provider, since the main
- * process refuses every act against its empty registry.
+ * process refuses every action against its empty registry.
  */
 export function fixtureSessions(fixture: FixtureSnapshot): readonly SessionView[] {
   return [...fixture.sessions]

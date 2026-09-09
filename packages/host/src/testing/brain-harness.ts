@@ -28,7 +28,7 @@ import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
 } from "@sidecar/session";
-import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { BrainHost } from "../brain/host.js";
 import { followBrainRequests } from "../brain/publication.js";
 import { deliverable, type GrantedWords, ledgerContext } from "../service.js";
@@ -155,7 +155,7 @@ export function brainHarness() {
       return { record: waited, speak: false };
     await drainMicrotasks();
     const live = agent?.request(runId) ?? waited;
-    if (live.historyRecordedAt === undefined) return { record: live, speak: false };
+    if (live.conversationRecordedAt === undefined) return { record: live, speak: false };
     const generationId = store.generationId() ?? "";
     const speak =
       deliverable(live) &&
@@ -182,11 +182,11 @@ export function brainHarness() {
       ...options,
       runtime: toolLoopRuntimeOver(model),
       prepareTurn: () => ({ prompt: "instructions", layers: {} }),
-      acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
+      actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
       roster: () => ({ text: "", identities: [] }),
       standingContext: () => "",
-      readTranscriptSince: async () => ({ status: ACT_RESULT_STATUS.REJECTED, reason: "no" }),
-      readTranscript: async () => ({ status: ACT_RESULT_STATUS.REJECTED, reason: "no" }),
+      readTranscriptSince: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
+      readTranscript: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
       deliver: () => undefined,
       store,
       createRunId: () => `run-${++ids}`,

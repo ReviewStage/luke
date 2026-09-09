@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { remoteRealtimeToolDefinitions } from "@sidecar/acts";
+import { remoteRealtimeToolDefinitions } from "@sidecar/actions";
 import { realtimeCredentialIsUsable } from "@sidecar/hosted";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import {

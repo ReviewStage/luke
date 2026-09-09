@@ -39,7 +39,7 @@ export interface BrainPublicationDependencies {
   onEndPublished?: (record: BrainRequestRecord, sessionKey: SessionKey) => void;
   /**
    * Hands the standing follower's publication chain to whoever answers a
-   * wait, so a wait that finds its run ended can let the end reach History
+   * wait, so a wait that finds its run ended can let the end reach Conversation
    * before the words are granted anywhere.
    */
   onPublication?: (settled: () => Promise<void>) => void;
@@ -54,7 +54,7 @@ export const REJECTED_SUBMISSION: BrainAskSubmissionResult = {
 /** The part of the agent publication reads and marks: the live record, and the two marks. */
 export type BrainPublicationAgent = Pick<
   BrainAgent,
-  "request" | "markHistoryRecorded" | "markAskRecorded"
+  "request" | "markConversationRecorded" | "markAskRecorded"
 >;
 
 /** Writes a typed ask's own line once, at its acceptance, and marks the run when the thread took it. */
@@ -95,18 +95,18 @@ async function publishEnd(
 ): Promise<BrainRequestRecord | undefined> {
   const current = agent.request(runId);
   if (!current || !isTerminalBrainRequestStatus(current.status)) return undefined;
-  if (current.historyRecordedAt !== undefined) return current;
+  if (current.conversationRecordedAt !== undefined) return current;
   const words = brainReplyWords(current);
   if (!words) return undefined;
   const at = current.settledAt ?? current.acceptedAt;
   if (!(await record(replyConversationEntry(words, current.runId), at, sessionKey))) {
     return undefined;
   }
-  if (!(await agent.markHistoryRecorded(runId, at))) return undefined;
+  if (!(await agent.markConversationRecorded(runId, at))) return undefined;
   // Re-read rather than patched: the mark landed on the live record, and a
   // Clear or a replacement in the meantime has taken the record with it.
   const marked = agent.request(runId);
-  return marked?.historyRecordedAt !== undefined ? marked : undefined;
+  return marked?.conversationRecordedAt !== undefined ? marked : undefined;
 }
 
 /**
@@ -142,7 +142,7 @@ export async function publishRuns(
  * Follows the brain that currently stands: each rebuilt agent is subscribed
  * as it arrives, its records relayed to every window and its runs written to
  * the thread. The subscription is the completion channel the reply delivery
- * reads; the thread write here is the one History write for a run.
+ * reads; the thread write here is the one Conversation write for a run.
  * Unfollowing retires the subscription, drains the publication of the reports
  * already taken, and then relays nothing more, so a replaced agent's records
  * are all written once and its late ones reach neither the thread nor the

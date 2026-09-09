@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  ACT_KIND,
-  ACT_RESULT_STATUS,
-  type ActInput,
+  ACTION_KIND,
+  ACTION_RESULT_STATUS,
+  type ActionInput,
   type AdvertisedControl,
   agedStatus,
-  dispatchAct,
+  dispatchAction,
   OBSERVATION_WINDOW,
   type ProviderSessionObservation,
   SESSION_LOCATION,
@@ -50,23 +50,23 @@ function observation(
 }
 
 const STUB_APPROVE_CONTROL = {
-  kind: ACT_KIND.CONTROL,
+  kind: ACTION_KIND.CONTROL,
   id: "approve",
   label: "Approve",
 } as const;
 
-/** An act whose provider answers only once it is done, on its route's own deadline. */
-const STUB_SLOW_ACT_CONTROL = {
-  kind: ACT_KIND.CONTROL,
+/** An action whose provider answers only once it is done, on its route's own deadline. */
+const STUB_SLOW_ACTION_CONTROL = {
+  kind: ACTION_KIND.CONTROL,
   id: "file-away",
   label: "File away",
 } as const;
 /** Short enough for a test to overrun; what matters is that it is the route's own. */
-const STUB_SLOW_ACT_DEADLINE_MS = 25;
+const STUB_SLOW_ACTION_DEADLINE_MS = 25;
 
 /**
  * Stands in for a real provider so the shared cloud pass can be tested on its
- * own: one plugin over `cloudPass`, with the two acts a provider routes and
+ * own: one plugin over `cloudPass`, with the two actions a provider routes and
  * the counters a test reads.
  */
 type StubCloudPlugin = SessionProviderPlugin & {
@@ -91,7 +91,7 @@ interface StubOptions {
   minimumRefreshIntervalMs?: number;
   onDiagnostic?: AdapterDiagnosticCallback;
   requestHeaders?: Readonly<Record<string, string>>;
-  /** Observes and routes nothing: a provider whose acts are all absent. */
+  /** Observes and routes nothing: a provider whose actions are all absent. */
   routesNothing?: boolean;
 }
 
@@ -138,7 +138,7 @@ function stubPluginFor(fetch: CloudFetch, overrides: StubOptions = {}): StubClou
     const key = await pass.readApiKey();
     if (!key) {
       return {
-        status: ACT_RESULT_STATUS.REJECTED,
+        status: ACTION_RESULT_STATUS.REJECTED,
         reason: `${STUB_PROVIDER.displayName}'s API key is no longer configured.`,
       } as const;
     }
@@ -170,8 +170,8 @@ function stubPluginFor(fetch: CloudFetch, overrides: StubOptions = {}): StubClou
     ...(overrides.routesNothing
       ? undefined
       : {
-          acts: {
-            message: ({ request, observation }: ActInput<{ readonly text: string }>) =>
+          actions: {
+            message: ({ request, observation }: ActionInput<{ readonly text: string }>) =>
               write({
                 segments: ["v0", "sessions", observation.providerSessionId],
                 action: "sendMessage",
@@ -180,17 +180,17 @@ function stubPluginFor(fetch: CloudFetch, overrides: StubOptions = {}): StubClou
             control: ({
               request,
               observation,
-            }: ActInput<{ readonly control: AdvertisedControl }>) => {
+            }: ActionInput<{ readonly control: AdvertisedControl }>) => {
               const { control } = request;
-              if (control.id === STUB_SLOW_ACT_CONTROL.id) {
+              if (control.id === STUB_SLOW_ACTION_CONTROL.id) {
                 return write({
                   segments: ["v0", "sessions", observation.providerSessionId, "file-away"],
-                  timeoutMs: STUB_SLOW_ACT_DEADLINE_MS,
+                  timeoutMs: STUB_SLOW_ACTION_DEADLINE_MS,
                 });
               }
               if (control.id !== STUB_APPROVE_CONTROL.id) {
                 return Promise.resolve({
-                  status: ACT_RESULT_STATUS.UNSUPPORTED,
+                  status: ACTION_RESULT_STATUS.UNSUPPORTED,
                   reason: UNSUPPORTED_BY_OBSERVATION,
                 });
               }
@@ -204,20 +204,20 @@ function stubPluginFor(fetch: CloudFetch, overrides: StubOptions = {}): StubClou
 }
 
 test("answers unsupported explicitly when no observed route exists", async () => {
-  // A provider that routes a message and one whose acts are all absent answer
+  // A provider that routes a message and one whose actions are all absent answer
   // the same way for a session no pass reported: what the observation does
   // not hold, no handler is reached for.
   const routed = stubPluginFor(stubFetch().fetch);
   const observesOnly = stubPluginFor(stubFetch().fetch, { routesNothing: true });
   for (const plugin of [routed, observesOnly]) {
     assert.deepEqual(
-      await dispatchAct(
+      await dispatchAction(
         plugin,
         "message",
         admittedForTest({ providerSessionId: "missing", text: "hello" }),
       ),
       {
-        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        status: ACTION_RESULT_STATUS.UNSUPPORTED,
         reason: UNSUPPORTED_BY_OBSERVATION,
       },
     );
@@ -546,10 +546,10 @@ test("issues no request at all when the credential cannot be read", async () => 
 test("sends a user message through the route and body the provider documents", async () => {
   const stub = stubFetch();
   const plugin = stubPluginFor(stub.fetch);
-  plugin.collected = [observation("session-one", { advertises: [{ kind: ACT_KIND.MESSAGE }] })];
+  plugin.collected = [observation("session-one", { advertises: [{ kind: ACTION_KIND.MESSAGE }] })];
   await plugin.observe();
 
-  const result = await dispatchAct(
+  const result = await dispatchAction(
     plugin,
     "message",
     admittedForTest({ providerSessionId: "session-one", text: "go on" }),
@@ -570,12 +570,12 @@ test("refuses to send once the credential is gone, whatever was observed with it
   const stub = stubFetch();
   let apiKey: string | undefined = TEST_API_KEY;
   const plugin = stubPluginFor(stub.fetch, { readApiKey: async () => apiKey });
-  plugin.collected = [observation("session-one", { advertises: [{ kind: ACT_KIND.MESSAGE }] })];
+  plugin.collected = [observation("session-one", { advertises: [{ kind: ACTION_KIND.MESSAGE }] })];
   await plugin.observe();
   const observationRequests = stub.requests.length;
 
   apiKey = undefined;
-  const result = await dispatchAct(
+  const result = await dispatchAction(
     plugin,
     "message",
     admittedForTest({ providerSessionId: "session-one", text: "go on" }),
@@ -594,18 +594,18 @@ test("reports what became of a send the provider refused", async () => {
   let status: number = HTTP_STATUS.OK;
   const stub = stubFetch(() => status);
   const plugin = stubPluginFor(stub.fetch);
-  plugin.collected = [observation("session-one", { advertises: [{ kind: ACT_KIND.MESSAGE }] })];
+  plugin.collected = [observation("session-one", { advertises: [{ kind: ACTION_KIND.MESSAGE }] })];
   await plugin.observe();
   const message = { providerSessionId: "session-one", text: "go on" };
 
   status = HTTP_STATUS.UNAUTHORIZED;
-  const unauthorized = await dispatchAct(plugin, "message", admittedForTest(message));
+  const unauthorized = await dispatchAction(plugin, "message", admittedForTest(message));
   status = HTTP_STATUS.NOT_FOUND;
-  const missing = await dispatchAct(plugin, "message", admittedForTest(message));
+  const missing = await dispatchAction(plugin, "message", admittedForTest(message));
   status = HTTP_STATUS.CONFLICT;
-  const conflicted = await dispatchAct(plugin, "message", admittedForTest(message));
+  const conflicted = await dispatchAction(plugin, "message", admittedForTest(message));
   status = HTTP_STATUS.SERVER_ERROR;
-  const failed = await dispatchAct(plugin, "message", admittedForTest(message));
+  const failed = await dispatchAction(plugin, "message", admittedForTest(message));
 
   assert.equal(unauthorized.status, "rejected");
   assert.match(unauthorized.status === "rejected" ? unauthorized.reason : "", /API key/);
@@ -624,11 +624,11 @@ test("reports an unanswered send as indeterminate and makes the next refresh ask
     return jsonResponse({});
   });
   const plugin = stubPluginFor(fetch, { minimumRefreshIntervalMs: 60_000 });
-  plugin.collected = [observation("session-one", { advertises: [{ kind: ACT_KIND.MESSAGE }] })];
+  plugin.collected = [observation("session-one", { advertises: [{ kind: ACTION_KIND.MESSAGE }] })];
   await plugin.observe();
 
   failWrites = true;
-  const result = await dispatchAct(
+  const result = await dispatchAction(
     plugin,
     "message",
     admittedForTest({ providerSessionId: "session-one", text: "go on" }),
@@ -649,11 +649,11 @@ test("a write answered with an unnamed status makes the next refresh ask", async
   let status: number = HTTP_STATUS.OK;
   const stub = stubFetch(() => status);
   const plugin = stubPluginFor(stub.fetch, { minimumRefreshIntervalMs: 60_000 });
-  plugin.collected = [observation("session-one", { advertises: [{ kind: ACT_KIND.MESSAGE }] })];
+  plugin.collected = [observation("session-one", { advertises: [{ kind: ACTION_KIND.MESSAGE }] })];
   await plugin.observe();
 
   status = HTTP_STATUS.SERVER_ERROR;
-  const result = await dispatchAct(
+  const result = await dispatchAction(
     plugin,
     "message",
     admittedForTest({ providerSessionId: "session-one", text: "go on" }),
@@ -670,23 +670,23 @@ test("a write answered with an unnamed status makes the next refresh ask", async
 test("a write runs on the deadline its own route asked for", async () => {
   const { fetch } = recordingFetch((request) => {
     if (request.method !== "POST") return jsonResponse({});
-    // An act still in progress at the deadline: the response arrives only as
+    // An action still in progress at the deadline: the response arrives only as
     // the refusal the route's own signal raises.
     return new Promise((_resolve, reject) => {
       request.init.signal?.addEventListener("abort", () => reject(new Error("deadline")));
     });
   });
   const plugin = stubPluginFor(fetch, { minimumRefreshIntervalMs: 60_000 });
-  plugin.collected = [observation("session-slow", { advertises: [STUB_SLOW_ACT_CONTROL] })];
+  plugin.collected = [observation("session-slow", { advertises: [STUB_SLOW_ACTION_CONTROL] })];
   await plugin.observe();
 
   const startedAt = performance.now();
-  const result = await dispatchAct(
+  const result = await dispatchAction(
     plugin,
     "control",
     admittedForTest({
       providerSessionId: "session-slow",
-      control: STUB_SLOW_ACT_CONTROL,
+      control: STUB_SLOW_ACTION_CONTROL,
     }),
   );
 
@@ -696,7 +696,7 @@ test("a write runs on the deadline its own route asked for", async () => {
   // out the shared bound here would mean the route's ask never reached the
   // request.
   assert.ok(performance.now() - startedAt < CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS / 2);
-  // The act may have finished behind the lost answer, so the next refresh
+  // The action may have finished behind the lost answer, so the next refresh
   // asks the provider instead of serving the cache.
   await plugin.observe();
   assert.equal(plugin.passes, 2);
@@ -724,7 +724,7 @@ test("runs an advertised control through its documented route, sending no body",
   await plugin.observe();
   const observationRequests = stub.requests.length;
 
-  const approved = await dispatchAct(
+  const approved = await dispatchAction(
     plugin,
     "control",
     admittedForTest({
@@ -732,7 +732,7 @@ test("runs an advertised control through its documented route, sending no body",
       control: STUB_APPROVE_CONTROL,
     }),
   );
-  const unadvertised = await dispatchAct(
+  const unadvertised = await dispatchAction(
     plugin,
     "control",
     admittedForTest({
@@ -740,12 +740,12 @@ test("runs an advertised control through its documented route, sending no body",
       control: STUB_APPROVE_CONTROL,
     }),
   );
-  const unknown = await dispatchAct(
+  const unknown = await dispatchAction(
     plugin,
     "control",
     admittedForTest({
       providerSessionId: "session-plan",
-      control: { kind: ACT_KIND.CONTROL, id: "terminate", label: "Terminate" },
+      control: { kind: ACTION_KIND.CONTROL, id: "terminate", label: "Terminate" },
     }),
   );
 

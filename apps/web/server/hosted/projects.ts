@@ -1,5 +1,5 @@
 import {
-  ACT_KIND,
+  ACTION_KIND,
   CLOUD_AGENT_PROVIDER_ID,
   type CloudAgentProviderId,
   type CloudFetch,
@@ -8,7 +8,7 @@ import {
   type WorkspaceProject,
   workspaceAgentModels,
 } from "../core.js";
-import { actUnsupportedReason } from "./act-execute.js";
+import { actionUnsupportedReason } from "./action-execute.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import { createRateBrake } from "./rate-brake.js";
 import { observeProviders, readApiKeyFor } from "./vault-keys.js";
@@ -75,7 +75,7 @@ export async function handleProjects(options: ProjectsOptions): Promise<Response
   const passes = await observeProviders({
     providerIds: Object.values(CLOUD_AGENT_PROVIDER_ID).filter(
       (providerId) =>
-        actUnsupportedReason(ACT_KIND.CREATE_WORKSPACE, providerId) === undefined &&
+        actionUnsupportedReason(ACTION_KIND.CREATE_WORKSPACE, providerId) === undefined &&
         stored.has(providerId),
     ),
     readApiKey,

@@ -15,8 +15,8 @@ export const HOST_NATIVE_NODE_ID = "native";
 export const HOST_NODE_CAPABILITY = {
   /** Hands an address to the operating system, as a row press does. */
   OPEN_EXTERNAL: "os.openExternal",
-  /** Carries an app act only the panel can perform and answers what became of it. */
-  PANEL_APP_ACT: "panel.performAppAct",
+  /** Carries an app action only the panel can perform and answers what became of it. */
+  PANEL_APP_ACTION: "panel.performAppAction",
   /**
    * Runs one invocation of this Mac's EventKit helper — a command fixed by
    * the build with the window's instants and calendar ids — and answers its

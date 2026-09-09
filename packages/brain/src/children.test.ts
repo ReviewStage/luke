@@ -16,7 +16,7 @@ import {
   itemsOfType,
   itemText,
   message,
-  messageAct,
+  messageAction,
   settle,
   submit,
 } from "./harness.js";
@@ -32,7 +32,7 @@ import { BRAIN_TOOL } from "./tools.js";
 
 test("a child's completion steers into the requester's run under way, is taken once, and opens its own turn when nothing is under way", async () => {
   const inner = new FakeClient();
-  inner.answers.push(answered([messageAct("act-1")]), answered([message("done")]));
+  inner.answers.push(answered([messageAction("act-1")]), answered([message("done")]));
   const { client, open } = gatedClient(inner);
   const h = harness({ client });
   const runId = acceptedRunId(await submit(h, "keep going"));
@@ -52,8 +52,8 @@ test("a child's completion steers into the requester's run under way, is taken o
   assert.deepEqual(await again, { delivered: true });
   await settle();
   assert.equal((await h.agent.waitAsk(runId, 1))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  // Two inferences: the act's, then the one that read the steered completion
-  // beside the act's result, and never a third for the duplicate.
+  // Two inferences: the action's, then the one that read the steered completion
+  // beside the action's result, and never a third for the duplicate.
   assert.equal(inner.inputs.length, 2);
   const second = inner.inputs[1] ?? [];
   const steeredItems = second.filter((item) =>
@@ -154,11 +154,11 @@ test("a steered completion is delivered only once a checkpoint carries it: a run
   assert.equal(completionTurns.length, 1);
 });
 
-test("a steered completion carried by an act's checkpoint is delivered even though the run then fails", async () => {
+test("a steered completion carried by an action's checkpoint is delivered even though the run then fails", async () => {
   const inner = new FakeClient();
   inner.answers.push(
-    answered([messageAct("act-1")]),
-    answered([messageAct("act-2")]),
+    answered([messageAction("act-1")]),
+    answered([messageAction("act-2")]),
     failedAnswer("upstream down"),
   );
   const { client, open } = gatedClient(inner);
@@ -169,15 +169,15 @@ test("a steered completion carried by an act's checkpoint is delivered even thou
     ...childCompletion({
       completionId: "completion:child-2",
       childId: "child-2",
-      resultText: "carried by the act",
+      resultText: "carried by the action",
     }),
   );
   open();
   assert.deepEqual(await pending, { delivered: true });
   assert.equal((await h.agent.waitAsk(runId, 1))?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(h.performed.length, 2);
-  // The second act's checkpoint carried the steered words; the failure rolled back to it, not before.
-  assert.ok(JSON.stringify(h.repository.state?.items ?? []).includes("carried by the act"));
+  // The second action's checkpoint carried the steered words; the failure rolled back to it, not before.
+  assert.ok(JSON.stringify(h.repository.state?.items ?? []).includes("carried by the action"));
 });
 
 test("a completion turn whose checkpoint the store refuses is not delivered, and one whose model fails leaves the context untouched", async () => {

@@ -1,6 +1,6 @@
 import {
-  ACT_KIND,
-  type AdvertisedAct,
+  ACTION_KIND,
+  type AdvertisedAction,
   agedStatus,
   agentIdentityFor,
   maximumSessionTitleLength,
@@ -151,7 +151,7 @@ export async function conductorObservations(
 
   // The workspaces every observed chat of which was positively seen settled
   // — reporting idle or errored — judged from this pass's own statuses. An
-  // archive is a workspace-level act, so it is offered only for these: a
+  // archive is a workspace-level action, so it is offered only for these: a
   // chat still working, and just as much one whose status could not be read
   // at all, keeps the whole workspace off the list, because filing away a
   // workspace whose state Luke has not actually seen stop could take a live
@@ -364,7 +364,7 @@ function observationFor(
 }
 
 /**
- * The acts Conductor documents for this chat right now. Every workspace id
+ * The actions Conductor documents for this chat right now. Every workspace id
  * riding one is the workspace this pass observed, so a target can never
  * outlive the snapshot that promised it.
  */
@@ -372,8 +372,8 @@ function advertisementsFor(
   session: ConductorSession,
   reported: ConductorReportedStatus | undefined,
   settledWorkspaceIds: ReadonlySet<string>,
-): readonly AdvertisedAct[] {
-  const advertises: AdvertisedAct[] = [];
+): readonly AdvertisedAction[] {
+  const advertises: AdvertisedAction[] = [];
   // Conductor documents both halves of a send — queued while a session is
   // idle, steered into the turn while it works — so any open chat takes a
   // message. An errored one is documented for no writer.
@@ -381,7 +381,7 @@ function advertisementsFor(
     reported?.status === CONDUCTOR_SESSION_STATUS.IDLE ||
     reported?.status === CONDUCTOR_SESSION_STATUS.WORKING
   ) {
-    advertises.push({ kind: ACT_KIND.MESSAGE });
+    advertises.push({ kind: ACTION_KIND.MESSAGE });
   }
   // The stop belongs to the turn and the archive to the workspace: a chat
   // mid-turn offers the stop alone — its own workspace is by definition
@@ -397,18 +397,18 @@ function advertisementsFor(
   }
   // Renaming is documented for any open chat, whatever its turn is doing,
   // so it is not gated on the reported status the way a message is.
-  advertises.push({ kind: ACT_KIND.RENAME_SESSION });
+  advertises.push({ kind: ACTION_KIND.RENAME_SESSION });
   // Another agent lands in the workspace around this row, whatever state
   // the row's own chat is in: the workspace was observed this pass, and
   // that is the thing the creation endpoint takes.
   advertises.push({
-    kind: ACT_KIND.ADD_AGENT,
+    kind: ACTION_KIND.ADD_AGENT,
     agents: CONDUCTOR_SPAWNABLE_AGENTS,
     target: session.workspace.id,
   });
   // A rename is documented for any open workspace, and every workspace here
   // is open — the filed-away ones never made it past the lifecycle read.
-  advertises.push({ kind: ACT_KIND.RENAME_WORKSPACE, target: session.workspace.id });
+  advertises.push({ kind: ACTION_KIND.RENAME_WORKSPACE, target: session.workspace.id });
   return advertises;
 }
 

@@ -178,7 +178,7 @@ export const CREDENTIAL_PROVIDER_LIST: readonly CredentialProvider[] =
 
 /* A key is a key, so every service lives in the one provider registry — but
    Settings draws these apart: an integration is a service Luke uses, not an
-   agent whose sessions he observes. The tracker is one he reads and acts on. */
+   agent whose sessions he observes. The tracker is one he reads and actions on. */
 const INTEGRATION_IDS: ReadonlySet<CredentialProviderId> = new Set([CREDENTIAL_PROVIDER_ID.LINEAR]);
 
 /**

@@ -326,7 +326,7 @@ export class HotkeyRegistrar {
    * The panel stands up focused, then the renderer is asked to put the caret in
    * the field — or, when the caret is already there, it reads the same press as
    * the dismissal, so one key summons and puts away like every launcher does.
-   * The panel is the primary one, where every other app-level act lands.
+   * The panel is the primary one, where every other app-level action lands.
    */
   #summonAskField(): void {
     const host = this.#host.primaryPanel();

@@ -1,4 +1,4 @@
-import type { RememberedFact } from "@sidecar/acts";
+import type { RememberedFact } from "@sidecar/actions";
 import type { BrainPersistedState, BrainStateRepository } from "@sidecar/brain";
 import {
   type DeletionOutcome,
@@ -27,7 +27,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { ConversationEntry } from "@sidecar/session";
 import type { CutoffBefore } from "./brain/conversation-deletion.js";
-import { ConversationThread, MemoryHistoryStore } from "./conversation-thread.js";
+import { ConversationThread, MemoryConversationStore } from "./conversation-thread.js";
 
 /**
  * The brain's store as the host composes it: one database under the
@@ -55,10 +55,10 @@ export interface StoreWiringDependencies {
   now: () => number;
   createEventId: () => string;
   /** Hears one conversation's thread as every window should now draw it, less the window that reported the change. */
-  onHistoryChanged: (
+  onConversationChanged: (
     sessionKey: SessionKey,
     entries: readonly ConversationEntry[],
-    except?: HistoryReporter,
+    except?: ConversationReporter,
   ) => void;
   /** Hears the directory whenever a conversation is created, archived, or deleted. */
   onDirectoryChanged: (entries: readonly ConversationRecord[]) => void;
@@ -66,15 +66,15 @@ export interface StoreWiringDependencies {
 }
 
 /**
- * What names the window a History change came from: an opaque token the
+ * What names the window a Conversation change came from: an opaque token the
  * client minted for that window, carried on its report and echoed on the
  * change so the client can skip the window that already holds the lines.
  * The host reads nothing into it.
  */
-export type HistoryReporter = string;
+export type ConversationReporter = string;
 
 /** How the store's side of a deletion ended; the archive itself stays with the store. */
-export type HistoryErasure = Pick<DeletionOutcome, "published">;
+export type ConversationErasure = Pick<DeletionOutcome, "published">;
 
 export interface StoreWiring {
   /** The client, started on first use; the worker's answers stand behind every method below. */
@@ -109,7 +109,7 @@ export interface StoreWiring {
   forgetNotebookEntry: (id: string) => Promise<boolean>;
   /**
    * Records a line in one conversation from the main process — the ask a
-   * carried act was, a typed ask the brain accepted, a run's end — minting
+   * carried action was, a typed ask the brain accepted, a run's end — minting
    * the line's id here, since this process is its writer.
    */
   recordConversationEntry: (
@@ -136,7 +136,7 @@ export interface StoreWiring {
   ) => Promise<ConversationRecord>;
   /** The scheduler's jobs; a run with nothing on disk keeps them in memory alone. */
   scheduledJobStore: () => ScheduledJobStore;
-  /** Closes the worker, once opened; the host's last act at a shutdown. */
+  /** Closes the worker, once opened; the host's last action at a shutdown. */
   close: () => Promise<void>;
   /** The child service's records and completions; a run with nothing on disk keeps them in memory alone. */
   childStore: () => ChildStore;
@@ -148,20 +148,20 @@ export interface StoreWiring {
    * every one sent after; nothing when the store could not answer. A thread
    * held in memory alone has no durable cutoff and answers an absent one.
    */
-  historyCutoff: (sessionKey: SessionKey) => Promise<CutoffBefore | undefined>;
+  conversationCutoff: (sessionKey: SessionKey) => Promise<CutoffBefore | undefined>;
   /**
-   * The store side of Delete history, called once the thread is fenced and
+   * The store side of Delete conversation, called once the thread is fenced and
    * the conversation's brain retired: the rows go behind a committed archive
    * and the archive is published. A thread held in memory alone has nothing
    * on disk to archive, so forgetting its lines is the whole erasure and
    * answers as published.
    */
-  eraseHistory: (
+  eraseConversation: (
     sessionKey: SessionKey,
     now: number,
     keepSessionId: string | undefined,
     cutoffBefore: number | undefined,
-  ) => Promise<HistoryErasure | undefined>;
+  ) => Promise<ConversationErasure | undefined>;
   /** One maintenance pass, with the conversations that must be kept whatever their age. */
   runMaintenance: (preserve: readonly SessionKey[]) => Promise<MaintenanceReport | undefined>;
   /** Refreshes the directory from the store and tells every window. */
@@ -179,14 +179,15 @@ export function wireStore(dependencies: StoreWiringDependencies): StoreWiring {
   const temporary = new Map<SessionKey, ConversationRecord>();
   let stored: readonly ConversationRecord[] = [];
 
-  const memoryStores = new Map<SessionKey, MemoryHistoryStore>();
+  const memoryStores = new Map<SessionKey, MemoryConversationStore>();
   const memoryThread = (sessionKey: SessionKey) => {
-    const store = new MemoryHistoryStore();
+    const store = new MemoryConversationStore();
     memoryStores.set(sessionKey, store);
     return new ConversationThread({
       store,
       now: dependencies.now,
-      onChanged: (entries, except) => dependencies.onHistoryChanged(sessionKey, entries, except),
+      onChanged: (entries, except) =>
+        dependencies.onConversationChanged(sessionKey, entries, except),
       report: dependencies.report,
     });
   };
@@ -198,12 +199,12 @@ export function wireStore(dependencies: StoreWiringDependencies): StoreWiring {
       dependencies.persistent && !temporary.has(sessionKey)
         ? new ConversationThread({
             store: {
-              appendHistory: (entries, now) =>
-                client().ask("history.append", { sessionKey, entries, now }),
+              appendConversation: (entries, now) =>
+                client().ask("conversation.append", { sessionKey, entries, now }),
             },
             now: dependencies.now,
             onChanged: (entries, except) =>
-              dependencies.onHistoryChanged(sessionKey, entries, except),
+              dependencies.onConversationChanged(sessionKey, entries, except),
             report: dependencies.report,
           })
         : memoryThread(sessionKey);
@@ -221,8 +222,8 @@ export function wireStore(dependencies: StoreWiringDependencies): StoreWiring {
 
   const restoreThread = async (sessionKey: SessionKey): Promise<void> => {
     const [entries, clearedAt] = await Promise.all([
-      client().ask("history.list", { sessionKey, now: dependencies.now() }),
-      client().ask("history.cutoff", { sessionKey }),
+      client().ask("conversation.list", { sessionKey, now: dependencies.now() }),
+      client().ask("conversation.cutoff", { sessionKey }),
     ]);
     thread(sessionKey).restore(entries, clearedAt);
   };
@@ -411,10 +412,10 @@ export function wireStore(dependencies: StoreWiringDependencies): StoreWiring {
       await refreshDirectory();
       return archived;
     },
-    historyCutoff: async (sessionKey) => {
+    conversationCutoff: async (sessionKey) => {
       if (temporary.has(sessionKey) || !dependencies.persistent) return { value: undefined };
       try {
-        return { value: await client().ask("history.cutoff", { sessionKey }) };
+        return { value: await client().ask("conversation.cutoff", { sessionKey }) };
       } catch (error) {
         dependencies.report(
           `Could not read the conversation's cutoff: ${error instanceof Error ? error.message : String(error)}`,
@@ -422,7 +423,7 @@ export function wireStore(dependencies: StoreWiringDependencies): StoreWiring {
         return undefined;
       }
     },
-    eraseHistory: async (sessionKey, now, keepSessionId, cutoffBefore) => {
+    eraseConversation: async (sessionKey, now, keepSessionId, cutoffBefore) => {
       if (temporary.has(sessionKey) || !dependencies.persistent) {
         memoryStores.get(sessionKey)?.eraseAtOrBefore(now);
         return { published: true };
@@ -454,14 +455,14 @@ export function wireStore(dependencies: StoreWiringDependencies): StoreWiring {
         }
         if (report.disk && report.disk.remainingPressureBytes > 0) {
           dependencies.report(
-            `History storage is still ${report.disk.remainingPressureBytes} bytes over its target after cleanup; the rest is protected`,
+            `Conversation storage is still ${report.disk.remainingPressureBytes} bytes over its target after cleanup; the rest is protected`,
           );
         }
         await refreshDirectory();
         return report;
       } catch (error) {
         dependencies.report(
-          `History maintenance did not run: ${error instanceof Error ? error.message : String(error)}`,
+          `Conversation maintenance did not run: ${error instanceof Error ? error.message : String(error)}`,
         );
         return undefined;
       }

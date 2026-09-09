@@ -46,7 +46,7 @@ vocabulary has answered for it.
 `PRODUCT_SURFACE_EVENT` is the subset the renderer may ask for: surface motion
 the main process cannot see. It exists to be the narrowing — the main process
 validates a renderer's send against that union before the allowlist, so a
-compromised renderer reaches none of the acts.
+compromised renderer reaches none of the actions.
 
 ## Everything outside this package has no such guarantee
 
@@ -59,7 +59,7 @@ autocapture do not build for watchOS, so the counted stream is the whole of
 what leaves it. Three things leave the other two that way and none is
 validated here:
 
-- The recording itself, which is the rendered panel except for the History
+- The recording itself, which is the rendered panel except for the Conversation
   tab's explicitly blocked `ph-no-capture` subtree — a session's title, branch,
   and error line, the account's name and address, and a screenshot
   attached to the feedback composer all travel because they are drawn. Only

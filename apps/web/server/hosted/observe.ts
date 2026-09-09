@@ -1,14 +1,14 @@
 import type { CloudFetch, ProviderSessionObservation } from "../core.js";
 import {
-  ACT_KIND,
-  advertisedActFor,
+  ACTION_KIND,
+  advertisedActionFor,
   advertisedControls,
   type CloudAgentProviderId,
   normalizeSessionDetail,
   type ObservedSession,
   type ObservedSessionControl,
 } from "../core.js";
-import { providerReadsConversation } from "./act-execute.js";
+import { providerReadsConversation } from "./action-execute.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import { createRateBrake } from "./rate-brake.js";
 import { observeProviders, readApiKeyFor } from "./vault-keys.js";
@@ -84,16 +84,16 @@ export async function handleObserve(options: ObserveOptions): Promise<Response> 
 }
 
 /**
- * The acts an observation advertised, written onto its wire row. Each is
+ * The actions an observation advertised, written onto its wire row. Each is
  * presence-only where it can be: what a control targets, or which workspace a
- * rename lands on, never travels — the act endpoints re-observe and rebuild
+ * rename lands on, never travels — the action endpoints re-observe and rebuild
  * every write from their own fresh advertisement.
  */
-function writeAdvertisedActs(
+function writeAdvertisedActions(
   session: ObservedSession,
   observation: Pick<ProviderSessionObservation, "advertises">,
 ): void {
-  if (advertisedActFor(observation, ACT_KIND.MESSAGE)) session.canReceiveMessage = true;
+  if (advertisedActionFor(observation, ACTION_KIND.MESSAGE)) session.canReceiveMessage = true;
   const controls = advertisedControls(observation)
     .map((control): ObservedSessionControl => {
       const wireControl: ObservedSessionControl = { id: control.id, label: control.label };
@@ -102,14 +102,15 @@ function writeAdvertisedActs(
     })
     .filter((control) => control.id && control.label);
   if (controls.length > 0) session.controls = controls;
-  const spawnableAgents = advertisedActFor(observation, ACT_KIND.ADD_AGENT)?.agents.filter(
+  const spawnableAgents = advertisedActionFor(observation, ACTION_KIND.ADD_AGENT)?.agents.filter(
     (agent) => agent.length > 0,
   );
   if (spawnableAgents && spawnableAgents.length > 0) {
     session.spawnableAgents = [...spawnableAgents];
   }
-  if (advertisedActFor(observation, ACT_KIND.RENAME_SESSION)) session.canRename = true;
-  if (advertisedActFor(observation, ACT_KIND.RENAME_WORKSPACE)) session.canRenameWorkspace = true;
+  if (advertisedActionFor(observation, ACTION_KIND.RENAME_SESSION)) session.canRename = true;
+  if (advertisedActionFor(observation, ACTION_KIND.RENAME_WORKSPACE))
+    session.canRenameWorkspace = true;
 }
 
 export function observedSessionForResponse(
@@ -135,7 +136,7 @@ export function observedSessionForResponse(
   if (error) session.error = error;
   session.lastActivityAt = obs.lastActivityAt;
   session.observedAt = obs.lastActivityAt;
-  writeAdvertisedActs(session, obs);
+  writeAdvertisedActions(session, obs);
   // A capability of the provider's documented transcript read, advertised so
   // a screen offers the fetch only where the messages endpoint could answer.
   if (providerReadsConversation(providerId)) session.canReadConversation = true;

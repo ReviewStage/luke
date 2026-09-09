@@ -138,7 +138,7 @@ export class SpeechMouth {
    * to the arbiter as held rather than being dropped — it is the arbiter's
    * to keep for the release. The developer's own call is never touched: a
    * conversation they are holding passes, held or not. A hold ending needs
-   * no act here — the arbiter offers what it held when the quiet ends.
+   * no action here — the arbiter offers what it held when the quiet ends.
    */
   setHeld(active: boolean): void {
     this.#quiet = active;

@@ -6,7 +6,7 @@ import {
 
 /**
  * Whose words the caption is showing: a briefing the brain decided to give,
- * or a reply to the developer. History records the two differently.
+ * or a reply to the developer. Conversation records the two differently.
  */
 export const REPLY_KIND = {
   BRIEFING: BRIEFING_SPEECH_KIND,

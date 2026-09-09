@@ -33,7 +33,7 @@ export interface FeedbackDeliveryOptions {
 /**
  * Carries one submission to the fixed endpoint and answers in the user's
  * terms. A refusal is an answer for the composer, never a throw: sending
- * feedback is the user's own act, and what became of it belongs beside the
+ * feedback is the user's own action, and what became of it belongs beside the
  * field it left. Nothing about the submission is ever logged — a message to
  * the founders is the user's words, and status codes alone diagnose the path.
  */

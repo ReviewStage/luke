@@ -17,7 +17,7 @@ import { writtenText } from "./service-wire.js";
 /**
  * One place a new workspace can be created, as the projects endpoint reports
  * it: a project the named provider itself listed on the fresh observation
- * pass that answered the request. The creation act re-observes and validates
+ * pass that answered the request. The creation action re-observes and validates
  * the id against the provider's own list again, so this entry can offer a
  * project but can never conjure one.
  */

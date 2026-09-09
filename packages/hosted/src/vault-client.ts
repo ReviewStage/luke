@@ -31,7 +31,7 @@ export interface HostedVaultClientOptions extends AccountToken {
   /**
    * Who the bearer answers for, as an opaque identity. Read before an ask and
    * again before its one 401 retry, because the retry re-reads the token: a
-   * sign-out and sign-in between the two must read as the act's account gone,
+   * sign-out and sign-in between the two must read as the action's account gone,
    * never as a fresh bearer to carry the old account's payload under.
    */
   readAccountKey?: () => Promise<string | undefined>;

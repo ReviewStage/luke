@@ -140,7 +140,7 @@ test("a reply that said nothing and named no run hands nothing over", () => {
   assert.deepEqual(context.drawn, []);
 });
 
-test("discarding empties without admitting anything to History", () => {
+test("discarding empties without admitting anything to Conversation", () => {
   const context = harness();
   context.strip.mark(REPLY_KIND.BRIEFING, "run-7");
   context.strip.append("item-1", "A briefing nobody heard.");

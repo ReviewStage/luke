@@ -20,7 +20,7 @@ export interface ReplyDeliveryPlayerOptions {
   showNotice: (words: string) => void;
   /** A delivered reply has begun speaking on the developer's call, answering an ask of the origin given. */
   onSpeaking: (origin: BrainRequestOrigin) => void;
-  /** The History generation as this window holds it, which a Clear advances. */
+  /** The Conversation generation as this window holds it, which a Clear advances. */
   conversationGeneration: () => number;
 }
 
@@ -34,12 +34,12 @@ export interface ReplyDeliveryPlayerOptions {
  * An offer is claimed only at a quiet moment — not while the developer is
  * talking or a reply is still under way, because a delivered reply is not
  * theirs to interrupt with, nor another reply's — and the identity of the
- * moment is captured first: the offer in hand, the History generation, and
+ * moment is captured first: the offer in hand, the Conversation generation, and
  * this window's own withdrawal count. It is checked again after the claim
  * lands, after the call opens, and immediately before a word is spoken or
  * shown. A Clear, a withdrawn generation, or a newer offer arriving during
  * any of those awaits means the words granted are never spoken, shown, or
- * acknowledged: History holds them, and nothing re-stamps them with the
+ * acknowledged: Conversation holds them, and nothing re-stamps them with the
  * generation that came after.
  *
  * A grant is acknowledged when its reply has ended by any route — spoken to

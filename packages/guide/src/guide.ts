@@ -82,12 +82,12 @@ export interface AppGuideFact {
 }
 
 /**
- * The three acts the Updates row's button ever performs, which are also the
+ * The three actions the Updates row's button ever performs, which are also the
  * only values a spoken update ask may name. The row offers exactly one at a
  * time, so which of these an ask can reach is the guide's `update` entry's
  * question, answered by the validator.
  */
-export const APP_UPDATE_ACT = {
+export const APP_UPDATE_ACTION = {
   /** Ask the release manifest for the latest build. */
   CHECK: "check",
   /** Open the latest release's page in the browser. */
@@ -96,13 +96,13 @@ export const APP_UPDATE_ACT = {
   RESTART: "restart",
 } as const;
 
-export type AppUpdateAct = (typeof APP_UPDATE_ACT)[keyof typeof APP_UPDATE_ACT];
+export type AppUpdateAction = (typeof APP_UPDATE_ACTION)[keyof typeof APP_UPDATE_ACTION];
 
-const APP_UPDATE_ACT_LIST: readonly AppUpdateAct[] = Object.values(APP_UPDATE_ACT);
+const APP_UPDATE_ACTION_LIST: readonly AppUpdateAction[] = Object.values(APP_UPDATE_ACTION);
 
-/** Guards an act arriving from a tool call's untrusted arguments. */
-export function isAppUpdateAct(value: UnparsedWireValue): value is AppUpdateAct {
-  return isListedGuideValue(value, APP_UPDATE_ACT_LIST);
+/** Guards an action arriving from a tool call's untrusted arguments. */
+export function isAppUpdateAction(value: UnparsedWireValue): value is AppUpdateAction {
+  return isListedGuideValue(value, APP_UPDATE_ACTION_LIST);
 }
 
 /** The two waits during which the Updates row's button offers nothing. */
@@ -115,15 +115,15 @@ export const APP_UPDATE_WAIT = {
 
 export type AppUpdateWait = (typeof APP_UPDATE_WAIT)[keyof typeof APP_UPDATE_WAIT];
 
-/** What the Updates row's button is right now: one act, or one wait. */
-export type AppUpdateButton = AppUpdateAct | AppUpdateWait;
+/** What the Updates row's button is right now: one action, or one wait. */
+export type AppUpdateButton = AppUpdateAction | AppUpdateWait;
 
 /**
  * The Updates row, as the guide describes it: the running version, where the
- * build stands in the row's own words, and the one act its button offers —
+ * build stands in the row's own words, and the one action its button offers —
  * or the wait it is disabled for. A spoken update ask is validated against
  * `button`, so the guide is the outer bound here exactly as it is for a
- * setting: an act the row is not offering is one no ask can run.
+ * setting: an action the row is not offering is one no ask can run.
  */
 export interface AppGuideUpdate {
   /** The running version, as the Updates row names it. */
@@ -179,7 +179,7 @@ function isAppGuideUpdate(value: UnparsedWireValue): value is AppGuideUpdate & W
     isRecord(value) &&
     isWireString(value.version) &&
     isWireString(value.detail) &&
-    (isAppUpdateAct(value.button) ||
+    (isAppUpdateAction(value.button) ||
       value.button === APP_UPDATE_WAIT.CHECKING ||
       value.button === APP_UPDATE_WAIT.DOWNLOADING)
   );
@@ -187,7 +187,7 @@ function isAppGuideUpdate(value: UnparsedWireValue): value is AppGuideUpdate & W
 
 /**
  * Guards a guide snapshot crossing a process boundary. The guide is what an
- * app act is validated against, so a snapshot that arrives malformed is
+ * app action is validated against, so a snapshot that arrives malformed is
  * refused whole rather than read as a guide that happens to allow less.
  */
 export function isAppGuideSnapshot(
@@ -205,7 +205,7 @@ export function isAppGuideSnapshot(
  */
 export const APP_PANEL_TAB = {
   SESSIONS: "sessions",
-  HISTORY: "history",
+  CONVERSATION: "conversation",
   SETTINGS: "settings",
 } as const;
 

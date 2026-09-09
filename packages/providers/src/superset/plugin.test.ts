@@ -94,7 +94,7 @@ test("a signed-out home observes its workspaces and offers no project", async (t
   const enrich = await plugin.refresh("codex");
 
   // Host state reads without a login, so the rows stand — undecorated with
-  // acts — however the connection looks.
+  // actions — however the connection looks.
   assert.deepEqual(await plugin.observe(), []);
   assert.equal(plugin.activeOrganization(), undefined);
   assert.deepEqual(plugin.projects?.(), []);

@@ -358,7 +358,7 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
     cancelHover();
     pointerInside.current = true;
     // A pointer arriving from outside ends whatever story a mark was telling:
-    // it is back on the shape, so its next leave is its own act. The arrival
+    // it is back on the shape, so its next leave is its own action. The arrival
     // cannot land between a recede and the leave it explains — the surface
     // covers the pointer for that whole stretch, so no enter fires there.
     recededAt.current = undefined;
@@ -376,7 +376,7 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
       cancelHover();
       pointerInside.current = false;
       // Read and spent in the same breath: the mark explains exactly one leave,
-      // and the next one is the pointer's own act again.
+      // and the next one is the pointer's own action again.
       const receded = recededAt.current !== undefined;
       recededAt.current = undefined;
       if (

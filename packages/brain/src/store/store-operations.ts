@@ -15,17 +15,13 @@ import type {
   ArchiveReason,
   ChildCompletionRecord,
   ChildRunRecord,
+  ConversationAppendOutcome,
   ConversationRecord,
-  HistoryAppendOutcome,
   SessionKey,
 } from "@sidecar/runtime/vocabulary";
 import type { ConversationEntry } from "@sidecar/session";
 import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import {
-  type DeletionOptions,
-  type DeletionOutcome,
-  deleteConversationHistory,
-} from "./archives.js";
+import { type DeletionOptions, type DeletionOutcome, deleteConversation } from "./archives.js";
 import { type EnvelopeRead, loadBrainEnvelope, saveBrainEnvelope } from "./brain-envelope.js";
 import {
   deleteChildCompletion,
@@ -36,6 +32,13 @@ import {
   putChildRun,
 } from "./children-table.js";
 import {
+  appendConversation,
+  type ConversationSearchHit,
+  conversationClearedAt,
+  listConversation,
+  searchConversation,
+} from "./conversation-table.js";
+import {
   archiveConversation,
   type ConversationCreation,
   createConversation,
@@ -45,15 +48,8 @@ import {
 } from "./conversations-table.js";
 import { AGENT_DATABASE_FILE, StoreDatabase } from "./database.js";
 import type { BrainStateSave } from "./envelope.js";
-import {
-  appendHistory,
-  type HistorySearchHit,
-  historyClearedAt,
-  listHistory,
-  searchHistory,
-} from "./history-table.js";
 import { deleteScheduledJob, listScheduledJobs, putScheduledJob } from "./jobs-table.js";
-import { type MaintenanceReport, runHistoryMaintenance } from "./maintenance-run.js";
+import { type MaintenanceReport, runConversationMaintenance } from "./maintenance-run.js";
 import { type FlushState, flushState, recordFlush } from "./memory-flush-table.js";
 import {
   applyMemorySync,
@@ -119,18 +115,22 @@ export const STORE_OPERATIONS = {
   "brain.save": (s, p: { sessionKey: SessionKey; save: BrainStateSave }): boolean =>
     saveBrainEnvelope(s.db, p.sessionKey, p.save),
 
-  "history.append": (
+  "conversation.append": (
     s,
     p: { sessionKey: SessionKey; entries: readonly ConversationEntry[]; now: number },
-  ): HistoryAppendOutcome<ConversationEntry> => appendHistory(s.db, p.sessionKey, p.entries, p.now),
-  "history.list": (s, p: { sessionKey: SessionKey; now: number }): readonly ConversationEntry[] =>
-    listHistory(s.db, p.sessionKey, p.now),
-  "history.cutoff": (s, p: { sessionKey: SessionKey }): number | undefined =>
-    historyClearedAt(s.db, p.sessionKey),
-  "history.search": (
+  ): ConversationAppendOutcome<ConversationEntry> =>
+    appendConversation(s.db, p.sessionKey, p.entries, p.now),
+  "conversation.list": (
+    s,
+    p: { sessionKey: SessionKey; now: number },
+  ): readonly ConversationEntry[] => listConversation(s.db, p.sessionKey, p.now),
+  "conversation.cutoff": (s, p: { sessionKey: SessionKey }): number | undefined =>
+    conversationClearedAt(s.db, p.sessionKey),
+  "conversation.search": (
     s,
     p: { sessionKeys: readonly SessionKey[]; query: string; limit: number; now: number },
-  ): readonly HistorySearchHit[] => searchHistory(s.db, p.sessionKeys, p.query, p.limit, p.now),
+  ): readonly ConversationSearchHit[] =>
+    searchConversation(s.db, p.sessionKeys, p.query, p.limit, p.now),
 
   "notebook.list": (s, p: { now: number }): readonly NotebookEntry[] =>
     listNotebookEntries(s.db, s.workspace, p.now),
@@ -190,11 +190,10 @@ export const STORE_OPERATIONS = {
   "conversations.delete": (
     s,
     p: { sessionKey: SessionKey; now: number } & DeletionOptions,
-  ): DeletionOutcome | undefined =>
-    deleteConversationHistory(s.db, s.agentRoot, p.sessionKey, p.now, p),
+  ): DeletionOutcome | undefined => deleteConversation(s.db, s.agentRoot, p.sessionKey, p.now, p),
 
   "maintenance.run": (s, p: { now: number; preserve: readonly SessionKey[] }): MaintenanceReport =>
-    runHistoryMaintenance(s.db, s.agentRoot, p),
+    runConversationMaintenance(s.db, s.agentRoot, p),
 
   "jobs.list": (s, _p: NoParams): readonly ScheduledJob[] => listScheduledJobs(s.db),
   "jobs.put": (s, p: { job: ScheduledJob }): boolean => putScheduledJob(s.db, p.job),

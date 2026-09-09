@@ -2,7 +2,7 @@ import { OBSERVATION_WINDOW, type ProviderSessionObservation } from "@sidecar/se
 import type { SessionFileCandidate } from "./local-files.js";
 
 /**
- * The roster the latest pass published, and nothing else. Every act is
+ * The roster the latest pass published, and nothing else. Every action is
  * re-validated against exactly this, so the one thing a provider has to get
  * right is publishing it — which is why holding it is a function rather than
  * a protected field a subclass could forget to write.
@@ -49,7 +49,7 @@ export interface ObservationPassInput<Candidate extends SessionFileCandidate, Pa
 export interface ObservationPass {
   /** Discover, prepare, parse only what changed, assemble, prune vanished parses. */
   run(): Promise<readonly ProviderSessionObservation[]>;
-  /** The roster the last `run` published — what every act is re-validated against. */
+  /** The roster the last `run` published — what every action is re-validated against. */
   latest(): readonly ProviderSessionObservation[];
 }
 

@@ -159,7 +159,7 @@ export function spokenAskPreviewSurvives(status: RealtimeStatus): boolean {
 }
 
 /**
- * The lines still being said, for History to draw under the settled thread:
+ * The lines still being said, for Conversation to draw under the settled thread:
  * the developer's spoken turns as the service transcribes them, then the
  * reply or announcement as its words are generated — the ask precedes its
  * answer. Presentation only, so each line mirrors exactly what its own

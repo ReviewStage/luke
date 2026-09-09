@@ -28,7 +28,7 @@ export interface CaptionStripOptions {
  * Owned by the call rather than by the caller so that every path which ends a
  * reply — finishing, being talked over, the call dropping — lets the words go
  * with it, and a caption can never outlive the speech it captions. The strip
- * is also where those words are handed over for History, at the one moment
+ * is also where those words are handed over for Conversation, at the one moment
  * they are both final and still known.
  */
 export class CaptionStrip {
@@ -42,7 +42,7 @@ export class CaptionStrip {
    */
   #segments: { itemId: string | undefined; text: string }[] = [];
   /**
-   * Whether the words under way are a briefing or a reply, for History to
+   * Whether the words under way are a briefing or a reply, for Conversation to
    * record as such. Set only when the words were decided by the brain and
    * cleared wherever the words are, so it can never outlive the reply.
    */
@@ -123,7 +123,7 @@ export class CaptionStrip {
     this.#options.onCaption(undefined, undefined);
   }
 
-  /** Clears an undelivered briefing without admitting it to History. */
+  /** Clears an undelivered briefing without admitting it to Conversation. */
   discard(): void {
     this.#segments = [];
     this.#kind = undefined;

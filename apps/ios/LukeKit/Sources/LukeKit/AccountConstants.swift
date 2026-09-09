@@ -14,7 +14,7 @@ public enum AccountConstants {
     }()
 
     /// The hosted service origin. The auth base lives under `/api/auth`,
-    /// vault endpoints under `/api/vault`, act endpoints under `/api/acts`,
+    /// vault endpoints under `/api/vault`, action endpoints under `/api/actions`,
     /// and observe under `/api/observe`.
     public static let serviceURL: URL = {
         #if DEBUG

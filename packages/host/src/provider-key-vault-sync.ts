@@ -24,7 +24,7 @@ function accountAnswersTo(account: VaultSyncAccount, tenant: string): boolean {
  * renderer, and the vault client refuses on its own wherever no account
  * stands, which is also what keeps a fixture or evidence run silent.
  *
- * Every act here is the direct product of a hand on the panel — a key's own
+ * Every action here is the direct product of a hand on the panel — a key's own
  * Save or delete, or the Sync provider keys switch moving — or the standing
  * state that switch declares, reconciled when account capabilities start.
  * The one read of a stored key this module makes exists because the switch
@@ -38,7 +38,7 @@ function accountAnswersTo(account: VaultSyncAccount, tenant: string): boolean {
  * different person signing in on this Mac inherits nothing. Only a hand can
  * claim the keys for a new account — the switch's own flip, or a key's own
  * save — and every sweep re-checks whose account stands before each key it
- * touches, so an act outliving its sign-out goes quiet instead of landing on
+ * touches, so an action outliving its sign-out goes quiet instead of landing on
  * whoever signed in next.
  */
 export class ProviderKeyVaultSync {
@@ -50,11 +50,11 @@ export class ProviderKeyVaultSync {
     write: (accountKey: string) => Promise<void>;
   };
   /**
-   * Every act rides one chain, so saves and switch flips land on the vault
+   * Every action rides one chain, so saves and switch flips land on the vault
    * in the order the hands took them: a save mid-sweep, or a quick off-and-on
    * of the switch, cannot interleave into a vault that agrees with neither.
    */
-  #acts: Promise<void> = Promise.resolve();
+  #actions: Promise<void> = Promise.resolve();
 
   constructor(options: {
     vault: HostedVaultClient;
@@ -80,10 +80,10 @@ export class ProviderKeyVaultSync {
   }
 
   #enqueue(act: () => Promise<void>): Promise<void> {
-    const settled = this.#acts.then(act);
-    // The chain never carries a refusal forward: every act is quiet on its
+    const settled = this.#actions.then(act);
+    // The chain never carries a refusal forward: every action is quiet on its
     // own, and one that threw must not still a queue of later hands.
-    this.#acts = settled.catch(() => undefined);
+    this.#actions = settled.catch(() => undefined);
     return settled;
   }
 

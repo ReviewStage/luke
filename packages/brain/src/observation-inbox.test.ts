@@ -7,7 +7,7 @@ import {
   SESSION_STATUS,
   type SessionIdentity,
 } from "@sidecar/session";
-import { ACT_RESULT_STATUS, unparsedWire, wireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, unparsedWire, wireRecord } from "@sidecar/wire";
 import { type BrainAgentOptions, LOOK_SUBJECT } from "./agent.js";
 import {
   ABC,
@@ -150,7 +150,7 @@ test("a roster look carries the roster and only the transcripts that grew", asyn
     readTranscriptSince: async (identity): Promise<ProviderTranscriptSinceResult> => {
       read.push(identity.providerSessionId);
       return {
-        status: ACT_RESULT_STATUS.ACCEPTED,
+        status: ACTION_RESULT_STATUS.ACCEPTED,
         text: identity.providerSessionId === "abc" ? "assistant: still going" : "",
         cursor: `${identity.providerSessionId}-cursor`,
         truncated: false,
@@ -265,7 +265,7 @@ test("captures past a turn's depth are kept whole across a relaunch and read in 
   let piece = 0;
   const reading = (): Partial<BrainAgentOptions> => ({
     readTranscriptSince: async (identity) => ({
-      status: ACT_RESULT_STATUS.ACCEPTED,
+      status: ACTION_RESULT_STATUS.ACCEPTED,
       text: `PIECE_${++piece}`,
       cursor: `${identity.providerSessionId}-${piece}`,
       truncated: false,
@@ -333,7 +333,7 @@ test("a conversation that looks at one session reads only it, and a repeated unc
       ],
     }),
     readTranscriptSince: async (identity) => ({
-      status: ACT_RESULT_STATUS.ACCEPTED,
+      status: ACTION_RESULT_STATUS.ACCEPTED,
       text: identity.providerSessionId === "abc" ? text : "never read",
       cursor: `${identity.providerSessionId}-${text.length}`,
       truncated: false,

@@ -2,16 +2,16 @@ import {
   isRecord,
   isWireNumber,
   isWireString,
-  UNKNOWN_ACT_STATUS,
+  UNKNOWN_ACTION_STATUS,
   type UnparsedWireValue,
 } from "@sidecar/wire";
 import { NestedMap } from "./nested-map.js";
 import { outputStatus } from "./tool-results.js";
 
 /**
- * The action journal: one entry per act a developer ask dispatched, keyed by
+ * The action journal: one entry per action a developer ask dispatched, keyed by
  * the run and the model's own call id. An entry is written before the
- * performer is called and completed with the act's result before the model
+ * performer is called and completed with the action's result before the model
  * hears it, so a crash between the two leaves a started entry whose result is
  * unknown — never replayed, and answered to the model as exactly that.
  */
@@ -22,7 +22,7 @@ export interface BrainJournalEntry {
   name: string;
   argumentsJson: string;
   startedAt: number;
-  /** The act's outcome as a JSON record, once the performer answered. */
+  /** The action's outcome as a JSON record, once the performer answered. */
   outputJson?: string;
   settledAt?: number;
 }
@@ -53,13 +53,13 @@ export function brainJournalEntryFromWire(value: UnparsedWireValue): BrainJourna
   return entry;
 }
 
-/** The status an act's output carries when whether it happened cannot be established. */
-export { UNKNOWN_ACT_STATUS };
+/** The status an action's output carries when whether it happened cannot be established. */
+export { UNKNOWN_ACTION_STATUS };
 
-/** What a model is told about a call whose act ran but whose result never reached the journal. */
-export const UNKNOWN_ACT_RESULT = {
-  status: UNKNOWN_ACT_STATUS,
-  reason: "the act was started but its result was lost before it was recorded",
+/** What a model is told about a call whose action ran but whose result never reached the journal. */
+export const UNKNOWN_ACTION_RESULT = {
+  status: UNKNOWN_ACTION_STATUS,
+  reason: "the action was started but its result was lost before it was recorded",
 } as const;
 
 /**
@@ -67,15 +67,15 @@ export const UNKNOWN_ACT_RESULT = {
  * provider may have taken the write, so it is neither a refusal nor a result,
  * and it is never retried on the model's own initiative.
  */
-export const UNCONFIRMED_ACT_RESULT = {
-  status: UNKNOWN_ACT_STATUS,
-  reason: "the act was dispatched but did not answer; it may have happened, so do not repeat it",
+export const UNCONFIRMED_ACTION_RESULT = {
+  status: UNKNOWN_ACTION_STATUS,
+  reason: "the action was dispatched but did not answer; it may have happened, so do not repeat it",
 } as const;
 
-/** What a run's journal can vouch for: acts that went through, and acts whose outcome is not known. */
-export interface JournalActCounts {
-  performedActs: number;
-  unknownActs: number;
+/** What a run's journal can vouch for: actions that went through, and actions whose outcome is not known. */
+export interface JournalActionCounts {
+  performedActions: number;
+  unknownActions: number;
 }
 
 /**
@@ -83,22 +83,22 @@ export interface JournalActCounts {
  * accepted went through; one whose result says unknown, or that has no result
  * at all, may have. Counting from the journal rather than from a running
  * tally means a launch that finds the run mid-flight reports exactly what
- * the acts before the crash established, no more and no less.
+ * the actions before the crash established, no more and no less.
  */
-export function journalActCounts(
+export function journalActionCounts(
   entries: readonly BrainJournalEntry[],
   runId: string,
-): JournalActCounts {
-  const counts: JournalActCounts = { performedActs: 0, unknownActs: 0 };
+): JournalActionCounts {
+  const counts: JournalActionCounts = { performedActions: 0, unknownActions: 0 };
   for (const entry of entries) {
     if (entry.runId !== runId) continue;
     if (entry.outputJson === undefined) {
-      counts.unknownActs += 1;
+      counts.unknownActions += 1;
       continue;
     }
     const status = outputStatus(entry.outputJson);
-    if (status === "accepted") counts.performedActs += 1;
-    else if (status === UNKNOWN_ACT_STATUS) counts.unknownActs += 1;
+    if (status === "accepted") counts.performedActions += 1;
+    else if (status === UNKNOWN_ACTION_STATUS) counts.unknownActions += 1;
   }
   return counts;
 }
@@ -137,7 +137,7 @@ export class BrainJournal {
     );
   }
 
-  /** Drops one entry whose start could not be checkpointed, so it never reads as an act that ran. */
+  /** Drops one entry whose start could not be checkpointed, so it never reads as an action that ran. */
   forget(runId: string, callId: string): void {
     this.#entries.delete(runId, callId);
   }

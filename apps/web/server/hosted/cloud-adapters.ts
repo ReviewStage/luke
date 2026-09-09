@@ -4,7 +4,7 @@ import { CLOUD_AGENT_PROVIDER_ID } from "../core.js";
 
 /**
  * What a stateless invocation supplies to a cloud plugin: the caller's own
- * decrypted key behind the same read-at-act-time seam the desktop uses, and
+ * decrypted key behind the same read-at-action-time seam the desktop uses, and
  * the fetch/now seams tests inject. The refresh debounce is always bypassed —
  * every server-side plugin lives for exactly one request, so a debounced
  * pass could only ever answer with nothing.

@@ -3,7 +3,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { REALTIME_TOOL } from "@sidecar/acts";
+import { REALTIME_TOOL } from "@sidecar/actions";
 import {
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_OPERATION,
@@ -46,7 +46,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { normalizeSession, SESSION_STATUS, type SessionProvider } from "@sidecar/session";
 import {
-  ACT_RESULT_STATUS,
+  ACTION_RESULT_STATUS,
   isRecord,
   isWireString,
   type UnparsedWireValue,
@@ -109,7 +109,7 @@ function reasoning(id: string): WireRecord {
   };
 }
 
-function actCall(callId: string): WireRecord {
+function actionCall(callId: string): WireRecord {
   return {
     type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
     call_id: callId,
@@ -260,7 +260,7 @@ function host(
   runtimeOver: (model: ModelAdapter) => AgentRuntime,
   model: ModelAdapter,
   repository = fakeBrainStateRepository(),
-  performer: () => Promise<WireRecord> = async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }),
+  performer: () => Promise<WireRecord> = async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
   overrides: Partial<BrainAgentOptions> = {},
 ): Host {
   const clock = new FakeClock();
@@ -279,7 +279,7 @@ function host(
   const agent = new BrainAgent({
     runtime: runtimeOver(model),
     prepareTurn: () => ({ prompt: "instructions", layers: {} }),
-    acts: {
+    actions: {
       perform: async (call) => {
         performed.push(call.name);
         return performer();
@@ -288,12 +288,12 @@ function host(
     roster: () => ({ text: "- abc", identities: [ABC], sessions: session ? [session] : [] }),
     standingContext: () => "Durable facts: none.",
     readTranscriptSince: async () => ({
-      status: ACT_RESULT_STATUS.ACCEPTED,
+      status: ACTION_RESULT_STATUS.ACCEPTED,
       text: "transcript delta",
       cursor: "c1",
       truncated: false,
     }),
-    readTranscript: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED, transcript: "whole" }),
+    readTranscript: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "whole" }),
     deliver: () => undefined,
     store,
     createRunId: () => `run-${++ids}`,
@@ -327,17 +327,17 @@ async function settle(): Promise<void> {
 }
 
 for (const transport of [KEYED, HOSTED]) {
-  test(`${transport.name}: multi-step tools run in order with encrypted items replayed, and the act is journaled before its effect`, async () => {
+  test(`${transport.name}: multi-step tools run in order with encrypted items replayed, and the action is journaled before its effect`, async () => {
     const upstream = fakeUpstream([
-      () => payload([reasoning("rs_1"), actCall("call_1")]),
-      () => payload([reasoning("rs_2"), actCall("call_2")]),
+      () => payload([reasoning("rs_1"), actionCall("call_1")]),
+      () => payload([reasoning("rs_2"), actionCall("call_2")]),
       () => payload([message("Sent twice.")]),
     ]);
     const h = host(toolLoopRuntimeOver, transport.model(upstream));
     const record = await h.ask("send the tests twice");
     assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
     assert.equal(record?.text, "Sent twice.");
-    assert.equal(record?.performedActs, 2);
+    assert.equal(record?.performedActions, 2);
     assert.deepEqual(h.performed, [
       REALTIME_TOOL.SEND_SESSION_MESSAGE,
       REALTIME_TOOL.SEND_SESSION_MESSAGE,
@@ -372,9 +372,9 @@ for (const transport of [KEYED, HOSTED]) {
     await h.agent.stop();
   });
 
-  test(`${transport.name}: a cancel mid-run refuses the act not yet dispatched and keeps the one that ran`, async () => {
+  test(`${transport.name}: a cancel mid-run refuses the action not yet dispatched and keeps the one that ran`, async () => {
     let releaseSecond: (() => void) | undefined;
-    const upstream = fakeUpstream([() => payload([actCall("call_1"), actCall("call_2")])]);
+    const upstream = fakeUpstream([() => payload([actionCall("call_1"), actionCall("call_2")])]);
     let performedCount = 0;
     const h = host(
       toolLoopRuntimeOver,
@@ -387,7 +387,7 @@ for (const transport of [KEYED, HOSTED]) {
             releaseSecond = resolve;
           });
         }
-        return { status: ACT_RESULT_STATUS.ACCEPTED };
+        return { status: ACTION_RESULT_STATUS.ACCEPTED };
       },
     );
     const accepted = await h.agent.submitAsk({
@@ -401,7 +401,7 @@ for (const transport of [KEYED, HOSTED]) {
     releaseSecond?.();
     const record = await h.agent.waitAsk(accepted.runId, 60_000);
     assert.equal(record?.status, BRAIN_REQUEST_STATUS.CANCELLED);
-    assert.equal(record?.performedActs, 1);
+    assert.equal(record?.performedActions, 1);
     assert.equal(h.performed.length, 1);
     // Every call in the stored memory is paired, the refused one included.
     const items = h.repository.state?.items ?? [];
@@ -438,15 +438,15 @@ for (const transport of [KEYED, HOSTED]) {
     await h.agent.stop();
   });
 
-  test(`${transport.name}: persistence interrupted before an act refuses the act; interrupted after it keeps the result and blocks the next`, async () => {
+  test(`${transport.name}: persistence interrupted before an action refuses the action; interrupted after it keeps the result and blocks the next`, async () => {
     const repository = fakeBrainStateRepository();
     const upstream = fakeUpstream([
-      () => payload([actCall("call_1")]),
+      () => payload([actionCall("call_1")]),
       () => payload([message("done")]),
     ]);
     const h = host(toolLoopRuntimeOver, transport.model(upstream), repository);
     await h.agent.ready();
-    // Acceptance and start land; the checkpoint before the act is refused.
+    // Acceptance and start land; the checkpoint before the action is refused.
     let writes = 0;
     const landed = repository.save;
     repository.save = (state, transcript) => {
@@ -457,7 +457,7 @@ for (const transport of [KEYED, HOSTED]) {
     assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
     assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
     assert.equal(h.performed.length, 0);
-    assert.equal(record?.performedActs, 0);
+    assert.equal(record?.performedActions, 0);
     await h.agent.stop();
   });
 }
@@ -489,7 +489,7 @@ test("hosted: a spent allowance ends the run as a failure, holds later wakes unt
  * its own records, its stamp is its own, it answers a fixed script, and it
  * calls the host's tools through the same executor contract. What the host
  * does with it is the proof: the checkpoint is stored under the runtime's
- * stamp, the acts are journaled, and the Responses runtime later refuses to
+ * stamp, the actions are journaled, and the Responses runtime later refuses to
  * run over that stamp while leaving everything in place.
  */
 const FAKE_FORMAT: CheckpointFormat = {
@@ -597,7 +597,7 @@ class ScriptedRuntime implements AgentRuntime {
   }
 }
 
-test("a runtime that is not Responses drives the same host: acts journaled through the executor, checkpoint stored under its own stamp, refusals still the host's", async () => {
+test("a runtime that is not Responses drives the same host: actions journaled through the executor, checkpoint stored under its own stamp, refusals still the host's", async () => {
   const repository = fakeBrainStateRepository();
   const runtime = new ScriptedRuntime([
     REALTIME_TOOL.SEND_SESSION_MESSAGE,
@@ -609,7 +609,7 @@ test("a runtime that is not Responses drives the same host: acts journaled throu
   const record = await h.ask("do the scripted thing");
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assert.equal(record?.text, "scripted reply after 3 tools");
-  assert.equal(record?.performedActs, 1);
+  assert.equal(record?.performedActions, 1);
   assert.deepEqual(h.performed, [REALTIME_TOOL.SEND_SESSION_MESSAGE]);
   const stored = repository.state;
   assert.equal(stored?.checkpointFormat, "scripted@3:scripted-turns/1");
@@ -624,7 +624,7 @@ test("a runtime that is not Responses drives the same host: acts journaled throu
   await h.agent.stop();
 
   // An observation turn runs over the same runtime, with the roster's deltas
-  // read by the host and the act the policy allows carried through the same
+  // read by the host and the action the policy allows carried through the same
   // executor, journaled while it ran and let go of once the turn committed.
   const observing = new ScriptedRuntime([REALTIME_TOOL.SEND_SESSION_MESSAGE]);
   const o = host(() => observing, model, repository);
@@ -767,10 +767,10 @@ test("an ingest held across a cancel that resolves after the successor turn bega
   await h.agent.stop();
 });
 
-test("a model failure after a recorded act restores the context to the act's committed boundary: the act, its result, and the record survive and are read again", async () => {
+test("a model failure after a recorded act restores the context to the action's committed boundary: the action, its result, and the record survive and are read again", async () => {
   const repository = fakeBrainStateRepository();
   const upstream = fakeUpstream([
-    () => payload([actCall("call_1")]),
+    () => payload([actionCall("call_1")]),
     () => new Response("", { status: 500 }),
     () => payload([message("after")]),
   ]);
@@ -778,12 +778,12 @@ test("a model failure after a recorded act restores the context to the act's com
   const failed = await h.ask("send then fail");
   assert.equal(failed?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(failed?.failure, BRAIN_REQUEST_FAILURE.MODEL);
-  assert.equal(failed?.performedActs, 1);
+  assert.equal(failed?.performedActions, 1);
   const stored = repository.state;
   assert.equal(stored?.journal.length, 1);
   assert.equal(
     stored?.journal[0]?.outputJson,
-    JSON.stringify({ status: ACT_RESULT_STATUS.ACCEPTED }),
+    JSON.stringify({ status: ACTION_RESULT_STATUS.ACCEPTED }),
   );
   const kept = stored?.items ?? [];
   assert.ok(

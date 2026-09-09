@@ -1,4 +1,4 @@
-import type { RealtimeFunctionCall } from "@sidecar/acts";
+import type { RealtimeFunctionCall } from "@sidecar/actions";
 import type { RunOrigin } from "@sidecar/runtime/vocabulary";
 import type { Session, SessionIdentity } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
@@ -15,16 +15,16 @@ export interface BrainRoster {
 }
 
 /**
- * The standing a turn hands the performer with each act: which run it
- * belongs to and who opened it — attribution, so History can say whether the
- * developer asked for the act or Luke took it on his own judgment — and
+ * The standing a turn hands the performer with each action: which run it
+ * belongs to and who opened it — attribution, so Conversation can say whether the
+ * developer asked for the action or Luke took it on his own judgment — and
  * whether the turn still stands. The performer asks `isRevoked()` after each
- * step it awaited and once more just before the effect, so an act prepared
+ * step it awaited and once more just before the effect, so an action prepared
  * inside a turn that has since ended is refused rather than dispatched.
- * Whether the act may run at all was decided by the tool policy before the
+ * Whether the action may run at all was decided by the tool policy before the
  * call reached the performer; the performer validates what it is aimed at.
  */
-export interface BrainActExecution {
+export interface BrainActionExecution {
   readonly runId: string;
   readonly origin: RunOrigin;
   isRevoked(): boolean;
@@ -37,7 +37,7 @@ export interface BrainActExecution {
   readonly signal: AbortSignal;
 }
 
-/** Carries one act for the host to validate and perform; answers what happened as a record. */
-export interface BrainActPerformer {
-  perform(call: RealtimeFunctionCall, execution: BrainActExecution): Promise<WireRecord>;
+/** Carries one action for the host to validate and perform; answers what happened as a record. */
+export interface BrainActionPerformer {
+  perform(call: RealtimeFunctionCall, execution: BrainActionExecution): Promise<WireRecord>;
 }

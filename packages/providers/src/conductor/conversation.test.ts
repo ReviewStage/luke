@@ -405,7 +405,7 @@ test("a scroll to the top reads the history just before what the screen holds", 
   assert.equal(result.messages.at(-1)?.id, longMessageUuid(19));
   assert.equal(result.firstOffset, 0);
   assert.equal(result.hasOlder, false);
-  // History must never move the poll: an older page names no forward cursor.
+  // Conversation must never move the poll: an older page names no forward cursor.
   assert.equal(result.lastMessageId, undefined);
 
   const read = api.requests.at(-1);

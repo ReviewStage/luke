@@ -24,10 +24,10 @@ test("a request record survives the wire whole, with every optional field presen
     settledAt: NOW + 2,
     text: "Two agents are waiting.",
     failure: BRAIN_REQUEST_FAILURE.MODEL,
-    performedActs: 1,
-    unknownActs: 0,
+    performedActions: 1,
+    unknownActions: 0,
     askRecordedAt: NOW,
-    historyRecordedAt: NOW + 2,
+    conversationRecordedAt: NOW + 2,
   };
   const bare: BrainRequestRecord = {
     runId: "run-2",
@@ -37,8 +37,8 @@ test("a request record survives the wire whole, with every optional field presen
     status: BRAIN_REQUEST_STATUS.QUEUED,
     revision: 1,
     acceptedAt: NOW,
-    performedActs: 0,
-    unknownActs: 0,
+    performedActions: 0,
+    unknownActions: 0,
   };
   for (const record of [full, bare]) {
     const wire = JSON.parse(JSON.stringify(brainRequestRecordToWire(record)));

@@ -30,7 +30,7 @@ Trust constraints:
   `terminals send` command is not terminal injection: Superset owns the
   terminal and its authenticated endpoint, the observed binding identifies
   the exact target, and Luke invokes it directly without a shell. It remains
-  bound by the same direct-user-act and latest-roster validation as every
+  bound by the same direct-user-action and latest-roster validation as every
   other session message.
 - A Superset workspace creation is the same bounded exception at the workspace
   level: only in a developer-opened turn, only on a host, project, and agent
@@ -88,7 +88,7 @@ Trust constraints:
   CLI's own documented creation command, in an environment the latest
   observation pass reported. The ask carries the developer's own task text as
   a single argument behind an end-of-options separator, never through a
-  shell, under the same login, probed again at the moment of the act, and
+  shell, under the same login, probed again at the moment of the action, and
   the one thing read out of the answer is the created task's id, for the next
   pass to report on its own. Codex documents no way to message or steer a
   task already running, so its cloud sessions advertise none, and the honest
@@ -117,12 +117,12 @@ Trust constraints:
   product decision, not an implementation detail.
 - The one thing Luke may change about a session is what the user just asked to
   send it: a message typed on its row, a control its provider advertised for
-  it, or the same two acts asked of Luke, out loud or typed into his own
+  it, or the same two actions asked of Luke, out loud or typed into his own
   composer, in a conversation the user is holding, each through the
   provider's own documented endpoint under the same user-supplied credential,
   and each admitted against the observed roster, and against that session's
-  own advertisement of the acts its provider documents for it now, by
-  `@sidecar/acts`'s `admit()` — the one function that mints the validated act,
+  own advertisement of the actions its provider documents for it now, by
+  `@sidecar/actions`'s `admit()` — the one function that mints the validated action,
   reading the roster for itself rather than taking a caller's copy of it — and
   by nothing else anywhere: a provider's write takes only what
   admission minted, so no path reaches a provider without it, and what a
@@ -138,7 +138,7 @@ Trust constraints:
   path: the attention evaluator above all, and the speak-only calls that voice
   a briefing or a reply, which carry no tools at the API and again at a
   runtime gate, so a session summary or a tool output that reads like an
-  instruction can never become an act there. What the brain itself may call
+  instruction can never become an action there. What the brain itself may call
   in any of its turns is decided by the effective tool policy, resolved from
   the configuration's layers (global, agent, provider, session, and the
   child restriction where a run is a child's, in OpenClaw's order, deny
@@ -147,14 +147,14 @@ Trust constraints:
   every emitted call meets at dispatch, so nothing the model reads can widen
   either. Who opened a turn — the developer's ask, a provider's hook, the
   roster look, a hold's release, a heartbeat — is its origin, recorded on the
-  run and in History, and never by itself a permission: a turn Luke opened
-  himself may carry the acts the policy allows, and an act it takes is
+  run and in Conversation, and never by itself a permission: a turn Luke opened
+  himself may carry the actions the policy allows, and an action it takes is
   journaled before its effect exactly as an ask's and narrated as Luke's own
-  judgment, never as something the developer asked. Every act still runs the
+  judgment, never as something the developer asked. Every action still runs the
   same validation whoever opened the turn: a cancellation or a revoked run
   refuses it, a fresh roster read precedes it, its target has to be one the
   roster holds, and the provider's documented requirements stand. The
-  one act not aimed at an
+  one action not aimed at an
   existing session keeps the same shape: a new workspace, asked of Luke in
   conversation, lands only in a project its provider reported on the latest
   observation pass and documents a creation endpoint for; the ask names a
@@ -187,7 +187,7 @@ Trust constraints:
   and needs no endpoint: the address its provider reported is handed to the
   operating system, and nothing reaches the provider; an open asked of Luke
   still runs only under the effective tool policy, and a session that reported
-  no address is offered nowhere to open. A History line records the acts Luke
+  no address is offered nowhere to open. A Conversation line records the actions Luke
   carried and the sessions they named, but draws no press of its own: a
   session's address is reached by its row's press or by a validated ask in a
   developer-opened turn, and by nothing else. A workspace Luke just
@@ -200,7 +200,7 @@ Trust constraints:
   press would. Nothing a model decided can start that wait, and a created
   session that reports no address inside its window is left unopened like any
   other row without one. Reading a local session's
-  transcript at the developer's ask is the brain's own read, not an act: the
+  transcript at the developer's ask is the brain's own read, not an action: the
   brain's `read_transcript` tool, offered in every kind of turn, names a
   session by the identity the standing context lists, is refused in the
   agent for any identity the roster does not hold, is refused again in the
@@ -216,7 +216,7 @@ Trust constraints:
   the brain's working memory like every other tool answer, and lives and dies
   with its generation under the next rule; what reaches the developer is the
   reply the brain writes from it, which may quote or summarize the reading
-  and which History keeps as Luke's words under the thread's own retention.
+  and which Conversation keeps as Luke's words under the thread's own retention.
 - The brain's transcript reads are the one place transcript content reaches
   a model unbidden, and both the read and what it leaves behind are bounded
   on every side. Luke's judgment is one agent with several conversations in
@@ -258,7 +258,7 @@ Trust constraints:
   child runs in a conversation of its own on the child lane, under the
   minimal prompt profile and OpenClaw `b7528507`'s child tool exclusions at
   its depth (delegation and session inspection go too at depth five), its
-  provider acts still governed by the configured policy and `announce`
+  provider actions still governed by the configured policy and `announce`
   denied as in an ask. The receipt says accepted, never done. A child starts
   isolated unless the spawn asked to fork, in which case the requester's
   active context is adopted whole as the child's opening history and
@@ -305,7 +305,7 @@ Trust constraints:
 - The judgment is a host over replaceable parts, and the seams are the
   contracts in the runtime's vocabulary (`@sidecar/runtime/vocabulary`). The
   host (`BrainAgent`) owns the conversation's standing — accepting asks into runs, queueing turns, the
-  journal that records an act before its effect and its result before the
+  journal that records an action before its effect and its result before the
   next inference, the transcript cursors, the checkpoint — and reaches a
   model only through an `AgentRuntime` over a `ModelAdapter`, a
   `ContextEngine`, and the `ToolExecutor` the host itself supplies. Nothing in
@@ -468,14 +468,14 @@ Trust constraints:
   operations, and delivery policy stay the host's; microphone, playback,
   window control, and OS opening stay the client's.
 - The native capabilities the brain's own acts reach (opening an address a
-  validated act named with the operating system, carrying an app act to the
+  validated action named with the operating system, carrying an app action to the
   panel, running this Mac's Calendar helper) are registered as one node's
   capabilities and asked for by name. A capability no connected node offers
-  answers a typed unavailable, and the act that needed it is left undone and
+  answers a typed unavailable, and the action that needed it is left undone and
   recorded as such, never as carried. An open the desktop performs for
   itself (the microphone or calendar privacy pane, a provider's API-keys
   page, the releases page, the changelog) reaches the operating system
-  directly, as the client's own act, and crosses no node; an open a
+  directly, as the client's own action, and crosses no node; an open a
   host-owned flow needs (a session's address, an OAuth consent page, a
   Superset or Conductor link) crosses the native node, because the flow that
   asks for it runs in the host. A node's capabilities are invoked on that
@@ -483,13 +483,13 @@ Trust constraints:
   so no reconnection can replay an ask to act; the host settles an ask whose
   connection closed before it answered as unknown (dispatched, effect
   uncertain), answers an ask made after as unavailable (never dispatched),
-  and the two reach the act journal as an unknown act and a refusal
-  respectively, an unknown act never retried on Luke's own initiative; the
+  and the two reach the action journal as an unknown action and a refusal
+  respectively, an unknown action never retried on Luke's own initiative; the
   node performs each invocation id once, answering a repeated frame from the
   first performance.
 - Replies to the ear keep the reply-grant ledger's guarantee with its states
   named (queued, offered, claimed, acknowledged, granted on call,
-  withdrawn): the History write precedes any offer, the generation and the
+  withdrawn): the Conversation write precedes any offer, the generation and the
   one current receiver epoch are checked at the grant, an offer a vanished
   renderer never claimed is offered again to the next epoch, a claimed one
   never is, and what is guaranteed is at most one authorization to speak per
@@ -529,7 +529,7 @@ Trust constraints:
   thing the envelope holds — the model's checkpoint items, the transcript
   cursors, the requests, the action receipts — beside each conversation's
   own lines, its retained transcript, the recovery archives of deleted
-  history, and the facts Luke remembers, so the main thread never waits on
+  conversations, and the facts Luke remembers, so the main thread never waits on
   the disk and no second writer exists. The files an earlier build kept
   beside `settings.json` are left in place and never read: nothing draws or
   writes them any more. Every save is a compare-and-set against the
@@ -540,7 +540,7 @@ Trust constraints:
   compaction onward — the API's encrypted compaction item included, which is
   user-derived data however opaque — the transcript cursors, the record of
   every developer ask and how it ended, and the action journal that pairs
-  each act with its outcome. What is stored, what the model is shown, and
+  each action with its outcome. What is stored, what the model is shown, and
   starting fresh are three different things. The transcript table keeps
   every input the context engine ingested and every point the projection
   folded, written in the same transaction as the checkpoint that carries
@@ -560,7 +560,7 @@ Trust constraints:
   does end, by that opt-in expiry or by an explicit replacement, the fence
   is synchronous: the store forgets the dead generation
   and announces the successor before any disk is waited on, so a turn
-  holding a model answer, a transcript read, or an act's preparation is
+  holding a model answer, a transcript read, or an action's preparation is
   revoked at once, a write landing afterwards installs nothing, and the late
   result lands nowhere. The conversation's lines answer to their own
   retention, not the generation's: each line is stamped with the generation
@@ -574,32 +574,32 @@ Trust constraints:
   generation that follows may
   observe the same provider files again, because the rule bounds how long a
   reading stands, not whether the source can be read. Within its life a
-  generation holds at most 200 records: ended runs whose ends History has
+  generation holds at most 200 records: ended runs whose ends Conversation has
   taken go first, each with its
   journal, a new ask is refused at the door when nothing can go, and a write
   that would still grow an envelope past the bound is refused rather than
   dropping a run still going or its journal.
 - The conversations are a directory, and the one operation the main process
-  carries over it is Delete history, which no window can name either: the
-  History tab draws exactly what it drew before — one thread and its Clear —
-  and the Clear is Delete history on main. Nothing lists, creates, resets,
+  carries over it is Delete conversation, which no window can name either: the
+  Conversation tab draws exactly what it drew before — one thread and its Clear —
+  and the Clear is Delete conversation on main. Nothing lists, creates, resets,
   archives, or restores a conversation over the Gateway, and nothing on any
   surface does; a conversation is listed by the runtime that owns it (an
   observed session's, a child's) and archived only by the brain's own
-  cleanup of an ended child and by history maintenance below. Main is the
+  cleanup of an ended child and by conversation maintenance below. Main is the
   agent's ordinary conversation, the one the talk key, both composers, and
   every observation reach; a private thread (`agent:<agentId>:thread:<uuid>`)
   is another logical conversation of the same agent with its own generation,
-  history, and transcript, and only main's thread is relayed to a window. A
+  lines, and transcript, and only main's thread is relayed to a window. A
   run that keeps nothing on disk holds its conversations in memory alone —
-  their history and their envelopes both — and they are gone at the next
+  their lines and their envelopes both — and they are gone at the next
   launch. **Start fresh** replaces a conversation's generation with an empty
   one under the same synchronous fence, with no marker, because nothing is
-  erased: the history and transcript stand, attributed to the lifetime that
+  erased: the lines and transcript stand, attributed to the lifetime that
   wrote them, and the facts Luke remembers are untouched; resetting never
   means forgetting the notebook. It is the brain wiring's own reset, reached
   by no control and no method, and stands exercised by its tests.
-  **Delete history** is the
+  **Delete conversation** is the
   recoverable deletion, in a fixed order: the relayed thread is fenced and
   every window told, the conversation's brain retired and its publication
   drained, and then the store removes the conversation's lines, transcript,
@@ -621,7 +621,7 @@ Trust constraints:
   detail. A deletion
   reaches neither the facts Luke separately remembers nor any provider's
   file.
-- History maintenance is OpenClaw's, ported from `store-maintenance.ts` at
+- Conversation maintenance is OpenClaw's, ported from `store-maintenance.ts` at
   the pinned `b7528507` (MIT; `THIRD_PARTY_NOTICES.md`) and run at every
   live launch and hourly after, with interrupted archive publications retried
   first. Its defaults are the pinned ones — enforce mode, a 30-day stale
@@ -665,7 +665,7 @@ Trust constraints:
   flushed is maintenance state in the store's flush-state table, keyed by
   the generation's id, read once per generation before its first assessment
   and written after each completed flush, so a relaunch neither flushes a
-  cycle twice nor skips one, and Clear, Start fresh, and Delete history
+  cycle twice nor skips one, and Clear, Start fresh, and Delete conversation
   begin a lifetime at cycle zero that consults no earlier marker. A marker
   that cannot be read defers the flush; one that cannot be written after
   three attempts is reported and leaves the cycle unflushed, never silently
@@ -673,7 +673,7 @@ Trust constraints:
   The reset capture: Start fresh on an
   eligible conversation runs the same turn first, its outcome reported
   honestly and never deciding the reset, which proceeds either way; Clear,
-  Delete history, Archive, and a forget run no capture. Nothing else writes
+  Delete conversation, Archive, and a forget run no capture. Nothing else writes
   the notebook on its own: no scheduled job reads a conversation's lines to
   learn from them, and no model call rewrites `MEMORY.md`, which from here
   changes only under the developer's own hand or Luke's own notebook tools.
@@ -683,7 +683,7 @@ Trust constraints:
   brain's store's own table. Forgetting names a notebook entry: the entry
   and the provenance row beside it go, `USER.md` is written again, and the
   watcher's next reconcile takes its index rows with it; an id the notebook
-  does not hold is refused rather than reported as erased. Deleting a conversation's history stays the separate,
+  does not hold is refused rather than reported as erased. Deleting a conversation stays the separate,
   recoverable operation. Widening what the flush may write, or what a forget
   reaches, is a product decision, not an implementation detail, and
   `PRIVACY.md` says each in as many words.
@@ -716,7 +716,7 @@ Trust constraints:
   allowlist governs and a person property is not. The renderer has one narrow
   way in — a fixed set of surface events the main process cannot see for itself
   — validated against that same allowlist in the main process before anything is
-  queued, and reaching none of the acts. What the allowlist governs is that
+  queued, and reaching none of the actions. What the allowlist governs is that
   endpoint, `/api/events`, and not the analytics project: the two streams below
   reach the project without passing it, so a claim about the allowlist is a
   claim about Luke's own service alone.
@@ -737,17 +737,17 @@ Trust constraints:
   rather than only stopping the recorder; a switch that named recording and
   left it running would be a consent nobody gave.
 - The replay stream has the opposite shape from the counted events. Except for
-  the conversation History tab, it records the rendered panel, so everything
+  the Conversation tab, it records the rendered panel, so everything
   drawn travels: a session's title, branch, and error line, the account's
   own name and address, and any
   screenshot attached to the feedback composer, which is drawn as its own
   bytes and which input masking does not reach. The one thing withheld is what
   is typed into a field, and that is the library's default rather than a
-  posture Luke keeps. The one explicit blocked subtree is History: its root
+  posture Luke keeps. The one explicit blocked subtree is Conversation: its root
   carries the recording library's fixed blocking class, so neither the
   conversation's words nor the entries Luke was asked to remember leave the
   machine in a recording. That view retains every line the retention policy
-  holds, its words whole, including session acts and the lines that outlived
+  holds, its words whole, including session actions and the lines that outlived
   the last launch, until the developer clears it — the same thread on every
   display's panel, relayed between windows through the main process — while
   the 20 most recent lines enter model context, each cut there to its own
@@ -770,7 +770,7 @@ Trust constraints:
   which leaves an anonymous recording running the way the launch before the
   sign-in was: nothing erased is re-created either way, but a recorder starting
   up again on the panel that just erased everything reads as though something
-  were, and deletion is the one act treated here as unrecoverable.
+  were, and deletion is the one action treated here as unrecoverable.
   The iOS app records on the same terms at its own scale: its own screens and
   never the device's, captured as screenshots because that is how the SDK
   sees SwiftUI at all, begun at first paint before any account, joined to the
@@ -804,12 +804,12 @@ Trust constraints:
   detail.
 - The conversation Luke holds outlives the app, and one narrower thing beside
   it does too. The thread itself is words that were already said — the
-  developer's asks, what Luke spoke or announced, the acts he carried at their
+  developer's asks, what Luke spoke or announced, the actions he carried at their
   ask — each of which reached the voice service once on the call that said it,
   so storing it changes only how long it stands, not what it is. It lives in
   Luke's own application data, never a provider's file, under a real retention
   policy replacing the old "dies with the app": every admitted line stands
-  in the brain's store's own table until Delete history or the conversation
+  in the brain's store's own table until Delete conversation or the conversation
   maintenance below removes it, and what the panel draws and the model is
   handed is a projection over that record, the 200 most recent lines and
   nothing older than a fortnight. Each line
@@ -818,7 +818,7 @@ Trust constraints:
   report can add to the thread and never replace it, a line delivered twice
   is one line, and two deliberate identical utterances are two. What the
   thread hands a model is the same bounded recent slice, riding beside the
-  brain's own working memory, and History's Delete history reaches the
+  brain's own working memory, and the Conversation tab's Delete conversation reaches the
   stored lines as well as the screen, behind the recovery archive the rule
   above describes, because a deletion that emptied only the view would leave
   the words on the machine with nothing left to draw them. The narrower thing is a durable
@@ -831,8 +831,8 @@ Trust constraints:
   store keeps only provenance beside it (the entry's id, when it was written,
   whether it came from the developer's hand, Luke's tool, or the fact table an
   earlier build kept, and the file hash last reconciled). The write runs the
-  same act gauntlet as every other write — admitted once, against the
-  notebook's standing entries, by the same `admit()` every act runs, and
+  same action gauntlet as every other write — admitted once, against the
+  notebook's standing entries, by the same `admit()` every action runs, and
   admitted by the effective tool policy — and every mutation of the notebook is one request to the store's
   worker, which answers one at a time per workspace and reads the file again
   before writing it, so two conversations or a child remembering at once
@@ -866,7 +866,7 @@ Trust constraints:
   answering only for paths inside the notebook root, each result carrying
   its path, line range, score, and provenance, and nothing runs a search of
   its own behind a turn. A search may surface the
-  retained History lines of eligible conversations (main and the developer's
+  retained Conversation lines of eligible conversations (main and the developer's
   private threads of the same agent, never the asking conversation, a
   temporary thread, an observed session's conversation, a child, a cron or
   heartbeat conversation, or another agent's) and indexes no transcript.
@@ -904,20 +904,20 @@ Trust constraints:
   in a build carrying a registered OAuth client; without one it is not drawn.
   Connecting is the tracker's own flow for a public client: PKCE over a
   loopback redirect that never leaves the machine, carrying no client secret,
-  asking for the narrowest scopes the acts need. No key is ever typed, and
+  asking for the narrowest scopes the actions need. No key is ever typed, and
   none is read from the environment: a tracker connected by consent has no
   environment variable at all. The grant is stored encrypted like a key, is
   renewed before it lapses (the renewal written before it is used, because a
   consumed refresh token is spent) and is deleted only when the tracker
   itself refuses the renewal, never when the network merely could not carry
   it. Disconnecting revokes the grant with the tracker as well as deleting it
-  here. The two acts a tracker takes, moving an issue to a state its latest
+  here. The two actions a tracker takes, moving an issue to a state its latest
   observation listed and adding a comment, happen only as the direct product of
   a turn the developer opened themselves, through the tracker's own documented
   endpoint under the same grant, admitted against the observed issue roster by
-  the same `admit()` every session act runs, before the tracker client sees
+  the same `admit()` every session action runs, before the tracker client sees
   anything. Observation sends only the read document; the write documents are
-  fixed by the build and issued only for a validated act.
+  fixed by the build and issued only for a validated action.
 - The calendar is the same rule with no write path at all. Luke reads when
   the user's meetings start and end, under accounts the user signed in, and
   observes nothing without one. The integration exists only in a build
@@ -996,12 +996,12 @@ Trust constraints:
   renderer draws while Luke speaks into that silence: his captions forced on,
   paced for reading rather than for the voice, because into a mute the caption
   is the speech, and a hint asking for volume. Luke never changes the system
-  volume himself; turning it up stays the user's own act on their own keys.
+  volume himself; turning it up stays the user's own action on their own keys.
 - The input side is read the same way: a native helper reports where the
   developer's voice would be captured from: the default input device's
   transport, whether the machine has a built-in microphone and what it is
   named, and whether the lid over it is open. Nothing else, and it can write
-  nothing. No audio is ever read. What it learns decides exactly one act:
+  nothing. No audio is ever read. What it learns decides exactly one action:
   which device the renderer asks the browser to open when a press takes a
   turn, so a Bluetooth headset is not pulled onto its call codec while the
   Mac's own microphone can listen, and is listened to itself when a shut lid
@@ -1025,7 +1025,7 @@ Trust constraints:
   next quits) and an install is asked for at most once, because repeat asks
   race the binary swap. The row's button is also a press that can be asked
   of Luke, only in a turn the developer opened themselves: the ask is
-  validated in the renderer against the one act the row currently offers and
+  validated in the renderer against the one action the row currently offers and
   lands on the same main-process guards the button's own press does, so it
   reaches nothing the button does not — the check, the restart, or the fixed
   releases page in the browser. A transient network failure is silence for
@@ -1050,7 +1050,7 @@ Trust constraints:
   both), and answers the same pinned OpenAI calls endpoint every minted call
   uses. The call itself is tool-free at the API — no tools declared, every
   scripted turn opened with none — and no carrier is wired behind it, so
-  nothing said, heard, or shown during the introduction can become an act.
+  nothing said, heard, or shown during the introduction can become an action.
   What travels on it is the build's own script and one observed thing: the
   detected sessions' titles, as data behind a marker, never as instructions,
   and capped at the panel's own visible depth however many sessions stand on
@@ -1114,7 +1114,7 @@ What Luke may show:
   message that does travel is never truncated — the bounds live on the page,
   because a cut message says something its author did not. On the phone the
   fetched words are masked out of the session recording, the way the desktop
-  blocks its History subtree, so the conversation reaches the developer's own
+  blocks its Conversation subtree, so the conversation reaches the developer's own
   screen and nothing else. A provider whose API documents no such read
   advertises none, and its screen says so rather than standing in a summary
   of its own; widening this read to another provider, another caller, an unattributed
@@ -1130,7 +1130,7 @@ What Luke may show:
   decided to give — its own words about what changed, under the briefing
   bound — which reaches the voice service so it can be said aloud, as the one
   input of a call that carries no tools and no conversation, behind a marker
-  that says it is data, so nothing in a briefing can become an act or inherit
+  that says it is data, so nothing in a briefing can become an action or inherit
   an earlier question. Nothing decides an announcement deterministically any
   more: no status edge speaks on its own, and no evaluator sentence stands
   between the transcript and the voice. Two onboarding beats are the members
@@ -1156,24 +1156,24 @@ What Luke may show:
   offers no microphone track, carries no tools, and is sent the one briefing
   alone: never the roster, the guide, or a
   transcript, which reach only the brain, and the voice only as the words the
-  brain chose to say. The desktop's voice knows no roster, guide, or history
+  brain chose to say. The desktop's voice knows no roster, guide, or conversation
   of its own: a developer-opened conversation hands their words to the brain
   through the voice's one tool and says the brain's reply whole. It is the
   brain whose standing context carries the recent exchange — the 20 most
-  recent History lines, each cut to its own length bound (the developer's
+  recent Conversation lines, each cut to its own length bound (the developer's
   asks, typed or spoken and handed back as text by the service that heard
-  them, the words Luke spoke or announced, and the acts he carried at their
+  them, the words Luke spoke or announced, and the actions he carried at their
   ask), beside the brain's own working memory of its turns — so the one
   conversation survives the calls that transport it: a briefing read out on
   Luke's own call, or a call retired idle, is still remembered on the next
-  ask. A reply that quoted or summarized a transcript read is History like
+  ask. A reply that quoted or summarized a transcript read is Conversation like
   any other reply, and enters that context under the same bounds. Each
-  History line's session identity is the roster-validated one its act
-  traveled with, and the history is stored only where the constraint above
+  Conversation line's session identity is the roster-validated one its action
+  traveled with, and the conversation is stored only where the constraint above
   puts it, on this machine and under its retention policy, and is never sent
   on Luke's speak-only call. The phone's call keeps the older shape: it
-  carries the roster it was shown as context and the session acts as its own
-  tools, and no History. A
+  carries the roster it was shown as context and the session actions as its own
+  tools, and no Conversation. A
   briefing's trigger is an observation turn of the brain — a provider's hook,
   the brain's own look at the roster on the observation pass, or a hold's
   release — and the brain's `announce` call inside it, offered in no other

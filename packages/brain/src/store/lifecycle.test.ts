@@ -23,7 +23,7 @@ import { userMessageItem } from "../responses-api.js";
 import { BrainStateStore } from "../state-store.js";
 import {
   archiveDirectory,
-  deleteConversationHistory,
+  deleteConversation,
   FILE_SYSTEM_DURABILITY,
   listArchives,
   type PublicationDurability,
@@ -32,6 +32,11 @@ import {
 import { loadBrainEnvelope, saveBrainEnvelope } from "./brain-envelope.js";
 import { decodeArchiveContent, encodeArchiveContent, zstdSupported } from "./compression.js";
 import {
+  appendConversation,
+  conversationClearedAt,
+  listConversation,
+} from "./conversation-table.js";
+import {
   archiveConversation,
   createConversation,
   listConversations,
@@ -39,17 +44,16 @@ import {
 } from "./conversations-table.js";
 import { AGENT_DATABASE_FILE, StoreDatabase } from "./database.js";
 import { EnvelopeTracker } from "./envelope.js";
-import { appendHistory, historyClearedAt, listHistory } from "./history-table.js";
 import {
+  CONVERSATION_MAINTENANCE_DEFAULTS,
   capVictims,
   diskBudgetVictims,
-  HISTORY_MAINTENANCE_DEFAULTS,
   idleThreadVictims,
   shouldRunEntryMaintenance,
   staleVictims,
 } from "./maintenance.js";
-import { measurePhysicalUsage, runHistoryMaintenance } from "./maintenance-run.js";
-import { inspectHistory, line, NOW } from "./testing.js";
+import { measurePhysicalUsage, runConversationMaintenance } from "./maintenance-run.js";
+import { inspectConversation, line, NOW } from "./testing.js";
 import { listCompactionBoundaries, listTranscript, searchTranscript } from "./transcript-table.js";
 
 /**
@@ -203,14 +207,19 @@ test("Start fresh replaces the lifetime and keeps the history and transcript, at
     })),
     true,
   );
-  appendHistory(database, MAIN_SESSION_KEY, [line("said before", NOW, { eventId: "h1" })], NOW);
+  appendConversation(
+    database,
+    MAIN_SESSION_KEY,
+    [line("said before", NOW, { eventId: "h1" })],
+    NOW,
+  );
   assert.equal(await store.reset(NOW + 5), true);
   const standing = loadBrainEnvelope(database, MAIN_SESSION_KEY);
   assert.equal(standing.state?.generationId, "gen-2");
   assert.deepEqual(standing.state?.items, []);
   assert.equal(standing.state?.reset, undefined);
-  assert.equal(listHistory(database, MAIN_SESSION_KEY, NOW + 5).length, 1);
-  assert.equal(historyClearedAt(database, MAIN_SESSION_KEY), undefined);
+  assert.equal(listConversation(database, MAIN_SESSION_KEY, NOW + 5).length, 1);
+  assert.equal(conversationClearedAt(database, MAIN_SESSION_KEY), undefined);
   assert.equal(listTranscript(database, MAIN_SESSION_KEY)[0]?.sessionId, "gen-1");
   // A checkpoint of the replaced lifetime lands nowhere, and cannot refill the fresh one.
   assert.equal(
@@ -226,7 +235,7 @@ test("Start fresh replaces the lifetime and keeps the history and transcript, at
   database.close();
 });
 
-test("Delete history commits the archive with the removal, publishes and verifies it, and a restore preserves identities and refuses a newer live conversation", () => {
+test("Delete conversation commits the archive with the removal, publishes and verifies it, and a restore preserves identities and refuses a newer live conversation", () => {
   const root = agentRoot();
   const database = openAt(root);
   const repo = repository(database);
@@ -236,7 +245,7 @@ test("Delete history commits the archive with the removal, publishes and verifie
     items: [{ type: "message", role: "user", content: SECRET }],
   };
   assert.equal(repo.save(gen, [userText(SECRET)]), true);
-  appendHistory(
+  appendConversation(
     database,
     MAIN_SESSION_KEY,
     [
@@ -245,12 +254,12 @@ test("Delete history commits the archive with the removal, publishes and verifie
     ],
     NOW,
   );
-  const deleted = deleteConversationHistory(database, root, MAIN_SESSION_KEY, NOW, {
+  const deleted = deleteConversation(database, root, MAIN_SESSION_KEY, NOW, {
     archiveId: "archive-1",
   });
   assert.ok(deleted);
   assert.equal(deleted.published, true);
-  assert.equal(deleted.archive.historyLines, 2);
+  assert.equal(deleted.archive.conversationLines, 2);
   assert.equal(deleted.archive.transcriptEvents, 1);
   assert.equal(deleted.archive.publishedAt !== undefined, true);
   assert.match(
@@ -260,13 +269,18 @@ test("Delete history commits the archive with the removal, publishes and verifie
   const file = path.join(archiveDirectory(root), deleted.archive.fileName);
   assert.equal(fs.existsSync(file), true);
   // The rows are gone, the cutoff stands, and nothing of the old lifetime remains.
-  assert.deepEqual(listHistory(database, MAIN_SESSION_KEY, NOW), []);
+  assert.deepEqual(listConversation(database, MAIN_SESSION_KEY, NOW), []);
   assert.equal(listTranscript(database, MAIN_SESSION_KEY).length, 0);
-  assert.equal(historyClearedAt(database, MAIN_SESSION_KEY), NOW);
+  assert.equal(conversationClearedAt(database, MAIN_SESSION_KEY), NOW);
   assert.deepEqual(loadBrainEnvelope(database, MAIN_SESSION_KEY), {});
   // A late line from before the deletion is refused by the cutoff.
-  appendHistory(database, MAIN_SESSION_KEY, [line("late", NOW - 1, { eventId: "late" })], NOW + 1);
-  assert.deepEqual(listHistory(database, MAIN_SESSION_KEY, NOW + 1), []);
+  appendConversation(
+    database,
+    MAIN_SESSION_KEY,
+    [line("late", NOW - 1, { eventId: "late" })],
+    NOW + 1,
+  );
+  assert.deepEqual(listConversation(database, MAIN_SESSION_KEY, NOW + 1), []);
   // The archive itself holds the words, compressed, and nowhere else does.
   const content = decodeArchiveContent(fs.readFileSync(file), deleted.archive.encoding);
   assert.match(content, /first words/u);
@@ -279,20 +293,20 @@ test("Delete history commits the archive with the removal, publishes and verifie
 test("a publication a crash interrupted keeps its payload in the registry and is published at the next launch", () => {
   const root = agentRoot();
   const database = openAt(root);
-  appendHistory(database, MAIN_SESSION_KEY, [line("words", NOW, { eventId: "h1" })], NOW);
+  appendConversation(database, MAIN_SESSION_KEY, [line("words", NOW, { eventId: "h1" })], NOW);
   // The archive directory is a file, so the publication cannot land.
   fs.writeFileSync(archiveDirectory(root), "not a directory");
-  const deleted = deleteConversationHistory(database, root, MAIN_SESSION_KEY, NOW, {
+  const deleted = deleteConversation(database, root, MAIN_SESSION_KEY, NOW, {
     archiveId: "archive-2",
   });
   assert.ok(deleted);
   assert.equal(deleted.published, false);
   assert.equal(deleted.archive.publishedAt, undefined);
-  assert.deepEqual(listHistory(database, MAIN_SESSION_KEY, NOW), []);
+  assert.deepEqual(listConversation(database, MAIN_SESSION_KEY, NOW), []);
   // The registry still holds the bytes until the publication lands.
   // SAFETY: length() of the payload column is one integer column named bytes.
   const held = database
-    .prepare("SELECT length(payload) AS bytes FROM history_archives WHERE archive_id = ?")
+    .prepare("SELECT length(payload) AS bytes FROM conversation_archives WHERE archive_id = ?")
     .get("archive-2") as { bytes: number };
   assert.ok(held.bytes > 0);
   database.close();
@@ -305,7 +319,7 @@ test("a publication a crash interrupted keeps its payload in the registry and is
   assert.equal(fs.existsSync(path.join(archiveDirectory(root), archive.fileName)), true);
   // SAFETY: the payload column is the BLOB the deletion wrote, or NULL once published.
   const cleared = relaunched
-    .prepare("SELECT payload FROM history_archives WHERE archive_id = ?")
+    .prepare("SELECT payload FROM conversation_archives WHERE archive_id = ?")
     .get("archive-2") as { payload: Uint8Array | null };
   assert.equal(cleared.payload, null);
   relaunched.close();
@@ -315,7 +329,7 @@ test("a publication a crash interrupted keeps its payload in the registry and is
 test("a directory sync that fails is a publication that failed: the rows are gone, the payload stays for the retry, and the retry syncs the name that already exists before it lets the payload go", () => {
   const root = agentRoot();
   const database = openAt(root);
-  appendHistory(database, MAIN_SESSION_KEY, [line("words", NOW, { eventId: "h1" })], NOW);
+  appendConversation(database, MAIN_SESSION_KEY, [line("words", NOW, { eventId: "h1" })], NOW);
   let syncs = 0;
   const failing: PublicationDurability = {
     syncDirectory: () => {
@@ -323,20 +337,20 @@ test("a directory sync that fails is a publication that failed: the rows are gon
       throw Object.assign(new Error("EIO: directory sync failed"), { code: "EIO" });
     },
   };
-  const deleted = deleteConversationHistory(database, root, MAIN_SESSION_KEY, NOW, {
+  const deleted = deleteConversation(database, root, MAIN_SESSION_KEY, NOW, {
     archiveId: "archive-4",
     durability: failing,
   });
   assert.ok(deleted);
   assert.equal(deleted.published, false);
   assert.equal(syncs, 1);
-  assert.deepEqual(listHistory(database, MAIN_SESSION_KEY, NOW), []);
+  assert.deepEqual(listConversation(database, MAIN_SESSION_KEY, NOW), []);
   // The name was linked before the sync failed, and the payload was not let go of.
   const target = path.join(archiveDirectory(root), deleted.archive.fileName);
   assert.equal(fs.existsSync(target), true);
   // SAFETY: the payload column is the BLOB the deletion wrote, or NULL once published.
   const held = database
-    .prepare("SELECT payload, published_at FROM history_archives WHERE archive_id = ?")
+    .prepare("SELECT payload, published_at FROM conversation_archives WHERE archive_id = ?")
     .get("archive-4") as { payload: Uint8Array | null; published_at: number | null };
   assert.ok(held.payload);
   assert.equal(held.published_at, null);
@@ -356,7 +370,7 @@ test("a directory sync that fails is a publication that failed: the rows are gon
   assert.equal(synced, 1);
   // SAFETY: the payload column is the BLOB the deletion wrote, or NULL once published, beside its publication instant.
   const cleared = database
-    .prepare("SELECT payload, published_at FROM history_archives WHERE archive_id = ?")
+    .prepare("SELECT payload, published_at FROM conversation_archives WHERE archive_id = ?")
     .get("archive-4") as { payload: Uint8Array | null; published_at: number | null };
   assert.equal(cleared.payload, null);
   assert.ok(cleared.published_at !== null);
@@ -372,7 +386,7 @@ test("a deletion takes what stood at or before its instant and every lifetime bu
     repo.save({ ...freshBrainState("gen-old", NOW - 10), items: [userMessageItem(SECRET)] }),
     true,
   );
-  appendHistory(
+  appendConversation(
     database,
     MAIN_SESSION_KEY,
     [line("before", NOW - 5, { eventId: "h-before" })],
@@ -387,27 +401,27 @@ test("a deletion takes what stood at or before its instant and every lifetime bu
     true,
   );
   // ...and a line lands a beat after the press, while the deletion waits.
-  appendHistory(
+  appendConversation(
     database,
     MAIN_SESSION_KEY,
     [line("after", NOW + 1, { eventId: "h-after" })],
     NOW + 1,
   );
-  const deleted = deleteConversationHistory(database, root, MAIN_SESSION_KEY, NOW, {
+  const deleted = deleteConversation(database, root, MAIN_SESSION_KEY, NOW, {
     archiveId: "archive-5",
     keepSessionId: "gen-new",
   });
   assert.ok(deleted);
-  assert.equal(deleted.archive.historyLines, 1);
+  assert.equal(deleted.archive.conversationLines, 1);
   assert.deepEqual(
-    listHistory(database, MAIN_SESSION_KEY, NOW + 1).map((entry) => entry.words),
+    listConversation(database, MAIN_SESSION_KEY, NOW + 1).map((entry) => entry.words),
     ["after"],
   );
   assert.equal(loadBrainEnvelope(database, MAIN_SESSION_KEY).state?.generationId, "gen-new");
-  assert.equal(historyClearedAt(database, MAIN_SESSION_KEY), NOW);
+  assert.equal(conversationClearedAt(database, MAIN_SESSION_KEY), NOW);
   // Unnamed, every lifetime goes: the maintenance removal of a conversation nobody is in.
   assert.ok(
-    deleteConversationHistory(database, root, MAIN_SESSION_KEY, NOW + 2, {
+    deleteConversation(database, root, MAIN_SESSION_KEY, NOW + 2, {
       archiveId: "archive-6",
     }),
   );
@@ -449,14 +463,14 @@ test("the maintenance policy: protections, the idle-thread and stale rules, the 
     idleThreadVictims(
       all,
       NOW,
-      HISTORY_MAINTENANCE_DEFAULTS.idleThreadArchiveAfterMs,
+      CONVERSATION_MAINTENANCE_DEFAULTS.idleThreadArchiveAfterMs,
       protections,
     ).map((r) => r.sessionKey),
     [idle.sessionKey, forgotten.sessionKey],
   );
   // Stale: archived in place; protected rows, archived rows, and a key this build cannot classify are left alone.
   assert.deepEqual(
-    staleVictims(all, NOW, HISTORY_MAINTENANCE_DEFAULTS.staleAfterMs, protections).map(
+    staleVictims(all, NOW, CONVERSATION_MAINTENANCE_DEFAULTS.staleAfterMs, protections).map(
       (r) => r.sessionKey,
     ),
     [forgotten.sessionKey],
@@ -490,11 +504,11 @@ test("the maintenance policy: protections, the idle-thread and stale rules, the 
   assert.equal(shouldRunEntryMaintenance(0, 5_000, true), true);
   assert.deepEqual(
     [
-      HISTORY_MAINTENANCE_DEFAULTS.staleAfterMs,
-      HISTORY_MAINTENANCE_DEFAULTS.idleThreadArchiveAfterMs,
-      HISTORY_MAINTENANCE_DEFAULTS.maximumUnarchived,
-      HISTORY_MAINTENANCE_DEFAULTS.maximumDiskBytes,
-      HISTORY_MAINTENANCE_DEFAULTS.highWaterBytes,
+      CONVERSATION_MAINTENANCE_DEFAULTS.staleAfterMs,
+      CONVERSATION_MAINTENANCE_DEFAULTS.idleThreadArchiveAfterMs,
+      CONVERSATION_MAINTENANCE_DEFAULTS.maximumUnarchived,
+      CONVERSATION_MAINTENANCE_DEFAULTS.maximumDiskBytes,
+      CONVERSATION_MAINTENANCE_DEFAULTS.highWaterBytes,
     ],
     [30 * DAY, 7 * DAY, 5_000, 10 * 1024 ** 3, 8 * 1024 ** 3],
   );
@@ -511,7 +525,7 @@ test("a maintenance pass archives idle and stale threads in place, keeps a key i
       name,
       now: NOW - ageMs,
     });
-    appendHistory(
+    appendConversation(
       database,
       key,
       [line(`${name} words`, NOW - ageMs, { eventId: `${name}-1` })],
@@ -531,14 +545,14 @@ test("a maintenance pass archives idle and stale threads in place, keeps a key i
     name: "unclassified",
     now: NOW - 40 * DAY,
   });
-  appendHistory(
+  appendConversation(
     database,
     MAIN_SESSION_KEY,
     [line("main words", NOW - 60 * DAY, { eventId: "m1" })],
     NOW - 60 * DAY,
   );
 
-  const report = runHistoryMaintenance(database, root, { now: NOW, preserve: [] });
+  const report = runConversationMaintenance(database, root, { now: NOW, preserve: [] });
   // The idle-thread rule runs before the stale rule, as the pinned source
   // orders its boundaries, so a thread past both is archived as idle.
   assert.equal(report.archivedIdleThreads, 2);
@@ -551,10 +565,10 @@ test("a maintenance pass archives idle and stale threads in place, keeps a key i
   assert.equal(byKey.get(MAIN_SESSION_KEY)?.archivedAt, undefined);
   assert.equal(byKey.get(unknown)?.archivedAt, undefined);
   // Archived in place: the history rows are still there, whatever the thread's own age retention shows.
-  assert.equal(inspectHistory(database, stale).count, 1);
+  assert.equal(inspectConversation(database, stale).count, 1);
 
   // The cap, forced: only unarchived rows count, and the longest untouched eligible one goes.
-  const capped = runHistoryMaintenance(database, root, {
+  const capped = runConversationMaintenance(database, root, {
     now: NOW,
     preserve: [],
     force: true,
@@ -570,7 +584,7 @@ test("a maintenance pass archives idle and stale threads in place, keeps a key i
   // archives, main, and the pinned thread survive; the pressure that remains
   // is reported rather than resolved by deleting protected history.
   const usage = measurePhysicalUsage(root, AGENT_DATABASE_FILE);
-  const pressured = runHistoryMaintenance(database, root, {
+  const pressured = runConversationMaintenance(database, root, {
     now: NOW,
     preserve: [],
     config: { maximumDiskBytes: 1, highWaterBytes: 1 },
@@ -583,8 +597,8 @@ test("a maintenance pass archives idle and stale threads in place, keeps a key i
   assert.ok(pressured.disk.remainingPressureBytes > 0);
   const survivors = listConversations(database).map((r) => r.sessionKey);
   assert.deepEqual(new Set(survivors), new Set([MAIN_SESSION_KEY, idle, stale, pinned, unknown]));
-  assert.equal(inspectHistory(database, stale).count, 1);
-  assert.equal(inspectHistory(database, MAIN_SESSION_KEY).count, 1);
+  assert.equal(inspectConversation(database, stale).count, 1);
+  assert.equal(inspectConversation(database, MAIN_SESSION_KEY).count, 1);
   assert.equal(listArchives(database).length, 1);
   assert.equal(listArchives(database)[0]?.sessionKey, fresh);
   assert.equal(archiveConversation(database, MAIN_SESSION_KEY, NOW, ARCHIVE_REASON.USER), false);
@@ -630,15 +644,15 @@ test("canonical history retains old and overflow lines while the existing panel 
   try {
     const now = NOW + 30 * DAY;
     const old = line("old voice-only history", NOW, { eventId: "old-voice" });
-    appendHistory(database, MAIN_SESSION_KEY, [old], NOW);
+    appendConversation(database, MAIN_SESSION_KEY, [old], NOW);
     const recent = Array.from({ length: 205 }, (_, i) =>
       line(`recent ${i}`, now - 205 + i, { eventId: `recent-${i}` }),
     );
-    appendHistory(database, MAIN_SESSION_KEY, recent, now);
-    assert.equal(listHistory(database, MAIN_SESSION_KEY, now).length, 200);
-    const archived = deleteConversationHistory(database, root, MAIN_SESSION_KEY, now);
+    appendConversation(database, MAIN_SESSION_KEY, recent, now);
+    assert.equal(listConversation(database, MAIN_SESSION_KEY, now).length, 200);
+    const archived = deleteConversation(database, root, MAIN_SESSION_KEY, now);
     assert.ok(archived?.published);
-    assert.equal(archived.archive.historyLines, 206);
+    assert.equal(archived.archive.conversationLines, 206);
     const content = decodeArchiveContent(
       fs.readFileSync(path.join(archiveDirectory(root), archived.archive.fileName)),
       archived.archive.encoding,

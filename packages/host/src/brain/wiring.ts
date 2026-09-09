@@ -89,8 +89,11 @@ import {
   type SessionIdentity,
   type SessionProviderPlugin,
 } from "@sidecar/session";
-import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { type BrainActPerformerDependencies, createBrainActPerformer } from "./act-performer.js";
+import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import {
+  type BrainActionPerformerDependencies,
+  createBrainActionPerformer,
+} from "./action-performer.js";
 import { BrainHost } from "./host.js";
 import { type BrainPublicationDependencies, followBrainRequests } from "./publication.js";
 import {
@@ -114,11 +117,11 @@ export interface BrainWiringDependencies extends ChildWiringDependencies {
     sessionKey: SessionKey,
   ) => boolean | Promise<boolean>;
   broadcastRequests: (snapshots: readonly BrainRequestSnapshot[]) => void;
-  /** A run's end stands in History, written and marked: the moment its reply may be owed to the ear. */
+  /** A run's end stands in Conversation, written and marked: the moment its reply may be owed to the ear. */
   onEndPublished?: BrainPublicationDependencies["onEndPublished"];
   /** A conversation's generation ended — reset, expired, or replaced — and its unspoken briefings and replies go with it. */
   onGenerationReplaced: (sessionKey: SessionKey) => void;
-  acts: BrainActPerformerDependencies;
+  actions: BrainActionPerformerDependencies;
   roster: () => BrainRoster;
   standingContext: () => string;
   pluginFor: (providerId: string) => SessionProviderPlugin | undefined;
@@ -404,13 +407,13 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
   };
 
   /**
-   * The gauntlet every act the brain asks for runs, in this process: validated
+   * The gauntlet every action the brain asks for runs, in this process: validated
    * against the roster, the issue board, the offered projects, the guide, or
-   * the remembered facts as each stands at the moment of the act, then carried
+   * the remembered facts as each stands at the moment of the action, then carried
    * by the performer. Only a turn the developer opened may act, and the
    * validators guard what it may act on.
    */
-  const acts = createBrainActPerformer(dependencies.acts);
+  const actions = createBrainActionPerformer(dependencies.actions);
 
   // The lanes are one scheduler over every conversation, each lane its own
   // budget and never one cap over Luke as a whole.
@@ -578,7 +581,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       ...(flushFor(sessionKey) ? { beforeCompaction: flushFor(sessionKey) } : undefined),
       ...(flushMarkerFor(sessionKey) ? { flushMarker: flushMarkerFor(sessionKey) } : undefined),
       runtime: toolLoopRuntimeOver(model),
-      acts,
+      actions,
       roster: dependencies.roster,
       standingContext: dependencies.standingContext,
       prepareTurn: (turn) =>
@@ -603,7 +606,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
         const plugin = dependencies.pluginFor(identity.providerId);
         if (!plugin) {
           return Promise.resolve({
-            status: ACT_RESULT_STATUS.UNSUPPORTED,
+            status: ACTION_RESULT_STATUS.UNSUPPORTED,
             reason: "That session's provider is not connected.",
           });
         }
@@ -614,13 +617,13 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
         const plugin = dependencies.pluginFor(identity.providerId);
         if (!session || !plugin) {
           return Promise.resolve({
-            status: ACT_RESULT_STATUS.REJECTED,
+            status: ACTION_RESULT_STATUS.REJECTED,
             reason: "No observed session matches that identity.",
           });
         }
         if (session.location !== SESSION_LOCATION.LOCAL) {
           return Promise.resolve({
-            status: ACT_RESULT_STATUS.UNSUPPORTED,
+            status: ACTION_RESULT_STATUS.UNSUPPORTED,
             reason: "A cloud session's conversation lives with its provider, not on this machine.",
           });
         }
@@ -787,7 +790,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     }
   };
 
-  // A conversation is busy while any run of it is pending in History's view,
+  // A conversation is busy while any run of it is pending in Conversation's view,
   // or while its brain has anything under way or owed: a turn running or
   // queued, a capture landing, an observation captured and not yet read, an
   // ask waiting. An unrecorded analysis is work too, and is never cut because

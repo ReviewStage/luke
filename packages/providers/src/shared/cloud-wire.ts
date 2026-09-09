@@ -62,9 +62,9 @@ export interface CloudWriteRoute {
   /** Left off entirely for an endpoint that documents an empty request. */
   body?: Readonly<WireRecord>;
   /**
-   * For the rare write the provider answers only once the act itself is done
+   * For the rare write the provider answers only once the action itself is done
    * — Conductor's archive stands the whole workspace down before it says so,
-   * well past the shared request bound. A deadline shorter than the act turns
+   * well past the shared request bound. A deadline shorter than the action turns
    * a write that landed into "may not have landed", so such a route asks for
    * the slow bound, the same ceiling a slow read gets and the widest this one
    * can reach.

@@ -24,7 +24,7 @@ struct OutgoingMessage: Identifiable, Equatable {
 }
 
 /// The shared left-side bubble used for words coming back from Luke or one of
-/// the observed agents. Voice history reuses this exact shape.
+/// the observed agents. The voice conversation reuses this exact shape.
 struct AgentMessageBubble: View {
     let words: String
     var isError = false
@@ -109,7 +109,7 @@ private struct MessageCopyAction: View {
 /// provider's plain report and draws as the words it is.
 struct SessionDetailView: View {
     let session: RosterSession
-    let actClient: ActClient
+    let actionClient: ActionClient
     let conversationClient: ConversationClient
     @Binding var thread: [OutgoingMessage]
     /// Runs after a delivered send so the roster refreshes behind this screen.
@@ -226,7 +226,7 @@ struct SessionDetailView: View {
                         }
                     } else {
                         // Masked from the recording the way the desktop
-                        // blocks its History subtree: a session's own words
+                        // blocks its Conversation subtree: a session's own words
                         // do not leave the machine in a replay.
                         ForEach(conversation) { message in
                             conversationBubble(message)
@@ -360,7 +360,7 @@ struct SessionDetailView: View {
     private func openSessionLink(_ link: URL) {
         openURL(link)
         if let provider = ProductProviderID(rawValue: session.providerId) {
-            events.record(.sessionActSend(provider: provider, act: .sessionOpen))
+            events.record(.sessionActionSend(provider: provider, action: .sessionOpen))
         }
     }
 
@@ -602,7 +602,7 @@ struct SessionDetailView: View {
             var delivery: OutgoingMessage.Delivery
             do {
                 let answer = try await account.authorized { token in
-                    try await actClient.sendMessage(
+                    try await actionClient.sendMessage(
                         accessToken: token,
                         providerId: session.providerId,
                         providerSessionId: session.sessionId,
@@ -612,7 +612,7 @@ struct SessionDetailView: View {
                 if answer.result == .accepted {
                     delivery = .sent
                     if let provider = ProductProviderID(rawValue: session.providerId) {
-                        events.record(.sessionActSend(provider: provider, act: .messageSend))
+                        events.record(.sessionActionSend(provider: provider, action: .messageSend))
                     }
                 } else {
                     delivery = .failed(reason: answer.reason ?? "The message was not delivered.")
@@ -639,12 +639,12 @@ struct SessionDetailView: View {
 }
 
 /// Session context that must remain reachable after the opening messages have
-/// scrolled away. The roster's act advertisements stay out: they decide which
+/// scrolled away. The roster's action advertisements stay out: they decide which
 /// controls exist, while this sheet is the provider's descriptive report.
 private struct SessionInfoSheet: View {
     let session: RosterSession
     /// The detail screen's own open press, so the sheet's row and the menu's
-    /// entry are one act — opened and counted in one place.
+    /// entry are one action — opened and counted in one place.
     let openLink: (URL) -> Void
 
     @Environment(\.dismiss) private var dismiss

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  ACT_KIND,
-  type AdvertisedAct,
-  advertisedActFor,
+  ACTION_KIND,
+  type AdvertisedAction,
+  advertisedActionFor,
   advertisedControls,
   maximumSessionDetailLength,
   normalizeSession,
@@ -237,12 +237,12 @@ test("a developer hold rides a waiting session and is dropped on any other statu
   assert.equal(working.holdingForDeveloper, undefined);
 });
 
-function advertising(advertises: readonly AdvertisedAct[]): Session {
+function advertising(advertises: readonly AdvertisedAction[]): Session {
   return normalizeSession(
     { id: "conductor", displayName: "Conductor" },
     {
       providerSessionId: "chat-1",
-      title: "Advertised acts",
+      title: "Advertised actions",
       status: SESSION_STATUS.WAITING,
       lastActivityAt: TEST_NOW,
       advertises,
@@ -251,14 +251,14 @@ function advertising(advertises: readonly AdvertisedAct[]): Session {
 }
 
 test("a control needs an id, and the same id twice is a contradiction", () => {
-  assert.throws(() => advertising([{ kind: ACT_KIND.CONTROL, id: "  ", label: "Stop" }]), {
+  assert.throws(() => advertising([{ kind: ACTION_KIND.CONTROL, id: "  ", label: "Stop" }]), {
     message: "control id must not be empty",
   });
   assert.throws(
     () =>
       advertising([
-        { kind: ACT_KIND.CONTROL, id: "stop", label: "Stop" },
-        { kind: ACT_KIND.CONTROL, id: "stop", label: "Halt" },
+        { kind: ACTION_KIND.CONTROL, id: "stop", label: "Stop" },
+        { kind: ACTION_KIND.CONTROL, id: "stop", label: "Halt" },
       ]),
     { message: "Duplicate session control: stop" },
   );
@@ -266,7 +266,7 @@ test("a control needs an id, and the same id twice is a contradiction", () => {
 
 test("a control's label falls back to its id, and its target is bounded", () => {
   const [control] = advertisedControls(
-    advertising([{ kind: ACT_KIND.CONTROL, id: "stop", label: "   ", target: "t".repeat(400) }]),
+    advertising([{ kind: ACTION_KIND.CONTROL, id: "stop", label: "   ", target: "t".repeat(400) }]),
   );
 
   assert.equal(control?.label, "stop");
@@ -278,35 +278,35 @@ test("a control kind this build does not know is dropped, the control kept", () 
     advertising([
       // SAFETY: a provider naming a kind this build never learned is exactly
       // what the drop exists for, so the test has to be able to say one.
-      { kind: ACT_KIND.CONTROL, id: "stop", label: "Stop", controlKind: "detonate" as never },
+      { kind: ACTION_KIND.CONTROL, id: "stop", label: "Stop", controlKind: "detonate" as never },
     ]),
   );
 
-  assert.deepEqual(control, { kind: ACT_KIND.CONTROL, id: "stop", label: "Stop" });
+  assert.deepEqual(control, { kind: ACTION_KIND.CONTROL, id: "stop", label: "Stop" });
 });
 
 test("an add-agent whose kinds all fall outside their bound advertises nothing", () => {
   assert.equal(
-    advertisedActFor(
-      advertising([{ kind: ACT_KIND.ADD_AGENT, agents: ["   "] }]),
-      ACT_KIND.ADD_AGENT,
+    advertisedActionFor(
+      advertising([{ kind: ACTION_KIND.ADD_AGENT, agents: ["   "] }]),
+      ACTION_KIND.ADD_AGENT,
     ),
     undefined,
   );
   assert.deepEqual(
-    advertisedActFor(
-      advertising([{ kind: ACT_KIND.ADD_AGENT, agents: ["claude", "a".repeat(80)] }]),
-      ACT_KIND.ADD_AGENT,
+    advertisedActionFor(
+      advertising([{ kind: ACTION_KIND.ADD_AGENT, agents: ["claude", "a".repeat(80)] }]),
+      ACTION_KIND.ADD_AGENT,
     ),
-    { kind: ACT_KIND.ADD_AGENT, agents: ["claude"] },
+    { kind: ACTION_KIND.ADD_AGENT, agents: ["claude"] },
   );
 });
 
 test("a workspace rename with nothing to rename advertises nothing", () => {
   assert.equal(
-    advertisedActFor(
-      advertising([{ kind: ACT_KIND.RENAME_WORKSPACE, target: "   " }]),
-      ACT_KIND.RENAME_WORKSPACE,
+    advertisedActionFor(
+      advertising([{ kind: ACTION_KIND.RENAME_WORKSPACE, target: "   " }]),
+      ACTION_KIND.RENAME_WORKSPACE,
     ),
     undefined,
   );
@@ -314,17 +314,17 @@ test("a workspace rename with nothing to rename advertises nothing", () => {
 
 test("a singleton kind advertised twice keeps the first, and carries nothing else", () => {
   const session = advertising([
-    { kind: ACT_KIND.RENAME_SESSION },
-    { kind: ACT_KIND.RENAME_SESSION },
-    { kind: ACT_KIND.MESSAGE },
-    { kind: ACT_KIND.ADD_AGENT, agents: ["claude"] },
-    { kind: ACT_KIND.ADD_AGENT, agents: ["codex"] },
+    { kind: ACTION_KIND.RENAME_SESSION },
+    { kind: ACTION_KIND.RENAME_SESSION },
+    { kind: ACTION_KIND.MESSAGE },
+    { kind: ACTION_KIND.ADD_AGENT, agents: ["claude"] },
+    { kind: ACTION_KIND.ADD_AGENT, agents: ["codex"] },
   ]);
 
   assert.deepEqual(session.advertises, [
-    { kind: ACT_KIND.RENAME_SESSION },
-    { kind: ACT_KIND.MESSAGE },
-    { kind: ACT_KIND.ADD_AGENT, agents: ["claude"] },
+    { kind: ACTION_KIND.RENAME_SESSION },
+    { kind: ACTION_KIND.MESSAGE },
+    { kind: ACTION_KIND.ADD_AGENT, agents: ["claude"] },
   ]);
 });
 

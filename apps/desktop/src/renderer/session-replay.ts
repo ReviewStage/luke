@@ -17,7 +17,7 @@ import type { SessionReplayBootstrap } from "#shared/messages/session";
  * because they are drawn; autocapture puts the text of whatever was clicked
  * on an event.
  * What is typed into a field stays masked by the library's default, and the
- * conversation History tab explicitly blocks its whole subtree with the
+ * conversation Conversation tab explicitly blocks its whole subtree with the
  * library's fixed `ph-no-capture` class.
  *
  * `PRIVACY.md` says all of that plainly, and it has to keep saying it: this

@@ -7,7 +7,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 
 /**
- * The history maintenance policy, ported from OpenClaw's
+ * The conversation maintenance policy, ported from OpenClaw's
  * `src/config/sessions/store-maintenance.ts` at commit `b7528507` (MIT;
  * `THIRD_PARTY_NOTICES.md`) onto the conversation directory. The rules are
  * the pinned source's, read for their behavior rather than their numbers:
@@ -33,7 +33,7 @@ import {
 
 const GIB = 1024 * 1024 * 1024;
 
-export interface HistoryMaintenanceConfig {
+export interface ConversationMaintenanceConfig {
   /** A conversation untouched this long is archived (durable) or removed (synthetic). */
   readonly staleAfterMs: number;
   /** A private thread idle this long is archived; null disables the rule. */
@@ -48,7 +48,7 @@ export interface HistoryMaintenanceConfig {
 /** Where cleanup stops once the budget is crossed, as a share of the budget, when no high-water mark is named. */
 export const DISK_BUDGET_HIGH_WATER_RATIO = 0.8;
 
-export const HISTORY_MAINTENANCE_DEFAULTS: HistoryMaintenanceConfig = {
+export const CONVERSATION_MAINTENANCE_DEFAULTS: ConversationMaintenanceConfig = {
   staleAfterMs: 30 * DAY_MS,
   idleThreadArchiveAfterMs: 7 * DAY_MS,
   maximumUnarchived: 5_000,

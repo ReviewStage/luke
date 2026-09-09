@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CLOUD_AGENT_PROVIDER_ID, type CloudFetch, type WireRecord } from "../server/core";
-import { executeConversationRead, providerReadsConversation } from "../server/hosted/act-execute";
+import {
+  executeConversationRead,
+  providerReadsConversation,
+} from "../server/hosted/action-execute";
 import {
   type ConversationReadOptions,
   handleConversationRead,
@@ -431,7 +434,7 @@ test("a history read rides its offset to the adapter and back", async () => {
   );
   assert.equal(answer.firstOffset, 0);
   assert.equal(answer.hasOlder, false);
-  // History must never move the poll: an older page names no forward cursor.
+  // Conversation must never move the poll: an older page names no forward cursor.
   assert.equal(answer.lastMessageId, undefined);
   assert.deepEqual(reads, ["?limit=2&offset=0"]);
 });

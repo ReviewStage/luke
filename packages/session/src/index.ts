@@ -1,9 +1,9 @@
-export { ACT_RESULT_STATUS, UNSUPPORTED_BY_OBSERVATION } from "@sidecar/wire";
-export * from "./act-results.js";
-export * from "./advertised-acts.js";
+export { ACTION_RESULT_STATUS, UNSUPPORTED_BY_OBSERVATION } from "@sidecar/wire";
+export * from "./action-results.js";
+export * from "./advertised-actions.js";
 export * from "./agent-identities.js";
 export * from "./bounds.js";
-export * from "./conversation/conversation-history.js";
+export * from "./conversation/conversation.js";
 export * from "./issues/issues.js";
 export * from "./normalize.js";
 export * from "./provider-contract.js";

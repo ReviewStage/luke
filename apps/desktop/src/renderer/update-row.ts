@@ -1,6 +1,6 @@
 import { UPDATE_STATUS, type UpdateSnapshot } from "#shared/messages/update";
 
-/** The one act the row's button offers in each state. */
+/** The one action the row's button offers in each state. */
 export const UPDATE_ROW_ACTION = {
   /** Ask the release manifest for the latest build. */
   CHECK: "check",

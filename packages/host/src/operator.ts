@@ -35,17 +35,17 @@ export interface GatewayOperator {
   runs: () => Promise<readonly BrainRequestSnapshot[]>;
   claim: (runId: string, deliveryId: string, epoch: number) => Promise<BrainReplyClaimResult>;
   acknowledge: (runId: string, deliveryId: string, epoch: number) => Promise<boolean>;
-  /** Delete history on a conversation: answers whether the erasure completed or was interrupted, false only when refused. */
-  deleteHistory: (sessionKey?: SessionKey) => Promise<boolean>;
+  /** Delete conversation on a conversation: answers whether the erasure completed or was interrupted, false only when refused. */
+  deleteConversation: (sessionKey?: SessionKey) => Promise<boolean>;
   onRunsChanged: (listener: (runs: readonly BrainRequestSnapshot[]) => void) => () => void;
   onDeliveryOffered: (listener: (offer: BrainReplyOffer) => void) => () => void;
   onDeliveriesWithdrawn: (listener: (epoch: number) => void) => () => void;
-  onHistoryChanged: (listener: (change: GatewayHistoryChange) => void) => () => void;
+  onConversationChanged: (listener: (change: GatewayConversationChange) => void) => () => void;
   /** The underlying client, for the calls the typed surface above does not name. */
   readonly client: GatewayClient;
 }
 
-export interface GatewayHistoryChange {
+export interface GatewayConversationChange {
   sessionKey: string;
   entries: readonly WireValue[];
   cleared: boolean;
@@ -126,7 +126,7 @@ export function createGatewayOperator(options: GatewayOperatorOptions): GatewayO
       });
       return result.ok && isRecord(result.result) && result.result.acknowledged === true;
     },
-    deleteHistory: async (sessionKey = MAIN_SESSION_KEY) => {
+    deleteConversation: async (sessionKey = MAIN_SESSION_KEY) => {
       const result = await client.call(GATEWAY_METHOD.CONVERSATION_DELETE, { sessionKey });
       if (!result.ok || !isRecord(result.result)) return false;
       return (
@@ -148,10 +148,10 @@ export function createGatewayOperator(options: GatewayOperatorOptions): GatewayO
         (payload) => (isRecord(payload) && isWireNumber(payload.epoch) ? payload.epoch : undefined),
         listener,
       ),
-    onHistoryChanged: (listener) =>
+    onConversationChanged: (listener) =>
       on(
-        GATEWAY_EVENT.HISTORY_CHANGED,
-        (payload): GatewayHistoryChange | undefined => {
+        GATEWAY_EVENT.CONVERSATION_CHANGED,
+        (payload): GatewayConversationChange | undefined => {
           if (!isRecord(payload) || !isWireString(payload.sessionKey)) return undefined;
           if (!Array.isArray(payload.entries) || !isWireBoolean(payload.cleared)) return undefined;
           return {

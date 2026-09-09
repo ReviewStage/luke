@@ -8,7 +8,7 @@ import {
 import { carried, GATEWAY_METHOD, type GatewayMethodTable, gatewayOk } from "@sidecar/gateway";
 import { ObservationLoop } from "@sidecar/runtime";
 import { ISSUE_TRACKER_ID, normalizeTrackedIssue, type TrackedIssue } from "@sidecar/session";
-import { ACT_RESULT_STATUS } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
@@ -122,7 +122,10 @@ export function composeIssues(dependencies: IssuesDependencies): IssuesComposer 
       const result = await settings.settingsWrite(
         async () => {
           await linearCredentials.disconnect();
-          return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await settingsStore.snapshot() };
+          return {
+            status: ACTION_RESULT_STATUS.ACCEPTED,
+            settings: await settingsStore.snapshot(),
+          };
         },
         (saved) => {
           if (saved.reason) return;

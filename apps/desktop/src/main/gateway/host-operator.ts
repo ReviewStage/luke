@@ -34,8 +34,8 @@ import type {
 } from "@sidecar/settings";
 import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
 import {
-  ACT_RESULT_STATUS,
-  type ActResult,
+  ACTION_RESULT_STATUS,
+  type ActionResult,
   isRecord,
   isWireBoolean,
   isWireNumber,
@@ -60,7 +60,7 @@ export interface HostBootstrap {
   sessions: readonly Session[];
   sessionsSettled: boolean;
   announcementsHeld: boolean;
-  conversationHistory: readonly ConversationEntry[];
+  conversationLines: readonly ConversationEntry[];
   workspaceProjects: readonly ObservedWorkspaceProject[];
   calendars: readonly ObservedAccountCalendars[];
   calendarOnboardingOwed: boolean;
@@ -133,14 +133,14 @@ export interface HostOperator {
   chooseSupersetOrganization(slug: string): Promise<SupersetSignInSnapshot | undefined>;
   reopenSupersetSignIn(): Promise<void>;
   cancelSupersetSignIn(): Promise<void>;
-  disconnectSuperset(): Promise<ActResult>;
+  disconnectSuperset(): Promise<ActionResult>;
   sessionRoster(): Promise<{ sessions: readonly Session[]; settled: boolean }>;
-  openSession(identity: SessionIdentity): Promise<ActResult>;
+  openSession(identity: SessionIdentity): Promise<ActionResult>;
   openSessionApplication(
     identity: SessionIdentity,
     applicationId: SessionApplicationId,
-  ): Promise<ActResult>;
-  openSessionChange(identity: SessionIdentity): Promise<ActResult>;
+  ): Promise<ActionResult>;
+  openSessionChange(identity: SessionIdentity): Promise<ActionResult>;
   workspaceProjects(): Promise<readonly ObservedWorkspaceProject[]>;
   settleSpeech(id: string, outcome: SpeechOutcome): Promise<void>;
   /** The host mints the receiver epoch a voice renderer will name; a client that cannot reach it gets none. */
@@ -156,7 +156,7 @@ export interface HostOperator {
     name: Name,
     properties: ProductEventPropertiesFor<Name>,
   ): void;
-  appendHistory(entries: readonly ConversationEntry[], reporter: string): Promise<boolean>;
+  appendConversation(entries: readonly ConversationEntry[], reporter: string): Promise<boolean>;
   onboardingState(): Promise<{ calendarOnboardingOwed: boolean } | undefined>;
   skipCalendarOnboarding(): Promise<void>;
   completeCalendarOnboarding(): Promise<void>;
@@ -220,7 +220,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     if (parsed?.settings !== undefined) return parsed;
     const settings = options.lastSettings();
     if (!settings) throw new Error(HOST_UNREACHABLE_REFUSAL);
-    return { status: ACT_RESULT_STATUS.REJECTED, settings, reason: HOST_UNREACHABLE_REFUSAL };
+    return { status: ACTION_RESULT_STATUS.REJECTED, settings, reason: HOST_UNREACHABLE_REFUSAL };
   };
 
   const accountResult = async (result: Promise<GatewayCallResult>): Promise<AccountSnapshot> => {
@@ -230,9 +230,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     throw new Error(HOST_UNREACHABLE_REFUSAL);
   };
 
-  const actResult = async (result: Promise<GatewayCallResult>): Promise<ActResult> => {
-    const answer = answered<ActResult>(record(await result));
-    return answer ?? { status: ACT_RESULT_STATUS.REJECTED, reason: HOST_UNREACHABLE_REFUSAL };
+  const actionResult = async (result: Promise<GatewayCallResult>): Promise<ActionResult> => {
+    const answer = answered<ActionResult>(record(await result));
+    return answer ?? { status: ACTION_RESULT_STATUS.REJECTED, reason: HOST_UNREACHABLE_REFUSAL };
   };
 
   const supersetResult = async (
@@ -344,7 +344,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       supersetResult(client.call(GATEWAY_METHOD.SUPERSET_CHOOSE_ORGANIZATION, { slug })),
     reopenSupersetSignIn: () => fire(client.call(GATEWAY_METHOD.SUPERSET_REOPEN_SIGN_IN)),
     cancelSupersetSignIn: () => fire(client.call(GATEWAY_METHOD.SUPERSET_CANCEL_SIGN_IN)),
-    disconnectSuperset: () => actResult(client.call(GATEWAY_METHOD.SUPERSET_DISCONNECT)),
+    disconnectSuperset: () => actionResult(client.call(GATEWAY_METHOD.SUPERSET_DISCONNECT)),
     sessionRoster: async () => {
       const answer = record(await client.call(GATEWAY_METHOD.SESSION_ROSTER));
       return {
@@ -353,16 +353,16 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       };
     },
     openSession: (identity) =>
-      actResult(client.call(GATEWAY_METHOD.SESSION_OPEN, { identity: { ...identity } })),
+      actionResult(client.call(GATEWAY_METHOD.SESSION_OPEN, { identity: { ...identity } })),
     openSessionApplication: (identity, applicationId) =>
-      actResult(
+      actionResult(
         client.call(GATEWAY_METHOD.SESSION_OPEN_APPLICATION, {
           identity: { ...identity },
           applicationId,
         }),
       ),
     openSessionChange: (identity) =>
-      actResult(client.call(GATEWAY_METHOD.SESSION_OPEN_CHANGE, { identity: { ...identity } })),
+      actionResult(client.call(GATEWAY_METHOD.SESSION_OPEN_CHANGE, { identity: { ...identity } })),
     workspaceProjects: async () =>
       answeredList<ObservedWorkspaceProject>(
         record(await client.call(GATEWAY_METHOD.WORKSPACE_PROJECTS))?.projects,
@@ -404,7 +404,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         event: { name, at: Date.now(), properties: carried(properties) },
       });
     },
-    appendHistory: async (entries, reporter) => {
+    appendConversation: async (entries, reporter) => {
       const answer = record(
         await client.call(GATEWAY_METHOD.CONVERSATION_APPEND, {
           entries: carried(entries),

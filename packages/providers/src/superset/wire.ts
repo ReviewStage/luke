@@ -61,7 +61,7 @@ export function supersetPressedLink(link: string, focusRequestId: string): strin
  * What one binding row says about the session it manages. Deliberately no
  * host identifier: the host state read here is this machine's own — the
  * directories under `host/` are named by organization, not by machine — so
- * every act on a bound terminal lands on the CLI's local default, and the
+ * every action on a bound terminal lands on the CLI's local default, and the
  * one id the CLI would take for `--host`, a machineId, appears nowhere in
  * this state.
  */
@@ -79,7 +79,7 @@ export interface SupersetSessionContext {
   /**
    * The bound terminal a message lands in. A chatless workspace row has none
    * — there is nothing there to message — and neither does a chat whose every
-   * binding Superset has ended, so every act that needs one must check rather
+   * binding Superset has ended, so every action that needs one must check rather
    * than assume.
    */
   terminalId?: string;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { REALTIME_TOOL, type RealtimeFunctionCall } from "@sidecar/acts";
+import { REALTIME_TOOL, type RealtimeFunctionCall } from "@sidecar/actions";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import { checkpointFormatTag, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
@@ -9,18 +9,18 @@ import {
   type ProviderTranscriptSinceResult,
   SESSION_STATUS,
 } from "@sidecar/session";
-import { ACT_RESULT_STATUS, isWireString, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, isWireString, type WireRecord } from "@sidecar/wire";
 import { type BrainPersistedState, freshBrainState } from "./envelope.js";
 import { BrainGenerationClock } from "./generation-clock.js";
 import {
   ABC,
   acceptedRunId,
-  actsOffered,
+  actionsOffered,
   adapterOf,
   agentOn,
   answered,
   ask,
-  assertNoActReached,
+  assertNoActionReached,
   type BrainClient,
   type BrainClientAnswer,
   CHECKPOINT,
@@ -42,10 +42,10 @@ import {
   itemText,
   LIFETIME,
   message,
-  messageAct,
+  messageAction,
   NO_ACTS_POLICY,
   NOW,
-  OBSERVATION_ACTS,
+  OBSERVATION_ACTIONS,
   OLD_SECRET,
   quietAnswer,
   reasoning,
@@ -56,7 +56,7 @@ import {
   TRANSCRIPT_SECRET,
 } from "./harness.js";
 import { BRAIN_INPUT_MARKER } from "./input-items.js";
-import type { BrainActExecution, BrainActPerformer } from "./performer.js";
+import type { BrainActionExecution, BrainActionPerformer } from "./performer.js";
 import {
   BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_ORIGIN,
@@ -129,7 +129,7 @@ test("an ask returns the final text, carries pending wakes, and refuses announce
 
   assert.equal(answer?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assert.equal(answer?.text, "Sent.");
-  assert.equal(answer?.performedActs, 1);
+  assert.equal(answer?.performedActions, 1);
   assert.deepEqual(h.deliveries, []);
   assert.deepEqual(h.performed, [
     {
@@ -159,8 +159,8 @@ test("an ask returns the final text, carries pending wakes, and refuses announce
   assert.equal(h.traces[0]?.outputText, "Sent.");
   assert.ok(h.traces[0]?.tools.includes(REALTIME_TOOL.SEND_SESSION_MESSAGE));
   assert.ok(!h.traces[0]?.tools.includes(BRAIN_TOOL.ANNOUNCE));
-  assert.deepEqual(h.client.actsOffered, [true, true]);
-  // The act arrived attributed to the developer's ask, live while the turn
+  assert.deepEqual(h.client.actionsOffered, [true, true]);
+  // The action arrived attributed to the developer's ask, live while the turn
   // ran, and revoked once the turn was over.
   assert.equal(h.executions[0]?.origin, RUN_ORIGIN.USER);
   assert.equal(h.executions[0]?.isRevoked(), true);
@@ -319,11 +319,11 @@ test("restored memory opens the next turn, and held briefings are re-decided fro
   assert.equal(h.sinceReads.length, 0);
 });
 
-test("a wake turn runs the acts the policy allows, journaled and attributed as Luke's own", async () => {
+test("a wake turn runs the actions the policy allows, journaled and attributed as Luke's own", async () => {
   const h = harness({
     standingContext: () => `Durable facts:\n- ${INSTRUCTION_IN_DATA}`,
     readTranscriptSince: async (): Promise<ProviderTranscriptSinceResult> => ({
-      status: ACT_RESULT_STATUS.ACCEPTED,
+      status: ACTION_RESULT_STATUS.ACCEPTED,
       text: INSTRUCTION_IN_DATA,
       cursor: "c1",
       truncated: false,
@@ -332,24 +332,24 @@ test("a wake turn runs the acts the policy allows, journaled and attributed as L
   await h.agent.wake([edge(ABC)]);
   h.client.answers.push(
     answered([
-      ...OBSERVATION_ACTS,
+      ...OBSERVATION_ACTIONS,
       call("brief", BRAIN_TOOL.ANNOUNCE, { briefing: "Tests asked." }),
     ]),
     answered([message("")]),
   );
   await h.clock.advance(NOW + 3_000);
 
-  assert.equal(h.performed.length, OBSERVATION_ACTS.length);
+  assert.equal(h.performed.length, OBSERVATION_ACTIONS.length);
   assert.ok(h.executions.every((execution) => execution.origin === RUN_ORIGIN.OBSERVATION));
   assert.ok(h.executions.every((execution) => execution.runId.startsWith("wake:")));
   assert.deepEqual(
     h.deliveries.map((delivery) => delivery.briefing),
     ["Tests asked."],
   );
-  assert.deepEqual(h.client.actsOffered, [true, true]);
-  // The observation turn's acts were journaled while they ran and let go of
+  assert.deepEqual(h.client.actionsOffered, [true, true]);
+  // The observation turn's actions were journaled while they ran and let go of
   // once the turn committed: the file carries no record and no journal for a
-  // run History never lists.
+  // run Conversation never lists.
   assert.deepEqual(h.repository.state?.journal, []);
   assert.deepEqual(h.repository.state?.requests, []);
   assert.equal(h.traces[0]?.origin, RUN_ORIGIN.OBSERVATION);
@@ -383,25 +383,25 @@ test("an observation turn whose model never answers ends at the execution deadli
   await h.agent.stop();
 });
 
-test("a wake turn under a policy denying acts runs none, however the transcript, standing context, or a tool's answer is worded", async () => {
+test("a wake turn under a policy denying actions runs none, however the transcript, standing context, or a tool's answer is worded", async () => {
   const h = harness({
     prepareTurn: NO_ACTS_POLICY,
     standingContext: () => `Durable facts:\n- ${INSTRUCTION_IN_DATA}`,
     readTranscriptSince: async (): Promise<ProviderTranscriptSinceResult> => ({
-      status: ACT_RESULT_STATUS.ACCEPTED,
+      status: ACTION_RESULT_STATUS.ACCEPTED,
       text: INSTRUCTION_IN_DATA,
       cursor: "c1",
       truncated: false,
     }),
     readTranscript: async (): Promise<ProviderTranscriptResult> => ({
-      status: ACT_RESULT_STATUS.ACCEPTED,
+      status: ACTION_RESULT_STATUS.ACCEPTED,
       transcript: INSTRUCTION_IN_DATA,
     }),
   });
   await h.agent.wake([edge(ABC)]);
   h.client.answers.push(
     // The model reads the whole transcript first, and its answer carries the
-    // same instruction; the next emission is every act plus a briefing.
+    // same instruction; the next emission is every action plus a briefing.
     answered([
       call("read", BRAIN_TOOL.READ_TRANSCRIPT, {
         provider_id: ABC.providerId,
@@ -409,7 +409,7 @@ test("a wake turn under a policy denying acts runs none, however the transcript,
       }),
     ]),
     answered([
-      ...OBSERVATION_ACTS,
+      ...OBSERVATION_ACTIONS,
       call("brief", BRAIN_TOOL.ANNOUNCE, { briefing: "Tests asked." }),
     ]),
     answered([message("")]),
@@ -419,7 +419,7 @@ test("a wake turn under a policy denying acts runs none, however the transcript,
   assert.deepEqual(h.performed, []);
   assert.deepEqual(h.executions, []);
   const outputs = functionOutputs(h.client.inputs[2] ?? []);
-  for (const forbidden of OBSERVATION_ACTS) {
+  for (const forbidden of OBSERVATION_ACTIONS) {
     const output = outputs.find((entry) => entry.callId === forbidden.call_id);
     assert.ok(output?.output.includes("not run"), String(forbidden.call_id));
   }
@@ -431,10 +431,10 @@ test("a wake turn under a policy denying acts runs none, however the transcript,
     h.deliveries.map((delivery) => delivery.briefing),
     ["Tests asked."],
   );
-  assert.deepEqual(h.client.actsOffered, [false, false, false]);
+  assert.deepEqual(h.client.actionsOffered, [false, false, false]);
 });
 
-test("a roster look under a policy denying acts runs none", async () => {
+test("a roster look under a policy denying actions runs none", async () => {
   const h = harness({
     prepareTurn: NO_ACTS_POLICY,
     roster: () => ({
@@ -443,42 +443,42 @@ test("a roster look under a policy denying acts runs none", async () => {
       sessions: [session("abc", { status: SESSION_STATUS.WORKING })],
     }),
   });
-  h.client.answers.push(answered(OBSERVATION_ACTS), answered([message("")]));
+  h.client.answers.push(answered(OBSERVATION_ACTIONS), answered([message("")]));
   h.agent.rosterLook();
   await settle();
-  assertNoActReached(h);
+  assertNoActionReached(h);
   assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.ROSTER);
 });
 
-test("a hold release under a policy denying acts runs none", async () => {
+test("a hold release under a policy denying actions runs none", async () => {
   const h = harness({ prepareTurn: NO_ACTS_POLICY });
-  h.client.answers.push(answered(OBSERVATION_ACTS), answered([message("")]));
+  h.client.answers.push(answered(OBSERVATION_ACTIONS), answered([message("")]));
   h.agent.releaseHeld([{ briefing: INSTRUCTION_IN_DATA, decidedAt: NOW - 1 }]);
   await settle();
-  assertNoActReached(h);
+  assertNoActionReached(h);
   assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.HOLD_RELEASED);
 });
 
-test("a developer ask carries every act with a live execution, revoked once the agent stops", async () => {
+test("a developer ask carries every action with a live execution, revoked once the agent stops", async () => {
   let release: (() => void) | undefined;
   const held = new Promise<void>((resolve) => {
     release = resolve;
   });
   const h = harness({
-    acts: {
+    actions: {
       perform: async (functionCall, execution): Promise<WireRecord> => {
         performedLate.push({ call: functionCall, execution });
         await held;
         return execution.isRevoked()
-          ? { status: ACT_RESULT_STATUS.REJECTED, reason: "turn over" }
-          : { status: ACT_RESULT_STATUS.ACCEPTED };
+          ? { status: ACTION_RESULT_STATUS.REJECTED, reason: "turn over" }
+          : { status: ACTION_RESULT_STATUS.ACCEPTED };
       },
     },
   });
-  const performedLate: { call: RealtimeFunctionCall; execution: BrainActExecution }[] = [];
-  const [messageAct] = OBSERVATION_ACTS;
-  assert.ok(messageAct);
-  h.client.answers.push(answered([messageAct]), answered([message("Done.")]));
+  const performedLate: { call: RealtimeFunctionCall; execution: BrainActionExecution }[] = [];
+  const [messageAction] = OBSERVATION_ACTIONS;
+  assert.ok(messageAction);
+  h.client.answers.push(answered([messageAction]), answered([message("Done.")]));
   const asked = ask(h, "send it");
   await settle();
   assert.equal(performedLate.length, 1);
@@ -486,7 +486,7 @@ test("a developer ask carries every act with a live execution, revoked once the 
   assert.ok(late);
   assert.equal(late.execution.origin, RUN_ORIGIN.USER);
   assert.equal(late.execution.isRevoked(), false);
-  // The host stops the agent while the act is still preparing: the standing
+  // The host stops the agent while the action is still preparing: the standing
   // is withdrawn before the effect, and the performer refuses on it.
   const stopping = h.agent.stop();
   assert.equal(late.execution.isRevoked(), true);
@@ -494,7 +494,7 @@ test("a developer ask carries every act with a live execution, revoked once the 
   await stopping;
   const answer = await asked;
   // The agent stopped under the run: the record says interrupted, and the
-  // refused act's output is paired in memory rather than a second call made.
+  // refused action's output is paired in memory rather than a second call made.
   assert.equal(answer?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
   assert.equal(h.client.inputs.length, 1);
   const stored = h.repository.state;
@@ -561,12 +561,12 @@ test("a cancel while the model is thinking aborts the request and settles the ru
   assert.ok(reject);
 });
 
-test("a cancel between two acts keeps the first's result and refuses the second, never undoing the first", async () => {
+test("a cancel between two actions keeps the first's result and refuses the second, never undoing the first", async () => {
   const held = heldPerformer();
   const performed = held.performed;
-  const h = harness({ acts: held.acts });
+  const h = harness({ actions: held.actions });
   h.client.answers.push(
-    answered([messageAct("call_1", "one"), messageAct("call_2", "two")]),
+    answered([messageAction("call_1", "one"), messageAction("call_2", "two")]),
     answered([message("Both sent.")]),
   );
   const runId = acceptedRunId(await submit(h, "send both"));
@@ -574,32 +574,32 @@ test("a cancel between two acts keeps the first's result and refuses the second,
   assert.equal(performed.length, 1);
   held.releases[0]?.();
   await settle();
-  // The first act's result is journaled and checkpointed before the second starts.
+  // The first action's result is journaled and checkpointed before the second starts.
   const journaled = h.repository.state?.journal ?? [];
   assert.equal(journaled.length, 2);
-  assert.ok(journaled[0]?.outputJson?.includes(ACT_RESULT_STATUS.ACCEPTED));
+  assert.ok(journaled[0]?.outputJson?.includes(ACTION_RESULT_STATUS.ACCEPTED));
   assert.equal(journaled[1]?.outputJson, undefined);
   await h.agent.cancelAsk(runId);
   held.releases[1]?.();
   await settle();
   const record = h.agent.request(runId);
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.CANCELLED);
-  assert.equal(record?.performedActs, 1);
+  assert.equal(record?.performedActions, 1);
   const outputs = functionOutputs(h.repository.state?.items ?? []);
   assert.equal(outputs.length, 2);
-  assert.ok(outputs[0]?.output.includes(ACT_RESULT_STATUS.ACCEPTED));
+  assert.ok(outputs[0]?.output.includes(ACTION_RESULT_STATUS.ACCEPTED));
   assert.ok(outputs[1]?.output.includes("turn over"));
   // No follow-up inference ran for a cancelled run.
   assert.equal(h.client.inputs.length, 1);
 });
 
-test("an act that succeeded survives the follow-up model failing, in the record and in memory", async () => {
+test("an action that succeeded survives the follow-up model failing, in the record and in memory", async () => {
   const h = harness();
-  h.client.answers.push(answered([messageAct("call_1")]), failedAnswer("network"));
+  h.client.answers.push(answered([messageAction("call_1")]), failedAnswer("network"));
   const record = await ask(h, "send it");
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.MODEL);
-  assert.equal(record?.performedActs, 1);
+  assert.equal(record?.performedActions, 1);
   assert.equal(record?.text, undefined);
   assert.equal(h.performed.length, 1);
   // The call and its output stand in the stored memory, paired, so the next
@@ -617,11 +617,11 @@ test("an act that succeeded survives the follow-up model failing, in the record 
 test("a repeated call id answers the recorded result once; the same id with other arguments is refused", async () => {
   const h = harness();
   h.client.answers.push(
-    answered([messageAct("call_1", "one")]),
+    answered([messageAction("call_1", "one")]),
     answered([
-      messageAct("call_1", "one"),
-      messageAct("call_1", "changed"),
-      messageAct("call_2", "two"),
+      messageAction("call_1", "one"),
+      messageAction("call_1", "changed"),
+      messageAction("call_2", "two"),
     ]),
     answered([message("Done.")]),
   );
@@ -634,26 +634,26 @@ test("a repeated call id answers the recorded result once; the same id with othe
   const outputs = functionOutputs(h.client.inputs[2] ?? []);
   const repeated = outputs.filter((output) => output.callId === "call_1");
   assert.equal(repeated.length, 3);
-  assert.ok(repeated[1]?.output.includes(ACT_RESULT_STATUS.ACCEPTED));
+  assert.ok(repeated[1]?.output.includes(ACTION_RESULT_STATUS.ACCEPTED));
   assert.ok(repeated[2]?.output.includes("already used with different arguments"));
-  assert.equal(record?.performedActs, 2);
+  assert.equal(record?.performedActions, 2);
 });
 
-test("acts run one at a time in the order the model emitted them", async () => {
+test("actions run one at a time in the order the model emitted them", async () => {
   const held = heldPerformer();
   const order: string[] = [];
   const h = harness({
-    acts: {
+    actions: {
       perform: async (functionCall, execution) => {
         order.push(`start ${JSON.parse(functionCall.argumentsJson).text}`);
-        const output = await held.acts.perform(functionCall, execution);
+        const output = await held.actions.perform(functionCall, execution);
         order.push(`end ${JSON.parse(functionCall.argumentsJson).text}`);
         return output;
       },
     },
   });
   h.client.answers.push(
-    answered([messageAct("c1", "a"), messageAct("c2", "b"), messageAct("c3", "c")]),
+    answered([messageAction("c1", "a"), messageAction("c2", "b"), messageAction("c3", "c")]),
     answered([message("Three sent.")]),
   );
   const asked = ask(h, "send three");
@@ -667,13 +667,13 @@ test("acts run one at a time in the order the model emitted them", async () => {
   held.releases[2]?.();
   const record = await asked;
   assert.deepEqual(order, ["start a", "end a", "start b", "end b", "start c", "end c"]);
-  assert.equal(record?.performedActs, 3);
+  assert.equal(record?.performedActions, 3);
 });
 
-test("a run past its execution deadline is timed out and its act refused", async () => {
+test("a run past its execution deadline is timed out and its action refused", async () => {
   const held = heldPerformer();
-  const h = harness({ acts: held.acts, executionDeadlineMs: 60_000 });
-  h.client.answers.push(answered([messageAct("call_1")]), answered([message("Sent.")]));
+  const h = harness({ actions: held.actions, executionDeadlineMs: 60_000 });
+  h.client.answers.push(answered([messageAction("call_1")]), answered([message("Sent.")]));
   const runId = acceptedRunId(await submit(h, "send"));
   await settle();
   await h.clock.advance(NOW + 60_000);
@@ -682,15 +682,15 @@ test("a run past its execution deadline is timed out and its act refused", async
   const record = h.agent.request(runId);
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.TIMED_OUT);
   assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.DEADLINE);
-  assert.equal(record?.performedActs, 0);
+  assert.equal(record?.performedActions, 0);
   assert.equal(h.client.inputs.length, 1);
 });
 
 test("the store's generation changing under a run revokes it and fences its late checkpoints", async () => {
   const held = heldPerformer();
-  const h = harness({ acts: held.acts });
-  // Only the act is answered: a revoked run asks the model for no follow-up.
-  h.client.answers.push(answered([messageAct("call_1")]));
+  const h = harness({ actions: held.actions });
+  // Only the action is answered: a revoked run asks the model for no follow-up.
+  h.client.answers.push(answered([messageAction("call_1")]));
   const runId = acceptedRunId(await submit(h, "send"));
   await settle();
   const execution = held.executions[0];
@@ -751,7 +751,7 @@ test("a reset while the model is thinking cannot roll old memory into the new ge
   let release: ((answer: BrainClientAnswer) => void) | undefined;
   inner.respond = (input, options) => {
     inner.inputs.push([...input]);
-    inner.actsOffered.push(actsOffered(options));
+    inner.actionsOffered.push(actionsOffered(options));
     return new Promise((resolve) => {
       release = resolve;
     });
@@ -774,7 +774,7 @@ test("a reset while the model is thinking cannot roll old memory into the new ge
   assert.equal(h.repository.state?.requests[0]?.question, "NEW_ASK");
 });
 
-test("a reset during a transcript read or an act's result cannot write into the new generation", async () => {
+test("a reset during a transcript read or an action's result cannot write into the new generation", async () => {
   // Held delta read on an observation turn.
   let releaseRead: ((result: ProviderTranscriptSinceResult) => void) | undefined;
   const h = harness({
@@ -789,7 +789,7 @@ test("a reset during a transcript read or an act's result cannot write into the 
   assert.ok(releaseRead);
   assert.equal(await h.store.clear(), true);
   releaseRead({
-    status: ACT_RESULT_STATUS.ACCEPTED,
+    status: ACTION_RESULT_STATUS.ACCEPTED,
     text: OLD_SECRET,
     cursor: "old-cursor",
     truncated: false,
@@ -806,8 +806,8 @@ test("a reset during a transcript read or an act's result cannot write into the 
 
   // Held act result on a developer run, then a new ask in the new generation.
   const held = heldPerformer();
-  const acting = harness({ acts: held.acts });
-  acting.client.answers.push(answered([messageAct("call_1", OLD_SECRET)]));
+  const acting = harness({ actions: held.actions });
+  acting.client.answers.push(answered([messageAction("call_1", OLD_SECRET)]));
   const runId = acceptedRunId(await submit(acting, `send ${OLD_SECRET}`));
   await settle();
   assert.equal(await acting.store.clear(), true);
@@ -864,8 +864,13 @@ test("a cancel, a deadline, or a stop settles a held read at once, and the next 
   assert.equal(h.client.inputs.length, 2);
   // The late read lands as a capture — an inbox entry and a capture cursor,
   // never a consumed cursor — and the turn it arms reads it from there.
-  deltas[0]?.({ status: ACT_RESULT_STATUS.ACCEPTED, text: "late", cursor: "c", truncated: false });
-  reads[0]?.({ status: ACT_RESULT_STATUS.ACCEPTED, transcript: "late" });
+  deltas[0]?.({
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+    text: "late",
+    cursor: "c",
+    truncated: false,
+  });
+  reads[0]?.({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "late" });
   await capture;
   assert.deepEqual(h.repository.state?.captureCursors, { [claude.id]: { def: "c" } });
   assert.equal(h.repository.state?.inbox.length, 1);
@@ -916,8 +921,8 @@ test("an incomplete reply and a failed final checkpoint are not reported as succ
 
 test("work queued behind a held act opens nothing once the generation it was queued in is reset", async () => {
   const held = heldPerformer();
-  const h = harness({ acts: held.acts });
-  h.client.answers.push(answered([messageAct("call_1")]));
+  const h = harness({ actions: held.actions });
+  h.client.answers.push(answered([messageAction("call_1")]));
   await submit(h, "send");
   await settle();
   // Every observation kind queues behind the held act: a hold release with an
@@ -1005,7 +1010,7 @@ test("a generation dies exactly one lifetime after its birth, on the host's cloc
   let release: ((answer: BrainClientAnswer) => void) | undefined;
   inner.respond = (input, options) => {
     inner.inputs.push([...input]);
-    inner.actsOffered.push(actsOffered(options));
+    inner.actionsOffered.push(actionsOffered(options));
     return new Promise((resolve) => {
       release = resolve;
     });
@@ -1100,23 +1105,23 @@ test("a compaction and a fortnight of writes never extend a generation's life", 
   generationClock.stop();
 });
 
-test("a Clear or expiry asked for while a write is out on disk revokes a held act's preparation before the disk answers, and no effect dispatches", async () => {
+test("a Clear or expiry asked for while a write is out on disk revokes a held action's preparation before the disk answers, and no effect dispatches", async () => {
   for (const ending of ["clear", "expiry"] as const) {
     let releasePreparation: (() => void) | undefined;
     let effects = 0;
-    const acts: BrainActPerformer = {
+    const actions: BrainActionPerformer = {
       perform: async (_call, execution): Promise<WireRecord> => {
         await new Promise<void>((resolve) => {
           releasePreparation = resolve;
         });
         if (execution.isRevoked()) {
-          return { status: ACT_RESULT_STATUS.REJECTED, reason: "revoked before the effect" };
+          return { status: ACTION_RESULT_STATUS.REJECTED, reason: "revoked before the effect" };
         }
         effects += 1;
-        return { status: ACT_RESULT_STATUS.ACCEPTED };
+        return { status: ACTION_RESULT_STATUS.ACCEPTED };
       },
     };
-    const h = harness({ acts });
+    const h = harness({ actions });
     const generationClock = new BrainGenerationClock({
       store: h.store,
       now: () => h.clock.now,
@@ -1128,15 +1133,15 @@ test("a Clear or expiry asked for while a write is out on disk revokes a held ac
     await ask(h, "first");
     const born = h.store.current();
     assert.ok(born);
-    // The act's start is durable; its preparation is held.
-    h.client.answers.push(answered([messageAct("call_1")]));
+    // The action's start is durable; its preparation is held.
+    h.client.answers.push(answered([messageAction("call_1")]));
     const runId = acceptedRunId(await submit(h, "send"));
     await settle();
-    assert.ok(releasePreparation, "the performer holds the act");
+    assert.ok(releasePreparation, "the performer holds the action");
     assert.equal(h.repository.state?.journal.length, 1);
     // A metadata write of another run is out on disk when the end is asked for.
     const release = h.repository.hold();
-    const marking = h.agent.markHistoryRecorded(runId, NOW);
+    const marking = h.agent.markConversationRecorded(runId, NOW);
     await settle();
     assert.ok(h.repository.holding, "a write is on disk");
     if (ending === "clear") {
@@ -1203,7 +1208,7 @@ test("an ask during a client quiet ends as an honest failure with no effects, an
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.MODEL);
   assert.equal(record?.text, undefined);
-  assert.equal(record?.performedActs, 0);
+  assert.equal(record?.performedActions, 0);
   assert.equal(h.performed.length, 0);
   assert.deepEqual(h.deliveries, []);
   assert.equal(h.repository.state?.requests[0]?.status, BRAIN_REQUEST_STATUS.FAILED);
@@ -1379,8 +1384,8 @@ test("an ask arriving while the model is thinking is steered into that run and a
 
 test("steering lands between tool calls: every emitted call is answered before the steered words are read", async () => {
   const held = heldPerformer();
-  const h = harness({ acts: held.acts });
-  h.client.answers.push(answered([messageAct("call_1")]), answered([message("Done both.")]));
+  const h = harness({ actions: held.actions });
+  h.client.answers.push(answered([messageAction("call_1")]), answered([message("Done both.")]));
   const first = acceptedRunId(await submit(h, "send"));
   await settle();
   assert.equal(held.performed.length, 1);
@@ -1428,13 +1433,13 @@ test("a steered ask cancelled before the run ends is settled cancelled and takes
 
 test("cancelling the run under way pairs its pending call, and the ask behind it opens next", async () => {
   const held = heldPerformer();
-  const h = harness({ acts: held.acts });
-  h.client.answers.push(answered([messageAct("call_1")]), answered([message("Second reply.")]));
+  const h = harness({ actions: held.actions });
+  h.client.answers.push(answered([messageAction("call_1")]), answered([message("Second reply.")]));
   const first = acceptedRunId(await submit(h, "send"));
   await settle();
   assert.equal(held.performed.length, 1);
   // The run is still at its held act, so the record settles cancelled only
-  // once that act returns; what the cancel does now is revoke the run.
+  // once that action returns; what the cancel does now is revoke the run.
   await h.agent.cancelAsk(first);
   const second = acceptedRunId(await submit(h, "stop, do this instead"));
   await settle();
@@ -1504,7 +1509,7 @@ test("opening notes are read once by the next turn and handed back when that tur
     trigger: BRAIN_TURN_TRIGGER.WAKE,
     identities: [ABC],
     briefings: ["abc is done."],
-    performedActs: 0,
+    performedActions: 0,
     at: NOW,
     label: "Claude Code: abc",
   };

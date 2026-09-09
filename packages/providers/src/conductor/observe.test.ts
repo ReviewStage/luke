@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ACT_KIND, advertisedActFor, advertisedControls, SESSION_STATUS } from "@sidecar/session";
+import {
+  ACTION_KIND,
+  advertisedActionFor,
+  advertisedControls,
+  SESSION_STATUS,
+} from "@sidecar/session";
 import type { CloudFetch } from "@sidecar/wire";
 import { HTTP_STATUS, jsonResponse } from "@sidecar/wire/testing";
 import {
@@ -26,10 +31,10 @@ import {
 } from "../testing/conductor-api.js";
 import { CONDUCTOR_PROVIDER } from "./vocabulary.js";
 
-test("names every act Conductor documents, and none it does not", () => {
+test("names every action Conductor documents, and none it does not", () => {
   const plugin = pluginFor(async () => new Response("{}", { status: 200 }));
 
-  assert.deepEqual(Object.keys(plugin.acts ?? {}).sort(), [
+  assert.deepEqual(Object.keys(plugin.actions ?? {}).sort(), [
     "control",
     "createWorkspace",
     "message",
@@ -78,9 +83,9 @@ test("observes cloud sessions the signed-in user created, under their own names"
   assert.equal(observations[0]?.lastActivityAt, TEST_TIME - 5_000);
   // A working session can be stopped and can take a message, both documented.
   assert.deepEqual(advertisedControls(observations[0] ?? {}), [
-    { kind: ACT_KIND.CONTROL, id: "cancel-turn", label: "Stop this turn", controlKind: "stop" },
+    { kind: ACTION_KIND.CONTROL, id: "cancel-turn", label: "Stop this turn", controlKind: "stop" },
   ]);
-  assert.notEqual(advertisedActFor(observations[0] ?? {}, ACT_KIND.MESSAGE), undefined);
+  assert.notEqual(advertisedActionFor(observations[0] ?? {}, ACTION_KIND.MESSAGE), undefined);
   assert.deepEqual(observations[0]?.detail, {
     repository: "luke",
     model: "claude-opus-5",
@@ -638,7 +643,7 @@ test("leaves a filed-away chat off the roster while its workspace stays", async 
   // open sibling's own settled turn is what offers the archive.
   assert.deepEqual(advertisedControls(observations[0] ?? {}), [
     {
-      kind: ACT_KIND.CONTROL,
+      kind: ACTION_KIND.CONTROL,
       id: "archive-workspace",
       label: "Archive",
       controlKind: "archive",
@@ -1129,7 +1134,7 @@ test("advertises a message for any open chat, a stop mid-turn, and an archive on
   const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
   const takesMessage = (sessionId: string): boolean =>
-    advertisedActFor(byId.get(sessionId) ?? {}, ACT_KIND.MESSAGE) !== undefined;
+    advertisedActionFor(byId.get(sessionId) ?? {}, ACTION_KIND.MESSAGE) !== undefined;
   assert.equal(takesMessage("session-idle"), true);
   assert.equal(takesMessage("session-working"), true);
   // A failed chat is documented for no writer.
@@ -1138,7 +1143,7 @@ test("advertises a message for any open chat, a stop mid-turn, and an archive on
   // still-open workspace — idle or failed — offers to file that workspace
   // away, each naming its own workspace as the target.
   assert.deepEqual(advertisedControls(byId.get("session-working") ?? {}), [
-    { kind: ACT_KIND.CONTROL, id: "cancel-turn", label: "Stop this turn", controlKind: "stop" },
+    { kind: ACTION_KIND.CONTROL, id: "cancel-turn", label: "Stop this turn", controlKind: "stop" },
   ]);
   for (const [sessionId, workspaceId] of [
     ["session-idle", "workspace-idle"],
@@ -1146,7 +1151,7 @@ test("advertises a message for any open chat, a stop mid-turn, and an archive on
   ] as const) {
     assert.deepEqual(advertisedControls(byId.get(sessionId) ?? {}), [
       {
-        kind: ACT_KIND.CONTROL,
+        kind: ACTION_KIND.CONTROL,
         id: "archive-workspace",
         label: "Archive",
         controlKind: "archive",
@@ -1186,7 +1191,7 @@ test("keeps the archive off every chat of a workspace while a sibling works", as
   // is not: filing it away would take the sibling's running turn with it, so
   // no row of this workspace offers the archive.
   assert.deepEqual(advertisedControls(byId.get("session-working") ?? {}), [
-    { kind: ACT_KIND.CONTROL, id: "cancel-turn", label: "Stop this turn", controlKind: "stop" },
+    { kind: ACTION_KIND.CONTROL, id: "cancel-turn", label: "Stop this turn", controlKind: "stop" },
   ]);
   assert.deepEqual(advertisedControls(byId.get("session-idle") ?? {}), []);
 });

@@ -3,7 +3,7 @@ import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { OMISSION_MARKER } from "@sidecar/session";
-import { ACT_RESULT_STATUS, isWireString, unparsedWire, wireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, isWireString, unparsedWire, wireRecord } from "@sidecar/wire";
 import { LOOK_SUBJECT } from "./agent.js";
 import { HostedBrainTransport, KeyedBrainTransport } from "./client.js";
 import {
@@ -18,7 +18,7 @@ import {
   ABC,
   answered,
   ask,
-  assertNoActReached,
+  assertNoActionReached,
   call,
   DELTA_PER_SESSION_CHARS,
   edge,
@@ -31,10 +31,10 @@ import {
   INSTRUCTION_IN_DATA,
   itemsOfType,
   message,
-  messageAct,
+  messageAction,
   NO_ACTS_POLICY,
   NOW,
-  OBSERVATION_ACTS,
+  OBSERVATION_ACTIONS,
   seededRequests,
   session,
   settle,
@@ -64,16 +64,16 @@ import { BRAIN_TURN_TRIGGER, REFUSAL_REASON } from "./turn.js";
 
 /**
  * "The host (`BrainAgent`) owns the conversation's standing — … the journal
- * that records an act before its effect and its result before the next
+ * that records an action before its effect and its result before the next
  * inference …" — `tool-executor.ts` and `turn-runner.ts`'s advance of the mark.
  */
-test("the journal records an act before its effect and its result before the next inference", async () => {
+test("the journal records an action before its effect and its result before the next inference", async () => {
   const held = heldPerformer();
   const inner = new FakeClient();
   /** What the journal said on disk each time the model was asked, so the order is the assertion. */
   const journalsAtRequest: (readonly { callId: string; answered: boolean }[])[] = [];
   const h = harness({
-    acts: held.acts,
+    actions: held.actions,
     client: {
       respond: (input, options) => {
         journalsAtRequest.push(
@@ -87,13 +87,13 @@ test("the journal records an act before its effect and its result before the nex
       quietUntil: () => undefined,
     },
   });
-  inner.answers.push(answered([messageAct("act_1")]), answered([message("done")]));
+  inner.answers.push(answered([messageAction("act_1")]), answered([message("done")]));
   await h.agent.wake([edge(ABC)]);
   await h.clock.advance(NOW + 3_000);
-  assert.equal(held.performed.length, 1, "the act is out at the performer");
+  assert.equal(held.performed.length, 1, "the action is out at the performer");
 
-  // The act is dispatched and its result is not back: its journal row already
-  // stands on disk, so a crash here reads as an act that may have happened
+  // The action is dispatched and its result is not back: its journal row already
+  // stands on disk, so a crash here reads as an action that may have happened
   // rather than one that never did.
   assert.deepEqual(
     h.persisted.at(-1)?.journal.map((row) => row.callId),
@@ -125,23 +125,23 @@ test("the effective tool policy fixes the schemas and the gate, and nothing the 
   const h = harness({
     prepareTurn: NO_ACTS_POLICY,
     readTranscriptSince: async () => ({
-      status: ACT_RESULT_STATUS.ACCEPTED,
+      status: ACTION_RESULT_STATUS.ACCEPTED,
       text: INSTRUCTION_IN_DATA,
       truncated: false,
     }),
   });
-  h.client.answers.push(answered(OBSERVATION_ACTS), answered([message("")]));
+  h.client.answers.push(answered(OBSERVATION_ACTIONS), answered([message("")]));
   await h.agent.wake([edge(ABC)]);
   await h.clock.advance(NOW + 3_000);
-  assertNoActReached(h);
+  assertNoActionReached(h);
 });
 
 /**
- * "an act taken in a turn the developer did not open is journaled and
+ * "an action taken in a turn the developer did not open is journaled and
  * narrated as Luke's own rather than as anything the developer asked for" —
  * `turn.ts`'s `runOriginOf`, read at every turn's opening.
  */
-test("an act in a turn the developer did not open is Luke's own", async () => {
+test("an action in a turn the developer did not open is Luke's own", async () => {
   const h = harness();
   await h.agent.wake([edge(ABC)]);
   await h.clock.advance(NOW + 3_000);
@@ -171,7 +171,7 @@ test("a wake's delta is cut from the front to 20,000 characters and written down
   assert.equal(DELTA_PER_SESSION_CHARS, 20_000);
   const h = harness({
     readTranscriptSince: async () => ({
-      status: ACT_RESULT_STATUS.ACCEPTED,
+      status: ACTION_RESULT_STATUS.ACCEPTED,
       text: `${"y".repeat(DELTA_PER_SESSION_CHARS * 2)}TAIL`,
       cursor: "far",
       truncated: false,
@@ -261,7 +261,7 @@ test("a whole-transcript read is cut from the front to 60,000 characters", async
   assert.equal(FULL_TRANSCRIPT_CHARS, 60_000);
   const h = harness({
     readTranscript: async () => ({
-      status: ACT_RESULT_STATUS.ACCEPTED,
+      status: ACTION_RESULT_STATUS.ACCEPTED,
       transcript: `${"x".repeat(FULL_TRANSCRIPT_CHARS * 2)}END`,
     }),
   });
@@ -356,7 +356,7 @@ test("the store this build wires enables no automatic reset", async () => {
 /**
  * "the store forgets the dead generation and announces the successor before
  * any disk is waited on, so a turn holding a model answer, a transcript read,
- * or an act's preparation is revoked at once" — `state-store.ts`'s `#begin`.
+ * or an action's preparation is revoked at once" — `state-store.ts`'s `#begin`.
  */
 test("the fence is synchronous: the successor is announced before any disk is waited on", async () => {
   const repository = fakeBrainStateRepository();
@@ -379,7 +379,7 @@ test("the fence is synchronous: the successor is announced before any disk is wa
 
 /**
  * "Within its life a generation holds at most 200 records: ended runs whose
- * ends History has taken go first, each with its journal, a new ask is
+ * ends Conversation has taken go first, each with its journal, a new ask is
  * refused at the door when nothing can go" — `envelope.ts`'s retention and
  * `asks.ts`'s door check.
  */
@@ -401,10 +401,10 @@ test("a generation holds at most 200 records; a new ask is refused at the door w
 });
 
 /**
- * "ended runs whose ends History has taken go first, each with its journal" —
+ * "ended runs whose ends Conversation has taken go first, each with its journal" —
  * `envelope.ts`'s `brainRequestPrunable`.
  */
-test("only an ended run whose end History has taken may be let go", () => {
+test("only an ended run whose end Conversation has taken may be let go", () => {
   const [taken] = seededRequests(1, true);
   const [untaken] = seededRequests(1, false);
   assert.ok(taken && untaken);

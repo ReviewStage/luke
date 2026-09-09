@@ -1,4 +1,4 @@
-import type { HistoryErasure } from "../store-wiring.js";
+import type { ConversationErasure } from "../store-wiring.js";
 
 /** The durable cutoff as read, which may itself be absent when no deletion ever raised one. */
 export interface CutoffBefore {
@@ -28,7 +28,7 @@ export interface ConversationDeletionDependencies {
   erase: (
     deletedAt: number,
     cutoffBefore: number | undefined,
-  ) => Promise<HistoryErasure | undefined>;
+  ) => Promise<ConversationErasure | undefined>;
   report: (message: string) => void;
 }
 
@@ -56,7 +56,7 @@ export const CONVERSATION_DELETION_INCOMPLETE = {
 } as const;
 
 /**
- * Delete history, in the order that makes a late arrival harmless and the
+ * Delete conversation, in the order that makes a late arrival harmless and the
  * erasure recoverable. The fences come first and are synchronous: the relayed
  * thread is emptied and every window told, and the brain's generation is
  * fenced in the same breath — the store forgets it and announces the empty
@@ -72,7 +72,7 @@ export const CONVERSATION_DELETION_INCOMPLETE = {
  * meanwhile builds over the same store, whose standing generation is that
  * successor.
  */
-export async function deleteConversationHistoryFlow(
+export async function deleteConversationFlow(
   dependencies: ConversationDeletionDependencies,
 ): Promise<ConversationDeleteOutcome> {
   const deletedAt = dependencies.now();
@@ -84,23 +84,29 @@ export async function deleteConversationHistoryFlow(
     // replace: the fences already keep them out of every view and context,
     // and rows removed without their marker would be a deletion the next
     // launch could not tell had happened.
-    dependencies.report(`Delete history incomplete: ${CONVERSATION_DELETION_INCOMPLETE.MARKER}`);
+    dependencies.report(
+      `Delete conversation incomplete: ${CONVERSATION_DELETION_INCOMPLETE.MARKER}`,
+    );
     return CONVERSATION_DELETE_OUTCOME.REFUSED;
   }
   const cutoffBefore = await cutoffRead;
   if (!cutoffBefore) {
     // An archive recording a guessed cutoff would make its restore hide
     // lines it brings back; the rows stay, behind the fences and the marker.
-    dependencies.report(`Delete history incomplete: ${CONVERSATION_DELETION_INCOMPLETE.CUTOFF}`);
+    dependencies.report(
+      `Delete conversation incomplete: ${CONVERSATION_DELETION_INCOMPLETE.CUTOFF}`,
+    );
     return CONVERSATION_DELETE_OUTCOME.REFUSED;
   }
   const outcome = await dependencies.erase(deletedAt, cutoffBefore.value);
   if (!outcome) {
-    dependencies.report(`Delete history incomplete: ${CONVERSATION_DELETION_INCOMPLETE.ROWS}`);
+    dependencies.report(`Delete conversation incomplete: ${CONVERSATION_DELETION_INCOMPLETE.ROWS}`);
     return CONVERSATION_DELETE_OUTCOME.REFUSED;
   }
   if (!outcome.published) {
-    dependencies.report(`Delete history incomplete: ${CONVERSATION_DELETION_INCOMPLETE.ARCHIVE}`);
+    dependencies.report(
+      `Delete conversation incomplete: ${CONVERSATION_DELETION_INCOMPLETE.ARCHIVE}`,
+    );
     return CONVERSATION_DELETE_OUTCOME.INCOMPLETE;
   }
   return CONVERSATION_DELETE_OUTCOME.COMPLETE;

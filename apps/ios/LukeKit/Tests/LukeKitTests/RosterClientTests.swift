@@ -181,9 +181,9 @@ final class RosterClientTests: XCTestCase {
     }
 }
 
-// MARK: - Act advertisements
+// MARK: - Action advertisements
 
-final class RosterSessionActAdvertisementTests: XCTestCase {
+final class RosterSessionActionAdvertisementTests: XCTestCase {
     func testAdvertisementsAbsentByDefault() {
         let s = RosterSession(json: [
             "providerId": "conductor",

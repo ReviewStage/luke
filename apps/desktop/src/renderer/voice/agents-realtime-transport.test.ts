@@ -3,7 +3,7 @@ import test from "node:test";
 import { ScriptedRealtimeTransport } from "@openai/agents-realtime/testing";
 import type { RealtimeConnection } from "@sidecar/hosted";
 import { introductionSessionConfig, realtimeSessionConfig } from "@sidecar/realtime";
-import { ACT_RESULT_STATUS } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import {
   agentsRealtimeErrorMessage,
   type BuiltRealtimeSessionConfig,
@@ -37,7 +37,7 @@ function sdkHarness(config: BuiltRealtimeSessionConfig) {
       onError: (message) => errors.push(message),
       executeTool: async (name) => {
         executed.push(name);
-        return { status: ACT_RESULT_STATUS.ACCEPTED };
+        return { status: ACTION_RESULT_STATUS.ACCEPTED };
       },
     },
     transport,
@@ -155,7 +155,7 @@ test("the production SDK adapter executes only its configured tool", async () =>
   assert.deepEqual(context.executed, [definition.name]);
   assert.equal(call.toolCall.callId, "call-1");
   assert.equal(call.startResponse, false);
-  assert.deepEqual(JSON.parse(call.output), { status: ACT_RESULT_STATUS.ACCEPTED });
+  assert.deepEqual(JSON.parse(call.output), { status: ACTION_RESULT_STATUS.ACCEPTED });
 
   const close = context.transport.expectCall("close");
   context.session.close();

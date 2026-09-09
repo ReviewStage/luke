@@ -11,7 +11,7 @@ import {
   type ModelResponse,
   TRANSCRIPT_EVENT_KIND,
 } from "@sidecar/runtime/vocabulary";
-import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { BrainAgent } from "./agent.js";
 import {
   assessCompaction,
@@ -296,11 +296,11 @@ function agentOver(model: ModelAdapter, repository: FakeBrainStateRepository) {
   const agent = new BrainAgent({
     runtime,
     prepareTurn: () => ({ prompt: "instructions", layers: {} }),
-    acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
+    actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
     roster: () => ({ text: "none", identities: [] }),
     standingContext: () => "",
-    readTranscriptSince: async () => ({ status: ACT_RESULT_STATUS.UNSUPPORTED, reason: "n" }),
-    readTranscript: async () => ({ status: ACT_RESULT_STATUS.UNSUPPORTED, reason: "n" }),
+    readTranscriptSince: async () => ({ status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: "n" }),
+    readTranscript: async () => ({ status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: "n" }),
     deliver: () => undefined,
     store,
     createRunId: () => `run-${++ids}`,

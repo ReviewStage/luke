@@ -17,7 +17,7 @@ import {
   type RealtimeStatus,
 } from "@sidecar/realtime";
 import type { ReplyKind } from "@sidecar/voice/orchestrator";
-import { ACT_RESULT_STATUS, isRecord, text, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, isRecord, text, type WireRecord } from "@sidecar/wire";
 import type { JsonValue, ParsedJsonObject } from "@sidecar/wire/testing";
 import type {
   SdkRealtimeTransport,
@@ -112,7 +112,7 @@ export interface Harness {
 
 /** An answer the brain accepted: words to say. */
 export function brainAnswer(briefing: string, runId = "run-1"): BrainAskResult {
-  return { status: ACT_RESULT_STATUS.ACCEPTED, briefing, runId };
+  return { status: ACTION_RESULT_STATUS.ACCEPTED, briefing, runId };
 }
 
 export function brainPending(): BrainAskResult {

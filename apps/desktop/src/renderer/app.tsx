@@ -1,4 +1,4 @@
-import { ACT_KIND, dispatchByKind } from "@sidecar/acts";
+import { ACTION_KIND, dispatchByKind } from "@sidecar/actions";
 import {
   PRODUCT_PANEL_SOURCE,
   PRODUCT_SEARCH_SURFACE,
@@ -16,7 +16,7 @@ import {
 } from "@sidecar/credentials/vocabulary";
 import type { FeedbackImage, FeedbackKind } from "@sidecar/feedback";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "@sidecar/feedback";
-import { APP_UPDATE_ACT, FEEDBACK_COMPOSER_KIND } from "@sidecar/guide";
+import { APP_UPDATE_ACTION, FEEDBACK_COMPOSER_KIND } from "@sidecar/guide";
 import { WingFace as LukeFace } from "@sidecar/panel";
 import { REALTIME_STATUS } from "@sidecar/realtime";
 import {
@@ -34,7 +34,7 @@ import type {
 import { appSettingsView } from "@sidecar/settings/wire";
 import { MOTION_DURATION_MS, VOICE_CAPTION_MAX_HEIGHT } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
-import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import {
   type CSSProperties,
   useCallback,
@@ -185,7 +185,7 @@ const SEARCH_QUERY_STORE_DELAY_MS = 400;
  * per service, so a fourth service is a fourth row rather than a fourth
  * branch at every dispatch site.
  */
-const CONSENT_ACTS = {
+const CONSENT_ACTIONS = {
   [CONSENT_SERVICE_ID.APPLE_CALENDAR]: {
     connect: () => window.sidecar.connectAppleCalendar(),
     cancel: () => window.sidecar.cancelAppleCalendarConnect(),
@@ -532,8 +532,8 @@ export function App(): React.JSX.Element {
   }, []);
 
   /**
-   * Every act this reply asked Luke to sign, in the order he will sign them.
-   * One flight at a time: a second act handed straight to the flight ends the
+   * Every action this reply asked Luke to sign, in the order he will sign them.
+   * One flight at a time: a second action handed straight to the flight ends the
    * first one mid-air, which is both switches flipping at once with nobody
    * seen doing either.
    */
@@ -544,7 +544,7 @@ export function App(): React.JSX.Element {
    * that is about to move them: the store answers before the errand is even
    * armed, and the switch Luke is on his way to move has to still read as it
    * did when he set off. A freeze already standing is kept, because the run
-   * signs its acts in turn and the oldest is the one still owed its tap.
+   * signs its actions in turn and the oldest is the one still owed its tap.
    */
   const deferSettings = useCallback(() => {
     setHeldSettings((held) => held ?? appSettingsNow());
@@ -556,14 +556,14 @@ export function App(): React.JSX.Element {
    * The change itself is made the moment it is asked for — nothing here delays
    * a write, and the spoken answer reports what actually happened. What waits
    * is only the drawing of it: a switch that has already flipped, or a list
-   * already narrowed, by the time Luke arrives makes the act look like
+   * already narrowed, by the time Luke arrives makes the action look like
    * something he flew over to inspect, and the whole point of the errand is
    * that he is the one doing it. Both kinds wait, because both are the same
    * mistake — the settings snapshot the store answered with, and the narrowing
    * or re-ordering a spoken ask chose for the list.
    *
-   * A hold belongs to the act that caught it rather than to the app, because
-   * one reply can ask for several acts and each has its own switch to move.
+   * A hold belongs to the action that caught it rather than to the app, because
+   * one reply can ask for several actions and each has its own switch to move.
    * They ride the run in {@link errandRun}, which is a ref rather than state:
    * the callbacks that release them have to stay stable across the whole
    * flight they are timing, and an errand whose callbacks changed identity
@@ -587,7 +587,7 @@ export function App(): React.JSX.Element {
     if (errandRunIdle(errandRun.current)) setHeldSettings(undefined);
   }, []);
 
-  /** The tap has landed, so the act in the air may finally be drawn. */
+  /** The tap has landed, so the action in the air may finally be drawn. */
   const releaseErrandChange = useCallback(() => {
     const landed = landErrand(errandRun.current);
     errandRun.current = landed.run;
@@ -725,19 +725,19 @@ export function App(): React.JSX.Element {
   }, [panelHeight, panelReceded]);
 
   /**
-   * Sends Luke to sign the next act waiting on him, and puts the panel where
-   * that act can be seen.
+   * Sends Luke to sign the next action waiting on him, and puts the panel where
+   * that action can be seen.
    *
    * Only the panel can hold a signature, so every caller stands it up first
    * and this is the backstop rather than the decision: a run whose panel never
    * opened has nobody to show anything to, so everything it was holding is
-   * drawn at once and the run is over. An act that named a control this build
+   * drawn at once and the run is over. An action that named a control this build
    * does not draw is over the moment it is taken up, in the same way — which
-   * is why this loops rather than returning: the next act takes its turn
+   * is why this loops rather than returning: the next action takes its turn
    * immediately instead of waiting for a flight that will never be made.
    *
-   * The tab and the page are turned here rather than where the act was asked
-   * for, because a page turned at the ask would take the previous act's
+   * The tab and the page are turned here rather than where the action was asked
+   * for, because a page turned at the ask would take the previous action's
    * control off screen before Luke had reached it.
    */
   const flyNextErrand = useCallback(() => {
@@ -768,11 +768,11 @@ export function App(): React.JSX.Element {
         errands.current += 1;
         setErrand({ targets: launch.targets, wait, run: errands.current });
         // Whether the panel is still the run's to put away, asked of the run
-        // rather than of this act alone. A later act must not answer "no" on
+        // rather than of this action alone. A later act must not answer "no" on
         // the first one's behalf just for having found the panel already open:
-        // a close the first act scheduled and the second disowned still fires,
-        // into the middle of the second act's flight. But an act that asked for
-        // the panel itself does disclaim it, whichever act stood it up.
+        // a close the first action scheduled and the second disowned still fires,
+        // into the middle of the second action's flight. But an action that asked for
+        // the panel itself does disclaim it, whichever action stood it up.
         errandOpenedPanel.current = errandBorrowedPanel(errandOpenedPanel.current, launch);
         return;
       }
@@ -783,7 +783,7 @@ export function App(): React.JSX.Element {
     }
   }, [changeTab, drawErrandHold, presentationOf, setSettingsView, settingsViewNow, tabNow]);
 
-  /** Adds an act to the run, and sends Luke off if he is not already out. */
+  /** Adds an action to the run, and sends Luke off if he is not already out. */
   const armErrandFlight = useCallback(
     (pending: PendingErrand) => {
       errandRun.current = armErrand(errandRun.current, pending);
@@ -936,8 +936,8 @@ export function App(): React.JSX.Element {
     isSendable: (entry): entry is ConsentConnectEntry => entry !== undefined && !entry.busy,
     send: async (sending) => {
       // Which service is being connected decides which documented act runs,
-      // and nothing else does: the entry names a row of the acts table.
-      const result = await CONSENT_ACTS[sending.serviceId].connect();
+      // and nothing else does: the entry names a row of the actions table.
+      const result = await CONSENT_ACTIONS[sending.serviceId].connect();
       return result.reason ? { rejection: result.reason } : {};
     },
     pointerInside: pointerIsInside,
@@ -1004,7 +1004,7 @@ export function App(): React.JSX.Element {
     // browser flow's loopback, or Apple's System Settings watch; after a
     // failure there is nothing left to stop.
     const waiting = consentConnect.latest();
-    if (waiting?.busy) CONSENT_ACTS[waiting.serviceId].cancel();
+    if (waiting?.busy) CONSENT_ACTIONS[waiting.serviceId].cancel();
     consentConnect.cancel();
   }, [consentConnect.cancel, consentConnect.latest]);
 
@@ -1041,7 +1041,7 @@ export function App(): React.JSX.Element {
    * way of it: the shape goes down to the slot, which is the field and nothing
    * else. It is the same wherever the key is coming from — a first connection, a
    * stored key being replaced, or one standing in front of the environment's —
-   * because they are all the same act.
+   * because they are all the same action.
    */
   const credentialsEntry = usePanelEntry<CredentialEntry>({
     aside: PANEL_PRESENTATION.SLOT,
@@ -1366,7 +1366,7 @@ export function App(): React.JSX.Element {
    * Opens the composer for a kind — from the section's own buttons or asked of
    * Luke out loud — and stands the panel down to its shape,
    * the way beginning a key entry stands it down to the slot: writing one
-   * note is one act. What opening does to a note already there is
+   * note is one action. What opening does to a note already there is
    * {@link openedFeedbackEntry}'s to decide — a half-written note is brought
    * back rather than discarded, and a starting draft lands only in an empty
    * one. Reports whether the draft was placed, so the spoken path can say
@@ -1574,7 +1574,7 @@ export function App(): React.JSX.Element {
       void changeMode(false);
       return;
     }
-    // Sessions and History each hold the composer, so a summons over either
+    // Sessions and Conversation each hold the composer, so a summons over either
     // lands in the field already showing; only Settings, which has none,
     // gives way to the sessions list.
     if (tabNow() === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
@@ -1597,7 +1597,7 @@ export function App(): React.JSX.Element {
   }, [changeTab]);
 
   /**
-   * Closing the search lets go of its query in the same act: a field that
+   * Closing the search lets go of its query in the same action: a field that
    * left its narrowing in force behind no visible control would be hiding
    * sessions with nothing on screen admitting it.
    */
@@ -1656,9 +1656,9 @@ export function App(): React.JSX.Element {
    *
    * Every beat is acted on, with no test for whether the flight reporting it is
    * still the current one. There is no such thing as a stale flight —
-   * a second act waits its turn rather than overtaking the one in the air — and
+   * a second action waits its turn rather than overtaking the one in the air — and
    * a guard here would be worse than redundant: this is what advances the run,
-   * so a beat it declined to act on would strand every act still waiting and
+   * so a beat it declined to act on would strand every action still waiting and
    * every hold they carry.
    */
   const finishErrandFlight = useCallback(() => {
@@ -1679,7 +1679,7 @@ export function App(): React.JSX.Element {
    * path. All were validated against their fixed
    * vocabularies before they arrive here, so this only performs and reports.
    *
-   * A settings change and a change of view are also the two acts nobody
+   * A settings change and a change of view are also the two actions nobody
    * watched anyone make, so both end by showing the control that moved and
    * sending Luke to it. A settings change stands the panel up on the Settings
    * tab to do it: the switch is the whole report, and a switch flipped behind
@@ -1692,7 +1692,7 @@ export function App(): React.JSX.Element {
   const carryAppAction = useCallback<AppActionCarrier>(
     async (action) =>
       dispatchByKind(action, {
-        [ACT_KIND.SETTING]: async (action): Promise<WireRecord> => {
+        [ACTION_KIND.SETTING]: async (action): Promise<WireRecord> => {
           // The drawing is held back before the write, not after it: the store
           // answers by moving the document, and the switch is what Luke is on
           // his way to move, so it has to still read as it did when he set
@@ -1707,7 +1707,7 @@ export function App(): React.JSX.Element {
           // change just made true. And that next call composes against the
           // same answer, before any version of the document could have carried
           // it back, which is why it is remembered outside the hold: the hold
-          // belongs to one act, and every act after it has to read this.
+          // belongs to one action, and every action after it has to read this.
           deferSettings();
           let caught: AppSettingsView | undefined;
           const outcome = await applySpokenSetting(
@@ -1725,10 +1725,10 @@ export function App(): React.JSX.Element {
           const hold: ErrandHold = caught === undefined ? NOTHING_HELD : { settings: caught };
           // Nothing to show and nothing to sign: a refused change must not stand
           // the panel up in front of a switch that did not move.
-          if (outcome.status !== ACT_RESULT_STATUS.ACCEPTED) {
+          if (outcome.status !== ACTION_RESULT_STATUS.ACCEPTED) {
             drawErrandHold(hold);
             return {
-              status: ACT_RESULT_STATUS.REJECTED,
+              status: ACTION_RESULT_STATUS.REJECTED,
               reason: outcome.reason ?? "That setting could not be changed.",
             };
           }
@@ -1741,7 +1741,7 @@ export function App(): React.JSX.Element {
           try {
             await changeMode(true);
             // Queued rather than flown at once. The tab, the page and the wait
-            // are all decided when this act comes up for its turn, because an
+            // are all decided when this action comes up for its turn, because an
             // earlier act may still be out over the very page this one would
             // otherwise turn away.
             armErrandFlight({
@@ -1761,7 +1761,7 @@ export function App(): React.JSX.Element {
           }
           return outcome;
         },
-        [ACT_KIND.FEEDBACK]: async (action) => {
+        [ACTION_KIND.FEEDBACK]: async (action) => {
           // The main process expands the window and sends the composer's
           // lifecycle event down the same ordered channel as the mode event,
           // so the composer's shape can never lose a race to the panel apply
@@ -1792,7 +1792,7 @@ export function App(): React.JSX.Element {
             throw error;
           }
           return {
-            status: ACT_RESULT_STATUS.ACCEPTED,
+            status: ACTION_RESULT_STATUS.ACCEPTED,
             kind: action.composer,
             ...(action.draft === undefined
               ? undefined
@@ -1805,7 +1805,7 @@ export function App(): React.JSX.Element {
                   }),
           };
         },
-        [ACT_KIND.PANEL]: async (action) => {
+        [ACTION_KIND.PANEL]: async (action) => {
           // Whether this ask is what opens the panel, read before it does: an
           // errand into a shape still growing has to trail the whole opening,
           // and one into a panel already up does not.
@@ -1822,7 +1822,7 @@ export function App(): React.JSX.Element {
           // narrowing is what Luke is on his way to the options control — or
           // its clear X, for a whole-list ask — to do, and a list that has
           // already re-sorted itself by the time he gets there makes the
-          // flight a report rather than the act.
+          // flight a report rather than the action.
           const view =
             filters || action.sort || action.query !== undefined
               ? {
@@ -1845,7 +1845,7 @@ export function App(): React.JSX.Element {
               : undefined;
           await changeMode(true);
           // The tab bar and the options button are drawn outside the settings
-          // pages, so this act names no page and waits for none. An act with
+          // pages, so this action names no page and waits for none. An action with
           // nowhere to land releases what it holds the moment it comes up: the
           // panel itself is what was asked for and it is already open, so the
           // list must show what the answer is about to claim it shows.
@@ -1866,7 +1866,7 @@ export function App(): React.JSX.Element {
             searched?.note,
           ].filter((line): line is string => line !== undefined);
           return {
-            status: ACT_RESULT_STATUS.ACCEPTED,
+            status: ACTION_RESULT_STATUS.ACCEPTED,
             tab: action.tab,
             ...(spoken !== undefined ? { filters: action.filters } : undefined),
             ...(action.sort ? { sort: action.sort } : undefined),
@@ -1875,25 +1875,25 @@ export function App(): React.JSX.Element {
             ...(notes.length > 0 ? { note: notes.join(" ") } : undefined),
           };
         },
-        [ACT_KIND.UPDATE]: async (action): Promise<WireRecord> => {
+        [ACTION_KIND.UPDATE]: async (action): Promise<WireRecord> => {
           // The Updates row's own three presses, behind the same bridge calls
           // its button uses; the main process holds its own guards — a check
           // never interrupts a download, an install runs only on a build in
           // hand, and the releases page is an address fixed by the build.
-          if (action.act === APP_UPDATE_ACT.CHECK) {
+          if (action.action === APP_UPDATE_ACTION.CHECK) {
             // Answered rather than fire-and-forget, like the row's own press,
             // so the outcome voiced is the answer the check actually returned.
             const answered = await window.sidecar.checkForUpdates();
-            return { status: ACT_RESULT_STATUS.ACCEPTED, outcome: updateRow(answered).detail };
+            return { status: ACTION_RESULT_STATUS.ACCEPTED, outcome: updateRow(answered).detail };
           }
-          if (action.act === APP_UPDATE_ACT.DOWNLOAD) {
+          if (action.action === APP_UPDATE_ACTION.DOWNLOAD) {
             window.sidecar.openLatestRelease();
             return {
-              status: ACT_RESULT_STATUS.ACCEPTED,
+              status: ACTION_RESULT_STATUS.ACCEPTED,
               note: "The latest release's page is open in the browser; the download itself is by hand from there.",
             };
           }
-          // Re-read at the act what the button reads at its press: the guide
+          // Re-read at the action what the button reads at its press: the guide
           // the call was validated against is a snapshot, and an install that
           // failed or landed between the two must answer as the row now
           // stands. The main process quietly refuses a stale ask either way;
@@ -1903,13 +1903,13 @@ export function App(): React.JSX.Element {
           const row = standing ? updateRow(standing) : undefined;
           if (row?.action !== UPDATE_ROW_ACTION.RESTART) {
             return {
-              status: ACT_RESULT_STATUS.REJECTED,
+              status: ACTION_RESULT_STATUS.REJECTED,
               reason: row?.detail ?? "This run does not report where updates stand.",
             };
           }
           window.sidecar.installUpdate();
           return {
-            status: ACT_RESULT_STATUS.ACCEPTED,
+            status: ACTION_RESULT_STATUS.ACCEPTED,
             note: "Luke is quitting to install the downloaded release; this conversation ends with it.",
           };
         },
@@ -1934,14 +1934,14 @@ export function App(): React.JSX.Element {
   carryAppActionRef.current = carryAppAction;
   useEffect(
     () =>
-      window.sidecar.onBrainAppAct((request) => {
+      window.sidecar.onBrainAppAction((request) => {
         void carryAppActionRef
           .current(request.action)
           .catch((error: Error) => ({
-            status: ACT_RESULT_STATUS.REJECTED,
+            status: ACTION_RESULT_STATUS.REJECTED,
             reason: error instanceof Error ? error.message : "The change could not be made.",
           }))
-          .then((answer) => window.sidecar.answerBrainAppAct(request.requestId, answer));
+          .then((answer) => window.sidecar.answerBrainAppAction(request.requestId, answer));
       }),
     [],
   );
@@ -1962,7 +1962,7 @@ export function App(): React.JSX.Element {
     discardListening,
     stopSpeaking,
     requestMicrophoneAccess,
-    clearConversationHistory,
+    clearConversationLines,
   } = useVoiceView();
   const { voiceError, voiceNotice, talkOpening, liveConversationEntries } = voiceView;
   // A capture run always draws the fixture's words: the voice window that
@@ -2079,7 +2079,7 @@ export function App(): React.JSX.Element {
   const shownCaptionHeight = leavingPanel ? heldCaptionHeight.current : captionTextHeight;
 
   /**
-   * The one act a row's chip can ask for, handed to the main process by
+   * The one action a row's chip can ask for, handed to the main process by
    * session identity. Unlike opening the session, it leaves the panel up: a
    * refusal lands back on the row that asked.
    */
@@ -2329,7 +2329,7 @@ export function App(): React.JSX.Element {
       else if (tab === PANEL_TAB.SETTINGS && settingsView !== SETTINGS_VIEW.ROOT) {
         setSettingsView(SETTINGS_VIEW.ROOT);
       } else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
-      else if (tab === PANEL_TAB.HISTORY) changeTab(PANEL_TAB.SESSIONS);
+      else if (tab === PANEL_TAB.CONVERSATION) changeTab(PANEL_TAB.SESSIONS);
       else void changeMode(false);
     };
     window.addEventListener("keydown", handleKey);
@@ -2632,9 +2632,9 @@ export function App(): React.JSX.Element {
             onOpenSession={openSession}
             onOpenSessionApplication={openSessionApplication}
             writes={sessionWrites}
-            conversationHistory={state.conversation.entries}
+            conversationLines={state.conversation.entries}
             liveConversationEntries={liveConversationEntries}
-            onClearConversationHistory={clearConversationHistory}
+            onClearConversationConversation={clearConversationLines}
             brainRequests={brainRequests}
             onCancelBrainRequest={cancelBrainAsk}
             ask={askLuke}
@@ -2663,10 +2663,10 @@ export function App(): React.JSX.Element {
               onDeleteAccount: async () => {
                 try {
                   await window.sidecar.deleteAccount();
-                  return { status: ACT_RESULT_STATUS.ACCEPTED };
+                  return { status: ACTION_RESULT_STATUS.ACCEPTED };
                 } catch {
                   return {
-                    status: ACT_RESULT_STATUS.REJECTED,
+                    status: ACTION_RESULT_STATUS.REJECTED,
                     reason:
                       "Luke's service could not delete the account, so it still stands. Try again in a moment.",
                   };
@@ -2768,11 +2768,11 @@ export function App(): React.JSX.Element {
             onReopen={() => {
               // The page reopened is the one the waiting flow built, named by
               // the service the entry says is waiting — no address from here.
-              // A wait with no page to reopen has no act in its row, and the
+              // A wait with no page to reopen has no action in its row, and the
               // slot draws no button for it either.
               const waiting = consentConnect.latest()?.serviceId;
               if (!waiting) return;
-              const acts = CONSENT_ACTS[waiting];
+              const acts = CONSENT_ACTIONS[waiting];
               if ("reopen" in acts) acts.reopen();
             }}
             onOpenSystemSettings={() => window.sidecar.openCalendarSettings()}

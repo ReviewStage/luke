@@ -28,7 +28,7 @@ export interface ClaudeCodePluginOptions {
 /**
  * Observes the Claude Code sessions on this machine from the JSONL
  * transcripts the CLI already writes for itself, sharpened where the
- * observation hook left a token. It names no acts: Claude Code documents no
+ * observation hook left a token. It names no actions: Claude Code documents no
  * endpoint a session can be written to from outside its own process, and an
  * absent handler is the unsupported answer.
  */

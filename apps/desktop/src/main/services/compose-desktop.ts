@@ -105,7 +105,7 @@ export function composeDesktop(config: DesktopConfig): DesktopServices {
 
   // The three edges no service could take as a constructor argument, because
   // each is a cycle the concerns genuinely have: the windows are built over
-  // the machine's own duck and carry the acts its node performs, they draw
+  // the machine's own duck and carry the actions its node performs, they draw
   // what the operator hears and the operator is reached over the host's own
   // server, and the host's standup is what the operator's first attach rides
   // inside. Reading one before this has run throws by name rather than
@@ -150,11 +150,11 @@ export function composeDesktop(config: DesktopConfig): DesktopServices {
   // already stopped.
   function teardown(): Promise<void> {
     quitting = true;
-    // An act still waiting on a panel is refused before the host drains: the
+    // An action still waiting on a panel is refused before the host drains: the
     // panels are going, so nothing can answer one, and the drain would
-    // otherwise wait out the act's own clock for a promise that was never
+    // otherwise wait out the action's own clock for a promise that was never
     // going to settle.
-    native.refusePendingActs();
+    native.refusePendingActions();
     if (!stopping) {
       stopping = stopInReverse(all, config.report).finally(() => {
         stopping = undefined;

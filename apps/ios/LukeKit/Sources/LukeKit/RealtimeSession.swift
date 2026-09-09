@@ -71,7 +71,7 @@ public struct RealtimeSessionOptions: Sendable {
     /// place the phone learns what Luke can actually be asked for.
     public var onSessionTools: (@MainActor @Sendable ([String]) -> Void)?
 
-    /// Dispatches an armed tool call to the appropriate hosted act endpoint.
+    /// Dispatches an armed tool call to the appropriate hosted action endpoint.
     /// Receives the tool name, the parsed arguments, and the call id; returns
     /// the JSON string to send back as `function_call_output`. Called only in
     /// turns the developer explicitly opened (press or typed ask).
@@ -522,7 +522,7 @@ public final class RealtimeSession {
 
         case "response.output_audio_transcript.done", "response.audio_transcript.done":
             guard !isStaleResponseEvent(json) else { return }
-            // The completed words now live in the conversation history. End
+            // The completed words now live in the conversation. End
             // this streaming segment so a tool follow-up gets its own bubble.
             captionBuffer = ""
             options.onCaption(nil)
@@ -590,8 +590,8 @@ public final class RealtimeSession {
             .flatMap { $0["output"] as? [[String: Any]] } ?? []
         let functionCalls = output.filter { $0["type"] as? String == "function_call" }
         responseStarted = false
-        // Marked in flight before the first act is carried, not after: the
-        // primary reply's audio can finish draining while an act's output is
+        // Marked in flight before the first action is carried, not after: the
+        // primary reply's audio can finish draining while an action's output is
         // still being sent, and a drain that found no follow-up pending would
         // return the session to ready with the follow-up's words still to come.
         if !functionCalls.isEmpty { followUpPending = true }
@@ -609,8 +609,8 @@ public final class RealtimeSession {
             } else {
                 result = #"{"error":"not authorized"}"#
             }
-            // A new developer turn may have interrupted while the hosted act
-            // was in flight. The act has already happened, but its old model
+            // A new developer turn may have interrupted while the hosted action
+            // was in flight. The action has already happened, but its old model
             // response must not resume over the new microphone turn.
             guard interruptionSequence == responseInterruptionSequence else { return }
             try? await ws.sendText(functionCallOutputJSON(callId: callId, output: result))

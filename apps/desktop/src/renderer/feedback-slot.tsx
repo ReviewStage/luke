@@ -63,7 +63,7 @@ function FeedbackLanding({
 
 /**
  * The panel stood down to the composer, the way it stands down to the key
- * slot: writing a note to the founders is one act, so the shape it happens in
+ * slot: writing a note to the founders is one action, so the shape it happens in
  * holds the note and nothing else. The same spring carries the morph, the
  * content arrives on the slot's beat, and everything the shape does not cover
  * stays click-through.

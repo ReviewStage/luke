@@ -128,8 +128,8 @@ export interface ChildRunRecord {
   /** The child's final visible reply, for a completed child. */
   readonly resultText?: string;
   readonly failureDetail?: string;
-  readonly performedActs?: number;
-  readonly unknownActs?: number;
+  readonly performedActions?: number;
+  readonly unknownActions?: number;
   readonly archivedAt?: number;
 }
 
@@ -175,7 +175,7 @@ export function childRunRecordFromWire(value: UnparsedWireValue): ChildRunRecord
   if (!optionalInstant(value.startedAt) || !optionalInstant(value.settledAt)) return undefined;
   if (!optionalInstant(value.archivedAt)) return undefined;
   if (!optionalString(value.resultText) || !optionalString(value.failureDetail)) return undefined;
-  if (!optionalInstant(value.performedActs) || !optionalInstant(value.unknownActs)) {
+  if (!optionalInstant(value.performedActions) || !optionalInstant(value.unknownActions)) {
     return undefined;
   }
   return {
@@ -207,8 +207,10 @@ export function childRunRecordFromWire(value: UnparsedWireValue): ChildRunRecord
     ...(value.settledAt !== undefined ? { settledAt: value.settledAt } : undefined),
     ...(value.resultText !== undefined ? { resultText: value.resultText } : undefined),
     ...(value.failureDetail !== undefined ? { failureDetail: value.failureDetail } : undefined),
-    ...(value.performedActs !== undefined ? { performedActs: value.performedActs } : undefined),
-    ...(value.unknownActs !== undefined ? { unknownActs: value.unknownActs } : undefined),
+    ...(value.performedActions !== undefined
+      ? { performedActions: value.performedActions }
+      : undefined),
+    ...(value.unknownActions !== undefined ? { unknownActions: value.unknownActions } : undefined),
     ...(value.archivedAt !== undefined ? { archivedAt: value.archivedAt } : undefined),
   };
 }

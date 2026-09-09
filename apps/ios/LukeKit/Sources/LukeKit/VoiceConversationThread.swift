@@ -18,7 +18,7 @@ public struct VoiceConversationMessage: Identifiable, Equatable, Sendable {
     public var words: String
     /// Whether the developer typed these words rather than speaking them, so
     /// the context re-feed can lead with the same distinction the desktop's
-    /// history keeps.
+    /// conversation keeps.
     public let typed: Bool
     /// The instant this line was first recorded, the desktop's own stamp
     /// transcribed: a caption keeps the moment its first words arrived

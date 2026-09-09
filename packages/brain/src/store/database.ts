@@ -1,6 +1,7 @@
 import { DatabaseSync, type SQLInputValue, type StatementSync } from "node:sqlite";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import {
+  STORE_SCHEMA_FLOOR,
   STORE_SCHEMA_MIGRATIONS,
   STORE_SCHEMA_STATEMENTS,
   STORE_SCHEMA_VERSION,
@@ -11,7 +12,7 @@ import {
  * store's own worker thread in the app — Electron's main thread never calls
  * it — and in-thread in tests, where the same operations are exercised
  * against a file or `:memory:`. The table groups each have a module of their
- * own over this handle: the brain's envelope, the conversation's history,
+ * own over this handle: the brain's envelope, the conversation's lines,
  * and the remembered facts.
  *
  * Every operation that changes more than one row runs in one transaction,
@@ -85,9 +86,9 @@ export class StoreDatabase {
             | { version: number }
             | undefined)
         : undefined;
-      // A version this build cannot reach from — past its own, or below the
-      // first one it ever wrote — is refused rather than migrated by guess.
-      if (row && (row.version > STORE_SCHEMA_VERSION || row.version < 1)) {
+      // A version this build cannot reach from — past its own, or before the
+      // floor it carries forward from — is refused rather than migrated by guess.
+      if (row && (row.version > STORE_SCHEMA_VERSION || row.version < STORE_SCHEMA_FLOOR)) {
         throw new Error(
           `the brain's store is at schema version ${row.version}, not ${STORE_SCHEMA_VERSION}`,
         );

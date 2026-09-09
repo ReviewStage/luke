@@ -116,7 +116,7 @@ test("an offer is claimed, the call opened, the words spoken once, and acknowled
 test("a Clear while the claim is out leaves the granted words unspoken, unshown, and unacknowledged", async () => {
   const h = harness();
   h.player.offer(offer("run-1"));
-  // The History generation moves while the claim is in flight.
+  // The Conversation generation moves while the claim is in flight.
   h.generation.current += 1;
   h.player.withdraw();
   h.grant(granted("Old words."));

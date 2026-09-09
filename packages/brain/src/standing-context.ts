@@ -1,7 +1,7 @@
 import { DAY_MS } from "@sidecar/runtime/vocabulary";
 import {
-  ACT_KIND,
-  advertisedActFor,
+  ACTION_KIND,
+  advertisedActionFor,
   advertisedControls,
   type ObservedWorkspaceProject,
   SESSION_LOCATION,
@@ -53,10 +53,10 @@ function sessionCapabilityText(session: Session, recency: SessionRecency): strin
     (application) => application.link !== undefined,
   );
   const controls = advertisedControls(session);
-  const addAgent = advertisedActFor(session, ACT_KIND.ADD_AGENT);
+  const addAgent = advertisedActionFor(session, ACTION_KIND.ADD_AGENT);
   const capabilities = [
     `provider_id=${session.providerId} provider_session_id=${session.providerSessionId}`,
-    `messages=${advertisedActFor(session, ACT_KIND.MESSAGE) !== undefined}`,
+    `messages=${advertisedActionFor(session, ACTION_KIND.MESSAGE) !== undefined}`,
     `open=${Boolean(session.detail.link)}`,
     ...(openableApplications.length > 0
       ? [
@@ -76,8 +76,10 @@ function sessionCapabilityText(session: Session, recency: SessionRecency): strin
     // Each capability travels as a fact and never a target: the identity is
     // what a rename ask names, and what it lands on stays resolved from
     // observed state on the machine.
-    ...(advertisedActFor(session, ACT_KIND.RENAME_SESSION) ? ["chat can be renamed"] : []),
-    ...(advertisedActFor(session, ACT_KIND.RENAME_WORKSPACE) ? ["workspace can be renamed"] : []),
+    ...(advertisedActionFor(session, ACTION_KIND.RENAME_SESSION) ? ["chat can be renamed"] : []),
+    ...(advertisedActionFor(session, ACTION_KIND.RENAME_WORKSPACE)
+      ? ["workspace can be renamed"]
+      : []),
   ];
   return capabilities.join("; ");
 }
@@ -247,7 +249,7 @@ export function sessionContextText(sessions: readonly Session[], now: number = D
 
 /**
  * The kinds of context a remote call is told, each answering one standing
- * question. The desktop's call is told none of them: its roster, history, and
+ * question. The desktop's call is told none of them: its roster, conversation, and
  * projects are the brain's, and the voice reaches them through its one tool.
  */
 export const CONTEXT_ITEM_KIND = {
@@ -281,7 +283,7 @@ export const maximumVoiceContextWorkspaceProjects = 10;
  * tie-break: an ask that names no provider goes to the default when one is
  * chosen and offering, and while none is chosen the context says that the
  * first creation decides — the saving itself is the main process's, done on
- * the validated act, so the sentence here is a description and never a lever.
+ * the validated action, so the sentence here is a description and never a lever.
  * The default projects ride on the same terms, one tie-break per provider:
  * an ask that names no project goes to that provider's default when one is
  * chosen and still offered.

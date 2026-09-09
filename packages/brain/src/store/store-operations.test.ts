@@ -57,7 +57,7 @@ test("the wire admits every name the table holds and no other, and reads the ope
   for (const name of ["history.destroy", "brain", "", "open.close"]) {
     assert.equal(storeRequestFromWire(unparsedWire({ id: 1, name, params: {} })), undefined);
   }
-  assert.equal(storeRequestFromWire(unparsedWire({ name: "history.list" })), undefined);
+  assert.equal(storeRequestFromWire(unparsedWire({ name: "conversation.list" })), undefined);
 });
 
 test("every request that named an id is answered under it, readable or not, and one that named none is dropped", () => {
@@ -76,7 +76,7 @@ test("every request that named an id is answered under it, readable or not, and 
   deliver({ name: "history.destroy" });
   assert.equal(posted.length, 2);
   // The store is not open, so the operation throws; the error carries the request's id.
-  deliver({ id: 3, name: "history.list", params: { sessionKey: MAIN_SESSION_KEY, now: 0 } });
+  deliver({ id: 3, name: "conversation.list", params: { sessionKey: MAIN_SESSION_KEY, now: 0 } });
   deliver({ id: 4, name: "conversations.list", params: {} });
   assert.deepEqual(posted.slice(2), [
     { id: 3, ok: false, error: "the brain's store is not open" },

@@ -31,7 +31,7 @@ import {
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
 import type { ConversationEntry } from "@sidecar/session";
-import { ACT_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
 import { type BrainWiring, wireBrain } from "./wiring.js";
 
 /**
@@ -214,7 +214,7 @@ function composed(
         lastActivityAt: NOW,
       },
     ],
-    historyLines: (sessionKey) => history.get(sessionKey) ?? [],
+    conversationLines: (sessionKey) => history.get(sessionKey) ?? [],
     childStore: () => childStore,
     parallelism: () => 8,
     createId: () => `id-${++ids}`,
@@ -227,9 +227,9 @@ function composed(
     },
     broadcastRequests: () => undefined,
     onGenerationReplaced: () => undefined,
-    acts: {
-      sessionActs: {
-        perform: async () => ({ status: ACT_RESULT_STATUS.REJECTED, reason: "not in test" }),
+    actions: {
+      sessionActions: {
+        perform: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "not in test" }),
         openSession: () => Promise.reject(new Error("not in test")),
         openSessionApplication: () => Promise.reject(new Error("not in test")),
         openSessionChange: () => Promise.reject(new Error("not in test")),
@@ -242,7 +242,9 @@ function composed(
       appGuide: () => ({ facts: [], settings: [] }),
       rememberedFacts: () => [],
       notebook: { remember: async () => true, forget: async () => true },
-      performAppAct: async (): Promise<WireRecord> => ({ status: ACT_RESULT_STATUS.REJECTED }),
+      performAppAction: async (): Promise<WireRecord> => ({
+        status: ACTION_RESULT_STATUS.REJECTED,
+      }),
       recordConversationEntry: () => undefined,
     },
     roster: () => ({ text: "", identities: [], sessions: [] }),

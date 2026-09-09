@@ -9,7 +9,7 @@ import Foundation
 /// is it muted, and how loud is it — and pushes a line whenever either answer
 /// changes, or the default device itself does. Nothing is ever written back:
 /// the app draws captions and a hint from these lines, and turning the volume
-/// up stays the user's own act on their own keys.
+/// up stays the user's own action on their own keys.
 ///
 /// One line per state: `output muted=<0|1> volume=<0.00–1.00>`, emitted once
 /// on start and again on every change. A machine with no output device, or one

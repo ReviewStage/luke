@@ -42,7 +42,7 @@ export interface OperatorClient extends DesktopService {
   voiceAvailable: () => boolean;
   /** One host bootstrap, adopted into the document every window is answered from. */
   readBootstrap: () => Promise<HostBootstrap | undefined>;
-  /** Stops recording now, ahead of an act that ends the account it is filed under; the host's next replay event re-answers. */
+  /** Stops recording now, ahead of an action that ends the account it is filed under; the host's next replay event re-answers. */
   haltSessionReplay: () => void;
   resumeSessionReplay: () => void;
   reportGuide: (snapshot: AppGuideSnapshot) => void;

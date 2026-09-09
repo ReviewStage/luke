@@ -86,7 +86,7 @@ export interface BrainV2Options extends BrainCapabilitiesOptions {
   timeoutMs?: number;
 }
 
-/** The catalog a name selects from: the acts table's rows and the brain's own tools, fixed by the build. */
+/** The catalog a name selects from: the actions table's rows and the brain's own tools, fixed by the build. */
 const CATALOG: ReadonlyMap<string, ResponsesFunctionTool> = hostedBrainToolCatalog();
 const CATALOG_NAMES: ReadonlySet<string> = new Set(CATALOG.keys());
 

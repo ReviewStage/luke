@@ -1,6 +1,6 @@
 import {
-  ACT_RESULT_STATUS,
-  type ProviderActResult,
+  ACTION_RESULT_STATUS,
+  type ProviderActionResult,
   type ProviderSessionObservation,
   SESSION_LOCATION,
   type SessionProvider,
@@ -63,7 +63,7 @@ export type WriteSubject = (typeof WRITE_SUBJECT)[keyof typeof WRITE_SUBJECT];
 
 /** What one authenticated write became, and whatever the provider answered with. */
 export interface CloudWriteOutcome {
-  outcome: ProviderActResult;
+  outcome: ProviderActionResult;
   body?: WireRecord;
 }
 
@@ -128,7 +128,7 @@ export interface CloudPass {
   /** One authenticated write; answers what became of it, never throws. */
   write(apiKey: string, route: CloudWriteRoute, subject?: WriteSubject): Promise<CloudWriteOutcome>;
   credentialBoundRead: CredentialBoundRead;
-  /** The credential as the caller's own act should present it, read afresh. */
+  /** The credential as the caller's own action should present it, read afresh. */
   readApiKey(): Promise<string | undefined>;
   reportDiagnostic(kind: AdapterDiagnosticKind, error: Error): void;
 }
@@ -189,7 +189,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
   /**
    * One observer must never abort the shared refresh pass, so a settings read
    * that fails is treated the same as having no credential at all — here, and
-   * for the act that reads the credential again at its own moment.
+   * for the action that reads the credential again at its own moment.
    */
   const readApiKey = (): Promise<string | undefined> => input.readApiKey().catch(() => undefined);
 
@@ -365,7 +365,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
      * The one authenticated write. It shares the read path's timeout and its
      * refusal to echo anything the provider said into an error a user sees,
      * and it answers with what became of the request rather than throwing: a
-     * write is a user's own act, so every outcome has to land back on the row
+     * write is a user's own action, so every outcome has to land back on the row
      * it left. The subject is what the route acts on, so a refusal names the
      * thing that actually went missing. What the provider answered with rides
      * along for the adapter that needs it — a creation response names the
@@ -400,7 +400,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
         lastAttemptAt = Number.NEGATIVE_INFINITY;
         return {
           outcome: {
-            status: ACT_RESULT_STATUS.REJECTED,
+            status: ACTION_RESULT_STATUS.REJECTED,
             reason: `${name} did not answer, so the request may not have landed.`,
           },
         };
@@ -416,7 +416,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
         // yes, so only a follow-up that needed the body has anything to miss.
         const body = await response.json().catch(() => undefined);
         return {
-          outcome: { status: ACT_RESULT_STATUS.ACCEPTED },
+          outcome: { status: ACTION_RESULT_STATUS.ACCEPTED },
           ...(isRecord(body) ? { body } : undefined),
         };
       }
@@ -426,7 +426,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
       ) {
         return {
           outcome: {
-            status: ACT_RESULT_STATUS.REJECTED,
+            status: ACTION_RESULT_STATUS.REJECTED,
             reason: `${name} rejected the configured API key.`,
           },
         };
@@ -434,7 +434,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
       if (response.status === HTTP_STATUS.NOT_FOUND) {
         return {
           outcome: {
-            status: ACT_RESULT_STATUS.REJECTED,
+            status: ACTION_RESULT_STATUS.REJECTED,
             reason: `${name} no longer has this ${subject}.`,
           },
         };
@@ -442,12 +442,12 @@ export function cloudPass(input: CloudPassInput): CloudPass {
       if (response.status === HTTP_STATUS.CONFLICT) {
         return {
           outcome: {
-            status: ACT_RESULT_STATUS.REJECTED,
+            status: ACTION_RESULT_STATUS.REJECTED,
             reason: `${name} says this ${subject} has moved on since Luke last looked.`,
           },
         };
       }
-      // Any other status is an answer that says nothing certain about the act
+      // Any other status is an answer that says nothing certain about the action
       // — a gateway that gave up may stand in front of a write that finished —
       // so this hedges the way a thrown fetch does, and the refresh that
       // follows must actually ask rather than keep advertising what the
@@ -455,7 +455,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
       lastAttemptAt = Number.NEGATIVE_INFINITY;
       return {
         outcome: {
-          status: ACT_RESULT_STATUS.REJECTED,
+          status: ACTION_RESULT_STATUS.REJECTED,
           reason: `${name} answered with status ${response.status}, so the request may not have landed.`,
         },
       };

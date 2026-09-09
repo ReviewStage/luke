@@ -1,22 +1,22 @@
 import {
-  ACT_RESULT_STATUS,
+  ACTION_RESULT_STATUS,
   type Admitted,
   reshapeAdmitted,
   UNSUPPORTED_BY_OBSERVATION,
 } from "@sidecar/wire";
 import type {
-  ProviderActResult,
+  ProviderActionResult,
   ProviderConversationResult,
   ProviderTranscriptResult,
   ProviderTranscriptSinceResult,
   ProviderWorkspaceResult,
-} from "./act-results.js";
+} from "./action-results.js";
 import {
-  ACT_KIND,
+  ACTION_KIND,
   type AdvertisedControl,
-  advertisedActFor,
+  advertisedActionFor,
   advertisedControl,
-} from "./advertised-acts.js";
+} from "./advertised-actions.js";
 import type {
   ProviderControlRequest,
   ProviderConversationRequest,
@@ -34,30 +34,30 @@ import { WORKSPACE_TASK_SUPPORT, type WorkspaceProject } from "./workspace-proje
 
 /**
  * A provider is a value: what it observes, the roster that pass published, and
- * the acts and reads it actually implements. An absent handler *is* the
- * unsupported answer, so a provider gains an act by naming it — and taking on
- * that act's constraint in the root guide — rather than by overriding a seam
+ * the actions and reads it actually implements. An absent handler *is* the
+ * unsupported answer, so a provider gains an action by naming it — and taking on
+ * that action's constraint in the root guide — rather than by overriding a seam
  * on a base class the compiler cannot hold to the same rule.
  */
 export interface SessionProviderPlugin {
   readonly provider: SessionProvider;
-  /** One read-only pass, which also publishes the roster acts validate against. */
+  /** One read-only pass, which also publishes the roster actions validate against. */
   observe(): Promise<readonly ProviderSessionObservation[]>;
-  /** The roster the latest pass published — what every act is re-validated against. */
+  /** The roster the latest pass published — what every action is re-validated against. */
   latest(): readonly ProviderSessionObservation[];
   /** The projects the latest pass reported, or none. */
   projects?(): readonly WorkspaceProject[];
-  readonly acts?: Partial<ActHandlers>;
+  readonly actions?: Partial<ActionHandlers>;
   readonly reads?: Partial<ReadHandlers>;
   /** What the latest pass learned about a CLI login, for a settings row to report. */
   connection?(): CliConnection;
 }
 
 /**
- * One act's input: the user's ask, and the target's own latest observation,
+ * One action's input: the user's ask, and the target's own latest observation,
  * which is the only place a target may come from.
  */
-export interface ActInput<Request> {
+export interface ActionInput<Request> {
   readonly request: Request;
   readonly observation: ProviderSessionObservation;
 }
@@ -83,21 +83,21 @@ export interface WorkspaceCreationInput {
 export type ConversationPage = Omit<ProviderConversationRequest, "providerSessionId">;
 
 /**
- * Every act a plugin performs takes an admitted input, for the same reason an
- * adapter's write does: only `admit()` in `@sidecar/acts` mints one, so a
+ * Every action a plugin performs takes an admitted input, for the same reason an
+ * adapter's write does: only `admit()` in `@sidecar/actions` mints one, so a
  * handler cannot be reached by anything that skipped the gauntlet. The reads
  * below take the plain input — a read is not a write and admits nothing.
  */
-export interface ActHandlers {
-  message(input: Admitted<ActInput<{ readonly text: string }>>): Promise<ProviderActResult>;
+export interface ActionHandlers {
+  message(input: Admitted<ActionInput<{ readonly text: string }>>): Promise<ProviderActionResult>;
   /** The control is the entry the observation advertised, never the caller's copy. */
   control(
-    input: Admitted<ActInput<{ readonly control: AdvertisedControl }>>,
-  ): Promise<ProviderActResult>;
+    input: Admitted<ActionInput<{ readonly control: AdvertisedControl }>>,
+  ): Promise<ProviderActionResult>;
   createWorkspace(input: Admitted<WorkspaceCreationInput>): Promise<ProviderWorkspaceResult>;
   spawnAgent(
     input: Admitted<
-      ActInput<{
+      ActionInput<{
         /** The workspace the observation's own `add-agent` advertisement named. */
         readonly spawnTarget: string;
         readonly agent: string;
@@ -110,14 +110,16 @@ export interface ActHandlers {
   ): Promise<ProviderWorkspaceResult>;
   renameWorkspace(
     input: Admitted<
-      ActInput<{
+      ActionInput<{
         /** The workspace the observation's own `rename-workspace` advertisement named. */
         readonly renameTarget: string;
         readonly name: string;
       }>
     >,
-  ): Promise<ProviderActResult>;
-  renameSession(input: Admitted<ActInput<{ readonly name: string }>>): Promise<ProviderActResult>;
+  ): Promise<ProviderActionResult>;
+  renameSession(
+    input: Admitted<ActionInput<{ readonly name: string }>>,
+  ): Promise<ProviderActionResult>;
 }
 
 export interface ReadHandlers {
@@ -126,32 +128,32 @@ export interface ReadHandlers {
     providerSessionId: string,
     cursor?: string,
   ): Promise<ProviderTranscriptSinceResult>;
-  conversation(input: ActInput<ConversationPage>): Promise<ProviderConversationResult>;
+  conversation(input: ActionInput<ConversationPage>): Promise<ProviderConversationResult>;
 }
 
 /**
  * The one answer an absent handler and an unobserved target both give. The
  * wording is deliberately the same for both: a caller learns that the latest
- * observation does not support the act, and nothing about which of the two
+ * observation does not support the action, and nothing about which of the two
  * reasons it was.
  */
 const unsupportedByObservation = {
-  status: ACT_RESULT_STATUS.UNSUPPORTED,
+  status: ACTION_RESULT_STATUS.UNSUPPORTED,
   reason: UNSUPPORTED_BY_OBSERVATION,
 } as const;
 
 const NO_TRANSCRIPT = {
-  status: ACT_RESULT_STATUS.UNSUPPORTED,
+  status: ACTION_RESULT_STATUS.UNSUPPORTED,
   reason: "This provider keeps no transcript this build can read.",
 } as const;
 
 const NO_CONVERSATION_READ = {
-  status: ACT_RESULT_STATUS.UNSUPPORTED,
+  status: ACTION_RESULT_STATUS.UNSUPPORTED,
   reason: "This provider documents no conversation read this build carries.",
 } as const;
 
-/** What each act is asked with, before `dispatchAct` resolves its target. */
-export interface PluginActRequests {
+/** What each action is asked with, before `dispatchAction` resolves its target. */
+export interface PluginActionRequests {
   message: ProviderSessionMessage;
   control: ProviderControlRequest;
   createWorkspace: ProviderWorkspaceRequest;
@@ -160,23 +162,23 @@ export interface PluginActRequests {
   renameSession: ProviderSessionRenameRequest;
 }
 
-/** What each act answers with. */
-export interface PluginActResults {
-  message: ProviderActResult;
-  control: ProviderActResult;
+/** What each action answers with. */
+export interface PluginActionResults {
+  message: ProviderActionResult;
+  control: ProviderActionResult;
   createWorkspace: ProviderWorkspaceResult;
   spawnAgent: ProviderWorkspaceResult;
-  renameWorkspace: ProviderActResult;
-  renameSession: ProviderActResult;
+  renameWorkspace: ProviderActionResult;
+  renameSession: ProviderActionResult;
 }
 
-export type PluginActKind = keyof PluginActRequests;
+export type PluginActionKind = keyof PluginActionRequests;
 
-type ActDispatchers = {
-  [Kind in PluginActKind]: (
+type ActionDispatchers = {
+  [Kind in PluginActionKind]: (
     plugin: SessionProviderPlugin,
-    request: PluginActRequests[Kind],
-  ) => Promise<PluginActResults[Kind]>;
+    request: PluginActionRequests[Kind],
+  ) => Promise<PluginActionResults[Kind]>;
 };
 
 function observationFor(
@@ -186,11 +188,11 @@ function observationFor(
   return plugin.latest().find((candidate) => candidate.providerSessionId === providerSessionId);
 }
 
-const ACT_DISPATCHERS: ActDispatchers = {
+const ACTION_DISPATCHERS: ActionDispatchers = {
   async message(plugin, request) {
     const observation = observationFor(plugin, request.providerSessionId);
     if (!observation) return unsupportedByObservation;
-    const handler = plugin.acts?.message;
+    const handler = plugin.actions?.message;
     if (!handler) return unsupportedByObservation;
     return handler(reshapeAdmitted(request, { request: { text: request.text }, observation }));
   },
@@ -202,7 +204,7 @@ const ACT_DISPATCHERS: ActDispatchers = {
     // actually saw, and nothing a caller sends can redirect it.
     const advertised = observation && advertisedControl(observation, request.control.id);
     if (!observation || !advertised) return unsupportedByObservation;
-    const handler = plugin.acts?.control;
+    const handler = plugin.actions?.control;
     if (!handler) return unsupportedByObservation;
     return handler(reshapeAdmitted(request, { request: { control: advertised }, observation }));
   },
@@ -226,16 +228,19 @@ const ACT_DISPATCHERS: ActDispatchers = {
     // project is the plugin's own: it comes back off the pass the plugin ran,
     // not out of the ask.
     if (task && project.taskSupport === WORKSPACE_TASK_SUPPORT.NONE) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: "This project takes no opening task." };
+      return {
+        status: ACTION_RESULT_STATUS.REJECTED,
+        reason: "This project takes no opening task.",
+      };
     }
     if (!task && project.taskSupport === WORKSPACE_TASK_SUPPORT.REQUIRED) {
       return {
-        status: ACT_RESULT_STATUS.REJECTED,
+        status: ACTION_RESULT_STATUS.REJECTED,
         reason: "This project needs an opening task to create a workspace.",
       };
     }
 
-    const handler = plugin.acts?.createWorkspace;
+    const handler = plugin.actions?.createWorkspace;
     if (!handler) return unsupportedByObservation;
     return handler(
       reshapeAdmitted(request, {
@@ -255,11 +260,11 @@ const ACT_DISPATCHERS: ActDispatchers = {
     if (!observation) return unsupportedByObservation;
     // The advertised list — not the caller's word — is what the handler is
     // given, so an agent kind is only ever one the last pass promised.
-    const addAgent = advertisedActFor(observation, ACT_KIND.ADD_AGENT);
+    const addAgent = advertisedActionFor(observation, ACTION_KIND.ADD_AGENT);
     const agent = addAgent?.agents.find((candidate) => candidate === request.agent);
     if (!addAgent || !agent) return unsupportedByObservation;
 
-    const handler = plugin.acts?.spawnAgent;
+    const handler = plugin.actions?.spawnAgent;
     if (!handler) return unsupportedByObservation;
     return handler(
       reshapeAdmitted(request, {
@@ -281,10 +286,11 @@ const ACT_DISPATCHERS: ActDispatchers = {
     // The advertised target — not the caller's word — is what the handler is
     // given, so a rename only ever lands on the workspace the last pass
     // promised.
-    const advertised = observation && advertisedActFor(observation, ACT_KIND.RENAME_WORKSPACE);
+    const advertised =
+      observation && advertisedActionFor(observation, ACTION_KIND.RENAME_WORKSPACE);
     if (!observation || !advertised) return unsupportedByObservation;
 
-    const handler = plugin.acts?.renameWorkspace;
+    const handler = plugin.actions?.renameWorkspace;
     if (!handler) return unsupportedByObservation;
     return handler(
       reshapeAdmitted(request, {
@@ -297,23 +303,25 @@ const ACT_DISPATCHERS: ActDispatchers = {
   async renameSession(plugin, request) {
     const observation = observationFor(plugin, request.providerSessionId);
     if (!observation) return unsupportedByObservation;
-    const handler = plugin.acts?.renameSession;
+    const handler = plugin.actions?.renameSession;
     if (!handler) return unsupportedByObservation;
     return handler(reshapeAdmitted(request, { request: { name: request.name }, observation }));
   },
 };
 
 /**
- * The ask each act's handler input was built from. `dispatchAct` resolves an
+ * The ask each action's handler input was built from. `dispatchAction` resolves an
  * ask into a handler input; a caller holding the input and needing the ask
  * again — an adapter behind a plugin, or one of several observers being asked
  * in turn — reads it back through here, so the two directions cannot drift.
  */
-export type ActRequestFrom = {
-  [Kind in PluginActKind]: (input: Parameters<ActHandlers[Kind]>[0]) => PluginActRequests[Kind];
+export type ActionRequestFrom = {
+  [Kind in PluginActionKind]: (
+    input: Parameters<ActionHandlers[Kind]>[0],
+  ) => PluginActionRequests[Kind];
 };
 
-export const ACT_REQUEST_FROM: ActRequestFrom = {
+export const ACTION_REQUEST_FROM: ActionRequestFrom = {
   message: (input) =>
     reshapeAdmitted(input, {
       providerSessionId: input.observation.providerSessionId,
@@ -361,25 +369,25 @@ export const ACT_REQUEST_FROM: ActRequestFrom = {
 };
 
 /**
- * The only route to an act handler. It resolves every target from the
+ * The only route to an action handler. It resolves every target from the
  * plugin's own latest roster — the advertised control, the `add-agent` and
- * `rename-workspace` targets, and the target's own observation — so an act
+ * `rename-workspace` targets, and the target's own observation — so an action
  * acts on what the pass saw and never on what a caller sent, and answers
- * unsupported for a session the pass did not report or an act the plugin does
- * not name. Whether the act may run at all was answered before it arrived:
+ * unsupported for a session the pass did not report or an action the plugin does
+ * not name. Whether the action may run at all was answered before it arrived:
  * only `admit()` mints the request this takes.
  */
-export function dispatchAct<Kind extends PluginActKind>(
+export function dispatchAction<Kind extends PluginActionKind>(
   plugin: SessionProviderPlugin,
   kind: Kind,
-  request: PluginActRequests[Kind],
-): Promise<PluginActResults[Kind]> {
-  // SAFETY: the table is keyed by the same act kind the request and result
+  request: PluginActionRequests[Kind],
+): Promise<PluginActionResults[Kind]> {
+  // SAFETY: the table is keyed by the same action kind the request and result
   // types are, so the entry this key selects takes and answers exactly these.
-  const dispatch = ACT_DISPATCHERS[kind] as (
+  const dispatch = ACTION_DISPATCHERS[kind] as (
     plugin: SessionProviderPlugin,
-    request: PluginActRequests[Kind],
-  ) => Promise<PluginActResults[Kind]>;
+    request: PluginActionRequests[Kind],
+  ) => Promise<PluginActionResults[Kind]>;
   return dispatch(plugin, request);
 }
 
@@ -415,7 +423,7 @@ export async function dispatchRead(
 }
 
 /**
- * The conversation read, dispatched like an act rather than like a transcript
+ * The conversation read, dispatched like an action rather than like a transcript
  * read: it reaches the provider, so it exists only for a session the latest
  * pass reported, and the session it names is the observation's own.
  */
@@ -461,7 +469,7 @@ export function mergePlugins(
   ): Promise<Result> => {
     for (const plugin of plugins) {
       const result = await ask(plugin);
-      if (result.status !== ACT_RESULT_STATUS.UNSUPPORTED) return result;
+      if (result.status !== ACTION_RESULT_STATUS.UNSUPPORTED) return result;
     }
     return exhausted;
   };
@@ -481,17 +489,17 @@ export function mergePlugins(
   };
 
   const exhausted = {
-    status: ACT_RESULT_STATUS.UNSUPPORTED,
-    reason: "No provider observer supports that act.",
+    status: ACTION_RESULT_STATUS.UNSUPPORTED,
+    reason: "No provider observer supports that action.",
   } as const;
 
-  /** One act, asked of each observer in turn with the ask it was built from. */
-  const askEach = <Kind extends PluginActKind>(
+  /** One action, asked of each observer in turn with the ask it was built from. */
+  const askEach = <Kind extends PluginActionKind>(
     kind: Kind,
-    input: Parameters<ActHandlers[Kind]>[0],
-  ): Promise<PluginActResults[Kind]> =>
-    firstFirmAnswer<PluginActResults[Kind]>(
-      (plugin) => dispatchAct(plugin, kind, ACT_REQUEST_FROM[kind](input)),
+    input: Parameters<ActionHandlers[Kind]>[0],
+  ): Promise<PluginActionResults[Kind]> =>
+    firstFirmAnswer<PluginActionResults[Kind]>(
+      (plugin) => dispatchAction(plugin, kind, ACTION_REQUEST_FROM[kind](input)),
       exhausted,
     );
 
@@ -513,7 +521,7 @@ export function mergePlugins(
     /** Every project any observer offered, in the order the observers stand in. */
     projects: () => plugins.flatMap((plugin) => plugin.projects?.() ?? []),
 
-    acts: {
+    actions: {
       message: (input) => askEach("message", input),
       control: (input) => askEach("control", input),
       createWorkspace: (input) => askEach("createWorkspace", input),

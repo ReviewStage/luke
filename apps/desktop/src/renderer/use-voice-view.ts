@@ -39,7 +39,7 @@ export function askDraftReason(result: BrainAskSubmissionResult | undefined): st
 
 /** What the strip says when the stored thread could not be deleted. */
 export const CLEAR_FAILED_REASON =
-  "History was cleared from view, but its file could not be fully erased. Try again.";
+  "Conversation was cleared from view, but its file could not be fully erased. Try again.";
 
 /**
  * How long a voice has been active, read off the relayed levels with the
@@ -123,7 +123,7 @@ export interface VoiceViewState {
    * arrives later, in the thread and in the voice.
    */
   askLuke: (text: string) => Promise<string | undefined>;
-  /** Every run the brain holds, for History to draw a pending ask beside its words. */
+  /** Every run the brain holds, for Conversation to draw a pending ask beside its words. */
   brainRequests: readonly BrainRequestSnapshot[];
   /** Cancels one run the developer no longer wants. */
   cancelBrainAsk: (runId: string) => void;
@@ -132,7 +132,7 @@ export interface VoiceViewState {
   stopSpeaking: () => void;
   requestMicrophoneAccess: () => void;
   /** Clears the visible history, the next call's context, and the stored file. */
-  clearConversationHistory: () => void;
+  clearConversationLines: () => void;
 }
 
 /**
@@ -220,7 +220,7 @@ export function useVoiceView(): VoiceViewState {
     const timer = window.setTimeout(() => setLocalError(undefined), VOICE_ERROR_NOTICE_MS);
     return () => window.clearTimeout(timer);
   }, [localError]);
-  const clearConversationHistory = useCallback(() => {
+  const clearConversationLines = useCallback(() => {
     void window.sidecar
       .voiceCommand(VOICE_COMMAND.CLEAR_CONVERSATION)
       .catch((): VoiceCommandOutcome => VOICE_COMMAND_OUTCOME.REFUSED)
@@ -241,6 +241,6 @@ export function useVoiceView(): VoiceViewState {
     discardListening,
     stopSpeaking,
     requestMicrophoneAccess,
-    clearConversationHistory,
+    clearConversationLines,
   };
 }

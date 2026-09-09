@@ -20,8 +20,8 @@ import { mintRealtimeConnection, voiceMintPreferences } from "./voice-mint.js";
  * so the phone can be a thin terminal: it forwards the opaque string into the
  * Realtime conversation without re-implementing context serialization logic.
  *
- * The tool list is narrowed to the acts the remote act endpoints serve; the
- * server re-validates every act on its own fresh observation pass regardless,
+ * The tool list is narrowed to the actions the remote action endpoints serve; the
+ * server re-validates every action on its own fresh observation pass regardless,
  * so the phone's narrowed set is a first gate, not the last.
  */
 

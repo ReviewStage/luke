@@ -41,12 +41,12 @@ test("declares credentials and observation hooks beside their adapters", () => {
   );
 });
 
-test("every registration publishes a roster before it names any act", () => {
+test("every registration publishes a roster before it names any action", () => {
   for (const { plugin } of Object.values(registrations)) {
     assert.ok(plugin.observe instanceof Function);
     assert.ok(plugin.latest instanceof Function);
     // An absent handler is the unsupported answer, so what a registration
-    // must have is the pass and the roster it publishes — never every act.
+    // must have is the pass and the roster it publishes — never every action.
     assert.deepEqual(plugin.latest(), []);
   }
 });

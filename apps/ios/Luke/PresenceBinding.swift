@@ -13,8 +13,8 @@ extension Binding where Value == Bool {
 }
 
 extension View {
-    /// The one failure alert every act surface shows: the title names the
-    /// act that failed, the message is the server's own reason, and the
+    /// The one failure alert every action surface shows: the title names the
+    /// action that failed, the message is the server's own reason, and the
     /// system's dismissal clears the presented value through its presence.
     func failureAlert(_ title: String, reason: Binding<String?>) -> some View {
         alert(

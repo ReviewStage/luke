@@ -1,4 +1,4 @@
-import { type CarriedAppAct, type Refusal, SESSION_LIST_ALL } from "@sidecar/acts";
+import { type CarriedAppAction, type Refusal, SESSION_LIST_ALL } from "@sidecar/actions";
 import { APP_PANEL_TAB, type AppPanelTab } from "@sidecar/guide";
 import { WingFace as LukeFace } from "@sidecar/panel";
 import { useEffect, useRef } from "react";
@@ -42,16 +42,16 @@ import { parseMilliseconds, parsePixels, STILL_MS } from "./session-motion";
  * the instant the face came back underneath.
  *
  * The errand is drawing and nothing else. It is armed by the tool-call carrier
- * alone — a row someone pressed themselves needs no attribution, and an act
+ * alone — a row someone pressed themselves needs no attribution, and an action
  * that was refused has nothing to sign — and it decides nothing: it reads
- * where two elements are and moves between them. An act made while the panel
+ * where two elements are and moves between them. An action made while the panel
  * is away flies nowhere at all, because attribution is only worth anything to
  * someone who can see what was attributed.
  *
  * One flight at a time, and that is the caller's to guarantee: a reply may ask
- * for several acts at once, and a new errand handed over mid-flight abandons
+ * for several actions at once, and a new errand handed over mid-flight abandons
  * the one in the air wherever it had got to. `errand-queue.ts` is where they
- * are made to take turns, and the reason each act carries its own hold.
+ * are made to take turns, and the reason each action carries its own hold.
  *
  * Everything moves with `transform` and `opacity` alone; the control it lands
  * on is read for its box and never restyled, so nothing about a settings row
@@ -79,7 +79,7 @@ export const ERRAND_ORIGIN_ATTRIBUTE = "data-errand-origin";
  */
 export const ERRAND_TARGET = {
   SESSIONS_TAB: "tab-sessions",
-  HISTORY_TAB: "tab-history",
+  CONVERSATION_TAB: "tab-conversation",
   SETTINGS_TAB: "tab-settings",
   LIST_OPTIONS: "list-options",
   LIST_CLEAR: "list-clear",
@@ -90,7 +90,7 @@ export type ErrandTarget = AppSettingId | (typeof ERRAND_TARGET)[keyof typeof ER
 
 const TAB_ERRAND_TARGET = {
   [APP_PANEL_TAB.SESSIONS]: ERRAND_TARGET.SESSIONS_TAB,
-  [APP_PANEL_TAB.HISTORY]: ERRAND_TARGET.HISTORY_TAB,
+  [APP_PANEL_TAB.CONVERSATION]: ERRAND_TARGET.CONVERSATION_TAB,
   [APP_PANEL_TAB.SETTINGS]: ERRAND_TARGET.SETTINGS_TAB,
 };
 
@@ -119,13 +119,13 @@ export function errandOriginProps() {
 }
 
 /**
- * Where an act should be signed, best first. More than one because the panel
+ * Where an action should be signed, best first. More than one because the panel
  * does not always draw the best answer: the options control carries the
  * narrowing and the ordering, but it is only offered beside a list with
  * something to choose between, so the tab stands behind it. The flight takes
- * the first candidate actually drawn, and an act with none flies nowhere.
+ * the first candidate actually drawn, and an action with none flies nowhere.
  */
-export function errandTargets(action: CarriedAppAct | Refusal): readonly ErrandTarget[] {
+export function errandTargets(action: CarriedAppAction | Refusal): readonly ErrandTarget[] {
   if (action.kind === "setting") {
     // The guide's ids travel as plain text, so one that names no setting of
     // Luke's is no landing place either.
@@ -148,7 +148,7 @@ export function errandTargets(action: CarriedAppAct | Refusal): readonly ErrandT
       : [tab];
   // A search is signed on the magnifier that opens its field, ahead of
   // whatever else the same ask changed: the field appearing is the loudest
-  // thing the act does, so the magnifier is where the tap reads as its cause.
+  // thing the action does, so the magnifier is where the tap reads as its cause.
   if (action.query !== undefined) return [ERRAND_TARGET.LIST_SEARCH, ...narrowed];
   return narrowed;
 }
@@ -159,7 +159,7 @@ export function errandTargets(action: CarriedAppAct | Refusal): readonly ErrandT
  * Everything the flight reads — where the face is, where the control is, how
  * wide the shape is — is read off elements that may still be arriving, and a
  * measurement taken mid-arrival lands the mark where a row was passing rather
- * than where it came to rest. So the errand waits out whatever the act it is
+ * than where it came to rest. So the errand waits out whatever the action it is
  * signing has set in motion.
  */
 export const ERRAND_WAIT = {
@@ -275,7 +275,7 @@ export function errandFlies(tokens: ErrandTokens): boolean {
  * — every number is derived from a token — which is how a capture run and
  * reduced motion silence the errand without knowing it exists.
  *
- * The wait before setting off is the whole of what the act it signs has set in
+ * The wait before setting off is the whole of what the action it signs has set in
  * motion. A panel that had to open costs the shape's travel plus the delay and
  * stagger its content arrives on. An instant page swap has no content motion,
  * but its flight still waits for the surface's edge when the destination page
@@ -596,14 +596,14 @@ export interface LukeErrandProps {
    * no flight to make — so whatever is waiting on it is never left held.
    *
    * Neither beat says which errand it belongs to, because there is only ever
-   * one it could belong to: a second act waits its turn rather than overtaking
+   * one it could belong to: a second action waits its turn rather than overtaking
    * the flight in the air, so no beat is ever a stale flight's.
    */
   onLanded?: () => void;
   /**
    * The flight is over, or was abandoned. Called once per errand and always,
    * on the same terms, so a panel that was stood up for an errand knows when
-   * it may stand back down — and so the act waiting behind this one knows it
+   * it may stand back down — and so the action waiting behind this one knows it
    * may set off.
    */
   onReturned?: () => void;
@@ -617,7 +617,7 @@ export interface LukeErrandProps {
  * Neither is a second Luke — the strip's own face is held invisible for
  * exactly as long as this one is drawn.
  *
- * The two callbacks are what let the act look like Luke's doing rather than
+ * The two callbacks are what let the action look like Luke's doing rather than
  * something he arrived to inspect. Both fire exactly once per errand, on every
  * path out — the flight running its course, a target that was never drawn,
  * tokens held still, a panel closing underneath it — because each of them

@@ -45,7 +45,7 @@ function wiring(root: string) {
     ensureDirectory: (directory) => fs.mkdirSync(directory, { recursive: true }),
     now: () => clock,
     createEventId: () => `id-${++ids}`,
-    onHistoryChanged: (sessionKey, entries) => {
+    onConversationChanged: (sessionKey, entries) => {
       changed.push({ sessionKey, entries });
     },
     onDirectoryChanged: (entries) => {
@@ -140,7 +140,10 @@ test("an erasure takes what stood at the instant it was asked at; a line recorde
     await c.wired.recordConversationEntry({ ...LINE, words: "after" }, after, OTHER),
     true,
   );
-  assert.equal((await c.wired.eraseHistory(OTHER, NOW, undefined, undefined))?.published, true);
+  assert.equal(
+    (await c.wired.eraseConversation(OTHER, NOW, undefined, undefined))?.published,
+    true,
+  );
   assert.deepEqual(
     c.wired
       .thread(OTHER)

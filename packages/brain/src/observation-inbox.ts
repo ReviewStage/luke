@@ -1,7 +1,7 @@
 import type { Session, SessionIdentity } from "@sidecar/session";
 import {
-  ACT_RESULT_STATUS,
-  type ActResultStatus,
+  ACTION_RESULT_STATUS,
+  type ActionResultStatus,
   isInstant,
   isRecord,
   isWireBoolean,
@@ -71,17 +71,18 @@ function isWakeKind(value: UnparsedWireValue): value is BrainWakeKind {
   return isWireString(value) && WAKE_KIND_LIST.includes(value as BrainWakeKind);
 }
 
-const ACT_RESULT_STATUS_LIST: readonly ActResultStatus[] = Object.values(ACT_RESULT_STATUS);
+const ACTION_RESULT_STATUS_LIST: readonly ActionResultStatus[] =
+  Object.values(ACTION_RESULT_STATUS);
 
-function isActResultStatus(value: UnparsedWireValue): value is ActResultStatus {
+function isActionResultStatus(value: UnparsedWireValue): value is ActionResultStatus {
   // SAFETY: value is a string; list membership is the vocabulary check.
-  return isWireString(value) && ACT_RESULT_STATUS_LIST.includes(value as ActResultStatus);
+  return isWireString(value) && ACTION_RESULT_STATUS_LIST.includes(value as ActionResultStatus);
 }
 
 function deltaFromWire(value: UnparsedWireValue): BrainTranscriptDelta | undefined | null {
   if (value === undefined) return undefined;
   if (!isRecord(value) || !isWireString(value.text) || !isWireBoolean(value.truncated)) return null;
-  if (!isActResultStatus(value.status)) return null;
+  if (!isActionResultStatus(value.status)) return null;
   return { text: value.text, truncated: value.truncated, status: value.status };
 }
 
@@ -166,7 +167,7 @@ export function eventFromEntry(entry: BrainObservationEntry): BrainWakeEvent {
     transcriptDelta: entry.delta ?? {
       text: "",
       truncated: false,
-      status: ACT_RESULT_STATUS.ACCEPTED,
+      status: ACTION_RESULT_STATUS.ACCEPTED,
     },
     atMs: entry.atMs,
     entryId: entry.id,

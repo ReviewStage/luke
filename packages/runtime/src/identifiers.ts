@@ -59,7 +59,7 @@ export const MAIN_SESSION_KEY: SessionKey = mainSessionKey();
  * What kind of conversation a session key addresses. Main is the agent's
  * ordinary conversation; a thread is one the developer opened beside it; an
  * observed conversation follows one coding session. A key this build cannot
- * classify is kept by maintenance and never a victim, because losing history
+ * classify is kept by maintenance and never a victim, because losing a conversation
  * is the worse failure.
  */
 export const CONVERSATION_KIND = {

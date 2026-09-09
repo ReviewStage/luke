@@ -3,13 +3,13 @@
  * take to say the gauntlet ran. The brand key is a module-private
  * `unique symbol`, so nothing anywhere can spell it: an object literal is
  * never an admitted value, and the whole set is entered at exactly one place
- * in the repository — the cast inside `admit()` in `@sidecar/acts`, whose job
+ * in the repository — the cast inside `admit()` in `@sidecar/actions`, whose job
  * is to be that place. Everything downstream of it re-shapes what it already
  * holds through {@link reshapeAdmitted}, which needs an admitted value of its
  * own to answer at all.
  *
- * It lives here, below every package that has an opinion about acts, because
- * both the act vocabulary that mints and the provider contract that demands
+ * It lives here, below every package that has an opinion about actions, because
+ * both the action vocabulary that mints and the provider contract that demands
  * one have to name it, and the graph stays acts → session → wire.
  */
 

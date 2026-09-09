@@ -27,7 +27,7 @@ export interface SupersetPlugin extends SessionProviderPlugin {
   refresh(defaultAgent: string | undefined): Promise<WorkspaceHostEnrichment>;
   /** The organization the CLI's login serves, as the latest pass read it. */
   activeOrganization(): string | undefined;
-  /** The context an act resolves against, in that organization and no other. */
+  /** The context an action resolves against, in that organization and no other. */
   actableContext(providerId: string, providerSessionId: string): SupersetSessionContext | undefined;
   /** The one enrichment a failed read stands in with: annotating nothing. */
   readonly emptyEnrichment: WorkspaceHostEnrichment;
@@ -37,11 +37,11 @@ export interface SupersetPlugin extends SessionProviderPlugin {
 /**
  * Superset as a workspace provider: it observes the idle worktrees its own
  * host state reports as rows of its own, annotates every other provider's
- * rows with the workspace holding them, and names one act — creating a
- * workspace through the CLI's documented `workspaces create`. The acts on a
+ * rows with the workspace holding them, and names one action — creating a
+ * workspace through the CLI's documented `workspaces create`. The actions on a
  * session another provider observes stay on `cli`, reached through
  * `actableContext`, because a roster Superset does not publish cannot be the
- * roster those acts validate against.
+ * roster those actions validate against.
  */
 export function supersetPlugin(options: SupersetPluginOptions): SupersetPlugin {
   const cli = new SupersetCli(options);
@@ -83,7 +83,7 @@ export function supersetPlugin(options: SupersetPluginOptions): SupersetPlugin {
     /**
      * The idle workspaces the latest pass reported, exactly as the snapshot
      * decorated them. `refresh` publishes them rather than this reading state
-     * of its own, so a plain registry refresh after an act commits the same
+     * of its own, so a plain registry refresh after an action commits the same
      * shape the observation loop does.
      */
     observe: async () => workspaceRows,
@@ -98,8 +98,8 @@ export function supersetPlugin(options: SupersetPluginOptions): SupersetPlugin {
       read.adoptDirectoryMatches(snapshot);
       snapshot = read;
       organization = activeOrganization;
-      // The rows are observation, not an act: host state reads without a
-      // login, so they stand — undecorated with acts — however the connection
+      // The rows are observation, not an action: host state reads without a
+      // login, so they stand — undecorated with actions — however the connection
       // looks.
       workspaceRows = read.workspaceRowObservations(activeOrganization);
       await refreshProjects(defaultAgent);
@@ -113,7 +113,7 @@ export function supersetPlugin(options: SupersetPluginOptions): SupersetPlugin {
     emptyEnrichment: (_providerId, observations) => observations,
     cli,
 
-    acts: {
+    actions: {
       createWorkspace: (input) =>
         cli.createWorkspace(
           reshapeAdmitted(input, {

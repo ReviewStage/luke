@@ -29,7 +29,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { SessionIdentity } from "@sidecar/session";
 import {
-  ACT_RESULT_STATUS,
+  ACTION_RESULT_STATUS,
   isWireBoolean,
   isWireNumber,
   isWireString,
@@ -42,8 +42,8 @@ import {
   conversationListingRecord,
 } from "./child-records.js";
 import { estimateTokens } from "./compaction.js";
-import { UNCONFIRMED_ACT_RESULT, UNKNOWN_ACT_RESULT } from "./journal.js";
-import type { BrainActExecution, BrainActPerformer, BrainRoster } from "./performer.js";
+import { UNCONFIRMED_ACTION_RESULT, UNKNOWN_ACTION_RESULT } from "./journal.js";
+import type { BrainActionExecution, BrainActionPerformer, BrainRoster } from "./performer.js";
 import { identityFromRecord, parsedRecord, rejection, sameIdentity } from "./records.js";
 import { answer } from "./tool-results.js";
 import {
@@ -53,7 +53,7 @@ import {
   maximumChildTaskLength,
   maximumMemoryQueryLength,
   maximumMemorySearchResults,
-  maximumSessionsHistoryLines,
+  maximumSessionsConversationLines,
 } from "./tools.js";
 import { REFUSAL_REASON, type RunControl, SPAWN_REFUSAL_REASON, type TurnContext } from "./turn.js";
 import type { BrainDelivery } from "./wake-events.js";
@@ -61,12 +61,12 @@ import type { BrainDelivery } from "./wake-events.js";
 /**
  * The tool executor one turn hands its runtime. Every call the model emits
  * lands here, is refused when the effective policy does not offer it, and is
- * otherwise dispatched by what the catalog says the tool is: an act carried
+ * otherwise dispatched by what the catalog says the tool is: an action carried
  * through the journal to the performer, a workspace file's read or write, or
  * one of the brain's own — the roster in full, a whole transcript, the
  * briefing it decided to give. The policy is enforced again at this door,
  * whatever the model was shown, and the runtime's own standing joins the
- * turn's: an act prepared inside a run the runtime has ended is refused.
+ * turn's: an action prepared inside a run the runtime has ended is refused.
  */
 
 /** How the memory tools reach the notebook's index: the memory host's own access, bounded and validated by the host that supplies it. */
@@ -117,8 +117,8 @@ export interface BrainChildAccess {
   /** Cancels one of this conversation's children and its descendants; nothing for a child that is not its own. */
   cancel(childId: string): Promise<ChildCancellation | undefined>;
   conversations(): Promise<readonly ConversationRecord[]>;
-  /** One of this conversation's children's history lines, most recent last; nothing for a child that is not its own. */
-  history(childId: string, limit: number): Promise<readonly string[] | undefined>;
+  /** One of this conversation's children's conversation lines, most recent last; nothing for a child that is not its own. */
+  lines(childId: string, limit: number): Promise<readonly string[] | undefined>;
 }
 
 /** A spawn's outcome as the model reads it: the receipt, or the refusal's sentence with the service's detail. */
@@ -129,7 +129,7 @@ function spawnOutcomeRecord(outcome: ChildSpawnOutcome): WireRecord {
 }
 
 function cancellationRecord(childId: string, cancelled: ChildCancellation): WireRecord {
-  if (cancelled.ok) return { status: ACT_RESULT_STATUS.ACCEPTED, cancelled: [childId] };
+  if (cancelled.ok) return { status: ACTION_RESULT_STATUS.ACCEPTED, cancelled: [childId] };
   return rejection(`not every child could be cancelled: ${cancelled.remaining.join(", ")}`);
 }
 
@@ -143,14 +143,14 @@ function forkSnapshotOf(context: ContextEngine): ForkSnapshot | undefined {
 /** What the agent lends the executor: its reads, its performer, its journal's checkpoint, and its clock. */
 export interface ToolExecutorDependencies {
   readonly roster: () => BrainRoster;
-  readonly acts: BrainActPerformer;
+  readonly actions: BrainActionPerformer;
   readonly workspace: BrainWorkspaceAccess | undefined;
   /** Delegation, when the host wired it; absent, the session tools refuse. */
   readonly children: BrainChildAccess | undefined;
   /** The notebook's search and read, when the host wired an index; absent, the memory tools refuse. */
   readonly memory: BrainMemoryAccess | undefined;
   readonly readWhole: (identity: SessionIdentity, context: TurnContext) => Promise<WireRecord>;
-  /** Checkpoints the turn's context and journal; false when the store refused, after which no act may run. */
+  /** Checkpoints the turn's context and journal; false when the store refused, after which no action may run. */
   readonly checkpoint: (context: TurnContext) => Promise<boolean>;
   readonly runRevoked: (run: RunControl) => boolean;
   readonly now: () => number;
@@ -160,12 +160,12 @@ export interface ToolExecutorDependencies {
 export interface ToolExecutorTurn {
   readonly policy: EffectiveToolPolicy;
   readonly context: TurnContext;
-  readonly execution: BrainActExecution;
+  readonly execution: BrainActionExecution;
   /** A briefing the model decided to give, handed to the turn to deliver once its context is kept. */
   readonly onBriefing: (delivery: BrainDelivery) => void;
 }
 
-/** Whether a tool's call goes through the journal as an effect: every write, and every act the performer carries. */
+/** Whether a tool's call goes through the journal as an effect: every write, and every action the performer carries. */
 export function journaledEffect(policy: EffectiveToolPolicy, name: string): boolean {
   const tool = policy.allowed.find((candidate) => candidate.schema.name === name);
   return (
@@ -201,7 +201,7 @@ export async function memoryToolCall(
   call: Pick<ToolInvocation, "name">,
   args: WireRecord,
   memory: BrainMemoryAccess,
-  execution: Pick<BrainActExecution, "isRevoked" | "signal">,
+  execution: Pick<BrainActionExecution, "isRevoked" | "signal">,
 ): Promise<WireRecord> {
   if (execution.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
   if (call.name === BRAIN_TOOL.MEMORY_SEARCH) {
@@ -238,20 +238,20 @@ export function createTurnToolExecutor(
   );
 
   /**
-   * One act through the journal. A call id the run already answered gets its
+   * One action through the journal. A call id the run already answered gets its
    * recorded result back rather than a second effect — or the honest
-   * unknown, when the act started and its result was lost — and the same id
+   * unknown, when the action started and its result was lost — and the same id
    * with other arguments is refused rather than guessed at. A fresh call is
    * written as started and checkpointed before the effect runs, so a crash
-   * mid-act is found as an act of unknown result and never replayed; a
-   * checkpoint that will not land refuses the act instead, because an act
+   * mid-action is found as an action of unknown result and never replayed; a
+   * checkpoint that will not land refuses the action instead, because an action
    * nobody could find afterwards is one the developer could not account
    * for. An effect that throws after dispatch has answered nothing about
    * itself: the outcome is unknown, counted as such, and never a refusal.
    */
   const performJournaled = async (
     call: ToolInvocation,
-    execution: BrainActExecution,
+    execution: BrainActionExecution,
     effect: () => Promise<WireRecord>,
   ): Promise<WireRecord> => {
     const { run, generation } = context;
@@ -264,7 +264,7 @@ export function createTurnToolExecutor(
         return rejection(REFUSAL_REASON.CALL_ID_REUSED);
       }
       return recorded.outputJson === undefined
-        ? { ...UNKNOWN_ACT_RESULT }
+        ? { ...UNKNOWN_ACTION_RESULT }
         : parsedRecord(recorded.outputJson);
     }
     if (run.checkpointFailed) return rejection(REFUSAL_REASON.NOT_CHECKPOINTED);
@@ -284,16 +284,16 @@ export function createTurnToolExecutor(
     try {
       output = await effect();
     } catch {
-      output = { ...UNCONFIRMED_ACT_RESULT };
+      output = { ...UNCONFIRMED_ACTION_RESULT };
     }
-    if (output.status === ACT_RESULT_STATUS.ACCEPTED) run.performedActs += 1;
-    if (output.status === UNCONFIRMED_ACT_RESULT.status) run.unknownActs += 1;
+    if (output.status === ACTION_RESULT_STATUS.ACCEPTED) run.performedActions += 1;
+    if (output.status === UNCONFIRMED_ACTION_RESULT.status) run.unknownActions += 1;
     generation.journal.settle(run.runId, call.callId, JSON.stringify(output), dependencies.now());
     return output;
   };
 
   /**
-   * A workspace tool through the same journal an act runs through: the write
+   * A workspace tool through the same journal an action runs through: the write
    * is recorded before it lands and its result before the model reads it,
    * and a read is answered directly. A call whose arguments are not the
    * strings the tool takes is refused before anything is journaled, never
@@ -303,7 +303,7 @@ export function createTurnToolExecutor(
   const workspaceTool = async (
     call: ToolInvocation,
     args: WireRecord,
-    execution: BrainActExecution,
+    execution: BrainActionExecution,
   ): Promise<WireRecord> => {
     const workspace = dependencies.workspace;
     if (!workspace) return rejection(REFUSAL_REASON.NO_WORKSPACE);
@@ -313,7 +313,7 @@ export function createTurnToolExecutor(
         if (!isWireString(args.name)) return rejection(REFUSAL_REASON.MALFORMED_ARGUMENTS);
         const read = await workspace.read(args.name);
         return read.ok
-          ? { status: ACT_RESULT_STATUS.ACCEPTED, content: read.content }
+          ? { status: ACTION_RESULT_STATUS.ACCEPTED, content: read.content }
           : rejection(read.reason);
       }
       case BRAIN_TOOL.LOAD_SKILL: {
@@ -321,7 +321,7 @@ export function createTurnToolExecutor(
         const loaded = await workspace.loadSkill(args.location);
         return loaded.ok
           ? {
-              status: ACT_RESULT_STATUS.ACCEPTED,
+              status: ACTION_RESULT_STATUS.ACCEPTED,
               instructions: loaded.instructions,
               truncated: loaded.truncated,
             }
@@ -335,7 +335,7 @@ export function createTurnToolExecutor(
         return performJournaled(call, execution, async () => {
           const written = await workspace.write(name, content);
           return written.ok
-            ? { status: ACT_RESULT_STATUS.ACCEPTED, chars: written.chars }
+            ? { status: ACTION_RESULT_STATUS.ACCEPTED, chars: written.chars }
             : rejection(written.reason);
         });
       }
@@ -347,15 +347,15 @@ export function createTurnToolExecutor(
   /**
    * The session tools, through the host's delegation. A spawn and a cancel
    * are effects and run through the journal — recorded before the child
-   * service hears them, so a crash mid-spawn is found as an act of unknown
+   * service hears them, so a crash mid-spawn is found as an action of unknown
    * result and the same call id answers the same receipt — while the list
-   * and the history are reads. Arguments are bounded and validated here;
+   * and the conversation lines are reads. Arguments are bounded and validated here;
    * whose child a name is, the host decides.
    */
   const childTool = async (
     call: ToolInvocation,
     args: WireRecord,
-    execution: BrainActExecution,
+    execution: BrainActionExecution,
   ): Promise<WireRecord> => {
     const children = dependencies.children;
     if (!children) return rejection(REFUSAL_REASON.NO_CHILDREN);
@@ -402,7 +402,7 @@ export function createTurnToolExecutor(
           });
         }
         return {
-          status: ACT_RESULT_STATUS.ACCEPTED,
+          status: ACTION_RESULT_STATUS.ACCEPTED,
           children: (await children.list()).map(({ record, completion }) =>
             childSummaryRecord(record, completion),
           ),
@@ -415,18 +415,18 @@ export function createTurnToolExecutor(
         if (!childId) return rejection(REFUSAL_REASON.NOT_OWN_CHILD);
         const limit =
           isWireNumber(args.limit) && args.limit > 0
-            ? Math.min(Math.floor(args.limit), maximumSessionsHistoryLines)
-            : maximumSessionsHistoryLines;
-        const lines = await children.history(childId, limit);
+            ? Math.min(Math.floor(args.limit), maximumSessionsConversationLines)
+            : maximumSessionsConversationLines;
+        const lines = await children.lines(childId, limit);
         if (!lines) return rejection(REFUSAL_REASON.UNKNOWN_CHILD);
-        return { status: ACT_RESULT_STATUS.ACCEPTED, lines: [...lines] };
+        return { status: ACTION_RESULT_STATUS.ACCEPTED, lines: [...lines] };
       }
       default:
         return rejection(REFUSAL_REASON.NOT_OFFERED);
     }
   };
 
-  const memoryTool = (call: ToolInvocation, args: WireRecord, execution: BrainActExecution) =>
+  const memoryTool = (call: ToolInvocation, args: WireRecord, execution: BrainActionExecution) =>
     dependencies.memory
       ? memoryToolCall(call, args, dependencies.memory, execution)
       : rejection(REFUSAL_REASON.NO_MEMORY);
@@ -437,7 +437,7 @@ export function createTurnToolExecutor(
       if (refused) return answer(refused);
       const roster = dependencies.roster();
       const args = parsedRecord(call.argumentsJson);
-      const execution: BrainActExecution = {
+      const execution: BrainActionExecution = {
         runId: turn.execution.runId,
         origin: turn.execution.origin,
         isRevoked: () => turn.execution.isRevoked() || runtimeContext.isRevoked(),
@@ -447,7 +447,7 @@ export function createTurnToolExecutor(
       if (tool?.execution === TOOL_EXECUTION.PERFORMER) {
         return answer(
           await performJournaled(call, execution, () =>
-            dependencies.acts.perform(
+            dependencies.actions.perform(
               { name: call.name, argumentsJson: call.argumentsJson },
               execution,
             ),
@@ -472,7 +472,7 @@ export function createTurnToolExecutor(
           const briefing = text(args.briefing)?.slice(0, maximumBriefingLength);
           if (!briefing) return answer(rejection(REFUSAL_REASON.EMPTY_BRIEFING));
           turn.onBriefing({ briefing, decidedAt: dependencies.now() });
-          return answer({ status: ACT_RESULT_STATUS.ACCEPTED });
+          return answer({ status: ACTION_RESULT_STATUS.ACCEPTED });
         }
         case BRAIN_TOOL.SESSIONS_SPAWN:
         case BRAIN_TOOL.SUBAGENTS:

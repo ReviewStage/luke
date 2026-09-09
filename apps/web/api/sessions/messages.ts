@@ -1,4 +1,4 @@
-import { executeConversationRead } from "../../server/hosted/act-execute.js";
+import { executeConversationRead } from "../../server/hosted/action-execute.js";
 import { handleConversationRead } from "../../server/hosted/conversation-read.js";
 import { hostedVaultRoute } from "../../server/hosted/vault-route.js";
 

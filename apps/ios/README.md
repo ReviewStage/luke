@@ -111,21 +111,21 @@ finishes processing, the build is offered to internal testers at once and to
 external groups after Beta App Review. The Watch app installs on a paired
 watch with the iPhone build; it needs no record or upload of its own.
 
-## Voice acts
+## Voice actions
 
-The voice screen carries the same acts the desktop's conversation does,
+The voice screen carries the same actions the desktop's conversation does,
 minus the ones that have no surface on a phone. A turn is opened by the talk
 button or by the keyboard button beside it, which stands a composer up in the
 controls' place: a typed ask is the same explicitly opened, tool-armed turn a
 press is, with no microphone anywhere in it, mirroring the desktop's Ask Luke
 field. The tool list is minted
-server-side from `remoteRealtimeToolDefinitions()` in `packages/acts`, and
+server-side from `remoteRealtimeToolDefinitions()` in `packages/actions`, and
 each call is validated on the phone in `LukeKit`'s `VoiceAsks` against the
 roster and projects the conversation was shown before anything is sent:
 
 | Tool | What happens on the phone |
 | --- | --- |
-| `send_session_message`, `run_session_control`, `add_workspace_agent`, `rename_session`, `rename_workspace`, `create_workspace` | Validated against the observed roster or projects answer, then sent to the hosted act endpoint, which re-observes and validates again |
+| `send_session_message`, `run_session_control`, `add_workspace_agent`, `rename_session`, `rename_workspace`, `create_workspace` | Validated against the observed roster or projects answer, then sent to the hosted action endpoint, which re-observes and validates again |
 | `open_session` | Switches to the Sessions tab and pushes the session's own screen once Luke's reply has finished |
 | `show_panel` | Switches to the Sessions tab and applies the filters, sort, or search the ask named, as the filter sheet and search field would |
 
@@ -135,7 +135,7 @@ read from the tool list the service minted the current call with and from
 what the observed roster and projects answer offer right now.
 
 Absent on purpose: `read_session_transcript` (no local sessions on a phone),
-the issue acts (no tracker is connected here), `remember_fact` and
+the issue actions (no tracker is connected here), `remember_fact` and
 `forget_fact` (the phone keeps no memory; Luke's durable facts live on the
 Mac), `change_app_setting`, the feedback composer, and the Updates row.
 
@@ -143,7 +143,7 @@ The watch app's hold-to-talk screen carries the same eight tools. The
 dispatcher they run through, `dispatchVoiceToolCall` in `LukeKit`, is shared
 with the phone, so a call is validated the same way — against the roster the
 watch's sessions page draws and the projects answer fetched beside the mint —
-and sent to the same hosted act endpoints. The two that land on a screen land
+and sent to the same hosted action endpoints. The two that land on a screen land
 on the watch's own: `open_session` swipes to the sessions page and pushes the
 session's screen once Luke's reply has finished, and `show_panel` narrows,
 sorts, or searches the watch list the same way, drawing a Show All row above

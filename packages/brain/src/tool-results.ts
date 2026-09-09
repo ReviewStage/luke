@@ -10,7 +10,7 @@ import {
 /**
  * A tool's output as the runtime carries it: the record serialized, with the
  * status lifted beside it so the journal and the loop can read what became of
- * an act without parsing the body again.
+ * an action without parsing the body again.
  */
 export function answer(output: WireRecord): ToolResult {
   const status = text(output.status);

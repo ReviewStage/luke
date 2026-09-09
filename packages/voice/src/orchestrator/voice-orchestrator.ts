@@ -118,7 +118,7 @@ export interface ConversationCallHooks<Stream> extends SpeakOnlyCallHooks<Stream
 
 /**
  * The words of the reply under way and whose they are, held as one value so
- * a live History line can never file a caption under a different reply.
+ * a live Conversation line can never file a caption under a different reply.
  */
 interface VoiceCaption {
   texts: readonly string[] | undefined;
@@ -272,7 +272,7 @@ export class VoiceOrchestrator<Stream> {
   }
 
   /**
-   * The main process's own lines in the thread — the ask a carried act was —
+   * The main process's own lines in the thread — the ask a carried action was —
    * reaching this window as they reach every panel. A Clear travels on its own
    * command instead, so a slice that says cleared has nothing left to do, and
    * the slice the adoption already placed is not merged a second time.
@@ -428,7 +428,7 @@ export class VoiceOrchestrator<Stream> {
 
   /**
    * Asks the system for access and nothing else. The capture device itself is
-   * the talk key's own act: it opens with a press and closes with the turn,
+   * the talk key's own action: it opens with a press and closes with the turn,
    * and the panel's row must not be a second way to it.
    */
   async requestMicrophoneAccess(): Promise<void> {
@@ -903,7 +903,7 @@ export class VoiceOrchestrator<Stream> {
 
   /**
    * The live lines are derived, not queued: they arrive with the captions and
-   * die with them, so History can never show words still arriving for a reply
+   * die with them, so Conversation can never show words still arriving for a reply
    * or a turn that has already settled or left. Rebuilt only when one of the
    * two things it is derived from has been replaced, so an unmoved view
    * compares equal to the one last reported.

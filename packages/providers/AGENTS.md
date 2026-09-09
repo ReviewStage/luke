@@ -13,17 +13,17 @@ beyond those — Cursor, OpenCode, Copilot, Gemini CLI, Grok Build — are
 hosted-agent identities in `@sidecar/session` alone: a mark and a display
 name, with no files, hook, or credential behind them.
 
-A provider validates nothing about whether an act may run: `dispatchAct` and
+A provider validates nothing about whether an action may run: `dispatchAction` and
 every provider write take an admitted request, which only `admit()` in
-`@sidecar/acts` stands behind. What a provider answers for is its own route —
+`@sidecar/actions` stands behind. What a provider answers for is its own route —
 the advertised control, spawn target, rename target, or listed project it reads
 back from its own latest pass — and the provider's documented shape.
 
 The plugin seam remains the authority for which acts exist. A provider is a
 `SessionProviderPlugin`: one `observe`, the roster that pass published, and a
-partial map of the acts and reads it actually implements. An absent handler is
-the unsupported answer, so a provider gains an act only by naming its key and
-taking on that act's constraint in root `CLAUDE.md` along with it. `dispatchAct`
+partial map of the actions and reads it actually implements. An absent handler is
+the unsupported answer, so a provider gains an action only by naming its key and
+taking on that action's constraint in root `CLAUDE.md` along with it. `dispatchAction`
 is the only code that reaches a handler, and it re-resolves every target from
 the plugin's own latest roster. Transcript reading belongs inside the plugin,
 through `jsonlTranscriptReader` for a provider whose records are JSONL.
@@ -39,9 +39,9 @@ Every provider passes one contract suite. `describeProviderContract` in
 `@sidecar/providers/testing` states the trust constraints as tests over
 recorded fixtures under `packages/session/fixtures/providers/<provider>/`,
 each case naming the sentence of root `CLAUDE.md` it holds a provider to. A
-provider is added by recording its fixtures and calling the suite; an act is
+provider is added by recording its fixtures and calling the suite; an action is
 added by declaring its answer in `advertised` or `unadvertised`, and the suite
-fails on an act kind neither list names. The golden answers are committed in
+fails on an action kind neither list names. The golden answers are committed in
 one canonical formatting — sorted keys, two-space indent, a trailing newline —
 which `repository-checks.sh` enforces and Biome is kept away from;
 `LUKE_UPDATE_FIXTURES=1` records them, and `check.sh` never sets it.

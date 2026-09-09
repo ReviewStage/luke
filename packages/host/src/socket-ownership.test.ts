@@ -31,7 +31,7 @@ import { VoiceReceiver } from "./voice-receiver.js";
 
 /**
  * The ownership the client and host boundary claims, exercised over a real
- * socket: the host holds the asks, the History, and the receiver; a client
+ * socket: the host holds the asks, the Conversation, and the receiver; a client
  * that dies takes none of it with it; the next client finds it all; the
  * host's native asks answer typed unavailable while no client stands; and
  * the explicit shutdown counts what the durable records still hold.
@@ -48,8 +48,8 @@ function record(overrides: Partial<BrainRequestRecord> = {}): BrainRequestRecord
     status: BRAIN_REQUEST_STATUS.RUNNING,
     revision: 1,
     acceptedAt: NOW,
-    performedActs: 0,
-    unknownActs: 0,
+    performedActions: 0,
+    unknownActions: 0,
     ...overrides,
   };
 }
@@ -64,7 +64,7 @@ function fakeHost(options: { persistCancellations?: boolean } = {}) {
   let runs = 0;
   const live = new Map<string, BrainRequestRecord>();
   const persisted = new Map<string, BrainRequestRecord>();
-  const history: ConversationEntry[] = [];
+  const lines: ConversationEntry[] = [];
   // SAFETY: the service reads only these members off an agent; the fixture stands in for the rest.
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- A fake agent is stood up whole for the host under test.
   const agent = {
@@ -110,11 +110,11 @@ function fakeHost(options: { persistCancellations?: boolean } = {}) {
       configuration: () => ({ revision: 1 }) as unknown as ResolvedConfiguration,
       updateConfiguration: () => [],
     },
-    // SAFETY: the tests reach History and the deletion alone; the fixture stands in for the rest.
+    // SAFETY: the tests reach Conversation and the deletion alone; the fixture stands in for the rest.
     conversations: {
-      deleteHistory: async () => CONVERSATION_DELETE_OUTCOME.COMPLETE,
+      deleteConversation: async () => CONVERSATION_DELETE_OUTCOME.COMPLETE,
       holds: () => true,
-      history: () => history,
+      lines: () => lines,
       directory: () => [],
     } as unknown as ConversationOperations,
     memory: { status: () => ({}) },
@@ -122,14 +122,14 @@ function fakeHost(options: { persistCancellations?: boolean } = {}) {
     deliveries,
     receiver,
     recordConversationEntry: (entry) => {
-      history.push(entry);
+      lines.push(entry);
       return true;
     },
     now: () => NOW,
     createId: () => `id-${++ids}`,
     onOperatorDisconnected: () => receiver.reset(),
   });
-  return { service, live, persisted, history, receiver, agent };
+  return { service, live, persisted, lines, receiver, agent };
 }
 
 async function listen(service: ReturnType<typeof fakeHost>["service"]) {
@@ -161,7 +161,7 @@ function recordOf(value: WireValue | undefined) {
   return value;
 }
 
-test("an ask and its History line survive the client that submitted them dying, and the next client reads them from the host", async () => {
+test("an ask and its Conversation line survive the client that submitted them dying, and the next client reads them from the host", async () => {
   const f = fakeHost();
   const { host, port } = await listen(f.service);
   try {
@@ -177,15 +177,15 @@ test("an ask and its History line survive the client that submitted them dying, 
     first.connection.close();
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.equal(f.live.get("run-1")?.status, BRAIN_REQUEST_STATUS.RUNNING);
-    assert.equal(f.history.length, 1);
-    assert.equal(f.history[0]?.kind, CONVERSATION_ENTRY_KIND.TYPED_ASK);
+    assert.equal(f.lines.length, 1);
+    assert.equal(f.lines[0]?.kind, CONVERSATION_ENTRY_KIND.TYPED_ASK);
     // The next client's hello snapshot and reads find the run and the line.
     const second = await client(port, "desktop-2");
     const hello = await second.gateway.call(GATEWAY_METHOD.HELLO);
     assert.ok(hello.ok);
     const snapshot = recordOf(recordOf(hello.result).snapshot);
     assert.ok(Array.isArray(snapshot.runs) && snapshot.runs.length === 1);
-    const listed = await second.gateway.call(GATEWAY_METHOD.CONVERSATION_HISTORY, {});
+    const listed = await second.gateway.call(GATEWAY_METHOD.CONVERSATION_LINES, {});
     assert.ok(listed.ok);
     const entries = recordOf(listed.result).entries;
     assert.ok(Array.isArray(entries) && entries.length === 1);

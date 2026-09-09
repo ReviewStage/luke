@@ -5,7 +5,7 @@ import {
   SESSION_STATUS,
   type SessionIdentity,
 } from "@sidecar/session";
-import { ACT_RESULT_STATUS } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import type { TranscriptCursors } from "./cursors.js";
 import { BRAIN_DEFAULTS } from "./defaults.js";
 import type { Generation } from "./generation.js";
@@ -292,7 +292,7 @@ export class WakeCapture {
             delta: {
               text: "",
               truncated: false,
-              status: read.delta?.status ?? ACT_RESULT_STATUS.ACCEPTED,
+              status: read.delta?.status ?? ACTION_RESULT_STATUS.ACCEPTED,
             },
             cursor: read.cursor,
           };

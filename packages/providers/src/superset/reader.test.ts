@@ -5,8 +5,8 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import {
-  ACT_KIND,
-  advertisedActFor,
+  ACTION_KIND,
+  advertisedActionFor,
   advertisedControls,
   HOSTED_AGENT_ID,
   PROVIDER_ID,
@@ -237,20 +237,20 @@ test("matches a chat Superset recorded no session id for by its worktree", async
   assert.equal(enriched?.detail?.repository, "Luke");
   assert.equal(enriched?.detail?.branch, "feat/grok-bot");
   // No observed binding identifies the exact terminal this chat is behind, so
-  // a message has nowhere it can be known to land — the workspace-scoped acts
+  // a message has nowhere it can be known to land — the workspace-scoped actions
   // still ride, because the workspace's identity is exactly known.
   assert.deepEqual(enriched?.advertises, [
     {
-      kind: ACT_KIND.CONTROL,
+      kind: ACTION_KIND.CONTROL,
       id: SUPERSET_CONTROL_ID.DELETE_WORKSPACE,
       label: "Delete workspace",
       target: "workspace-1",
     },
-    { kind: ACT_KIND.RENAME_WORKSPACE, target: "workspace-1" },
-    { kind: ACT_KIND.ADD_AGENT, agents: ["claude", "opencode"], target: "workspace-1" },
+    { kind: ACTION_KIND.RENAME_WORKSPACE, target: "workspace-1" },
+    { kind: ACTION_KIND.ADD_AGENT, agents: ["claude", "opencode"], target: "workspace-1" },
   ]);
 
-  // The act router resolves the matched chat against the same snapshot the
+  // The action router resolves the matched chat against the same snapshot the
   // advertisement rode, terminal-less like a chatless workspace row.
   const context = snapshot.actableContext(HOSTED_AGENT_ID.OPENCODE, "ses_grok", "host-local");
   assert.equal(context?.workspaceId, "workspace-1");
@@ -301,7 +301,7 @@ test("carries directory matches into the next snapshot until enrichment re-decid
   const first = await read();
   first.enrich(HOSTED_AGENT_ID.OPENCODE, [observation], "host-local");
 
-  // A drawn row keeps advertising its acts until the next enrichment pass
+  // A drawn row keeps advertising its actions until the next enrichment pass
   // commits, so the fresh snapshot must answer them before that pass runs.
   const second = await read();
   assert.equal(
@@ -446,15 +446,15 @@ test("advertises Superset actions only after the CLI is connected", async (t) =>
   // The delete carries the workspace it acts on as its target — what the
   // press deletes, and what seats the control on a tray's header.
   assert.deepEqual(connected?.advertises, [
-    { kind: ACT_KIND.MESSAGE },
+    { kind: ACTION_KIND.MESSAGE },
     {
-      kind: ACT_KIND.CONTROL,
+      kind: ACTION_KIND.CONTROL,
       id: SUPERSET_CONTROL_ID.DELETE_WORKSPACE,
       label: "Delete workspace",
       target: "workspace-1",
     },
-    { kind: ACT_KIND.RENAME_WORKSPACE, target: "workspace-1" },
-    { kind: ACT_KIND.ADD_AGENT, agents: ["claude", "codex"], target: "workspace-1" },
+    { kind: ACTION_KIND.RENAME_WORKSPACE, target: "workspace-1" },
+    { kind: ACTION_KIND.ADD_AGENT, agents: ["claude", "codex"], target: "workspace-1" },
   ]);
 
   // Deleting is unrecoverable, so a row still working — or one whose state
@@ -466,7 +466,7 @@ test("advertises Superset actions only after the CLI is connected", async (t) =>
 
   // The CLI's login serves one organization at a time, so a workspace another
   // organization's host service recorded advertises nothing actable — and the
-  // act router answers no context for it — while observation itself stays.
+  // action router answers no context for it — while observation itself stays.
   const otherOrg = snapshot.enrich(PROVIDER_ID.CODEX, [observation], "org-other")[0];
   assert.equal(otherOrg?.advertises, undefined);
   assert.equal(otherOrg?.detail?.link, "superset://v2-workspace/workspace-1?terminalId=terminal-1");
@@ -522,7 +522,7 @@ test("reports a chatless workspace as its own standing, settled row", async (t) 
 
   const snapshot = await supersetHostState({ homeDirectory: home });
   // Signed out, the row still observes — host state needs no login — but
-  // advertises no act, the same posture a bound chat's enrichment keeps.
+  // advertises no action, the same posture a bound chat's enrichment keeps.
   assert.deepEqual(snapshot.workspaceRowObservations(undefined), [
     {
       providerSessionId: "workspace-idle",
@@ -556,17 +556,17 @@ test("reports a chatless workspace as its own standing, settled row", async (t) 
   const connected = snapshot.workspaceRowObservations("host-local")[0];
   assert.deepEqual(connected?.advertises, [
     {
-      kind: ACT_KIND.CONTROL,
+      kind: ACTION_KIND.CONTROL,
       id: SUPERSET_CONTROL_ID.DELETE_WORKSPACE,
       label: "Delete workspace",
       target: "workspace-idle",
     },
-    { kind: ACT_KIND.RENAME_WORKSPACE, target: "workspace-idle" },
-    { kind: ACT_KIND.ADD_AGENT, agents: ["claude", "codex"], target: "workspace-idle" },
+    { kind: ACTION_KIND.RENAME_WORKSPACE, target: "workspace-idle" },
+    { kind: ACTION_KIND.ADD_AGENT, agents: ["claude", "codex"], target: "workspace-idle" },
   ]);
   assert.equal(snapshot.workspaceRowObservations("org-other")[0]?.advertises, undefined);
 
-  // The act router resolves the row like any managed session, terminal-less.
+  // The action router resolves the row like any managed session, terminal-less.
   const context = snapshot.actableContext(
     SUPERSET_WORKSPACE_PROVIDER_ID,
     "workspace-idle",
@@ -743,9 +743,9 @@ test("a chat whose every binding ended keeps its workspace and loses the termina
     ],
     "host-local",
   );
-  // The workspace identity and its acts stand; only the terminal is gone, so
+  // The workspace identity and its actions stand; only the terminal is gone, so
   // nothing offers to land a message or a focus in a terminal Superset ended.
   assert.equal(enriched?.workspace?.providerWorkspaceId, "workspace-1");
-  assert.equal(advertisedActFor(enriched ?? {}, ACT_KIND.MESSAGE), undefined);
+  assert.equal(advertisedActionFor(enriched ?? {}, ACTION_KIND.MESSAGE), undefined);
   assert.equal(enriched?.detail?.link, "superset://v2-workspace/workspace-1");
 });

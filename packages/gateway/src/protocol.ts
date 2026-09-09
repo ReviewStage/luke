@@ -35,7 +35,7 @@ const GATEWAY_METHODS = {
   HELLO: { name: "gateway.hello", mutates: false },
   RECONNECT: { name: "gateway.reconnect", mutates: false },
   SHUTDOWN: { name: "gateway.shutdown", mutates: true },
-  CONVERSATION_HISTORY: { name: "conversation.history", mutates: false },
+  CONVERSATION_LINES: { name: "conversation.lines", mutates: false },
   CONVERSATION_DELETE: { name: "conversation.delete", mutates: true },
   RUN_SUBMIT: { name: "run.submit", mutates: true },
   RUN_CANCEL: { name: "run.cancel", mutates: true },
@@ -191,7 +191,7 @@ export type GatewayResponse =
 
 export const GATEWAY_EVENT = {
   RUNS_CHANGED: "runs.changed",
-  HISTORY_CHANGED: "history.changed",
+  CONVERSATION_CHANGED: "conversation.changed",
   DIRECTORY_CHANGED: "directory.changed",
   DELIVERY_OFFERED: "delivery.offered",
   DELIVERIES_WITHDRAWN: "deliveries.withdrawn",
@@ -291,11 +291,11 @@ export interface GatewayClientIdentity {
 /**
  * What a node capability's invocation answers. Unavailable is a typed answer,
  * never a thrown error and never a success: a required node that is not
- * connected leaves the act undone and says so, so nothing records it as done.
+ * connected leaves the action undone and says so, so nothing records it as done.
  * Unknown is the other typed answer an absent node can give, and it is not
  * unavailable: the ask was dispatched to the node and the node's connection
  * closed before it answered, so the effect may have happened. What reads an
- * unknown must record the act as uncertain, never as failed and never as
+ * unknown must record the action as uncertain, never as failed and never as
  * safe to repeat.
  */
 export const NODE_CAPABILITY_STATUS = {

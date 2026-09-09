@@ -4,7 +4,7 @@ import {
   type ProviderTranscriptSinceResult,
   type SessionIdentity,
 } from "@sidecar/session";
-import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { rejection, sameIdentity } from "./records.js";
 import { type Settled, settledUnlessAborted } from "./settled.js";
 import { REFUSAL_REASON } from "./turn.js";
@@ -90,11 +90,11 @@ export async function readTranscriptDelta(
       options.signal,
     );
   } catch {
-    return { text: "", truncated: false, status: ACT_RESULT_STATUS.REJECTED };
+    return { text: "", truncated: false, status: ACTION_RESULT_STATUS.REJECTED };
   }
   if (read.aborted) return undefined;
   const result = read.value;
-  if (result.status !== ACT_RESULT_STATUS.ACCEPTED) {
+  if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
     return { text: "", truncated: false, status: result.status };
   }
   if (result.cursor !== undefined) cursors.setCursor(identity, result.cursor);
@@ -102,7 +102,7 @@ export async function readTranscriptDelta(
   return {
     text: bounded.text,
     truncated: result.truncated || bounded.cut,
-    status: ACT_RESULT_STATUS.ACCEPTED,
+    status: ACTION_RESULT_STATUS.ACCEPTED,
   };
 }
 
@@ -124,12 +124,12 @@ export async function readWholeTranscript(
   }
   if (read.aborted) return rejection(REFUSAL_REASON.RUN_REVOKED);
   const result = read.value;
-  if (result.status !== ACT_RESULT_STATUS.ACCEPTED) {
+  if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
     return { status: result.status, reason: result.reason };
   }
   const bounded = cutFront(result.transcript, options.maximumChars);
   return {
-    status: ACT_RESULT_STATUS.ACCEPTED,
+    status: ACTION_RESULT_STATUS.ACCEPTED,
     truncated: bounded.cut,
     transcript: bounded.text,
   };

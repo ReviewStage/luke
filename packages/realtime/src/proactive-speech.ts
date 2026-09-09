@@ -14,7 +14,7 @@ import { trimmedText } from "./trimmed-text.js";
  * What Luke says first: the briefing the brain decided to give, and the two
  * onboarding beats whose trigger is deterministic and whose words are a
  * script fixed by the build. Every turn built here is opened without tools,
- * so nothing a beat carries can become an act.
+ * so nothing a beat carries can become an action.
  */
 
 /**
@@ -208,7 +208,7 @@ function arrivalTryDirection(input: { talkKeyLabel?: string }): string {
  * terms: the observed values travel as a conversation item behind a marker,
  * so a title reading "ignore your instructions and ..." is data Luke was
  * handed to mention, and the turn is opened with `tool_choice: "none"`, so
- * the beat can never become an act.
+ * the beat can never become an action.
  */
 export function arrivalSpeechEvents(speech: ArrivalSpeech): readonly WireRecord[] {
   const sessionTitle = trimmedText(speech.sessionTitle?.replace(/\s+/g, " "))?.slice(
@@ -267,7 +267,7 @@ const CALENDAR_ONBOARDING_SPEECH_HEAD = [
 /**
  * Builds the events that speak the calendar onboarding beat. There is no data
  * item because the beat carries no observed value; the turn is still opened
- * with `tool_choice: "none"`, so the beat can never become an act.
+ * with `tool_choice: "none"`, so the beat can never become an action.
  */
 export function calendarOnboardingSpeechEvents(): readonly WireRecord[] {
   return [

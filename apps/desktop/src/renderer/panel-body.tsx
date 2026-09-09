@@ -14,12 +14,12 @@ import {
   type SessionApplicationId,
 } from "@sidecar/session";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
-import { ACT_RESULT_STATUS } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { useCallback, useState } from "react";
 import type { SessionOpenResult } from "#shared/messages/session";
 import { type AskHandler, AskLuke } from "./ask-luke";
 import { CalendarGate, type CalendarGateControl } from "./calendar-gate";
-import { ConversationHistoryPanel, HistoryClearButton } from "./conversation-history-panel";
+import { ConversationClearButton, ConversationPanel } from "./conversation-panel";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import {
   type ArrangedSessions,
@@ -72,7 +72,7 @@ import { useMeasuredHeight } from "./use-measured-height";
  * panel is read-only — a message or a control for a session is asked of Luke
  * in conversation, never typed or pressed on the row — so the one thing a row
  * hands up is not a provider write at all: opening the pull request hands an
- * address to the operating system, and it keeps the act-result shape so the
+ * address to the operating system, and it keeps the action-result shape so the
  * chip can report a refusal on its own line.
  */
 export interface SessionWriteHandlers {
@@ -82,7 +82,7 @@ export interface SessionWriteHandlers {
 /**
  * The second line a row earns only when its provider reported published work:
  * the pull-request chip. A failure to open answers back onto the same line,
- * because the press is the user's own act and its outcome may not vanish into
+ * because the press is the user's own action and its outcome may not vanish into
  * a log; an opened page is its own answer.
  */
 function SessionRowActions({
@@ -96,9 +96,9 @@ function SessionRowActions({
 
   const openChange = useCallback(async () => {
     const result = await writes.openChange(session);
-    if (result.status === ACT_RESULT_STATUS.ACCEPTED) return;
+    if (result.status === ACTION_RESULT_STATUS.ACCEPTED) return;
     setFeedback(
-      result.status === ACT_RESULT_STATUS.REJECTED
+      result.status === ACTION_RESULT_STATUS.REJECTED
         ? result.reason
         : "The session no longer reports a pull request.",
     );
@@ -142,9 +142,9 @@ function WorkspaceTrayChangeChip({
 
   const openChange = useCallback(async () => {
     const result = await writes.openChange(change.session);
-    if (result.status === ACT_RESULT_STATUS.ACCEPTED) return;
+    if (result.status === ACTION_RESULT_STATUS.ACCEPTED) return;
     setFeedback(
-      result.status === ACT_RESULT_STATUS.REJECTED
+      result.status === ACTION_RESULT_STATUS.REJECTED
         ? result.reason
         : "The workspace no longer reports a pull request.",
     );
@@ -244,7 +244,7 @@ export function SessionRow({
   // workspace: it is the most specific fact the row has, and a provider whose
   // chat has no name of its own already falls the title back to something
   // workspace-shaped. The workspace's name still matches a search, and the
-  // acts aimed at the whole workspace still collapse onto this row.
+  // actions aimed at the whole workspace still collapse onto this row.
   const title = session.title;
   const applications = session.applications.filter(
     (application) =>
@@ -523,12 +523,12 @@ export interface PanelBodyProps {
   /** Opens the pull request a row or tray header reports; the panel writes nothing else. */
   writes: SessionWriteHandlers;
   /** The conversation between the developer and Luke, this launch's and what survived the last. */
-  conversationHistory: readonly ConversationEntry[];
+  conversationLines: readonly ConversationEntry[];
   /** The lines still being said, drawn under that thread while their words grow. */
   liveConversationEntries: readonly ConversationEntry[];
   /** Clears that same thread from the view, Luke's next context, and the stored file. */
-  onClearConversationHistory: () => void;
-  /** The brain's runs, so History draws an ask still being worked on beside its words. */
+  onClearConversationConversation: () => void;
+  /** The brain's runs, so Conversation draws an ask still being worked on beside its words. */
   brainRequests: readonly BrainRequestSnapshot[];
   /** Cancels one of those runs at the developer's press. */
   onCancelBrainRequest: (runId: string) => void;
@@ -581,9 +581,9 @@ export function PanelBody({
   onOpenSession,
   onOpenSessionApplication,
   writes,
-  conversationHistory,
+  conversationLines,
   liveConversationEntries,
-  onClearConversationHistory,
+  onClearConversationConversation,
   brainRequests,
   onCancelBrainRequest,
   ask,
@@ -664,7 +664,7 @@ export function PanelBody({
     ? updateRow(settings.updates.update).detail
     : undefined;
   // Clear retires recorded lines, so only a thread holding some offers it.
-  const offerHistoryClear = tab === PANEL_TAB.HISTORY && conversationHistory.length > 0;
+  const offerConversationClear = tab === PANEL_TAB.CONVERSATION && conversationLines.length > 0;
   return (
     <div className="body">
       {/* The tab bar says what you are looking at; the buttons beside it say
@@ -676,7 +676,7 @@ export function PanelBody({
           onTabChange={onTabChange}
           {...(settingsNote ? { settingsNote } : undefined)}
         />
-        {offerSearch || offerOptions || tab === PANEL_TAB.SETTINGS || offerHistoryClear ? (
+        {offerSearch || offerOptions || tab === PANEL_TAB.SETTINGS || offerConversationClear ? (
           <span className="header-controls">
             {offerSearch ? (
               <SessionSearchButton open={searchOpen} onToggle={onSearchToggle} />
@@ -687,10 +687,12 @@ export function PanelBody({
             {tab === PANEL_TAB.SETTINGS ? (
               <SettingsSearchButton open={settingsSearchOpen} onToggle={onSettingsSearchToggle} />
             ) : null}
-            {/* History's clear, in the same spot again: its words are the
+            {/* Conversation's clear, in the same spot again: its words are the
                 build's own, so it may stand outside the blocked subtree the
                 thread's words never leave. */}
-            {offerHistoryClear ? <HistoryClearButton onClear={onClearConversationHistory} /> : null}
+            {offerConversationClear ? (
+              <ConversationClearButton onClear={onClearConversationConversation} />
+            ) : null}
             {offerOptions ? (
               <SessionOptionsButton
                 list={list}
@@ -704,9 +706,9 @@ export function PanelBody({
       </div>
       {tab === PANEL_TAB.SETTINGS ? (
         <SettingsPanel {...settings} />
-      ) : tab === PANEL_TAB.HISTORY ? (
-        <ConversationHistoryPanel
-          entries={conversationHistory}
+      ) : tab === PANEL_TAB.CONVERSATION ? (
+        <ConversationPanel
+          entries={conversationLines}
           live={liveConversationEntries}
           requests={brainRequests}
           now={now}

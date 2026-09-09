@@ -42,8 +42,8 @@ export function request(
     status: BRAIN_REQUEST_STATUS.QUEUED,
     revision: 0,
     acceptedAt: NOW,
-    performedActs: 0,
-    unknownActs: 0,
+    performedActions: 0,
+    unknownActions: 0,
     ...overrides,
   };
 }
@@ -98,25 +98,25 @@ export function line(
 }
 
 /** What the history table holds for a conversation, retention or not: the raw rows a test asserts on. */
-export interface HistoryTableContents {
+export interface ConversationTableContents {
   sequences: readonly number[];
   /** The distinct generations the lines were written under. */
   sessionIds: readonly (string | undefined)[];
   count: number;
 }
 
-export function inspectHistory(
+export function inspectConversation(
   database: StoreDatabase,
   sessionKey: SessionKey,
-): HistoryTableContents {
+): ConversationTableContents {
   // SAFETY: each query selects the one column its row type names.
   const sequences = database
-    .prepare("SELECT sequence FROM history_events WHERE session_key = ? ORDER BY sequence")
+    .prepare("SELECT sequence FROM conversation_events WHERE session_key = ? ORDER BY sequence")
     .all(sessionKey) as { sequence: number }[];
   // SAFETY: as above, for the nullable text column.
   const sessionIds = database
     .prepare(
-      "SELECT DISTINCT session_id FROM history_events WHERE session_key = ? ORDER BY session_id",
+      "SELECT DISTINCT session_id FROM conversation_events WHERE session_key = ? ORDER BY session_id",
     )
     .all(sessionKey) as { session_id: string | null }[];
   return {

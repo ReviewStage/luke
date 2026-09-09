@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { REALTIME_TOOL, realtimeToolDefinitions } from "@sidecar/acts";
+import { REALTIME_TOOL, realtimeToolDefinitions } from "@sidecar/actions";
 import {
   GROUP_PREFIX,
   resolveToolPolicy,
@@ -21,15 +21,15 @@ import {
 } from "./tools.js";
 import { BRAIN_TURN_TRIGGER } from "./turn.js";
 
-test("the catalog holds every act and every brain tool once, each under its execution", () => {
+test("the catalog holds every action and every brain tool once, each under its execution", () => {
   const catalog = brainToolCatalog();
   const names = catalog.map((tool) => tool.schema.name);
   assert.equal(new Set(names).size, names.length);
-  for (const act of realtimeToolDefinitions()) {
-    const entry = catalog.find((tool) => tool.schema.name === act.name);
-    assert.ok(entry, `${act.name} is in the catalog`);
+  for (const tool of realtimeToolDefinitions()) {
+    const entry = catalog.find((candidate) => candidate.schema.name === tool.name);
+    assert.ok(entry, `${tool.name} is in the catalog`);
     assert.equal(entry.execution, TOOL_EXECUTION.PERFORMER);
-    assert.ok(entry.groups.includes(TOOL_GROUP.ACTS));
+    assert.ok(entry.groups.includes(TOOL_GROUP.ACTIONS));
   }
   for (const own of Object.values(BRAIN_TOOL)) {
     const entry = catalog.find((tool) => tool.schema.name === own);
@@ -67,11 +67,11 @@ test("with no configured layers every turn is offered the whole catalog, and onl
   for (const schema of brainToolSchemas(wake)) assert.ok(schema.name.length > 0);
 });
 
-test("a configured deny of the acts group removes every act and keeps the reads", () => {
+test("a configured deny of the actions group removes every action and keeps the reads", () => {
   const policy = resolveToolPolicy(brainToolCatalog(), {
-    agent: { deny: [`group:${TOOL_GROUP.ACTS}`] },
+    agent: { deny: [`group:${TOOL_GROUP.ACTIONS}`] },
   });
-  for (const act of realtimeToolDefinitions()) assert.ok(!policy.allows(act.name), act.name);
+  for (const tool of realtimeToolDefinitions()) assert.ok(!policy.allows(tool.name), tool.name);
   assert.ok(policy.allows(BRAIN_TOOL.LIST_SESSIONS));
   assert.ok(policy.allows(BRAIN_TOOL.READ_TRANSCRIPT));
   assert.ok(policy.allows(BRAIN_TOOL.READ_WORKSPACE_FILE));

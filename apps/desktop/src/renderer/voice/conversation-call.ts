@@ -1,6 +1,6 @@
 import {
   BRAIN_ASK_PENDING_STATUS,
-  type BrainAppActRequest,
+  type BrainAppActionRequest,
   type BrainAskResult,
 } from "@sidecar/brain/requests-wire";
 import {
@@ -21,7 +21,7 @@ import {
 import { maximumTypedAskLength } from "@sidecar/session";
 import { REPLY_KIND } from "@sidecar/voice/orchestrator";
 import {
-  ACT_RESULT_STATUS,
+  ACTION_RESULT_STATUS,
   isRecord,
   text,
   type UnparsedWireValue,
@@ -43,12 +43,12 @@ import { ToolFollowUp } from "./tool-follow-up";
 /**
  * Carries one app act the brain decided — a settings change, the panel shown,
  * the feedback composer brought up, the Updates row's button — to the renderer
- * that can perform it, and answers what became of it. The act was validated
+ * that can perform it, and answers what became of it. The action was validated
  * against the guide in the main process before it got here; the carrier only
  * performs and reports. Nothing here sends a note: the feedback act opens the
  * composer, and what it holds leaves only by its own Send button.
  */
-export type AppActionCarrier = (action: BrainAppActRequest["action"]) => Promise<WireRecord>;
+export type AppActionCarrier = (action: BrainAppActionRequest["action"]) => Promise<WireRecord>;
 
 export interface ConversationCallOptions extends SpeakOnlyCallOptions {
   /**
@@ -492,7 +492,7 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
     // briefing taken there bumps the epoch, and the follow-up voicing the
     // answer stands down against it, the developer's answer abandoned for a
     // briefing. The hold is the ask's, so it gets a clock of its own, long
-    // enough for a brain turn that reads and acts before it answers — while
+    // enough for a brain turn that reads and actions before it answers — while
     // an ask that hangs past even that still meets a backstop, because a turn
     // that never ends is worse than one that ends early.
     this.clearSettleTimer();
@@ -517,11 +517,14 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
     const callId = toolCall?.callId;
     const name = toolCall?.name;
     if (toolCall?.type !== "function_call" || !callId || name !== expectedName) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: "The tool call was malformed." };
+      return { status: ACTION_RESULT_STATUS.REJECTED, reason: "The tool call was malformed." };
     }
     const argumentsJson = toolCall.arguments;
     if (argumentsJson === undefined) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: "The tool arguments were malformed." };
+      return {
+        status: ACTION_RESULT_STATUS.REJECTED,
+        reason: "The tool arguments were malformed.",
+      };
     }
     // Only the reply now under way may ask the brain: a cancelled reply's
     // late call — the developer already talked over it — is answered with a
@@ -542,20 +545,20 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
   async #toolCallOutput(call: ParsedRealtimeFunctionCall, current: boolean): Promise<WireRecord> {
     if (!current) {
       return {
-        status: ACT_RESULT_STATUS.REJECTED,
+        status: ACTION_RESULT_STATUS.REJECTED,
         reason: "That turn is over; ask again if it still matters.",
       };
     }
     if (call.name !== ASK_BRAIN_TOOL.name) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: "No such tool exists." };
+      return { status: ACTION_RESULT_STATUS.REJECTED, reason: "No such tool exists." };
     }
     const question = askQuestion(call.argumentsJson);
     if (!question) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: "The ask carried no words." };
+      return { status: ACTION_RESULT_STATUS.REJECTED, reason: "The ask carried no words." };
     }
     if (!this.options.askBrain) {
       return {
-        status: ACT_RESULT_STATUS.REJECTED,
+        status: ACTION_RESULT_STATUS.REJECTED,
         reason: "Luke's judgment is not available on this call.",
       };
     }
@@ -569,7 +572,7 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
       answer = await this.options.askBrain(question, call.callId);
     } catch {
       return {
-        status: ACT_RESULT_STATUS.REJECTED,
+        status: ACTION_RESULT_STATUS.REJECTED,
         reason: "Luke's judgment did not answer.",
       };
     }
@@ -579,7 +582,7 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
       // long time coming.
       return { status: answer.status, note: answer.note };
     }
-    if (answer.status !== ACT_RESULT_STATUS.ACCEPTED) {
+    if (answer.status !== ACTION_RESULT_STATUS.ACCEPTED) {
       return { status: answer.status, reason: answer.reason };
     }
     // The follow-up that says the answer is the reply now under way, and its

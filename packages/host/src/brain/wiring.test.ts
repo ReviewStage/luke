@@ -28,15 +28,15 @@ function dependencies(overrides: Partial<BrainWiringDependencies> = {}) {
     ensureChildConversation: async () => undefined,
     archiveConversation: async () => true,
     conversationDirectory: () => [],
-    historyLines: () => [],
+    conversationLines: () => [],
     childStore: () => childStore,
     createId: () => "id",
     report: () => undefined,
     recordConversationEntry: () => true,
     broadcastRequests: () => undefined,
     onGenerationReplaced: () => undefined,
-    acts: {
-      sessionActs: {
+    actions: {
+      sessionActions: {
         perform: async () => ({ status: "accepted" }),
         openSession: async () => ({ status: "accepted" }),
         openSessionApplication: async () => ({ status: "accepted" }),
@@ -50,7 +50,7 @@ function dependencies(overrides: Partial<BrainWiringDependencies> = {}) {
       appGuide: () => ({ facts: [], settings: [] }),
       rememberedFacts: () => [],
       notebook: { remember: async () => true, forget: async () => true },
-      performAppAct: async () => ({ status: "accepted" }),
+      performAppAction: async () => ({ status: "accepted" }),
       recordConversationEntry: () => undefined,
     },
     roster: () => ({ text: "", identities: [] }),

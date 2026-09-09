@@ -1,5 +1,5 @@
 import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
-import { ACT_RESULT_STATUS } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import {
   BRIDGE,
@@ -66,7 +66,7 @@ export function createSettingsHandler(deps: SettingsHandlerDeps) {
       } catch {
         const settings = await deps.snapshot();
         if (!settings) throw new Error(spec.refusal);
-        return { status: ACT_RESULT_STATUS.REJECTED, settings, reason: spec.refusal };
+        return { status: ACTION_RESULT_STATUS.REJECTED, settings, reason: spec.refusal };
       }
     };
     registerBridgeEntry(BRIDGE, definition, handler, deps);

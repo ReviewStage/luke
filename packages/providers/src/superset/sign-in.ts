@@ -200,7 +200,7 @@ export class SupersetSignIn {
   async chooseOrganization(slug: string): Promise<SupersetSignInSnapshot> {
     if (this.#state.stage !== SUPERSET_SIGN_IN_STAGE.ORGANIZATION) return this.#state;
     const attempt = ++this.#attempt;
-    // The CLI's own word for this act: an organization switch is not the code
+    // The CLI's own word for this action: an organization switch is not the code
     // exchange, and drawing it as one would ask for a code nobody owes.
     this.#set(snapshot(SUPERSET_SIGN_IN_STAGE.SWITCHING));
     const connected = await this.#cli.chooseOrganization(slug);

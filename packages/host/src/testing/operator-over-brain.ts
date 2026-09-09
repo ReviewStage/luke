@@ -15,7 +15,7 @@ import {
  * Test support: the operator a window's ask crosses, stood over one brain
  * and one thread and nothing else, so a test of the brain's own lifecycle
  * submits the way production does — through the host's submit method, its
- * bound and its History write — without composing the rest of the host.
+ * bound and its Conversation write — without composing the rest of the host.
  * Every other capability is an inert stand-in a test of it would not use.
  */
 export function operatorOverBrain(options: {

@@ -42,9 +42,9 @@ importers:
       '@sentry/esbuild-plugin':
         specifier: 5.4.0
         version: 5.4.0(rollup@4.62.4)
-      '@sidecar/acts':
+      '@sidecar/actions':
         specifier: workspace:*
-        version: link:../../packages/acts
+        version: link:../../packages/actions
       '@sidecar/analytics':
         specifier: workspace:*
         version: link:../../packages/analytics
@@ -254,7 +254,7 @@ importers:
         specifier: 7.3.1
         version: 7.3.1(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0)
 
-  packages/acts:
+  packages/actions:
     dependencies:
       '@sidecar/guide':
         specifier: workspace:*
@@ -309,9 +309,9 @@ importers:
 
   packages/brain:
     dependencies:
-      '@sidecar/acts':
+      '@sidecar/actions':
         specifier: workspace:*
-        version: link:../acts
+        version: link:../actions
       '@sidecar/guide':
         specifier: workspace:*
         version: link:../guide
@@ -469,9 +469,9 @@ importers:
 
   packages/host:
     dependencies:
-      '@sidecar/acts':
+      '@sidecar/actions':
         specifier: workspace:*
-        version: link:../acts
+        version: link:../actions
       '@sidecar/analytics':
         specifier: workspace:*
         version: link:../analytics
@@ -558,9 +558,9 @@ importers:
 
   packages/memory:
     dependencies:
-      '@sidecar/acts':
+      '@sidecar/actions':
         specifier: workspace:*
-        version: link:../acts
+        version: link:../actions
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
@@ -620,9 +620,9 @@ importers:
 
   packages/providers:
     dependencies:
-      '@sidecar/acts':
+      '@sidecar/actions':
         specifier: workspace:*
-        version: link:../acts
+        version: link:../actions
       '@sidecar/credentials':
         specifier: workspace:*
         version: link:../credentials
@@ -648,9 +648,9 @@ importers:
 
   packages/realtime:
     dependencies:
-      '@sidecar/acts':
+      '@sidecar/actions':
         specifier: workspace:*
-        version: link:../acts
+        version: link:../actions
       '@sidecar/guide':
         specifier: workspace:*
         version: link:../guide
@@ -819,9 +819,9 @@ importers:
 
   tools/ios-parity:
     dependencies:
-      '@sidecar/acts':
+      '@sidecar/actions':
         specifier: workspace:*
-        version: link:../../packages/acts
+        version: link:../../packages/actions
       '@sidecar/analytics':
         specifier: workspace:*
         version: link:../../packages/analytics

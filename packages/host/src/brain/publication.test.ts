@@ -31,8 +31,8 @@ function record(overrides: Partial<BrainRequestRecord> = {}): BrainRequestRecord
     startedAt: NOW + 1,
     settledAt: NOW + 2,
     text: "Two agents are waiting.",
-    performedActs: 0,
-    unknownActs: 0,
+    performedActions: 0,
+    unknownActions: 0,
     askRecordedAt: NOW,
     ...overrides,
   };
@@ -82,9 +82,9 @@ function thread(fail = () => false) {
 function markingBrain(
   marked: string[],
   records: () => readonly BrainRequestRecord[] = () => [],
-): Pick<BrainAgent, "markHistoryRecorded" | "markAskRecorded" | "request"> {
+): Pick<BrainAgent, "markConversationRecorded" | "markAskRecorded" | "request"> {
   return {
-    markHistoryRecorded: async (runId) => {
+    markConversationRecorded: async (runId) => {
       marked.push(runId);
       return true;
     },
@@ -180,7 +180,7 @@ test("a run's end reaches the thread once, at the moment it settled, decided aga
   // Once marked, the live record says so: an unrelated later report, an
   // older report captured before the mark, a rebuilt follower, or a thread
   // that has since let the line go all leave it alone.
-  live = [{ ...record(), historyRecordedAt: NOW + 2 }];
+  live = [{ ...record(), conversationRecordedAt: NOW + 2 }];
   await publishRuns(agent, [record()], written.record);
   live = [
     ...live,
@@ -202,10 +202,10 @@ test("a retired follower stops between two records, and the second waits for a l
   const marked: string[] = [];
   const live = [record({ runId: "run-1" }), record({ runId: "run-2" })];
   let holdMark: (() => void) | undefined;
-  const agent: Pick<BrainAgent, "request" | "markHistoryRecorded" | "markAskRecorded"> = {
+  const agent: Pick<BrainAgent, "request" | "markConversationRecorded" | "markAskRecorded"> = {
     request: (runId) => live.find((entry) => entry.runId === runId),
     markAskRecorded: async () => true,
-    markHistoryRecorded: (runId) =>
+    markConversationRecorded: (runId) =>
       new Promise((resolve) => {
         marked.push(runId);
         holdMark = () => resolve(true);
@@ -268,7 +268,7 @@ test("a typed ask whose line the thread refused at acceptance is written by a la
 });
 
 test("an end without a reply is worded from what was done, never from a provider's words", () => {
-  const acted = { performedActs: 2, text: undefined };
+  const acted = { performedActions: 2, text: undefined };
   assert.equal(
     brainReplyWords(record({ status: BRAIN_REQUEST_STATUS.FAILED, failure: "model", ...acted })),
     "I did 2 things you asked, but I couldn't put the reply into words.",
@@ -281,13 +281,13 @@ test("an end without a reply is worded from what was done, never from a provider
   );
   assert.equal(
     brainReplyWords(
-      record({ status: BRAIN_REQUEST_STATUS.FAILED, failure: "persistence", performedActs: 1 }),
+      record({ status: BRAIN_REQUEST_STATUS.FAILED, failure: "persistence", performedActions: 1 }),
     ),
     "Two agents are waiting. I did one thing you asked, but I couldn't save my notes about it.",
   );
   assert.equal(
     brainReplyWords(
-      record({ status: BRAIN_REQUEST_STATUS.SUCCEEDED, text: undefined, performedActs: 1 }),
+      record({ status: BRAIN_REQUEST_STATUS.SUCCEEDED, text: undefined, performedActions: 1 }),
     ),
     "Done: I did one thing you asked.",
   );
@@ -297,28 +297,28 @@ test("an end without a reply is worded from what was done, never from a provider
   );
   assert.equal(
     brainReplyWords(
-      record({ status: BRAIN_REQUEST_STATUS.INTERRUPTED, text: undefined, performedActs: 1 }),
+      record({ status: BRAIN_REQUEST_STATUS.INTERRUPTED, text: undefined, performedActions: 1 }),
     ),
     "That ask was interrupted, though I did one thing you asked.",
   );
   assert.equal(brainReplyWords(record({ status: BRAIN_REQUEST_STATUS.QUEUED })), undefined);
-  // An act nobody confirmed is said as such, never as refused and never as done.
+  // An action nobody confirmed is said as such, never as refused and never as done.
   assert.equal(
     brainReplyWords(
       record({
         status: BRAIN_REQUEST_STATUS.FAILED,
         failure: "model",
         text: undefined,
-        unknownActs: 1,
+        unknownActions: 1,
       }),
     ),
-    "one act may have gone through without confirming, so I won't repeat it on my own, but I couldn't put the reply into words.",
+    "one action may have gone through without confirming, so I won't repeat it on my own, but I couldn't put the reply into words.",
   );
   assert.equal(
     brainReplyWords(
-      record({ status: BRAIN_REQUEST_STATUS.SUCCEEDED, unknownActs: 2, text: "Sent." }),
+      record({ status: BRAIN_REQUEST_STATUS.SUCCEEDED, unknownActions: 2, text: "Sent." }),
     ),
-    "Sent. 2 acts may have gone through without confirming, so I won't repeat them on my own.",
+    "Sent. 2 actions may have gone through without confirming, so I won't repeat them on my own.",
   );
   assert.equal(
     brainReplyWords(
@@ -348,7 +348,7 @@ test("following a brain relays every report, writes and marks the ended runs, an
     requests: () => [ready],
     request: (runId: string) => [ready, record({ runId: "run-2" })].find((r) => r.runId === runId),
     markAskRecorded: async () => true,
-    markHistoryRecorded: async (runId: string) => {
+    markConversationRecorded: async (runId: string) => {
       marked.push(runId);
       return true;
     },
@@ -365,7 +365,7 @@ test("following a brain relays every report, writes and marks the ended runs, an
   assert.equal(broadcasts.length, 1);
   assert.equal(written.entries()[0]?.words, "That ask was interrupted before I could finish it.");
   assert.deepEqual(marked, ["run-1"]);
-  listener?.([{ ...ready, historyRecordedAt: NOW + 2 }, record({ runId: "run-2" })]);
+  listener?.([{ ...ready, conversationRecordedAt: NOW + 2 }, record({ runId: "run-2" })]);
   await drainMicrotasks(1);
   await drainMicrotasks(1);
   assert.equal(broadcasts.length, 2);
@@ -390,7 +390,7 @@ test("a retired follower relays nothing a late report carries", async () => {
     requests: () => [record()],
     request: () => record(),
     markAskRecorded: async () => true,
-    markHistoryRecorded: async () => true,
+    markConversationRecorded: async () => true,
   } as unknown as BrainAgent;
   const broadcasts: (readonly BrainRequestRecord[])[] = [];
   const written = thread();
@@ -411,12 +411,12 @@ test("an end is published downstream only once its line and its mark have both l
   let markRefused = true;
   let marked = false;
   const live = () =>
-    record({ askRecordedAt: NOW, historyRecordedAt: marked ? NOW + 2 : undefined });
+    record({ askRecordedAt: NOW, conversationRecordedAt: marked ? NOW + 2 : undefined });
   // SAFETY: publication reads only these members off the agent.
   const agent = {
     request: () => live(),
     markAskRecorded: async () => true,
-    markHistoryRecorded: async () => {
+    markConversationRecorded: async () => {
       if (markRefused) return false;
       marked = true;
       return true;
@@ -429,7 +429,7 @@ test("an end is published downstream only once its line and its mark have both l
       [live()],
       written.record,
       () => true,
-      (ended) => published.push(`${ended.runId}@${ended.historyRecordedAt}`),
+      (ended) => published.push(`${ended.runId}@${ended.conversationRecordedAt}`),
     );
   // The line was taken but the mark refused: not published downstream, and
   // the line is not written a second time on the retry because the thread
@@ -455,9 +455,9 @@ test("a refused thread write publishes nothing downstream, and a retired followe
   let refuse = true;
   // SAFETY: publication reads only these members off the agent.
   const agent = {
-    request: () => record({ askRecordedAt: NOW, historyRecordedAt: undefined }),
+    request: () => record({ askRecordedAt: NOW, conversationRecordedAt: undefined }),
     markAskRecorded: async () => true,
-    markHistoryRecorded: async () => true,
+    markConversationRecorded: async () => true,
   } as unknown as BrainAgent;
   const written = thread(() => refuse);
   await publishRuns(
@@ -475,7 +475,7 @@ test("a refused thread write publishes nothing downstream, and a retired followe
   // SAFETY: publication reads only `request` and the two marks off the agent; the fixture stands in for the rest.
   const retiringAgent = {
     ...agent,
-    markHistoryRecorded: async () => {
+    markConversationRecorded: async () => {
       following = false;
       return true;
     },

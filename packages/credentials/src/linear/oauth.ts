@@ -1,5 +1,5 @@
 import {
-  ACT_RESULT_STATUS,
+  ACTION_RESULT_STATUS,
   isRecord,
   isWireNumber,
   isWireString,
@@ -68,12 +68,12 @@ export const LINEAR_REVOKE_URL = "https://api.linear.app/oauth/revoke";
 
 /**
  * The scopes the consent page asks for. `read` is the roster; `write` is the
- * two acts a developer can ask for on a row — moving an issue to another of
+ * two actions a developer can ask for on a row — moving an issue to another of
  * its team's states, and commenting. Linear publishes narrower scopes only
  * for creating issues and comments, and moving an issue is neither, so
- * `write` is the narrowest grant that carries both acts rather than a wide
- * one chosen for convenience. What bounds the acts is not the scope but the
- * validation above it: an act is issued only for an issue and a state the
+ * `write` is the narrowest grant that carries both actions rather than a wide
+ * one chosen for convenience. What bounds the actions is not the scope but the
+ * validation above it: an action is issued only for an issue and a state the
  * latest read actually listed, and only in a turn the developer opened.
  *
  * Linear separates scopes with commas, where most providers use spaces.
@@ -280,7 +280,7 @@ export async function revokeLinearGrant(
  */
 export const LINEAR_REFRESH_STATUS = {
   RENEWED: "renewed",
-  REFUSED: ACT_RESULT_STATUS.REJECTED,
+  REFUSED: ACTION_RESULT_STATUS.REJECTED,
   UNREACHABLE: "unreachable",
 } as const;
 

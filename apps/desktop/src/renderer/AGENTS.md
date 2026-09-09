@@ -180,7 +180,7 @@ an `AppGuideSnapshot` from it and reports it to the main process over
 marker into the brain's standing context, the build-fixed prose every turn
 reads, and never into a conversation item. The voice is only the brain's
 mouth and carries no guide of its own. The brain's `change_app_setting` and
-`show_panel` acts are validated against that same snapshot in the renderer, so
+`show_panel` actions are validated against that same snapshot in the renderer, so
 the guide is simultaneously what Luke can say about himself and the outer
 bound of what an ask can do to him.
 
@@ -192,15 +192,15 @@ choice row on the page the entry names. There is no separate renderer record
 whose completeness the compiler checks. A guide entry that deliberately
 builds no row still needs a comment saying which fact or special control covers
 it. The facts half has no compile lever either, so the rule is stated here: a
-capability or act the guide does not describe is one Luke will deny having,
+capability or action the guide does not describe is one Luke will deny having,
 and a stale entry is one he will misdescribe.
 The facts deliberately cover only what Luke needs to hold a conversation and
-what a spoken ask may do — capabilities, acts, refusals, and their bounds. A
+what a spoken ask may do — capabilities, actions, refusals, and their bounds. A
 detail the developer should know but Luke never acts on (the surface's own
 mechanics, a connector's internals, what an update check sends) stays with
 the surface and the settings entries that already describe it, and the guide's
 closing fact has Luke redirect what it leaves out rather than deny it. The
-rule still binds in full at the act level: a new capability, act, refusal, or
+rule still binds in full at the action level: a new capability, action, refusal, or
 bound lands here in the same change, as does any change to what a key does or
 what a provider connection allows.
 

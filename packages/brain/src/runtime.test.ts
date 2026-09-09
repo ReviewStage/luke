@@ -134,7 +134,7 @@ function harness(tools?: Partial<ToolExecutor>): Harness {
       runId: "run-1",
       context,
       tools: executor,
-      toolSchemas: [{ name: "act", description: "an act", parameters: { type: "object" } }],
+      toolSchemas: [{ name: "act", description: "an action", parameters: { type: "object" } }],
       prompt: "instructions",
       input: [{ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: "[developer ask] hello" }],
       ephemeral: () => ["[standing context] roster"],

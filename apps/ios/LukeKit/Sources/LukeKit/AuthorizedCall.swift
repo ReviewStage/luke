@@ -24,40 +24,40 @@ extension AccountTokenProviding {
     }
 }
 
-/// What a hosted act endpoint answered, whichever act it was: the shared
-/// slice of every act answer the runner below reads.
-public protocol ActAnswer {
-    var result: ActResult { get }
+/// What a hosted action endpoint answered, whichever action it was: the shared
+/// slice of every action answer the runner below reads.
+public protocol ActionAnswer {
+    var result: ActionResult { get }
     var reason: String? { get }
 }
 
-extension ActMessageAnswer: ActAnswer {}
-extension ActWorkspaceAnswer: ActAnswer {}
+extension ActionMessageAnswer: ActionAnswer {}
+extension ActionWorkspaceAnswer: ActionAnswer {}
 
-/// What became of one act run end to end.
-public enum ActOutcome<Answer: ActAnswer> {
+/// What became of one action run end to end.
+public enum ActionOutcome<Answer: ActionAnswer> {
     /// The provider accepted; the count is already recorded.
     case delivered(Answer)
-    /// The act did not land; the reason is ready to show.
+    /// The action did not land; the reason is ready to show.
     case refused(String)
-    /// Signed out mid-act; the state change redraws, and there is nothing to show.
+    /// Signed out mid-action; the state change redraws, and there is nothing to show.
     case signedOut
 }
 
 extension AccountTokenProviding {
-    /// Runs one act with the account's token discipline and counts an
-    /// accepted one under its allowlisted name — which act, on which
-    /// provider, never what it carried. Every act surface answers with the
+    /// Runs one action with the account's token discipline and counts an
+    /// accepted one under its allowlisted name — which action, on which
+    /// provider, never what it carried. Every action surface answers with the
     /// same three outcomes, so the accepted/refused/signed-out contract and
     /// the analytics record live here once instead of at each leaf.
     @MainActor
-    public func performAct<Answer: ActAnswer>(
-        counting act: ProductSessionAct,
+    public func performAction<Answer: ActionAnswer>(
+        counting action: ProductSessionAction,
         provider providerId: String,
         events: ProductEventSender,
         fallbackReason: String,
         _ call: (String) async throws -> Answer
-    ) async -> ActOutcome<Answer> {
+    ) async -> ActionOutcome<Answer> {
         do {
             let answer = try await authorized(call)
             guard answer.result == .accepted else {
@@ -66,7 +66,7 @@ extension AccountTokenProviding {
             // A provider id the shared vocabulary has not answered for is
             // left uncounted rather than sent to be refused.
             if let provider = ProductProviderID(rawValue: providerId) {
-                events.record(.sessionActSend(provider: provider, act: act))
+                events.record(.sessionActionSend(provider: provider, action: action))
             }
             return .delivered(answer)
         } catch is AccountSessionError {

@@ -27,7 +27,7 @@ export const CREATED_WORKSPACE_OPEN_WINDOW_MS = 5 * 60_000;
  * that reports no address is offered nowhere to open.
  *
  * Deterministic by construction: nothing a model decided can add an entry,
- * only the validated creation act itself.
+ * only the validated creation action itself.
  */
 export class CreatedWorkspaceOpenTracker {
   /** Deadlines keyed by the original identifiers, never a composite string. */

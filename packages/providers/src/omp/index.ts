@@ -19,7 +19,7 @@ export interface OmpPluginOptions {
 
 /**
  * Observes the OMP sessions on this machine from the JSONL recordings the CLI
- * already writes for itself. It names no acts at all: OMP documents no way in
+ * already writes for itself. It names no actions at all: OMP documents no way in
  * from outside its own process, and an absent handler is the unsupported
  * answer, so the plugin carries an observation pass and the two transcript
  * reads and nothing that could reach a write.

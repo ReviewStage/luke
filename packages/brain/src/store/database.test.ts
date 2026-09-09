@@ -17,20 +17,27 @@ import {
 } from "../envelope.js";
 import { BRAIN_REQUEST_STATUS } from "../requests.js";
 import { BrainStateStore } from "../state-store.js";
-import { deleteConversationHistory } from "./archives.js";
+import { deleteConversation } from "./archives.js";
 import { loadBrainEnvelope, saveBrainEnvelope } from "./brain-envelope.js";
-import { createConversation, raiseHistoryCutoff } from "./conversations-table.js";
+import {
+  appendConversation,
+  CONVERSATION_SEARCH_MAXIMUM_SCANNED_ROWS,
+  conversationClearedAt,
+  listConversation,
+  searchConversation,
+} from "./conversation-table.js";
+import { createConversation, raiseConversationCutoff } from "./conversations-table.js";
 import { StoreDatabase } from "./database.js";
 import { EnvelopeTracker, SAVE_KIND } from "./envelope.js";
-import {
-  appendHistory,
-  HISTORY_SEARCH_MAXIMUM_SCANNED_ROWS,
-  historyClearedAt,
-  listHistory,
-  searchHistory,
-} from "./history-table.js";
 import { STORE_SCHEMA_VERSION } from "./schema.js";
-import { inspectHistory, line, NOW, openTestDatabase, populatedState, request } from "./testing.js";
+import {
+  inspectConversation,
+  line,
+  NOW,
+  openTestDatabase,
+  populatedState,
+  request,
+} from "./testing.js";
 
 /** A repository over the database in-thread, tracking the last envelope it saw land as the client does. */
 function repository(database: StoreDatabase) {
@@ -175,17 +182,17 @@ test("history appends are idempotent on the line's own id, and two identical utt
     kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
     eventId: "e2",
   });
-  const first = appendHistory(database, MAIN_SESSION_KEY, [one], NOW);
+  const first = appendConversation(database, MAIN_SESSION_KEY, [one], NOW);
   assert.equal(first.changed, true);
-  const repeated = appendHistory(database, MAIN_SESSION_KEY, [one, one], NOW);
+  const repeated = appendConversation(database, MAIN_SESSION_KEY, [one, one], NOW);
   assert.equal(repeated.changed, false);
   assert.deepEqual(repeated.entries, [one]);
-  const second = appendHistory(database, MAIN_SESSION_KEY, [again], NOW);
+  const second = appendConversation(database, MAIN_SESSION_KEY, [again], NOW);
   assert.deepEqual(second.entries, [one, again]);
   // A line without an id is identified by its value: delivered twice, it is one line.
   const anonymous = line("no id", NOW + 1);
-  appendHistory(database, MAIN_SESSION_KEY, [anonymous, anonymous], NOW + 1);
-  assert.equal(inspectHistory(database, MAIN_SESSION_KEY).count, 3);
+  appendConversation(database, MAIN_SESSION_KEY, [anonymous, anonymous], NOW + 1);
+  assert.equal(inspectConversation(database, MAIN_SESSION_KEY).count, 3);
 });
 
 test("a line learns the run it opened, and a run's ask and end are each published once", () => {
@@ -194,29 +201,29 @@ test("a line learns the run it opened, and a run's ask and end are each publishe
     kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK,
     eventId: "s1",
   });
-  appendHistory(database, MAIN_SESSION_KEY, [spoken], NOW);
+  appendConversation(database, MAIN_SESSION_KEY, [spoken], NOW);
   const tied = { ...spoken, requestId: "run-1" };
-  const enriched = appendHistory(database, MAIN_SESSION_KEY, [tied], NOW);
+  const enriched = appendConversation(database, MAIN_SESSION_KEY, [tied], NOW);
   assert.equal(enriched.changed, true);
   assert.deepEqual(enriched.entries, [tied]);
   // Another window's copy of the same ask under another id is the same publication, and is refused.
   const duplicateAsk = { ...tied, eventId: "s1-other-window" };
-  assert.equal(appendHistory(database, MAIN_SESSION_KEY, [duplicateAsk], NOW).changed, false);
+  assert.equal(appendConversation(database, MAIN_SESSION_KEY, [duplicateAsk], NOW).changed, false);
   const reply = line("two agents", NOW + 1, { requestId: "run-1", eventId: "r1" });
   const replyAgain = line("two agents", NOW + 2, { requestId: "run-1", eventId: "r1-late" });
-  const published = appendHistory(database, MAIN_SESSION_KEY, [reply, replyAgain], NOW + 2);
+  const published = appendConversation(database, MAIN_SESSION_KEY, [reply, replyAgain], NOW + 2);
   assert.deepEqual(published.entries, [tied, reply]);
 });
 
 test("the sequence counts up and is never reused after retention or a deletion", () => {
   const database = openTestDatabase();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "luke-database-"));
-  appendHistory(database, MAIN_SESSION_KEY, [line("a", NOW - 10, { eventId: "a" })], NOW);
-  appendHistory(database, MAIN_SESSION_KEY, [line("b", NOW - 5, { eventId: "b" })], NOW);
-  assert.ok(deleteConversationHistory(database, root, MAIN_SESSION_KEY, NOW));
-  assert.equal(inspectHistory(database, MAIN_SESSION_KEY).count, 0);
-  appendHistory(database, MAIN_SESSION_KEY, [line("c", NOW + 1, { eventId: "c" })], NOW + 1);
-  const sequences = inspectHistory(database, MAIN_SESSION_KEY).sequences;
+  appendConversation(database, MAIN_SESSION_KEY, [line("a", NOW - 10, { eventId: "a" })], NOW);
+  appendConversation(database, MAIN_SESSION_KEY, [line("b", NOW - 5, { eventId: "b" })], NOW);
+  assert.ok(deleteConversation(database, root, MAIN_SESSION_KEY, NOW));
+  assert.equal(inspectConversation(database, MAIN_SESSION_KEY).count, 0);
+  appendConversation(database, MAIN_SESSION_KEY, [line("c", NOW + 1, { eventId: "c" })], NOW + 1);
+  const sequences = inspectConversation(database, MAIN_SESSION_KEY).sequences;
   assert.deepEqual(sequences, [3]);
   fs.rmSync(root, { recursive: true, force: true });
 });
@@ -227,13 +234,13 @@ test("the panel projection keeps 200 recent lines while canonical history keeps 
   const many = Array.from({ length: maximumStoredConversationEntries + 10 }, (_, index) =>
     line(`line ${index}`, NOW - 1000 + index, { eventId: `m${index}` }),
   );
-  const outcome = appendHistory(database, MAIN_SESSION_KEY, [old, ...many], NOW);
+  const outcome = appendConversation(database, MAIN_SESSION_KEY, [old, ...many], NOW);
   assert.equal(outcome.entries.length, maximumStoredConversationEntries);
   assert.equal(outcome.entries[0]?.words, "line 10");
-  assert.equal(inspectHistory(database, MAIN_SESSION_KEY).count, many.length + 1);
+  assert.equal(inspectConversation(database, MAIN_SESSION_KEY).count, many.length + 1);
   // A line stamped in the future is not admitted: the thread's clock is the store's.
   assert.equal(
-    appendHistory(database, MAIN_SESSION_KEY, [line("soon", NOW + 1, { eventId: "f" })], NOW)
+    appendConversation(database, MAIN_SESSION_KEY, [line("soon", NOW + 1, { eventId: "f" })], NOW)
       .changed,
     false,
   );
@@ -244,7 +251,7 @@ test("a brain generation's expiry erases no visible history; only the Clear reac
   const gen1 = populatedState("gen-1");
   saveBrainEnvelope(database, MAIN_SESSION_KEY, { kind: SAVE_KIND.REPLACE, state: gen1 });
   const said = line("said under gen-1", NOW, { eventId: "h1" });
-  appendHistory(database, MAIN_SESSION_KEY, [said], NOW);
+  appendConversation(database, MAIN_SESSION_KEY, [said], NOW);
   // The generation runs out and an empty successor replaces it: its rows cascade away...
   const later = NOW + BRAIN_GENERATION_LIFETIME_MS;
   saveBrainEnvelope(database, MAIN_SESSION_KEY, {
@@ -254,8 +261,8 @@ test("a brain generation's expiry erases no visible history; only the Clear reac
   });
   assert.deepEqual(loadBrainEnvelope(database, MAIN_SESSION_KEY).state?.requests, []);
   // ...while the thread keeps its lines under its own retention, still attributed to gen-1.
-  assert.deepEqual(listHistory(database, MAIN_SESSION_KEY, NOW + 1), [said]);
-  assert.deepEqual(inspectHistory(database, MAIN_SESSION_KEY).sessionIds, ["gen-1"]);
+  assert.deepEqual(listConversation(database, MAIN_SESSION_KEY, NOW + 1), [said]);
+  assert.deepEqual(inspectConversation(database, MAIN_SESSION_KEY).sessionIds, ["gen-1"]);
   // A reset marker written into the successor raises the cutoff, and the lines at or before it stop projecting.
   const clearedAt = NOW + 2;
   saveBrainEnvelope(database, MAIN_SESSION_KEY, {
@@ -263,16 +270,24 @@ test("a brain generation's expiry erases no visible history; only the Clear reac
     expectGeneration: "gen-2",
     state: { ...freshBrainState("gen-3", clearedAt), reset: { clearedAt, generationId: "gen-2" } },
   });
-  assert.deepEqual(listHistory(database, MAIN_SESSION_KEY, NOW + 3), []);
+  assert.deepEqual(listConversation(database, MAIN_SESSION_KEY, NOW + 3), []);
   // A late line from before the cutoff is refused by the standing marker.
   assert.equal(
-    appendHistory(database, MAIN_SESSION_KEY, [line("late", NOW + 1, { eventId: "late" })], NOW + 3)
-      .changed,
+    appendConversation(
+      database,
+      MAIN_SESSION_KEY,
+      [line("late", NOW + 1, { eventId: "late" })],
+      NOW + 3,
+    ).changed,
     false,
   );
   assert.equal(
-    appendHistory(database, MAIN_SESSION_KEY, [line("new", NOW + 3, { eventId: "new" })], NOW + 3)
-      .changed,
+    appendConversation(
+      database,
+      MAIN_SESSION_KEY,
+      [line("new", NOW + 3, { eventId: "new" })],
+      NOW + 3,
+    ).changed,
     true,
   );
 });
@@ -288,20 +303,25 @@ test("history search reads only the conversations named, under each one's cutoff
     name: "Thread",
     now: NOW,
   });
-  appendHistory(
+  appendConversation(
     database,
     MAIN_SESSION_KEY,
     [line("we chose Tuesday deploys", NOW, { eventId: "a" })],
     NOW,
   );
-  appendHistory(
+  appendConversation(
     database,
     thread,
     [line("tuesday is the deploy day", NOW + 1, { eventId: "b" })],
     NOW + 1,
   );
-  appendHistory(database, thread, [line("unrelated words", NOW + 2, { eventId: "c" })], NOW + 2);
-  const both = searchHistory(database, [MAIN_SESSION_KEY, thread], "TUESDAY", 10, NOW + 3);
+  appendConversation(
+    database,
+    thread,
+    [line("unrelated words", NOW + 2, { eventId: "c" })],
+    NOW + 2,
+  );
+  const both = searchConversation(database, [MAIN_SESSION_KEY, thread], "TUESDAY", 10, NOW + 3);
   assert.deepEqual(
     both.map((hit) => [hit.sessionKey, hit.entry.words]),
     [
@@ -309,21 +329,22 @@ test("history search reads only the conversations named, under each one's cutoff
       [MAIN_SESSION_KEY, "we chose Tuesday deploys"],
     ],
   );
-  assert.equal(searchHistory(database, [thread], "tuesday", 10, NOW + 3).length, 1);
-  assert.equal(searchHistory(database, [], "tuesday", 10, NOW + 3).length, 0);
+  assert.equal(searchConversation(database, [thread], "tuesday", 10, NOW + 3).length, 1);
+  assert.equal(searchConversation(database, [], "tuesday", 10, NOW + 3).length, 0);
   assert.equal(
-    searchHistory(database, [MAIN_SESSION_KEY, thread], "deploys, tuesday?", 10, NOW + 3).length,
+    searchConversation(database, [MAIN_SESSION_KEY, thread], "deploys, tuesday?", 10, NOW + 3)
+      .length,
     1,
     "a line is matched by its tokens, in any order and past punctuation, never as one phrase",
   );
   assert.equal(
-    searchHistory(database, [MAIN_SESSION_KEY, thread], "tuesday", 1, NOW + 3).length,
+    searchConversation(database, [MAIN_SESSION_KEY, thread], "tuesday", 1, NOW + 3).length,
     1,
     "the limit bounds the whole answer across every conversation named",
   );
-  raiseHistoryCutoff(database, MAIN_SESSION_KEY, NOW);
+  raiseConversationCutoff(database, MAIN_SESSION_KEY, NOW);
   assert.equal(
-    searchHistory(database, [MAIN_SESSION_KEY, thread], "tuesday", 10, NOW + 3).length,
+    searchConversation(database, [MAIN_SESSION_KEY, thread], "tuesday", 10, NOW + 3).length,
     1,
   );
 });
@@ -339,7 +360,7 @@ test("history search admits lines by exact token before the limit is spent, so r
     name: "Thread",
     now: NOW,
   });
-  appendHistory(
+  appendConversation(
     database,
     MAIN_SESSION_KEY,
     [line("Deploy? Tuesday, we said.", NOW, { eventId: "exact" })],
@@ -348,52 +369,58 @@ test("history search admits lines by exact token before the limit is spent, so r
   const crowd = Array.from({ length: 60 }, (_, index) =>
     line(`deployment tuesday note ${index}`, NOW + 1 + index, { eventId: `crowd-${index}` }),
   );
-  appendHistory(database, thread, crowd, NOW + 100);
-  appendHistory(
+  appendConversation(database, thread, crowd, NOW + 100);
+  appendConversation(
     database,
     thread,
     [line("we redeploy TUESDAYS only", NOW + 200, { eventId: "substring" })],
     NOW + 200,
   );
-  const hits = searchHistory(database, [MAIN_SESSION_KEY, thread], "tuesday deploy", 6, NOW + 300);
+  const hits = searchConversation(
+    database,
+    [MAIN_SESSION_KEY, thread],
+    "tuesday deploy",
+    6,
+    NOW + 300,
+  );
   assert.deepEqual(
     hits.map((hit) => [hit.sessionKey, hit.entry.words]),
     [[MAIN_SESSION_KEY, "Deploy? Tuesday, we said."]],
     "only the line carrying every token as a word is a hit, in any order, case, or punctuation",
   );
   assert.equal(
-    searchHistory(database, [MAIN_SESSION_KEY, thread], "deployment", 6, NOW + 300).length,
+    searchConversation(database, [MAIN_SESSION_KEY, thread], "deployment", 6, NOW + 300).length,
     6,
     "the limit still bounds the whole answer across the conversations named",
   );
-  raiseHistoryCutoff(database, MAIN_SESSION_KEY, NOW);
+  raiseConversationCutoff(database, MAIN_SESSION_KEY, NOW);
   assert.equal(
-    searchHistory(database, [MAIN_SESSION_KEY, thread], "tuesday deploy", 6, NOW + 300).length,
+    searchConversation(database, [MAIN_SESSION_KEY, thread], "tuesday deploy", 6, NOW + 300).length,
     0,
     "a cleared conversation's lines are not reached by any page of the scan",
   );
-  const many = Array.from({ length: HISTORY_SEARCH_MAXIMUM_SCANNED_ROWS }, (_, index) =>
+  const many = Array.from({ length: CONVERSATION_SEARCH_MAXIMUM_SCANNED_ROWS }, (_, index) =>
     line(`deployments ${index}`, NOW + 1000 + index, { eventId: `many-${index}` }),
   );
-  appendHistory(database, thread, many, NOW + 5000);
-  appendHistory(
+  appendConversation(database, thread, many, NOW + 5000);
+  appendConversation(
     database,
     thread,
     [line("deploy now", NOW + 500, { eventId: "behind" })],
     NOW + 5000,
   );
   assert.equal(
-    searchHistory(database, [thread], "deploy", 6, NOW + 6000).length,
+    searchConversation(database, [thread], "deploy", 6, NOW + 6000).length,
     0,
     "a match behind more substring-only lines than the scan bound is not found: the bound is the documented limit",
   );
   assert.equal(
-    searchHistory(
+    searchConversation(
       database,
       [thread],
       "deploy",
       6,
-      NOW + 1000 + HISTORY_SEARCH_MAXIMUM_SCANNED_ROWS - 2,
+      NOW + 1000 + CONVERSATION_SEARCH_MAXIMUM_SCANNED_ROWS - 2,
     ).length,
     1,
     "and the same match is found once fewer lines stand in front of it",
@@ -453,13 +480,13 @@ test("the Clear's cutoff outlives the generation that carried its marker, at the
   const database = openTestDatabase();
   const cutoff = NOW;
   const atCutoff = line("AT_CUTOFF", cutoff, { eventId: "at" });
-  appendHistory(database, MAIN_SESSION_KEY, [atCutoff], cutoff);
+  appendConversation(database, MAIN_SESSION_KEY, [atCutoff], cutoff);
   // The Clear's marker lands; the thread's erasure does not (the disk refused it).
   saveBrainEnvelope(database, MAIN_SESSION_KEY, {
     kind: SAVE_KIND.REPLACE,
     state: { ...freshBrainState("gen-cleared", cutoff), reset: { clearedAt: cutoff } },
   });
-  assert.deepEqual(listHistory(database, MAIN_SESSION_KEY, cutoff + 1), []);
+  assert.deepEqual(listConversation(database, MAIN_SESSION_KEY, cutoff + 1), []);
   // The marker's generation expires and an unmarked successor replaces it at exactly cutoff + lifetime,
   // when the retained-age comparison alone would still admit a line stamped at the cutoff.
   const expiry = cutoff + BRAIN_GENERATION_LIFETIME_MS;
@@ -469,17 +496,17 @@ test("the Clear's cutoff outlives the generation that carried its marker, at the
     state: freshBrainState("gen-after", expiry),
   });
   assert.equal(loadBrainEnvelope(database, MAIN_SESSION_KEY).state?.reset, undefined);
-  assert.equal(historyClearedAt(database, MAIN_SESSION_KEY), cutoff);
-  assert.deepEqual(listHistory(database, MAIN_SESSION_KEY, expiry), []);
-  assert.equal(appendHistory(database, MAIN_SESSION_KEY, [atCutoff], expiry).changed, false);
+  assert.equal(conversationClearedAt(database, MAIN_SESSION_KEY), cutoff);
+  assert.deepEqual(listConversation(database, MAIN_SESSION_KEY, expiry), []);
+  assert.equal(appendConversation(database, MAIN_SESSION_KEY, [atCutoff], expiry).changed, false);
   // A later cutoff only raises it; an older marker never lowers it.
-  raiseHistoryCutoff(database, MAIN_SESSION_KEY, expiry + 5);
+  raiseConversationCutoff(database, MAIN_SESSION_KEY, expiry + 5);
   saveBrainEnvelope(database, MAIN_SESSION_KEY, {
     kind: SAVE_KIND.REPLACE,
     expectGeneration: "gen-after",
     state: { ...freshBrainState("gen-late", expiry + 6), reset: { clearedAt: cutoff } },
   });
-  assert.equal(historyClearedAt(database, MAIN_SESSION_KEY), expiry + 5);
+  assert.equal(conversationClearedAt(database, MAIN_SESSION_KEY), expiry + 5);
 });
 
 test("the reproduced boundary: marker written, erase failed, store load at exactly cutoff + lifetime, then a relaunch — the erased line never projects", async () => {
@@ -491,7 +518,7 @@ test("the reproduced boundary: marker written, erase failed, store load at exact
   let clock = cutoff;
   let ids = 0;
   const first = openTestDatabase(location);
-  appendHistory(
+  appendConversation(
     first,
     MAIN_SESSION_KEY,
     [line("ERASED_SYNTHETIC", cutoff, { eventId: "e" })],
@@ -506,21 +533,21 @@ test("the reproduced boundary: marker written, erase failed, store load at exact
   await store.load();
   // The Clear: the marker lands, the erasure is never asked for (the disk refused it).
   assert.equal(await store.clear(cutoff), true);
-  assert.deepEqual(listHistory(first, MAIN_SESSION_KEY, cutoff + 1), []);
+  assert.deepEqual(listConversation(first, MAIN_SESSION_KEY, cutoff + 1), []);
   // Exactly one lifetime later the marked generation expires through the store itself.
   clock = cutoff + BRAIN_GENERATION_LIFETIME_MS;
   assert.equal(store.expireIfDue(clock), true);
   await store.flush();
   assert.equal(loadBrainEnvelope(first, MAIN_SESSION_KEY).state?.reset, undefined);
-  assert.deepEqual(listHistory(first, MAIN_SESSION_KEY, clock), []);
+  assert.deepEqual(listConversation(first, MAIN_SESSION_KEY, clock), []);
   first.close();
   // The next launch opens the same file: the cutoff is the conversation's, not the dead generation's.
   const relaunch = StoreDatabase.open(location);
-  assert.equal(historyClearedAt(relaunch, MAIN_SESSION_KEY), cutoff);
-  assert.deepEqual(listHistory(relaunch, MAIN_SESSION_KEY, clock), []);
-  assert.deepEqual(listHistory(relaunch, MAIN_SESSION_KEY, clock + 1), []);
+  assert.equal(conversationClearedAt(relaunch, MAIN_SESSION_KEY), cutoff);
+  assert.deepEqual(listConversation(relaunch, MAIN_SESSION_KEY, clock), []);
+  assert.deepEqual(listConversation(relaunch, MAIN_SESSION_KEY, clock + 1), []);
   assert.equal(
-    appendHistory(
+    appendConversation(
       relaunch,
       MAIN_SESSION_KEY,
       [line("ERASED_SYNTHETIC", cutoff, { eventId: "e2" })],
@@ -538,7 +565,7 @@ test("a line keeps its Markdown line structure through the store and a relaunch"
   );
   const words = "Two things:\n\n- first\n- second\n\n```ts\nconst x = 1;\n```";
   const database = openTestDatabase(location);
-  const appended = appendHistory(
+  const appended = appendConversation(
     database,
     MAIN_SESSION_KEY,
     [line(words, NOW, { eventId: "multiline" })],
@@ -547,7 +574,7 @@ test("a line keeps its Markdown line structure through the store and a relaunch"
   assert.equal(appended.entries[0]?.words, words);
   database.close();
   const relaunch = StoreDatabase.open(location);
-  assert.equal(listHistory(relaunch, MAIN_SESSION_KEY, NOW)[0]?.words, words);
+  assert.equal(listConversation(relaunch, MAIN_SESSION_KEY, NOW)[0]?.words, words);
   relaunch.close();
 });
 
@@ -589,65 +616,17 @@ test("the checkpoint stamp lives on the generation: an empty foreign checkpoint 
   );
 });
 
-test("a version-1 database is walked forward: its item-tagged generation gains the legacy stamp, an empty one none, and a newer database is refused", () => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "luke-store-"));
+test("a database from before the rename is refused at the door, and a newer one is never guessed at", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "luke-runtime-store-"));
   const location = path.join(directory, "agent.sqlite");
-  const raw = new DatabaseSync(location);
-  raw.exec(`CREATE TABLE schema_version (version INTEGER NOT NULL)`);
-  raw.exec(`INSERT INTO schema_version (version) VALUES (1)`);
-  raw.exec(`CREATE TABLE agents (agent_id TEXT PRIMARY KEY, created_at INTEGER NOT NULL)`);
-  raw.exec(`CREATE TABLE conversations (
-    session_key TEXT PRIMARY KEY, agent_id TEXT NOT NULL REFERENCES agents(agent_id),
-    name TEXT NOT NULL, created_at INTEGER NOT NULL,
-    next_history_sequence INTEGER NOT NULL DEFAULT 1, history_cleared_at INTEGER)`);
-  raw.exec(`CREATE TABLE conversation_sessions (
-    session_id TEXT PRIMARY KEY, session_key TEXT NOT NULL REFERENCES conversations(session_key),
-    created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL,
-    reset_cleared_at INTEGER, reset_generation_id TEXT)`);
-  raw.exec(`CREATE TABLE runtime_checkpoints (
-    session_id TEXT NOT NULL REFERENCES conversation_sessions(session_id) ON DELETE CASCADE,
-    sequence INTEGER NOT NULL, format TEXT NOT NULL, item TEXT NOT NULL,
-    PRIMARY KEY (session_id, sequence))`);
-  raw.prepare("INSERT INTO agents VALUES (?, ?)").run("main", NOW);
-  raw
-    .prepare(
-      "INSERT INTO conversations (session_key, agent_id, name, created_at) VALUES (?, ?, ?, ?)",
-    )
-    .run(MAIN_SESSION_KEY, "main", "main", NOW);
-  const lifetime = 14 * 24 * 60 * 60 * 1000;
-  raw
-    .prepare(
-      "INSERT INTO conversation_sessions (session_id, session_key, created_at, expires_at) VALUES (?, ?, ?, ?)",
-    )
-    .run("gen-old", MAIN_SESSION_KEY, NOW, NOW + lifetime);
-  raw
-    .prepare("INSERT INTO runtime_checkpoints VALUES (?, ?, ?, ?)")
-    .run(
-      "gen-old",
-      0,
-      "openai-responses-input/1",
-      JSON.stringify({ type: "message", role: "user", content: "x" }),
-    );
-  raw.close();
-
-  const database = StoreDatabase.open(location);
-  const loaded = loadBrainEnvelope(database, MAIN_SESSION_KEY);
-  assert.equal(loaded.state?.checkpointFormat, "tool-loop@1:openai-responses-input/1");
-  assert.equal(loaded.state?.items.length, 1);
-  // SAFETY: the schema_version table has one integer column.
-  const version = database.prepare("SELECT version FROM schema_version").get() as {
-    version: number;
-  };
-  assert.equal(version.version, STORE_SCHEMA_VERSION);
-  // SAFETY: the columns version 3 added to the conversation row.
-  const migrated = database
-    .prepare("SELECT kind, last_activity_at FROM conversations WHERE session_key = ?")
-    .get(MAIN_SESSION_KEY) as { kind: string; last_activity_at: number };
-  assert.equal(migrated.kind, "main");
-  assert.equal(migrated.last_activity_at, NOW);
-  database.close();
-  // Reopening at the current version is a no-op, and a newer database is refused.
   StoreDatabase.open(location).close();
+  const earlier = new DatabaseSync(location);
+  earlier.exec("UPDATE schema_version SET version = 10");
+  earlier.close();
+  assert.throws(
+    () => StoreDatabase.open(location),
+    new RegExp(`schema version 10, not ${STORE_SCHEMA_VERSION}`, "u"),
+  );
   const newer = new DatabaseSync(location);
   newer.exec("UPDATE schema_version SET version = 99");
   newer.close();
@@ -704,53 +683,4 @@ test("the observation inbox and capture cursors round-trip, amend whole, and cas
     )
     .run("gen-inbox", 0, "bad", JSON.stringify({ id: "bad" }));
   assert.equal(loadBrainEnvelope(database, MAIN_SESSION_KEY).unreadable, true);
-});
-
-test("a database still carrying the retired memory tables opens with them dropped and everything else intact", () => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "luke-store-"));
-  const location = path.join(directory, "agent.sqlite");
-  const seeded = StoreDatabase.open(location);
-  createConversation(seeded, {
-    agentId: DEFAULT_AGENT_ID,
-    sessionKey: MAIN_SESSION_KEY,
-    name: "main",
-    now: NOW,
-  });
-  saveBrainEnvelope(seeded, MAIN_SESSION_KEY, {
-    kind: SAVE_KIND.REPLACE,
-    state: populatedState("gen-kept"),
-  });
-  appendHistory(seeded, MAIN_SESSION_KEY, [line("kept", NOW, { eventId: "k" })], NOW);
-  seeded.close();
-
-  // The shape a build before the memory tables went: their rows stand, and
-  // the version is the one before the migration that drops them.
-  const older = new DatabaseSync(location);
-  older.exec("CREATE TABLE memory_candidates (candidate_id TEXT PRIMARY KEY, words TEXT NOT NULL)");
-  older.prepare("INSERT INTO memory_candidates VALUES (?, ?)").run("c-1", "CANDIDATE_SECRET");
-  older.exec("UPDATE schema_version SET version = 9");
-  older.close();
-
-  const database = StoreDatabase.open(location);
-  // SAFETY: the query selects the one column its row type names.
-  const tables = database
-    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'memory_%'")
-    .all() as { name: string }[];
-  const names = new Set(tables.map((row) => row.name));
-  assert.equal(names.has("memory_candidates"), false);
-  // What the index and the flush marker still need stands untouched beside it.
-  assert.equal(names.has("memory_index_chunks"), true);
-  assert.equal(names.has("memory_flush_state"), true);
-  // SAFETY: as above.
-  const version = database.prepare("SELECT version FROM schema_version").get() as {
-    version: number;
-  };
-  assert.equal(version.version, STORE_SCHEMA_VERSION);
-  assert.equal(loadBrainEnvelope(database, MAIN_SESSION_KEY).state?.generationId, "gen-kept");
-  assert.deepEqual(
-    listHistory(database, MAIN_SESSION_KEY, NOW).map((entry) => entry.words),
-    ["kept"],
-  );
-  database.close();
-  fs.rmSync(directory, { recursive: true, force: true });
 });

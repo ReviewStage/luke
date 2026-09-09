@@ -113,7 +113,7 @@ export interface ToolResult {
  * The standing a runtime hands the executor with each admitted invocation:
  * which run it belongs to, whether that run still stands, and the signal
  * every wait of the run settles on. The executor asks `isRevoked()` after
- * each step it awaited and once more before an effect, so an act prepared
+ * each step it awaited and once more before an effect, so an action prepared
  * inside a run that ended meanwhile is refused rather than dispatched.
  */
 export interface ToolExecutionContext {

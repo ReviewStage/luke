@@ -20,7 +20,7 @@ import {
  * each other, at construction, so a wrong declaration cannot ship.
  */
 
-/** Why a value was refused. Three words, because a caller can only act on three. */
+/** Why a value was refused. Three words, because a caller can only action on three. */
 export const SCHEMA_REFUSAL = {
   /** Wrong type, wrong structure, unknown key, missing required key, unlisted literal. */
   MALFORMED: "malformed",

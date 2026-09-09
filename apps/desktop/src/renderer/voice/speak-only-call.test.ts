@@ -13,7 +13,7 @@ import {
   realtimeSessionConfig,
 } from "@sidecar/realtime";
 import { REPLY_KIND, type ReplyKind } from "@sidecar/voice/orchestrator";
-import { ACT_RESULT_STATUS, isRecord, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, isRecord, type WireRecord } from "@sidecar/wire";
 import type { JsonValue, ParsedJsonObject } from "@sidecar/wire/testing";
 import {
   asMediaTrack,
@@ -199,7 +199,7 @@ test("a tool call on a speak-only call is refused before anything can act", asyn
   // Nothing can reach here — the session declared no tools — so a call that
   // does is malformed and is answered as such rather than performed.
   assert.deepEqual(await context.executeTool(ASK_BRAIN_TOOL.name), {
-    status: ACT_RESULT_STATUS.REJECTED,
+    status: ACTION_RESULT_STATUS.REJECTED,
     reason: "This call carries no tools.",
   });
 });
@@ -304,7 +304,7 @@ test("a stop cuts the reply where it stands and opens nothing in its place", asy
   assert.equal(context.call.stopSpeaking(), false);
 });
 
-test("a failed briefing delivery leaves no transcript for History", async () => {
+test("a failed briefing delivery leaves no transcript for Conversation", async () => {
   const context = harness();
   await context.call.connect();
   context.call.speak(briefingAbout("session-a", "Checkout finished."));

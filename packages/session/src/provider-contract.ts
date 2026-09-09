@@ -1,16 +1,16 @@
 import type { Admitted } from "@sidecar/wire";
-import type { AdvertisedControl } from "./advertised-acts.js";
+import type { AdvertisedControl } from "./advertised-actions.js";
 import type { WorkspaceAgentSelection } from "./workspace-agents.js";
 
 /**
- * What each act is asked with. Every one is an `Admitted` request, which only
- * `admit()` in `@sidecar/acts` stands behind: the session or project was one
- * the roster that pass reported, the act was one it advertised, and the
+ * What each action is asked with. Every one is an `Admitted` request, which only
+ * `admit()` in `@sidecar/actions` stands behind: the session or project was one
+ * the roster that pass reported, the action was one it advertised, and the
  * developer's text was bounded, before a provider saw any of it. What a
  * provider answers for is its own route — the advertised control, spawn
  * target, rename target, or listed project it reads back from its own latest
  * pass — and the provider's documented shape, and nothing about whether the
- * act may run.
+ * action may run.
  */
 
 /** A provider-local request for a control that was previously exposed by observation. */

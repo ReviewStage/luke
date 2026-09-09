@@ -1,4 +1,4 @@
-import { maximumRememberedFactLength, rememberedFactText } from "@sidecar/acts";
+import { maximumRememberedFactLength, rememberedFactText } from "@sidecar/actions";
 import { WORKSPACE_FILE } from "@sidecar/runtime";
 
 /**
@@ -31,7 +31,7 @@ export const REMEMBERED_HEADING = "## Remembered";
 
 const BULLET_RE = /^\s*[-*]\s+(.*\S)\s*$/u;
 
-/** One flattening and bound for a fact's words: the acts package's, the same one a remember act applies at the door. */
+/** One flattening and bound for a fact's words: the actions package's, the same one a remember action applies at the door. */
 export const maximumNotebookEntryLength = maximumRememberedFactLength;
 
 export function notebookEntryText(value: string): string | undefined {

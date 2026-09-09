@@ -1,7 +1,7 @@
 /**
  * What a provider line's delete is currently asking.
  *
- * Deleting a stored key is the one act in this panel that cannot be undone from
+ * Deleting a stored key is the one action in this panel that cannot be undone from
  * inside it. Luke never sends a key back — the main process reports where a
  * credential resolved from and nothing more — so a trash pressed by mistake
  * costs a trip to the provider's own site to put right. That is what the

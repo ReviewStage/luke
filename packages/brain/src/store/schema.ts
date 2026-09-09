@@ -1,18 +1,18 @@
 /**
  * The per-agent database, one file under the agent's own directory in Luke's
  * application data. Every kind of thing the brain kept in one JSON envelope
- * has a table of its own here, so a request, an act's receipt, a transcript
+ * has a table of its own here, so a request, an action's receipt, a transcript
  * cursor, and the model's opaque checkpoint items can be written and let go
- * of separately, and the history the panel draws is kept apart from the
+ * of separately, and the conversation the panel draws is kept apart from the
  * payloads it is projected from.
  *
  * Two lifetimes are deliberately kept apart. A conversation session — the
  * brain's generation — dies at a fixed age or at a Clear, and its checkpoints,
- * cursors, requests, and receipts cascade away with it. The history the panel
- * draws answers to its own rolling retention instead: a history event names
+ * cursors, requests, and receipts cascade away with it. The conversation the panel
+ * draws answers to its own rolling retention instead: a conversation event names
  * the session that stood when it was written, for attribution, but the column
  * is not a foreign key, so a generation's expiry erases no visible line. Only
- * the Clear erases both, and it does so explicitly. A conversation's history
+ * the Clear erases both, and it does so explicitly. A conversation's line
  * sequence counts up from a counter on the conversation row and is never
  * reused, however many lines retention or a Clear has let go of. The Clear's
  * cutoff is kept on the conversation row as well, written in the same
@@ -62,27 +62,33 @@
  * Memory maintenance keeps each conversation's last flush, so a flush runs
  * once per compaction cycle.
  *
- * Version 10 drops the tables a nightly consolidation sweep kept — its
- * short-term candidates, ingestion cursors and seen-message hashes, source
- * tombstones, and MEMORY.md rewrite preimages. Nothing reads or writes them
+ * The tables a nightly consolidation sweep once kept — its short-term
+ * candidates, ingestion cursors and seen-message hashes, source tombstones,
+ * and MEMORY.md rewrite preimages — are gone: nothing reads or writes them
  * any more, and the notebook's files are the source of truth they were
  * derived from.
+ *
+ * The conversation's own tables are named for what they hold:
+ * `conversation_events` for its lines and `conversation_archives` for the
+ * recovery payloads of deleted conversations, with the conversation row's
+ * sequence, cutoff, and the request's recorded-at column named to match.
+ * Version 11 carries nothing across that rename: a database from before it
+ * is refused at the door rather than opened onto tables whose columns it
+ * lacks, and no step exists to carry it over.
+ *
+ * The conversation's own tables are named for what they hold:
+ * `conversation_events` for its lines and `conversation_archives` for the
+ * recovery payloads of deleted conversations, with the conversation row's
+ * sequence, cutoff, and the request's recorded-at column named to match.
+ * Version 11 carries nothing across that rename: a database from before it
+ * is refused at the door rather than opened onto tables whose columns it
+ * lacks, and no step exists to carry it over.
  *
  * The schema is versioned by the `schema_version` table. A database at a
  * version this build does not know is refused rather than migrated by guess.
  */
 
 import type { SQLInputValue } from "node:sqlite";
-
-/**
- * The stamp version 2 writes onto a checkpoint stored before stamps existed:
- * every such checkpoint was the tool-loop runtime's first version over the
- * Responses input array, because nothing else ever wrote one. Pinned history,
- * so it is a literal rather than composed from this build's own ids — a
- * runtime or item format renamed later must not change what a decade-old row
- * is said to be.
- */
-const LEGACY_CHECKPOINT_FORMAT_TAG = "tool-loop@1:openai-responses-input/1";
 
 /**
  * One flush marker per conversation: the generation and compaction count the
@@ -97,7 +103,16 @@ const MEMORY_FLUSH_STATE_TABLE = `CREATE TABLE IF NOT EXISTS memory_flush_state 
     flushed_at INTEGER NOT NULL
   )`;
 
-export const STORE_SCHEMA_VERSION = 10;
+export const STORE_SCHEMA_VERSION = 11;
+
+/**
+ * The earliest version this build opens. The rename at 11 carried nothing
+ * across: a database from before it still holds the old table and column
+ * names, and `CREATE TABLE IF NOT EXISTS` cannot rename a column on a table
+ * that already stands, so opening one would fail at its first write. It is
+ * refused at the door instead, and there is no step that carries it over.
+ */
+export const STORE_SCHEMA_FLOOR = 11;
 
 /**
  * How a database at an earlier version is brought to this one, in order. Each
@@ -112,76 +127,8 @@ export interface SchemaMigrationStep {
   params: readonly SQLInputValue[];
 }
 
-export const STORE_SCHEMA_MIGRATIONS: ReadonlyMap<number, readonly SchemaMigrationStep[]> = new Map(
-  [
-    [
-      2,
-      [
-        { sql: "ALTER TABLE conversation_sessions ADD COLUMN checkpoint_format TEXT", params: [] },
-        {
-          sql: `UPDATE conversation_sessions SET checkpoint_format = ?
-       WHERE checkpoint_format IS NULL
-         AND EXISTS (SELECT 1 FROM runtime_checkpoints WHERE runtime_checkpoints.session_id = conversation_sessions.session_id)`,
-          params: [LEGACY_CHECKPOINT_FORMAT_TAG],
-        },
-      ],
-    ],
-    [
-      3,
-      [
-        { sql: "ALTER TABLE runtime_checkpoints DROP COLUMN format", params: [] },
-        {
-          sql: "ALTER TABLE conversations ADD COLUMN kind TEXT NOT NULL DEFAULT 'main'",
-          params: [],
-        },
-        { sql: "ALTER TABLE conversations ADD COLUMN archived_at INTEGER", params: [] },
-        { sql: "ALTER TABLE conversations ADD COLUMN archive_reason TEXT", params: [] },
-        { sql: "ALTER TABLE conversations ADD COLUMN pinned_at INTEGER", params: [] },
-        {
-          sql: "ALTER TABLE conversations ADD COLUMN last_activity_at INTEGER NOT NULL DEFAULT 0",
-          params: [],
-        },
-        {
-          sql: "ALTER TABLE conversations ADD COLUMN next_transcript_sequence INTEGER NOT NULL DEFAULT 1",
-          params: [],
-        },
-        {
-          sql: `UPDATE conversations SET last_activity_at = MAX(
-         created_at,
-         COALESCE((SELECT MAX(recorded_at) FROM history_events WHERE history_events.session_key = conversations.session_key), 0),
-         COALESCE((SELECT MAX(created_at) FROM conversation_sessions WHERE conversation_sessions.session_key = conversations.session_key), 0)
-       )`,
-          params: [],
-        },
-      ],
-    ],
-    [
-      9,
-      [
-        {
-          sql: "ALTER TABLE conversation_sessions ADD COLUMN compaction_count INTEGER NOT NULL DEFAULT 0",
-          params: [],
-        },
-        // The flush marker is keyed by the generation it was written under
-        // from this version on; rows from before it name no generation and
-        // were read by nothing, so the table starts over rather than
-        // carrying a marker no cycle can claim.
-        { sql: "DROP TABLE memory_flush_state", params: [] },
-        { sql: MEMORY_FLUSH_STATE_TABLE, params: [] },
-      ],
-    ],
-    [
-      10,
-      [
-        { sql: "DROP TABLE IF EXISTS memory_candidates", params: [] },
-        { sql: "DROP TABLE IF EXISTS memory_ingestion_cursors", params: [] },
-        { sql: "DROP TABLE IF EXISTS memory_ingested_messages", params: [] },
-        { sql: "DROP TABLE IF EXISTS memory_forgotten_sources", params: [] },
-        { sql: "DROP TABLE IF EXISTS memory_rewrites", params: [] },
-      ],
-    ],
-  ],
-);
+export const STORE_SCHEMA_MIGRATIONS: ReadonlyMap<number, readonly SchemaMigrationStep[]> =
+  new Map();
 
 export const STORE_SCHEMA_STATEMENTS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS schema_version (
@@ -196,8 +143,8 @@ export const STORE_SCHEMA_STATEMENTS: readonly string[] = [
     agent_id TEXT NOT NULL REFERENCES agents(agent_id),
     name TEXT NOT NULL,
     created_at INTEGER NOT NULL,
-    next_history_sequence INTEGER NOT NULL DEFAULT 1,
-    history_cleared_at INTEGER,
+    next_conversation_sequence INTEGER NOT NULL DEFAULT 1,
+    conversation_cleared_at INTEGER,
     kind TEXT NOT NULL DEFAULT 'main',
     archived_at INTEGER,
     archive_reason TEXT,
@@ -258,10 +205,10 @@ export const STORE_SCHEMA_STATEMENTS: readonly string[] = [
     settled_at INTEGER,
     text TEXT,
     failure TEXT,
-    performed_acts INTEGER NOT NULL,
-    unknown_acts INTEGER NOT NULL,
+    performed_actions INTEGER NOT NULL,
+    unknown_actions INTEGER NOT NULL,
     ask_recorded_at INTEGER,
-    history_recorded_at INTEGER
+    conversation_recorded_at INTEGER
   )`,
   `CREATE INDEX IF NOT EXISTS requests_by_session ON requests(session_id, ordinal)`,
   `CREATE TABLE IF NOT EXISTS action_receipts (
@@ -277,7 +224,7 @@ export const STORE_SCHEMA_STATEMENTS: readonly string[] = [
     PRIMARY KEY (run_id, call_id)
   )`,
   `CREATE INDEX IF NOT EXISTS action_receipts_by_session ON action_receipts(session_id, ordinal)`,
-  `CREATE TABLE IF NOT EXISTS history_events (
+  `CREATE TABLE IF NOT EXISTS conversation_events (
     session_key TEXT NOT NULL REFERENCES conversations(session_key),
     sequence INTEGER NOT NULL,
     session_id TEXT,
@@ -291,12 +238,12 @@ export const STORE_SCHEMA_STATEMENTS: readonly string[] = [
     payload TEXT NOT NULL,
     PRIMARY KEY (session_key, sequence)
   )`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS history_events_by_key
-    ON history_events(session_key, event_key)`,
-  `CREATE INDEX IF NOT EXISTS history_events_by_time
-    ON history_events(session_key, recorded_at, sequence)`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS history_events_once_published
-    ON history_events(session_key, request_id, kind) WHERE request_id IS NOT NULL`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS conversation_events_by_key
+    ON conversation_events(session_key, event_key)`,
+  `CREATE INDEX IF NOT EXISTS conversation_events_by_time
+    ON conversation_events(session_key, recorded_at, sequence)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS conversation_events_once_published
+    ON conversation_events(session_key, request_id, kind) WHERE request_id IS NOT NULL`,
   `CREATE TABLE IF NOT EXISTS transcript_events (
     session_key TEXT NOT NULL REFERENCES conversations(session_key),
     sequence INTEGER NOT NULL,
@@ -316,7 +263,7 @@ export const STORE_SCHEMA_STATEMENTS: readonly string[] = [
     created_at INTEGER NOT NULL,
     PRIMARY KEY (session_key, transcript_sequence)
   )`,
-  `CREATE TABLE IF NOT EXISTS history_archives (
+  `CREATE TABLE IF NOT EXISTS conversation_archives (
     archive_id TEXT PRIMARY KEY,
     session_key TEXT NOT NULL,
     kind TEXT NOT NULL,
@@ -328,7 +275,7 @@ export const STORE_SCHEMA_STATEMENTS: readonly string[] = [
     byte_length INTEGER NOT NULL,
     file_name TEXT NOT NULL,
     published_at INTEGER,
-    history_lines INTEGER NOT NULL,
+    conversation_lines INTEGER NOT NULL,
     transcript_events INTEGER NOT NULL,
     previous_cutoff INTEGER,
     payload BLOB

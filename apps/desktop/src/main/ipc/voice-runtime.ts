@@ -47,7 +47,7 @@ export interface VoiceRuntimeIpcDependencies {
    */
   recordAgentTrace: (trace: AgentWireTrace) => void;
   /**
-   * The History Clear, carried out here before the voice window is told, and
+   * The Conversation Clear, carried out here before the voice window is told, and
    * answering whether the erasure completed on disk: the view and every
    * context are emptied either way, and a false answer is what the panel
    * shows as a Clear that did not finish.

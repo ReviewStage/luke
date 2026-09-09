@@ -88,7 +88,7 @@ struct LukeApp: App {
 
     /// The account edges analytics reacts to. Restores never pass here — the
     /// keychain read lands before this view observes — so a sign-in edge is
-    /// always the developer's own act, the transition the desktop counts.
+    /// always the developer's own action, the transition the desktop counts.
     private func accountEdge(from previous: AuthState, to current: AuthState) {
         switch (previous, current) {
         case (.signedOut, .signedIn(let identity)):

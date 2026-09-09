@@ -3,9 +3,9 @@ import {
   type HostedConversationAnswer,
   isCloudAgentProviderId,
 } from "../core.js";
-import type { ConversationReadRefusal } from "./act-execute.js";
-import { providerReadsConversation } from "./act-execute.js";
-import { parseProviderSessionId } from "./act-session.js";
+import type { ConversationReadRefusal } from "./action-execute.js";
+import { providerReadsConversation } from "./action-execute.js";
+import { parseProviderSessionId } from "./action-session.js";
 import { decryptProviderKey } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import { createRateBrake } from "./rate-brake.js";
@@ -61,7 +61,7 @@ function parseBeforeOffset(value: string): number | undefined {
 
 /**
  * Read-a-conversation-on-demand: one GET per ask from an opened conversation
- * screen, sharing the act endpoints' gates — bearer auth, a cloud-agent provider
+ * screen, sharing the action endpoints' gates — bearer auth, a cloud-agent provider
  * id, a bounded session id and cursor, and the stored key decrypted only for
  * a request that passed everything else. The executor re-observes before
  * reading, exactly as a write would, and the server stores nothing after

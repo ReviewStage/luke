@@ -14,7 +14,7 @@ import {
   type ModelRequestOptions,
   type ModelResponse,
 } from "@sidecar/runtime/vocabulary";
-import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { BrainAgent, type BrainFlushInput, type BrainFlushMarkerStore } from "./agent.js";
 import { ResponsesContextEngine } from "./context-engine.js";
 import {
@@ -154,11 +154,11 @@ function agentWith(
   const agent = new BrainAgent({
     runtime,
     prepareTurn: () => ({ prompt: "flush test", layers: {} }),
-    acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
+    actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
     roster: () => ({ text: "", identities: [] }),
     standingContext: () => "",
-    readTranscriptSince: async () => ({ status: ACT_RESULT_STATUS.REJECTED, reason: "no" }),
-    readTranscript: async () => ({ status: ACT_RESULT_STATUS.REJECTED, reason: "no" }),
+    readTranscriptSince: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
+    readTranscript: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
     deliver: () => undefined,
     store,
     createRunId: () => `run-${ids++}`,
