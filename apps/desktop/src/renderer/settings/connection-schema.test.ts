@@ -49,13 +49,12 @@ test("a section's rows stand in an order the table fixes rather than the literal
 
 test("a build that can offer nothing draws no connection but the ones always there", () => {
   const offered = offeredConnections(connectionVisibility()).map((spec) => spec.id);
-  // Codex is observed through a CLI this build always asks about, and every
-  // cloud agent's key row is listed whether or not a key is stored — the list
-  // is how you learn which services Luke can watch at all.
-  assert.deepEqual(offered, [
-    "codex-cloud",
-    ...CLOUD_AGENT_PROVIDER_LIST.map((provider) => provider.id),
-  ]);
+  // Every cloud agent's key row is listed whether or not a key is stored — the
+  // list is how you learn which services Luke can watch at all.
+  assert.deepEqual(
+    offered,
+    CLOUD_AGENT_PROVIDER_LIST.map((provider) => provider.id),
+  );
 });
 
 test("every connection this build can offer stands when its condition is true", () => {
@@ -93,10 +92,9 @@ test("the voice key's row stands with the half that supplies it, and nowhere els
 });
 
 test("a connection made somewhere else offers no control that pretends otherwise", () => {
-  // Codex connects by `codex login` in the user's own terminal, and local
-  // Conductor by an index on disk. Both are declarations of having nothing to
-  // press rather than an absence of code.
-  for (const id of ["codex-cloud", CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID]) {
+  // Local Conductor connects by an index on disk: a declaration of having
+  // nothing to press rather than an absence of code.
+  for (const id of [CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID]) {
     const spec = CONNECTION_SCHEMA.find((entry) => entry.id === id);
     assert.ok(spec, id);
     assert.equal(spec.actions(connectionInput()).length, 0, id);
@@ -131,7 +129,6 @@ test("a query reads the connections in the order the page draws them", () => {
     .filter((spec) => spec.page === SETTINGS_VIEW.CONNECTIONS)
     .map((spec) => spec.id);
   assert.deepEqual(offered, [
-    "codex-cloud",
     ...CLOUD_AGENT_PROVIDER_LIST.map((provider) => provider.id),
     CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
     SUPERSET_WORKSPACE_PROVIDER_ID,

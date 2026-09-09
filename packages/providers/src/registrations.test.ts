@@ -2,13 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { PROVIDER_ID, PROVIDER_ID_LIST, PROVIDER_IDENTITY_BY_ID } from "@sidecar/session";
-import { codexCloudPlugin } from "./codex/cloud.js";
 import { providerRegistrations } from "./registrations.js";
 
 const registrations = providerRegistrations({
   readApiKey: async () => undefined,
-  // A runner that answers signed-out, so no test can spawn a real CLI.
-  codexCloud: codexCloudPlugin({ run: async () => ({ exitCode: 1, stdout: "" }) }),
   observationHookInstallation: (providerId) => ({
     providerHome: `/missing/${providerId}`,
     hookScriptPath: `/missing/${providerId}-hook`,

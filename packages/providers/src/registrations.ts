@@ -4,15 +4,9 @@ import {
   type CredentialProvider,
   type CredentialProviderId,
 } from "@sidecar/credentials/vocabulary";
-import {
-  mergePlugins,
-  PROVIDER_ID,
-  type ProviderId,
-  type SessionProviderPlugin,
-} from "@sidecar/session";
+import { PROVIDER_ID, type ProviderId, type SessionProviderPlugin } from "@sidecar/session";
 import { CLAUDE_HOOK_EVENT, installClaudeCodeObservationHooks } from "./claude-code/hooks.js";
 import { CODEX_HOOK_EVENT, installCodexObservationHooks } from "./codex/hooks.js";
-import { CODEX_PROVIDER } from "./codex/observe.js";
 import { conductorPlugin } from "./conductor/index.js";
 import type { ObservationHookProviderId } from "./hook-registry.js";
 import { localSessionAdapters } from "./local-adapters.js";
@@ -48,17 +42,9 @@ export interface ProviderRegistrationOptions {
     providerId: ObservationHookProviderId,
   ) => ObservationHookInstallation;
   /**
-   * Built by the caller rather than here, because the app also asks it what
-   * the latest pass learned about the Codex CLI login — the settings snapshot
-   * reports that beside the key sources — and the reference the settings read
-   * is the reference the merged plugin observes with.
-   */
-  codexCloud: SessionProviderPlugin;
-  /**
    * Where every cloud adapter constructed here lands its diagnostic channel,
-   * tagged with the provider it came from. The `codexCloud` above is the
-   * caller's to wire, at the construction the caller already owns. Absent,
-   * diagnostics reach nobody, which is what a fixture run wants.
+   * tagged with the provider it came from. Absent, diagnostics reach nobody,
+   * which is what a fixture run wants.
    */
   onDiagnostic?: (providerId: ProviderId, kind: AdapterDiagnosticKind, error: Error) => void;
   now?: () => number;
@@ -102,11 +88,6 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
     hookEventsDirectory: (providerId) => () =>
       options.observationHookInstallation(providerId).spoolDirectory,
   });
-  // Codex runs sessions in two places: on this machine, observed from its own
-  // transcripts, and in Codex cloud, observed through the Codex CLI's
-  // documented read under the ChatGPT login the user already gave that CLI.
-  const codex = mergePlugins(CODEX_PROVIDER, [locals.codexLocal, options.codexCloud]);
-
   return {
     [PROVIDER_ID.CLAUDE_CODE]: {
       plugin: locals.claudeCode,
@@ -121,7 +102,7 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
       },
     },
     [PROVIDER_ID.CODEX]: {
-      plugin: codex,
+      plugin: locals.codexLocal,
       registerObservationHook: observationHookRegistration(
         installCodexObservationHooks,
         codexInstallation,

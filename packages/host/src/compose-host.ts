@@ -74,7 +74,6 @@ export function composeHost(options: HostSeams): Host {
   // list: each is a cycle the concerns genuinely have, and reading one before
   // this has run throws by name rather than answering nothing.
   settings.link({
-    codexCloudConnection: observation.codexCloudConnection,
     refreshAccount: async () => {
       await account.session.refreshOnce();
     },

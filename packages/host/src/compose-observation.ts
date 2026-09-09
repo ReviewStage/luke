@@ -21,7 +21,6 @@ import {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticKind,
   claudeDesktopApplications,
-  codexCloudPlugin,
   conductorApplications,
   conductorLocalWorkspacePlugin,
   ObservationHookRegistry,
@@ -46,7 +45,6 @@ import {
   isWorkspaceProviderId,
   normalizeObservedWorkspaceProjects,
   type ObservedWorkspaceProject,
-  PROVIDER_ID,
   PROVIDER_ID_LIST,
   type ProviderId,
   rosterRelevantSessions,
@@ -60,7 +58,6 @@ import {
   workspaceProjectSelectionId,
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
-import type { CliConnection } from "@sidecar/settings/wire";
 import {
   ACTION_RESULT_STATUS,
   isRecord,
@@ -108,7 +105,6 @@ export interface ObservationComposer extends Composer {
   readonly loop: ObservationLoop;
   readonly sessionActions: SessionActionPerformer;
   readonly supersetCli: ReturnType<typeof supersetPlugin>["cli"];
-  codexCloudConnection: () => CliConnection;
   pluginFor: (providerId: string) => SessionProviderPlugin | undefined;
   session: (identity: SessionIdentity) => Session | undefined;
   observedSessionCount: () => number;
@@ -160,9 +156,6 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
   }
 
   const sessionRegistry = new SessionRoster();
-  const codexCloud = codexCloudPlugin({
-    onDiagnostic: (kind, error) => reportAdapterDiagnostic(PROVIDER_ID.CODEX, kind, error),
-  });
   const conductorSessionApplications = conductorApplications();
   const claudeDesktopSessionApplications = claudeDesktopApplications();
   // The local counterpart of the cloud Conductor adapter's creation path: it
@@ -192,7 +185,6 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
   const providerRegistry = providerRegistrations({
     readApiKey: (providerId) => settingsStore.readApiKey(providerId),
     observationHookInstallation: (providerId) => observationHooks.installation(providerId),
-    codexCloud,
     onDiagnostic: reportAdapterDiagnostic,
   });
   const orderedRegistrations: readonly ProviderRegistration[] = PROVIDER_ID_LIST.map(
@@ -526,7 +518,6 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     intervalMs: SESSION_REFRESH_INTERVAL_MS,
     run: refreshProviderSessions,
     afterRun: () => {
-      void settings.emitCodexCloudConnection();
       links.get().rosterLook();
     },
   });
@@ -687,7 +678,6 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     loop,
     sessionActions,
     supersetCli,
-    codexCloudConnection: () => codexCloud.connection(),
     pluginFor,
     session: (identity) => sessionRegistry.get(identity),
     observedSessionCount: () => actableSessions().length,

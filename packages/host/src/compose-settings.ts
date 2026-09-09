@@ -35,7 +35,7 @@ import {
   settingAnalytics,
   settingEntryGuard,
 } from "@sidecar/settings";
-import type { CliConnection, SettingsUpdateResult } from "@sidecar/settings/wire";
+import type { SettingsUpdateResult } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS, isWireString, lateRef, type UnparsedWireValue } from "@sidecar/wire";
 import { AccountPreferencesClient } from "./account-preferences-client.js";
 import type { Composer } from "./composer.js";
@@ -54,7 +54,6 @@ type StoredSettings = SettingsUpdateResult["settings"]["stored"];
  * the graph however much simpler that would be.
  */
 export interface SettingsLinks {
-  codexCloudConnection: () => CliConnection;
   refreshAccount: () => Promise<void>;
   applyVoiceCredential: () => Promise<void>;
   setVoice: (voice: StoredSettings["voice"]) => void;
@@ -75,7 +74,6 @@ export interface SettingsComposer extends Composer {
   recordProductEventOncePerDay: ProductEventSender["recordOncePerDay"];
   emitSettingsSnapshot: (settings: SettingsUpdateResult["settings"], reporter?: string) => void;
   emitSettings: () => Promise<void>;
-  emitCodexCloudConnection: () => Promise<void>;
   refusedSettings: (reason: string) => Promise<SettingsUpdateResult>;
   settingsWrite: (
     save: () => Promise<SettingsUpdateResult>,
@@ -110,7 +108,6 @@ export function composeSettings(dependencies: SettingsDependencies): SettingsCom
     credentialsUsable: runMode.observesProviders,
     cipher: options.cipher,
     environment: options.environment,
-    codexCloudConnection: () => links.get().codexCloudConnection(),
   });
 
   const productEvents = new ProductEventSender({
@@ -292,14 +289,6 @@ export function composeSettings(dependencies: SettingsDependencies): SettingsCom
 
   async function emitSettings(): Promise<void> {
     emitSettingsSnapshot(await store.snapshot());
-  }
-
-  let announcedCodexCloudConnection: CliConnection | undefined;
-  async function emitCodexCloudConnection(): Promise<void> {
-    const connection = links.get().codexCloudConnection();
-    if (connection === announcedCodexCloudConnection) return;
-    announcedCodexCloudConnection = connection;
-    await emitSettings();
   }
 
   function recordSettingUpdate(field: AppSettingField, settings: SettingsUpdateResult["settings"]) {
@@ -501,7 +490,6 @@ export function composeSettings(dependencies: SettingsDependencies): SettingsCom
       productEvents.recordOncePerDay(name, key, properties),
     emitSettingsSnapshot,
     emitSettings,
-    emitCodexCloudConnection,
     refusedSettings,
     settingsWrite,
     reconcileProviderKeyVault,
@@ -513,7 +501,6 @@ export function composeSettings(dependencies: SettingsDependencies): SettingsCom
     flushProductEvents: () => productEvents.flush(),
     link: (next) => {
       links.set(next);
-      announcedCodexCloudConnection = next.codexCloudConnection();
     },
     start: async () => {
       void store.snapshot();

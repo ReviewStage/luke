@@ -26,8 +26,6 @@ import {
 import { REALTIME_DEFAULTS } from "@sidecar/realtime";
 import {
   type AppSettings,
-  CLI_CONNECTION,
-  type CliConnection,
   type SettingsResetScope,
   type SettingsUpdateResult,
   VOICE_SOURCE,
@@ -124,15 +122,6 @@ export interface SettingsStoreOptions {
    * key is. Only the app knows which kind of run this is. True by default.
    */
   credentialsUsable?: boolean;
-  /**
-   * What the latest observation pass learned about the Codex CLI's login. It
-   * rides the settings snapshot beside `credentialSources` because it answers
-   * the same question for a provider whose connection is not a key — but the
-   * fact lives with the observer, so the app supplies it rather than the
-   * store resolving it. Absent, the snapshot says the question was never
-   * asked, which is what a store without an app around it can honestly say.
-   */
-  codexCloudConnection?: () => CliConnection;
 }
 
 interface PersistedSettings extends StoredAppSettings {
@@ -567,7 +556,6 @@ export class SettingsStore {
   readonly #cipher: SecretCipher;
   readonly #environment: NodeJS.ProcessEnv;
   readonly #credentialsUsable: boolean;
-  readonly #codexCloudConnection: () => CliConnection;
   #loading: Promise<PersistedSettings> | undefined;
   #resolved = new Map<CredentialProviderId, ResolvedApiKey>();
   /** Decrypted accounts, cached like the keys so timers never drum the Keychain. */
@@ -718,7 +706,6 @@ export class SettingsStore {
     this.#cipher = options.cipher;
     this.#environment = options.environment ?? process.env;
     this.#credentialsUsable = options.credentialsUsable ?? true;
-    this.#codexCloudConnection = options.codexCloudConnection ?? (() => CLI_CONNECTION.UNKNOWN);
   }
 
   async snapshot(): Promise<AppSettings> {
@@ -749,11 +736,6 @@ export class SettingsStore {
           CredentialProviderId,
           CredentialSource
         >,
-        // The same question `credentialSources` answers, for the one provider
-        // whose connection is a CLI login rather than a key: asked of the
-        // observer that actually holds the answer, at snapshot time like the
-        // key sources beside it.
-        codexCloudConnection: this.#codexCloudConnection(),
         // Reports what storing a key has already established, and asks nothing on
         // its own: a snapshot is taken on every launch, and most of them are for
         // a user with no key to protect.
