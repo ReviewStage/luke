@@ -23,7 +23,12 @@ import {
   type Session,
   workspaceAgentModels,
 } from "@sidecar/session";
-import { ACTION_RESULT_STATUS, isWireString, type WireRecord } from "@sidecar/wire";
+import {
+  ACTION_RESULT_STATUS,
+  isWireString,
+  UNKNOWN_ACTION_STATUS,
+  type WireRecord,
+} from "@sidecar/wire";
 import type { SessionActionPerformer } from "../session-action-performer.js";
 
 /** The developer's saved creation tie-breaks, as the projects context narrates them. */
@@ -138,26 +143,34 @@ export function createBrainActionPerformer(
     };
   };
 
-  const carrySessionAction = (
+  const carrySessionAction = async (
     action: ValidatedAction<SessionActionKind>,
     execution: BrainActionExecution,
   ): Promise<WireRecord> => {
-    // The ask is recorded before the outcome is known: a refusal still leaves
-    // the developer having asked it, and the reply voicing the outcome is
-    // recorded as what Luke said.
-    dependencies.recordConversationEntry(
-      sessionActionConversationEntry(
-        action,
-        { sessions: dependencies.sessions(), projects: dependencies.workspaceProjects() },
-        execution.origin === RUN_ORIGIN.USER
-          ? CONVERSATION_ENTRY_KIND.ACTION
-          : CONVERSATION_ENTRY_KIND.OWN_ACTION,
-        execution.runId,
-      ),
-    );
     // The performer awaits once more of its own before a create or a spawn,
     // so the execution rides along to be asked again there.
-    return dependencies.sessionActions.perform(action, execution);
+    const result = await dependencies.sessionActions.perform(action, execution);
+    // The line records the act, in the past tense, so it is written once the
+    // effect has settled: a provider that accepted it, or one whose answer
+    // never came back, so the act may have landed. A provider that refused it
+    // leaves no line — nothing was done — and the reply voicing the refusal is
+    // recorded as what Luke said.
+    if (
+      result.status === ACTION_RESULT_STATUS.ACCEPTED ||
+      result.status === UNKNOWN_ACTION_STATUS
+    ) {
+      dependencies.recordConversationEntry(
+        sessionActionConversationEntry(
+          action,
+          { sessions: dependencies.sessions(), projects: dependencies.workspaceProjects() },
+          execution.origin === RUN_ORIGIN.USER
+            ? CONVERSATION_ENTRY_KIND.ACTION
+            : CONVERSATION_ENTRY_KIND.OWN_ACTION,
+          execution.runId,
+        ),
+      );
+    }
+    return result;
   };
 
   return {

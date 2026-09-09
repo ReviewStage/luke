@@ -21,7 +21,7 @@ import {
   type Session,
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
-import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS } from "@sidecar/wire";
 import {
   type BrainActionPerformerDependencies,
   createBrainActionPerformer,
@@ -172,7 +172,7 @@ test("a session action reaches the performer only for a session the roster holds
   assert.equal(landed.status, ACTION_RESULT_STATUS.ACCEPTED);
   assert.equal(performed.length, 1);
   assert.equal(performed[0]?.kind, "message");
-  // The ask is recorded as the developer's, before the outcome is known, and
+  // The act is recorded as the developer's once the provider accepted it, and
   // names the run that carried it, so the panel can fold the turn's actions.
   assert.equal(recorded.length, 1);
   assert.equal(recorded[0]?.kind, "action");
@@ -193,6 +193,34 @@ test("a session action reaches the performer only for a session the roster holds
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: "No such tool exists.",
   });
+});
+
+test("a session action the provider refused leaves no line, and one whose answer never came back does", async () => {
+  const refusing = performer({
+    sessionActions: {
+      perform: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "Not now." }),
+      openSession: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+      openSessionApplication: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+      openSessionChange: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+    },
+  });
+  const refused = await refusing.actions.perform(MESSAGE_CALL, LIVE);
+  assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.deepEqual(refusing.recorded, []);
+
+  const uncertain = performer({
+    sessionActions: {
+      perform: async () => ({ status: UNKNOWN_ACTION_STATUS, reason: "The connection closed." }),
+      openSession: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+      openSessionApplication: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+      openSessionChange: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+    },
+  });
+  const unknown = await uncertain.actions.perform(MESSAGE_CALL, LIVE);
+  assert.equal(unknown.status, UNKNOWN_ACTION_STATUS);
+  // The act may have landed, so the thread says it was taken; the reply carries the doubt.
+  assert.equal(uncertain.recorded.length, 1);
+  assert.equal(uncertain.recorded[0]?.kind, "action");
 });
 
 test("an issue action is refused outright while no tracker is connected", async () => {
