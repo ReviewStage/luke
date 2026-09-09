@@ -306,6 +306,15 @@ export abstract class RealtimeCall<Options extends RealtimeCallOptions = Realtim
     ) {
       return;
     }
+    this.endCall();
+  }
+
+  /**
+   * The ordinary end of a call: the channel closed under it, the provider
+   * ended it at its cap, or it stood idle long enough. Nothing is reported,
+   * `#closed` stays as it was, and the next `connect()` opens a fresh call.
+   */
+  protected endCall(): void {
     this.onCallLost();
     this.teardown();
     this.setStatus(REALTIME_STATUS.IDLE);

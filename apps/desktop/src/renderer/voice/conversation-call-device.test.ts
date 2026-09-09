@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_SERVER_EVENT, REALTIME_STATUS } from "@sidecar/realtime";
+import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { REPLY_KIND } from "@sidecar/voice/orchestrator";
 import {
   armDeveloperTurn,
@@ -18,15 +19,46 @@ import {
   reportedErrors,
   settleReply,
 } from "#testing/conversation-call-harness";
+import { IDLE_CALL_RETIRE_MS } from "./conversation-call";
 
-test("an idle call stays open until the provider closes it", async (t) => {
+test("an idle developer call retires itself after five minutes", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const context = harness();
+  await context.session.connect();
+
+  t.mock.timers.tick(IDLE_CALL_RETIRE_MS - 1);
+  assert.equal(context.session.isConnected, true);
+
+  t.mock.timers.tick(1);
+
+  // An ordinary end: no fault drawn, and the next press opens a fresh call.
+  // The conversation itself is the brain's History, not the call's.
+  assert.equal(context.session.status, REALTIME_STATUS.IDLE);
+  assert.equal(context.session.isConnected, false);
+  assert.deepEqual(reportedErrors(context), []);
+  assert.equal(await context.session.connect(), true);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+});
+
+test("a press during the idle countdown keeps the call", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const context = harness();
   await context.session.connect();
 
   t.mock.timers.tick(4 * 60_000);
-
+  context.session.beginTurn();
+  // The device's arrival is a promise, not a timer, so it lands under the mock.
+  await drainMicrotasks();
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+  context.session.stopListening(true);
+  settleReply(context);
+  // The countdown starts over at the exchange's end, not from the connect.
+  t.mock.timers.tick(4 * 60_000);
   assert.equal(context.session.isConnected, true);
+
+  t.mock.timers.tick(60_000);
+  assert.equal(context.session.status, REALTIME_STATUS.IDLE);
+  assert.equal(context.session.isConnected, false);
 });
 
 test("the device closes with the exchange and the conversation stays", async () => {

@@ -69,9 +69,29 @@ function sdkErrorText(value: TransportError["error"]): string | undefined {
   return normalized || undefined;
 }
 
+const RTC_ERROR_EVENT_TAG = "[object RTCErrorEvent]";
+const RTC_ERROR_EVENT_MESSAGE = "The voice connection closed.";
+
+/**
+ * The browser's own `RTCErrorEvent`, which a data channel abort raises. It is
+ * no plain object, so it is read here by its tag for the `RTCError` it
+ * carries — `String()` would print only the tag.
+ */
+function rtcErrorEventMessage(value: TransportError["error"]): string | undefined {
+  if (Object.prototype.toString.call(value) !== RTC_ERROR_EVENT_TAG) return undefined;
+  // SAFETY: The runtime tag above establishes an event whose fields remain untrusted below.
+  const event = value as { error?: unknown; message?: unknown };
+  const error = event.error;
+  // An `RTCError` is a `DOMException`, so an `Error`; a scripted stand-in is a record.
+  const nested = error instanceof Error ? error.message : sdkErrorRecord(error)?.message;
+  return sdkErrorText(nested) ?? sdkErrorText(event.message) ?? RTC_ERROR_EVENT_MESSAGE;
+}
+
 export function agentsRealtimeErrorMessage(error: TransportError["error"]): string {
   try {
     if (error instanceof Error) return error.message;
+    const rtc = rtcErrorEventMessage(error);
+    if (rtc !== undefined) return rtc;
     const record = sdkErrorRecord(error);
     if (record) {
       const nested = sdkErrorRecord(record.error);
@@ -143,12 +163,21 @@ export function createAgentsRealtimeTransport(
   options: SdkTransportFactoryOptions,
   injectedTransport?: RealtimeTransportLayer,
 ): SdkRealtimeTransport {
-  const report = (error: TransportError["error"]): void => {
+  let closed = false;
+  let live: RealtimeTransportLayer | undefined;
+  const surface = (error: TransportError["error"]): void => {
     try {
       options.onError(agentsRealtimeErrorMessage(error));
     } catch {
       // Closing a call must not be defeated by an error reporter.
     }
+  };
+  // An error on a call already being put away is not news to the developer:
+  // the channel abort that follows a close, or a provider-ended session, lands
+  // here after the session stopped listening.
+  const report = (error: TransportError["error"]): void => {
+    if (closed || live?.status === "disconnected" || live?.status === "disconnecting") return;
+    surface(error);
   };
 
   let releaseOwnedResources: (() => void) | undefined;
@@ -199,6 +228,7 @@ export function createAgentsRealtimeTransport(
         options.onToolOutputSent,
       );
     })();
+  live = transport;
 
   const tools = options.sessionConfig.tools.map((definition) =>
     tool({
@@ -241,7 +271,6 @@ export function createAgentsRealtimeTransport(
   });
   transport.on("connection_change", options.onConnectionChange);
 
-  let closed = false;
   return {
     get status() {
       return transport.status;
@@ -258,7 +287,7 @@ export function createAgentsRealtimeTransport(
       try {
         session.close();
       } catch (error) {
-        report(error);
+        surface(error);
       } finally {
         releaseOwnedResources?.();
       }

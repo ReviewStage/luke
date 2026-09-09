@@ -412,9 +412,35 @@ test("a service error is surfaced rather than swallowed", async () => {
   const context = harness();
   await context.session.connect();
 
-  context.emit({ type: REALTIME_SERVER_EVENT.ERROR, error: { message: "Session expired" } });
+  context.emit({ type: REALTIME_SERVER_EVENT.ERROR, error: { message: "Rate limit reached" } });
 
-  assert.ok(context.errors.includes("Session expired"));
+  assert.ok(context.errors.includes("Rate limit reached"));
+});
+
+test("a session_expired error ends the call quietly", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.ERROR,
+    error: {
+      type: "invalid_request_error",
+      code: "session_expired",
+      message: "Your session hit the maximum duration of 60 minutes.",
+    },
+  });
+
+  assert.equal(context.session.status, REALTIME_STATUS.IDLE);
+  assert.equal(context.session.isConnected, false);
+  assert.deepEqual(reportedErrors(context), []);
+
+  // The channel abort that follows lands on a call already put away.
+  context.closeChannel();
+  assert.equal(context.session.status, REALTIME_STATUS.IDLE);
+  assert.deepEqual(reportedErrors(context), []);
+
+  assert.equal(await context.session.connect(), true);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
 });
 
 test("malformed server data never breaks the session", async () => {

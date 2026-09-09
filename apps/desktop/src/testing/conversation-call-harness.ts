@@ -4,6 +4,7 @@
  * connecting, endings, interruption, the brain, the caption, the device — and
  * one harness is what keeps those files describing the same call.
  */
+import { after } from "node:test";
 import { BRAIN_ASK_PENDING_NOTE } from "@sidecar/brain/requests";
 import { BRAIN_ASK_PENDING_STATUS, type BrainAskResult } from "@sidecar/brain/requests-wire";
 import type { TraceDirection } from "@sidecar/devtrace/vocabulary";
@@ -118,6 +119,16 @@ export function brainAnswer(briefing: string, runId = "run-1"): BrainAskResult {
 export function brainPending(): BrainAskResult {
   return { status: BRAIN_ASK_PENDING_STATUS, note: BRAIN_ASK_PENDING_NOTE };
 }
+
+/**
+ * A developer's call left standing arms its idle retirement, a real timer of
+ * minutes; closing every call at the end lets the test process exit rather
+ * than wait one out.
+ */
+const openSessions: ConversationCall[] = [];
+after(async () => {
+  for (const session of openSessions) await session.close();
+});
 
 export function harness(
   options: {
@@ -380,6 +391,7 @@ export function harness(
     };
   }
   const session = new ConversationCall(sessionOptions);
+  openSessions.push(session);
 
   return {
     session,

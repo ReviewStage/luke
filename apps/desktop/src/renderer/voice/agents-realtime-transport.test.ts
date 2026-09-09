@@ -183,6 +183,46 @@ test("SDK errors are rendered without serializing unknown values", () => {
   );
 });
 
+test("an RTCErrorEvent is rendered by the error it carries, never as its tag", () => {
+  class RTCErrorEvent {
+    get [Symbol.toStringTag]() {
+      return "RTCErrorEvent";
+    }
+    constructor(readonly error: Error | { message: string } | undefined) {}
+  }
+
+  assert.equal(
+    agentsRealtimeErrorMessage(
+      new RTCErrorEvent({ message: "User-Initiated Abort, reason=Close called" }),
+    ),
+    "User-Initiated Abort, reason=Close called",
+  );
+  assert.equal(
+    agentsRealtimeErrorMessage(new RTCErrorEvent(new Error("Transport channel closed"))),
+    "Transport channel closed",
+  );
+  assert.equal(
+    agentsRealtimeErrorMessage(new RTCErrorEvent(undefined)),
+    "The voice connection closed.",
+  );
+});
+
+test("an error on a call already put away is not reported", async () => {
+  const closedFirst = sdkHarness(realtimeSessionConfig());
+  await connect(closedFirst);
+  const close = closedFirst.transport.expectCall("close");
+  closedFirst.session.close();
+  await close;
+  closedFirst.transport.emit("error", { type: "error", error: new Error("channel aborted") });
+  assert.deepEqual(closedFirst.errors, []);
+
+  const disconnectedFirst = sdkHarness(realtimeSessionConfig());
+  await connect(disconnectedFirst);
+  disconnectedFirst.transport.disconnect();
+  disconnectedFirst.transport.emit("error", { type: "error", error: new Error("channel aborted") });
+  assert.deepEqual(disconnectedFirst.errors, []);
+});
+
 test("a server error is left to the session's own filter, not reported twice", async () => {
   const context = sdkHarness(realtimeSessionConfig());
   await connect(context);
