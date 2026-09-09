@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { OutputAudioState } from "#shared/messages/audio";
-import { OutputVolumeWatcher, parseOutputLine } from "./output-volume";
+import { type OutputVolumeWatch, outputVolumeWatcher, parseOutputLine } from "./output-volume";
 
 interface Harness {
-  watcher: OutputVolumeWatcher;
+  watcher: OutputVolumeWatch;
   events: string[];
   killed: () => boolean;
   emit: (chunk: string) => void;
@@ -17,7 +17,7 @@ function harness(spawnFails = false): Harness {
   let onData: ((chunk: string) => void) | undefined;
   const exits: (() => void)[] = [];
 
-  const watcher = new OutputVolumeWatcher({
+  const watcher = outputVolumeWatcher({
     spawnHelper: () =>
       spawnFails
         ? undefined
@@ -108,6 +108,15 @@ test("stopping kills the helper and silences everything after", () => {
   context.die();
   // The stop was the app's own doing, so nothing is reported for it.
   assert.deepEqual(context.events, []);
+});
+
+test("a second start is refused rather than standing up a helper nobody reads", () => {
+  const context = harness();
+  assert.equal(context.watcher.start(), true);
+  assert.equal(context.watcher.start(), false);
+
+  context.emit("output muted=1 volume=0.42\n");
+  assert.deepEqual(context.events, ["state:1:0.42"]);
 });
 
 test("a line that does not parse is dropped rather than guessed at", () => {

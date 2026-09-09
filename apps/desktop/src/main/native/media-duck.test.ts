@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { MediaDuckController, type MediaDuckProcess } from "./media-duck";
+import { MediaDuckController } from "./media-duck";
+import type { NativeHelperProcess } from "./native-helper";
 
 /** Short enough to wait out for real, long enough to act inside of. */
 const RELEASE_DELAY_MS = 40;
@@ -14,13 +15,13 @@ interface Harness {
   die: () => void;
 }
 
-function harness(options: { spawns?: (() => MediaDuckProcess | undefined)[] } = {}): Harness {
+function harness(options: { spawns?: (() => NativeHelperProcess | undefined)[] } = {}): Harness {
   const commands: string[] = [];
   let spawned = 0;
   let ended = false;
   const exits: (() => void)[] = [];
 
-  const spawnHelper = (): MediaDuckProcess | undefined => {
+  const spawnHelper = (): NativeHelperProcess | undefined => {
     const scripted = options.spawns?.[spawned];
     spawned += 1;
     if (scripted) return scripted();

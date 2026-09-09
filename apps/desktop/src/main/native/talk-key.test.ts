@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TalkKeyWatcher } from "./talk-key";
+import { type TalkKeyWatch, talkKeyWatcher } from "./talk-key";
 
 interface Harness {
-  watcher: TalkKeyWatcher;
+  watcher: TalkKeyWatch;
   edges: string[];
   candidates: string[][];
   killed: () => boolean;
@@ -18,7 +18,7 @@ function harness(): Harness {
   let onData: ((chunk: string) => void) | undefined;
   const exits: (() => void)[] = [];
 
-  const watcher = new TalkKeyWatcher({
+  const watcher = talkKeyWatcher({
     spawnHelper: (requested) => {
       candidates.push([...requested]);
       return {

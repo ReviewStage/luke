@@ -1,5 +1,6 @@
 import type { OutputAudioState } from "#shared/messages/audio";
-import { NativeHelper, type NativeHelperProcess } from "./native-helper";
+import { LINE_UNAVAILABLE, lineWatcher } from "./line-watcher";
+import type { NativeHelperProcess } from "./native-helper";
 
 /**
  * The two things the helper says. Parsed rather than assumed, like the talk
@@ -23,12 +24,19 @@ export interface OutputVolumeEdges {
   onUnavailable(): void;
 }
 
-/** Only the parts of a child process this needs, so a test can supply them. */
-export type OutputVolumeProcess = NativeHelperProcess;
-
 export interface OutputVolumeWatcherOptions extends OutputVolumeEdges {
   /** Injectable so the reader can be exercised without a Mac or a binary. */
-  spawnHelper?: () => OutputVolumeProcess | undefined;
+  spawnHelper?: () => NativeHelperProcess | undefined;
+}
+
+export interface OutputVolumeWatch {
+  /**
+   * Starts the helper, reporting whether it could be launched at all. A `true`
+   * is not yet a readable output — that arrives on the helper's first line.
+   */
+  start(): boolean;
+  /** Stops the helper. Nothing succeeds it during shutdown, so no one waits. */
+  stop(): void;
 }
 
 /**
@@ -38,64 +46,27 @@ export interface OutputVolumeWatcherOptions extends OutputVolumeEdges {
  * renderer draws — captions forced on, and a hint asking for volume, while
  * Luke speaks unheard.
  */
-export class OutputVolumeWatcher {
-  readonly #options: OutputVolumeWatcherOptions;
-  #helper: NativeHelper | undefined;
-  #done = false;
-
-  constructor(options: OutputVolumeWatcherOptions) {
-    this.#options = options;
-  }
-
-  /**
-   * Starts the helper, reporting whether it could be launched at all. A `true`
-   * is not yet a readable output — that arrives on the helper's first line.
-   */
-  start(): boolean {
-    const helper = new NativeHelper({
-      binary: "mac-output-volume",
-      output: "lines",
-      ...(this.#options.spawnHelper ? { spawnProcess: this.#options.spawnHelper } : undefined),
-    });
-    helper.onLine((line) => this.#handle(line));
-    helper.onExit(() => this.#unavailable());
-    if (!helper.start()) {
-      this.#unavailable();
-      return false;
-    }
-    this.#helper = helper;
-    return true;
-  }
-
-  /**
-   * Stops the helper. Detached before killing: this exit is the app's own
-   * doing, and nothing succeeds a watcher during shutdown, so no one waits.
-   */
-  stop(): void {
-    const helper = this.#helper;
-    this.#helper = undefined;
-    this.#done = true;
-    void helper?.stop();
-  }
-
-  #handle(line: string): void {
-    if (line.startsWith(`${OUTPUT_VOLUME_EVENT.OUTPUT} `)) {
-      const state = parseOutputLine(line);
-      if (state) this.#options.onState(state);
-      return;
-    }
+export function outputVolumeWatcher(options: OutputVolumeWatcherOptions): OutputVolumeWatch {
+  const { spawnHelper } = options;
+  const watch = lineWatcher<OutputAudioState>({
+    binary: "mac-output-volume",
+    parse: (line) =>
+      line.startsWith(OUTPUT_VOLUME_EVENT.UNAVAILABLE) ? LINE_UNAVAILABLE : parseOutputLine(line),
+    onState: options.onState,
+    onUnavailable: options.onUnavailable,
     // Unlike the talk key's, this unavailability is not final: the default
     // device can change to one the helper can read, so the watcher stays up
     // and only the current answer is withdrawn.
-    if (line.startsWith(OUTPUT_VOLUME_EVENT.UNAVAILABLE)) this.#options.onUnavailable();
-  }
+    unavailableLineEnds: false,
+    ...(spawnHelper ? { spawnProcess: spawnHelper } : undefined),
+  });
 
-  #unavailable(): void {
-    if (this.#done) return;
-    this.#done = true;
-    this.#helper = undefined;
-    this.#options.onUnavailable();
-  }
+  return {
+    start: () => watch.start(),
+    stop: () => {
+      void watch.stop();
+    },
+  };
 }
 
 /**

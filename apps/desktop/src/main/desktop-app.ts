@@ -81,8 +81,14 @@ import { registerVoiceRuntimeIpc } from "./ipc/voice-runtime";
 import { registerWindowSurfaceIpc } from "./ipc/window-surface";
 import { jsonStateFile } from "./json-state-file";
 import { MediaDuckController } from "./native/media-duck";
-import { MicrophoneRouteWatcher } from "./native/microphone-route";
-import { OutputVolumeWatcher } from "./native/output-volume";
+import {
+  microphoneRouteWatcher as createMicrophoneRouteWatcher,
+  type MicrophoneRouteWatch,
+} from "./native/microphone-route";
+import {
+  outputVolumeWatcher as createOutputVolumeWatcher,
+  type OutputVolumeWatch,
+} from "./native/output-volume";
 import { onboardingStateFile } from "./onboarding-state";
 import { type BridgeContext, registerBridge, registerBridgeEntry } from "./register-bridge";
 import { runModeFor, sentryReportingEnabled } from "./run-mode";
@@ -183,9 +189,9 @@ const BRAIN_APP_ACT_TIMEOUT_MS = 10_000;
 const mediaDuck = new MediaDuckController();
 const feedbackDelivery = feedbackDeliveryFromEnvironment();
 let outputAudio: OutputAudioState | undefined;
-let outputVolumeWatcher: OutputVolumeWatcher | undefined;
+let outputVolumeWatcher: OutputVolumeWatch | undefined;
 let microphoneRoute: MicrophoneRoute | undefined;
-let microphoneRouteWatcher: MicrophoneRouteWatcher | undefined;
+let microphoneRouteWatcher: MicrophoneRouteWatch | undefined;
 
 function rendererUrl(): string {
   return pathToFileURL(path.join(__dirname, "renderer", "index.html")).href;
@@ -335,7 +341,7 @@ function startOutputVolumeWatch(): void {
     outputAudio = state;
     broadcast(channels.onOutputAudioChanged, state);
   };
-  outputVolumeWatcher = new OutputVolumeWatcher({
+  outputVolumeWatcher = createOutputVolumeWatcher({
     onState: send,
     onUnavailable: () => send(undefined),
   });
@@ -344,7 +350,7 @@ function startOutputVolumeWatch(): void {
 
 function startMicrophoneRouteWatch(): void {
   if (!runMode.observesProviders) return;
-  microphoneRouteWatcher = new MicrophoneRouteWatcher({
+  microphoneRouteWatcher = createMicrophoneRouteWatcher({
     onRoute: (route) => {
       microphoneRoute = route;
     },

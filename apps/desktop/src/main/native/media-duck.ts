@@ -20,12 +20,9 @@ type MediaDuckCommand = (typeof MEDIA_DUCK_COMMAND)[keyof typeof MEDIA_DUCK_COMM
  */
 export const MEDIA_DUCK_RELEASE_DELAY_MS = 1_000;
 
-/** Only the parts of a child process this needs, so a test can supply them. */
-export type MediaDuckProcess = NativeHelperProcess;
-
 export interface MediaDuckControllerOptions {
   /** Injectable so the ordering can be exercised without a Mac or a binary. */
-  spawnHelper?: () => MediaDuckProcess | undefined;
+  spawnHelper?: () => NativeHelperProcess | undefined;
   releaseDelayMs?: number;
 }
 
@@ -38,7 +35,7 @@ export interface MediaDuckControllerOptions {
  * that is the user's own hand asking for their volume back.
  */
 export class MediaDuckController {
-  readonly #spawnHelper: (() => MediaDuckProcess | undefined) | undefined;
+  readonly #spawnHelper: (() => NativeHelperProcess | undefined) | undefined;
   readonly #releaseDelayMs: number;
   #helper: NativeHelper | undefined;
   #enabled = false;
