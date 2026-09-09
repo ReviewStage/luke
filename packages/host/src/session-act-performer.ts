@@ -22,6 +22,7 @@ import {
   type ProductSessionAct,
   type RecordProductEvent,
 } from "@sidecar/analytics";
+import type { LinearIssueTracker } from "@sidecar/credentials";
 import {
   ISSUE_ACTION_KIND,
   isIssueTrackerId,
@@ -47,7 +48,6 @@ import {
   type WorkspaceAgentSelection,
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
-import type { LinearIssueTracker } from "@sidecar/trackers";
 import {
   ACT_RESULT_STATUS,
   UNKNOWN_ACT_STATUS,

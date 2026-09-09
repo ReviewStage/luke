@@ -29,6 +29,14 @@ launch's recovery, and only then the store closed. A caller that ran the
 steps itself would be a second order for the same quit; a shutdown never
 fabricates a completion for work it cut off.
 
+## The account preference client is here for the graph's sake
+
+`account-preferences-client.ts` speaks two hosted routes and would otherwise
+belong beside the vault client in `@sidecar/hosted`. It cannot: the snapshot
+it reads and writes is `AccountPreferences`, which is `@sidecar/settings`
+vocabulary, and `settings` already reaches `hosted`. This package is the
+lowest one that holds both.
+
 ## The test scaffolding is behind its own door
 
 `@sidecar/host/testing` holds the brain composition and the operator a

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@sidecar/account/snapshot";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import {
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_SOURCE,

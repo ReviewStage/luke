@@ -1,5 +1,5 @@
-import type { HostedVaultClient } from "@sidecar/account";
 import type { CredentialProviderId } from "@sidecar/credentials";
+import type { HostedVaultClient } from "@sidecar/hosted";
 import { CLOUD_AGENT_PROVIDER_ID, isCloudAgentProviderId } from "@sidecar/session";
 
 /** The signed-in account, by the names the tenant record may hold it under. */

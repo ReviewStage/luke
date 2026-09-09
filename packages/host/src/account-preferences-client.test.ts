@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AccountPreferences } from "@sidecar/settings";
-import { AccountPreferencesClient } from "./preferences.js";
+import { AccountPreferencesClient } from "./account-preferences-client.js";
 
 const PREFERENCES_ANSWER = {
   preferences: { voice: "marin", voiceSpeed: 1.5 },

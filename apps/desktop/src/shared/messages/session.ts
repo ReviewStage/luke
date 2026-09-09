@@ -1,5 +1,5 @@
-import type { AccountSnapshot } from "@sidecar/account/snapshot";
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
+import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import type { FixtureSnapshot } from "@sidecar/fixtures";
 import type { ConversationEntry } from "@sidecar/realtime";
 import type { ObservedWorkspaceProject, Session } from "@sidecar/session";

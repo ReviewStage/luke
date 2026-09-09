@@ -3,12 +3,11 @@ import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import {
   accountLoopbackPage,
-  codeChallenge,
-  createCodeVerifier,
   LOOPBACK_CONNECTION_SOURCE,
   LOOPBACK_PAGE_TONE,
   type LoopbackConnectionSource,
-} from "@sidecar/credentials";
+} from "../loopback-page.js";
+import { codeChallenge, createCodeVerifier } from "../pkce.js";
 import type { AccountProvider } from "./snapshot.js";
 
 const CALLBACK_PATH = "/callback";

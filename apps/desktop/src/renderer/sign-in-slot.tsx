@@ -1,4 +1,4 @@
-import { ACCOUNT_PROVIDER, type AccountProvider } from "@sidecar/account/snapshot";
+import { ACCOUNT_PROVIDER, type AccountProvider } from "@sidecar/credentials/snapshot";
 import { useRef } from "react";
 import { AccountProviderMark } from "./account-marks";
 import { useStagedFocus } from "./credential-entry";

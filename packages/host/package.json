@@ -14,7 +14,6 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@sidecar/account": "workspace:*",
     "@sidecar/acts": "workspace:*",
     "@sidecar/analytics": "workspace:*",
     "@sidecar/brain": "workspace:*",
@@ -34,7 +33,6 @@
     "@sidecar/session": "workspace:*",
     "@sidecar/settings": "workspace:*",
     "@sidecar/surface": "workspace:*",
-    "@sidecar/trackers": "workspace:*",
     "@sidecar/voice": "workspace:*",
     "@sidecar/wire": "workspace:*"
   },

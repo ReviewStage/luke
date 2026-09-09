@@ -1,5 +1,9 @@
-import type { AccountSnapshot } from "@sidecar/account/snapshot";
-import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountProvider } from "@sidecar/account/snapshot";
+import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
+import {
+  ACCOUNT_PROVIDER,
+  ACCOUNT_STATUS,
+  type AccountProvider,
+} from "@sidecar/credentials/snapshot";
 import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "@sidecar/surface";
 import { useEffect, useState } from "react";
 import { GitHubMark, GoogleMark } from "./account-marks";

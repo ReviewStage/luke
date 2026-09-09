@@ -4,7 +4,6 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import * as Sentry from "@sentry/electron/main";
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/account/snapshot";
 import {
   PRODUCT_CREDENTIAL_SOURCE,
   PRODUCT_EVENT,
@@ -13,6 +12,7 @@ import {
   type RecordProductEvent,
 } from "@sidecar/analytics";
 import type { BrainAppActRequest } from "@sidecar/brain/requests-wire";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidecar/feedback";
 import { fixtureSnapshot } from "@sidecar/fixtures";
 import { GATEWAY_CLIENT_ROLE, InProcessTransport } from "@sidecar/gateway";

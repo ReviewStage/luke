@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { JsonValue } from "@sidecar/wire/testing";
-import { AccountClient, AccountClientError, type FetchLike } from "./client.js";
+import {
+  ACCOUNT_FAILURE_ACTION,
+  AccountClient,
+  AccountClientError,
+  accessTokenNeedsRefresh,
+  accountFailureAction,
+  accountGateOpen,
+  deleteHostedAccount,
+  type FetchLike,
+  withIssuedAccountTokens,
+} from "./client.js";
 import { ACCOUNT_PROVIDER } from "./snapshot.js";
 
 function json(body: JsonValue, status = 200): Response {
@@ -226,4 +236,141 @@ test("invalid token and identity responses are refused", async () => {
     identityClient.userInfo("access", ACCOUNT_PROVIDER.GOOGLE),
     /invalid identity/,
   );
+});
+
+test("invalid_grant is the only refresh result that signs an account out", () => {
+  assert.equal(
+    accountFailureAction(new AccountClientError("revoked", { oauthError: "invalid_grant" })),
+    ACCOUNT_FAILURE_ACTION.SIGN_OUT,
+  );
+  assert.equal(
+    accountFailureAction(new AccountClientError("service down", { status: 503 })),
+    ACCOUNT_FAILURE_ACTION.KEEP_ACCOUNT,
+  );
+  assert.equal(
+    accountFailureAction(new TypeError("network failed")),
+    ACCOUNT_FAILURE_ACTION.KEEP_ACCOUNT,
+  );
+  assert.equal(
+    accountFailureAction(new DOMException("timed out", "TimeoutError")),
+    ACCOUNT_FAILURE_ACTION.KEEP_ACCOUNT,
+  );
+});
+
+test("a rejected or expired access token refreshes without signing out", () => {
+  assert.equal(
+    accessTokenNeedsRefresh(new AccountClientError("expired", { oauthError: "invalid_scope" })),
+    true,
+  );
+  assert.equal(
+    accessTokenNeedsRefresh(new AccountClientError("unauthorized", { status: 401 })),
+    true,
+  );
+  assert.equal(
+    accessTokenNeedsRefresh(new AccountClientError("service down", { status: 503 })),
+    false,
+  );
+  assert.equal(accessTokenNeedsRefresh(new TypeError("network failed")), false);
+});
+
+test("capture and fixture runs bypass the account wall", () => {
+  assert.equal(accountGateOpen({ requiresAccount: false }, false), true);
+  assert.equal(accountGateOpen({ requiresAccount: true }, false), false);
+  assert.equal(accountGateOpen({ requiresAccount: true }, true), true);
+});
+
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+test("a delete posts the bearer token at the service's account-delete path", async () => {
+  let request: Request | undefined;
+  const fetch: FetchLike = async (input, init) => {
+    request = new Request(input, init);
+    return json({ deleted: true });
+  };
+
+  await deleteHostedAccount({
+    serviceBaseUrl: "https://tryluke.dev/",
+    accessToken: "access-1",
+    fetch,
+  });
+
+  assert.equal(request?.url, "https://tryluke.dev/api/account/delete");
+  assert.equal(request?.method, "POST");
+  assert.equal(request?.headers.get("authorization"), "Bearer access-1");
+});
+
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+test("an expired token's refusal reads as refresh-and-retry, a service no does not", async () => {
+  const refusal = (status: number): FetchLike => {
+    return async () => json({ error: "invalid-token" }, status);
+  };
+
+  const expired = await deleteHostedAccount({
+    serviceBaseUrl: "https://tryluke.dev",
+    accessToken: "access-1",
+    fetch: refusal(401),
+  }).catch((error) => error);
+  assert.equal(expired instanceof AccountClientError, true);
+  assert.equal(accessTokenNeedsRefresh(expired), true);
+
+  const refused = await deleteHostedAccount({
+    serviceBaseUrl: "https://tryluke.dev",
+    accessToken: "access-1",
+    fetch: refusal(503),
+  }).catch((error) => error);
+  assert.equal(refused instanceof AccountClientError, true);
+  assert.equal(accessTokenNeedsRefresh(refused), false);
+});
+
+const ISSUED_TOKENS = { accessToken: "issued-access", refreshToken: "issued-refresh" };
+
+test("accepted account tokens stay active", async () => {
+  const revoked: string[] = [];
+  const result = await withIssuedAccountTokens({
+    issue: async () => ISSUED_TOKENS,
+    use: async (tokens) => tokens.accessToken,
+    revoke: async (refreshToken) => {
+      revoked.push(refreshToken);
+    },
+  });
+
+  assert.equal(result, ISSUED_TOKENS.accessToken);
+  assert.deepEqual(revoked, []);
+});
+
+test("a failed account completion revokes every issued refresh token", async () => {
+  const revoked: string[] = [];
+  await assert.rejects(
+    withIssuedAccountTokens({
+      issue: async () => ISSUED_TOKENS,
+      use: async () => {
+        throw new Error("identity failed");
+      },
+      revoke: async (refreshToken) => {
+        revoked.push(refreshToken);
+      },
+    }),
+    /identity failed/,
+  );
+
+  assert.deepEqual(revoked, [ISSUED_TOKENS.refreshToken]);
+});
+
+test("revocation failure preserves the sign-in failure", async () => {
+  const revokeFailures: unknown[] = [];
+  await assert.rejects(
+    withIssuedAccountTokens({
+      issue: async () => ISSUED_TOKENS,
+      use: async () => {
+        throw new Error("storage failed");
+      },
+      revoke: async () => {
+        throw new Error("revocation failed");
+      },
+      onRevokeFailure: (error) => revokeFailures.push(error),
+    }),
+    /storage failed/,
+  );
+
+  assert.equal(revokeFailures.length, 1);
+  assert.match(String(revokeFailures[0]), /revocation failed/);
 });

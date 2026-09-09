@@ -1,3 +1,4 @@
+import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import {
   isRecord,
   isWireString,
@@ -204,4 +205,88 @@ export class AccountClient {
 export interface StoredAccount extends AccountIdentity {
   accessToken: string;
   refreshToken: string;
+}
+
+export const ACCOUNT_FAILURE_ACTION = {
+  KEEP_ACCOUNT: "keep-account",
+  SIGN_OUT: "sign-out",
+} as const;
+
+export type AccountFailureAction =
+  (typeof ACCOUNT_FAILURE_ACTION)[keyof typeof ACCOUNT_FAILURE_ACTION];
+
+/** Only the OAuth server's definitive revocation answer removes a stored account. */
+export function accountFailureAction(error: Error): AccountFailureAction {
+  return error instanceof AccountClientError && error.oauthError === "invalid_grant"
+    ? ACCOUNT_FAILURE_ACTION.SIGN_OUT
+    : ACCOUNT_FAILURE_ACTION.KEEP_ACCOUNT;
+}
+
+/** Whether the pinned auth provider has definitively rejected an access token. */
+export function accessTokenNeedsRefresh(error: Error): boolean {
+  return (
+    error instanceof AccountClientError &&
+    (error.status === 401 || error.oauthError === "invalid_scope")
+  );
+}
+
+/** Fixture and capture modes remain deterministic and never need an account. */
+export function accountGateOpen(
+  runMode: { readonly requiresAccount: boolean },
+  signedIn: boolean,
+): boolean {
+  return !runMode.requiresAccount || signedIn;
+}
+
+const DELETE_TIMEOUT_MS = 15_000;
+
+export interface AccountDeletionOptions {
+  /** The hosted service origin, without a trailing slash. */
+  serviceBaseUrl: string;
+  /** The signed-in account's current access token. */
+  accessToken: string;
+  fetch?: FetchLike;
+  timeoutMs?: number;
+}
+
+/**
+ * Asks the hosted service to erase the signed-in account. The bearer token is
+ * the whole request — the service resolves who to delete from it, so nothing
+ * here can name a different account. A refusal throws an `AccountClientError`
+ * carrying the status, which is what lets the caller tell an expired access
+ * token (refresh and retry) from a service that actually said no.
+ */
+export async function deleteHostedAccount(options: AccountDeletionOptions): Promise<void> {
+  const fetchLike = options.fetch ?? fetch;
+  const response = await fetchLike(
+    `${options.serviceBaseUrl.replace(/\/$/, "")}${HOSTED_SERVICE_PATH.ACCOUNT_DELETE}`,
+    {
+      method: "POST",
+      headers: { authorization: `Bearer ${options.accessToken}` },
+      signal: AbortSignal.timeout(options.timeoutMs ?? DELETE_TIMEOUT_MS),
+    },
+  );
+  if (!response.ok) {
+    throw new AccountClientError(`Account service returned ${response.status}`, {
+      status: response.status,
+    });
+  }
+}
+
+/** Ensures credentials rejected before sign-in completes do not outlive the failed attempt. */
+export async function withIssuedAccountTokens<T>(options: {
+  issue: () => Promise<AccountTokens>;
+  use: (tokens: AccountTokens) => Promise<T>;
+  revoke: (refreshToken: string) => Promise<void>;
+  onRevokeFailure?: (error: Error) => void;
+}): Promise<T> {
+  const tokens = await options.issue();
+  try {
+    return await options.use(tokens);
+  } catch (error) {
+    await options.revoke(tokens.refreshToken).catch((revokeError) => {
+      options.onRevokeFailure?.(revokeError);
+    });
+    throw error;
+  }
 }

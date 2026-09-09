@@ -1,13 +1,3 @@
-import {
-  HOSTED_SERVICE_PATH,
-  type VaultKeyDeleteAnswer,
-  type VaultKeyListEntry,
-  type VaultKeyStoreAnswer,
-  vaultKeyDeleteAnswerSchema,
-  vaultKeyIsStorable,
-  vaultKeyStoreAnswerSchema,
-  vaultKeysListAnswerSchema,
-} from "@sidecar/hosted";
 import type { CloudAgentProviderId } from "@sidecar/session";
 import {
   type CloudFetch,
@@ -17,6 +7,16 @@ import {
   unparsedWire,
   withoutTrailingSlash,
 } from "@sidecar/wire";
+import { HOSTED_SERVICE_PATH } from "./service-paths.js";
+import {
+  type VaultKeyDeleteAnswer,
+  type VaultKeyListEntry,
+  type VaultKeyStoreAnswer,
+  vaultKeyDeleteAnswerSchema,
+  vaultKeyIsStorable,
+  vaultKeyStoreAnswerSchema,
+  vaultKeysListAnswerSchema,
+} from "./vault-wire.js";
 
 const VAULT_DEFAULTS = {
   REQUEST_TIMEOUT_MS: 10_000,
