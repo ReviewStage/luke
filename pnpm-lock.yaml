@@ -891,6 +891,31 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
+  tools/trace-export:
+    dependencies:
+      '@sidecar/brain':
+        specifier: workspace:*
+        version: link:../../packages/brain
+      '@sidecar/devtrace':
+        specifier: workspace:*
+        version: link:../../packages/devtrace
+      '@sidecar/realtime':
+        specifier: workspace:*
+        version: link:../../packages/realtime
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../../packages/wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
 packages:
 
   7zip-bin@5.2.0:

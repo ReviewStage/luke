@@ -1,7 +1,7 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import type { BrainTurnTraceRecord } from "@sidecar/brain";
-import { type AgentWireTrace, sanitizedTraceEvent } from "./vocabulary.js";
+import { type AgentWireTrace, sanitizedTraceEvent, TRACE_ENTRY_KIND } from "./vocabulary.js";
 
 /**
  * One model request a brain turn made, as the trace records it. The input
@@ -35,15 +35,6 @@ export interface SpeechTraceRecord {
   decision: string;
   pendingCount: number;
 }
-
-export const TRACE_ENTRY_KIND = {
-  WIRE: "wire",
-  BRAIN: "brain",
-  BRAIN_REQUEST: "brain-request",
-  SPEECH: "speech",
-} as const;
-
-export type TraceEntryKind = (typeof TRACE_ENTRY_KIND)[keyof typeof TRACE_ENTRY_KIND];
 
 /**
  * One line of the trace before its timestamp is stamped on. `JSON.stringify`

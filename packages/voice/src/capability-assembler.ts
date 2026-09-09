@@ -15,9 +15,8 @@ import {
   VOICE_SOURCE,
   type VoiceSource,
 } from "@sidecar/settings";
-import { HostedRealtimeCredentialMinter } from "./hosted-credentials.js";
-import type { RealtimeCredentialMinter } from "./minter.js";
 import { openAiRealtimeCredentials, unavailableRealtimeDiagnostics } from "./openai-credentials.js";
+import { hostedRealtimeCredentialMinter, type RealtimeCredentialMinter } from "./service-mint.js";
 
 export interface VoiceCapabilityInput {
   credentialsUsable: boolean;
@@ -218,7 +217,7 @@ export class VoiceCapabilityAssembler {
     this.#realtimeCredentials = apiKey
       ? openAiRealtimeCredentials(apiKey, preferences)
       : policy.useHosted
-        ? new HostedRealtimeCredentialMinter({ ...seams, ...preferences })
+        ? hostedRealtimeCredentialMinter({ ...seams, ...preferences })
         : undefined;
     this.#unavailableDiagnostics = unavailableRealtimeDiagnostics({
       fixtureMode: this.#options.fixtureRun(),

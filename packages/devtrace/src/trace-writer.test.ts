@@ -7,8 +7,8 @@ import { BRAIN_TURN_TRIGGER, hostedBrainToolCatalog } from "@sidecar/brain";
 import { TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import { MODEL_RESPONSE_OUTCOME, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { isRecord, isWireString, recordFromJsonLine } from "@sidecar/wire";
-import { AgentTraceWriter, TRACE_ENTRY_KIND } from "./trace-writer.js";
-import { TRACE_DIRECTION } from "./vocabulary.js";
+import { AgentTraceWriter } from "./trace-writer.js";
+import { TRACE_DIRECTION, TRACE_ENTRY_KIND } from "./vocabulary.js";
 
 function fixedClock(): () => Date {
   let tick = 0;

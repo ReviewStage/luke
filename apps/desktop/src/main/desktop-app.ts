@@ -37,7 +37,7 @@ import { fixtureSnapshot } from "@sidecar/session/fixtures";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { AppSettings } from "@sidecar/settings/wire";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
-import { IntroductionRealtimeCredentialMinter } from "@sidecar/voice";
+import { introductionRealtimeCredentialMinter } from "@sidecar/voice";
 import { ACT_RESULT_STATUS, text, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import {
   app,
@@ -257,7 +257,7 @@ function sendToVoice<Payload>(channel: string, payload: Payload): void {
 let latestVoiceView: VoiceView | undefined;
 let introductionRendererReady = false;
 let resolveIntroductionPanelReady: (() => void) | undefined;
-const introductionMinter = new IntroductionRealtimeCredentialMinter({
+const introductionMinter = introductionRealtimeCredentialMinter({
   serviceBaseUrl: HOSTED_SERVICE_BASE_URL,
 });
 const onboarding = onboardingStateFile(() => app.getPath("userData"), report);

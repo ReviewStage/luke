@@ -7,6 +7,10 @@ panel's React anatomy so the desktop and marketing mock compose the same
 components. Each app owns the styling that presents those components. Other
 modules belong in an app when they import `electron`, `react`, or a DOM API.
 Everything else is logic and can be tested with `node --test` and no harness.
+A developer command-line tool lives under `tools/` instead, where what it
+reaches cannot become a package's: `tools/trace-export` reads a recorded trace
+against `@sidecar/brain`'s hosted tool catalog, which `@sidecar/devtrace` would
+otherwise pull into the app that only writes the file.
 
 Whether an act may run is decided once, by `admit()` in `@sidecar/acts`, which
 mints the only `ValidatedAct` there is: its brand is `@sidecar/wire`'s

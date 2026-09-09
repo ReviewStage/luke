@@ -1,7 +1,7 @@
 /**
  * Turns a recorded trace into the JSON unbox-ai opens:
  *
- *   pnpm --filter @sidecar/devtrace export <trace.jsonl> [out.json]
+ *   pnpm --filter @luke/trace-export export <trace.jsonl> [out.json]
  *   npx unbox-ai out.json
  *
  * Reading and writing stay on this machine; the viewer the output is meant
