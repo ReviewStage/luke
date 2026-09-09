@@ -5,9 +5,14 @@ import type { CredentialProviderId } from "@sidecar/credentials";
 import type { AccountProvider, AccountSnapshot } from "@sidecar/credentials/snapshot";
 import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import type { GatewayCallResult, GatewayClient } from "@sidecar/gateway";
-import { carried, GATEWAY_EVENT, GATEWAY_METHOD, gatewayEventReader } from "@sidecar/gateway";
+import {
+  carried,
+  GATEWAY_EVENT,
+  GATEWAY_METHOD,
+  gatewayEventReader,
+  RECEIVER_REPORT_KIND,
+} from "@sidecar/gateway";
 import type { AppGuideSnapshot } from "@sidecar/guide";
-import { RECEIVER_REPORT_KIND } from "@sidecar/host";
 import type { RealtimeConnection } from "@sidecar/hosted";
 import type { SupersetSignInSnapshot } from "@sidecar/providers/superset/sign-in-stage";
 import type { ConversationEntry, RealtimeDiagnostics } from "@sidecar/realtime";

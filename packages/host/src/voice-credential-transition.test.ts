@@ -20,7 +20,7 @@ import { REASONING_EFFORT } from "@sidecar/runtime-contracts";
 import { APP_SETTING_SCHEMA, VOICE_SOURCE, type VoiceSource } from "@sidecar/settings";
 import { VoiceCapabilityAssembler, type VoiceSettings } from "@sidecar/voice";
 import { BrainHost } from "./brain/host.js";
-import { transitionVoiceCredential } from "./compose-host.js";
+import { transitionVoiceCredential } from "./voice-credential-transition.js";
 
 const HELD_READ = {
   SOURCE: "source",

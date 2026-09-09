@@ -109,6 +109,15 @@ export const GATEWAY_METHOD =
 
 export type GatewayMethod = (typeof GATEWAY_METHOD)[keyof typeof GATEWAY_METHOD];
 
+/** How a `receiver.report` names the moment it reports. */
+export const RECEIVER_REPORT_KIND = {
+  BEGIN: "begin",
+  READY: "ready",
+  RESET: "reset",
+} as const;
+
+export type ReceiverReportKind = (typeof RECEIVER_REPORT_KIND)[keyof typeof RECEIVER_REPORT_KIND];
+
 const GATEWAY_METHODS_BY_NAME: ReadonlyMap<string, GatewayMethodEntry> = new Map(
   Object.values(GATEWAY_METHODS).map((entry) => [entry.name, entry]),
 );

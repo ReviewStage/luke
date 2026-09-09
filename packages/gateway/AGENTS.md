@@ -9,7 +9,10 @@ cannot be forgotten in a set beside it: `isMutatingGatewayMethod` reads the
 same entry the name came from, and the server demands an idempotency key from
 exactly the methods that flag says change something. Widening the method
 vocabulary or the event set is a product decision, not an implementation
-detail.
+detail. What a method's own parameters may say belongs here too, beside the
+entry that names it: `RECEIVER_REPORT_KIND` is the vocabulary of
+`receiver.report`, so the host that answers it and the client that sends it
+read the same three words from the contract rather than from each other.
 
 ## Three doors, because one of them reaches `ws`
 
