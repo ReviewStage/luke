@@ -29,6 +29,13 @@ export function deviceSeams(database: DeviceDatabase): DeviceSeams {
               ),
             );
         }
+        // A registration that arrived with no token leaves the one on file: the
+        // phone holds its token in memory and re-registers on every launch
+        // before Apple has handed the token back, and a registration is not a
+        // statement that the device has none.
+        const pushColumns = registration.push
+          ? { pushToken: registration.push.token, pushEnvironment: registration.push.environment }
+          : undefined;
         const [row] = await transaction
           .insert(devices)
           .values({
@@ -38,8 +45,9 @@ export function deviceSeams(database: DeviceDatabase): DeviceSeams {
             platform: registration.platform,
             lastSeenAt: now,
             activeUntil: null,
-            pushToken: registration.push?.token ?? null,
-            pushEnvironment: registration.push?.environment ?? null,
+            pushToken: null,
+            pushEnvironment: null,
+            ...pushColumns,
             createdAt: now,
             updatedAt: now,
           })
@@ -50,8 +58,7 @@ export function deviceSeams(database: DeviceDatabase): DeviceSeams {
               platform: registration.platform,
               lastSeenAt: now,
               activeUntil: null,
-              pushToken: registration.push?.token ?? null,
-              pushEnvironment: registration.push?.environment ?? null,
+              ...pushColumns,
               updatedAt: now,
             },
           })

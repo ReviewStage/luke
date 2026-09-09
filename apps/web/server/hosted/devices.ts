@@ -42,7 +42,12 @@ export interface DevicePushAddress {
   environment: PushEnvironment;
 }
 
-/** What a registration writes: the row's key, its platform, and the push address it arrived with, if any. */
+/**
+ * What a registration writes: the row's key, its platform, and the push
+ * address it arrived with. An address replaces the one on file; none leaves
+ * it, because a device that registers before Apple has handed its token back
+ * still has the token it registered with last time.
+ */
 export interface DeviceRegistration {
   installationId: string;
   platform: DevicePlatform;

@@ -111,6 +111,9 @@ function pushFieldsPaired(fields: {
  * installation id is the client's stable key: a row already standing under
  * it moves to the account the bearer names, so a machine that signs into a
  * different account carries its one row along rather than leaving a second.
+ * A push token present replaces the one on file; one absent leaves it, since
+ * a launch that registers before Apple hands the token back is not a device
+ * without one.
  */
 export interface DeviceRegisterRequest {
   platform: DevicePlatform;

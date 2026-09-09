@@ -65,6 +65,60 @@ private final class RecordingHTTP: HTTPClient, @unchecked Sendable {
     }
 }
 
+/// Records like `RecordingHTTP`, but holds every request at the network until
+/// the test opens the gate, so a call can be caught in flight.
+private final class GatedHTTP: HTTPClient, @unchecked Sendable {
+    private let lock = NSLock()
+    private var answers: [(Int, [String: Any])]
+    private var opened = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private(set) var sent: [RecordingHTTP.Sent] = []
+
+    init(answers: [(Int, [String: Any])]) {
+        self.answers = answers
+    }
+
+    var waiting: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return waiters.count
+    }
+
+    func open() {
+        lock.lock()
+        opened = true
+        let released = waiters
+        waiters = []
+        lock.unlock()
+        for waiter in released { waiter.resume() }
+    }
+
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        let body = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? [String: Any]) ?? [:]
+        lock.lock()
+        sent.append(RecordingHTTP.Sent(
+            method: request.httpMethod ?? "",
+            body: body,
+            token: request.value(forHTTPHeaderField: "Authorization")
+        ))
+        lock.unlock()
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            lock.lock()
+            if opened {
+                lock.unlock()
+                continuation.resume()
+            } else {
+                waiters.append(continuation)
+                lock.unlock()
+            }
+        }
+        lock.lock()
+        let (status, json) = answers.isEmpty ? (500, [:]) : answers.removeFirst()
+        lock.unlock()
+        return (jsonData(json), makeResponse(url: request.url!, status: status))
+    }
+}
+
 @MainActor
 final class DeviceRegistrarTests: XCTestCase {
     private var suites: [String] = []
@@ -181,10 +235,11 @@ final class DeviceRegistrarTests: XCTestCase {
         XCTAssertEqual(subject.deviceId, deviceId)
     }
 
-    func testAPushTokenArrivingLaterTravelsAsAChangeAndWithTheNextRegistration() async {
+    func testAPushTokenArrivingLaterTravelsAsAChangeAndWithEveryRegistration() async {
         let store = makeStore()
         let http = RecordingHTTP(answers: [
             (200, ["deviceId": deviceId]),
+            (200, ["seen": true]),
             (200, ["seen": true]),
             (200, ["deviceId": deviceId]),
         ])
@@ -194,13 +249,48 @@ final class DeviceRegistrarTests: XCTestCase {
         subject.pushTokenDidArrive(Data(repeating: 0xab, count: 32), environment: .sandbox)
         subject.pushTokenDidArrive(Data(repeating: 0xab, count: 32), environment: .sandbox)
         await subject.heartbeat().value
-        XCTAssertEqual(http.sent.map(\.method), ["POST", "PUT"])
+        XCTAssertEqual(http.sent.map(\.method), ["POST", "PUT", "PUT"])
         XCTAssertEqual(http.sent[1].body["pushToken"] as? String, String(repeating: "ab", count: 32))
         XCTAssertEqual(http.sent[1].body["pushEnvironment"] as? String, "sandbox")
+        XCTAssertEqual(http.sent[2].body.keys.sorted(), ["deviceId"], "an acknowledged token is not resent")
 
         await subject.register().value
-        XCTAssertEqual(http.sent[2].body["pushToken"] as? String, String(repeating: "ab", count: 32))
-        XCTAssertEqual(http.sent[2].body["pushEnvironment"] as? String, "sandbox")
+        XCTAssertEqual(http.sent[3].body["pushToken"] as? String, String(repeating: "ab", count: 32))
+        XCTAssertEqual(http.sent[3].body["pushEnvironment"] as? String, "sandbox")
+    }
+
+    func testAPushTokenTheServiceNeverAcknowledgedRidesTheNextHeartbeat() async {
+        let store = makeStore()
+        let http = RecordingHTTP(answers: [
+            (200, ["deviceId": deviceId]),
+            (500, [:]),
+            (200, ["seen": true]),
+            (200, ["seen": true]),
+        ])
+        let subject = registrar(store: store, http: http)
+        await subject.register().value
+        subject.pushTokenDidArrive(Data(repeating: 0xcd, count: 32), environment: .production)
+        await subject.heartbeat().value
+        await subject.heartbeat().value
+
+        XCTAssertEqual(http.sent.map(\.method), ["POST", "PUT", "PUT", "PUT"])
+        XCTAssertEqual(http.sent[2].body["pushToken"] as? String, String(repeating: "cd", count: 32))
+        XCTAssertEqual(http.sent[3].body.keys.sorted(), ["deviceId"])
+    }
+
+    func testARegistrationStillOutAtSignOutInstallsNothing() async {
+        let store = makeStore()
+        let http = GatedHTTP(answers: [(200, ["deviceId": deviceId])])
+        let subject = registrar(store: store, http: http)
+
+        let registering = subject.register()
+        while http.waiting == 0 { await Task.yield() }
+        await subject.forget(accessToken: "departing")
+        http.open()
+        await registering.value
+
+        XCTAssertNil(subject.deviceId, "the row the late answer names was let go of at sign-out")
+        XCTAssertEqual(http.sent.map(\.method), ["POST"], "nothing was registered, so nothing was forgotten")
     }
 
     func testForgetUsesTheDepartingTokenAndDropsTheRowIdFirst() async {

@@ -115,15 +115,17 @@ test("a first registration inserts the row under the account with the minted id"
     updatedAt: NOW,
   });
   assert.equal(insert?.target, devices.installationId);
-  assert.deepEqual(insert?.set, {
-    userId: "user-1",
-    platform: DEVICE_PLATFORM.MACOS,
-    lastSeenAt: NOW,
-    activeUntil: null,
-    pushToken: null,
-    pushEnvironment: null,
-    updatedAt: NOW,
-  });
+  assert.deepEqual(
+    insert?.set,
+    {
+      userId: "user-1",
+      platform: DEVICE_PLATFORM.MACOS,
+      lastSeenAt: NOW,
+      activeUntil: null,
+      updatedAt: NOW,
+    },
+    "a registration without a token leaves the one on file",
+  );
 });
 
 test("a registration re-keys the installation's row to the account that presents it", () => {

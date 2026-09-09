@@ -7,7 +7,8 @@ import Foundation
 /// answered sits beside it so a heartbeat can name the row. Every call runs
 /// under the account's own token discipline; a failure is left for the next
 /// registration or heartbeat rather than retried here, because nothing the
-/// user sees waits on it.
+/// user sees waits on it. Every answer is checked against the generation that
+/// asked, so a call still out when the account signed out installs nothing.
 @MainActor
 public final class DeviceRegistrar {
     public enum Key {
@@ -19,9 +20,14 @@ public final class DeviceRegistrar {
     private let client: DeviceClient
     private let session: any AccountTokenProviding
     private let platform: DevicePlatform
-    /// The push address Apple issued this run, carried into the next
-    /// registration and sent as a change to a row already standing.
+    /// The push address Apple issued this run, carried into every
+    /// registration and sent as a change to a row already standing until the
+    /// service has acknowledged it once.
     private var push: DevicePushAddress?
+    private var pushAcknowledged = false
+    /// Bumped by every forget so an answer to a call made under the departing
+    /// account installs nothing — the row it names is gone.
+    private var generation = 0
     private var task: Task<Void, Never>?
 
     public init(
@@ -65,46 +71,22 @@ public final class DeviceRegistrar {
         enqueue { await self.registerNow() }
     }
 
-    /// Moves the row's last-seen instant, registering again when the service
-    /// no longer holds the row or none was ever registered.
+    /// Moves the row's last-seen instant, carrying a push address the service
+    /// has not yet acknowledged, and registers again when the service no
+    /// longer holds the row or none was ever registered.
     @discardableResult
     public func heartbeat() -> Task<Void, Never> {
-        enqueue {
-            guard let deviceId = self.deviceId else {
-                await self.registerNow()
-                return
-            }
-            do {
-                let seen = try await self.session.authorized {
-                    try await self.client.heartbeat(
-                        deviceId: deviceId, pushToken: .unchanged, accessToken: $0
-                    )
-                }
-                if !seen { await self.registerNow() }
-            } catch {}
-        }
+        enqueue { await self.heartbeatNow() }
     }
 
     /// Carries the token Apple issued to the row: as a change when one is
-    /// already registered, and with the next registration either way.
+    /// already registered, and with every registration until acknowledged.
     public func pushTokenDidArrive(_ token: Data, environment: PushEnvironment) {
         let address = DevicePushAddress(token: DeviceClient.hexToken(token), environment: environment)
         guard address != push else { return }
         push = address
-        enqueue {
-            guard let deviceId = self.deviceId else {
-                await self.registerNow()
-                return
-            }
-            do {
-                let seen = try await self.session.authorized {
-                    try await self.client.heartbeat(
-                        deviceId: deviceId, pushToken: .replaced(address), accessToken: $0
-                    )
-                }
-                if !seen { await self.registerNow() }
-            } catch {}
-        }
+        pushAcknowledged = false
+        enqueue { await self.heartbeatNow() }
     }
 
     /// Forgets the row on the departing account's own token, handed in because
@@ -112,8 +94,10 @@ public final class DeviceRegistrar {
     /// account is leaving whether or not the service heard, and a row it still
     /// holds is re-keyed by the next sign-in's registration.
     public func forget(accessToken: String) async {
+        generation += 1
         task?.cancel()
         task = nil
+        pushAcknowledged = false
         guard let deviceId else { return }
         store.removeObject(forKey: Key.deviceId)
         _ = try? await client.forget(deviceId: deviceId, accessToken: accessToken)
@@ -121,6 +105,7 @@ public final class DeviceRegistrar {
 
     private func registerNow() async {
         guard session.accountEmail != nil else { return }
+        let generation = generation
         let installationId = installationId
         let push = push
         do {
@@ -132,7 +117,30 @@ public final class DeviceRegistrar {
                     accessToken: $0
                 )
             }
+            guard generation == self.generation else { return }
             store.set(deviceId, forKey: Key.deviceId)
+            if push != nil, push == self.push { pushAcknowledged = true }
+        } catch {}
+    }
+
+    private func heartbeatNow() async {
+        guard let deviceId else {
+            await registerNow()
+            return
+        }
+        let generation = generation
+        let push = push
+        let change: PushTokenChange = if let push, !pushAcknowledged { .replaced(push) } else { .unchanged }
+        do {
+            let seen = try await session.authorized {
+                try await self.client.heartbeat(deviceId: deviceId, pushToken: change, accessToken: $0)
+            }
+            guard generation == self.generation else { return }
+            if !seen {
+                await registerNow()
+                return
+            }
+            if case .replaced = change, push == self.push { pushAcknowledged = true }
         } catch {}
     }
 
