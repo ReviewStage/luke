@@ -39,7 +39,6 @@ import {
   spokenAskPreviewSurvives,
   talkKeyPress,
   talkOpeningHolds,
-  typedAskHolds,
   VOICE_RESTART,
   voiceRestartAction,
 } from "./voice-policy.js";
@@ -184,12 +183,6 @@ export class VoiceOrchestrator<Stream> {
    * that did nothing.
    */
   #talkOpening = false;
-  /**
-   * Whether the reply under way answers an ask the developer typed. A typed
-   * ask is read, not only heard, so its reply draws the caption whatever the
-   * captions preference says.
-   */
-  #typedAsk = false;
   #localStream: Stream | undefined;
   #remoteStream: Stream | undefined;
   #caption: VoiceCaption = { texts: undefined, kind: undefined };
@@ -199,9 +192,9 @@ export class VoiceOrchestrator<Stream> {
   /** Whether a tap has left a turn open for a later press to end. */
   #talkLatched = false;
   /**
-   * Whether the exchange about to open was opened by the composer. The typed
-   * caption cannot answer for it: that is set once the words are away, which
-   * is after the call has already reached the edge the count is taken on.
+   * Whether the exchange about to open was opened by the composer, for the
+   * count alone: set once the words are away, which is after the call has
+   * already reached the edge the count is taken on, and read once there.
    */
   #typedExchange = false;
 
@@ -704,14 +697,12 @@ export class VoiceOrchestrator<Stream> {
       acknowledge: (offer) =>
         this.#bridge.ackBrainReply(offer.runId, offer.deliveryId, offer.epoch),
       showNotice: (words) => this.#strip.showNotice(words),
-      // Only a typed ask's reply is the composer's exchange: it counts as one
-      // and holds the caption the composer asked for. A spoken ask answered
-      // late is the spoken exchange it always was.
+      // Only a typed ask's reply is the composer's exchange, and counts as
+      // one. A spoken ask answered late is the spoken exchange it always was.
       onSpeaking: (origin) => {
         this.#strip.showNotice(undefined);
         if (origin !== BRAIN_REQUEST_ORIGIN.TYPED) return;
         this.#typedExchange = true;
-        this.#typedAsk = true;
         this.#report();
       },
       conversationGeneration: () => this.#thread.generation,
@@ -751,9 +742,6 @@ export class VoiceOrchestrator<Stream> {
     // in hand may be claimed, and a call ending settles the grant on it.
     this.#replyPlayer?.onStatus(status);
     this.#considerRestart();
-    // The reply that answered the typed ask is over, so the caption goes back
-    // to being the preference's to grant.
-    if (!typedAskHolds(status)) this.#typedAsk = false;
     // The call gone takes its half-transcribed turns with it: no completed
     // transcript can arrive to settle a preview, so none may keep streaming.
     if (!spokenAskPreviewSurvives(status)) this.#thread.clearPreviews();
@@ -883,7 +871,6 @@ export class VoiceOrchestrator<Stream> {
       talkOpening: this.#talkOpening,
       lukeCaptions: lukeCaptionsToShow({
         captionsEnabled: this.#surroundings.captionsEnabled,
-        typedAsk: this.#typedAsk,
         outputSilent: this.#surroundings.outputSilent,
         status: this.#status,
         captions: this.#caption.texts,
