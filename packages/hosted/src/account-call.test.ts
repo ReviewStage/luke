@@ -138,6 +138,21 @@ test("a credential that reads nothing asks the service nothing at all", async ()
   assert.deepEqual(requests, []);
 });
 
+test("a credential the store could not read is a call that was never made, not a throw", async () => {
+  const { call, requests } = callOn(
+    {
+      authorization: () => Promise.reject(new Error("the settings file could not be read")),
+      renew: () => Promise.resolve(),
+    },
+    () => jsonResponse({}),
+  );
+
+  const answer = await call.send({ method: HTTP_METHOD.POST, path: PATH, body: "{}" });
+
+  assert.ok(!callAnswered(answer) && answer.fault === CALL_FAULT.NO_CREDENTIAL);
+  assert.deepEqual(requests, []);
+});
+
 test("an endpoint that takes no identity is asked without a header, and its own 401 is no fault of a credential", async () => {
   const { call, requests } = callOn(NO_CREDENTIAL, () => refusal());
 

@@ -24,7 +24,9 @@ trimmed once, the bearer header written once, the deadline joined with the
 caller's own cancellation, a fetch that threw read as a fault by the error's
 kind alone, and the one reading of a 401 — renew the credential, retry
 exactly once, only on a credential that changed, and only while it still
-answers for the same holder. It holds no credential itself: a
+answers for the same holder. It answers rather than throws, including when
+the credential itself could not be read: a caller that took work off a queue
+to send it has to be able to put it back. It holds no credential itself: a
 `CallCredential` is handed in (`accountBearer` for the signed-in account,
 `fixedBearer` for a key, `NO_CREDENTIAL` for an endpoint that takes no
 identity at all), so who may renew a credential and who may say which account

@@ -181,6 +181,23 @@ test("signed out the queue waits rather than being spent", async () => {
   assert.equal(sentEvents(recordedRequest(requests)).length, 1);
 });
 
+test("a token the settings file could not answer leaves the batch queued", async () => {
+  let readable = false;
+  const { sender, requests } = sharingSender({
+    readAccessToken: async () => {
+      if (!readable) throw new Error("the settings file could not be read");
+      return "token-1";
+    },
+  });
+  sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
+  await sender.flush();
+  assert.deepEqual(requests, []);
+
+  readable = true;
+  await sender.flush();
+  assert.equal(sentEvents(recordedRequest(requests)).length, 1);
+});
+
 test("past the queue limit the oldest go and the newest stay", async () => {
   const { sender, requests } = sharingSender({ queueLimit: 3 });
   for (const providerId of ["claude-code", "codex", "conductor", "omp"] as const) {

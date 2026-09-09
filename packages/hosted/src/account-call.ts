@@ -120,6 +120,11 @@ export interface AccountCall {
   ): Promise<Answer | undefined>;
 }
 
+interface Identity {
+  holder: string | undefined;
+  authorization: string | undefined;
+}
+
 export function createAccountCall(options: AccountCallOptions): AccountCall {
   const baseUrl = text(options.baseUrl);
   if (!baseUrl) throw new Error("A call's base URL must not be empty");
@@ -155,14 +160,29 @@ export function createAccountCall(options: AccountCallOptions): AccountCall {
     }
   }
 
-  async function send(request: CallRequest): Promise<CallAnswer> {
-    const holder = await credential.holder?.();
-    const authorization = await credential.authorization?.();
-    if (credential.authorization && authorization === undefined) {
-      return { fault: CALL_FAULT.NO_CREDENTIAL };
+  /**
+   * Who the credential answers for and what one attempt carries, read
+   * together. A credential that cannot be read at all — a store that failed,
+   * not an account that is absent — reads as nothing rather than throwing,
+   * because a caller that took work off a queue to send it has to be able to
+   * put it back.
+   */
+  async function identify(): Promise<Identity | undefined> {
+    try {
+      const holder = await credential.holder?.();
+      const authorization = await credential.authorization?.();
+      if (credential.authorization && authorization === undefined) return undefined;
+      return { holder, authorization };
+    } catch {
+      return undefined;
     }
+  }
 
-    const answer = await attempt(request, authorization);
+  async function send(request: CallRequest): Promise<CallAnswer> {
+    const identity = await identify();
+    if (!identity) return { fault: CALL_FAULT.NO_CREDENTIAL };
+
+    const answer = await attempt(request, identity.authorization);
     if (!callAnswered(answer) || answer.response.status !== HTTP_STATUS.UNAUTHORIZED) {
       return answer;
     }
@@ -171,12 +191,10 @@ export function createAccountCall(options: AccountCallOptions): AccountCall {
     // that itself fails, or that produced the same credential, leaves the
     // refusal standing: retrying it would only repeat the no.
     await credential.renew?.().catch(() => undefined);
-    const renewed = await credential.authorization?.();
-    if (renewed === undefined || renewed === authorization) return answer;
-    if (credential.holder && (await credential.holder()) !== holder) {
-      return { fault: CALL_FAULT.HOLDER_CHANGED };
-    }
-    return attempt(request, renewed);
+    const renewal = await identify();
+    if (!renewal || renewal.authorization === identity.authorization) return answer;
+    if (renewal.holder !== identity.holder) return { fault: CALL_FAULT.HOLDER_CHANGED };
+    return attempt(request, renewal.authorization);
   }
 
   return {
