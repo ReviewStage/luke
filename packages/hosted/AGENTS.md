@@ -15,6 +15,24 @@ account preference client in `@sidecar/host` because the snapshot it carries is
 settings vocabulary, and realtime credential lifecycle depends on this package
 rather than being imported by it.
 
+## One call stands behind all of them
+
+`account-call.ts` is the request every caller to Luke's own service makes,
+here rather than beside any one of them because this is the lowest package
+they all reach. It owns what each of them used to restate: the base address
+trimmed once, the bearer header written once, the deadline joined with the
+caller's own cancellation, a fetch that threw read as a fault by the error's
+kind alone, and the one reading of a 401 — renew the credential, retry
+exactly once, only on a credential that changed, and only while it still
+answers for the same holder. It holds no credential itself: a
+`CallCredential` is handed in (`accountBearer` for the signed-in account,
+`fixedBearer` for a key, `NO_CREDENTIAL` for an endpoint that takes no
+identity at all), so who may renew a credential and who may say which account
+it answers for stay their owners' to know. What a caller keeps is its own
+vocabulary and its own reading of a status: `ask` for a caller that wants a
+validated body or nothing, `send` for one that reads the status itself.
+`device-client.ts` still carries its own copy of that dance.
+
 A renamed wire field keeps its old name on the wire for one iOS release. The
 desktop and the service ship together, but an installed phone reads whatever
 the service sends until its owner updates it, so the service writes both names

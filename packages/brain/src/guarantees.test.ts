@@ -3,9 +3,15 @@ import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { OMISSION_MARKER } from "@sidecar/session";
-import { ACTION_RESULT_STATUS, isWireString, unparsedWire, wireRecord } from "@sidecar/wire";
+import {
+  ACTION_RESULT_STATUS,
+  HTTP_METHOD,
+  isWireString,
+  unparsedWire,
+  wireRecord,
+} from "@sidecar/wire";
 import { LOOK_SUBJECT } from "./agent.js";
-import { HostedBrainTransport, KeyedBrainTransport } from "./client.js";
+import { hostedBrainTransport, keyedBrainTransport } from "./client.js";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
   BRAIN_STATE_VERSION,
@@ -42,7 +48,6 @@ import {
   TRANSCRIPT_SECRET,
   UNKNOWN,
 } from "./harness.js";
-import { HTTP_METHOD } from "./model-adapter-shared.js";
 import { INBOX_CAPACITY } from "./observation-inbox.js";
 import {
   BRAIN_REQUEST_STATUS,
@@ -487,13 +492,13 @@ test("a brain call is addressed to the developer's own key or to Luke's own serv
     addressed.push(url);
     return Promise.resolve(Response.json({}));
   };
-  const keyed = new KeyedBrainTransport({
+  const keyed = keyedBrainTransport({
     baseUrl: "https://api.openai.test/v1",
     apiKey: "sk-secret",
     fetch,
     now: () => NOW,
   });
-  const service = new HostedBrainTransport({
+  const service = hostedBrainTransport({
     baseUrl: "https://luke.test",
     readAccessToken: () => Promise.resolve("account-secret"),
     refreshAccount: () => Promise.resolve(),

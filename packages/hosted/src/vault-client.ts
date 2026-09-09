@@ -1,12 +1,6 @@
 import type { CloudAgentProviderId } from "@sidecar/session";
-import {
-  type CloudFetch,
-  positiveInteger,
-  text,
-  type UnparsedWireValue,
-  unparsedWire,
-  withoutTrailingSlash,
-} from "@sidecar/wire";
+import { type CloudFetch, HTTP_METHOD } from "@sidecar/wire";
+import { type AccountCall, accountBearer, createAccountCall } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
 import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 import {
@@ -19,132 +13,70 @@ import {
   vaultKeysListAnswerSchema,
 } from "./vault-wire.js";
 
-const VAULT_DEFAULTS = {
-  REQUEST_TIMEOUT_MS: 10_000,
-} as const;
-
-const UNAUTHORIZED_STATUS = 401;
-
 export interface HostedVaultClientOptions extends AccountToken {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
-  /**
-   * Who the bearer answers for, as an opaque identity. Read before an ask and
-   * again before its one 401 retry, because the retry re-reads the token: a
-   * sign-out and sign-in between the two must read as the action's account gone,
-   * never as a fresh bearer to carry the old account's payload under.
-   */
-  readAccountKey?: () => Promise<string | undefined>;
   fetch?: CloudFetch;
   requestTimeoutMs?: number;
-}
-
-interface VaultRequest {
-  method: "POST" | "GET" | "DELETE";
-  path: string;
-  body?: Record<string, string>;
 }
 
 /**
  * The desktop's side of the provider-key vault: store a key, list what is
  * stored (ids and timestamps — the service holds no endpoint that reads a
- * key back, and stores no fragment for display), and delete one. The shape follows the hosted usage reader —
- * token read fresh per ask, a 401 refreshed and retried once, every answer
- * validated by the shared wire contract — and a failure resolves to nothing,
+ * key back, and stores no fragment for display), and delete one. Every ask
+ * goes out on the one account call, and a failure resolves to nothing,
  * leaving the wording to the settings row that asked. Every call here is the
  * direct product of a press on that row; nothing reads the vault on a timer.
  */
 export class HostedVaultClient {
-  readonly #baseUrl: string;
-  readonly #readAccessToken: () => Promise<string | undefined>;
-  readonly #refreshAccount: () => Promise<void>;
-  readonly #readAccountKey?: () => Promise<string | undefined>;
-  readonly #fetch: CloudFetch;
-  readonly #requestTimeoutMs: number;
+  readonly #call: AccountCall;
 
   constructor(options: HostedVaultClientOptions) {
-    const baseUrl = text(options.serviceBaseUrl);
-    if (!baseUrl) throw new Error("Hosted service base URL must not be empty");
-    this.#baseUrl = withoutTrailingSlash(baseUrl);
-    this.#readAccessToken = options.readAccessToken;
-    this.#refreshAccount = options.refreshAccount;
-    if (options.readAccountKey) this.#readAccountKey = options.readAccountKey;
-    this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
-    this.#requestTimeoutMs = positiveInteger(
-      options.requestTimeoutMs,
-      VAULT_DEFAULTS.REQUEST_TIMEOUT_MS,
-    );
+    this.#call = createAccountCall({
+      baseUrl: options.serviceBaseUrl,
+      credential: accountBearer(options),
+      fetch: options.fetch,
+      requestTimeoutMs: options.requestTimeoutMs,
+    });
   }
 
   /**
    * Stores or replaces one provider's key. A key the service would refuse by
    * shape is refused here without traveling at all.
    */
-  async storeKey(
+  storeKey(
     providerId: CloudAgentProviderId,
     key: string,
   ): Promise<VaultKeyStoreAnswer | undefined> {
-    if (!vaultKeyIsStorable(key)) return undefined;
-    return this.#ask(
-      { method: "POST", path: HOSTED_SERVICE_PATH.VAULT_KEY, body: { providerId, key } },
+    if (!vaultKeyIsStorable(key)) return Promise.resolve(undefined);
+    return this.#call.ask(
+      {
+        method: HTTP_METHOD.POST,
+        path: HOSTED_SERVICE_PATH.VAULT_KEY,
+        body: JSON.stringify({ providerId, key }),
+      },
       (payload) => vaultKeyStoreAnswerSchema.parse(payload),
     );
   }
 
   /** Lists what is stored — provider ids and timestamps, never keys. */
   async listKeys(): Promise<readonly VaultKeyListEntry[] | undefined> {
-    const answer = await this.#ask(
-      { method: "GET", path: HOSTED_SERVICE_PATH.VAULT_KEYS },
+    const answer = await this.#call.ask(
+      { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.VAULT_KEYS },
       (payload) => vaultKeysListAnswerSchema.parse(payload),
     );
     return answer?.keys;
   }
 
   /** Deletes one provider's key; `deleted: false` means none was stored. */
-  async deleteKey(providerId: CloudAgentProviderId): Promise<VaultKeyDeleteAnswer | undefined> {
-    return this.#ask(
-      { method: "DELETE", path: HOSTED_SERVICE_PATH.VAULT_KEY, body: { providerId } },
+  deleteKey(providerId: CloudAgentProviderId): Promise<VaultKeyDeleteAnswer | undefined> {
+    return this.#call.ask(
+      {
+        method: HTTP_METHOD.DELETE,
+        path: HOSTED_SERVICE_PATH.VAULT_KEY,
+        body: JSON.stringify({ providerId }),
+      },
       (payload) => vaultKeyDeleteAnswerSchema.parse(payload),
     );
-  }
-
-  async #ask<Answer>(
-    request: VaultRequest,
-    read: (payload: UnparsedWireValue) => Answer | undefined,
-  ): Promise<Answer | undefined> {
-    const account = await this.#readAccountKey?.();
-    const token = await this.#readAccessToken();
-    if (!token) return undefined;
-
-    let response = await this.#request(request, token);
-    if (response?.status === UNAUTHORIZED_STATUS) {
-      await this.#refreshAccount().catch(() => undefined);
-      const refreshed = await this.#readAccessToken();
-      const sameAccount =
-        this.#readAccountKey === undefined || (await this.#readAccountKey()) === account;
-      if (refreshed && refreshed !== token && sameAccount) {
-        response = await this.#request(request, refreshed);
-      }
-    }
-    if (!response?.ok) return undefined;
-
-    const payload = await response.json().catch(() => undefined);
-    return payload === undefined ? undefined : read(unparsedWire(payload));
-  }
-
-  async #request(request: VaultRequest, token: string): Promise<Response | undefined> {
-    try {
-      return await this.#fetch(`${this.#baseUrl}${request.path}`, {
-        method: request.method,
-        headers: {
-          authorization: `Bearer ${token}`,
-          ...(request.body ? { "content-type": "application/json" } : undefined),
-        },
-        ...(request.body ? { body: JSON.stringify(request.body) } : undefined),
-        signal: AbortSignal.timeout(this.#requestTimeoutMs),
-      });
-    } catch {
-      return undefined;
-    }
   }
 }

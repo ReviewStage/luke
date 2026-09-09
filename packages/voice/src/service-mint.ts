@@ -1,9 +1,16 @@
 import {
+  type AccountCall,
   type AccountToken,
+  accountBearer,
+  CALL_FAULT,
+  type CallFailure,
+  callAnswered,
+  createAccountCall,
   HOSTED_SERVICE_PATH,
   type HostedQuota,
   hostedMintAnswerAt,
   hostedQuotaSchema,
+  NO_CREDENTIAL,
   type RealtimeConnection,
 } from "@sidecar/hosted";
 import {
@@ -16,20 +23,14 @@ import {
 } from "@sidecar/realtime";
 import {
   type CloudFetch,
+  HTTP_METHOD,
+  HTTP_STATUS,
   isRecord,
-  positiveInteger,
   text,
   type UnparsedWireValue,
   unparsedWire,
-  withoutTrailingSlash,
 } from "@sidecar/wire";
 
-const SERVICE_MINT_DEFAULTS = {
-  REQUEST_TIMEOUT_MS: 10_000,
-} as const;
-
-const UNAUTHORIZED_STATUS = 401;
-const QUOTA_STATUS = 429;
 const UNAVAILABLE_STATUS = 503;
 
 /**
@@ -75,18 +76,18 @@ interface ServiceMintOptions {
  * refusal a spent quota answers with is diagnosed from.
  */
 class ServiceRealtimeCredentialMinter implements RealtimeCredentialMinter {
-  readonly #endpoint: string;
+  readonly #call: AccountCall;
+  readonly #path: string;
+  /** Whether an attempt carried an identity at all, which is what makes a 401 a signed-out answer. */
+  readonly #identified: boolean;
   readonly #logLabel: string;
   readonly #malformedDetail: string;
-  readonly #authorization: AccountToken | undefined;
   /** The voice from construction, which a cleared setting falls back to. */
   readonly #configuredVoice: string | undefined;
   #voice: string | undefined;
   readonly #configuredSpeed: number | undefined;
   #speed: number | undefined;
-  readonly #fetch: CloudFetch;
   readonly #now: () => number;
-  readonly #requestTimeoutMs: number;
   #lastModel: string | undefined;
   #lastOutcome: RealtimeMintOutcome = REALTIME_MINT_OUTCOME.NOT_ATTEMPTED;
   #lastDetail: string | undefined;
@@ -94,22 +95,21 @@ class ServiceRealtimeCredentialMinter implements RealtimeCredentialMinter {
   #quota: HostedQuota | undefined;
 
   constructor(options: ServiceMintOptions) {
-    const baseUrl = text(options.serviceBaseUrl);
-    if (!baseUrl) throw new Error("Hosted service base URL must not be empty");
-    this.#endpoint = `${withoutTrailingSlash(baseUrl)}${options.servicePath}`;
+    this.#call = createAccountCall({
+      baseUrl: options.serviceBaseUrl,
+      credential: options.authorization ? accountBearer(options.authorization) : NO_CREDENTIAL,
+      fetch: options.fetch,
+      requestTimeoutMs: options.requestTimeoutMs,
+    });
+    this.#path = options.servicePath;
+    this.#identified = options.authorization !== undefined;
     this.#logLabel = options.logLabel;
     this.#malformedDetail = options.malformedDetail;
-    this.#authorization = options.authorization;
     this.#configuredVoice = text(options.voice);
     this.#voice = this.#configuredVoice;
     this.#configuredSpeed = options.speed;
     this.#speed = this.#configuredSpeed;
-    this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
     this.#now = options.now ?? Date.now;
-    this.#requestTimeoutMs = positiveInteger(
-      options.requestTimeoutMs,
-      SERVICE_MINT_DEFAULTS.REQUEST_TIMEOUT_MS,
-    );
   }
 
   /**
@@ -121,9 +121,18 @@ class ServiceRealtimeCredentialMinter implements RealtimeCredentialMinter {
    */
   async mint(): Promise<RealtimeConnection | undefined> {
     this.#lastAttemptAt = this.#now();
-    const response = await this.#authorizedMint();
-    if (!response) return undefined;
-    return this.#settleMint(response);
+    const answer = await this.#call.send({
+      method: HTTP_METHOD.POST,
+      path: this.#path,
+      // Only values inside the build's own sets travel; anything else lets
+      // the service mint its default rather than sending a refusable field.
+      body: JSON.stringify({
+        ...(isRealtimeVoice(this.#voice) ? { voice: this.#voice } : undefined),
+        ...(isRealtimeVoiceSpeed(this.#speed) ? { speed: this.#speed } : undefined),
+      }),
+    });
+    if (!callAnswered(answer)) return this.#refuseCall(answer);
+    return this.#settleMint(answer.response);
   }
 
   /**
@@ -146,7 +155,7 @@ class ServiceRealtimeCredentialMinter implements RealtimeCredentialMinter {
       model: this.#lastModel ?? REALTIME_DEFAULTS.MODEL,
       voice: this.#voice ?? REALTIME_DEFAULTS.VOICE,
       speed: this.#speed ?? REALTIME_DEFAULTS.SPEED,
-      endpoint: this.#endpoint,
+      endpoint: this.#call.address(this.#path),
       lastOutcome: this.#lastOutcome,
       ...(this.#lastDetail ? { lastDetail: this.#lastDetail } : undefined),
       ...(this.#lastAttemptAt === undefined ? undefined : { lastAttemptAt: this.#lastAttemptAt }),
@@ -154,48 +163,21 @@ class ServiceRealtimeCredentialMinter implements RealtimeCredentialMinter {
     };
   }
 
-  async #authorizedMint(): Promise<Response | undefined> {
-    if (!this.#authorization) return this.#requestMint({});
-
-    const token = await this.#authorization.readAccessToken();
-    if (!token) {
-      this.#recordOutcome(REALTIME_MINT_OUTCOME.NOT_SIGNED_IN, "no access token");
-      return undefined;
-    }
-
-    const response = await this.#requestMint({ authorization: `Bearer ${token}` });
-    if (response?.status !== UNAUTHORIZED_STATUS) return response;
-
-    // Routine expiry of an hour-lived token inside a day-lived app: refresh
-    // and retry once. A retry on the same token would only repeat the no.
-    await this.#authorization.refreshAccount().catch(() => undefined);
-    const refreshed = await this.#authorization.readAccessToken();
-    if (!refreshed || refreshed === token) return response;
-    return this.#requestMint({ authorization: `Bearer ${refreshed}` });
-  }
-
-  async #requestMint(headers: Record<string, string>): Promise<Response | undefined> {
-    try {
-      return await this.#fetch(this.#endpoint, {
-        method: "POST",
-        headers: {
-          ...headers,
-          "content-type": "application/json",
-        },
-        // Only values inside the build's own sets travel; anything else lets
-        // the service mint its default rather than sending a refusable field.
-        body: JSON.stringify({
-          ...(isRealtimeVoice(this.#voice) ? { voice: this.#voice } : undefined),
-          ...(isRealtimeVoiceSpeed(this.#speed) ? { speed: this.#speed } : undefined),
-        }),
-        signal: AbortSignal.timeout(this.#requestTimeoutMs),
-      });
-    } catch (error) {
-      this.#recordOutcome(
-        REALTIME_MINT_OUTCOME.NETWORK_ERROR,
-        error instanceof Error ? error.name : "unknown error",
-      );
-      return undefined;
+  /** A mint that never reached the service, named by the fault the call ended at. */
+  #refuseCall(failure: CallFailure): undefined {
+    switch (failure.fault) {
+      case CALL_FAULT.NO_CREDENTIAL:
+        this.#recordOutcome(REALTIME_MINT_OUTCOME.NOT_SIGNED_IN, "no access token");
+        return undefined;
+      case CALL_FAULT.HOLDER_CHANGED:
+        this.#recordOutcome(REALTIME_MINT_OUTCOME.NOT_SIGNED_IN, "the account changed");
+        return undefined;
+      case CALL_FAULT.NETWORK:
+        this.#recordOutcome(
+          REALTIME_MINT_OUTCOME.NETWORK_ERROR,
+          failure.errorName ?? "unknown error",
+        );
+        return undefined;
     }
   }
 
@@ -228,7 +210,7 @@ class ServiceRealtimeCredentialMinter implements RealtimeCredentialMinter {
    * where an identity was sent at all.
    */
   #refuseMint(status: number, payload: UnparsedWireValue): void {
-    if (status === QUOTA_STATUS) {
+    if (status === HTTP_STATUS.TOO_MANY_REQUESTS) {
       this.#quota = isRecord(payload)
         ? hostedQuotaSchema.parse(unparsedWire(payload.quota))
         : undefined;
@@ -239,7 +221,7 @@ class ServiceRealtimeCredentialMinter implements RealtimeCredentialMinter {
       this.#recordOutcome(REALTIME_MINT_OUTCOME.HOSTED_UNAVAILABLE);
       return;
     }
-    if (status === UNAUTHORIZED_STATUS && this.#authorization) {
+    if (status === HTTP_STATUS.UNAUTHORIZED && this.#identified) {
       this.#recordOutcome(REALTIME_MINT_OUTCOME.NOT_SIGNED_IN, `status ${status}`);
       return;
     }
@@ -272,13 +254,13 @@ export type HostedRealtimeCredentialOptions = RealtimeCredentialOptions & Accoun
 export function hostedRealtimeCredentialMinter(
   options: HostedRealtimeCredentialOptions,
 ): RealtimeCredentialMinter {
-  const { readAccessToken, refreshAccount, ...rest } = options;
+  const { readAccessToken, refreshAccount, readAccountKey, ...rest } = options;
   return new ServiceRealtimeCredentialMinter({
     ...rest,
     servicePath: HOSTED_SERVICE_PATH.VOICE_MINT,
     logLabel: "Hosted realtime mint",
     malformedDetail: "no usable hosted credential",
-    authorization: { readAccessToken, refreshAccount },
+    authorization: { readAccessToken, refreshAccount, readAccountKey },
   });
 }
 

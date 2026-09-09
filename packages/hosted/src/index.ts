@@ -1,3 +1,14 @@
+export {
+  type AccountCall,
+  accountBearer,
+  CALL_FAULT,
+  type CallCredential,
+  type CallFailure,
+  callAnswered,
+  createAccountCall,
+  fixedBearer,
+  NO_CREDENTIAL,
+} from "./account-call.js";
 export type { AccountToken } from "./account-token.js";
 export {
   type HostedActionAnswer,

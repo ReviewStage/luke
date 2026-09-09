@@ -116,6 +116,7 @@ export function composeSettings(dependencies: SettingsDependencies): SettingsCom
     sends: runMode.sendsNetwork,
     readAccessToken: async () => (await store.readAccount())?.accessToken,
     refreshAccount: () => links.get().refreshAccount(),
+    readAccountKey: async () => (await store.readAccount())?.email,
   });
   const hostedVault = new HostedVaultClient({
     serviceBaseUrl: kernel.hostedServiceBaseUrl,

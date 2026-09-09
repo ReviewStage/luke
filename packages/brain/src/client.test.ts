@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { HOSTED_BRAIN_CONTRACT_VERSION, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { MODEL_FAILURE, MODEL_RESPONSE_OUTCOME } from "@sidecar/runtime/vocabulary";
-import { HostedBrainTransport, KeyedBrainTransport } from "./client.js";
+import { HTTP_METHOD } from "@sidecar/wire";
+import { hostedBrainTransport, keyedBrainTransport } from "./client.js";
 import {
   BRAIN_RATE_LIMIT_COOLDOWN_MS,
   BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS,
-  HTTP_METHOD,
+  BRAIN_REQUEST_TIMEOUT_MS,
 } from "./model-adapter-shared.js";
 
 const NOW = 1_800_000_000_000;
@@ -45,7 +46,7 @@ function keyed(answers: readonly (() => Response)[], baseUrl = `${BASE}/v1/`) {
   const { fetch, calls } = recorder(answers);
   return {
     calls,
-    transport: new KeyedBrainTransport({ baseUrl, apiKey: "sk-test", fetch, now: () => NOW }),
+    transport: keyedBrainTransport({ baseUrl, apiKey: "sk-test", fetch, now: () => NOW }),
   };
 }
 
@@ -57,7 +58,7 @@ function hosted(
   const queue = [...tokens];
   let current = queue.shift();
   const refreshes: number[] = [];
-  const transport = new HostedBrainTransport({
+  const transport = hostedBrainTransport({
     baseUrl: BASE,
     readAccessToken: () => Promise.resolve(current),
     refreshAccount: () => {
@@ -98,7 +99,7 @@ test("the run's own cancellation is joined with the per-request timeout, and nei
 });
 
 test("a fetch that throws is a network failure named by the error's kind alone, never by its words", async () => {
-  const transport = new KeyedBrainTransport({
+  const transport = keyedBrainTransport({
     baseUrl: BASE,
     apiKey: "sk-secret-key",
     fetch: () => Promise.reject(new TypeError("sk-secret-key was refused by dns")),
@@ -124,23 +125,24 @@ test("the keyed transport sends one attempt and never refreshes; no account toke
   assert.deepEqual(signedOut.calls, []);
 });
 
-test("a hosted attempt refused once is refreshed and retried once; a refresh that changes nothing lets the refusal stand", async () => {
-  const retried = hosted(
-    [() => new Response("", { status: 401 }), () => Response.json({ ok: true })],
-    ["stale", "fresh"],
-  );
-  const answer = await retried.transport.send("/responses", HTTP_METHOD.POST, "{}");
-  assert.ok(answer instanceof Response && answer.ok);
-  assert.deepEqual(
-    retried.calls.map((call) => call.authorization),
-    ["Bearer stale", "Bearer fresh"],
-  );
-
+test("a refusal that outlived a renewed token is the caller's to read, not a failure of its own", async () => {
   const unchanged = hosted([() => new Response("", { status: 401 })], ["only"]);
   const refusal = await unchanged.transport.send("/responses", HTTP_METHOD.POST, "{}");
   assert.ok(refusal instanceof Response && refusal.status === 401);
-  assert.equal(unchanged.calls.length, 1);
   assert.equal(unchanged.refreshes.length, 1);
+});
+
+test("the brain asks for its own deadline, and an explicit one replaces it", () => {
+  assert.equal(BRAIN_REQUEST_TIMEOUT_MS, 90_000);
+  assert.equal(keyed([]).transport.requestTimeoutMs, BRAIN_REQUEST_TIMEOUT_MS);
+  assert.equal(hosted([]).transport.requestTimeoutMs, BRAIN_REQUEST_TIMEOUT_MS);
+  const tighter = keyedBrainTransport({
+    baseUrl: BASE,
+    apiKey: "sk-test",
+    requestTimeoutMs: 5_000,
+    now: () => NOW,
+  });
+  assert.equal(tighter.requestTimeoutMs, 5_000);
 });
 
 test("a 429 earns the bounded Retry-After or the fixed cooldown on either transport, and a spent allowance waits for its reset", () => {

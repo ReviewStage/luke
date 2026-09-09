@@ -6,14 +6,13 @@ import {
   REASONING_EFFORT,
   type ReasoningEffort,
 } from "@sidecar/runtime/vocabulary";
-import { type CloudFetch, HTTP_STATUS, text, type WireRecord } from "@sidecar/wire";
-import { KeyedBrainTransport } from "./client.js";
+import { type CloudFetch, HTTP_METHOD, HTTP_STATUS, text, type WireRecord } from "@sidecar/wire";
+import { type BrainTransport, keyedBrainTransport } from "./client.js";
 import { COMPACTION_POLICY } from "./compaction.js";
 import {
   BRAIN_MAXIMUM_OUTPUT_TOKENS,
   BRAIN_REQUEST_TIMEOUT_MS,
   failed,
-  HTTP_METHOD,
 } from "./model-adapter-shared.js";
 import {
   BRAIN_RESPONSES_COMPACT_PATH,
@@ -85,12 +84,12 @@ class OpenAiTransport implements ResponsesTransport<undefined> {
   readonly adapter = BUILTIN_MODEL_ADAPTER.OPENAI;
   readonly #model: string;
   readonly #reasoningEffort: ReasoningEffort;
-  readonly #client: KeyedBrainTransport;
+  readonly #client: BrainTransport;
 
   constructor(options: OpenAiModelAdapterOptions) {
     this.#model = text(options.model) ?? BRAIN_OPENAI_DEFAULTS.MODEL;
     this.#reasoningEffort = options.reasoningEffort ?? BRAIN_OPENAI_DEFAULTS.REASONING_EFFORT;
-    this.#client = new KeyedBrainTransport({
+    this.#client = keyedBrainTransport({
       ...options,
       baseUrl: text(options.baseUrl) ?? BRAIN_OPENAI_DEFAULTS.BASE_URL,
     });

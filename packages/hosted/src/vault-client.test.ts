@@ -101,47 +101,7 @@ test("deletes one provider's key and reads whether one was removed", async () =>
   });
 });
 
-test("a 401 refreshes the account and retries once on the new token", async () => {
-  const tokens = ["token-1", "token-2"];
-  let refreshes = 0;
-  const { requests, fetchLike } = service([
-    () => new Response(JSON.stringify({ error: "invalid-token" }), { status: 401 }),
-    () => new Response(JSON.stringify(LIST_ANSWER), { status: 200 }),
-  ]);
-
-  const keys = await client({
-    fetch: fetchLike,
-    readAccessToken: async () => tokens.shift(),
-    refreshAccount: async () => {
-      refreshes += 1;
-    },
-  }).listKeys();
-
-  assert.deepEqual(keys, LIST_ANSWER.keys);
-  assert.equal(refreshes, 1);
-  assert.equal(requests.length, 2);
-  assert.equal(new Headers(requests[1]?.init.headers).get("authorization"), "Bearer token-2");
-});
-
-test("a 401 whose refresh yields the same token is not retried", async () => {
-  const { requests, fetchLike } = service([
-    () => new Response(JSON.stringify({ error: "invalid-token" }), { status: 401 }),
-  ]);
-
-  const answer = await client({ fetch: fetchLike }).deleteKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR);
-  assert.equal(answer, undefined);
-  assert.equal(requests.length, 1);
-});
-
-test("failures, malformed answers, and a missing account all read as no answer", async () => {
-  const failing = client({
-    fetch: async () => {
-      throw new Error("offline");
-    },
-  });
-  assert.equal(await failing.listKeys(), undefined);
-  assert.equal(await failing.storeKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, "key_1234"), undefined);
-
+test("a refusal and an answer the vault contract does not admit both read as no answer", async () => {
   const refused = client({
     fetch: async () => new Response(JSON.stringify({ error: "unavailable" }), { status: 503 }),
   });
@@ -154,15 +114,4 @@ test("failures, malformed answers, and a missing account all read as no answer",
       }),
   });
   assert.equal(await malformed.listKeys(), undefined);
-
-  const requests: RecordedRequest[] = [];
-  const signedOut = client({
-    fetch: async (url, init) => {
-      requests.push({ url, init });
-      return new Response(JSON.stringify(LIST_ANSWER), { status: 200 });
-    },
-    readAccessToken: async () => undefined,
-  });
-  assert.equal(await signedOut.listKeys(), undefined);
-  assert.equal(requests.length, 0);
 });

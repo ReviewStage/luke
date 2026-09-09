@@ -151,27 +151,6 @@ test("no access token asks the service nothing and says why voice is off", async
   assert.equal(minter.diagnostics().lastOutcome, REALTIME_MINT_OUTCOME.NOT_SIGNED_IN);
 });
 
-test("a 401 refreshes the account and retries once with the new token", async () => {
-  const tokens = ["stale-token", "fresh-token"];
-  let refreshes = 0;
-  const { requests, fetchLike } = service([
-    refused(401, { error: "invalid-token" }),
-    minted(mintedBody()),
-  ]);
-  const minter = hosted({
-    fetch: fetchLike,
-    readAccessToken: async () => tokens[Math.min(refreshes, tokens.length - 1)],
-    refreshAccount: async () => {
-      refreshes += 1;
-    },
-  });
-
-  assert.ok(await minter.mint());
-  assert.equal(refreshes, 1);
-  assert.equal(requests.length, 2);
-  assert.equal(new Headers(requests[1]?.init.headers).get("authorization"), "Bearer fresh-token");
-});
-
 test("a refresh that changes nothing is not retried and reads as signed out", async () => {
   let refreshes = 0;
   const { requests, fetchLike } = service([refused(401, { error: "invalid-token" })]);

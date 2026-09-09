@@ -12,7 +12,9 @@ export { type Admitted, reshapeAdmitted } from "./admitted.js";
 export { Emitter, type Event } from "./event.js";
 export {
   type CloudFetch,
+  HTTP_METHOD,
   HTTP_STATUS,
+  type HttpMethod,
   isInstant,
   isOptionalWireString,
   isRecord,

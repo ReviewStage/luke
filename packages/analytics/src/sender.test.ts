@@ -101,44 +101,35 @@ test("a sender that was never armed sends nothing", async () => {
   assert.deepEqual(requests, []);
 });
 
-test("a 401 refreshes and retries once, and the same token twice does not", async () => {
+test("a batch queued under one account is never posted under another's bearer", async () => {
+  let account = "ada@luke.test";
   let token = "stale";
-  const { fetch, requests } = recordingFetch((request) =>
-    request.authorization === "Bearer fresh"
-      ? new Response("{}")
-      : new Response("{}", { status: HTTP_STATUS.UNAUTHORIZED }),
+  const { fetch, requests } = recordingFetch(
+    () => new Response("{}", { status: HTTP_STATUS.UNAUTHORIZED }),
   );
-  let refreshes = 0;
-  const sender = new ProductEventSender({
-    serviceBaseUrl: BASE_URL,
-    appVersion: APP_VERSION,
-    sends: true,
+  const { sender } = sharingSender({
+    fetch,
     readAccessToken: async () => token,
+    readAccountKey: async () => account,
+    // The sign-out and sign-in the refusal was the first sign of: the token
+    // the retry would carry answers for somebody else.
     refreshAccount: async () => {
-      refreshes += 1;
+      account = "grace@luke.test";
       token = "fresh";
     },
-    fetch,
-    now: () => NOON,
   });
-  sender.arm();
   sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
   await sender.flush();
 
-  assert.equal(refreshes, 1);
   assert.deepEqual(
     requests.map((request) => request.authorization),
-    ["Bearer stale", "Bearer fresh"],
+    ["Bearer stale"],
   );
 
-  const stuck = senderWith(
-    { readAccessToken: async () => "same" },
-    () => new Response("{}", { status: HTTP_STATUS.UNAUTHORIZED }),
-  );
-  stuck.sender.arm();
-  stuck.sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
-  await stuck.sender.flush();
-  assert.equal(stuck.requests.length, 1);
+  // Spent, not requeued: these counts belong to an account this sender can no
+  // longer name.
+  await sender.flush();
+  assert.equal(requests.length, 1);
 });
 
 test("a failed send drops its batch rather than retrying it behind the next one", async () => {
