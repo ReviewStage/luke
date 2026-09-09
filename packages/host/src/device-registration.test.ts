@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { DEVICE_PLATFORM } from "@sidecar/hosted";
-import { FakeClock, temporaryDirectory } from "@sidecar/runtime/testing";
+import { drainMicrotasks, FakeClock, temporaryDirectory } from "@sidecar/runtime/testing";
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import {
   DEVICE_HEARTBEAT_INTERVAL_MS,
@@ -236,7 +236,7 @@ test("a registration still on the wire at sign-out lands before the next account
   await subject.stop({ forget: { accessToken: "leaving" } });
 
   const arriving = subject.start();
-  await new Promise((resolve) => setImmediate(resolve));
+  await drainMicrotasks(20);
   assert.equal(calls.length, 1, "the next registration waits for the one on the wire");
 
   release?.();
