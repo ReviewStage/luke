@@ -1,9 +1,11 @@
 import type { BrainAgent, BrainRequestRecord } from "@sidecar/brain";
 import { BRAIN_DEFAULTS } from "@sidecar/brain";
+import type { BrainRequestOrigin } from "@sidecar/brain/requests";
 import {
   BRAIN_SUBMISSION_OUTCOME,
   BRAIN_SUBMISSION_REJECTION,
   type BrainSubmissionResult,
+  brainReplyWords,
   brainRequestRecordToWire,
   isBrainRequestOrigin,
   isTerminalBrainRequestStatus,
@@ -15,6 +17,8 @@ import {
 } from "@sidecar/realtime";
 import {
   type ChildRunService,
+  type DeliveryClaimContext,
+  type DeliveryLedger,
   deliveryRecordToWire,
   type GatewayMethodContext,
   type GatewayMethodHandler,
@@ -53,7 +57,6 @@ import type {
   BrainRequestSnapshot,
 } from "#shared/messages/brain";
 import { publishAsk } from "../brain/ipc";
-import type { BrainReplyDeliveries } from "../brain/reply-delivery";
 import type { SettableConfigurationPatch } from "../brain/wiring";
 import type { ConversationOperations } from "../conversation-operations";
 
@@ -99,7 +102,7 @@ export interface GatewayServiceDependencies {
   memory: GatewayMemoryAccess;
   /** How many sessions the roster holds now; the observation event's whole payload. */
   observedSessionCount: () => number;
-  deliveries: BrainReplyDeliveries;
+  deliveries: DeliveryLedger<GrantedWords>;
   receiver: GatewayReceiverState;
   nodes?: NodeRegistry;
   recordConversationEntry: (
@@ -302,6 +305,51 @@ function submissionResultToWire(result: BrainSubmissionResult): WireRecord {
     : { outcome: result.outcome, reason: result.reason };
 }
 
+/** The words one granted reply is spoken as, read from the live record at the moment of the grant. */
+export interface GrantedWords {
+  words: string;
+  origin: BrainRequestOrigin;
+}
+
+/** What a grant is checked against at the moment it lands: the receiver, the store, and the live record. */
+export interface BrainReplyClaimContext {
+  /** Whether the receiver is ready and the epoch given is its current one. */
+  receiverCurrent: (epoch: number) => boolean;
+  /** Whether the generation named still stands in the store. */
+  generationStands: (generationId: string) => boolean;
+  /** The run's record as the standing brain holds it now, or nothing. */
+  liveRecord: (runId: string) => BrainRequestRecord | undefined;
+}
+
+/**
+ * Whether a run's end may be spoken at all: ended, written and marked in
+ * History, and wordable in History's own wording. The ledger keeps the
+ * states, the epochs, and the one grant per run; this is the only thing read
+ * out of a brain record on the way there.
+ */
+export function deliverable(record: BrainRequestRecord): boolean {
+  return (
+    isTerminalBrainRequestStatus(record.status) &&
+    record.historyRecordedAt !== undefined &&
+    brainReplyWords(record) !== undefined
+  );
+}
+
+/** The claim context as the ledger asks for it: the words come from the live record, never the offer's. */
+export function ledgerContext(context: BrainReplyClaimContext): DeliveryClaimContext<GrantedWords> {
+  return {
+    receiverCurrent: context.receiverCurrent,
+    generationStands: context.generationStands,
+    runHeld: (runId: string) => context.liveRecord(runId) !== undefined,
+    liveWords: (runId: string): GrantedWords | undefined => {
+      const live = context.liveRecord(runId);
+      if (!live || !deliverable(live)) return undefined;
+      const words = brainReplyWords(live);
+      return words === undefined ? undefined : { words, origin: live.origin };
+    },
+  };
+}
+
 export function createGatewayService(dependencies: GatewayServiceDependencies): GatewayService {
   const { brain, conversations, deliveries, receiver } = dependencies;
   const nodes = dependencies.nodes ?? new NodeRegistry();
@@ -358,7 +406,9 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
     generationId: string,
     epoch: number,
   ): boolean => {
-    const granted = deliveries.grantOnCall(live, generationId, epoch, claimContext());
+    const granted =
+      deliverable(live) &&
+      deliveries.grantOnCall(live.runId, generationId, epoch, ledgerContext(claimContext()));
     if (granted) offerReplies();
     return granted;
   };
@@ -521,12 +571,15 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
       });
     }),
     [GATEWAY_METHOD.DELIVERY_CLAIM]: reading((read) => {
-      const claim: BrainReplyClaimResult = deliveries.claim(
+      const granted = deliveries.claim(
         read.identifier("runId"),
         read.identifier("deliveryId"),
         read.number("epoch"),
-        claimContext(),
+        ledgerContext(claimContext()),
       );
+      const claim: BrainReplyClaimResult = granted.granted
+        ? { granted: true, words: granted.words.words, origin: granted.words.origin }
+        : { granted: false };
       return gatewayOk(
         claim.granted
           ? { granted: true, words: claim.words, origin: claim.origin }
@@ -562,13 +615,18 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
     server,
     nodes,
     runsReported: (snapshots) => {
-      deliveries.observe(snapshots);
+      deliveries.observe(
+        snapshots.map((record) => ({
+          runId: record.runId,
+          ended: isTerminalBrainRequestStatus(record.status),
+        })),
+      );
       server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: snapshots.map(brainRequestRecordToWire) });
     },
     endPublished: (record, sessionKey) => {
       const generationId = brain.generationId(sessionKey);
       if (generationId === undefined) return;
-      deliveries.published(record, generationId);
+      if (deliverable(record)) deliveries.published(record.runId, generationId);
       offerReplies();
     },
     generationReplaced: () => {

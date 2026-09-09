@@ -4,7 +4,12 @@ import type { BrainAgent, BrainRequestRecord, BrainSubmission } from "@sidecar/b
 import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
-import { GatewayClient, InProcessTransport, LoopbackTransport } from "@sidecar/runtime";
+import {
+  DeliveryLedger,
+  GatewayClient,
+  InProcessTransport,
+  LoopbackTransport,
+} from "@sidecar/runtime";
 import {
   DELIVERY_STATE,
   type DeliveryState,
@@ -17,11 +22,10 @@ import {
 } from "@sidecar/runtime-contracts";
 import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
 import { CONVERSATION_DELETE_OUTCOME } from "../brain/conversation-deletion";
-import { BrainReplyDeliveries } from "../brain/reply-delivery";
 import type { ConversationOperations } from "../conversation-operations";
 import { VoiceReceiver } from "../voice-receiver";
 import { createGatewayOperator } from "./operator";
-import { createGatewayService } from "./service";
+import { createGatewayService, type GrantedWords } from "./service";
 
 const NOW = 1_800_000_000_000;
 
@@ -32,7 +36,10 @@ function recordOf(value: WireValue | undefined): WireRecord {
 }
 
 /** The state the ledger holds for one run, or nothing once the run's delivery is gone. */
-function deliveryState(deliveries: BrainReplyDeliveries, runId: string): DeliveryState | undefined {
+function deliveryState(
+  deliveries: DeliveryLedger<GrantedWords>,
+  runId: string,
+): DeliveryState | undefined {
   return deliveries.records().find((delivery) => delivery.runId === runId)?.state;
 }
 
@@ -104,7 +111,9 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
     markAskRecorded: async () => true,
   } as unknown as BrainAgent;
   let brainStands = true;
-  const deliveries = new BrainReplyDeliveries({ nextDeliveryId: () => `delivery-${++ids}` });
+  const deliveries = new DeliveryLedger<GrantedWords>({
+    nextDeliveryId: () => `delivery-${++ids}`,
+  });
   const receiver = new VoiceReceiver();
   const service = createGatewayService({
     brain: {

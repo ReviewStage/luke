@@ -85,6 +85,7 @@ import {
 import {
   CREDENTIAL_REFERENCE_KIND,
   CronScheduler,
+  DeliveryLedger,
   type GatewayMethodTable,
   type GatewayShutdownSteps,
   gatewayError,
@@ -182,12 +183,11 @@ import {
 } from "../apple-calendar";
 import { arrivalBeatOwed, countsFirstAnnouncement } from "../arrival-flow";
 import type { WorkspaceCreationDefaults } from "../brain/act-performer";
-import { BrainReplyDeliveries } from "../brain/reply-delivery";
 import { wakeEventsFromHooks, wireBrain } from "../brain/wiring";
 import { calendarOnboardingOwed } from "../calendar-onboarding-flow";
 import { conversationOperations, startHistoryMaintenance } from "../conversation-operations";
 import { NODE_CAPABILITY } from "../gateway/desktop-node";
-import { createGatewayService, type GatewayService } from "../gateway/service";
+import { createGatewayService, type GatewayService, type GrantedWords } from "../gateway/service";
 import { createSessionActPerformer, NodeAnswerLostError } from "../ipc/session-acts";
 import { wireMemoryMaintenance } from "../memory-maintenance";
 import { type OnboardingState, onboardingStateFile } from "../onboarding-state";
@@ -606,7 +606,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     onDirectoryChanged: () => undefined,
     report,
   });
-  const brainReplyDeliveries = new BrainReplyDeliveries({ nextDeliveryId: createId });
+  const brainReplyDeliveries = new DeliveryLedger<GrantedWords>({ nextDeliveryId: createId });
   /**
    * The one voice receiver, as the client that owns the voice window reports
    * it: the host mints the epochs, so a claim names an epoch this host issued,

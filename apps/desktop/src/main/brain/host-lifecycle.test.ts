@@ -22,15 +22,19 @@ import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
 } from "@sidecar/realtime";
-import { QUEUE_MODE } from "@sidecar/runtime";
-import type { ModelResponse } from "@sidecar/runtime-contracts";
+import { DeliveryLedger, type DeliveryRecord, QUEUE_MODE } from "@sidecar/runtime";
+import { DELIVERY_STATE, type ModelResponse } from "@sidecar/runtime-contracts";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import type { BrainReplyOffer, BrainRequestSnapshot } from "#shared/messages/brain";
+import type {
+  BrainReplyClaimResult,
+  BrainReplyOffer,
+  BrainRequestSnapshot,
+} from "#shared/messages/brain";
+import { deliverable, type GrantedWords, ledgerContext } from "../gateway/service";
 import { operatorOverBrain } from "../gateway/testing";
 import { VoiceReceiver } from "../voice-receiver";
 import { BrainHost } from "./host";
 import { followBrainRequests } from "./ipc";
-import { BrainReplyDeliveries } from "./reply-delivery";
 
 /**
  * The real agent, store, host, follower, and submission path composed as the
@@ -96,7 +100,9 @@ function composed() {
   // The delivery owner and the receiver, composed as desktop-app composes
   // them: every report is observed before it is broadcast, every published
   // end is offered to a ready receiver, and readiness flushes what waited.
-  const deliveries = new BrainReplyDeliveries({ nextDeliveryId: () => `delivery-${++ids}` });
+  const deliveries = new DeliveryLedger<GrantedWords>({
+    nextDeliveryId: () => `delivery-${++ids}`,
+  });
   const receiver = new VoiceReceiver();
   const offers: BrainReplyOffer[] = [];
   const offerReplies = () => {
@@ -111,12 +117,19 @@ function composed() {
       followBrainRequests(agent, {
         recordConversationEntry: record,
         broadcastRequests: (snapshots) => {
-          deliveries.observe(snapshots);
+          deliveries.observe(
+            snapshots.map((snapshot) => ({
+              runId: snapshot.runId,
+              ended: isTerminalBrainRequestStatus(snapshot.status),
+            })),
+          );
           broadcasts.push(snapshots);
         },
         onEndPublished: (ended) => {
           const generationId = store.generationId();
-          if (generationId !== undefined) deliveries.published(ended, generationId);
+          if (generationId !== undefined && deliverable(ended)) {
+            deliveries.published(ended.runId, generationId);
+          }
           offerReplies();
         },
       }),
@@ -132,8 +145,25 @@ function composed() {
     generationStands: (generationId: string) => store.holdsGeneration(generationId),
     liveRecord: (runId: string) => host.current()?.request(runId),
   });
-  const claim = (offer: BrainReplyOffer) =>
-    deliveries.claim(offer.runId, offer.deliveryId, offer.epoch, claimContext());
+  const claim = (offer: BrainReplyOffer): BrainReplyClaimResult => {
+    const granted = deliveries.claim(
+      offer.runId,
+      offer.deliveryId,
+      offer.epoch,
+      ledgerContext(claimContext()),
+    );
+    return granted.granted
+      ? { granted: true, words: granted.words.words, origin: granted.words.origin }
+      : { granted: false };
+  };
+  /** Queued or offered: everything owed that no receiver has taken in hand. */
+  const unclaimed = (): readonly DeliveryRecord[] =>
+    deliveries
+      .records()
+      .filter(
+        (delivery) =>
+          delivery.state === DELIVERY_STATE.QUEUED || delivery.state === DELIVERY_STATE.OFFERED,
+      );
   const acknowledge = (offer: BrainReplyOffer) => {
     const emptied = deliveries.acknowledge(offer.runId, offer.deliveryId, offer.epoch);
     if (emptied) offerReplies();
@@ -149,7 +179,9 @@ function composed() {
     const live = agent?.request(runId) ?? waited;
     if (live.historyRecordedAt === undefined) return { record: live, speak: false };
     const generationId = store.generationId() ?? "";
-    const speak = deliveries.grantOnCall(live, generationId, epoch, claimContext());
+    const speak =
+      deliverable(live) &&
+      deliveries.grantOnCall(live.runId, generationId, epoch, ledgerContext(claimContext()));
     if (speak) offerReplies();
     return { record: live, speak };
   };
@@ -190,6 +222,7 @@ function composed() {
     thread: () => thread,
     broadcasts,
     deliveries,
+    unclaimed,
     receiver,
     offers,
     claim,
@@ -385,7 +418,7 @@ test("a run ending long after its wait is offered once, to a ready receiver, onl
   client.release(answered("Two agents are waiting."));
   await settle();
   assert.equal(replies(c.thread(), runId).length, 1);
-  assert.equal(c.deliveries.unclaimed().length, 1);
+  assert.equal(c.unclaimed().length, 1);
   assert.equal(c.offers.length, 0);
   // Readiness flushes it, exactly once, under the epoch that reported.
   const next = c.receiver.begin();
@@ -550,7 +583,7 @@ test("a Clear invalidates every delivery: an unclaimed offer is refused, a late 
   // The Clear fences synchronously; the renderer's claim lands after it.
   const cleared = c.store.clear(NOW + 5);
   assert.deepEqual(c.claim(offer), { granted: false });
-  assert.deepEqual(c.deliveries.unclaimed(), []);
+  assert.deepEqual(c.unclaimed(), []);
   await cleared;
   await settle();
   assert.equal(c.acknowledge(offer), false);
@@ -614,7 +647,7 @@ test("a spoken ask's end is authorized exactly once across the call that asked a
   const waited = await c.waitOnCall(spoken.runId, epoch);
   assert.equal(waited.speak, true);
   assert.deepEqual(c.claim(offer), { granted: false });
-  assert.equal(c.deliveries.unclaimed().length, 0);
+  assert.equal(c.unclaimed().length, 0);
   assert.equal(replies(c.thread(), spoken.runId).length, 1);
 
   // The reverse order: the offer is claimed first, and the wait is refused.
