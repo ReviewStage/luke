@@ -1,5 +1,5 @@
 import { text, type UnparsedWireValue, type WireRecord, wholeNumber } from "@sidecar/wire";
-import { canIgnoreFilesystemError, fileStats } from "./local-session-adapter.js";
+import { canIgnoreFilesystemError, fileStats } from "./local-files.js";
 
 export function numberFromRow(row: WireRecord, key: string): number | undefined {
   return wholeNumber(row[key]);

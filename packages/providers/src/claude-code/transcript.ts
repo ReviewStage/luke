@@ -1,5 +1,4 @@
 import path from "node:path";
-import type { ProviderTranscriptSinceReading } from "@sidecar/session";
 import {
   isRecord,
   isWireString,
@@ -9,20 +8,13 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import {
-  readDirectory,
-  readTail,
-  statDirectoryEntry,
-  tailRecords,
-} from "../shared/local-session-adapter.js";
-import {
-  boundedTranscript,
-  readRecordsSince,
   TRANSCRIPT_BOUNDS,
-  type TranscriptPathCache,
   transcriptContentBlocks,
   transcriptLine,
   transcriptMessageText,
-} from "../shared/local-transcript.js";
+} from "../shared/jsonl-transcript.js";
+import { readDirectory, statDirectoryEntry } from "../shared/local-files.js";
+import { CLAUDE_TOOL_INPUT_KEYS } from "./records.js";
 
 /**
  * On-demand reading of one Claude Code session's transcript, for a question
@@ -41,26 +33,11 @@ const CLAUDE_SESSION_FILE_EXTENSION = ".jsonl";
 /** The same shape the observation hook accepts: the ids Claude Code mints. */
 const CLAUDE_SESSION_ID_PATTERN = /^[0-9a-fA-F-]{8,64}$/;
 
-/** Tool inputs whose value names the work, in the order they read best. */
-const TOOL_INPUT_KEYS = ["description", "file_path", "pattern", "command", "prompt"] as const;
-
-export interface ClaudeTranscriptRequest {
-  claudeHome: string;
-  providerSessionId: string;
-  readTailBytes?: number;
-  maximumRenderedLength?: number;
-}
-
-export interface ClaudeTranscriptSinceRequest extends ClaudeTranscriptRequest {
-  cursor?: string;
-  pathCache: TranscriptPathCache;
-}
-
 function toolLine(block: WireRecord): string | undefined {
   const name = text(block.name);
   if (!name) return undefined;
   const input = isRecord(block.input) ? block.input : {};
-  for (const key of TOOL_INPUT_KEYS) {
+  for (const key of CLAUDE_TOOL_INPUT_KEYS) {
     const detail = oneLine(text(input[key]), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
     if (detail) return transcriptLine.toolCall(name, detail);
   }
@@ -110,7 +87,7 @@ function isToolResult(record: WireRecord): boolean {
 }
 
 /** Renders one record into the lines a conversation can carry, oldest first. */
-function linesFromRecord(record: WireRecord): string[] {
+export function linesFromClaudeRecord(record: WireRecord): string[] {
   if (record.type === "user") {
     if (isToolResult(record)) {
       const answer = oneLine(toolResultText(record), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
@@ -156,7 +133,7 @@ function linesFromRecord(record: WireRecord): string[] {
  * without trusting the id as a path: an id outside the shape Claude Code
  * mints names nothing.
  */
-async function transcriptFilePath(
+export async function claudeTranscriptFilePath(
   claudeHome: string,
   providerSessionId: string,
 ): Promise<string | undefined> {
@@ -170,45 +147,4 @@ async function transcriptFilePath(
     if (candidate?.stats.isFile()) return candidate.directoryPath;
   }
   return undefined;
-}
-
-/**
- * Reads one session's recent transcript into a bounded rendering, or nothing
- * when no transcript file exists for that id.
- */
-export async function readClaudeSessionTranscript(
-  request: ClaudeTranscriptRequest,
-): Promise<string | undefined> {
-  const filePath = await transcriptFilePath(request.claudeHome, request.providerSessionId);
-  if (!filePath) return undefined;
-
-  const tail = await readTail(filePath, request.readTailBytes ?? TRANSCRIPT_BOUNDS.READ_TAIL_BYTES);
-  const lines = tailRecords(tail).flatMap(linesFromRecord);
-  return boundedTranscript(lines, request.maximumRenderedLength);
-}
-
-/**
- * Renders what the session's transcript has gained since `cursor`, or nothing
- * when no transcript file exists for that id. The rendering is unbounded in
- * total, like a tail read with no maximum: the window the read loads and the
- * per-line cuts are the bounds.
- */
-export async function readClaudeSessionTranscriptSince(
-  request: ClaudeTranscriptSinceRequest,
-): Promise<ProviderTranscriptSinceReading | undefined> {
-  const filePath = await request.pathCache.resolve(request.providerSessionId, () =>
-    transcriptFilePath(request.claudeHome, request.providerSessionId),
-  );
-  if (!filePath) return undefined;
-
-  const since = await readRecordsSince(
-    filePath,
-    request.cursor,
-    request.readTailBytes ?? TRANSCRIPT_BOUNDS.READ_TAIL_BYTES,
-  );
-  return {
-    text: boundedTranscript(since.records.flatMap(linesFromRecord)) ?? "",
-    cursor: since.cursor,
-    truncated: since.truncated,
-  };
 }

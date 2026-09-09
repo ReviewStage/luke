@@ -10,7 +10,7 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
-import { canIgnoreFilesystemError } from "./local-session-adapter.js";
+import { canIgnoreFilesystemError } from "./local-files.js";
 
 /**
  * Hook-fed observation for the local providers that register hooks at all,

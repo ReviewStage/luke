@@ -12,7 +12,8 @@ import {
   type JsonObject,
   type JsonValue,
 } from "@sidecar/wire/testing";
-import { CLI_FAILURE, CliCommandError, type CliRun } from "../shared/cli-session-adapter.js";
+import { ADAPTER_FAILURE, AdapterFailure } from "../shared/adapter-failure.js";
+import type { CliRun } from "../shared/cli-pass.js";
 
 /**
  * What a recorded provider fixture is, and how one is read back: the home a
@@ -249,7 +250,7 @@ export async function recordedCli(
   return {
     run: async (_binary, argv) => {
       invocations.push(argv);
-      if (uninstalled) throw new CliCommandError(CLI_FAILURE.UNAVAILABLE, "no binary");
+      if (uninstalled) throw new AdapterFailure(ADAPTER_FAILURE.UNAVAILABLE, "no binary");
       const slug = invocationSlug(argv);
       if (slug === loginProbeSlug) return { exitCode: signedOut ? 1 : 0, stdout: "" };
       if (failing) return { exitCode: 1, stdout: "" };

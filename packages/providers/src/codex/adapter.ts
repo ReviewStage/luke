@@ -26,15 +26,10 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import {
-  type HookStatusRefinement,
-  hookRefinedStatus,
-  LocalSessionAdapter,
-  readTail,
-  readTextFile,
-  uniquePaths,
-  workspaceLabel,
-} from "../shared/local-session-adapter.js";
+import { type HookStatusRefinement, hookRefinedStatus } from "../shared/hook-status.js";
+import { TranscriptPathCache } from "../shared/jsonl-transcript.js";
+import { readTail, readTextFile, uniquePaths, workspaceLabel } from "../shared/local-files.js";
+import { LocalSessionAdapter } from "../shared/local-session-adapter.js";
 import {
   canIgnoreSqliteError,
   defaultSqliteModule,
@@ -43,7 +38,6 @@ import {
   type SqliteModuleLoader,
   textFromRow,
 } from "../shared/local-sqlite.js";
-import { TranscriptPathCache } from "../shared/local-transcript.js";
 import {
   CODEX_HOOK_EVENT,
   type CodexHookEvent,

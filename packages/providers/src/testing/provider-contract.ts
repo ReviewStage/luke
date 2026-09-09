@@ -29,7 +29,7 @@ import {
   recordedRoutes,
   temporaryDirectory,
 } from "@sidecar/wire/testing";
-import type { CliRun } from "../shared/cli-session-adapter.js";
+import type { CliRun } from "../shared/cli-pass.js";
 import {
   assertGoldenJson,
   assertGoldenText,
@@ -190,16 +190,29 @@ async function askAct(
       };
       return (await plugin.acts?.control?.(input({ control }))) ?? UNSUPPORTED;
     }
-    case ACT_KIND.ADD_AGENT:
+    case ACT_KIND.ADD_AGENT: {
+      // The dispatcher resolves the target from the advertisement, so the
+      // suite hands over exactly what the advertisement named.
+      const advertised = observation && advertisedActFor(observation, ACT_KIND.ADD_AGENT);
       return (
         (await plugin.acts?.spawnAgent?.(
-          input({ agent: overrides.agent ?? "contract-unadvertised-agent" }),
+          input({
+            spawnTarget: advertised?.target ?? providerSessionId,
+            agent: overrides.agent ?? "contract-unadvertised-agent",
+          }),
         )) ?? UNSUPPORTED
       );
+    }
     case ACT_KIND.RENAME_SESSION:
       return (await plugin.acts?.renameSession?.(input({ name: "contract" }))) ?? UNSUPPORTED;
-    case ACT_KIND.RENAME_WORKSPACE:
-      return (await plugin.acts?.renameWorkspace?.(input({ name: "contract" }))) ?? UNSUPPORTED;
+    case ACT_KIND.RENAME_WORKSPACE: {
+      const advertised = observation && advertisedActFor(observation, ACT_KIND.RENAME_WORKSPACE);
+      return (
+        (await plugin.acts?.renameWorkspace?.(
+          input({ renameTarget: advertised?.target ?? providerSessionId, name: "contract" }),
+        )) ?? UNSUPPORTED
+      );
+    }
   }
 }
 

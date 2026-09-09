@@ -5,8 +5,6 @@ import {
   type ProviderSessionObservation,
   type ProviderTranscriptResult,
   type ProviderTranscriptSinceResult,
-  providerTranscriptResult,
-  providerTranscriptSinceResult,
   SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type SessionDetail,
@@ -14,11 +12,11 @@ import {
   type SessionStatus,
 } from "@sidecar/session";
 import { isRecord, isWireString, oneLine, text, type WireRecord } from "@sidecar/wire";
+import { localSessionStatus } from "../shared/hook-status.js";
+import { type JsonlTranscriptReader, jsonlTranscriptReader } from "../shared/jsonl-transcript.js";
 import {
   discoverSessionFiles,
   LOCAL_ADAPTER_DEFAULTS,
-  LocalFileSessionAdapter,
-  localSessionStatus,
   readDirectory,
   readHead,
   readTail,
@@ -26,8 +24,8 @@ import {
   statDirectoryEntry,
   tailRecords,
   workspaceLabel,
-} from "../shared/local-session-adapter.js";
-import { TranscriptPathCache } from "../shared/local-transcript.js";
+} from "../shared/local-files.js";
+import { LocalFileSessionAdapter } from "../shared/local-session-adapter.js";
 import {
   defaultOmpHome,
   OMP_CONTENT_TYPE,
@@ -42,7 +40,7 @@ import {
   ompMessageText,
   sessionIdFromOmpFileName,
 } from "./records.js";
-import { readOmpSessionTranscript, readOmpSessionTranscriptSince } from "./transcript.js";
+import { linesFromOmpRecord, ompTranscriptFilePath } from "./transcript.js";
 
 const OMP_PROVIDER_ID = PROVIDER_ID.OMP;
 const OMP_PROVIDER_NAME = "OMP";
@@ -306,11 +304,15 @@ export class OmpSessionAdapter extends LocalFileSessionAdapter<
   readonly provider = OMP_PROVIDER;
 
   readonly #ompHome: string;
-  readonly #transcriptPaths = new TranscriptPathCache();
+  readonly #transcripts: JsonlTranscriptReader;
 
   constructor(options: OmpAdapterOptions = {}) {
     super(options);
     this.#ompHome = options.ompHome ?? defaultOmpHome();
+    this.#transcripts = jsonlTranscriptReader({
+      locate: (providerSessionId) => ompTranscriptFilePath(this.#ompHome, providerSessionId),
+      lines: linesFromOmpRecord,
+    });
   }
 
   protected discover(): Promise<OmpSessionFileCandidate[]> {
@@ -351,25 +353,13 @@ export class OmpSessionAdapter extends LocalFileSessionAdapter<
   }
 
   override readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult> {
-    return providerTranscriptResult(
-      readOmpSessionTranscript({
-        ompHome: this.#ompHome,
-        providerSessionId,
-      }),
-    );
+    return this.#transcripts.read(providerSessionId);
   }
 
   override readTranscriptSince(
     providerSessionId: string,
     cursor?: string,
   ): Promise<ProviderTranscriptSinceResult> {
-    return providerTranscriptSinceResult(
-      readOmpSessionTranscriptSince({
-        ompHome: this.#ompHome,
-        providerSessionId,
-        cursor,
-        pathCache: this.#transcriptPaths,
-      }),
-    );
+    return this.#transcripts.readSince(providerSessionId, cursor);
   }
 }

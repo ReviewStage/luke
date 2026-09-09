@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 import type { WireRecord } from "@sidecar/wire";
-import { readRecordsSince, TranscriptPathCache } from "./local-transcript.js";
+import { readRecordsSince, TranscriptPathCache } from "./jsonl-transcript.js";
 
 const WINDOW_BYTES = 256;
 

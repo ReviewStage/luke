@@ -13,12 +13,8 @@ import {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticCallback,
 } from "../shared/adapter-diagnostics.js";
-import {
-  CLI_ADAPTER_DEFAULTS,
-  CLI_FAILURE,
-  CliCommandError,
-  type CliRun,
-} from "../shared/cli-session-adapter.js";
+import { ADAPTER_FAILURE, AdapterFailure } from "../shared/adapter-failure.js";
+import { CLI_ADAPTER_DEFAULTS, type CliRun } from "../shared/cli-pass.js";
 import { CodexCloudSessionAdapter } from "./cloud-adapter.js";
 
 const TEST_TIME = Date.parse("2026-08-18T02:45:00.000Z");
@@ -93,7 +89,7 @@ function fakeCodexCli(behavior: FakeCliBehavior) {
   const run: CliRun = async (binary, argv) => {
     invocations.push({ binary, argv });
     if (behavior.binaryMissing) {
-      throw new CliCommandError(CLI_FAILURE.UNAVAILABLE, "codex could not be run");
+      throw new AdapterFailure(ADAPTER_FAILURE.UNAVAILABLE, "codex could not be run");
     }
     if (argv.join(" ") === LOGIN_PROBE_ARGV.join(" ")) {
       return { exitCode: (behavior.loggedIn ?? true) ? 0 : 1, stdout: "" };

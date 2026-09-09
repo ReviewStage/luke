@@ -10,6 +10,7 @@ import {
   type SessionProvider,
 } from "@sidecar/session";
 import { text, type UnparsedWireValue, wholeNumber, wireRecord } from "@sidecar/wire";
+import { unclaimedWorkspace } from "../shared/host-claims.js";
 import {
   canIgnoreSqliteError,
   defaultSqliteModule,
@@ -17,7 +18,7 @@ import {
   type SqliteDatabase,
   type SqliteModuleLoader,
 } from "../shared/local-sqlite.js";
-import { unclaimedWorkspace, WorkspaceHostSnapshot } from "../shared/workspace-host-snapshot.js";
+import { WorkspaceHostSnapshot } from "../shared/workspace-host-snapshot.js";
 
 const CONDUCTOR_APPLICATION_SUPPORT_DIRECTORY = "com.conductor.app";
 const CONDUCTOR_DATABASE_FILE = "conductor.db";

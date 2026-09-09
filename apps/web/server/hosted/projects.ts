@@ -1,7 +1,7 @@
-import type { CloudFetch } from "../../../../packages/providers/src/shared/cloud-session-adapter.js";
 import {
   CLOUD_AGENT_PROVIDER_ID,
   type CloudAgentProviderId,
+  type CloudFetch,
   type HostedWorkspaceAgentModels,
   type HostedWorkspaceProject,
   type WorkspaceProject,

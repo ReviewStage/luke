@@ -1,4 +1,7 @@
 import type { ProviderSessionObservation } from "@sidecar/session";
+
+export type { WorkspaceHostEnrichment } from "./host-claims.js";
+
 import {
   type ClaudeDesktopSessionApplicationReader,
   ClaudeDesktopSessionApplicationSnapshot,
@@ -7,12 +10,7 @@ import {
   type ConductorSessionApplicationReader,
   ConductorSessionApplicationSnapshot,
 } from "../conductor/session-applications.js";
-
-/** One manager's annotation of one provider's already-observed sessions. */
-export type WorkspaceHostEnrichment = (
-  providerId: string,
-  observations: readonly ProviderSessionObservation[],
-) => readonly ProviderSessionObservation[];
+import type { WorkspaceHostEnrichment } from "./host-claims.js";
 
 /**
  * One workspace manager in the observation pass: how its own records become

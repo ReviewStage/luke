@@ -1,6 +1,5 @@
 import { ConductorSessionAdapter } from "../../../../packages/providers/src/conductor/adapter.js";
-import type { CloudFetch } from "../../../../packages/providers/src/shared/cloud-session-adapter.js";
-import type { CloudAgentProviderId, SessionProviderAdapter } from "../core.js";
+import type { CloudAgentProviderId, CloudFetch, SessionProviderAdapter } from "../core.js";
 import { CLOUD_AGENT_PROVIDER_ID } from "../core.js";
 
 /**
