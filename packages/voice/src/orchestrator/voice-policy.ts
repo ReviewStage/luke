@@ -56,18 +56,19 @@ export function activeVoiceStream<T>(input: {
  * The words the panels draw under the shape, one entry per response so
  * back-to-back responses stack apart instead of running together. Luke's
  * captions are offered only when there is a reason to read them and the reply
- * they belong to is his turn: the captions preference, a reply answering an
- * ask the developer typed, or an output that would swallow the speech.
+ * they belong to is his turn: the captions preference, or an output that
+ * would swallow the speech. A reply to an ask the developer typed earns no
+ * caption of its own: the words land in Conversation as a line, so the
+ * preference alone says whether they are also read under the housing.
  */
 export function lukeCaptionsToShow(input: {
   captionsEnabled: boolean;
-  typedAsk: boolean;
   outputSilent: boolean;
   status: RealtimeStatus;
   captions: readonly string[] | undefined;
 }): readonly string[] | undefined {
   if (
-    (input.captionsEnabled || input.typedAsk || input.outputSilent) &&
+    (input.captionsEnabled || input.outputSilent) &&
     input.status === REALTIME_STATUS.RESPONDING
   ) {
     return input.captions;
@@ -93,15 +94,6 @@ export function talkKeyPress(input: { latched: boolean; microphoneCall: boolean 
  */
 export function talkOpeningHolds(input: { status: RealtimeStatus; turnPending: boolean }): boolean {
   return input.status === REALTIME_STATUS.CONNECTING || input.turnPending;
-}
-
-/**
- * Whether a typed ask's reply is still the one being spoken. The caption of a
- * typed conversation stays readable whatever the preference says, and clears
- * the moment the turn moves on.
- */
-export function typedAskHolds(status: RealtimeStatus): boolean {
-  return status === REALTIME_STATUS.RESPONDING;
 }
 
 /**

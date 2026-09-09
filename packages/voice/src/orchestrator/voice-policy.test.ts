@@ -11,7 +11,6 @@ import {
   spokenAskPreviewSurvives,
   talkKeyPress,
   talkOpeningHolds,
-  typedAskHolds,
   VOICE_RESTART,
   voiceRestartAction,
 } from "./voice-policy.js";
@@ -99,7 +98,6 @@ test("a connecting call meters the press's device, and nothing where no press op
 test("Luke's captions are offered only on his turn, and only with a reason to read them", () => {
   const shown = {
     captionsEnabled: true,
-    typedAsk: false,
     outputSilent: false,
     status: REALTIME_STATUS.RESPONDING,
     captions: ["two sessions are waiting on you.", "and the build just finished."],
@@ -120,15 +118,14 @@ test("Luke's captions are offered only on his turn, and only with a reason to re
   );
 });
 
-test("a typed ask, or an output that would swallow the reply, captions whatever the preference says", () => {
+test("an output that would swallow the reply captions whatever the preference says, and nothing else does", () => {
   const hidden = {
     captionsEnabled: false,
-    typedAsk: false,
     outputSilent: false,
     status: REALTIME_STATUS.RESPONDING,
     captions: ["the words"],
   };
-  assert.deepEqual(lukeCaptionsToShow({ ...hidden, typedAsk: true }), ["the words"]);
+  assert.equal(lukeCaptionsToShow(hidden), undefined);
   assert.deepEqual(lukeCaptionsToShow({ ...hidden, outputSilent: true }), ["the words"]);
 });
 
@@ -148,12 +145,6 @@ test("the press-wait meter rides a handshake and a pending takeover, nothing els
   assert.equal(talkOpeningHolds({ status: REALTIME_STATUS.LISTENING, turnPending: false }), false);
   assert.equal(talkOpeningHolds({ status: REALTIME_STATUS.READY, turnPending: false }), false);
   assert.equal(talkOpeningHolds({ status: REALTIME_STATUS.FAILED, turnPending: false }), false);
-});
-
-test("a typed ask's caption holds only for the reply it opened", () => {
-  assert.equal(typedAskHolds(REALTIME_STATUS.RESPONDING), true);
-  assert.equal(typedAskHolds(REALTIME_STATUS.READY), false);
-  assert.equal(typedAskHolds(REALTIME_STATUS.LISTENING), false);
 });
 
 test("the first stored pace is not a change, and a later one is", () => {
