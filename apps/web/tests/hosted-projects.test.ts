@@ -3,8 +3,10 @@ import test from "node:test";
 import { hostedProjectsAnswerSchema } from "@sidecar/hosted";
 import { encryptProviderKey } from "../server/hosted/encryption";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
+import { observeAndSnapshot } from "../server/hosted/observation-pass";
 import { handleProjects } from "../server/hosted/projects";
 import type { VaultKeyRow } from "../server/hosted/vault-route";
+import { memoryObservationStore } from "./support/observation-store";
 
 const SECRET = "a".repeat(64);
 
@@ -23,9 +25,72 @@ function projectsOptions(
     encryptionSecret: SECRET,
     resolveUserId: async () => "user-1",
     readVaultKeys: async (): Promise<VaultKeyRow[]> => [],
+    store: () => memoryObservationStore(),
     ...overrides,
   };
 }
+
+const KEY_ROWS: VaultKeyRow[] = [
+  { providerId: "conductor", ciphertext: encryptProviderKey("conductor-key", SECRET) },
+];
+
+/** Conductor answering one project, and one more once `connected` is set, recording how often it was asked. */
+function conductorProjects() {
+  const state = { connected: false, reads: 0 };
+  const fetch = async (url: string) => {
+    state.reads += 1;
+    if (url.endsWith("/me")) {
+      return new Response(JSON.stringify({ userId: "u1" }), { status: 200 });
+    }
+    if (url.includes("/v0/projects")) {
+      const data = [{ id: "proj-1", gitRemote: "https://github.com/owner/repo", name: "Repo" }];
+      if (state.connected) {
+        data.push({ id: "proj-2", gitRemote: "https://github.com/owner/other", name: "Other" });
+      }
+      return new Response(JSON.stringify({ data }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ data: [] }), { status: 200 });
+  };
+  return { state, fetch };
+}
+
+function projectIds(body: { projects: Array<{ providerProjectId: string }> }): string[] {
+  return body.projects.map((project) => project.providerProjectId);
+}
+
+test("projects are listed from the stored snapshot, seeded once, and a project connected later appears with the next pass", async () => {
+  const store = memoryObservationStore();
+  const conductor = conductorProjects();
+  const options = () =>
+    projectsOptions({
+      readVaultKeys: async () => KEY_ROWS,
+      store: () => store,
+      fetch: conductor.fetch,
+    });
+
+  assert.deepEqual(projectIds(await (await handleProjects(options())).json()), ["proj-1"]);
+  assert.equal(store.snapshots.has("user-1"), true);
+  const readsAfterSeeding = conductor.state.reads;
+
+  conductor.state.connected = true;
+  assert.deepEqual(projectIds(await (await handleProjects(options())).json()), ["proj-1"]);
+  assert.equal(conductor.state.reads, readsAfterSeeding);
+
+  // The schedule's next pass is what brings the new project to the phone,
+  // and to admission at the same moment.
+  await observeAndSnapshot({
+    userId: "user-1",
+    rows: KEY_ROWS,
+    secret: SECRET,
+    store,
+    seams: { fetch: conductor.fetch },
+    now: Date.now(),
+  });
+  assert.deepEqual(projectIds(await (await handleProjects(options())).json()), [
+    "proj-1",
+    "proj-2",
+  ]);
+});
 
 test("the projects gate order is method, token, secret", async () => {
   const wrongMethod = await handleProjects(

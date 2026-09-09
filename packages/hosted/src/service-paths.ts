@@ -28,9 +28,9 @@ export const HOSTED_SERVICE_PATH = {
   ACTION_RENAME_WORKSPACE: "/api/actions/rename-workspace",
   /**
    * List the projects a new workspace can be created in (GET): each entry is
-   * one a provider itself reported on a fresh observation pass, so a creation
-   * ask can only ever name a reported project. Stored nowhere: a projects
-   * request is its own pass.
+   * one a provider reported on the same stored snapshot a creation is
+   * admitted against, so a creation ask can only ever name a project this
+   * answer offered. Read like observe, from the snapshot.
    */
   PROJECTS: "/api/projects",
   /**
