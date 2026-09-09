@@ -816,12 +816,43 @@ export function App(): React.JSX.Element {
    * the only honest baseline either way.
    */
   const storedSessionFilters = useRef<readonly SessionFilter[] | undefined>(undefined);
+  /** Whether the stored way of viewing the list has been taken up. */
+  const restoredView = useRef(false);
+  /**
+   * The stored filter chips and search words coming back with the panel: each
+   * is a standing way of viewing the list, and this is the one moment they are
+   * read from the store — from here on the view leads and the store follows.
+   * Never in a fixture or capture run, whose evidence must not vary with what
+   * a developer last chose.
+   *
+   * Taken up during the render that first has them rather than from an
+   * effect, for the reason the emptied filter below is: an effect would let
+   * one paint, and the two effects that store the view, read this build's
+   * default as though the developer had chosen it — and storing that would
+   * clear the very narrowing being restored.
+   */
+  if (!restoredView.current && state?.settings !== undefined) {
+    restoredView.current = true;
+    const storedFilters = state.settings.stored.sessionFilters;
+    const storedQuery = state.settings.stored.sessionSearchQuery;
+    if (!state.run.fixtureMode && (storedFilters !== undefined || storedQuery !== undefined)) {
+      setSessionView((current) => ({
+        ...current,
+        ...(storedFilters !== undefined ? { filters: storedFilters } : undefined),
+        ...(storedQuery !== undefined ? { query: storedQuery } : undefined),
+      }));
+      // A restored query opens the field it refills, on the rule the field's
+      // own closing keeps: a narrowing in force behind no visible control
+      // would hide sessions with nothing on screen admitting it.
+      if (storedQuery !== undefined) setSearchOpen(true);
+    }
+  }
   // Every way the selection changes funnels through the view — a chip, a
   // spoken ask, the widen button, the list correcting an emptied selection —
   // so the store follows the view from one place. Never in a fixture or
   // capture run, which must not write a developer's own settings file.
   useEffect(() => {
-    if (state === undefined || state.run.fixtureMode) return;
+    if (!restoredView.current || state === undefined || state.run.fixtureMode) return;
     storedSessionFilters.current ??= liveSettings?.sessionFilters ?? [];
     const filters = sessionView.filters;
     if (sameSessionFilters(storedSessionFilters.current, filters)) return;
@@ -847,7 +878,7 @@ export function App(): React.JSX.Element {
   // somewhere, and a quit inside a waited write would bring back a search the
   // developer deliberately let go.
   useEffect(() => {
-    if (state === undefined || state.run.fixtureMode) return;
+    if (!restoredView.current || state === undefined || state.run.fixtureMode) return;
     storedSessionQuery.current ??= liveSettings?.sessionSearchQuery ?? "";
     const query = sessionView.query;
     if (storedSessionQuery.current === query) return;
@@ -2107,34 +2138,20 @@ export function App(): React.JSX.Element {
   }, []);
 
   /**
-   * What the panel does once with the state it opened on: the mode main
-   * decided, the stored way of viewing the list, and the two shapes an
-   * evidence run has no press to reach. Once, on the first snapshot that
-   * carries settings — from here on the view leads and the store follows.
-   * The mode needs no guard against a developer who moved it meanwhile: the
-   * snapshot carries the mode main holds as it publishes, so it is the same
-   * word the lifecycle relay would carry for whatever moved it.
+   * What the panel performs once with the state it opened on: the mode main
+   * decided, the two shapes an evidence run has no press to reach, and the
+   * report that it has painted. Once, on the first snapshot that carries
+   * settings. The mode needs no guard against a developer who moved it
+   * meanwhile: the snapshot carries the mode main holds as it publishes, so
+   * it is the same word the lifecycle relay would carry for whatever moved
+   * it. The stored way of viewing the list is not here — restoring it is a
+   * state derivation and happens in the render above.
    */
   const opened = useRef(false);
   useEffect(() => {
     if (opened.current || !state?.settings) return;
     opened.current = true;
     const { run, window: pane } = state;
-    // Never in a fixture or capture run, whose evidence must not vary with
-    // what a developer last chose.
-    const storedFilters = state.settings.stored.sessionFilters;
-    const storedQuery = state.settings.stored.sessionSearchQuery;
-    if (!run.fixtureMode && (storedFilters !== undefined || storedQuery !== undefined)) {
-      setSessionView((current) => ({
-        ...current,
-        ...(storedFilters !== undefined ? { filters: storedFilters } : undefined),
-        ...(storedQuery !== undefined ? { query: storedQuery } : undefined),
-      }));
-      // A restored query opens the field it refills, on the rule the field's
-      // own closing keeps: a narrowing in force behind no visible control
-      // would hide sessions with nothing on screen admitting it.
-      if (storedQuery !== undefined) setSearchOpen(true);
-    }
     applyAuthoritativeMode(pane.mode);
     if (run.startPeeked && pane.mode === "compact") {
       applyPresentation(PANEL_PRESENTATION.PEEK);

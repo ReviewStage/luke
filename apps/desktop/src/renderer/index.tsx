@@ -45,6 +45,13 @@ void (async () => {
     // whose read failed start recording a blank window; and a panel in the
     // same state is already broken, since it draws from the same read, so the
     // fallback protected nothing.
+    //
+    // Which window this is cannot be known without that read, so the abandon
+    // is sent whatever this window turns out to be: the main process answers
+    // it only for the takeover it owns and refuses a panel's outright, and a
+    // takeover that stands down here rather than waiting out the mount
+    // deadline hands the screen back at once.
+    window.sidecar.abandonIntroduction("The window could not read its state.");
     console.error("The window's state could not be read; nothing is drawn.", error);
   }
 })();
