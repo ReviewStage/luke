@@ -5,19 +5,18 @@ import { BrainGenerationClock } from "./generation-clock.js";
 import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "./requests.js";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
-  BRAIN_STATE_BOUNDS,
   BRAIN_STATE_VERSION,
   type BrainPersistedState,
   BrainStateStore,
   brainGenerationExpired,
   brainPersistedStateFromWire,
   freshBrainState,
+  MAXIMUM_TERMINAL_REQUESTS,
   retainedBrainState,
 } from "./state-store.js";
 import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
 
 const NOW = 1_800_000_000_000;
-const { MAXIMUM_TERMINAL_REQUESTS } = BRAIN_STATE_BOUNDS;
 
 /** A record as it would come off the wire: the same fields, with no domain type attached. */
 function raw(value: BrainPersistedState | BrainPersistedState["requests"][number] | undefined) {

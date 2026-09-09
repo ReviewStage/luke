@@ -1,3 +1,4 @@
+import type { NotebookMemoryStore } from "@sidecar/memory";
 import type { ChildStore, ScheduledJobStore } from "@sidecar/runtime";
 import type { SessionKey, TranscriptEvent } from "@sidecar/runtime/vocabulary";
 import type { UnparsedWireValue } from "@sidecar/wire";
@@ -52,6 +53,8 @@ export interface StoreClient {
   brainStateRepository(sessionKey: SessionKey): BrainStateRepository;
   /** The scheduler's jobs as a store: listed, written whole, and deleted through the worker. */
   scheduledJobStore(): ScheduledJobStore;
+  /** The notebook's index and History's search under the names the memory package's host asks for. */
+  notebookMemoryStore(): NotebookMemoryStore;
   /** The child service's records and completions as a store, each written whole through the worker. */
   childStore(): ChildStore;
 }
@@ -86,6 +89,11 @@ export function storeClient(port: StorePort): StoreClient {
   port.on("error", (error) => fail(error));
   port.on("exit", (code) => fail(new Error(`the brain's store worker exited with code ${code}`)));
 
+  /**
+   * One request out, answered once or rejected once. The id is minted by the
+   * caller rather than here, because a request is one of three arms and
+   * spreading an id onto it would widen it past the arm it belongs to.
+   */
   const send = (request: StoreRequest): Promise<UnparsedWireValue> => {
     if (failure) return Promise.reject(failure);
     return new Promise((resolve, reject) => {
@@ -143,6 +151,20 @@ export function storeClient(port: StorePort): StoreClient {
     close: () =>
       send({ id: nextId++, name: STORE_LIFECYCLE.CLOSE, params: {} }) as Promise<boolean>,
     brainStateRepository,
+    notebookMemoryStore: () => ({
+      planMemorySync: (identity, now) =>
+        ask("memory.plan-sync", { ...(identity ? { identity } : undefined), now }),
+      applyMemorySync: (apply) => ask("memory.apply-sync", apply),
+      searchMemory: (query) => ask("memory.search", query),
+      readMemory: (path, from, lines) =>
+        ask("memory.get", {
+          path,
+          ...(from !== undefined ? { from } : undefined),
+          ...(lines !== undefined ? { lines } : undefined),
+        }),
+      searchHistory: (sessionKeys, query, limit, now) =>
+        ask("history.search", { sessionKeys, query, limit, now }),
+    }),
     scheduledJobStore: () => ({
       list: () => ask("jobs.list", {}),
       put: (job) => ask("jobs.put", { job }),

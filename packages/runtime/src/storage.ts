@@ -12,7 +12,7 @@ import { type ConversationKind, isConversationKind, type SessionKey } from "./id
  * The storage contracts the brain's store implements and the host composes
  * against. Nothing here names a database: the contracts describe what a
  * durable owner of conversation state must be able to do, and the store that
- * does it lives in its own package behind them.
+ * does it lives behind them, in the package whose state it keeps.
  */
 
 /** What an append answered: whether the store changed, and the lines it now holds. */

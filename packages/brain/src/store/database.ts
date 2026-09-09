@@ -85,9 +85,11 @@ export class StoreDatabase {
             | { version: number }
             | undefined)
         : undefined;
-      if (row && row.version > STORE_SCHEMA_VERSION) {
+      // A version this build cannot reach from — past its own, or below the
+      // first one it ever wrote — is refused rather than migrated by guess.
+      if (row && (row.version > STORE_SCHEMA_VERSION || row.version < 1)) {
         throw new Error(
-          `runtime database is at schema version ${row.version}, not ${STORE_SCHEMA_VERSION}`,
+          `the brain's store is at schema version ${row.version}, not ${STORE_SCHEMA_VERSION}`,
         );
       }
       // The current statements run first: each creates a table only where

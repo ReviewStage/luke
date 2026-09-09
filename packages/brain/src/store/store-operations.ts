@@ -1,5 +1,14 @@
 import path from "node:path";
-import type { EmbeddingModelIdentity, IndexedFileWrite, MemoryReadResult } from "@sidecar/memory";
+import type {
+  EmbeddingModelIdentity,
+  EmbeddingWrite,
+  IndexedFileWrite,
+  MemoryApplyReport,
+  MemoryReadResult,
+  MemoryScanPlan,
+  MemorySearchOutcome,
+  MemorySearchQuery,
+} from "@sidecar/memory";
 import type { ConversationEntry } from "@sidecar/realtime";
 import type { ScheduledJob } from "@sidecar/runtime";
 import type {
@@ -48,12 +57,7 @@ import { type MaintenanceReport, runHistoryMaintenance } from "./maintenance-run
 import { type FlushState, flushState, recordFlush } from "./memory-flush-table.js";
 import {
   applyMemorySync,
-  type EmbeddingWrite,
-  type MemoryApplyReport,
   type MemoryIndexStatus,
-  type MemoryScanPlan,
-  type MemorySearchOutcome,
-  type MemorySearchQuery,
   memoryIndexStatus,
   planMemorySync,
   readMemoryLines,
@@ -77,6 +81,13 @@ import {
  * table. Every parameter and every answer is structured-cloneable — nothing
  * here is a function or a handle — so the same table runs over a
  * `MessagePort` in a test and a `Worker` in the app.
+ *
+ * The keys are written as raw strings rather than gathered into an `as const`
+ * constants object, which is the one place this file departs from the
+ * repository's rule for fixed value sets. They are that set's declaration:
+ * the name and what it does are one entry, `StoreOperationName` derives from
+ * them by `keyof`, and a caller's typo is a compile error. A constants object
+ * beside them would be the second list the rule exists to prevent.
  */
 
 /** An open store as an operation sees it: the database, and the two directories it owns. */
@@ -92,13 +103,15 @@ export interface OpenStore {
 export type NoParams = Record<string, never>;
 
 /**
- * What an operation answers: a structured-cloneable value, which every table
- * entry narrows to its own type. Named here so the table's shape can be
- * checked without widening any entry's own answer.
+ * The floor an operation's answer stands on: enough to keep `void` and
+ * `null` out of the table, and no more. It is deliberately not a proof of
+ * structured-cloneability — `object` admits a function and a live database
+ * handle both — so what keeps every answer cloneable is each entry's own
+ * narrower return type, which is the thing to read when adding one.
  */
-export type StoreAnswer = boolean | number | string | undefined | object;
+export type StoreAnswer = boolean | number | undefined | object;
 
-export type StoreOperation = (store: OpenStore, params: never) => StoreAnswer;
+type StoreOperation = (store: OpenStore, params: never) => StoreAnswer;
 
 export const STORE_OPERATIONS = {
   "brain.load": (s, p: { sessionKey: SessionKey }): EnvelopeRead =>
@@ -221,14 +234,6 @@ export function isStoreOperationName(value: UnparsedWireValue): value is StoreOp
  * and the table holds neither.
  */
 export const STORE_LIFECYCLE = { OPEN: "open", CLOSE: "close" } as const;
-
-export type StoreLifecycleName = (typeof STORE_LIFECYCLE)[keyof typeof STORE_LIFECYCLE];
-
-const STORE_LIFECYCLE_NAMES: readonly StoreLifecycleName[] = Object.values(STORE_LIFECYCLE);
-
-export function isStoreLifecycleName(value: UnparsedWireValue): value is StoreLifecycleName {
-  return isWireString(value) && STORE_LIFECYCLE_NAMES.some((name) => name === value);
-}
 
 export interface StoreOpenOptions {
   /** The agent's own directory under Luke's application data; the database lives in it. */

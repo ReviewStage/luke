@@ -60,10 +60,10 @@ import {
 import { type ResponsesInputItem, responsesModelAnswer } from "./responses-api.js";
 import { ToolLoopAgentRuntime } from "./runtime.js";
 import {
-  BRAIN_STATE_BOUNDS,
   type BrainPersistedState,
   BrainStateStore,
   freshBrainState,
+  MAXIMUM_TERMINAL_REQUESTS,
 } from "./state-store.js";
 import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
 import { BRAIN_TOOL, isBrainOnlyTool, TOOL_GROUP } from "./tools.js";
@@ -75,7 +75,7 @@ const TOOL_LOOP_IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOOP_RUNTIM
 
 const NOW = 1_800_000_000_000;
 const { DELTA_PER_SESSION_CHARS, FULL_TRANSCRIPT_CHARS } = BRAIN_DEFAULTS;
-const RECORD_CAP = BRAIN_STATE_BOUNDS.MAXIMUM_TERMINAL_REQUESTS;
+const RECORD_CAP = MAXIMUM_TERMINAL_REQUESTS;
 
 /** Settled runs a generation is seeded with, oldest first, their ends taken by the thread or not. */
 function seededRequests(count: number, published: boolean): BrainPersistedState["requests"] {

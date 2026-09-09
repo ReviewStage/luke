@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
+import { FakeClock } from "@sidecar/fixtures/testing";
 import { BrainGenerationClock } from "./generation-clock.js";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
@@ -20,30 +20,7 @@ import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testi
 const NOW = 1_800_000_000_000;
 const EXPIRED_SECRET = "EXPIRED_SECRET_MARKER";
 
-/** Enough of a clock for the generation clock: it records what was armed and never fires. */
-function fakeClock() {
-  const timers = new Map<ScheduledTimer, { callback: () => void; at: number }>();
-  let now = NOW;
-  return {
-    get now() {
-      return now;
-    },
-    timers,
-    advanceTo: (at: number) => {
-      now = at;
-    },
-    schedule: (callback: () => void, delayMs: number): ScheduledTimer => {
-      const handle: ScheduledTimer = {};
-      timers.set(handle, { callback, at: now + delayMs });
-      return handle;
-    },
-    cancel: (timer: ScheduledTimer): void => {
-      timers.delete(timer);
-    },
-  };
-}
-
-function launch(repository: FakeBrainStateRepository, clock: ReturnType<typeof fakeClock>) {
+function launch(repository: FakeBrainStateRepository, clock: FakeClock) {
   const reports: string[] = [];
   let generations = 0;
   const store = new BrainStateStore({
@@ -68,7 +45,7 @@ test("a launch under the default policy keeps a checkpoint past its stamped dead
     items: [{ type: "message", role: "user", content: EXPIRED_SECRET }],
   };
   const repository = fakeBrainStateRepository(stale);
-  const clock = fakeClock();
+  const clock = new FakeClock(NOW);
   const { store, generationClock, reports } = launch(repository, clock);
   await generationClock.start();
   assert.equal(store.generationId(), "gen-old");
@@ -76,7 +53,9 @@ test("a launch under the default policy keeps a checkpoint past its stamped dead
   assert.ok(repository.words().includes(EXPIRED_SECRET));
   assert.equal(reports.length, 0);
   assert.equal(clock.timers.size, 0);
-  clock.advanceTo(NOW + BRAIN_GENERATION_LIFETIME_MS);
+  // Nothing was armed, so advancing past the deadline fires nothing and the
+  // generation stands: only a store with automatic reset has a clock to keep.
+  await clock.advance(NOW + BRAIN_GENERATION_LIFETIME_MS);
   assert.equal(store.generationId(), "gen-old");
   generationClock.stop();
 });

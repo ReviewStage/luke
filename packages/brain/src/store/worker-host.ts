@@ -12,13 +12,20 @@ import {
   type StoreRequest,
   type StoreResponse,
   storeRequestFromWire,
+  storeRequestIdFromWire,
 } from "./wire.js";
+
+/** What a request whose envelope this build cannot read is answered with. */
+export const UNREADABLE_REQUEST = "the request could not be read";
 
 /**
  * The database's side of the channel. It answers requests one at a time in
  * the order they arrive — the database is synchronous, so there is nothing
  * to interleave — and never lets an exception cross the channel as anything
  * but an error answer with the request's id, so a caller always hears back.
+ * A message whose payload the read refuses is answered the same way, under
+ * the id it named; only a message that named no id at all is dropped, since
+ * there is nothing to answer it under.
  */
 export function serveStore(port: StorePort): void {
   let open: OpenStore | undefined;
@@ -52,7 +59,11 @@ export function serveStore(port: StorePort): void {
 
   port.on("message", (message) => {
     const request = storeRequestFromWire(message);
-    if (!request) return;
+    if (!request) {
+      const id = storeRequestIdFromWire(message);
+      if (id !== undefined) port.postMessage({ id, ok: false, error: UNREADABLE_REQUEST });
+      return;
+    }
     let response: StoreResponse;
     try {
       // SAFETY: an operation's answer is the structured-clone value its declared type describes.

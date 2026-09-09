@@ -617,8 +617,10 @@ Trust constraints:
   live launch and hourly after, with interrupted archive publications retried
   first. Its defaults are the pinned ones — enforce mode, a 30-day stale
   threshold, a 7-day idle threshold for private threads, 5,000 unarchived
-  conversations, a 10 GiB physical budget cleaned to 8 GiB, automatic reset
-  off, archive age expiry off — and its rules are the source's: ordinary age
+  conversations, a 10 GiB physical budget cleaned to 8 GiB — and the two the
+  pinned source ships off, a reset of a stale conversation and an age sweep
+  over the archives, are absent here rather than configured off, so there is
+  no path to enable either. Its rules are the source's: ordinary age
   and count maintenance never touches an archived conversation; a
   conversation is archived in place and never removed outright, since every
   kind this build makes is durable; main, a pinned conversation, one with a

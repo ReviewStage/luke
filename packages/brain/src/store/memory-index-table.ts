@@ -36,14 +36,6 @@ import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import type { StoreDatabase } from "./database.js";
 import type { NotebookEntry } from "./notebook-table.js";
 
-export type {
-  EmbeddingWrite,
-  MemoryApplyReport,
-  MemoryScanPlan,
-  MemorySearchOutcome,
-  MemorySearchQuery,
-} from "@sidecar/memory";
-
 /**
  * The disposable search index over the notebook's Markdown files, in the
  * agent's own database. The files are the source of truth and the index is

@@ -32,24 +32,20 @@ export const BRAIN_GENERATION_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
 
 /**
  * How large a generation may grow. The request count bounds what the panel
- * and the model can be shown of ended runs, and it is the bound that can
+ * and the model can be shown of ended runs, and it is the one bound that can
  * refuse a write: ended runs are let go first, and a write that would still
  * leave the envelope oversized is refused rather than dropping anything that
  * is not finished.
+ *
+ * It bounds records and nothing else. The checkpoint items are bounded by
+ * compaction, which folds the context under the model's own window, and a
+ * hosted request is bounded again by its transport's envelope; there is no
+ * bound on the envelope's bytes, because the envelope is rows in the store
+ * rather than a file to measure. A byte bound here would have to be measured
+ * where the bytes are, over the checkpoint rows, and that is a decision this
+ * build has not made.
  */
-export interface BrainStateBounds {
-  readonly MAXIMUM_TERMINAL_REQUESTS: number;
-}
-
-export const BRAIN_STATE_BOUNDS: BrainStateBounds = {
-  MAXIMUM_TERMINAL_REQUESTS: 200,
-};
-
-/** The same bounds with one place kept open, which is what asks whether one more record fits. */
-const ADMISSION_BOUNDS: BrainStateBounds = {
-  ...BRAIN_STATE_BOUNDS,
-  MAXIMUM_TERMINAL_REQUESTS: BRAIN_STATE_BOUNDS.MAXIMUM_TERMINAL_REQUESTS - 1,
-};
+export const MAXIMUM_TERMINAL_REQUESTS = 200;
 
 /**
  * What a Clear leaves behind in place of the generation it erased: the id of
@@ -261,7 +257,7 @@ export interface RetainedBrainState {
  */
 export function retainedBrainState(
   state: BrainPersistedState,
-  bounds: BrainStateBounds = BRAIN_STATE_BOUNDS,
+  maximumRequests: number = MAXIMUM_TERMINAL_REQUESTS,
 ): RetainedBrainState {
   const eligible = state.requests
     .filter(brainRequestPrunable)
@@ -271,7 +267,7 @@ export function retainedBrainState(
         left.acceptedAt - right.acceptedAt,
     );
   const pruned = new Set<string>();
-  let excess = state.requests.length - bounds.MAXIMUM_TERMINAL_REQUESTS;
+  let excess = state.requests.length - maximumRequests;
   for (const record of eligible) {
     if (excess <= 0) break;
     pruned.add(record.runId);
@@ -288,7 +284,7 @@ export function retainedBrainState(
   return {
     state: retained,
     prunedRunIds: [...pruned],
-    oversized: retained.requests.length > bounds.MAXIMUM_TERMINAL_REQUESTS,
+    oversized: retained.requests.length > maximumRequests,
   };
 }
 
@@ -461,7 +457,7 @@ export class BrainStateStore {
         rewrite: "the expired generation",
       };
     }
-    const retained = retainedBrainState(read, BRAIN_STATE_BOUNDS);
+    const retained = retainedBrainState(read);
     if (retained.oversized) {
       // Nothing this build writes exceeds its bounds with nothing left to
       // let go, so a file that does was not written under this rule; it is
@@ -522,9 +518,10 @@ export class BrainStateStore {
   admits(generationId: string): boolean {
     const held = this.#state;
     if (!held || held.generationId !== generationId) return false;
+    // One place kept open is what asks whether one more record would fit.
     return (
-      retainedBrainState(held, ADMISSION_BOUNDS).state.requests.length <
-      BRAIN_STATE_BOUNDS.MAXIMUM_TERMINAL_REQUESTS
+      retainedBrainState(held, MAXIMUM_TERMINAL_REQUESTS - 1).state.requests.length <
+      MAXIMUM_TERMINAL_REQUESTS
     );
   }
 
@@ -585,7 +582,7 @@ export class BrainStateStore {
         expiresAt: held.expiresAt,
         ...(held.reset ? { reset: held.reset } : undefined),
       };
-      const retained = retainedBrainState(composed, BRAIN_STATE_BOUNDS);
+      const retained = retainedBrainState(composed);
       // A write that would still leave the envelope over its bound is
       // refused rather than dropping a run still going or its journal; one
       // that shrinks it toward the bound is let through.
@@ -610,7 +607,7 @@ export class BrainStateStore {
    * newer truth carrying the file.
    */
   replace(state: BrainPersistedState): Promise<boolean> {
-    const retained = retainedBrainState(state, BRAIN_STATE_BOUNDS);
+    const retained = retainedBrainState(state);
     if (retained.oversized) return Promise.resolve(false);
     this.#state = retained.state;
     this.#announceReplaced(retained.state);

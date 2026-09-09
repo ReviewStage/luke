@@ -4,7 +4,6 @@ import type { StoreClient } from "@sidecar/brain/store";
 import {
   type MemorySyncReport,
   NotebookMemory,
-  type NotebookMemoryStore,
   RETRIEVAL_MODE,
   type RetrievalMode,
 } from "@sidecar/memory";
@@ -53,27 +52,9 @@ export interface NotebookMemoryDependencies {
  * the store's worker and the embedding adapter the credential policy built.
  * This composes only; the sync and the search live in `NotebookMemory`.
  */
-/** The store's operations under the names the memory package's host asks for. */
-function notebookMemoryStore(client: StoreClient): NotebookMemoryStore {
-  return {
-    planMemorySync: (identity, now) =>
-      client.ask("memory.plan-sync", { ...(identity ? { identity } : undefined), now }),
-    applyMemorySync: (apply) => client.ask("memory.apply-sync", apply),
-    searchMemory: (query) => client.ask("memory.search", query),
-    readMemory: (path, from, lines) =>
-      client.ask("memory.get", {
-        path,
-        ...(from !== undefined ? { from } : undefined),
-        ...(lines !== undefined ? { lines } : undefined),
-      }),
-    searchHistory: (sessionKeys, query, limit, now) =>
-      client.ask("history.search", { sessionKeys, query, limit, now }),
-  };
-}
-
 export function composeNotebookMemory(dependencies: NotebookMemoryDependencies): NotebookMemory {
   const memory = new NotebookMemory({
-    store: () => notebookMemoryStore(dependencies.client()),
+    store: () => dependencies.client().notebookMemoryStore(),
     embeddingAdapter: dependencies.embeddingAdapter,
     embeddingBatchSize: EMBEDDING_BATCH_SIZE,
     workspaceDirectory: dependencies.workspaceDirectory,

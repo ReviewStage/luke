@@ -2,7 +2,6 @@ import { type AgentId, isIdentifier, type SessionKey } from "@sidecar/runtime/vo
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import {
   type AnyOperationParams,
-  isStoreLifecycleName,
   isStoreOperationName,
   type NoParams,
   STORE_LIFECYCLE,
@@ -60,6 +59,16 @@ export function storeResponseFromWire(value: UnparsedWireValue): StoreResponse |
 }
 
 /**
+ * The id an unreadable message still carries. A request whose payload the
+ * read refuses is answered as a refusal rather than left waiting, because a
+ * caller that named an id is owed an answer under it; a message that named
+ * none can only be dropped.
+ */
+export function storeRequestIdFromWire(value: UnparsedWireValue): number | undefined {
+  return isRecord(value) && isWireNumber(value.id) ? value.id : undefined;
+}
+
+/**
  * Reads a request off the channel. The envelope is the only thing to
  * establish: an id, and a name the operation table or the lifecycle holds.
  * The parameters belong to the name the read admitted, and the sender — this
@@ -71,10 +80,10 @@ export function storeRequestFromWire(value: UnparsedWireValue): StoreRequest | u
     // SAFETY: the name selects the operation whose parameters the sender typed.
     return { id: value.id, name: value.name, params: value.params as AnyOperationParams };
   }
-  if (!isStoreLifecycleName(value.name)) return undefined;
   if (value.name === STORE_LIFECYCLE.CLOSE) {
     return { id: value.id, name: STORE_LIFECYCLE.CLOSE, params: {} };
   }
+  if (value.name !== STORE_LIFECYCLE.OPEN) return undefined;
   const params = storeOpenOptionsFromWire(value.params);
   return params ? { id: value.id, name: STORE_LIFECYCLE.OPEN, params } : undefined;
 }
