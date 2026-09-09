@@ -39,6 +39,14 @@ export interface DesktopServices {
  * machine's capabilities back; the host it operates is one of its services.
  */
 export function composeDesktop(config: DesktopConfig): DesktopServices {
+  /**
+   * Whether a Quit has been asked for. It is set the moment `stop` is called
+   * rather than when the drain is reached, because the drain is several
+   * awaited stops behind that ask: a launch suspended on one of its own waits
+   * would otherwise resume after the teardown and open a window, claim the
+   * keys, and re-attach the listeners the teardown just released.
+   */
+  let quitting = false;
   const keychain = createKeychainService();
   const host = createHostService({ config, cipher: keychain.cipher });
   const native = createNativeNode(config);
@@ -51,7 +59,13 @@ export function composeDesktop(config: DesktopConfig): DesktopServices {
     config,
     recordEvent: (name, properties) => operator.host.recordEvent(name, properties),
   });
-  const windows = createWindowService({ config, native, telemetry, operator, host });
+  const windows = createWindowService({
+    config,
+    native,
+    telemetry,
+    operator,
+    launchStanding: () => !quitting,
+  });
   const updates = createUpdateServiceHost({
     config,
     recordProductEvent: telemetry.recordProductEvent,
@@ -91,11 +105,14 @@ export function composeDesktop(config: DesktopConfig): DesktopServices {
    * machine itself answers comes first, so nothing that draws waits on it;
    * then the host, whose standup carries the operator's first attach and the
    * bootstrap every later decision is made from — which is why the operator
-   * sits here and starts nowhere else; then the windows, which are what a
-   * bootstrap that never arrived must not be drawn over.
+   * sits here and starts nowhere else; then the updater, which reads and
+   * spends the last-run-version mark, so a standup that failed or was quit
+   * must not have spent it; then the windows, which are what a bootstrap that
+   * never arrived must not be drawn over, and which read the updater's
+   * snapshot in their own bootstrap.
    */
-  const machine = [keychain, telemetry, native, updates] as const;
-  const all: readonly DesktopService[] = [...machine, host, operator, windows];
+  const machine = [keychain, telemetry, native] as const;
+  const all: readonly DesktopService[] = [...machine, host, operator, updates, windows];
   let stopping: Promise<void> | undefined;
 
   return {
@@ -108,18 +125,24 @@ export function composeDesktop(config: DesktopConfig): DesktopServices {
     start: async () => {
       for (const service of machine) await service.start();
       await host.start();
-      // A Quit that landed during the standup drained the host and took it
-      // down; the launch must not go on to draw windows over it, which would
-      // also abort the quit it interrupted.
-      if (!host.standingUp()) return;
+      // A Quit that landed during the standup is already tearing this process
+      // down; the launch must not go on to spend the update mark or draw
+      // windows over it, which would also abort the quit it interrupted.
+      if (quitting) return;
+      await updates.start();
       await windows.start();
     },
     // Two paths ask for the quit's teardown — the explicit Quit and a launch
     // that could not stand up — and both are handed the one under way rather
     // than a second pass over services already stopped.
-    stop: () =>
-      (stopping ??= stopInReverse(all, config.report).finally(() => {
-        stopping = undefined;
-      })),
+    stop: () => {
+      quitting = true;
+      if (!stopping) {
+        stopping = stopInReverse(all, config.report).finally(() => {
+          stopping = undefined;
+        });
+      }
+      return stopping;
+    },
   };
 }

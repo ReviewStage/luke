@@ -34,7 +34,6 @@ import { IntroductionWindow } from "../window/introduction-window";
 import { PanelManager } from "../window/panel-manager";
 import { VoiceWindow } from "../window/voice-window";
 import type { DesktopConfig } from "./desktop-config";
-import type { HostService } from "./host-service";
 import type { NativeNode } from "./native-node";
 import type { OperatorClient } from "./operator-client";
 import type { DesktopService } from "./service";
@@ -45,8 +44,13 @@ export interface WindowServiceDependencies {
   native: NativeNode;
   telemetry: TelemetryService;
   operator: OperatorClient;
-  /** Whether the launch still stands: a Quit landing in one of its waits opens nothing over the drain. */
-  host: HostService;
+  /**
+   * Whether the launch this start belongs to still stands. False from the
+   * moment a Quit is asked for, which is what every wait below re-checks: a
+   * start suspended on one of its own awaits must not resume into opening a
+   * window and re-claiming keys the teardown has already given back.
+   */
+  launchStanding: () => boolean;
 }
 
 export interface WindowService extends DesktopService {
@@ -88,7 +92,7 @@ export interface WindowService extends DesktopService {
  * and it opens none until `start`.
  */
 export function createWindowService(dependencies: WindowServiceDependencies): WindowService {
-  const { config, native, telemetry, operator, host } = dependencies;
+  const { config, native, telemetry, operator, launchStanding } = dependencies;
   const { runMode } = config;
   const recordProductEvent = telemetry.recordProductEvent;
 
@@ -364,13 +368,14 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
         completed: onboarding.read()?.introductionCompletedAt !== undefined,
       });
       await panels.refreshGeometry();
+      // A Quit landing inside one of the launch's own waits is already tearing
+      // this process down; nothing is opened or armed over it. This check sits
+      // after every wait that still has a window behind it.
+      if (!launchStanding()) return;
       dock.applyIcon();
       dock.watchTheme();
       const settings = await operator.ensureSettings();
-      // A Quit landing inside one of the launch's own waits is already
-      // draining the host; nothing is opened or armed over it. This check and
-      // the one below sit after each wait that still has a window behind it.
-      if (!host.standingUp()) return;
+      if (!launchStanding()) return;
       if (settings?.stored.showInDock) dock.apply(true);
       applyLoginItem(settings?.stored.openAtLogin ?? APP_SETTING_SCHEMA.openAtLogin.default);
       if (runMode.observesProviders) {
@@ -393,7 +398,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       hotkeys.setChosen(HOTKEY_RANK.ASK, settings?.stored.askHotkey);
       hotkeys.setChosen(HOTKEY_RANK.STOP, settings?.stored.stopHotkey);
       await hotkeys.reapply(HOTKEY_RANK.TALK);
-      if (!host.standingUp()) return;
+      if (!launchStanding()) return;
       if (!introductionWindow.active) panels.reconcile();
       raiseVoiceWindow();
       configurePermissions();

@@ -46,11 +46,12 @@ export interface HostService extends DesktopService {
   readonly server: GatewayServer;
   link: (links: HostServiceLinks) => void;
   /**
-   * Whether the launch that armed this standup still stands. False once a
-   * Quit has asked for the drain, which is when the launch must stop drawing
-   * over a runtime it no longer has.
+   * Whether a drain is still owed for this standup: true from before the
+   * start until one has finished. It says nothing about whether a quit has
+   * been asked for — the drain is several awaited stops behind that ask, so
+   * what the launch checks is the composition's own quitting flag.
    */
-  standingUp: () => boolean;
+  drainOwed: () => boolean;
   /**
    * The one drain, made once whichever path asks for it: the explicit Quit,
    * or the updater's restart into a downloaded build, which swaps this
@@ -136,7 +137,7 @@ export function createHostService(dependencies: HostServiceDependencies): HostSe
     name: "host",
     server: host.server,
     link: (next) => links.set(next),
-    standingUp: () => state === HOST_DRAIN.OWED,
+    drainOwed: () => state === HOST_DRAIN.OWED,
     drain,
     // The drain is owed from before the start rather than after it, because
     // the start opens the store and arms the scheduler, the hooks, and the

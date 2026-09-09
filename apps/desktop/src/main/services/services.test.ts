@@ -141,11 +141,11 @@ test("the host service starts and stops leaving no handle, and says what the dra
     cipher: CIPHER,
   });
   host.link({ attach: async () => undefined });
-  assert.equal(host.standingUp(), false);
+  assert.equal(host.drainOwed(), false);
   await host.start();
-  assert.equal(host.standingUp(), true);
+  assert.equal(host.drainOwed(), true);
   await host.stop();
-  assert.equal(host.standingUp(), false);
+  assert.equal(host.drainOwed(), false);
   assert.ok(
     reports.some((message) => message.startsWith("shutting down:")),
     `the drain reported nothing: ${reports.join(" | ")}`,
@@ -171,7 +171,7 @@ test("the host's standup carries the operator's attach, and a failed attach fail
   assert.deepEqual(order, ["attach"]);
   // The drain is owed from before the start, so a launch that could not stand
   // up still has a runtime to give back.
-  assert.equal(host.standingUp(), true);
+  assert.equal(host.drainOwed(), true);
   await host.stop();
 });
 
@@ -221,4 +221,47 @@ test("the updater's timers are handles the stop takes back, and a restart drains
   assert.ok(snapshots.length > 0, "no update state ever reached the windows");
   await updates.stop();
   await updates.stop();
+});
+
+test("a launch suspended on one of its waits opens nothing once a quit has been asked for", async (t) => {
+  // The invariant, in the shape the composition wires: the signal a start
+  // re-checks is set the instant `stop` is asked for, so a start that resumes
+  // after the teardown has run opens nothing. Reading the drain's own state
+  // instead would flip the signal several awaited stops later, which is how a
+  // resumed start came to re-open what the teardown had just given back.
+  const stateRoot = await temporaryDirectory(t);
+  const host = createHostService({ config: fixtureConfig(stateRoot), cipher: CIPHER });
+  host.link({ attach: async () => undefined });
+  await host.start();
+
+  let quitting = false;
+  const opened: string[] = [];
+  let releaseSettings: (() => void) | undefined;
+  const windows: DesktopService = {
+    name: "windows",
+    start: async () => {
+      await new Promise<void>((resolve) => {
+        releaseSettings = resolve;
+      });
+      if (!quitting) opened.push("window");
+    },
+    stop: async () => {
+      opened.push("teardown");
+    },
+  };
+  const all = [host, windows];
+  const stop = () => {
+    quitting = true;
+    return stopInReverse(all, () => undefined);
+  };
+
+  const launch = windows.start();
+  const quit = stop();
+  releaseSettings?.();
+  await Promise.all([launch, quit]);
+  // The teardown ran and the launch, resuming after it, opened nothing.
+  assert.deepEqual(opened, ["teardown"]);
+  // And by now the drain has finished, so its own state is back to owing
+  // nothing — a signal that says nothing about whether a quit was asked for.
+  assert.equal(host.drainOwed(), false);
 });
