@@ -1,7 +1,7 @@
-import { ACT_KIND, adapterAsPlugin } from "@sidecar/session";
+import { ACT_KIND } from "@sidecar/session";
 import { codexStateDb, describeProviderContract, PROVIDER_OBSERVATION } from "../testing/index.js";
-import { CodexSessionAdapter } from "./adapter.js";
 import { CODEX_HOOK_EVENT } from "./hooks.js";
+import { codexLocalPlugin } from "./index.js";
 
 const CODEX_SESSION_ID = {
   WAITING: "019b1c22-6f10-7d5e-9a71-2b8c4d5e6f70",
@@ -12,13 +12,11 @@ const CODEX_SESSION_ID = {
 describeProviderContract(
   async (input) => {
     await codexStateDb(input.home, await input.sql("state"));
-    return adapterAsPlugin(
-      new CodexSessionAdapter({
-        codexHome: input.home,
-        now: input.now,
-        hookEventsDirectory: input.hookEventsDirectory,
-      }),
-    );
+    return codexLocalPlugin({
+      codexHome: input.home,
+      now: input.now,
+      hookEventsDirectory: input.hookEventsDirectory,
+    });
   },
   {
     providerId: "codex",

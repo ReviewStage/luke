@@ -188,6 +188,14 @@ const TRANSCRIPT_NOT_FOUND = {
 export interface JsonlTranscriptInput {
   /** Where this session's record file is, or nothing when there is none. */
   locate(providerSessionId: string): Promise<string | undefined>;
+  /**
+   * Why this build will not render a file it did find, when the provider has
+   * a reason — Codex compresses an old rollout, and a bounded window cannot
+   * be cut from one. Naming the reason is what keeps the refusal honest: a
+   * located file answered as missing would send the ask on to the next
+   * observer of the same provider.
+   */
+  refuses?(filePath: string): string | undefined;
   /** The attributed lines one stored record yields, or none. */
   lines(record: WireRecord): readonly string[];
 }
@@ -215,6 +223,8 @@ export function jsonlTranscriptReader(input: JsonlTranscriptInput): JsonlTranscr
       // every wake and is what the path cache exists for.
       const filePath = await input.locate(providerSessionId);
       if (filePath === undefined) return TRANSCRIPT_NOT_FOUND;
+      const refusal = input.refuses?.(filePath);
+      if (refusal !== undefined) return { status: ACT_RESULT_STATUS.REJECTED, reason: refusal };
       const tail = await readTail(filePath, TRANSCRIPT_BOUNDS.READ_TAIL_BYTES);
       const transcript = boundedTranscript(
         tailRecords(tail).flatMap((record) => input.lines(record)),
@@ -229,6 +239,8 @@ export function jsonlTranscriptReader(input: JsonlTranscriptInput): JsonlTranscr
         input.locate(providerSessionId),
       );
       if (filePath === undefined) return TRANSCRIPT_NOT_FOUND;
+      const refusal = input.refuses?.(filePath);
+      if (refusal !== undefined) return { status: ACT_RESULT_STATUS.REJECTED, reason: refusal };
       const since = await readRecordsSince(filePath, cursor, TRANSCRIPT_BOUNDS.READ_TAIL_BYTES);
       return {
         status: ACT_RESULT_STATUS.ACCEPTED,

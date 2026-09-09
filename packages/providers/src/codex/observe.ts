@@ -1,13 +1,8 @@
-import os from "node:os";
 import path from "node:path";
 import {
   maximumSessionTitleLength,
-  OBSERVATION_WINDOW,
   PROVIDER_ID,
   type ProviderSessionObservation,
-  type ProviderTranscriptResult,
-  type ProviderTranscriptSinceResult,
-  providerTranscriptResult,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
   SESSION_COMPLETION_CAUSE,
@@ -18,160 +13,38 @@ import {
 import {
   isRecord,
   isWireBoolean,
-  isWireNumber,
-  isWireString,
   oneLine,
   recordFromJsonLine,
   text,
-  type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
 import { type HookStatusRefinement, hookRefinedStatus } from "../shared/hook-status.js";
-import { TranscriptPathCache } from "../shared/jsonl-transcript.js";
-import { readTail, readTextFile, uniquePaths, workspaceLabel } from "../shared/local-files.js";
-import { LocalSessionAdapter } from "../shared/local-session-adapter.js";
-import {
-  canIgnoreSqliteError,
-  defaultSqliteModule,
-  numberFromRow,
-  openReadOnlyDatabase,
-  type SqliteModuleLoader,
-  textFromRow,
-} from "../shared/local-sqlite.js";
+import { readTail, workspaceLabel } from "../shared/local-files.js";
+import { numberFromRow, textFromRow } from "../shared/local-sqlite.js";
 import {
   CODEX_HOOK_EVENT,
   type CodexHookEvent,
   type ObservedCodexHookEvent,
   readCodexHookEvent,
 } from "./hooks.js";
-import { readCodexSessionTranscript, readCodexSessionTranscriptSince } from "./transcript.js";
+import {
+  argumentPhrase,
+  CODEX_CALL_ARGUMENT_KEY,
+  CODEX_DELEGATION_TITLE,
+  CODEX_EVENT_PAYLOAD,
+  CODEX_MESSAGE_ROLE,
+  CODEX_REALTIME_ACTIVE_KEY,
+  CODEX_RESPONSE_PAYLOAD,
+  CODEX_ROLLOUT_TYPE,
+  CODEX_SUBAGENT_SOURCE_FIELD,
+  CODEX_THREAD_ID,
+  CODEX_THREAD_LINK_PREFIX,
+  CODEX_WORLD_STATE_SECTION,
+  isCodexRealtimeDelegationText,
+} from "./records.js";
+import { CODEX_SESSION_INDEX_FILE, CODEX_THREAD_COLUMN, type CodexThreadRow } from "./state.js";
 
-const CODEX_PROVIDER_ID = PROVIDER_ID.CODEX;
-const CODEX_PROVIDER_NAME = "Codex";
-
-const CODEX_ENVIRONMENT = {
-  CONFIG_DIRECTORY: "CODEX_HOME",
-  SQLITE_DIRECTORY: "CODEX_SQLITE_HOME",
-} as const;
-
-const CODEX_DATABASE_FILE = {
-  STATE: "state_5.sqlite",
-} as const;
-
-const CODEX_SESSION_INDEX_FILE = "session_index.jsonl";
-
-const CODEX_CONFIG_FILE = {
-  USER: "config.toml",
-} as const;
-
-const CODEX_CONFIG_KEY = {
-  SQLITE_DIRECTORY: "sqlite_home",
-} as const;
-
-/**
- * The Codex app's own address for a local thread. Codex registers the `codex`
- * scheme for its windows and documents `threads/<thread-id>` as the route to an
- * existing local chat, keyed by the same `threads.id` this adapter reads — so
- * the row and the address it opens name one thread rather than two.
- */
-const CODEX_THREAD_LINK_PREFIX = "codex://threads/";
-
-/**
- * Codex uses this synthetic title for locally-created delegation sessions.
- * It identifies the source chat for Codex itself, but is not a user-facing
- * title and can be misleading when shown in Luke's session list.
- */
-const CODEX_DELEGATION_TITLE =
-  /<codex_delegation>\s*<source_thread_id>\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\s*<\/source_thread_id>/i;
-
-const CODEX_THREAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const CODEX_THREAD_COLUMN = {
-  ID: "id",
-  SOURCE: "source",
-  CWD: "cwd",
-  CREATED_AT: "created_at",
-  UPDATED_AT: "updated_at",
-  CREATED_AT_MS: "created_at_ms",
-  UPDATED_AT_MS: "updated_at_ms",
-  RECENCY_AT_MS: "recency_at_ms",
-  TITLE: "title",
-  FIRST_USER_MESSAGE: "first_user_message",
-  GIT_BRANCH: "git_branch",
-  MODEL: "model",
-  REASONING_EFFORT: "reasoning_effort",
-  ROLLOUT_PATH: "rollout_path",
-} as const;
-
-const CODEX_SUBAGENT_SOURCE_FIELD = {
-  SUBAGENT: "subagent",
-  THREAD_SPAWN: "thread_spawn",
-  PARENT_THREAD_ID: "parent_thread_id",
-} as const;
-
-/** Records Codex appends to the rollout file named by a thread's `rollout_path`. */
-const CODEX_ROLLOUT_TYPE = {
-  EVENT_MSG: "event_msg",
-  RESPONSE_ITEM: "response_item",
-  WORLD_STATE: "world_state",
-} as const;
-
-/**
- * The realtime section of Codex's persisted world state: `{ active: boolean }`,
- * written into every turn's snapshot. This is the durable record of whether a
- * realtime voice conversation was open over the thread when its last turn ran —
- * the voice lifecycle events themselves are transient and never reach the
- * rollout. A `full` snapshot carries every section, so one without this key is
- * a build with no realtime at all; a patch reports the section only when it
- * changed.
- */
-const CODEX_WORLD_STATE_SECTION = {
-  REALTIME: "realtime",
-} as const;
-
-const CODEX_REALTIME_ACTIVE_KEY = "active";
-
-/**
- * The turn boundary. `threads` carries no status column at all, so without the
- * rollout a Codex session can only be guessed at from how recently its row was
- * touched — and could never be reported as waiting for its developer.
- */
-const CODEX_EVENT_PAYLOAD = {
-  TASK_STARTED: "task_started",
-  TASK_COMPLETE: "task_complete",
-  /**
-   * The failure that ended a turn early. Current Codex builds carry the error
-   * on `task_complete` itself; older ones wrote this event standing alone, so
-   * both shapes are read — the same pair the transcript reader renders.
-   */
-  ERROR: "error",
-} as const;
-
-const CODEX_RESPONSE_PAYLOAD = {
-  FUNCTION_CALL: "function_call",
-  MESSAGE: "message",
-} as const;
-
-const CODEX_MESSAGE_ROLE = {
-  USER: "user",
-} as const;
-
-/**
- * Function-call arguments whose value names the work, in the order they read
- * best. `cmd` leads because `exec_command` is by far the most common call Codex
- * makes and that is what it calls its command line.
- */
-export const CODEX_CALL_ARGUMENT_KEY = [
-  "cmd",
-  "command",
-  "path",
-  "file_path",
-  "query",
-  "search_query",
-  "pattern",
-] as const;
-
-const CODEX_ADAPTER_DEFAULTS = {
+const CODEX_OBSERVATION_DEFAULTS = {
   /** Enough to reach past one turn's token accounting to its boundary event. */
   READ_ROLLOUT_TAIL_BYTES: 64 * 1024,
   /** Only the threads that can still change are worth a second file read. */
@@ -187,74 +60,10 @@ const CODEX_ADAPTER_DEFAULTS = {
   MAXIMUM_ACTIVITY_LENGTH: 80,
 } as const;
 
-const CODEX_REALTIME_DELEGATION_MARKER = "<realtime_delegation>";
-
-// Every column is read defensively from the row, so the projection stays `*`:
-// Codex adds columns by migration, and naming one this build expects but an
-// older install lacks would fail the whole query rather than one field.
-// An archived thread is one the user filed away in Codex's own UI, so it is
-// no row at all rather than a completed one — the same reading OpenCode's
-// archived sessions get — and archiving touches the row's clock, so anything
-// short of excluding it outright would resurface it as fresh.
-const CODEX_THREAD_QUERY = `
-  WITH observed_threads AS (
-    SELECT
-      *,
-      MAX(
-        COALESCE(recency_at_ms, 0),
-        COALESCE(updated_at_ms, 0),
-        COALESCE(created_at_ms, 0),
-        COALESCE(updated_at, 0) * 1000,
-        COALESCE(created_at, 0) * 1000
-      ) AS luke_observed_at_ms
-    FROM threads
-  )
-  SELECT *
-  FROM observed_threads
-  WHERE id <> ''
-    AND cwd <> ''
-    AND archived = 0
-  ORDER BY luke_observed_at_ms DESC,
-    id DESC
-`;
-
-type CodexThreadRow = WireRecord;
-
 export const CODEX_PROVIDER: SessionProvider = {
-  id: CODEX_PROVIDER_ID,
-  displayName: CODEX_PROVIDER_NAME,
+  id: PROVIDER_ID.CODEX,
+  displayName: "Codex",
 };
-
-export interface CodexAdapterOptions {
-  codexHome?: string;
-  sqliteHome?: string;
-  now?: () => number;
-  sqlite?: SqliteModuleLoader;
-  /**
-   * Where the observation hook spools its events, when hooks are on at all.
-   * Read lazily like the cloud adapters' credentials, because the app decides
-   * the path after this adapter is declared. Absent — or answering nothing —
-   * the adapter reads the state database and rollouts alone, exactly as it
-   * always has: the hooks only ever sharpen what those already showed.
-   */
-  hookEventsDirectory?: () => string | undefined;
-}
-
-/**
- * Reads one argument as the phrase that names the work. Codex passes some of
- * them as a list rather than a string — a search's terms, a command's argv —
- * so a list of plain values is joined instead of dropped. A list of anything
- * else, such as a plan's steps, is not a phrase and is left alone.
- */
-export function argumentPhrase(value: UnparsedWireValue): string | undefined {
-  if (isWireString(value)) return text(value);
-  if (isWireNumber(value)) return String(value);
-  if (!Array.isArray(value) || value.length === 0) return undefined;
-  const tokens = value.map((entry) =>
-    isWireString(entry) || isWireNumber(entry) ? String(entry) : undefined,
-  );
-  return tokens.every((token) => token !== undefined) ? text(tokens.join(" ")) : undefined;
-}
 
 /** Names the tool Codex called, preferring whichever argument says what it is for. */
 function activityFromCall(payload: WireRecord): string | undefined {
@@ -269,7 +78,7 @@ function activityFromCall(payload: WireRecord): string | undefined {
   for (const key of CODEX_CALL_ARGUMENT_KEY) {
     const detail = oneLine(
       argumentPhrase(parsedArguments?.[key]),
-      CODEX_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH,
+      CODEX_OBSERVATION_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH,
     );
     if (detail) return `${name}: ${detail}`;
   }
@@ -335,7 +144,7 @@ function parseCodexRolloutTail(tail: string): ParsedCodexRollout {
       }
       if (payload.type === CODEX_EVENT_PAYLOAD.ERROR) {
         parsed.error =
-          oneLine(text(payload.message), CODEX_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH) ??
+          oneLine(text(payload.message), CODEX_OBSERVATION_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH) ??
           parsed.error;
       }
       if (payload.type === CODEX_EVENT_PAYLOAD.TASK_COMPLETE) {
@@ -345,8 +154,10 @@ function parseCodexRolloutTail(tail: string): ParsedCodexRollout {
           // The fallback keeps a standalone error event's message when the
           // boundary's own error carries none.
           parsed.error =
-            oneLine(text(payload.error.message), CODEX_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH) ??
-            parsed.error;
+            oneLine(
+              text(payload.error.message),
+              CODEX_OBSERVATION_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH,
+            ) ?? parsed.error;
         } else {
           // A turn that settled cleanly got past any failure it recorded on
           // the way, so a stale error must not outlive it.
@@ -382,85 +193,6 @@ function timestampFromRow(row: CodexThreadRow): number {
     numberFromRow(row, CODEX_THREAD_COLUMN.CREATED_AT_MS) ?? 0,
     (numberFromRow(row, CODEX_THREAD_COLUMN.UPDATED_AT) ?? 0) * 1000,
     (numberFromRow(row, CODEX_THREAD_COLUMN.CREATED_AT) ?? 0) * 1000,
-  );
-}
-
-function normalizeDirectory(value: string | undefined, baseDirectory: string): string | undefined {
-  const normalized = value?.trim();
-  if (!normalized) return undefined;
-  if (normalized === "~") return os.homedir();
-  if (normalized.startsWith("~/")) return path.join(os.homedir(), normalized.slice(2));
-  if (path.isAbsolute(normalized)) return normalized;
-  return path.resolve(baseDirectory, normalized);
-}
-
-function unescapeBasicTomlString(value: string): string {
-  return value.replace(/\\(["\\bfnrt])/g, (_match, character: string) => {
-    if (character === "b") return "\b";
-    if (character === "f") return "\f";
-    if (character === "n") return "\n";
-    if (character === "r") return "\r";
-    if (character === "t") return "\t";
-    return character;
-  });
-}
-
-function tomlStringValue(value: string): string | undefined {
-  const normalized = value.trim();
-  if (!normalized) return undefined;
-  if (normalized.startsWith('"') && normalized.endsWith('"')) {
-    return unescapeBasicTomlString(normalized.slice(1, -1)).trim() || undefined;
-  }
-  if (normalized.startsWith("'") && normalized.endsWith("'")) {
-    return normalized.slice(1, -1).trim() || undefined;
-  }
-  return normalized.trim() || undefined;
-}
-
-function topLevelTomlString(source: string, key: string): string | undefined {
-  let inTopLevel = true;
-  for (const line of source.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
-      inTopLevel = false;
-      continue;
-    }
-    if (!inTopLevel) continue;
-    const separatorIndex = trimmed.indexOf("=");
-    if (separatorIndex < 0) continue;
-    if (trimmed.slice(0, separatorIndex).trim() !== key) continue;
-    return tomlStringValue(trimmed.slice(separatorIndex + 1).replace(/\s+#.*$/, ""));
-  }
-  return undefined;
-}
-
-async function sqliteHomeFromConfig(codexHome: string): Promise<string | undefined> {
-  const config = await readTextFile(path.join(codexHome, CODEX_CONFIG_FILE.USER));
-  return config
-    ? normalizeDirectory(topLevelTomlString(config, CODEX_CONFIG_KEY.SQLITE_DIRECTORY), codexHome)
-    : undefined;
-}
-
-/**
- * Where Codex's state database may be, most authoritative first: an explicit
- * home, then the one `config.toml` names, then wherever `CODEX_SQLITE_HOME`
- * points, then the paths Codex writes by default.
- */
-export async function stateDatabasePaths(
-  codexHome: string,
-  configuredSqliteHome: string | undefined,
-): Promise<string[]> {
-  const sqliteHome =
-    normalizeDirectory(configuredSqliteHome, codexHome) ??
-    (await sqliteHomeFromConfig(codexHome)) ??
-    normalizeDirectory(process.env[CODEX_ENVIRONMENT.SQLITE_DIRECTORY], codexHome);
-  return uniquePaths(
-    [
-      sqliteHome && path.join(sqliteHome, CODEX_DATABASE_FILE.STATE),
-      path.join(codexHome, "sqlite", CODEX_DATABASE_FILE.STATE),
-      path.join(codexHome, CODEX_DATABASE_FILE.STATE),
-    ].filter((candidate): candidate is string => candidate !== undefined),
   );
 }
 
@@ -529,7 +261,7 @@ async function readCodexSessionTitles(codexHome: string): Promise<Map<string, st
   const titles = new Map<string, string>();
   const tail = await readTail(
     path.join(codexHome, CODEX_SESSION_INDEX_FILE),
-    CODEX_ADAPTER_DEFAULTS.READ_SESSION_INDEX_TAIL_BYTES,
+    CODEX_OBSERVATION_DEFAULTS.READ_SESSION_INDEX_TAIL_BYTES,
   );
   for (const line of tail.split(/\r?\n/u)) {
     const record = recordFromJsonLine(line);
@@ -540,16 +272,6 @@ async function readCodexSessionTitles(codexHome: string): Promise<Map<string, st
     else titles.delete(id);
   }
   return titles;
-}
-
-/**
- * Codex keeps the initial user message in the thread row even after it gives
- * the chat a user-facing name. That makes it a more durable signal than the
- * provisional title, while the title fallback covers older rows that do not
- * carry the column's value.
- */
-export function isCodexRealtimeDelegationText(value: string | undefined): boolean {
-  return text(value)?.trimStart().startsWith(CODEX_REALTIME_DELEGATION_MARKER) === true;
 }
 
 function isCodexRealtimeDelegationThread(row: CodexThreadRow): boolean {
@@ -730,169 +452,116 @@ function observationFromThreadRow(
   return observation;
 }
 
-export function defaultCodexHome(): string {
-  const configuredHome = process.env[CODEX_ENVIRONMENT.CONFIG_DIRECTORY]?.trim();
-  return configuredHome || path.join(os.homedir(), ".codex");
+/**
+ * Reads the turn boundary for each observed thread, newest first. The cap
+ * keeps a crowded day from turning one observation pass into dozens of file
+ * reads.
+ */
+async function rollouts(rows: readonly CodexThreadRow[]): Promise<Map<string, ParsedCodexRollout>> {
+  const candidates = rows
+    .slice(0, CODEX_OBSERVATION_DEFAULTS.MAXIMUM_ROLLOUT_READS)
+    .map((row) => ({
+      id: textFromRow(row, CODEX_THREAD_COLUMN.ID),
+      rolloutPath: textFromRow(row, CODEX_THREAD_COLUMN.ROLLOUT_PATH),
+    }))
+    .filter(
+      (candidate): candidate is { id: string; rolloutPath: string } =>
+        candidate.id !== undefined && candidate.rolloutPath !== undefined,
+    );
+
+  const parsed = await Promise.all(
+    candidates.map(async (candidate) => {
+      const tail = await readTail(
+        candidate.rolloutPath,
+        CODEX_OBSERVATION_DEFAULTS.READ_ROLLOUT_TAIL_BYTES,
+      );
+      return [candidate.id, parseCodexRolloutTail(tail)] as const;
+    }),
+  );
+  return new Map(parsed);
 }
 
-export class CodexSessionAdapter extends LocalSessionAdapter {
-  readonly provider = CODEX_PROVIDER;
-
-  readonly #codexHome: string;
-  readonly #sqliteHome: string | undefined;
-  readonly #sqlite: SqliteModuleLoader;
-  readonly #transcriptPaths = new TranscriptPathCache();
-  readonly #hookEventsDirectory: (() => string | undefined) | undefined;
-
-  constructor(options: CodexAdapterOptions = {}) {
-    super(options);
-    this.#codexHome = options.codexHome ?? defaultCodexHome();
-    this.#sqliteHome = options.sqliteHome;
-    this.#sqlite = options.sqlite ?? defaultSqliteModule;
-    this.#hookEventsDirectory = options.hookEventsDirectory;
-  }
-
-  async observe(): Promise<readonly ProviderSessionObservation[]> {
-    for (const databasePath of await stateDatabasePaths(this.#codexHome, this.#sqliteHome)) {
-      const database = await openReadOnlyDatabase(this.#sqlite, databasePath);
-      if (!database) continue;
-      let rows: CodexThreadRow[];
-      let now: number;
-      try {
-        now = this.observationTime();
-        rows = database
-          .prepare(CODEX_THREAD_QUERY)
-          .all()
-          .filter((row): row is CodexThreadRow => isRecord(row));
-      } catch (error) {
-        if (error instanceof Error && canIgnoreSqliteError(error)) continue;
-        throw error;
-      } finally {
-        database.close();
-      }
-
-      // The rollout and spool reads happen with the database already closed,
-      // so a slow disk never holds a read lock on state Codex itself is
-      // writing.
-      const rollouts = await this.#rollouts(rows);
-      const hookEvents = await this.#hookEvents(rows);
-      const names = await this.#threadNames(rows);
-      linkDelegatedVoiceConversations(rows, rollouts);
-      return rows
-        .map((row) =>
-          observationFromThreadRow(
-            row,
-            rollouts.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? ""),
-            names,
-            now,
-            OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
-            hookEvents.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? ""),
-          ),
-        )
-        .filter(
-          (observation): observation is ProviderSessionObservation => observation !== undefined,
-        );
+/**
+ * Gathers the names a delegated chat's marker title can resolve through. The
+ * pass's own rows already carry every titled thread; the name index is a
+ * second file read, so it is opened only when some row actually shows a
+ * marker in need of a name.
+ */
+async function threadNames(
+  codexHome: string,
+  rows: readonly CodexThreadRow[],
+): Promise<CodexThreadNameSources> {
+  const rowTitles = new Map<string, string>();
+  let hasMarkerTitle = false;
+  for (const row of rows) {
+    const id = textFromRow(row, CODEX_THREAD_COLUMN.ID);
+    const title = oneLine(textFromRow(row, CODEX_THREAD_COLUMN.TITLE), maximumSessionTitleLength);
+    if (!id || !title) continue;
+    if (CODEX_DELEGATION_TITLE.test(title) || isCodexRealtimeDelegationText(title)) {
+      hasMarkerTitle = true;
+      continue;
     }
-    return [];
+    rowTitles.set(id, title);
   }
+  const indexNames = hasMarkerTitle
+    ? await readCodexSessionTitles(codexHome)
+    : new Map<string, string>();
+  return { indexNames, rowTitles };
+}
 
-  override readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult> {
-    return providerTranscriptResult(
-      readCodexSessionTranscript({
-        codexHome: this.#codexHome,
-        sqliteHome: this.#sqliteHome,
-        providerSessionId,
-        sqlite: this.#sqlite,
-      }),
-    );
-  }
-
-  override readTranscriptSince(
-    providerSessionId: string,
-    cursor?: string,
-  ): Promise<ProviderTranscriptSinceResult> {
-    return readCodexSessionTranscriptSince({
-      codexHome: this.#codexHome,
-      sqliteHome: this.#sqliteHome,
-      providerSessionId,
-      sqlite: this.#sqlite,
-      cursor,
-      pathCache: this.#transcriptPaths,
-    });
-  }
-
-  /**
-   * Reads the turn boundary for each observed thread, newest first. The cap
-   * keeps a crowded day from turning one observation pass into dozens of file
-   * reads.
-   */
-  async #rollouts(rows: readonly CodexThreadRow[]): Promise<Map<string, ParsedCodexRollout>> {
-    const candidates = rows
-      .slice(0, CODEX_ADAPTER_DEFAULTS.MAXIMUM_ROLLOUT_READS)
-      .map((row) => ({
-        id: textFromRow(row, CODEX_THREAD_COLUMN.ID),
-        rolloutPath: textFromRow(row, CODEX_THREAD_COLUMN.ROLLOUT_PATH),
-      }))
-      .filter(
-        (candidate): candidate is { id: string; rolloutPath: string } =>
-          candidate.id !== undefined && candidate.rolloutPath !== undefined,
-      );
-
-    const parsed = await Promise.all(
-      candidates.map(async (candidate) => {
-        const tail = await readTail(
-          candidate.rolloutPath,
-          CODEX_ADAPTER_DEFAULTS.READ_ROLLOUT_TAIL_BYTES,
-        );
-        return [candidate.id, parseCodexRolloutTail(tail)] as const;
-      }),
-    );
-    return new Map(parsed);
-  }
-
-  /**
-   * Gathers the names a delegated chat's marker title can resolve through. The
-   * pass's own rows already carry every titled thread; the name index is a
-   * second file read, so it is opened only when some row actually shows a
-   * marker in need of a name.
-   */
-  async #threadNames(rows: readonly CodexThreadRow[]): Promise<CodexThreadNameSources> {
-    const rowTitles = new Map<string, string>();
-    let hasMarkerTitle = false;
-    for (const row of rows) {
+/**
+ * Reads what the observation hook last said about each thread. The spool is
+ * a refinement, never a dependency: a directory that is missing, unreadable,
+ * or holding something unexpected reads as no event, and the row's own
+ * verdict stands.
+ */
+async function hookEvents(
+  hookEventsDirectory: string | undefined,
+  rows: readonly CodexThreadRow[],
+): Promise<Map<string, ObservedCodexHookEvent>> {
+  const events = new Map<string, ObservedCodexHookEvent>();
+  if (!hookEventsDirectory) return events;
+  await Promise.all(
+    rows.map(async (row) => {
       const id = textFromRow(row, CODEX_THREAD_COLUMN.ID);
-      const title = oneLine(textFromRow(row, CODEX_THREAD_COLUMN.TITLE), maximumSessionTitleLength);
-      if (!id || !title) continue;
-      if (CODEX_DELEGATION_TITLE.test(title) || isCodexRealtimeDelegationText(title)) {
-        hasMarkerTitle = true;
-        continue;
-      }
-      rowTitles.set(id, title);
-    }
-    const indexNames = hasMarkerTitle
-      ? await readCodexSessionTitles(this.#codexHome)
-      : new Map<string, string>();
-    return { indexNames, rowTitles };
-  }
+      if (!id) return;
+      const event = await readCodexHookEvent(hookEventsDirectory, id).catch(() => undefined);
+      if (event) events.set(id, event);
+    }),
+  );
+  return events;
+}
 
-  /**
-   * Reads what the observation hook last said about each thread. The spool is
-   * a refinement, never a dependency: a directory that is missing, unreadable,
-   * or holding something unexpected reads as no event, and the row's own
-   * verdict stands.
-   */
-  async #hookEvents(rows: readonly CodexThreadRow[]): Promise<Map<string, ObservedCodexHookEvent>> {
-    const events = new Map<string, ObservedCodexHookEvent>();
-    const hookEventsDirectory = this.#hookEventsDirectory?.();
-    if (!hookEventsDirectory) return events;
-    await Promise.all(
-      rows.map(async (row) => {
-        const id = textFromRow(row, CODEX_THREAD_COLUMN.ID);
-        if (!id) return;
-        const event = await readCodexHookEvent(hookEventsDirectory, id).catch(() => undefined);
-        if (event) events.set(id, event);
-      }),
-    );
-    return events;
-  }
+/**
+ * One pass's rows into one pass's rows on the panel. The rollout, spool and
+ * name-index reads all happen with the state database already closed, so a
+ * slow disk never holds a read lock on state Codex itself is writing.
+ */
+export async function codexObservations(input: {
+  readonly codexHome: string;
+  readonly rows: readonly CodexThreadRow[];
+  readonly hookEventsDirectory: string | undefined;
+  readonly now: number;
+  readonly activeSessionFreshnessMs: number;
+}): Promise<readonly ProviderSessionObservation[]> {
+  const { codexHome, rows, now, activeSessionFreshnessMs } = input;
+  const [parsedRollouts, events, names] = await Promise.all([
+    rollouts(rows),
+    hookEvents(input.hookEventsDirectory, rows),
+    threadNames(codexHome, rows),
+  ]);
+  linkDelegatedVoiceConversations(rows, parsedRollouts);
+  return rows
+    .map((row) => {
+      const id = textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? "";
+      return observationFromThreadRow(
+        row,
+        parsedRollouts.get(id),
+        names,
+        now,
+        activeSessionFreshnessMs,
+        events.get(id),
+      );
+    })
+    .filter((observation): observation is ProviderSessionObservation => observation !== undefined);
 }
