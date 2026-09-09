@@ -5,6 +5,7 @@ import { BrainGenerationClock } from "./generation-clock.js";
 import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "./requests.js";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
+  BRAIN_STATE_BOUNDS,
   BRAIN_STATE_VERSION,
   type BrainPersistedState,
   type BrainStateStorage,
@@ -18,6 +19,9 @@ import {
 } from "./state-store.js";
 
 const NOW = 1_800_000_000_000;
+const { MAXIMUM_TERMINAL_REQUESTS, MAXIMUM_SERIALIZED_BYTES } = BRAIN_STATE_BOUNDS;
+/** Wide enough that a handful of records overflow the byte cap the build fixes. */
+const WIDE_TEXT_CHARS = Math.ceil(MAXIMUM_SERIALIZED_BYTES / 3);
 
 /** A record as it would come off the wire: the same fields, with no domain type attached. */
 function raw(value: BrainPersistedState | BrainPersistedState["requests"][number] | undefined) {
@@ -344,18 +348,16 @@ test("an ended run whose end the thread has not taken is kept past the count, ho
 });
 
 test("the byte cap prunes eligible ended runs first, and refuses a write that would still grow an oversized envelope", async () => {
-  const bounds = { MAXIMUM_TERMINAL_REQUESTS: 200, MAXIMUM_SERIALIZED_BYTES: 4_000 } as const;
   const storage = new MemoryStorage();
   const store = new BrainStateStore({
     automaticReset: true,
     storage,
     createGenerationId: () => "gen-1",
     now: () => NOW,
-    bounds,
   });
   const lease = store.lease();
   await store.load();
-  const big = (index: number) => terminal(index, { text: "x".repeat(600) });
+  const big = (index: number) => terminal(index, { text: "x".repeat(WIDE_TEXT_CHARS) });
   const journal = [0, 1, 2, 3].flatMap((index) => journalFor(`run-${index}`));
   const pruned: string[][] = [];
   assert.equal(
@@ -377,14 +379,14 @@ test("the byte cap prunes eligible ended runs first, and refuses a write that wo
     assert.ok(!held.requests.some((record) => record.runId === runId));
     assert.ok(!held.journal.some((entry) => entry.runId === runId));
   }
-  assert.ok(brainStateRecord(held).length <= bounds.MAXIMUM_SERIALIZED_BYTES);
+  assert.ok(brainStateRecord(held).length <= MAXIMUM_SERIALIZED_BYTES);
 
   // A running run's checkpoint cannot be pruned: growth past the cap with
   // nothing eligible left is refused, and the held copy and file stand.
   const active = terminal(50, {
     status: BRAIN_REQUEST_STATUS.RUNNING,
     settledAt: undefined,
-    text: "y".repeat(5_000),
+    text: "y".repeat(MAXIMUM_SERIALIZED_BYTES + 1_000),
   });
   const before = storage.file;
   assert.equal(
@@ -406,14 +408,13 @@ test("the byte cap prunes eligible ended runs first, and refuses a write that wo
     storage: new MemoryStorage(),
     createGenerationId: () => "gen-1",
     now: () => NOW,
-    bounds: { MAXIMUM_TERMINAL_REQUESTS: 200, MAXIMUM_SERIALIZED_BYTES: 400 },
   });
   const oversizedLease = oversizedStore.lease();
   await oversizedStore.load();
   const items = Array.from({ length: 5 }, (_, index) => ({
     type: "message",
     role: "user",
-    content: `${index}${"z".repeat(200)}`,
+    content: `${index}${"z".repeat(WIDE_TEXT_CHARS)}`,
   }));
   assert.equal(
     await oversizedStore.write(oversizedLease, "gen-1", (state) => ({ ...state, items })),
@@ -422,7 +423,9 @@ test("the byte cap prunes eligible ended runs first, and refuses a write that wo
   assert.equal(
     await oversizedStore.write(oversizedLease, "gen-1", (state) => ({
       ...state,
-      items: [{ type: "compaction", id: "cmp", encrypted_content: "z".repeat(600) }],
+      items: [
+        { type: "compaction", id: "cmp", encrypted_content: "z".repeat(WIDE_TEXT_CHARS * 4) },
+      ],
     })),
     false,
     "the first oversized write has nothing to shrink from",
@@ -604,14 +607,12 @@ test("a Clear on a store that never loaded still leaves the marker, learning the
 
 test("load admits a file only within its bounds and rewrites the disk to match what it admitted", async () => {
   const reports: string[] = [];
-  const bounds = { MAXIMUM_TERMINAL_REQUESTS: 3, MAXIMUM_SERIALIZED_BYTES: 100_000 };
   const make = (storage: MemoryStorage, now = NOW) =>
     new BrainStateStore({
       automaticReset: true,
       storage,
       createGenerationId: () => "gen-fresh",
       now: () => now,
-      bounds,
       report: (message) => reports.push(message),
     });
 
@@ -632,26 +633,29 @@ test("load admits a file only within its bounds and rewrites the disk to match w
   await make(broken).load();
   assert.ok(!String(broken.read()).includes("V1_SECRET"));
 
-  // Pruned at load: the admitted copy and the file both hold three.
+  // Pruned at load: the admitted copy and the file both hold the cap.
+  const crowdedIndexes = Array.from({ length: MAXIMUM_TERMINAL_REQUESTS + 2 }, (_, at) => at);
   const crowded = new MemoryStorage();
   crowded.file = brainStateRecord({
     ...freshBrainState("gen-1", NOW),
-    requests: [0, 1, 2, 3, 4].map((index) => terminal(index)),
-    journal: [0, 1, 2, 3, 4].flatMap((index) => journalFor(`run-${index}`)),
+    requests: crowdedIndexes.map((index) => terminal(index)),
+    journal: crowdedIndexes.flatMap((index) => journalFor(`run-${index}`)),
   });
   const pruned = await make(crowded).load();
   assert.deepEqual(
     pruned.requests.map((record) => record.runId),
-    ["run-2", "run-3", "run-4"],
+    crowdedIndexes.slice(2).map((index) => `run-${index}`),
   );
-  assert.equal(brainStateFromStored(crowded.file)?.requests.length, 3);
-  assert.equal(brainStateFromStored(crowded.file)?.journal.length, 3);
+  assert.equal(brainStateFromStored(crowded.file)?.requests.length, MAXIMUM_TERMINAL_REQUESTS);
+  assert.equal(brainStateFromStored(crowded.file)?.journal.length, MAXIMUM_TERMINAL_REQUESTS);
 
   // Past its bounds with nothing eligible: refused whole, replaced, reported.
   const overfull = new MemoryStorage();
   overfull.file = brainStateRecord({
     ...freshBrainState("gen-1", NOW),
-    requests: [0, 1, 2, 3].map((index) => terminal(index, { historyRecordedAt: undefined })),
+    requests: Array.from({ length: MAXIMUM_TERMINAL_REQUESTS + 1 }, (_, index) =>
+      terminal(index, { historyRecordedAt: undefined }),
+    ),
   });
   assert.equal((await make(overfull).load()).requests.length, 0);
   assert.equal(brainStateFromStored(overfull.file)?.generationId, "gen-fresh");
@@ -674,21 +678,25 @@ test("the record count is a hard bound: admission closes at capacity and a write
     storage,
     createGenerationId: () => "gen-1",
     now: () => NOW,
-    bounds: { MAXIMUM_TERMINAL_REQUESTS: 2, MAXIMUM_SERIALIZED_BYTES: 100_000 },
   });
   const lease = store.lease();
   await store.load();
   const unpublished = (index: number) => terminal(index, { historyRecordedAt: undefined });
   assert.equal(store.admits("gen-1"), true);
   assert.equal(
-    await store.write(lease, "gen-1", (state) => ({ ...state, requests: [unpublished(0)] })),
+    await store.write(lease, "gen-1", (state) => ({
+      ...state,
+      requests: Array.from({ length: MAXIMUM_TERMINAL_REQUESTS - 1 }, (_, index) =>
+        unpublished(index),
+      ),
+    })),
     true,
   );
   assert.equal(store.admits("gen-1"), true);
   assert.equal(
     await store.write(lease, "gen-1", (state) => ({
       ...state,
-      requests: [...state.requests, unpublished(1)],
+      requests: [...state.requests, unpublished(MAXIMUM_TERMINAL_REQUESTS - 1)],
     })),
     true,
   );
@@ -696,7 +704,7 @@ test("the record count is a hard bound: admission closes at capacity and a write
   assert.equal(
     await store.write(lease, "gen-1", (state) => ({
       ...state,
-      requests: [...state.requests, unpublished(2)],
+      requests: [...state.requests, unpublished(MAXIMUM_TERMINAL_REQUESTS)],
     })),
     false,
   );

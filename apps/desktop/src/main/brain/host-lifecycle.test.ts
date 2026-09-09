@@ -8,7 +8,6 @@ import {
 } from "@sidecar/brain";
 import { brainReplyWords } from "@sidecar/brain/requests";
 import { CONVERSATION_ENTRY_KIND } from "@sidecar/realtime";
-import { QUEUE_MODE } from "@sidecar/runtime";
 import {
   answered,
   answerOf,
@@ -247,14 +246,16 @@ test("a refused History write keeps the reply unoffered and ungranted until the 
 test("two completions flushed together are offered one at a time, the second only after the first is acknowledged", async () => {
   const c = brainHarness();
   const client = heldModel();
-  // Follow-up mode: two asks are two runs with two completions, where steer would answer both in one.
-  await c.host.replace(() => c.build(client, { queueMode: QUEUE_MODE.FOLLOWUP }));
+  await c.host.replace(() => c.build(client));
   const agent = c.host.current();
   assert.ok(agent);
-  const [runA, runB] = await c.submitMany(2);
-  assert.ok(runA && runB);
+  // One ask at a time, so they are two runs with two completions: words that
+  // reached a run under way would ride it and be answered in one.
+  const [runA] = await c.submitMany(1);
   client.release(answered("Answer."));
   await drainMicrotasks();
+  const [runB] = await c.submitMany(1, 1);
+  assert.ok(runA && runB);
   client.release(answered("Answer."));
   await drainMicrotasks();
   // Both ended with no receiver; readiness offers the oldest alone.
@@ -282,15 +283,16 @@ test("two completions flushed together are offered one at a time, the second onl
 test("an offer the renderer never claimed is offered again to the next epoch; a claimed one is not, and old-epoch claims are refused", async () => {
   const c = brainHarness();
   const client = heldModel();
-  await c.host.replace(() => c.build(client, { queueMode: QUEUE_MODE.FOLLOWUP }));
+  await c.host.replace(() => c.build(client));
   const agent = c.host.current();
   assert.ok(agent);
   const first = c.receiver.begin();
   c.receiver.markReady(first);
-  const [runA, runB] = await c.submitMany(2);
-  assert.ok(runA && runB);
+  const [runA] = await c.submitMany(1);
   client.release(answered("Answer."));
   await drainMicrotasks();
+  const [runB] = await c.submitMany(1, 1);
+  assert.ok(runA && runB);
   client.release(answered("Answer."));
   await drainMicrotasks();
   // A is offered and claimed; its renderer dies before the reply ends.

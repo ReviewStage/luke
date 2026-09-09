@@ -114,7 +114,6 @@ export interface SettingsStoreOptions {
   directory: () => string;
   cipher: SecretCipher;
   environment?: NodeJS.ProcessEnv;
-  providers?: readonly CredentialProvider[];
   /**
    * Whether this run will use the credentials it resolves. A fixture or evidence
    * run will not, and the panel has to mark what would actually happen rather
@@ -122,13 +121,6 @@ export interface SettingsStoreOptions {
    * key is. Only the app knows which kind of run this is. True by default.
    */
   credentialsUsable?: boolean;
-  /**
-   * Whether this build can offer the Apple Calendar connection: a Mac to
-   * read. No client or key gates it — the grant lives with macOS — so the
-   * platform is the whole question, asked as an option so the store never
-   * reads the platform itself and tests can answer it either way.
-   */
-  appleCalendarSupported?: boolean;
   /**
    * What the latest observation pass learned about the Codex CLI's login. It
    * rides the settings snapshot beside `credentialSources` because it answers
@@ -573,9 +565,7 @@ export class SettingsStore {
   readonly #directory: () => string;
   readonly #cipher: SecretCipher;
   readonly #environment: NodeJS.ProcessEnv;
-  readonly #providers: readonly CredentialProvider[];
   readonly #credentialsUsable: boolean;
-  readonly #appleCalendarSupported: boolean;
   readonly #codexCloudConnection: () => CliConnection;
   #loading: Promise<PersistedSettings> | undefined;
   #resolved = new Map<CredentialProviderId, ResolvedApiKey>();
@@ -726,9 +716,7 @@ export class SettingsStore {
     this.#directory = options.directory;
     this.#cipher = options.cipher;
     this.#environment = options.environment ?? process.env;
-    this.#providers = options.providers ?? CREDENTIAL_PROVIDER_LIST;
     this.#credentialsUsable = options.credentialsUsable ?? true;
-    this.#appleCalendarSupported = options.appleCalendarSupported ?? process.platform === "darwin";
     this.#codexCloudConnection = options.codexCloudConnection ?? (() => CLI_CONNECTION.UNKNOWN);
   }
 
@@ -736,7 +724,7 @@ export class SettingsStore {
     const persisted = await this.#load();
     const voiceCapability = await this.#voiceCapability(persisted);
     const sources = await Promise.all(
-      this.#providers.map(
+      CREDENTIAL_PROVIDER_LIST.map(
         async (provider) => [provider.id, (await this.#resolveApiKey(provider)).source] as const,
       ),
     );
@@ -755,7 +743,7 @@ export class SettingsStore {
         formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
       },
       status: {
-        // SAFETY: #providers contains every credential provider exactly once.
+        // SAFETY: the registry list contains every credential provider exactly once.
         credentialSources: Object.fromEntries(sources) as Record<
           CredentialProviderId,
           CredentialSource
@@ -788,7 +776,9 @@ export class SettingsStore {
         // Whether this build can offer the Apple Calendar connection: a Mac to
         // read, and a run that would use what macOS grants. No client gates it
         // the way the sign-ins are gated — the grant lives with the system.
-        appleCalendarAvailable: this.#credentialsUsable && this.#appleCalendarSupported,
+        // No client or key gates the Apple connection — the grant lives with
+        // macOS — so a Mac to read is the whole question.
+        appleCalendarAvailable: this.#credentialsUsable && process.platform === "darwin",
         // The accounts without their grants: which are connected and which
         // calendars count is the renderer's to draw; the tokens never travel.
         calendarAccounts: (persisted.calendarAccounts ?? []).map((account) => ({
@@ -918,7 +908,7 @@ export class SettingsStore {
    * nothing and issues no request.
    */
   async readApiKey(providerId: CredentialProviderId): Promise<string | undefined> {
-    const provider = this.#providers.find((candidate) => candidate.id === providerId);
+    const provider = CREDENTIAL_PROVIDER_LIST.find((candidate) => candidate.id === providerId);
     if (!provider) return undefined;
     return (await this.#resolveApiKey(provider)).apiKey;
   }
@@ -930,7 +920,7 @@ export class SettingsStore {
    * into Luke, so it is not Luke's to send anywhere.
    */
   async readStoredApiKey(providerId: CredentialProviderId): Promise<string | undefined> {
-    const provider = this.#providers.find((candidate) => candidate.id === providerId);
+    const provider = CREDENTIAL_PROVIDER_LIST.find((candidate) => candidate.id === providerId);
     if (!provider) return undefined;
     const resolved = await this.#resolveApiKey(provider);
     return resolved.source === CREDENTIAL_SOURCE.ENCRYPTED_FILE ? resolved.apiKey : undefined;
@@ -958,7 +948,9 @@ export class SettingsStore {
     providerId: CredentialProviderId,
     apiKey: string | undefined,
   ): Promise<SettingsUpdateResult> {
-    const keyFormat = this.#providers.find((candidate) => candidate.id === providerId)?.keyFormat;
+    const keyFormat = CREDENTIAL_PROVIDER_LIST.find(
+      (candidate) => candidate.id === providerId,
+    )?.keyFormat;
     const normalized = apiKey?.trim();
     // Clearing a key needs no cipher, so only a key on its way in asks whether
     // there is anywhere to put it.
@@ -1490,7 +1482,7 @@ export class SettingsStore {
     let persisted = defaultPersistedSettings();
     if (source) {
       try {
-        persisted = parsePersistedSettings(source, this.#providers);
+        persisted = parsePersistedSettings(source, CREDENTIAL_PROVIDER_LIST);
       } catch {
         // A corrupt settings file is replaced by the next write rather than
         // failing app start.

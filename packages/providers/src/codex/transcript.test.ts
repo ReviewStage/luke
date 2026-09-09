@@ -12,24 +12,8 @@ import {
   SessionProviderAdapterBase,
 } from "@sidecar/session";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
-import type { SqliteModuleLoader } from "../shared/local-sqlite.js";
 import { CODEX_PROVIDER, CodexSessionAdapter } from "./adapter.js";
-
-async function readCodexSessionTranscript(request: {
-  codexHome?: string;
-  sqliteHome?: string;
-  providerSessionId: string;
-  sqlite?: SqliteModuleLoader;
-  maximumRenderedLength?: number;
-}): Promise<string | undefined> {
-  const result = await new CodexSessionAdapter({
-    codexHome: request.codexHome,
-    sqliteHome: request.sqliteHome,
-    sqlite: request.sqlite,
-    transcriptMaximumRenderedLength: request.maximumRenderedLength,
-  }).readTranscript(request.providerSessionId);
-  return result.status === "accepted" ? result.transcript : undefined;
-}
+import { readCodexSessionTranscript } from "./transcript.js";
 
 const TEST_SESSION_ID = "0198c1f2-4d5e-7789-abcd-ef0123456789";
 const CODEX_STATE_DATABASE = "state_5.sqlite";

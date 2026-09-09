@@ -61,18 +61,9 @@ export function conversationOperations(
 /** How often maintenance looks again between launches; a store crosses none of its bounds faster than this. */
 export const HISTORY_MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000;
 
-type MaintenanceTimer = ReturnType<typeof setInterval>;
-
-/** The clock maintenance runs on; the process's own unless a test supplies one. */
-export interface MaintenanceTimers {
-  setInterval: (work: () => void, ms: number) => MaintenanceTimer;
-  clearInterval: (timer: MaintenanceTimer) => void;
-}
-
 export interface HistoryMaintenanceDependencies {
   store: Pick<RuntimeStoreWiring, "runMaintenance">;
   brain: Pick<BrainWiring, "busyConversations">;
-  timers?: MaintenanceTimers;
 }
 
 /**
@@ -81,12 +72,8 @@ export interface HistoryMaintenanceDependencies {
  * conversations with a run under way whatever their age. Answers the stop.
  */
 export function startHistoryMaintenance(dependencies: HistoryMaintenanceDependencies): () => void {
-  const timers: MaintenanceTimers = dependencies.timers ?? {
-    setInterval: (work, ms) => setInterval(work, ms).unref(),
-    clearInterval,
-  };
   const run = () => void dependencies.store.runMaintenance(dependencies.brain.busyConversations());
   run();
-  const timer = timers.setInterval(run, HISTORY_MAINTENANCE_INTERVAL_MS);
-  return () => timers.clearInterval(timer);
+  const timer = setInterval(run, HISTORY_MAINTENANCE_INTERVAL_MS).unref();
+  return () => clearInterval(timer);
 }

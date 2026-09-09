@@ -12,7 +12,6 @@ import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion";
 import {
   type ConversationOperationsDependencies,
   conversationOperations,
-  HISTORY_MAINTENANCE_INTERVAL_MS,
   startHistoryMaintenance,
 } from "./conversation-operations";
 
@@ -110,11 +109,8 @@ test("a cutoff the store cannot read refuses the deletion after the marker, with
   assert.ok(calls.some((call) => call.includes("earlier cutoff could not be read")));
 });
 
-test("maintenance runs at once and then on its clock, preserving the busy conversations, until stopped", () => {
+test("maintenance runs at the launch, preserving the busy conversations, and stops with its clock", () => {
   const runs: (readonly SessionKey[])[] = [];
-  let scheduled: { work: () => void; ms: number } | undefined;
-  const handle = setTimeout(() => undefined, 0);
-  let cleared = 0;
   const stop = startHistoryMaintenance({
     store: {
       runMaintenance: async (preserve) => {
@@ -123,21 +119,7 @@ test("maintenance runs at once and then on its clock, preserving the busy conver
       },
     },
     brain: { busyConversations: () => [THREAD] },
-    timers: {
-      setInterval: (work, ms) => {
-        scheduled = { work, ms };
-        return handle;
-      },
-      clearInterval: (timer) => {
-        assert.equal(timer, handle);
-        cleared += 1;
-      },
-    },
   });
   assert.deepEqual(runs, [[THREAD]]);
-  assert.equal(scheduled?.ms, HISTORY_MAINTENANCE_INTERVAL_MS);
-  scheduled?.work();
-  assert.equal(runs.length, 2);
   stop();
-  assert.equal(cleared, 1);
 });

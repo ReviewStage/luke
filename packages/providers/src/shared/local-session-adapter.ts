@@ -17,7 +17,7 @@ import {
   sessionMessageText,
   UNKNOWN_WORKSPACE_LABEL,
 } from "@sidecar/session";
-import { recordFromJsonLine, resolveOptions, type WireRecord } from "@sidecar/wire";
+import { recordFromJsonLine, type WireRecord } from "@sidecar/wire";
 
 export function localSessionStatus(
   status: SessionStatus,
@@ -179,7 +179,6 @@ export function sessionIdFromFileName(fileName: string, extension: string): stri
 
 export interface LocalSessionAdapterOptions {
   now?: () => number;
-  activeSessionFreshnessMs?: number;
 }
 
 /**
@@ -190,17 +189,11 @@ export interface LocalSessionAdapterOptions {
 export abstract class LocalSessionAdapter extends SessionProviderAdapterBase {
   readonly #now: () => number;
   #observations: readonly ProviderSessionObservation[] = [];
-  protected readonly activeSessionFreshnessMs: number;
+  protected readonly activeSessionFreshnessMs = OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS;
 
   protected constructor(options: LocalSessionAdapterOptions = {}) {
     super();
     this.#now = options.now ?? Date.now;
-    const resolved = resolveOptions(
-      options,
-      { activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS },
-      { nonNegative: ["activeSessionFreshnessMs"] },
-    );
-    this.activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
   }
 
   protected observationTime(): number {

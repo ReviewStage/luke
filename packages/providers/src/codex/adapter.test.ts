@@ -938,7 +938,6 @@ test("keeps a failed Codex turn at error past the freshness decay", async (t) =>
   ]);
 
   const adapter = new CodexSessionAdapter({
-    activeSessionFreshnessMs: 15 * 60 * 1000,
     codexHome,
     now: () => TEST_TIME,
   });
@@ -1015,7 +1014,6 @@ test("holds a long Codex turn at working however stale its row is", async (t) =>
   const adapter = new CodexSessionAdapter({
     codexHome,
     now: () => TEST_TIME,
-    activeSessionFreshnessMs: 15 * 60 * 1000,
   });
   const [observation] = await adapter.observe();
 
@@ -1194,7 +1192,6 @@ test("keeps stale unarchived Codex sessions unknown instead of inventing activit
   ]);
 
   const adapter = new CodexSessionAdapter({
-    activeSessionFreshnessMs: 15 * 60 * 1000,
     codexHome,
     now: () => TEST_TIME,
   });
@@ -1435,7 +1432,6 @@ test("a stop event keeps a finished turn waiting past the freshness decay", asyn
   await writeHookEvent(spool, "codex-still-waiting", "stop", TEST_TIME - 60_000);
 
   const adapter = new CodexSessionAdapter({
-    activeSessionFreshnessMs: 15 * 60 * 1000,
     codexHome,
     hookEventsDirectory: () => spool,
     now: () => TEST_TIME,
@@ -1600,7 +1596,6 @@ test("a permission hold that outlives the freshness window is still an ask", asy
   await writeHookEvent(spool, "codex-long-hold", "notification", TEST_TIME - 20 * 60 * 1000);
 
   const adapter = new CodexSessionAdapter({
-    activeSessionFreshnessMs: 15 * 60 * 1000,
     codexHome,
     hookEventsDirectory: () => spool,
     now: () => TEST_TIME,

@@ -254,7 +254,6 @@ test("keeps a fresh prompt working and a stale one unknown", async (t) => {
   const adapter = new OmpSessionAdapter({
     ompHome,
     now: () => TEST_TIME,
-    activeSessionFreshnessMs: 15 * 60 * 1000,
   });
   const observations = await adapter.observe();
   const byId = new Map(

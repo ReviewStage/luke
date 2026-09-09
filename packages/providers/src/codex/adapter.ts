@@ -234,9 +234,7 @@ export interface CodexAdapterOptions {
   codexHome?: string;
   sqliteHome?: string;
   now?: () => number;
-  activeSessionFreshnessMs?: number;
   sqlite?: SqliteModuleLoader;
-  transcriptMaximumRenderedLength?: number;
   /**
    * Where the observation hook spools its events, when hooks are on at all.
    * Read lazily like the cloud adapters' credentials, because the app decides
@@ -748,7 +746,6 @@ export class CodexSessionAdapter extends LocalSessionAdapter {
   readonly #codexHome: string;
   readonly #sqliteHome: string | undefined;
   readonly #sqlite: SqliteModuleLoader;
-  readonly #transcriptMaximumRenderedLength: number | undefined;
   readonly #transcriptPaths = new TranscriptPathCache();
   readonly #hookEventsDirectory: (() => string | undefined) | undefined;
 
@@ -757,7 +754,6 @@ export class CodexSessionAdapter extends LocalSessionAdapter {
     this.#codexHome = options.codexHome ?? defaultCodexHome();
     this.#sqliteHome = options.sqliteHome;
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
-    this.#transcriptMaximumRenderedLength = options.transcriptMaximumRenderedLength;
     this.#hookEventsDirectory = options.hookEventsDirectory;
   }
 
@@ -812,7 +808,6 @@ export class CodexSessionAdapter extends LocalSessionAdapter {
         sqliteHome: this.#sqliteHome,
         providerSessionId,
         sqlite: this.#sqlite,
-        maximumRenderedLength: this.#transcriptMaximumRenderedLength,
       }),
     );
   }

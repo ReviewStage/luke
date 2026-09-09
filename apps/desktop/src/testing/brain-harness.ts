@@ -173,9 +173,9 @@ export function brainHarness() {
     if (speak) offerReplies();
     return { record: live, speak };
   };
-  const submitMany = async (count: number) => {
+  const submitMany = async (count: number, from = 0) => {
     const runIds: string[] = [];
-    for (let index = 0; index < count; index += 1) {
+    for (let index = from; index < from + count; index += 1) {
       const result = await submit({
         submissionId: `sub-${index}`,
         question: `ask ${index}`,
