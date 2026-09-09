@@ -1,11 +1,6 @@
 import { APPLE_CALENDAR_ACCESS, CALENDAR_PRIVACY_PANE_URL } from "@sidecar/calendar/vocabulary";
 import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
-import {
-  APP_SETTING_FIELDS,
-  APP_SETTING_SCHEMA,
-  type AppSettingField,
-  SETTING_SIDE_EFFECT,
-} from "@sidecar/settings";
+import { APP_SETTING_FIELDS, APP_SETTING_SCHEMA, type AppSettingField } from "@sidecar/settings";
 import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import type { WebContents } from "electron";
@@ -16,6 +11,7 @@ import type { MediaDuckController } from "../native/media-duck";
 import type { DockPresence } from "../window/dock-presence";
 import { HOTKEY_RANK, type HotkeyRegistrar } from "../window/hotkey-registrar";
 import type { PanelManager } from "../window/panel-manager";
+import { clientSettingSideEffects } from "./settings-side-effects";
 
 /**
  * The settings rows as the desktop client answers them: each write is
@@ -113,6 +109,14 @@ export function settingsActRows(
   const { host, reporterOf, hotkeys, dock, applyLoginItem, panels, mediaDuck } = dependencies;
   const { write, refuse } = settingsWriter(dependencies);
 
+  const sideEffects = clientSettingSideEffects({
+    hotkeys,
+    dock,
+    applyLoginItem,
+    panels,
+    mediaDuck,
+  });
+
   /** The side effects this process has hands on; the host applied its own before answering. */
   async function applyClientSettingSideEffect(
     field: AppSettingField,
@@ -120,45 +124,11 @@ export function settingsActRows(
     sender: WebContents,
     waitForDeferredEffects = false,
   ): Promise<void> {
-    switch (APP_SETTING_SCHEMA[field].mainProcessSideEffect) {
-      case SETTING_SIDE_EFFECT.LOGIN_ITEM:
-        applyLoginItem(settings.stored.openAtLogin);
-        break;
-      case SETTING_SIDE_EFFECT.DOCK:
-        dock.apply(settings.stored.showInDock, panels.displayIdFor(sender));
-        break;
-      case SETTING_SIDE_EFFECT.DISPLAYS:
-        panels.setShowOnAllDisplays(settings.stored.showOnAllDisplays);
-        panels.reconcile();
-        break;
-      case SETTING_SIDE_EFFECT.FORM_FACTOR:
-        panels.setFormFactor(settings.stored.formFactor ?? APP_SETTING_SCHEMA.formFactor.default);
-        panels.positionAll();
-        break;
-      case SETTING_SIDE_EFFECT.TALK_HOTKEY:
-        hotkeys.setChosen(HOTKEY_RANK.TALK, settings.stored.voiceHotkey);
-        await hotkeys.reapply(HOTKEY_RANK.TALK);
-        break;
-      case SETTING_SIDE_EFFECT.ASK_HOTKEY:
-        hotkeys.setChosen(HOTKEY_RANK.ASK, settings.stored.askHotkey);
-        if (waitForDeferredEffects) await hotkeys.reapply(HOTKEY_RANK.ASK);
-        else void hotkeys.reapply(HOTKEY_RANK.ASK);
-        break;
-      case SETTING_SIDE_EFFECT.STOP_HOTKEY:
-        hotkeys.setChosen(HOTKEY_RANK.STOP, settings.stored.stopHotkey);
-        if (waitForDeferredEffects) await hotkeys.reapply(HOTKEY_RANK.STOP);
-        else void hotkeys.reapply(HOTKEY_RANK.STOP);
-        break;
-      case SETTING_SIDE_EFFECT.MEDIA_DUCK:
-        mediaDuck.setEnabled(settings.stored.duckOtherMedia);
-        break;
-      case SETTING_SIDE_EFFECT.VOICE_SOURCE:
-        // The host rebuilt the voice; the key follows what it now has.
-        await hotkeys.reapply(HOTKEY_RANK.TALK);
-        break;
-      default:
-        break;
-    }
+    await sideEffects[APP_SETTING_SCHEMA[field].sideEffect]({
+      settings,
+      sender,
+      waitForDeferredEffects,
+    });
   }
 
   /**

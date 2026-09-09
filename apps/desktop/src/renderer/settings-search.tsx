@@ -7,7 +7,6 @@ import {
 import {
   CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_PROVIDER_ID,
-  CREDENTIAL_SOURCE,
   VOICE_CREDENTIAL_PROVIDER,
 } from "@sidecar/credentials/vocabulary";
 import {
@@ -26,15 +25,13 @@ import {
   PROVIDER_ID,
   SUPERSET_WORKSPACE_PROVIDER_ID,
   type WorkspaceProviderId,
-  workspaceAgentModels,
 } from "@sidecar/session";
 import {
-  APP_SETTING_ID,
   APP_SETTING_SCHEMA,
-  type AppSettingId,
-  isAppSettingId,
+  type SettingsVisibility,
   settingFieldForGuideId,
   settingGuideEntries,
+  settingIdVisible,
 } from "@sidecar/settings";
 import type { AppSettingsView } from "@sidecar/settings/wire";
 import { VOICE_SOURCE } from "@sidecar/settings/wire";
@@ -62,11 +59,12 @@ import {
  * offer: the stored
  * settings come from the same guide entries the voice conversation is handed
  * — one description of each setting, so the search and Luke's own account of
- * himself cannot drift apart — and the rows that are not settings (a
- * permission, a key, a shortcut, the ways out) are declared here, gated by
- * the same conditions that draw them. A row the pages are not drawing right
- * now is not offered, because a result that leads to a page without its row
- * is a promise the page cannot keep.
+ * himself cannot drift apart — and each says for itself whether its row is
+ * drawn, so nothing here restates a condition a page branches on. The rows
+ * that are not settings (a permission, a key, a shortcut, the ways out) are
+ * declared here, gated by the same conditions that draw them. A row the pages
+ * are not drawing right now is not offered, because a result that leads to a
+ * page without its row is a promise the page cannot keep.
  *
  * Results read the way macOS System Settings reads them: grouped under the
  * page that holds them, the page's own row leading with its glyph, the rows
@@ -165,65 +163,13 @@ export interface SettingsSearchEntry {
   haystack: readonly string[];
 }
 
-/** What the pages must answer before the corpus can say what they hold. */
-export interface SettingsSearchInput {
-  settings: AppSettingsView;
-  /**
-   * Whether the voice controls stand on the Voice page: voice available and
-   * the microphone granted. Until both, that page holds only the way in.
-   */
-  voiceControlsDrawn: boolean;
-  /** Whether the Account section stands at the foot of the front page. */
-  accountDrawn: boolean;
-  /** The Superset row is drawn while installed; its agent row needs more. */
-  superset: { installed: boolean; connected: boolean; agentsOffered: boolean };
-  /** The providers currently offering projects, each drawing a Default project row. */
-  workspaceProjects: readonly { id: WorkspaceProviderId; name: string }[];
-}
-
 /**
- * Whether a stored setting's row is currently drawn, for the settings whose
- * rows are conditional. A setting absent here is always drawn on its page.
- * These restate the conditions the pages themselves branch on — the one drift
- * this module accepts, stated per setting so a changed condition has one line
- * to change here.
+ * What the pages must answer before the corpus can say what they hold. The
+ * settings' own half is the schema's: each entry says whether its row is drawn
+ * right now, judged from this same record, so nothing here restates a
+ * condition a page branches on.
  */
-const conductorAgentRowDrawn = (input: SettingsSearchInput): boolean =>
-  input.settings.credentialSources[CREDENTIAL_PROVIDER_ID.CONDUCTOR] !== CREDENTIAL_SOURCE.NONE &&
-  workspaceAgentModels(PROVIDER_ID.CONDUCTOR).length > 0;
-
-const voiceControlRowDrawn = (input: SettingsSearchInput): boolean => input.voiceControlsDrawn;
-
-const SETTING_ROW_DRAWN = {
-  // The Provider section stands only over a signed-in account.
-  [APP_SETTING_ID.VOICE_SOURCE]: (input: SettingsSearchInput) => input.accountDrawn,
-  // The voice controls exist only once there is a voice to control.
-  [APP_SETTING_ID.VOICE]: voiceControlRowDrawn,
-  [APP_SETTING_ID.VOICE_SPEED]: voiceControlRowDrawn,
-  [APP_SETTING_ID.VOICE_CAPTIONS]: voiceControlRowDrawn,
-  [APP_SETTING_ID.DUCK_OTHER_MEDIA]: voiceControlRowDrawn,
-  [APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE]: voiceControlRowDrawn,
-  [APP_SETTING_ID.ANNOUNCE_SESSIONS]: voiceControlRowDrawn,
-  // The quiet rides the calendar block, and appears with its first
-  // connection — a Google account, or this Mac's own Calendar.
-  [APP_SETTING_ID.QUIET_DURING_MEETINGS]: (input) =>
-    (input.settings.calendarSignInAvailable && input.settings.calendarAccounts.length > 0) ||
-    input.settings.appleCalendar !== undefined,
-  // The Conductor agent rows belong to a connected provider the build
-  // documents a model table for.
-  [APP_SETTING_ID.WORKSPACE_AGENT_MODEL]: conductorAgentRowDrawn,
-  [APP_SETTING_ID.WORKSPACE_AGENT_EFFORT]: conductorAgentRowDrawn,
-  // The Superset agent row stands under a connected Superset with agents.
-  [APP_SETTING_ID.SUPERSET_AGENT]: (input: SettingsSearchInput) =>
-    input.superset.connected && input.superset.agentsOffered,
-} satisfies Partial<Record<AppSettingId, (input: SettingsSearchInput) => boolean>>;
-
-/** Whether a setting's row is drawn; a setting the table leaves out always is. */
-function settingRowDrawn(id: AppSettingId, input: SettingsSearchInput): boolean {
-  if (!Object.hasOwn(SETTING_ROW_DRAWN, id)) return true;
-  // SAFETY: hasOwn narrows the id to the table's own keys.
-  return SETTING_ROW_DRAWN[id as keyof typeof SETTING_ROW_DRAWN](input);
-}
+export type SettingsSearchInput = SettingsVisibility & { settings: AppSettingsView };
 
 /**
  * The page named the way a group's head says it. `SETTINGS_PAGE_LABEL` words
@@ -389,8 +335,9 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
     // Drawn only while local Conductor is actually detected — the block stands
     // on the same repositories its row offers, so it is searchable exactly when
     // it is on screen.
-    input.workspaceProjects.some(
-      (provider) => provider.id === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
+    input.workspaceProviders.some(
+      (provider) =>
+        provider.offersProjects && provider.id === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
     )
       ? {
           id: CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
@@ -420,9 +367,9 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       : undefined,
     // One entry per provider drawing a Default project row, named for its
     // provider so the results can be told apart, each landing on its own row.
-    ...input.workspaceProjects.flatMap((provider): SettingsSearchEntry[] => {
+    ...input.workspaceProviders.flatMap((provider): SettingsSearchEntry[] => {
       const id = defaultProjectRowId(provider.id);
-      if (!id) return [];
+      if (!id || !provider.offersProjects) return [];
       return [
         {
           id,
@@ -446,12 +393,12 @@ export function settingsSearchEntries(input: SettingsSearchInput): readonly Sett
   const guided = settingGuideEntries(input.settings).flatMap((setting): SettingsSearchEntry[] => {
     const field = settingFieldForGuideId(setting.id);
     if (!field) return [];
-    if (isAppSettingId(setting.id) && !settingRowDrawn(setting.id, input)) return [];
+    if (!settingIdVisible(setting.id, input)) return [];
     return [
       {
         id: setting.id,
         label: setting.label,
-        page: APP_SETTING_SCHEMA[field].settingsPage,
+        page: APP_SETTING_SCHEMA[field].page,
         haystack: [setting.label, setting.description],
       },
     ];

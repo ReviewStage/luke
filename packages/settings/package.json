@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
+    "./testing": "./src/testing.js",
     "./wire": "./src/wire.js"
   },
   "types": "./src/index.ts",
