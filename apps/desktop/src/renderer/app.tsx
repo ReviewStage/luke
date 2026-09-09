@@ -15,18 +15,10 @@ import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTION } from "@sidecar/session/fix
 import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE, voiceHotkeyLabel } from "@sidecar/settings";
 import type { AppSettingsView, ObservedAccountCalendars } from "@sidecar/settings/wire";
 import { appSettingsView } from "@sidecar/settings/wire";
-import { MOTION_DURATION_MS, VOICE_CAPTION_MAX_HEIGHT } from "@sidecar/surface";
+import { MOTION_DURATION_MS } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import {
-  type CSSProperties,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { type AppStateSnapshot, sessionReplayBootstrap } from "#shared/messages/app-state";
 import type { DisplayDiagnostic, SupersetSignInSnapshot } from "#shared/messages/session";
@@ -52,7 +44,6 @@ import {
 } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { displaySessions, sessionFiltersFromSpoken, spokenSearchOutcome } from "./session-model";
-import { parsePixels } from "./session-motion";
 import { applySessionReplay } from "./session-replay";
 import { focusSearchField } from "./session-search";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings-panel";
@@ -66,16 +57,11 @@ import {
 } from "./settings-views";
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { SignInSlot } from "./sign-in-slot";
-import {
-  CAPTION_TONE,
-  type CaptionTone,
-  pointOverStrip,
-  type SpokenStripContent,
-  stripHoldNext,
-} from "./strip-hold";
+import { CAPTION_TONE } from "./strip-hold";
 import { SupersetSignInSlot } from "./superset-sign-in-slot";
 import { UPDATE_ROW_ACTION, updateRow } from "./update-row";
 import { appSettingsNow, appStateNow, useAppState } from "./use-app-state";
+import { useCaptionPresentation } from "./use-caption-presentation";
 import { useConnections } from "./use-connections";
 import { useErrandFlight } from "./use-errand-flight";
 import { useFeedbackComposer } from "./use-feedback-composer";
@@ -85,11 +71,10 @@ import { usePanelPresentation } from "./use-panel-presentation";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
 import { useSessionList } from "./use-session-list";
 import { useStateWithRef } from "./use-state-with-ref";
-import { useVoiceView, voiceErrorToShow, voiceNoticeToShow } from "./use-voice-view";
+import { useVoiceView } from "./use-voice-view";
 import type { AppActionCarrier } from "./voice/conversation-call";
 import {
   outputSilent,
-  VOLUME_HINT_BAND_HEIGHT,
   type VolumeHintDismissal,
   volumeHintDismissed,
   volumeHintText,
@@ -105,43 +90,6 @@ const FEEDBACK_KIND_FOR_COMPOSER = {
   [FEEDBACK_COMPOSER_KIND.FEEDBACK]: FEEDBACK_KIND.FEEDBACK,
   [FEEDBACK_COMPOSER_KIND.PROMPT]: FEEDBACK_KIND.PROMPT,
 };
-
-/**
- * Sizes the caption block to the words it currently holds. The text wraps, so
- * only a measurement can say how tall it is; the size drives the surface's
- * growth and the clip that reveals the text. The whole reply stays on screen —
- * the reserved maximum is sized past what a spoken reply wraps to, so the
- * clamp below is the window's physical bound rather than a working edge.
- * The volume hint stands in a band of its own below the block: while it is
- * drawn, the band comes off the block's maximum, so the block and the band
- * partition the reserved room instead of sharing it, and the stack never asks
- * for more height than the window holds.
- * Padding is the caption's own computed padding, not a restated number, so a
- * retune in the stylesheet grows the surface by exactly what the text is
- * inset — the one inset above the words, with whatever stands below the block
- * carrying the gap on that side.
- */
-function captionSizeStyle(
-  textHeight: number | undefined,
-  volumeHint: boolean,
-  padding: number,
-): CSSProperties {
-  if (!textHeight) return {};
-  return cssCustomProperties({
-    "--caption-size": `${captionBlockSize(textHeight, volumeHint, padding)}px`,
-  });
-}
-
-/**
- * The caption block's visible height — the `--caption-size` the clip ends the
- * element at. The strip's hover test reads it too: the element's own box runs
- * to the reserved maximum, and only this much of it is words rather than
- * desktop.
- */
-function captionBlockSize(textHeight: number, volumeHint: boolean, padding: number): number {
-  const hintBand = volumeHint ? VOLUME_HINT_BAND_HEIGHT : 0;
-  return Math.min(VOICE_CAPTION_MAX_HEIGHT - hintBand, textHeight + padding);
-}
 
 function notchStyle(display: DisplayDiagnostic): CSSProperties {
   return cssCustomProperties({
@@ -274,16 +222,6 @@ export function App(): React.JSX.Element {
   const [signInSlotElement, signInSlotHeight] = useMeasuredHeight();
   const [connectElement, connectHeight] = useMeasuredHeight();
   const [feedbackElement, feedbackHeight] = useMeasuredHeight();
-  const [captionTextElement, captionTextHeight] = useMeasuredHeight();
-  const captionElement = useRef<HTMLSpanElement>(null);
-  const [captionPadding, setCaptionPadding] = useState(0);
-  useLayoutEffect(() => {
-    const element = captionElement.current;
-    if (!element) return;
-    const style = getComputedStyle(element);
-    const next = parsePixels(style.paddingTop) + parsePixels(style.paddingBottom);
-    setCaptionPadding((previous) => (previous === next ? previous : next));
-  });
   /**
    * Which stretch of unbroken silence is on screen, advanced each time one
    * begins. A "Got it" is remembered against the stretch it answered, so it
@@ -953,114 +891,23 @@ export function App(): React.JSX.Element {
   // otherwise decides the captions does not stand in one.
   const lukeCaptions = fixtureSpeaking ? [FIXTURE_SPEAKING_CAPTION] : voiceView.lukeCaptions;
 
-  // A failed call is reported where its reply would have landed: on the
-  // caption strip, under the field or the key press that asked. It yields to
-  // live words, so it can never be drawn over a reply being spoken.
-  const voiceErrorNotice = voiceErrorToShow({
+  // The hint rides the caption it explains, and only over a silence the
+  // helper actually reported. "Got it" quiets it for this stretch of silence
+  // and any that follows too soon; the captions above it stay either way.
+  const volumeHint =
+    fixtureMuted ||
+    (outputSilent(outputAudio) &&
+      lukeCaptions !== undefined &&
+      !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
+  const caption = useCaptionPresentation({
+    lukeCaptions,
+    voiceError,
+    voiceNotice,
+    voiceTurn,
     fixtureSpeaking,
-    voice: voiceTurn,
-    error: voiceError,
+    volumeHint,
+    leavingPanel,
   });
-  // A state notice borrows the strip on the failure's own terms — leaving on
-  // the same clock, in its quieter tone — but yields only to Luke's own turn:
-  // the developer's open microphone draws nothing on the strip, and the one
-  // refusal that happens during it belongs there. The failure outranks it: a
-  // fault is the more urgent thing to read.
-  const voiceNoticeShown = voiceNoticeToShow({
-    fixtureSpeaking,
-    voice: voiceTurn,
-    notice: voiceNotice,
-  });
-  // What the caption block is being handed live this frame: Luke's words, a
-  // failure borrowing their strip, or a notice borrowing it more quietly.
-  const liveStripText = voiceErrorNotice ?? voiceNoticeShown;
-  const liveCaptionTexts =
-    lukeCaptions ?? (liveStripText === undefined ? undefined : [liveStripText]);
-  // Words is the resting tone, kept even when nothing is drawn, so a frame
-  // with no words never snapshots a coloured tone into the strip hold.
-  const captionLiveTone: CaptionTone =
-    lukeCaptions !== undefined || liveStripText === undefined
-      ? CAPTION_TONE.WORDS
-      : voiceErrorNotice !== undefined
-        ? CAPTION_TONE.ERROR
-        : CAPTION_TONE.NOTICE;
-
-  /**
-   * The pointer's hold on the strip. The words leave with the reply that
-   * earned them, and a failure leaves on its own clock — but never out from
-   * under a pointer resting on them, which is someone mid-read. The hold
-   * snapshots exactly what the strip was showing and keeps it drawn until the
-   * pointer moves away; it can start nothing, so nothing dismissed before the
-   * hover began is ever resurrected.
-   */
-  const [stripHovered, setStripHovered] = useState(false);
-  // Derived in the render, never advanced after paint: the frame that brings
-  // a new reply's content composes the hold against that same content, so a
-  // held snapshot can never paint one frame beside live words it should have
-  // yielded to. The ref carries the previous frame's answer.
-  const stripHoldRef = useRef<SpokenStripContent | undefined>(undefined);
-  const stripHold = stripHoldNext({
-    hovered: stripHovered,
-    drawn:
-      liveCaptionTexts === undefined
-        ? undefined
-        : { texts: liveCaptionTexts, tone: captionLiveTone },
-    held: stripHoldRef.current,
-  });
-  stripHoldRef.current = stripHold;
-
-  /**
-   * The strip's hoverable box, kept current for the window's move listener:
-   * the caption block's visible height — zero while no words are drawn, so an
-   * invisible block holds nothing. A ref rather than state, because the
-   * listener reads it at each move and re-subscribing per frame would be work
-   * for nobody.
-   */
-  const captionHoverHeight = useRef(0);
-  useEffect(() => {
-    // Forwarded moves arrive even while the window is click-through, which is
-    // what lets a pointer resting on words that take no pointer be seen here
-    // at all.
-    const handleMove = (event: MouseEvent) => {
-      const caption = captionElement.current;
-      setStripHovered(
-        pointOverStrip({
-          x: event.clientX,
-          y: event.clientY,
-          caption:
-            caption && captionHoverHeight.current > 0
-              ? {
-                  box: caption.getBoundingClientRect(),
-                  visibleHeight: captionHoverHeight.current,
-                }
-              : undefined,
-        }),
-      );
-    };
-    const handleLeave = () => setStripHovered(false);
-    window.addEventListener("mousemove", handleMove, { passive: true });
-    document.documentElement.addEventListener("mouseleave", handleLeave);
-    return () => {
-      window.removeEventListener("mousemove", handleMove);
-      document.documentElement.removeEventListener("mouseleave", handleLeave);
-    };
-  }, []);
-
-  /**
-   * The measured caption height the shape spends, held through a collapse
-   * out of the panel. The compact width lands at the flip and re-wraps the
-   * words while they are still riding down at the panel's foot, and a
-   * re-measure landing mid-ride would open the clip and retarget the surface
-   * past room nothing has made yet. The collapse travels on the panel's
-   * numbers; the compact re-measure lands when the shape has settled, and
-   * grows it there the way words arriving at rest do.
-   */
-  const heldCaptionHeight = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    if (leavingPanel) return;
-    heldCaptionHeight.current = captionTextHeight;
-  });
-  const shownCaptionHeight = leavingPanel ? heldCaptionHeight.current : captionTextHeight;
 
   /** The capsule is a button: pressing it opens the panel, or closes it again. */
   const handleCapsulePress = useCallback(
@@ -1355,31 +1202,6 @@ export function App(): React.JSX.Element {
   const shownAskHotkey = state.hotkeys.ask;
   const shownStopHotkey = state.hotkeys.stop;
   const hasAudioSignal = fixtureSpeaking || voiceTurn !== undefined;
-  const outputIsSilent = outputSilent(outputAudio);
-  // Live words win; the held snapshot only ever finishes being read. A held
-  // caption is drawn exactly as it was, its tone included.
-  const heldCaptionTexts = liveCaptionTexts === undefined ? stripHold?.texts : undefined;
-  const captionTexts = liveCaptionTexts ?? heldCaptionTexts;
-  const captionTone: CaptionTone =
-    liveCaptionTexts !== undefined ? captionLiveTone : (stripHold?.tone ?? CAPTION_TONE.WORDS);
-  // Two responses spoken back-to-back stack as two captions: the settled one
-  // above, the one still arriving below, in the always-mounted slot the lone
-  // caption also uses.
-  const settledCaption = captionTexts && captionTexts.length > 1 ? captionTexts.at(-2) : undefined;
-  const liveCaption = captionTexts?.at(-1);
-  // The hint rides the caption it explains, and only over a silence the
-  // helper actually reported. "Got it" quiets it for this stretch of silence
-  // and any that follows too soon; the captions above it stay either way.
-  const volumeHint =
-    fixtureMuted ||
-    (outputIsSilent &&
-      lukeCaptions !== undefined &&
-      !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
-  // What the hover test may match this frame, now that both are known.
-  captionHoverHeight.current =
-    captionTexts === undefined || captionTextHeight === undefined
-      ? 0
-      : captionBlockSize(captionTextHeight, volumeHint, captionPadding);
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
   const slotOpen = presentation === PANEL_PRESENTATION.SLOT;
   const feedbackOpen = presentation === PANEL_PRESENTATION.FEEDBACK;
@@ -1477,7 +1299,7 @@ export function App(): React.JSX.Element {
       // Whether there are words to draw under the shape — a caption or a
       // failure borrowing its strip — so the surface can grow the room they
       // are drawn in.
-      data-caption={String(Boolean(captionTexts))}
+      data-caption={String(Boolean(caption.texts))}
       // Whether those words need the volume hint under them, which stands in
       // a band of its own below the caption block.
       data-volume-hint={String(volumeHint)}
@@ -1504,7 +1326,7 @@ export function App(): React.JSX.Element {
               : slotHeight,
           feedbackHeight,
         ),
-        ...captionSizeStyle(shownCaptionHeight, volumeHint, captionPadding),
+        ...caption.style,
       }}
     >
       {/* Capsule, peek, slot and panel are all this one shape at different
@@ -1716,15 +1538,15 @@ export function App(): React.JSX.Element {
           all. */}
       <span
         className="voice-caption"
-        ref={captionElement}
-        data-tone={captionTone}
-        {...(captionTone !== CAPTION_TONE.WORDS ? { role: "status" } : { "aria-hidden": true })}
+        ref={caption.ref}
+        data-tone={caption.tone}
+        {...(caption.tone !== CAPTION_TONE.WORDS ? { role: "status" } : { "aria-hidden": true })}
       >
-        <span className="voice-caption-stack" ref={captionTextElement}>
-          {settledCaption === undefined ? null : (
-            <MarkdownMessage className="voice-caption-text" words={settledCaption} />
+        <span className="voice-caption-stack" ref={caption.textRef}>
+          {caption.settled === undefined ? null : (
+            <MarkdownMessage className="voice-caption-text" words={caption.settled} />
           )}
-          <MarkdownMessage className="voice-caption-text" words={liveCaption ?? ""} />
+          <MarkdownMessage className="voice-caption-text" words={caption.live ?? ""} />
         </span>
       </span>
 
