@@ -40,6 +40,38 @@ test("an idle developer call retires itself after five minutes", async (t) => {
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 });
 
+test("a press let go of before its device arrived still lets the call retire", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const context = harness();
+  await context.session.connect();
+
+  t.mock.timers.tick(60_000);
+  context.session.beginTurn();
+  context.session.endTurn(false);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  assert.equal(context.session.turnPending, false);
+
+  t.mock.timers.tick(IDLE_CALL_RETIRE_MS - 60_000);
+  assert.equal(context.session.status, REALTIME_STATUS.IDLE);
+  assert.equal(context.session.isConnected, false);
+});
+
+test("a press still opening its device at the fire starts the countdown over", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const context = harness();
+  await context.session.connect();
+
+  t.mock.timers.tick(IDLE_CALL_RETIRE_MS - 1);
+  context.gateMicrophone();
+  context.session.beginTurn();
+  t.mock.timers.tick(1);
+  assert.equal(context.session.isConnected, true);
+
+  context.session.endTurn(false);
+  t.mock.timers.tick(IDLE_CALL_RETIRE_MS);
+  assert.equal(context.session.status, REALTIME_STATUS.IDLE);
+});
+
 test("a press during the idle countdown keeps the call", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const context = harness();

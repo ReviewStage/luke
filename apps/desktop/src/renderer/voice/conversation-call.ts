@@ -221,7 +221,6 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
       // under way is cut off now, exactly as the stop key cuts one, and the
       // turn itself opens when the device arrives.
       this.stopSpeaking();
-      this.#clearIdleTimer();
       this.#pendingTurn = true;
       this.#acquireMicrophone();
       return;
@@ -429,17 +428,18 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
     }
   }
 
+  /**
+   * The countdown is not cleared by a press, only re-read at the fire: a
+   * press let go of before its device arrived leaves the status at READY and
+   * would otherwise stand the call up until the provider's cap. A press or
+   * reply still under way at the fire starts the countdown over instead.
+   */
   #armIdleTimer(): void {
     this.#idleTimer ??= setTimeout(() => {
       this.#idleTimer = undefined;
-      // Re-read at the fire: a press or a reply since the arm makes the
-      // countdown moot.
-      if (
-        !this.isConnected ||
-        this.status !== REALTIME_STATUS.READY ||
-        this.#pendingTurn ||
-        this.replying
-      ) {
+      if (!this.isConnected || this.status !== REALTIME_STATUS.READY) return;
+      if (this.#pendingTurn || this.replying) {
+        this.#armIdleTimer();
         return;
       }
       this.endCall();
