@@ -1,36 +1,33 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { OMISSION_MARKER } from "@sidecar/session";
-import type { ParsedJsonObject } from "@sidecar/wire/testing";
+import { dispatchRead, OMISSION_MARKER } from "@sidecar/session";
+import { type ParsedJsonObject, temporaryDirectory } from "@sidecar/wire/testing";
 import { boundedTranscript, TRANSCRIPT_BOUNDS } from "../shared/jsonl-transcript.js";
 import { readTail, tailRecords } from "../shared/local-files.js";
-import { OmpSessionAdapter } from "./adapter.js";
+import { ompPlugin } from "./index.js";
 import { OMP_SESSIONS_DIRECTORY } from "./records.js";
 import { linesFromOmpRecord, ompTranscriptFilePath } from "./transcript.js";
 
 const SESSION_ID = "01a0540a-c238-7264-80d8-546b0c7be0d8";
+const SESSION_FILE_NAME = `2026-08-20T11-58-00-000Z_${SESSION_ID}.jsonl`;
 
-/** Reads through the adapter, which is the only caller a rendering has. */
+/** Reads the way the brain's own ask does, through the plugin's read seam. */
 async function readOmpSessionTranscript(request: {
   ompHome: string;
   providerSessionId: string;
 }): Promise<string | undefined> {
-  const result = await new OmpSessionAdapter({ ompHome: request.ompHome }).readTranscript(
+  const result = await dispatchRead(
+    ompPlugin({ ompHome: request.ompHome }),
+    "transcript",
     request.providerSessionId,
   );
   return result.status === "accepted" ? result.transcript : undefined;
 }
-const SESSION_FILE_NAME = `2026-08-20T11-58-00-000Z_${SESSION_ID}.jsonl`;
 
-async function temporaryOmpHome(t: TestContext): Promise<string> {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-omp-transcript-"));
-  t.after(async () => {
-    await fs.rm(directory, { recursive: true, force: true });
-  });
-  return directory;
+function temporaryOmpHome(t: TestContext): Promise<string> {
+  return temporaryDirectory(t, "luke-omp-transcript-");
 }
 
 async function writeSessionFile(
@@ -43,6 +40,16 @@ async function writeSessionFile(
     path.join(projectDirectory, SESSION_FILE_NAME),
     `${records.map((record) => JSON.stringify(record)).join("\n")}\n`,
   );
+}
+
+/** One stored message record, which is how OMP writes every turn. */
+function message(
+  id: string,
+  parentId: string | null,
+  timestamp: string,
+  words: ParsedJsonObject,
+): ParsedJsonObject {
+  return { type: "message", id, parentId, timestamp, message: words };
 }
 
 const CONVERSATION: readonly ParsedJsonObject[] = [
@@ -60,89 +67,53 @@ const CONVERSATION: readonly ParsedJsonObject[] = [
     timestamp: "2026-08-20T11:58:00.000Z",
     cwd: "/Users/test/luke",
   },
-  {
-    type: "message",
-    id: "m1",
-    parentId: null,
-    timestamp: "2026-08-20T11:58:00.000Z",
-    message: {
-      role: "user",
-      content: [{ type: "text", text: "Fix the flaky updater test" }],
-    },
-  },
-  {
-    type: "message",
-    id: "m2",
-    parentId: "m1",
-    timestamp: "2026-08-20T11:58:10.000Z",
-    message: {
-      role: "assistant",
-      content: [
-        { type: "thinking", thinking: "hidden" },
-        { type: "text", text: "Looking at the updater suite." },
-        {
-          type: "toolCall",
-          id: "call-1",
-          name: "bash",
-          arguments: { command: "pnpm test updater" },
-          intent: "pnpm test updater",
-        },
-      ],
-    },
-  },
-  {
-    type: "message",
-    id: "m3",
-    parentId: "m2",
-    timestamp: "2026-08-20T11:58:20.000Z",
-    message: {
-      role: "toolResult",
-      toolCallId: "call-1",
-      toolName: "bash",
-      content: [{ type: "text", text: "1 failing: restarts twice" }],
-      isError: false,
-    },
-  },
-  {
-    type: "message",
-    id: "m4",
-    parentId: "m3",
-    timestamp: "2026-08-20T11:58:30.000Z",
-    message: {
-      role: "assistant",
-      content: [
-        {
-          type: "toolCall",
-          id: "call-2",
-          name: "edit",
-          arguments: { path: "/Users/test/luke/updater.ts" },
-        },
-      ],
-    },
-  },
-  {
-    type: "message",
-    id: "m5",
-    parentId: "m4",
-    timestamp: "2026-08-20T11:58:40.000Z",
-    message: {
-      role: "toolResult",
-      toolCallId: "call-2",
-      toolName: "edit",
-      content: [{ type: "text", text: "Quota exceeded" }],
-      isError: true,
-    },
-  },
-  {
-    type: "message",
-    id: "m6",
-    parentId: "m5",
-    timestamp: "2026-08-20T11:59:00.000Z",
-    message: {
-      role: "assistant",
-      content: [{ type: "text", text: "Fixed; the test passes now." }],
-    },
-  },
+  message("m1", null, "2026-08-20T11:58:00.000Z", {
+    role: "user",
+    content: [{ type: "text", text: "Fix the flaky updater test" }],
+  }),
+  message("m2", "m1", "2026-08-20T11:58:10.000Z", {
+    role: "assistant",
+    content: [
+      { type: "thinking", thinking: "hidden" },
+      { type: "text", text: "Looking at the updater suite." },
+      {
+        type: "toolCall",
+        id: "call-1",
+        name: "bash",
+        arguments: { command: "pnpm test updater" },
+        intent: "pnpm test updater",
+      },
+    ],
+  }),
+  message("m3", "m2", "2026-08-20T11:58:20.000Z", {
+    role: "toolResult",
+    toolCallId: "call-1",
+    toolName: "bash",
+    content: [{ type: "text", text: "1 failing: restarts twice" }],
+    isError: false,
+  }),
+  message("m4", "m3", "2026-08-20T11:58:30.000Z", {
+    role: "assistant",
+    content: [
+      {
+        type: "toolCall",
+        id: "call-2",
+        name: "edit",
+        arguments: { path: "/Users/test/luke/updater.ts" },
+      },
+    ],
+  }),
+  message("m5", "m4", "2026-08-20T11:58:40.000Z", {
+    role: "toolResult",
+    toolCallId: "call-2",
+    toolName: "edit",
+    content: [{ type: "text", text: "Quota exceeded" }],
+    isError: true,
+  }),
+  message("m6", "m5", "2026-08-20T11:59:00.000Z", {
+    role: "assistant",
+    content: [{ type: "text", text: "Fixed; the test passes now." }],
+  }),
 ];
 
 test("renders a conversation into bounded lines", async (t) => {
@@ -197,32 +168,21 @@ test("renders a string prompt, a turn's recorded error, and no synthetic words",
       timestamp: "2026-08-20T11:58:00.000Z",
       cwd: "/Users/test/luke",
     },
-    {
-      type: "message",
-      id: "m1",
-      parentId: null,
-      timestamp: "2026-08-20T11:58:00.000Z",
-      message: { role: "user", content: "Fix the flaky updater test" },
-    },
-    {
-      type: "message",
-      id: "m2",
-      parentId: "m1",
-      timestamp: "2026-08-20T11:58:10.000Z",
-      message: {
-        role: "assistant",
-        content: [{ type: "text", text: "Looking." }],
-        stopReason: "error",
-        errorMessage: "Provider rejected the request.",
-      },
-    },
-    {
-      type: "message",
-      id: "m3",
-      parentId: "m2",
-      timestamp: "2026-08-20T11:58:20.000Z",
-      message: { role: "user", content: "continue", synthetic: true },
-    },
+    message("m1", null, "2026-08-20T11:58:00.000Z", {
+      role: "user",
+      content: "Fix the flaky updater test",
+    }),
+    message("m2", "m1", "2026-08-20T11:58:10.000Z", {
+      role: "assistant",
+      content: [{ type: "text", text: "Looking." }],
+      stopReason: "error",
+      errorMessage: "Provider rejected the request.",
+    }),
+    message("m3", "m2", "2026-08-20T11:58:20.000Z", {
+      role: "user",
+      content: "continue",
+      synthetic: true,
+    }),
   ]);
 
   const rendered = await readOmpSessionTranscript({
@@ -257,25 +217,12 @@ test("refuses an id shaped like a path and answers nothing for an unknown one", 
   );
 });
 
-test("the adapter reads the same rendering on ask", async (t) => {
-  const ompHome = await temporaryOmpHome(t);
-  await writeSessionFile(ompHome, CONVERSATION);
-
-  const adapter = new OmpSessionAdapter({ ompHome });
-  const rendered = await adapter.readTranscript(SESSION_ID);
-
-  assert.equal(rendered.status, "accepted");
-  if (rendered.status === "accepted") {
-    assert.ok(rendered.transcript.includes("Developer: Fix the flaky updater test"));
-  }
-});
-
 test("reads what a recording gained since the cursor an earlier read minted", async (t) => {
   const ompHome = await temporaryOmpHome(t);
   await writeSessionFile(ompHome, CONVERSATION.slice(0, 3));
-  const adapter = new OmpSessionAdapter({ ompHome });
+  const plugin = ompPlugin({ ompHome });
 
-  const first = await adapter.readTranscriptSince(SESSION_ID);
+  const first = await dispatchRead(plugin, "transcriptSince", SESSION_ID);
   assert.equal(first.status, "accepted");
   if (first.status !== "accepted") return;
   assert.equal(first.text, "Developer: Fix the flaky updater test");
@@ -283,19 +230,15 @@ test("reads what a recording gained since the cursor an earlier read minted", as
 
   await fs.appendFile(
     path.join(ompHome, OMP_SESSIONS_DIRECTORY, "luke", SESSION_FILE_NAME),
-    `${JSON.stringify({
-      type: "message",
-      id: "m9",
-      parentId: "m1",
-      timestamp: "2026-08-20T11:59:00.000Z",
-      message: {
+    `${JSON.stringify(
+      message("m9", "m1", "2026-08-20T11:59:00.000Z", {
         role: "assistant",
         content: [{ type: "text", text: "Green again." }],
-      },
-    })}\n`,
+      }),
+    )}\n`,
   );
 
-  const second = await adapter.readTranscriptSince(SESSION_ID, first.cursor);
+  const second = await dispatchRead(plugin, "transcriptSince", SESSION_ID, first.cursor);
   assert.equal(second.status, "accepted");
   if (second.status !== "accepted") return;
   assert.equal(second.text, "OMP: Green again.");

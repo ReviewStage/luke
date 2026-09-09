@@ -3,8 +3,6 @@ import {
   maximumSessionTitleLength,
   PROVIDER_ID,
   type ProviderSessionObservation,
-  type ProviderTranscriptResult,
-  type ProviderTranscriptSinceResult,
   SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type SessionDetail,
@@ -13,7 +11,6 @@ import {
 } from "@sidecar/session";
 import { isRecord, isWireString, oneLine, text, type WireRecord } from "@sidecar/wire";
 import { localSessionStatus } from "../shared/hook-status.js";
-import { type JsonlTranscriptReader, jsonlTranscriptReader } from "../shared/jsonl-transcript.js";
 import {
   discoverSessionFiles,
   LOCAL_ADAPTER_DEFAULTS,
@@ -25,9 +22,7 @@ import {
   tailRecords,
   workspaceLabel,
 } from "../shared/local-files.js";
-import { LocalFileSessionAdapter } from "../shared/local-session-adapter.js";
 import {
-  defaultOmpHome,
   OMP_CONTENT_TYPE,
   OMP_CUSTOM_TYPE,
   OMP_EXIT_KIND,
@@ -40,12 +35,8 @@ import {
   ompMessageText,
   sessionIdFromOmpFileName,
 } from "./records.js";
-import { linesFromOmpRecord, ompTranscriptFilePath } from "./transcript.js";
 
-const OMP_PROVIDER_ID = PROVIDER_ID.OMP;
-const OMP_PROVIDER_NAME = "OMP";
-
-const OMP_ADAPTER_DEFAULTS = {
+const OMP_OBSERVATION_DEFAULTS = {
   MAXIMUM_PROJECT_DIRECTORIES: 200,
   MAXIMUM_ACTIVITY_LENGTH: 80,
   /** Title slot plus session header live at the start of every recording. */
@@ -53,14 +44,9 @@ const OMP_ADAPTER_DEFAULTS = {
 } as const;
 
 export const OMP_PROVIDER: SessionProvider = {
-  id: OMP_PROVIDER_ID,
-  displayName: OMP_PROVIDER_NAME,
+  id: PROVIDER_ID.OMP,
+  displayName: "OMP",
 };
-
-export interface OmpAdapterOptions {
-  ompHome?: string;
-  now?: () => number;
-}
 
 function timestampMsFrom(record: WireRecord): number | undefined {
   const timestamp = record.timestamp;
@@ -86,8 +72,8 @@ function activityFromOpenTools(open: ReadonlyMap<string, OpenTool>): string | un
   let last: OpenTool | undefined;
   for (const tool of open.values()) last = tool;
   if (!last) return undefined;
-  const intent = oneLine(last.intent, OMP_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH);
-  const name = oneLine(last.name, OMP_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH);
+  const intent = oneLine(last.intent, OMP_OBSERVATION_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH);
+  const name = oneLine(last.name, OMP_OBSERVATION_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH);
   if (name && intent) return `${name}: ${intent}`;
   return intent ?? name;
 }
@@ -195,7 +181,7 @@ function parseTail(tail: string): Omit<ParsedOmpSession, "cwd" | "title"> {
     parsed.failure = parsed.turnFailed
       ? oneLine(
           text(message.errorMessage) ?? ompMessageText(message),
-          OMP_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH,
+          OMP_OBSERVATION_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH,
         )
       : undefined;
     for (const block of ompContentBlocks(message)) {
@@ -214,7 +200,7 @@ function parseTail(tail: string): Omit<ParsedOmpSession, "cwd" | "title"> {
   return parsed;
 }
 
-export function parseOmpSession(head: string, tail: string): ParsedOmpSession {
+function parseOmpSession(head: string, tail: string): ParsedOmpSession {
   return { ...parseHead(head), ...parseTail(tail) };
 }
 
@@ -258,7 +244,8 @@ function detailFromParsed(parsed: ParsedOmpSession, workspace: string): SessionD
     ...(parsed.failure ? { error: parsed.failure } : undefined),
   };
 }
-interface OmpSessionFileCandidate extends SessionFileCandidate {
+
+export interface OmpSessionFileCandidate extends SessionFileCandidate {
   projectDirectory: string;
 }
 
@@ -292,74 +279,42 @@ async function sessionFilesIn(
   );
 }
 
-/**
- * Observes the OMP sessions on this machine from the JSONL recordings the
- * CLI already writes for itself. Observation is read-only; OMP documents no
- * way to message or open a live session from outside its own process.
- */
-export class OmpSessionAdapter extends LocalFileSessionAdapter<
-  OmpSessionFileCandidate,
-  ParsedOmpSession
-> {
-  readonly provider = OMP_PROVIDER;
+export function discoverOmpSessions(ompHome: string): Promise<OmpSessionFileCandidate[]> {
+  return discoverSessionFiles({
+    projectsDirectory: path.join(ompHome, OMP_SESSIONS_DIRECTORY),
+    maximumProjectDirectories: OMP_OBSERVATION_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
+    sessionFilesIn,
+  });
+}
 
-  readonly #ompHome: string;
-  readonly #transcripts: JsonlTranscriptReader;
+export async function parseOmpSessionFile(
+  candidate: OmpSessionFileCandidate,
+): Promise<ParsedOmpSession> {
+  const [head, tail] = await Promise.all([
+    readHead(candidate.filePath, OMP_OBSERVATION_DEFAULTS.READ_HEAD_BYTES),
+    readTail(candidate.filePath, LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES),
+  ]);
+  return parseOmpSession(head, tail);
+}
 
-  constructor(options: OmpAdapterOptions = {}) {
-    super(options);
-    this.#ompHome = options.ompHome ?? defaultOmpHome();
-    this.#transcripts = jsonlTranscriptReader({
-      locate: (providerSessionId) => ompTranscriptFilePath(this.#ompHome, providerSessionId),
-      lines: linesFromOmpRecord,
-    });
-  }
-
-  protected discover(): Promise<OmpSessionFileCandidate[]> {
-    return discoverSessionFiles({
-      projectsDirectory: path.join(this.#ompHome, OMP_SESSIONS_DIRECTORY),
-      maximumProjectDirectories: OMP_ADAPTER_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
-      sessionFilesIn,
-    });
-  }
-
-  protected async parse(candidate: OmpSessionFileCandidate): Promise<ParsedOmpSession> {
-    const [head, tail] = await Promise.all([
-      readHead(candidate.filePath, OMP_ADAPTER_DEFAULTS.READ_HEAD_BYTES),
-      readTail(candidate.filePath, LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES),
-    ]);
-    return parseOmpSession(head, tail);
-  }
-
-  protected observation(
-    candidate: OmpSessionFileCandidate,
-    parsed: ParsedOmpSession,
-    now: number,
-    activeSessionFreshnessMs: number,
-  ): ProviderSessionObservation {
-    const workspace = workspaceLabel(parsed.cwd);
-    const conversationAt = parsed.timestampMs ?? candidate.mtimeMs;
-    const status = statusFromParsed(parsed, conversationAt, now, activeSessionFreshnessMs);
-    return {
-      providerSessionId: candidate.providerSessionId,
-      title: parsed.title ?? workspace,
-      status,
-      ...(status === SESSION_STATUS.COMPLETE && parsed.sessionClosed === true
-        ? { completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED }
-        : undefined),
-      lastActivityAt: conversationAt,
-      detail: detailFromParsed(parsed, workspace),
-    };
-  }
-
-  override readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult> {
-    return this.#transcripts.read(providerSessionId);
-  }
-
-  override readTranscriptSince(
-    providerSessionId: string,
-    cursor?: string,
-  ): Promise<ProviderTranscriptSinceResult> {
-    return this.#transcripts.readSince(providerSessionId, cursor);
-  }
+export function ompObservation(input: {
+  readonly candidate: OmpSessionFileCandidate;
+  readonly parsed: ParsedOmpSession;
+  readonly now: number;
+  readonly activeSessionFreshnessMs: number;
+}): ProviderSessionObservation {
+  const { candidate, parsed, now, activeSessionFreshnessMs } = input;
+  const workspace = workspaceLabel(parsed.cwd);
+  const conversationAt = parsed.timestampMs ?? candidate.mtimeMs;
+  const status = statusFromParsed(parsed, conversationAt, now, activeSessionFreshnessMs);
+  return {
+    providerSessionId: candidate.providerSessionId,
+    title: parsed.title ?? workspace,
+    status,
+    ...(status === SESSION_STATUS.COMPLETE && parsed.sessionClosed === true
+      ? { completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED }
+      : undefined),
+    lastActivityAt: conversationAt,
+    detail: detailFromParsed(parsed, workspace),
+  };
 }
