@@ -22,9 +22,10 @@ export interface MouthToolDefinition {
 /**
  * The tool the voice carries, and the only one: everything about the
  * developer's agents, settings, issues, or anything to be done is asked of
- * the brain, whose answer the voice says whole. Its one argument is the
- * developer's own words, so the brain hears the ask as it was made rather than
- * the voice's paraphrase of it.
+ * the brain, whose answer the voice says word for word, because that answer
+ * is also the line Conversation keeps. Its one argument is the developer's
+ * own words, so the brain hears the ask as it was made rather than the
+ * voice's paraphrase of it.
  */
 export const ASK_BRAIN_TOOL = {
   type: "function",
@@ -33,7 +34,8 @@ export const ASK_BRAIN_TOOL = {
     "Ask Luke's brain — the part of Luke that reads the developer's coding agents, holds the " +
     "roster, settings, issues, and memory, and carries out acts — anything about the developer's " +
     "agents, settings, issues, or anything to do. Pass the developer's words as they said them. " +
-    "Say its answer whole, in your own voice.",
+    "Say its answer word for word, exactly as written, without rephrasing, shortening, or adding " +
+    "to it.",
   parameters: {
     type: "object",
     properties: {
@@ -54,15 +56,17 @@ export function mouthToolDefinitions(): readonly MouthToolDefinition[] {
 /**
  * The voice's standing instructions. It is the mouth and not the mind: it
  * knows nothing of the roster, the guide, or the history, so anything about
- * the developer's work goes to the brain, and what comes back is said as
- * given. Small talk it may answer itself.
+ * the developer's work goes to the brain, and what comes back is said word
+ * for word, since the brain's text is also what Conversation records. Small
+ * talk it may answer itself.
  */
 const REALTIME_INSTRUCTION_HEAD: readonly string[] = [
   LUKE_PERSONA,
   "",
   "You are the voice.",
   `- For anything about the developer's agents, settings, issues, or anything to do, call ${ASK_BRAIN_TOOL.name}`,
-  "  with their words, and say its answer whole in your own voice.",
+  "  with their words, then say its answer word for word, exactly as written: do not rephrase,",
+  "  shorten, summarize, or add to it. The persona shapes only how you sound, never the words.",
   '- Before calling it, say a brief acknowledgement of about five words, in the spirit of "Let me',
   '  check", varying the wording so it is not the same phrase every time.',
   "- Small talk you may answer yourself.",
