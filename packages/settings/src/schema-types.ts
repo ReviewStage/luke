@@ -158,7 +158,7 @@ export interface SettingOption {
  */
 export interface SettingControl<Value> {
   /** The token the control draws for the value stored now. */
-  value: (stored: Value, view: SettingsVisibility) => string;
+  value: (stored: Value) => string;
   options: (view: SettingsVisibility) => readonly SettingOption[];
   /** What one of those tokens means as a stored value; nothing means cleared. */
   stored: (token: string, view: SettingsVisibility) => Value | undefined;

@@ -37,12 +37,12 @@ export function optional<Value extends UnparsedWireValue>(
   return guard(value) ? valid(value) : invalid(undefined);
 }
 
-export function boolean(defaultValue: boolean) {
+function boolean(defaultValue: boolean) {
   return (value: UnparsedWireValue): SettingGuardResult<boolean> =>
     value === true || value === false ? valid(value) : invalid(defaultValue);
 }
 
-export function hotkey(value: UnparsedWireValue): SettingGuardResult<string | undefined> {
+function hotkey(value: UnparsedWireValue): SettingGuardResult<string | undefined> {
   if (value === undefined) return valid(undefined);
   if (!isWireString(value)) return invalid(undefined);
   // A deletion is a choice the parser cannot spell: no chord at all, with no
@@ -91,10 +91,11 @@ export function keyedSetting<
   Field extends string,
   Value,
   Id extends AppSettingId,
+  Default extends Value,
   Entry extends SettingEntryDefinition<never>,
 >(
-  entry: AppSettingSchemaEntry<Field, Value, Id, undefined & Value> & { entry: Entry },
-): AppSettingSchemaEntry<Field, Value, Id, undefined & Value> & { entry: Entry } {
+  entry: AppSettingSchemaEntry<Field, Value, Id, Default> & { entry: Entry },
+): AppSettingSchemaEntry<Field, Value, Id, Default> & { entry: Entry } {
   return entry;
 }
 
@@ -128,7 +129,7 @@ export function toggleSetting<Field extends string, Id extends AppSettingId>(spe
     page: spec.page,
     section: spec.section ?? SETTING_SECTION.MAIN,
     order: spec.order,
-    ...(spec.resetScope !== undefined ? { resetScope: spec.resetScope } : undefined),
+    resetScope: spec.resetScope,
     sideEffect: spec.sideEffect,
     rows: SETTING_ROWS.SCHEMA,
     ids: [spec.id],
@@ -142,7 +143,7 @@ export function toggleSetting<Field extends string, Id extends AppSettingId>(spe
       adjustable: spec.adjustable,
       manual: spec.manual,
     }),
-    ...(spec.visible !== undefined ? { visible: spec.visible } : undefined),
+    visible: spec.visible,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
     analytics: { value: toggleAnalytics },
   };
@@ -186,8 +187,13 @@ export function choiceSetting<
   resetScope?: SettingsResetScope;
   rows?: typeof SETTING_ROWS.SCHEMA | typeof SETTING_ROWS.BESPOKE;
   adjustable: boolean;
-  /** The guard, for a value set a plain membership test cannot spell. */
-  guard?: (value: UnparsedWireValue) => SettingGuardResult<Value | undefined>;
+  /**
+   * The vocabulary's own guard for its own values. Passed rather than built
+   * from `values`, because the package that names a value set is the package
+   * that says what one is, and a membership test rebuilt here would be a
+   * second reading of it.
+   */
+  guard: (value: UnparsedWireValue) => SettingGuardResult<Value | undefined>;
   visible?: (view: SettingsVisibility) => boolean;
   /** A control whose options are observed, or whose empty token is its own. */
   control?: SettingControl<Value | undefined>;
@@ -203,10 +209,14 @@ export function choiceSetting<
     // SAFETY: The field's own guard is what put this value in the store.
     return value as Value;
   };
-  const said = (value: Value | undefined): string =>
-    value === undefined
-      ? (spec.absent ?? (spec.default === undefined ? "" : spec.say(spec.default)))
-      : spec.say(value);
+  // A choice with a default says the default where nothing is stored; one with
+  // no default needs a word for nothing, and `schema.test.ts` refuses an entry
+  // that would read as blank rather than letting it draw one.
+  const said = (value: Value | undefined): string => {
+    if (value !== undefined) return spec.say(value);
+    if (spec.absent !== undefined) return spec.absent;
+    return spec.default === undefined ? "" : spec.say(spec.default);
+  };
   const control: SettingControl<Value | undefined> = spec.control ?? {
     value: (stored) => said(stored),
     options: (): readonly SettingOption[] =>
@@ -216,16 +226,11 @@ export function choiceSetting<
   return {
     field: spec.field,
     default: spec.default,
-    guard:
-      spec.guard ??
-      ((value: UnparsedWireValue) =>
-        optional(value, (candidate): candidate is Value =>
-          spec.values.some((known) => known === candidate),
-        )),
+    guard: spec.guard,
     page: spec.page,
     section: spec.section ?? SETTING_SECTION.MAIN,
     order: spec.order,
-    ...(spec.resetScope !== undefined ? { resetScope: spec.resetScope } : undefined),
+    resetScope: spec.resetScope,
     sideEffect: spec.sideEffect,
     rows: spec.rows ?? SETTING_ROWS.SCHEMA,
     ids: [spec.id],
@@ -240,11 +245,11 @@ export function choiceSetting<
       adjustable: spec.adjustable,
       manual: spec.manual,
     }),
-    ...(spec.visible !== undefined ? { visible: spec.visible } : undefined),
+    visible: spec.visible,
     control,
     // A choice no spoken ask may change needs no word to read back: the
     // refusal Luke voices is the whole of what it offers.
-    ...(spec.adjustable ? { spokenValue: (value: string) => spoken.get(value) } : undefined),
+    spokenValue: spec.adjustable ? (value: string) => spoken.get(value) : undefined,
     analytics: { value: choiceAnalytics },
   };
 }

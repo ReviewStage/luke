@@ -105,6 +105,11 @@ test("every field's own declaration answers for everything read of it", () => {
 
     const built = entriesFor(field);
     for (const guideEntry of built) {
+      // A row has to say what it is set to and what its default is; a choice
+      // with no default and no word for nothing would read as blank.
+      assert.notEqual(guideEntry.value, "", guideEntry.id);
+      assert.notEqual(guideEntry.defaultValue, "", guideEntry.id);
+
       // SAFETY: The built entry's id is checked against the field's own list.
       assert.ok(entry.ids.includes(guideEntry.id as never), `${field} builds ${guideEntry.id}`);
 
@@ -133,7 +138,7 @@ test("every field's own declaration answers for everything read of it", () => {
         // SAFETY: The control belongs to this entry, so its stored type is this default's.
         const stored = entry.default as never;
         assert.deepEqual(
-          control.stored(control.value(stored, view), view),
+          control.stored(control.value(stored), view),
           entry.default,
           `${field} reads its own token back`,
         );

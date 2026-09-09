@@ -28,12 +28,11 @@ import {
 } from "@sidecar/session";
 import {
   APP_SETTING_SCHEMA,
-  type SettingsVisibility,
+  type SettingsRowsInput,
   settingFieldForGuideId,
   settingGuideEntries,
   settingIdVisible,
 } from "@sidecar/settings";
-import type { AppSettingsView } from "@sidecar/settings/wire";
 import { VOICE_SOURCE } from "@sidecar/settings/wire";
 import { Fragment, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -164,12 +163,12 @@ export interface SettingsSearchEntry {
 }
 
 /**
- * What the pages must answer before the corpus can say what they hold. The
- * settings' own half is the schema's: each entry says whether its row is drawn
- * right now, judged from this same record, so nothing here restates a
- * condition a page branches on.
+ * What the pages must answer before the corpus can say what they hold: the one
+ * record the rows themselves are drawn from. The settings' own half is the
+ * schema's — each entry says whether its row is drawn right now, judged from
+ * this same record — so nothing here restates a condition a page branches on.
  */
-export type SettingsSearchInput = SettingsVisibility & { settings: AppSettingsView };
+export type SettingsSearchInput = SettingsRowsInput;
 
 /**
  * The page named the way a group's head says it. `SETTINGS_PAGE_LABEL` words

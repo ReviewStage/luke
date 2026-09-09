@@ -254,8 +254,9 @@ export function settingIdVisible(id: string, view: SettingsVisibility): boolean 
 }
 
 /**
- * What a settings page's rows are read from: the settings as they stand, and
- * the facts a row's own condition is judged from.
+ * What the settings pages and the settings search are both read from: the
+ * settings as they stand, and the facts a row's own condition is judged from.
+ * One record, so a result can never lead to a page without its row.
  */
 export interface SettingsRowsInput extends SettingsVisibility {
   settings: Pick<StoredAppSettings, AppSettingField> & RuntimeStatus;
@@ -306,7 +307,7 @@ export function settingRowsForPage(
       changed: stored !== definition.default,
       ...(control
         ? {
-            control: { value: control.value(stored, view), options: control.options(view) },
+            control: { value: control.value(stored), options: control.options(view) },
           }
         : undefined),
     }));

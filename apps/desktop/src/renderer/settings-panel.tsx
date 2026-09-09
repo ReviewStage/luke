@@ -66,7 +66,7 @@ import {
   SETTING_SECTION,
   SETTINGS_VIEW_COUNTED_AS,
   type SettingSection,
-  type SettingsVisibility,
+  type SettingsRowsInput,
   settingFromOption,
   settingRowsForPage,
   settingsScopeChanged,
@@ -196,14 +196,6 @@ export interface UpdateControl {
   /** Opens the latest release's page, fixed by the build, in the browser. */
   onOpenLatest: () => void;
 }
-
-/**
- * What the pages read to decide what they draw: the settings as they stand,
- * and the few facts about the surface around them that a row's own condition
- * is judged from. The same record the settings search reads, so a result can
- * never lead to a page without its row.
- */
-export type SettingsPanelView = SettingsVisibility & { settings: AppSettingsView };
 
 export interface SettingsWrites {
   setting(field: AppSettingField, value: AppSettingValue<AppSettingField>): Promise<ActionResult>;
@@ -1029,7 +1021,7 @@ function SchemaSettingRows({
 }: {
   page: (typeof SCHEMA_SETTINGS_PAGE)[keyof typeof SCHEMA_SETTINGS_PAGE];
   section?: SettingSection;
-  view: SettingsVisibility & { settings: AppSettingsView };
+  view: SettingsRowsInput;
   writes: SettingsWrites;
   details?: Partial<Record<AppSettingField, string>>;
 }): React.JSX.Element {
@@ -1401,7 +1393,7 @@ function KeySyncSection({
   view,
   writes,
 }: {
-  view: SettingsPanelView;
+  view: SettingsRowsInput;
   writes: SettingsWrites;
 }): React.JSX.Element {
   return (
@@ -1791,7 +1783,7 @@ export function CalendarIntegrations({
    * defaults on, and a switch offered before the first calendar is even
    * confirmed reads as one more demand rather than a choice.
    */
-  view?: SettingsPanelView;
+  view?: SettingsRowsInput;
   calendar: CalendarControl;
   appleCalendar: AppleCalendarControl;
   writes: SettingsWrites;
@@ -2233,7 +2225,7 @@ function IntegrationsSection({
   linear,
 }: {
   settings: AppSettingsView;
-  view: SettingsPanelView;
+  view: SettingsRowsInput;
   writes: SettingsWrites;
   calendar: CalendarControl;
   appleCalendar: AppleCalendarControl;
@@ -2394,7 +2386,7 @@ function VoiceSection({
   credentials: CredentialEntryControl;
   panelOpen: boolean;
   settings: AppSettingsView;
-  view: SettingsPanelView;
+  view: SettingsRowsInput;
   writes: SettingsWrites;
   microphone: MicrophoneControl;
 }): React.JSX.Element {
@@ -2491,7 +2483,7 @@ function VoiceControlsSection({
   view,
   writes,
 }: {
-  view: SettingsPanelView;
+  view: SettingsRowsInput;
   writes: SettingsWrites;
 }): React.JSX.Element {
   return (
@@ -2519,7 +2511,7 @@ function AppearanceSection({
   view,
   writes,
 }: {
-  view: SettingsPanelView;
+  view: SettingsRowsInput;
   writes: SettingsWrites;
 }): React.JSX.Element {
   return (
@@ -2541,7 +2533,7 @@ function WorkspacesSection({
   view,
   writes,
 }: {
-  view: SettingsPanelView;
+  view: SettingsRowsInput;
   writes: SettingsWrites;
 }): React.JSX.Element {
   return (
@@ -2838,7 +2830,7 @@ function ShortcutSection({
   voiceAvailable,
 }: {
   shortcuts: ShortcutControl;
-  view?: SettingsPanelView;
+  view?: SettingsRowsInput;
   writes: SettingsWrites;
   voiceAvailable: boolean;
 }): React.JSX.Element {
@@ -3553,7 +3545,7 @@ export function SettingsPanel({
   // condition is judged from this one record, by the rows the pages draw and
   // by the search corpus alike, so a result never leads to a page without
   // its row.
-  const panelView: SettingsPanelView | undefined = settings
+  const panelView: SettingsRowsInput | undefined = settings
     ? {
         settings,
         voiceControlsDrawn: microphoneAccessRow({
