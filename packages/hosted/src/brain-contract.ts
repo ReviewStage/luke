@@ -18,19 +18,16 @@ import {
 } from "./responses-input.js";
 
 /**
- * The second hosted brain contract. The first carried the input array and an
- * authority, and the service derived everything else from its build; this
- * one lets the desktop prepare the prompt and name the tools, because the
- * prompt is meant to be composed on the desktop from now on and the toolset
- * is meant to be chosen by a policy there. What the service still fixes is
- * everything a caller could abuse: the model, the upstream, the credential,
- * the refusal to store, the catalog of tool schemas a name may select, and
- * every bound below. A tool travels as its registered name and nothing more,
- * so a caller can never upload a schema; the prompt travels as bounded text
- * with an explicit refusal past the bound, never a truncation. Every request
- * names the contract it speaks, and the service answers its capabilities on
- * request so a desktop can refuse to run against a service that lacks them
- * rather than falling back to the older shape.
+ * The hosted brain contract. The desktop prepares the prompt and names the
+ * tools, because the prompt is composed on the desktop and the toolset is
+ * chosen by a policy there. What the service fixes is everything a caller
+ * could abuse: the model, the upstream, the credential, the refusal to store,
+ * the catalog of tool schemas a name may select, and every bound below. A
+ * tool travels as its registered name and nothing more, so a caller can never
+ * upload a schema; the prompt travels as bounded text with an explicit
+ * refusal past the bound, never a truncation. Every request names the
+ * contract it speaks, and the service answers its capabilities on request so
+ * a desktop can refuse to run against a service that lacks them.
  */
 
 export const HOSTED_BRAIN_CONTRACT_VERSION = 2;

@@ -1,5 +1,5 @@
-import { and, eq, sql } from "drizzle-orm";
-import type { HostedQuota, HostedUsageAnswer } from "../core.js";
+import { sql } from "drizzle-orm";
+import type { HostedQuota } from "../core.js";
 import type { createDatabase } from "../db/index.js";
 import { hostedUsage, introductionUsage } from "../db/usage-schema.js";
 
@@ -128,25 +128,4 @@ export async function spendIntroductionMeter(
   const day = utcDayKey(input.now);
   const used = await incrementIntroductionUsage(database, day);
   return { allowed: used <= HOSTED_DAILY_LIMIT };
-}
-
-type UsageReadDatabase = Pick<ReturnType<typeof createDatabase>, "select">;
-
-/**
- * Reads today's two hosted counters without spending either. A day with no
- * row yet has spent nothing, which is an answer, not an absence.
- */
-export async function readHostedUsage(
-  database: UsageReadDatabase,
-  input: { userId: string; now: number },
-): Promise<HostedUsageAnswer> {
-  const day = utcDayKey(input.now);
-  const [row] = await database
-    .select()
-    .from(hostedUsage)
-    .where(and(eq(hostedUsage.userId, input.userId), eq(hostedUsage.day, day)));
-  return {
-    voice: meterStanding(row?.voiceCalls ?? 0, day),
-    attention: meterStanding(row?.attentionReviews ?? 0, day),
-  };
 }

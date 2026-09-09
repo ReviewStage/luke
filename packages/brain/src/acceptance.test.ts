@@ -79,7 +79,7 @@ import { BRAIN_IDENTITY_LINE, BRAIN_WORKSPACE_SEEDS } from "./workspace-seeds.js
 /**
  * The same execution contract, run through the real host against each
  * transport this build ships — the keyed adapter over a fake OpenAI, and the
- * hosted adapter over a fake service speaking the second contract — and
+ * hosted adapter over a fake service speaking the hosted contract — and
  * then through a second runtime that shares nothing with OpenAI Responses,
  * to prove the host has no Responses-specific dependency: it stores whatever
  * stamp the runtime writes, refuses to run a compatible-looking host over a
@@ -172,7 +172,7 @@ function fakeUpstream(answers: (() => Response)[]) {
 }
 
 /**
- * A fake hosted service speaking the second contract as the real handlers
+ * A fake hosted service speaking the hosted contract as the real handlers
  * do: capabilities on GET, the request's prompt and named tools relayed to
  * the fake upstream as instructions and selected schemas, the allowance spent
  * per operation, and a spent allowance answered as the real service answers

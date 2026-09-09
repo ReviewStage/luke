@@ -20,9 +20,9 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "../server/core";
-import { HOSTED_BRAIN_DEFAULTS } from "../server/hosted/brain-respond";
 import {
   type BrainV2Options,
+  HOSTED_BRAIN_DEFAULTS,
   handleBrainCapabilities,
   handleBrainCompact,
   handleBrainCountTokens,

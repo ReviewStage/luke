@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_TOOL, realtimeToolDefinitions } from "@sidecar/acts";
-import { BRAIN_TURN_AUTHORITY } from "@sidecar/hosted";
 import {
   createRuntimeRegistries,
   GROUP_PREFIX,
@@ -21,7 +20,6 @@ import {
   brainToolCatalog,
   brainToolSchemas,
   hostedBrainToolCatalog,
-  hostedBrainV1ToolDefinitions,
   isBrainOnlyTool,
   resolveTurnToolPolicy,
   TOOL_GROUP,
@@ -95,20 +93,6 @@ test("announce takes the briefing alone and the hosted catalog carries every def
   assert.ok(isBrainOnlyTool(BRAIN_TOOL.READ_TRANSCRIPT));
   assert.ok(isBrainOnlyTool(BRAIN_TOOL.LOAD_SKILL));
   assert.ok(!isBrainOnlyTool(REALTIME_TOOL.SEND_SESSION_MESSAGE));
-});
-
-test("the first hosted contract's toolsets stand as installed clients expect them", () => {
-  const developer = hostedBrainV1ToolDefinitions(BRAIN_TURN_AUTHORITY.DEVELOPER).map((t) => t.name);
-  const observation = hostedBrainV1ToolDefinitions(BRAIN_TURN_AUTHORITY.OBSERVATION).map(
-    (t) => t.name,
-  );
-  assert.equal(developer.length, realtimeToolDefinitions().length + 2);
-  assert.ok(!developer.includes(BRAIN_TOOL.ANNOUNCE));
-  assert.ok(!developer.includes(BRAIN_TOOL.WRITE_WORKSPACE_FILE));
-  assert.deepEqual(
-    [...observation].sort(),
-    [BRAIN_TOOL.LIST_SESSIONS, BRAIN_TOOL.READ_TRANSCRIPT, BRAIN_TOOL.ANNOUNCE].sort(),
-  );
 });
 
 test("a child's task turn loses announce like an ask, and the session tools stand in the catalog under their group", () => {
