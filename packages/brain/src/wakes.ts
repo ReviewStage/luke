@@ -2,6 +2,7 @@ import {
   type ProviderTranscriptSinceResult,
   SESSION_LOCATION,
   SESSION_STATUS,
+  type Session,
   type SessionIdentity,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
@@ -204,10 +205,11 @@ export class WakeCapture {
    * batch is read once from its capture cursor; an event that names a hook
    * the inbox already holds — the same hook, session, and instant delivered
    * twice — is not captured again; a roster edge that gained nothing over a
-   * session standing exactly as it last stood is not captured at all. What
-   * remains is written with the advanced capture cursors in one save, and a
-   * save the store refuses moves no cursor in memory either. Answers how many
-   * entries were captured.
+   * session standing exactly as it last stood is not captured at all; and an
+   * event on a session the developer is speaking with moves its cursor past
+   * what was read and leaves no entry. What remains is written with the
+   * advanced capture cursors in one save, and a save the store refuses moves
+   * no cursor in memory either. Answers how many entries were captured.
    */
   #capture(events: readonly BrainWakeEvent[]): Promise<number> {
     const work = async (): Promise<number> => {
@@ -226,6 +228,7 @@ export class WakeCapture {
         cursor: string | undefined;
       }>();
       const entries: BrainObservationEntry[] = [];
+      let heardFirstHand = false;
       const now = this.#seam.now();
       for (const event of fresh) {
         let read = reads.get(event.identity.providerId, event.identity.providerSessionId);
@@ -254,6 +257,10 @@ export class WakeCapture {
             cursor: read.cursor,
           };
         }
+        if (event.session && developerSpeakingWith(event.session)) {
+          heardFirstHand = true;
+          continue;
+        }
         if (
           event.kind === BRAIN_WAKE_KIND.ROSTER &&
           !read.delta?.text &&
@@ -266,7 +273,7 @@ export class WakeCapture {
           entryFromEvent(event, this.#options.createRunId(), now, read.delta, read.cursor),
         );
       }
-      if (entries.length === 0) {
+      if (entries.length === 0 && !heardFirstHand) {
         generation.captureCursors.rollback(mark);
         return 0;
       }
@@ -362,6 +369,20 @@ export class WakeCapture {
   }
 }
 
+/**
+ * A session the developer is speaking with first-hand wakes nothing: its turn
+ * boundaries are the rhythm of a conversation being heard as it happens, and a
+ * briefing read over them would talk over the very exchange it reports. Its
+ * hooks and looks still read what the transcript gained, so the capture cursor
+ * moves past the exchange, but they write no entry and open no turn — the text
+ * is read past rather than read out, and the exchange ending never replays
+ * what happened inside it. The session stays on the roster and in the standing
+ * context throughout, because the developer may still ask about it.
+ */
+function developerSpeakingWith(session: Session): boolean {
+  return session.realtimeVoiceLive === true;
+}
+
 /** A session as the roster showed it at a look, in the fields a change would move; never a transcript. */
 function lookFingerprint(event: BrainWakeEvent): string {
   const session = event.session;
@@ -369,6 +390,8 @@ function lookFingerprint(event: BrainWakeEvent): string {
     session
       ? [
           session.status,
+          session.holdingForDeveloper === true,
+          session.completionCause ?? null,
           session.lastActivityAt,
           session.detail.activity ?? null,
           session.detail.error ?? null,
