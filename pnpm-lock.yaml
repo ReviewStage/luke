@@ -111,9 +111,6 @@ importers:
       '@sidecar/settings':
         specifier: workspace:*
         version: link:../../packages/settings
-      '@sidecar/superset':
-        specifier: workspace:*
-        version: link:../../packages/superset
       '@sidecar/surface':
         specifier: workspace:*
         version: link:../../packages/surface
@@ -612,9 +609,6 @@ importers:
       '@sidecar/settings':
         specifier: workspace:*
         version: link:../settings
-      '@sidecar/superset':
-        specifier: workspace:*
-        version: link:../superset
       '@sidecar/surface':
         specifier: workspace:*
         version: link:../surface
@@ -747,18 +741,6 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
-  packages/process:
-    devDependencies:
-      '@types/node':
-        specifier: 26.2.0
-        version: 26.2.0
-      tsx:
-        specifier: 4.23.12
-        version: 4.23.12
-      typescript:
-        specifier: 7.0.2
-        version: 7.0.2
-
   packages/providers:
     dependencies:
       '@sidecar/acts':
@@ -767,9 +749,6 @@ importers:
       '@sidecar/credentials':
         specifier: workspace:*
         version: link:../credentials
-      '@sidecar/process':
-        specifier: workspace:*
-        version: link:../process
       '@sidecar/runtime-contracts':
         specifier: workspace:*
         version: link:../runtime-contracts
@@ -932,31 +911,6 @@ importers:
       '@sidecar/surface':
         specifier: workspace:*
         version: link:../surface
-      '@sidecar/wire':
-        specifier: workspace:*
-        version: link:../wire
-    devDependencies:
-      '@types/node':
-        specifier: 26.2.0
-        version: 26.2.0
-      tsx:
-        specifier: 4.23.12
-        version: 4.23.12
-      typescript:
-        specifier: 7.0.2
-        version: 7.0.2
-
-  packages/superset:
-    dependencies:
-      '@sidecar/process':
-        specifier: workspace:*
-        version: link:../process
-      '@sidecar/providers':
-        specifier: workspace:*
-        version: link:../providers
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../session
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire

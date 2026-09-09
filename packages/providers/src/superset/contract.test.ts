@@ -1,9 +1,9 @@
+import { ACT_KIND } from "@sidecar/session";
 import {
   describeProviderContract,
   PROVIDER_OBSERVATION,
   supersetHostDb,
-} from "@sidecar/providers/testing";
-import { ACT_KIND } from "@sidecar/session";
+} from "../testing/index.js";
 import { supersetPlugin } from "./plugin.js";
 
 describeProviderContract(

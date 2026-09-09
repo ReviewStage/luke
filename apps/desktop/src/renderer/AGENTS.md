@@ -30,7 +30,7 @@ Importing `@sidecar/calendar` for one string constant resolves that package's
 whole export graph, `node:http` included. Packages that hold both a vocabulary
 and a Node flow open a door for the vocabulary alone. Import
 `@sidecar/calendar/vocabulary`, `@sidecar/account/snapshot`,
-`@sidecar/superset/sign-in-stage`, not the barrel.
+`@sidecar/providers/superset/sign-in-stage`, not the barrel.
 
 ## Panel motion
 

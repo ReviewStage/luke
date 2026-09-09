@@ -9,6 +9,7 @@ import { carried, GATEWAY_EVENT, GATEWAY_METHOD, gatewayEventReader } from "@sid
 import type { AppGuideSnapshot } from "@sidecar/guide";
 import { RECEIVER_REPORT_KIND } from "@sidecar/host";
 import type { RealtimeConnection } from "@sidecar/hosted";
+import type { SupersetSignInSnapshot } from "@sidecar/providers/superset/sign-in-stage";
 import type { ConversationEntry, RealtimeDiagnostics } from "@sidecar/realtime";
 import type { SpeechOffer, SpeechOutcome } from "@sidecar/realtime/speech";
 import { isSpeechOffer } from "@sidecar/realtime/speech";
@@ -26,7 +27,6 @@ import type {
   SettingsResetScope,
 } from "@sidecar/settings";
 import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
-import type { SupersetSignInSnapshot } from "@sidecar/superset/sign-in-stage";
 import {
   ACT_RESULT_STATUS,
   type ActResult,

@@ -5,8 +5,6 @@ export const DEFAULT_CLI_PATH_DIRECTORIES = ["/opt/homebrew/bin", "/usr/local/bi
 
 export const INVOCATION_FAILURE = {
   UNAVAILABLE: "unavailable",
-  TIMED_OUT: "timed-out",
-  OUTPUT_LIMIT: "output-limit",
   FAILED: "failed",
 } as const;
 
@@ -72,10 +70,7 @@ export function boundedInvocation(
           return;
         }
         // SAFETY: execFile reports command failures as errno-like errors.
-        const commandError = error as NodeJS.ErrnoException & {
-          code?: unknown;
-          killed?: boolean;
-        };
+        const commandError = error as NodeJS.ErrnoException & { code?: unknown };
         const exitCode = commandError.code === null ? Number.NaN : Number(commandError.code);
         if (Number.isInteger(exitCode)) {
           resolve({ exitCode, stdout, stderr });
@@ -84,11 +79,7 @@ export function boundedInvocation(
         const failure =
           commandError.code === "ENOENT"
             ? INVOCATION_FAILURE.UNAVAILABLE
-            : commandError.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"
-              ? INVOCATION_FAILURE.OUTPUT_LIMIT
-              : commandError.killed || commandError.code === "ETIMEDOUT"
-                ? INVOCATION_FAILURE.TIMED_OUT
-                : INVOCATION_FAILURE.FAILED;
+            : INVOCATION_FAILURE.FAILED;
         reject(new InvocationError(failure, options.binary));
       },
     );

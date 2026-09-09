@@ -85,8 +85,9 @@ failure is a `FUNCTION_INVOCATION_FAILED` on a deployed route.
 Importing a package resolves its whole export graph, not the one name asked
 for. A package that holds both a wire vocabulary and a Node flow gives the
 vocabulary a subpath of its own (`@sidecar/calendar/vocabulary`,
-`@sidecar/account/snapshot`, `@sidecar/superset/sign-in-stage`), or the renderer
-bundle fails to resolve `node:http` behind a string constant it wanted to draw.
+`@sidecar/account/snapshot`, `@sidecar/providers/superset/sign-in-stage`), or
+the renderer bundle fails to resolve `node:http` behind a string constant it
+wanted to draw.
 
 A barrel over modules that are all one vocabulary is written as `export *` per
 module (`@sidecar/session`), because a hand-listed re-export of a package whose

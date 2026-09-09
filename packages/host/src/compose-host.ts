@@ -91,6 +91,10 @@ import {
   type ObservationSpoolWatcher,
   type ProviderRegistration,
   providerRegistrations,
+  SUPERSET_SIGN_IN_STAGE,
+  SupersetSignIn,
+  supersetPlugin,
+  supersetPressedLink,
   type WorkspaceHostEnrichment,
   type WorkspaceHostRegistration,
   watchObservationSpool,
@@ -168,12 +172,6 @@ import {
   VOICE_SOURCE_COUNTED_AS,
 } from "@sidecar/settings";
 import type { ObservedAccountCalendars, SettingsUpdateResult } from "@sidecar/settings/wire";
-import {
-  SUPERSET_SIGN_IN_STAGE,
-  SupersetSignIn,
-  supersetPlugin,
-  supersetPressedLink,
-} from "@sidecar/superset";
 import { LinearCredentials, LinearIssueTracker, LinearSignIn } from "@sidecar/trackers";
 import { type VoiceCapabilityApplication, VoiceCapabilityAssembler } from "@sidecar/voice";
 import {

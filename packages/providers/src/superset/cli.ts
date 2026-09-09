@@ -1,8 +1,6 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { boundedInvocation, INVOCATION_FAILURE, InvocationError } from "@sidecar/process";
-import { canIgnoreFilesystemError } from "@sidecar/providers";
 import {
   ACT_RESULT_STATUS,
   type ProviderControlResult,
@@ -21,6 +19,8 @@ import {
   type WireRecord,
   wireRecord,
 } from "@sidecar/wire";
+import { boundedInvocation, INVOCATION_FAILURE, InvocationError } from "../shared/invocation.js";
+import { canIgnoreFilesystemError } from "../shared/local-files.js";
 import { activeOrganizationId } from "./config.js";
 import type { SupersetOrganizationChoice } from "./sign-in-stage.js";
 import {

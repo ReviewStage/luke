@@ -1,4 +1,3 @@
-import type { SqliteModuleLoader, WorkspaceHostEnrichment } from "@sidecar/providers";
 import {
   type ProviderSessionObservation,
   type SessionProviderPlugin,
@@ -6,6 +5,8 @@ import {
   type WorkspaceProject,
 } from "@sidecar/session";
 import { reshapeAdmitted } from "@sidecar/wire";
+import type { WorkspaceHostEnrichment } from "../shared/host-claims.js";
+import type { SqliteModuleLoader } from "../shared/local-sqlite.js";
 import { SupersetCli, type SupersetCliOptions } from "./cli.js";
 import { supersetHostState } from "./reader.js";
 import { type SupersetSnapshot, supersetSnapshot } from "./snapshot.js";

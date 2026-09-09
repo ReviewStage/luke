@@ -1,10 +1,4 @@
 import {
-  boundedInvocation,
-  DEFAULT_CLI_PATH_DIRECTORIES,
-  INVOCATION_FAILURE,
-  InvocationError,
-} from "@sidecar/process";
-import {
   ACT_RESULT_STATUS,
   CLI_CONNECTION,
   type CliConnection,
@@ -22,6 +16,12 @@ import {
 } from "@sidecar/wire";
 import { ADAPTER_DIAGNOSTIC_KIND, type AdapterDiagnosticCallback } from "./adapter-diagnostics.js";
 import { ADAPTER_FAILURE, AdapterFailure, clearsObservedState } from "./adapter-failure.js";
+import {
+  boundedInvocation,
+  DEFAULT_CLI_PATH_DIRECTORIES,
+  INVOCATION_FAILURE,
+  InvocationError,
+} from "./invocation.js";
 
 export const CLI_ADAPTER_DEFAULTS = {
   MINIMUM_REFRESH_INTERVAL_MS: 15 * 1000,

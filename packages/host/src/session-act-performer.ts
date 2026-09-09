@@ -29,6 +29,12 @@ import {
   type TrackerActionResult,
 } from "@sidecar/issues";
 import {
+  isSupersetControlId,
+  type SupersetCli,
+  type SupersetSessionContext,
+  supersetPressedLink,
+} from "@sidecar/providers";
+import {
   ExternalOpenAnswerLostError,
   isProviderId,
   type ProviderActResult,
@@ -41,8 +47,6 @@ import {
   type WorkspaceAgentSelection,
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
-import type { SupersetSessionContext } from "@sidecar/superset";
-import { isSupersetControlId, type SupersetCli, supersetPressedLink } from "@sidecar/superset";
 import type { LinearIssueTracker } from "@sidecar/trackers";
 import {
   ACT_RESULT_STATUS,

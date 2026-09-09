@@ -40,6 +40,7 @@ import {
 } from "@sidecar/feedback";
 import { type AppGuideSnapshot, isAppGuideSnapshot } from "@sidecar/guide";
 import type { RealtimeConnection } from "@sidecar/hosted";
+import type { SupersetSignInSnapshot } from "@sidecar/providers/superset/sign-in-stage";
 import {
   type ConversationEntry,
   type RealtimeDiagnostics,
@@ -75,7 +76,6 @@ import {
   settingEntryGuard,
 } from "@sidecar/settings";
 import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
-import type { SupersetSignInSnapshot } from "@sidecar/superset/sign-in-stage";
 import type { WindowMode } from "@sidecar/surface";
 import {
   type ActResult,

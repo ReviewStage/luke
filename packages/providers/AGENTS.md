@@ -8,11 +8,10 @@ The adapters this package ships are Claude Code (plus the Claude desktop
 app's session-application reader, which names the Code-tab chats that app
 holds and their `claude://` addresses), Codex (local and cloud), Conductor
 (cloud, plus the local workspace creator and the session-application reader),
-and OMP; Superset's lives in `@sidecar/superset`. The agents a
-Conductor or Superset workspace can run beyond those — Cursor, OpenCode,
-Copilot, Gemini CLI, Grok Build — are hosted-agent identities in
-`@sidecar/session` alone: a mark and a display name, with no adapter, files,
-hook, or credential behind them.
+OMP, and Superset. The agents a Conductor or Superset workspace can run
+beyond those — Cursor, OpenCode, Copilot, Gemini CLI, Grok Build — are
+hosted-agent identities in `@sidecar/session` alone: a mark and a display
+name, with no adapter, files, hook, or credential behind them.
 
 A provider validates nothing about whether an act may run: `dispatchAct` and
 every adapter write take an admitted request, which only `admit()` in
@@ -55,7 +54,7 @@ credentials in `@sidecar/credentials`, analytics connections in
 `@sidecar/analytics` and the desktop bridge, hooks and plugin registration in
 this package, fixture coverage in `@sidecar/fixtures` and the recorded
 provider fixtures beside `@sidecar/session`, workspace presentation in the
-surface that offers it, and Superset agent kinds in `@sidecar/superset`.
+surface that offers it, and Superset agent kinds in this package.
 Provider marks and CSS are presentation owned by their surfaces, not identity.
 
 Add a provider identity and its adapter together, then update every applicable

@@ -62,7 +62,6 @@
     "@sidecar/runtime-store": "workspace:*",
     "@sidecar/session": "workspace:*",
     "@sidecar/settings": "workspace:*",
-    "@sidecar/superset": "workspace:*",
     "@sidecar/surface": "workspace:*",
     "@sidecar/trackers": "workspace:*",
     "@sidecar/voice": "workspace:*",
