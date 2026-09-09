@@ -12,6 +12,7 @@ import {
   type LoopbackConsent,
   type LoopbackConsentOutcome,
   loopbackConsent,
+  unofferedConsent,
 } from "../loopback-consent.js";
 import { LOOPBACK_CONNECTION_SOURCE } from "../loopback-page.js";
 
@@ -191,13 +192,7 @@ export async function exchangeLinearCode(
  */
 export function linearSignIn(options: LinearSignInOptions): LoopbackConsent<LinearGrant> {
   const config = linearSignInConfig(options.environment);
-  if (!config) {
-    return {
-      signIn: async () => ({ reason: "Sign-in is not configured in this build." }),
-      cancel: () => undefined,
-      reopen: () => undefined,
-    };
-  }
+  if (!config) return unofferedConsent();
   return loopbackConsent<LinearGrant>({
     ports: LOOPBACK_PORTS,
     callbackPath: CALLBACK_PATH,
@@ -239,13 +234,11 @@ export function linearSignIn(options: LinearSignInOptions): LoopbackConsent<Line
     },
     exchange: (input) =>
       exchangeLinearCode(config, input, {
-        ...(options.fetchImplementation
-          ? { fetchImplementation: options.fetchImplementation }
-          : undefined),
-        ...(options.now ? { now: options.now } : undefined),
+        fetchImplementation: options.fetchImplementation,
+        now: options.now,
       }),
     openExternal: options.openExternal,
-    ...(options.timeoutMs === undefined ? undefined : { timeoutMs: options.timeoutMs }),
+    timeoutMs: options.timeoutMs,
   });
 }
 

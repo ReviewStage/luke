@@ -194,13 +194,12 @@ export class AccountSessionManager {
   }
 
   #consent(provider: AccountProvider, generation: number): LoopbackConsent<AccountSnapshot> {
-    const source = connectionSource(provider);
     return loopbackConsent<AccountSnapshot>({
       callbackPath: CALLBACK_PATH,
       // The hosted authorize route reads which provider was chosen back off
       // the state it issued, so the choice rides in front of the entropy.
       statePrefix: provider,
-      ...(source ? { source } : undefined),
+      source: connectionSource(provider),
       pages: SIGN_IN_PAGES,
       reasons: {
         refused: "Sign-in was not completed.",

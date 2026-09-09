@@ -39,6 +39,7 @@ const SHARED_REASON = {
   UNAVAILABLE: "Luke could not open a sign-in callback on this machine.",
   ALREADY_WAITING: "A sign-in is already waiting in your browser.",
   BROWSER: "Luke could not open the sign-in page in your browser.",
+  UNCONFIGURED: "Sign-in is not configured in this build.",
 } as const;
 
 /**
@@ -136,6 +137,19 @@ export interface LoopbackConsentOptions<Grant> {
   timeoutMs?: number;
 }
 
+/**
+ * The flow a run that does not hold a provider's registration offers: the
+ * press answers with why, and there is nothing to cancel or reopen. A row
+ * drawn this way beats one whose button fails after the user has consented.
+ */
+export function unofferedConsent<Grant>(): LoopbackConsent<Grant> {
+  return {
+    signIn: async () => ({ reason: SHARED_REASON.UNCONFIGURED }),
+    cancel: () => undefined,
+    reopen: () => undefined,
+  };
+}
+
 export interface LoopbackConsent<Grant> {
   /** One trip, press to grant. A second call while one waits answers with why. */
   signIn(): Promise<LoopbackConsentOutcome<Grant>>;
@@ -208,7 +222,7 @@ export function loopbackConsent<Grant extends object>(
     return accountLoopbackPage({
       tone,
       ...page,
-      ...(options.source ? { source: options.source } : undefined),
+      source: options.source,
     });
   }
 
@@ -252,7 +266,7 @@ export function loopbackConsent<Grant extends object>(
         return;
       }
       claimed = true;
-      if (timeout) clearTimeout(timeout);
+      clearTimeout(timeout);
       abandon = undefined;
       const answer = (granted: boolean): void => {
         response.writeHead(RESPONSE_STATUS.ANSWERED, {
@@ -287,13 +301,13 @@ export function loopbackConsent<Grant extends object>(
         redirectUri,
         codeChallenge: challenge,
       });
+      if (withdrawn) return { reason: LOOPBACK_CONSENT_CANCELLED };
       timeout = setTimeout(
         () => finish({ reason: options.reasons.timedOut }),
         options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       );
       timeout.unref();
       abandon = () => finish({ reason: LOOPBACK_CONSENT_CANCELLED });
-      if (withdrawn) return { reason: LOOPBACK_CONSENT_CANCELLED };
       reopenPage = () => {
         void Promise.resolve(options.openExternal(authorizationUrl)).catch(() => undefined);
       };

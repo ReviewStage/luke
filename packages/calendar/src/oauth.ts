@@ -6,6 +6,7 @@ import {
   type LoopbackConsent,
   type LoopbackConsentOutcome,
   loopbackConsent,
+  unofferedConsent,
 } from "@sidecar/credentials";
 import { isWireString, type UnparsedWireValue, unparsedWire, wireRecord } from "@sidecar/wire";
 
@@ -178,13 +179,7 @@ export function googleCalendarSignIn(
   options: GoogleCalendarSignInOptions,
 ): LoopbackConsent<GoogleCalendarGrant> {
   const config = googleCalendarSignInConfig(options.environment);
-  if (!config) {
-    return {
-      signIn: async () => ({ reason: "Sign-in is not configured in this build." }),
-      cancel: () => undefined,
-      reopen: () => undefined,
-    };
-  }
+  if (!config) return unofferedConsent();
   return loopbackConsent<GoogleCalendarGrant>({
     callbackPath: CALLBACK_PATH,
     source: LOOPBACK_CONNECTION_SOURCE.GOOGLE_CALENDAR,
@@ -221,6 +216,6 @@ export function googleCalendarSignIn(
     },
     exchange: (input) => exchangeGoogleCode(config, input, options.fetchImplementation ?? fetch),
     openExternal: options.openExternal,
-    ...(options.timeoutMs === undefined ? undefined : { timeoutMs: options.timeoutMs }),
+    timeoutMs: options.timeoutMs,
   });
 }
