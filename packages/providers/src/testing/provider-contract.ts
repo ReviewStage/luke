@@ -13,6 +13,7 @@ import {
   advertisedActFor,
   advertisedControls,
   CLI_CONNECTION,
+  dispatchAct,
   maximumSessionMessageLength,
   normalizeSession,
   type ProviderActResult,
@@ -821,19 +822,20 @@ export function describeProviderContract(
 
     const projects: readonly WorkspaceProject[] = plugin.projects?.() ?? [];
     await assertGoldenJson(golden("projects.json"), projects);
-    const created = await plugin.acts?.createWorkspace?.(
+    // Asked the one way an act reaches a provider at all, so what refuses an
+    // unreported project is the same resolution production runs.
+    const created = await dispatchAct(
+      plugin,
+      "createWorkspace",
       admittedForTest({
-        project: {
-          providerProjectId: fixtures.absentProjectId,
-          repository: "unreported",
-          taskSupport: "optional",
-        },
+        providerProjectId: fixtures.absentProjectId,
         task: "This creation must never reach a provider.",
       }),
     );
 
-    assert.ok(
-      created === undefined || created.status !== ACT_RESULT_STATUS.ACCEPTED,
+    assert.notEqual(
+      created.status,
+      ACT_RESULT_STATUS.ACCEPTED,
       "a creation landed in a project no pass reported",
     );
     assert.equal(api.requests().length, requestsAfterPass);

@@ -7,7 +7,7 @@ import {
   PROVIDER_IDENTITY_BY_ID,
   type ProviderId,
 } from "@sidecar/session";
-import { CodexCloudSessionAdapter } from "./codex/cloud-adapter.js";
+import { codexCloudPlugin } from "./codex/cloud.js";
 import { providerRegistrations } from "./registrations.js";
 import {
   ADAPTER_DIAGNOSTIC_KIND,
@@ -17,9 +17,7 @@ import {
 const registrations = providerRegistrations({
   readApiKey: async () => undefined,
   // A runner that answers signed-out, so no test can spawn a real CLI.
-  codexCloudAdapter: new CodexCloudSessionAdapter({
-    run: async () => ({ exitCode: 1, stdout: "" }),
-  }),
+  codexCloud: codexCloudPlugin({ run: async () => ({ exitCode: 1, stdout: "" }) }),
   observationHookInstallation: (providerId) => ({
     providerHome: `/missing/${providerId}`,
     hookScriptPath: `/missing/${providerId}-hook`,
@@ -69,9 +67,7 @@ test("a diagnostic reported by a cloud adapter reaches the callback tagged with 
     [];
   const tagged = providerRegistrations({
     readApiKey: async () => undefined,
-    codexCloudAdapter: new CodexCloudSessionAdapter({
-      run: async () => ({ exitCode: 1, stdout: "" }),
-    }),
+    codexCloud: codexCloudPlugin({ run: async () => ({ exitCode: 1, stdout: "" }) }),
     observationHookInstallation: (providerId) => ({
       providerHome: `/missing/${providerId}`,
       hookScriptPath: `/missing/${providerId}-hook`,

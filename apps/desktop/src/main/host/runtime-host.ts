@@ -58,10 +58,10 @@ import {
 import {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticKind,
-  CodexCloudSessionAdapter,
   ConductorLocalWorkspaceAdapter,
   ConductorSessionApplicationReader,
   claudeDesktopApplications,
+  codexCloudPlugin,
   ObservationHookRegistry,
   type ObservationSpoolWatcher,
   type ProviderRegistration,
@@ -425,7 +425,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
   };
 
   const sessionRegistry = new SessionRoster();
-  const codexCloudAdapter = new CodexCloudSessionAdapter({
+  const codexCloud = codexCloudPlugin({
     onDiagnostic: (kind, error) => reportAdapterDiagnostic(PROVIDER_ID.CODEX, kind, error),
   });
   const conductorSessionApplications = new ConductorSessionApplicationReader();
@@ -461,7 +461,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     credentialsUsable: runMode.observesProviders,
     cipher: options.cipher,
     environment: options.environment,
-    codexCloudConnection: () => codexCloudAdapter.connection(),
+    codexCloudConnection: () => codexCloud.connection(),
   });
   const accountClient = new AccountClient({
     baseUrl: ACCOUNT_BASE_URL,
@@ -511,7 +511,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
   const providerRegistry = providerRegistrations({
     readApiKey: (providerId) => settingsStore.readApiKey(providerId),
     observationHookInstallation: (providerId) => observationHooks.installation(providerId),
-    codexCloudAdapter,
+    codexCloud,
     onDiagnostic: reportAdapterDiagnostic,
   });
   const orderedRegistrations: readonly ProviderRegistration[] = PROVIDER_ID_LIST.map(
@@ -858,9 +858,9 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     emitSettingsSnapshot(await settingsStore.snapshot());
   }
 
-  let announcedCodexCloudConnection = codexCloudAdapter.connection();
+  let announcedCodexCloudConnection = codexCloud.connection();
   async function emitCodexCloudConnection(): Promise<void> {
-    const connection = codexCloudAdapter.connection();
+    const connection = codexCloud.connection();
     if (connection === announcedCodexCloudConnection) return;
     announcedCodexCloudConnection = connection;
     await emitSettings();

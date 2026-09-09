@@ -1,19 +1,14 @@
-import { ACT_KIND, adapterAsPlugin } from "@sidecar/session";
+import { ACT_KIND } from "@sidecar/session";
 import { describeProviderContract, PROVIDER_OBSERVATION } from "../testing/index.js";
-import { CodexCloudSessionAdapter } from "./cloud-adapter.js";
+import { codexCloudPlugin } from "./cloud.js";
 
 describeProviderContract(
-  (input) => {
-    const adapter = new CodexCloudSessionAdapter({
+  (input) =>
+    codexCloudPlugin({
       run: input.run,
       now: input.now,
       minimumRefreshIntervalMs: input.minimumRefreshIntervalMs,
-    });
-    // What the latest pass learned about the login is not one of the acts the
-    // adapter interface declares, so it rides beside the shim until the
-    // plugin itself carries it.
-    return { ...adapterAsPlugin(adapter), connection: () => adapter.connection() };
-  },
+    }),
   {
     providerId: "codex-cloud",
     observation: PROVIDER_OBSERVATION.CLI,
