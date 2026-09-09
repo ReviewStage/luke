@@ -5,13 +5,13 @@ import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "@sidecar/session";
+import { settingsView } from "@sidecar/settings/testing";
 import { VOICE_SOURCE } from "@sidecar/settings/wire";
 import {
   connectionInput,
   connectionVisibility,
   everyConnectionOffered,
 } from "#testing/connection-fixtures";
-import { settingsView } from "#testing/settings-fixtures";
 import { SETTINGS_VIEW } from "../settings-views";
 import {
   CONNECTION_SCHEMA,

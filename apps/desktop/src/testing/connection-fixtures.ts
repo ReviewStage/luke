@@ -1,8 +1,8 @@
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
+import { settingsView } from "@sidecar/settings/testing";
 import { VOICE_SOURCE } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import type { ConnectionInput, ConnectionVisibility } from "../renderer/settings/connection-schema";
-import { settingsView } from "./settings-fixtures";
 
 /** Nothing connected, nothing installed, no account: what a first launch draws. */
 export function connectionVisibility(

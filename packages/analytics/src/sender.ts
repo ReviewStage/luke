@@ -1,3 +1,5 @@
+import { type AccountToken, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
+import { type CloudFetch, positiveInteger, text, withoutTrailingSlash } from "@sidecar/wire";
 import {
   PRODUCT_EVENT,
   PRODUCT_EVENT_BATCH_LIMIT,
@@ -7,9 +9,7 @@ import {
   type ProductEventName,
   type ProductEventPropertiesFor,
   productEventFromWire,
-} from "@sidecar/analytics";
-import { type AccountToken, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
-import { type CloudFetch, positiveInteger, text, withoutTrailingSlash } from "@sidecar/wire";
+} from "./product-events.js";
 
 const PRODUCT_EVENT_DEFAULTS = {
   REQUEST_TIMEOUT_MS: 10_000,

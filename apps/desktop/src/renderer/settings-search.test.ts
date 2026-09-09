@@ -7,9 +7,9 @@ import {
   VOICE_CREDENTIAL_PROVIDER,
 } from "@sidecar/credentials/vocabulary";
 import { APP_SETTING_SCHEMA, settingFieldForGuideId, settingGuideEntries } from "@sidecar/settings";
+import { settingsView } from "@sidecar/settings/testing";
 import type { AppSettingsView } from "@sidecar/settings/wire";
 import { VOICE_SOURCE } from "@sidecar/settings/wire";
-import { settingsView } from "#testing/settings-fixtures";
 import {
   type SettingsSearchEntry,
   type SettingsSearchInput,

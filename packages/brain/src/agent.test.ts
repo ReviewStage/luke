@@ -104,7 +104,7 @@ test("an announce is delivered trimmed, and every output item is remembered", as
   assert.deepEqual(h.traces[0]?.toolCalls, [
     {
       name: BRAIN_TOOL.ANNOUNCE,
-      argumentsChars: h.traces[0]?.toolCalls[0]?.argumentsChars,
+      argumentsChars: JSON.stringify({ briefing: "  Checkout agent wants a decision. " }).length,
       outcomeStatus: "accepted",
     },
   ]);

@@ -1,4 +1,4 @@
-import fs from "node:fs/promises";
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { TestContext } from "node:test";
@@ -8,12 +8,14 @@ import type { TestContext } from "node:test";
  * seeds a provider home needs one, and a test that forgets to remove it leaves
  * a machine's temporary directory holding fixture trees for as long as it
  * stands — so the removal is registered before the path is handed back rather
- * than left to the caller's own teardown.
+ * than left to the caller's own teardown. Synchronous, so a fixture assembled
+ * outside an async helper can have one.
  */
-export async function temporaryDirectory(t: TestContext, prefix: string): Promise<string> {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), `${prefix}-`));
-  t.after(async () => {
-    await fs.rm(directory, { recursive: true, force: true });
+export function temporaryDirectory(t: TestContext, prefix = "luke-"): string {
+  const stem = prefix.endsWith("-") ? prefix : `${prefix}-`;
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), stem));
+  t.after(() => {
+    fs.rmSync(directory, { recursive: true, force: true });
   });
   return directory;
 }

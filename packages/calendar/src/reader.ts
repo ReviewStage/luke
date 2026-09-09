@@ -1,9 +1,3 @@
-import {
-  CALENDAR_LOOKAHEAD_MS,
-  MAXIMUM_MEETING_LENGTH_MS,
-  type MeetingInterval,
-  meetingsFromBusyIntervals,
-} from "@sidecar/calendar";
 import { ACCESS_TOKEN_EXPIRY_SLACK_MS } from "@sidecar/credentials";
 import {
   isRecord,
@@ -14,6 +8,12 @@ import {
   unparsedWire,
   type WireValue,
 } from "@sidecar/wire";
+import {
+  CALENDAR_LOOKAHEAD_MS,
+  MAXIMUM_MEETING_LENGTH_MS,
+  type MeetingInterval,
+  meetingsFromBusyIntervals,
+} from "./calendar.js";
 import {
   GOOGLE_TOKEN_URL,
   type GoogleCalendarSignInConfig,

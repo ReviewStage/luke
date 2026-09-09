@@ -10,7 +10,7 @@ import { codexLocalPlugin } from "./index.js";
 const TEST_SESSION_ID = "0198c1f2-4d5e-7789-abcd-ef0123456789";
 const CODEX_STATE_DATABASE = "state_5.sqlite";
 
-function temporaryCodexHome(t: TestContext): Promise<string> {
+async function temporaryCodexHome(t: TestContext): Promise<string> {
   return temporaryDirectory(t, "luke-codex-transcript-");
 }
 
