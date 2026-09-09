@@ -141,7 +141,11 @@ export class PressTurnCapture {
 
   /**
    * The press was released mid-handshake: stop reading the device, keep what
-   * was heard. The words wait in memory, not on an open microphone.
+   * was heard. The words wait in memory, not on an open microphone — the track
+   * closes with the source that was reading it, so the invariant every path
+   * out of here keeps is that the track is open exactly while a source reads
+   * it. Without it a sealed capture would hand the sender a live microphone
+   * when it retired.
    */
   seal(): void {
     const state = this.#state;
@@ -149,6 +153,8 @@ export class PressTurnCapture {
     state.source?.stop();
     state.source = undefined;
     this.#commitPending = true;
+    const device = this.#options.device();
+    if (device) device.track.enabled = false;
   }
 
   /**

@@ -165,6 +165,24 @@ test("a release mid-handshake stops reading the device but keeps the words", () 
   assert.deepEqual(context.sent, []);
 });
 
+test("a sealed capture never hands the sender a live microphone", () => {
+  const context = harness();
+  context.capture.begin();
+  context.speak(1);
+
+  // The press is released mid-handshake, so nothing reads the device any more.
+  // A track left open here rides onto the sender when the capture retires.
+  context.capture.seal();
+  assert.equal(context.track.enabled, false);
+
+  context.capture.deliverSealed();
+
+  // The seam still hands the track to the sender — that is what lets the next
+  // turn ride WebRTC — but a disabled track transmits silence.
+  assert.deepEqual(context.replaced, [asTrack(context.track)]);
+  assert.equal(context.track.enabled, false);
+});
+
 test("the sealed words are delivered once and the capture retires with them", () => {
   const context = harness();
   context.capture.begin();
