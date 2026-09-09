@@ -232,7 +232,6 @@ export function NotchWings({
                 speaking={fixtureSpeaking}
                 voice={meterVoice}
                 voiceActive={voiceActive}
-                connecting={voiceOpening && voice === undefined && !analyser}
                 onVoiceActivity={setMeasuredVoiceActive}
               />
             </span>

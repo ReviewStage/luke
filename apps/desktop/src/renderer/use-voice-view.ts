@@ -176,8 +176,10 @@ export function useVoiceView(): VoiceViewState {
     const timer = window.setTimeout(() => setVoiceActive(false), decided.remainingMs);
     return () => window.clearTimeout(timer);
   }, [levelReport]);
-  // A turn ending takes the voice with it, whatever the last level said.
-  const turnLive = waveformVoice(view.voiceStatus) !== undefined;
+  // A turn ending takes the voice with it, whatever the last level said. A
+  // press whose call is still opening is a live turn: its device is already
+  // heard, and the bars follow it as they will once the channel is up.
+  const turnLive = waveformVoice(view.voiceStatus) !== undefined || view.talkOpening;
   useEffect(() => {
     if (!turnLive) setVoiceActive(false);
   }, [turnLive]);

@@ -36,7 +36,10 @@ export const VOICE_ERROR_NOTICE_MS = 12_000;
 
 /**
  * The stream the meter should listen to for this status, or none. Typed over
- * the stream itself so the rule can be tested without a MediaStream.
+ * the stream itself so the rule can be tested without a MediaStream. A
+ * connecting call meters the local stream too: only a press opens one, and
+ * its words are already being captured beside the handshake, so the meter
+ * draws the same listening it will draw once the channel is up.
  */
 export function activeVoiceStream<T>(input: {
   status: RealtimeStatus;
@@ -45,6 +48,7 @@ export function activeVoiceStream<T>(input: {
 }): T | undefined {
   if (input.status === REALTIME_STATUS.RESPONDING) return input.remote;
   if (input.status === REALTIME_STATUS.LISTENING) return input.local;
+  if (input.status === REALTIME_STATUS.CONNECTING) return input.local;
   return undefined;
 }
 
