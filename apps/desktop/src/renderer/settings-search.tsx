@@ -37,9 +37,9 @@ import { VOICE_SOURCE } from "@sidecar/settings/wire";
 import { Fragment, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { tell } from "./act";
-import { FOCUS_FRAME_LIMIT } from "./credential-entry";
+import { drawnVisibly, focusSeek } from "./focus-seek";
 import { ERRAND_TARGET_ATTRIBUTE } from "./luke-errand";
-import { searchTokens } from "./session-model";
+import { matchesTokens, searchTokens } from "./session-model";
 import { Highlighted } from "./session-search";
 import {
   SETTINGS_SUBVIEW_LIST,
@@ -443,10 +443,7 @@ export function searchSettings(
 ): SettingsSearchOutcome | undefined {
   const tokens = searchTokens(query);
   if (tokens.length === 0) return undefined;
-  const kept = entries.filter((entry) => {
-    const lines = entry.haystack.map((line) => line.toLowerCase());
-    return tokens.every((token) => lines.some((line) => line.includes(token)));
-  });
+  const kept = entries.filter((entry) => matchesTokens(entry.haystack, tokens));
   const groups = PAGE_ORDER.flatMap((page): SettingsSearchGroup[] => {
     const items = kept.filter((entry) => entry.page === page);
     return items.length > 0 ? [{ page, items }] : [];
@@ -469,22 +466,16 @@ const FOCUSABLE = "button, select, input, textarea, [tabindex]";
  * view belongs. A row the page is not drawing is given up on quietly.
  */
 export function landOnSettingsRow(id: string): () => void {
-  let frame = 0;
-  let frames = 0;
-  const take = () => {
-    const element =
-      document.querySelector(`[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${id}"]`) ??
-      document.querySelector(`[${ERRAND_TARGET_ATTRIBUTE}="${id}"]`);
-    if (element instanceof HTMLElement && element.checkVisibility({ opacityProperty: true })) {
+  return focusSeek({
+    find: () =>
+      document.querySelector<HTMLElement>(`[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${id}"]`) ??
+      document.querySelector<HTMLElement>(`[${ERRAND_TARGET_ATTRIBUTE}="${id}"]`),
+    ready: drawnVisibly,
+    act: (element) => {
       element.scrollIntoView({ block: "start" });
       if (element.matches(FOCUSABLE)) element.focus({ preventScroll: true });
-      return;
-    }
-    if (frames++ > FOCUS_FRAME_LIMIT) return;
-    frame = requestAnimationFrame(take);
-  };
-  take();
-  return () => cancelAnimationFrame(frame);
+    },
+  });
 }
 
 /**

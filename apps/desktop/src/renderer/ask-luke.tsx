@@ -4,7 +4,7 @@ import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useCallback, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { tell } from "./act";
-import { FOCUS_FRAME_LIMIT } from "./credential-entry";
+import { focusSeek } from "./focus-seek";
 import { Keycaps } from "./keycaps";
 
 /**
@@ -25,26 +25,15 @@ export const ASK_LUKE_INPUT_ID = "ask-luke-input";
  * Puts the caret in the ask field, waiting out the panel's arrival on the way.
  *
  * The ask key can arrive with the panel closed or with Settings showing, so
- * the field it is reaching for may not be drawn until React has answered —
- * and a hidden stage refuses focus outright, the same trap `focusWhenVisible`
- * waits out. So this seeks by id, frame by frame, until the field exists and
- * is visible, and gives up on the same backstop rather than holding an
- * intention forever.
+ * the field it is reaching for may not be drawn until React has answered — and
+ * a hidden stage refuses focus outright, which is the trap every seek waits
+ * out.
  */
 export function focusAskField(): () => void {
-  let frame = 0;
-  let frames = 0;
-  const take = () => {
-    const element = document.getElementById(ASK_LUKE_INPUT_ID);
-    if (element && getComputedStyle(element).visibility === "visible") {
-      element.focus({ preventScroll: true });
-      return;
-    }
-    if (frames++ > FOCUS_FRAME_LIMIT) return;
-    frame = requestAnimationFrame(take);
-  };
-  take();
-  return () => cancelAnimationFrame(frame);
+  return focusSeek({
+    find: () => document.getElementById(ASK_LUKE_INPUT_ID),
+    act: (element) => element.focus({ preventScroll: true }),
+  });
 }
 
 /**

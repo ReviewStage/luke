@@ -3,6 +3,7 @@ import { APP_PANEL_TAB, type AppPanelTab } from "@sidecar/guide";
 import { WingFace as LukeFace } from "@sidecar/panel";
 import { useEffect, useRef } from "react";
 import { flushSync } from "react-dom";
+import { drawnVisibly } from "./focus-seek";
 import { type AppSettingId, isAppSettingId } from "./luke-guide";
 import { HIT_REGION, HIT_REGION_ATTRIBUTE, PANEL_PRESENTATION } from "./panel-state";
 import { parseMilliseconds, parsePixels, STILL_MS } from "./session-motion";
@@ -519,11 +520,6 @@ function keepInView(stage: HTMLElement, target: HTMLElement, room: number): void
   }
 }
 
-/** Only a control a reader can actually see is worth flying to. */
-function drawn(element: HTMLElement): boolean {
-  return element.checkVisibility({ opacityProperty: true });
-}
-
 /**
  * The first candidate the panel is actually drawing. Read as one pass over the
  * marked elements rather than a selector per candidate, so the document is
@@ -536,7 +532,8 @@ function landingPlace(
   const marked = new Map<string, HTMLElement>();
   for (const element of stage.querySelectorAll<HTMLElement>(`[${ERRAND_TARGET_ATTRIBUTE}]`)) {
     const target = element.getAttribute(ERRAND_TARGET_ATTRIBUTE);
-    if (target !== null && !marked.has(target) && drawn(element)) marked.set(target, element);
+    if (target !== null && !marked.has(target) && drawnVisibly(element))
+      marked.set(target, element);
   }
   for (const target of targets) {
     const element = marked.get(target);
@@ -668,7 +665,7 @@ export function LukeErrand({ errand, onLanded, onReturned }: LukeErrandProps): R
       const target = landingPlace(stage, errand.targets);
       // No face is the meter standing in Luke's place, and no target is a
       // control this build does not draw. Either way there is no journey.
-      if (face === null || !drawn(face) || target === undefined) return returnHome();
+      if (face === null || !drawnVisibly(face) || target === undefined) return returnHome();
       // A control below the fold of a settings page is scrolled to first, so
       // the flight lands somewhere a reader is looking — and far enough above
       // the foot that the captions still to come cannot take the view back.

@@ -2,6 +2,7 @@ import type { CredentialProviderId, CredentialSource } from "@sidecar/credential
 import { CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
 import type { ActionResult } from "@sidecar/wire";
 import { type RefObject, useEffect } from "react";
+import { focusSeek } from "./focus-seek";
 
 /* One field, three jobs: what it is for depends on what is answering for the
    provider now, and a credential typed here always wins over one read
@@ -99,34 +100,17 @@ export function removalEndsEntry(
   return rejection === undefined && entry?.providerId === providerId;
 }
 
-/** Long enough for any stage to arrive, and short enough to be a backstop. */
-export const FOCUS_FRAME_LIMIT = 60;
-
 /**
  * Hands focus to an element as soon as it can take it, and answers with the way
- * to stop waiting.
- *
- * Everything the panel draws around a credential sits in a staged surface that
- * is `visibility: hidden` until its arrival delay has passed, and a hidden
- * element refuses focus outright — so asking on the frame the shape changes
- * silently does nothing. This waits for the stage rather than guessing at its
- * delay, which keeps the timing in the stylesheet where the rest of the motion
- * lives.
+ * to stop waiting. An element that is not there at all is given up on at once:
+ * the caller already holds it, so no later frame could find a different one.
  */
 export function focusWhenVisible(element: HTMLElement | null): () => void {
-  let frame = 0;
-  let frames = 0;
-  const takeFocus = () => {
-    if (!element) return;
-    if (getComputedStyle(element).visibility !== "visible") {
-      if (frames++ > FOCUS_FRAME_LIMIT) return;
-      frame = requestAnimationFrame(takeFocus);
-      return;
-    }
-    element.focus({ preventScroll: true });
-  };
-  takeFocus();
-  return () => cancelAnimationFrame(frame);
+  if (!element) return () => undefined;
+  return focusSeek({
+    find: () => element,
+    act: (target) => target.focus({ preventScroll: true }),
+  });
 }
 
 /**
