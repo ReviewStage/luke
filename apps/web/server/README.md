@@ -289,14 +289,24 @@ DATABASE_URL_UNPOOLED=postgresql://... pnpm --filter @luke/web db:migrate
 LUKE_STORE_TEST_DATABASE_URL=postgresql://... pnpm --filter @luke/web test:store
 ```
 
-## Phone push tokens
+## Devices
 
-`api/devices/token.ts` registers (POST) and forgets (DELETE) the push token of
-a phone signed into Luke. A token names one app installation and nothing else:
-it is not a credential, and the row moves to whichever account the phone last
-signed in under, so a notification for one account can never reach a phone now
-signed in as another. Rows go with the account, at sign-out, and when Apple
-answers that the token is gone.
+`api/devices.ts` keeps one `devices` row per app installation on every
+platform Luke runs on — `macos`, `ios`, and `watchos` — registered (POST) at
+sign-in, moved along (PUT) by a heartbeat that carries the row's last-seen
+instant and optionally a presence window or a push token change, and
+forgotten (DELETE) at sign-out. The row is keyed by an installation id the
+client minted once and keeps in its own state, so a device that signs into a
+different account moves its one row to that account rather than leaving a
+second, and a notification for one account can never reach a device now
+signed in as another. A push token is unique across rows because Apple issues
+one per installation; a registration or heartbeat that presents a token
+another row holds takes it off that row in the same transaction. The
+installation id and a push token are not credentials. Rows go with the
+account, at sign-out, and when Apple answers that the token is gone. The
+handler is `server/hosted/devices.ts` and the writes `server/hosted/device-store.ts`;
+`active_until` is written by nothing today, and the push token reaches the
+sender below in a later change.
 
 `server/hosted/apns.ts` is the sender behind those rows. It needs the
 deployment's Apple push credential, an APNs auth key from the developer
@@ -311,6 +321,6 @@ account, as four variables:
 
 Any one absent or blank means no sender is constructed, the same kill switch
 the OpenAI and vault endpoints keep: a Preview deployment without the
-credential stores registrations and sends nothing. Each token records which
-of Apple's two gateways issued it, so a build run from Xcode and one from
-TestFlight are addressed at the right host.
+credential stores registrations and sends nothing. Each row records which
+of Apple's two gateways issued its token, so a build run from Xcode and one
+from TestFlight are addressed at the right host.

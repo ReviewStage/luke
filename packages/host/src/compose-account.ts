@@ -1,5 +1,10 @@
 import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT } from "@sidecar/analytics";
-import { AccountClient, AccountSessionManager, accountGateOpen } from "@sidecar/credentials";
+import {
+  AccountClient,
+  AccountSessionManager,
+  accountGateOpen,
+  type StoredAccount,
+} from "@sidecar/credentials";
 import {
   ACCOUNT_STATUS,
   type AccountSnapshot,
@@ -40,6 +45,8 @@ export interface AccountLinks {
   retireBrain: () => void;
   rebuildBrain: () => Promise<void>;
   syncMemory: () => void;
+  /** The device row let go of on the departing account's own token, before the credential is cleared. */
+  releaseDevice: (account: StoredAccount) => Promise<void>;
 }
 
 export interface AccountComposer extends Composer {
@@ -78,6 +85,7 @@ export function composeAccount(dependencies: AccountDependencies): AccountCompos
     openExternal: (url) => kernel.openExternalThroughNode(url),
     startCapabilities: () => links.get().startCapabilities(),
     stopCapabilities: () => links.get().stopCapabilities(),
+    onSignOut: (stored) => links.get().releaseDevice(stored),
     onChange: (next) => {
       const signedIn = next.status === ACCOUNT_STATUS.SIGNED_IN;
       const wasSignedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;

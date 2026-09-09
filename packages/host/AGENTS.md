@@ -20,17 +20,21 @@ that line: the ipcMain registrations stayed in `apps/desktop/src/main/ipc/`,
 and resolving this Mac's EventKit helper bundle stayed in
 `apps/desktop/src/main/native/`.
 
-## One composition, seven concerns
+## One composition, eight concerns
 
 `composeHost` constructs, links, merges, and starts; it holds no state of a
-concern's own. Each concern is a composer — settings, account, issues,
-observation, calendars, speech, brain — that owns its own mutable state, its
-own timers, and the Gateway methods of its domain, and answers `start()` and
-`stop()` for exactly what it began. The merge folds their method tables into
-one and refuses a method two of them claim, so which concern answers a method
-is checked at construction rather than left to the fold's order.
-`client.bootstrap` is the one method no composer owns: it reads six of them,
-and giving it to any would hand that composer references to the other five.
+concern's own. Each concern is a composer — settings, account, devices,
+issues, observation, calendars, speech, brain — that owns its own mutable
+state, its own timers, and the Gateway methods of its domain, and answers
+`start()` and `stop()` for exactly what it began. The devices composer answers
+no method at all: it is this installation's device row on the service,
+registered when the account gate opens, kept warm by a timer, and forgotten
+at sign-out on the departing account's own token. The merge folds their
+method tables into one and refuses a method two of them claim, so which
+concern answers a method is checked at construction rather than left to the
+fold's order. `client.bootstrap` is the one method no composer owns: it reads
+six of them, and giving it to any would hand that composer references to the
+other five.
 
 The concerns depend on each other in both directions in five places — the
 account's capability gate starts the loops whose owners read that gate, the

@@ -29,7 +29,14 @@ import {
   PRODUCT_SETTING_VALUE,
 } from "@sidecar/analytics";
 import { APP_SETTING_ID } from "@sidecar/guide";
-import { HOSTED_API_ERROR, VAULT_KEY_MAX_LENGTH } from "@sidecar/hosted";
+import {
+  DEVICE_PLATFORM,
+  DEVICE_TOKEN_BOUNDS,
+  HOSTED_API_ERROR,
+  HOSTED_SERVICE_PATH,
+  PUSH_ENVIRONMENT,
+  VAULT_KEY_MAX_LENGTH,
+} from "@sidecar/hosted";
 import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import {
   CLOUD_AGENT_PROVIDER_ID,
@@ -135,6 +142,38 @@ test("HostedAPIError is HOSTED_API_ERROR", () => {
     swiftEnumRawValues(swift(`${KIT}/VaultClient.swift`), "HostedAPIError"),
     HOSTED_API_ERROR,
     "a refusal the phone cannot name is shown as a bare status instead of a reason",
+  );
+});
+
+test("DevicePlatform is DEVICE_PLATFORM", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/DeviceClient.swift`), "DevicePlatform"),
+    DEVICE_PLATFORM,
+    "a platform the service does not name registers no row",
+  );
+});
+
+test("PushEnvironment is PUSH_ENVIRONMENT", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/DeviceClient.swift`), "PushEnvironment"),
+    PUSH_ENVIRONMENT,
+    "a gateway name the service does not know refuses the registration whole",
+  );
+});
+
+test("the device path and token bounds are the hosted contract's", () => {
+  assert.equal(
+    `/${swiftStaticString(swift(`${KIT}/DeviceClient.swift`), "path")}`,
+    HOSTED_SERVICE_PATH.DEVICES,
+    "a path the service does not answer registers nothing",
+  );
+  assert.equal(
+    swiftStaticNumber(swift(`${KIT}/DeviceClient.swift`), "tokenMinLength"),
+    DEVICE_TOKEN_BOUNDS.MIN_LENGTH,
+  );
+  assert.equal(
+    swiftStaticNumber(swift(`${KIT}/DeviceClient.swift`), "tokenMaxLength"),
+    DEVICE_TOKEN_BOUNDS.MAX_LENGTH,
   );
 });
 

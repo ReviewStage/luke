@@ -12,5 +12,5 @@ test("account preferences have a stable endpoint path", () => {
 });
 
 test("the device registration has a stable endpoint path", () => {
-  assert.equal(HOSTED_SERVICE_PATH.DEVICE_TOKEN, "/api/devices/token");
+  assert.equal(HOSTED_SERVICE_PATH.DEVICES, "/api/devices");
 });

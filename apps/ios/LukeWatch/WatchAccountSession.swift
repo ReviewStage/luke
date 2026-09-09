@@ -26,6 +26,10 @@ final class WatchAccountSession {
     private(set) var accountScope: String?
 
     @ObservationIgnored var onCredentialsNeeded: (() -> Void)?
+    /// Tokens landed from the phone: the moment this watch registers its device row.
+    @ObservationIgnored var onSignedIn: (@MainActor () -> Void)?
+    /// The phone signed out: the row is forgotten on the token the watch still held.
+    @ObservationIgnored var onSignOut: ((String) async -> Void)?
 
     private var accessToken: String?
     private var tokenExpiry: Date?
@@ -38,7 +42,11 @@ final class WatchAccountSession {
     /// Accepts both proactive pushes and sign-out notifications.
     func receive(payload: [String: Any]) {
         if payload["event"] as? String == "signedOut" {
+            let departing = accessToken
             signOut()
+            if let departing, let onSignOut {
+                Task { await onSignOut(departing) }
+            }
             return
         }
         guard
@@ -62,6 +70,7 @@ final class WatchAccountSession {
         self.tokenExpiry = stored.expiry
         accountScope = Self.scope(email: stored.email)
         state = .signedIn(email: email, name: stored.name)
+        onSignedIn?()
     }
 
     func signOut() {

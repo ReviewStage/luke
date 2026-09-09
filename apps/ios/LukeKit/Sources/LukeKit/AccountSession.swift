@@ -56,6 +56,12 @@ public final class AccountSession {
     /// rotates the refresh token on use, so a stale copy becomes invalid.
     public var onTokensRefreshed: (() -> Void)?
 
+    /// The last thing the departing account's access token is used for, run
+    /// after the session has let go of it and before the refresh token is
+    /// revoked: the device row this phone registered under the account is
+    /// told to let go while a token still stands to say so.
+    public var onSignOut: ((String) async -> Void)?
+
     public init(client: AccountClient) {
         self.client = client
         restoreFromKeychain()
@@ -95,11 +101,15 @@ public final class AccountSession {
     public func signOut() async {
         generation += 1
         let tokenToRevoke = refreshToken
+        let departing = accessToken
         accessToken = nil
         refreshToken = nil
         accessTokenExpiry = nil
         KeychainStore.phone.clearAll()
         state = .signedOut
+        if let departing, let onSignOut {
+            await onSignOut(departing)
+        }
         if let token = tokenToRevoke {
             try? await client.revoke(refreshToken: token)
         }

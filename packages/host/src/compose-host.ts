@@ -21,6 +21,7 @@ import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { composeAccount } from "./compose-account.js";
 import { composeBrain } from "./compose-brain.js";
 import { composeCalendars } from "./compose-calendars.js";
+import { composeDevices } from "./compose-devices.js";
 import { composeIssues } from "./compose-issues.js";
 import { composeObservation } from "./compose-observation.js";
 import { composeSettings } from "./compose-settings.js";
@@ -61,6 +62,7 @@ export function composeHost(options: HostSeams): Host {
 
   const settings = composeSettings({ kernel });
   const account = composeAccount({ kernel, settings });
+  const devices = composeDevices({ kernel, settings, account });
   const observationGate = () => runMode.observesProviders && account.capabilitiesActive();
   const issues = composeIssues({ kernel, settings, observationGate });
   const observation = composeObservation({ kernel, settings, account, issues, observationGate });
@@ -96,6 +98,7 @@ export function composeHost(options: HostSeams): Host {
     retireBrain: () => brain.wiring.retire(),
     rebuildBrain: () => brain.wiring.rebuild(),
     syncMemory: brain.syncMemory,
+    releaseDevice: (stored) => devices.release(stored),
   });
   observation.link({
     wake: (events) => brain.wiring.wake(events),
@@ -115,6 +118,7 @@ export function composeHost(options: HostSeams): Host {
   const composers: readonly Composer[] = [
     settings,
     account,
+    devices,
     issues,
     observation,
     calendars,
@@ -129,6 +133,7 @@ export function composeHost(options: HostSeams): Host {
     await account.applyVoiceCredential();
     await settings.emitSettings();
     if (!account.capabilitiesActive()) return;
+    void devices.register();
     observation.startObservation();
     calendars.startObservation();
     supervisor.setEnabled(true);
@@ -138,6 +143,7 @@ export function composeHost(options: HostSeams): Host {
 
   async function stopAccountCapabilities(): Promise<void> {
     supervisor.setEnabled(false);
+    await devices.release(undefined);
     observation.stopObservation();
     issues.stopObservation();
     calendars.stopObservation();
@@ -237,6 +243,7 @@ export function composeHost(options: HostSeams): Host {
   const startOrder: readonly Composer[] = [
     settings,
     account,
+    devices,
     brain,
     calendars,
     observation,
@@ -247,6 +254,7 @@ export function composeHost(options: HostSeams): Host {
   const start = async (): Promise<void> => {
     for (const composer of startOrder) await composer.start();
     if (account.signedIn()) void settings.reconcileAccountPreferences();
+    void devices.register();
     await account.applyVoiceCredential();
     observation.startObservation();
     calendars.startObservation();

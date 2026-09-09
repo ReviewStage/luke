@@ -16,6 +16,7 @@ function manager(options: {
   stored?: StoredAccount;
   revoke?: (token: string) => Promise<void>;
   exchangeCode?: () => Promise<{ accessToken: string; refreshToken: string }>;
+  onSignOut?: (account: StoredAccount) => Promise<void>;
 }) {
   let stored = options.stored;
   const changes: string[] = [];
@@ -55,6 +56,7 @@ function manager(options: {
     stopCapabilities: async () => {
       events.push("stop");
     },
+    ...(options.onSignOut ? { onSignOut: options.onSignOut } : undefined),
     onChange: (account) => changes.push(account.status),
   });
   return { instance, changes, events, authorizations, stored: () => stored };
@@ -73,6 +75,27 @@ test("sign out closes capabilities, clears storage, broadcasts, then revokes", a
   assert.deepEqual(subject.events, ["stop"]);
   assert.deepEqual(subject.changes, [ACCOUNT_STATUS.SIGNED_OUT, ACCOUNT_STATUS.SIGNED_OUT]);
   assert.deepEqual(calls, ["revoke"]);
+  assert.equal(subject.stored(), undefined);
+});
+
+test("sign out releases the departing account while its token still stands, and a failed release never holds it up", async () => {
+  const order: string[] = [];
+  const subject = manager({
+    stored: STORED,
+    revoke: async () => {
+      order.push("revoke");
+    },
+    onSignOut: async (account) => {
+      order.push(
+        `release:${account.accessToken}:${subject.stored() === undefined ? "cleared" : "standing"}`,
+      );
+      throw new Error("service unreachable");
+    },
+  });
+  subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+  await subject.instance.signOut({ revokeRemote: true });
+  assert.deepEqual(order, ["release:access:standing", "revoke"]);
+  assert.deepEqual(subject.events, ["stop"]);
   assert.equal(subject.stored(), undefined);
 });
 
