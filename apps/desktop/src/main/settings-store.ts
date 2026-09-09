@@ -1,5 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import {
+  ACCOUNT_STATUS,
+  type AccountProvider,
+  type AccountSnapshot,
+  isAccountProvider,
+} from "@sidecar/account/snapshot";
 import { APPLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
 import {
   CREDENTIAL_CONNECTION,
@@ -9,7 +15,22 @@ import {
   type CredentialProviderId,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "@sidecar/credentials";
+import {
+  CREDENTIAL_SOURCE,
+  type CredentialSource,
+  SECRET_STORAGE,
+  type SecretStorage,
+} from "@sidecar/credentials/vocabulary";
 import { REALTIME_DEFAULTS } from "@sidecar/realtime";
+import {
+  type AppSettings,
+  CLI_CONNECTION,
+  type CliConnection,
+  type SettingsResetScope,
+  type SettingsUpdateResult,
+  VOICE_SOURCE,
+  type VoiceSource,
+} from "@sidecar/settings/wire";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import {
   ACT_RESULT_STATUS,
@@ -22,25 +43,6 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
-import {
-  ACCOUNT_STATUS,
-  type AccountProvider,
-  type AccountSnapshot,
-  CREDENTIAL_SOURCE,
-  type CredentialSource,
-  isAccountProvider,
-  SECRET_STORAGE,
-  type SecretStorage,
-} from "#shared/messages/account";
-import {
-  type AppSettings,
-  CLI_CONNECTION,
-  type CliConnection,
-  type SettingsResetScope,
-  type SettingsUpdateResult,
-  VOICE_SOURCE,
-  type VoiceSource,
-} from "#shared/messages/settings";
 // The reader owns the shape it is fed: what this store resolves a stored
 // connection into is exactly what `readAppleCalendarConnection` promises it.
 import type { AppleCalendarConnection } from "./apple-calendar";

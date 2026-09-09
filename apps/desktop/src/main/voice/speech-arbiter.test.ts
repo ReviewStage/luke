@@ -8,7 +8,7 @@ import {
   CALENDAR_ONBOARDING_SPEECH_KIND,
   isBriefingSpeech,
 } from "@sidecar/realtime";
-import { SPEECH_OUTCOME } from "#shared/messages/speech";
+import { SPEECH_OUTCOME } from "@sidecar/realtime/speech";
 import { FakeClock } from "#testing/fake-clock";
 import {
   MAXIMUM_PENDING_BRIEFINGS,

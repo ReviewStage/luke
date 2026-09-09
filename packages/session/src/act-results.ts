@@ -146,6 +146,16 @@ export type ProviderWorkspaceResult =
   | UnknownActResult;
 
 /**
+ * What became of a request to open a session. Opening is a local act — the
+ * session's address is handed to the operating system, never to a provider —
+ * so the answer is the app's own: opened, refused by the system, or
+ * unsupported because the session never reported an address. A pressed row
+ * ignores the answer; a spoken ask says it aloud, and grounding that sentence
+ * is why this is answered at all.
+ */
+export type SessionOpenResult = ActResult | UnknownActResult;
+
+/**
  * Thrown by an open port when the address was handed to the process that
  * opens it and that process went away before answering: the system may have
  * opened it. An adapter that creates through a deep link reads this as an

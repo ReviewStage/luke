@@ -15,6 +15,11 @@ import {
   isBrainRequestOrigin,
   isTerminalBrainRequestStatus,
 } from "@sidecar/brain/requests";
+import type {
+  BrainAskWait,
+  BrainReplyClaimResult,
+  BrainRequestSnapshot,
+} from "@sidecar/brain/requests-wire";
 import {
   GATEWAY_ERROR,
   GATEWAY_EVENT,
@@ -53,11 +58,6 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
-import type {
-  BrainAskWait,
-  BrainReplyClaimResult,
-  BrainRequestSnapshot,
-} from "#shared/messages/brain";
 import { publishAsk } from "../brain/ipc";
 import type { SettableConfigurationPatch } from "../brain/wiring";
 import type { ConversationOperations } from "../conversation-operations";

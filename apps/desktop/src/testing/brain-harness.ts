@@ -11,6 +11,11 @@ import {
   responsesModelAnswer,
 } from "@sidecar/brain";
 import { isTerminalBrainRequestStatus } from "@sidecar/brain/requests";
+import type {
+  BrainReplyClaimResult,
+  BrainReplyOffer,
+  BrainRequestSnapshot,
+} from "@sidecar/brain/requests-wire";
 import {
   type BareResponsesModel,
   bareModelAdapter,
@@ -27,11 +32,6 @@ import { BrainHost } from "#main/brain/host";
 import { followBrainRequests } from "#main/brain/ipc";
 import { deliverable, type GrantedWords, ledgerContext } from "#main/gateway/service";
 import { VoiceReceiver } from "#main/voice-receiver";
-import type {
-  BrainReplyClaimResult,
-  BrainReplyOffer,
-  BrainRequestSnapshot,
-} from "#shared/messages/brain";
 import { operatorOverBrain } from "#testing/operator-over-brain";
 import { drainMicrotasks } from "./drain";
 

@@ -1,7 +1,7 @@
+import { CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
 import { ExternalIcon, ProviderMark } from "@sidecar/panel";
 import { SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/session";
 import { useEffect, useRef, useState } from "react";
-import { CREDENTIAL_SOURCE } from "#shared/messages/account";
 import type { SupersetSignInSnapshot } from "#shared/messages/session";
 import { SUPERSET_SIGN_IN_STAGE } from "#shared/messages/session";
 import { CREDENTIAL_PLACEHOLDER, useStagedFocus } from "./credential-entry";

@@ -1,8 +1,7 @@
-import type { CredentialProviderId } from "@sidecar/credentials/vocabulary";
+import type { CredentialProviderId, CredentialSource } from "@sidecar/credentials/vocabulary";
+import { CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
 import type { ActResult } from "@sidecar/wire";
 import { type RefObject, useEffect } from "react";
-import type { CredentialSource } from "#shared/messages/account";
-import { CREDENTIAL_SOURCE } from "#shared/messages/account";
 
 /* One field, three jobs: what it is for depends on what is answering for the
    provider now, and a credential typed here always wins over one read

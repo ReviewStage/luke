@@ -7,6 +7,7 @@ import {
   accountGateOpen,
   HostedVaultClient,
 } from "@sidecar/account";
+import { ACCOUNT_STATUS, type AccountSnapshot, isAccountProvider } from "@sidecar/account/snapshot";
 import { rememberedFactsText } from "@sidecar/acts";
 import {
   PRODUCT_ACCOUNT_ACT,
@@ -30,6 +31,7 @@ import {
   EMBEDDING_BATCH_SIZE,
 } from "@sidecar/brain";
 import { BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
+import type { BrainAppActRequest } from "@sidecar/brain/requests-wire";
 import {
   activeMeetingEnd,
   GoogleCalendarReader,
@@ -37,7 +39,11 @@ import {
   type MeetingInterval,
   nextMeetingBoundary,
 } from "@sidecar/calendar";
-import { APPLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
+import {
+  APPLE_CALENDAR_ACCESS,
+  APPLE_CALENDAR_ID,
+  CALENDAR_PRIVACY_PANE_URL,
+} from "@sidecar/calendar/vocabulary";
 import {
   CREDENTIAL_PROVIDER_ID,
   type CredentialProviderId,
@@ -98,6 +104,7 @@ import {
   storedConversationEntry,
   workspaceProjectContextText,
 } from "@sidecar/realtime";
+import { isSpeechOutcome, SPEECH_OUTCOME, type SpeechOutcome } from "@sidecar/realtime/speech";
 import {
   CREDENTIAL_REFERENCE_KIND,
   CronScheduler,
@@ -157,6 +164,7 @@ import {
   VOICE_SOURCE,
   VOICE_SOURCE_COUNTED_AS,
 } from "@sidecar/settings";
+import type { ObservedAccountCalendars, SettingsUpdateResult } from "@sidecar/settings/wire";
 import {
   SUPERSET_SIGN_IN_STAGE,
   SupersetSignIn,
@@ -176,11 +184,6 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
-import { APPLE_CALENDAR_ACCESS, CALENDAR_PRIVACY_PANE_URL } from "#shared/apple-calendar";
-import { ACCOUNT_STATUS, type AccountSnapshot, isAccountProvider } from "#shared/messages/account";
-import type { BrainAppActRequest } from "#shared/messages/brain";
-import type { ObservedAccountCalendars, SettingsUpdateResult } from "#shared/messages/settings";
-import { isSpeechOutcome, SPEECH_OUTCOME, type SpeechOutcome } from "#shared/messages/speech";
 import {
   APPLE_CALENDAR_ACCESS_REFUSAL,
   type AppleCalendarHelperRun,

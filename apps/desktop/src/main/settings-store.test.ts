@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+import { ACCOUNT_STATUS } from "@sidecar/account/snapshot";
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
+import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "@sidecar/credentials/vocabulary";
 import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import {
   PROVIDER_ID,
@@ -19,10 +21,9 @@ import {
   settingEntryGuard,
   VOICE_HOTKEY_NONE,
 } from "@sidecar/settings";
+import { appSettingsView, SETTINGS_RESET_SCOPE, VOICE_SOURCE } from "@sidecar/settings/wire";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { type UnparsedWireValue, unparsedWire, type WireRecord } from "@sidecar/wire";
-import { ACCOUNT_STATUS, CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/messages/account";
-import { appSettingsView, SETTINGS_RESET_SCOPE, VOICE_SOURCE } from "#shared/messages/settings";
 import { temporaryDirectory } from "#testing/temporary-directory";
 import {
   apiKeyRejection,

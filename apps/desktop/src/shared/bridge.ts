@@ -1,4 +1,5 @@
 import type { AccountProvider, AccountSnapshot } from "@sidecar/account/snapshot";
+import { isAccountProvider } from "@sidecar/account/snapshot";
 import { ACT_KIND } from "@sidecar/acts";
 import {
   isProductExchangeKind,
@@ -8,7 +9,26 @@ import {
   type ProductSurfaceEventName,
   productEventFromWire,
 } from "@sidecar/analytics";
+import {
+  type BrainAppActAnswer,
+  type BrainAppActRequest,
+  type BrainAskSubmission,
+  type BrainAskSubmissionResult,
+  type BrainAskWait,
+  type BrainReplyClaimResult,
+  type BrainReplyOffer,
+  type BrainRequestSnapshot,
+  isBrainAskSubmission,
+  isBrainAskSubmissionResult,
+  isBrainAskWait,
+  isBrainReplyClaimResult,
+  isBrainReplyOffer,
+  isBrainRequestSnapshot,
+  isBrainRequestSnapshotList,
+  isReceiverEpoch,
+} from "@sidecar/brain/requests-wire";
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
+import type { AppleCalendarAccess } from "@sidecar/calendar/vocabulary";
 import { type CredentialProviderId, isCredentialProviderId } from "@sidecar/credentials/vocabulary";
 import { type AgentWireTrace, isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import {
@@ -25,6 +45,14 @@ import {
   type RealtimeDiagnostics,
   storedConversationEntry,
 } from "@sidecar/realtime";
+import {
+  isSpeechOffer,
+  isSpeechOutcome,
+  isSpeechWithdrawal,
+  type SpeechOffer,
+  type SpeechOutcome,
+  type SpeechWithdrawal,
+} from "@sidecar/realtime/speech";
 import {
   isProviderId,
   isSessionApplicationId,
@@ -46,6 +74,7 @@ import {
   type SettingsResetScope,
   settingEntryGuard,
 } from "@sidecar/settings";
+import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
 import type { SupersetSignInSnapshot } from "@sidecar/superset/sign-in-stage";
 import type { WindowMode } from "@sidecar/surface";
 import {
@@ -61,8 +90,6 @@ import {
   unparsedWire,
   type WireBoundaryInput,
 } from "@sidecar/wire";
-import type { AppleCalendarAccess } from "./apple-calendar";
-import { isAccountProvider } from "./messages/account";
 import {
   MICROPHONE_STATUS,
   type MicrophoneRoute,
@@ -70,24 +97,6 @@ import {
   type OutputAudioState,
   type VoiceHotkeyState,
 } from "./messages/audio";
-import {
-  type BrainAppActAnswer,
-  type BrainAppActRequest,
-  type BrainAskSubmission,
-  type BrainAskSubmissionResult,
-  type BrainAskWait,
-  type BrainReplyClaimResult,
-  type BrainReplyOffer,
-  type BrainRequestSnapshot,
-  isBrainAskSubmission,
-  isBrainAskSubmissionResult,
-  isBrainAskWait,
-  isBrainReplyClaimResult,
-  isBrainReplyOffer,
-  isBrainRequestSnapshot,
-  isBrainRequestSnapshotList,
-  isReceiverEpoch,
-} from "./messages/brain";
 import {
   type AppBootstrap,
   type ConversationHistoryPayload,
@@ -99,15 +108,6 @@ import {
   WINDOW_ROLE,
   type WindowRole,
 } from "./messages/session";
-import type { AppSettings, SettingsUpdateResult } from "./messages/settings";
-import {
-  isSpeechOffer,
-  isSpeechOutcome,
-  isSpeechWithdrawal,
-  type SpeechOffer,
-  type SpeechOutcome,
-  type SpeechWithdrawal,
-} from "./messages/speech";
 import type { UpdateSnapshot } from "./messages/update";
 import {
   isVoiceCommand,

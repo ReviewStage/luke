@@ -3,6 +3,7 @@ import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_SUBMISSION_OUTCOME,
 } from "@sidecar/brain/requests";
+import type { BrainAskSubmissionResult, BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
 import { type ConversationEntry, REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -10,7 +11,6 @@ import {
   type MicrophoneStatus,
   type VoiceHotkeyState,
 } from "#shared/messages/audio";
-import type { BrainAskSubmissionResult, BrainRequestSnapshot } from "#shared/messages/brain";
 import type { AppBootstrap } from "#shared/messages/session";
 import {
   IDLE_VOICE_VIEW,

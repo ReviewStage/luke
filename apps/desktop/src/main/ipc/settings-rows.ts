@@ -1,4 +1,5 @@
 import type { RecordProductEvent } from "@sidecar/analytics";
+import { APPLE_CALENDAR_ACCESS, CALENDAR_PRIVACY_PANE_URL } from "@sidecar/calendar/vocabulary";
 import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
 import {
   APP_SETTING_FIELDS,
@@ -6,11 +7,10 @@ import {
   type AppSettingField,
   SETTING_SIDE_EFFECT,
 } from "@sidecar/settings";
+import type { AppSettings } from "@sidecar/settings/wire";
 import { ACT_RESULT_STATUS, isWireString } from "@sidecar/wire";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
-import { APPLE_CALENDAR_ACCESS, CALENDAR_PRIVACY_PANE_URL } from "#shared/apple-calendar";
 import { BRIDGE, type BridgeArgumentsFor } from "#shared/bridge";
-import type { AppSettings } from "#shared/messages/settings";
 import type { HostOperator } from "../gateway/host-operator";
 import type { MediaDuckController } from "../native/media-duck";
 import { type BridgeContext, registerBridge } from "../register-bridge";

@@ -1,8 +1,11 @@
-import type { CredentialProviderId } from "@sidecar/credentials/vocabulary";
+import type {
+  CredentialProviderId,
+  CredentialSource,
+  SecretStorage,
+} from "@sidecar/credentials/vocabulary";
 import type { CliConnection } from "@sidecar/session";
-import { APP_SETTING_DEFAULTS, type StoredAppSettings, VOICE_SOURCE } from "@sidecar/settings";
 import type { ActResult } from "@sidecar/wire";
-import type { CredentialSource, SecretStorage } from "./account";
+import { APP_SETTING_DEFAULTS, type StoredAppSettings, VOICE_SOURCE } from "./schema.js";
 
 export type { AccountCalendar, ObservedAccountCalendars } from "@sidecar/calendar/observation";
 export { CLI_CONNECTION, type CliConnection } from "@sidecar/session";
@@ -13,14 +16,14 @@ export type {
   SettingEntryValue,
   SettingsResetScope,
   VoiceSource,
-} from "@sidecar/settings";
+} from "./schema.js";
 export {
   APP_SETTING_DEFAULTS,
   isSettingsResetScope,
   isVoiceSource,
   SETTINGS_RESET_SCOPE,
   VOICE_SOURCE,
-} from "@sidecar/settings";
+} from "./schema.js";
 
 /**
  * One connected calendar source as a renderer may know it: which account,

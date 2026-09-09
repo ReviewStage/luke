@@ -4,6 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import * as Sentry from "@sentry/electron/main";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/account/snapshot";
 import {
   PRODUCT_CREDENTIAL_SOURCE,
   PRODUCT_EVENT,
@@ -11,13 +12,16 @@ import {
   productSessionCountBucket,
   type RecordProductEvent,
 } from "@sidecar/analytics";
+import type { BrainAppActRequest } from "@sidecar/brain/requests-wire";
 import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidecar/feedback";
 import { fixtureSnapshot } from "@sidecar/fixtures";
 import { GATEWAY_CLIENT_ROLE, InProcessTransport, shutdownGateway } from "@sidecar/gateway";
 import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { peekLocalSessions } from "@sidecar/providers";
+import type { SpeechOutcome } from "@sidecar/realtime/speech";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
+import type { AppSettings } from "@sidecar/settings/wire";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { IntroductionRealtimeCredentialMinter } from "@sidecar/voice";
 import { ACT_RESULT_STATUS, text, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
@@ -38,22 +42,18 @@ import {
   type WebContents,
 } from "electron";
 import { BRIDGE, channels } from "#shared/bridge";
-import { ACCOUNT_STATUS, type AccountSnapshot } from "#shared/messages/account";
 import {
   MICROPHONE_STATUS,
   type MicrophoneRoute,
   type MicrophoneStatus,
   type OutputAudioState,
 } from "#shared/messages/audio";
-import type { BrainAppActRequest } from "#shared/messages/brain";
 import {
   type AppBootstrap,
   type SessionReplayBootstrap,
   type VoiceBootstrap,
   WINDOW_ROLE,
 } from "#shared/messages/session";
-import type { AppSettings } from "#shared/messages/settings";
-import type { SpeechOutcome } from "#shared/messages/speech";
 import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/messages/voice-view";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
 import { runAppleCalendarHelper } from "./apple-calendar";

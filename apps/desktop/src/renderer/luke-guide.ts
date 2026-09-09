@@ -21,10 +21,15 @@
  * the guide says whether a provider is connected, and no more.
  */
 
+import type { AccountSnapshot } from "@sidecar/account/snapshot";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@sidecar/account/snapshot";
+import type { CredentialSource } from "@sidecar/credentials/vocabulary";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDERS,
+  CREDENTIAL_SOURCE,
+  SECRET_STORAGE,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "@sidecar/credentials/vocabulary";
 import {
@@ -45,18 +50,11 @@ import {
   settingGuideEntries,
   spokenSettingValue,
 } from "@sidecar/settings";
+import type { AppSettings, AppSettingsView, SettingsUpdateResult } from "@sidecar/settings/wire";
+import { CLI_CONNECTION } from "@sidecar/settings/wire";
 import { ACT_RESULT_STATUS, type ActResult } from "@sidecar/wire";
 import type { AppBridge } from "#shared/bridge";
-import type { AccountSnapshot, CredentialSource } from "#shared/messages/account";
-import {
-  ACCOUNT_PROVIDER,
-  ACCOUNT_STATUS,
-  CREDENTIAL_SOURCE,
-  SECRET_STORAGE,
-} from "#shared/messages/account";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "#shared/messages/audio";
-import type { AppSettings, AppSettingsView, SettingsUpdateResult } from "#shared/messages/settings";
-import { CLI_CONNECTION } from "#shared/messages/settings";
 import type { UpdateSnapshot } from "#shared/messages/update";
 import { UPDATE_STATUS } from "#shared/messages/update";
 import { UPDATE_ROW_ACTION, type UpdateRowAction, updateRow } from "./update-row";

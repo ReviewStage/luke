@@ -1,8 +1,4 @@
 import { brainRequestRecordFromWire, isBrainRequestOrigin } from "@sidecar/brain/requests";
-import type { GatewayCallResult, GatewayClient } from "@sidecar/gateway";
-import { GATEWAY_EVENT, GATEWAY_METHOD, gatewayEventReader } from "@sidecar/gateway";
-import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
-import { isRecord, isWireBoolean, isWireNumber, isWireString, type WireValue } from "@sidecar/wire";
 import {
   type BrainAskSubmission,
   type BrainAskSubmissionResult,
@@ -12,7 +8,11 @@ import {
   type BrainRequestSnapshot,
   isBrainAskSubmissionResult,
   isBrainReplyOffer,
-} from "#shared/messages/brain";
+} from "@sidecar/brain/requests-wire";
+import type { GatewayCallResult, GatewayClient } from "@sidecar/gateway";
+import { GATEWAY_EVENT, GATEWAY_METHOD, gatewayEventReader } from "@sidecar/gateway";
+import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
+import { isRecord, isWireBoolean, isWireNumber, isWireString, type WireValue } from "@sidecar/wire";
 import { CONVERSATION_DELETE_OUTCOME } from "../brain/conversation-deletion";
 import { REJECTED_SUBMISSION } from "../brain/ipc";
 

@@ -7,7 +7,7 @@ import {
   BRAIN_REQUEST_STATUS,
   isTerminalBrainRequestStatus,
 } from "@sidecar/brain/requests";
-import type { BrainReplyClaimResult } from "#shared/messages/brain";
+import type { BrainReplyClaimResult } from "@sidecar/brain/requests-wire";
 import {
   type BrainReplyClaimContext,
   deliverable,

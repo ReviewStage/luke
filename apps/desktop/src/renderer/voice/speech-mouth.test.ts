@@ -7,7 +7,7 @@ import {
   isBriefingSpeech,
   REALTIME_STATUS,
 } from "@sidecar/realtime";
-import { SPEECH_OUTCOME, type SpeechOffer, type SpeechOutcome } from "#shared/messages/speech";
+import { SPEECH_OUTCOME, type SpeechOffer, type SpeechOutcome } from "@sidecar/realtime/speech";
 import { FakeClock } from "#testing/fake-clock";
 import {
   ANNOUNCER_GRACE_MS,

@@ -1,3 +1,8 @@
+import {
+  BRAIN_ASK_PENDING_STATUS,
+  type BrainAppActRequest,
+  type BrainAskResult,
+} from "@sidecar/brain/requests-wire";
 import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/devtrace/vocabulary";
 import type { RealtimeConnection } from "@sidecar/hosted";
 import {
@@ -39,11 +44,6 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import {
-  BRAIN_ASK_PENDING_STATUS,
-  type BrainAppActRequest,
-  type BrainAskResult,
-} from "#shared/messages/brain";
 import { voiceExchangeActive } from "#shared/messages/voice-view";
 import {
   type BuiltRealtimeSessionConfig,

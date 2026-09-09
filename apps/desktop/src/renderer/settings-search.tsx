@@ -7,6 +7,7 @@ import {
 import {
   CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_PROVIDER_ID,
+  CREDENTIAL_SOURCE,
   VOICE_CREDENTIAL_PROVIDER,
 } from "@sidecar/credentials/vocabulary";
 import {
@@ -35,10 +36,9 @@ import {
   settingFieldForGuideId,
   settingGuideEntries,
 } from "@sidecar/settings";
+import type { AppSettingsView } from "@sidecar/settings/wire";
+import { VOICE_SOURCE } from "@sidecar/settings/wire";
 import { Fragment, useRef } from "react";
-import { CREDENTIAL_SOURCE } from "#shared/messages/account";
-import type { AppSettingsView } from "#shared/messages/settings";
-import { VOICE_SOURCE } from "#shared/messages/settings";
 import { FOCUS_FRAME_LIMIT } from "./credential-entry";
 import { ERRAND_TARGET_ATTRIBUTE } from "./luke-errand";
 import { searchTokens } from "./session-model";

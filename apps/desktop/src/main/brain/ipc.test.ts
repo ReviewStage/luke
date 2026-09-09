@@ -9,6 +9,7 @@ import {
   BRAIN_REQUEST_STATUS,
   brainReplyWords,
 } from "@sidecar/brain/requests";
+import type { BrainAskWait, BrainReplyClaimResult } from "@sidecar/brain/requests-wire";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
@@ -25,7 +26,6 @@ import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import { BRIDGE } from "#shared/bridge";
-import type { BrainAskWait, BrainReplyClaimResult } from "#shared/messages/brain";
 import { drainMicrotasks } from "#testing/drain";
 import { operatorOverBrain } from "#testing/operator-over-brain";
 import type { ConversationOperations } from "../conversation-operations";

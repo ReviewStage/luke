@@ -1,4 +1,3 @@
-import { isProactiveSpeechTurn, type ProactiveSpeechTurn } from "@sidecar/realtime";
 import {
   isRecord,
   isWireNumber,
@@ -6,6 +5,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { isProactiveSpeechTurn, type ProactiveSpeechTurn } from "./realtime-protocol.js";
 
 /**
  * What crosses the bridge between the speech arbiter in the main process and

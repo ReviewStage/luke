@@ -33,6 +33,7 @@ import {
   runOriginOf,
   TOOL_LOOP_RUNTIME,
 } from "@sidecar/brain";
+import { type BrainRequestSnapshot, brainRequestPending } from "@sidecar/brain/requests-wire";
 import {
   failedHousekeeping,
   housekeepingFellShort,
@@ -90,7 +91,6 @@ import {
   type SessionIdentity,
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { type BrainRequestSnapshot, brainRequestPending } from "#shared/messages/brain";
 import { type BrainActPerformerDependencies, createBrainActPerformer } from "./act-performer";
 import { BrainHost } from "./host";
 import { type BrainIpcDependencies, followBrainRequests } from "./ipc";

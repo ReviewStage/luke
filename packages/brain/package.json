@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.js",
     "./requests": "./src/requests.js",
+    "./requests-wire": "./src/requests-wire.js",
     "./testing": "./src/testing.js"
   },
   "types": "./src/index.ts",

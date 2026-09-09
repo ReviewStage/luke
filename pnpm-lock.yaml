@@ -820,6 +820,9 @@ importers:
       '@sidecar/analytics':
         specifier: workspace:*
         version: link:../analytics
+      '@sidecar/calendar':
+        specifier: workspace:*
+        version: link:../calendar
       '@sidecar/credentials':
         specifier: workspace:*
         version: link:../credentials

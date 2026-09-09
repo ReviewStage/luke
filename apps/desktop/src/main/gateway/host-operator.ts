@@ -1,6 +1,7 @@
 import type { AccountProvider, AccountSnapshot } from "@sidecar/account/snapshot";
 import type { ProductEventName, ProductEventPropertiesFor } from "@sidecar/analytics";
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
+import type { AppleCalendarAccess } from "@sidecar/calendar/vocabulary";
 import type { CredentialProviderId } from "@sidecar/credentials";
 import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import type { GatewayCallResult, GatewayClient } from "@sidecar/gateway";
@@ -8,6 +9,8 @@ import { carried, GATEWAY_EVENT, GATEWAY_METHOD, gatewayEventReader } from "@sid
 import type { AppGuideSnapshot } from "@sidecar/guide";
 import type { RealtimeConnection } from "@sidecar/hosted";
 import type { ConversationEntry, RealtimeDiagnostics } from "@sidecar/realtime";
+import type { SpeechOffer, SpeechOutcome } from "@sidecar/realtime/speech";
+import { isSpeechOffer } from "@sidecar/realtime/speech";
 import type {
   ObservedWorkspaceProject,
   Session,
@@ -21,6 +24,7 @@ import type {
   SettingEntryValue,
   SettingsResetScope,
 } from "@sidecar/settings";
+import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
 import type { SupersetSignInSnapshot } from "@sidecar/superset/sign-in-stage";
 import {
   ACT_RESULT_STATUS,
@@ -32,10 +36,6 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import type { AppleCalendarAccess } from "#shared/apple-calendar";
-import type { AppSettings, SettingsUpdateResult } from "#shared/messages/settings";
-import type { SpeechOffer, SpeechOutcome } from "#shared/messages/speech";
-import { isSpeechOffer } from "#shared/messages/speech";
 import { RECEIVER_REPORT_KIND } from "../host/runtime-host";
 
 /**

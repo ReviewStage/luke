@@ -1,6 +1,6 @@
 import type { BrainRequestOrigin } from "@sidecar/brain/requests";
+import type { BrainReplyClaimResult, BrainReplyOffer } from "@sidecar/brain/requests-wire";
 import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
-import type { BrainReplyClaimResult, BrainReplyOffer } from "#shared/messages/brain";
 import { voiceExchangeActive } from "#shared/messages/voice-view";
 
 /** The slice of the voice session a delivered reply is spoken through. */

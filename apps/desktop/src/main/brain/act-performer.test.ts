@@ -8,6 +8,7 @@ import {
   type RememberedFact,
 } from "@sidecar/acts";
 import type { BrainActExecution } from "@sidecar/brain";
+import type { BrainAppActRequest } from "@sidecar/brain/requests-wire";
 import { APP_SETTING_KIND, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import type { ConversationEntry } from "@sidecar/realtime";
 import { RUN_ORIGIN } from "@sidecar/runtime-contracts";
@@ -20,7 +21,6 @@ import {
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
-import type { BrainAppActRequest } from "#shared/messages/brain";
 import { drainMicrotasks } from "#testing/drain";
 import { type BrainActPerformerDependencies, createBrainActPerformer } from "./act-performer";
 

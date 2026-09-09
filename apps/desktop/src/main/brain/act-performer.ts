@@ -11,6 +11,7 @@ import {
   type ValidatedAct,
 } from "@sidecar/acts";
 import type { BrainActExecution, BrainActPerformer } from "@sidecar/brain";
+import type { BrainAppActRequest } from "@sidecar/brain/requests-wire";
 import type { AppGuideSnapshot } from "@sidecar/guide";
 import type { TrackedIssue } from "@sidecar/issues";
 import {
@@ -25,7 +26,6 @@ import {
   workspaceAgentModels,
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS, isWireString, type WireRecord } from "@sidecar/wire";
-import type { BrainAppActRequest } from "#shared/messages/brain";
 import type { SessionActPerformer } from "../ipc/session-acts";
 
 /** The developer's saved creation tie-breaks, as the projects context narrates them. */

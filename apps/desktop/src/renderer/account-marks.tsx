@@ -1,4 +1,4 @@
-import { ACCOUNT_PROVIDER, type AccountProvider } from "#shared/messages/account";
+import { ACCOUNT_PROVIDER, type AccountProvider } from "@sidecar/account/snapshot";
 
 /**
  * The two identity providers' own marks, traced for the sign-in surface. They

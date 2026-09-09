@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
+import {
+  CREDENTIAL_PROVIDER_ID,
+  CREDENTIAL_SOURCE,
+  SECRET_STORAGE,
+} from "@sidecar/credentials/vocabulary";
 import {
   CONVERSATION_ENTRY_KIND,
   REALTIME_STATUS,
@@ -9,9 +13,8 @@ import {
 } from "@sidecar/realtime";
 import { normalizeSession, SESSION_STATUS } from "@sidecar/session";
 import { APP_SETTING_DEFAULTS } from "@sidecar/settings";
-import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/messages/account";
+import { type AppSettings, appSettingsView, CLI_CONNECTION } from "@sidecar/settings/wire";
 import type { VoiceBootstrap } from "#shared/messages/session";
-import { type AppSettings, appSettingsView, CLI_CONNECTION } from "#shared/messages/settings";
 import { REPLY_KIND } from "./realtime-session";
 import {
   activeVoiceStream,

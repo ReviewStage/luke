@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.js"
+    ".": "./src/index.js",
+    "./wire": "./src/wire.js"
   },
   "types": "./src/index.ts",
   "scripts": {
@@ -18,6 +19,7 @@
   },
   "dependencies": {
     "@sidecar/analytics": "workspace:*",
+    "@sidecar/calendar": "workspace:*",
     "@sidecar/credentials": "workspace:*",
     "@sidecar/guide": "workspace:*",
     "@sidecar/realtime": "workspace:*",

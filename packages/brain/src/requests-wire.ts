@@ -1,15 +1,4 @@
 import type { CarriedAppAct } from "@sidecar/acts";
-import {
-  type BRAIN_REQUEST_ORIGIN,
-  BRAIN_REQUEST_STATUS,
-  BRAIN_SUBMISSION_OUTCOME,
-  BRAIN_SUBMISSION_REJECTION,
-  type BrainRequestOrigin,
-  type BrainRequestRecord,
-  type BrainSubmissionRejection,
-  brainRequestRecordFromWire,
-  isBrainRequestOrigin,
-} from "@sidecar/brain/requests";
 import { maximumTypedAskLength } from "@sidecar/realtime";
 import {
   type ACT_RESULT_STATUS,
@@ -20,6 +9,17 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import {
+  type BRAIN_REQUEST_ORIGIN,
+  BRAIN_REQUEST_STATUS,
+  BRAIN_SUBMISSION_OUTCOME,
+  BRAIN_SUBMISSION_REJECTION,
+  type BrainRequestOrigin,
+  type BrainRequestRecord,
+  type BrainSubmissionRejection,
+  brainRequestRecordFromWire,
+  isBrainRequestOrigin,
+} from "./requests.js";
 
 /**
  * What crosses the bridge between the brain in the main process and the

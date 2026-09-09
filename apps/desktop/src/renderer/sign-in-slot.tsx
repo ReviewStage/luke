@@ -1,5 +1,5 @@
+import { ACCOUNT_PROVIDER, type AccountProvider } from "@sidecar/account/snapshot";
 import { useRef } from "react";
-import { ACCOUNT_PROVIDER, type AccountProvider } from "#shared/messages/account";
 import { AccountProviderMark } from "./account-marks";
 import { useStagedFocus } from "./credential-entry";
 import { HIT_REGION } from "./panel-state";
