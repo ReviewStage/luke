@@ -137,17 +137,7 @@ test("latest answers exactly what the last run published", async () => {
   assert.deepEqual(pass.latest(), observations);
 });
 
-test("forget drops the roster and every cached parse", async () => {
-  const { candidates, parses, pass } = harness();
-  candidates.push(candidate("one", 10));
-  await pass.run();
-  pass.forget();
-  assert.deepEqual(pass.latest(), []);
-  await pass.run();
-  assert.deepEqual(parses, ["/sessions/one.jsonl", "/sessions/one.jsonl"]);
-});
-
-test("a roster holder answers what it last published, and nothing after a forget", () => {
+test("a roster holder answers exactly what it last published", () => {
   const roster = rosterHolder();
   const published = roster.publish([
     {
@@ -158,6 +148,4 @@ test("a roster holder answers what it last published, and nothing after a forget
     },
   ]);
   assert.deepEqual(roster.latest(), published);
-  roster.forget();
-  assert.deepEqual(roster.latest(), []);
 });

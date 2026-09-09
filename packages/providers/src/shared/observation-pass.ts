@@ -12,7 +12,6 @@ export interface RosterHolder {
     observations: readonly ProviderSessionObservation[],
   ): readonly ProviderSessionObservation[];
   latest(): readonly ProviderSessionObservation[];
-  forget(): void;
 }
 
 export function rosterHolder(): RosterHolder {
@@ -23,9 +22,6 @@ export function rosterHolder(): RosterHolder {
       return observations;
     },
     latest: () => observations,
-    forget() {
-      observations = [];
-    },
   };
 }
 
@@ -50,8 +46,6 @@ export interface ObservationPass {
   run(): Promise<readonly ProviderSessionObservation[]>;
   /** The roster the last `run` published — what every act is re-validated against. */
   latest(): readonly ProviderSessionObservation[];
-  /** Drops the roster and every cached parse. */
-  forget(): void;
 }
 
 /**
@@ -100,9 +94,5 @@ export function observationPass<Candidate extends SessionFileCandidate, Parsed>(
       return roster.publish([...observations.values()]);
     },
     latest: () => roster.latest(),
-    forget() {
-      parsed.clear();
-      roster.forget();
-    },
   };
 }
