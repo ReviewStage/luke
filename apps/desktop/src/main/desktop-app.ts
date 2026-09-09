@@ -19,13 +19,7 @@ import { GATEWAY_CLIENT_ROLE, MAIN_SESSION_KEY } from "@sidecar/runtime-contract
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { IntroductionRealtimeCredentialMinter } from "@sidecar/voice";
-import {
-  ACT_RESULT_STATUS,
-  isRecord,
-  text,
-  type UnparsedWireValue,
-  type WireRecord,
-} from "@sidecar/wire";
+import { ACT_RESULT_STATUS, text, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import {
   app,
   BrowserWindow,
@@ -74,9 +68,6 @@ import {
   INTRODUCTION_HANDOFF_READY_MS,
   INTRODUCTION_PEEK_FRESH_MS,
   INTRODUCTION_RENDER_DEADLINE_MS,
-  INTRODUCTION_STATE_FILE,
-  introductionCompleted,
-  introductionRecord,
   shouldRunIntroduction,
 } from "./introduction-flow";
 import { registerAccountSessionIpc } from "./ipc/account-session";
@@ -86,9 +77,11 @@ import { registerSettingsRowsIpc } from "./ipc/settings-rows";
 import { registerTrackerConnectionIpc } from "./ipc/tracker-connection";
 import { registerVoiceRuntimeIpc } from "./ipc/voice-runtime";
 import { registerWindowSurfaceIpc } from "./ipc/window-surface";
+import { jsonStateFile } from "./json-state-file";
 import { MediaDuckController } from "./native/media-duck";
 import { MicrophoneRouteWatcher } from "./native/microphone-route";
 import { OutputVolumeWatcher } from "./native/output-volume";
+import { onboardingStateFile } from "./onboarding-state";
 import { type BridgeContext, registerBridge, registerBridgeEntry } from "./register-bridge";
 import { runModeFor, sentryReportingEnabled } from "./run-mode";
 import { createSettingsHandler } from "./settings-handler";
@@ -268,30 +261,15 @@ let resolveIntroductionPanelReady: (() => void) | undefined;
 const introductionMinter = new IntroductionRealtimeCredentialMinter({
   serviceBaseUrl: HOSTED_SERVICE_BASE_URL,
 });
-const introductionStatePath = () => path.join(app.getPath("userData"), INTRODUCTION_STATE_FILE);
-
-function introductionCompletedOnDisk(): boolean {
-  try {
-    return introductionCompleted(fs.readFileSync(introductionStatePath(), "utf8"));
-  } catch {
-    return false;
-  }
-}
-
-function markIntroductionComplete(): void {
-  try {
-    fs.writeFileSync(introductionStatePath(), introductionRecord(new Date().toISOString()));
-  } catch (error) {
-    report(
-      `Could not persist the introduction record: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-}
+const onboarding = onboardingStateFile(() => app.getPath("userData"), report);
 
 async function finishIntroduction(given: boolean): Promise<void> {
   if (!introductionWindow.active) return;
   if (given) {
-    markIntroductionComplete();
+    onboarding.update((current) => ({
+      ...current,
+      introductionCompletedAt: new Date().toISOString(),
+    }));
     recordProductEvent(PRODUCT_EVENT.INTRODUCTION_COMPLETE, {});
   }
   introductionWindow.retire();
@@ -987,7 +965,16 @@ function drainingEngine(engine: UpdaterEngine): UpdaterEngine {
     },
   };
 }
-const lastRunVersionPath = () => path.join(app.getPath("userData"), "last-run-version.json");
+const lastRunVersionFile = jsonStateFile<{ version: string }>({
+  directory: () => app.getPath("userData"),
+  fileName: "last-run-version.json",
+  read: (record) => {
+    const version = text(record.version);
+    return version === undefined ? undefined : { version };
+  },
+  write: (state) => state,
+  report,
+});
 const updateService = new UpdateService({
   currentVersion: app.getVersion(),
   onChange: (update) => broadcast(channels.onUpdateChanged, update),
@@ -996,22 +983,9 @@ const updateService = new UpdateService({
       ? drainingEngine(createElectronUpdaterEngine())
       : undefined,
   lastRunVersion: {
-    read: () => {
-      try {
-        const stored: UnparsedWireValue = JSON.parse(fs.readFileSync(lastRunVersionPath(), "utf8"));
-        return isRecord(stored) ? text(stored.version) : undefined;
-      } catch {
-        return undefined;
-      }
-    },
+    read: () => lastRunVersionFile.read()?.version,
     write: (version) => {
-      try {
-        fs.writeFileSync(lastRunVersionPath(), `${JSON.stringify({ version })}\n`);
-      } catch (error) {
-        report(
-          `Could not persist the last-run version: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
+      lastRunVersionFile.save({ version });
     },
   },
 });
@@ -1062,7 +1036,7 @@ export function startDesktopApp(): void {
       const giveIntroduction = shouldRunIntroduction({
         requiresAccount: runMode.requiresAccount,
         signedIn: account.status === ACCOUNT_STATUS.SIGNED_IN,
-        completed: introductionCompletedOnDisk(),
+        completed: onboarding.read()?.introductionCompletedAt !== undefined,
       });
       await panels.refreshGeometry();
       registerIpc();

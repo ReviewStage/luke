@@ -1,10 +1,7 @@
-import { isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
+import type { OnboardingState } from "./onboarding-state";
 
 /**
- * When the calendar step of onboarding stands, and how its settling is
- * remembered. The decisions are pure so they can be tested without Electron,
- * on the introduction flow's own pattern; the wiring that acts on them lives
- * in desktop-app.
+ * When the calendar step of onboarding stands.
  *
  * The step exists because Luke's quiet during meetings can only hold what he
  * can see: announcements land mid-meeting exactly for the developer who never
@@ -18,58 +15,6 @@ import { isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
  * rows run; the gate changes when the ask is made, never what it may do.
  */
 
-/** The calendar onboarding record, beside `arrival.json` in the app's own state directory. */
-export const CALENDAR_ONBOARDING_STATE_FILE = "calendar-onboarding.json";
-
-export interface CalendarOnboardingState {
-  /** When the install's first observed sign-in put the gate up. */
-  requiredAt?: string;
-  /**
-   * When the gate stopped standing: Done confirmed the connected calendars,
-   * or a calendar already standing was recognized at a launch or a sign-in.
-   */
-  settledAt?: string;
-  /**
-   * When the user declined the step instead. Its own field rather than a
-   * settle, so the record keeps what actually happened, but it stands the
-   * gate down the same way: a decline is answered once and remembered, never
-   * re-asked, and the settings rows stay the way to connect later.
-   */
-  skippedAt?: string;
-}
-
-/**
- * Reads a stored record, or nothing for a file that is missing or does not
- * parse. "Nothing" means "no sign-in was ever observed", which raises no
- * gate: the safe direction, since it can only stand the gate down, never
- * raise it over someone who already passed it.
- */
-export function calendarOnboardingStateFromStored(
-  stored: string | undefined,
-): CalendarOnboardingState | undefined {
-  if (stored === undefined) return undefined;
-  let parsed: UnparsedWireValue;
-  try {
-    parsed = JSON.parse(stored);
-  } catch {
-    return undefined;
-  }
-  if (!isRecord(parsed)) return undefined;
-  const requiredAt = text(parsed.requiredAt);
-  const settledAt = text(parsed.settledAt);
-  const skippedAt = text(parsed.skippedAt);
-  return {
-    ...(requiredAt !== undefined ? { requiredAt } : undefined),
-    ...(settledAt !== undefined ? { settledAt } : undefined),
-    ...(skippedAt !== undefined ? { skippedAt } : undefined),
-  };
-}
-
-/** The record the state persists as. */
-export function calendarOnboardingRecord(state: CalendarOnboardingState): string {
-  return `${JSON.stringify(state)}\n`;
-}
-
 /**
  * Whether the gate is still owed: a sign-in observed under the step that no
  * Done has settled and no press on the gate's own skip has declined. Both
@@ -77,10 +22,10 @@ export function calendarOnboardingRecord(state: CalendarOnboardingState): string
  * standing again, because a step a quit could dodge would never be answered
  * at all.
  */
-export function calendarOnboardingOwed(state: CalendarOnboardingState | undefined): boolean {
+export function calendarOnboardingOwed(state: OnboardingState | undefined): boolean {
   return (
-    state?.requiredAt !== undefined &&
-    state.settledAt === undefined &&
-    state.skippedAt === undefined
+    state?.calendarOnboardingRequiredAt !== undefined &&
+    state.calendarOnboardingSettledAt === undefined &&
+    state.calendarOnboardingSkippedAt === undefined
   );
 }
