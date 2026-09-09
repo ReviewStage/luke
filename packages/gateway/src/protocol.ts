@@ -86,6 +86,9 @@ const GATEWAY_METHODS = {
   SESSION_OPEN: { name: "session.open", mutates: true },
   SESSION_OPEN_APPLICATION: { name: "session.openApplication", mutates: true },
   SESSION_OPEN_CHANGE: { name: "session.openChange", mutates: true },
+  /** The two writes a session's own row asks for, each admitted in the host against the roster it reads for itself. */
+  SESSION_SEND_MESSAGE: { name: "session.sendMessage", mutates: true },
+  SESSION_EXECUTE_CONTROL: { name: "session.executeControl", mutates: true },
   WORKSPACE_PROJECTS: { name: "workspace.projects", mutates: false },
   SPEECH_SETTLE: { name: "speech.settle", mutates: true },
   RECEIVER_REPORT: { name: "receiver.report", mutates: true },

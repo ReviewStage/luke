@@ -1,4 +1,13 @@
-import { ACTION_RESULT_STATUS, type ActionResult, type UnknownActionResult } from "@sidecar/wire";
+import {
+  ACTION_RESULT_STATUS,
+  type ActionResult,
+  isActionResult,
+  isRecord,
+  isWireString,
+  UNKNOWN_ACTION_STATUS,
+  type UnknownActionResult,
+  type UnparsedWireValue,
+} from "@sidecar/wire";
 
 /**
  * What became of a write the user asked for. Every adapter capability answers
@@ -154,6 +163,24 @@ export type ProviderWorkspaceResult =
  * is why this is answered at all.
  */
 export type SessionOpenResult = ActionResult | UnknownActionResult;
+
+/**
+ * What became of a write a session's own row asked for — a typed message or
+ * an advertised control — as it travels back to the row that asked: the
+ * provider's three answers, or unknown where the write was handed on and its
+ * answer lost, which the row must neither call failed nor repeat.
+ */
+export type SessionWriteResult = ActionResult | UnknownActionResult;
+
+export function isSessionWriteResult(value: UnparsedWireValue): value is SessionWriteResult {
+  if (isActionResult(value)) return true;
+  return (
+    isRecord(value) &&
+    Object.keys(value).length === 2 &&
+    value.status === UNKNOWN_ACTION_STATUS &&
+    isWireString(value.reason)
+  );
+}
 
 /**
  * Thrown by an open port when the address was handed to the process that

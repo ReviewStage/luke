@@ -1,3 +1,4 @@
+import { ACTION_KIND, type AdvertisedControl, SESSION_CONTROL_KIND } from "./advertised-actions.js";
 import { AGENT_IDENTITY } from "./agent-identities.js";
 import {
   type HostedAgentId,
@@ -58,10 +59,14 @@ export interface SessionSnapshot {
   /** When the session was last seen, in the same units a live observation uses. */
   lastActivityAt: number;
   /**
-   * Drawn only: the pull-request chip a live session's published work earns.
-   * A fixture run refuses every action — its registry is empty, so nothing a
-   * capture could press reaches a provider.
+   * Drawn only: a fixture row can show the composer a live session would have,
+   * but a fixture run refuses every write — its registry is empty, so nothing
+   * a capture could press reaches a provider.
    */
+  canMessage?: boolean;
+  /** Drawn only, like the composer: the controls a live session would show. */
+  actions?: readonly AdvertisedControl[];
+  /** Drawn only: the pull-request chip a live session's published work earns. */
   hasChange?: boolean;
   /** Drawn only: the number the chip is titled by when the address names one. */
   changeNumber?: number;
@@ -264,10 +269,19 @@ const smokeFixture: FixtureSnapshot = {
       urgency: SESSION_URGENCY.WORKING,
       location: SESSION_LOCATION.CLOUD,
       lastActivityAt: minutesBeforeEpoch(18),
-      // The pull-request chip on a lone chat's own row, whose sentence names
+      // What a working Conductor chat advertises live, so the one screenshot
+      // the evidence is reviewed from also proves the stop control is drawn —
+      // and the pull-request chip beside it, on the row whose sentence names
       // one, titled by a synthetic number the way a live address would title
-      // it — so the one screenshot the evidence is reviewed from proves the
-      // chip is drawn on a row as well as on a tray header.
+      // it.
+      actions: [
+        {
+          kind: ACTION_KIND.CONTROL,
+          id: "cancel-run",
+          label: "Stop this run",
+          controlKind: SESSION_CONTROL_KIND.STOP,
+        },
+      ],
       hasChange: true,
       changeNumber: 31,
       workspace: {
@@ -301,6 +315,9 @@ const smokeFixture: FixtureSnapshot = {
       urgency: SESSION_URGENCY.UNKNOWN,
       location: SESSION_LOCATION.CLOUD,
       lastActivityAt: minutesBeforeEpoch(41),
+      // A settled Conductor chat takes a message live, so this row is what
+      // puts the composer in the evidence.
+      canMessage: true,
       workspace: {
         id: "conductor-watch",
         name: "watch-session",

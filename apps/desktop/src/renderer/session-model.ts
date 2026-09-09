@@ -1,6 +1,10 @@
 import { SESSION_LIST_ALL } from "@sidecar/actions";
 import { SESSION_LIST_SORT, type SessionListSort } from "@sidecar/guide";
 import {
+  ACTION_KIND,
+  type AdvertisedControl,
+  advertisedActionFor,
+  advertisedControls,
   HOSTED_AGENT_ID_LIST,
   type HostedAgentId,
   isHostedAgentId,
@@ -268,6 +272,20 @@ export interface SessionView {
   /** The app owning the row's primary address, when that association is exact. */
   openApplication?: string;
   /**
+   * Whether the provider will take a typed message for this session right now.
+   * Like the address, the route stays in the host; the row only has to know
+   * whether to offer the field, and the host admits the send again against the
+   * roster it reads for itself.
+   */
+  canMessage: boolean;
+  /**
+   * The controls the provider advertised for this session, exactly as its
+   * latest observation listed them: the row draws each by the provider's own
+   * label, and a press names the id back, never the entry, which the host
+   * reads out of the roster again.
+   */
+  actions: readonly AdvertisedControl[];
+  /**
    * Whether the provider reported published work — a pull request — for this
    * session. Like the session's own address, the URL stays in the main
    * process; the row only has to know the chip would open something.
@@ -494,10 +512,11 @@ function bySort(sort: SessionSort): (first: SessionView, second: SessionView) =>
 
 /**
  * A fixture's rows. A fixture stands for sessions that are not on the machine
- * drawing them, so nothing in one is openable: the pull-request chip is still
- * drawn where the fixture says a live session would have it — the evidence has
- * to show it — but a fixture run cannot reach a provider, since the main
- * process refuses every action against its empty registry.
+ * drawing them, so nothing in one is openable. The composer, the controls,
+ * and the pull-request chip are still drawn where the fixture says a live
+ * session would have them — the evidence has to show them — but a fixture run
+ * cannot reach a provider: the host refuses every write against its empty
+ * roster.
  */
 export function fixtureSessions(fixture: FixtureSnapshot): readonly SessionView[] {
   return [...fixture.sessions]
@@ -513,6 +532,8 @@ export function fixtureSessions(fixture: FixtureSnapshot): readonly SessionView[
         ...application,
         openable: false,
       })),
+      canMessage: session.canMessage === true,
+      actions: session.actions ?? [],
       hasChange: session.hasChange === true,
     }))
     .sort(byUrgency);
@@ -554,6 +575,8 @@ export function observedSessions(sessions: readonly Session[]): readonly Session
         lastActivityAt: session.lastActivityAt,
         openable: session.detail.link !== undefined,
         ...(openApplication ? { openApplication: openApplication.displayName } : undefined),
+        canMessage: advertisedActionFor(session, ACTION_KIND.MESSAGE) !== undefined,
+        actions: advertisedControls(session),
         hasChange: session.detail.change !== undefined,
         ...(changeNumber !== undefined ? { changeNumber } : undefined),
         // A workspace the provider left unnamed still groups its chats; the
@@ -828,6 +851,44 @@ export function sessionRunKeys(
     const lead = run.indexes[0];
     return (lead !== undefined ? rows[lead]?.item.id : undefined) ?? "";
   });
+}
+
+/**
+ * Whether an advertised control acts on the row's whole workspace rather than
+ * on the chat itself — a Conductor archive, whose target is the workspace id
+ * riding the advertisement. Only the target can say so: the label is the
+ * provider's own words, and words are not a contract.
+ */
+export function actsOnWorkspace(session: SessionView, action: AdvertisedControl): boolean {
+  return session.workspace !== undefined && action.target === session.workspace.id;
+}
+
+/** One workspace-level control, and the chat whose advertisement carries it. */
+export interface WorkspaceTrayAction {
+  action: AdvertisedControl;
+  session: SessionView;
+}
+
+/**
+ * The controls a tray's header offers: every workspace-level one its chats
+ * advertise, each once. A provider advertises the same archive on every chat
+ * of a settled workspace, and a tray drawing one chip per chat reads as
+ * several different acts when pressing any of them files the whole workspace
+ * away — so the tray says it once, where the workspace is named once. The
+ * first chat advertising a control is the one the press travels through, which
+ * keeps the write validated against the same roster row that advertised it.
+ */
+export function workspaceTrayActions(
+  sessions: readonly SessionView[],
+): readonly WorkspaceTrayAction[] {
+  const acts = new Map<string, WorkspaceTrayAction>();
+  for (const session of sessions) {
+    for (const action of session.actions) {
+      if (!actsOnWorkspace(session, action) || acts.has(action.id)) continue;
+      acts.set(action.id, { action, session });
+    }
+  }
+  return [...acts.values()];
 }
 
 /** The tray header's pull request, and the chat whose report carries it. */
