@@ -238,6 +238,11 @@ recoverable act above.
 **Your account.** Signing in with Google or GitHub gives us your name, email
 address, and which of the two you used. We also keep the records that keep you
 signed in, and a daily count of how much voice and review you have used.
+Luke's own maintainers can see that record — your name, email address, which
+sign-in you used, when you joined, when you were last active, and your daily
+counts — on an admin page of our site that only an account we have marked as an
+administrator can open; nothing you type, say, or run in a session appears on
+it.
 
 **Usage data.** We count how Luke's features are used, on the Mac, in the
 iOS app, and in the Apple Watch app, and attach your name and email to that

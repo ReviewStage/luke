@@ -1,4 +1,4 @@
-import { accountLabel } from "../../account-label";
+import { accountLabel } from "../../account-initials";
 
 /**
  * The account fields both admin tables' rows carry — the shared columns'
