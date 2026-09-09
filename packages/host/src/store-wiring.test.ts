@@ -4,7 +4,6 @@ import path from "node:path";
 import test from "node:test";
 import { MessageChannel } from "node:worker_threads";
 import { type StorePort, serveStore } from "@sidecar/brain/store";
-import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
 import { temporaryDirectory } from "@sidecar/runtime/testing";
 import {
   CONVERSATION_KIND,
@@ -14,6 +13,7 @@ import {
   sessionKey,
   threadSessionKey,
 } from "@sidecar/runtime/vocabulary";
+import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import { wireStore } from "./store-wiring.js";
 
 /**

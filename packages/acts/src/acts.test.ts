@@ -2,9 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
+import {
+  type AdvertisedControl,
+  CONVERSATION_ENTRY_KIND,
+  normalizeSession,
+  SESSION_APPLICATION_ID,
+  SESSION_APPLICATION_SCOPE,
+  SESSION_STATUS,
+} from "@sidecar/session";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { ACT_KIND } from "./act-kinds.js";
-import { actNarration } from "./act-narration.js";
+import { actNarration, sessionActConversationEntry } from "./act-narration.js";
 import {
   REALTIME_TOOL,
   realtimeToolDefinitions,
@@ -199,4 +207,100 @@ test("the phone is handed the acts it carries, in the shape its own surface give
       continue;
     assert.deepEqual(tool, desktop.get(tool.name));
   }
+});
+
+const OBSERVED_AT = 1_800_000_000_000;
+
+function rosterSession(providerSessionId: string, title: string) {
+  return normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    { providerSessionId, title, status: SESSION_STATUS.WORKING, lastActivityAt: OBSERVED_AT },
+  );
+}
+
+test("an act's line records the ask in words, with the identity it named", () => {
+  const sessions = [rosterSession("session-a", "checkout-service")];
+  const identity = { providerId: "claude-code", providerSessionId: "session-a" };
+
+  const message = sessionActConversationEntry(
+    { kind: ACT_KIND.MESSAGE, identity, text: "please add tests" },
+    sessions,
+    CONVERSATION_ENTRY_KIND.ACT,
+  );
+  assert.equal(message.kind, CONVERSATION_ENTRY_KIND.ACT);
+  assert.equal(message.words, 'sent a message to "checkout-service": "please add tests"');
+  assert.deepEqual(message.identity, identity);
+
+  const control: AdvertisedControl = { kind: ACT_KIND.CONTROL, id: "retry", label: "Retry" };
+  assert.equal(
+    sessionActConversationEntry(
+      { kind: ACT_KIND.CONTROL, identity, control },
+      sessions,
+      CONVERSATION_ENTRY_KIND.ACT,
+    ).words,
+    'ran "Retry" on "checkout-service"',
+  );
+
+  // A session the roster no longer shows is still named honestly.
+  assert.equal(
+    sessionActConversationEntry({ kind: ACT_KIND.OPEN, identity }, [], CONVERSATION_ENTRY_KIND.ACT)
+      .words,
+    "opened a session",
+  );
+
+  // An open that picked an app records where it landed, under the display
+  // name the roster listed — or the bare id when the roster has let it go.
+  const heldByApp = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    {
+      providerSessionId: "session-a",
+      title: "checkout-service",
+      status: SESSION_STATUS.WORKING,
+      lastActivityAt: OBSERVED_AT,
+      applications: [
+        {
+          id: SESSION_APPLICATION_ID.SUPERSET,
+          displayName: "Superset",
+          scope: SESSION_APPLICATION_SCOPE.SESSION,
+          link: "superset://v2-workspace/workspace-1",
+        },
+      ],
+    },
+  );
+  const openedInApp = {
+    kind: ACT_KIND.OPEN,
+    identity,
+    applicationId: SESSION_APPLICATION_ID.SUPERSET,
+  } as const;
+  assert.equal(
+    sessionActConversationEntry(openedInApp, [heldByApp], CONVERSATION_ENTRY_KIND.ACT).words,
+    'opened "checkout-service" in Superset',
+  );
+  assert.equal(
+    sessionActConversationEntry(openedInApp, [], CONVERSATION_ENTRY_KIND.ACT).words,
+    "opened a session in superset",
+  );
+
+  // A workspace creation aims at no session, so its line carries no identity.
+  const created = sessionActConversationEntry(
+    { kind: ACT_KIND.CREATE_WORKSPACE, providerId: "conductor", providerProjectId: "p1" },
+    sessions,
+    CONVERSATION_ENTRY_KIND.ACT,
+  );
+  assert.equal(created.words, "asked conductor to create a workspace");
+  assert.equal(created.identity, undefined);
+  const createdNamed = sessionActConversationEntry(
+    {
+      kind: ACT_KIND.CREATE_WORKSPACE,
+      providerId: "conductor",
+      providerProjectId: "p1",
+      name: "Notch panel clipping",
+    },
+    sessions,
+    CONVERSATION_ENTRY_KIND.ACT,
+  );
+  assert.equal(
+    createdNamed.words,
+    'asked conductor to create a workspace named "Notch panel clipping"',
+  );
 });

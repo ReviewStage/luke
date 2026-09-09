@@ -85,6 +85,13 @@ export {
 } from "./responses-api.js";
 export { settledUnlessAborted } from "./settled.js";
 export {
+  CONTEXT_ITEM_KIND,
+  type ContextItemKind,
+  contextItemId,
+  sessionContextText,
+  workspaceProjectContextText,
+} from "./standing-context.js";
+export {
   BRAIN_GENERATION_LIFETIME_MS,
   type BrainPersistedState,
   type BrainStateLoad,

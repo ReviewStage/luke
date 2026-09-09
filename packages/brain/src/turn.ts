@@ -1,10 +1,10 @@
-import type { ScheduledTimer } from "@sidecar/realtime";
 import {
   CHILD_SPAWN_REFUSAL,
   type ChildSpawnRefusal,
   type ToolDescriptor,
   type ToolPolicyLayers,
 } from "@sidecar/runtime";
+import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import { RUN_ORIGIN, type RunOrigin } from "@sidecar/runtime/vocabulary";
 import type { Generation } from "./generation.js";
 import type { SteeredDeliveries } from "./steered-deliveries.js";

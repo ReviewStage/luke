@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { maximumTypedAskLength } from "@sidecar/realtime";
+import { maximumTypedAskLength } from "@sidecar/session";
 import { BRIDGE } from "./bridge";
 
 test("act bridge entries reject legacy and malformed outcomes", () => {

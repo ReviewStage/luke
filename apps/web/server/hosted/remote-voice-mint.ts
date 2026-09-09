@@ -105,7 +105,7 @@ export async function handleRemoteVoiceMint(options: RemoteVoiceMintOptions): Pr
 
   const sessionItemId = contextItemId(CONTEXT_ITEM_KIND.SESSIONS, 0);
   const contextText = remoteSessionContextText(sessions, now());
-  // The label prefix matches the one `sessionContextEvents` in @sidecar/realtime
+  // The label prefix matches the one `sessionContextEvents` in @sidecar/brain
   // applies, so the model reads remote and desktop context items identically.
   const sessionItemText = `[observed session status, sent automatically]\n${contextText}`;
 

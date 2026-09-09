@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { rememberedFactsText } from "@sidecar/acts";
-import { DeliveryLedger } from "@sidecar/brain";
+import { DeliveryLedger, workspaceProjectContextText } from "@sidecar/brain";
 import type { BrainAppActRequest } from "@sidecar/brain/requests-wire";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
 import {
@@ -18,13 +18,6 @@ import {
   isAppGuideSnapshot,
 } from "@sidecar/guide";
 import {
-  type ConversationEntry,
-  conversationHistoryText,
-  recentConversationEntries,
-  storedConversationEntry,
-  workspaceProjectContextText,
-} from "@sidecar/realtime";
-import {
   CREDENTIAL_REFERENCE_KIND,
   CronScheduler,
   HEARTBEAT_DEFAULTS,
@@ -37,6 +30,12 @@ import {
   MAIN_SESSION_KEY,
   sessionKey as toSessionKey,
 } from "@sidecar/runtime/vocabulary";
+import {
+  type ConversationEntry,
+  conversationHistoryText,
+  recentConversationEntries,
+  storedConversationEntry,
+} from "@sidecar/session";
 import { VOICE_SOURCE } from "@sidecar/settings";
 import { ACT_RESULT_STATUS, isRecord, UNKNOWN_ACT_STATUS, type WireRecord } from "@sidecar/wire";
 import { wireBrain } from "./brain/wiring.js";

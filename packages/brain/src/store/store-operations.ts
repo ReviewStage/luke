@@ -9,7 +9,6 @@ import type {
   MemorySearchOutcome,
   MemorySearchQuery,
 } from "@sidecar/memory";
-import type { ConversationEntry } from "@sidecar/realtime";
 import type { ScheduledJob } from "@sidecar/runtime";
 import type {
   AgentId,
@@ -20,6 +19,7 @@ import type {
   HistoryAppendOutcome,
   SessionKey,
 } from "@sidecar/runtime/vocabulary";
+import type { ConversationEntry } from "@sidecar/session";
 import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import {
   type DeletionOptions,

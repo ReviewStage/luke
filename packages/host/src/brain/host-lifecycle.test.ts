@@ -6,8 +6,8 @@ import {
   type BrainRequestRecord,
 } from "@sidecar/brain";
 import { brainReplyWords } from "@sidecar/brain/requests";
-import { CONVERSATION_ENTRY_KIND } from "@sidecar/realtime";
 import { drainMicrotasks } from "@sidecar/runtime/testing";
+import { CONVERSATION_ENTRY_KIND } from "@sidecar/session";
 import {
   answered,
   answerOf,

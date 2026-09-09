@@ -3,7 +3,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { CONVERSATION_ENTRY_KIND } from "@sidecar/realtime";
 import {
   ARCHIVE_REASON,
   COMPACTION_SOURCE,
@@ -18,6 +17,7 @@ import {
   type TranscriptEvent,
   threadSessionKey,
 } from "@sidecar/runtime/vocabulary";
+import { CONVERSATION_ENTRY_KIND } from "@sidecar/session";
 import { userMessageItem } from "../responses-api.js";
 import { BrainStateStore, freshBrainState } from "../state-store.js";
 import {

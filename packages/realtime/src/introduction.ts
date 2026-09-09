@@ -1,7 +1,7 @@
 import { LUKE_PERSONA } from "@sidecar/guide";
 import { text, type WireRecord } from "@sidecar/wire";
 import { type RealtimeSessionOptions, realtimeSessionConfig } from "./realtime-credentials.js";
-import { REALTIME_CLIENT_EVENT } from "./realtime-protocol.js";
+import { REALTIME_CLIENT_EVENT } from "./realtime-events.js";
 
 /**
  * The spoken introduction's wire grammar. The introduction is the one call

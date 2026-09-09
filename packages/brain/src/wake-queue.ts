@@ -1,4 +1,4 @@
-import type { ScheduledTimer } from "@sidecar/realtime";
+import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import type { BrainWakeEvent } from "./wake-events.js";
 
 /**

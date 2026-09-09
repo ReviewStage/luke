@@ -6,7 +6,6 @@ import {
   type MemoryHousekeepingResult,
   shouldRunMemoryFlush,
 } from "@sidecar/memory";
-import type { ScheduledTimer } from "@sidecar/realtime";
 import {
   type ChildEnd,
   type ChildPolicyContext,
@@ -17,6 +16,7 @@ import {
   queueSummaryLine,
   queueSummaryText,
 } from "@sidecar/runtime";
+import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import {
   type AgentRuntime,
   CHILD_RUN_STATUS,

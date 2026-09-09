@@ -6,10 +6,12 @@ import {
 import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/devtrace/vocabulary";
 import type { RealtimeConnection } from "@sidecar/hosted";
 import {
+  ARRIVAL_SPEECH_KIND,
   ASK_BRAIN_TOOL,
   arrivalSpeechEvents,
   BRIEFING_SPEECH_KIND,
   briefingSpeechEvents,
+  CALENDAR_ONBOARDING_SPEECH_KIND,
   calendarOnboardingSpeechEvents,
   cancelResponseEvents,
   clearInputAudioEvents,
@@ -20,9 +22,6 @@ import {
   inputAudioAppendEvents,
   inputAudioFormatUpdateEvents,
   introductionSpeechEvents,
-  isArrivalSpeech,
-  isCalendarOnboardingSpeech,
-  maximumTypedAskLength,
   outputSpeedUpdateEvents,
   type ParsedRealtimeFunctionCall,
   PressAudioBuffer,
@@ -36,6 +35,7 @@ import {
   realtimeSessionConfig,
   truncateResponseEvents,
 } from "@sidecar/realtime";
+import { maximumTypedAskLength } from "@sidecar/session";
 import {
   ACT_RESULT_STATUS,
   isRecord,
@@ -1318,7 +1318,7 @@ export class RealtimeVoiceSession {
    * read out as though it just happened.
    */
   speak(speech: ProactiveSpeechTurn): boolean {
-    if (isArrivalSpeech(speech)) {
+    if (speech.kind === ARRIVAL_SPEECH_KIND) {
       const arrivalEvents = arrivalSpeechEvents(speech);
       if (arrivalEvents.length === 0 || !this.isConnected || voiceExchangeActive(this.#status))
         return false;
@@ -1328,7 +1328,7 @@ export class RealtimeVoiceSession {
       this.#startResponse(arrivalEvents);
       return true;
     }
-    if (isCalendarOnboardingSpeech(speech)) {
+    if (speech.kind === CALENDAR_ONBOARDING_SPEECH_KIND) {
       if (!this.isConnected || voiceExchangeActive(this.#status)) return false;
       // On the arrival's own terms: words with no kind, recorded as none.
       this.#startResponse(calendarOnboardingSpeechEvents());

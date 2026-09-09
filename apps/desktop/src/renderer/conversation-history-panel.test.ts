@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { appendConversationThreadEntry, CONVERSATION_ENTRY_KIND } from "@sidecar/realtime";
+import { appendConversationThreadEntry, CONVERSATION_ENTRY_KIND } from "@sidecar/session";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {

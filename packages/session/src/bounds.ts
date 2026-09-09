@@ -37,6 +37,14 @@ export const maximumSessionLinkLength = 300;
 export const maximumSessionMessageLength = 4_000;
 
 /**
+ * How long a typed ask to Luke himself may run. The same bound a session
+ * message carries: room for anything worth typing into a chat field, and a
+ * floor under a paste of a whole document — which is cut rather than sent,
+ * because the ask is a sentence to a companion, not a transfer.
+ */
+export const maximumTypedAskLength = maximumSessionMessageLength;
+
+/**
  * The text of a message on its way to a session, or nothing. Unlike an observed
  * field this one is refused rather than cut when it runs long: a truncated
  * message says something its author did not.

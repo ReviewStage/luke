@@ -1,10 +1,10 @@
+import type { HistoryAppendOutcome } from "@sidecar/runtime/vocabulary";
 import {
   appendConversationThreadEntry,
   type ConversationEntry,
   conversationEntryIdentity,
   recordedAfterClear,
-} from "@sidecar/realtime";
-import type { HistoryAppendOutcome } from "@sidecar/runtime/vocabulary";
+} from "@sidecar/session";
 
 /**
  * The conversation as the main process holds it between the brain's store and

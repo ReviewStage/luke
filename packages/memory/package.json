@@ -13,8 +13,8 @@
   },
   "dependencies": {
     "@sidecar/acts": "workspace:*",
-    "@sidecar/realtime": "workspace:*",
     "@sidecar/runtime": "workspace:*",
+    "@sidecar/session": "workspace:*",
     "@sidecar/wire": "workspace:*"
   },
   "devDependencies": {

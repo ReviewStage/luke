@@ -1,4 +1,5 @@
 import { type ConversationLineHit, tokenize } from "@sidecar/memory";
+import type { HistoryAppendOutcome, SessionKey } from "@sidecar/runtime/vocabulary";
 import {
   type ConversationEntry,
   conversationEntryIdentity,
@@ -6,8 +7,7 @@ import {
   recordedAfterClear,
   storedConversationEntry,
   storedConversationMaximumAgeMs,
-} from "@sidecar/realtime";
-import type { HistoryAppendOutcome, SessionKey } from "@sidecar/runtime/vocabulary";
+} from "@sidecar/session";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { standingGeneration } from "./brain-envelope.js";
 import { historyCutoff } from "./conversations-table.js";

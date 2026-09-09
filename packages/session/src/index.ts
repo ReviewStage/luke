@@ -3,6 +3,7 @@ export * from "./act-results.js";
 export * from "./advertised-acts.js";
 export * from "./agent-identities.js";
 export * from "./bounds.js";
+export * from "./conversation/conversation-history.js";
 export * from "./issues/issues.js";
 export * from "./normalize.js";
 export * from "./provider-contract.js";

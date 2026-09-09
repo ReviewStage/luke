@@ -4,7 +4,8 @@ import {
   BRAIN_SUBMISSION_OUTCOME,
 } from "@sidecar/brain/requests";
 import type { BrainAskSubmissionResult, BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
-import { type ConversationEntry, REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
+import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
+import type { ConversationEntry } from "@sidecar/session";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   MICROPHONE_STATUS,

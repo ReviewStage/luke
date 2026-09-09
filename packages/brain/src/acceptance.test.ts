@@ -11,7 +11,6 @@ import {
   hostedBrainBounds,
   RESPONSES_INPUT_ITEM_TYPE,
 } from "@sidecar/hosted";
-import type { ScheduledTimer } from "@sidecar/realtime";
 import {
   BUILTIN_CONTEXT_ENGINE,
   BUILTIN_MODEL_ADAPTER,
@@ -26,6 +25,7 @@ import {
   seedWorkspace,
   TOOL_LOOP_RUNTIME,
 } from "@sidecar/runtime";
+import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import {
   type AgentRuntime,
   type CheckpointFormat,

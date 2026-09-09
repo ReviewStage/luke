@@ -4,7 +4,7 @@ import {
   adoptConversationThread,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
-} from "@sidecar/realtime";
+} from "@sidecar/session";
 import { HistoryReporter, withPendingLines } from "./history-reporter";
 
 const NOW = 1_800_000_000_000;

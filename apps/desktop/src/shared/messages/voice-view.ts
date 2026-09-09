@@ -1,10 +1,6 @@
 import { PRODUCT_EXCHANGE_KIND, type ProductExchangeKind } from "@sidecar/analytics";
-import {
-  type ConversationEntry,
-  REALTIME_STATUS,
-  type RealtimeStatus,
-  storedConversationEntry,
-} from "@sidecar/realtime";
+import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
+import { type ConversationEntry, storedConversationEntry } from "@sidecar/session";
 import {
   isOptionalWireString,
   isRecord,

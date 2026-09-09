@@ -16,8 +16,8 @@ import {
   HOST_NODE_CAPABILITY,
   HOST_NODE_CAPABILITY_LIST,
 } from "@sidecar/host";
-import { type ConversationEntry, conversationEntryFromWire } from "@sidecar/realtime";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
+import { type ConversationEntry, storedConversationEntry } from "@sidecar/session";
 import {
   isRecord,
   isWireNumber,
@@ -124,7 +124,7 @@ export function wireGateway(dependencies: GatewayWiringDependencies): GatewayWir
   operator.onHistoryChanged((change) => {
     if (change.sessionKey !== MAIN_SESSION_KEY) return;
     const entries = change.entries
-      .map((entry) => conversationEntryFromWire(entry))
+      .map((entry) => storedConversationEntry(entry, { strict: false }))
       .filter((entry): entry is ConversationEntry => entry !== undefined);
     const payload: ConversationHistoryPayload = { entries, cleared: change.cleared };
     broadcast(

@@ -1,5 +1,5 @@
 import type { CarriedAppAct } from "@sidecar/acts";
-import { maximumTypedAskLength } from "@sidecar/realtime";
+import { maximumTypedAskLength } from "@sidecar/session";
 import {
   type ACT_RESULT_STATUS,
   isRecord,

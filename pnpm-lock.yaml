@@ -321,9 +321,6 @@ importers:
       '@sidecar/memory':
         specifier: workspace:*
         version: link:../memory
-      '@sidecar/realtime':
-        specifier: workspace:*
-        version: link:../realtime
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
@@ -564,12 +561,12 @@ importers:
       '@sidecar/acts':
         specifier: workspace:*
         version: link:../acts
-      '@sidecar/realtime':
-        specifier: workspace:*
-        version: link:../realtime
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
+      '@sidecar/session':
+        specifier: workspace:*
+        version: link:../session
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
@@ -660,9 +657,6 @@ importers:
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../hosted
-      '@sidecar/runtime':
-        specifier: workspace:*
-        version: link:../runtime
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
