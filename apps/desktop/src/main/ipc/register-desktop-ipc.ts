@@ -33,6 +33,46 @@ export function registerDesktopIpc(services: DesktopServices): void {
   const { panels, voiceWindow, introductionWindow, hotkeys, dock, introductionMinter } = windows;
   const recordProductEvent = telemetry.recordProductEvent;
 
+  /**
+   * The voice window's own dependencies, built once: the act rows and the
+   * reports below are two readings of the same collaborators, and two objects
+   * carrying the same closures would only invite them to drift.
+   */
+  const voiceRuntime = {
+    panels,
+    voiceWindow,
+    receiver: { markReady: (epoch: number) => operator.host.readyReceiver(epoch) },
+    state,
+    // The Conversation Clear is Delete conversation on main: the recoverable
+    // reported to the panel as refused only when the store took nothing.
+    clearConversation: () => operator.operator.deleteConversation(MAIN_SESSION_KEY),
+    setShortcutCapturing: (capturing: boolean) => hotkeys.setShortcutCapturing(capturing),
+    openExternal: config.openExternal,
+    // While the takeover stands and no voice stands on the host yet, the
+    // introduction's bounded mint answers; the moment the account lands, the
+    // host's own credential wins even before the takeover has faded.
+    mintRealtimeCredential: async () => {
+      if (operator.voiceAvailable()) return operator.host.mintRealtimeCredential();
+      if (!introductionWindow.active) return undefined;
+      const credential = await introductionMinter.mint();
+      if (credential) {
+        recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {
+          credential_source: PRODUCT_CREDENTIAL_SOURCE.INTRODUCTION,
+        });
+      }
+      return credential;
+    },
+    realtimeDiagnostics: async () => {
+      if (!operator.voiceAvailable() && introductionWindow.active) {
+        return introductionMinter.diagnostics();
+      }
+      return (await operator.host.realtimeDiagnostics()) ?? introductionMinter.diagnostics();
+    },
+    recordProductEvent,
+    recordAgentTrace: (trace: Parameters<typeof operator.host.recordAgentTrace>[0]) =>
+      operator.host.recordAgentTrace(trace),
+  };
+
   const rows: ActRows = {
     ...accountActRows({
       host: operator.host,
@@ -65,7 +105,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       microphoneRouteWatcher: () => native.microphoneRouteWatcher(),
       recordProductEvent,
     }),
-    ...voiceRuntimeActRows(voiceRuntime()),
+    ...voiceRuntimeActRows(voiceRuntime),
     ...brainActRows({ operator: operator.operator, isVoice: (s) => voiceWindow.owns(s) }),
     [ACT_KIND.SUPERSET_BEGIN_SIGN_IN]: () => operator.host.beginSupersetSignIn(),
     [ACT_KIND.SUPERSET_SUBMIT_CODE]: ({ code }) => operator.host.submitSupersetSignInCode(code),
@@ -107,7 +147,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
 
   const reports: ReportHandlers = {
     ...windowSurfaceReports({ recordProductEvent }),
-    ...voiceRuntimeReports(voiceRuntime()),
+    ...voiceRuntimeReports(voiceRuntime),
     ...brainReports({ operator: operator.operator, isVoice: (s) => voiceWindow.owns(s) }),
     // The voice window's appends to the conversation, carried to the host's
     // store under this window's opaque reporter, and relayed back to every
@@ -170,41 +210,4 @@ export function registerDesktopIpc(services: DesktopServices): void {
       return { ...state.snapshot(), window: windows.windowFactsFor(sender) };
     },
   });
-
-  function voiceRuntime() {
-    return {
-      panels,
-      voiceWindow,
-      receiver: { markReady: (epoch: number) => operator.host.readyReceiver(epoch) },
-      state,
-      // The History Clear is Delete history on main: the recoverable deletion,
-      // reported to the panel as refused only when the store took nothing.
-      clearConversation: () => operator.operator.deleteConversation(MAIN_SESSION_KEY),
-      setShortcutCapturing: (capturing: boolean) => hotkeys.setShortcutCapturing(capturing),
-      openExternal: config.openExternal,
-      // While the takeover stands and no voice stands on the host yet, the
-      // introduction's bounded mint answers; the moment the account lands, the
-      // host's own credential wins even before the takeover has faded.
-      mintRealtimeCredential: async () => {
-        if (operator.voiceAvailable()) return operator.host.mintRealtimeCredential();
-        if (!introductionWindow.active) return undefined;
-        const credential = await introductionMinter.mint();
-        if (credential) {
-          recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {
-            credential_source: PRODUCT_CREDENTIAL_SOURCE.INTRODUCTION,
-          });
-        }
-        return credential;
-      },
-      realtimeDiagnostics: async () => {
-        if (!operator.voiceAvailable() && introductionWindow.active) {
-          return introductionMinter.diagnostics();
-        }
-        return (await operator.host.realtimeDiagnostics()) ?? introductionMinter.diagnostics();
-      },
-      recordProductEvent,
-      recordAgentTrace: (trace: Parameters<typeof operator.host.recordAgentTrace>[0]) =>
-        operator.host.recordAgentTrace(trace),
-    };
-  }
 }

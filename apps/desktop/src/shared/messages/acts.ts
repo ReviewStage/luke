@@ -24,7 +24,6 @@ import type { RealtimeConnection } from "@sidecar/hosted";
 import type { SupersetSignInSnapshot } from "@sidecar/providers/superset/sign-in-stage";
 import type { RealtimeDiagnostics } from "@sidecar/realtime";
 import {
-  isProviderId,
   isSessionApplicationId,
   type Session,
   type SessionApplicationId,
@@ -57,7 +56,7 @@ import {
   type UnparsedWireValue,
 } from "@sidecar/wire";
 import type { MicrophoneRoute, MicrophoneStatus } from "./audio";
-import type { SessionOpenResult } from "./session";
+import { isSessionIdentity, type SessionOpenResult } from "./session";
 import type { UpdateSnapshot } from "./update";
 import { isVoiceCommandOutcome, VOICE_COMMAND, type VoiceCommandOutcome } from "./voice-view";
 import { isWireValue, type WireGuard, type WireGuardValue, wireResult } from "./wire-guard";
@@ -75,12 +74,6 @@ import { isWireValue, type WireGuard, type WireGuardValue, wireResult } from "./
  * it: some are carried to the host over the operator client and some are the
  * desktop's own, and which is which is the router's business rather than the
  * vocabulary's.
- *
- * An act is not one of `@sidecar/actions`'s actions. An action is a validated
- * thing Luke does at the developer's ask, admitted by `admit()` against a
- * session's own advertisement; an act is one window of this build asking its
- * own main process for an effect. A press that carries an action to a session
- * does so by asking the host, which is where the action is admitted.
  */
 export const ACT_KIND = {
   ACCOUNT_BEGIN_SIGN_IN: "account.beginSignIn",
@@ -162,6 +155,13 @@ export interface ActSchema<Value> {
   read(value: UnparsedWireValue): SchemaRead<Value>;
 }
 
+/** One kind's whole declaration: what its payload takes, what its answer is, and what its refusal says. */
+export interface ActDeclaration<Payload, Result> {
+  readonly payload: ActSchema<Payload>;
+  readonly result: WireGuard<Result>;
+  readonly refusal: string;
+}
+
 function malformed(path: SchemaPath = []): SchemaRead<never> {
   return { ok: false, refusal: SCHEMA_REFUSAL.MALFORMED, path };
 }
@@ -188,14 +188,20 @@ function guarded<Value>(admits: (value: UnparsedWireValue) => boolean): ActSchem
   };
 }
 
-/** The record itself when it carries no key the payload does not name, and nothing otherwise. */
-function onlyKeys(
-  value: UnparsedWireValue,
-  keys: readonly string[],
-): UnparsedWireValue | undefined {
-  if (!isRecord(value)) return undefined;
-  for (const key of Object.keys(value)) if (!keys.includes(key)) return undefined;
-  return value;
+/**
+ * A payload named field by field, each field admitted by the parser its own
+ * domain owns. What `s.record` is for a payload whose fields are texts and
+ * counts, for the payloads whose fields are whole domain values instead.
+ */
+function fields<Value>(guards: {
+  readonly [key: string]: (value: UnparsedWireValue) => boolean;
+}): ActSchema<Value> {
+  const named = Object.keys(guards);
+  return guarded<Value>((value) => {
+    if (!isRecord(value)) return false;
+    for (const key of Object.keys(value)) if (!named.includes(key)) return false;
+    return named.every((key) => guards[key]?.(value[key]) === true);
+  });
 }
 
 /**
@@ -208,21 +214,8 @@ const exactId = s.text({ max: 512, ends: TEXT_ENDS.KEEP });
 /** Every credential provider this build registered, which is what its record is keyed by. */
 const CREDENTIAL_PROVIDER_IDS = Object.keys(CREDENTIAL_PROVIDERS).filter(isCredentialProviderId);
 
-/**
- * A session as its provider named it. The provider id is admitted against the
- * registry rather than typed by it: an identity carries the id its provider
- * reported, and this build's own registry is what says whether that is one it
- * observes.
- */
-function isSessionIdentity(value: UnparsedWireValue): boolean {
-  if (!isRecord(value)) return false;
-  return (
-    isWireString(value.providerId) &&
-    isProviderId(value.providerId) &&
-    isWireString(value.providerSessionId) &&
-    value.providerSessionId.length > 0
-  );
-}
+/** The three opens that name one session and nothing else. */
+const oneSession = fields<{ identity: SessionIdentity }>({ identity: isSessionIdentity });
 
 /** A setting and a value already parsed for it, which is the pair its field types. */
 export type SettingUpdatePayload = {
@@ -240,8 +233,10 @@ export type SettingUpdatePayload = {
  */
 const settingUpdatePayload: ActSchema<SettingUpdatePayload> = {
   read: (raw) => {
-    const value = onlyKeys(raw, ["field", "value"]);
-    if (!value || !isRecord(value)) return malformed();
+    if (!isRecord(raw) || Object.keys(raw).some((key) => key !== "field" && key !== "value")) {
+      return malformed();
+    }
+    const value = raw;
     const field = value.field;
     if (!isWireString(field) || !isAppSettingField(field) || isKeyedAppSettingField(field)) {
       return malformed(["field"]);
@@ -263,8 +258,11 @@ export type SettingEntryPayload = {
 
 const settingEntryPayload: ActSchema<SettingEntryPayload> = {
   read: (raw) => {
-    const value = onlyKeys(raw, ["field", "key", "value"]);
-    if (!value || !isRecord(value)) return malformed();
+    const named = ["field", "key", "value"];
+    if (!isRecord(raw) || Object.keys(raw).some((key) => !named.includes(key))) {
+      return malformed();
+    }
+    const value = raw;
     const field = value.field;
     if (!isWireString(field) || !isKeyedAppSettingField(field)) return malformed(["field"]);
     const key = value.key;
@@ -275,275 +273,297 @@ const settingEntryPayload: ActSchema<SettingEntryPayload> = {
   },
 };
 
+const answersNothing = wireResult<void>();
+const answersSettings = wireResult<SettingsUpdateResult>();
+const answersAccount = wireResult<AccountSnapshot>();
+const answersSupersetSignIn = wireResult<SupersetSignInSnapshot | undefined>();
+const answersSessionOpen = wireResult<SessionOpenResult>();
+
 /**
- * Every act's payload, one schema per kind. The schema is the whole of what
- * the boundary admits: it runs in the preload before the invoke leaves the
- * window and again in the router, so a caller inside the main process cannot
- * reach a row with a payload the window could not have sent.
+ * A press: a kind that carries nothing and answers nothing, which is what
+ * most of them are. The sentence is the only thing such a row has to say.
  */
-export const ACT_SCHEMA = {
-  [ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]: s.record({
-    provider: s.enumOf(Object.values(ACCOUNT_PROVIDER)),
-  }),
-  [ACT_KIND.ACCOUNT_CANCEL_SIGN_IN]: noPayload,
-  [ACT_KIND.ACCOUNT_SIGN_OUT]: noPayload,
-  [ACT_KIND.ACCOUNT_DELETE]: noPayload,
-  [ACT_KIND.SETTING_UPDATE]: settingUpdatePayload,
-  [ACT_KIND.SETTING_UPDATE_ENTRY]: settingEntryPayload,
-  [ACT_KIND.SETTINGS_RESET]: s.record({
-    scope: s.enumOf(Object.values(SETTINGS_RESET_SCOPE)),
-  }),
-  [ACT_KIND.CREDENTIAL_SET_API_KEY]: s.record({
-    providerId: s.enumOf(CREDENTIAL_PROVIDER_IDS),
-    apiKey: s.text({ max: 4096, ends: TEXT_ENDS.KEEP, allowEmpty: true }).optional(),
-  }),
-  [ACT_KIND.CREDENTIAL_OPEN_API_KEYS]: s.record({
-    providerId: s.enumOf(CREDENTIAL_PROVIDER_IDS),
-  }),
-  [ACT_KIND.CALENDAR_CONNECT_GOOGLE]: noPayload,
-  [ACT_KIND.CALENDAR_CANCEL_GOOGLE_SIGN_IN]: noPayload,
-  [ACT_KIND.CALENDAR_REOPEN_GOOGLE_SIGN_IN]: noPayload,
-  [ACT_KIND.CALENDAR_REMOVE_ACCOUNT]: s.record({ accountId: exactId }),
-  [ACT_KIND.CALENDAR_CONNECT_APPLE]: noPayload,
-  [ACT_KIND.CALENDAR_DISCONNECT_APPLE]: noPayload,
-  [ACT_KIND.CALENDAR_APPLE_ACCESS_STATUS]: noPayload,
-  [ACT_KIND.CALENDAR_CANCEL_APPLE_CONNECT]: noPayload,
-  [ACT_KIND.CALENDAR_OPEN_SETTINGS]: noPayload,
-  [ACT_KIND.CALENDAR_REFRESH]: noPayload,
-  [ACT_KIND.CALENDAR_SET_SELECTED]: s.record({
-    accountId: exactId,
-    calendarId: exactId,
-    selected: s.boolean(),
-  }),
-  [ACT_KIND.TRACKER_CONNECT]: noPayload,
-  [ACT_KIND.TRACKER_CANCEL_SIGN_IN]: noPayload,
-  [ACT_KIND.TRACKER_REOPEN_SIGN_IN]: noPayload,
-  [ACT_KIND.TRACKER_DISCONNECT]: noPayload,
-  [ACT_KIND.SUPERSET_BEGIN_SIGN_IN]: noPayload,
-  [ACT_KIND.SUPERSET_SUBMIT_CODE]: s.record({ code: s.text({ max: 512 }) }),
-  [ACT_KIND.SUPERSET_CHOOSE_ORGANIZATION]: s.record({ slug: exactId }),
-  [ACT_KIND.SUPERSET_REOPEN_SIGN_IN]: noPayload,
-  [ACT_KIND.SUPERSET_CANCEL_SIGN_IN]: noPayload,
-  [ACT_KIND.SUPERSET_DISCONNECT]: noPayload,
-  [ACT_KIND.UPDATE_CHECK]: noPayload,
-  [ACT_KIND.UPDATE_INSTALL]: noPayload,
-  [ACT_KIND.UPDATE_OPEN_RELEASE]: noPayload,
-  [ACT_KIND.UPDATE_OPEN_CHANGELOG]: noPayload,
-  [ACT_KIND.SESSION_OPEN]: guarded<{ identity: SessionIdentity }>(
-    (value) =>
-      onlyKeys(value, ["identity"]) !== undefined &&
-      isRecord(value) &&
-      isSessionIdentity(value.identity),
+const press = (refusal: string): ActDeclaration<undefined, void> => ({
+  payload: noPayload,
+  result: answersNothing,
+  refusal,
+});
+
+/** A press whose answer is the settings the host now holds, for the row to redraw from. */
+const settingsPress = (refusal: string): ActDeclaration<undefined, SettingsUpdateResult> => ({
+  payload: noPayload,
+  result: answersSettings,
+  refusal,
+});
+
+/**
+ * Every act, one row per kind, and everything this build says about a kind in
+ * that one row: the parser its payload has to pass, the guard its answer has
+ * to pass, and the sentence its refusal carries. One row rather than three
+ * tables, so a kind is read and added in one place and a kind missing any of
+ * the three does not build.
+ *
+ * The payload's parser is the whole of what the boundary admits: it runs in
+ * the main process before the act is dispatched and again in the router, so a
+ * caller inside the main process cannot reach a row with a payload the window
+ * could not have sent. The answer's guard is checked where the answer is
+ * read — in the router before the outcome is minted, and in the window that
+ * asked before its caller sees a value — and a kind whose answer has a domain
+ * reader of its own names it, while the rest carry the structured-clone shape
+ * alone, which is all a `void` or a snapshot the host composed needs. The
+ * refusal is fixed by the build, so what reaches the window is something its
+ * row can draw rather than whatever message an exception happened to carry.
+ */
+export const ACT = {
+  [ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]: {
+    payload: s.record({
+      provider: s.enumOf(Object.values(ACCOUNT_PROVIDER)),
+    }),
+    result: answersAccount,
+    refusal: "Could not start signing in on this system.",
+  },
+  [ACT_KIND.ACCOUNT_CANCEL_SIGN_IN]: press("Could not cancel that sign-in on this system."),
+  [ACT_KIND.ACCOUNT_SIGN_OUT]: {
+    payload: noPayload,
+    result: answersAccount,
+    refusal: "Could not sign out on this system.",
+  },
+  [ACT_KIND.ACCOUNT_DELETE]: {
+    payload: noPayload,
+    result: answersAccount,
+    refusal: "Could not delete that account on this system.",
+  },
+  [ACT_KIND.SETTING_UPDATE]: {
+    payload: settingUpdatePayload,
+    result: answersSettings,
+    refusal: "Could not save that setting on this system.",
+  },
+  [ACT_KIND.SETTING_UPDATE_ENTRY]: {
+    payload: settingEntryPayload,
+    result: answersSettings,
+    refusal: "Could not save that setting on this system.",
+  },
+  [ACT_KIND.SETTINGS_RESET]: {
+    payload: s.record({
+      scope: s.enumOf(Object.values(SETTINGS_RESET_SCOPE)),
+    }),
+    result: answersSettings,
+    refusal: "Could not reset those settings on this system.",
+  },
+  [ACT_KIND.CREDENTIAL_SET_API_KEY]: {
+    payload: s.record({
+      providerId: s.enumOf(CREDENTIAL_PROVIDER_IDS),
+      apiKey: s.text({ max: 4096, ends: TEXT_ENDS.KEEP, allowEmpty: true }).optional(),
+    }),
+    result: answersSettings,
+    refusal: "Could not save that API key on this system.",
+  },
+  [ACT_KIND.CREDENTIAL_OPEN_API_KEYS]: {
+    payload: s.record({
+      providerId: s.enumOf(CREDENTIAL_PROVIDER_IDS),
+    }),
+    result: answersNothing,
+    refusal: "Could not open that provider's keys page.",
+  },
+  [ACT_KIND.CALENDAR_CONNECT_GOOGLE]: settingsPress(
+    "Could not connect Google Calendar on this system.",
   ),
-  [ACT_KIND.SESSION_OPEN_APPLICATION]: guarded<{
-    identity: SessionIdentity;
-    applicationId: SessionApplicationId;
-  }>(
-    (value) =>
-      onlyKeys(value, ["identity", "applicationId"]) !== undefined &&
-      isRecord(value) &&
-      isSessionIdentity(value.identity) &&
-      isWireString(value.applicationId) &&
-      isSessionApplicationId(value.applicationId),
+  [ACT_KIND.CALENDAR_CANCEL_GOOGLE_SIGN_IN]: press("Could not cancel that sign-in on this system."),
+  [ACT_KIND.CALENDAR_REOPEN_GOOGLE_SIGN_IN]: press("Could not reopen that sign-in on this system."),
+  [ACT_KIND.CALENDAR_REMOVE_ACCOUNT]: {
+    payload: s.record({ accountId: exactId }),
+    result: answersSettings,
+    refusal: "Could not disconnect that account on this system.",
+  },
+  [ACT_KIND.CALENDAR_CONNECT_APPLE]: settingsPress(
+    "Could not connect Apple Calendar on this system.",
   ),
-  [ACT_KIND.SESSION_OPEN_CHANGE]: guarded<{ identity: SessionIdentity }>(
-    (value) =>
-      onlyKeys(value, ["identity"]) !== undefined &&
-      isRecord(value) &&
-      isSessionIdentity(value.identity),
+  [ACT_KIND.CALENDAR_DISCONNECT_APPLE]: settingsPress(
+    "Could not disconnect Apple Calendar on this system.",
   ),
-  [ACT_KIND.BRAIN_SUBMIT_ASK]: guarded<{ submission: BrainAskSubmission }>(
-    (value) =>
-      onlyKeys(value, ["submission"]) !== undefined &&
-      isRecord(value) &&
-      isBrainAskSubmission(value.submission),
+  [ACT_KIND.CALENDAR_APPLE_ACCESS_STATUS]: {
+    payload: noPayload,
+    result: wireResult<AppleCalendarAccess>(),
+    refusal: "Could not read Calendar access on this system.",
+  },
+  [ACT_KIND.CALENDAR_CANCEL_APPLE_CONNECT]: press(
+    "Could not cancel that connection on this system.",
   ),
-  [ACT_KIND.BRAIN_WAIT_ASK]: s.record({
-    runId: exactId,
-    epoch: s.wholeNumber({ minimum: 0 }),
-  }),
-  [ACT_KIND.BRAIN_CANCEL_ASK]: s.record({ runId: exactId }),
-  [ACT_KIND.BRAIN_CLAIM_REPLY]: s.record({
-    runId: exactId,
-    deliveryId: exactId,
-    epoch: s.wholeNumber({ minimum: 0 }),
-  }),
-  [ACT_KIND.VOICE_COMMAND]: s.record({
-    command: s.enumOf(Object.values(VOICE_COMMAND)),
-  }),
-  [ACT_KIND.VOICE_MINT_CREDENTIAL]: noPayload,
-  [ACT_KIND.VOICE_DIAGNOSTICS]: noPayload,
-  [ACT_KIND.MICROPHONE_REQUEST]: noPayload,
-  [ACT_KIND.MICROPHONE_ROUTE]: noPayload,
-  [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: noPayload,
-  [ACT_KIND.WINDOW_SET_EXPANDED]: s.record({
-    expanded: s.boolean(),
-    focus: s.boolean().optional(),
-  }),
-  [ACT_KIND.WINDOW_FOCUS_PANEL]: noPayload,
-  [ACT_KIND.WINDOW_COPY_TEXT]: s.record({ words: s.text({ max: 100_000, ends: TEXT_ENDS.KEEP }) }),
-  [ACT_KIND.WINDOW_QUIT]: noPayload,
-  [ACT_KIND.FEEDBACK_SUMMON]: s.record({ kind: s.enumOf(Object.values(FEEDBACK_KIND)) }),
-  [ACT_KIND.FEEDBACK_SEND]: guarded<{ submission: FeedbackSubmission }>(
-    (value) =>
-      onlyKeys(value, ["submission"]) !== undefined &&
-      isRecord(value) &&
-      feedbackSubmission(value.submission) !== undefined,
-  ),
-  [ACT_KIND.ONBOARDING_SKIP_CALENDAR]: noPayload,
-  [ACT_KIND.ONBOARDING_COMPLETE_CALENDAR]: noPayload,
-  [ACT_KIND.INTRODUCTION_PEEK_SESSIONS]: noPayload,
-  [ACT_KIND.INTRODUCTION_COMPLETE]: s.record({ given: s.boolean() }),
-  [ACT_KIND.INTRODUCTION_ABANDON]: s.record({ reason: s.text({ max: 1024, oneLine: true }) }),
-} as const satisfies Record<ActKind, ActSchema<unknown>>;
+  [ACT_KIND.CALENDAR_OPEN_SETTINGS]: press("Could not open the Calendar privacy settings."),
+  [ACT_KIND.CALENDAR_REFRESH]: press("Could not read the calendars on this system."),
+  [ACT_KIND.CALENDAR_SET_SELECTED]: {
+    payload: s.record({
+      accountId: exactId,
+      calendarId: exactId,
+      selected: s.boolean(),
+    }),
+    result: answersSettings,
+    refusal: "Could not save that calendar choice on this system.",
+  },
+  [ACT_KIND.TRACKER_CONNECT]: settingsPress("Could not connect Linear on this system."),
+  [ACT_KIND.TRACKER_CANCEL_SIGN_IN]: press("Could not cancel that sign-in on this system."),
+  [ACT_KIND.TRACKER_REOPEN_SIGN_IN]: press("Could not reopen that sign-in on this system."),
+  [ACT_KIND.TRACKER_DISCONNECT]: settingsPress("Could not disconnect Linear on this system."),
+  [ACT_KIND.SUPERSET_BEGIN_SIGN_IN]: {
+    payload: noPayload,
+    result: answersSupersetSignIn,
+    refusal: "Could not start signing in to Superset on this system.",
+  },
+  [ACT_KIND.SUPERSET_SUBMIT_CODE]: {
+    payload: s.record({ code: s.text({ max: 512 }) }),
+    result: answersSupersetSignIn,
+    refusal: "Could not send that code to Superset on this system.",
+  },
+  [ACT_KIND.SUPERSET_CHOOSE_ORGANIZATION]: {
+    payload: s.record({ slug: exactId }),
+    result: answersSupersetSignIn,
+    refusal: "Could not choose that organization on this system.",
+  },
+  [ACT_KIND.SUPERSET_REOPEN_SIGN_IN]: press("Could not reopen that sign-in on this system."),
+  [ACT_KIND.SUPERSET_CANCEL_SIGN_IN]: press("Could not cancel that sign-in on this system."),
+  [ACT_KIND.SUPERSET_DISCONNECT]: {
+    payload: noPayload,
+    result: wireResult<ActionResult>(isActionResult),
+    refusal: "Could not disconnect Superset on this system.",
+  },
+  [ACT_KIND.UPDATE_CHECK]: {
+    payload: noPayload,
+    result: wireResult<UpdateSnapshot>(),
+    refusal: "Could not check for updates on this system.",
+  },
+  [ACT_KIND.UPDATE_INSTALL]: press("Could not install that update on this system."),
+  [ACT_KIND.UPDATE_OPEN_RELEASE]: press("Could not open the releases page."),
+  [ACT_KIND.UPDATE_OPEN_CHANGELOG]: press("Could not open the changelog."),
+  [ACT_KIND.SESSION_OPEN]: {
+    payload: oneSession,
+    result: answersSessionOpen,
+    refusal: "Could not open that session on this system.",
+  },
+  [ACT_KIND.SESSION_OPEN_APPLICATION]: {
+    payload: fields<{ identity: SessionIdentity; applicationId: SessionApplicationId }>({
+      identity: isSessionIdentity,
+      applicationId: (value) => isWireString(value) && isSessionApplicationId(value),
+    }),
+    result: answersSessionOpen,
+    refusal: "Could not open that session in that app on this system.",
+  },
+  [ACT_KIND.SESSION_OPEN_CHANGE]: {
+    payload: oneSession,
+    result: answersSessionOpen,
+    refusal: "Could not open that pull request on this system.",
+  },
+  [ACT_KIND.BRAIN_SUBMIT_ASK]: {
+    payload: fields<{ submission: BrainAskSubmission }>({ submission: isBrainAskSubmission }),
+    result: wireResult<BrainAskSubmissionResult>(isBrainAskSubmissionResult),
+    refusal: "Could not reach Luke's runtime to ask that.",
+  },
+  [ACT_KIND.BRAIN_WAIT_ASK]: {
+    payload: s.record({
+      runId: exactId,
+      epoch: s.wholeNumber({ minimum: 0 }),
+    }),
+    result: wireResult<BrainAskWait>(isBrainAskWait),
+    refusal: "Could not reach Luke's runtime to wait on that.",
+  },
+  [ACT_KIND.BRAIN_CANCEL_ASK]: {
+    payload: s.record({ runId: exactId }),
+    result: wireResult<BrainRequestSnapshot | undefined>(
+      (value) => value === undefined || isBrainRequestSnapshot(value),
+    ),
+    refusal: "Could not reach Luke's runtime to cancel that.",
+  },
+  [ACT_KIND.BRAIN_CLAIM_REPLY]: {
+    payload: s.record({
+      runId: exactId,
+      deliveryId: exactId,
+      epoch: s.wholeNumber({ minimum: 0 }),
+    }),
+    result: wireResult<BrainReplyClaimResult>(isBrainReplyClaimResult),
+    refusal: "Could not reach Luke's runtime to claim that reply.",
+  },
+  [ACT_KIND.VOICE_COMMAND]: {
+    payload: s.record({
+      command: s.enumOf(Object.values(VOICE_COMMAND)),
+    }),
+    result: wireResult<VoiceCommandOutcome | undefined>(
+      (value) => value === undefined || isVoiceCommandOutcome(value),
+    ),
+    refusal: "Could not carry that command on this system.",
+  },
+  [ACT_KIND.VOICE_MINT_CREDENTIAL]: {
+    payload: noPayload,
+    result: wireResult<RealtimeConnection | undefined>(),
+    refusal: "Could not open a voice call on this system.",
+  },
+  [ACT_KIND.VOICE_DIAGNOSTICS]: {
+    payload: noPayload,
+    result: wireResult<RealtimeDiagnostics>(),
+    refusal: "Could not read the voice diagnostics on this system.",
+  },
+  [ACT_KIND.MICROPHONE_REQUEST]: {
+    payload: noPayload,
+    result: wireResult<MicrophoneStatus>(),
+    refusal: "Could not ask for the microphone on this system.",
+  },
+  [ACT_KIND.MICROPHONE_ROUTE]: {
+    payload: noPayload,
+    result: wireResult<MicrophoneRoute | undefined>(),
+    refusal: "Could not read the microphone route on this system.",
+  },
+  [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: press("Could not open the microphone privacy settings."),
+  [ACT_KIND.WINDOW_SET_EXPANDED]: {
+    payload: s.record({
+      expanded: s.boolean(),
+      focus: s.boolean().optional(),
+    }),
+    result: wireResult<WindowMode>(),
+    refusal: "Could not resize the panel on this system.",
+  },
+  [ACT_KIND.WINDOW_FOCUS_PANEL]: press("Could not focus the panel on this system."),
+  [ACT_KIND.WINDOW_COPY_TEXT]: {
+    payload: s.record({ words: s.text({ max: 100_000, ends: TEXT_ENDS.KEEP }) }),
+    result: answersNothing,
+    refusal: "Could not copy that to the clipboard on this system.",
+  },
+  [ACT_KIND.WINDOW_QUIT]: press("Could not quit on this system."),
+  [ACT_KIND.FEEDBACK_SUMMON]: {
+    payload: s.record({ kind: s.enumOf(Object.values(FEEDBACK_KIND)) }),
+    result: answersNothing,
+    refusal: "Could not open the composer on this system.",
+  },
+  [ACT_KIND.FEEDBACK_SEND]: {
+    payload: fields<{ submission: FeedbackSubmission }>({
+      submission: (value) => feedbackSubmission(value) !== undefined,
+    }),
+    result: wireResult<FeedbackResult>(),
+    refusal: "Could not send that on this system.",
+  },
+  [ACT_KIND.ONBOARDING_SKIP_CALENDAR]: press("Could not skip that step on this system."),
+  [ACT_KIND.ONBOARDING_COMPLETE_CALENDAR]: press("Could not settle that step on this system."),
+  [ACT_KIND.INTRODUCTION_PEEK_SESSIONS]: {
+    payload: noPayload,
+    result: wireResult<readonly Session[]>(),
+    refusal: "Could not read this machine's sessions.",
+  },
+  [ACT_KIND.INTRODUCTION_COMPLETE]: {
+    payload: s.record({ given: s.boolean() }),
+    result: answersNothing,
+    refusal: "Could not record the introduction on this system.",
+  },
+  [ACT_KIND.INTRODUCTION_ABANDON]: {
+    payload: s.record({ reason: s.text({ max: 1024, oneLine: true }) }),
+    result: answersNothing,
+    refusal: "Could not stand the introduction down on this system.",
+  },
+} as const satisfies Record<ActKind, ActDeclaration<unknown, unknown>>;
 
 type SchemaValue<Declaration> = Declaration extends ActSchema<infer Value> ? Value : never;
 
 /** What one kind's payload is, read from that kind's own schema. */
-export type ActPayload<Kind extends ActKind> = SchemaValue<(typeof ACT_SCHEMA)[Kind]>;
-
-/**
- * Every act's answer, one guard per kind, checked where the answer is read:
- * in the router before the outcome is minted, and in the window that asked
- * before its caller sees a value. A kind whose answer has a domain reader of
- * its own names it here; the rest carry the structured-clone shape alone,
- * which is all a `void` or a snapshot the host composed needs.
- */
-export const ACT_RESULT = {
-  [ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]: wireResult<AccountSnapshot>(),
-  [ACT_KIND.ACCOUNT_CANCEL_SIGN_IN]: wireResult<void>(),
-  [ACT_KIND.ACCOUNT_SIGN_OUT]: wireResult<AccountSnapshot>(),
-  [ACT_KIND.ACCOUNT_DELETE]: wireResult<AccountSnapshot>(),
-  [ACT_KIND.SETTING_UPDATE]: wireResult<SettingsUpdateResult>(),
-  [ACT_KIND.SETTING_UPDATE_ENTRY]: wireResult<SettingsUpdateResult>(),
-  [ACT_KIND.SETTINGS_RESET]: wireResult<SettingsUpdateResult>(),
-  [ACT_KIND.CREDENTIAL_SET_API_KEY]: wireResult<SettingsUpdateResult>(),
-  [ACT_KIND.CREDENTIAL_OPEN_API_KEYS]: wireResult<void>(),
-  [ACT_KIND.CALENDAR_CONNECT_GOOGLE]: wireResult<SettingsUpdateResult>(),
-  [ACT_KIND.CALENDAR_CANCEL_GOOGLE_SIGN_IN]: wireResult<void>(),
-  [ACT_KIND.CALENDAR_REOPEN_GOOGLE_SIGN_IN]: wireResult<void>(),
-  [ACT_KIND.CALENDAR_REMOVE_ACCOUNT]: wireResult<SettingsUpdateResult>(),
-  [ACT_KIND.CALENDAR_CONNECT_APPLE]: wireResult<SettingsUpdateResult>(),
-  [ACT_KIND.CALENDAR_DISCONNECT_APPLE]: wireResult<SettingsUpdateResult>(),
-  [ACT_KIND.CALENDAR_APPLE_ACCESS_STATUS]: wireResult<AppleCalendarAccess>(),
-  [ACT_KIND.CALENDAR_CANCEL_APPLE_CONNECT]: wireResult<void>(),
-  [ACT_KIND.CALENDAR_OPEN_SETTINGS]: wireResult<void>(),
-  [ACT_KIND.CALENDAR_REFRESH]: wireResult<void>(),
-  [ACT_KIND.CALENDAR_SET_SELECTED]: wireResult<SettingsUpdateResult>(),
-  [ACT_KIND.TRACKER_CONNECT]: wireResult<SettingsUpdateResult>(),
-  [ACT_KIND.TRACKER_CANCEL_SIGN_IN]: wireResult<void>(),
-  [ACT_KIND.TRACKER_REOPEN_SIGN_IN]: wireResult<void>(),
-  [ACT_KIND.TRACKER_DISCONNECT]: wireResult<SettingsUpdateResult>(),
-  [ACT_KIND.SUPERSET_BEGIN_SIGN_IN]: wireResult<SupersetSignInSnapshot | undefined>(),
-  [ACT_KIND.SUPERSET_SUBMIT_CODE]: wireResult<SupersetSignInSnapshot | undefined>(),
-  [ACT_KIND.SUPERSET_CHOOSE_ORGANIZATION]: wireResult<SupersetSignInSnapshot | undefined>(),
-  [ACT_KIND.SUPERSET_REOPEN_SIGN_IN]: wireResult<void>(),
-  [ACT_KIND.SUPERSET_CANCEL_SIGN_IN]: wireResult<void>(),
-  [ACT_KIND.SUPERSET_DISCONNECT]: wireResult<ActionResult>(isActionResult),
-  [ACT_KIND.UPDATE_CHECK]: wireResult<UpdateSnapshot>(),
-  [ACT_KIND.UPDATE_INSTALL]: wireResult<void>(),
-  [ACT_KIND.UPDATE_OPEN_RELEASE]: wireResult<void>(),
-  [ACT_KIND.UPDATE_OPEN_CHANGELOG]: wireResult<void>(),
-  [ACT_KIND.SESSION_OPEN]: wireResult<SessionOpenResult>(),
-  [ACT_KIND.SESSION_OPEN_APPLICATION]: wireResult<SessionOpenResult>(),
-  [ACT_KIND.SESSION_OPEN_CHANGE]: wireResult<SessionOpenResult>(),
-  [ACT_KIND.BRAIN_SUBMIT_ASK]: wireResult<BrainAskSubmissionResult>(isBrainAskSubmissionResult),
-  [ACT_KIND.BRAIN_WAIT_ASK]: wireResult<BrainAskWait>(isBrainAskWait),
-  [ACT_KIND.BRAIN_CANCEL_ASK]: wireResult<BrainRequestSnapshot | undefined>(
-    (value) => value === undefined || isBrainRequestSnapshot(value),
-  ),
-  [ACT_KIND.BRAIN_CLAIM_REPLY]: wireResult<BrainReplyClaimResult>(isBrainReplyClaimResult),
-  [ACT_KIND.VOICE_COMMAND]: wireResult<VoiceCommandOutcome | undefined>(
-    (value) => value === undefined || isVoiceCommandOutcome(value),
-  ),
-  [ACT_KIND.VOICE_MINT_CREDENTIAL]: wireResult<RealtimeConnection | undefined>(),
-  [ACT_KIND.VOICE_DIAGNOSTICS]: wireResult<RealtimeDiagnostics>(),
-  [ACT_KIND.MICROPHONE_REQUEST]: wireResult<MicrophoneStatus>(),
-  [ACT_KIND.MICROPHONE_ROUTE]: wireResult<MicrophoneRoute | undefined>(),
-  [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: wireResult<void>(),
-  [ACT_KIND.WINDOW_SET_EXPANDED]: wireResult<WindowMode>(),
-  [ACT_KIND.WINDOW_FOCUS_PANEL]: wireResult<void>(),
-  [ACT_KIND.WINDOW_COPY_TEXT]: wireResult<void>(),
-  [ACT_KIND.WINDOW_QUIT]: wireResult<void>(),
-  [ACT_KIND.FEEDBACK_SUMMON]: wireResult<void>(),
-  [ACT_KIND.FEEDBACK_SEND]: wireResult<FeedbackResult>(),
-  [ACT_KIND.ONBOARDING_SKIP_CALENDAR]: wireResult<void>(),
-  [ACT_KIND.ONBOARDING_COMPLETE_CALENDAR]: wireResult<void>(),
-  [ACT_KIND.INTRODUCTION_PEEK_SESSIONS]: wireResult<readonly Session[]>(),
-  [ACT_KIND.INTRODUCTION_COMPLETE]: wireResult<void>(),
-  [ACT_KIND.INTRODUCTION_ABANDON]: wireResult<void>(),
-} as const satisfies Record<ActKind, WireGuard<unknown>>;
-
-/**
- * What one kind's refusal says when the act could not be carried at all: the
- * host unreachable, a window gone, the machine refusing. One sentence per
- * kind, fixed by this build, so what reaches the window that asked is
- * something its row can draw rather than whatever message an exception
- * happened to carry.
- */
-export const ACT_REFUSAL = {
-  [ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]: "Could not start signing in on this system.",
-  [ACT_KIND.ACCOUNT_CANCEL_SIGN_IN]: "Could not cancel that sign-in on this system.",
-  [ACT_KIND.ACCOUNT_SIGN_OUT]: "Could not sign out on this system.",
-  [ACT_KIND.ACCOUNT_DELETE]: "Could not delete that account on this system.",
-  [ACT_KIND.SETTING_UPDATE]: "Could not save that setting on this system.",
-  [ACT_KIND.SETTING_UPDATE_ENTRY]: "Could not save that setting on this system.",
-  [ACT_KIND.SETTINGS_RESET]: "Could not reset those settings on this system.",
-  [ACT_KIND.CREDENTIAL_SET_API_KEY]: "Could not save that API key on this system.",
-  [ACT_KIND.CREDENTIAL_OPEN_API_KEYS]: "Could not open that provider's keys page.",
-  [ACT_KIND.CALENDAR_CONNECT_GOOGLE]: "Could not connect Google Calendar on this system.",
-  [ACT_KIND.CALENDAR_CANCEL_GOOGLE_SIGN_IN]: "Could not cancel that sign-in on this system.",
-  [ACT_KIND.CALENDAR_REOPEN_GOOGLE_SIGN_IN]: "Could not reopen that sign-in on this system.",
-  [ACT_KIND.CALENDAR_REMOVE_ACCOUNT]: "Could not disconnect that account on this system.",
-  [ACT_KIND.CALENDAR_CONNECT_APPLE]: "Could not connect Apple Calendar on this system.",
-  [ACT_KIND.CALENDAR_DISCONNECT_APPLE]: "Could not disconnect Apple Calendar on this system.",
-  [ACT_KIND.CALENDAR_APPLE_ACCESS_STATUS]: "Could not read Calendar access on this system.",
-  [ACT_KIND.CALENDAR_CANCEL_APPLE_CONNECT]: "Could not cancel that connection on this system.",
-  [ACT_KIND.CALENDAR_OPEN_SETTINGS]: "Could not open the Calendar privacy settings.",
-  [ACT_KIND.CALENDAR_REFRESH]: "Could not read the calendars on this system.",
-  [ACT_KIND.CALENDAR_SET_SELECTED]: "Could not save that calendar choice on this system.",
-  [ACT_KIND.TRACKER_CONNECT]: "Could not connect Linear on this system.",
-  [ACT_KIND.TRACKER_CANCEL_SIGN_IN]: "Could not cancel that sign-in on this system.",
-  [ACT_KIND.TRACKER_REOPEN_SIGN_IN]: "Could not reopen that sign-in on this system.",
-  [ACT_KIND.TRACKER_DISCONNECT]: "Could not disconnect Linear on this system.",
-  [ACT_KIND.SUPERSET_BEGIN_SIGN_IN]: "Could not start signing in to Superset on this system.",
-  [ACT_KIND.SUPERSET_SUBMIT_CODE]: "Could not send that code to Superset on this system.",
-  [ACT_KIND.SUPERSET_CHOOSE_ORGANIZATION]: "Could not choose that organization on this system.",
-  [ACT_KIND.SUPERSET_REOPEN_SIGN_IN]: "Could not reopen that sign-in on this system.",
-  [ACT_KIND.SUPERSET_CANCEL_SIGN_IN]: "Could not cancel that sign-in on this system.",
-  [ACT_KIND.SUPERSET_DISCONNECT]: "Could not disconnect Superset on this system.",
-  [ACT_KIND.UPDATE_CHECK]: "Could not check for updates on this system.",
-  [ACT_KIND.UPDATE_INSTALL]: "Could not install that update on this system.",
-  [ACT_KIND.UPDATE_OPEN_RELEASE]: "Could not open the releases page.",
-  [ACT_KIND.UPDATE_OPEN_CHANGELOG]: "Could not open the changelog.",
-  [ACT_KIND.SESSION_OPEN]: "Could not open that session on this system.",
-  [ACT_KIND.SESSION_OPEN_APPLICATION]: "Could not open that session in that app on this system.",
-  [ACT_KIND.SESSION_OPEN_CHANGE]: "Could not open that pull request on this system.",
-  [ACT_KIND.BRAIN_SUBMIT_ASK]: "Could not reach Luke's runtime to ask that.",
-  [ACT_KIND.BRAIN_WAIT_ASK]: "Could not reach Luke's runtime to wait on that.",
-  [ACT_KIND.BRAIN_CANCEL_ASK]: "Could not reach Luke's runtime to cancel that.",
-  [ACT_KIND.BRAIN_CLAIM_REPLY]: "Could not reach Luke's runtime to claim that reply.",
-  [ACT_KIND.VOICE_COMMAND]: "Could not carry that command on this system.",
-  [ACT_KIND.VOICE_MINT_CREDENTIAL]: "Could not open a voice call on this system.",
-  [ACT_KIND.VOICE_DIAGNOSTICS]: "Could not read the voice diagnostics on this system.",
-  [ACT_KIND.MICROPHONE_REQUEST]: "Could not ask for the microphone on this system.",
-  [ACT_KIND.MICROPHONE_ROUTE]: "Could not read the microphone route on this system.",
-  [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: "Could not open the microphone privacy settings.",
-  [ACT_KIND.WINDOW_SET_EXPANDED]: "Could not resize the panel on this system.",
-  [ACT_KIND.WINDOW_FOCUS_PANEL]: "Could not focus the panel on this system.",
-  [ACT_KIND.WINDOW_COPY_TEXT]: "Could not copy that to the clipboard on this system.",
-  [ACT_KIND.WINDOW_QUIT]: "Could not quit on this system.",
-  [ACT_KIND.FEEDBACK_SUMMON]: "Could not open the composer on this system.",
-  [ACT_KIND.FEEDBACK_SEND]: "Could not send that on this system.",
-  [ACT_KIND.ONBOARDING_SKIP_CALENDAR]: "Could not skip that step on this system.",
-  [ACT_KIND.ONBOARDING_COMPLETE_CALENDAR]: "Could not settle that step on this system.",
-  [ACT_KIND.INTRODUCTION_PEEK_SESSIONS]: "Could not read this machine's sessions.",
-  [ACT_KIND.INTRODUCTION_COMPLETE]: "Could not record the introduction on this system.",
-  [ACT_KIND.INTRODUCTION_ABANDON]: "Could not stand the introduction down on this system.",
-} as const satisfies Record<ActKind, string>;
+export type ActPayload<Kind extends ActKind> = SchemaValue<(typeof ACT)[Kind]["payload"]>;
 
 /** What one kind answers with, read from that kind's own guard. */
-export type ActResultFor<Kind extends ActKind> = WireGuardValue<(typeof ACT_RESULT)[Kind]>;
+export type ActResultFor<Kind extends ActKind> = WireGuardValue<(typeof ACT)[Kind]["result"]>;
 
 /**
  * One command as it crosses: the kind, and the payload its kind takes. A kind
@@ -591,7 +611,7 @@ export function parsedAct(value: UnparsedWireValue): Act | undefined {
   for (const key of Object.keys(value)) if (key !== "kind" && key !== "payload") return undefined;
   const kind = value.kind;
   if (!isActKind(kind)) return undefined;
-  const read = ACT_SCHEMA[kind].read(value.payload);
+  const read = ACT[kind].payload.read(value.payload);
   if (!read.ok) return undefined;
   // SAFETY: the kind's own schema admitted this payload, which is the pairing Act declares.
   return (read.value === undefined ? { kind } : { kind, payload: read.value }) as Act;

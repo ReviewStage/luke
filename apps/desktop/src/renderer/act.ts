@@ -6,9 +6,9 @@ import type {
 } from "@sidecar/settings";
 import type { SettingsUpdateResult } from "@sidecar/settings/wire";
 import {
+  ACT,
   ACT_KIND,
   ACT_OUTCOME_STATUS,
-  ACT_RESULT,
   type ActKind,
   type ActPayload,
   type ActResultFor,
@@ -43,7 +43,7 @@ export async function act<Kind extends ActKind>(
     throw new Error(`Luke does not know the act ${kind}.`);
   }
   if (outcome.status === ACT_OUTCOME_STATUS.REFUSED) throw new Error(outcome.reason);
-  if (ACT_RESULT[kind](outcome.value) === false) {
+  if (ACT[kind].result(outcome.value) === false) {
     throw new Error(`Invalid answer to the act ${kind}.`);
   }
   // SAFETY: the kind's own result guard admitted this value.
@@ -98,5 +98,3 @@ export function updateSettingEntry<Field extends KeyedAppSettingField>(
   // SAFETY: as above, for the keyed fields and their entry values.
   return act(ACT_KIND.SETTING_UPDATE_ENTRY, { field, key, value } as SettingEntryPayload);
 }
-
-export const settingWriteActs: SettingWriteActs = { updateSetting, updateSettingEntry };

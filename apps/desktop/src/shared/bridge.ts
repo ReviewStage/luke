@@ -48,15 +48,7 @@ import {
   type SpeechOutcome,
   type SpeechWithdrawal,
 } from "@sidecar/realtime/speech";
-import {
-  type ConversationEntry,
-  isProviderId,
-  isSessionApplicationId,
-  type Session,
-  type SessionApplicationId,
-  type SessionIdentity,
-  storedConversationEntry,
-} from "@sidecar/session";
+import { type ConversationEntry, storedConversationEntry } from "@sidecar/session";
 import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
@@ -82,15 +74,10 @@ import {
   isWireNumber,
   isWireString,
   type UnparsedWireValue,
-  unparsedWire,
-  type WireBoundaryInput,
 } from "@sidecar/wire";
 import { type Act, type ActOutcome, isActOutcome, parsedAct } from "./messages/acts";
 import { type AppStateSnapshot, isAppStateSnapshot } from "./messages/app-state";
-import type { MicrophoneRoute, MicrophoneStatus } from "./messages/audio";
-import type { SessionOpenResult } from "./messages/session";
 import { isSessionIdentity } from "./messages/session";
-import type { UpdateSnapshot } from "./messages/update";
 import {
   isVoiceCommand,
   isVoiceCommandOutcome,

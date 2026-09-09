@@ -1,10 +1,8 @@
 import type { UnparsedWireValue } from "@sidecar/wire";
 import type { WebContents } from "electron";
 import {
+  ACT,
   ACT_OUTCOME_STATUS,
-  ACT_REFUSAL,
-  ACT_RESULT,
-  ACT_SCHEMA,
   type Act,
   type ActKind,
   type ActOutcome,
@@ -78,23 +76,24 @@ function refused(reason: string): ActOutcome {
  */
 export function createActRouter(rows: ActRows): ActRouter {
   async function perform(act: Act, sender: ActSender): Promise<ActOutcome> {
-    if (!Object.hasOwn(ACT_SCHEMA, act.kind)) {
+    if (!Object.hasOwn(ACT, act.kind)) {
       return { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT };
     }
+    const declared = ACT[act.kind];
     // SAFETY: an act's payload is the structured-clone value its own schema
     // admitted, which is what reading it again takes.
     const sent = ("payload" in act ? act.payload : undefined) as UnparsedWireValue;
-    const read = ACT_SCHEMA[act.kind].read(sent);
-    if (!read.ok) return refused(ACT_REFUSAL[act.kind]);
+    const read = declared.payload.read(sent);
+    if (!read.ok) return refused(declared.refusal);
     try {
       // SAFETY: ActRows types every row by its own kind; the erasure is the
       // union index this dispatch is, and the answer is guarded below.
       const value = await (rows[act.kind] as ErasedRow)(read.value, sender);
-      if (ACT_RESULT[act.kind](value) === false) return refused(ACT_REFUSAL[act.kind]);
+      if (declared.result(value) === false) return refused(declared.refusal);
       // SAFETY: the kind's own result guard admitted this value.
       return { status: ACT_OUTCOME_STATUS.DONE, value: value as ActResultFor<ActKind> };
     } catch (error) {
-      return refused(error instanceof ActRefused ? error.message : ACT_REFUSAL[act.kind]);
+      return refused(error instanceof ActRefused ? error.message : declared.refusal);
     }
   }
 

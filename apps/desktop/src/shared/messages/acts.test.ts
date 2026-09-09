@@ -3,25 +3,25 @@ import test from "node:test";
 import { maximumTypedAskLength } from "@sidecar/session";
 import type { WireValue } from "@sidecar/wire";
 import { ONE_ACT_OF_EACH_KIND } from "../../testing/acts";
-import {
-  ACT_KIND,
-  ACT_OUTCOME_STATUS,
-  ACT_REFUSAL,
-  ACT_RESULT,
-  ACT_SCHEMA,
-  type ActKind,
-  isActOutcome,
-  parsedAct,
-} from "./acts";
+import { ACT, ACT_KIND, ACT_OUTCOME_STATUS, type ActKind, isActOutcome, parsedAct } from "./acts";
 
 const IDENTITY = { providerId: "claude-code", providerSessionId: "session-a" };
 
 const KINDS: readonly ActKind[] = Object.values(ACT_KIND);
 
-test("every kind has a payload schema, an answer's guard, and a refusal", () => {
-  assert.deepEqual(Object.keys(ACT_SCHEMA).sort(), [...KINDS].sort());
-  assert.deepEqual(Object.keys(ACT_RESULT).sort(), [...KINDS].sort());
-  assert.deepEqual(Object.keys(ACT_REFUSAL).sort(), [...KINDS].sort());
+/** A value no kind's payload takes: not absent, not a record, not a text a field would hold. */
+const SOMETHING_NO_PAYLOAD_IS = [1, 2, 3];
+
+test("every kind has one row, and that row says all three things", () => {
+  assert.deepEqual(Object.keys(ACT).sort(), [...KINDS].sort());
+  for (const kind of KINDS) {
+    const declared = ACT[kind];
+    // The row says three things and nothing else, its parser really parses,
+    // and its refusal is a sentence. What each guard admits is its own test.
+    assert.deepEqual(Object.keys(declared).sort(), ["payload", "refusal", "result"], kind);
+    assert.equal(declared.payload.read(SOMETHING_NO_PAYLOAD_IS).ok, false, kind);
+    assert.ok(declared.refusal.endsWith("."), kind);
+  }
   // A kind's name is what a channel carries, so no two kinds may share one.
   assert.equal(new Set(KINDS).size, KINDS.length);
 });
@@ -171,20 +171,20 @@ test("an outcome is one of the three answers and nothing else", () => {
 });
 
 test("an answer's guard is the kind's own, so a shape another kind would take is refused", () => {
-  assert.equal(ACT_RESULT[ACT_KIND.SUPERSET_DISCONNECT]({ status: "accepted" }), true);
-  assert.equal(ACT_RESULT[ACT_KIND.SUPERSET_DISCONNECT]({ status: "rejected" }), false);
+  assert.equal(ACT[ACT_KIND.SUPERSET_DISCONNECT].result({ status: "accepted" }), true);
+  assert.equal(ACT[ACT_KIND.SUPERSET_DISCONNECT].result({ status: "rejected" }), false);
   assert.equal(
-    ACT_RESULT[ACT_KIND.BRAIN_SUBMIT_ASK]({ outcome: "accepted", runId: "run-1", acceptedAt: 1 }),
+    ACT[ACT_KIND.BRAIN_SUBMIT_ASK].result({ outcome: "accepted", runId: "run-1", acceptedAt: 1 }),
     true,
   );
   assert.equal(
-    ACT_RESULT[ACT_KIND.BRAIN_SUBMIT_ASK]({ outcome: "rejected", reason: "tired" }),
+    ACT[ACT_KIND.BRAIN_SUBMIT_ASK].result({ outcome: "rejected", reason: "tired" }),
     false,
   );
-  assert.equal(ACT_RESULT[ACT_KIND.BRAIN_CLAIM_REPLY]({ granted: false }), true);
-  assert.equal(ACT_RESULT[ACT_KIND.BRAIN_CLAIM_REPLY]({ granted: true, words: "w" }), false);
-  assert.equal(ACT_RESULT[ACT_KIND.BRAIN_CANCEL_ASK](undefined), true);
-  assert.equal(ACT_RESULT[ACT_KIND.BRAIN_CANCEL_ASK]({ runId: "run-1" }), false);
-  assert.equal(ACT_RESULT[ACT_KIND.VOICE_COMMAND]("accepted"), true);
-  assert.equal(ACT_RESULT[ACT_KIND.VOICE_COMMAND]("sent"), false);
+  assert.equal(ACT[ACT_KIND.BRAIN_CLAIM_REPLY].result({ granted: false }), true);
+  assert.equal(ACT[ACT_KIND.BRAIN_CLAIM_REPLY].result({ granted: true, words: "w" }), false);
+  assert.equal(ACT[ACT_KIND.BRAIN_CANCEL_ASK].result(undefined), true);
+  assert.equal(ACT[ACT_KIND.BRAIN_CANCEL_ASK].result({ runId: "run-1" }), false);
+  assert.equal(ACT[ACT_KIND.VOICE_COMMAND].result("accepted"), true);
+  assert.equal(ACT[ACT_KIND.VOICE_COMMAND].result("sent"), false);
 });

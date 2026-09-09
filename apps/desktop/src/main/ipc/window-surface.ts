@@ -8,15 +8,15 @@ import {
   type RecordProductEvent,
 } from "@sidecar/analytics";
 import { FEEDBACK_LIFECYCLE_EVENT } from "@sidecar/feedback";
-import { BrowserWindow, type WebContents } from "electron";
+import { BrowserWindow } from "electron";
 import { channels } from "#shared/bridge";
-import { ACT_KIND, ACT_REFUSAL } from "#shared/messages/acts";
+import { ACT, ACT_KIND } from "#shared/messages/acts";
 import {
   MICROPHONE_STATUS,
   type MicrophoneRoute,
   type MicrophoneStatus,
 } from "#shared/messages/audio";
-import { ActRefused, type ActRows } from "../act-router";
+import { ActRefused, type ActRows, type ActSender } from "../act-router";
 import type { ReportHandlers } from "../bridge-host";
 import type { MicrophoneRouteWatch } from "../native/microphone-route";
 import type { PanelManager } from "../window/panel-manager";
@@ -60,31 +60,30 @@ export function windowSurfaceActRows(
   dependencies: WindowSurfaceDependencies,
 ): Pick<ActRows, WindowSurfaceActKind> {
   const { panels } = dependencies;
-  /** The display the asking panel stands on, or a refusal: a window with none is not a panel. */
-  const displayOf = (sender: WebContents, refusal: string): number => {
-    const displayId = panels.displayIdFor(sender);
-    if (displayId === undefined) throw new ActRefused(refusal);
+  /**
+   * The display the asking panel stands on. One statement of the standing all
+   * three kinds below need: a window that is not a panel, and a panel on no
+   * display, are the same refusal, because each of the three is about the
+   * display one panel stands on and no other surface has one.
+   */
+  const panelDisplay = (sender: ActSender, kind: WindowSurfaceActKind): number => {
+    const displayId = sender.panel ? panels.displayIdFor(sender.sender) : undefined;
+    if (displayId === undefined) throw new ActRefused(ACT[kind].refusal);
     return displayId;
   };
   return {
-    [ACT_KIND.WINDOW_SET_EXPANDED]: ({ expanded, focus }, { sender, panel }) => {
-      if (!panel) throw new ActRefused(ACT_REFUSAL[ACT_KIND.WINDOW_SET_EXPANDED]);
-      const refusal = ACT_REFUSAL[ACT_KIND.WINDOW_SET_EXPANDED];
-      return panels.setMode(
-        displayOf(sender, refusal),
+    [ACT_KIND.WINDOW_SET_EXPANDED]: ({ expanded, focus }, sender) =>
+      panels.setMode(
+        panelDisplay(sender, ACT_KIND.WINDOW_SET_EXPANDED),
         expanded ? "expanded" : "compact",
         focus === true,
-      );
+      ),
+    [ACT_KIND.WINDOW_FOCUS_PANEL]: (_payload, sender) => {
+      panels.focusIfExpanded(panelDisplay(sender, ACT_KIND.WINDOW_FOCUS_PANEL));
     },
-    [ACT_KIND.WINDOW_FOCUS_PANEL]: (_payload, { sender, panel }) => {
-      if (!panel) throw new ActRefused(ACT_REFUSAL[ACT_KIND.WINDOW_FOCUS_PANEL]);
-      const displayId = panels.displayIdFor(sender);
-      if (displayId !== undefined) panels.focusIfExpanded(displayId);
-    },
-    [ACT_KIND.FEEDBACK_SUMMON]: ({ kind }, { sender, panel }) => {
-      if (!panel) throw new ActRefused(ACT_REFUSAL[ACT_KIND.FEEDBACK_SUMMON]);
-      panels.setMode(displayOf(sender, ACT_REFUSAL[ACT_KIND.FEEDBACK_SUMMON]), "expanded", true);
-      sender.send(channels.onLifecycle, FEEDBACK_LIFECYCLE_EVENT[kind]);
+    [ACT_KIND.FEEDBACK_SUMMON]: ({ kind }, sender) => {
+      panels.setMode(panelDisplay(sender, ACT_KIND.FEEDBACK_SUMMON), "expanded", true);
+      sender.sender.send(channels.onLifecycle, FEEDBACK_LIFECYCLE_EVENT[kind]);
       dependencies.recordProductEvent(PRODUCT_EVENT.FEEDBACK_OPEN, {});
     },
     [ACT_KIND.MICROPHONE_REQUEST]: async () => {

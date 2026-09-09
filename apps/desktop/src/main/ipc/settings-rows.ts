@@ -9,7 +9,7 @@ import {
 import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import type { WebContents } from "electron";
-import { ACT_KIND, ACT_REFUSAL, type SettingUpdatePayload } from "#shared/messages/acts";
+import { ACT, ACT_KIND, type SettingUpdatePayload } from "#shared/messages/acts";
 import type { ActRows } from "../act-router";
 import type { HostOperator } from "../gateway/host-operator";
 import type { MediaDuckController } from "../native/media-duck";
@@ -62,39 +62,53 @@ type SettingsActKind =
   | typeof ACT_KIND.TRACKER_REOPEN_SIGN_IN
   | typeof ACT_KIND.TRACKER_DISCONNECT;
 
+/** How every settings row below answers: a write carried, or a refusal the row can draw. */
+interface SettingsWriter {
+  /**
+   * One settings write. The host's change event is what every other window
+   * hears; the window that asked hears this answer and is skipped there. A
+   * host that could not be reached at all is refused over the last snapshot
+   * this client saw, worded by the act's own sentence, and only a client with
+   * no snapshot either throws — which the router then answers as that same
+   * sentence, without the settings the row would have redrawn from.
+   */
+  write(
+    kind: SettingsActKind,
+    save: () => Promise<SettingsUpdateResult>,
+    apply?: (result: SettingsUpdateResult) => Promise<void> | void,
+  ): Promise<SettingsUpdateResult>;
+  /** A refusal decided here rather than by the host: the settings as they stand, and why. */
+  refuse(reason: string): Promise<SettingsUpdateResult>;
+}
+
+function settingsWriter(
+  dependencies: Pick<SettingsRowsDependencies, "host" | "lastSettings">,
+): SettingsWriter {
+  const refuse = async (reason: string): Promise<SettingsUpdateResult> => {
+    const settings = dependencies.lastSettings() ?? (await dependencies.host.settingsSnapshot());
+    if (!settings) throw new Error(reason);
+    return { status: ACTION_RESULT_STATUS.REJECTED, settings, reason };
+  };
+  return {
+    refuse,
+    async write(kind, save, apply) {
+      let saved: SettingsUpdateResult;
+      try {
+        saved = await save();
+      } catch {
+        return refuse(ACT[kind].refusal);
+      }
+      await apply?.(saved);
+      return saved;
+    },
+  };
+}
+
 export function settingsActRows(
   dependencies: SettingsRowsDependencies,
 ): Pick<ActRows, SettingsActKind> {
   const { host, reporterOf, hotkeys, dock, applyLoginItem, panels, mediaDuck } = dependencies;
-
-  /** A refusal the row draws: the settings as they stand, and why the write did not happen. */
-  const refuse = async (reason: string): Promise<SettingsUpdateResult> => {
-    const settings = dependencies.lastSettings() ?? (await host.settingsSnapshot());
-    if (!settings) throw new Error(reason);
-    return { status: ACTION_RESULT_STATUS.REJECTED, settings, reason };
-  };
-
-  /**
-   * One settings write. The host's change event is what every other window
-   * hears; the window that asked hears this answer and is skipped there. A
-   * host that could not be reached at all is worded over the last snapshot
-   * this client saw, and only a client with no snapshot either throws — which
-   * the router answers as the act's own refusal.
-   */
-  const write = async (
-    reason: string,
-    save: () => Promise<SettingsUpdateResult>,
-    apply?: (result: SettingsUpdateResult) => Promise<void> | void,
-  ): Promise<SettingsUpdateResult> => {
-    let saved: SettingsUpdateResult;
-    try {
-      saved = await save();
-    } catch {
-      return refuse(reason);
-    }
-    await apply?.(saved);
-    return saved;
-  };
+  const { write, refuse } = settingsWriter(dependencies);
 
   /** The side effects this process has hands on; the host applied its own before answering. */
   async function applyClientSettingSideEffect(
@@ -169,7 +183,7 @@ export function settingsActRows(
     // and the key itself crosses once, to the host that keeps it.
     [ACT_KIND.CREDENTIAL_SET_API_KEY]: ({ providerId, apiKey }, { sender }) =>
       write(
-        ACT_REFUSAL[ACT_KIND.CREDENTIAL_SET_API_KEY],
+        ACT_KIND.CREDENTIAL_SET_API_KEY,
         () => host.setProviderApiKey(providerId, apiKey, reporterOf(sender)),
         async (result) => {
           // The voice key is what the talk key is claimed for: once the host
@@ -184,7 +198,7 @@ export function settingsActRows(
       const holder = chordHolder(payload);
       if (holder) return refuse(`That chord is reserved for the ${holder} key.`);
       return write(
-        ACT_REFUSAL[ACT_KIND.SETTING_UPDATE],
+        ACT_KIND.SETTING_UPDATE,
         // SAFETY: the act's own schema parsed this value for this field.
         () => host.updateSetting(payload.field, payload.value as never, reporterOf(sender)),
         async (result) => {
@@ -195,7 +209,7 @@ export function settingsActRows(
     },
     [ACT_KIND.SETTING_UPDATE_ENTRY]: ({ field, key, value }, { sender }) =>
       write(
-        ACT_REFUSAL[ACT_KIND.SETTING_UPDATE_ENTRY],
+        ACT_KIND.SETTING_UPDATE_ENTRY,
         // SAFETY: the act's own schema parsed this value for this field and key.
         () => host.updateSettingEntry(field, key, value as never, reporterOf(sender)),
         async (result) => {
@@ -205,7 +219,7 @@ export function settingsActRows(
       ),
     [ACT_KIND.SETTINGS_RESET]: ({ scope }, { sender }) =>
       write(
-        ACT_REFUSAL[ACT_KIND.SETTINGS_RESET],
+        ACT_KIND.SETTINGS_RESET,
         () => host.resetSettings(scope, reporterOf(sender)),
         async (result) => {
           if (result.reason) return;
@@ -246,43 +260,26 @@ function connectionActRows(
   >,
 ): Pick<ActRows, ConnectionActKind> {
   const { host, reporterOf, openExternal } = dependencies;
-  const write = async (
-    reason: string,
-    save: () => Promise<SettingsUpdateResult>,
-  ): Promise<SettingsUpdateResult> => {
-    try {
-      return await save();
-    } catch {
-      const settings = dependencies.lastSettings() ?? (await host.settingsSnapshot());
-      if (!settings) throw new Error(reason);
-      return { status: ACTION_RESULT_STATUS.REJECTED, settings, reason };
-    }
-  };
+  const { write } = settingsWriter(dependencies);
   return {
     [ACT_KIND.TRACKER_CONNECT]: (_payload, { sender }) =>
-      write(ACT_REFUSAL[ACT_KIND.TRACKER_CONNECT], () => host.connectLinear(reporterOf(sender))),
+      write(ACT_KIND.TRACKER_CONNECT, () => host.connectLinear(reporterOf(sender))),
     [ACT_KIND.TRACKER_DISCONNECT]: (_payload, { sender }) =>
-      write(ACT_REFUSAL[ACT_KIND.TRACKER_DISCONNECT], () =>
-        host.disconnectLinear(reporterOf(sender)),
-      ),
+      write(ACT_KIND.TRACKER_DISCONNECT, () => host.disconnectLinear(reporterOf(sender))),
     [ACT_KIND.TRACKER_CANCEL_SIGN_IN]: () => host.cancelLinearSignIn(),
     [ACT_KIND.TRACKER_REOPEN_SIGN_IN]: () => host.reopenLinearSignIn(),
     [ACT_KIND.CALENDAR_CONNECT_GOOGLE]: (_payload, { sender }) =>
-      write(ACT_REFUSAL[ACT_KIND.CALENDAR_CONNECT_GOOGLE], () =>
-        host.connectGoogleCalendar(reporterOf(sender)),
-      ),
+      write(ACT_KIND.CALENDAR_CONNECT_GOOGLE, () => host.connectGoogleCalendar(reporterOf(sender))),
     [ACT_KIND.CALENDAR_CANCEL_GOOGLE_SIGN_IN]: () => host.cancelGoogleCalendarSignIn(),
     [ACT_KIND.CALENDAR_REOPEN_GOOGLE_SIGN_IN]: () => host.reopenGoogleCalendarSignIn(),
     [ACT_KIND.CALENDAR_REMOVE_ACCOUNT]: ({ accountId }, { sender }) =>
-      write(ACT_REFUSAL[ACT_KIND.CALENDAR_REMOVE_ACCOUNT], () =>
+      write(ACT_KIND.CALENDAR_REMOVE_ACCOUNT, () =>
         host.removeCalendarAccount(accountId, reporterOf(sender)),
       ),
     [ACT_KIND.CALENDAR_CONNECT_APPLE]: (_payload, { sender }) =>
-      write(ACT_REFUSAL[ACT_KIND.CALENDAR_CONNECT_APPLE], () =>
-        host.connectAppleCalendar(reporterOf(sender)),
-      ),
+      write(ACT_KIND.CALENDAR_CONNECT_APPLE, () => host.connectAppleCalendar(reporterOf(sender))),
     [ACT_KIND.CALENDAR_DISCONNECT_APPLE]: (_payload, { sender }) =>
-      write(ACT_REFUSAL[ACT_KIND.CALENDAR_DISCONNECT_APPLE], () =>
+      write(ACT_KIND.CALENDAR_DISCONNECT_APPLE, () =>
         host.disconnectAppleCalendar(reporterOf(sender)),
       ),
     [ACT_KIND.CALENDAR_CANCEL_APPLE_CONNECT]: () => host.cancelAppleCalendarConnect(),
@@ -291,7 +288,7 @@ function connectionActRows(
     [ACT_KIND.CALENDAR_REFRESH]: () => host.refreshCalendars(),
     [ACT_KIND.CALENDAR_OPEN_SETTINGS]: () => openExternal(CALENDAR_PRIVACY_PANE_URL),
     [ACT_KIND.CALENDAR_SET_SELECTED]: ({ accountId, calendarId, selected }, { sender }) =>
-      write(ACT_REFUSAL[ACT_KIND.CALENDAR_SET_SELECTED], () =>
+      write(ACT_KIND.CALENDAR_SET_SELECTED, () =>
         host.setCalendarSelected(accountId, calendarId, selected, reporterOf(sender)),
       ),
   };

@@ -1,13 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { WebContents } from "electron";
-import {
-  ACT_KIND,
-  ACT_OUTCOME_STATUS,
-  ACT_REFUSAL,
-  type Act,
-  type ActKind,
-} from "#shared/messages/acts";
+import { ACT, ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActKind } from "#shared/messages/acts";
 import { ONE_ACT_OF_EACH_KIND } from "../testing/acts";
 import { ActRefused, type ActRows, type ActSender, createActRouter } from "./act-router";
 
@@ -64,7 +58,7 @@ test("a payload the kind's schema refuses never reaches the row", async () => {
   );
   assert.deepEqual(outcome, {
     status: ACT_OUTCOME_STATUS.REFUSED,
-    reason: ACT_REFUSAL[ACT_KIND.WINDOW_COPY_TEXT],
+    reason: ACT[ACT_KIND.WINDOW_COPY_TEXT].refusal,
   });
   assert.deepEqual(ran, []);
 });
@@ -97,7 +91,7 @@ test("a row's own refusal is answered with its sentence; every other throw with 
   // Nothing an exception carried reaches the window: the kind's own sentence does.
   assert.deepEqual(await router.performAct({ kind: ACT_KIND.CALENDAR_REFRESH }, PANEL), {
     status: ACT_OUTCOME_STATUS.REFUSED,
-    reason: ACT_REFUSAL[ACT_KIND.CALENDAR_REFRESH],
+    reason: ACT[ACT_KIND.CALENDAR_REFRESH].refusal,
   });
 });
 
@@ -110,7 +104,7 @@ test("an answer the kind's own guard refuses is a refusal rather than a value dr
   );
   assert.deepEqual(await router.performAct({ kind: ACT_KIND.SUPERSET_DISCONNECT }, PANEL), {
     status: ACT_OUTCOME_STATUS.REFUSED,
-    reason: ACT_REFUSAL[ACT_KIND.SUPERSET_DISCONNECT],
+    reason: ACT[ACT_KIND.SUPERSET_DISCONNECT].refusal,
   });
 });
 
