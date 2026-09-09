@@ -334,9 +334,6 @@ importers:
         specifier: workspace:*
         version: link:../wire
     devDependencies:
-      '@sidecar/fixtures':
-        specifier: workspace:*
-        version: link:../fixtures
       '@types/node':
         specifier: 26.2.0
         version: 26.2.0

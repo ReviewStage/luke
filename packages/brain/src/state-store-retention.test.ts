@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { FakeClock } from "@sidecar/fixtures/testing";
+import { FakeClock } from "@sidecar/runtime/testing";
 import { BrainGenerationClock } from "./generation-clock.js";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
