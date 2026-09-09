@@ -1,6 +1,7 @@
 import {
   BRAIN_ASK_PENDING_NOTE,
   BRAIN_ASK_REFUSAL,
+  BRAIN_ASK_STOPPED_NOTE,
   BRAIN_REQUEST_ORIGIN,
   BRAIN_SUBMISSION_OUTCOME,
   brainReplyWords,
@@ -62,6 +63,11 @@ export async function askBrain(
     return { status: ACTION_RESULT_STATUS.REJECTED, reason: BRAIN_ASK_REFUSAL.absent };
   }
   const moved = generation !== context.thread.generation || withdrawals !== context.withdrawals();
+  // A run the developer stopped ended with no reply to grant: the thread holds
+  // its quiet line already, and the voice says so rather than "still working".
+  if (!brainRequestPending(waited.record) && brainReplyWords(waited.record) === undefined) {
+    return { status: ACTION_RESULT_STATUS.REJECTED, reason: BRAIN_ASK_STOPPED_NOTE };
+  }
   if (brainRequestPending(waited.record) || !waited.speak || moved) {
     return { status: BRAIN_ASK_PENDING_STATUS, note: BRAIN_ASK_PENDING_NOTE };
   }

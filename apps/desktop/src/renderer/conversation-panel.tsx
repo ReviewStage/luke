@@ -1,11 +1,12 @@
 import { type BrainRequestSnapshot, brainRequestPending } from "@sidecar/brain/requests-wire";
-import { CheckIcon, CopyIcon } from "@sidecar/panel";
+import { CheckIcon, CopyIcon, WingFace } from "@sidecar/panel";
 import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
   type ConversationEntryKind,
   conversationEntryKey,
 } from "@sidecar/session";
+import { FACE_MOTION } from "@sidecar/surface";
 import { useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { tell } from "./act";
@@ -56,20 +57,86 @@ const ENTRY_TIME = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute:
 
 const timeBreakLabel = createConversationTimeBreakFormatter();
 
-/** What Conversation says under an ask whose run has not ended yet. */
-export const CONVERSATION_PENDING_LABEL = "Luke is working on this…";
+/** What a reader is told of a run still going; the sighted read the face and the dots. */
+export const CONVERSATION_THINKING_LABEL = "Luke is thinking";
+
+/** How long a run goes before the wait says how long it has been. */
+const THINKING_ELAPSED_AFTER_MS = 10_000;
+
+/** How often the wait's own clock moves once it is saying its age. */
+const THINKING_CLOCK_MS = 1_000;
+
+/**
+ * What the wait says once a run has gone on long enough to be worth a word,
+ * and nothing before that: a quick reply earns no sentence, and a run that has
+ * stood for minutes must not read like one that started a second ago.
+ */
+export function thinkingElapsedLabel(since: number, now: number): string | undefined {
+  const elapsed = now - since;
+  if (elapsed < THINKING_ELAPSED_AFTER_MS) return undefined;
+  const seconds = Math.floor(elapsed / 1000);
+  return `Still thinking · ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+/**
+ * Luke's turn, drawn on his side of the thread in the bubble his reply will
+ * fill, so the thread holds one object per turn and the reply replaces the wait
+ * in place. His face plays the success hop on repeat — a run still going is
+ * continuously true, which is what a repeating motion is for — and three dots
+ * rise in its wake. Nothing here is a control: the stop is the composer's disc,
+ * which both tabs share. The reader's line is the live region, and the age
+ * beside it is not, so a ticking count is never read out second by second.
+ */
+function ConversationThinkingRow({
+  since,
+  now,
+}: {
+  since: number;
+  now: number;
+}): React.JSX.Element {
+  // The wait keeps a clock of its own past the app's, which moves only when
+  // the app renders: a count of how long a run has been going has to move on
+  // its own. Never behind the app's clock, so a fixed clock is never
+  // contradicted by this one.
+  const [clock, setClock] = useState(now);
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), THINKING_CLOCK_MS);
+    return () => window.clearInterval(timer);
+  }, []);
+  const elapsed = thinkingElapsedLabel(since, Math.max(clock, now));
+  return (
+    <li
+      className="conversation-entry"
+      data-speaker={CONVERSATION_ENTRY_SPEAKER.LUKE}
+      data-thinking="true"
+    >
+      <small className="visually-hidden">Luke</small>
+      <div className="conversation-message">
+        <span className="conversation-bubble">
+          <span className="conversation-thinking">
+            <WingFace motion={FACE_MOTION.SUCCESS} repeat />
+            <span className="conversation-thinking-dots" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </span>
+            {elapsed ? <span className="conversation-thinking-elapsed">{elapsed}</span> : null}
+            <span className="visually-hidden" role="status">
+              {CONVERSATION_THINKING_LABEL}
+            </span>
+          </span>
+        </span>
+      </div>
+    </li>
+  );
+}
 
 function ConversationEntryRow({
   entry,
   streaming,
-  pending,
-  onCancel,
 }: {
   entry: ConversationEntry;
   streaming?: boolean;
-  /** Whether the run this ask opened is still going, which draws the wait and the cancel. */
-  pending?: boolean;
-  onCancel?: () => void;
 }): React.JSX.Element {
   const presentation = conversationEntryPresentation(entry.kind);
   const words = entry.words;
@@ -93,16 +160,6 @@ function ConversationEntryRow({
       <div className="conversation-message">
         <span className="conversation-bubble">
           <MarkdownMessage words={words} className="conversation-words" />
-          {pending ? (
-            <span className="conversation-pending" role="status">
-              <span className="conversation-pending-label">{CONVERSATION_PENDING_LABEL}</span>
-              {onCancel ? (
-                <button type="button" className="conversation-cancel" onClick={onCancel}>
-                  Cancel
-                </button>
-              ) : null}
-            </span>
-          ) : null}
           {/* Copying words still arriving would copy half a sentence; the control
             appears with the settled line the same words become. */}
           {presentation.speaker === CONVERSATION_ENTRY_SPEAKER.EVENT || streaming ? null : (
@@ -228,10 +285,10 @@ export function ConversationPanel({
   live = [],
   requests = [],
   now,
-  onCancelRequest,
   ask,
   onAskEngaged,
   askShortcut,
+  onStop,
 }: {
   entries: readonly ConversationEntry[];
   /**
@@ -241,12 +298,11 @@ export function ConversationPanel({
    */
   now: number;
   /**
-   * The brain's runs, so an ask whose run is still going is drawn waiting,
-   * with the cancel the developer holds. Read here from the records alone;
-   * the reply's own line arrives when the run ends.
+   * The brain's runs, so a run still going draws Luke's turn at the thread's
+   * tail. Read here from the records alone; the reply's own line arrives when
+   * the run ends, and the stop is the composer's.
    */
   requests?: readonly BrainRequestSnapshot[];
-  onCancelRequest?: (runId: string) => void;
   /**
    * The lines still being said, drawn under the settled thread as the same
    * bubbles they will settle into — words growing, no timestamp, no copy.
@@ -256,21 +312,26 @@ export function ConversationPanel({
   ask: AskHandler;
   onAskEngaged: (engaged: boolean) => void;
   askShortcut?: string;
+  /** Stops every run still going, for the composer's disc while one is. */
+  onStop?: () => void;
 }): React.JSX.Element {
   const list = useRef<HTMLDivElement | null>(null);
   const entryCount = entries.length;
   const liveLength = live.reduce((total, entry) => total + entry.words.length, 0);
-  const pendingRuns = new Set(
-    requests.filter(brainRequestPending).map((snapshot) => snapshot.runId),
-  );
+  // One wait however many runs are going: a second ask joins the turn under
+  // way, and two waits for one turn would say otherwise. Its age is the
+  // oldest run's.
+  const pending = requests.filter(brainRequestPending);
+  const thinkingSince =
+    pending.length > 0 ? Math.min(...pending.map((snapshot) => snapshot.acceptedAt)) : undefined;
 
   useEffect(() => {
-    // Reading the count binds the scroll to an append or clear, not to an
-    // unrelated render of the same conversation.
-    if (entryCount === 0) return;
+    // Reading the count binds the scroll to an append, a clear, or the wait
+    // arriving, not to an unrelated render of the same conversation.
+    if (entryCount === 0 && thinkingSince === undefined) return;
     const element = list.current;
     if (element) element.scrollTop = element.scrollHeight;
-  }, [entryCount]);
+  }, [entryCount, thinkingSince]);
 
   useEffect(() => {
     // A streaming line only carries the reader along; unlike an append, it
@@ -282,7 +343,7 @@ export function ConversationPanel({
     if (fromTail <= STREAM_FOLLOW_SLACK_PX) element.scrollTop = element.scrollHeight;
   }, [liveLength]);
 
-  const thread = entries.length > 0 || live.length > 0;
+  const thread = entries.length > 0 || live.length > 0 || thinkingSince !== undefined;
 
   return (
     <section
@@ -302,22 +363,7 @@ export function ConversationPanel({
           <div className="conversation-pull">
             <ol className="conversation-list">
               {keyedConversationEntries(entries).flatMap(({ entry, key, opensBreak }) => {
-                const runId = entry.requestId;
-                const pending =
-                  runId !== undefined &&
-                  (entry.kind === CONVERSATION_ENTRY_KIND.TYPED_ASK ||
-                    entry.kind === CONVERSATION_ENTRY_KIND.SPOKEN_ASK) &&
-                  pendingRuns.has(runId);
-                const row = (
-                  <ConversationEntryRow
-                    key={key}
-                    entry={entry}
-                    pending={pending}
-                    {...(pending && runId !== undefined && onCancelRequest
-                      ? { onCancel: () => onCancelRequest(runId) }
-                      : undefined)}
-                  />
-                );
+                const row = <ConversationEntryRow key={key} entry={entry} />;
                 return opensBreak && entry.recordedAt !== undefined
                   ? [
                       <ConversationTimeBreak
@@ -337,6 +383,11 @@ export function ConversationPanel({
                   streaming
                 />
               ))}
+              {/* After the lines still being said: a spoken ask's own words
+                  stream in above the wait for their answer. */}
+              {thinkingSince !== undefined ? (
+                <ConversationThinkingRow since={thinkingSince} now={now} />
+              ) : null}
             </ol>
           </div>
         </div>
@@ -354,6 +405,8 @@ export function ConversationPanel({
         ask={ask}
         onEngagedChange={onAskEngaged}
         rowIndex={CONVERSATION_COMPOSER_ROW_INDEX}
+        thinking={thinkingSince !== undefined}
+        {...(onStop ? { onStop } : undefined)}
         {...(askShortcut ? { shortcut: askShortcut } : undefined)}
       />
     </section>

@@ -3,6 +3,7 @@ import {
   PRODUCT_SEARCH_SURFACE,
   PRODUCT_SURFACE_EVENT,
 } from "@sidecar/analytics";
+import { brainRequestPending } from "@sidecar/brain/requests-wire";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { CREDENTIAL_PROVIDER_LIST, CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
 import { feedbackKindForLifecycleEvent } from "@sidecar/feedback";
@@ -573,6 +574,13 @@ export function App(): React.JSX.Element {
     clearConversationLines,
   } = useVoiceView();
   const { voiceError, voiceNotice, talkOpening, liveConversationEntries } = voiceView;
+  // The composer's stop takes every run still going: a second ask joined the
+  // turn under way, so stopping the turn is stopping them all.
+  const stopThinking = useCallback(() => {
+    for (const run of brainRequests) {
+      if (brainRequestPending(run)) cancelBrainAsk(run.runId);
+    }
+  }, [brainRequests, cancelBrainAsk]);
   // A capture run always draws the fixture's words: the voice window that
   // otherwise decides the captions does not stand in one.
   const lukeCaptions = fixtureSpeaking ? [FIXTURE_SPEAKING_CAPTION] : voiceView.lukeCaptions;
@@ -1045,7 +1053,7 @@ export function App(): React.JSX.Element {
             liveConversationEntries={liveConversationEntries}
             onClearConversationConversation={clearConversationLines}
             brainRequests={brainRequests}
-            onCancelBrainRequest={cancelBrainAsk}
+            onStopThinking={stopThinking}
             ask={askLuke}
             onAskEngaged={changeAskEngagement}
             {...(shownAskHotkey ? { askShortcut: shownAskHotkey } : undefined)}

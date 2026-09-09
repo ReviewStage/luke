@@ -5,12 +5,14 @@ import {
   BRAIN_SUBMISSION_REJECTION,
   brainReplyWords,
   isTerminalBrainRequestStatus,
+  stoppedAskNarration,
 } from "@sidecar/brain/requests";
 import type { BrainAskSubmissionResult, BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
 import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime/vocabulary";
 import {
   type ConversationEntry,
   replyConversationEntry,
+  stoppedAskConversationEntry,
   typedAskConversationEntry,
 } from "@sidecar/session";
 
@@ -96,12 +98,19 @@ async function publishEnd(
   const current = agent.request(runId);
   if (!current || !isTerminalBrainRequestStatus(current.status)) return undefined;
   if (current.conversationRecordedAt !== undefined) return current;
+  // An end with words is Luke's reply; a plain stop has none and leaves the
+  // quiet line instead, so every ended run reaches the thread and is marked.
   const words = brainReplyWords(current);
-  if (!words) return undefined;
+  const narration = words === undefined ? stoppedAskNarration(current) : undefined;
+  const entry =
+    words !== undefined
+      ? replyConversationEntry(words, current.runId)
+      : narration !== undefined
+        ? stoppedAskConversationEntry(narration, current.runId)
+        : undefined;
+  if (!entry) return undefined;
   const at = current.settledAt ?? current.acceptedAt;
-  if (!(await record(replyConversationEntry(words, current.runId), at, sessionKey))) {
-    return undefined;
-  }
+  if (!(await record(entry, at, sessionKey))) return undefined;
   if (!(await agent.markConversationRecorded(runId, at))) return undefined;
   // Re-read rather than patched: the mark landed on the live record, and a
   // Clear or a replacement in the meantime has taken the record with it.

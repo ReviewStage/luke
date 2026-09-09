@@ -205,29 +205,129 @@
   color: var(--text-primary);
 }
 
-/* The wait under an ask still running, and the one control it offers: quiet,
-   in the bubble's own column, gone the moment the reply's line arrives. */
-.conversation-pending {
-  display: flex;
+/* Luke's turn, in the bubble his reply will fill: his face, three dots, and
+   past ten seconds how long it has been. It is a received bubble in every
+   measure but its words, so the reply lands exactly where the wait stood.
+   Nothing here is a control; the stop is the composer's disc. */
+.conversation-thinking {
+  display: inline-flex;
+  min-height: 32px;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-  padding: 4px 6px 2px;
-  color: var(--text-secondary);
-  font-size: 11.5px;
+  gap: 9px;
+  padding: 6px 12px 6px 10px;
+  border-radius: 15px 15px 15px 5px;
+  background: var(--raised-strong);
 }
 
-.conversation-cancel {
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: var(--raised);
-  color: var(--text-primary);
-  font-size: 11px;
+/* A step below the wing's face: the bubble is a line of text, not a housing. */
+.conversation-thinking .luke-face {
+  width: 16px;
+  height: 16px;
 }
 
-.conversation-cancel:hover {
+.conversation-thinking-dots {
+  display: inline-flex;
+  height: 12px;
+  align-items: center;
+  gap: 4px;
+}
+
+/* The dots follow the generated `success` cycle the face beside them is
+   playing on repeat — luke-success-2, 2s, the head off the ground from 25% to
+   65% and highest at 45% — each rising as the head comes down, one after
+   another, a ripple off the hop. The stagger is cut into the keyframes rather
+   than carried as a delay, so a paused loop holds every dot at rest, the pose
+   the face itself holds paused; and being timed to a face gesture, they answer
+   --face-motion rather than --loop-motion, so the two can never stop apart. */
+.conversation-thinking-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
   background: var(--text-secondary);
-  color: var(--surface);
+  opacity: 0.35;
+  animation-duration: 2s;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  animation-iteration-count: infinite;
+  animation-play-state: var(--face-motion);
+}
+
+.conversation-thinking-dots i:nth-child(1) {
+  animation-name: conversation-thinking-dot-1;
+}
+
+.conversation-thinking-dots i:nth-child(2) {
+  animation-name: conversation-thinking-dot-2;
+}
+
+.conversation-thinking-dots i:nth-child(3) {
+  animation-name: conversation-thinking-dot-3;
+}
+
+@keyframes conversation-thinking-dot-1 {
+  0%,
+  45% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+
+  55% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+
+  65%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+}
+
+@keyframes conversation-thinking-dot-2 {
+  0%,
+  53% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+
+  63% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+
+  73%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+}
+
+@keyframes conversation-thinking-dot-3 {
+  0%,
+  61% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+
+  71% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+
+  81%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+}
+
+/* How long the run has been going, said only once it is worth saying. Plain
+   text beside the reader's status line rather than inside it, so a count that
+   moves every second is never read out every second. */
+.conversation-thinking-elapsed {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* The bubble's words, drawn as the Markdown they were written in; the block

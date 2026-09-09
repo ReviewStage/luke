@@ -389,6 +389,15 @@ export function replyConversationEntry(words: string, requestId?: string): Conve
   };
 }
 
+/**
+ * The quiet line a run the developer stopped leaves behind, tied to its run
+ * the way the reply it stands in for would be, so it is recorded exactly once
+ * however many windows hear of the run's end.
+ */
+export function stoppedAskConversationEntry(words: string, requestId: string): ConversationEntry {
+  return { kind: CONVERSATION_ENTRY_KIND.ACTION, words, requestId };
+}
+
 /** The history line a typed ask the brain accepted leaves behind, tied to its run. */
 export function typedAskConversationEntry(words: string, requestId: string): ConversationEntry {
   return { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words, requestId };

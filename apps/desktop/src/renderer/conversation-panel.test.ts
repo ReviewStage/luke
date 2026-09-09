@@ -5,10 +5,11 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   CONVERSATION_ENTRY_SPEAKER,
-  CONVERSATION_PENDING_LABEL,
+  CONVERSATION_THINKING_LABEL,
   ConversationClearButton,
   ConversationPanel,
   conversationEntryPresentation,
+  thinkingElapsedLabel,
 } from "./conversation-panel";
 
 const NOW = Date.parse("2026-09-08T17:30:00.000Z");
@@ -250,53 +251,66 @@ test("the composer stands at the foot of the thread, empty or not", () => {
   assert.match(threaded, /aria-keyshortcuts="Alt\+Space"/);
 });
 
-test("an ask whose run is still going waits beside its words and offers a cancel", () => {
-  const cancelled: string[] = [];
+test("a run still going draws Luke's turn at the tail, with no control of its own", () => {
   const run = {
     runId: "run-1",
     submissionId: "sub-1",
     origin: "typed",
     question: "ship it",
     revision: 1,
-    acceptedAt: 1,
+    acceptedAt: NOW,
     performedActions: 0,
     unknownActions: 0,
   } as const;
-  const render = (status: "running" | "succeeded") =>
+  const render = (status: "running" | "succeeded", now = NOW) =>
     renderToStaticMarkup(
       createElement(ConversationPanel, {
         entries: [
           { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "ship it", requestId: "run-1" },
         ],
         requests: [{ ...run, status }],
-        onCancelRequest: (runId) => cancelled.push(runId),
-        now: NOW,
+        now,
         ask: async () => undefined,
         onAskEngaged: () => undefined,
+        onStop: () => undefined,
       }),
     );
   const pending = render("running");
-  assert.match(pending, new RegExp(CONVERSATION_PENDING_LABEL));
-  assert.match(pending, /class="conversation-cancel"/);
-  // The wait stands beneath the words, inside the bubble, after the question's
-  // own paragraph: the bubble stacks, so the status never shares the row.
-  assert.match(pending, /<\/p><\/div><span class="conversation-pending" role="status">/);
+  // Luke's side, after the ask, wearing the success hop on repeat, with the
+  // reader's line as the live region and nothing to press.
+  assert.match(pending, /data-speaker="luke" data-thinking="true"/);
+  assert.match(pending, /<\/li><li class="conversation-entry" data-speaker="luke" data-thinking/);
+  assert.match(pending, /class="conversation-thinking"/);
+  assert.match(pending, /data-motion="success" data-repeat="true"/);
+  assert.match(pending, new RegExp(`role="status">${CONVERSATION_THINKING_LABEL}`));
+  assert.doesNotMatch(pending, /conversation-cancel|conversation-pending|Cancel/);
+  // Under ten seconds the wait says nothing of its age; past it, how long.
+  assert.doesNotMatch(pending, /Still thinking/);
+  assert.match(render("running", NOW + 71_000), /Still thinking · 1:11/);
   // Still inside the blocked subtree: a wait is drawn beside words a recording never sees.
   assert.match(pending, /ph-no-capture/);
+  // The composer's disc is the stop, in both of its states.
+  assert.match(pending, /data-turn="luke"/);
+  assert.match(pending, /aria-label="Stop Luke&#x27;s reply"/);
   const settled = render("succeeded");
-  assert.doesNotMatch(settled, /conversation-cancel|conversation-pending/);
+  assert.doesNotMatch(settled, /conversation-thinking|data-thinking/);
   // A spoken ask is the same lifecycle: its transcript, tied to its run, waits too.
   const spoken = renderToStaticMarkup(
     createElement(ConversationPanel, {
       entries: [{ kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK, words: "ship it", requestId: "run-1" }],
       requests: [{ ...run, origin: "spoken", status: "running" }],
-      onCancelRequest: (runId) => cancelled.push(runId),
       now: NOW,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),
   );
-  assert.match(spoken, /class="conversation-cancel"/);
+  assert.match(spoken, /class="conversation-thinking"/);
+});
+
+test("the wait's age is worded once it is worth a word", () => {
+  assert.equal(thinkingElapsedLabel(NOW, NOW + 9_999), undefined);
+  assert.equal(thinkingElapsedLabel(NOW, NOW + 10_000), "Still thinking · 0:10");
+  assert.equal(thinkingElapsedLabel(NOW, NOW + 605_000), "Still thinking · 10:05");
 });
 
 test("a line that followed a long silence is dated over it, in the quiet event voice", () => {

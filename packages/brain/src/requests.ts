@@ -291,6 +291,9 @@ export const BRAIN_ASK_REFUSAL = {
 /** What the voice says while a run is still going when its wait ran out. */
 export const BRAIN_ASK_PENDING_NOTE = "I'm still working on that. I'll tell you when it's done.";
 
+/** What the voice says of a spoken ask the developer stopped before its reply formed. */
+export const BRAIN_ASK_STOPPED_NOTE = "That ask was stopped before I finished it.";
+
 function actionsPhrase(count: number): string {
   return count === 1 ? "one thing you asked" : `${count} things you asked`;
 }
@@ -349,7 +352,11 @@ export function brainReplyWords(snapshot: BrainRequestRecord): string | undefine
         ? `${account}, but I couldn't put the reply into words.`
         : "I couldn't work that one out. Ask me again in a moment.";
     case BRAIN_REQUEST_STATUS.CANCELLED:
-      return acted ? `Cancelled, though ${account}.` : "Cancelled.";
+      // A plain stop is the developer's own press, not a reply: it reaches the
+      // thread as the quiet line `stoppedAskNarration` words and is never
+      // offered to the ear. What was done before the stop is still news, so
+      // that account is said.
+      return acted ? `Cancelled, though ${account}.` : undefined;
     case BRAIN_REQUEST_STATUS.TIMED_OUT:
       return acted ? `That ask ran out of time, though ${account}.` : "That ask ran out of time.";
     case BRAIN_REQUEST_STATUS.INTERRUPTED:
@@ -357,6 +364,20 @@ export function brainReplyWords(snapshot: BrainRequestRecord): string | undefine
         ? `That ask was interrupted, though ${account}.`
         : "That ask was interrupted before I could finish it.";
   }
+}
+
+/** What a stopped ask leaves in the thread, in the voice of the actions carried at the developer's ask. */
+export const STOPPED_ASK_NARRATION = "stopped working on that ask";
+
+/**
+ * The quiet line a run the developer stopped leaves behind, worded as what
+ * Luke did at their ask rather than as something he said, so it is drawn in the
+ * thread's event voice and never spoken. A cancel that had already acted is
+ * not quiet: its account travels as the reply `brainReplyWords` builds.
+ */
+export function stoppedAskNarration(snapshot: BrainRequestRecord): string | undefined {
+  if (snapshot.status !== BRAIN_REQUEST_STATUS.CANCELLED) return undefined;
+  return actionsAccount(snapshot).length > 0 ? undefined : STOPPED_ASK_NARRATION;
 }
 
 /** Some fields of one record, as a save applies them over what is committed. */

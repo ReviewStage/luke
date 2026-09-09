@@ -1,5 +1,5 @@
 import { PRODUCT_ASK_OUTCOME, PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
-import { SendIcon } from "@sidecar/panel";
+import { SendIcon, StopIcon } from "@sidecar/panel";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useCallback, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -13,6 +13,10 @@ import { Keycaps } from "./keycaps";
  * loud with its words landing right below the field.
  */
 const ASK_PLACEHOLDER = "Ask Luke…";
+
+/** The disc's two names: the field's own ask, and the stop of a run of Luke's still going. */
+const SEND_LABEL = "Ask Luke";
+export const STOP_LABEL = "Stop Luke's reply";
 
 /**
  * How the ask field is found from outside the component, the way the options
@@ -66,12 +70,21 @@ export type AskHandler = (text: string) => Promise<string | undefined>;
  * instant layout change the surface answers with one spring — up to the
  * stylesheet's cap, where the field starts scrolling instead. Enter still
  * sends; Shift-Enter breaks the line.
+ *
+ * While a run of Luke's is still going, the disc is its stop: the same control
+ * in the same place, lit in the primary ink with a stop glyph rather than
+ * anything arriving beside the field, and Escape in the field presses it. The disc is the one
+ * element both tabs share, so a run opened from either tab or the ask key can
+ * be stopped from wherever the hand already is. An ask typed meanwhile still
+ * sends, and joins the turn under way as the brain's queue has it.
  */
 export function AskLuke({
   ask,
   onEngagedChange,
   rowIndex,
   shortcut,
+  thinking = false,
+  onStop,
 }: {
   ask: AskHandler;
   /**
@@ -89,7 +102,12 @@ export function AskLuke({
    * key that answers — a hint for a chord another app owns would be a lie.
    */
   shortcut?: string;
+  /** Whether a run of Luke's is still going, which makes the disc its stop. */
+  thinking?: boolean;
+  /** Stops every run still going, at the disc's press or Escape in the field. */
+  onStop?: () => void;
 }): React.JSX.Element {
+  const stopping = thinking && onStop !== undefined;
   const [draft, setDraft] = useState("");
   const [asking, setAsking] = useState(false);
   const field = useRef<HTMLTextAreaElement | null>(null);
@@ -134,6 +152,7 @@ export function AskLuke({
         className="ask-luke"
         data-asking={String(asking)}
         data-draft={String(draft.length > 0)}
+        data-turn={stopping ? "luke" : "you"}
         onSubmit={(event) => {
           event.preventDefault();
           void submit();
@@ -164,8 +183,14 @@ export function AskLuke({
           onKeyDown={(event) => {
             // Escape lets go of the field rather than closing the panel
             // behind it. The draft survives: the field is not going anywhere.
+            // While Luke is still working it stops him first, and the caret
+            // stays: quiet is what was asked for, not leaving.
             if (event.key === "Escape") {
               event.stopPropagation();
+              if (stopping) {
+                onStop();
+                return;
+              }
               event.currentTarget.blur();
               return;
             }
@@ -188,14 +213,17 @@ export function AskLuke({
             Left readable: a reader announcing the caps agrees with
             aria-keyshortcuts. */}
         {shortcut ? <Keycaps className="ask-luke-hint" accelerator={shortcut} /> : null}
+        {/* One button in both of its states, so the disc neither remounts nor
+            loses focus when the turn changes hands. */}
         <button
-          type="submit"
+          type={stopping ? "button" : "submit"}
           className="ask-luke-send"
-          aria-label="Ask Luke"
-          title="Ask Luke"
-          disabled={asking || !draft.trim()}
+          aria-label={stopping ? STOP_LABEL : SEND_LABEL}
+          title={stopping ? STOP_LABEL : SEND_LABEL}
+          disabled={!stopping && (asking || !draft.trim())}
+          {...(stopping ? { onClick: onStop } : undefined)}
         >
-          <SendIcon />
+          {stopping ? <StopIcon /> : <SendIcon />}
         </button>
       </form>
     </div>
