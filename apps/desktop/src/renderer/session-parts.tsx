@@ -1,4 +1,11 @@
-import { OptionsIcon, ProviderMark } from "@sidecar/panel";
+import {
+  CloseIcon,
+  CloudIcon,
+  LaptopIcon,
+  OptionsIcon,
+  ProviderMark,
+  VoiceIcon,
+} from "@sidecar/panel";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useRef } from "react";
 import { ERRAND_TARGET, errandTargetProps } from "./luke-errand";
@@ -14,7 +21,6 @@ import {
   type SessionSort,
   toggledSessionFilters,
 } from "./session-model";
-import { CloseIcon, CloudIcon, LaptopIcon, VoiceIcon } from "./settings-icons";
 
 /**
  * Rides beside a workspace's name to say what kind of thing the tray is. The

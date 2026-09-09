@@ -1,3 +1,4 @@
+import { CheckIcon, CopyIcon } from "@sidecar/panel";
 import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
@@ -10,7 +11,6 @@ import { type AskHandler, AskLuke } from "./ask-luke";
 import { createHistoryTimeBreakFormatter, opensHistoryTimeBreak } from "./history-time-break";
 import { MarkdownMessage } from "./markdown-message";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
-import { CheckIcon, CopyIcon } from "./settings-icons";
 
 export const HISTORY_ENTRY_SPEAKER = {
   YOU: "you",

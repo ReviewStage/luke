@@ -1,4 +1,4 @@
-import { ExternalIcon } from "./settings-icons";
+import { ExternalIcon } from "@sidecar/panel";
 
 /**
  * One sentence whose link is its destination: the lead, then the linked words

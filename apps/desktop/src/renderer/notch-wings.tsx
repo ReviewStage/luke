@@ -3,13 +3,7 @@ import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, peekWidth } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { errandOriginProps } from "./luke-errand";
-import {
-  faceYieldsToMeter,
-  speechFaceInputs,
-  useFaceHover,
-  useFaceMotion,
-  usePrefersReducedMotion,
-} from "./luke-face-mood";
+import { faceYieldsToMeter, speechFaceInputs, useFaceHover, useFaceMotion } from "./luke-face-mood";
 import { PANEL_PRESENTATION, type PanelPresentation } from "./panel-state";
 import type { ProviderTally, SessionTally } from "./session-model";
 import {
@@ -19,6 +13,7 @@ import {
   WING_SLOT_ID_ATTRIBUTE,
   WING_SPREAD_ATTRIBUTE,
 } from "./session-motion";
+import { usePrefersReducedMotion } from "./use-reduced-motion";
 import { WAVEFORM_VOICE, Waveform, type WaveformVoice } from "./waveform";
 
 /**

@@ -1,9 +1,9 @@
 import { PRODUCT_ASK_OUTCOME, PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
+import { SendIcon } from "@sidecar/panel";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useCallback, useRef, useState } from "react";
 import { FOCUS_FRAME_LIMIT } from "./credential-entry";
 import { Keycaps } from "./keycaps";
-import { SendIcon } from "./settings-icons";
 
 /**
  * What the field is for, in the fewest words that say it. "Ask" rather than
