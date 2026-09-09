@@ -35,6 +35,11 @@ final class WatchAccountSession {
 
     private var accessToken: String?
     private var tokenExpiry: Date?
+    /// The token the near-expiry invalidation let go of, kept for one purpose:
+    /// a phone sign-out that arrives before the phone pushed a fresh pair still
+    /// has something to forget the device row with. It is not restored to the
+    /// session, and a fresh pair or a sign-out clears it.
+    private var departedAccessToken: String?
 
     init() {
         restoreFromKeychain()
@@ -44,7 +49,8 @@ final class WatchAccountSession {
     /// Accepts both proactive pushes and sign-out notifications.
     func receive(payload: [String: Any]) {
         if payload["event"] as? String == "signedOut" {
-            let departing = accessToken
+            let departing = accessToken ?? departedAccessToken
+            departedAccessToken = nil
             signOut()
             if let departing { onSignOut?(departing) }
             return
@@ -68,6 +74,7 @@ final class WatchAccountSession {
         KeychainStore.watch.save(stored)
         self.accessToken = accessToken
         self.tokenExpiry = stored.expiry
+        departedAccessToken = nil
         accountScope = Self.scope(email: stored.email)
         state = .signedIn(email: email, name: stored.name)
         onSignedIn?()
@@ -128,6 +135,7 @@ final class WatchAccountSession {
     }
 
     private func invalidateCredentialsAndRequestReplacement() {
+        departedAccessToken = accessToken
         signOut()
         onCredentialsNeeded?()
     }
