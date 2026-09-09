@@ -43,11 +43,9 @@ import { wireBrain } from "./brain/wiring.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { IssuesComposer } from "./compose-issues.js";
 import type { ObservationComposer } from "./compose-observation.js";
-import type { SettingsComposer } from "./compose-settings.js";
 import type { SpeechComposer } from "./compose-speech.js";
-import type { Composer } from "./composer.js";
+import type { Composer, ComposerContext } from "./composer.js";
 import { conversationOperations, startConversationMaintenance } from "./conversation-operations.js";
-import type { HostKernel } from "./host-kernel.js";
 import { seedWorkspaceThenStartMemory } from "./lifecycle.js";
 import { wireMemoryMaintenance } from "./memory-maintenance.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
@@ -72,9 +70,7 @@ export interface BrainComposer extends Composer {
   syncMemory: () => void;
 }
 
-export interface BrainDependencies {
-  kernel: HostKernel;
-  settings: SettingsComposer;
+export interface BrainDependencies extends ComposerContext {
   account: AccountComposer;
   issues: IssuesComposer;
   observation: ObservationComposer;
