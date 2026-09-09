@@ -461,6 +461,13 @@ export function useConnections(options: UseConnectionsOptions): Connections {
     if (presentationOf() === PANEL_PRESENTATION.SLOT) restorePanel();
   }, [supersetSignIn, presentationOf, restorePanel, supersetSignInHeld]);
 
+  const reopenConsentPage = useCallback(() => {
+    const waiting = consentConnect.latest()?.serviceId;
+    if (!waiting) return;
+    const acts = CONSENT_ACTS[waiting];
+    if ("reopen" in acts) acts.reopen();
+  }, [consentConnect.latest]);
+
   const supersetAgents = useMemo(
     () => [
       ...new Set(
@@ -495,12 +502,7 @@ export function useConnections(options: UseConnectionsOptions): Connections {
     consentEntry: consentConnect.entry,
     consentWaiting: consentConnect.latest,
     cancelConsentSignIn,
-    reopenConsentPage: () => {
-      const waiting = consentConnect.latest()?.serviceId;
-      if (!waiting) return;
-      const acts = CONSENT_ACTS[waiting];
-      if ("reopen" in acts) acts.reopen();
-    },
+    reopenConsentPage,
     calendar: {
       choices: calendars,
       held: slotHeldExcept(CONSENT_SERVICE_ID.GOOGLE_CALENDAR),

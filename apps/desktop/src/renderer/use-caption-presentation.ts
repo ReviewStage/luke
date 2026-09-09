@@ -1,6 +1,13 @@
 import { VOICE_CAPTION_MAX_HEIGHT } from "@sidecar/surface";
 import { cssCustomProperties, SURFACE_PROPERTY } from "@sidecar/surface/react-css";
-import { type CSSProperties, type RefObject, useEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { parsePixels } from "./session-motion";
 import {
   CAPTION_TONE,
@@ -92,7 +99,10 @@ export function useCaptionPresentation(
   const [textElement, textHeight] = useMeasuredHeight();
   const element = useRef<HTMLSpanElement>(null);
   const [padding, setPadding] = useState(0);
-  useEffect(() => {
+  // Before paint, not after: `--caption-size` is composed from this, and a
+  // padding that landed a frame later would size the first frame of a reply
+  // without it and then retarget the surface's height transition mid-travel.
+  useLayoutEffect(() => {
     const node = element.current;
     if (!node) return;
     const style = getComputedStyle(node);

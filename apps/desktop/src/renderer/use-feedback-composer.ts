@@ -251,6 +251,16 @@ export function useFeedbackComposer(options: UseFeedbackComposerOptions): Feedba
    * request a submission has to travel as — and what could not come is said
    * beside the field rather than dropped in silence.
    */
+  const holdSpokenDraft = useCallback((draft: string | undefined) => {
+    spokenDraft.current = draft;
+  }, []);
+
+  const takeSpokenDraft = useCallback(() => {
+    const draft = spokenDraft.current;
+    spokenDraft.current = undefined;
+    return draft;
+  }, []);
+
   const attach = useCallback(
     async (files: readonly File[]) => {
       const current = entry.latest();
@@ -308,13 +318,7 @@ export function useFeedbackComposer(options: UseFeedbackComposerOptions): Feedba
     begin,
     dismiss,
     latest: entry.latest,
-    holdSpokenDraft: (draft) => {
-      spokenDraft.current = draft;
-    },
-    takeSpokenDraft: () => {
-      const draft = spokenDraft.current;
-      spokenDraft.current = undefined;
-      return draft;
-    },
+    holdSpokenDraft,
+    takeSpokenDraft,
   };
 }
