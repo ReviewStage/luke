@@ -20,13 +20,22 @@ public struct VoiceConversationMessage: Identifiable, Equatable, Sendable {
     /// the context re-feed can lead with the same distinction the desktop's
     /// history keeps.
     public let typed: Bool
+    /// The instant this line was first recorded, the desktop's own stamp
+    /// transcribed: a caption keeps the moment its first words arrived
+    /// however long it goes on streaming, and a late transcript stands at the
+    /// moment it landed, not the press it answers. The screen's clock alone,
+    /// never sent anywhere.
+    public let recordedAt: Date
 
-    public init(turnId: UUID, speaker: Speaker, words: String, typed: Bool = false) {
+    public init(
+        turnId: UUID, speaker: Speaker, words: String, typed: Bool = false, recordedAt: Date = Date()
+    ) {
         id = UUID()
         self.turnId = turnId
         self.speaker = speaker
         self.words = words
         self.typed = typed
+        self.recordedAt = recordedAt
     }
 }
 
@@ -53,8 +62,13 @@ public final class VoiceConversationThread {
 
     private var activeTurnId: UUID?
     private var activeResponseMessageId: UUID?
+    /// The clock every line is stamped from; injected so a test can say what
+    /// time it is.
+    private let now: () -> Date
 
-    public init() {}
+    public init(now: @escaping () -> Date = Date.init) {
+        self.now = now
+    }
 
     /// Marks a developer press: the ask and reply that follow belong to one
     /// turn, which is what lets a transcript arriving late find its place.
@@ -81,7 +95,9 @@ public final class VoiceConversationThread {
             if !messages[index].typed { messages[index].words = words }
             return
         }
-        let message = VoiceConversationMessage(turnId: turnId, speaker: .developer, words: words)
+        let message = VoiceConversationMessage(
+            turnId: turnId, speaker: .developer, words: words, recordedAt: now()
+        )
         if let responseIndex = messages.firstIndex(where: {
             $0.turnId == turnId && $0.speaker == .luke
         }) {
@@ -102,7 +118,8 @@ public final class VoiceConversationThread {
         beginTurn()
         messages.append(
             VoiceConversationMessage(
-                turnId: currentTurnId(), speaker: .developer, words: words, typed: true
+                turnId: currentTurnId(), speaker: .developer, words: words, typed: true,
+                recordedAt: now()
             )
         )
         retainRecentMessages()
@@ -124,7 +141,8 @@ public final class VoiceConversationThread {
         let message = VoiceConversationMessage(
             turnId: currentTurnId(),
             speaker: .luke,
-            words: text
+            words: text,
+            recordedAt: now()
         )
         messages.append(message)
         activeResponseMessageId = message.id
