@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { temporaryDirectory } from "@sidecar/fixtures/testing";
 import { MEMORY_SOURCE, RETRIEVAL_MODE } from "@sidecar/memory";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
+import { temporaryDirectory } from "@sidecar/runtime/testing";
 import {
   type ConversationRecord,
   conversationKindOf,

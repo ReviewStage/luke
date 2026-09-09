@@ -10,9 +10,9 @@ import {
   isSessionApplicationId,
   SESSION_APPLICATION_SCOPE,
   SESSION_LOCATION,
+  SESSION_URGENCY,
   type SessionApplicationId,
 } from "@sidecar/session";
-import { SESSION_URGENCY } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { useCallback, useState } from "react";

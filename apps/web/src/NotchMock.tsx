@@ -3,7 +3,6 @@ import {
   meshGradientFragmentShader,
   ShaderMount,
 } from "@paper-design/shaders";
-import { FIXTURE_EPOCH_MS, fixtureSnapshot } from "@sidecar/fixtures";
 import {
   lastActivityLabel,
   OptionsIcon,
@@ -13,13 +12,14 @@ import {
   wingMarkCapacity,
   wingPileOffset,
 } from "@sidecar/panel";
+import { SESSION_URGENCY } from "@sidecar/session";
+import { FIXTURE_EPOCH_MS, fixtureSnapshot } from "@sidecar/session/fixtures";
 import {
   CAPSULE_SIDE_WIDTH,
   compareSessionsByUrgency,
   MOTION_DURATION_MS,
   PANEL_WIDTH,
   PEEK_SIDE_GROWTH,
-  SESSION_URGENCY,
   urgencyLabel,
 } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";

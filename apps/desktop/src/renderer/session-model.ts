@@ -14,6 +14,7 @@ import {
   SESSION_FILTER_AXIS,
   SESSION_LOCATION,
   SESSION_STATUS,
+  SESSION_URGENCY,
   type Session,
   type SessionApplicationId,
   type SessionApplicationScope,
@@ -21,16 +22,12 @@ import {
   type SessionFilter,
   type SessionFilterAxis,
   type SessionLocation,
+  type SessionUrgency,
   SUPERSET_WORKSPACE_PROVIDER_ID,
   sessionChangeNumber,
   sessionFilterAxis,
 } from "@sidecar/session";
-import {
-  compareSessionsByUrgency,
-  SESSION_URGENCY,
-  type SessionUrgency,
-  urgencyLabel,
-} from "@sidecar/surface";
+import { compareSessionsByUrgency, urgencyLabel } from "@sidecar/surface";
 import type { AppBootstrap } from "#shared/messages/session";
 
 /**

@@ -9,13 +9,13 @@ import {
   hostedBrainToolCatalog,
   toolLoopRuntimeOver,
 } from "@sidecar/brain";
-import { drainMicrotasks } from "@sidecar/fixtures/testing";
 import {
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_OPERATION,
   HOSTED_SERVICE_PATH,
   hostedBrainBounds,
 } from "@sidecar/hosted";
+import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { REASONING_EFFORT } from "@sidecar/runtime/vocabulary";
 import { APP_SETTING_SCHEMA, VOICE_SOURCE, type VoiceSource } from "@sidecar/settings";
 import { VoiceCapabilityAssembler, type VoiceSettings } from "@sidecar/voice";

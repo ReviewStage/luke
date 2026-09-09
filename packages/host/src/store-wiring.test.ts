@@ -3,8 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { MessageChannel } from "node:worker_threads";
-import { temporaryDirectory } from "@sidecar/fixtures/testing";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
+import { temporaryDirectory } from "@sidecar/runtime/testing";
 import {
   CONVERSATION_KIND,
   type ConversationRecord,

@@ -1,7 +1,12 @@
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials/vocabulary";
 import { APP_PANEL_TAB, APP_SETTING_ID, type AppPanelTab, type AppSettingId } from "@sidecar/guide";
-import { ISSUE_TRACKER_ID, type IssueTrackerId } from "@sidecar/issues";
-import { ACT_RESULT_STATUS, PROVIDER_ID_LIST, type ProviderId } from "@sidecar/session";
+import {
+  ACT_RESULT_STATUS,
+  ISSUE_TRACKER_ID,
+  type IssueTrackerId,
+  PROVIDER_ID_LIST,
+  type ProviderId,
+} from "@sidecar/session";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { parseReleaseVersion } from "./release-version.js";
 

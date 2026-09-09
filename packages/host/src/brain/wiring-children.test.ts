@@ -10,11 +10,11 @@ import {
   responsesModelAnswer,
 } from "@sidecar/brain";
 import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testing";
-import { drainMicrotasks, FakeClock, temporaryDirectory } from "@sidecar/fixtures/testing";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { MEMORY_HOUSEKEEPING_OUTCOME } from "@sidecar/memory";
 import type { ConversationEntry } from "@sidecar/realtime";
 import { type ChildStore, CREDENTIAL_REFERENCE_KIND } from "@sidecar/runtime";
+import { drainMicrotasks, FakeClock, temporaryDirectory } from "@sidecar/runtime/testing";
 import {
   CHILD_CONTEXT_MODE,
   CHILD_RUN_STATUS,

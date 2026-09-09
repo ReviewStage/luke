@@ -24,12 +24,6 @@ import {
 } from "@sidecar/analytics";
 import type { LinearIssueTracker } from "@sidecar/credentials";
 import {
-  ISSUE_ACTION_KIND,
-  isIssueTrackerId,
-  type TrackedIssue,
-  type TrackerActionResult,
-} from "@sidecar/issues";
-import {
   isSupersetControlId,
   type SupersetCli,
   type SupersetSessionContext,
@@ -38,6 +32,8 @@ import {
 import {
   dispatchAct,
   ExternalOpenAnswerLostError,
+  ISSUE_ACTION_KIND,
+  isIssueTrackerId,
   isProviderId,
   type ProviderActResult,
   type ProviderWorkspaceResult,
@@ -46,6 +42,8 @@ import {
   type SessionOpenResult,
   type SessionProviderPlugin,
   type SessionRoster,
+  type TrackedIssue,
+  type TrackerActionResult,
   type WorkspaceAgentSelection,
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";

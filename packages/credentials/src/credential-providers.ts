@@ -1,5 +1,9 @@
-import { ISSUE_TRACKER_ID } from "@sidecar/issues";
-import { isCloudAgentProviderId, PROVIDER_ID, PROVIDER_IDENTITY_BY_ID } from "@sidecar/session";
+import {
+  ISSUE_TRACKER_ID,
+  isCloudAgentProviderId,
+  PROVIDER_ID,
+  PROVIDER_IDENTITY_BY_ID,
+} from "@sidecar/session";
 import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 
 /**

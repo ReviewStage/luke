@@ -7,13 +7,13 @@ import {
   BRAIN_REQUEST_STATUS,
   brainReplyWords,
 } from "@sidecar/brain/requests";
-import { drainMicrotasks } from "@sidecar/fixtures/testing";
 import {
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
   maximumTypedAskLength,
 } from "@sidecar/realtime";
+import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { operatorOverBrain } from "../testing/index.js";
 import { followBrainRequests, publishRuns } from "./publication.js";
 

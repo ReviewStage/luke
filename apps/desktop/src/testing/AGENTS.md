@@ -16,7 +16,7 @@ The shared ones, and the rule each carries:
   the realtime session opens, and the bridge a spoken settings change crosses.
 
 Three fixtures every test in the repository shares live in
-`@sidecar/fixtures/testing` instead, because the host's tests are in a package
+`@sidecar/runtime/testing` instead, because the host's tests are in a package
 and a package cannot reach into an app: `temporaryDirectory` (a directory of
 the test's own, removed by `t.after` — a test that makes one by hand forgets
 the cleanup, and four of them had), `drainMicrotasks(ticks)` (the tick count

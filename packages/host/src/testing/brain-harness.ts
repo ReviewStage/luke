@@ -18,12 +18,12 @@ import type {
   BrainRequestSnapshot,
 } from "@sidecar/brain/requests-wire";
 import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testing";
-import { drainMicrotasks } from "@sidecar/fixtures/testing";
 import {
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
 } from "@sidecar/realtime";
+import { drainMicrotasks } from "@sidecar/runtime/testing";
 import type { ModelResponse } from "@sidecar/runtime/vocabulary";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { BrainHost } from "../brain/host.js";

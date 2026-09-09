@@ -9,3 +9,10 @@ This package stays React-free. `@sidecar/panel` is the shared React layer that
 traces the generated artwork into the real desktop panel and the marketing
 mock, so provider geometry, row anatomy, face, glyphs, timing labels, and base
 panel CSS have one implementation.
+
+The urgency value set itself is `@sidecar/session`'s: a fixture snapshot and a
+session model both name it, and neither may reach presentation for a value
+set. What this package generates is only the wording and the ranking —
+`URGENCY_LABEL`, `urgencyLabel`, `URGENCY_PRIORITY`, `compareSessionsByUrgency`
+— so the marketing mock cannot advertise a different sentence or a different
+top row than the product draws.

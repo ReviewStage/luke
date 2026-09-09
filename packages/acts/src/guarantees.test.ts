@@ -7,12 +7,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { EMPTY_APP_GUIDE } from "@sidecar/guide";
-import { normalizeTrackedIssue } from "@sidecar/issues";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import {
   maximumSessionMessageLength,
   maximumWorkspaceNameLength,
   normalizeSession,
+  normalizeTrackedIssue,
   type ObservedWorkspaceProject,
   SESSION_CONTROL_KIND,
   SESSION_LOCATION,

@@ -12,9 +12,9 @@ import {
   responsesModelAnswer,
 } from "@sidecar/brain";
 import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testing";
-import { drainMicrotasks, temporaryDirectory } from "@sidecar/fixtures/testing";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { CREDENTIAL_REFERENCE_KIND, memoryChildStore } from "@sidecar/runtime";
+import { drainMicrotasks, temporaryDirectory } from "@sidecar/runtime/testing";
 import {
   CONVERSATION_KIND,
   conversationKindOf,

@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
+    "./testing": "./src/testing/index.js",
     "./vocabulary": "./src/vocabulary.js"
   },
   "types": "./src/index.ts",

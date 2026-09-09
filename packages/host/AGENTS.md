@@ -62,4 +62,4 @@ lowest one that holds both.
 window's ask crosses, so nothing that ships can reach them. The three
 fixtures every test in the repository shares — a temporary directory, a
 stated microtask drain, a clock the test drives — are in
-`@sidecar/fixtures/testing`.
+`@sidecar/runtime/testing`.

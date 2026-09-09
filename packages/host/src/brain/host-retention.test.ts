@@ -7,7 +7,7 @@ import {
   brainStateRecord,
   freshBrainState,
 } from "@sidecar/brain";
-import { FakeClock } from "@sidecar/fixtures/testing";
+import { FakeClock } from "@sidecar/runtime/testing";
 import { MemoryBrainStorage, BRAIN_HARNESS_NOW as NOW } from "../testing/index.js";
 
 /**

@@ -90,6 +90,16 @@ vocabulary a subpath of its own (`@sidecar/calendar/vocabulary`,
 the renderer bundle fails to resolve `node:http` behind a string constant it
 wanted to draw.
 
+A subpath is also how a package keeps something out of a bundle that has no
+use for it. `@sidecar/session/fixtures` is the synthetic snapshot the fixture
+runs and the marketing mock draw, and it stays off the barrel because three
+hundred lines of test data must not ride into a production bundle behind a
+session type. `@sidecar/runtime/testing` is the scaffolding every test in this
+repository shares — a self-cleaning temporary directory, a stated microtask
+drain, and a clock the test drives — behind its own door because it reaches
+`node:fs` and `node:os`, and in this package because the clock stands in for
+the runtime's own `ScheduledTimer`.
+
 `@sidecar/runtime/vocabulary` is the same rule at the bottom of the graph: the
 identities, the storage contracts, and the execution seams are Node-free, and
 the packages below the runtime import that door so the barrel's `croner` and

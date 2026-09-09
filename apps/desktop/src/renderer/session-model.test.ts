@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { fixtureSnapshot } from "@sidecar/fixtures";
 import {
   HOSTED_AGENT_ID,
   normalizeSession,
@@ -10,10 +9,11 @@ import {
   SESSION_APPLICATION_SCOPE,
   SESSION_LOCATION,
   SESSION_STATUS,
+  SESSION_URGENCY,
   type Session,
   type SessionProvider,
 } from "@sidecar/session";
-import { SESSION_URGENCY } from "@sidecar/surface";
+import { fixtureSnapshot } from "@sidecar/session/fixtures";
 import type { AppBootstrap } from "#shared/messages/session";
 import {
   arrangeSessions,

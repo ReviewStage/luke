@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { APPLE_CALENDAR_ID, GOOGLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
-import { ISSUE_TRACKER_ID } from "@sidecar/issues";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   HOSTED_AGENT_ID,
+  ISSUE_TRACKER_ID,
   PROVIDER_ID,
   SESSION_APPLICATION_ID,
   SUPERSET_WORKSPACE_PROVIDER_ID,

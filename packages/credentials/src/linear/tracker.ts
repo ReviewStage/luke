@@ -8,7 +8,7 @@ import {
   type TrackerActionResult,
   type TrackerIssueAction,
   type TrackerIssueObservation,
-} from "@sidecar/issues";
+} from "@sidecar/session";
 import {
   isRecord,
   isWireNumber,

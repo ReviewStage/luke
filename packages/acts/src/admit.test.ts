@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ISSUE_TRACKER_ID, normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import type { ObservedWorkspaceProject as ListedProject, Session } from "@sidecar/session";
 import {
   ACT_KIND,
+  ISSUE_TRACKER_ID,
   maximumWorkspaceNameLength,
   normalizeSession,
+  normalizeTrackedIssue,
   type ObservedWorkspaceProject,
   PROVIDER_ID_LIST,
   SESSION_APPLICATION_ID,
@@ -14,6 +15,7 @@ import {
   SESSION_CONTROL_KIND,
   SESSION_LOCATION,
   SESSION_STATUS,
+  type TrackedIssue,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentModels,
 } from "@sidecar/session";

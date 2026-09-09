@@ -1,17 +1,19 @@
+import { AGENT_IDENTITY } from "./agent-identities.js";
 import {
-  AGENT_IDENTITY,
   type HostedAgentId,
   PROVIDER_ID,
   PROVIDER_IDENTITY_BY_ID,
   type ProviderId,
+} from "./provider-identity.js";
+import {
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
   SESSION_LOCATION,
   type SessionApplicationId,
   type SessionApplicationScope,
   type SessionLocation,
-} from "@sidecar/session";
-import { SESSION_URGENCY, type SessionUrgency } from "@sidecar/surface";
+} from "./session-identity.js";
+import { SESSION_URGENCY, type SessionUrgency } from "./urgency.js";
 
 /** The workspace a fixture row is one chat of, shaped as the surface draws it. */
 export interface WorkspaceSnapshot {

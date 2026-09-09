@@ -5,8 +5,8 @@ import test from "node:test";
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "@sidecar/credentials/vocabulary";
-import { temporaryDirectory } from "@sidecar/fixtures/testing";
 import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
+import { temporaryDirectory } from "@sidecar/runtime/testing";
 import {
   PROVIDER_ID,
   type ProviderId,

@@ -63,9 +63,6 @@ importers:
       '@sidecar/feedback':
         specifier: workspace:*
         version: link:../../packages/feedback
-      '@sidecar/fixtures':
-        specifier: workspace:*
-        version: link:../../packages/fixtures
       '@sidecar/gateway':
         specifier: workspace:*
         version: link:../../packages/gateway
@@ -78,9 +75,6 @@ importers:
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../../packages/hosted
-      '@sidecar/issues':
-        specifier: workspace:*
-        version: link:../../packages/issues
       '@sidecar/memory':
         specifier: workspace:*
         version: link:../../packages/memory
@@ -183,9 +177,6 @@ importers:
       '@sidecar/credentials':
         specifier: workspace:*
         version: link:../../packages/credentials
-      '@sidecar/fixtures':
-        specifier: workspace:*
-        version: link:../../packages/fixtures
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../../packages/hosted
@@ -271,9 +262,6 @@ importers:
       '@sidecar/guide':
         specifier: workspace:*
         version: link:../guide
-      '@sidecar/issues':
-        specifier: workspace:*
-        version: link:../issues
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
@@ -305,9 +293,6 @@ importers:
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../hosted
-      '@sidecar/issues':
-        specifier: workspace:*
-        version: link:../issues
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
@@ -386,9 +371,6 @@ importers:
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../hosted
-      '@sidecar/issues':
-        specifier: workspace:*
-        version: link:../issues
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
@@ -439,28 +421,6 @@ importers:
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
-    devDependencies:
-      '@types/node':
-        specifier: 26.2.0
-        version: 26.2.0
-      tsx:
-        specifier: 4.23.12
-        version: 4.23.12
-      typescript:
-        specifier: 7.0.2
-        version: 7.0.2
-
-  packages/fixtures:
-    dependencies:
-      '@sidecar/runtime':
-        specifier: workspace:*
-        version: link:../runtime
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../session
-      '@sidecar/surface':
-        specifier: workspace:*
-        version: link:../surface
     devDependencies:
       '@types/node':
         specifier: 26.2.0
@@ -542,9 +502,6 @@ importers:
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../hosted
-      '@sidecar/issues':
-        specifier: workspace:*
-        version: link:../issues
       '@sidecar/memory':
         specifier: workspace:*
         version: link:../memory
@@ -576,9 +533,6 @@ importers:
         specifier: workspace:*
         version: link:../wire
     devDependencies:
-      '@sidecar/fixtures':
-        specifier: workspace:*
-        version: link:../fixtures
       '@types/node':
         specifier: 26.2.0
         version: 26.2.0
@@ -597,22 +551,6 @@ importers:
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
-      '@sidecar/wire':
-        specifier: workspace:*
-        version: link:../wire
-    devDependencies:
-      '@types/node':
-        specifier: 26.2.0
-        version: 26.2.0
-      tsx:
-        specifier: 4.23.12
-        version: 4.23.12
-      typescript:
-        specifier: 7.0.2
-        version: 7.0.2
-
-  packages/issues:
-    dependencies:
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
@@ -660,9 +598,6 @@ importers:
       '@sidecar/credentials':
         specifier: workspace:*
         version: link:../credentials
-      '@sidecar/issues':
-        specifier: workspace:*
-        version: link:../issues
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
@@ -856,6 +791,9 @@ importers:
 
   packages/surface:
     dependencies:
+      '@sidecar/session':
+        specifier: workspace:*
+        version: link:../session
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire

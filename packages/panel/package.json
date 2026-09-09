@@ -13,7 +13,6 @@
   "dependencies": {
     "@sidecar/calendar": "workspace:*",
     "@sidecar/credentials": "workspace:*",
-    "@sidecar/issues": "workspace:*",
     "@sidecar/session": "workspace:*",
     "@sidecar/surface": "workspace:*",
     "react": "19.2.8"

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { BrainAgent } from "@sidecar/brain";
-import { drainMicrotasks } from "@sidecar/fixtures/testing";
+import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { BrainHost } from "./host.js";
 
 /** An agent whose stop the test releases, recording the order things happened in. */

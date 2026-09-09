@@ -9,9 +9,9 @@ import {
 } from "@sidecar/acts";
 import type { BrainActExecution } from "@sidecar/brain";
 import type { BrainAppActRequest } from "@sidecar/brain/requests-wire";
-import { drainMicrotasks } from "@sidecar/fixtures/testing";
 import { APP_SETTING_KIND, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import type { ConversationEntry } from "@sidecar/realtime";
+import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import {
   ACT_KIND,

@@ -1,7 +1,7 @@
 /**
- * Provider-observed condition. `SESSION_URGENCY`, the surface's ranked
- * disposition, prefixes its own literals, so neither value set can be passed
- * where the other is expected.
+ * Provider-observed condition. `SESSION_URGENCY`, the ranked disposition a
+ * surface draws a row by, prefixes its own literals, so neither value set can
+ * be passed where the other is expected.
  */
 export const SESSION_STATUS = {
   WORKING: "working",

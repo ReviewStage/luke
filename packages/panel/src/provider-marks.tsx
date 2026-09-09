@@ -1,10 +1,11 @@
 import { APPLE_CALENDAR_ID, GOOGLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
-import { ISSUE_TRACKER_ID, type IssueTrackerId } from "@sidecar/issues";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   HOSTED_AGENT_ID,
   type HostedAgentId,
+  ISSUE_TRACKER_ID,
+  type IssueTrackerId,
   PROVIDER_ID,
   type ProviderId,
   SESSION_APPLICATION_ID,
