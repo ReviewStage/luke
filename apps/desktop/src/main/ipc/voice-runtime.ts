@@ -14,9 +14,9 @@ import { BRIDGE, channels } from "#shared/bridge";
 import {
   VOICE_COMMAND,
   VOICE_COMMAND_OUTCOME,
-  type VoiceView,
   voiceExchangeActive,
 } from "#shared/messages/voice-view";
+import type { AppStateStore } from "../app-state";
 import { registerBridge } from "../register-bridge";
 import type { PanelManager } from "../window/panel-manager";
 
@@ -33,8 +33,8 @@ export interface VoiceRuntimeIpcDependencies {
   voiceWindow: VoiceWindowSurface;
   /** Whether the voice window's renderer can receive yet, which only its own report under the current epoch decides; the host answers. */
   receiver: { markReady: (epoch: number) => boolean | Promise<boolean> };
-  /** Hands a payload to every panel and the voice window alike. */
-  broadcast: <Payload>(channel: string, payload: Payload) => void;
+  /** Where the voice window's own reports are written; every panel is told from it. */
+  state: AppStateStore;
   openExternal: (url: string) => Promise<void>;
   /**
    * The one credential a call runs on: the short-lived realtime secret the
@@ -50,8 +50,6 @@ export interface VoiceRuntimeIpcDependencies {
    * fire-and-forget send lands here and stops.
    */
   recordAgentTrace: (trace: AgentWireTrace) => void;
-  /** The voice window's latest snapshot, kept for the next panel to bootstrap. */
-  storeVoiceView: (view: VoiceView) => void;
   /**
    * The History Clear, carried out here before the voice window is told, and
    * answering whether the erasure completed on disk: the view and every
@@ -89,15 +87,16 @@ export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencie
         if (erasing === undefined) return undefined;
         return (await erasing) ? VOICE_COMMAND_OUTCOME.ACCEPTED : VOICE_COMMAND_OUTCOME.REFUSED;
       },
-      // The voice window's snapshot: kept for a late panel, forwarded to every
-      // panel, and read for the one level the main process owns — whether an
-      // exchange is live, which the media duck follows on every display. A
-      // kind arrives only with the edge that opened the exchange, so its
-      // presence is the count and no level change of its own is one.
+      // The voice window's snapshot: written to the document, from which
+      // every panel is told and a late one bootstraps, and read for the one
+      // level the main process owns — whether an exchange is live, which the
+      // media duck follows on every display. A kind arrives only with the
+      // edge that opened the exchange, so its presence is the count and no
+      // level change of its own is one.
       reportVoiceView(context, view, countedKind) {
         if (!voiceWindow.owns(context.sender)) return;
-        dependencies.storeVoiceView(view);
-        dependencies.broadcast(channels.onVoiceViewChanged, view);
+        const { state } = dependencies;
+        state.update({ voice: { ...state.snapshot().voice, view } });
         panels.setVoiceExchange(voiceExchangeActive(view.voiceStatus));
         if (countedKind !== undefined) {
           dependencies.recordProductEvent(PRODUCT_EVENT.VOICE_EXCHANGE, {
@@ -107,7 +106,8 @@ export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencie
       },
       reportVoiceLevel(context, level) {
         if (!voiceWindow.owns(context.sender)) return;
-        dependencies.broadcast(channels.onVoiceLevelChanged, level);
+        const { state } = dependencies;
+        state.update({ voice: { ...state.snapshot().voice, level } });
       },
       // The voice renderer saying it can receive. Only the renderer the
       // window holds now may say so, and only for the epoch its own bootstrap

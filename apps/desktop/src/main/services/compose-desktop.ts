@@ -1,4 +1,5 @@
-import { channels } from "#shared/bridge";
+import { AppStateStore, initialAppState } from "../app-state";
+import { fanOutAppState } from "../app-state-channels";
 import { createElectronUpdaterEngine } from "../update-installer";
 import type { DesktopConfig } from "./desktop-config";
 import { createHostService } from "./host-service";
@@ -19,6 +20,12 @@ import { createWindowService, type WindowService } from "./window-service";
  */
 export interface DesktopServices {
   readonly config: DesktopConfig;
+  /**
+   * Everything main keeps of what the host tells it and what this machine
+   * answers for itself, in one document. Every window's bootstrap is read
+   * from it and every push to a window leaves from it.
+   */
+  readonly state: AppStateStore;
   readonly telemetry: TelemetryService;
   readonly native: NativeNode;
   readonly updates: UpdateServiceHost;
@@ -62,11 +69,20 @@ export function composeDesktop(config: DesktopConfig): DesktopServices {
   let quitting = false;
   const keychain = createKeychainService();
   const host = createHostService({ config, cipher: keychain.cipher });
-  const native = createNativeNode(config);
+  // Nothing to install without a signed build, a network, and the platform
+  // Squirrel serves; the row says so rather than offering a press that could
+  // not land, and the document says so from its first version.
+  const updateEngine =
+    config.packaged && config.runMode.sendsNetwork && config.platform === "darwin"
+      ? createElectronUpdaterEngine()
+      : undefined;
+  const state = new AppStateStore(initialAppState(config, updateEngine !== undefined));
+  const native = createNativeNode({ config, state });
   const operator = createOperatorClient({
     config,
     server: host.server,
     node: native.capabilities,
+    state,
   });
   const telemetry = createTelemetryService({
     config,
@@ -74,6 +90,7 @@ export function composeDesktop(config: DesktopConfig): DesktopServices {
   });
   const windows = createWindowService({
     config,
+    state,
     native,
     telemetry,
     operator,
@@ -82,15 +99,9 @@ export function composeDesktop(config: DesktopConfig): DesktopServices {
   const updates = createUpdateServiceHost({
     config,
     recordProductEvent: telemetry.recordProductEvent,
-    // Nothing to install without a signed build, a network, and the platform
-    // Squirrel serves; the row says so rather than offering a press that
-    // could not land.
-    engine:
-      config.packaged && config.runMode.sendsNetwork && config.platform === "darwin"
-        ? createElectronUpdaterEngine()
-        : undefined,
+    engine: updateEngine,
     beforeRestart: () => teardown(),
-    broadcastUpdate: (update) => windows.broadcast(channels.onUpdateChanged, update),
+    state,
   });
 
   // The three edges no service could take as a constructor argument, because
@@ -102,15 +113,29 @@ export function composeDesktop(config: DesktopConfig): DesktopServices {
   // answering nothing.
   host.link({ attach: () => operator.start() });
   native.link({
-    broadcast: (channel, payload) => windows.broadcast(channel, payload),
     sendToPrimaryPanel: (channel, payload) => windows.sendToPrimaryPanel(channel, payload),
   });
   operator.link({
-    broadcast: (channel, payload, except) => windows.broadcast(channel, payload, except),
     sendToVoice: (channel, payload) => windows.sendToVoice(channel, payload),
-    webContentsByReporter: (reporter) => windows.webContentsByReporter(reporter),
     reapplyTalkHotkey: () => windows.reapplyTalkHotkey(),
     recycleVoiceWindow: () => windows.recycleVoiceWindow(),
+  });
+
+  /**
+   * The one place the document becomes a push. Every channel a window
+   * subscribes to leaves from here, so what a window is told and what the
+   * next bootstrap answers are the same document read twice — and a window
+   * whose own write produced the change is skipped rather than told what it
+   * already drew.
+   */
+  state.subscribe((change) => {
+    fanOutAppState(change, (channel, payload, exceptReporter) => {
+      windows.broadcast(
+        channel,
+        payload,
+        exceptReporter === undefined ? undefined : windows.webContentsByReporter(exceptReporter),
+      );
+    });
   });
 
   /**
@@ -151,6 +176,7 @@ export function composeDesktop(config: DesktopConfig): DesktopServices {
 
   return {
     config,
+    state,
     telemetry,
     native,
     updates,

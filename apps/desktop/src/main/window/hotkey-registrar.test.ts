@@ -4,6 +4,7 @@ import { VOICE_HOTKEY_NONE } from "@sidecar/settings";
 import type { TalkKeyEdges } from "../native/talk-key";
 import {
   HOTKEY_RANK,
+  type HotkeyRank,
   HotkeyRegistrar,
   type ShortcutSurface,
   type TalkKeyHandle,
@@ -18,7 +19,7 @@ function harness(options: { credentials?: boolean; registers?: boolean } = {}) {
   const registered: RecordedShortcut[] = [];
   const unregistered: string[] = [];
   let unregisterAllCount = 0;
-  const broadcasts: { channel: string; payload: unknown }[] = [];
+  const announced: HotkeyRank[] = [];
   const talkStops: number[] = [];
   let talkEdges: TalkKeyEdges | undefined;
   let talkStart = true;
@@ -58,7 +59,7 @@ function harness(options: { credentials?: boolean; registers?: boolean } = {}) {
       displayIdFor: () => undefined,
       modeFor: () => "compact",
       setMode: () => undefined,
-      broadcast: (channel, payload) => broadcasts.push({ channel, payload }),
+      hotkeyChanged: (rank) => announced.push(rank),
     },
   });
 
@@ -67,7 +68,7 @@ function harness(options: { credentials?: boolean; registers?: boolean } = {}) {
     registered: () => registered.map((entry) => entry.accelerator),
     unregistered: () => unregistered,
     unregisterAllCount: () => unregisterAllCount,
-    broadcasts: () => broadcasts,
+    announced: () => announced,
     talkStops: () => talkStops,
     failTalkStart() {
       talkStart = false;

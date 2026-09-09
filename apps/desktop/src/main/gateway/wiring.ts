@@ -25,9 +25,8 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import type { WebContents } from "electron";
 import { channels } from "#shared/bridge";
-import type { ConversationHistoryPayload } from "#shared/messages/session";
+import type { AppStateStore } from "../app-state";
 import { createHostOperator, type HostOperator } from "./host-operator";
 
 /**
@@ -41,14 +40,10 @@ export interface GatewayWiringDependencies {
   transport: GatewayTransport;
   createId: () => string;
   report: (message: string) => void;
-  /** Hands a payload to every panel and the voice window, less the window given. */
-  broadcast: <Payload>(channel: string, payload: Payload, except?: WebContents) => void;
   /** Hands a payload to the voice window alone, the one receiver of offers and withdrawals. */
   sendToVoice: <Payload>(channel: string, payload: Payload) => void;
-  /** The window an opaque reporter names in this process, so its own report is not echoed back to it. */
-  webContentsByReporter: (reporter: string) => WebContents | undefined;
-  /** The last settings snapshot this client saw, for a refusal the host cannot word itself. */
-  lastSettings: HostOperatorDependencies["lastSettings"];
+  /** What the host says, written down once; the windows are told from it. */
+  state: AppStateStore;
   /** This machine's native capabilities, performed here at the host's ask. */
   node: {
     openExternal: (url: string) => Promise<void>;
@@ -59,8 +54,6 @@ export interface GatewayWiringDependencies {
     ) => Promise<string>;
   };
 }
-
-type HostOperatorDependencies = Parameters<typeof createHostOperator>[0];
 
 export interface GatewayWiring {
   readonly client: GatewayClient;
@@ -95,30 +88,36 @@ function isCarriedAppAction(
 }
 
 export function wireGateway(dependencies: GatewayWiringDependencies): GatewayWiring {
-  const { transport, broadcast, sendToVoice, report } = dependencies;
+  const { transport, state, sendToVoice, report } = dependencies;
   const client = new GatewayClient({
     transport,
     createId: dependencies.createId,
     report,
     // A snapshot stands in for events the client will never see: the ones a
     // replaced host never numbered, or a window that moved past. The runs it
-    // carries reach every window as the runs list would have.
+    // carries land in the document as the runs event would have.
     onSnapshot: (snapshot) => {
       if (!isRecord(snapshot) || !Array.isArray(snapshot.runs)) return;
-      broadcast(
-        channels.onBrainRequestsChanged,
-        snapshot.runs.flatMap((run) => brainRequestRecordFromWire(run) ?? []),
-      );
+      state.update({
+        brain: { runs: snapshot.runs.flatMap((run) => brainRequestRecordFromWire(run) ?? []) },
+      });
     },
   });
   const operator = createGatewayOperator({ client });
-  const host = createHostOperator({ client, lastSettings: dependencies.lastSettings, report });
+  const host = createHostOperator({
+    client,
+    lastSettings: () => state.snapshot().settings,
+    report,
+  });
 
-  // What the host tells its clients, relayed to the windows by the one client
-  // that owns them. The runs list reaches every window; a reply offer and a
-  // withdrawal reach the voice window, the one receiver; main's history reaches
-  // every window but the one whose report produced it.
-  operator.onRunsChanged((runs) => broadcast(channels.onBrainRequestsChanged, runs));
+  // What the host tells its clients: the runs and main's thread written to the
+  // document every window is told from, and the two a receiver alone may take
+  // — a reply offer and a withdrawal — handed to the voice window directly,
+  // because an offer is addressed to the receiver that stands now and no
+  // later window may find it waiting.
+  operator.onRunsChanged((runs) => {
+    state.update({ brain: { runs } });
+  });
   operator.onDeliveryOffered((offer) => sendToVoice(channels.onBrainReplyOffered, offer));
   operator.onDeliveriesWithdrawn((epoch) => sendToVoice(channels.onBrainRepliesWithdrawn, epoch));
   operator.onHistoryChanged((change) => {
@@ -126,13 +125,9 @@ export function wireGateway(dependencies: GatewayWiringDependencies): GatewayWir
     const entries = change.entries
       .map((entry) => storedConversationEntry(entry, { strict: false }))
       .filter((entry): entry is ConversationEntry => entry !== undefined);
-    const payload: ConversationHistoryPayload = { entries, cleared: change.cleared };
-    broadcast(
-      channels.onConversationHistoryChanged,
-      payload,
-      change.reporter === undefined
-        ? undefined
-        : dependencies.webContentsByReporter(change.reporter),
+    state.update(
+      { conversation: { entries, cleared: change.cleared } },
+      change.reporter === undefined ? undefined : { reporter: change.reporter },
     );
   });
 

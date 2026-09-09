@@ -7,13 +7,12 @@ import { INTRODUCTION_PEEK_FRESH_MS } from "@sidecar/host";
 import { peekLocalSessions } from "@sidecar/providers";
 import type { SpeechOutcome } from "@sidecar/realtime/speech";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
-import { fixtureSnapshot } from "@sidecar/session/fixtures";
 import type { AppSettings } from "@sidecar/settings/wire";
 import type { WireRecord } from "@sidecar/wire";
 import { BrowserWindow, clipboard, ipcMain, screen } from "electron";
 import { BRIDGE } from "#shared/bridge";
 import { type AppBootstrap, type VoiceBootstrap, WINDOW_ROLE } from "#shared/messages/session";
-import type { HostBootstrap } from "../gateway/host-operator";
+import { sessionReplayBootstrap } from "../app-state";
 import { type BridgeContext, registerBridge, registerBridgeEntry } from "../register-bridge";
 import type { DesktopServices } from "../services/compose-desktop";
 import { createSettingsHandler } from "../settings-handler";
@@ -31,12 +30,11 @@ import { registerWindowSurfaceIpc } from "./window-surface";
  * open in the window service's own start.
  */
 export function registerDesktopIpc(services: DesktopServices): void {
-  const { config, telemetry, native, updates, operator, windows } = services;
+  const { config, state, telemetry, native, updates, operator, windows } = services;
   const { runMode, launch } = config;
   const { panels, voiceWindow, introductionWindow, hotkeys, dock, introductionMinter } = windows;
   const trustedSender = windows.trustedSender;
   const recordProductEvent = telemetry.recordProductEvent;
-  const fixture = fixtureSnapshot(launch.fixtureName ?? "smoke");
 
   const registerHandler = (
     definition: Parameters<typeof registerBridgeEntry>[1],
@@ -64,33 +62,32 @@ export function registerDesktopIpc(services: DesktopServices): void {
   };
 
   /**
-   * The fields the hidden voice window reads, assembled from one host
-   * bootstrap and this process's own facts: the microphone, the output, the
-   * keys, the trace gate, and — for the voice window itself — the receiver
-   * epoch the host minted for this load.
+   * The fields the hidden voice window reads, read from the one document
+   * every window is answered from and this window's own facts: the receiver
+   * epoch the host minted for this load, which only the voice window is told,
+   * and the microphone, whose answer is macOS's to move and so is taken
+   * afresh rather than trusted.
    */
-  const voiceBootstrapFields = async (
-    context: BridgeContext,
-    boot: HostBootstrap | undefined,
-  ): Promise<VoiceBootstrap> => {
-    const outputAudio = native.outputAudio();
+  const voiceBootstrapFields = async (context: BridgeContext): Promise<VoiceBootstrap> => {
+    native.refreshMicrophoneStatus();
+    const held = state.snapshot();
     return {
-      agentTraceEnabled: boot?.agentTraceEnabled ?? false,
-      microphoneStatus: native.microphoneStatus(),
-      ...(voiceWindow.owns(context.sender) && boot
-        ? { voiceEpoch: boot.receiverEpoch }
+      agentTraceEnabled: held.run.agentTraceEnabled,
+      microphoneStatus: held.audio.microphoneStatus,
+      ...(voiceWindow.owns(context.sender) && held.voice.epoch !== undefined
+        ? { voiceEpoch: held.voice.epoch }
         : undefined),
-      ...(hotkeys.talk ? { voiceHotkey: hotkeys.talk } : undefined),
-      ...(outputAudio ? { outputAudio } : undefined),
-      sessionRoster: { sessions: boot?.sessions ?? [] },
-      announcementsHeld: boot?.announcementsHeld ?? false,
-      conversationHistory: boot?.conversationHistory ?? [],
-      settings: boot?.settings ?? operator.settings() ?? (await unreachableSettings()),
+      ...(held.hotkeys.talk ? { voiceHotkey: held.hotkeys.talk } : undefined),
+      ...(held.audio.outputAudio ? { outputAudio: held.audio.outputAudio } : undefined),
+      sessionRoster: held.sessions.roster,
+      announcementsHeld: held.announcements.held,
+      conversationHistory: held.conversation.entries,
+      settings: held.settings ?? (await unreachableSettings()),
     };
   };
   registerContextHandler(BRIDGE.getVoiceBootstrap, async (context: BridgeContext) => {
-    const boot = await operator.readBootstrap();
-    return voiceBootstrapFields(context, boot);
+    await operator.readBootstrap();
+    return await voiceBootstrapFields(context);
   });
   registerContextHandler(
     BRIDGE.getBootstrap,
@@ -100,37 +97,35 @@ export function registerDesktopIpc(services: DesktopServices): void {
         ? undefined
         : ((displayId !== undefined ? panels.display(displayId) : undefined) ??
           screen.getPrimaryDisplay());
-      const boot = await operator.readBootstrap();
-      const voiceFields = await voiceBootstrapFields(context, boot);
+      await operator.readBootstrap();
+      const voiceFields = await voiceBootstrapFields(context);
+      const held = state.snapshot();
       return {
         ...voiceFields,
         mode: displayId !== undefined ? panels.modeFor(displayId) : panels.initialMode,
-        startPeeked: launch.startPeeked,
-        startInSlot: launch.startInSlot,
-        profile: launch.profile,
-        fixture,
-        captureMode: launch.captureMode,
-        fixtureMode: launch.fixtureMode,
-        supersetInstalled: boot?.supersetInstalled ?? false,
-        supersetConnected: boot?.supersetConnected ?? false,
-        accountRequired: runMode.requiresAccount,
-        account: operator.account(),
-        packaged: config.packaged,
-        platform: config.platform,
-        voiceHotkeyHeld: hotkeys.held,
-        ...(hotkeys.ask ? { askHotkey: hotkeys.ask } : undefined),
-        ...(hotkeys.stop ? { stopHotkey: hotkeys.stop } : undefined),
+        startPeeked: held.run.startPeeked,
+        startInSlot: held.run.startInSlot,
+        profile: held.run.profile,
+        fixture: held.run.fixture,
+        captureMode: held.run.captureMode,
+        fixtureMode: held.run.fixtureMode,
+        supersetInstalled: held.superset.installed,
+        supersetConnected: held.superset.connected,
+        accountRequired: held.run.accountRequired,
+        account: held.account,
+        packaged: held.run.packaged,
+        platform: held.run.platform,
+        voiceHotkeyHeld: held.hotkeys.talkHeld,
+        ...(held.hotkeys.ask ? { askHotkey: held.hotkeys.ask } : undefined),
+        ...(held.hotkeys.stop ? { stopHotkey: held.hotkeys.stop } : undefined),
         display: display ? panels.diagnostic(display) : undefined,
-        update: updates.snapshot(),
-        // A fixture run never observes and its sessions travel in the fixture
-        // itself, so it is settled from the start; a live run settles once
-        // the host has read the roster at all.
-        sessionsSettled: !runMode.observesProviders || (boot?.sessionsSettled ?? false),
-        workspaceProjects: boot?.workspaceProjects ?? [],
-        calendars: boot?.calendars ?? [],
-        voiceView: windows.voiceView(),
-        calendarOnboardingOwed: boot?.calendarOnboardingOwed ?? false,
-        sessionReplay: operator.sessionReplayBootstrap(),
+        update: held.update,
+        sessionsSettled: held.sessions.settled,
+        workspaceProjects: held.sessions.workspaceProjects,
+        calendars: held.calendars,
+        voiceView: held.voice.view,
+        calendarOnboardingOwed: held.onboarding.calendarOwed,
+        sessionReplay: sessionReplayBootstrap(held),
       };
     },
   );
@@ -181,7 +176,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     trustedSender,
     panels,
     requestMicrophone: () => native.requestMicrophone(),
-    microphoneRoute: () => native.microphoneRoute(),
+    microphoneRoute: () => state.snapshot().audio.microphoneRoute,
     microphoneRouteWatcher: () => native.microphoneRouteWatcher(),
     recordProductEvent,
   });
@@ -213,8 +208,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     panels,
     voiceWindow,
     receiver: { markReady: (epoch) => operator.host.readyReceiver(epoch) },
-    broadcast: windows.broadcast,
-    storeVoiceView: windows.storeVoiceView,
+    state,
     // The History Clear is Delete history on main: the recoverable deletion,
     // reported to the panel as refused only when the store took nothing.
     clearConversation: () => operator.operator.deleteHistory(MAIN_SESSION_KEY),

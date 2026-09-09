@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { runModeFor } from "@sidecar/host";
 import { drainMicrotasks, temporaryDirectory } from "@sidecar/runtime/testing";
+import { AppStateStore, initialAppState } from "../app-state";
 import type { UpdaterEngine, UpdaterEngineEvents } from "../update-service";
 import type { DesktopConfig } from "./desktop-config";
 import { createHostService } from "./host-service";
@@ -198,17 +199,20 @@ test("the updater's timers are handles the stop takes back, and a restart tears 
     quitAndInstall: () => order.push("install"),
     clearCachedUpdate: async () => undefined,
   };
+  const config = {
+    ...fixtureConfig(stateRoot),
+    runMode: runModeFor({ capture: false, fixture: false }),
+  };
+  const state = new AppStateStore(initialAppState(config, true));
+  state.subscribe((change) => snapshots.push(change.state.update.status));
   const updates = createUpdateServiceHost({
-    config: {
-      ...fixtureConfig(stateRoot),
-      runMode: runModeFor({ capture: false, fixture: false }),
-    },
+    config,
     recordProductEvent: () => undefined,
     engine,
     beforeRestart: async () => {
       order.push("teardown");
     },
-    broadcastUpdate: (update) => snapshots.push(update.status),
+    state,
   });
   await updates.start();
   assert.ok(events, "the engine was never wired");

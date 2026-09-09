@@ -26,7 +26,7 @@ import {
   type WebContents,
 } from "electron";
 import { channels } from "#shared/bridge";
-import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/messages/voice-view";
+import type { AppStateStore } from "../app-state";
 import type { BridgeContext } from "../register-bridge";
 import { DockPresence } from "../window/dock-presence";
 import { HOTKEY_RANK, HotkeyRegistrar } from "../window/hotkey-registrar";
@@ -44,6 +44,8 @@ const DISPLAY_SETTLE_MS = 100;
 
 export interface WindowServiceDependencies {
   config: DesktopConfig;
+  /** What the windows are told from, and where what this service holds of it is written. */
+  state: AppStateStore;
   native: NativeNode;
   telemetry: TelemetryService;
   operator: OperatorClient;
@@ -78,8 +80,6 @@ export interface WindowService extends DesktopService {
   applyLoginItem: (openAtLogin: boolean) => void;
   reapplyTalkHotkey: () => void;
   recycleVoiceWindow: () => void;
-  storeVoiceView: (view: VoiceView) => void;
-  voiceView: () => VoiceView | undefined;
   introductionMounted: () => void;
   /** A panel that finished painting, which is what the introduction's handoff waits for. */
   notePanelReady: (context: BridgeContext) => void;
@@ -95,7 +95,7 @@ export interface WindowService extends DesktopService {
  * and it opens none until `start`.
  */
 export function createWindowService(dependencies: WindowServiceDependencies): WindowService {
-  const { config, native, telemetry, operator, launchStanding } = dependencies;
+  const { config, state, native, telemetry, operator, launchStanding } = dependencies;
   const { runMode } = config;
   const recordProductEvent = telemetry.recordProductEvent;
 
@@ -153,9 +153,12 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     rendererUrl,
     onGone: (reason) => {
       config.report(`Voice window replaced: ${reason}`);
-      latestVoiceView = undefined;
+      // The window that held the exchange is gone, so what every panel draws
+      // in its place is an idle voice; the document says so by holding no
+      // view at all.
+      const { epoch } = state.snapshot().voice;
+      state.update({ voice: { level: 0, ...(epoch !== undefined ? { epoch } : undefined) } });
       panels.setVoiceExchange(false);
-      broadcast(channels.onVoiceViewChanged, IDLE_VOICE_VIEW);
     },
     onGaveUp: (reason) => {
       config.report(`Voice window abandoned: ${reason}`);
@@ -180,7 +183,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     voiceWindow.current()?.webContents.send(channel, payload as UnparsedWireValue);
   }
 
-  let latestVoiceView: VoiceView | undefined;
   let introductionRendererReady = false;
   let resolveIntroductionPanelReady: (() => void) | undefined;
   /**
@@ -263,7 +265,18 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       setMode: (displayId, mode, requestFocus) => {
         panels.setMode(displayId, mode, requestFocus);
       },
-      broadcast: (channel, payload) => broadcast(channel, payload),
+      hotkeyChanged: (rank) => {
+        state.update({
+          hotkeys: {
+            ...state.snapshot().hotkeys,
+            ...(rank === HOTKEY_RANK.TALK
+              ? { talk: hotkeys.talk, talkHeld: hotkeys.held }
+              : rank === HOTKEY_RANK.ASK
+                ? { ask: hotkeys.ask }
+                : { stop: hotkeys.stop }),
+          },
+        });
+      },
     },
   });
   const dock = new DockPresence({
@@ -371,10 +384,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       voiceWindow.close();
       raiseVoiceWindow();
     },
-    storeVoiceView: (view) => {
-      latestVoiceView = view;
-    },
-    voiceView: () => latestVoiceView,
     introductionMounted: () => {
       introductionRendererReady = true;
     },

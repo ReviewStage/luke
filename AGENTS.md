@@ -408,7 +408,12 @@ Trust constraints:
   client's node on the connection that now stands, and reads one bootstrap
   before the launch decides anything from it. Desktop main is the one
   operator client; the renderer and voice windows keep the narrow preload
-  bridge and never speak the protocol. A connection is authenticated on its
+  bridge and never speak the protocol. Everything main keeps of what the host
+  tells it is one versioned `AppState` document in
+  `apps/desktop/src/main/app-state.ts`, updated only through
+  `AppStateStore.update` and pushed to the windows from the one subscriber
+  over it, so the state a window is handed and the state main answers a call
+  from cannot differ. A connection is authenticated on its
   own handshake and never in an address: the protocol version is refused
   outright when it differs, and who is asking is decided by the credential
   check the binding is handed, compared where it is understood — a shared

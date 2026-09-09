@@ -1,14 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
+import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { GATEWAY_CLIENT_ROLE, type GatewayServer, InProcessTransport } from "@sidecar/gateway";
 import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { HOST_OPERATOR_CLIENT_ID } from "@sidecar/host";
 import type { AppSettings } from "@sidecar/settings/wire";
 import { type LateRef, lateRef } from "@sidecar/wire";
-import type { WebContents } from "electron";
 import { channels } from "#shared/bridge";
-import type { SessionReplayBootstrap } from "#shared/messages/session";
-import type { HostBootstrap, HostOperator, HostSessionReplay } from "../gateway/host-operator";
+import type { AppStateStore } from "../app-state";
+import type { HostBootstrap, HostOperator } from "../gateway/host-operator";
 import { wireGateway } from "../gateway/wiring";
 import type { DesktopConfig } from "./desktop-config";
 import type { NativeNodeCapabilities } from "./native-node";
@@ -16,9 +15,7 @@ import type { DesktopService } from "./service";
 
 /** What the host's events reach in the windows that draw them. */
 export interface OperatorClientLinks {
-  broadcast: <Payload>(channel: string, payload: Payload, except?: WebContents) => void;
   sendToVoice: <Payload>(channel: string, payload: Payload) => void;
-  webContentsByReporter: (reporter: string) => WebContents | undefined;
   /**
    * A voice that came or went moves the talk key: claimed now that there is
    * something to talk to, or given back to the machine now that there is not.
@@ -38,14 +35,12 @@ export interface OperatorClient extends DesktopService {
   /** The runs, deliveries, and history operations the brain's windows reach. */
   readonly operator: ReturnType<typeof wireGateway>["operator"];
   settings: () => AppSettings | undefined;
-  /** The settings this launch decides its windows from, read from the host once and remembered. */
+  /** The settings this launch decides its windows from, read from the host once and written down. */
   ensureSettings: () => Promise<AppSettings | undefined>;
-  account: () => AccountSnapshot;
   signedIn: () => boolean;
   voiceAvailable: () => boolean;
-  /** One host bootstrap, adopted into the caches the synchronous answers read. */
+  /** One host bootstrap, adopted into the document every window is answered from. */
   readBootstrap: () => Promise<HostBootstrap | undefined>;
-  sessionReplayBootstrap: () => SessionReplayBootstrap;
   /** Stops recording now, ahead of an act that ends the account it is filed under; the host's next replay event re-answers. */
   haltSessionReplay: () => void;
   resumeSessionReplay: () => void;
@@ -57,6 +52,8 @@ export interface OperatorClientDependencies {
   /** The host this client operates, reached over the in-process transport. */
   server: GatewayServer;
   node: NativeNodeCapabilities;
+  /** Everything the host says, written down once; the windows are told from it. */
+  state: AppStateStore;
 }
 
 /**
@@ -67,21 +64,16 @@ export interface OperatorClientDependencies {
  * nothing here composes a store, a brain, or an observation.
  */
 export function createOperatorClient(dependencies: OperatorClientDependencies): OperatorClient {
-  const { config } = dependencies;
+  const { config, state } = dependencies;
   const links: LateRef<OperatorClientLinks> = lateRef("the operator client's links");
 
   /**
-   * What this client last heard from the host, for the answers it must give
-   * synchronously or when the host cannot be reached: the settings the rows
-   * draw, the account the gate opens on, whether a voice stands, and the
-   * recording state. Each moves only on a host event or a bootstrap.
+   * Whether a voice stands at all, which is the one thing this client decides
+   * for itself rather than draws: the keys ask it before claiming a chord and
+   * the mint asks it before the introduction's own. Everything else the host
+   * says goes into the document.
    */
-  let latestSettings: AppSettings | undefined;
-  let account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
   let voiceAvailable = false;
-  let latestSessionReplay: HostSessionReplay = { permitted: config.runMode.sendsNetwork };
-  let sessionReplayHalted = false;
-  let appGuide: AppGuideSnapshot = EMPTY_APP_GUIDE;
   let attachments = 0;
   const unsubscribers: (() => void)[] = [];
 
@@ -92,140 +84,147 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
     }),
     createId: () => randomUUID(),
     report: config.report,
-    broadcast: (channel, payload, except) => links.get().broadcast(channel, payload, except),
     sendToVoice: (channel, payload) => links.get().sendToVoice(channel, payload),
-    webContentsByReporter: (reporter) => links.get().webContentsByReporter(reporter),
-    lastSettings: () => latestSettings,
+    state,
     node: dependencies.node,
   });
 
-  function sessionReplayBootstrap(): SessionReplayBootstrap {
-    return {
-      permitted: latestSessionReplay.permitted && !sessionReplayHalted,
-      appVersion: config.appVersion,
-      ...(latestSessionReplay.accountId ? { accountId: latestSessionReplay.accountId } : undefined),
-    };
-  }
-
-  function announceSessionReplay(): void {
-    links.get().broadcast(channels.onSessionReplayChanged, sessionReplayBootstrap());
-  }
-
+  /**
+   * One host bootstrap, written into the document whole. What each slice
+   * carries is the host's own answer; the two derivations are this client's:
+   * a run that observes nothing is settled from the start, and the trace gate
+   * is a fact of the run rather than of the launch's arguments.
+   */
   function adoptBootstrap(boot: HostBootstrap): void {
-    latestSettings = boot.settings;
-    account = boot.account;
     voiceAvailable = boot.voiceAvailable;
-    latestSessionReplay = boot.sessionReplay;
+    const held = state.snapshot();
+    state.update({
+      run: { ...held.run, agentTraceEnabled: boot.agentTraceEnabled },
+      settings: boot.settings,
+      account: boot.account,
+      sessions: {
+        roster: { sessions: boot.sessions },
+        settled: !held.run.observesProviders || boot.sessionsSettled,
+        workspaceProjects: boot.workspaceProjects,
+      },
+      calendars: boot.calendars,
+      superset: {
+        ...held.superset,
+        installed: boot.supersetInstalled,
+        connected: boot.supersetConnected,
+      },
+      voice: { ...held.voice, epoch: boot.receiverEpoch },
+      conversation: {
+        entries: boot.conversationHistory,
+        cleared: boot.conversationHistory.length === 0,
+      },
+      announcements: { held: boot.announcementsHeld },
+      onboarding: { calendarOwed: boot.calendarOnboardingOwed },
+      sessionReplay: { ...boot.sessionReplay, halted: false },
+    });
   }
 
-  // What the host tells its clients, relayed to the windows by the one client
-  // that owns them, and remembered where a synchronous answer needs it.
+  // What the host tells its clients, written to the document the windows are
+  // told from. The two offers a receiver alone may take are not state and
+  // reach the voice window directly.
   unsubscribers.push(
     gateway.host.onSettingsChanged((change) => {
       const stoodVoice = voiceAvailable;
-      latestSettings = change.settings;
       voiceAvailable = change.settings.status.voiceAvailable;
-      links
-        .get()
-        .broadcast(
-          channels.onSettingsChanged,
-          change.settings,
-          change.reporter === undefined
-            ? undefined
-            : links.get().webContentsByReporter(change.reporter),
-        );
+      state.update(
+        { settings: change.settings },
+        change.reporter === undefined ? undefined : { reporter: change.reporter },
+      );
       if (stoodVoice !== voiceAvailable) links.get().reapplyTalkHotkey();
     }),
-    gateway.host.onAccountChanged((next) => {
-      account = next;
-      links.get().broadcast(channels.onAccountChanged, account);
+    gateway.host.onAccountChanged((account) => {
+      state.update({ account });
     }),
-    gateway.host.onSessionsChanged((roster) =>
-      links.get().broadcast(channels.onSessionsChanged, { sessions: roster.sessions }),
-    ),
-    gateway.host.onWorkspaceProjectsChanged((projects) =>
-      links.get().broadcast(channels.onWorkspaceProjectsChanged, projects),
-    ),
-    gateway.host.onCalendarsChanged((calendars) =>
-      links.get().broadcast(channels.onCalendarsChanged, calendars),
-    ),
-    gateway.host.onAnnouncementsHeldChanged((held) =>
-      links.get().broadcast(channels.onAnnouncementsHeldChanged, held),
-    ),
-    gateway.host.onSupersetSignInChanged((state) =>
-      links.get().broadcast(channels.onSupersetSignInChanged, state),
-    ),
-    gateway.host.onCalendarOnboardingChanged((owed) =>
-      links.get().broadcast(channels.onCalendarOnboardingChanged, owed),
-    ),
+    gateway.host.onSessionsChanged((roster) => {
+      state.update({
+        sessions: {
+          ...state.snapshot().sessions,
+          roster: { sessions: roster.sessions },
+          settled: true,
+        },
+      });
+    }),
+    gateway.host.onWorkspaceProjectsChanged((workspaceProjects) => {
+      state.update({ sessions: { ...state.snapshot().sessions, workspaceProjects } });
+    }),
+    gateway.host.onCalendarsChanged((calendars) => {
+      state.update({ calendars });
+    }),
+    gateway.host.onAnnouncementsHeldChanged((held) => {
+      state.update({ announcements: { held } });
+    }),
+    gateway.host.onSupersetSignInChanged((signIn) => {
+      state.update({ superset: { ...state.snapshot().superset, signIn } });
+    }),
+    gateway.host.onCalendarOnboardingChanged((calendarOwed) => {
+      state.update({ onboarding: { calendarOwed } });
+    }),
     gateway.host.onSpeechOffered((offer) =>
       links.get().sendToVoice(channels.onSpeechOffered, offer),
     ),
     gateway.host.onSpeechWithdrawn((id) =>
       links.get().sendToVoice(channels.onSpeechWithdrawn, { id }),
     ),
+    // The host's own answer about recording stands the halt down: it is the
+    // account transition the halt was waiting on.
     gateway.host.onSessionReplayChanged((replay) => {
-      latestSessionReplay = replay;
-      sessionReplayHalted = false;
-      announceSessionReplay();
+      state.update({ sessionReplay: { ...replay, halted: false } });
     }),
   );
+
+  function setSessionReplayHalted(halted: boolean): void {
+    state.update({ sessionReplay: { ...state.snapshot().sessionReplay, halted } });
+  }
 
   return {
     name: "operator",
     link: (next) => links.set(next),
     host: gateway.host,
     operator: gateway.operator,
-    settings: () => latestSettings,
+    settings: () => state.snapshot().settings,
     ensureSettings: async () => {
-      latestSettings = latestSettings ?? (await gateway.host.settingsSnapshot());
-      return latestSettings;
+      const held = state.snapshot().settings;
+      if (held) return held;
+      const settings = await gateway.host.settingsSnapshot();
+      if (settings) state.update({ settings });
+      return settings;
     },
-    account: () => account,
-    signedIn: () => account.status === ACCOUNT_STATUS.SIGNED_IN,
+    signedIn: () => state.snapshot().account.status === ACCOUNT_STATUS.SIGNED_IN,
     voiceAvailable: () => voiceAvailable,
     readBootstrap: async () => {
       const boot = await gateway.host.bootstrap();
       if (boot) adoptBootstrap(boot);
       return boot;
     },
-    sessionReplayBootstrap,
-    haltSessionReplay: () => {
-      sessionReplayHalted = true;
-      announceSessionReplay();
-    },
-    resumeSessionReplay: () => {
-      sessionReplayHalted = false;
-      announceSessionReplay();
-    },
-    reportGuide: (snapshot) => {
-      appGuide = snapshot;
-      void gateway.host.reportGuide(snapshot);
+    haltSessionReplay: () => setSessionReplayHalted(true),
+    resumeSessionReplay: () => setSessionReplayHalted(false),
+    reportGuide: (guide) => {
+      state.update({ guide });
+      void gateway.host.reportGuide(guide);
     },
     /**
      * What every attachment owes the host: its stream adopted and this
      * process's node registered on the connection that now stands, the guide
      * the panel last reported, and a bootstrap read. A host composed in this
      * process is attached once and never goes away; over a transport that can
-     * drop, a later attachment tells every window what the host now holds.
+     * drop, a later attachment writes what the host now holds into the
+     * document, which is what tells the windows whatever of it moved.
      */
     start: async () => {
       attachments += 1;
       await gateway.attached();
-      if (appGuide !== EMPTY_APP_GUIDE) void gateway.host.reportGuide(appGuide);
+      const guide = state.snapshot().guide;
+      if (guide !== EMPTY_APP_GUIDE) void gateway.host.reportGuide(guide);
       const boot = await gateway.host.bootstrap();
       if (!boot) throw new Error("the host answered no bootstrap");
       adoptBootstrap(boot);
       if (attachments === 1) return;
       const relay = links.get();
-      relay.broadcast(channels.onSettingsChanged, boot.settings);
-      relay.broadcast(channels.onAccountChanged, boot.account);
-      relay.broadcast(channels.onSessionsChanged, { sessions: boot.sessions });
-      relay.broadcast(channels.onWorkspaceProjectsChanged, boot.workspaceProjects);
-      relay.broadcast(channels.onCalendarsChanged, boot.calendars);
-      relay.broadcast(channels.onAnnouncementsHeldChanged, boot.announcementsHeld);
-      relay.broadcast(channels.onCalendarOnboardingChanged, boot.calendarOnboardingOwed);
-      relay.broadcast(channels.onSessionReplayChanged, sessionReplayBootstrap());
       relay.reapplyTalkHotkey();
       relay.recycleVoiceWindow();
     },

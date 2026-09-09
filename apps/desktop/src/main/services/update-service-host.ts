@@ -2,12 +2,12 @@ import { PRODUCT_EVENT, PRODUCT_UPDATE_ACT, type RecordProductEvent } from "@sid
 import { jsonStateFile } from "@sidecar/host";
 import { text } from "@sidecar/wire";
 import type { UpdateSnapshot } from "#shared/messages/update";
+import type { AppStateStore } from "../app-state";
 import { UPDATE_ENDPOINT, type UpdaterEngine, UpdateService } from "../update-service";
 import type { DesktopConfig } from "./desktop-config";
 import type { DesktopService } from "./service";
 
 export interface UpdateServiceHost extends DesktopService {
-  snapshot: () => UpdateSnapshot;
   check: () => Promise<UpdateSnapshot>;
   install: () => void;
   openLatestRelease: () => void;
@@ -32,8 +32,8 @@ export interface UpdateServiceHostDependencies {
    * installer asks to leave.
    */
   beforeRestart: () => Promise<void>;
-  /** Every state the row draws, carried to the windows that draw it. */
-  broadcastUpdate: (update: UpdateSnapshot) => void;
+  /** Every state the row draws, written to the document the windows are told from. */
+  state: AppStateStore;
 }
 
 /**
@@ -61,7 +61,9 @@ export function createUpdateServiceHost(
   const engine = dependencies.engine;
   const service = new UpdateService({
     currentVersion: config.appVersion,
-    onChange: dependencies.broadcastUpdate,
+    onChange: (update) => {
+      dependencies.state.update({ update });
+    },
     engine:
       engine === undefined
         ? undefined
@@ -81,7 +83,6 @@ export function createUpdateServiceHost(
 
   return {
     name: "updates",
-    snapshot: () => service.snapshot(),
     check: () => {
       recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, { update_act: PRODUCT_UPDATE_ACT.CHECK });
       return service.check();
