@@ -22,7 +22,7 @@ import {
   fakeBrainStateRepository,
 } from "@sidecar/brain/testing";
 import { drainMicrotasks } from "@sidecar/runtime/testing";
-import type { ModelResponse } from "@sidecar/runtime/vocabulary";
+import { type ModelResponse, systemClock } from "@sidecar/runtime/vocabulary";
 import {
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
@@ -191,16 +191,7 @@ export function brainHarness() {
       store,
       createRunId: () => `run-${++ids}`,
       report: () => {},
-      now: () => NOW,
-      // A run left in flight at a test's end must not hold the process open:
-      // its deadline timers are unreferenced, as the test's own would be.
-      schedule: (callback, delayMs) => {
-        const timer = setTimeout(callback, delayMs);
-        timer.unref();
-        return timer;
-      },
-      // SAFETY: the handle is what `schedule` above returned, which is always a `setTimeout` timer.
-      cancel: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
+      clock: { ...systemClock, now: () => NOW },
     });
   };
   return {

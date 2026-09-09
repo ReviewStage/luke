@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
+import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { OMISSION_MARKER } from "@sidecar/session";
 import {
@@ -43,7 +44,6 @@ import {
   OBSERVATION_ACTIONS,
   seededRequests,
   session,
-  settle,
   submit,
   TRANSCRIPT_SECRET,
   UNKNOWN,
@@ -108,7 +108,7 @@ test("the journal records an action before its effect and its result before the 
   assert.equal(inner.inputs.length, 1, "the model has not been asked again");
 
   held.releases[0]?.();
-  await settle();
+  await drainMicrotasks(20);
   assert.deepEqual(
     journalsAtRequest,
     [[], [{ callId: "act_1", answered: true }]],
@@ -151,9 +151,9 @@ test("an action in a turn the developer did not open is Luke's own", async () =>
   await h.agent.wake([edge(ABC)]);
   await h.clock.advance(NOW + 3_000);
   await h.agent.rosterLook();
-  await settle();
+  await drainMicrotasks(20);
   h.agent.releaseHeld([{ briefing: "held", decidedAt: NOW }]);
-  await settle();
+  await drainMicrotasks(20);
   const observation = h.traces.filter((trace) => trace.trigger !== BRAIN_TURN_TRIGGER.ASK);
   assert.ok(observation.length >= 3);
   assert.ok(observation.every((trace) => trace.origin === RUN_ORIGIN.OBSERVATION));
@@ -240,10 +240,10 @@ test("a repeated unchanged look captures nothing, a hook delivered twice is one 
     roster: () => ({ text: "one", identities: [ABC], sessions: [session(ABC.providerSessionId)] }),
   });
   await h.agent.rosterLook();
-  await settle();
+  await drainMicrotasks(20);
   const captures = h.persisted.length;
   await h.agent.rosterLook();
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.persisted.length, captures, "a look over an unchanged session captures nothing");
 
   const twice = edge(ABC, NOW + 100);
@@ -449,7 +449,7 @@ test("a briefing leaves only from a turn that still stands", async () => {
   const turning = other.clock.advance(NOW + 3_000);
   await other.agent.stop();
   await turning;
-  await settle();
+  await drainMicrotasks(20);
   assert.deepEqual(
     other.deliveries,
     [],

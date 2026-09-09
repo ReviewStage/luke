@@ -1,4 +1,5 @@
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
+import type { Clock } from "@sidecar/runtime/vocabulary";
+import type { IDisposable } from "@sidecar/wire";
 import { sameObservation } from "./observation-inbox.js";
 import type { BrainWakeEvent } from "./wake-events.js";
 
@@ -14,9 +15,7 @@ export interface WakeQueueOptions {
   coalesceMs: number;
   /** The most wakes held for one turn. */
   capacity: number;
-  now: () => number;
-  schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
-  cancel: (timer: ScheduledTimer) => void;
+  clock: Clock;
   /** The moment the model may be asked again, or nothing when it may be asked now. */
   quietUntil: () => number | undefined;
   /** Opens a turn over the events taken; the host decides in what and how. */
@@ -26,7 +25,7 @@ export interface WakeQueueOptions {
 export class WakeQueue {
   readonly #options: WakeQueueOptions;
   #pending: BrainWakeEvent[] = [];
-  #timer: ScheduledTimer | undefined;
+  #timer: IDisposable | undefined;
 
   constructor(options: WakeQueueOptions) {
     this.#options = options;
@@ -73,7 +72,7 @@ export class WakeQueue {
 
   /** The wait a quiet earns: until it ends, or the coalescing window at least. */
   quietDelay(until: number): number {
-    return Math.max(until - this.#options.now(), this.#options.coalesceMs);
+    return Math.max(until - this.#options.clock.now(), this.#options.coalesceMs);
   }
 
   /** Drops every pending wake and disarms the window: the memory they described is gone. */
@@ -84,15 +83,15 @@ export class WakeQueue {
 
   #arm(delayMs: number): void {
     if (this.#timer !== undefined) return;
-    this.#timer = this.#options.schedule(() => {
+    this.#timer = this.#options.clock.schedule(delayMs, () => {
       this.#timer = undefined;
       this.#flush();
-    }, delayMs);
+    });
   }
 
   #disarm(): void {
     if (this.#timer === undefined) return;
-    this.#options.cancel(this.#timer);
+    this.#timer.dispose();
     this.#timer = undefined;
   }
 

@@ -14,6 +14,7 @@ import {
   type QueueMode,
   queueSummaryText,
 } from "./queue.js";
+import { FakeClock } from "./testing/index.js";
 
 const input = (id: string, text = `words ${id}`): QueuedInput => ({ id, text, atMs: 1 });
 
@@ -76,25 +77,6 @@ test("the other overflow policies drop the oldest or refuse the newest", () => {
   assert.deepEqual(refused.evicted, [input("d")]);
 });
 
-interface FakeClock {
-  timers: Map<number, () => void>;
-  next: number;
-  fire(): void;
-}
-
-function fakeClock(): FakeClock {
-  const clock: FakeClock = {
-    timers: new Map(),
-    next: 1,
-    fire() {
-      const pending = [...clock.timers.values()];
-      clock.timers.clear();
-      for (const callback of pending) callback();
-    },
-  };
-  return clock;
-}
-
 function queueWith(
   clock: FakeClock,
   steer: (input: QueuedInput) => boolean,
@@ -111,21 +93,13 @@ function queueWith(
     flush: (batches) => {
       for (const batch of batches) flushed.push(batch.inputs.map((entry) => entry.id));
     },
-    schedule: (callback) => {
-      const id = clock.next++;
-      clock.timers.set(id, callback);
-      return id;
-    },
-    cancel: (timer) => {
-      // SAFETY: every timer this test's clock hands out is the number it minted above.
-      clock.timers.delete(timer as number);
-    },
+    clock,
   });
   return { queue, flushed, interrupted: () => interrupted };
 }
 
 test("steer hands input to the run under way and falls back to a follow-up when nothing can take it", () => {
-  const clock = fakeClock();
+  const clock = new FakeClock();
   const steered: string[] = [];
   let active = true;
   const { queue, flushed } = queueWith(clock, (entry) => {
@@ -143,23 +117,23 @@ test("steer hands input to the run under way and falls back to a follow-up when 
   assert.equal(queue.push(input("c")), true);
   assert.deepEqual(steered, ["a"]);
   assert.equal(queue.push(input("c")), false);
-  clock.fire();
+  clock.fireAll();
   assert.deepEqual(flushed, [["b", "c"]]);
   assert.equal(queue.size, 0);
 });
 
 test("follow-up opens one turn per input, collect opens one turn for all, interrupt cancels and opens now", () => {
-  const clock = fakeClock();
+  const clock = new FakeClock();
   const followup = queueWith(clock, () => false, QUEUE_MODE.FOLLOWUP);
   followup.queue.push(input("a"));
   followup.queue.push(input("b"));
-  clock.fire();
+  clock.fireAll();
   assert.deepEqual(followup.flushed, [["a"], ["b"]]);
   const collect = queueWith(clock, () => false, QUEUE_MODE.COLLECT);
   collect.queue.push(input("a"));
   collect.queue.push(input("b"));
   assert.deepEqual(collect.flushed, []);
-  clock.fire();
+  clock.fireAll();
   assert.deepEqual(collect.flushed, [["a", "b"]]);
   const interrupt = queueWith(clock, () => true, QUEUE_MODE.INTERRUPT);
   interrupt.queue.push(input("a"));
@@ -169,18 +143,18 @@ test("follow-up opens one turn per input, collect opens one turn for all, interr
 });
 
 test("clear forgets the queue and its timer", () => {
-  const clock = fakeClock();
+  const clock = new FakeClock();
   const { queue, flushed } = queueWith(clock, () => false);
   queue.push(input("a"));
   assert.equal(clock.timers.size, 1);
   queue.clear();
   assert.equal(clock.timers.size, 0);
-  clock.fire();
+  clock.fireAll();
   assert.deepEqual(flushed, []);
 });
 
 test("withdraw takes one queued input back before the drain, and disarms the timer when nothing is left", () => {
-  const clock = fakeClock();
+  const clock = new FakeClock();
   const { queue, flushed } = queueWith(clock, () => false, QUEUE_MODE.COLLECT);
   queue.push(input("a"));
   queue.push(input("b"));
@@ -188,7 +162,7 @@ test("withdraw takes one queued input back before the drain, and disarms the tim
   assert.equal(queue.withdraw("a"), false);
   assert.equal(queue.withdraw("never-queued"), false);
   assert.equal(clock.timers.size, 1);
-  clock.fire();
+  clock.fireAll();
   assert.deepEqual(flushed, [["b"]]);
   queue.push(input("c"));
   assert.equal(clock.timers.size, 1);
@@ -213,7 +187,7 @@ test("a queue holding only folded asks still drains one turn for them, in follow
 });
 
 test("withdrawing a folded ask by its place in the summary leaves the queue empty and disarmed when nothing else waits", () => {
-  const clock = fakeClock();
+  const clock = new FakeClock();
   const flushed: string[][] = [];
   const full = new PendingInputQueue({
     settings: { mode: QUEUE_MODE.COLLECT, capacity: 1, overflow: QUEUE_OVERFLOW.SUMMARIZE },
@@ -222,13 +196,7 @@ test("withdrawing a folded ask by its place in the summary leaves the queue empt
     flush: (batches) => {
       for (const batch of batches) flushed.push(batch.inputs.map((entry) => entry.id));
     },
-    schedule: (callback) => {
-      const id = clock.next++;
-      clock.timers.set(id, callback);
-      return id;
-    },
-    // SAFETY: every timer this test's clock hands out is the number it minted above.
-    cancel: (timer) => void clock.timers.delete(timer as number),
+    clock,
   });
   full.push(input("a"));
   full.push(input("b"));
@@ -246,6 +214,6 @@ test("withdrawing a folded ask by its place in the summary leaves the queue empt
   assert.equal(full.size, 0);
   assert.equal(clock.timers.size, 0);
   assert.equal(full.withdrawSummarized(0), false);
-  clock.fire();
+  clock.fireAll();
   assert.deepEqual(flushed, []);
 });

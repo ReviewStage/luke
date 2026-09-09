@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
+import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { CHILD_RUN_STATUS } from "@sidecar/runtime/vocabulary";
 import {
   acceptedRunId,
@@ -17,7 +18,6 @@ import {
   itemText,
   message,
   messageAction,
-  settle,
   submit,
 } from "./harness.js";
 import { BRAIN_INPUT_MARKER } from "./input-items.js";
@@ -36,7 +36,7 @@ test("a child's completion steers into the requester's run under way, is taken o
   const { client, open } = gatedClient(inner);
   const h = harness({ client });
   const runId = acceptedRunId(await submit(h, "keep going"));
-  await settle();
+  await drainMicrotasks(20);
   const completion = childCompletion({
     completionId: "completion:child-1",
     childId: "child-1",
@@ -45,12 +45,12 @@ test("a child's completion steers into the requester's run under way, is taken o
   // The run is waiting on its first inference: the completion is steered in,
   // and a retry that arrives while it is still being decided joins it.
   const steered = h.agent.deliverChildCompletion(...completion);
-  await settle();
+  await drainMicrotasks(20);
   const again = h.agent.deliverChildCompletion(...completion);
   open();
   assert.deepEqual(await steered, { delivered: true });
   assert.deepEqual(await again, { delivered: true });
-  await settle();
+  await drainMicrotasks(20);
   assert.equal((await h.agent.waitAsk(runId, 1))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   // Two inferences: the action's, then the one that read the steered completion
   // beside the action's result, and never a third for the duplicate.
@@ -91,7 +91,7 @@ test("a child task's end is decided in the brain: a run its generation forgot be
   const h = harness({ client });
   const run = await h.agent.runChildTask("look into it", "child-run-1");
   assert.ok(run);
-  await settle();
+  await drainMicrotasks(20);
   // The generation is replaced while the child's inference is still out: the
   // run's record goes with it, and the requester's service is still owed an end.
   h.store.reset();
@@ -126,7 +126,7 @@ test("a steered completion is delivered only once a checkpoint carries it: a run
   const { client, open } = gatedClient(inner);
   const h = harness({ client });
   const runId = acceptedRunId(await submit(h, "keep going"));
-  await settle();
+  await drainMicrotasks(20);
   const completion = childCompletion({
     completionId: "completion:child-1",
     childId: "child-1",
@@ -164,7 +164,7 @@ test("a steered completion carried by an action's checkpoint is delivered even t
   const { client, open } = gatedClient(inner);
   const h = harness({ client });
   const runId = acceptedRunId(await submit(h, "keep going"));
-  await settle();
+  await drainMicrotasks(20);
   const pending = h.agent.deliverChildCompletion(
     ...childCompletion({
       completionId: "completion:child-2",

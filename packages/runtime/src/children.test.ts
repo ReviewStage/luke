@@ -25,7 +25,7 @@ import {
   type SessionKey,
   threadSessionKey,
 } from "./identifiers.js";
-import type { ScheduledTimer } from "./timers.js";
+import { drainMicrotasks, FakeClock } from "./testing/index.js";
 
 /**
  * The child service over a synthetic executor and deliverer: the limits, the
@@ -35,46 +35,6 @@ import type { ScheduledTimer } from "./timers.js";
  */
 
 const NOW = 1_800_000_000_000;
-
-class FakeClock {
-  now = NOW;
-  readonly timers = new Map<ScheduledTimer, { callback: () => void; at: number }>();
-  schedule = (callback: () => void, delayMs: number): ScheduledTimer => {
-    const handle: ScheduledTimer = {};
-    this.timers.set(handle, { callback, at: this.now + delayMs });
-    return handle;
-  };
-  cancel = (timer: ScheduledTimer): void => {
-    this.timers.delete(timer);
-  };
-  /** Advances to `at`, firing every timer due on the way, in order. */
-  async advanceTo(at: number): Promise<void> {
-    for (;;) {
-      const due = [...this.timers.entries()]
-        .filter(([, timer]) => timer.at <= at)
-        .sort(([, a], [, b]) => a.at - b.at)[0];
-      if (!due) break;
-      const [handle, timer] = due;
-      this.timers.delete(handle);
-      this.now = Math.max(this.now, timer.at);
-      timer.callback();
-      await settle();
-    }
-    this.now = Math.max(this.now, at);
-  }
-}
-
-function settle(): Promise<void> {
-  return new Promise((resolve) => {
-    let ticks = 0;
-    const tick = () => {
-      ticks += 1;
-      if (ticks > 40) resolve();
-      else setImmediate(tick);
-    };
-    tick();
-  });
-}
 
 class MemoryChildStore implements ChildStore {
   readonly children = new Map<string, ChildRunRecord>();
@@ -185,9 +145,7 @@ function harness(overrides: Partial<ConstructorParameters<typeof ChildRunService
     executor,
     deliverer,
     createId: () => `id-${++ids}`,
-    now: () => clock.now,
-    schedule: clock.schedule,
-    cancel: clock.cancel,
+    clock,
     report: (message) => reports.push(message),
     ...overrides,
   });
@@ -222,10 +180,10 @@ test("a spawn is recorded before its receipt and started after it, and the recei
   assert.ok(stored);
   assert.equal(stored.completionDestination, MAIN_SESSION_KEY);
   assert.equal(stored.timeoutMs, CHILD_DEFAULTS.TIMEOUT_MS);
-  await settle();
+  await drainMicrotasks(40);
   assert.equal(executor.started.length, 1);
   assert.equal(store.children.get("id-1")?.status, CHILD_RUN_STATUS.RUNNING);
-  assert.equal(store.children.get("id-1")?.startedAt, clock.now);
+  assert.equal(store.children.get("id-1")?.startedAt, clock.instant);
 });
 
 test("a spawn the store refuses starts nothing", async () => {
@@ -233,7 +191,7 @@ test("a spawn the store refuses starts nothing", async () => {
   store.refuse = true;
   const outcome = await service.spawn(request());
   assert.deepEqual(outcome, { accepted: false, reason: CHILD_SPAWN_REFUSAL.PERSISTENCE });
-  await settle();
+  await drainMicrotasks(40);
   assert.equal(executor.started.length, 0);
 });
 
@@ -262,7 +220,7 @@ test("children start isolated by default, thread-bound forks inherit, and a fork
   assert.equal(capped.receipt.context, CHILD_CONTEXT_MODE.ISOLATED);
   assert.match(capped.receipt.contextNote ?? "", /fork cap/);
   assert.equal(empty.receipt.context, CHILD_CONTEXT_MODE.ISOLATED);
-  await settle();
+  await drainMicrotasks(40);
   assert.deepEqual(executor.started[1]?.fork, items);
   assert.equal(executor.started[2]?.fork, undefined);
   const other = await service.spawn(
@@ -298,20 +256,23 @@ test("a completion is persisted before delivery, delivered to the requesting con
   const thread = threadSessionKey("private");
   const outcome = await service.spawn(request(thread));
   assert.ok(outcome.accepted);
-  await settle();
+  await drainMicrotasks(40);
   deliverer.accept = false;
   executor.started[0]?.end({ status: CHILD_RUN_STATUS.COMPLETED, resultText: "all green" });
-  await settle();
+  await drainMicrotasks(40);
   const completion = store.completions.get("completion:id-1");
   assert.ok(completion);
   assert.equal(completion.destination, thread);
   assert.equal(completion.resultText, "all green");
   assert.equal(completion.delivery, COMPLETION_DELIVERY_STATUS.PENDING);
   assert.equal(completion.attempts, 1);
-  assert.equal(completion.nextAttemptAt, clock.now + CHILD_DEFAULTS.DELIVERY_INITIAL_BACKOFF_MS);
+  assert.equal(
+    completion.nextAttemptAt,
+    clock.instant + CHILD_DEFAULTS.DELIVERY_INITIAL_BACKOFF_MS,
+  );
   assert.equal(store.children.get("id-1")?.status, CHILD_RUN_STATUS.COMPLETED);
   deliverer.accept = true;
-  await clock.advanceTo(clock.now + CHILD_DEFAULTS.DELIVERY_INITIAL_BACKOFF_MS);
+  await clock.advance(clock.instant + CHILD_DEFAULTS.DELIVERY_INITIAL_BACKOFF_MS);
   assert.equal(
     store.completions.get("completion:id-1")?.delivery,
     COMPLETION_DELIVERY_STATUS.DELIVERED,
@@ -321,7 +282,7 @@ test("a completion is persisted before delivery, delivered to the requesting con
     [thread, thread],
   );
   assert.deepEqual(executor.archived, []);
-  await clock.advanceTo(NOW + CHILD_DEFAULTS.ARCHIVE_AFTER_MS + 1);
+  await clock.advance(NOW + CHILD_DEFAULTS.ARCHIVE_AFTER_MS + 1);
   assert.deepEqual(executor.archived, ["id-1"]);
   assert.ok(store.children.get("id-1")?.archivedAt);
 });
@@ -338,10 +299,10 @@ test("blocked delivery backs off from 15 seconds to five minutes, blocks after 3
   for (let index = 0; index < CHILD_DEFAULTS.BLOCKED_REFUSAL; index += 1) {
     assert.ok((await service.spawn(request())).accepted);
   }
-  await settle();
+  await drainMicrotasks(40);
   for (const started of executor.started) started.end({ status: CHILD_RUN_STATUS.COMPLETED });
-  await settle();
-  await clock.advanceTo(NOW + CHILD_DEFAULTS.DELIVERY_WINDOW_MS + 1);
+  await drainMicrotasks(40);
+  await clock.advance(NOW + CHILD_DEFAULTS.DELIVERY_WINDOW_MS + 1);
   const blocked = [...store.completions.values()].filter(
     (completion) => completion.delivery === COMPLETION_DELIVERY_STATUS.BLOCKED,
   );
@@ -352,7 +313,7 @@ test("blocked delivery backs off from 15 seconds to five minutes, blocks after 3
   if (!refused.accepted) assert.equal(refused.reason, CHILD_SPAWN_REFUSAL.BLOCKED_COMPLETIONS);
   // A blocked result is retained seven days and then let go of at the next load.
   const reloaded = harness({ store });
-  reloaded.clock.now = clock.now + CHILD_DEFAULTS.BLOCKED_RETENTION_MS + 1;
+  reloaded.clock.instant = clock.instant + CHILD_DEFAULTS.BLOCKED_RETENTION_MS + 1;
   await reloaded.service.start();
   assert.equal(reloaded.service.completions().length, 0);
 });
@@ -361,10 +322,10 @@ test("the same completion is delivered once however often the deliverer is asked
   const { service, store, executor, deliverer, clock } = harness();
   deliverer.accept = false;
   assert.ok((await service.spawn(request())).accepted);
-  await settle();
+  await drainMicrotasks(40);
   executor.started[0]?.end({ status: CHILD_RUN_STATUS.COMPLETED, resultText: "x" });
-  await settle();
-  await clock.advanceTo(NOW + CHILD_DEFAULTS.DELIVERY_WINDOW_MS + 1);
+  await drainMicrotasks(40);
+  await clock.advance(NOW + CHILD_DEFAULTS.DELIVERY_WINDOW_MS + 1);
   assert.equal(
     store.completions.get("completion:id-1")?.delivery,
     COMPLETION_DELIVERY_STATUS.BLOCKED,
@@ -372,7 +333,7 @@ test("the same completion is delivered once however often the deliverer is asked
   const attemptsBlocked = deliverer.delivered.length;
   deliverer.accept = true;
   assert.equal(await service.retryDelivery("id-1"), true);
-  await settle();
+  await drainMicrotasks(40);
   assert.equal(
     store.completions.get("completion:id-1")?.delivery,
     COMPLETION_DELIVERY_STATUS.DELIVERED,
@@ -386,19 +347,19 @@ test("a parent's completion never ends its child, but an explicit cancellation c
   const { service, executor, store } = harness();
   const parent = await service.spawn(request());
   assert.ok(parent.accepted);
-  await settle();
+  await drainMicrotasks(40);
   const child = await service.spawn(request(parent.receipt.childSessionKey, { requesterDepth: 1 }));
   assert.ok(child.accepted);
-  await settle();
+  await drainMicrotasks(40);
   const grandchild = await service.spawn(
     request(child.receipt.childSessionKey, { requesterDepth: 2 }),
   );
   assert.ok(grandchild.accepted);
-  await settle();
+  await drainMicrotasks(40);
   assert.equal(grandchild.receipt.depth, 3);
   // The parent ends; its children keep running.
   executor.started[0]?.end({ status: CHILD_RUN_STATUS.COMPLETED });
-  await settle();
+  await drainMicrotasks(40);
   assert.equal(store.children.get(child.receipt.childId)?.status, CHILD_RUN_STATUS.RUNNING);
   assert.equal(store.children.get(grandchild.receipt.childId)?.status, CHILD_RUN_STATUS.RUNNING);
   const cancelled = await service.cancel(child.receipt.childId);
@@ -413,7 +374,7 @@ test("a reset's descendant cancellation reports honestly when a cancel does not 
   const first = await service.spawn(request());
   const second = await service.spawn(request());
   assert.ok(first.accepted && second.accepted);
-  await settle();
+  await drainMicrotasks(40);
   executor.cancelLands = false;
   const outcome = await service.cancelDescendantsOf(MAIN_SESSION_KEY);
   assert.equal(outcome.ok, false);
@@ -433,10 +394,10 @@ test("a cancel racing the child's own end leaves one terminal status and one com
   const { service, executor, store } = harness();
   const spawned = await service.spawn(request());
   assert.ok(spawned.accepted);
-  await settle();
+  await drainMicrotasks(40);
   executor.started[0]?.end({ status: CHILD_RUN_STATUS.COMPLETED, resultText: "finished" });
   const cancelled = service.cancel(spawned.receipt.childId);
-  await settle();
+  await drainMicrotasks(40);
   await cancelled;
   const record = store.children.get(spawned.receipt.childId);
   const terminal: readonly string[] = [CHILD_RUN_STATUS.COMPLETED, CHILD_RUN_STATUS.CANCELLED];
@@ -448,14 +409,14 @@ test("a cancel racing the child's own end leaves one terminal status and one com
 test("a relaunch adopts unfinished children through the executor's recovery and keeps a bounded budget of start failures", async () => {
   const { service, store, executor } = harness();
   for (let index = 0; index < 5; index += 1) assert.ok((await service.spawn(request())).accepted);
-  await settle();
+  await drainMicrotasks(40);
   assert.equal(executor.started.length, 5);
   // Relaunch: the same store, a new service minting ids of its own; the backend refuses every resume.
   let later = 0;
   const relaunch = harness({ store, createId: () => `later-${++later}` });
   relaunch.executor.refuseResume = "no model";
   await relaunch.service.start();
-  await settle();
+  await drainMicrotasks(40);
   assert.equal(relaunch.executor.resumed.length, CHILD_DEFAULTS.RECOVERY_FAILURE_BUDGET);
   assert.equal(relaunch.service.recoveryFailures(), CHILD_DEFAULTS.RECOVERY_FAILURE_BUDGET);
   for (const record of relaunch.service.children()) {
@@ -469,18 +430,18 @@ test("a relaunch adopts unfinished children through the executor's recovery and 
   // A backend that actually starts resets the budget.
   const spawned = await relaunch.service.spawn(request(threadSessionKey("later")));
   assert.ok(spawned.accepted);
-  await settle();
+  await drainMicrotasks(40);
   assert.equal(relaunch.service.recoveryFailures(), 0);
 });
 
 test("a relaunch that recovers a child preserves the unknown outcome the runtime reports rather than replaying it", async () => {
   const { service, store, executor } = harness();
   assert.ok((await service.spawn(request())).accepted);
-  await settle();
+  await drainMicrotasks(40);
   assert.equal(executor.started.length, 1);
   const relaunch = harness({ store });
   await relaunch.service.start();
-  await settle();
+  await drainMicrotasks(40);
   assert.equal(relaunch.executor.resumed.length, 1);
   assert.equal(relaunch.executor.started.length, 0);
   const record = relaunch.service.child("id-1");
@@ -495,9 +456,9 @@ test("a fire-and-forget child records its delivery as not required, and delete c
     request(MAIN_SESSION_KEY, { expectsCompletion: false, cleanup: "delete" }),
   );
   assert.ok(spawned.accepted);
-  await settle();
+  await drainMicrotasks(40);
   executor.started[0]?.end({ status: CHILD_RUN_STATUS.COMPLETED });
-  await settle();
+  await drainMicrotasks(40);
   assert.equal(
     store.completions.get("completion:id-1")?.delivery,
     COMPLETION_DELIVERY_STATUS.NOT_REQUIRED,
@@ -514,7 +475,7 @@ test("a cancel that lands while the child is still starting stops the run that t
   });
   const spawned = await service.spawn(request());
   assert.ok(spawned.accepted);
-  await settle();
+  await drainMicrotasks(40);
   assert.equal(executor.started.length, 0);
   // The cancel finds no run yet; the record settles cancelled on its word.
   const cancelled = await service.cancel(spawned.receipt.childId);
@@ -523,14 +484,14 @@ test("a cancel that lands while the child is still starting stops the run that t
   assert.deepEqual(executor.cancelled, ["id-1"]);
   // The backend then starts the run anyway: it is stopped, and the row stays cancelled, never running.
   release?.();
-  await settle();
+  await drainMicrotasks(40);
   assert.equal(executor.started.length, 1);
   assert.deepEqual(executor.cancelled, ["id-1", "id-1"]);
   const record = store.children.get("id-1");
   assert.equal(record?.status, CHILD_RUN_STATUS.CANCELLED);
   assert.equal(record?.startedAt, undefined);
   executor.started[0]?.end({ status: CHILD_RUN_STATUS.COMPLETED, resultText: "too late" });
-  await settle();
+  await drainMicrotasks(40);
   assert.equal(store.children.get("id-1")?.status, CHILD_RUN_STATUS.CANCELLED);
   assert.equal(store.completions.size, 1);
   assert.equal(store.completions.get("completion:id-1")?.status, CHILD_RUN_STATUS.CANCELLED);

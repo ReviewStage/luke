@@ -1,8 +1,8 @@
 /**
  * The runtime's vocabulary: the identities it keeps apart, the storage
  * contracts a durable owner of conversation state satisfies, the execution
- * seams a host composes over, the records delegation keeps, and the one
- * scheduler handle. A re-export door and nothing else, Node-free by
+ * seams a host composes over, the records delegation keeps, and the clock they
+ * all run on. A re-export door and nothing else, Node-free by
  * construction, because packages below the runtime — realtime, hosted,
  * voice, devtrace, memory — import this door and not the barrel, which
  * reaches `node:fs`.
@@ -134,4 +134,4 @@ export {
   TRANSCRIPT_EVENT_KIND,
   type TranscriptEvent,
 } from "./storage.js";
-export { DAY_MS, type ScheduledTimer } from "./timers.js";
+export { type Clock, DAY_MS, type ScheduledTimer, systemClock } from "./timers.js";

@@ -11,7 +11,7 @@ import {
   type ModelResponse,
   TRANSCRIPT_EVENT_KIND,
 } from "@sidecar/runtime/vocabulary";
-import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, toDisposable, type WireRecord } from "@sidecar/wire";
 import { BrainAgent } from "./agent.js";
 import {
   assessCompaction,
@@ -307,13 +307,13 @@ function agentOver(model: ModelAdapter, repository: FakeBrainStateRepository) {
     report: (message) => {
       reports.push(message);
     },
-    now: () => NOW,
-    schedule: (callback) => {
-      const handle = {};
-      setImmediate(callback);
-      return handle;
+    clock: {
+      now: () => NOW,
+      schedule: (_delayMs, run) => {
+        const immediate = setImmediate(run);
+        return toDisposable(() => clearImmediate(immediate));
+      },
     },
-    cancel: () => undefined,
   });
   return { agent, store, reports };
 }

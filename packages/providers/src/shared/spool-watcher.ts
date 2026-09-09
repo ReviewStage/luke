@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import { type Clock, systemClock } from "@sidecar/runtime/vocabulary";
+import type { IDisposable } from "@sidecar/wire";
 import { type ObservedHookEvent, readObservationHookEvent } from "./hook-merge.js";
 
 /**
@@ -33,8 +35,6 @@ const DEFAULT_DEBOUNCE_MS = 500;
  */
 const DEFAULT_REARM_INTERVAL_MS = 5000;
 
-type Timer = ReturnType<typeof setTimeout>;
-
 /** The narrow slice of `fs.watch` the watcher relies on, so a test can stand in. */
 export interface SpoolWatchHandle {
   on(event: "error", listener: (error: Error) => void): void;
@@ -62,8 +62,7 @@ export interface ObservationSpoolWatcherOptions<Event extends string> {
   events: readonly Event[];
   onEvents: (events: readonly ObservedSpoolEvent<Event>[]) => void;
   watch?: SpoolWatch;
-  schedule?: (callback: () => void, delayMs: number) => Timer;
-  cancel?: (timer: Timer) => void;
+  clock?: Clock;
 }
 
 export interface ObservationSpoolWatcher {
@@ -80,12 +79,11 @@ class SpoolWatcher<Event extends string> implements ObservationSpoolWatcher {
   readonly #events: readonly Event[];
   readonly #onEvents: (events: readonly ObservedSpoolEvent<Event>[]) => void;
   readonly #watch: SpoolWatch;
-  readonly #schedule: (callback: () => void, delayMs: number) => Timer;
-  readonly #cancel: (timer: Timer) => void;
+  readonly #clock: Clock;
 
   readonly #pendingIds = new Set<string>();
-  #debounceTimer: Timer | undefined;
-  #rearmTimer: Timer | undefined;
+  #debounceTimer: IDisposable | undefined;
+  #rearmTimer: IDisposable | undefined;
   #handle: SpoolWatchHandle | undefined;
   #reads: Promise<void> = Promise.resolve();
   #closed = false;
@@ -95,16 +93,15 @@ class SpoolWatcher<Event extends string> implements ObservationSpoolWatcher {
     this.#events = options.events;
     this.#onEvents = options.onEvents;
     this.#watch = options.watch ?? fs.watch;
-    this.#schedule = options.schedule ?? setTimeout;
-    this.#cancel = options.cancel ?? clearTimeout;
+    this.#clock = options.clock ?? systemClock;
     this.#arm();
   }
 
   close(): void {
     this.#closed = true;
-    if (this.#debounceTimer !== undefined) this.#cancel(this.#debounceTimer);
+    this.#debounceTimer?.dispose();
     this.#debounceTimer = undefined;
-    if (this.#rearmTimer !== undefined) this.#cancel(this.#rearmTimer);
+    this.#rearmTimer?.dispose();
     this.#rearmTimer = undefined;
     this.#pendingIds.clear();
     this.#dropHandle();
@@ -144,10 +141,10 @@ class SpoolWatcher<Event extends string> implements ObservationSpoolWatcher {
 
   #scheduleRearm(): void {
     if (this.#closed || this.#rearmTimer !== undefined) return;
-    this.#rearmTimer = this.#schedule(() => {
+    this.#rearmTimer = this.#clock.schedule(DEFAULT_REARM_INTERVAL_MS, () => {
       this.#rearmTimer = undefined;
       this.#arm();
-    }, DEFAULT_REARM_INTERVAL_MS);
+    });
   }
 
   /**
@@ -160,12 +157,12 @@ class SpoolWatcher<Event extends string> implements ObservationSpoolWatcher {
     if (providerSessionId === undefined) return;
     this.#pendingIds.add(providerSessionId);
     if (this.#debounceTimer !== undefined) return;
-    this.#debounceTimer = this.#schedule(() => {
+    this.#debounceTimer = this.#clock.schedule(DEFAULT_DEBOUNCE_MS, () => {
       this.#debounceTimer = undefined;
       const ids = [...this.#pendingIds];
       this.#pendingIds.clear();
       this.#reads = this.#reads.then(() => this.#report(ids)).catch(() => undefined);
-    }, DEFAULT_DEBOUNCE_MS);
+    });
   }
 
   /**

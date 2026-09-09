@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
+import { drainMicrotasks } from "@sidecar/runtime/testing";
 import {
   normalizeSession,
   type ProviderTranscriptSinceResult,
@@ -26,7 +27,6 @@ import {
   message,
   NOW,
   session,
-  settle,
   submit,
   TRANSCRIPT_SECRET,
 } from "./harness.js";
@@ -159,7 +159,7 @@ test("a roster look carries only the transcripts that grew, never the roster", a
     },
   });
   h.agent.rosterLook();
-  await settle();
+  await drainMicrotasks(20);
 
   assert.equal(h.client.inputs.length, 1);
   const input = h.client.inputs[0] ?? [];
@@ -184,7 +184,7 @@ test("a roster look carries only the transcripts that grew, never the roster", a
 
   // The look can be triggered again by the host.
   h.agent.rosterLook();
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.client.inputs.length, 2);
   await h.agent.stop();
 });
@@ -201,7 +201,7 @@ test("a roster look is skipped while the client is quiet or a turn is in flight"
   // Quiet: the look is skipped.
   h.client.quiet = NOW + 30_000;
   h.agent.rosterLook();
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.client.inputs.length, 0);
 
   // Quiet over, but a turn is under way: the look yields.
@@ -216,18 +216,18 @@ test("a roster look is skipped while the client is quiet or a turn is in flight"
     return respond(input, options);
   };
   const asked = ask(h, "what's up?");
-  await settle();
+  await drainMicrotasks(20);
   h.agent.rosterLook();
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.client.inputs.length, 0);
   release?.();
   await asked;
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.client.inputs.length, 1);
 
   // After the turn completes, the look proceeds.
   h.agent.rosterLook();
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.client.inputs.length, 2);
   assert.equal(h.traces.at(-1)?.trigger, BRAIN_TURN_TRIGGER.ROSTER);
   await h.agent.stop();
@@ -246,7 +246,7 @@ test("a conversation that observes no session opens no look, however the roster 
     }),
   });
   h.agent.rosterLook();
-  await settle();
+  await drainMicrotasks(20);
   // No transcript is read and no inference opens: this conversation's turns
   // are the developer's asks and its own scheduled review.
   assert.equal(h.client.inputs.length, 0);
@@ -300,8 +300,8 @@ test("captures past a turn's depth are kept whole across a relaunch and read in 
   const relaunched = harness(reading(), quiet.repository);
   relaunched.client.answers.push(answered([message("")]), answered([message("")]));
   await relaunched.agent.ready();
-  await relaunched.clock.advance(relaunched.clock.now + 3_000);
-  await settle();
+  await relaunched.clock.advance(relaunched.clock.instant + 3_000);
+  await drainMicrotasks(20);
   assert.equal(relaunched.sinceReads.length, 0);
   assert.equal(relaunched.client.inputs.length, 1);
   const firstTurn = (relaunched.client.inputs[0] ?? []).map(itemText).join("\n");
@@ -312,8 +312,8 @@ test("captures past a turn's depth are kept whole across a relaunch and read in 
   // The next look finds nothing new in the transcript and still opens the
   // turn the standing captures are owed.
   relaunched.agent.rosterLook();
-  await relaunched.clock.advance(relaunched.clock.now + 3_000);
-  await settle();
+  await relaunched.clock.advance(relaunched.clock.instant + 3_000);
+  await drainMicrotasks(20);
   assert.equal(relaunched.client.inputs.length, 2);
   const secondTurn = (relaunched.client.inputs[1] ?? []).map(itemText).join("\n");
   for (let index = 21; index <= 25; index += 1) assert.ok(secondTurn.includes(`PIECE_${index}`));
@@ -344,7 +344,7 @@ test("a conversation that looks at one session reads only it, and a repeated unc
   });
   h.client.answers.push(answered([message("")]));
   h.agent.rosterLook();
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.client.inputs.length, 1);
   assert.deepEqual(notices[0]?.identities, [ABC]);
   assert.ok(!itemText((h.client.inputs[0] ?? [])[0]).includes("for def"));
@@ -353,16 +353,16 @@ test("a conversation that looks at one session reads only it, and a repeated unc
   // Nothing gained and the session unchanged: the look is suppressed, deterministically.
   text = "";
   h.agent.rosterLook();
-  await settle();
+  await drainMicrotasks(20);
   h.agent.rosterLook();
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.client.inputs.length, 1);
   assert.equal(notices.length, 1);
   // The transcript growing opens a look again.
   text = "more words";
   h.client.answers.push(answered([message("")]));
   h.agent.rosterLook();
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.client.inputs.length, 2);
 });
 
@@ -394,14 +394,14 @@ test("a session the developer is speaking with wakes nothing, and the exchange o
   // exchange being heard first-hand, and nothing is written down to open one
   // later — but the capture cursor moves past what was said.
   h.agent.rosterLook();
-  await settle();
+  await drainMicrotasks(20);
   await h.agent.wake([
     {
       ...edge(ABC),
       session: session("abc", { status: SESSION_STATUS.WORKING, realtimeVoiceLive: true }),
     },
   ]);
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.client.inputs.length, 0);
   assert.equal(h.repository.state?.inbox.length ?? 0, 0);
   assert.equal(h.repository.state?.captureCursors["claude-code"]?.abc, String(transcript.length));
@@ -410,14 +410,14 @@ test("a session the developer is speaking with wakes nothing, and the exchange o
   // opens nothing and replays none of what the developer heard themselves.
   live = false;
   h.agent.rosterLook();
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.client.inputs.length, 0);
 
   // A fresh turn after it is read from where the exchange left off.
   transcript += "\nassistant: back to typing";
   h.client.answers.push(answered([message("")]));
   h.agent.rosterLook();
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.client.inputs.length, 1);
   const opening = itemText((h.client.inputs[0] ?? [])[0]);
   assert.ok(opening.includes("back to typing"));
@@ -443,7 +443,7 @@ test("a wake's session summary carries the hold and the completion cause beside 
     },
   ]);
   await h.clock.advance(NOW + 3_000);
-  await settle();
+  await drainMicrotasks(20);
   const opening = itemText(
     itemsOfType(h.client.inputs[0] ?? [], RESPONSES_INPUT_ITEM_TYPE.MESSAGE)[0],
   );
@@ -464,10 +464,10 @@ test("a relaunch does not run an ask that was only queued, and runs a captured o
   const gated = gatedClient(inner);
   const h = harness({ client: gated.client });
   acceptedRunId(await submit(h, "first?"));
-  await settle();
+  await drainMicrotasks(20);
   const queued = acceptedRunId(await submit(h, "second, queued"));
   await h.agent.wake([edge(DEF)]);
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.agent.pendingWakes(), 1);
   // The process dies with the first running, the second steered or queued, and a captured observation waiting.
   const relaunched = harness({}, fakeBrainStateRepository(h.repository.state));

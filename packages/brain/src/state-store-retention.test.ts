@@ -27,14 +27,12 @@ function launch(repository: FakeBrainStateRepository, clock: FakeClock) {
     automaticReset: false,
     repository,
     createGenerationId: () => `gen-${++generations}`,
-    now: () => clock.now,
+    now: () => clock.instant,
     report: (message) => reports.push(message),
   });
   const generationClock = new BrainGenerationClock({
     store,
-    now: () => clock.now,
-    schedule: clock.schedule,
-    cancel: clock.cancel,
+    clock,
   });
   return { store, generationClock, reports };
 }

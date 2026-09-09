@@ -116,7 +116,7 @@ session type. `@sidecar/runtime/testing` is the scaffolding every test in this
 repository shares — a self-cleaning temporary directory, a stated microtask
 drain, and a clock the test drives — behind its own door because it reaches
 `node:fs` and `node:os`, and in this package because the clock stands in for
-the runtime's own `ScheduledTimer`.
+the runtime's own `Clock`.
 
 `@sidecar/brain` is the reason the rule exists twice in one package: the barrel
 is a door the web functions and the renderer open, and the store beneath it

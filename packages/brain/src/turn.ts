@@ -4,8 +4,8 @@ import {
   type ToolDescriptor,
   type ToolPolicyLayers,
 } from "@sidecar/runtime";
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import { RUN_ORIGIN, type RunOrigin } from "@sidecar/runtime/vocabulary";
+import type { IDisposable } from "@sidecar/wire";
 import type { Generation } from "./generation.js";
 import type { SteeredDeliveries } from "./steered-deliveries.js";
 import type { RecordingContextEngine } from "./transcript-recorder.js";
@@ -118,7 +118,7 @@ export interface RunControl {
   abort: AbortController;
   cancelled: boolean;
   timedOut: boolean;
-  deadline?: ScheduledTimer;
+  deadline?: IDisposable;
   /** Whether a checkpoint failed inside this run, after which no further action may be dispatched. */
   checkpointFailed: boolean;
   /** Whether the context had to be compacted before the run could be sent and could not be; the context stands as it was. */

@@ -1,4 +1,4 @@
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
+import type { Clock } from "@sidecar/runtime/vocabulary";
 import type { Generation } from "./generation.js";
 import type { BrainRequestLedger } from "./ledger.js";
 import type { BrainTurnTrigger, RunControl } from "./turn.js";
@@ -10,9 +10,7 @@ import type { BrainTurnTrigger, RunControl } from "./turn.js";
  * collaborator holds the agent and none of them can own the standing twice.
  */
 export interface AgentSeam {
-  readonly now: () => number;
-  readonly schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
-  readonly cancel: (timer: ScheduledTimer) => void;
+  readonly clock: Clock;
   readonly report: (message: string) => void;
   readonly ledger: BrainRequestLedger;
   /** The generation that stands, or nothing before the first load. */

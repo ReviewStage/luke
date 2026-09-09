@@ -1,4 +1,4 @@
-import type { WireRecord } from "@sidecar/wire";
+import type { IDisposable, WireRecord } from "@sidecar/wire";
 import {
   CHILD_CLEANUP,
   CHILD_CONTEXT_MODE,
@@ -15,7 +15,7 @@ import {
   isTerminalChildRunStatus,
 } from "./child-records.js";
 import { type AgentId, childSessionKey, type SessionKey } from "./identifiers.js";
-import type { ScheduledTimer } from "./timers.js";
+import { type Clock, systemClock } from "./timers.js";
 import { CHILD_DEPTH_CAP } from "./tool-policy.js";
 
 /**
@@ -198,9 +198,7 @@ export interface ChildRunServiceOptions {
   executor: ChildExecutor;
   deliverer: CompletionDeliverer;
   createId: () => string;
-  now?: () => number;
-  schedule?: (callback: () => void, delayMs: number) => ScheduledTimer;
-  cancel?: (timer: ScheduledTimer) => void;
+  clock?: Clock;
   report?: (message: string) => void;
   limits?: Partial<{
     maximumActivePerRequester: number;
@@ -238,14 +236,12 @@ export function deliveryBackoffMs(attempts: number): number {
 
 export class ChildRunService {
   readonly #options: ChildRunServiceOptions;
-  readonly #now: () => number;
-  readonly #schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
-  readonly #cancel: (timer: ScheduledTimer) => void;
+  readonly #clock: Clock;
   readonly #report: (message: string) => void;
   readonly #children = new Map<string, ChildRunRecord>();
   readonly #completions = new Map<string, ChildCompletionRecord>();
-  readonly #deliveryTimers = new Map<string, ScheduledTimer>();
-  readonly #archiveTimers = new Map<string, ScheduledTimer>();
+  readonly #deliveryTimers = new Map<string, IDisposable>();
+  readonly #archiveTimers = new Map<string, IDisposable>();
   /** Each child's own write chain, so two updates of one record land in order. */
   readonly #writes = new Map<string, Promise<unknown>>();
   /** Children whose end is being written, claimed synchronously so a cancel and an end racing cannot both settle one child. */
@@ -257,15 +253,7 @@ export class ChildRunService {
 
   constructor(options: ChildRunServiceOptions) {
     this.#options = options;
-    this.#now = options.now ?? Date.now;
-    this.#schedule =
-      options.schedule ?? ((callback, delayMs) => globalThis.setTimeout(callback, delayMs));
-    this.#cancel =
-      options.cancel ??
-      ((timer) => {
-        // SAFETY: a timer this service scheduled itself came from setTimeout above.
-        globalThis.clearTimeout(timer as ReturnType<typeof setTimeout>);
-      });
+    this.#clock = options.clock ?? systemClock;
     this.#report = options.report ?? ((message) => process.stderr.write(`${message}\n`));
   }
 
@@ -386,8 +374,8 @@ export class ChildRunService {
   /** Stops every timer; nothing is delivered or archived after this, and what stands is on disk. */
   stop(): void {
     this.#stopped = true;
-    for (const timer of this.#deliveryTimers.values()) this.#cancel(timer);
-    for (const timer of this.#archiveTimers.values()) this.#cancel(timer);
+    for (const timer of this.#deliveryTimers.values()) timer.dispose();
+    for (const timer of this.#archiveTimers.values()) timer.dispose();
     this.#deliveryTimers.clear();
     this.#archiveTimers.clear();
   }
@@ -468,7 +456,7 @@ export class ChildRunService {
       }
     }
     const childId = this.#options.createId();
-    const now = this.#now();
+    const now = this.#clock.now();
     const record: ChildRunRecord = {
       childId,
       agentId: request.agentId,
@@ -533,7 +521,7 @@ export class ChildRunService {
     await this.#putIfActive(record.childId, (current) => ({
       ...current,
       status: CHILD_RUN_STATUS.RUNNING,
-      startedAt: this.#now(),
+      startedAt: this.#clock.now(),
     }));
     this.#follow(record.childId, start.done);
   }
@@ -628,7 +616,7 @@ export class ChildRunService {
     const record = this.#children.get(childId);
     if (!record || isTerminalChildRunStatus(record.status) || this.#settling.has(childId)) return;
     this.#settling.add(childId);
-    const now = this.#now();
+    const now = this.#clock.now();
     const settled: ChildRunRecord = {
       ...record,
       status: end.status,
@@ -670,14 +658,11 @@ export class ChildRunService {
   #armArchive(record: ChildRunRecord): void {
     if (this.#stopped || this.#archiveTimers.has(record.childId)) return;
     const after = this.#limit("archiveAfterMs", CHILD_DEFAULTS.ARCHIVE_AFTER_MS);
-    const at = (record.settledAt ?? this.#now()) + after;
-    const timer = this.#schedule(
-      () => {
-        this.#archiveTimers.delete(record.childId);
-        void this.#archive(record.childId);
-      },
-      Math.max(0, at - this.#now()),
-    );
+    const at = (record.settledAt ?? this.#clock.now()) + after;
+    const timer = this.#clock.schedule(Math.max(0, at - this.#clock.now()), () => {
+      this.#archiveTimers.delete(record.childId);
+      void this.#archive(record.childId);
+    });
     this.#archiveTimers.set(record.childId, timer);
   }
 
@@ -692,7 +677,7 @@ export class ChildRunService {
       this.#report(`Child ${childId}'s conversation could not be archived`);
       return;
     }
-    await this.#put({ ...record, archivedAt: this.#now() });
+    await this.#put({ ...record, archivedAt: this.#clock.now() });
   }
 
   /** Retries delivery of a completion the host could not take; the operator's manual retry. */
@@ -728,11 +713,11 @@ export class ChildRunService {
 
   #armDelivery(completion: ChildCompletionRecord): void {
     if (this.#stopped || this.#deliveryTimers.has(completion.completionId)) return;
-    const delay = Math.max(0, (completion.nextAttemptAt ?? this.#now()) - this.#now());
-    const timer = this.#schedule(() => {
+    const delay = Math.max(0, (completion.nextAttemptAt ?? this.#clock.now()) - this.#clock.now());
+    const timer = this.#clock.schedule(delay, () => {
       this.#deliveryTimers.delete(completion.completionId);
       void this.#attemptDelivery(completion.completionId);
-    }, delay);
+    });
     this.#deliveryTimers.set(completion.completionId, timer);
   }
 
@@ -741,7 +726,7 @@ export class ChildRunService {
     const record = completion ? this.#children.get(completion.childId) : undefined;
     if (!completion || !record || this.#stopped) return;
     if (completion.delivery !== COMPLETION_DELIVERY_STATUS.PENDING) return;
-    const now = this.#now();
+    const now = this.#clock.now();
     const firstAttemptAt = completion.firstAttemptAt ?? now;
     const outcome = await attempt(
       () => this.#options.deliverer.deliver(completion, record),
@@ -756,14 +741,14 @@ export class ChildRunService {
         delivery: COMPLETION_DELIVERY_STATUS.DELIVERED,
         attempts,
         firstAttemptAt,
-        deliveredAt: this.#now(),
+        deliveredAt: this.#clock.now(),
       });
       return;
     }
     // The window bounds the retries themselves: a next attempt that would
     // fall past it is not scheduled, and the result is retained as blocked now
     // rather than after one more wait nobody would answer.
-    const after = this.#now();
+    const after = this.#clock.now();
     const nextAttemptAt = after + deliveryBackoffMs(attempts);
     if (nextAttemptAt - firstAttemptAt > CHILD_DEFAULTS.DELIVERY_WINDOW_MS) {
       await this.#putCompletion({
@@ -802,7 +787,7 @@ export class ChildRunService {
 
   /** Blocked and dismissed completions older than the retention are let go of, with their children's records. */
   async #pruneRetainedCompletions(): Promise<void> {
-    const now = this.#now();
+    const now = this.#clock.now();
     for (const completion of this.completions()) {
       const retained =
         completion.delivery === COMPLETION_DELIVERY_STATUS.BLOCKED ||

@@ -1,6 +1,6 @@
 import type { BrainAgent, BrainChildAccess } from "@sidecar/brain";
 import { ChildRunService, type ChildStore } from "@sidecar/runtime";
-import type { ModelAdapter, ScheduledTimer } from "@sidecar/runtime/vocabulary";
+import type { Clock, ModelAdapter } from "@sidecar/runtime/vocabulary";
 import {
   CHILD_RUN_STATUS,
   type ChildRunRecord,
@@ -33,11 +33,8 @@ export interface ChildWiringDependencies {
   conversationLines: (sessionKey: SessionKey) => readonly ConversationEntry[];
   /** Where child records and completions stand between launches. */
   childStore: () => ChildStore;
-  /** The clock the child service's delivery retries and archive delays run on; absent means the process's own timers. */
-  childTimers?: {
-    schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
-    cancel: (timer: ScheduledTimer) => void;
-  };
+  /** The clock the child service's delivery retries and archive delays run on; absent means the process's own. */
+  childClock?: Clock;
   createId: () => string;
   report: (message: string) => void;
   /** The model adapter the credential policy built, or nothing when it built none. */
@@ -90,7 +87,7 @@ export function wireChildren(
     store: dependencies.childStore(),
     createId: dependencies.createId,
     report: dependencies.report,
-    ...(dependencies.childTimers ?? undefined),
+    clock: dependencies.childClock,
     executor: {
       start: async (record, fork) => {
         const agent = await openChild(record, fork);

@@ -95,9 +95,7 @@ export class WakeCapture {
     this.#queue = new WakeQueue({
       coalesceMs: BRAIN_DEFAULTS.WAKE_COALESCE_MS,
       capacity: BRAIN_DEFAULTS.PENDING_WAKE_CAPACITY,
-      now: this.#seam.now,
-      schedule: this.#seam.schedule,
-      cancel: this.#seam.cancel,
+      clock: this.#seam.clock,
       quietUntil: options.quietUntil,
       flush: (events) => this.#flush(events),
     });
@@ -158,7 +156,7 @@ export class WakeCapture {
     const generation = this.#seam.generation();
     if (!generation) return this.#seam.ready().then(() => this.rosterLook());
     const roster = this.#options.roster();
-    const looks = this.#ownLooks(roster, generation.captureCursors, this.#seam.now());
+    const looks = this.#ownLooks(roster, generation.captureCursors, this.#seam.clock.now());
     // The look is captured before anything opens, like a hook: what each
     // session gained stands in the inbox with its cursor, and the turn that
     // follows — now, or the next one if the model is quiet or a turn is in
@@ -229,7 +227,7 @@ export class WakeCapture {
       }>();
       const entries: BrainObservationEntry[] = [];
       let heardFirstHand = false;
-      const now = this.#seam.now();
+      const now = this.#seam.clock.now();
       for (const event of fresh) {
         let read = reads.get(event.identity.providerId, event.identity.providerSessionId);
         if (!read) {

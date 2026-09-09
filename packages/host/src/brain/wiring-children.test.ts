@@ -186,7 +186,7 @@ function composed(
   const clock = new FakeClock();
   const workspace = temporaryDirectory(t, "luke-children-");
   const wiring = wireBrain({
-    childTimers: { schedule: clock.schedule, cancel: clock.cancel },
+    childClock: clock,
     repositoryFor: (sessionKey) => {
       let repository = repositories.get(sessionKey);
       if (!repository) {

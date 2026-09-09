@@ -4,8 +4,8 @@ import {
   type QueuedInput,
   queueSummaryLine,
 } from "@sidecar/runtime";
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import { CONTEXT_INPUT_KIND } from "@sidecar/runtime/vocabulary";
+import type { IDisposable } from "@sidecar/wire";
 import { CONTEXT_OPENING, type Generation } from "./generation.js";
 import { askInputText } from "./input-items.js";
 import {
@@ -74,8 +74,7 @@ export class AskLedger {
       steer: (input) => this.#steer(input),
       interrupt: () => this.#interrupt(),
       flush: (batches) => this.#openBatches(batches),
-      schedule: this.#seam.schedule,
-      cancel: this.#seam.cancel,
+      clock: this.#seam.clock,
     });
   }
 
@@ -243,7 +242,7 @@ export class AskLedger {
     generation: Generation,
     submission: BrainSubmission,
   ): Promise<BrainSubmissionResult> {
-    const acceptedAt = this.#seam.now();
+    const acceptedAt = this.#seam.clock.now();
     const record: BrainRequestRecord = {
       runId: this.#options.createRunId(),
       submissionId: submission.submissionId,
@@ -304,7 +303,11 @@ export class AskLedger {
       return;
     }
     const held = this.#queue.state.entries;
-    const admitted = this.#queue.push({ id: run.runId, text: question, atMs: this.#seam.now() });
+    const admitted = this.#queue.push({
+      id: run.runId,
+      text: question,
+      atMs: this.#seam.clock.now(),
+    });
     this.#foldEvicted(held);
     if (!admitted && !held.some((entry) => entry.id === run.runId)) {
       // The overflow refused these words outright: no turn will carry them,
@@ -344,7 +347,7 @@ export class AskLedger {
     // formed inside it would be that turn's, not the developer's answer. The
     // ask waits in the queue instead and opens its own turn when this one ends.
     if (active.plan.trigger !== BRAIN_TURN_TRIGGER.ASK) return false;
-    const text = askInputText(input.text, [], this.#seam.now());
+    const text = askInputText(input.text, [], this.#seam.clock.now());
     if (!active.started.steer({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text })) return false;
     active.riders.push(run);
     // The one place a rider is committed running: its words are in the model's
@@ -352,7 +355,7 @@ export class AskLedger {
     void this.#seam.ledger
       .commit(run.generation, run.runId, {
         status: BRAIN_REQUEST_STATUS.RUNNING,
-        startedAt: this.#seam.now(),
+        startedAt: this.#seam.clock.now(),
       })
       .then(() => this.notify());
     return true;
@@ -435,17 +438,17 @@ export class AskLedger {
     if (!record) return undefined;
     if (isTerminalBrainRequestStatus(record.status)) return record;
     return new Promise((resolve) => {
-      let timer: ScheduledTimer | undefined;
+      let timer: IDisposable | undefined;
       const finish = () => {
         unsubscribe();
-        if (timer !== undefined) this.#seam.cancel(timer);
+        timer?.dispose();
         resolve(this.record(runId));
       };
       const unsubscribe = this.subscribe(() => {
         const current = this.record(runId);
         if (!current || isTerminalBrainRequestStatus(current.status)) finish();
       });
-      timer = this.#seam.schedule(finish, timeoutMs);
+      timer = this.#seam.clock.schedule(timeoutMs, finish);
     });
   }
 

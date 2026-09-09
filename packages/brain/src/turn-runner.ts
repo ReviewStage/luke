@@ -284,7 +284,7 @@ export class TurnRunner {
       // start was being written ends it on its own terms, likewise unopened.
       const started = await this.#seam.ledger.commit(generation, run.runId, {
         status: BRAIN_REQUEST_STATUS.RUNNING,
-        startedAt: this.#seam.now(),
+        startedAt: this.#seam.clock.now(),
       });
       this.#options.notifyRecords();
       if (!started || this.#seam.runRevoked(run)) {
@@ -315,15 +315,15 @@ export class TurnRunner {
         opened.push(rider);
         await this.#seam.ledger.commit(rider.run.generation, rider.run.runId, {
           status: BRAIN_REQUEST_STATUS.RUNNING,
-          startedAt: this.#seam.now(),
+          startedAt: this.#seam.clock.now(),
         });
       }
       if (riders.length > 0) this.#options.notifyRecords();
       const question = askQuestion(opened);
-      run.deadline = this.#seam.schedule(() => {
+      run.deadline = this.#seam.clock.schedule(this.#options.executionDeadlineMs, () => {
         run.timedOut = true;
         run.abort.abort();
-      }, this.#options.executionDeadlineMs);
+      });
       // A child's task runs under its own trigger: the words open as the
       // delegated task rather than the developer's ask, and the final text is
       // the result its requester is handed rather than speech.
@@ -353,7 +353,7 @@ export class TurnRunner {
       } catch {
         result = { outcome: TURN_OUTCOME.FAILED };
       }
-      if (run.deadline !== undefined) this.#seam.cancel(run.deadline);
+      run.deadline?.dispose();
       this.#options.forgetRun(run.runId);
       const { status, end } = runOutcomeOf(run, result, this.#seam.stopped());
       await this.#seam.ledger.settleRun(generation, run.runId, status, end, run);
@@ -408,7 +408,7 @@ export class TurnRunner {
         identities: uniqueIdentities(plan.events),
         briefings: result.outcome === TURN_OUTCOME.DONE ? result.briefings : [],
         performedActions: run.performedActions,
-        at: this.#seam.now(),
+        at: this.#seam.clock.now(),
       });
     }
     return result;
@@ -449,10 +449,10 @@ export class TurnRunner {
     // same deadline: a model that never answers cannot stall every turn
     // behind it.
     if (!plan.run) {
-      run.deadline = this.#seam.schedule(() => {
+      run.deadline = this.#seam.clock.schedule(this.#options.executionDeadlineMs, () => {
         run.timedOut = true;
         run.abort.abort();
-      }, this.#options.executionDeadlineMs);
+      });
     }
     const consumes = plan.events.flatMap((event) => (event.entryId ? [event.entryId] : []));
     const turnContext: TurnContext = {
@@ -474,7 +474,7 @@ export class TurnRunner {
       return { result: await this.#runTurn(plan, turnContext, execution, riders), run };
     } finally {
       ended = true;
-      if (!plan.run && run.deadline !== undefined) this.#seam.cancel(run.deadline);
+      if (!plan.run) run.deadline?.dispose();
       this.#turnInFlight = false;
       // Steered words no checkpoint of the turn carried are owed still.
       plan.deliveries.turnEnded();
@@ -489,7 +489,7 @@ export class TurnRunner {
     riders: RunControl[],
   ): Promise<TurnResult> {
     const { generation, context, run } = turnContext;
-    const startedAt = this.#seam.now();
+    const startedAt = this.#seam.clock.now();
     let contextMark: ContextMark = context.mark();
     let cursorMark = generation.cursors.persisted();
     const gathering: TurnGathering = {
@@ -661,7 +661,7 @@ export class TurnRunner {
         briefingChars: delivery.briefing.length,
       })),
       ...(model ? { model } : undefined),
-      elapsedMs: this.#seam.now() - startedAt,
+      elapsedMs: this.#seam.clock.now() - startedAt,
       iterations: gathering.iterations,
       compacted: gathering.compacted,
       ...(gathering.error ? { error: gathering.error } : undefined),
@@ -693,7 +693,7 @@ export class TurnRunner {
       ),
       generation.abort.signal,
       "the runtime could not reopen its own checkpoint",
-      this.#seam.now,
+      () => this.#seam.clock.now(),
     );
     if (reopened.aborted) return;
     const standing = await generation.opened;
@@ -792,7 +792,7 @@ export class TurnRunner {
           }),
         checkpoint: (checkpointContext) => this.#seam.ledger.checkpoint(checkpointContext),
         runRevoked: (checked) => this.#seam.runRevoked(checked),
-        now: this.#seam.now,
+        now: () => this.#seam.clock.now(),
       },
       {
         policy: turn.policy,
@@ -852,7 +852,7 @@ export class TurnRunner {
         standingContextText(
           this.#options.roster().text,
           this.#options.standingContext(),
-          this.#seam.now(),
+          this.#seam.clock.now(),
         ),
       ],
       maximumOutputTokens: this.#options.maximumOutputTokens,

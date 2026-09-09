@@ -1,4 +1,5 @@
-import type { ScheduledTimer } from "./timers.js";
+import type { IDisposable } from "@sidecar/wire";
+import { type Clock, systemClock } from "./timers.js";
 
 /**
  * How input that arrives while a conversation is busy is queued, ported from
@@ -174,8 +175,7 @@ export interface PendingInputQueueOptions {
   interrupt: () => void;
   /** Opens the drained turns, in order. */
   flush: (batches: readonly QueueBatch[]) => void;
-  schedule?: (callback: () => void, delayMs: number) => ScheduledTimer;
-  cancel?: (timer: ScheduledTimer) => void;
+  clock?: Clock;
 }
 
 /**
@@ -188,22 +188,14 @@ export interface PendingInputQueueOptions {
 export class PendingInputQueue {
   readonly #settings: QueueSettings;
   readonly #options: PendingInputQueueOptions;
-  readonly #schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
-  readonly #cancel: (timer: ScheduledTimer) => void;
+  readonly #clock: Clock;
   #state: PendingQueueState = EMPTY_QUEUE;
-  #timer: ScheduledTimer | undefined;
+  #timer: IDisposable | undefined;
 
   constructor(options: PendingInputQueueOptions) {
     this.#options = options;
     this.#settings = { ...DEFAULT_QUEUE_SETTINGS, ...options.settings };
-    this.#schedule =
-      options.schedule ?? ((callback, delayMs) => globalThis.setTimeout(callback, delayMs));
-    this.#cancel =
-      options.cancel ??
-      ((timer) => {
-        // SAFETY: a timer this queue scheduled itself came from setTimeout above.
-        globalThis.clearTimeout(timer as ReturnType<typeof setTimeout>);
-      });
+    this.#clock = options.clock ?? systemClock;
   }
 
   get settings(): QueueSettings {
@@ -281,15 +273,15 @@ export class PendingInputQueue {
 
   #arm(): void {
     if (this.#timer !== undefined) return;
-    this.#timer = this.#schedule(() => {
+    this.#timer = this.#clock.schedule(this.#settings.debounceMs, () => {
       this.#timer = undefined;
       this.#flushNow();
-    }, this.#settings.debounceMs);
+    });
   }
 
   #disarm(): void {
     if (this.#timer === undefined) return;
-    this.#cancel(this.#timer);
+    this.#timer.dispose();
     this.#timer = undefined;
   }
 

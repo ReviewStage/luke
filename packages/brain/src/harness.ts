@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { REALTIME_TOOL, type RealtimeFunctionCall } from "@sidecar/actions";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
+import { drainMicrotasks, FakeClock } from "@sidecar/runtime/testing";
 import {
   CHILD_CLEANUP,
   CHILD_CONTEXT_MODE,
@@ -231,40 +231,6 @@ export class FakeClient implements BrainClient {
   }
 }
 
-export class FakeClock {
-  now = NOW;
-  readonly timers = new Map<ScheduledTimer, { callback: () => void; at: number }>();
-
-  schedule = (callback: () => void, delayMs: number): ScheduledTimer => {
-    const handle: ScheduledTimer = {};
-    this.timers.set(handle, { callback, at: this.now + delayMs });
-    return handle;
-  };
-
-  cancel = (timer: ScheduledTimer): void => {
-    this.timers.delete(timer);
-  };
-
-  /** Fires every timer due by `until`, advancing the clock to each in order. */
-  async advance(untilMs: number): Promise<void> {
-    for (;;) {
-      const due = [...this.timers.entries()]
-        .filter(([, timer]) => timer.at <= untilMs)
-        .sort((a, b) => a[1].at - b[1].at)[0];
-      if (!due) break;
-      this.timers.delete(due[0]);
-      this.now = Math.max(this.now, due[1].at);
-      due[1].callback();
-      await settle();
-    }
-    this.now = Math.max(this.now, untilMs);
-  }
-}
-
-export async function settle(): Promise<void> {
-  for (let index = 0; index < 20; index += 1) await new Promise((resolve) => setImmediate(resolve));
-}
-
 export interface Harness {
   agent: BrainAgent;
   runtime: ToolLoopAgentRuntime;
@@ -320,7 +286,7 @@ export function harness(
       },
     },
     createGenerationId: () => `gen-${nextRunId()}`,
-    now: () => clock.now,
+    now: () => clock.instant,
   });
   const performed: RealtimeFunctionCall[] = [];
   const executions: BrainActionExecution[] = [];
@@ -362,9 +328,7 @@ export function harness(
       traces.push(record);
     },
     report: () => {},
-    now: () => clock.now,
-    schedule: clock.schedule,
-    cancel: clock.cancel,
+    clock,
     ...agentOverrides,
   });
   return {
@@ -665,9 +629,7 @@ export function agentOn(runtime: ToolLoopAgentRuntime, h: Harness) {
     store: h.store,
     createRunId: () => `run-${nextRunId()}`,
     report: () => {},
-    now: () => h.clock.now,
-    schedule: h.clock.schedule,
-    cancel: h.clock.cancel,
+    clock: h.clock,
   });
 }
 
@@ -683,14 +645,14 @@ export async function reviewing(...replies: readonly BrainClientAnswer[]) {
   const h = harness({ client: gated.client });
   inner.answers.push(answered([message("nothing spoken")]), ...replies);
   await h.agent.rosterLook();
-  await settle();
+  await drainMicrotasks(20);
   return {
     h,
     inner,
     async release(): Promise<void> {
       gated.open();
-      await settle();
-      while (h.agent.busy()) await settle();
+      await drainMicrotasks(20);
+      while (h.agent.busy()) await drainMicrotasks(20);
     },
   };
 }

@@ -666,10 +666,12 @@ test("default policy keeps an existing checkpoint beyond its legacy deadline and
   let scheduled = false;
   const clock = new BrainGenerationClock({
     store,
-    now: () => now,
-    schedule: () => {
-      scheduled = true;
-      throw new Error("default policy must not schedule expiry");
+    clock: {
+      now: () => now,
+      schedule: () => {
+        scheduled = true;
+        throw new Error("default policy must not schedule expiry");
+      },
     },
   });
   await clock.start();

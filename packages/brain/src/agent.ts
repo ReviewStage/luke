@@ -1,11 +1,12 @@
 import type { MemoryHousekeepingResult } from "@sidecar/memory";
 import type { ChildEnd, ChildPolicyContext } from "@sidecar/runtime";
-import type {
-  AgentRuntime,
-  ChildCompletionRecord,
-  ChildRunRecord,
-  ReasoningEffort,
-  ScheduledTimer,
+import {
+  type AgentRuntime,
+  type ChildCompletionRecord,
+  type ChildRunRecord,
+  type Clock,
+  type ReasoningEffort,
+  systemClock,
 } from "@sidecar/runtime/vocabulary";
 import type {
   ProviderTranscriptResult,
@@ -145,9 +146,7 @@ export interface BrainAgentOptions {
   createRunId: () => string;
   trace?: (record: BrainTurnTraceRecord) => void;
   report?: (message: string) => void;
-  now?: () => number;
-  schedule?: (callback: () => void, delayMs: number) => ScheduledTimer;
-  cancel?: (timer: ScheduledTimer) => void;
+  clock?: Clock;
   maximumOutputTokens?: number;
   reasoningEffort?: ReasoningEffort;
   /**
@@ -202,9 +201,7 @@ export interface BrainAgentOptions {
  */
 export class BrainAgent {
   readonly #options: BrainAgentOptions;
-  readonly #now: () => number;
-  readonly #schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
-  readonly #cancel: (timer: ScheduledTimer) => void;
+  readonly #clock: Clock;
   readonly #report: (message: string) => void;
   #generation: Generation | undefined;
   readonly #lease: BrainStoreLease;
@@ -223,28 +220,18 @@ export class BrainAgent {
 
   constructor(options: BrainAgentOptions) {
     this.#options = options;
-    this.#now = options.now ?? Date.now;
-    this.#schedule =
-      options.schedule ?? ((callback, delayMs) => globalThis.setTimeout(callback, delayMs));
-    this.#cancel =
-      options.cancel ??
-      ((timer) => {
-        // SAFETY: a timer this agent scheduled itself came from setTimeout above.
-        globalThis.clearTimeout(timer as ReturnType<typeof setTimeout>);
-      });
+    this.#clock = options.clock ?? systemClock;
     this.#report = options.report ?? ((message) => process.stderr.write(`${message}\n`));
     this.#lease = options.store.lease();
     this.#ledger = new BrainRequestLedger({
       store: options.store,
       lease: this.#lease,
-      now: this.#now,
+      now: () => this.#clock.now(),
       report: this.#report,
       notify: () => this.#asks.notify(),
     });
     const seam: AgentSeam = {
-      now: this.#now,
-      schedule: this.#schedule,
-      cancel: this.#cancel,
+      clock: this.#clock,
       report: this.#report,
       ledger: this.#ledger,
       generation: () => this.#generation,
@@ -603,11 +590,8 @@ export class BrainAgent {
   }
 
   #generationFrom(state: BrainPersistedState): Generation {
-    return generationFrom(
-      state,
-      this.#options.runtime,
-      JSON.stringify(UNKNOWN_ACTION_RESULT),
-      this.#now,
+    return generationFrom(state, this.#options.runtime, JSON.stringify(UNKNOWN_ACTION_RESULT), () =>
+      this.#clock.now(),
     );
   }
 
@@ -636,7 +620,7 @@ export class BrainAgent {
     if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
       this.#reportIncompatible(generation, opened.reason);
     }
-    const interrupted = interruptedUnfinishedRequests(state.requests, this.#now());
+    const interrupted = interruptedUnfinishedRequests(state.requests, this.#clock.now());
     // An action found started with no result may have happened: the runtime's
     // context paired it as unknown at load, and the interrupted run says so
     // in its count; neither is ever a call to make again.
@@ -720,8 +704,9 @@ export class BrainAgent {
    */
   #expireIfDue(): void {
     const generation = this.#generation;
-    if (this.#stopped || !generation || !brainGenerationExpired(generation, this.#now())) return;
-    this.#options.store.expireIfDue(this.#now());
+    const now = this.#clock.now();
+    if (this.#stopped || !generation || !brainGenerationExpired(generation, now)) return;
+    this.#options.store.expireIfDue(now);
   }
 
   #runRevoked(run: RunControl): boolean {

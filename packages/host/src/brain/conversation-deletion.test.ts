@@ -24,6 +24,7 @@ import {
   MAIN_CONVERSATION_NAME,
   MAIN_SESSION_KEY,
   type ModelResponse,
+  systemClock,
   type TranscriptEvent,
 } from "@sidecar/runtime/vocabulary";
 import {
@@ -150,7 +151,7 @@ function composed(t: TestContext) {
       store,
       createRunId: () => `run-${++ids}`,
       report: () => undefined,
-      now: () => clock,
+      clock: { ...systemClock, now: () => clock },
     });
     followers.set(
       agent,

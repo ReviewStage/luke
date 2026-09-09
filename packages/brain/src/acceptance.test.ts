@@ -25,7 +25,7 @@ import {
   seedWorkspace,
   TOOL_LOOP_RUNTIME,
 } from "@sidecar/runtime";
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
+import { FakeClock } from "@sidecar/runtime/testing";
 import {
   type AgentRuntime,
   type CheckpointFormat,
@@ -124,19 +124,6 @@ function actionCall(callId: string): WireRecord {
 
 function payload(output: readonly WireRecord[]): Response {
   return Response.json({ id: "resp", status: "completed", output, usage: { input_tokens: 9 } });
-}
-
-class FakeClock {
-  now = NOW;
-  readonly timers = new Map<ScheduledTimer, { callback: () => void; at: number }>();
-  schedule = (callback: () => void, delayMs: number): ScheduledTimer => {
-    const handle: ScheduledTimer = {};
-    this.timers.set(handle, { callback, at: this.now + delayMs });
-    return handle;
-  };
-  cancel = (timer: ScheduledTimer): void => {
-    this.timers.delete(timer);
-  };
 }
 
 interface UpstreamCall {
@@ -267,7 +254,7 @@ function host(
   const store = new BrainStateStore({
     repository,
     createGenerationId: () => `gen-${++ids}`,
-    now: () => clock.now,
+    now: () => clock.instant,
   });
   const performed: string[] = [];
   const session = normalizeSession(claude, {
@@ -298,9 +285,7 @@ function host(
     store,
     createRunId: () => `run-${++ids}`,
     report: () => undefined,
-    now: () => clock.now,
-    schedule: clock.schedule,
-    cancel: clock.cancel,
+    clock,
     ...overrides,
   });
   return {
@@ -631,7 +616,7 @@ test("a runtime that is not Responses drives the same host: actions journaled th
   await o.agent.ready();
   o.agent.wake([{ kind: BRAIN_WAKE_KIND.HOOK, identity: ABC, hookEvent: "Stop", atMs: NOW }]);
   await settle();
-  o.clock.now += 3_000;
+  o.clock.instant += 3_000;
   for (const timer of [...o.clock.timers.values()]) timer.callback();
   await settle();
   assert.deepEqual(o.performed, [REALTIME_TOOL.SEND_SESSION_MESSAGE]);
@@ -671,7 +656,7 @@ test("the Responses runtime refuses a valid checkpoint of the scripted runtime: 
   });
   responses.agent.wake([{ kind: BRAIN_WAKE_KIND.HOOK, identity: ABC, atMs: NOW }]);
   await settle();
-  responses.clock.now += 3_000;
+  responses.clock.instant += 3_000;
   for (const timer of [...responses.clock.timers.values()]) timer.callback();
   await settle();
   assert.equal(upstream.calls.length, 0);

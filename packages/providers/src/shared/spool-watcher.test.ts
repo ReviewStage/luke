@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
+import { drainMicrotasks, FakeClock } from "@sidecar/runtime/testing";
 import { HOOK_EVENT } from "./hook-merge.js";
 import {
   type ObservedSpoolEvent,
@@ -17,53 +18,11 @@ const EVENTS: readonly SpoolEvent[] = Object.values(HOOK_EVENT);
 const DEBOUNCE_MS = 500;
 const REARM_INTERVAL_MS = 5000;
 
-type Timer = ReturnType<typeof setTimeout>;
+/** The clock's own reading is relative here: every delay the watcher asks for is a fixed interval. */
+const advance = (clock: FakeClock, ms: number): Promise<void> => clock.advance(clock.instant + ms);
 
-interface FakeClock {
-  schedule: (callback: () => void, delayMs: number) => Timer;
-  cancel: (timer: Timer) => void;
-  advance: (ms: number) => Promise<void>;
-  pending: () => number[];
-}
-
-function fakeClock(): FakeClock {
-  let nowMs = 0;
-  let nextId = 1;
-  const timers = new Map<Timer, { dueMs: number; callback: () => void }>();
-  return {
-    schedule: (callback, delayMs) => {
-      // SAFETY: the watcher only hands the timer back to `cancel`, so any
-      // distinct value serves as its handle.
-      const timer = nextId++ as unknown as Timer;
-      timers.set(timer, { dueMs: nowMs + delayMs, callback });
-      return timer;
-    },
-    cancel: (timer) => {
-      timers.delete(timer);
-    },
-    advance: async (ms) => {
-      const untilMs = nowMs + ms;
-      for (;;) {
-        const due = [...timers.entries()]
-          .filter(([, entry]) => entry.dueMs <= untilMs)
-          .sort(([, a], [, b]) => a.dueMs - b.dueMs)[0];
-        if (!due) break;
-        const [timer, entry] = due;
-        timers.delete(timer);
-        nowMs = entry.dueMs;
-        entry.callback();
-        await settle();
-      }
-      nowMs = untilMs;
-    },
-    pending: () => [...timers.values()].map((entry) => entry.dueMs - nowMs),
-  };
-}
-
-/** Gives the reads a fired timer started a chance to finish before asserting. */
-async function settle(): Promise<void> {
-  for (let i = 0; i < 20; i += 1) await new Promise<void>((resolve) => setImmediate(resolve));
-}
+const pending = (clock: FakeClock): number[] =>
+  [...clock.timers.values()].map((timer) => timer.at - clock.instant);
 
 async function waitFor(condition: () => boolean): Promise<void> {
   const deadline = Date.now() + 5000;
@@ -149,8 +108,7 @@ function standWatcher(
       batches.push(events);
     },
     watch: watcher.watch,
-    schedule: clock.schedule,
-    cancel: clock.cancel,
+    clock,
   });
   t.after(() => handle.close());
   return { handle, batches };
@@ -159,7 +117,7 @@ function standWatcher(
 test("one debounce window reports every readable spool file it saw as one batch", async (t) => {
   const spoolDirectory = await temporarySpool(t);
   const watcher = fakeWatcher();
-  const clock = fakeClock();
+  const clock = new FakeClock(0);
   const { batches } = standWatcher(t, spoolDirectory, watcher, clock);
   assert.deepEqual(watcher.directories, [spoolDirectory]);
 
@@ -179,9 +137,9 @@ test("one debounce window reports every readable spool file it saw as one batch"
   watcher.emit("rename", "../escape.json");
   watcher.emit("rename", null);
 
-  await clock.advance(DEBOUNCE_MS - 1);
+  await advance(clock, DEBOUNCE_MS - 1);
   assert.equal(batches.length, 0);
-  await clock.advance(1);
+  await advance(clock, 1);
   await waitFor(() => batches.length === 1);
 
   const batch = batches[0] ?? [];
@@ -199,15 +157,15 @@ test("one debounce window reports every readable spool file it saw as one batch"
 test("the batch window opens at the first event and is not extended by later ones", async (t) => {
   const spoolDirectory = await temporarySpool(t);
   const watcher = fakeWatcher();
-  const clock = fakeClock();
+  const clock = new FakeClock(0);
   const { batches } = standWatcher(t, spoolDirectory, watcher, clock);
 
   await writeSpoolFile(spoolDirectory, "first.json", '{"event":"session-start"}');
   await writeSpoolFile(spoolDirectory, "second.json", '{"event":"stop"}');
   watcher.emit("rename", "first.json");
-  await clock.advance(DEBOUNCE_MS - 100);
+  await advance(clock, DEBOUNCE_MS - 100);
   watcher.emit("rename", "second.json");
-  await clock.advance(100);
+  await advance(clock, 100);
   await waitFor(() => batches.length === 1);
   assert.deepEqual(
     batches.map((batch) => batch.map((event) => event.providerSessionId)),
@@ -215,7 +173,7 @@ test("the batch window opens at the first event and is not extended by later one
   );
 
   watcher.emit("rename", "second.json");
-  await clock.advance(DEBOUNCE_MS);
+  await advance(clock, DEBOUNCE_MS);
   await waitFor(() => batches.length === 2);
   assert.deepEqual(
     batches.map((batch) => batch.map((event) => event.providerSessionId)),
@@ -226,11 +184,11 @@ test("the batch window opens at the first event and is not extended by later one
 test("a batch whose files all fail to read reports nothing", async (t) => {
   const spoolDirectory = await temporarySpool(t);
   const watcher = fakeWatcher();
-  const clock = fakeClock();
+  const clock = new FakeClock(0);
   const { batches } = standWatcher(t, spoolDirectory, watcher, clock);
 
   watcher.emit("rename", "gone.json");
-  await clock.advance(DEBOUNCE_MS);
+  await advance(clock, DEBOUNCE_MS);
   assert.equal(batches.length, 0);
 });
 
@@ -238,23 +196,23 @@ test("a spool directory that does not exist yet is watched once it appears", asy
   const spoolDirectory = path.join(await temporarySpool(t), "events");
   const watcher = fakeWatcher();
   watcher.refuse(missingDirectoryError(), missingDirectoryError());
-  const clock = fakeClock();
+  const clock = new FakeClock(0);
   const { batches } = standWatcher(t, spoolDirectory, watcher, clock);
   assert.deepEqual(watcher.directories, []);
-  assert.deepEqual(clock.pending(), [REARM_INTERVAL_MS]);
+  assert.deepEqual(pending(clock), [REARM_INTERVAL_MS]);
 
-  await clock.advance(REARM_INTERVAL_MS);
+  await advance(clock, REARM_INTERVAL_MS);
   assert.deepEqual(watcher.directories, []);
-  assert.deepEqual(clock.pending(), [REARM_INTERVAL_MS]);
+  assert.deepEqual(pending(clock), [REARM_INTERVAL_MS]);
 
   await fs.mkdir(spoolDirectory);
-  await clock.advance(REARM_INTERVAL_MS);
+  await advance(clock, REARM_INTERVAL_MS);
   assert.deepEqual(watcher.directories, [spoolDirectory]);
-  assert.deepEqual(clock.pending(), []);
+  assert.deepEqual(pending(clock), []);
 
   await writeSpoolFile(spoolDirectory, "late.json", '{"event":"stop"}');
   watcher.emit("rename", "late.json");
-  await clock.advance(DEBOUNCE_MS);
+  await advance(clock, DEBOUNCE_MS);
   await waitFor(() => batches.length === 1);
   assert.deepEqual(
     batches.map((batch) => batch.map((event) => event.providerSessionId)),
@@ -265,22 +223,22 @@ test("a spool directory that does not exist yet is watched once it appears", asy
 test("a watch that fails is closed and stood up again after the rearm interval", async (t) => {
   const spoolDirectory = await temporarySpool(t);
   const watcher = fakeWatcher();
-  const clock = fakeClock();
+  const clock = new FakeClock(0);
   const { batches } = standWatcher(t, spoolDirectory, watcher, clock);
 
   watcher.fail(new Error("watch failed"));
   assert.equal(watcher.closedCount(), 1);
-  assert.deepEqual(clock.pending(), [REARM_INTERVAL_MS]);
+  assert.deepEqual(pending(clock), [REARM_INTERVAL_MS]);
   watcher.fail(new Error("watch failed again"));
   assert.equal(watcher.closedCount(), 1);
-  assert.deepEqual(clock.pending(), [REARM_INTERVAL_MS]);
+  assert.deepEqual(pending(clock), [REARM_INTERVAL_MS]);
 
-  await clock.advance(REARM_INTERVAL_MS);
+  await advance(clock, REARM_INTERVAL_MS);
   assert.deepEqual(watcher.directories, [spoolDirectory, spoolDirectory]);
 
   await writeSpoolFile(spoolDirectory, "after.json", '{"event":"notification"}');
   watcher.emit("rename", "after.json");
-  await clock.advance(DEBOUNCE_MS);
+  await advance(clock, DEBOUNCE_MS);
   await waitFor(() => batches.length === 1);
   assert.deepEqual(
     batches.map((batch) => batch.map((event) => event.event)),
@@ -291,18 +249,18 @@ test("a watch that fails is closed and stood up again after the rearm interval",
 test("closing stops the watch, drops pending ids, and cancels the rearm", async (t) => {
   const spoolDirectory = await temporarySpool(t);
   const watcher = fakeWatcher();
-  const clock = fakeClock();
+  const clock = new FakeClock(0);
   const { handle, batches } = standWatcher(t, spoolDirectory, watcher, clock);
 
   await writeSpoolFile(spoolDirectory, "pending.json", '{"event":"stop"}');
   watcher.emit("rename", "pending.json");
-  assert.deepEqual(clock.pending(), [DEBOUNCE_MS]);
+  assert.deepEqual(pending(clock), [DEBOUNCE_MS]);
   handle.close();
   assert.equal(watcher.closedCount(), 1);
-  assert.deepEqual(clock.pending(), []);
+  assert.deepEqual(pending(clock), []);
 
   watcher.emit("rename", "pending.json");
-  await clock.advance(DEBOUNCE_MS + REARM_INTERVAL_MS);
+  await advance(clock, DEBOUNCE_MS + REARM_INTERVAL_MS);
   assert.equal(batches.length, 0);
   assert.deepEqual(watcher.directories, [spoolDirectory]);
   handle.close();
@@ -313,20 +271,20 @@ test("closing while a directory is still awaited stops the retries", async (t) =
   const spoolDirectory = path.join(await temporarySpool(t), "events");
   const watcher = fakeWatcher();
   watcher.refuse(missingDirectoryError());
-  const clock = fakeClock();
+  const clock = new FakeClock(0);
   const { handle } = standWatcher(t, spoolDirectory, watcher, clock);
-  assert.deepEqual(clock.pending(), [REARM_INTERVAL_MS]);
+  assert.deepEqual(pending(clock), [REARM_INTERVAL_MS]);
   handle.close();
-  assert.deepEqual(clock.pending(), []);
+  assert.deepEqual(pending(clock), []);
   await fs.mkdir(spoolDirectory);
-  await clock.advance(REARM_INTERVAL_MS);
+  await advance(clock, REARM_INTERVAL_MS);
   assert.deepEqual(watcher.directories, []);
 });
 
 test("a batch read after close is not reported", async (t) => {
   const spoolDirectory = await temporarySpool(t);
   const watcher = fakeWatcher();
-  const clock = fakeClock();
+  const clock = new FakeClock(0);
   let closeDuringRead: () => void = () => undefined;
   const batches: (readonly ObservedSpoolEvent<SpoolEvent>[])[] = [];
   const handle = watchObservationSpool({
@@ -336,25 +294,27 @@ test("a batch read after close is not reported", async (t) => {
       batches.push(events);
     },
     watch: watcher.watch,
-    schedule: (callback, delayMs) =>
-      clock.schedule(() => {
-        callback();
-        closeDuringRead();
-      }, delayMs),
-    cancel: clock.cancel,
+    clock: {
+      now: clock.now,
+      schedule: (delayMs, run) =>
+        clock.schedule(delayMs, () => {
+          run();
+          closeDuringRead();
+        }),
+    },
   });
   closeDuringRead = () => handle.close();
 
   await writeSpoolFile(spoolDirectory, "racing.json", '{"event":"stop"}');
   watcher.emit("rename", "racing.json");
-  await clock.advance(DEBOUNCE_MS);
+  await advance(clock, DEBOUNCE_MS);
   assert.equal(batches.length, 0);
 });
 
 test("a listener that throws loses its own batch and the next batch is still delivered", async (t) => {
   const spoolDirectory = await temporarySpool(t);
   const watcher = fakeWatcher();
-  const clock = fakeClock();
+  const clock = new FakeClock(0);
   const batches: (readonly ObservedSpoolEvent<SpoolEvent>[])[] = [];
   let throwOnce = true;
   const handle = watchObservationSpool({
@@ -368,19 +328,18 @@ test("a listener that throws loses its own batch and the next batch is still del
       batches.push(events);
     },
     watch: watcher.watch,
-    schedule: clock.schedule,
-    cancel: clock.cancel,
+    clock,
   });
 
   await writeSpoolFile(spoolDirectory, "first.json", '{"event":"stop"}');
   watcher.emit("rename", "first.json");
-  await clock.advance(DEBOUNCE_MS);
-  await settle();
+  await advance(clock, DEBOUNCE_MS);
+  await drainMicrotasks(20);
   assert.equal(batches.length, 0);
 
   await writeSpoolFile(spoolDirectory, "second.json", '{"event":"prompt"}');
   watcher.emit("rename", "second.json");
-  await clock.advance(DEBOUNCE_MS);
+  await advance(clock, DEBOUNCE_MS);
   await waitFor(() => batches.length === 1);
   assert.deepEqual(
     batches[0]?.map(({ providerSessionId }) => providerSessionId),
@@ -390,7 +349,7 @@ test("a listener that throws loses its own batch and the next batch is still del
   handle.close();
   await writeSpoolFile(spoolDirectory, "third.json", '{"event":"stop"}');
   watcher.emit("rename", "third.json");
-  await clock.advance(DEBOUNCE_MS);
-  await settle();
+  await advance(clock, DEBOUNCE_MS);
+  await drainMicrotasks(20);
   assert.equal(batches.length, 1);
 });

@@ -105,8 +105,8 @@ function mouth(session: FakeSession, timers: FakeClock, now = () => 1_000) {
     session: () => session,
     settle: (id, outcome) => settled.push({ id, outcome }),
     now,
-    schedule: timers.schedule,
-    cancel: timers.cancel,
+    schedule: timers.scheduleTimer,
+    cancel: timers.cancelTimer,
   });
   return { subject, settled };
 }

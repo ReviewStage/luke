@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
+import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, isWireString, type WireRecord } from "@sidecar/wire";
 import { BrainAgent } from "./agent.js";
@@ -35,7 +36,6 @@ import {
   RECORD_CAP,
   runtimeOver,
   seededRequests,
-  settle,
   submissionsIssued,
   submit,
 } from "./harness.js";
@@ -76,10 +76,10 @@ test("a checkpoint that fails before an action refuses it, and acceptance itself
   assert.equal(h.agent.requests().length, 0);
   h.repository.accept();
   const runId = acceptedRunId(await submit(h, "send"));
-  await settle();
+  await drainMicrotasks(20);
   h.repository.refuse();
   gated.open();
-  await settle();
+  await drainMicrotasks(20);
   const record = h.agent.request(runId);
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
@@ -130,7 +130,7 @@ test("a restart marks unfinished runs interrupted and pairs a started act as unk
   const h = harness({ actions: held.actions });
   h.client.answers.push(answered([messageAction("call_1")]), answered([message("Sent.")]));
   const runId = acceptedRunId(await submit(h, "send"));
-  await settle();
+  await drainMicrotasks(20);
   // The process dies here: the action has started, its result never recorded.
   const stored = h.repository.state;
   assert.equal(stored?.requests[0]?.status, BRAIN_REQUEST_STATUS.RUNNING);
@@ -172,10 +172,10 @@ test("a retry of a submission whose acceptance is still being written awaits the
   h.client.answers.push(answered([message("once")]));
 
   const first = submit(h, "send", "sub-1");
-  await settle();
+  await drainMicrotasks(20);
   const retry = submit(h, "send", "sub-1");
   const other = submit(h, "send", "sub-1").then(() => h.agent.requests().length);
-  await settle();
+  await drainMicrotasks(20);
   // Nobody has been told anything yet, and no run stands to be found.
   assert.equal(h.agent.requests().length, 0);
   // The write refuses: every caller hears the same refusal, and no run remains.
@@ -192,7 +192,7 @@ test("a retry of a submission whose acceptance is still being written awaits the
   const accepted = await Promise.all([submit(h, "send", "sub-1"), submit(h, "send", "sub-1")]);
   assert.equal(accepted[0]?.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
   assert.deepEqual(accepted[0], accepted[1]);
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.client.inputs.length, 1);
   assert.equal(h.agent.requests().length, 1);
   // The same id with other words, or another origin, is a conflict, not a retry.
@@ -217,13 +217,13 @@ test("a stop while an acceptance is being written interrupts the run it accepted
   await h.agent.ready();
   const releaseWrite = h.repository.hold();
   const pending = submit(h, "send", "sub-1");
-  await settle();
+  await drainMicrotasks(20);
   const stopping = h.agent.stop();
   releaseWrite?.(true);
   const accepted = await pending;
   await stopping;
   assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
-  await settle();
+  await drainMicrotasks(20);
   const record = h.agent.requests()[0];
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
   assert.equal(h.client.inputs.length, 0);
@@ -248,12 +248,12 @@ test("stop settles only after a held acceptance, which the successor then finds 
   await h.agent.ready();
   const releaseWrite = h.repository.hold();
   const pending = submit(h, "send", "sub-1");
-  await settle();
+  await drainMicrotasks(20);
   let stopped = false;
   const stopping = h.agent.stop().then(() => {
     stopped = true;
   });
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(stopped, false, "stop waits for the acceptance to settle");
   releaseWrite?.(true);
   await stopping;
@@ -276,9 +276,7 @@ test("stop settles only after a held acceptance, which the successor then finds 
     store: h.store,
     createRunId: () => `successor-${nextRunId()}`,
     report: () => {},
-    now: () => h.clock.now,
-    schedule: h.clock.schedule,
-    cancel: h.clock.cancel,
+    clock: h.clock,
   });
   await successor.ready();
   const runId = h.agent.requests()[0]?.runId ?? "";
@@ -307,7 +305,7 @@ test("a copy taken before the second model answer already carries the actions th
   };
   const h = harness({ client });
   await submit(h, "send");
-  await settle();
+  await drainMicrotasks(20);
   assert.ok(release, "the second model call is held");
   const copy = h.repository.state;
   const stored = copy;
@@ -348,7 +346,7 @@ test("a copy taken before the second model answer already carries the actions th
     ]),
   );
   await submit(mixed, "send three");
-  await settle();
+  await drainMicrotasks(20);
   const midway = mixed.repository.state;
   assert.equal(midway?.requests[0]?.unknownActions, 1);
   assert.equal(midway?.journal.length, 3);
@@ -387,7 +385,7 @@ test("a mark is not visible or acknowledged before its write lands, and marking 
   assert.ok(record);
   const releaseWrite = h.repository.hold();
   const first = h.agent.markConversationRecorded(record.runId, NOW + 5);
-  await settle();
+  await drainMicrotasks(20);
   // Nothing reads the mark while the write is out, and a second caller waits
   // on the same write rather than being told yes.
   assert.equal(h.agent.request(record.runId)?.conversationRecordedAt, undefined);
@@ -399,7 +397,7 @@ test("a mark is not visible or acknowledged before its write lands, and marking 
   // The ask marker is another field: it stages its own write and touches
   // nothing of the history marker's.
   const other = h.agent.markAskRecorded(record.runId, NOW);
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(secondAnswered, false);
   releaseWrite(false);
   assert.deepEqual(await Promise.all([first, second]), [false, false]);
@@ -432,7 +430,7 @@ test("a run's success is seen by no reader before the write that keeps it has la
     const record = records.find((entry) => entry.runId === runId);
     if (record) seen.push(record.status);
   });
-  await settle();
+  await drainMicrotasks(20);
   // Hold the write that would carry the success; the turn's own end
   // checkpoint lands first, so the held one is the settle.
   let writes = 0;
@@ -445,14 +443,14 @@ test("a run's success is seen by no reader before the write that keeps it has la
     });
   };
   gated.open();
-  await settle();
+  await drainMicrotasks(20);
   assert.ok(releaseWrite, "the settle write is held");
   // Every public reader still sees the run under way.
   assert.equal(h.agent.request(runId)?.status, BRAIN_REQUEST_STATUS.RUNNING);
   assert.equal(h.agent.requests()[0]?.status, BRAIN_REQUEST_STATUS.RUNNING);
   const waited = h.agent.waitAsk(runId, 1_000);
-  await settle();
-  await h.clock.advance(h.clock.now + 1_000);
+  await drainMicrotasks(20);
+  await h.clock.advance(h.clock.instant + 1_000);
   assert.equal((await waited)?.status, BRAIN_REQUEST_STATUS.RUNNING);
   assert.ok(!seen.includes(BRAIN_REQUEST_STATUS.SUCCEEDED));
   assert.equal(h.repository.state?.requests[0]?.status, BRAIN_REQUEST_STATUS.RUNNING);
@@ -460,7 +458,7 @@ test("a run's success is seen by no reader before the write that keeps it has la
   // kept, and that is the first terminal state anyone sees.
   h.repository.save = landed;
   releaseWrite?.(false);
-  await settle();
+  await drainMicrotasks(20);
   const ended = h.agent.request(runId);
   assert.equal(ended?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(ended?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
@@ -477,7 +475,7 @@ test("a run's success is seen by no reader before the write that keeps it has la
   await ok.agent.ready();
   const okLanded = ok.repository.save;
   const okRun = acceptedRunId(await submit(ok, "hello"));
-  await settle();
+  await drainMicrotasks(20);
   let okRelease: (() => void) | undefined;
   let okWrites = 0;
   ok.repository.save = (state, transcript) => {
@@ -488,11 +486,11 @@ test("a run's success is seen by no reader before the write that keeps it has la
     });
   };
   okGate.open();
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(ok.agent.request(okRun)?.status, BRAIN_REQUEST_STATUS.RUNNING);
   ok.repository.save = okLanded;
   okRelease?.();
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(ok.agent.request(okRun)?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assert.equal(ok.repository.state?.requests[0]?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
 
@@ -503,10 +501,10 @@ test("a run's success is seen by no reader before the write that keeps it has la
   const dark = harness({ client: darkGate.client });
   await dark.agent.ready();
   const darkRun = acceptedRunId(await submit(dark, "hello"));
-  await settle();
+  await drainMicrotasks(20);
   dark.repository.refuse();
   darkGate.open();
-  await settle();
+  await drainMicrotasks(20);
   const darkEnd = await dark.agent.waitAsk(darkRun, 1);
   assert.equal(darkEnd?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(darkEnd?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
@@ -551,15 +549,15 @@ test("an ordinary observation checkpoint composed behind a held mark keeps the m
   const runId = await completedRun(h);
   const releaseWrite = h.repository.hold();
   const marking = h.agent.markConversationRecorded(runId, NOW + 1);
-  await settle();
+  await drainMicrotasks(20);
   // Periodic observation races the publication: its inference and checkpoint
   // queue behind the held mark write.
   h.client.answers.push(answered([message("noted")]));
   h.agent.rosterLook();
-  await settle();
+  await drainMicrotasks(20);
   releaseWrite(true);
   assert.equal(await marking, true);
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.client.inputs.length, 2);
   assert.equal(h.agent.request(runId)?.conversationRecordedAt, NOW + 1);
   assert.equal(h.repository.state?.requests[0]?.conversationRecordedAt, NOW + 1);
@@ -572,7 +570,7 @@ test("a terminal end and its marks overlapping a new submission and a checkpoint
   const gated = gatedClient(inner);
   const h = harness({ client: gated.client });
   const first = acceptedRunId(await submit(h, "send"));
-  await settle();
+  await drainMicrotasks(20);
   gated.open();
   // While the first run's end and marks are being saved, a second ask is
   // accepted and an observation wakes: every save composes on the last.
@@ -583,7 +581,7 @@ test("a terminal end and its marks overlapping a new submission and a checkpoint
     h.agent.markAskRecorded(first, NOW),
   ]);
   await h.agent.wake([edge(ABC)]);
-  await h.clock.advance(h.clock.now + 3_000);
+  await h.clock.advance(h.clock.instant + 3_000);
   assert.equal(second.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
   assert.equal(end?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assert.deepEqual([marked, askMarked], [true, true]);
@@ -637,11 +635,11 @@ test("a refused acceptance is never saved by an unrelated mark, and never comes 
   const a = await completedRun(h, "s");
   const held = holdNextWrite(h.repository);
   const firstMark = h.agent.markConversationRecorded(a, NOW + 1);
-  await settle();
+  await drainMicrotasks(20);
   const secondMark = h.agent.markAskRecorded(a, NOW);
   // B is provisional while its own acceptance write waits behind the marks.
   const rejectedB = submit(h, "ASK_THAT_WAS_REJECTED", "rejected-b");
-  await settle();
+  await drainMicrotasks(20);
   // Behind the held write: A's second mark lands, B's own write is refused.
   const landed = h.repository.save;
   let later = 0;
@@ -656,7 +654,7 @@ test("a refused acceptance is never saved by an unrelated mark, and never comes 
     outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
     reason: BRAIN_SUBMISSION_REJECTION.PERSISTENCE,
   });
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.client.inputs.length, 1, "no effect ran for the refused ask");
   assert.deepEqual(
     h.agent.requests().map((r) => r.runId),
@@ -686,7 +684,7 @@ test("a refused acceptance is never saved by an unrelated mark, and never comes 
     origin: BRAIN_REQUEST_ORIGIN.TYPED,
   });
   assert.equal(retried.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(relaunched.repository.state?.requests.length, 2);
 });
 
@@ -706,7 +704,7 @@ test("two overlapping submissions, one refused, leave no ghost run and execute t
     outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
     reason: BRAIN_SUBMISSION_REJECTION.PERSISTENCE,
   });
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.client.inputs.length, 1);
   assert.deepEqual(
     h.repository.state?.requests.map((r) => r.submissionId),
@@ -718,7 +716,7 @@ test("two overlapping submissions, one refused, leave no ghost run and execute t
   );
   // The refused one retried is a fresh run, and the accepted one ran once.
   assert.equal((await submit(h, "second", "b")).outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.client.inputs.length, 2);
   assert.deepEqual(
     h.repository.state?.requests.map((r) => r.submissionId),
@@ -741,7 +739,7 @@ test("an observation in flight enters no memory through an unrelated mark or acc
   // reads a real delta, moves a cursor, and then waits on the model.
   await observing.agent.wake([edge(ABC)]);
   observing.agent.releaseHeld([{ briefing: "UNCOMMITTED_OBSERVATION", decidedAt: NOW }]);
-  await settle();
+  await drainMicrotasks(20);
   // The delta was captured — an inbox entry and a capture cursor — and read
   // into working memory; the consumed cursor has not moved; the model is held.
   assert.equal(observing.sinceReads.length, 1);
@@ -770,7 +768,7 @@ test("an observation in flight enters no memory through an unrelated mark or acc
   // turn behind it, and that turn is the one that consumes the standing entry.
   inner.answers.unshift(failedAnswer("network"));
   regate.open();
-  await settle();
+  await drainMicrotasks(20);
   const after = observing.repository.state;
   assert.ok(!JSON.stringify(after?.items).includes("UNCOMMITTED_OBSERVATION"));
   assert.equal(after?.inbox.length, 0);
@@ -813,13 +811,13 @@ test("a cancel or stop landing while the start is being written ends the run uno
   cancelling.client.answers.push(answered([messageAction("call_1")]));
   const heldStart = holdWriteMatching(cancelling.repository, CARRIES_A_RUNNING_RUN);
   const runId = acceptedRunId(await submit(cancelling, "send"));
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(heldStart.held(), true);
   const cancelled = cancelling.agent.cancelAsk(runId);
-  await settle();
+  await drainMicrotasks(20);
   heldStart.release(true);
   await cancelled;
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(cancelling.agent.request(runId)?.status, BRAIN_REQUEST_STATUS.CANCELLED);
   assert.equal(cancelling.client.inputs.length, 0);
   assert.deepEqual(cancelling.performed, []);
@@ -831,7 +829,7 @@ test("a cancel or stop landing while the start is being written ends the run uno
   stopping.client.answers.push(answered([messageAction("call_1")]));
   const refusedStart = holdWriteMatching(stopping.repository, CARRIES_A_RUNNING_RUN);
   const stopRun = acceptedRunId(await submit(stopping, "send"));
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(refusedStart.held(), true);
   const stopped = stopping.agent.stop();
   refusedStart.release(false);
@@ -848,11 +846,11 @@ test("a cancel or stop landing while the start is being written ends the run uno
   h.client.answers.push(answered([messageAction("call_1")]));
   const start = holdWriteMatching(h.repository, CARRIES_A_RUNNING_RUN);
   const live = acceptedRunId(await submit(h, "send"));
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(start.held(), true);
   assert.equal(h.client.inputs.length, 0);
   start.release(true);
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.client.inputs.length, 1);
   assert.equal(held.performed.length, 1);
   const cancelledLate = await h.agent.cancelAsk(live);
@@ -863,7 +861,7 @@ test("a cancel or stop landing while the start is being written ends the run uno
     if (record && isTerminalBrainRequestStatus(record.status)) seen.push(record);
   });
   held.releases[0]?.();
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(seen.length, 1);
   assert.equal(seen[0]?.status, BRAIN_REQUEST_STATUS.CANCELLED);
   assert.equal(seen[0]?.performedActions, 0);
@@ -889,7 +887,7 @@ test("runs retention lets go of leave the live records and journal too, so the n
     const record = await ask(h, words);
     assert.ok(record);
     runIds.push(record.runId);
-    assert.equal(await h.agent.markConversationRecorded(record.runId, h.clock.now), true);
+    assert.equal(await h.agent.markConversationRecorded(record.runId, h.clock.instant), true);
   }
   // Retention ran inside the marks: the four oldest seeded runs went to make
   // room, in the file, in the live records, and in the journal the agent holds.
@@ -908,7 +906,7 @@ test("runs retention lets go of leave the live records and journal too, so the n
   // journal again, and the pruned runs stay gone.
   h.client.answers.push(answered([message("")]));
   await h.agent.wake([edge(ABC)]);
-  await h.clock.advance(h.clock.now + 3_000);
+  await h.clock.advance(h.clock.instant + 3_000);
   const after = h.repository.state;
   assert.deepEqual(new Set(after?.journal.map((entry) => entry.runId)), new Set(runIds));
   for (const runId of goneIds) assert.ok(!standing(after).has(runId));

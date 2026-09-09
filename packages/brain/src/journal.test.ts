@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_TOOL } from "@sidecar/actions";
+import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { ACTION_RESULT_STATUS, isWireString } from "@sidecar/wire";
 import { freshBrainState } from "./envelope.js";
 import {
@@ -16,7 +17,6 @@ import {
   messageAction,
   NOW,
   OBSERVATION_ACTIONS,
-  settle,
   submit,
 } from "./harness.js";
 import { UNKNOWN_ACTION_RESULT } from "./journal.js";
@@ -117,7 +117,7 @@ test("an interrupted run's started actions are counted unknown at the next launc
   const h = harness({ actions: held.actions });
   h.client.answers.push(answered([messageAction("call_1")]));
   await submit(h, "send");
-  await settle();
+  await drainMicrotasks(20);
   const relaunched = harness({}, fakeBrainStateRepository(h.repository.state));
   await relaunched.agent.ready();
   const record = relaunched.agent.requests()[0];

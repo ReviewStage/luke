@@ -3,6 +3,7 @@ import test from "node:test";
 import { REALTIME_TOOL, type RealtimeFunctionCall } from "@sidecar/actions";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
+import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { checkpointFormatTag, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import {
   type ProviderTranscriptResult,
@@ -51,7 +52,6 @@ import {
   reasoning,
   reviewing,
   session,
-  settle,
   submit,
   TRANSCRIPT_SECRET,
 } from "./harness.js";
@@ -183,22 +183,22 @@ test("a wait that runs out answers the run still pending, and the same run finis
   const h = harness({ client: slow });
   const accepted = await submit(h, "anything?", "sub-1");
   const runId = acceptedRunId(accepted);
-  await settle();
+  await drainMicrotasks(20);
   // The transport retries the same submission: the same run, no second turn.
   assert.deepEqual(await submit(h, "anything?", "sub-1"), accepted);
   const firstWait = h.agent.waitAsk(runId, 30_000);
-  await settle();
+  await drainMicrotasks(20);
   await h.clock.advance(NOW + 30_000);
   const pending = await firstWait;
   assert.equal(pending?.status, BRAIN_REQUEST_STATUS.RUNNING);
   assert.equal(pending?.runId, runId);
   // A second wait, well past the old 45-second deadline: still the one run.
   const secondWait = h.agent.waitAsk(runId, 30_000);
-  await settle();
+  await drainMicrotasks(20);
   await h.clock.advance(NOW + 60_000);
   assert.equal((await secondWait)?.status, BRAIN_REQUEST_STATUS.RUNNING);
   release?.();
-  await settle();
+  await drainMicrotasks(20);
   const done = await h.agent.waitAsk(runId, 1);
   assert.equal(done?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assert.equal(done?.text, "Done at last.");
@@ -310,7 +310,7 @@ test("restored memory opens the next turn, and held briefings are re-decided fro
     answered([message("")]),
   );
   h.agent.releaseHeld([{ briefing: "Checkout wants a decision.", decidedAt: NOW - 1 }]);
-  await settle();
+  await drainMicrotasks(20);
   const input = h.client.inputs[0] ?? [];
   assert.deepEqual(input.slice(0, 2), prior);
   assert.ok(itemText(input[2]).startsWith(`${BRAIN_INPUT_MARKER.HOLD_RELEASED} `));
@@ -369,16 +369,16 @@ test("an observation turn whose model never answers ends at the execution deadli
   const h = harness({ client: hung, executionDeadlineMs: 60_000 });
   await h.agent.wake([edge(ABC)]);
   await h.clock.advance(NOW + 3_000);
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.traces.length, 0, "the turn is still holding the model");
   await h.clock.advance(NOW + 3_000 + 60_000);
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.traces.length, 1);
   assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.WAKE);
   assert.equal(h.traces[0]?.error, "execution deadline passed");
   // The next turn is not stuck behind the dead one.
   h.agent.rosterLook();
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.traces.length, 2);
   await h.agent.stop();
 });
@@ -445,7 +445,7 @@ test("a roster look under a policy denying actions runs none", async () => {
   });
   h.client.answers.push(answered(OBSERVATION_ACTIONS), answered([message("")]));
   h.agent.rosterLook();
-  await settle();
+  await drainMicrotasks(20);
   assertNoActionReached(h);
   assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.ROSTER);
 });
@@ -454,7 +454,7 @@ test("a hold release under a policy denying actions runs none", async () => {
   const h = harness({ prepareTurn: NO_ACTS_POLICY });
   h.client.answers.push(answered(OBSERVATION_ACTIONS), answered([message("")]));
   h.agent.releaseHeld([{ briefing: INSTRUCTION_IN_DATA, decidedAt: NOW - 1 }]);
-  await settle();
+  await drainMicrotasks(20);
   assertNoActionReached(h);
   assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.HOLD_RELEASED);
 });
@@ -480,7 +480,7 @@ test("a developer ask carries every action with a live execution, revoked once t
   assert.ok(messageAction);
   h.client.answers.push(answered([messageAction]), answered([message("Done.")]));
   const asked = ask(h, "send it");
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(performedLate.length, 1);
   const [late] = performedLate;
   assert.ok(late);
@@ -520,11 +520,11 @@ test("a queued ask cancelled before its turn never starts, and its record says c
   });
   const first = acceptedRunId(await submit(h, "first?"));
   const second = acceptedRunId(await submit(h, "second?"));
-  await settle();
+  await drainMicrotasks(20);
   const cancelled = await h.agent.cancelAsk(second);
   assert.equal(cancelled?.status, BRAIN_REQUEST_STATUS.CANCELLED);
   release?.();
-  await settle();
+  await drainMicrotasks(20);
   assert.equal((await h.agent.waitAsk(first, 1))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assert.equal(inner.inputs.length, 1);
   assert.equal(h.repository.state?.requests[1]?.status, BRAIN_REQUEST_STATUS.CANCELLED);
@@ -549,12 +549,12 @@ test("a cancel while the model is thinking aborts the request and settles the ru
     },
   });
   const runId = acceptedRunId(await submit(h, "slow?"));
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(signals[0]?.aborted, false);
   const cancelled = await h.agent.cancelAsk(runId);
   assert.equal(signals[0]?.aborted, true);
   assert.equal(cancelled?.status, BRAIN_REQUEST_STATUS.RUNNING);
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.agent.request(runId)?.status, BRAIN_REQUEST_STATUS.CANCELLED);
   assert.equal(h.repository.state?.requests[0]?.status, BRAIN_REQUEST_STATUS.CANCELLED);
   assert.equal(h.repository.state?.items.length, 0);
@@ -570,10 +570,10 @@ test("a cancel between two actions keeps the first's result and refuses the seco
     answered([message("Both sent.")]),
   );
   const runId = acceptedRunId(await submit(h, "send both"));
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(performed.length, 1);
   held.releases[0]?.();
-  await settle();
+  await drainMicrotasks(20);
   // The first action's result is journaled and checkpointed before the second starts.
   const journaled = h.repository.state?.journal ?? [];
   assert.equal(journaled.length, 2);
@@ -581,7 +581,7 @@ test("a cancel between two actions keeps the first's result and refuses the seco
   assert.equal(journaled[1]?.outputJson, undefined);
   await h.agent.cancelAsk(runId);
   held.releases[1]?.();
-  await settle();
+  await drainMicrotasks(20);
   const record = h.agent.request(runId);
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.CANCELLED);
   assert.equal(record?.performedActions, 1);
@@ -657,13 +657,13 @@ test("actions run one at a time in the order the model emitted them", async () =
     answered([message("Three sent.")]),
   );
   const asked = ask(h, "send three");
-  await settle();
+  await drainMicrotasks(20);
   assert.deepEqual(order, ["start a"]);
   held.releases[0]?.();
-  await settle();
+  await drainMicrotasks(20);
   assert.deepEqual(order, ["start a", "end a", "start b"]);
   held.releases[1]?.();
-  await settle();
+  await drainMicrotasks(20);
   held.releases[2]?.();
   const record = await asked;
   assert.deepEqual(order, ["start a", "end a", "start b", "end b", "start c", "end c"]);
@@ -675,10 +675,10 @@ test("a run past its execution deadline is timed out and its action refused", as
   const h = harness({ actions: held.actions, executionDeadlineMs: 60_000 });
   h.client.answers.push(answered([messageAction("call_1")]), answered([message("Sent.")]));
   const runId = acceptedRunId(await submit(h, "send"));
-  await settle();
+  await drainMicrotasks(20);
   await h.clock.advance(NOW + 60_000);
   held.releases[0]?.();
-  await settle();
+  await drainMicrotasks(20);
   const record = h.agent.request(runId);
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.TIMED_OUT);
   assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.DEADLINE);
@@ -692,14 +692,14 @@ test("the store's generation changing under a run revokes it and fences its late
   // Only the action is answered: a revoked run asks the model for no follow-up.
   h.client.answers.push(answered([messageAction("call_1")]));
   const runId = acceptedRunId(await submit(h, "send"));
-  await settle();
+  await drainMicrotasks(20);
   const execution = held.executions[0];
   assert.equal(execution?.isRevoked(), false);
   assert.equal(await h.store.clear(), true);
   assert.equal(execution?.isRevoked(), true);
   assert.equal(h.agent.requests().length, 0);
   held.releases[0]?.();
-  await settle();
+  await drainMicrotasks(20);
   // Nothing of the old generation reached the new envelope.
   const fresh = h.store.current();
   assert.equal(fresh?.requests.length, 0);
@@ -757,10 +757,10 @@ test("a reset while the model is thinking cannot roll old memory into the new ge
     });
   };
   const held = acceptedRunId(await submit(h, "and now?"));
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(await h.store.clear(), true);
   release?.(answered([message(`late answer about ${OLD_SECRET}`)]));
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.agent.request(held), undefined);
 
   // The new generation's first ask sees nothing of the old one anywhere.
@@ -785,7 +785,7 @@ test("a reset during a transcript read or an action's result cannot write into t
   });
   h.client.answers.push(answered([message("seen")]));
   const capture = h.agent.wake([edge(ABC)]);
-  await settle();
+  await drainMicrotasks(20);
   assert.ok(releaseRead);
   assert.equal(await h.store.clear(), true);
   releaseRead({
@@ -809,10 +809,10 @@ test("a reset during a transcript read or an action's result cannot write into t
   const acting = harness({ actions: held.actions });
   acting.client.answers.push(answered([messageAction("call_1", OLD_SECRET)]));
   const runId = acceptedRunId(await submit(acting, `send ${OLD_SECRET}`));
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(await acting.store.clear(), true);
   held.releases[0]?.();
-  await settle();
+  await drainMicrotasks(20);
   acting.client.answers.push(answered([message("fresh")]));
   assert.equal((await ask(acting, "NEW_ASK"))?.text, "fresh");
   const surface = generationSurface(acting, acting.client);
@@ -846,10 +846,10 @@ test("a cancel, a deadline, or a stop settles a held read at once, and the next 
     ]),
   );
   const first = acceptedRunId(await submit(h, "read it"));
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(reads.length, 1);
   await h.agent.cancelAsk(first);
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.agent.request(first)?.status, BRAIN_REQUEST_STATUS.CANCELLED);
   assert.equal(h.client.inputs.length, 1);
 
@@ -859,7 +859,7 @@ test("a cancel, a deadline, or a stop settles a held read at once, and the next 
   h.client.answers.push(answered([message("proceeding")]));
   const second = acceptedRunId(await submit(h, "and this?"));
   assert.equal(deltas.length, 1);
-  await settle();
+  await drainMicrotasks(20);
   assert.equal((await h.agent.waitAsk(second, 1))?.text, "proceeding");
   assert.equal(h.client.inputs.length, 2);
   // The late read lands as a capture — an inbox entry and a capture cursor,
@@ -883,7 +883,7 @@ test("a cancel, a deadline, or a stop settles a held read at once, and the next 
 
   // A stop settles a held capture read too: nothing is captured, and the queue drains behind it.
   const held = h.agent.wake([edge(ABC)]);
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(deltas.length, 2);
   await h.agent.stop();
   await held;
@@ -924,7 +924,7 @@ test("work queued behind a held act opens nothing once the generation it was que
   const h = harness({ actions: held.actions });
   h.client.answers.push(answered([messageAction("call_1")]));
   await submit(h, "send");
-  await settle();
+  await drainMicrotasks(20);
   // Every observation kind queues behind the held act: a hold release with an
   // old briefing, a roster look, a coalesced wake, and a quiet retry's wakes.
   h.agent.releaseHeld([{ briefing: "OLD_SECRET_QUEUED_BRIEFING", decidedAt: NOW }]);
@@ -934,7 +934,7 @@ test("work queued behind a held act opens nothing once the generation it was que
   assert.equal(await h.store.clear(), true);
   assert.equal(h.agent.pendingWakes(), 0);
   held.releases[0]?.();
-  await settle();
+  await drainMicrotasks(20);
   await h.clock.advance(NOW + 10_000);
   // The only inference was the held ask's own, in the old generation.
   assert.equal(h.client.inputs.length, 1);
@@ -965,7 +965,7 @@ test("a briefing is not delivered after a stop or reset that lands during the tu
   const stopping = h.agent.stop();
   releasing(true);
   await stopping;
-  await settle();
+  await drainMicrotasks(20);
   assert.deepEqual(h.deliveries, []);
 
   // A reset between two deliveries withdraws the second.
@@ -995,9 +995,7 @@ test("a generation dies exactly one lifetime after its birth, on the host's cloc
   const h = harness({ client: inner });
   const generationClock = new BrainGenerationClock({
     store: h.store,
-    now: () => h.clock.now,
-    schedule: h.clock.schedule,
-    cancel: h.clock.cancel,
+    clock: h.clock,
   });
   await generationClock.start();
   inner.answers.push(answered([message(`noted ${OLD_SECRET}`)]));
@@ -1017,7 +1015,7 @@ test("a generation dies exactly one lifetime after its birth, on the host's cloc
   };
   await h.clock.advance(born.expiresAt - 1);
   const held = acceptedRunId(await submit(h, "and now?"));
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.store.generationId(), born.generationId);
   assert.ok(release, "the model holds the turn open");
 
@@ -1027,7 +1025,7 @@ test("a generation dies exactly one lifetime after its birth, on the host's cloc
   assert.equal(h.store.current()?.createdAt, born.expiresAt);
   assert.equal(h.agent.request(held), undefined);
   release?.(answered([message(`late ${OLD_SECRET}`)]));
-  await settle();
+  await drainMicrotasks(20);
 
   inner.respond = FakeClient.prototype.respond;
   inner.answers.push(answered([message("fresh")]));
@@ -1059,7 +1057,7 @@ test("an expiry is enforced at the door of a turn and a submission even when no 
   // The cursor died with the generation: the next look reads from the start.
   h.client.answers.push(answered([message("")]));
   await h.agent.wake([edge(ABC)]);
-  await h.clock.advance(h.clock.now + 3_000);
+  await h.clock.advance(h.clock.instant + 3_000);
   assert.equal(h.sinceReads.at(-1)?.cursor, undefined);
 
   // A generation that reaches its end while the app sits idle, with the
@@ -1070,10 +1068,10 @@ test("an expiry is enforced at the door of a turn and a submission even when no 
   const born = idle.store.current();
   assert.ok(born);
   for (const timer of idle.clock.timers.keys()) idle.clock.timers.delete(timer);
-  idle.clock.now = born.expiresAt;
+  idle.clock.instant = born.expiresAt;
   idle.client.answers.push(answered([message("")]));
   await idle.agent.wake([edge(ABC)]);
-  await idle.clock.advance(idle.clock.now + 3_000);
+  await idle.clock.advance(idle.clock.instant + 3_000);
   assert.notEqual(idle.store.generationId(), born.generationId);
   assert.equal(idle.store.current()?.requests.length, 0);
 });
@@ -1082,9 +1080,7 @@ test("a compaction and a fortnight of writes never extend a generation's life", 
   const h = harness();
   const generationClock = new BrainGenerationClock({
     store: h.store,
-    now: () => h.clock.now,
-    schedule: h.clock.schedule,
-    cancel: h.clock.cancel,
+    clock: h.clock,
   });
   await generationClock.start();
   h.client.answers.push(answered([message("one")]));
@@ -1124,9 +1120,7 @@ test("a Clear or expiry asked for while a write is out on disk revokes a held ac
     const h = harness({ actions });
     const generationClock = new BrainGenerationClock({
       store: h.store,
-      now: () => h.clock.now,
-      schedule: h.clock.schedule,
-      cancel: h.clock.cancel,
+      clock: h.clock,
     });
     await generationClock.start();
     h.client.answers.push(answered([message("first")]));
@@ -1136,16 +1130,16 @@ test("a Clear or expiry asked for while a write is out on disk revokes a held ac
     // The action's start is durable; its preparation is held.
     h.client.answers.push(answered([messageAction("call_1")]));
     const runId = acceptedRunId(await submit(h, "send"));
-    await settle();
+    await drainMicrotasks(20);
     assert.ok(releasePreparation, "the performer holds the action");
     assert.equal(h.repository.state?.journal.length, 1);
     // A metadata write of another run is out on disk when the end is asked for.
     const release = h.repository.hold();
     const marking = h.agent.markConversationRecorded(runId, NOW);
-    await settle();
+    await drainMicrotasks(20);
     assert.ok(h.repository.holding, "a write is on disk");
     if (ending === "clear") {
-      void h.store.clear(h.clock.now + 1);
+      void h.store.clear(h.clock.instant + 1);
     } else {
       await h.clock.advance(born.expiresAt);
     }
@@ -1153,10 +1147,10 @@ test("a Clear or expiry asked for while a write is out on disk revokes a held ac
     assert.equal(h.store.holdsGeneration(born.generationId), false);
     assert.equal(h.agent.request(runId), undefined);
     releasePreparation();
-    await settle();
+    await drainMicrotasks(20);
     release(true);
     await marking;
-    await settle();
+    await drainMicrotasks(20);
     await h.store.flush();
     assert.equal(effects, 0, `${ending}: an effect dispatched after the fence`);
     assert.equal(h.store.current()?.journal.length, 0);
@@ -1176,7 +1170,7 @@ test("a Clear pressed while a starting agent's load is still reading the file le
   const releaseRead = repository.holdRead();
   const h = harness({}, repository);
   const readying = h.agent.ready();
-  await settle();
+  await drainMicrotasks(20);
   assert.ok(repository.holding, "the load is reading the file");
   const clearing = h.store.clear(NOW);
   const fresh = h.store.generationId();
@@ -1201,7 +1195,7 @@ test("an ask during a client quiet ends as an honest failure with no effects, an
   h.client.answers.push(quietAnswer(NOW + 60_000));
   const first = await submit(h, "hello", "sub-quiet");
   const runId = acceptedRunId(first);
-  await settle();
+  await drainMicrotasks(20);
   // The run is not held for the quiet to end: it settles as a failed call,
   // with nothing performed and nothing delivered.
   const record = h.agent.request(runId);
@@ -1270,12 +1264,12 @@ test("a stop during a held initial bootstrap settles at once; the open finishing
       question: "hello",
       origin: BRAIN_REQUEST_ORIGIN.TYPED,
     });
-    await settle();
+    await drainMicrotasks(20);
     let stopped = false;
     const stopping = agent.stop().then(() => {
       stopped = true;
     });
-    await settle();
+    await drainMicrotasks(20);
     assert.equal(stopped, true, "stop settled while the bootstrap was still held");
     await stopping;
     await ready;
@@ -1285,11 +1279,11 @@ test("a stop during a held initial bootstrap settles at once; the open finishing
     // The open finishes after everything settled: the context is let go of,
     // once, and never installed.
     held.release();
-    await settle();
+    await drainMicrotasks(20);
     assert.equal(held.disposed(), 1);
     // Still not installed: the generation stays as the stop left it.
     assert.match((await agent.incompatibility()) ?? "", /replaced while its context was opening/u);
-    await settle();
+    await drainMicrotasks(20);
     assert.equal(held.disposed(), 1);
   }
 });
@@ -1354,12 +1348,12 @@ test("a reopen claimed just before a stop installs nothing: the stop's signal is
   h.client.answers.push(failedAnswer("boom"));
   const accepted = await submit(h, "fail");
   assert.ok(accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
-  await settle();
+  await drainMicrotasks(20);
   assert.ok(releaseReopen, "the failed turn is reopening its context");
   const stopping = h.agent.stop();
   releaseReopen?.();
   await stopping;
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(disposed, 1);
 });
 
@@ -1369,13 +1363,13 @@ test("an ask arriving while the model is thinking is steered into that run and a
   const h = harness({ client: gated.client });
   inner.answers.push(answered([message("First alone.")]), answered([message("Both answered.")]));
   const first = acceptedRunId(await submit(h, "first?"));
-  await settle();
+  await drainMicrotasks(20);
   const second = acceptedRunId(await submit(h, "second?"));
-  await settle();
+  await drainMicrotasks(20);
   // The second ask is running inside the first's execution, not queued behind it.
   assert.equal(h.agent.request(second)?.status, BRAIN_REQUEST_STATUS.RUNNING);
   gated.open();
-  await settle();
+  await drainMicrotasks(20);
   // Words steered in after the model had already answered are not lost: the
   // run asks once more with them, and the run's reply is everything it said,
   // the answer it had already given and the one that took both in.
@@ -1396,13 +1390,13 @@ test("steering lands between tool calls: every emitted call is answered before t
   const h = harness({ actions: held.actions });
   h.client.answers.push(answered([messageAction("call_1")]), answered([message("Done both.")]));
   const first = acceptedRunId(await submit(h, "send"));
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(held.performed.length, 1);
   const second = acceptedRunId(await submit(h, "and this?"));
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.agent.request(second)?.status, BRAIN_REQUEST_STATUS.RUNNING);
   held.releases[0]?.();
-  await settle();
+  await drainMicrotasks(20);
   assert.equal((await h.agent.waitAsk(first, 1))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assert.equal((await h.agent.waitAsk(second, 1))?.text, "Done both.");
   const secondInput = h.client.inputs[1] ?? [];
@@ -1429,12 +1423,12 @@ test("a steered ask cancelled before the run ends is settled cancelled and takes
   // record's claim on the reply.
   inner.answers.push(answered([message("First.")]), answered([message("Reply.")]));
   const first = acceptedRunId(await submit(h, "first?"));
-  await settle();
+  await drainMicrotasks(20);
   const second = acceptedRunId(await submit(h, "second?"));
-  await settle();
+  await drainMicrotasks(20);
   assert.equal((await h.agent.cancelAsk(second))?.status, BRAIN_REQUEST_STATUS.CANCELLED);
   gated.open();
-  await settle();
+  await drainMicrotasks(20);
   assert.equal((await h.agent.waitAsk(first, 1))?.text, "First.\n\nReply.");
   assert.equal(h.agent.request(second)?.status, BRAIN_REQUEST_STATUS.CANCELLED);
   assert.equal(h.agent.request(second)?.text, undefined);
@@ -1445,15 +1439,15 @@ test("cancelling the run under way pairs its pending call, and the ask behind it
   const h = harness({ actions: held.actions });
   h.client.answers.push(answered([messageAction("call_1")]), answered([message("Second reply.")]));
   const first = acceptedRunId(await submit(h, "send"));
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(held.performed.length, 1);
   // The run is still at its held act, so the record settles cancelled only
   // once that action returns; what the cancel does now is revoke the run.
   await h.agent.cancelAsk(first);
   const second = acceptedRunId(await submit(h, "stop, do this instead"));
-  await settle();
+  await drainMicrotasks(20);
   held.releases[0]?.();
-  await settle();
+  await drainMicrotasks(20);
   assert.equal((await h.agent.waitAsk(first, 1))?.status, BRAIN_REQUEST_STATUS.CANCELLED);
   assert.equal((await h.agent.waitAsk(second, 1))?.text, "Second reply.");
   // The interrupted run's call left no dangling function_call in what the next turn read or kept.
@@ -1474,7 +1468,7 @@ test("asks that arrive while a review runs open one turn together, each settled 
   const { h, inner, release } = await reviewing(answered([message("One reply for both.")]));
   const first = acceptedRunId(await submit(h, "first?"));
   const second = acceptedRunId(await submit(h, "second?"));
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(inner.inputs.length, 0);
   await release();
   assert.equal(inner.inputs.length, 2);
@@ -1540,14 +1534,14 @@ test("a steered companion shares the run's persistence failure: a final write th
   // The steered words make the run ask once more; the second answer is the run's reply.
   inner.answers.push(answered([message("First alone.")]), answered([message("Reply for both.")]));
   const first = acceptedRunId(await submit(h, "first?"));
-  await settle();
+  await drainMicrotasks(20);
   const second = acceptedRunId(await submit(h, "second?"));
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.agent.request(second)?.status, BRAIN_REQUEST_STATUS.RUNNING);
   // The disk refuses from here: the run's final checkpoint cannot land.
   h.repository.refuse();
   gated.open();
-  await settle();
+  await drainMicrotasks(20);
   const primary = h.agent.request(first);
   const companion = h.agent.request(second);
   assert.equal(primary?.status, BRAIN_REQUEST_STATUS.FAILED);
@@ -1575,12 +1569,12 @@ test("a rider settles when the shared turn dies to a thrown hook after its check
   });
   inner.answers.push(answered([message("First alone.")]), answered([message("Both.")]));
   const first = acceptedRunId(await submit(h, "first?"));
-  await settle();
+  await drainMicrotasks(20);
   const second = acceptedRunId(await submit(h, "second?"));
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.agent.request(second)?.status, BRAIN_REQUEST_STATUS.RUNNING);
   gated.open();
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.agent.request(first)?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(h.agent.request(second)?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.ok(h.agent.requests().every((record) => record.status !== BRAIN_REQUEST_STATUS.RUNNING));
@@ -1591,7 +1585,7 @@ test("riders committed running before a turn refused at its door are settled wit
   const { h, inner, release } = await reviewing();
   const first = acceptedRunId(await submit(h, "first?"));
   const second = acceptedRunId(await submit(h, "second?"));
-  await settle();
+  await drainMicrotasks(20);
   // The generation is replaced the instant the primary is marked running, so
   // the drained turn reaches its door over a memory that no longer stands.
   let reset = false;
@@ -1618,7 +1612,7 @@ test("asks queued behind a primary that is cancelled or whose start the store re
   const { h, inner, release } = await reviewing(answered([message("second answered")]));
   const first = acceptedRunId(await submit(h, "first?"));
   const second = acceptedRunId(await submit(h, "second?"));
-  await settle();
+  await drainMicrotasks(20);
   // The primary is cancelled while the queue still holds them both.
   assert.equal((await h.agent.cancelAsk(first))?.status, BRAIN_REQUEST_STATUS.CANCELLED);
   await release();
@@ -1630,7 +1624,7 @@ test("asks queued behind a primary that is cancelled or whose start the store re
   const refusing = refused.h;
   const third = acceptedRunId(await submit(refusing, "third?"));
   const fourth = acceptedRunId(await submit(refusing, "fourth?"));
-  await settle();
+  await drainMicrotasks(20);
   refusing.repository.refuse();
   await refused.release();
   assert.equal(refusing.agent.request(third)?.status, BRAIN_REQUEST_STATUS.FAILED);
@@ -1676,7 +1670,7 @@ test("an idle ask pays no debounce, and one that arrives during a turn opens the
 
   const { h, inner, release } = await reviewing(answered([message("answered")]));
   const queued = acceptedRunId(await submit(h, "queued?"));
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.agent.request(queued)?.status, BRAIN_REQUEST_STATUS.QUEUED);
   await release();
   // Nothing advanced the clock: the run ending is what drained the queue.
@@ -1781,7 +1775,7 @@ test("an ask already drained but waiting behind another turn takes its words wit
   const keptRun = acceptedRunId(await submit(h, "kept-behind-1e9b"));
   const cancelledRun = acceptedRunId(await submit(h, "cancelled-behind-5c7d"));
   await h.clock.advance(NOW + 500);
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(h.agent.request(cancelledRun)?.status, BRAIN_REQUEST_STATUS.QUEUED);
   assert.equal((await h.agent.cancelAsk(cancelledRun))?.status, BRAIN_REQUEST_STATUS.CANCELLED);
   await release();
@@ -1802,7 +1796,7 @@ test("folded asks left alone by cancelling every ordinary one still open their t
   for (let index = 0; index < QUEUE_DEFAULTS.CAPACITY; index += 1) {
     ordinary.push(acceptedRunId(await submit(h, `ordinary ${index} marker-0d4c`)));
   }
-  await settle();
+  await drainMicrotasks(20);
   for (const runId of ordinary) {
     assert.equal((await h.agent.cancelAsk(runId))?.status, BRAIN_REQUEST_STATUS.CANCELLED);
   }
@@ -1837,7 +1831,7 @@ test("cancelling every waiting ask, folded ones included, leaves nothing queued,
   assert.equal(h.clock.timers.size, 0);
   // Stale summary metadata does not hold the conversation: the next ask opens its own turn at once.
   const next = acceptedRunId(await submit(h, "after all of them"));
-  await settle();
+  await drainMicrotasks(20);
   assert.equal((await h.agent.waitAsk(next, 1))?.text, "fresh");
   const opening = (inner.inputs[1] ?? []).map(itemText).join("\n");
   assert.ok(!opening.includes("summarized because the queue was full"));
@@ -1847,7 +1841,7 @@ test("a refused final checkpoint fails a drained batch's primary and its riders 
   const { h, release } = await reviewing(answered([message("reply for both")]));
   const first = acceptedRunId(await submit(h, "first?"));
   const second = acceptedRunId(await submit(h, "second?"));
-  await settle();
+  await drainMicrotasks(20);
   // The disk refuses from the moment the drained turn starts, so what cannot
   // land is its final checkpoint rather than its opening record.
   h.agent.subscribe((records) => {
@@ -1871,7 +1865,7 @@ test("a refused final checkpoint fails a drained batch's primary and its riders 
 test("a Clear with an ask still queued opens nothing for it and leaves no timer standing", async () => {
   const { h, inner, release } = await reviewing();
   const queued = acceptedRunId(await submit(h, "queued?"));
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(await h.store.clear(), true);
   await release();
   // The queued ask belonged to the memory the Clear replaced: no turn opens
@@ -1884,11 +1878,11 @@ test("a Clear with an ask still queued opens nothing for it and leaves no timer 
 test("a stop with an ask still queued records it interrupted and opens nothing", async () => {
   const { h, inner, release } = await reviewing();
   const queued = acceptedRunId(await submit(h, "queued?"));
-  await settle();
+  await drainMicrotasks(20);
   const stopping = h.agent.stop();
   await release();
   await stopping;
-  await settle();
+  await drainMicrotasks(20);
   assert.equal(inner.inputs.length, 1);
   assert.equal(h.agent.request(queued)?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
 });

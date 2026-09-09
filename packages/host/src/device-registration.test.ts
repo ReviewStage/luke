@@ -61,8 +61,8 @@ function registration(
     client,
     state: deviceStateFile(() => directory),
     mintInstallationId: mint,
-    schedule: clock.schedule,
-    cancel: clock.cancel,
+    schedule: clock.scheduleTimer,
+    cancel: clock.cancelTimer,
   });
 }
 
@@ -157,11 +157,11 @@ test("each beat moves last seen, and a row the service no longer holds is regist
   const subject = registration(directory, client, clock);
   await subject.start();
 
-  await clock.advance(clock.now + DEVICE_HEARTBEAT_INTERVAL_MS);
+  await clock.advance(clock.instant + DEVICE_HEARTBEAT_INTERVAL_MS);
   assert.deepEqual(calls.at(-1), { kind: "heartbeat", body: { deviceId: DEVICE_ID } });
   assert.equal(clock.armed(), 1);
 
-  await clock.advance(clock.now + DEVICE_HEARTBEAT_INTERVAL_MS);
+  await clock.advance(clock.instant + DEVICE_HEARTBEAT_INTERVAL_MS);
   assert.deepEqual(
     calls.map((call) => call.kind),
     ["register", "heartbeat", "heartbeat", "register"],
@@ -182,7 +182,7 @@ test("a registration that did not land is tried again by the next beat, and a la
   assert.deepEqual(storedState(directory), { installationId: INSTALLATION_ID.toLowerCase() });
 
   answer = { deviceId: DEVICE_ID };
-  await clock.advance(clock.now + DEVICE_HEARTBEAT_INTERVAL_MS);
+  await clock.advance(clock.instant + DEVICE_HEARTBEAT_INTERVAL_MS);
   assert.deepEqual(
     calls.map((call) => call.kind),
     ["register", "register"],
@@ -200,7 +200,7 @@ test("a registration that did not land is tried again by the next beat, and a la
   };
   const racing = registration(directory, slow, clock);
   await racing.start();
-  const beat = clock.advance(clock.now + DEVICE_HEARTBEAT_INTERVAL_MS);
+  const beat = clock.advance(clock.instant + DEVICE_HEARTBEAT_INTERVAL_MS);
   await racing.stop({ forget: false });
   release?.();
   await beat;

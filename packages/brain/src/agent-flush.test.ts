@@ -13,6 +13,7 @@ import {
   type ModelAdapter,
   type ModelRequestOptions,
   type ModelResponse,
+  systemClock,
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { BrainAgent, type BrainFlushInput, type BrainFlushMarkerStore } from "./agent.js";
@@ -165,7 +166,7 @@ function agentWith(
     report: (line) => {
       reports.push(line);
     },
-    now: () => NOW,
+    clock: { ...systemClock, now: () => NOW },
     beforeCompaction: hook,
     ...(launch.marker ? { flushMarker: launch.marker } : undefined),
   });

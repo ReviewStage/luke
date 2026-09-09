@@ -172,7 +172,7 @@ export class ChildRuns {
     if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
       return { delivered: false, reason: "the conversation's memory cannot be run" };
     }
-    const text = childCompletionInputText(completion, record, this.#seam.now());
+    const text = childCompletionInputText(completion, record, this.#seam.clock.now());
     const active = this.#options.active();
     if (
       active &&
