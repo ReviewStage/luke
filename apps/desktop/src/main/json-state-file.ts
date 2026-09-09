@@ -22,13 +22,13 @@ export interface JsonStateFileOptions<T> {
 export interface JsonStateFile<T> {
   /** The stored record, or nothing. Reads the file on every call. */
   read(): T | undefined;
-  /** Persists the record. Answers whether it reached disk. */
-  save(state: T): boolean;
   /**
    * Persists `mutate`'s answer over whatever is on disk at this moment, rather
-   * than over a record read earlier, and answers what was persisted. Two
-   * processes write Luke's onboarding record, each owning its own moments, so
-   * a writer that saved over its own older read would drop the other's.
+   * than over a record read earlier, and answers what was persisted. The one
+   * writer, because two processes write Luke's onboarding record, each owning
+   * its own moments, and one saving over its own older read would drop the
+   * other's. A write that cannot land is reported and nothing else: there is
+   * no recovery a caller here could take that the next write does not.
    */
   update(mutate: (current: T | undefined) => T): T;
 }
@@ -49,23 +49,17 @@ export function jsonStateFile<T>(options: JsonStateFileOptions<T>): JsonStateFil
     }
     return isRecord(parsed) ? options.read(parsed) : undefined;
   };
-  const save = (state: T): boolean => {
-    try {
-      fs.writeFileSync(filePath(), `${JSON.stringify(options.write(state))}\n`);
-    } catch (error) {
-      options.report?.(
-        `Could not persist ${options.fileName}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      return false;
-    }
-    return true;
-  };
   return {
     read,
-    save,
     update: (mutate) => {
       const next = mutate(read());
-      save(next);
+      try {
+        fs.writeFileSync(filePath(), `${JSON.stringify(options.write(next))}\n`);
+      } catch (error) {
+        options.report?.(
+          `Could not persist ${options.fileName}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
       return next;
     },
   };

@@ -985,7 +985,7 @@ const updateService = new UpdateService({
   lastRunVersion: {
     read: () => lastRunVersionFile.read()?.version,
     write: (version) => {
-      lastRunVersionFile.save({ version });
+      lastRunVersionFile.update(() => ({ version }));
     },
   },
 });

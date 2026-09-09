@@ -11,43 +11,29 @@ import { ONBOARDING_STATE_FILE, onboardingStateFile } from "./onboarding-state";
 const SIGNED_IN_AT = "2026-08-24T00:00:00.000Z";
 const LATER = "2026-08-24T00:05:00.000Z";
 
-function directory(t: TestContext): string {
-  const made = fs.mkdtempSync(path.join(os.tmpdir(), "luke-onboarding-"));
-  t.after(() => {
-    fs.rmSync(made, { recursive: true, force: true });
-  });
-  return made;
-}
-
 function fileIn(t: TestContext) {
-  const root = directory(t);
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "luke-onboarding-"));
+  t.after(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
   return { root, file: onboardingStateFile(() => root) };
 }
+
+const MOMENTS = {
+  introductionCompletedAt: SIGNED_IN_AT,
+  arrivalSignedInAt: SIGNED_IN_AT,
+  arrivalSpokenAt: LATER,
+  arrivalFirstAnnouncementAt: LATER,
+  calendarOnboardingRequiredAt: SIGNED_IN_AT,
+  calendarOnboardingSettledAt: LATER,
+  calendarOnboardingSkippedAt: LATER,
+};
 
 test("the record round-trips every moment, and anything unreadable reads as no record", (t) => {
   const { root, file } = fileIn(t);
   assert.equal(file.read(), undefined);
-  assert.equal(
-    file.save({
-      introductionCompletedAt: SIGNED_IN_AT,
-      arrivalSignedInAt: SIGNED_IN_AT,
-      arrivalSpokenAt: LATER,
-      arrivalFirstAnnouncementAt: LATER,
-      calendarOnboardingRequiredAt: SIGNED_IN_AT,
-      calendarOnboardingSettledAt: LATER,
-      calendarOnboardingSkippedAt: LATER,
-    }),
-    true,
-  );
-  assert.deepEqual(file.read(), {
-    introductionCompletedAt: SIGNED_IN_AT,
-    arrivalSignedInAt: SIGNED_IN_AT,
-    arrivalSpokenAt: LATER,
-    arrivalFirstAnnouncementAt: LATER,
-    calendarOnboardingRequiredAt: SIGNED_IN_AT,
-    calendarOnboardingSettledAt: LATER,
-    calendarOnboardingSkippedAt: LATER,
-  });
+  file.update(() => MOMENTS);
+  assert.deepEqual(file.read(), MOMENTS);
 
   const stored = path.join(root, ONBOARDING_STATE_FILE);
   for (const text of ["{", "[]", "7", '"words"']) {
@@ -86,7 +72,12 @@ test("a write that cannot land is reported, not thrown", () => {
     () => path.join(os.tmpdir(), "luke-onboarding-absent", "deeper"),
     (message) => reported.push(message),
   );
-  assert.equal(file.save({ arrivalSignedInAt: SIGNED_IN_AT }), false);
+  assert.deepEqual(
+    file.update(() => ({ arrivalSignedInAt: SIGNED_IN_AT })),
+    {
+      arrivalSignedInAt: SIGNED_IN_AT,
+    },
+  );
   assert.equal(reported.length, 1);
   assert.match(reported[0] ?? "", /onboarding\.json/);
 });
@@ -94,7 +85,7 @@ test("a write that cannot land is reported, not thrown", () => {
 test("an update merges over the record on disk, not over an older read", (t) => {
   const { root, file } = fileIn(t);
   const other = onboardingStateFile(() => root);
-  file.save({ arrivalSignedInAt: SIGNED_IN_AT });
+  file.update(() => ({ arrivalSignedInAt: SIGNED_IN_AT }));
   // The desktop process finishes the introduction while the Gateway holds an
   // older read; neither writer may drop the other's moment.
   other.update((current) => ({ ...current, introductionCompletedAt: LATER }));
