@@ -1,14 +1,7 @@
 import path from "node:path";
-import type { ProviderTranscriptSinceReading } from "@sidecar/session";
 import { isRecord, oneLine, text, type WireRecord } from "@sidecar/wire";
-import { readDirectory, readTail, statDirectoryEntry, tailRecords } from "../shared/local-files.js";
-import {
-  boundedTranscript,
-  readRecordsSince,
-  TRANSCRIPT_BOUNDS,
-  type TranscriptPathCache,
-  transcriptLine,
-} from "../shared/local-transcript.js";
+import { TRANSCRIPT_BOUNDS, transcriptLine } from "../shared/jsonl-transcript.js";
+import { readDirectory, statDirectoryEntry } from "../shared/local-files.js";
 import {
   OMP_CONTENT_TYPE,
   OMP_MESSAGE_ROLE,
@@ -30,18 +23,6 @@ import {
 const OMP_SPEAKER_NAME = "OMP";
 const OMP_TOOL_INPUT_KEY = ["command", "path", "file_path", "pattern", "prompt"] as const;
 
-export interface OmpTranscriptRequest {
-  ompHome: string;
-  providerSessionId: string;
-  readTailBytes?: number;
-  maximumRenderedLength?: number;
-}
-
-export interface OmpTranscriptSinceRequest extends OmpTranscriptRequest {
-  cursor?: string;
-  pathCache: TranscriptPathCache;
-}
-
 function toolCallLine(block: WireRecord): string | undefined {
   const name = text(block.name);
   if (!name) return undefined;
@@ -55,7 +36,7 @@ function toolCallLine(block: WireRecord): string | undefined {
   return transcriptLine.toolCall(name);
 }
 
-function linesFromRecord(record: WireRecord): string[] {
+export function linesFromOmpRecord(record: WireRecord): string[] {
   const message = ompMessageFrom(record);
   if (!message) return [];
   const role = text(message.role);
@@ -94,7 +75,7 @@ function linesFromRecord(record: WireRecord): string[] {
  * ends in `_<id>.jsonl` inside one encoded-cwd directory, without trusting
  * the id as a path.
  */
-async function transcriptFilePath(
+export async function ompTranscriptFilePath(
   ompHome: string,
   providerSessionId: string,
 ): Promise<string | undefined> {
@@ -110,45 +91,4 @@ async function transcriptFilePath(
     }
   }
   return undefined;
-}
-
-/**
- * Reads one session's recent transcript into a bounded rendering, or nothing
- * when no recording exists for that id.
- */
-export async function readOmpSessionTranscript(
-  request: OmpTranscriptRequest,
-): Promise<string | undefined> {
-  const filePath = await transcriptFilePath(request.ompHome, request.providerSessionId);
-  if (!filePath) return undefined;
-
-  const tail = await readTail(filePath, request.readTailBytes ?? TRANSCRIPT_BOUNDS.READ_TAIL_BYTES);
-  return boundedTranscript(
-    tailRecords(tail).flatMap(linesFromRecord),
-    request.maximumRenderedLength,
-  );
-}
-
-/**
- * Renders what the session's recording has gained since `cursor`, or nothing
- * when no recording exists for that id.
- */
-export async function readOmpSessionTranscriptSince(
-  request: OmpTranscriptSinceRequest,
-): Promise<ProviderTranscriptSinceReading | undefined> {
-  const filePath = await request.pathCache.resolve(request.providerSessionId, () =>
-    transcriptFilePath(request.ompHome, request.providerSessionId),
-  );
-  if (!filePath) return undefined;
-
-  const since = await readRecordsSince(
-    filePath,
-    request.cursor,
-    request.readTailBytes ?? TRANSCRIPT_BOUNDS.READ_TAIL_BYTES,
-  );
-  return {
-    text: boundedTranscript(since.records.flatMap(linesFromRecord)) ?? "",
-    cursor: since.cursor,
-    truncated: since.truncated,
-  };
 }

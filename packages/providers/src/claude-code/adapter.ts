@@ -6,8 +6,6 @@ import {
   type ProviderSessionObservation,
   type ProviderTranscriptResult,
   type ProviderTranscriptSinceResult,
-  providerTranscriptResult,
-  providerTranscriptSinceResult,
   SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type SessionDetail,
@@ -23,13 +21,12 @@ import {
   wholeNumber,
 } from "@sidecar/wire";
 import {
+  discoverSessionFiles,
   type HookStatusRefinement,
   hookRefinedStatus,
-  localSessionStatus,
-} from "../shared/hook-status.js";
-import {
-  discoverSessionFiles,
   LOCAL_ADAPTER_DEFAULTS,
+  LocalFileSessionAdapter,
+  localSessionStatus,
   readDirectory,
   readHead,
   readTail,
@@ -38,9 +35,8 @@ import {
   statDirectoryEntry,
   tailRecords,
   workspaceLabel,
-} from "../shared/local-files.js";
-import { LocalFileSessionAdapter } from "../shared/local-session-adapter.js";
-import { TranscriptPathCache } from "../shared/local-transcript.js";
+} from "../shared/local-session-adapter.js";
+import { type JsonlTranscriptReader, jsonlTranscriptReader } from "../shared/jsonl-transcript.js";
 import {
   CLAUDE_HOOK_EVENT,
   type ClaudeHookEvent,
@@ -48,7 +44,8 @@ import {
   type ObservedClaudeHookEvent,
   readClaudeHookEvent,
 } from "./hooks.js";
-import { readClaudeSessionTranscript, readClaudeSessionTranscriptSince } from "./transcript.js";
+import { CLAUDE_TOOL_INPUT_KEYS } from "./records.js";
+import { claudeTranscriptFilePath, linesFromClaudeRecord } from "./transcript.js";
 
 const CLAUDE_CODE_PROVIDER_ID = PROVIDER_ID.CLAUDE_CODE;
 const CLAUDE_CODE_PROVIDER_NAME = "Claude Code";
@@ -97,8 +94,6 @@ const CLAUDE_CONTENT_TYPE = {
 } as const;
 
 /** Tool inputs whose value names the work, in the order they read best. */
-const CLAUDE_TOOL_INPUT_KEY = ["description", "file_path", "pattern", "command", "prompt"] as const;
-
 const CLAUDE_ADAPTER_DEFAULTS = {
   MAXIMUM_PROJECT_DIRECTORIES: 200,
   /**
@@ -227,7 +222,7 @@ function activityFromAssistant(record: WireRecord): string | undefined {
     const name = text(block.name);
     if (!name) continue;
     const input = isRecord(block.input) ? block.input : {};
-    for (const key of CLAUDE_TOOL_INPUT_KEY) {
+    for (const key of CLAUDE_TOOL_INPUT_KEYS) {
       const detail = oneLine(text(input[key]), CLAUDE_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH);
       if (detail) return `${name}: ${detail}`;
     }
@@ -529,13 +524,17 @@ export class ClaudeCodeSessionAdapter extends LocalFileSessionAdapter<
   readonly provider = CLAUDE_CODE_PROVIDER;
 
   readonly #claudeHome: string;
-  readonly #transcriptPaths = new TranscriptPathCache();
+  readonly #transcripts: JsonlTranscriptReader;
   readonly #hookEventsDirectory: (() => string | undefined) | undefined;
 
   constructor(options: ClaudeCodeAdapterOptions = {}) {
     super(options);
     this.#claudeHome = options.claudeHome ?? defaultClaudeHome();
     this.#hookEventsDirectory = options.hookEventsDirectory;
+    this.#transcripts = jsonlTranscriptReader({
+      locate: (providerSessionId) => claudeTranscriptFilePath(this.#claudeHome, providerSessionId),
+      lines: linesFromClaudeRecord,
+    });
   }
 
   protected async parse(candidate: SessionFileCandidate): Promise<ParsedClaudeSessionTail> {
@@ -589,25 +588,13 @@ export class ClaudeCodeSessionAdapter extends LocalFileSessionAdapter<
   }
 
   override readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult> {
-    return providerTranscriptResult(
-      readClaudeSessionTranscript({
-        claudeHome: this.#claudeHome,
-        providerSessionId,
-      }),
-    );
+    return this.#transcripts.read(providerSessionId);
   }
 
   override readTranscriptSince(
     providerSessionId: string,
     cursor?: string,
   ): Promise<ProviderTranscriptSinceResult> {
-    return providerTranscriptSinceResult(
-      readClaudeSessionTranscriptSince({
-        claudeHome: this.#claudeHome,
-        providerSessionId,
-        cursor,
-        pathCache: this.#transcriptPaths,
-      }),
-    );
+    return this.#transcripts.readSince(providerSessionId, cursor);
   }
 }

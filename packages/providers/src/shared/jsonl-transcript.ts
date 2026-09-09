@@ -9,9 +9,22 @@
  * a reader sees the whole rendering the tail it read produces.
  */
 
-import { OMISSION_MARKER, transcriptReadTailBytes } from "@sidecar/session";
+import {
+  ACT_RESULT_STATUS,
+  OMISSION_MARKER,
+  type ProviderTranscriptResult,
+  type ProviderTranscriptSinceResult,
+  transcriptReadTailBytes,
+} from "@sidecar/session";
 import { isRecord, isWireString, recordFromJsonLine, text, type WireRecord } from "@sidecar/wire";
-import { type FileWindow, fileStats, readRange, readTailWindow } from "./local-files.js";
+import {
+  type FileWindow,
+  fileStats,
+  readRange,
+  readTail,
+  readTailWindow,
+  tailRecords,
+} from "./local-files.js";
 
 export const transcriptLine = {
   developer: (words: string) => `Developer: ${words}`,
@@ -189,4 +202,76 @@ export class TranscriptPathCache {
     }
     return located;
   }
+}
+
+/**
+ * The transcript-not-found refusal. It is the same answer for a session this
+ * provider never wrote a record file for and for one whose file has since
+ * gone: what a reader learns is that there is nothing to render, and nothing
+ * about the provider's own directory.
+ */
+const TRANSCRIPT_NOT_FOUND = {
+  status: ACT_RESULT_STATUS.REJECTED,
+  reason: "That session's transcript could not be found.",
+} as const;
+
+/** How one provider's stored records become transcript lines. */
+export interface JsonlTranscriptInput {
+  /** Where this session's record file is, or nothing when there is none. */
+  locate(providerSessionId: string): Promise<string | undefined>;
+  /** The attributed lines one stored record yields, or none. */
+  lines(record: WireRecord): readonly string[];
+  readTailBytes?: number;
+  maximumRenderedLength?: number;
+}
+
+export interface JsonlTranscriptReader {
+  read(providerSessionId: string): Promise<ProviderTranscriptResult>;
+  readSince(providerSessionId: string, cursor?: string): Promise<ProviderTranscriptSinceResult>;
+}
+
+/**
+ * Every on-demand read of a JSONL-backed transcript: the bounded tail read,
+ * the cursor arithmetic, the path cache an incremental read walks by, and the
+ * bounds every rendering is held to. A provider supplies only where its
+ * records live and what one of them says; nothing here opens a file for
+ * writing, and the rendering is kept nowhere.
+ */
+export function jsonlTranscriptReader(input: JsonlTranscriptInput): JsonlTranscriptReader {
+  const readTailBytes = input.readTailBytes ?? TRANSCRIPT_BOUNDS.READ_TAIL_BYTES;
+  const paths = new TranscriptPathCache();
+  return {
+    async read(providerSessionId) {
+      // A whole-tail read walks the provider's directory itself: it happens
+      // once at a developer's ask, where the incremental read repeats on
+      // every wake and is what the path cache exists for.
+      const filePath = await input.locate(providerSessionId);
+      if (filePath === undefined) return TRANSCRIPT_NOT_FOUND;
+      const tail = await readTail(filePath, readTailBytes);
+      const transcript = boundedTranscript(
+        tailRecords(tail).flatMap((record) => input.lines(record)),
+        input.maximumRenderedLength,
+      );
+      return transcript === undefined
+        ? TRANSCRIPT_NOT_FOUND
+        : { status: ACT_RESULT_STATUS.ACCEPTED, transcript };
+    },
+
+    async readSince(providerSessionId, cursor) {
+      const filePath = await paths.resolve(providerSessionId, () =>
+        input.locate(providerSessionId),
+      );
+      if (filePath === undefined) return TRANSCRIPT_NOT_FOUND;
+      const since = await readRecordsSince(filePath, cursor, readTailBytes);
+      return {
+        status: ACT_RESULT_STATUS.ACCEPTED,
+        // The rendering is unbounded in total, like a tail read with no
+        // maximum: the window the read loaded and the per-line cuts are the
+        // bounds.
+        text: boundedTranscript(since.records.flatMap((record) => input.lines(record))) ?? "",
+        cursor: since.cursor,
+        truncated: since.truncated,
+      };
+    },
+  };
 }

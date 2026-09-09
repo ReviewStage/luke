@@ -7,9 +7,21 @@ import { OMISSION_MARKER } from "@sidecar/session";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import { OmpSessionAdapter } from "./adapter.js";
 import { OMP_SESSIONS_DIRECTORY } from "./records.js";
-import { readOmpSessionTranscript } from "./transcript.js";
 
 const SESSION_ID = "01a0540a-c238-7264-80d8-546b0c7be0d8";
+
+/** Reads through the adapter, which is the only caller a rendering has. */
+async function readOmpSessionTranscript(request: {
+  ompHome: string;
+  providerSessionId: string;
+  maximumRenderedLength?: number;
+}): Promise<string | undefined> {
+  const result = await new OmpSessionAdapter({
+    ompHome: request.ompHome,
+    transcriptMaximumRenderedLength: request.maximumRenderedLength,
+  }).readTranscript(request.providerSessionId);
+  return result.status === "accepted" ? result.transcript : undefined;
+}
 const SESSION_FILE_NAME = `2026-08-20T11-58-00-000Z_${SESSION_ID}.jsonl`;
 
 async function temporaryOmpHome(t: TestContext): Promise<string> {

@@ -22,6 +22,7 @@ import {
   maximumWorkspaceNameLength,
   type PluginActKind,
   type PluginActRequests,
+  type PluginActResults,
   type ProviderSessionObservation,
   SESSION_CONTROL_KIND,
   SESSION_STATUS,
@@ -134,12 +135,14 @@ class StubAdapter extends CloudSessionAdapter {
   }
 }
 
-const BASE_METHOD_BY_ACT: {
+type BaseMethods = {
   [Kind in PluginActKind]: (
     adapter: SessionProviderAdapter,
     request: PluginActRequests[Kind],
-  ) => Promise<unknown>;
-} = {
+  ) => Promise<PluginActResults[Kind]>;
+};
+
+const BASE_METHOD_BY_ACT: BaseMethods = {
   message: (adapter, request) => adapter.sendMessage(request),
   control: (adapter, request) => adapter.executeControl(request),
   createWorkspace: (adapter, request) => adapter.createWorkspace(request),

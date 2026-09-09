@@ -8,6 +8,13 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import {
+  boundedTranscript,
+  readRecordsSince,
+  TRANSCRIPT_BOUNDS,
+  type TranscriptPathCache,
+  transcriptLine,
+} from "../shared/jsonl-transcript.js";
 import { readTail, tailRecords } from "../shared/local-files.js";
 import {
   canIgnoreSqliteError,
@@ -15,13 +22,6 @@ import {
   openReadOnlyDatabase,
   type SqliteModuleLoader,
 } from "../shared/local-sqlite.js";
-import {
-  boundedTranscript,
-  readRecordsSince,
-  TRANSCRIPT_BOUNDS,
-  type TranscriptPathCache,
-  transcriptLine,
-} from "../shared/local-transcript.js";
 import {
   argumentPhrase,
   CODEX_CALL_ARGUMENT_KEY,

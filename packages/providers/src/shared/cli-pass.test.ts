@@ -10,7 +10,7 @@ import {
 } from "@sidecar/session";
 import { ADAPTER_DIAGNOSTIC_KIND } from "./adapter-diagnostics.js";
 import { ADAPTER_FAILURE, AdapterFailure } from "./adapter-failure.js";
-import { type CliPassInput, type CliRun, cliPass } from "./cli-pass.js";
+import { type CliPass, type CliPassInput, type CliRun, cliPass } from "./cli-pass.js";
 
 const TEST_TIME = Date.parse("2026-09-01T12:00:00.000Z");
 const BINARY = "stub";
@@ -51,16 +51,15 @@ function fakeCli(behavior: CliBehavior = {}) {
   return { run, invocations, behavior };
 }
 
-function harness(
-  behavior: CliBehavior = {},
-  overrides: Partial<CliPassInput> = {},
-): {
-  pass: ReturnType<typeof cliPass>;
+interface PassHarness {
+  pass: CliPass;
   invocations: (readonly string[])[];
   behavior: CliBehavior;
   forgotten: () => number;
   collected: () => number;
-} {
+}
+
+function harness(behavior: CliBehavior = {}, overrides: Partial<CliPassInput> = {}): PassHarness {
   const cli = fakeCli(behavior);
   let forgotten = 0;
   let collected = 0;

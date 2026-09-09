@@ -12,9 +12,15 @@ test("a failure that says nothing about the credential leaves the snapshot stand
 });
 
 test("every failure kind has an answer, so a new one cannot arrive undecided", () => {
-  for (const failure of Object.values(ADAPTER_FAILURE)) {
-    assert.equal(typeof clearsObservedState(failure), "boolean");
-  }
+  const answers = Object.values(ADAPTER_FAILURE).map((failure) => [
+    failure,
+    clearsObservedState(failure),
+  ]);
+  assert.deepEqual(answers, [
+    [ADAPTER_FAILURE.UNAUTHORIZED, true],
+    [ADAPTER_FAILURE.UNAVAILABLE, true],
+    [ADAPTER_FAILURE.TRANSIENT, false],
+  ]);
 });
 
 test("a failure carries its kind and stays an error", () => {
