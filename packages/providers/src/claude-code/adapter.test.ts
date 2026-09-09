@@ -9,6 +9,13 @@ import { CLAUDE_CODE_PROVIDER, ClaudeCodeSessionAdapter } from "./adapter.js";
 
 const TEST_TIME = Date.parse("2026-08-11T23:45:00.000Z");
 const SECRET_TRANSCRIPT_TEXT = "SECRET_TRANSCRIPT_TEXT";
+/**
+ * Longer than the bounded tail one observation pass reads, so a record written
+ * before it sits outside that tail however small the rest of the file is.
+ */
+const PAST_TAIL_TEXT = "x".repeat(96 * 1024);
+/** One filler record's words: forty of them outweigh that same tail. */
+const PAST_TAIL_FILLER = SECRET_TRANSCRIPT_TEXT.repeat(200);
 const CLAUDE_PROJECTS_DIRECTORY = "projects";
 const TEST_CLAUDE_EVENT_TYPE = {
   ASSISTANT: "assistant",
@@ -99,7 +106,6 @@ test("keeps stale user-tail sessions unknown instead of inventing activity", asy
   );
 
   const adapter = new ClaudeCodeSessionAdapter({
-    activeSessionFreshnessMs: 15 * 60 * 1000,
     claudeHome,
     now: () => TEST_TIME,
   });
@@ -126,7 +132,6 @@ test("keeps stale assistant-tail sessions from staying in attention", async (t) 
   );
 
   const adapter = new ClaudeCodeSessionAdapter({
-    activeSessionFreshnessMs: 15 * 60 * 1000,
     claudeHome,
     now: () => TEST_TIME,
   });
@@ -229,7 +234,7 @@ test("keeps fresh sessions active when a large tail has no complete status event
         timestamp: "2026-08-11T23:44:58.000Z",
         toolUseResult: {
           type: TEST_CLAUDE_CONTENT_TYPE.TOOL_RESULT,
-          content: "x".repeat(512),
+          content: PAST_TAIL_TEXT,
         },
       },
     ],
@@ -239,7 +244,6 @@ test("keeps fresh sessions active when a large tail has no complete status event
   const adapter = new ClaudeCodeSessionAdapter({
     claudeHome,
     now: () => TEST_TIME,
-    readTailBytes: 128,
   });
   const observations = await adapter.observe();
 
@@ -498,7 +502,6 @@ test("keeps a spent failure at error after it goes stale", async (t) => {
   );
 
   const adapter = new ClaudeCodeSessionAdapter({
-    activeSessionFreshnessMs: 15 * 60 * 1000,
     claudeHome,
     now: () => TEST_TIME,
   });
@@ -557,7 +560,7 @@ test("recovers a title from a session too long to hold one in its tail", async (
         type: TEST_CLAUDE_EVENT_TYPE.USER,
         cwd: "/Users/test/luke",
         timestamp: "2026-08-11T23:44:50.000Z",
-        toolUseResult: { content: "x".repeat(4_096) },
+        toolUseResult: { content: PAST_TAIL_TEXT },
       },
       {
         type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
@@ -572,8 +575,6 @@ test("recovers a title from a session too long to hold one in its tail", async (
   const adapter = new ClaudeCodeSessionAdapter({
     claudeHome,
     now: () => TEST_TIME,
-    // Small enough that the title is far behind the tail the status comes from.
-    readTailBytes: 256,
   });
   const [observation] = await adapter.observe();
 
@@ -832,7 +833,7 @@ test("reads past a tail of appended bookkeeping to the conversation's own clock"
       // The bookkeeping a later Claude Code pass appended in bulk: enough of
       // it to fill the whole bounded tail, with the same pass bumping mtime.
       { type: "ai-title", aiTitle: "Old refactor" },
-      { type: "last-prompt", cwd: "/Users/test/backfilled", prompt: "x".repeat(120) },
+      { type: "last-prompt", cwd: "/Users/test/backfilled", prompt: PAST_TAIL_TEXT },
     ],
     TEST_TIME,
   );
@@ -840,7 +841,6 @@ test("reads past a tail of appended bookkeeping to the conversation's own clock"
   const adapter = new ClaudeCodeSessionAdapter({
     claudeHome,
     now: () => TEST_TIME,
-    readTailBytes: 256,
   });
   const [observation] = await adapter.observe();
 
@@ -1047,7 +1047,6 @@ test("a stop event keeps a finished turn waiting past the freshness decay", asyn
   await writeHookEvent(spool, "still-waiting", "stop", TEST_TIME - 60_000);
 
   const adapter = new ClaudeCodeSessionAdapter({
-    activeSessionFreshnessMs: 15 * 60 * 1000,
     claudeHome,
     hookEventsDirectory: () => spool,
     now: () => TEST_TIME,
@@ -1131,7 +1130,6 @@ test("a session-start event bumps the clock without deciding the status", async 
   await writeHookEvent(spool, "resumed", "session-start", TEST_TIME - 60_000);
 
   const adapter = new ClaudeCodeSessionAdapter({
-    activeSessionFreshnessMs: 15 * 60 * 1000,
     claudeHome,
     hookEventsDirectory: () => spool,
     now: () => TEST_TIME,
@@ -1219,7 +1217,7 @@ test("recovers a chosen title from the head of a session too long to hold one in
     type: TEST_CLAUDE_EVENT_TYPE.USER,
     cwd: "/Users/test/luke",
     timestamp: `2026-08-11T23:44:${String(10 + index).padStart(2, "0")}.000Z`,
-    message: { content: SECRET_TRANSCRIPT_TEXT.repeat(4) },
+    message: { content: PAST_TAIL_FILLER },
   }));
   await writeSessionFile(
     claudeHome,
@@ -1232,7 +1230,6 @@ test("recovers a chosen title from the head of a session too long to hold one in
   const adapter = new ClaudeCodeSessionAdapter({
     claudeHome,
     now: () => TEST_TIME,
-    readTailBytes: 512,
   });
   const [observation] = await adapter.observe();
 
@@ -1245,7 +1242,7 @@ test("a chosen title in the head outranks a generated one the tail still holds",
     type: TEST_CLAUDE_EVENT_TYPE.USER,
     cwd: "/Users/test/luke",
     timestamp: `2026-08-11T23:44:${String(10 + index).padStart(2, "0")}.000Z`,
-    message: { content: SECRET_TRANSCRIPT_TEXT.repeat(4) },
+    message: { content: PAST_TAIL_FILLER },
   }));
   await writeSessionFile(
     claudeHome,
@@ -1262,7 +1259,6 @@ test("a chosen title in the head outranks a generated one the tail still holds",
   const adapter = new ClaudeCodeSessionAdapter({
     claudeHome,
     now: () => TEST_TIME,
-    readTailBytes: 512,
   });
   const [observation] = await adapter.observe();
 

@@ -6,23 +6,10 @@ import test, { type TestContext } from "node:test";
 import { OMISSION_MARKER } from "@sidecar/session";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import { ClaudeCodeSessionAdapter } from "./adapter.js";
+import { readClaudeSessionTranscript } from "./transcript.js";
 
 const TEST_SESSION_ID = "3f9a1b2c-4d5e-6789-abcd-ef0123456789";
 const CLAUDE_PROJECTS_DIRECTORY = "projects";
-
-async function readClaudeSessionTranscript(request: {
-  claudeHome: string;
-  providerSessionId: string;
-  readTailBytes?: number;
-  maximumRenderedLength?: number;
-}): Promise<string | undefined> {
-  const result = await new ClaudeCodeSessionAdapter({
-    claudeHome: request.claudeHome,
-    transcriptReadTailBytes: request.readTailBytes,
-    transcriptMaximumRenderedLength: request.maximumRenderedLength,
-  }).readTranscript(request.providerSessionId);
-  return result.status === "accepted" ? result.transcript : undefined;
-}
 
 async function temporaryClaudeHome(t: TestContext): Promise<string> {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-claude-transcript-"));

@@ -18,7 +18,6 @@ import {
   isWireString,
   oneLine,
   recordFromJsonLine,
-  resolveOptions,
   text,
   type WireRecord,
   wholeNumber,
@@ -127,12 +126,6 @@ export const CLAUDE_CODE_PROVIDER: SessionProvider = {
 export interface ClaudeCodeAdapterOptions {
   claudeHome?: string;
   now?: () => number;
-  maximumProjectDirectories?: number;
-  activeSessionFreshnessMs?: number;
-  readTailBytes?: number;
-  readHeadBytes?: number;
-  transcriptReadTailBytes?: number;
-  transcriptMaximumRenderedLength?: number;
   /**
    * Where the observation hook spools its events, when hooks are on at all.
    * Read lazily like the cloud adapters' credentials, because the app decides
@@ -534,38 +527,17 @@ export class ClaudeCodeSessionAdapter extends LocalFileSessionAdapter<
   readonly provider = CLAUDE_CODE_PROVIDER;
 
   readonly #claudeHome: string;
-  readonly #maximumProjectDirectories: number;
-  readonly #readTailBytes: number;
-  readonly #readHeadBytes: number;
-  readonly #transcriptReadTailBytes: number | undefined;
-  readonly #transcriptMaximumRenderedLength: number | undefined;
   readonly #transcriptPaths = new TranscriptPathCache();
   readonly #hookEventsDirectory: (() => string | undefined) | undefined;
 
   constructor(options: ClaudeCodeAdapterOptions = {}) {
     super(options);
     this.#claudeHome = options.claudeHome ?? defaultClaudeHome();
-    const resolved = resolveOptions(
-      options,
-      {
-        maximumProjectDirectories: CLAUDE_ADAPTER_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
-        readTailBytes: LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES,
-        readHeadBytes: CLAUDE_ADAPTER_DEFAULTS.READ_HEAD_BYTES,
-      },
-      {
-        positive: ["maximumProjectDirectories", "readTailBytes", "readHeadBytes"],
-      },
-    );
-    this.#maximumProjectDirectories = resolved.maximumProjectDirectories;
-    this.#readTailBytes = resolved.readTailBytes;
-    this.#readHeadBytes = resolved.readHeadBytes;
-    this.#transcriptReadTailBytes = options.transcriptReadTailBytes;
-    this.#transcriptMaximumRenderedLength = options.transcriptMaximumRenderedLength;
     this.#hookEventsDirectory = options.hookEventsDirectory;
   }
 
   protected async parse(candidate: SessionFileCandidate): Promise<ParsedClaudeSessionTail> {
-    const tail = await readTail(candidate.filePath, this.#readTailBytes);
+    const tail = await readTail(candidate.filePath, LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES);
     let parsed = parseClaudeSessionTail(tail);
     // A truncated tail holding no conversation clock says nothing about when
     // the session last moved, and the file's date is exactly what a bulk
@@ -574,8 +546,7 @@ export class ClaudeCodeSessionAdapter extends LocalFileSessionAdapter<
     // there is nothing further back to find.
     if (
       parsed.timestampMs === undefined &&
-      Buffer.byteLength(tail, "utf8") >= this.#readTailBytes &&
-      CLAUDE_ADAPTER_DEFAULTS.CLOCK_RESCUE_TAIL_BYTES > this.#readTailBytes
+      Buffer.byteLength(tail, "utf8") >= LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES
     ) {
       const rescued = parseClaudeSessionTail(
         await readTail(candidate.filePath, CLAUDE_ADAPTER_DEFAULTS.CLOCK_RESCUE_TAIL_BYTES),
@@ -583,7 +554,9 @@ export class ClaudeCodeSessionAdapter extends LocalFileSessionAdapter<
       if (rescued.timestampMs !== undefined) parsed = rescued;
     }
     if (!parsed.customTitle) {
-      const titles = titlesFromHead(await readHead(candidate.filePath, this.#readHeadBytes));
+      const titles = titlesFromHead(
+        await readHead(candidate.filePath, CLAUDE_ADAPTER_DEFAULTS.READ_HEAD_BYTES),
+      );
       parsed.customTitle = titles.customTitle;
       parsed.aiTitle ??= titles.aiTitle;
     }
@@ -593,7 +566,7 @@ export class ClaudeCodeSessionAdapter extends LocalFileSessionAdapter<
   protected discover(): Promise<SessionFileCandidate[]> {
     return discoverSessionFiles({
       projectsDirectory: path.join(this.#claudeHome, CLAUDE_PROJECTS_DIRECTORY),
-      maximumProjectDirectories: this.#maximumProjectDirectories,
+      maximumProjectDirectories: CLAUDE_ADAPTER_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
       sessionFilesIn,
     });
   }
@@ -618,8 +591,6 @@ export class ClaudeCodeSessionAdapter extends LocalFileSessionAdapter<
       readClaudeSessionTranscript({
         claudeHome: this.#claudeHome,
         providerSessionId,
-        readTailBytes: this.#transcriptReadTailBytes,
-        maximumRenderedLength: this.#transcriptMaximumRenderedLength,
       }),
     );
   }
@@ -634,7 +605,6 @@ export class ClaudeCodeSessionAdapter extends LocalFileSessionAdapter<
         providerSessionId,
         cursor,
         pathCache: this.#transcriptPaths,
-        readTailBytes: this.#transcriptReadTailBytes,
       }),
     );
   }

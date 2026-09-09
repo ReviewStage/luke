@@ -66,13 +66,7 @@ export class NativeHelper {
   }
 
   start(): boolean {
-    if (
-      this.#child ||
-      this.#ended ||
-      (!this.#options.spawnProcess && process.platform !== "darwin")
-    ) {
-      return false;
-    }
+    if (this.#child || this.#ended) return false;
     try {
       const child = this.#options.spawnProcess?.() ?? this.#spawn();
       if (!child) return false;
@@ -126,7 +120,11 @@ export class NativeHelper {
     return gone;
   }
 
-  #spawn(): NativeHelperProcess {
+  #spawn(): NativeHelperProcess | undefined {
+    // The helpers are Mac binaries, so there is nothing to spawn anywhere
+    // else. The check lives with the spawn rather than with the start, so no
+    // seam above it can turn it off.
+    if (process.platform !== "darwin") return undefined;
     const stdio: StdioOptions = [
       this.#options.input ?? "ignore",
       this.#options.output === "lines"

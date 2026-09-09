@@ -61,8 +61,6 @@ export interface ObservationSpoolWatcherOptions<Event extends string> {
   /** The tokens the hook may write; a file holding anything else is dropped. */
   events: readonly Event[];
   onEvents: (events: readonly ObservedSpoolEvent<Event>[]) => void;
-  debounceMs?: number;
-  rearmIntervalMs?: number;
   watch?: SpoolWatch;
   schedule?: (callback: () => void, delayMs: number) => Timer;
   cancel?: (timer: Timer) => void;
@@ -81,8 +79,6 @@ class SpoolWatcher<Event extends string> implements ObservationSpoolWatcher {
   readonly #spoolDirectory: string;
   readonly #events: readonly Event[];
   readonly #onEvents: (events: readonly ObservedSpoolEvent<Event>[]) => void;
-  readonly #debounceMs: number;
-  readonly #rearmIntervalMs: number;
   readonly #watch: SpoolWatch;
   readonly #schedule: (callback: () => void, delayMs: number) => Timer;
   readonly #cancel: (timer: Timer) => void;
@@ -98,8 +94,6 @@ class SpoolWatcher<Event extends string> implements ObservationSpoolWatcher {
     this.#spoolDirectory = options.spoolDirectory;
     this.#events = options.events;
     this.#onEvents = options.onEvents;
-    this.#debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
-    this.#rearmIntervalMs = options.rearmIntervalMs ?? DEFAULT_REARM_INTERVAL_MS;
     this.#watch = options.watch ?? fs.watch;
     this.#schedule = options.schedule ?? setTimeout;
     this.#cancel = options.cancel ?? clearTimeout;
@@ -153,7 +147,7 @@ class SpoolWatcher<Event extends string> implements ObservationSpoolWatcher {
     this.#rearmTimer = this.#schedule(() => {
       this.#rearmTimer = undefined;
       this.#arm();
-    }, this.#rearmIntervalMs);
+    }, DEFAULT_REARM_INTERVAL_MS);
   }
 
   /**
@@ -171,7 +165,7 @@ class SpoolWatcher<Event extends string> implements ObservationSpoolWatcher {
       const ids = [...this.#pendingIds];
       this.#pendingIds.clear();
       this.#reads = this.#reads.then(() => this.#report(ids)).catch(() => undefined);
-    }, this.#debounceMs);
+    }, DEFAULT_DEBOUNCE_MS);
   }
 
   /**

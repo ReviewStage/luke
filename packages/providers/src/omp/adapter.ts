@@ -62,8 +62,6 @@ export const OMP_PROVIDER: SessionProvider = {
 export interface OmpAdapterOptions {
   ompHome?: string;
   now?: () => number;
-  activeSessionFreshnessMs?: number;
-  transcriptMaximumRenderedLength?: number;
 }
 
 function timestampMsFrom(record: WireRecord): number | undefined {
@@ -308,13 +306,11 @@ export class OmpSessionAdapter extends LocalFileSessionAdapter<
   readonly provider = OMP_PROVIDER;
 
   readonly #ompHome: string;
-  readonly #transcriptMaximumRenderedLength: number | undefined;
   readonly #transcriptPaths = new TranscriptPathCache();
 
   constructor(options: OmpAdapterOptions = {}) {
     super(options);
     this.#ompHome = options.ompHome ?? defaultOmpHome();
-    this.#transcriptMaximumRenderedLength = options.transcriptMaximumRenderedLength;
   }
 
   protected discover(): Promise<OmpSessionFileCandidate[]> {
@@ -359,7 +355,6 @@ export class OmpSessionAdapter extends LocalFileSessionAdapter<
       readOmpSessionTranscript({
         ompHome: this.#ompHome,
         providerSessionId,
-        maximumRenderedLength: this.#transcriptMaximumRenderedLength,
       }),
     );
   }

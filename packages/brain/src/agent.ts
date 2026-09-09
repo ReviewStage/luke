@@ -12,11 +12,8 @@ import {
   type ChildPolicyContext,
   type EffectiveToolPolicy,
   PendingInputQueue,
-  QUEUE_DEFAULTS,
-  QUEUE_MODE,
   type QueueBatch,
   type QueuedInput,
-  type QueueMode,
   queueSummaryLine,
   queueSummaryText,
 } from "@sidecar/runtime";
@@ -326,10 +323,6 @@ export interface BrainAgentOptions {
    * every local session that is working, waiting, or read before.
    */
   observes?: LookSubject;
-  /** How an ask arriving while a turn is under way is taken; steer by default, as OpenClaw has it. */
-  queueMode?: QueueMode;
-  /** How long collect mode waits for more asks before opening one turn for them all. */
-  queueDebounceMs?: number;
   /**
    * Set when this conversation is a child's: how deep it is. Every turn is
    * then prepared as a child's — the minimal profile, the child restriction
@@ -356,10 +349,7 @@ export interface BrainAgentOptions {
   cancel?: (timer: ScheduledTimer) => void;
   maximumOutputTokens?: number;
   reasoningEffort?: ReasoningEffort;
-  wakeCoalesceMs?: number;
   executionDeadlineMs?: number;
-  deltaPerSessionChars?: number;
-  fullTranscriptChars?: number;
 }
 
 /** What the pre-compaction flush is handed: a copy of the context, never the engine itself, and the counts its gate read. */
@@ -480,10 +470,7 @@ export class BrainAgent {
     turn: BrainTurnDescription,
   ) => BrainTurnPreparation | Promise<BrainTurnPreparation>;
   readonly #maximumOutputTokens: number;
-  readonly #wakeCoalesceMs: number;
   readonly #executionDeadlineMs: number;
-  readonly #deltaPerSessionChars: number;
-  readonly #fullTranscriptChars: number;
   #generation: Generation | undefined;
   readonly #lease: BrainStoreLease;
   readonly #ledger: BrainRequestLedger;
@@ -541,11 +528,7 @@ export class BrainAgent {
     this.#report = options.report ?? ((message) => process.stderr.write(`${message}\n`));
     this.#prepareTurn = options.prepareTurn;
     this.#maximumOutputTokens = options.maximumOutputTokens ?? BRAIN_DEFAULTS.MAXIMUM_OUTPUT_TOKENS;
-    this.#wakeCoalesceMs = options.wakeCoalesceMs ?? BRAIN_DEFAULTS.WAKE_COALESCE_MS;
     this.#executionDeadlineMs = options.executionDeadlineMs ?? BRAIN_DEFAULTS.EXECUTION_DEADLINE_MS;
-    this.#deltaPerSessionChars =
-      options.deltaPerSessionChars ?? BRAIN_DEFAULTS.DELTA_PER_SESSION_CHARS;
-    this.#fullTranscriptChars = options.fullTranscriptChars ?? BRAIN_DEFAULTS.FULL_TRANSCRIPT_CHARS;
     this.#subject = options.observes ?? { kind: LOOK_SUBJECT.ROSTER };
     this.#lease = options.store.lease();
     this.#ledger = new BrainRequestLedger({
@@ -556,7 +539,7 @@ export class BrainAgent {
       notify: () => this.#notify(),
     });
     this.#wakes = new WakeQueue({
-      coalesceMs: this.#wakeCoalesceMs,
+      coalesceMs: BRAIN_DEFAULTS.WAKE_COALESCE_MS,
       capacity: BRAIN_DEFAULTS.PENDING_WAKE_CAPACITY,
       now: this.#now,
       schedule: this.#schedule,
@@ -565,10 +548,6 @@ export class BrainAgent {
       flush: (events) => this.#flushWakes(events),
     });
     this.#asks = new PendingInputQueue({
-      settings: {
-        mode: options.queueMode ?? QUEUE_DEFAULTS.MODE,
-        debounceMs: options.queueDebounceMs ?? QUEUE_DEFAULTS.DEBOUNCE_MS,
-      },
       steer: (input) => this.#steerAsk(input),
       interrupt: () => this.#interruptActive(),
       flush: (batches) => this.#openBatches(batches),
@@ -800,15 +779,13 @@ export class BrainAgent {
   /**
    * Where an accepted ask goes. An idle conversation opens it at once: the
    * queue exists for a conversation that is busy, and a debounce on an idle
-   * one is only delay — except in collect mode, whose window is its whole
-   * contract. Everything else is admitted to the ported queue, which decides
-   * under its mode whether the words steer into the execution under way,
-   * interrupt it, or wait for a turn of their own, and under its bounds what
-   * the overflow folds into a summary.
+   * one is only delay. Everything else is admitted to the ported queue, which
+   * decides whether the words steer into the execution under way or wait for
+   * a turn of their own, and under its bounds what the overflow folds into a
+   * summary.
    */
   #admitAsk(run: RunControl, question: string): void {
-    const mode = this.#asks.settings.mode;
-    if (!this.#active && this.#asks.size === 0 && mode !== QUEUE_MODE.COLLECT) {
+    if (!this.#active && this.#asks.size === 0) {
       this.#openAsks([{ run, text: question, folded: false }]);
       return;
     }
@@ -1084,7 +1061,7 @@ export class BrainAgent {
             cursors: generation.captureCursors,
             read: (identity, cursor) => this.#options.readTranscriptSince(identity, cursor),
             signal: generation.abort.signal,
-            maximumChars: this.#deltaPerSessionChars,
+            maximumChars: BRAIN_DEFAULTS.DELTA_PER_SESSION_CHARS,
           });
           if (!delta) {
             generation.captureCursors.rollback(mark);
@@ -1203,7 +1180,7 @@ export class BrainAgent {
         this.#heartbeatRetry = undefined;
         void this.heartbeat();
       },
-      Math.max(until - this.#now(), this.#wakeCoalesceMs),
+      Math.max(until - this.#now(), BRAIN_DEFAULTS.WAKE_COALESCE_MS),
     );
   }
 
@@ -2689,7 +2666,7 @@ export class BrainAgent {
       cursors: context.generation.cursors,
       read: (identity, cursor) => this.#options.readTranscriptSince(identity, cursor),
       signal: context.signal,
-      maximumChars: this.#deltaPerSessionChars,
+      maximumChars: BRAIN_DEFAULTS.DELTA_PER_SESSION_CHARS,
       revoked: () => this.#revoked(context),
     });
   }
@@ -2698,7 +2675,7 @@ export class BrainAgent {
     return readWholeTranscript(identity, {
       read: (identity) => this.#options.readTranscript(identity),
       signal: context.signal,
-      maximumChars: this.#fullTranscriptChars,
+      maximumChars: BRAIN_DEFAULTS.FULL_TRANSCRIPT_CHARS,
     });
   }
 }

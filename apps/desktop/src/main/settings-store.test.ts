@@ -2,12 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import {
-  CREDENTIAL_CONNECTION,
-  CREDENTIAL_PROVIDER_ID,
-  type CredentialProvider,
-  type CredentialProviderId,
-} from "@sidecar/credentials";
+import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
 import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import {
   PROVIDER_ID,
@@ -44,67 +39,10 @@ const CONDUCTOR = CREDENTIAL_PROVIDER_ID.CONDUCTOR;
 const TEST_ENVIRONMENT_VARIABLE = {
   API_KEY: "CONDUCTOR_API_KEY",
   API_TOKEN: "CONDUCTOR_API_TOKEN",
-  FIRST_CLOUD_API_KEY: "FIRST_CLOUD_API_KEY",
-  SECOND_CLOUD_API_KEY: "SECOND_CLOUD_API_KEY",
-  THIRD_CLOUD_API_KEY: "THIRD_CLOUD_API_KEY",
 } as const;
 
-/**
- * Two providers the registry does not ship, so per-provider behavior is covered
- * without waiting for a second cloud adapter to exist.
- */
-const FIRST_CLOUD_PROVIDER: CredentialProvider = {
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  id: "first-cloud" as CredentialProviderId,
-  displayName: "First Cloud",
-  connection: CREDENTIAL_CONNECTION.KEY,
-  hint: { lead: "Create a key in First Cloud under", destination: "Settings > API keys" },
-  environmentVariables: [TEST_ENVIRONMENT_VARIABLE.FIRST_CLOUD_API_KEY],
-};
-
-const SECOND_CLOUD_PROVIDER: CredentialProvider = {
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  id: "second-cloud" as CredentialProviderId,
-  displayName: "Second Cloud",
-  connection: CREDENTIAL_CONNECTION.KEY,
-  hint: { lead: "Create a key in Second Cloud under", destination: "Settings > API keys" },
-  environmentVariables: [TEST_ENVIRONMENT_VARIABLE.SECOND_CLOUD_API_KEY],
-};
-
-/** Publishes a key format, which only some providers do. */
-const THIRD_CLOUD_PROVIDER: CredentialProvider = {
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  id: "third-cloud" as CredentialProviderId,
-  displayName: "Third Cloud",
-  connection: CREDENTIAL_CONNECTION.KEY,
-  hint: { lead: "Create a key in Third Cloud under", destination: "Settings > API keys" },
-  environmentVariables: [TEST_ENVIRONMENT_VARIABLE.THIRD_CLOUD_API_KEY],
-  keyFormat: {
-    label: "API key",
-    prefix: "current_",
-    rejection: "Third Cloud's current keys start with current_.",
-  },
-};
-
-/** Connected on the provider's own consent page rather than by a pasted key. */
-const CONSENT_PROVIDER: CredentialProvider = {
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  id: "consent-service" as CredentialProviderId,
-  displayName: "Consent Service",
-  connection: CREDENTIAL_CONNECTION.CONSENT,
-  environmentVariables: [],
-};
-
-const TEST_PROVIDERS = [
-  FIRST_CLOUD_PROVIDER,
-  SECOND_CLOUD_PROVIDER,
-  THIRD_CLOUD_PROVIDER,
-  CONSENT_PROVIDER,
-];
-const CONSENT_SERVICE = CONSENT_PROVIDER.id;
-const FIRST_CLOUD = FIRST_CLOUD_PROVIDER.id;
-const SECOND_CLOUD = SECOND_CLOUD_PROVIDER.id;
-const THIRD_CLOUD = THIRD_CLOUD_PROVIDER.id;
+/** The one service connected on its own consent page rather than by a pasted key. */
+const CONSENT_SERVICE = CREDENTIAL_PROVIDER_ID.LINEAR;
 
 /** Stands in for Electron's Keychain-backed `safeStorage`. */
 function testCipher(available = true): SecretCipher {
@@ -175,24 +113,13 @@ function expectedPersistedSettings(overrides: WireRecord = {}): UnparsedWireValu
 
 function storeIn(
   directory: string,
-  options: {
-    cipher?: SecretCipher;
-    environment?: NodeJS.ProcessEnv;
-    providers?: readonly CredentialProvider[];
-    appleCalendarSupported?: boolean;
-  } = {},
+  options: { cipher?: SecretCipher; environment?: NodeJS.ProcessEnv } = {},
 ): SettingsStore {
   const config: SettingsStoreOptions = {
     directory: () => directory,
     cipher: options.cipher ?? testCipher(),
     environment: options.environment ?? {},
   };
-  if (options.providers) {
-    config.providers = options.providers;
-  }
-  if (options.appleCalendarSupported !== undefined) {
-    config.appleCalendarSupported = options.appleCalendarSupported;
-  }
   return new SettingsStore(config);
 }
 
@@ -603,11 +530,10 @@ test("selection changes one calendar on one account, and removal takes the grant
 
 test("the Apple Calendar connection stores only the choice and survives a reopen", async (t) => {
   const directory = temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory, { appleCalendarSupported: true });
+  const store = storeIn(directory);
 
   assert.equal(await store.readAppleCalendarConnection(), undefined);
   assert.equal(appSettingsView(await store.snapshot()).appleCalendar, undefined);
-  assert.equal(appSettingsView(await store.snapshot()).appleCalendarAvailable, true);
 
   const connected = await store.connectAppleCalendar(["home", "work"]);
   assert.equal(connected.reason, undefined);
@@ -620,15 +546,14 @@ test("the Apple Calendar connection stores only the choice and survives a reopen
   const persisted = JSON.parse(await readSettingsFile(directory));
   assert.deepEqual(persisted.appleCalendar, { calendars: ["home", "work"] });
   // The connection outlives the run that stored it.
-  assert.deepEqual(
-    await storeIn(directory, { appleCalendarSupported: true }).readAppleCalendarConnection(),
-    { selectedCalendarIds: ["home", "work"] },
-  );
+  assert.deepEqual(await storeIn(directory).readAppleCalendarConnection(), {
+    selectedCalendarIds: ["home", "work"],
+  });
 });
 
 test("connecting Apple Calendar again keeps the held choices, and selection edits them", async (t) => {
   const directory = temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory, { appleCalendarSupported: true });
+  const store = storeIn(directory);
   await store.connectAppleCalendar(["default-calendar"]);
   // Asking to connect while connected is not a fresh mind about the choices.
   await store.connectAppleCalendar(["another"]);
@@ -647,10 +572,10 @@ test("connecting Apple Calendar again keeps the held choices, and selection edit
   assert.equal(JSON.parse(await readSettingsFile(directory)).appleCalendar, undefined);
 });
 
-test("Apple Calendar is not offered where there is no Mac calendar to read", async (t) => {
+test("Apple Calendar is offered only where there is a Mac calendar to read", async (t) => {
   const directory = temporaryDirectory(t, "luke-settings-");
-  const snapshot = await storeIn(directory, { appleCalendarSupported: false }).snapshot();
-  assert.equal(appSettingsView(snapshot).appleCalendarAvailable, false);
+  const snapshot = await storeIn(directory).snapshot();
+  assert.equal(appSettingsView(snapshot).appleCalendarAvailable, process.platform === "darwin");
 });
 
 test("a calendar account never disturbs a stored key, nor a key an account", async (t) => {
@@ -669,27 +594,29 @@ test("a calendar account never disturbs a stored key, nor a key an account", asy
 test("keeps each provider's key, environment fallback, and reported source separate", async (t) => {
   const directory = temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory, {
-    providers: TEST_PROVIDERS,
-    environment: { [TEST_ENVIRONMENT_VARIABLE.SECOND_CLOUD_API_KEY]: "second-cloud-environment" },
+    environment: { [TEST_ENVIRONMENT_VARIABLE.API_KEY]: "conductor-environment" },
   });
 
-  await store.setApiKey(FIRST_CLOUD, "first-cloud-key");
+  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-stored-key");
   const settings = appSettingsView(await store.snapshot());
 
-  assert.equal(settings.credentialSources[FIRST_CLOUD], CREDENTIAL_SOURCE.ENCRYPTED_FILE);
-  assert.equal(settings.credentialSources[SECOND_CLOUD], CREDENTIAL_SOURCE.ENVIRONMENT);
-  assert.equal(await store.readApiKey(FIRST_CLOUD), "first-cloud-key");
-  assert.equal(await store.readApiKey(SECOND_CLOUD), "second-cloud-environment");
+  assert.equal(
+    settings.credentialSources[CREDENTIAL_PROVIDER_ID.OPENAI],
+    CREDENTIAL_SOURCE.ENCRYPTED_FILE,
+  );
+  assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.ENVIRONMENT);
+  assert.equal(await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI), "sk-stored-key");
+  assert.equal(await store.readApiKey(CONDUCTOR), "conductor-environment");
 
   // Storing and then clearing one provider's key leaves the other untouched.
-  await store.setApiKey(SECOND_CLOUD, "second-cloud-key");
-  assert.equal(await store.readApiKey(FIRST_CLOUD), "first-cloud-key");
-  await store.setApiKey(FIRST_CLOUD, undefined);
+  await store.setApiKey(CONDUCTOR, "conductor-stored-key");
+  assert.equal(await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI), "sk-stored-key");
+  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, undefined);
 
-  assert.equal(await store.readApiKey(SECOND_CLOUD), "second-cloud-key");
-  assert.equal(await store.readApiKey(FIRST_CLOUD), undefined);
+  assert.equal(await store.readApiKey(CONDUCTOR), "conductor-stored-key");
+  assert.equal(await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI), undefined);
   assert.equal(
-    appSettingsView(await store.snapshot()).credentialSources[FIRST_CLOUD],
+    appSettingsView(await store.snapshot()).credentialSources[CREDENTIAL_PROVIDER_ID.OPENAI],
     CREDENTIAL_SOURCE.NONE,
     "a provider with no key must report nothing",
   );
@@ -699,35 +626,39 @@ test("keeps both keys when two providers are saved at once", async (t) => {
   // Each settings row carries its own busy flag, so a user with more than one
   // provider can start a second save before the first has landed.
   const directory = temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory, { providers: TEST_PROVIDERS });
+  const store = storeIn(directory);
 
   await Promise.all([
-    store.setApiKey(FIRST_CLOUD, "first-cloud-key"),
-    store.setApiKey(SECOND_CLOUD, "second-cloud-key"),
+    store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-stored-key"),
+    store.setApiKey(CONDUCTOR, "conductor-stored-key"),
   ]);
 
-  assert.equal(await store.readApiKey(FIRST_CLOUD), "first-cloud-key");
-  assert.equal(await store.readApiKey(SECOND_CLOUD), "second-cloud-key");
+  assert.equal(await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI), "sk-stored-key");
+  assert.equal(await store.readApiKey(CONDUCTOR), "conductor-stored-key");
   assert.deepEqual(
     JSON.parse(await readSettingsFile(directory)),
     expectedPersistedSettings({
       apiKeys: {
-        [FIRST_CLOUD]: sealed("first-cloud-key"),
-        [SECOND_CLOUD]: sealed("second-cloud-key"),
+        [CREDENTIAL_PROVIDER_ID.OPENAI]: sealed("sk-stored-key"),
+        [CONDUCTOR]: sealed("conductor-stored-key"),
       },
+      // Storing the voice key is choosing it, so the file records the choice.
+      voiceSource: VOICE_SOURCE.KEY,
     }),
   );
-  const reopened = storeIn(directory, { providers: TEST_PROVIDERS });
-  assert.equal(await reopened.readApiKey(FIRST_CLOUD), "first-cloud-key");
-  assert.equal(await reopened.readApiKey(SECOND_CLOUD), "second-cloud-key");
+  const reopened = storeIn(directory);
+  assert.equal(await reopened.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI), "sk-stored-key");
+  assert.equal(await reopened.readApiKey(CONDUCTOR), "conductor-stored-key");
 });
 
-test("reports nothing for a provider this store does not know", async (t) => {
+test("reports nothing for a provider the registry does not name", async (t) => {
   const directory = temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory, { providers: [FIRST_CLOUD_PROVIDER] });
+  const store = storeIn(directory);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+  const unknown = "no-such-service" as CredentialProviderId;
 
-  assert.equal(await store.readApiKey(SECOND_CLOUD), undefined);
-  assert.equal(appSettingsView(await store.snapshot()).credentialSources[SECOND_CLOUD], undefined);
+  assert.equal(await store.readApiKey(unknown), undefined);
+  assert.equal(appSettingsView(await store.snapshot()).credentialSources[unknown], undefined);
 });
 
 test("falls back to an API key from the environment", async (t) => {
@@ -766,52 +697,22 @@ test("rejects a key that cannot be sent as an authorization header", async (t) =
   await assert.rejects(() => readSettingsFile(directory), /ENOENT/);
 });
 
-test("holds a key only in the form its provider says it issues", async (t) => {
+test("holds a key only in the form its provider says it issues", () => {
   // A credential in a form the provider no longer accepts would be refused on
   // the first request, and a key Luke cannot use is worth saying so about
-  // rather than storing and then going quiet.
-  const directory = temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory, {
-    providers: TEST_PROVIDERS,
-    environment: { [TEST_ENVIRONMENT_VARIABLE.THIRD_CLOUD_API_KEY]: "legacy-third-cloud-key" },
-  });
+  // rather than storing and then going quiet. No provider this build ships
+  // publishes a format, so the rule is read where it lives: the same pure
+  // check every stored, pasted, and environment key passes through.
+  const format = {
+    label: "API key",
+    prefix: "current_",
+    rejection: "Third Cloud's current keys start with current_.",
+  };
 
-  const refused = await store.setApiKey(THIRD_CLOUD, "legacy-third-cloud-key");
-
-  assert.match(refused.reason ?? "", /start with current_/);
-  assert.equal(await store.readApiKey(THIRD_CLOUD), undefined);
-  // The same rule holds a key read from the environment, so a shell profile is
-  // not a way around it.
-  assert.equal(
-    appSettingsView(refused.settings).credentialSources[THIRD_CLOUD],
-    CREDENTIAL_SOURCE.NONE,
-  );
-
-  const accepted = await store.setApiKey(THIRD_CLOUD, "current_third-cloud-key");
-  assert.equal(accepted.reason, undefined);
-  assert.equal(await store.readApiKey(THIRD_CLOUD), "current_third-cloud-key");
+  assert.match(apiKeyRejection("legacy-third-cloud-key", format) ?? "", /start with current_/);
+  assert.equal(apiKeyRejection("current_third-cloud-key", format), undefined);
   // A provider that publishes no format still takes whatever it issues.
-  assert.equal((await store.setApiKey(FIRST_CLOUD, "legacy-third-cloud-key")).reason, undefined);
-});
-
-test("stops honouring a stored key the moment its provider names a form it is not", async (t) => {
-  // The rule arrived after the key did, so the key was stored under an older
-  // build that had no format to hold it to.
-  const directory = temporaryDirectory(t, "luke-settings-");
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: { [THIRD_CLOUD]: sealed("legacy-third-cloud-key") } }),
-  );
-
-  const store = storeIn(directory, { providers: TEST_PROVIDERS });
-
-  assert.equal(await store.readApiKey(THIRD_CLOUD), undefined);
-  assert.equal(
-    appSettingsView(await store.snapshot()).credentialSources[THIRD_CLOUD],
-    CREDENTIAL_SOURCE.NONE,
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    "a key the provider no longer accepts must not read as connected",
-  );
+  assert.equal(apiKeyRejection("legacy-third-cloud-key"), undefined);
 });
 
 test("refuses to store a key when encrypted storage is unavailable", async (t) => {
@@ -1765,7 +1666,7 @@ test("pasting a key back while parked on the allowance is still choosing it", as
 
 test("a grant is stored encrypted, and read back only in the main process", async (t) => {
   const directory = temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory, { providers: TEST_PROVIDERS });
+  const store = storeIn(directory);
 
   const { settings } = await store.setGrant(CONSENT_SERVICE, {
     accessToken: "granted-access",
@@ -1796,14 +1697,14 @@ test("a grant is stored encrypted, and read back only in the main process", asyn
   });
 
   // A stored grant outlives the process that made it.
-  const reopened = storeIn(directory, { providers: TEST_PROVIDERS });
+  const reopened = storeIn(directory);
   assert.equal((await reopened.readGrant(CONSENT_SERVICE))?.accessToken, "granted-access");
 });
 
 test("clearing a grant leaves nothing behind, and keys alone", async (t) => {
   const directory = temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory, { providers: TEST_PROVIDERS });
-  await store.setApiKey(FIRST_CLOUD, "first-cloud-key");
+  const store = storeIn(directory);
+  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-stored-key");
   await store.setGrant(CONSENT_SERVICE, { accessToken: "granted-access", expiresAt: 1 });
 
   const { settings } = await store.clearGrant(CONSENT_SERVICE);
@@ -1813,7 +1714,7 @@ test("clearing a grant leaves nothing behind, and keys alone", async (t) => {
   );
   assert.equal(await store.readGrant(CONSENT_SERVICE), undefined);
   // Disconnecting one service never disturbs another's credential.
-  assert.equal(await store.readApiKey(FIRST_CLOUD), "first-cloud-key");
+  assert.equal(await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI), "sk-stored-key");
   assert.doesNotMatch(await readSettingsFile(directory), /granted-access/);
 });
 
@@ -1827,12 +1728,12 @@ test("a key left by a build that asked for one is dropped, never carried", async
       version: 2,
       apiKeys: {
         [CONSENT_SERVICE]: sealed("stale-pasted-key"),
-        [FIRST_CLOUD]: sealed("first-cloud-key"),
+        [CREDENTIAL_PROVIDER_ID.OPENAI]: sealed("sk-stored-key"),
       },
     }),
     "utf8",
   );
-  const store = storeIn(directory, { providers: TEST_PROVIDERS });
+  const store = storeIn(directory);
 
   const settings = appSettingsView(await store.snapshot());
   assert.equal(settings.credentialSources[CONSENT_SERVICE], CREDENTIAL_SOURCE.NONE);
@@ -1840,8 +1741,8 @@ test("a key left by a build that asked for one is dropped, never carried", async
 
   // A provider this build does know, and knows takes no key, has its key let
   // go on the next write — a credential Luke will not use is not one to keep.
-  await store.setApiKey(FIRST_CLOUD, "replaced-key");
+  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-replaced-key");
   const file = JSON.parse(await readSettingsFile(directory));
   assert.equal(file.apiKeys[CONSENT_SERVICE], undefined);
-  assert.ok(file.apiKeys[FIRST_CLOUD]);
+  assert.ok(file.apiKeys[CREDENTIAL_PROVIDER_ID.OPENAI]);
 });

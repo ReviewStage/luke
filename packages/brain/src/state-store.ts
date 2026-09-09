@@ -47,6 +47,12 @@ export const BRAIN_STATE_BOUNDS: BrainStateBounds = {
   MAXIMUM_SERIALIZED_BYTES: 8 * 1024 * 1024,
 };
 
+/** The same bounds with one place kept open, which is what asks whether one more record fits. */
+const ADMISSION_BOUNDS: BrainStateBounds = {
+  ...BRAIN_STATE_BOUNDS,
+  MAXIMUM_TERMINAL_REQUESTS: BRAIN_STATE_BOUNDS.MAXIMUM_TERMINAL_REQUESTS - 1,
+};
+
 /**
  * What a Clear leaves behind in place of the generation it erased: the id of
  * the generation nothing may write into again, and the instant of the Clear,
@@ -391,7 +397,6 @@ export type BrainStateStoreOptions = (
   now?: () => number;
   /** Enforce the stamped deadline. Off by default, as OpenClaw's session reset policy is `none`. */
   automaticReset?: boolean;
-  bounds?: BrainStateBounds;
   /** Hears the store's own housekeeping failures: a discard or expiry the disk would not take. */
   report?: (message: string) => void;
 };
@@ -449,7 +454,6 @@ export class BrainStateStore {
   readonly #repository: BrainStateRepository;
   readonly #createGenerationId: () => string;
   readonly #now: () => number;
-  readonly #bounds: BrainStateBounds;
   readonly #report: (message: string) => void;
   #state: BrainPersistedState | undefined;
   #lease: BrainStoreLease | undefined;
@@ -461,7 +465,6 @@ export class BrainStateStore {
     this.#repository = options.repository ?? brainStateRepositoryFromStorage(options.storage);
     this.#createGenerationId = options.createGenerationId;
     this.#now = options.now ?? Date.now;
-    this.#bounds = options.bounds ?? BRAIN_STATE_BOUNDS;
     this.#report = options.report ?? (() => undefined);
   }
 
@@ -527,7 +530,7 @@ export class BrainStateStore {
         rewrite: "the expired generation",
       };
     }
-    const retained = retainedBrainState(read, this.#bounds);
+    const retained = retainedBrainState(read, BRAIN_STATE_BOUNDS);
     if (retained.oversized) {
       // Nothing this build writes exceeds its bounds with nothing left to
       // let go, so a file that does was not written under this rule; it is
@@ -588,9 +591,10 @@ export class BrainStateStore {
   admits(generationId: string): boolean {
     const held = this.#state;
     if (!held || held.generationId !== generationId) return false;
-    const cap = this.#bounds.MAXIMUM_TERMINAL_REQUESTS;
-    const withRoom = { ...this.#bounds, MAXIMUM_TERMINAL_REQUESTS: cap - 1 };
-    return retainedBrainState(held, withRoom).state.requests.length < cap;
+    return (
+      retainedBrainState(held, ADMISSION_BOUNDS).state.requests.length <
+      BRAIN_STATE_BOUNDS.MAXIMUM_TERMINAL_REQUESTS
+    );
   }
 
   /**
@@ -650,7 +654,7 @@ export class BrainStateStore {
         expiresAt: held.expiresAt,
         ...(held.reset ? { reset: held.reset } : undefined),
       };
-      const retained = retainedBrainState(composed, this.#bounds);
+      const retained = retainedBrainState(composed, BRAIN_STATE_BOUNDS);
       if (retained.oversized && grows(retained, held)) return false;
       if (!(await this.#persist(retained.state, transcript))) return false;
       if (this.#state !== held || !this.holdsLease(lease)) return false;
@@ -670,7 +674,7 @@ export class BrainStateStore {
    * newer truth carrying the file.
    */
   replace(state: BrainPersistedState): Promise<boolean> {
-    const retained = retainedBrainState(state, this.#bounds);
+    const retained = retainedBrainState(state, BRAIN_STATE_BOUNDS);
     if (retained.oversized) return Promise.resolve(false);
     this.#state = retained.state;
     this.#announceReplaced(retained.state);

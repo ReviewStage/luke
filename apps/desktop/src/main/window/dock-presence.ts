@@ -19,33 +19,11 @@ export const DOCK_ICON_FILES = {
  */
 export const DOCK_SETTLE_MS = 1100;
 
-/** Only the Dock surface this needs, so a test can supply one. */
-export interface DockTile {
-  isVisible(): boolean;
-  show(): Promise<void>;
-  hide(): void;
-  setIcon(image: Electron.NativeImage): void;
-}
-
-export interface DockTheme {
-  readonly shouldUseDarkColors: boolean;
-  on(event: "updated", listener: () => void): void;
-}
-
 export interface DockPresenceOptions {
   /** The display whose panel held the switch is brought back forward. */
   focusExpanded: (displayId?: number) => void;
   /** Directory holding the two theme tiles. */
   iconDirectory: string;
-  dock?: DockTile;
-  theme?: DockTheme;
-  loadIcon?: (file: string) => Electron.NativeImage;
-  delay?: (ms: number) => Promise<void>;
-  settleMs?: number;
-}
-
-function defaultDelay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -56,12 +34,7 @@ function defaultDelay(ms: number): Promise<void> {
 export class DockPresence {
   readonly #focusExpanded: (displayId?: number) => void;
   readonly #iconDirectory: string;
-  readonly #dock: DockTile | undefined;
-  readonly #theme: DockTheme;
-  readonly #loadIcon: (file: string) => Electron.NativeImage;
-  readonly #delay: (ms: number) => Promise<void>;
-  readonly #settleMs: number;
-  readonly #enforcePlatform: boolean;
+  readonly #dock: Electron.Dock | undefined;
   /** The Dock state last asked for, and whether the applier is chasing it. */
   #desired = false;
   #settling = false;
@@ -71,14 +44,7 @@ export class DockPresence {
   constructor(options: DockPresenceOptions) {
     this.#focusExpanded = options.focusExpanded;
     this.#iconDirectory = options.iconDirectory;
-    this.#dock = options.dock ?? app.dock;
-    this.#theme = options.theme ?? nativeTheme;
-    this.#loadIcon =
-      options.loadIcon ??
-      ((file) => nativeImage.createFromPath(path.join(this.#iconDirectory, file)));
-    this.#delay = options.delay ?? defaultDelay;
-    this.#settleMs = options.settleMs ?? DOCK_SETTLE_MS;
-    this.#enforcePlatform = options.dock === undefined;
+    this.#dock = app.dock;
   }
 
   /**
@@ -92,14 +58,14 @@ export class DockPresence {
    */
   applyIcon(): void {
     if (!this.#dock) return;
-    const file = this.#theme.shouldUseDarkColors ? DOCK_ICON_FILES.DARK : DOCK_ICON_FILES.LIGHT;
-    const image = this.#loadIcon(file);
+    const file = nativeTheme.shouldUseDarkColors ? DOCK_ICON_FILES.DARK : DOCK_ICON_FILES.LIGHT;
+    const image = nativeImage.createFromPath(path.join(this.#iconDirectory, file));
     if (!image.isEmpty()) this.#dock.setIcon(image);
   }
 
   /** Keeps the tile matched as the desktop changes mode. */
   watchTheme(): void {
-    this.#theme.on("updated", () => this.applyIcon());
+    nativeTheme.on("updated", () => this.applyIcon());
   }
 
   /**
@@ -110,7 +76,6 @@ export class DockPresence {
    * press was made rather than to whichever panel stands first.
    */
   apply(show: boolean, askedFrom?: number): void {
-    if (this.#enforcePlatform && process.platform !== "darwin") return;
     this.#desired = show;
     this.#askedFrom = askedFrom;
     void this.#settle();
@@ -139,7 +104,7 @@ export class DockPresence {
         // the app; the panel the switch was pressed in is brought back forward
         // rather than left to lose its caret.
         this.#focusExpanded(this.#askedFrom);
-        await this.#delay(this.#settleMs);
+        await new Promise((resolve) => setTimeout(resolve, DOCK_SETTLE_MS));
       }
     } finally {
       this.#settling = false;

@@ -18,7 +18,7 @@ import {
   UNKNOWN_WORKSPACE_LABEL,
   UNSUPPORTED_BY_OBSERVATION,
 } from "@sidecar/session";
-import { recordFromJsonLine, resolveOptions, type WireRecord } from "@sidecar/wire";
+import { recordFromJsonLine, type WireRecord } from "@sidecar/wire";
 
 export function localSessionStatus(
   status: SessionStatus,
@@ -180,7 +180,6 @@ export function sessionIdFromFileName(fileName: string, extension: string): stri
 
 export interface LocalSessionAdapterOptions {
   now?: () => number;
-  activeSessionFreshnessMs?: number;
 }
 
 /**
@@ -191,17 +190,10 @@ export interface LocalSessionAdapterOptions {
 export abstract class LocalSessionAdapter extends SessionProviderAdapterBase {
   readonly #now: () => number;
   #observations: readonly ProviderSessionObservation[] = [];
-  protected readonly activeSessionFreshnessMs: number;
 
   protected constructor(options: LocalSessionAdapterOptions = {}) {
     super();
     this.#now = options.now ?? Date.now;
-    const resolved = resolveOptions(
-      options,
-      { activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS },
-      { nonNegative: ["activeSessionFreshnessMs"] },
-    );
-    this.activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
   }
 
   protected observationTime(): number {
@@ -288,7 +280,12 @@ export abstract class LocalFileSessionAdapter<
         cached?.mtimeMs === candidate.mtimeMs ? cached.value : await this.parseAndCache(candidate);
       observations.set(
         candidate.providerSessionId,
-        await this.observation(candidate, parsed, now, this.activeSessionFreshnessMs),
+        await this.observation(
+          candidate,
+          parsed,
+          now,
+          OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
+        ),
       );
     }
     const discovered = new Set(candidates.map((candidate) => candidate.filePath));
