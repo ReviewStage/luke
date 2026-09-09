@@ -7,15 +7,13 @@ import {
 } from "@sidecar/hosted";
 import { MODEL_FAILURE, MODEL_RESPONSE_OUTCOME } from "@sidecar/runtime/vocabulary";
 import {
+  BRAIN_EMBEDDING_MODEL,
+  BRAIN_EMBEDDINGS_PATH,
   EMBEDDING_BATCH_SIZE,
+  embeddingsVectors,
   HostedEmbeddingAdapter,
   OpenAiEmbeddingAdapter,
 } from "./embedding-adapters.js";
-import {
-  BRAIN_EMBEDDING_MODEL,
-  BRAIN_EMBEDDINGS_PATH,
-  embeddingsVectors,
-} from "./responses-api.js";
 
 interface Call {
   url: string;

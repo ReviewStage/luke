@@ -10,13 +10,13 @@ import {
   maximumStoredConversationEntries,
   storedConversationMaximumAgeMs,
 } from "@sidecar/session";
-import { BRAIN_REQUEST_STATUS } from "../requests.js";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
   type BrainPersistedState,
-  BrainStateStore,
   freshBrainState,
-} from "../state-store.js";
+} from "../envelope.js";
+import { BRAIN_REQUEST_STATUS } from "../requests.js";
+import { BrainStateStore } from "../state-store.js";
 import { deleteConversationHistory } from "./archives.js";
 import { loadBrainEnvelope, saveBrainEnvelope } from "./brain-envelope.js";
 import { createConversation, raiseHistoryCutoff } from "./conversations-table.js";

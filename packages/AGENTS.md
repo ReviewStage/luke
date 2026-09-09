@@ -112,7 +112,11 @@ the runtime's own `ScheduledTimer`.
 `@sidecar/brain` is the reason the rule exists twice in one package: the barrel
 is a door the web functions and the renderer open, and the store beneath it
 reaches `node:sqlite`, so the store and its worker entry each get a subpath and
-the barrel exports neither.
+the barrel exports neither. `@sidecar/brain/envelope` is the third: the
+envelope's shape and its readings are what everything under `brain/src/store/`
+needs, and reaching them through the barrel — or through `state-store.ts`,
+which is the store class over them — would pull the whole brain into the module
+that only has to read a row back.
 
 `@sidecar/runtime/vocabulary` is the same rule at the bottom of the graph: the
 identities, the storage contracts, and the execution seams are Node-free, and

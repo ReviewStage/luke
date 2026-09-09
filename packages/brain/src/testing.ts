@@ -8,8 +8,8 @@ import {
   type TranscriptEvent,
 } from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
+import type { BrainPersistedState, BrainStateLoad, BrainStateRepository } from "./envelope.js";
 import { BRAIN_MAXIMUM_OUTPUT_TOKENS, failed } from "./model-adapter-shared.js";
-import type { BrainPersistedState, BrainStateLoad, BrainStateRepository } from "./state-store.js";
 
 /** The two things a bare transport answers: an inference, and when it is quiet. */
 export interface BareResponsesModel {

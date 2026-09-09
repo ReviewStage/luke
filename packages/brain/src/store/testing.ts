@@ -5,13 +5,13 @@ import {
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
+import { type BrainPersistedState, freshBrainState } from "../envelope.js";
 import type { BrainJournalEntry } from "../journal.js";
 import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
   type BrainRequestRecord,
 } from "../requests.js";
-import { type BrainPersistedState, freshBrainState } from "../state-store.js";
 import { createConversation } from "./conversations-table.js";
 import { StoreDatabase } from "./database.js";
 

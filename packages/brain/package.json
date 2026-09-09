@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
+    "./envelope": "./src/envelope.js",
     "./requests": "./src/requests.js",
     "./requests-wire": "./src/requests-wire.js",
     "./store": "./src/store/index.js",

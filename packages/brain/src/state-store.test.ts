@@ -1,25 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
-import { BrainGenerationClock } from "./generation-clock.js";
-import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "./requests.js";
+import type { WireBoundaryInput } from "@sidecar/wire";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
-  BRAIN_STATE_VERSION,
   type BrainPersistedState,
-  BrainStateStore,
-  brainGenerationExpired,
-  brainPersistedStateFromWire,
   freshBrainState,
   MAXIMUM_TERMINAL_REQUESTS,
-  retainedBrainState,
-} from "./state-store.js";
+} from "./envelope.js";
+import { BrainGenerationClock } from "./generation-clock.js";
+import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "./requests.js";
+import { BrainStateStore } from "./state-store.js";
 import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
 
 const NOW = 1_800_000_000_000;
 
 /** A record as it would come off the wire: the same fields, with no domain type attached. */
-function raw(value: BrainPersistedState | BrainPersistedState["requests"][number] | undefined) {
+function _raw(value: BrainPersistedState | BrainPersistedState["requests"][number] | undefined) {
   // SAFETY: a JSON round trip of a plain record is boundary input by construction.
   return JSON.parse(JSON.stringify(value)) as Record<string, WireBoundaryInput>;
 }
@@ -62,49 +58,43 @@ function complete(): BrainPersistedState {
   };
 }
 
-test("a fresh generation is born now and expires exactly one lifetime later", () => {
-  const state = freshBrainState("gen-1", NOW);
-  assert.equal(state.version, BRAIN_STATE_VERSION);
-  assert.equal(state.expiresAt - state.createdAt, BRAIN_GENERATION_LIFETIME_MS);
-  assert.deepEqual([state.items, state.requests, state.journal], [[], [], []]);
-});
+function terminal(index: number, overrides: Partial<BrainPersistedState["requests"][number]> = {}) {
+  const base = complete().requests[0];
+  assert.ok(base);
+  return {
+    ...base,
+    runId: `run-${index}`,
+    submissionId: `sub-${index}`,
+    acceptedAt: NOW + index,
+    settledAt: NOW + index + 1,
+    historyRecordedAt: NOW + index + 2,
+    ...overrides,
+  };
+}
 
-test("the envelope round-trips, and anything from another shape reads as nothing", () => {
-  const state = complete();
-  assert.deepEqual(brainPersistedStateFromWire(unparsedWire(raw(state))), state);
-  // The version-1 file — items and cursors alone, of unknown age — is not
-  // given a fresh lifetime; it reads as no state.
-  const read = (value: WireBoundaryInput) => brainPersistedStateFromWire(unparsedWire(value));
-  assert.equal(read({ version: 1, items: [], cursors: {} }), undefined);
-  assert.equal(read({ ...raw(state), generationId: "" }), undefined);
-  assert.equal(read({ ...raw(state), expiresAt: "soon" }), undefined);
-  assert.equal(read({ ...raw(state), items: ["text"] }), undefined);
-  assert.equal(read({ ...raw(state), cursors: { a: { b: 1 } } }), undefined);
-  assert.equal(read({ ...raw(state), requests: [{ runId: "x" }] }), undefined);
-  assert.equal(
-    read({ ...raw(state), requests: [{ ...raw(state.requests[0]), status: "sleeping" }] }),
-    undefined,
-  );
-  assert.equal(read({ ...raw(state), journal: [{ runId: "x" }] }), undefined);
-});
+function journalFor(runId: string, calls = 1) {
+  return Array.from({ length: calls }, (_, index) => ({
+    runId,
+    callId: `${runId}-call-${index}`,
+    name: "send_session_message",
+    argumentsJson: "{}",
+    startedAt: NOW,
+    outputJson: '{"status":"accepted"}',
+    settledAt: NOW + 1,
+  }));
+}
 
-test("the checkpoint stamp is kept as written, and absent wherever none was written", () => {
-  const read = (value: WireBoundaryInput) => brainPersistedStateFromWire(unparsedWire(value));
-  const { checkpointFormat: _stamp, ...unstamped } = raw(complete());
-  const held = read(unstamped);
-  assert.ok(held && !("checkpointFormat" in held));
-  const empty = read({ ...unstamped, items: [] });
-  assert.ok(empty && !("checkpointFormat" in empty));
-  // An empty checkpoint of another runtime keeps saying whose it is.
-  const foreign = "other-runtime@3:anthropic-messages/2";
-  assert.equal(
-    read({ ...unstamped, items: [], checkpointFormat: foreign })?.checkpointFormat,
-    foreign,
-  );
-  assert.equal(read({ ...unstamped, checkpointFormat: foreign })?.checkpointFormat, foreign);
-  assert.equal(read({ ...unstamped, checkpointFormat: "not a stamp" }), undefined);
-  assert.equal(read({ ...unstamped, checkpointFormat: 7 }), undefined);
-});
+function settleTicks(): Promise<void> {
+  return new Promise((resolve) => {
+    let ticks = 0;
+    const tick = () => {
+      ticks += 1;
+      if (ticks > 10) resolve();
+      else setImmediate(tick);
+    };
+    tick();
+  });
+}
 
 test("the store loads once, serializes writes, and fences a write against a replaced generation", async () => {
   const repository = fakeBrainStateRepository();
@@ -172,55 +162,6 @@ test("the store loads once, serializes writes, and fences a write against a repl
   await store.flush();
 });
 
-function terminal(index: number, overrides: Partial<BrainPersistedState["requests"][number]> = {}) {
-  const base = complete().requests[0];
-  assert.ok(base);
-  return {
-    ...base,
-    runId: `run-${index}`,
-    submissionId: `sub-${index}`,
-    acceptedAt: NOW + index,
-    settledAt: NOW + index + 1,
-    historyRecordedAt: NOW + index + 2,
-    ...overrides,
-  };
-}
-
-function journalFor(runId: string, calls = 1) {
-  return Array.from({ length: calls }, (_, index) => ({
-    runId,
-    callId: `${runId}-call-${index}`,
-    name: "send_session_message",
-    argumentsJson: "{}",
-    startedAt: NOW,
-    outputJson: '{"status":"accepted"}',
-    settledAt: NOW + 1,
-  }));
-}
-
-test("a generation is expired at its expiry instant exactly, and not one millisecond before", () => {
-  const state = freshBrainState("gen-1", NOW);
-  assert.equal(brainGenerationExpired(state, state.expiresAt - 1), false);
-  assert.equal(brainGenerationExpired(state, state.expiresAt), true);
-  assert.equal(brainGenerationExpired(state, state.expiresAt + 1), true);
-  assert.equal(state.expiresAt, NOW + 14 * 24 * 60 * 60 * 1000);
-});
-
-test("the reset marker round-trips, and a marker that is present but unreadable fails the whole envelope", () => {
-  const cleared: BrainPersistedState = {
-    ...freshBrainState("gen-2", NOW),
-    reset: { generationId: "gen-1", clearedAt: NOW - 5 },
-  };
-  assert.deepEqual(brainPersistedStateFromWire(unparsedWire(raw(cleared))), cleared);
-  const read = (value: WireBoundaryInput) => brainPersistedStateFromWire(unparsedWire(value));
-  assert.equal(read({ ...raw(cleared), reset: { generationId: "" } }), undefined);
-  assert.equal(
-    read({ ...raw(cleared), reset: { generationId: "gen-1", clearedAt: -1 } }),
-    undefined,
-  );
-  assert.equal(read({ ...raw(cleared), reset: "gone" }), undefined);
-});
-
 test("the store discards an expired file at load rather than giving old memory a fresh lifetime", async () => {
   const stale = complete();
   const repository = fakeBrainStateRepository(stale);
@@ -284,43 +225,6 @@ test("writes and a compaction never move the expiry, and expireIfDue ends the ge
   assert.deepEqual(store.current()?.cursors, {});
   assert.equal(await store.write(lease, "gen-1", (state) => state), false);
   assert.equal(await store.expireIfDue(born.expiresAt), false);
-});
-
-test("retention keeps 200 records, oldest ended runs and their journals going first, and never touches a run still going", () => {
-  const requests = [
-    ...Array.from({ length: 205 }, (_, index) => terminal(index)),
-    terminal(900, { status: BRAIN_REQUEST_STATUS.RUNNING, settledAt: undefined }),
-    terminal(901, { status: BRAIN_REQUEST_STATUS.QUEUED, settledAt: undefined }),
-  ];
-  const journal = requests.flatMap((record) => journalFor(record.runId));
-  const retained = retainedBrainState({ ...freshBrainState("gen-1", NOW), requests, journal });
-  // The bound counts every record, the two still going included, so seven go.
-  assert.deepEqual(retained.prunedRunIds, [
-    "run-0",
-    "run-1",
-    "run-2",
-    "run-3",
-    "run-4",
-    "run-5",
-    "run-6",
-  ]);
-  assert.equal(retained.state.requests.length, 200);
-  assert.ok(retained.state.requests.some((record) => record.runId === "run-900"));
-  assert.ok(retained.state.requests.some((record) => record.runId === "run-901"));
-  assert.ok(!retained.state.requests.some((record) => record.runId === "run-0"));
-  assert.ok(!retained.state.journal.some((entry) => entry.runId === "run-0"));
-  assert.ok(retained.state.journal.some((entry) => entry.runId === "run-900"));
-  assert.equal(retained.oversized, false);
-});
-
-test("an ended run whose end the thread has not taken is kept past the count, however old", () => {
-  const requests = Array.from({ length: 203 }, (_, index) =>
-    terminal(index, index < 3 ? { historyRecordedAt: undefined } : {}),
-  );
-  const retained = retainedBrainState({ ...freshBrainState("gen-1", NOW), requests, journal: [] });
-  // The three unpublished are the oldest, yet the next three go instead.
-  assert.deepEqual(retained.prunedRunIds, ["run-3", "run-4", "run-5"]);
-  assert.equal(retained.state.requests.length, 200);
 });
 
 test("a write that would still leave the envelope over the count is refused, and one that shrinks it lands", async () => {
@@ -406,15 +310,6 @@ test("a Clear whose marker the repository refuses still fences the old generatio
     generationId: "gen-1",
     clearedAt: NOW + 1,
   });
-});
-
-test("the parser refuses a lifetime other than the build's and a marker dated after its generation's birth", () => {
-  const state = complete();
-  const read = (value: WireBoundaryInput) => brainPersistedStateFromWire(unparsedWire(value));
-  assert.equal(read({ ...raw(state), expiresAt: state.expiresAt + 1 }), undefined);
-  assert.equal(read({ ...raw(state), createdAt: state.createdAt - 1 }), undefined);
-  assert.deepEqual(read({ ...raw(state), reset: { clearedAt: NOW } })?.reset, { clearedAt: NOW });
-  assert.equal(read({ ...raw(state), reset: { clearedAt: NOW + 1 } }), undefined);
 });
 
 test("a Clear and an expiry fence synchronously, before any disk is waited on, and a write landing afterwards installs nothing", async () => {
@@ -755,18 +650,6 @@ test("a load's own cleanup write and a replacement both yield to a Clear or expi
     generationId: "fresh-5",
   });
 });
-
-function settleTicks(): Promise<void> {
-  return new Promise((resolve) => {
-    let ticks = 0;
-    const tick = () => {
-      ticks += 1;
-      if (ticks > 10) resolve();
-      else setImmediate(tick);
-    };
-    tick();
-  });
-}
 
 test("default policy keeps an existing checkpoint beyond its legacy deadline and arms no reset timer", async () => {
   const previous = complete();

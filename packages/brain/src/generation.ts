@@ -6,20 +6,12 @@ import {
   checkpointFormatTag,
   type RuntimeCheckpoint,
 } from "@sidecar/runtime/vocabulary";
-import type { SessionIdentity } from "@sidecar/session";
-import {
-  ACT_RESULT_STATUS,
-  isRecord,
-  text,
-  type UnparsedWireValue,
-  type WireRecord,
-} from "@sidecar/wire";
 import { TranscriptCursors } from "./cursors.js";
+import type { BrainPersistedState } from "./envelope.js";
 import { BrainJournal } from "./journal.js";
 import type { BrainObservationEntry } from "./observation-inbox.js";
 import type { BrainRequestRecord } from "./requests.js";
 import { claimedUnlessAborted, type Settled } from "./settled.js";
-import type { BrainPersistedState } from "./state-store.js";
 import { RecordingContextEngine } from "./transcript-recorder.js";
 
 /**
@@ -195,31 +187,4 @@ export function retireContext(context: ContextEngine): void {
   void Promise.resolve()
     .then(() => context.dispose())
     .catch(() => undefined);
-}
-
-export function parsedRecord(json: string): WireRecord {
-  try {
-    // SAFETY: JSON.parse returns a wire value; the record check below is the validation.
-    const parsed = JSON.parse(json) as UnparsedWireValue;
-    return isRecord(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-export function identityFromRecord(value: UnparsedWireValue): SessionIdentity | undefined {
-  if (!isRecord(value)) return undefined;
-  const providerId = text(value.provider_id);
-  const providerSessionId = text(value.provider_session_id);
-  return providerId && providerSessionId ? { providerId, providerSessionId } : undefined;
-}
-
-export function sameIdentity(first: SessionIdentity, second: SessionIdentity): boolean {
-  return (
-    first.providerId === second.providerId && first.providerSessionId === second.providerSessionId
-  );
-}
-
-export function rejection(reason: string): WireRecord {
-  return { status: ACT_RESULT_STATUS.REJECTED, reason };
 }

@@ -36,15 +36,15 @@ import {
   text,
   type WireRecord,
 } from "@sidecar/wire";
-import { estimateTokens } from "./compaction.js";
-import { identityFromRecord, parsedRecord, rejection, sameIdentity } from "./generation.js";
 import {
   childSpawnReceiptRecord,
   childSummaryRecord,
   conversationListingRecord,
-} from "./input-items.js";
+} from "./child-records.js";
+import { estimateTokens } from "./compaction.js";
 import { UNCONFIRMED_ACT_RESULT, UNKNOWN_ACT_RESULT } from "./journal.js";
 import type { BrainActExecution, BrainActPerformer, BrainRoster } from "./performer.js";
+import { identityFromRecord, parsedRecord, rejection, sameIdentity } from "./records.js";
 import { answer } from "./tool-results.js";
 import {
   BRAIN_TOOL,

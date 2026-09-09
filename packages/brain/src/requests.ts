@@ -356,3 +356,13 @@ export function brainReplyWords(snapshot: BrainRequestRecord): string | undefine
         : "That ask was interrupted before I could finish it.";
   }
 }
+
+/** Some fields of one record, as a save applies them over what is committed. */
+export type RecordChanges = Partial<Omit<BrainRequestRecord, "runId" | "revision">>;
+
+/** One record's fields over the committed record — or the record itself, for its own acceptance. */
+export interface BrainRecordChange {
+  runId: string;
+  changes: RecordChanges;
+  insert?: BrainRequestRecord;
+}

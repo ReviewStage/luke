@@ -1,6 +1,6 @@
 import type { SessionIdentity } from "@sidecar/session";
+import type { BrainTranscriptCursors } from "./envelope.js";
 import { NestedMap } from "./nested-map.js";
-import type { BrainTranscriptCursors } from "./state-store.js";
 
 /**
  * Where the brain last read each observed transcript to, keyed by provider and

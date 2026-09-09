@@ -1,14 +1,14 @@
 import type { SQLInputValue } from "node:sqlite";
 import type { SessionKey } from "@sidecar/runtime/vocabulary";
 import { isWireNumber, isWireString, type WireRecord, type WireValue } from "@sidecar/wire";
-import type { BrainJournalEntry } from "../journal.js";
-import type { BrainObservationEntry } from "../observation-inbox.js";
-import type { BrainRequestRecord } from "../requests.js";
 import {
   type BrainPersistedState,
   type BrainTranscriptCursors,
   brainPersistedStateFromWire,
-} from "../state-store.js";
+} from "../envelope.js";
+import type { BrainJournalEntry } from "../journal.js";
+import type { BrainObservationEntry } from "../observation-inbox.js";
+import type { BrainRequestRecord } from "../requests.js";
 import { raiseHistoryCutoff, touchConversation } from "./conversations-table.js";
 import { column, nullable, type StoreDatabase } from "./database.js";
 import { type BrainStateSave, SAVE_KIND } from "./envelope.js";
