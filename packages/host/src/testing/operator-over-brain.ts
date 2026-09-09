@@ -34,7 +34,7 @@ export function operatorOverBrain(options: {
       publicationSettled: () => Promise.resolve(),
       // SAFETY: the submit path reaches no child; the stand-in is never read.
       children: {} as ChildRunService,
-      // SAFETY: only the revision is read here; the stand-in is never read further.
+      // SAFETY: only the revision is ever read off this stand-in.
       configuration: () => ({ revision: 1 }) as ResolvedConfiguration,
       updateConfiguration: () => [],
     },

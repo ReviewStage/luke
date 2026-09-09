@@ -238,10 +238,6 @@ export function SettingsPanel({
       ) : null}
 
       {settings && searchOpen ? (
-        /* The field opens at the head of whichever page is showing — under
-           the page's own pinned header, above the front page's sections —
-           and a typed query swaps the page below it for the rows it kept,
-           read across every page wherever the field was opened from. */
         <SettingsSearch
           query={searchQuery}
           search={search}
@@ -261,12 +257,10 @@ export function SettingsPanel({
       ) : null}
 
       {view === SETTINGS_VIEW.ROOT && !search ? (
-        /* The front page: one row per page, then the sections that answer at a glance —
-           what Luke is allowed, what he counts about his own use, the way to
-           the founders, whose account this is, and the way out. A newer
-           release waiting is marked on the tab rather than moved here: a
-           section that changed places as its own check found news would
-           rearrange the page under the hand that pressed it. */
+        /* A newer release waiting is marked on the tab rather than given a
+           section of its own here: a section that changed places as its own
+           check found news would rearrange the page under the hand that
+           pressed it. */
         <section
           className="settings-section settings-index"
           style={cssCustomProperties({ "--row-index": 1 })}
@@ -308,8 +302,6 @@ export function SettingsPanel({
 
       {view === SETTINGS_VIEW.CONNECTIONS && connections && panelView && !search ? (
         <>
-          {/* The one choice spanning every provider leads the page; the
-              providers it chooses between follow. */}
           <WorkspacesSection view={panelView} writes={SETTINGS_WRITES} />
           <KeySyncSection view={panelView} writes={SETTINGS_WRITES} />
           <CredentialsSection input={connections} />
@@ -331,8 +323,6 @@ export function SettingsPanel({
 
           <FeedbackSection control={feedback} />
 
-          {/* The account and the two ways out of it, last of the sections:
-              signing out and deleting are rare and cannot be taken back. */}
           {account.status === ACCOUNT_STATUS.SIGNED_IN ? (
             <AccountSection
               account={account}

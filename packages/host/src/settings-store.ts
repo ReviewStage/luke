@@ -481,13 +481,11 @@ function accountPreferencesWithLocalChanges(
 ): AccountPreferences {
   const settings: Record<string, WireValue> = {};
   for (const field of ACCOUNT_PREFERENCE_FIELDS) {
+    // SAFETY: AccountPreferenceField selects JSON-compatible account preference values.
     const value = accountPreferenceWithLocalChanges(
       field,
-      // SAFETY: AccountPreferenceField selects JSON-compatible account preference values.
       remote[field] as UnparsedWireValue,
-      // SAFETY: AccountPreferenceField selects JSON-compatible account preference values.
       current[field] as UnparsedWireValue,
-      // SAFETY: AccountPreferenceField selects JSON-compatible account preference values.
       expected[field] as UnparsedWireValue,
     );
     if (value !== undefined) settings[field] = value;

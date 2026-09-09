@@ -95,9 +95,8 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
     state.update(bootstrapPatch(state.snapshot(), boot));
   }
 
-  // What the host tells its clients, written to the document the windows are
-  // told from. The two offers a receiver alone may take are not state and
-  // reach the voice window directly.
+  // The two offers a receiver alone may take are not state and reach the voice
+  // window directly; everything else is written to the document.
   unsubscribers.push(
     gateway.host.onSettingsChanged((change) => {
       const stoodVoice = voiceAvailable;

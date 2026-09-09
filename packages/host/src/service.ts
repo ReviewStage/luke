@@ -510,9 +510,6 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
       }
       return gatewayOk(configurationToWire(brain.configuration()));
     }),
-    // A registration over the protocol names capabilities the host may ask
-    // for; each is invoked back through the registering client's own
-    // channel, which the in-process build wires directly.
     // A registration names the capabilities the host may ask the registering
     // connection for. Each ask travels back on that connection alone, bound
     // to it by the invocation id its ledger holds; the connection closing

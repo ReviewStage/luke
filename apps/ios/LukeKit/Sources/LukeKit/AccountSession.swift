@@ -73,12 +73,6 @@ public final class AccountSession {
         state = .signedIn(identity)
     }
 
-    /// Returns the stored access token when signed in, or nil when signed out.
-    public func currentAccessToken() -> String? {
-        guard case .signedIn = state else { return nil }
-        return KeychainStore.phone.get(.accessToken)
-    }
-
     /// Returns a credential payload suitable for WatchConnectivity transfer.
     /// Nil when signed out or any required field is absent.
     public func tokenPayload() -> [String: Any]? {

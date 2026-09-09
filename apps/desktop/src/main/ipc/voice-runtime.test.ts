@@ -38,7 +38,7 @@ function fixture(clearConversation: () => Promise<boolean>) {
   const sentToVoice: { channel: string; payload: WireRecord }[] = [];
   // SAFETY: the row reads senders by identity alone; two distinct inert objects are two windows.
   const panelSender = {} as WebContents;
-  // SAFETY: as above, the second window.
+  // SAFETY: a second inert object, so the row reads two distinct windows.
   const voiceSender = {} as WebContents;
   // SAFETY: the Clear path reads only `owns` and `current().webContents.send` off the voice window surface.
   const voiceWindow = {
