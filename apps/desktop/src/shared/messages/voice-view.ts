@@ -22,6 +22,13 @@ export interface VoiceView {
   voiceNotice: string | undefined;
   talkOpening: boolean;
   lukeCaptions: readonly string[] | undefined;
+  /**
+   * The lines still being said, as `streamingConversationEntry` builds them:
+   * a kind and words, and no timestamp, because a line still growing has not
+   * happened yet. Read under the unstrict parse for that reason — the strict
+   * one refuses every unstamped line, which would drop the whole report at
+   * exactly the edges that carry a caption.
+   */
   liveConversationEntries: readonly ConversationEntry[];
 }
 
@@ -98,7 +105,11 @@ export function isVoiceView(value: UnparsedWireValue): value is VoiceView & Wire
   }
   const entries = value.liveConversationEntries;
   return (
-    Array.isArray(entries) && entries.every((entry) => storedConversationEntry(entry) !== undefined)
+    Array.isArray(entries) &&
+    entries.every((entry) => {
+      const streaming = storedConversationEntry(entry, { strict: false });
+      return streaming !== undefined && streaming.words.length > 0;
+    })
   );
 }
 
