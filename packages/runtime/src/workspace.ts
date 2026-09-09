@@ -6,7 +6,7 @@ import path from "node:path";
  * reads at the start of every prompt and may edit through its workspace
  * tools. The files are seeded once, when missing, from the seeds the product
  * supplies — this package knows the files' names and bounds, never their
- * words — and never rewritten by an upgrade: a user's edit to SOUL.md is the
+ * words — and never rewritten by an upgrade: a user's edit to AGENTS.md is the
  * user's, and a new build that disagreed would be overwriting a decision. Daily notes live under
  * `memory/` as one file per day; they are never appended to an ordinary
  * prompt, only retrieved when asked for and primed once when a conversation
@@ -17,7 +17,6 @@ import path from "node:path";
 
 export const WORKSPACE_FILE = {
   AGENTS: "AGENTS.md",
-  SOUL: "SOUL.md",
   IDENTITY: "IDENTITY.md",
   USER: "USER.md",
   MEMORY: "MEMORY.md",
@@ -29,7 +28,6 @@ export type WorkspaceFile = (typeof WORKSPACE_FILE)[keyof typeof WORKSPACE_FILE]
 /** The bootstrap files in the order the prompt injects them, from OpenClaw `b7528507` (`docs/concepts/system-prompt.md`). */
 export const BOOTSTRAP_FILE_ORDER: readonly WorkspaceFile[] = [
   WORKSPACE_FILE.AGENTS,
-  WORKSPACE_FILE.SOUL,
   WORKSPACE_FILE.IDENTITY,
   WORKSPACE_FILE.USER,
   WORKSPACE_FILE.BOOTSTRAP,

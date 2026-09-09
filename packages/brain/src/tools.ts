@@ -143,7 +143,7 @@ const BRAIN_ONLY_TOOLS: readonly ActionToolDefinition[] = [
     type: BRAIN_TOOL_TYPE,
     name: BRAIN_TOOL.READ_WORKSPACE_FILE,
     description:
-      "Read one of your own workspace files whole: AGENTS.md, SOUL.md, IDENTITY.md, USER.md, " +
+      "Read one of your own workspace files whole: AGENTS.md, IDENTITY.md, USER.md, " +
       "MEMORY.md, BOOTSTRAP.md, or a dated note as memory/YYYY-MM-DD.md. Nothing " +
       "outside the workspace can be named.",
     parameters: {

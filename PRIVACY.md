@@ -74,7 +74,7 @@ keeps no conversation at all.
 
 **Luke's workspace.** Luke keeps a small set of Markdown files of his own on
 your Mac, under his application data (`agents/main/workspace`): his operating
-instructions, his personality, his identity, stable facts about you, curated
+instructions, his identity, stable facts about you, curated
 notes, and first-run setup notes, plus dated notes under `memory/`. He seeds any file that is missing and never
 overwrites one that exists, so you may edit them freely. The files are read
 into the standing instructions of every call he makes (each cut to 20,000

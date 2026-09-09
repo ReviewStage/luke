@@ -73,7 +73,7 @@ import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testi
 import { brainToolCatalog, hostedBrainToolCatalog, resolveTurnToolPolicy } from "./tools.js";
 import { BRAIN_TURN_KIND, runOriginOf } from "./turn.js";
 import { BRAIN_WAKE_KIND } from "./wake-events.js";
-import { BRAIN_IDENTITY_LINE, BRAIN_WORKSPACE_SEEDS } from "./workspace-seeds.js";
+import { BRAIN_IDENTITY_LINE, BRAIN_PERSONA, BRAIN_WORKSPACE_SEEDS } from "./workspace-seeds.js";
 
 /**
  * The same execution contract, run through the real host against each
@@ -840,6 +840,7 @@ async function workspacePreparation(
       configuration: store.snapshot(),
       run: { origin: trigger === undefined ? RUN_ORIGIN.MAINTENANCE : runOriginOf(trigger) },
       identity: BRAIN_IDENTITY_LINE,
+      persona: BRAIN_PERSONA,
       tools: policy.allowed.map((tool) => ({ name: tool.schema.name, groups: tool.groups })),
       toolNotes: brainToolNotes(),
       runtimeContextMarker: BRAIN_INPUT_MARKER.STANDING_CONTEXT,
@@ -890,7 +891,12 @@ test("a keyed turn and a hosted turn send the same prompt upstream, built from t
     pathless(hosted, hostedPreparation.workspace),
   );
   assert.ok(keyed.includes("# Workspace Files"));
-  assert.ok(keyed.includes("## SOUL.md"));
+  assert.ok(keyed.includes("# Persona"));
+  // The persona is the build's own section and never a workspace file, so it
+  // reaches the prompt exactly once.
+  const personaOpening = BRAIN_PERSONA.split("\n")[0] ?? "";
+  assert.equal(keyed.split(personaOpening).length - 1, 1);
+  assert.ok(!keyed.includes("## SOUL.md"));
   assert.ok(keyed.includes("# Tooling"));
   assert.ok(!keyed.includes("- announce:"), "an ask is not offered the briefing");
 });

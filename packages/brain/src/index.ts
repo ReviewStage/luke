@@ -123,4 +123,4 @@ export {
   type BrainTurnReport,
   type BrainWakeEvent,
 } from "./wake-events.js";
-export { BRAIN_IDENTITY_LINE, BRAIN_WORKSPACE_SEEDS } from "./workspace-seeds.js";
+export { BRAIN_IDENTITY_LINE, BRAIN_PERSONA, BRAIN_WORKSPACE_SEEDS } from "./workspace-seeds.js";

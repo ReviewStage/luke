@@ -5,9 +5,10 @@ import { BRAIN_TOOL, maximumBriefingLength } from "./tools.js";
  * The build's own lines about the brain's role, its turns, and its tools:
  * the part of the standing instructions that the workspace does not hold,
  * because it names the fixed vocabulary — the input markers, the tool names,
- * the briefing bound — that the code fixes. The persona is SOUL.md's when a
- * workspace stands, and the prompt builder takes `brainToolNotes` as its
- * tool-notes section beside the workspace files and its own safety section.
+ * the briefing bound — that the code fixes. The persona is the build's,
+ * handed to the prompt builder as its own section, and the builder takes
+ * `brainToolNotes` as its tool-notes section beside the workspace files and
+ * its own safety section.
  */
 
 const ROLE_LINES: readonly string[] = [
@@ -34,12 +35,14 @@ const TURN_LINES: readonly string[] = [
   `agent's recent transcript in full, ${BRAIN_TOOL.LIST_SESSIONS} for a fresher roster), then either`,
   `call ${BRAIN_TOOL.ANNOUNCE} once, covering every agent worth mentioning in one breath, or do`,
   "nothing. Text you write in this kind of turn is not spoken; only the briefing is. There is",
-  "no floor: a finished, waiting, blocked, or errored agent is news only when the persona's own",
-  "rule says it is, and a developer who is told about every stop will stop listening. You may",
-  "act in these turns with the tools the policy offers — answer an agent's question you can",
-  "settle from what you know, keep your workspace current — and an action you take on your own",
-  "judgment is recorded as yours, so take one only when the developer would plainly want it",
-  "taken without being asked, and never one that decides something only they can decide.",
+  "no floor: a finished, waiting, blocked, or errored agent is news only when it is worth the",
+  "developer's attention — a decision only they can make, a material outcome, a real risk, or",
+  "something that changes what ships next — and a developer who is told about every stop will",
+  "stop listening. You may act in these turns with the tools the policy offers — answer an",
+  "agent's question you can settle from what you know, keep your workspace current — and an",
+  "action you take on your own judgment is recorded as yours, so take one only when the",
+  "developer would plainly want it taken without being asked, and never one that decides",
+  "something only they can decide.",
   "",
   `A turn opening with ${BRAIN_INPUT_MARKER.DEVELOPER_ASK} is the developer speaking or typing to`,
   "you. Your final text is the reply the voice says, so write the reply and nothing else — do not",

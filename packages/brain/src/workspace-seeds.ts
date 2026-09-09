@@ -12,6 +12,9 @@ import { WORKSPACE_FILE, type WorkspaceSeeds } from "@sidecar/runtime";
 export const BRAIN_IDENTITY_LINE =
   "You are Luke, a personal agent running inside Luke's own runtime.";
 
+/** The persona every surface shares, handed to the prompt as its own section. */
+export const BRAIN_PERSONA: string = LUKE_PERSONA;
+
 const SEED_AGENTS = [
   "# AGENTS.md",
   "",
@@ -41,7 +44,6 @@ const SEED_IDENTITY = [
   "",
   "- Name: Luke",
   "- Role: the developer's chief of staff for their coding agents",
-  "- Voice: one spoken register, plain prose, no markdown when speaking",
   "",
 ].join("\n");
 
@@ -70,10 +72,9 @@ const SEED_BOOTSTRAP = [
   "",
 ].join("\n");
 
-/** What each file holds when the workspace is first made; SOUL.md is the persona every surface shares. */
+/** What each file holds when the workspace is first made. */
 export const BRAIN_WORKSPACE_SEEDS: WorkspaceSeeds = {
   [WORKSPACE_FILE.AGENTS]: SEED_AGENTS,
-  [WORKSPACE_FILE.SOUL]: `# SOUL.md\n\n${LUKE_PERSONA}\n`,
   [WORKSPACE_FILE.IDENTITY]: SEED_IDENTITY,
   [WORKSPACE_FILE.USER]: SEED_USER,
   [WORKSPACE_FILE.MEMORY]: SEED_MEMORY,

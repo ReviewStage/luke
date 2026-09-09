@@ -24,7 +24,6 @@ import {
 const testSeed = (name: WorkspaceFile) => `# ${name}\n\nseeded for the test\n`;
 const TEST_SEEDS: WorkspaceSeeds = {
   [WORKSPACE_FILE.AGENTS]: testSeed(WORKSPACE_FILE.AGENTS),
-  [WORKSPACE_FILE.SOUL]: testSeed(WORKSPACE_FILE.SOUL),
   [WORKSPACE_FILE.IDENTITY]: testSeed(WORKSPACE_FILE.IDENTITY),
   [WORKSPACE_FILE.USER]: testSeed(WORKSPACE_FILE.USER),
   [WORKSPACE_FILE.MEMORY]: testSeed(WORKSPACE_FILE.MEMORY),
@@ -41,16 +40,16 @@ test("seeding writes every missing file once and never overwrites an edit or a l
   const directory = await temporaryDirectory();
   const first = await seedWorkspace(directory, TEST_SEEDS);
   assert.deepEqual([...first.seeded].sort(), Object.values(WORKSPACE_FILE).sort());
-  const soul = await fs.readFile(path.join(directory, WORKSPACE_FILE.SOUL), "utf8");
-  assert.equal(soul, TEST_SEEDS[WORKSPACE_FILE.SOUL]);
+  const agents = await fs.readFile(path.join(directory, WORKSPACE_FILE.AGENTS), "utf8");
+  assert.equal(agents, TEST_SEEDS[WORKSPACE_FILE.AGENTS]);
 
-  await fs.writeFile(path.join(directory, WORKSPACE_FILE.SOUL), "# SOUL.md\n\nMy own Luke.\n");
+  await fs.writeFile(path.join(directory, WORKSPACE_FILE.AGENTS), "# AGENTS.md\n\nMy own Luke.\n");
   await fs.rm(path.join(directory, WORKSPACE_FILE.BOOTSTRAP));
   const second = await seedWorkspace(directory, TEST_SEEDS);
   assert.deepEqual(second.seeded, [WORKSPACE_FILE.BOOTSTRAP]);
   assert.equal(
-    await fs.readFile(path.join(directory, WORKSPACE_FILE.SOUL), "utf8"),
-    "# SOUL.md\n\nMy own Luke.\n",
+    await fs.readFile(path.join(directory, WORKSPACE_FILE.AGENTS), "utf8"),
+    "# AGENTS.md\n\nMy own Luke.\n",
   );
   const third = await seedWorkspace(directory, TEST_SEEDS);
   assert.deepEqual(third.seeded, []);
@@ -60,8 +59,8 @@ test("bootstrap files are bounded per file and in total, in order, with what the
   const perFile = BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE;
   const files = boundBootstrapFiles([
     { name: WORKSPACE_FILE.AGENTS, path: "a", content: "a".repeat(perFile + 10_000) },
-    { name: WORKSPACE_FILE.SOUL, path: "s", content: "s".repeat(10_000) },
-    { name: WORKSPACE_FILE.IDENTITY, path: "i", content: undefined },
+    { name: WORKSPACE_FILE.IDENTITY, path: "i", content: "i".repeat(10_000) },
+    { name: WORKSPACE_FILE.BOOTSTRAP, path: "b", content: undefined },
     { name: WORKSPACE_FILE.USER, path: "u", content: "u".repeat(perFile) },
     { name: WORKSPACE_FILE.MEMORY, path: "m", content: "m".repeat(15_000) },
   ]);
@@ -69,8 +68,8 @@ test("bootstrap files are bounded per file and in total, in order, with what the
     files.map((file) => [file.name, file.content.length, file.truncated, file.missing]),
     [
       [WORKSPACE_FILE.AGENTS, perFile, true, false],
-      [WORKSPACE_FILE.SOUL, 10_000, false, false],
-      [WORKSPACE_FILE.IDENTITY, 0, false, true],
+      [WORKSPACE_FILE.IDENTITY, 10_000, false, false],
+      [WORKSPACE_FILE.BOOTSTRAP, 0, false, true],
       [WORKSPACE_FILE.USER, perFile, false, false],
       [
         WORKSPACE_FILE.MEMORY,
