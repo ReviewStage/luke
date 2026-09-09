@@ -6,7 +6,6 @@ import {
   SESSION_STATUS,
   type SessionDiffSummary,
   type SessionStatus,
-  sessionMessageText,
   UNSUPPORTED_BY_OBSERVATION,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
@@ -242,8 +241,8 @@ export class CodexCloudSessionAdapter extends CliSessionAdapter {
     }
 
     // The task is the whole creation — `cloud exec` starts nothing without a
-    // prompt — and it is held to the same bound as a message.
-    const task = request.task === undefined ? undefined : sessionMessageText(request.task);
+    // prompt — so a creation without one has nothing to start.
+    const { task } = request;
     if (!task) {
       return {
         status: ACT_RESULT_STATUS.REJECTED,

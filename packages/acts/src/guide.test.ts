@@ -31,35 +31,21 @@ import {
   SESSION_LIST_VOICE,
   toolAction,
 } from "./index.js";
-import { appToolAction as legacyAppToolAction } from "./legacy-validation.js";
 import { withoutAdmission } from "./testing/admitted.js";
 
-/**
- * Every app act below is admitted twice — once by the validator the intakes
- * ran before `admit` existed, once by `admit` — and the case passes only if
- * the two answer identically. The pair goes when the old validator does.
- */
+/** One app act admitted, as the payload alone: the brand and the origin are dropped. */
 async function appToolAction(
   functionCall: RealtimeFunctionCall,
   guide: AppGuideSnapshot,
   sessions: readonly Session[],
 ) {
-  const legacy = legacyAppToolAction(functionCall, guide, sessions);
-  // Which family a name belongs to is the caller's question, before admission
-  // and after it; only what a named act admits to is compared here.
-  if (realtimeToolFamily(functionCall.name) !== undefined) {
-    assert.deepEqual(
-      withoutAdmission(
-        await toolAction(functionCall, {
-          origin: RUN_ORIGIN.USER,
-          roster: { read: async () => sessions },
-          guide,
-        }),
-      ),
-      legacy,
-    );
-  }
-  return legacy;
+  return withoutAdmission(
+    await toolAction(functionCall, {
+      origin: RUN_ORIGIN.USER,
+      roster: { read: async () => sessions },
+      guide,
+    }),
+  );
 }
 
 const GUIDE: AppGuideSnapshot = {

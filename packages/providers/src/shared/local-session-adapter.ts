@@ -1,13 +1,10 @@
 import {
-  ACT_KIND,
   ACT_RESULT_STATUS,
-  advertisedActFor,
   type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderSessionObservation,
   type SessionProvider,
   SessionProviderAdapterBase,
-  sessionMessageText,
   UNSUPPORTED_BY_OBSERVATION,
 } from "@sidecar/session";
 import type { SessionFileCandidate } from "./local-files.js";
@@ -47,29 +44,21 @@ export abstract class LocalSessionAdapter extends SessionProviderAdapterBase {
   }
 
   /**
-   * Shared local-message guard. A local adapter gains no write by inheriting
-   * this: the default delivery remains unsupported. An adapter that overrides
-   * `deliverMessage` receives only a session the latest roster advertised and
-   * already-bounded developer text.
+   * Reads the delivery's own target back out of the latest pass, which is the
+   * one place a local write may learn where to land. A local adapter gains no
+   * write by inheriting this: the default delivery remains unsupported.
    */
   override async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
     const observation = this.#roster
       .latest()
       .find((candidate) => candidate.providerSessionId === message.providerSessionId);
-    if (!observation || !advertisedActFor(observation, ACT_KIND.MESSAGE)) {
+    if (!observation) {
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
         reason: UNSUPPORTED_BY_OBSERVATION,
       };
     }
-    const text = sessionMessageText(message.text);
-    if (!text) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: "That message is empty or too long.",
-      };
-    }
-    return this.deliverMessage(observation, text);
+    return this.deliverMessage(observation, message.text);
   }
 
   protected async deliverMessage(

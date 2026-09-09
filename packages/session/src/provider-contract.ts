@@ -1,4 +1,4 @@
-import { ACT_RESULT_STATUS } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, type Admitted } from "@sidecar/wire";
 import type {
   ProviderActResult,
   ProviderControlResult,
@@ -21,25 +21,31 @@ import type { WorkspaceProject } from "./workspace-projects.js";
  * thing inherits that answer from `SessionProviderAdapterBase` and says so,
  * where a missing method would leave each caller asking whether the question
  * could be put at all. Overriding one is what taking on its constraint means.
+ *
+ * Every write below takes an `Admitted` request, which only `admit()` in
+ * `@sidecar/acts` stands behind: the session or project was one the roster
+ * that pass reported, the act was one it advertised, and the developer's text
+ * was bounded, before an adapter saw any of it. An adapter answers for its own
+ * route — the advertised control, spawn target, rename target, or listed
+ * project it reads back from its own latest pass — and for the provider's
+ * documented shape, and for nothing about whether the act may run.
  */
 export interface SessionProviderAdapter {
   readonly provider: SessionProvider;
   observe(): Promise<readonly ProviderSessionObservation[]>;
 
   /**
-   * Runs a control against a session the adapter has already observed.
-   * Adapters must reject any request whose control that session's latest
-   * observation did not advertise.
+   * Runs a control the adapter's own latest observation advertised for a
+   * session it observed, building the route from that advertised entry rather
+   * than from the request's copy of it.
    */
   executeControl(request: ProviderControlRequest): Promise<ProviderControlResult>;
 
   /**
    * Hands a message to an already-observed session through the provider's own
    * documented endpoint. It is one of the three places an adapter may change
-   * provider state, and only ever with text a user chose to send: adapters
-   * must refuse any session that did not advertise a `message` act on its
-   * latest observation, and nothing that decides on the user's behalf may
-   * reach it.
+   * provider state, and only ever with text a user chose to send: nothing that
+   * decides on the user's behalf may reach it.
    */
   sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult>;
 
@@ -47,33 +53,28 @@ export interface SessionProviderAdapter {
   workspaceProjects(): readonly WorkspaceProject[];
 
   /**
-   * Creates a workspace in a project the latest observation pass reported. The
-   * same rules bind it that bind a message: it acts only on what a user just
-   * asked for, through the provider's own documented endpoint, and nothing
-   * that decides on the user's behalf may reach it.
+   * Creates a workspace in a project the latest observation pass reported,
+   * read back from that pass rather than composed from the request, through
+   * the provider's own documented endpoint.
    */
   createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult>;
 
   /**
    * Starts another agent in the workspace an observed session already runs in,
-   * under the same rules and one more: the agent must be one of the kinds
-   * that session's own `add-agent` advertisement listed.
+   * on the spawn target that session's own `add-agent` advertisement named.
    */
   spawnWorkspaceAgent(request: ProviderWorkspaceAgentRequest): Promise<ProviderWorkspaceResult>;
 
   /**
-   * Renames the workspace an observed session already runs in, under the same
-   * rules and one more: the session's latest observation must have carried a
-   * `rename-workspace` advertisement, whose target is what the rename lands
-   * on, so a rename only ever lands on a workspace its provider documents
-   * renaming.
+   * Renames the workspace an observed session already runs in, on the target
+   * that session's own `rename-workspace` advertisement named, so a rename
+   * only ever lands on a workspace its provider documents renaming.
    */
   renameWorkspace(request: ProviderWorkspaceRenameRequest): Promise<ProviderActResult>;
 
   /**
    * Renames an observed session itself — the chat, where `renameWorkspace`
-   * renames the workspace around it — only for a session whose latest
-   * observation advertised a `rename-session` act.
+   * renames the workspace around it.
    */
   renameSession(request: ProviderSessionRenameRequest): Promise<ProviderActResult>;
 
@@ -112,16 +113,16 @@ export interface SessionProviderAdapter {
 }
 
 /** A provider-local request for a control that was previously exposed by observation. */
-export interface ProviderControlRequest {
+export type ProviderControlRequest = Admitted<{
   providerSessionId: string;
   control: AdvertisedControl;
-}
+}>;
 
 /** A user-authored message for one session the adapter has already observed. */
-export interface ProviderSessionMessage {
+export type ProviderSessionMessage = Admitted<{
   providerSessionId: string;
   text: string;
-}
+}>;
 
 /**
  * A user-asked read of one observed session's conversation, positioned the
@@ -147,7 +148,7 @@ export interface ProviderConversationRequest {
 }
 
 /** A user-asked request for a new workspace in one reported project. */
-export interface ProviderWorkspaceRequest {
+export type ProviderWorkspaceRequest = Admitted<{
   providerProjectId: string;
   providerTargetId?: string;
   agent?: string;
@@ -167,14 +168,14 @@ export interface ProviderWorkspaceRequest {
    * nothing at all rather than a guess.
    */
   agentSelection?: WorkspaceAgentSelection;
-}
+}>;
 
 /**
  * A user-asked request for another agent in the workspace an observed session
  * already runs in. The session names the workspace; the agent must be one that
  * session's latest observation listed as spawnable.
  */
-export interface ProviderWorkspaceAgentRequest {
+export type ProviderWorkspaceAgentRequest = Admitted<{
   providerSessionId: string;
   /** The kind of agent, exactly as the observation listed it. */
   agent: string;
@@ -191,7 +192,7 @@ export interface ProviderWorkspaceAgentRequest {
   model?: string;
   /** The effort level riding with that model, under exactly the same rules. */
   effort?: string;
-}
+}>;
 
 /**
  * A user-asked request to rename the workspace an observed session already
@@ -199,22 +200,22 @@ export interface ProviderWorkspaceAgentRequest {
  * from its own latest observation, never from the request — and the name is
  * the user's own choice, bounded like the one a creation carries.
  */
-export interface ProviderWorkspaceRenameRequest {
+export type ProviderWorkspaceRenameRequest = Admitted<{
   providerSessionId: string;
   /** The new name, exactly as the user chose it. */
   name: string;
-}
+}>;
 
 /**
  * A user-asked request to rename one observed session itself — the chat,
  * where `ProviderWorkspaceRenameRequest` renames the workspace around it —
  * under the same rules.
  */
-export interface ProviderSessionRenameRequest {
+export type ProviderSessionRenameRequest = Admitted<{
   providerSessionId: string;
   /** The new name, exactly as the user chose it. */
   name: string;
-}
+}>;
 
 /**
  * The explicit answers an adapter gives for acts its provider does not

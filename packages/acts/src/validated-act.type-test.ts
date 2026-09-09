@@ -1,15 +1,15 @@
 /**
  * The claim `admit` exists to make, checked by the compiler rather than by a
  * run: a `ValidatedAct` cannot be written down anywhere but inside `admit`.
- * Its brand is a module-private `unique symbol`, so nothing outside that module
- * can spell the key an object literal would need, and no payload flows into a
- * performer's parameter on its own.
+ * Its brand is `@sidecar/wire`'s module-private `unique symbol`, so nothing
+ * anywhere can spell the key an object literal would need, and no payload flows
+ * into a performer's or an adapter's parameter on its own.
  *
  * What the type cannot stop is a deliberate `as ValidatedAct` assertion, since
  * the brand makes the admitted act a subtype of the payload and TypeScript
  * permits an assertion between the two. That one is caught by reading the diff
- * and by `git grep "as ValidatedAct"` answering nothing, which is why the
- * assertion appears nowhere in this repository.
+ * and by `git grep "as ValidatedAct"` answering with `admit` itself and nothing
+ * else, which is the one place the repository enters the admitted set.
  *
  * This file exports nothing and runs nowhere. It fails by an `@ts-expect-error`
  * that stops erroring, which `tsc` reports as an error of its own.

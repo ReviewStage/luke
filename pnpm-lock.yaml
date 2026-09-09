@@ -639,12 +639,18 @@ importers:
 
   packages/providers:
     dependencies:
+      '@sidecar/acts':
+        specifier: workspace:*
+        version: link:../acts
       '@sidecar/credentials':
         specifier: workspace:*
         version: link:../credentials
       '@sidecar/process':
         specifier: workspace:*
         version: link:../process
+      '@sidecar/runtime-contracts':
+        specifier: workspace:*
+        version: link:../runtime-contracts
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session

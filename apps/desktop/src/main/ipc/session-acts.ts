@@ -3,10 +3,17 @@ import {
   ACT_KIND,
   ACT_REFUSAL,
   type ActGuard,
-  type CarriedIssueAct,
-  type CarriedSessionAct,
   dispatchByKind,
   guardedRead,
+  type IssueActKind,
+  providerControlRequest,
+  providerSessionMessage,
+  providerSessionRenameRequest,
+  providerWorkspaceAgentRequest,
+  providerWorkspaceRenameRequest,
+  providerWorkspaceRequest,
+  type SessionActKind,
+  type ValidatedAct,
 } from "@sidecar/acts";
 import {
   PRODUCT_EVENT,
@@ -18,27 +25,19 @@ import {
 import {
   ISSUE_ACTION_KIND,
   isIssueTrackerId,
-  issueCommentText,
   type TrackedIssue,
   type TrackerActionResult,
 } from "@sidecar/issues";
 import {
-  advertisedActFor,
-  advertisedControl,
-  advertisedControls,
   ExternalOpenAnswerLostError,
-  isListedWorkspaceAgentModel,
   isProviderId,
   type ProviderActResult,
   type ProviderWorkspaceResult,
-  type Session,
   type SessionApplicationId,
   type SessionIdentity,
   type SessionProviderAdapter,
   type SessionRoster,
-  sessionMessageText,
   type WorkspaceAgentSelection,
-  workspaceNameText,
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { SupersetSessionContext } from "@sidecar/superset";
@@ -46,10 +45,8 @@ import { isSupersetControlId, type SupersetCli, supersetPressedLink } from "@sid
 import type { LinearIssueTracker } from "@sidecar/trackers";
 import {
   ACT_RESULT_STATUS,
-  isWireString,
   UNKNOWN_ACT_STATUS,
   type UnknownActResult,
-  type UnparsedWireValue,
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
@@ -115,10 +112,12 @@ export interface SessionActsIpcDependencies {
 
 /**
  * The one entry every act on a session or an issue passes through. The brain
- * is the only caller: a validated action arrives, is checked again against
- * what this process observed, and is carried by the adapter or tracker that
- * advertised it. The opens are exposed on their own because a row press is
- * not a write and reaches them without the brain.
+ * is the only caller, and what arrives is a `ValidatedAct`, which only
+ * `admit()` mints: whether the act may run was decided there, against the
+ * roster it read for itself, so what is left here is carrying it — reading each
+ * effect's own route back out of the adapter or the tracker that offered it,
+ * and counting what landed. The opens are exposed on their own because a row
+ * press is not a write and reaches them without the brain.
  */
 export interface SessionActPerformer {
   /**
@@ -128,7 +127,7 @@ export interface SessionActPerformer {
    * Only a create and a spawn ask it, because only they await a read of their
    * own — the stored agent defaults — between admission and the write.
    */
-  perform(action: CarriedSessionAct | CarriedIssueAct, guard?: ActGuard): Promise<WireRecord>;
+  perform(act: ValidatedAct<SessionActKind | IssueActKind>, guard?: ActGuard): Promise<WireRecord>;
   openSession(identity: SessionIdentity): Promise<SessionOpenResult>;
   openSessionApplication(
     identity: SessionIdentity,
@@ -196,19 +195,22 @@ export function createSessionActPerformer(
     return result;
   }
 
-  // Capability checks stay in their handlers so no act can inherit another act's authority.
+  /**
+   * Hands one admitted act to the adapter that observed its session. Whether
+   * the act may run is admission's answer; what is asked here is whether this
+   * process still holds the provider it names at all, which is a fact about
+   * the app rather than about the roster.
+   */
   async function performSessionAct<Result extends ProviderActResult | UnknownActResult>(
     identity: SessionIdentity,
     counted: ProductSessionAct,
-    act: (adapter: SessionProviderAdapter, session: Session) => Promise<Result>,
+    act: (adapter: SessionProviderAdapter) => Promise<Result>,
   ): Promise<Result | { status: typeof ACT_RESULT_STATUS.UNSUPPORTED; reason: string }> {
-    const session = sessionRegistry.get(identity);
-    if (!session) return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_SESSION };
     const adapter = adapterFor(identity.providerId);
     if (!adapter) {
       return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.PROVIDER_ABSENT };
     }
-    const result = await act(adapter, session);
+    const result = await act(adapter);
     // A rejection refreshes like an acceptance: a write whose answer never
     // arrived may still have landed, so the roster must catch up with the
     // provider rather than keep advertising what it may have already taken. A
@@ -309,59 +311,29 @@ export function createSessionActPerformer(
     );
 
   // A message is handed to the session's own provider, through the adapter
-  // that observed it — the one component that knows the documented way in.
-  // The action names a session already observed, the text is bounded before
-  // an adapter sees it, and only a session whose latest observation
-  // advertised taking messages gets one.
-  const sendMessage = async (identity: SessionIdentity, text: string): Promise<WireRecord> => {
-    const message = boundedField(text, sessionMessageText);
-    if (!message.ok || message.value === undefined) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: "That message is empty or too long." };
-    }
-    const messageText = message.value;
-    const session = sessionRegistry.get(identity);
-    if (!session) return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_SESSION };
-    if (!advertisedActFor(session, ACT_KIND.MESSAGE)) {
-      return {
-        status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That session does not take messages right now.",
-      };
-    }
+  // that observed it — the one component that knows the documented way in —
+  // or, for a Superset-managed row, through the CLI that owns its terminal.
+  const sendMessage = async (act: ValidatedAct<typeof ACT_KIND.MESSAGE>): Promise<WireRecord> => {
+    const { identity } = act;
     const managed = supersetContext(identity);
     if (managed) {
       return countSessionAct(
         identity.providerId,
         PRODUCT_SESSION_ACT.MESSAGE_SEND,
-        await supersetCli.sendMessage(managed, messageText),
+        await supersetCli.sendMessage(managed, act.text),
       );
     }
     return performSessionAct(identity, PRODUCT_SESSION_ACT.MESSAGE_SEND, (adapter) =>
-      adapter.sendMessage({ providerSessionId: identity.providerSessionId, text: messageText }),
+      adapter.sendMessage(providerSessionMessage(act)),
     );
   };
 
-  // A control runs the same gauntlet a message does, and one more: the id
-  // named must be a control the session's latest observation actually
-  // advertised. The registry is what advertised it, so the registry is what
-  // answers whether it stands.
+  // The control the act carries is the advertised entry itself, which is what
+  // the effect is built from on either path.
   const executeControl = async (
-    identity: SessionIdentity,
-    controlId: string,
+    act: ValidatedAct<typeof ACT_KIND.CONTROL>,
   ): Promise<WireRecord> => {
-    const session = sessionRegistry.get(identity);
-    if (!session) return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_SESSION };
-    const control = advertisedControl(session, controlId);
-    // The labels travel with the roster the caller already read, so naming
-    // what still stands surfaces nothing the roster withheld.
-    if (!control) {
-      const advertised = advertisedControls(session);
-      return {
-        status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: advertised.length
-          ? `That session advertises no such control, only ${advertised.map((candidate) => candidate.label).join(", ")}.`
-          : "That session advertises no controls right now.",
-      };
-    }
+    const { identity, control } = act;
     const managed = supersetContext(identity);
     if (managed && isSupersetControlId(control.id)) {
       return countSessionAct(
@@ -371,26 +343,20 @@ export function createSessionActPerformer(
       );
     }
     return performSessionAct(identity, PRODUCT_SESSION_ACT.CONTROL_RUN, (adapter) =>
-      adapter.executeControl({ providerSessionId: identity.providerSessionId, control }),
+      adapter.executeControl(providerControlRequest(act)),
     );
   };
 
-  // A new workspace runs the same gauntlet a message does, against the list
-  // that offered it: the action names a project rather than a repository, and
-  // only a project an adapter reported on its latest pass — read back here from
-  // the adapter itself, never from the request — reaches the provider's
-  // documented creation endpoint. A fixture run offers no projects at all, so
-  // it refuses every ask without touching a network.
+  // A new workspace lands only in a project an adapter reported on its latest
+  // pass — read back here from the adapter itself, never from the act — before
+  // it reaches the provider's documented creation endpoint. A fixture run
+  // offers no projects at all, so it refuses every ask without touching a
+  // network.
   const createWorkspace = async (
-    providerId: string,
-    providerProjectId: string,
-    providerTargetId: string | undefined,
-    agent: string | undefined,
-    name: string | undefined,
-    task: string | undefined,
-    namedSelection: WorkspaceAgentSelection | undefined,
+    act: ValidatedAct<typeof ACT_KIND.CREATE_WORKSPACE>,
     guard: ActGuard | undefined,
   ): Promise<ProviderWorkspaceResult> => {
+    const { providerId, providerProjectId, providerTargetId } = act;
     if (!sendsNetwork) {
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
@@ -414,32 +380,11 @@ export function createSessionActPerformer(
         reason: "No listed project matches that identity.",
       };
     }
-    if (project.spawnableAgents && !(agent && project.spawnableAgents.includes(agent.trim()))) {
-      return {
-        status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: project.spawnableAgents.length
-          ? `That project lists no such agent, only ${project.spawnableAgents.join(", ")}.`
-          : "That project lists no agent to create with.",
-      };
-    }
-    const workspaceName = boundedField(name, workspaceNameText);
-    if (!workspaceName.ok) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: "That workspace name is empty or too long.",
-      };
-    }
-    // The task's own bound, and its fit to the project, are answered by the
-    // adapter, which validates both against the projects it actually offers.
-    const openingTask = boundedField(task, sessionMessageText);
-    if (!openingTask.ok) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: "That task is empty or too long." };
-    }
-    // A model the user named for this one creation outranks the stored
-    // choice for this act alone; the stored choice stands otherwise. Both
-    // are held to the build's documented table — the named one by the
-    // validator, the stored one when it was written — and the adapter holds
-    // whichever rides to its own table again before anything reaches the network.
+    // A model the user named for this one creation outranks the stored choice
+    // for this act alone; the stored choice stands otherwise. Both are held to
+    // the build's documented table — the named one by admission, the stored one
+    // when it was written — and the adapter holds whichever rides to its own
+    // table again before anything reaches the network.
     const stored = isProviderId(providerId)
       ? (
           await guardedRead(
@@ -450,20 +395,7 @@ export function createSessionActPerformer(
       : undefined;
     if (guard?.isRevoked())
       return { status: ACT_RESULT_STATUS.REJECTED, reason: REFUSAL.TURN_OVER };
-    const agentSelection = namedSelection ?? stored;
-    const createRequest: Parameters<SessionProviderAdapter["createWorkspace"]>[0] = {
-      providerProjectId,
-    };
-    if (isWireString(providerTargetId) && providerTargetId.trim()) {
-      createRequest.providerTargetId = providerTargetId.trim();
-    }
-    if (isWireString(agent) && agent.trim()) {
-      createRequest.agent = agent.trim();
-    }
-    if (workspaceName.value) createRequest.name = workspaceName.value;
-    if (openingTask.value) createRequest.task = openingTask.value;
-    if (agentSelection) createRequest.agentSelection = agentSelection;
-    const result = await adapter.createWorkspace(createRequest);
+    const result = await adapter.createWorkspace(providerWorkspaceRequest(act, stored));
     // A workspace that landed is a session the panel should be showing, so
     // the next look must actually ask rather than serve the cache. A
     // rejection refreshes too: a workspace can stand with its opening task
@@ -499,9 +431,9 @@ export function createSessionActPerformer(
       await rememberWorkspaceDefaults(
         adapter,
         providerProjectId,
-        isWireString(providerTargetId) ? providerTargetId.trim() : undefined,
-        namedSelection,
-        isWireString(agent) ? agent.trim() : undefined,
+        providerTargetId,
+        act.agentSelection,
+        act.agent,
       );
       countSessionAct(adapter.provider.id, PRODUCT_SESSION_ACT.WORKSPACE_CREATE, result);
       // The named session was consumed above; the answer stays what became
@@ -514,62 +446,20 @@ export function createSessionActPerformer(
     return result;
   };
 
-  // Another agent in an observed workspace runs the gauntlet a control does,
-  // and one more: the agent kind named must be one the session's latest
-  // observation actually listed. The registry is what advertised it, so the
-  // registry is what answers whether it stands; the adapter then reads the
-  // workspace back from its own last pass.
+  // Another agent in an observed workspace: the agent kind the act carries is
+  // the one that session's own observation listed, and the adapter reads the
+  // workspace it lands in back from its own last pass.
   const addWorkspaceAgent = async (
-    identity: SessionIdentity,
-    agent: string,
-    name: string | undefined,
-    task: string | undefined,
-    namedModel: string | undefined,
-    namedEffort: string | undefined,
+    act: ValidatedAct<typeof ACT_KIND.ADD_AGENT>,
     guard: ActGuard | undefined,
   ): Promise<WireRecord> => {
-    const session = sessionRegistry.get(identity);
-    if (!session) return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_SESSION };
-    const agents = advertisedActFor(session, ACT_KIND.ADD_AGENT)?.agents ?? [];
-    const advertised = agents.find((candidate) => candidate === agent.trim());
-    if (!advertised) {
-      return {
-        status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: agents.length
-          ? `That session lists no such agent to add, only ${agents.join(", ")}.`
-          : "That session lists no agent to add.",
-      };
-    }
-    // A model named for this one agent must be a documented pairing of
-    // exactly the asked-for kind: the user's chosen agent is never
-    // re-decided by the model named beside it.
-    if (namedModel !== undefined) {
-      const selection: WorkspaceAgentSelection = { agent: advertised, model: namedModel };
-      if (namedEffort !== undefined) selection.effort = namedEffort;
-      if (!isListedWorkspaceAgentModel(identity.providerId, selection)) {
-        return {
-          status: ACT_RESULT_STATUS.REJECTED,
-          reason: "That agent lists no such model.",
-        };
-      }
-    }
-    const sessionName = boundedField(name, workspaceNameText);
-    if (!sessionName.ok) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: "That session name is empty or too long.",
-      };
-    }
-    const openingTask = boundedField(task, sessionMessageText);
-    if (!openingTask.ok) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: "That task is empty or too long." };
-    }
+    const { identity } = act;
     const managed = supersetContext(identity);
     if (managed) {
       return countSessionAct(
         identity.providerId,
         PRODUCT_SESSION_ACT.AGENT_ADD,
-        await supersetCli.createAgent(managed, advertised, openingTask.value),
+        await supersetCli.createAgent(managed, act.agent, act.task),
       );
     }
     return performSessionAct(identity, PRODUCT_SESSION_ACT.AGENT_ADD, async (adapter) => {
@@ -584,88 +474,43 @@ export function createSessionActPerformer(
       if (guard?.isRevoked()) {
         return { status: ACT_RESULT_STATUS.REJECTED, reason: REFUSAL.TURN_OVER };
       }
-      const fallback = stored?.agent === advertised ? stored : undefined;
-      const model = namedModel ?? fallback?.model;
-      const effort = namedModel !== undefined ? namedEffort : fallback?.effort;
-      return adapter.spawnWorkspaceAgent({
-        providerSessionId: identity.providerSessionId,
-        agent: advertised,
-        ...(sessionName.value ? { name: sessionName.value } : undefined),
-        ...(openingTask.value ? { task: openingTask.value } : undefined),
-        ...(model ? { model } : undefined),
-        ...(effort ? { effort } : undefined),
-      });
+      return adapter.spawnWorkspaceAgent(providerWorkspaceAgentRequest(act, stored));
     });
   };
 
-  // Renaming a workspace runs the gauntlet a control does: the session named
-  // must have advertised a rename target on its latest observation. The
-  // registry is what advertised it, so the registry is what answers whether
-  // it stands; the adapter then resolves the workspace from its own last
-  // pass, never from the request.
-  const renameWorkspace = async (identity: SessionIdentity, name: string): Promise<WireRecord> => {
-    // Unlike a creation's optional name, a rename with nothing to rename to
-    // is no ask at all, so an absent name is refused with the same words an
-    // oversized one earns.
-    const workspaceName = workspaceNameText(name);
-    if (!workspaceName) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: "That workspace name is empty or too long.",
-      };
-    }
-    const session = sessionRegistry.get(identity);
-    if (!session) return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_SESSION };
-    if (!advertisedActFor(session, ACT_KIND.RENAME_WORKSPACE)) {
-      return {
-        status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: "That session's workspace cannot be renamed.",
-      };
-    }
+  // Renaming a workspace: the adapter resolves the workspace from its own
+  // last pass, never from the act, which carries the session and the name.
+  const renameWorkspace = async (
+    act: ValidatedAct<typeof ACT_KIND.RENAME_WORKSPACE>,
+  ): Promise<WireRecord> => {
+    const { identity } = act;
     const managed = supersetContext(identity);
     if (managed) {
       return countSessionAct(
         identity.providerId,
         PRODUCT_SESSION_ACT.WORKSPACE_RENAME,
-        await supersetCli.renameWorkspace(managed, workspaceName),
+        await supersetCli.renameWorkspace(managed, act.name),
       );
     }
     return performSessionAct(identity, PRODUCT_SESSION_ACT.WORKSPACE_RENAME, (adapter) =>
-      adapter.renameWorkspace({
-        providerSessionId: identity.providerSessionId,
-        name: workspaceName,
-      }),
+      adapter.renameWorkspace(providerWorkspaceRenameRequest(act)),
     );
   };
 
-  // Renaming a chat itself runs the same gauntlet one notch narrower: only a
-  // session whose latest observation advertised a `rename-session` act takes
-  // one, and the registry that advertised it is what answers whether it
-  // stands.
-  const renameSession = async (identity: SessionIdentity, name: string): Promise<WireRecord> => {
-    const sessionName = workspaceNameText(name);
-    if (!sessionName) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: "That session name is empty or too long.",
-      };
-    }
-    const session = sessionRegistry.get(identity);
-    if (!session) return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_SESSION };
-    if (!advertisedActFor(session, ACT_KIND.RENAME_SESSION)) {
-      return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: "That chat cannot be renamed." };
-    }
-    return performSessionAct(identity, PRODUCT_SESSION_ACT.SESSION_RENAME, (adapter) =>
-      adapter.renameSession({ providerSessionId: identity.providerSessionId, name: sessionName }),
+  const renameSession = async (
+    act: ValidatedAct<typeof ACT_KIND.RENAME_SESSION>,
+  ): Promise<WireRecord> =>
+    performSessionAct(act.identity, PRODUCT_SESSION_ACT.SESSION_RENAME, (adapter) =>
+      adapter.renameSession(providerSessionRenameRequest(act)),
     );
-  };
 
-  // An issue act resolves every named thing again from the latest
-  // observation — the issue by its identity, the transition by the id the
-  // tracker itself listed — so what reaches a tracker client is built from
-  // observed state, never from what a model composed. A fixture run observes
-  // no tracker, so it refuses every act.
-  const performIssueAct = async (action: CarriedIssueAct): Promise<TrackerActionResult> => {
+  // An issue act is built from observed state alone: the issue's own tracker
+  // id comes back off the latest board rather than out of the act, and the
+  // transition comes back off that issue's own listed set. A fixture run
+  // observes no tracker, so it carries nothing.
+  const performIssueAct = async (
+    action: ValidatedAct<IssueActKind>,
+  ): Promise<TrackerActionResult> => {
     const issue = trackedIssues()?.find(
       (candidate) =>
         candidate.trackerId === action.identity.trackerId &&
@@ -694,20 +539,10 @@ export function createSessionActPerformer(
         transition,
       });
     } else {
-      if (!issue.canComment) {
-        return {
-          status: ACT_RESULT_STATUS.UNSUPPORTED,
-          reason: "That issue does not take comments.",
-        };
-      }
-      const body = boundedField(action.body, issueCommentText);
-      if (!body.ok || body.value === undefined) {
-        return { status: ACT_RESULT_STATUS.REJECTED, reason: "That comment is empty or too long." };
-      }
       result = await tracker.execute({
         kind: ISSUE_ACTION_KIND.COMMENT,
         trackerIssueId: issue.trackerIssueId,
-        body: body.value,
+        body: action.body,
       });
     }
     // An act that landed changes the board, so the roster should catch up
@@ -728,50 +563,32 @@ export function createSessionActPerformer(
   };
 
   // Of the acts below, only the create and the spawn await anything of their
-  // own between validation and the provider effect, so only they take the
+  // own between admission and the provider effect, so only they take the
   // guard; the rest reach their adapter or the CLI with nothing awaited between.
   const performSessionAction = (
-    action: CarriedSessionAct,
+    act: ValidatedAct<SessionActKind>,
     guard: ActGuard | undefined,
   ): Promise<WireRecord> =>
-    dispatchByKind(action, {
-      [ACT_KIND.MESSAGE]: (act) => sendMessage(act.identity, act.text),
-      [ACT_KIND.CONTROL]: (act) => executeControl(act.identity, act.control.id),
-      [ACT_KIND.OPEN]: async (act): Promise<WireRecord> =>
-        act.applicationId
-          ? openSessionApplication(act.identity, act.applicationId)
-          : openSession(act.identity),
-      [ACT_KIND.CREATE_WORKSPACE]: async (act): Promise<WireRecord> =>
-        createWorkspace(
-          act.providerId,
-          act.providerProjectId,
-          act.providerTargetId,
-          act.agent,
-          act.name,
-          act.task,
-          act.agentSelection,
-          guard,
-        ),
-      [ACT_KIND.ADD_AGENT]: (act) =>
-        addWorkspaceAgent(
-          act.identity,
-          act.agent,
-          act.name,
-          act.task,
-          act.model,
-          act.effort,
-          guard,
-        ),
-      [ACT_KIND.RENAME_WORKSPACE]: (act) => renameWorkspace(act.identity, act.name),
-      [ACT_KIND.RENAME_SESSION]: (act) => renameSession(act.identity, act.name),
+    dispatchByKind(act, {
+      [ACT_KIND.MESSAGE]: sendMessage,
+      [ACT_KIND.CONTROL]: executeControl,
+      [ACT_KIND.OPEN]: async (open): Promise<WireRecord> =>
+        open.applicationId
+          ? openSessionApplication(open.identity, open.applicationId)
+          : openSession(open.identity),
+      [ACT_KIND.CREATE_WORKSPACE]: async (creation): Promise<WireRecord> =>
+        createWorkspace(creation, guard),
+      [ACT_KIND.ADD_AGENT]: (spawn) => addWorkspaceAgent(spawn, guard),
+      [ACT_KIND.RENAME_WORKSPACE]: renameWorkspace,
+      [ACT_KIND.RENAME_SESSION]: renameSession,
     });
 
   return {
-    async perform(action, guard) {
-      if (action.kind === ACT_KIND.ISSUE_STATE || action.kind === ACT_KIND.ISSUE_COMMENT) {
-        return performIssueAct(action);
+    async perform(act, guard) {
+      if (act.kind === ACT_KIND.ISSUE_STATE || act.kind === ACT_KIND.ISSUE_COMMENT) {
+        return performIssueAct(act);
       }
-      return performSessionAction(action, guard);
+      return performSessionAction(act, guard);
     },
     openSession,
     openSessionApplication,
@@ -825,13 +642,4 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     act: (identity) => performer.openSessionChange(identity),
     failure: failure(REFUSAL.OPEN_CHANGE_FAILED),
   });
-}
-
-function boundedField(
-  raw: UnparsedWireValue,
-  bound: (value: UnparsedWireValue) => string | undefined,
-): { ok: true; value: string | undefined } | { ok: false } {
-  if (raw === undefined) return { ok: true, value: undefined };
-  const value = bound(raw);
-  return value === undefined ? { ok: false } : { ok: true, value };
 }

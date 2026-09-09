@@ -1,32 +1,20 @@
 import {
+  ACT_KIND,
   ACT_RESULT_STATUS,
   type CloudAgentProviderId,
   type HostedActWorkspaceAnswer,
   isCloudAgentProviderId,
   isRecord,
-  maximumSessionMessageLength,
-  maximumWorkspaceNameLength,
-  parseWorkspaceAgentSelection,
-  RECORD_EXTRA_KEYS,
-  type Schema,
-  s,
   text,
   type UnparsedWireValue,
   type WireRecord,
-  type WorkspaceAgentSelection,
+  type WireValue,
 } from "../core.js";
 import {
   type ActExecutionAnswer,
-  AGENT_ACT,
   actUnsupportedReason,
-  CONTROL_ACT,
-  executeCreateWorkspaceAct,
   executeSessionAct,
-  MESSAGE_ACT,
-  REMOTE_SESSION_ACT,
-  RENAME_SESSION_ACT,
-  RENAME_WORKSPACE_ACT,
-  type SessionActPlan,
+  type HostedSessionActKind,
 } from "./act-execute.js";
 import { decryptProviderKey, secretOrUnavailable } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
@@ -51,88 +39,75 @@ export function parseProviderSessionId(value: UnparsedWireValue): string | undef
   return identifier;
 }
 
-/** Maximum length accepted for a provider project id. */
-const PROJECT_ID_MAX_LENGTH = 200;
-
-function parseProviderProjectId(value: UnparsedWireValue): string | undefined {
-  const identifier = text(value);
-  if (!identifier || identifier.length > PROJECT_ID_MAX_LENGTH) return undefined;
-  if (identifier.includes("\0")) return undefined;
-  return identifier;
+/**
+ * The ask's own fields, with what the body never carried left out: an absent
+ * field and a field carrying nothing are the same ask, and admission reads
+ * absence as "the developer named none".
+ */
+function named(entries: Readonly<Record<string, WireValue | undefined>>): WireRecord {
+  return Object.fromEntries(
+    Object.entries(entries).flatMap(([key, value]) =>
+      value === undefined ? [] : [[key, value] as const],
+    ),
+  );
 }
 
 /**
- * Control ids and agent kinds are short provider-fixed slugs (`cancel-turn`,
- * `archive-agent`; `claude`, `codex`, `opencode`); the bound refuses anything
- * that could not be one. Which ids or kinds exist is not decided here — the
- * executor honours only what the fresh observation pass advertised.
+ * An act aimed at a session, carrying its target. The id is bounded here
+ * because it becomes a URL segment inside the adapter; whether it names a
+ * session anyone observed is admission's question. An id that could not be a
+ * segment is a malformed ask rather than a refusal, so the whole ask answers
+ * nothing and the route says `invalid_request`.
  */
-const SLUG_MAX_LENGTH = 100;
-
-/**
- * A bounded name or task an ask may leave out. Blank is left out, and so is a
- * value this boundary cannot read as words at all — both are the ask not
- * carrying one — while words past the bound are the ask carrying something
- * this endpoint refuses, and refuses whole.
- */
-function askedText(maximumLength: number): Schema<string | undefined> {
-  return s
-    .refine(
-      s.map(s.dropRefused(s.text({ allowEmpty: true })), (value) => value || undefined),
-      (value) => value === undefined || value.length <= maximumLength,
-    )
-    .optional();
+function aimed(
+  body: WireRecord,
+  fields: Readonly<Record<string, WireValue | undefined>>,
+): WireRecord | undefined {
+  const providerSessionId = parseProviderSessionId(body.providerSessionId);
+  return providerSessionId
+    ? named({ provider_session_id: providerSessionId, ...fields })
+    : undefined;
 }
 
 /**
- * Each act's own fields, bounded exactly as the desktop bounds them before a
- * network call. The envelope every act request carries — its provider id and
- * its target — is read by the handler itself, so a field table names only
- * what its act adds and ignores the rest of the body.
+ * The one place this wire's camelCase body becomes the field names admission
+ * reads, and the one place that says which acts name a session at all — the
+ * creation names a project instead. Nothing here validates a value: it is
+ * renamed and handed on unparsed, because whether it is a message, a name, a
+ * task, or a model any session or project actually takes is `admit()`'s
+ * question, asked once, against the observation pass the act goes out on.
  */
-const BESIDE_THE_ENVELOPE = { extraKeys: RECORD_EXTRA_KEYS.IGNORE } as const;
-
-const MESSAGE_FIELDS = s.record(
-  { text: s.text({ max: maximumSessionMessageLength }) },
-  BESIDE_THE_ENVELOPE,
-);
-
-const CONTROL_FIELDS = s.record(
-  { controlId: s.text({ max: SLUG_MAX_LENGTH }) },
-  BESIDE_THE_ENVELOPE,
-);
-
-const AGENT_FIELDS = s.record(
-  {
-    agent: s.text({ max: SLUG_MAX_LENGTH }),
-    name: askedText(maximumWorkspaceNameLength),
-    task: askedText(maximumSessionMessageLength),
-  },
-  BESIDE_THE_ENVELOPE,
-);
-
-const NAME_FIELDS = s.record(
-  { name: s.text({ max: maximumWorkspaceNameLength }) },
-  BESIDE_THE_ENVELOPE,
-);
-
-const WORKSPACE_FIELDS = s.record(
-  { name: askedText(maximumWorkspaceNameLength), task: askedText(maximumSessionMessageLength) },
-  BESIDE_THE_ENVELOPE,
-);
+const HOSTED_ACT_FIELDS = {
+  [ACT_KIND.MESSAGE]: (body: WireRecord) => aimed(body, { text: body.text }),
+  [ACT_KIND.CONTROL]: (body: WireRecord) => aimed(body, { control_id: body.controlId }),
+  [ACT_KIND.ADD_AGENT]: (body: WireRecord) =>
+    aimed(body, { agent: body.agent, name: body.name, task: body.task }),
+  [ACT_KIND.RENAME_SESSION]: (body: WireRecord) => aimed(body, { name: body.name }),
+  [ACT_KIND.RENAME_WORKSPACE]: (body: WireRecord) => aimed(body, { name: body.name }),
+  [ACT_KIND.CREATE_WORKSPACE]: (body: WireRecord) =>
+    named({
+      project_id: body.providerProjectId,
+      agent: body.agent,
+      model: body.model,
+      effort: body.effort,
+      name: body.name,
+      task: body.task,
+    }),
+} as const satisfies Readonly<
+  Record<HostedSessionActKind, (body: WireRecord) => WireRecord | undefined>
+>;
 
 /**
- * One session-scoped act request: every act a mobile row asks of an observed
- * session shares these gates — bearer auth, a cloud-agent provider id, a bounded
- * session id, the act's own bounded fields, the unsupported answer before a
- * key is required, and the stored key decrypted only for a request that
- * passed everything else. Only the act's fields and its plan differ, so they
- * are what a route names.
+ * One act request: every act a mobile row asks shares these gates — bearer
+ * auth, a cloud-agent provider id, a readable ask, the unsupported answer
+ * before a key is required, and the stored key decrypted only for a request
+ * that passed everything else. What a route names is the act's own kind;
+ * everything about whether that act may run is admission's, one layer down,
+ * over the same observation pass the write goes out on.
  */
-export interface SessionActOptions<Fields, Target>
+export interface SessionActOptions
   extends Pick<HostedVaultRoute, "request" | "resolveUserId" | "encryptionSecret" | "readKey"> {
-  plan: SessionActPlan<Fields, Target>;
-  fields: Schema<Fields>;
+  kind: HostedSessionActKind;
   /**
    * The reason this provider cannot take this act. Injected only in tests:
    * every act this build ships is supported by its one provider, so the
@@ -140,11 +115,11 @@ export interface SessionActOptions<Fields, Target>
    * has no other way to be exercised.
    */
   unsupportedReason?: (providerId: CloudAgentProviderId) => string | undefined;
-  /** Injected in tests; production runs the plan through `executeSessionAct`. */
+  /** Injected in tests; production hands the ask to `executeSessionAct`. */
   execute?: (options: {
+    kind: HostedSessionActKind;
     providerId: CloudAgentProviderId;
-    providerSessionId: string;
-    fields: Fields;
+    fields: WireRecord;
     apiKey: string;
   }) => Promise<ActExecutionAnswer>;
 }
@@ -242,108 +217,44 @@ async function apiKeyOrAnswer(
   }
 }
 
-/** Validates and delivers one act aimed at a cloud session on the user's behalf. */
-export async function handleSessionAct<Fields, Target>(
-  options: SessionActOptions<Fields, Target>,
-): Promise<Response> {
+/** Admits and delivers one act aimed at a cloud session or project on the user's behalf. */
+export async function handleSessionAct(options: SessionActOptions): Promise<Response> {
   const admission = await admitActRequest(options);
   if (admission instanceof Response) return admission;
   const { userId, secret, providerId, body } = admission;
+  const { kind } = options;
 
-  const providerSessionId = parseProviderSessionId(body.providerSessionId);
-  if (!providerSessionId) return invalidRequest();
-
-  const fields = options.fields.parse(body);
-  if (fields === undefined) return invalidRequest();
-
-  const unsupported = (
-    options.unsupportedReason ?? ((id) => actUnsupportedReason(options.plan.act, id))
-  )(providerId);
-  if (unsupported) return refusedAnswer(ACT_RESULT_STATUS.UNSUPPORTED, unsupported);
-
-  const key = await apiKeyOrAnswer(options.readKey, userId, providerId, secret);
-  if (key instanceof Response) return key;
-
-  const execute = options.execute ?? ((request) => executeSessionAct(options.plan, request));
-  return actAnswer(await execute({ providerId, providerSessionId, fields, apiKey: key.apiKey }));
-}
-
-export interface WorkspaceActOptions
-  extends Pick<HostedVaultRoute, "request" | "resolveUserId" | "encryptionSecret" | "readKey"> {
-  /** Injected in tests, for the reason {@link SessionActOptions.unsupportedReason} gives. */
-  unsupportedReason?: (providerId: CloudAgentProviderId) => string | undefined;
-  /** Injected in tests; production reaches the provider through `executeCreateWorkspaceAct`. */
-  executeCreateWorkspace?: (options: {
-    providerId: CloudAgentProviderId;
-    providerProjectId: string;
-    name: string | undefined;
-    task: string | undefined;
-    agentSelection: WorkspaceAgentSelection | undefined;
-    apiKey: string;
-  }) => Promise<ActExecutionAnswer>;
-}
-
-/**
- * Validates and creates a workspace in a cloud project on the user's behalf.
- * It shares every gate with a session act and differs in its target: a
- * project the provider reported rather than a session it observed, which is
- * why it names its own fields and its own executor rather than a plan.
- */
-export async function handleWorkspaceAct(options: WorkspaceActOptions): Promise<Response> {
-  const admission = await admitActRequest(options);
-  if (admission instanceof Response) return admission;
-  const { userId, secret, providerId, body } = admission;
-
-  const providerProjectId = parseProviderProjectId(body.providerProjectId);
-  if (!providerProjectId) return invalidRequest();
-
-  const asked = WORKSPACE_FIELDS.parse(body);
+  const asked = HOSTED_ACT_FIELDS[kind](body);
   if (asked === undefined) return invalidRequest();
+  const fields: WireRecord = { provider_id: providerId, ...asked };
 
-  // An agent choice must be one the build's own table lists for this
-  // provider — the same gate the desktop's stores, offers, and adapters all
-  // answer to — so a request carrying any of the three fields either parses
-  // whole against that table or is invalid, never trimmed to something else.
-  let agentSelection: WorkspaceAgentSelection | undefined;
-  if (body.agent !== undefined || body.model !== undefined || body.effort !== undefined) {
-    agentSelection = parseWorkspaceAgentSelection(providerId, body);
-    if (!agentSelection) return invalidRequest();
-  }
-
-  const unsupported = (
-    options.unsupportedReason ??
-    ((id) => actUnsupportedReason(REMOTE_SESSION_ACT.CREATE_WORKSPACE, id))
-  )(providerId);
+  const unsupported = (options.unsupportedReason ?? ((id) => actUnsupportedReason(kind, id)))(
+    providerId,
+  );
   if (unsupported) return refusedAnswer(ACT_RESULT_STATUS.UNSUPPORTED, unsupported);
 
   const key = await apiKeyOrAnswer(options.readKey, userId, providerId, secret);
   if (key instanceof Response) return key;
 
-  const create = options.executeCreateWorkspace ?? executeCreateWorkspaceAct;
-  return actAnswer(
-    await create({
-      providerId,
-      providerProjectId,
-      name: asked.name,
-      task: asked.task,
-      agentSelection,
-      apiKey: key.apiKey,
-    }),
-  );
+  const execute = options.execute ?? executeSessionAct;
+  return actAnswer(await execute({ kind, providerId, fields, apiKey: key.apiKey }));
 }
 
-/** The five acts aimed at an observed session, each as the one thing its route names. */
+/** The six acts, each as the one thing its route names. */
 export const handleMessageAct = (route: HostedVaultRoute): Promise<Response> =>
-  handleSessionAct({ ...route, plan: MESSAGE_ACT, fields: MESSAGE_FIELDS });
+  handleSessionAct({ ...route, kind: ACT_KIND.MESSAGE });
 
 export const handleControlAct = (route: HostedVaultRoute): Promise<Response> =>
-  handleSessionAct({ ...route, plan: CONTROL_ACT, fields: CONTROL_FIELDS });
+  handleSessionAct({ ...route, kind: ACT_KIND.CONTROL });
 
 export const handleAgentAct = (route: HostedVaultRoute): Promise<Response> =>
-  handleSessionAct({ ...route, plan: AGENT_ACT, fields: AGENT_FIELDS });
+  handleSessionAct({ ...route, kind: ACT_KIND.ADD_AGENT });
 
 export const handleRenameSessionAct = (route: HostedVaultRoute): Promise<Response> =>
-  handleSessionAct({ ...route, plan: RENAME_SESSION_ACT, fields: NAME_FIELDS });
+  handleSessionAct({ ...route, kind: ACT_KIND.RENAME_SESSION });
 
 export const handleRenameWorkspaceAct = (route: HostedVaultRoute): Promise<Response> =>
-  handleSessionAct({ ...route, plan: RENAME_WORKSPACE_ACT, fields: NAME_FIELDS });
+  handleSessionAct({ ...route, kind: ACT_KIND.RENAME_WORKSPACE });
+
+export const handleWorkspaceAct = (route: HostedVaultRoute): Promise<Response> =>
+  handleSessionAct({ ...route, kind: ACT_KIND.CREATE_WORKSPACE });

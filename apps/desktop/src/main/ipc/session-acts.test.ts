@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ACT_KIND, ACT_REFUSAL, type CarriedSessionAct } from "@sidecar/acts";
+import { ACT_KIND, ACT_REFUSAL, type SessionActKind, type ValidatedAct } from "@sidecar/acts";
+import { RUN_ORIGIN } from "@sidecar/runtime-contracts";
 import {
   PROVIDER_ID,
   type ProviderSessionObservation,
@@ -15,12 +16,13 @@ import {
   type WorkspaceProject,
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
+import { admittedForTest } from "@sidecar/wire/testing";
 import { drainMicrotasks } from "#testing/drain";
 import type { SettingsStore } from "../settings-store";
 import { createSessionActPerformer } from "./session-acts";
 
 /*
- * The two acts that await something of their own between validation and the
+ * The two acts that await something of their own between admission and the
  * provider effect — the stored agent defaults read before a create and before a
  * spawn — are the two places a turn can end mid-preparation. The tests below
  * hold that read open, revoke the turn, release it, and assert the provider was
@@ -117,17 +119,20 @@ const WORKSPACE_OBSERVATION: ProviderSessionObservation = {
   lastActivityAt: NOW_DEEP,
   advertises: [{ kind: ACT_KIND.ADD_AGENT, agents: ["claude"] }],
 };
-const CREATE: CarriedSessionAct = {
+/** What admission would have minted, since only an admitted act reaches a performer. */
+const CREATE: ValidatedAct<SessionActKind> = admittedForTest({
   kind: ACT_KIND.CREATE_WORKSPACE,
   providerId: PROVIDER_ID.CONDUCTOR,
   providerProjectId: "project-1",
   task: "add tests",
-};
-const SPAWN: CarriedSessionAct = {
+  origin: RUN_ORIGIN.USER,
+});
+const SPAWN: ValidatedAct<SessionActKind> = admittedForTest({
   kind: ACT_KIND.ADD_AGENT,
   identity: { providerId: PROVIDER_ID.CONDUCTOR, providerSessionId: "workspace-1" },
   agent: "claude",
-};
+  origin: RUN_ORIGIN.USER,
+});
 
 test("a create whose turn ends while the stored defaults are read never reaches the provider", async () => {
   const adapter = new FakeAdapter();

@@ -1,4 +1,9 @@
-import { ACT_RESULT_STATUS, UNSUPPORTED_BY_OBSERVATION } from "@sidecar/wire";
+import {
+  ACT_RESULT_STATUS,
+  type Admitted,
+  reshapeAdmitted,
+  UNSUPPORTED_BY_OBSERVATION,
+} from "@sidecar/wire";
 import type {
   ProviderActResult,
   ProviderConversationResult,
@@ -12,7 +17,6 @@ import {
   advertisedActFor,
   advertisedControl,
 } from "./advertised-acts.js";
-import { sessionMessageText, workspaceNameText } from "./bounds.js";
 import type {
   ProviderControlRequest,
   ProviderConversationRequest,
@@ -79,30 +83,42 @@ export interface WorkspaceCreationInput {
 /** Where in a stored transcript a conversation read starts; the observation names the session. */
 export type ConversationPage = Omit<ProviderConversationRequest, "providerSessionId">;
 
+/**
+ * Every act a plugin performs takes an admitted input, for the same reason an
+ * adapter's write does: only `admit()` in `@sidecar/acts` mints one, so a
+ * handler cannot be reached by anything that skipped the gauntlet. The reads
+ * below take the plain input — a read is not a write and admits nothing.
+ */
 export interface ActHandlers {
-  message(input: ActInput<{ readonly text: string }>): Promise<ProviderActResult>;
+  message(input: Admitted<ActInput<{ readonly text: string }>>): Promise<ProviderActResult>;
   /** The control is the entry the observation advertised, never the caller's copy. */
-  control(input: ActInput<{ readonly control: AdvertisedControl }>): Promise<ProviderActResult>;
-  createWorkspace(input: WorkspaceCreationInput): Promise<ProviderWorkspaceResult>;
+  control(
+    input: Admitted<ActInput<{ readonly control: AdvertisedControl }>>,
+  ): Promise<ProviderActResult>;
+  createWorkspace(input: Admitted<WorkspaceCreationInput>): Promise<ProviderWorkspaceResult>;
   spawnAgent(
-    input: ActInput<{
-      /** The workspace the observation's own `add-agent` advertisement named. */
-      readonly spawnTarget: string;
-      readonly agent: string;
-      readonly name?: string;
-      readonly task?: string;
-      readonly model?: string;
-      readonly effort?: string;
-    }>,
+    input: Admitted<
+      ActInput<{
+        /** The workspace the observation's own `add-agent` advertisement named. */
+        readonly spawnTarget: string;
+        readonly agent: string;
+        readonly name?: string;
+        readonly task?: string;
+        readonly model?: string;
+        readonly effort?: string;
+      }>
+    >,
   ): Promise<ProviderWorkspaceResult>;
   renameWorkspace(
-    input: ActInput<{
-      /** The workspace the observation's own `rename-workspace` advertisement named. */
-      readonly renameTarget: string;
-      readonly name: string;
-    }>,
+    input: Admitted<
+      ActInput<{
+        /** The workspace the observation's own `rename-workspace` advertisement named. */
+        readonly renameTarget: string;
+        readonly name: string;
+      }>
+    >,
   ): Promise<ProviderActResult>;
-  renameSession(input: ActInput<{ readonly name: string }>): Promise<ProviderActResult>;
+  renameSession(input: Admitted<ActInput<{ readonly name: string }>>): Promise<ProviderActResult>;
 }
 
 export interface ReadHandlers {
@@ -212,16 +228,10 @@ function observationFor(
 const ACT_DISPATCHERS: ActDispatchers = {
   async message(plugin, request) {
     const observation = observationFor(plugin, request.providerSessionId);
-    if (!observation || !advertisedActFor(observation, ACT_KIND.MESSAGE)) {
-      return unsupportedByObservation;
-    }
-    const text = sessionMessageText(request.text);
-    if (!text) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: "That message is empty or too long." };
-    }
+    if (!observation) return unsupportedByObservation;
     const handler = plugin.acts?.message;
     if (!handler) return unsupportedByObservation;
-    return handler({ request: { text }, observation });
+    return handler(reshapeAdmitted(request, { request: { text: request.text }, observation }));
   },
 
   async control(plugin, request) {
@@ -233,7 +243,7 @@ const ACT_DISPATCHERS: ActDispatchers = {
     if (!observation || !advertised) return unsupportedByObservation;
     const handler = plugin.acts?.control;
     if (!handler) return unsupportedByObservation;
-    return handler({ request: { control: advertised }, observation });
+    return handler(reshapeAdmitted(request, { request: { control: advertised }, observation }));
   },
 
   async createWorkspace(plugin, request) {
@@ -250,20 +260,10 @@ const ACT_DISPATCHERS: ActDispatchers = {
       );
     if (!project) return unsupportedByObservation;
 
-    const name = request.name === undefined ? undefined : workspaceNameText(request.name);
-    if (request.name !== undefined && !name) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: "That workspace name is empty or too long.",
-      };
-    }
-    // The task is held to the project's own word for it, again here: the
-    // renderer already refused what it could, but a provider answers for its
-    // own writes.
-    const task = request.task === undefined ? undefined : sessionMessageText(request.task);
-    if (request.task !== undefined && !task) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: "That task is empty or too long." };
-    }
+    const { name, task } = request;
+    // The task is held to the project's own word for it here, because the
+    // project is the plugin's own: it comes back off the pass the plugin ran,
+    // not out of the ask.
     if (task && project.taskSupport === WORKSPACE_TASK_SUPPORT.NONE) {
       return { status: ACT_RESULT_STATUS.REJECTED, reason: "This project takes no opening task." };
     }
@@ -276,15 +276,17 @@ const ACT_DISPATCHERS: ActDispatchers = {
 
     const handler = plugin.acts?.createWorkspace;
     if (!handler) return unsupportedByObservation;
-    return handler({
-      project,
-      ...(request.agent === undefined ? undefined : { agent: request.agent }),
-      ...(name === undefined ? undefined : { name }),
-      ...(task === undefined ? undefined : { task }),
-      ...(request.agentSelection === undefined
-        ? undefined
-        : { agentSelection: request.agentSelection }),
-    });
+    return handler(
+      reshapeAdmitted(request, {
+        project,
+        ...(request.agent === undefined ? undefined : { agent: request.agent }),
+        ...(name === undefined ? undefined : { name }),
+        ...(task === undefined ? undefined : { task }),
+        ...(request.agentSelection === undefined
+          ? undefined
+          : { agentSelection: request.agentSelection }),
+      }),
+    );
   },
 
   async spawnAgent(plugin, request) {
@@ -296,31 +298,21 @@ const ACT_DISPATCHERS: ActDispatchers = {
     const agent = addAgent?.agents.find((candidate) => candidate === request.agent);
     if (!addAgent || !agent) return unsupportedByObservation;
 
-    const name = request.name === undefined ? undefined : workspaceNameText(request.name);
-    if (request.name !== undefined && !name) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: "That session name is empty or too long.",
-      };
-    }
-    const task = request.task === undefined ? undefined : sessionMessageText(request.task);
-    if (request.task !== undefined && !task) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: "That task is empty or too long." };
-    }
-
     const handler = plugin.acts?.spawnAgent;
     if (!handler) return unsupportedByObservation;
-    return handler({
-      request: {
-        spawnTarget: addAgent.target ?? request.providerSessionId,
-        agent,
-        ...(name === undefined ? undefined : { name }),
-        ...(task === undefined ? undefined : { task }),
-        ...(request.model === undefined ? undefined : { model: request.model }),
-        ...(request.effort === undefined ? undefined : { effort: request.effort }),
-      },
-      observation,
-    });
+    return handler(
+      reshapeAdmitted(request, {
+        request: {
+          spawnTarget: addAgent.target ?? request.providerSessionId,
+          agent,
+          ...(request.name === undefined ? undefined : { name: request.name }),
+          ...(request.task === undefined ? undefined : { task: request.task }),
+          ...(request.model === undefined ? undefined : { model: request.model }),
+          ...(request.effort === undefined ? undefined : { effort: request.effort }),
+        },
+        observation,
+      }),
+    );
   },
 
   async renameWorkspace(plugin, request) {
@@ -331,36 +323,22 @@ const ACT_DISPATCHERS: ActDispatchers = {
     const advertised = observation && advertisedActFor(observation, ACT_KIND.RENAME_WORKSPACE);
     if (!observation || !advertised) return unsupportedByObservation;
 
-    const name = workspaceNameText(request.name);
-    if (!name) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: "That workspace name is empty or too long.",
-      };
-    }
-
     const handler = plugin.acts?.renameWorkspace;
     if (!handler) return unsupportedByObservation;
-    return handler({ request: { renameTarget: advertised.target, name }, observation });
+    return handler(
+      reshapeAdmitted(request, {
+        request: { renameTarget: advertised.target, name: request.name },
+        observation,
+      }),
+    );
   },
 
   async renameSession(plugin, request) {
     const observation = observationFor(plugin, request.providerSessionId);
-    if (!observation || !advertisedActFor(observation, ACT_KIND.RENAME_SESSION)) {
-      return unsupportedByObservation;
-    }
-
-    const name = workspaceNameText(request.name);
-    if (!name) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: "That session name is empty or too long.",
-      };
-    }
-
+    if (!observation) return unsupportedByObservation;
     const handler = plugin.acts?.renameSession;
     if (!handler) return unsupportedByObservation;
-    return handler({ request: { name }, observation });
+    return handler(reshapeAdmitted(request, { request: { name: request.name }, observation }));
   },
 };
 
@@ -375,51 +353,60 @@ export type ActRequestFrom = {
 };
 
 export const ACT_REQUEST_FROM: ActRequestFrom = {
-  message: ({ request, observation }) => ({
-    providerSessionId: observation.providerSessionId,
-    text: request.text,
-  }),
-  control: ({ request, observation }) => ({
-    providerSessionId: observation.providerSessionId,
-    control: request.control,
-  }),
-  createWorkspace: (input) => ({
-    providerProjectId: input.project.providerProjectId,
-    // Read back off the offered project, never the ask: a re-dispatch acts on
-    // the target the pass reported.
-    ...(input.project.providerTargetId === undefined
-      ? undefined
-      : { providerTargetId: input.project.providerTargetId }),
-    ...(input.agent === undefined ? undefined : { agent: input.agent }),
-    ...(input.name === undefined ? undefined : { name: input.name }),
-    ...(input.task === undefined ? undefined : { task: input.task }),
-    ...(input.agentSelection === undefined ? undefined : { agentSelection: input.agentSelection }),
-  }),
-  spawnAgent: ({ request, observation }) => ({
-    providerSessionId: observation.providerSessionId,
-    agent: request.agent,
-    ...(request.name === undefined ? undefined : { name: request.name }),
-    ...(request.task === undefined ? undefined : { task: request.task }),
-    ...(request.model === undefined ? undefined : { model: request.model }),
-    ...(request.effort === undefined ? undefined : { effort: request.effort }),
-  }),
-  renameWorkspace: ({ request, observation }) => ({
-    providerSessionId: observation.providerSessionId,
-    name: request.name,
-  }),
-  renameSession: ({ request, observation }) => ({
-    providerSessionId: observation.providerSessionId,
-    name: request.name,
-  }),
+  message: (input) =>
+    reshapeAdmitted(input, {
+      providerSessionId: input.observation.providerSessionId,
+      text: input.request.text,
+    }),
+  control: (input) =>
+    reshapeAdmitted(input, {
+      providerSessionId: input.observation.providerSessionId,
+      control: input.request.control,
+    }),
+  createWorkspace: (input) =>
+    reshapeAdmitted(input, {
+      providerProjectId: input.project.providerProjectId,
+      // Read back off the offered project, never the ask: a re-dispatch acts
+      // on the target the pass reported.
+      ...(input.project.providerTargetId === undefined
+        ? undefined
+        : { providerTargetId: input.project.providerTargetId }),
+      ...(input.agent === undefined ? undefined : { agent: input.agent }),
+      ...(input.name === undefined ? undefined : { name: input.name }),
+      ...(input.task === undefined ? undefined : { task: input.task }),
+      ...(input.agentSelection === undefined
+        ? undefined
+        : { agentSelection: input.agentSelection }),
+    }),
+  spawnAgent: (input) =>
+    reshapeAdmitted(input, {
+      providerSessionId: input.observation.providerSessionId,
+      agent: input.request.agent,
+      ...(input.request.name === undefined ? undefined : { name: input.request.name }),
+      ...(input.request.task === undefined ? undefined : { task: input.request.task }),
+      ...(input.request.model === undefined ? undefined : { model: input.request.model }),
+      ...(input.request.effort === undefined ? undefined : { effort: input.request.effort }),
+    }),
+  renameWorkspace: (input) =>
+    reshapeAdmitted(input, {
+      providerSessionId: input.observation.providerSessionId,
+      name: input.request.name,
+    }),
+  renameSession: (input) =>
+    reshapeAdmitted(input, {
+      providerSessionId: input.observation.providerSessionId,
+      name: input.request.name,
+    }),
 };
 
 /**
  * The only route to an act handler. It resolves every target from the
  * plugin's own latest roster — the advertised control, the `add-agent` and
  * `rename-workspace` targets, and the target's own observation — so an act
- * acts on what the pass saw and never on what a caller sent, holds the ask to
- * its bound, and answers unsupported for a session the pass did not report or
- * an act the plugin does not name.
+ * acts on what the pass saw and never on what a caller sent, and answers
+ * unsupported for a session the pass did not report or an act the plugin does
+ * not name. Whether the act may run at all was answered before it arrived:
+ * only `admit()` mints the request this takes.
  */
 export function dispatchAct<Kind extends PluginActKind>(
   plugin: SessionProviderPlugin,

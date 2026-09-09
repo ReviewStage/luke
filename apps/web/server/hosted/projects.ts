@@ -1,4 +1,5 @@
 import {
+  ACT_KIND,
   CLOUD_AGENT_PROVIDER_ID,
   type CloudAgentProviderId,
   type CloudFetch,
@@ -7,7 +8,7 @@ import {
   type WorkspaceProject,
   workspaceAgentModels,
 } from "../core.js";
-import { actUnsupportedReason, REMOTE_SESSION_ACT } from "./act-execute.js";
+import { actUnsupportedReason } from "./act-execute.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import { createRateBrake } from "./rate-brake.js";
 import { observeProviders, readApiKeyFor } from "./vault-keys.js";
@@ -74,7 +75,7 @@ export async function handleProjects(options: ProjectsOptions): Promise<Response
   const passes = await observeProviders({
     providerIds: Object.values(CLOUD_AGENT_PROVIDER_ID).filter(
       (providerId) =>
-        actUnsupportedReason(REMOTE_SESSION_ACT.CREATE_WORKSPACE, providerId) === undefined &&
+        actUnsupportedReason(ACT_KIND.CREATE_WORKSPACE, providerId) === undefined &&
         stored.has(providerId),
     ),
     readApiKey,

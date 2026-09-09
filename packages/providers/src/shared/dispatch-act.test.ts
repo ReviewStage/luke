@@ -34,7 +34,12 @@ import {
   type WorkspaceCreationInput,
   type WorkspaceProject,
 } from "@sidecar/session";
-import { jsonResponse, type RecordedRequest, recordingFetch } from "@sidecar/wire/testing";
+import {
+  admittedForTest,
+  jsonResponse,
+  type RecordedRequest,
+  recordingFetch,
+} from "@sidecar/wire/testing";
 import { type CloudAdapterOptions, CloudSessionAdapter } from "./cloud-session-adapter.js";
 import type { CloudRequest } from "./cloud-wire.js";
 
@@ -232,36 +237,44 @@ async function bothWays<Kind extends PluginActKind>(
   );
 }
 
+/**
+ * The asks one case runs, admitted: what these compare is the two ways an
+ * admitted ask travels to a provider, not what admission does with one.
+ */
+function ADMITTED_ASKS<Ask>(asks: readonly Ask[]) {
+  return asks.map((ask) => admittedForTest(ask));
+}
+
 const OVER_LONG_MESSAGE = "m".repeat(maximumSessionMessageLength + 1);
 const OVER_LONG_NAME = "n".repeat(maximumWorkspaceNameLength + 1);
 
 test("a message answers identically through the base method and through dispatchAct", async () => {
-  for (const request of [
+  for (const request of ADMITTED_ASKS([
     { providerSessionId: SESSION_ID, text: "ship it" },
     { providerSessionId: ABSENT_SESSION_ID, text: "ship it" },
     { providerSessionId: BARE_SESSION_ID, text: "ship it" },
     { providerSessionId: SESSION_ID, text: "   " },
     { providerSessionId: SESSION_ID, text: OVER_LONG_MESSAGE },
-  ]) {
+  ])) {
     await bothWays("message", request);
   }
 });
 
 test("a control answers identically, on the advertised target either way", async () => {
-  for (const request of [
+  for (const request of ADMITTED_ASKS([
     { providerSessionId: SESSION_ID, control: CANCEL_CONTROL },
     { providerSessionId: ABSENT_SESSION_ID, control: CANCEL_CONTROL },
     { providerSessionId: BARE_SESSION_ID, control: CANCEL_CONTROL },
     { providerSessionId: SESSION_ID, control: { ...CANCEL_CONTROL, id: "invented" } },
     // A caller that rewrote the target must still act on the advertised one.
     { providerSessionId: SESSION_ID, control: { ...CANCEL_CONTROL, target: "somewhere-else" } },
-  ]) {
+  ])) {
     await bothWays("control", request);
   }
 });
 
 test("a creation answers identically, including every task-support refusal", async () => {
-  for (const request of [
+  for (const request of ADMITTED_ASKS([
     { providerProjectId: PROJECT.providerProjectId },
     { providerProjectId: PROJECT.providerProjectId, name: "notch", task: "start here" },
     { providerProjectId: "project-unreported" },
@@ -269,13 +282,13 @@ test("a creation answers identically, including every task-support refusal", asy
     { providerProjectId: PROJECT.providerProjectId, task: "  " },
     { providerProjectId: NO_TASK_PROJECT.providerProjectId, task: "start here" },
     { providerProjectId: REQUIRED_TASK_PROJECT.providerProjectId },
-  ]) {
+  ])) {
     await bothWays("createWorkspace", request);
   }
 });
 
 test("a spawn answers identically, on the advertised workspace either way", async () => {
-  for (const request of [
+  for (const request of ADMITTED_ASKS([
     { providerSessionId: SESSION_ID, agent: "claude" },
     { providerSessionId: SESSION_ID, agent: "claude", name: "notch", task: "start here" },
     { providerSessionId: ABSENT_SESSION_ID, agent: "claude" },
@@ -283,19 +296,19 @@ test("a spawn answers identically, on the advertised workspace either way", asyn
     { providerSessionId: SESSION_ID, agent: "invented" },
     { providerSessionId: SESSION_ID, agent: "claude", name: OVER_LONG_NAME },
     { providerSessionId: SESSION_ID, agent: "claude", task: OVER_LONG_MESSAGE },
-  ]) {
+  ])) {
     await bothWays("spawnAgent", request);
   }
 });
 
 test("both renames answer identically, on the advertised target either way", async () => {
-  for (const request of [
+  for (const request of ADMITTED_ASKS([
     { providerSessionId: SESSION_ID, name: "notch" },
     { providerSessionId: ABSENT_SESSION_ID, name: "notch" },
     { providerSessionId: BARE_SESSION_ID, name: "notch" },
     { providerSessionId: SESSION_ID, name: "  " },
     { providerSessionId: SESSION_ID, name: OVER_LONG_NAME },
-  ]) {
+  ])) {
     await bothWays("renameWorkspace", request);
     await bothWays("renameSession", request);
   }
@@ -305,10 +318,14 @@ test("a control acts on the target the observation advertised", async () => {
   const { plugin, requests } = await observedPlugin();
   const from = requests.length;
 
-  const result = await dispatchAct(plugin, "control", {
-    providerSessionId: SESSION_ID,
-    control: { ...CANCEL_CONTROL, target: "somewhere-else" },
-  });
+  const result = await dispatchAct(
+    plugin,
+    "control",
+    admittedForTest({
+      providerSessionId: SESSION_ID,
+      control: { ...CANCEL_CONTROL, target: "somewhere-else" },
+    }),
+  );
 
   assert.equal(result.status, ACT_RESULT_STATUS.ACCEPTED);
   assert.deepEqual(
@@ -321,7 +338,11 @@ test("a spawn acts on the advertised workspace, not the session it was asked wit
   const { plugin, requests } = await observedPlugin();
   const from = requests.length;
 
-  await dispatchAct(plugin, "spawnAgent", { providerSessionId: SESSION_ID, agent: "claude" });
+  await dispatchAct(
+    plugin,
+    "spawnAgent",
+    admittedForTest({ providerSessionId: SESSION_ID, agent: "claude" }),
+  );
 
   assert.deepEqual(
     requests.slice(from).map((request) => request.url),
@@ -333,7 +354,11 @@ test("a rename acts on the advertised workspace, not the session it was asked wi
   const { plugin, requests } = await observedPlugin();
   const from = requests.length;
 
-  await dispatchAct(plugin, "renameWorkspace", { providerSessionId: SESSION_ID, name: "notch" });
+  await dispatchAct(
+    plugin,
+    "renameWorkspace",
+    admittedForTest({ providerSessionId: SESSION_ID, name: "notch" }),
+  );
 
   assert.deepEqual(
     requests.slice(from).map((request) => request.url),
@@ -351,41 +376,65 @@ test("an act the plugin does not name answers unsupported and issues no request"
     reason: UNSUPPORTED_BY_OBSERVATION,
   };
   assert.deepEqual(
-    await dispatchAct(withoutActs, "message", { providerSessionId: SESSION_ID, text: "ship it" }),
+    await dispatchAct(
+      withoutActs,
+      "message",
+      admittedForTest({ providerSessionId: SESSION_ID, text: "ship it" }),
+    ),
     expected,
   );
   assert.deepEqual(
-    await dispatchAct(withoutActs, "control", {
-      providerSessionId: SESSION_ID,
-      control: CANCEL_CONTROL,
-    }),
+    await dispatchAct(
+      withoutActs,
+      "control",
+      admittedForTest({
+        providerSessionId: SESSION_ID,
+        control: CANCEL_CONTROL,
+      }),
+    ),
     expected,
   );
   assert.deepEqual(
-    await dispatchAct(withoutActs, "spawnAgent", {
-      providerSessionId: SESSION_ID,
-      agent: "claude",
-    }),
+    await dispatchAct(
+      withoutActs,
+      "spawnAgent",
+      admittedForTest({
+        providerSessionId: SESSION_ID,
+        agent: "claude",
+      }),
+    ),
     expected,
   );
   assert.deepEqual(
-    await dispatchAct(withoutActs, "renameWorkspace", {
-      providerSessionId: SESSION_ID,
-      name: "notch",
-    }),
+    await dispatchAct(
+      withoutActs,
+      "renameWorkspace",
+      admittedForTest({
+        providerSessionId: SESSION_ID,
+        name: "notch",
+      }),
+    ),
     expected,
   );
   assert.deepEqual(
-    await dispatchAct(withoutActs, "renameSession", {
-      providerSessionId: SESSION_ID,
-      name: "notch",
-    }),
+    await dispatchAct(
+      withoutActs,
+      "renameSession",
+      admittedForTest({
+        providerSessionId: SESSION_ID,
+        name: "notch",
+      }),
+    ),
     expected,
   );
   assert.deepEqual(
-    await dispatchAct(withoutActs, "createWorkspace", {
-      providerProjectId: PROJECT.providerProjectId,
-    }),
+    await dispatchAct(
+      withoutActs,
+      "createWorkspace",
+      admittedForTest({
+        providerProjectId: PROJECT.providerProjectId,
+      }),
+    ),
     expected,
   );
   assert.equal(requests.length, from);
@@ -396,9 +445,13 @@ test("a plugin that reports no projects is offered nowhere to create", async () 
   const { projects: _projects, ...withoutProjects } = plugin;
 
   assert.deepEqual(
-    await dispatchAct(withoutProjects, "createWorkspace", {
-      providerProjectId: PROJECT.providerProjectId,
-    }),
+    await dispatchAct(
+      withoutProjects,
+      "createWorkspace",
+      admittedForTest({
+        providerProjectId: PROJECT.providerProjectId,
+      }),
+    ),
     {
       status: ACT_RESULT_STATUS.UNSUPPORTED,
       reason: UNSUPPORTED_BY_OBSERVATION,
@@ -491,10 +544,14 @@ async function recordedCreations(): Promise<{
 test("a creation resolves the project by the target the ask named", async () => {
   const { plugin, created } = await recordedCreations();
 
-  const result = await dispatchAct(plugin, "createWorkspace", {
-    providerProjectId: HOSTED_PROJECT.providerProjectId,
-    providerTargetId: "host-b",
-  });
+  const result = await dispatchAct(
+    plugin,
+    "createWorkspace",
+    admittedForTest({
+      providerProjectId: HOSTED_PROJECT.providerProjectId,
+      providerTargetId: "host-b",
+    }),
+  );
 
   assert.equal(result.status, ACT_RESULT_STATUS.ACCEPTED);
   assert.deepEqual(
@@ -507,10 +564,14 @@ test("a creation naming a target no project reported is offered nowhere to creat
   const { plugin, created } = await recordedCreations();
 
   assert.deepEqual(
-    await dispatchAct(plugin, "createWorkspace", {
-      providerProjectId: HOSTED_PROJECT.providerProjectId,
-      providerTargetId: "host-never-reported",
-    }),
+    await dispatchAct(
+      plugin,
+      "createWorkspace",
+      admittedForTest({
+        providerProjectId: HOSTED_PROJECT.providerProjectId,
+        providerTargetId: "host-never-reported",
+      }),
+    ),
     { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: UNSUPPORTED_BY_OBSERVATION },
   );
   assert.deepEqual(created, []);
@@ -519,9 +580,13 @@ test("a creation naming a target no project reported is offered nowhere to creat
 test("a creation naming no target still reaches the project that shares its id", async () => {
   const { plugin, created } = await recordedCreations();
 
-  await dispatchAct(plugin, "createWorkspace", {
-    providerProjectId: HOSTED_PROJECT.providerProjectId,
-  });
+  await dispatchAct(
+    plugin,
+    "createWorkspace",
+    admittedForTest({
+      providerProjectId: HOSTED_PROJECT.providerProjectId,
+    }),
+  );
 
   assert.deepEqual(
     created.map((input) => input.project),
@@ -532,22 +597,24 @@ test("a creation naming no target still reaches the project that shares its id",
 test("the agent kind an ask carried reaches the handler that documents taking one", async () => {
   const { plugin, created } = await recordedCreations();
 
-  await dispatchAct(plugin, "createWorkspace", {
-    providerProjectId: HOSTED_PROJECT.providerProjectId,
-    agent: "claude",
-    task: "start here",
-  });
+  await dispatchAct(
+    plugin,
+    "createWorkspace",
+    admittedForTest({
+      providerProjectId: HOSTED_PROJECT.providerProjectId,
+      agent: "claude",
+      task: "start here",
+    }),
+  );
 
   assert.deepEqual(created, [{ project: HOSTED_PROJECT, agent: "claude", task: "start here" }]);
 });
 
 test("the ask a creation input was built from carries the offered target and the agent kind", () => {
   assert.deepEqual(
-    ACT_REQUEST_FROM.createWorkspace({
-      project: HOSTED_PROJECT,
-      agent: "claude",
-      task: "start here",
-    }),
+    ACT_REQUEST_FROM.createWorkspace(
+      admittedForTest({ project: HOSTED_PROJECT, agent: "claude", task: "start here" }),
+    ),
     {
       providerProjectId: HOSTED_PROJECT.providerProjectId,
       providerTargetId: "host-a",

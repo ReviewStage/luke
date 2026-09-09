@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ACT_RESULT_STATUS, UNSUPPORTED_BY_OBSERVATION } from "@sidecar/wire";
+import { admittedForTest } from "@sidecar/wire/testing";
 import { ACT_KIND, SESSION_CONTROL_KIND } from "./advertised-acts.js";
 import {
   type ProviderControlRequest,
@@ -120,18 +121,26 @@ test("carries every act and read to the adapter, naming the observation's own se
     controlKind: SESSION_CONTROL_KIND.STOP,
   } as const;
 
-  await plugin.acts?.message?.({ request: { text: "ship it" }, observation: OBSERVATION });
-  await plugin.acts?.control?.({ request: { control }, observation: OBSERVATION });
-  await plugin.acts?.createWorkspace?.({ project: PROJECT, task: "start here" });
-  await plugin.acts?.spawnAgent?.({
-    request: { spawnTarget: "workspace-1", agent: "claude" },
-    observation: OBSERVATION,
-  });
-  await plugin.acts?.renameWorkspace?.({
-    request: { renameTarget: "workspace-1", name: "notch" },
-    observation: OBSERVATION,
-  });
-  await plugin.acts?.renameSession?.({ request: { name: "notch" }, observation: OBSERVATION });
+  await plugin.acts?.message?.(
+    admittedForTest({ request: { text: "ship it" }, observation: OBSERVATION }),
+  );
+  await plugin.acts?.control?.(admittedForTest({ request: { control }, observation: OBSERVATION }));
+  await plugin.acts?.createWorkspace?.(admittedForTest({ project: PROJECT, task: "start here" }));
+  await plugin.acts?.spawnAgent?.(
+    admittedForTest({
+      request: { spawnTarget: "workspace-1", agent: "claude" },
+      observation: OBSERVATION,
+    }),
+  );
+  await plugin.acts?.renameWorkspace?.(
+    admittedForTest({
+      request: { renameTarget: "workspace-1", name: "notch" },
+      observation: OBSERVATION,
+    }),
+  );
+  await plugin.acts?.renameSession?.(
+    admittedForTest({ request: { name: "notch" }, observation: OBSERVATION }),
+  );
   await plugin.reads?.transcript?.("session-1");
   await plugin.reads?.transcriptSince?.("session-1", "cursor-1");
   await plugin.reads?.conversation?.({ request: { beforeOffset: 20 }, observation: OBSERVATION });
@@ -154,7 +163,7 @@ test("leaves an act the caller did not choose out of the request entirely", asyn
   const plugin = adapterAsPlugin(adapter);
   await plugin.observe();
 
-  await plugin.acts?.createWorkspace?.({ project: PROJECT });
+  await plugin.acts?.createWorkspace?.(admittedForTest({ project: PROJECT }));
 
   assert.deepEqual(adapter.asked, [{ providerProjectId: "project-1" }]);
 });
@@ -245,10 +254,9 @@ test("an act moves past an observer that never saw the session and stops at a fi
   const merged = mergePlugins({ id: "merged", displayName: "Merged" }, [unaware, holder]);
   await merged.observe();
 
-  const result = await merged.acts?.message?.({
-    request: { text: "ship it" },
-    observation: ADVERTISING_OBSERVATION,
-  });
+  const result = await merged.acts?.message?.(
+    admittedForTest({ request: { text: "ship it" }, observation: ADVERTISING_OBSERVATION }),
+  );
 
   assert.deepEqual(result, { status: ACT_RESULT_STATUS.ACCEPTED });
   // The unaware observer's own handler is never reached: its roster refused
@@ -265,10 +273,9 @@ test("an act no observer holds answers unsupported once", async () => {
   const merged = mergePlugins({ id: "merged", displayName: "Merged" }, [unaware, unaware]);
 
   assert.deepEqual(
-    await merged.acts?.message?.({
-      request: { text: "ship it" },
-      observation: ADVERTISING_OBSERVATION,
-    }),
+    await merged.acts?.message?.(
+      admittedForTest({ request: { text: "ship it" }, observation: ADVERTISING_OBSERVATION }),
+    ),
     { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: "No provider observer supports that act." },
   );
 });
@@ -291,9 +298,12 @@ test("an adapter read as a plugin and back answers every act the same way", asyn
   const roundTripped = pluginAsAdapter(adapterAsPlugin(adapter));
   await roundTripped.observe();
 
-  assert.deepEqual(await roundTripped.sendMessage({ providerSessionId: "session-1", text: "go" }), {
-    status: ACT_RESULT_STATUS.ACCEPTED,
-  });
+  assert.deepEqual(
+    await roundTripped.sendMessage(admittedForTest({ providerSessionId: "session-1", text: "go" })),
+    {
+      status: ACT_RESULT_STATUS.ACCEPTED,
+    },
+  );
   assert.deepEqual(adapter.asked, [{ providerSessionId: "session-1", text: "go" }]);
   assert.deepEqual(roundTripped.workspaceProjects(), [PROJECT]);
 });
@@ -305,7 +315,9 @@ test("a round-tripped adapter still refuses a session the pass did not report", 
   await roundTripped.observe();
 
   assert.deepEqual(
-    await roundTripped.sendMessage({ providerSessionId: "session-absent", text: "go" }),
+    await roundTripped.sendMessage(
+      admittedForTest({ providerSessionId: "session-absent", text: "go" }),
+    ),
     { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: UNSUPPORTED_BY_OBSERVATION },
   );
   assert.deepEqual(adapter.asked, []);

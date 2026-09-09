@@ -14,7 +14,13 @@ Copilot, Gemini CLI, Grok Build — are hosted-agent identities in
 `@sidecar/session` alone: a mark and a display name, with no adapter, files,
 hook, or credential behind them.
 
-The plugin seam remains the authority for acts. A provider is a
+A provider validates nothing about whether an act may run: `dispatchAct` and
+every adapter write take an admitted request, which only `admit()` in
+`@sidecar/acts` stands behind. What a provider answers for is its own route —
+the advertised control, spawn target, rename target, or listed project it reads
+back from its own latest pass — and the provider's documented shape.
+
+The plugin seam remains the authority for which acts exist. A provider is a
 `SessionProviderPlugin`: one `observe`, the roster that pass published, and a
 partial map of the acts and reads it actually implements. An absent handler is
 the unsupported answer, so a provider gains an act only by naming its key and

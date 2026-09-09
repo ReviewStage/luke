@@ -9,6 +9,7 @@ import {
   UNSUPPORTED_BY_OBSERVATION,
 } from "@sidecar/session";
 import type { JsonObject } from "@sidecar/wire/testing";
+import { admittedForTest } from "@sidecar/wire/testing";
 import {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticCallback,
@@ -341,21 +342,29 @@ test("answers unsupported for every act but the creation its provider documents"
   const adapter = adapterFor(run);
   await adapter.observe();
 
-  assert.deepEqual(await adapter.sendMessage({ providerSessionId: "task-1", text: "hello" }), {
-    status: "unsupported",
-    reason: "This provider does not take messages.",
-  });
   assert.deepEqual(
-    await adapter.executeControl({
-      providerSessionId: "task-1",
-      control: { kind: ACT_KIND.CONTROL, id: "stop", label: "Stop" },
-    }),
+    await adapter.sendMessage(admittedForTest({ providerSessionId: "task-1", text: "hello" })),
+    {
+      status: "unsupported",
+      reason: "This provider does not take messages.",
+    },
+  );
+  assert.deepEqual(
+    await adapter.executeControl(
+      admittedForTest({
+        providerSessionId: "task-1",
+        control: { kind: ACT_KIND.CONTROL, id: "stop", label: "Stop" },
+      }),
+    ),
     { status: "unsupported", reason: "This provider has no such control." },
   );
-  assert.deepEqual(await adapter.spawnWorkspaceAgent({ providerSessionId: "task-1", agent: "x" }), {
-    status: "unsupported",
-    reason: "This provider cannot add agents.",
-  });
+  assert.deepEqual(
+    await adapter.spawnWorkspaceAgent(admittedForTest({ providerSessionId: "task-1", agent: "x" })),
+    {
+      status: "unsupported",
+      reason: "This provider cannot add agents.",
+    },
+  );
   // A cloud task's conversation lives with its provider and is never fetched.
   assert.deepEqual(await adapter.readTranscript("task-1"), {
     status: "unsupported",
@@ -405,10 +414,12 @@ test("creates a task in an observed environment through the documented command",
   const adapter = adapterFor(run);
   await adapter.observe();
 
-  const result = await adapter.createWorkspace({
-    providerProjectId: "reviewstage/luke",
-    task: "Fix the flaky login test",
-  });
+  const result = await adapter.createWorkspace(
+    admittedForTest({
+      providerProjectId: "reviewstage/luke",
+      task: "Fix the flaky login test",
+    }),
+  );
 
   assert.deepEqual(result, { status: "accepted", providerSessionId: "task-created-9" });
   const exec = invocations.at(-1);
@@ -430,19 +441,26 @@ test("refuses a creation the latest pass did not offer or cannot honour", async 
   const invocationsAfterObserve = invocations.length;
 
   // An environment the pass never reported names nowhere a creation could go.
-  assert.deepEqual(await adapter.createWorkspace({ providerProjectId: "env-9", task: "Fix it" }), {
-    status: "unsupported",
-    reason: UNSUPPORTED_BY_OBSERVATION,
-  });
+  assert.deepEqual(
+    await adapter.createWorkspace(admittedForTest({ providerProjectId: "env-9", task: "Fix it" })),
+    {
+      status: "unsupported",
+      reason: UNSUPPORTED_BY_OBSERVATION,
+    },
+  );
   // Codex names tasks itself, so a chosen name is refused rather than dropped.
-  const named = await adapter.createWorkspace({
-    providerProjectId: "reviewstage/luke",
-    name: "My workspace",
-    task: "Fix it",
-  });
+  const named = await adapter.createWorkspace(
+    admittedForTest({
+      providerProjectId: "reviewstage/luke",
+      name: "My workspace",
+      task: "Fix it",
+    }),
+  );
   assert.equal(named.status, "rejected");
   // The task is the whole creation; without one there is nothing to start.
-  const taskless = await adapter.createWorkspace({ providerProjectId: "reviewstage/luke" });
+  const taskless = await adapter.createWorkspace(
+    admittedForTest({ providerProjectId: "reviewstage/luke" }),
+  );
   assert.equal(taskless.status, "rejected");
   // Every refusal above answered without running anything.
   assert.equal(invocations.length, invocationsAfterObserve);
@@ -450,19 +468,23 @@ test("refuses a creation the latest pass did not offer or cannot honour", async 
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // A CLI that refuses the request is reported as a rejection, not a success.
   behavior.execExitCode = 2;
-  const refused = await adapter.createWorkspace({
-    providerProjectId: "reviewstage/luke",
-    task: "Fix it",
-  });
+  const refused = await adapter.createWorkspace(
+    admittedForTest({
+      providerProjectId: "reviewstage/luke",
+      task: "Fix it",
+    }),
+  );
   assert.equal(refused.status, "rejected");
 
   // A login gone since the pass refuses at the moment of the act.
   behavior.execExitCode = 0;
   behavior.loggedIn = false;
-  const signedOut = await adapter.createWorkspace({
-    providerProjectId: "reviewstage/luke",
-    task: "Fix it",
-  });
+  const signedOut = await adapter.createWorkspace(
+    admittedForTest({
+      providerProjectId: "reviewstage/luke",
+      task: "Fix it",
+    }),
+  );
   assert.equal(signedOut.status, "rejected");
 });
 
@@ -474,10 +496,12 @@ test("a login lost at the moment of an act clears observed state immediately", a
   assert.equal(adapter.workspaceProjects().length, 1);
 
   behavior.loggedIn = false;
-  const rejected = await adapter.createWorkspace({
-    providerProjectId: "reviewstage/luke",
-    task: "Fix it",
-  });
+  const rejected = await adapter.createWorkspace(
+    admittedForTest({
+      providerProjectId: "reviewstage/luke",
+      task: "Fix it",
+    }),
+  );
 
   assert.equal(rejected.status, "rejected");
   assert.equal(adapter.connection(), CLI_CONNECTION.SIGNED_OUT);

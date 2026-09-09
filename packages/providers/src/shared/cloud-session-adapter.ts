@@ -17,12 +17,10 @@ import {
   type ProviderWorkspaceResult,
   type SessionProvider,
   SessionProviderAdapterBase,
-  sessionMessageText,
   UNSUPPORTED_BY_OBSERVATION,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentSelection,
   type WorkspaceProject,
-  workspaceNameText,
 } from "@sidecar/session";
 import type { CloudFetch, WireRecord } from "@sidecar/wire";
 import type { AdapterDiagnosticCallback, AdapterDiagnosticKind } from "./adapter-diagnostics.js";
@@ -114,26 +112,15 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
 
   /**
    * Sends one user-typed message to one observed session, through the
-   * provider's documented message endpoint. Everything that could make this a
-   * different kind of write is refused before a request exists: a session the
-   * last pass did not observe, one that advertised no `message` act,
-   * text outside the message bound, and a missing credential all answer
-   * without touching the network.
+   * provider's documented message endpoint. The message arrives admitted, so
+   * what is left here is this adapter's own pass — a session it did not
+   * observe has no route to build — and the provider's own shape.
    */
   override async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
-    const observation = this.latestObservation(message.providerSessionId);
-    if (!observation || !advertisedActFor(observation, ACT_KIND.MESSAGE)) {
+    if (!this.latestObservation(message.providerSessionId)) {
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
         reason: UNSUPPORTED_BY_OBSERVATION,
-      };
-    }
-
-    const text = sessionMessageText(message.text);
-    if (!text) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: "That message is empty or too long.",
       };
     }
 
@@ -145,7 +132,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     const apiKey = await this.#pass.readApiKey();
     if (!apiKey) return this.#missingKeyRejection();
 
-    const route = this.messageRoute(message.providerSessionId, text);
+    const route = this.messageRoute(message.providerSessionId, message.text);
     if (!route)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
@@ -163,10 +150,10 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
 
   /**
    * Runs one provider-defined control against one observed session, through
-   * the endpoint the provider documents for it. The same refusals guard it
-   * that guard a message: no request exists for a session the last pass did
-   * not observe, for a control that session did not advertise, or without a
-   * credential.
+   * the endpoint the provider documents for it. The advertised control is read
+   * back out of this adapter's own latest pass, because that entry is what the
+   * route is built from; a session the pass did not observe, or a control it
+   * did not advertise, has no route to build.
    */
   override async executeControl(request: ProviderControlRequest): Promise<ProviderControlResult> {
     const observation = this.latestObservation(request.providerSessionId);
@@ -194,10 +181,9 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
 
   /**
    * Starts another agent in the workspace one observed session runs in,
-   * through the provider's documented endpoint. The same refusals guard it
-   * that guard a message: a session the last pass did not observe, an agent
-   * its observation did not list, a name or task outside its bound, and a
-   * missing credential all answer without touching the network.
+   * through the provider's documented endpoint. The spawn target and the agent
+   * kind are read back out of this adapter's own latest pass, because they are
+   * what the route is built from.
    */
   override async spawnWorkspaceAgent(
     request: ProviderWorkspaceAgentRequest,
@@ -218,29 +204,12 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
         reason: UNSUPPORTED_BY_OBSERVATION,
       };
 
-    const name = request.name === undefined ? undefined : workspaceNameText(request.name);
-    if (request.name !== undefined && !name) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: "That session name is empty or too long.",
-      };
-    }
-    const task = request.task === undefined ? undefined : sessionMessageText(request.task);
-    if (request.task !== undefined && !task) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: "That task is empty or too long.",
-      };
-    }
-
-    // The route is built in the same synchronous step as the validation, from
-    // the observation's own spawn target: a pass landing while the key is read
-    // must not be able to swap the snapshot between the check and the route.
+    // The route is built in the same synchronous step as the target is read,
+    // from the observation's own spawn target: a pass landing while the key is
+    // read must not be able to swap the snapshot between the two.
     const route = this.workspaceAgentRoute(addAgent?.target ?? request.providerSessionId, {
       ...request,
       agent,
-      name,
-      task,
     });
     if (!route)
       return {
@@ -272,9 +241,8 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
   /**
    * Renames the workspace one observed session runs in, through the
    * provider's documented endpoint. The same refusals guard it that guard a
-   * message: a session the last pass did not observe, one whose observation
-   * advertised no rename target, a name outside its bound, and a missing
-   * credential all answer without touching the network.
+   * message: the rename target is read back out of this adapter's own latest
+   * pass, because that target is what the route is built from.
    */
   override async renameWorkspace(
     request: ProviderWorkspaceRenameRequest,
@@ -290,19 +258,10 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
         reason: UNSUPPORTED_BY_OBSERVATION,
       };
 
-    const name = workspaceNameText(request.name);
-    if (!name) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: "That workspace name is empty or too long.",
-      };
-    }
-
-    // The route is built in the same synchronous step as the validation, from
-    // the observation's own rename target: a pass landing while the key is
-    // read must not be able to swap the snapshot between the check and the
-    // route.
-    const route = this.workspaceRenameRoute(renameWorkspace.target, name);
+    // The route is built in the same synchronous step as the target is read,
+    // from the observation's own rename target: a pass landing while the key
+    // is read must not be able to swap the snapshot between the two.
+    const route = this.workspaceRenameRoute(renameWorkspace.target, request.name);
     if (!route)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
@@ -331,28 +290,18 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
   /**
    * Renames one observed session itself — the chat, where `renameWorkspace`
    * renames the workspace around it — through the provider's documented
-   * endpoint. The same refusals guard it: a session the last pass did not
-   * observe, one whose observation advertised no `rename-session` act, a name
-   * outside its bound, and a missing credential all answer without touching
-   * the network.
+   * endpoint. The session names its own route, so what is left here is this
+   * adapter's own pass and the provider's own shape.
    */
   override async renameSession(request: ProviderSessionRenameRequest): Promise<ProviderActResult> {
-    const observation = this.latestObservation(request.providerSessionId);
-    if (!observation || !advertisedActFor(observation, ACT_KIND.RENAME_SESSION))
+    if (!this.latestObservation(request.providerSessionId)) {
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
         reason: UNSUPPORTED_BY_OBSERVATION,
       };
-
-    const name = workspaceNameText(request.name);
-    if (!name) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: "That session name is empty or too long.",
-      };
     }
 
-    const route = this.sessionRenameRoute(request.providerSessionId, name);
+    const route = this.sessionRenameRoute(request.providerSessionId, request.name);
     if (!route)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
@@ -399,24 +348,10 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
         reason: UNSUPPORTED_BY_OBSERVATION,
       };
 
-    const name = request.name === undefined ? undefined : workspaceNameText(request.name);
-    if (request.name !== undefined && !name) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: "That workspace name is empty or too long.",
-      };
-    }
-
-    // The task is held to the project's own word for it, again here: the
-    // renderer already refused what it could, but an adapter answers for its
-    // own writes.
-    const task = request.task === undefined ? undefined : sessionMessageText(request.task);
-    if (request.task !== undefined && !task) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: "That task is empty or too long.",
-      };
-    }
+    const { name, task } = request;
+    // The task is held to the project's own word for it here, because the
+    // project is the adapter's own: it comes back off the pass this adapter
+    // ran, not out of the request.
     if (task && project.taskSupport === WORKSPACE_TASK_SUPPORT.NONE) {
       return {
         status: ACT_RESULT_STATUS.REJECTED,

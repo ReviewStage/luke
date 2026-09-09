@@ -5,6 +5,7 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { SESSION_COMPLETION_CAUSE, SESSION_STATUS } from "@sidecar/session";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
+import { admittedForTest } from "@sidecar/wire/testing";
 import { OMP_PROVIDER, OmpSessionAdapter } from "./adapter.js";
 import { OMP_SESSIONS_DIRECTORY } from "./records.js";
 
@@ -483,7 +484,11 @@ test("answers every write as unsupported", async (t) => {
   const adapter = new OmpSessionAdapter({ ompHome, now: () => TEST_TIME });
 
   assert.equal(
-    (await adapter.sendMessage({ providerSessionId: SESSION_ID.SETTLED, text: "hi" })).status,
+    (
+      await adapter.sendMessage(
+        admittedForTest({ providerSessionId: SESSION_ID.SETTLED, text: "hi" }),
+      )
+    ).status,
     "unsupported",
   );
   assert.equal(adapter.workspaceProjects().length, 0);
