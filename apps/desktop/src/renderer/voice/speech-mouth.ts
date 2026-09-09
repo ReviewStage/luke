@@ -1,7 +1,8 @@
-import type { ProactiveSpeechTurn, RealtimeStatus } from "@sidecar/realtime";
+import type { RealtimeStatus } from "@sidecar/realtime";
 import { REALTIME_STATUS } from "@sidecar/realtime";
 import { SPEECH_OUTCOME, type SpeechOffer, type SpeechOutcome } from "@sidecar/realtime/speech";
 import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
+import type { SpeakOnlyCall } from "./speak-only-call";
 
 /**
  * How long Luke's own call lingers once what it was opened for has been said.
@@ -39,20 +40,24 @@ export const MAXIMUM_CONNECT_ATTEMPTS = 3;
 export const ANNOUNCER_GRACE_MS = 10_000;
 
 /**
- * The slice of the voice session the mouth drives. `microphoneCall` is the
- * ownership question: true means the call up or coming is the developer's own,
- * which the mouth may speak on but must never close.
+ * The slice of a call the mouth drives, and it is a speak-only call's:
+ * everything the mouth can reach is a member of one, so the call it opens for
+ * itself carries no microphone and no tools by construction rather than by a
+ * flag it remembered to pass. `microphoneCall` is the ownership question — a
+ * conversation call satisfies this type too, because the mouth may ride the
+ * developer's own call, but it must never close one.
  */
-export interface SpeechMouthSession {
-  readonly isConnected: boolean;
-  readonly isConnecting: boolean;
-  readonly status: RealtimeStatus;
-  readonly microphoneCall: boolean;
-  connect(options: { microphone: false }): Promise<boolean>;
-  speak(speech: ProactiveSpeechTurn): boolean;
-  stopSpeaking(): boolean;
-  close(): Promise<void>;
-}
+export type SpeechMouthSession = Pick<
+  SpeakOnlyCall,
+  | "isConnected"
+  | "isConnecting"
+  | "status"
+  | "microphoneCall"
+  | "connect"
+  | "speak"
+  | "stopSpeaking"
+  | "close"
+>;
 
 export interface SpeechMouthOptions {
   session: () => SpeechMouthSession;
@@ -282,7 +287,7 @@ export class SpeechMouth {
     this.#connectAttempts += 1;
     this.#ownsCall = true;
     void session
-      .connect({ microphone: false })
+      .connect()
       .then((opened) => {
         if (opened) {
           this.#connectAttempts = 0;

@@ -165,7 +165,7 @@ import { usePanelPresentation } from "./use-panel-presentation";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
 import { useStateWithRef } from "./use-state-with-ref";
 import { useVoiceView, voiceErrorToShow, voiceNoticeToShow } from "./use-voice-view";
-import type { AppActionCarrier } from "./voice/realtime-session";
+import type { AppActionCarrier } from "./voice/conversation-call";
 import {
   outputSilent,
   VOLUME_HINT_BAND_HEIGHT,

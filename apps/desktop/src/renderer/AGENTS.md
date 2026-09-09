@@ -15,15 +15,23 @@ exempt from the `node:` half: it runs under Node and never enters the bundle.
 
 Two renderers load this bundle under the same rule. The panel is one; the
 hidden voice window under `WINDOW_ROLE.VOICE` is the other, and everything it
-mounts lives under `renderer/voice/`: the realtime session, the microphone,
-the mouth, and the hook that reports the conversation back to the main process
-as one `VoiceView`. It reaches the main process through the same bridge, under
+mounts lives under `renderer/voice/`: the calls, the microphone, the mouth,
+and the hook that reports the conversation back to the main process as one
+`VoiceView`. It reaches the main process through the same bridge, under
 the same sandbox, and it must never mount `App` or import `session-replay.ts`:
 the panel is the one surface that records, and a recording of a blank hidden
 window would be a session nobody consented to. `repository-checks.sh` fails the
 build on a `session-replay` import anywhere under `renderer/voice/`. A panel
 draws the voice state the main process forwards and forwards its presses back;
-it constructs no session of its own.
+it constructs no call of its own.
+
+A call Luke opens for himself is a `SpeakOnlyCall`
+(`voice/speak-only-call.ts`): it is configured with
+`SPEAK_ONLY_SESSION_CONFIG`, whose `tools` is the empty array, and it has no
+microphone member to open — the guarantee `CLAUDE.md` states for a briefing is
+the type rather than a flag, and `ConversationCall` is the subclass that adds
+the device and the one tool, over the transport both share in
+`voice/realtime-call.ts`.
 
 The same trap arrives through a package barrel, where nothing greps for it.
 Importing `@sidecar/calendar` for one string constant resolves that package's

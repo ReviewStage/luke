@@ -24,8 +24,8 @@ import { parseMilliseconds, useSessionReorderMotion } from "../session-motion";
 import { useSignInFaceCycle } from "../sign-in-gate";
 import { useMeasuredHeight } from "../use-measured-height";
 import { usePrefersReducedMotion } from "../use-reduced-motion";
+import { ConversationCall } from "../voice/conversation-call";
 import { openPreferredMicrophone } from "../voice/microphone-choice";
-import { RealtimeVoiceSession } from "../voice/realtime-session";
 import { activeVoiceStream } from "../voice/use-voice-session";
 import { outputSilent } from "../volume-hint";
 import { WAVEFORM_VOICE, Waveform, type WaveformVoice } from "../waveform";
@@ -418,7 +418,7 @@ export function IntroductionTakeover({
   /** The drawn keycaps mirror the developer's own hands on the talk key. */
   const [talkHeld, setTalkHeld] = useState(false);
 
-  const sessionRef = useRef<RealtimeVoiceSession | undefined>(undefined);
+  const sessionRef = useRef<ConversationCall | undefined>(undefined);
   const audioRef = useRef<IntroductionAudio | undefined>(undefined);
   /** The meter's own graph, reading levels only — nothing reaches a speaker. */
   const meterContextRef = useRef<AudioContext | undefined>(undefined);
@@ -524,8 +524,8 @@ export function IntroductionTakeover({
     [trySpeak],
   );
 
-  const ensureSession = useCallback((): RealtimeVoiceSession => {
-    sessionRef.current ??= new RealtimeVoiceSession({
+  const ensureSession = useCallback((): ConversationCall => {
+    sessionRef.current ??= new ConversationCall({
       requestConnection: () => window.sidecar.requestRealtimeCredential(),
       sessionConfig: (model) => introductionSessionConfig({ model }),
       audioElement: () => remoteAudioRef.current,
@@ -593,7 +593,7 @@ export function IntroductionTakeover({
     // while a service that genuinely cannot answer still fails in seconds.
     const connectUnderTheDark = async () => {
       for (let attempt = 1; attempt <= CONNECT_ATTEMPTS; attempt += 1) {
-        const opened = await session.connect({ microphone: true });
+        const opened = await session.connect();
         if (gone) return;
         if (opened) {
           connectSettledRef.current = true;

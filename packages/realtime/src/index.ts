@@ -44,6 +44,7 @@ export {
   inputAudioFormatUpdateEvents,
   outputSpeedUpdateEvents,
   type ParsedRealtimeFunctionCall,
+  type ParsedRealtimeServerEvent,
   parseRealtimeServerEvent,
   pushToTalkCommitEvents,
   REALTIME_CLIENT_EVENT,
