@@ -133,9 +133,8 @@ function everyGuideState(): LukeGuideInput[] {
 test("every fact the guide can state is one it states, and states once", () => {
   const stated = new Set<string>();
   for (const input of everyGuideState()) {
-    const facts = buildLukeGuide(input).facts;
     const drawn = new Set<string>();
-    for (const fact of facts) {
+    for (const fact of buildLukeGuide(input).facts) {
       // A label nobody put on the list is a fact nobody decided Luke may
       // state, which is the half of the rule a test can hold.
       assert.ok(GUIDE_FACT_LABELS.includes(fact.label), `${fact.label} is on the list`);
