@@ -808,31 +808,35 @@ struct VoiceView: View {
 /// trailing edge, which the pull brings in the way iMessage uncovers a
 /// message's time. The stamp is the row's, not the bubble's, so sent and
 /// received stand in one column. A sent bubble rides the pull, moving left
-/// to make the room the way a sent bubble does in iMessage; Luke's words
-/// stand still, because the room the column takes on their side is room the
-/// row already had spare, and nothing of his is ever pushed off the screen.
+/// to make the room the way a sent bubble does in iMessage, and stops where
+/// iMessage's does: with its trailing edge on the line the widest received
+/// bubble's trailing edge reaches, the two sides squared up and the stamps
+/// standing at the thread's edge beside them. Luke's words stand still,
+/// because the room the column takes on their side is room the row already
+/// had spare, and nothing of his is ever pushed off the screen.
 private struct StampedMessageRow: View {
     let message: VoiceConversationMessage
     let pull: CGFloat
 
-    /// Room for the widest stamp a twelve-hour clock draws, and the inset it
-    /// keeps from the screen's edge once uncovered.
-    static let timeColumn: CGFloat = 56
+    /// Room for the widest stamp a twelve-hour clock draws at this size, and
+    /// the inset it keeps from the thread's edge once uncovered.
+    private static let timeColumn: CGFloat = 48
     private static let stampInset: CGFloat = 4
     /// The thread's horizontal inset, which the column rests behind.
     private static let threadInset: CGFloat = 16
     /// The margin the shared bubbles keep on their far side.
     private static let bubbleMargin: CGFloat = 48
-    /// How far the column travels to stand fully in view: its own width and
-    /// the inset it rests behind.
-    static let reveal: CGFloat = timeColumn + threadInset
-    /// What a sent bubble leaves free beyond its own margin, so a long ask
-    /// riding the full pull stops at the screen's leading edge rather than
-    /// through it; only the resistance past the reveal carries it further.
+    /// What Luke's bubble leaves free beyond its own margin: the stop is set
+    /// so that a full pull squares a sent bubble's trailing edge with the
+    /// widest received bubble's, and this is what puts the received edge far
+    /// enough in that the uncovered column, its inset, and a gap fit beside it.
+    private static let receivedRoom: CGFloat = 20
+    /// How far the pull travels before it stops: the column and the inset it
+    /// rests behind, so the stamps arrive exactly as the edges square up.
+    static let reveal: CGFloat = bubbleMargin + receivedRoom
+    /// What a sent bubble leaves free beyond its own margin, so the full pull
+    /// stops it at the screen's leading edge rather than carrying it through.
     private static let sentRoom: CGFloat = reveal - bubbleMargin - threadInset
-    /// What Luke's bubble leaves free beyond its own margin, so a long reply
-    /// and the stamp uncovered beside it never share a pixel.
-    private static let receivedRoom: CGFloat = timeColumn + stampInset - bubbleMargin
 
     var body: some View {
         ZStack(alignment: .trailing) {

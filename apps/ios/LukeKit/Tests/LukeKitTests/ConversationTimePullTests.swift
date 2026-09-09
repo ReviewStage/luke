@@ -13,8 +13,9 @@ final class ConversationTimePullTests: XCTestCase {
         XCTAssertEqual(ConversationTimePull.distance(dragged: 40, reveal: 72), 0)
     }
 
-    func testADragPastTheRevealMeetsResistance() {
-        XCTAssertEqual(ConversationTimePull.distance(dragged: -122, reveal: 72), 82)
+    func testADragPastTheRevealStopsAtIt() {
+        XCTAssertEqual(ConversationTimePull.distance(dragged: -122, reveal: 72), 72)
+        XCTAssertEqual(ConversationTimePull.distance(dragged: -400, reveal: 72), 72)
     }
 
     func testAMostlySidewaysDragIsThePulls() {
