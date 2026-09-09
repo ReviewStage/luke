@@ -14,11 +14,24 @@ Copilot, Gemini CLI, Grok Build — are hosted-agent identities in
 `@sidecar/session` alone: a mark and a display name, with no adapter, files,
 hook, or credential behind them.
 
-The adapter seam remains the authority for acts. Every adapter implements the
-total `SessionProviderAdapter` interface through its base class, whose answer is
-unsupported. A provider gains an act only by overriding the matching protected
-route or delivery seam and preserving every trust constraint in root
-`CLAUDE.md`. Transcript reading belongs inside the adapter.
+The plugin seam remains the authority for acts. A provider is a
+`SessionProviderPlugin`: one `observe`, the roster that pass published, and a
+partial map of the acts and reads it actually implements. An absent handler is
+the unsupported answer, so a provider gains an act only by naming its key and
+taking on that act's constraint in root `CLAUDE.md` along with it. `dispatchAct`
+is the only code that reaches a handler, and it re-resolves every target from
+the plugin's own latest roster. Transcript reading belongs inside the plugin,
+through `jsonlTranscriptReader` for a provider whose records are JSONL.
+
+The base classes still standing — `SessionProviderAdapter` and the local,
+cloud and CLI bases — are the class-shaped reading of the same thing while the
+providers convert one at a time; `adapterAsPlugin` and `pluginAsAdapter` are
+the two directions, and both go with the interface. The shared mechanics are
+functions with one home each: `observationPass` for a file-backed pass,
+`cloudPass` and `cliPass` for the credential and login halves, `hostClaims`
+for a workspace manager's claims, `mergePlugins` for one provider observed in
+more than one place, and `AdapterFailure` with `clearsObservedState` for
+whether a failed read clears what was observed.
 
 Every provider passes one contract suite. `describeProviderContract` in
 `@sidecar/providers/testing` states the trust constraints as tests over
@@ -33,7 +46,7 @@ which `repository-checks.sh` enforces and Biome is kept away from;
 
 Capabilities stay with their owning package in explicit, exhaustive maps:
 credentials in `@sidecar/credentials`, analytics connections in
-`@sidecar/analytics` and the desktop bridge, hooks and adapter registration in
+`@sidecar/analytics` and the desktop bridge, hooks and plugin registration in
 this package, fixture coverage in `@sidecar/fixtures` and the recorded
 provider fixtures beside `@sidecar/session`, workspace presentation in the
 surface that offers it, and Superset agent kinds in `@sidecar/superset`.

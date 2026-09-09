@@ -1,5 +1,4 @@
-import type { CloudFetch } from "../../../../packages/providers/src/shared/cloud-session-adapter.js";
-import type { ProviderSessionObservation } from "../core.js";
+import type { CloudFetch, ProviderSessionObservation } from "../core.js";
 import {
   ACT_KIND,
   advertisedActFor,

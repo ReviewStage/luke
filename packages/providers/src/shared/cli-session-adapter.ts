@@ -72,11 +72,6 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
     return this.#pass.connection();
   }
 
-  /** What the latest pass observed, for a subclass answering an act of its own. */
-  protected latest(): readonly ProviderSessionObservation[] {
-    return this.#pass.latest();
-  }
-
   /**
    * Clears anything a subclass cached across passes — projects offered for
    * creation, above all. It runs whenever the login goes away, so nothing

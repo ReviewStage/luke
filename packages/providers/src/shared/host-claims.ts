@@ -5,7 +5,12 @@ import {
   type SessionWorkspace,
 } from "@sidecar/session";
 import { text } from "@sidecar/wire";
-import type { WorkspaceHostEnrichment } from "./workspace-hosts.js";
+
+/** One manager's annotation of one provider's already-observed sessions. */
+export type WorkspaceHostEnrichment = (
+  providerId: string,
+  observations: readonly ProviderSessionObservation[],
+) => readonly ProviderSessionObservation[];
 
 /**
  * What one workspace manager's own records say about the sessions it holds,

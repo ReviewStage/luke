@@ -14,6 +14,7 @@ import {
   transcriptMessageText,
 } from "../shared/jsonl-transcript.js";
 import { readDirectory, statDirectoryEntry } from "../shared/local-files.js";
+import { CLAUDE_TOOL_INPUT_KEYS } from "./records.js";
 
 /**
  * On-demand reading of one Claude Code session's transcript, for a question
@@ -32,14 +33,11 @@ const CLAUDE_SESSION_FILE_EXTENSION = ".jsonl";
 /** The same shape the observation hook accepts: the ids Claude Code mints. */
 const CLAUDE_SESSION_ID_PATTERN = /^[0-9a-fA-F-]{8,64}$/;
 
-/** Tool inputs whose value names the work, in the order they read best. */
-const TOOL_INPUT_KEYS = ["description", "file_path", "pattern", "command", "prompt"] as const;
-
 function toolLine(block: WireRecord): string | undefined {
   const name = text(block.name);
   if (!name) return undefined;
   const input = isRecord(block.input) ? block.input : {};
-  for (const key of TOOL_INPUT_KEYS) {
+  for (const key of CLAUDE_TOOL_INPUT_KEYS) {
     const detail = oneLine(text(input[key]), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
     if (detail) return transcriptLine.toolCall(name, detail);
   }
