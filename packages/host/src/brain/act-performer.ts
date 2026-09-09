@@ -19,7 +19,7 @@ import {
   type ConversationEntry,
   sessionActConversationEntry,
 } from "@sidecar/realtime";
-import { isRunOrigin, RUN_ORIGIN } from "@sidecar/runtime-contracts";
+import { isRunOrigin, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import {
   type ObservedWorkspaceProject,
   type Session,

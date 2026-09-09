@@ -13,7 +13,7 @@ import {
   RUN_END_REASON,
   type RuntimeRunRequest,
   threadSessionKey,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import {
   RuntimeStoreClient,
   type RuntimeStorePort,

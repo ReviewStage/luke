@@ -1,5 +1,5 @@
 import type { ConversationEntry } from "@sidecar/realtime";
-import type { SessionKey } from "@sidecar/runtime-contracts";
+import type { SessionKey } from "@sidecar/runtime/vocabulary";
 import type { RetrievalMode } from "./defaults.js";
 
 /**

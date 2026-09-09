@@ -1,4 +1,4 @@
-import { checkpointFormatFromTag, type TranscriptEvent } from "@sidecar/runtime-contracts";
+import { checkpointFormatFromTag, type TranscriptEvent } from "@sidecar/runtime/vocabulary";
 import {
   isInstant,
   isRecord,

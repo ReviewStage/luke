@@ -16,7 +16,7 @@ import {
   maximumStoredConversationEntries,
   storedConversationMaximumAgeMs,
 } from "@sidecar/realtime";
-import { DEFAULT_AGENT_ID, MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
+import { DEFAULT_AGENT_ID, MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
 import { deleteConversationHistory } from "./archives.js";
 import { loadBrainEnvelope, saveBrainEnvelope } from "./brain-envelope.js";
 import { createConversation, raiseHistoryCutoff } from "./conversations-table.js";

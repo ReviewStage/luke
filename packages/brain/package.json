@@ -21,7 +21,6 @@
     "@sidecar/memory": "workspace:*",
     "@sidecar/realtime": "workspace:*",
     "@sidecar/runtime": "workspace:*",
-    "@sidecar/runtime-contracts": "workspace:*",
     "@sidecar/session": "workspace:*",
     "@sidecar/wire": "workspace:*"
   },

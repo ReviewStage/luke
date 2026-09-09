@@ -9,7 +9,7 @@ import {
   isArchiveReason,
   isConversationKind,
   type SessionKey,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { nullable, type RuntimeDatabase } from "./database.js";
 
 /**

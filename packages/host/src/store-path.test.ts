@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
-import { agentId } from "@sidecar/runtime-contracts";
+import { agentId } from "@sidecar/runtime/vocabulary";
 import { agentRootPath, runtimeStoreWorkerPath } from "./store-path.js";
 
 test("the agent's root is its own directory under the application data", () => {

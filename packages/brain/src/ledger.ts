@@ -1,4 +1,4 @@
-import { checkpointFormatTag } from "@sidecar/runtime-contracts";
+import { checkpointFormatTag } from "@sidecar/runtime/vocabulary";
 import type { Generation } from "./generation.js";
 import type { BrainObservationEntry } from "./observation-inbox.js";
 import {

@@ -16,7 +16,7 @@ import {
   MAIN_CONVERSATION_NAME,
   MAIN_SESSION_KEY,
   type SessionKey,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import type { NotebookEntry, NotebookMutation } from "@sidecar/runtime-store";
 import {
   type DeletionOutcome,

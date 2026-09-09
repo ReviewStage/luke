@@ -10,7 +10,7 @@ import {
   historyArchiveRecordFromWire,
   isConversationKind,
   type SessionKey,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { standingGeneration } from "./brain-envelope.js";
 import { archiveEncodingSuffix, encodeArchiveContent } from "./compression.js";
 import {

@@ -22,7 +22,7 @@ import {
   observedSessionRefOf,
   type SessionKey,
   threadSessionKey,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import {
   normalizeSession,
   SESSION_STATUS,

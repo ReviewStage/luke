@@ -14,7 +14,7 @@ import {
   FEEDBACK_COMPOSER_KIND,
   SESSION_LIST_SORT,
 } from "@sidecar/guide";
-import { RUN_ORIGIN } from "@sidecar/runtime-contracts";
+import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import type { Session } from "@sidecar/session";
 import {
   maximumSessionMessageLength,

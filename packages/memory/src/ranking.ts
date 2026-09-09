@@ -1,4 +1,4 @@
-import { DAY_MS } from "@sidecar/runtime-contracts";
+import { DAY_MS } from "@sidecar/runtime/vocabulary";
 import { numberVector, type UnparsedWireValue } from "@sidecar/wire";
 import type { KeywordHit, MemorySearchResult, MemorySource, VectorHit } from "./contracts.js";
 import { MEMORY_SEARCH_DEFAULTS } from "./defaults.js";

@@ -37,6 +37,6 @@ export * from "../../../packages/analytics/src/index.js";
 export * from "../../../packages/brain/src/index.js";
 export * from "../../../packages/hosted/src/index.js";
 export * from "../../../packages/realtime/src/index.js";
-export * from "../../../packages/runtime-contracts/src/index.js";
+export * from "../../../packages/runtime/src/vocabulary.js";
 export * from "../../../packages/session/src/index.js";
 export * from "../../../packages/wire/src/index.js";

@@ -1,4 +1,4 @@
-import type { MaybePromise } from "@sidecar/runtime-contracts";
+import type { MaybePromise } from "@sidecar/runtime/vocabulary";
 import { isWireNumber, type WireRecord, type WireValue } from "@sidecar/wire";
 import {
   GATEWAY_CLIENT_ROLE,

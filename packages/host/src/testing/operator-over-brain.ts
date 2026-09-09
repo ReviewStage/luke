@@ -2,7 +2,7 @@ import type { BrainAgent } from "@sidecar/brain";
 import { DeliveryLedger } from "@sidecar/brain";
 import { GATEWAY_CLIENT_ROLE, GatewayClient, InProcessTransport } from "@sidecar/gateway";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
-import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
+import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
 import type { ConversationOperations } from "../conversation-operations.js";
 import { createGatewayOperator, type GatewayOperator } from "../operator.js";
 import {

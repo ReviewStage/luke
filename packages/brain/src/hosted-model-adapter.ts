@@ -14,6 +14,7 @@ import {
   maximumHostedBrainRequestBytes,
   serializedRequestBytes,
 } from "@sidecar/hosted";
+import { BUILTIN_MODEL_ADAPTER } from "@sidecar/runtime";
 import {
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
@@ -21,7 +22,7 @@ import {
   type ModelRequestOptions,
   type ModelResponse,
   type ModelTokenCount,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import {
   type CloudFetch,
   HTTP_STATUS,
@@ -53,8 +54,6 @@ import {
   type ResponsesTransport,
 } from "./responses-model-adapter.js";
 
-export const HOSTED_MODEL_ADAPTER_ID = "hosted-responses";
-
 export interface HostedModelAdapterOptions {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
@@ -81,7 +80,7 @@ const HOSTED_PATH = {
  * installed client still speaks.
  */
 class HostedTransport implements ResponsesTransport<HostedBrainCapabilities> {
-  readonly adapter = HOSTED_MODEL_ADAPTER_ID;
+  readonly adapter = BUILTIN_MODEL_ADAPTER.HOSTED;
   readonly #calls: HostedServiceCalls;
   readonly #now: () => number;
   #capabilities: HostedBrainCapabilities | undefined;

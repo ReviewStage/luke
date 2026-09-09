@@ -1,5 +1,5 @@
 import zlib from "node:zlib";
-import { ARCHIVE_ENCODING, type ArchiveEncoding } from "@sidecar/runtime-contracts";
+import { ARCHIVE_ENCODING, type ArchiveEncoding } from "@sidecar/runtime/vocabulary";
 
 /**
  * How an archive's JSONL is kept on disk, ported from OpenClaw's

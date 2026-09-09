@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import {
   type AgentRuntime,
   CONTEXT_INPUT_KIND,
   type ContextOpening,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { CONTEXT_OPENING, generationFrom } from "./generation.js";
-import { TOOL_LOOP_RUNTIME } from "./runtime.js";
 import { freshBrainState } from "./state-store.js";
 
 const TOOL_LOOP_IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOOP_RUNTIME.VERSION };

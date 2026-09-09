@@ -22,16 +22,12 @@ import {
   type BrainTurnTrigger,
   type BrainWakeEvent,
   type BrainWorkspaceAccess,
+  brainToolCatalog,
   brainToolNotes,
-  HOSTED_MODEL_ADAPTER_ID,
   LOOK_SUBJECT,
-  notebookMemoryProviderFor,
-  OPENAI_MODEL_ADAPTER_ID,
-  RESPONSES_CONTEXT_ENGINE_ID,
-  registerBrainBuiltIns,
   resolveTurnToolPolicy,
   runOriginOf,
-  TOOL_LOOP_RUNTIME,
+  toolLoopRuntimeOver,
 } from "@sidecar/brain";
 import { type BrainRequestSnapshot, brainRequestPending } from "@sidecar/brain/requests-wire";
 import {
@@ -42,14 +38,16 @@ import {
 import type { ObservedSpoolEvent } from "@sidecar/providers";
 import type { ConversationEntry } from "@sidecar/realtime";
 import {
+  BUILTIN_CONTEXT_ENGINE,
+  BUILTIN_MODEL_ADAPTER,
   type BuiltPrompt,
   buildSystemPrompt,
   type ChildPolicyContext,
   type ChildRunService,
+  CONFIGURATION_OUTCOME,
   ConfigurationStore,
   CREDENTIAL_REFERENCE_KIND,
   type CredentialReference,
-  createRuntimeRegistries,
   defaultAgentConfiguration,
   discoverSkills,
   eligibleSkills,
@@ -59,12 +57,13 @@ import {
   LaneScheduler,
   laneConfiguration,
   loadSkill,
+  notebookMemoryProviderFor,
   type ResolvedConfiguration,
-  type RuntimeRegistries,
   readWorkspaceFile,
   recentDailyNotes,
   type SkillDescriptor,
   seedWorkspace,
+  TOOL_LOOP_RUNTIME,
   type WorkspaceSeeding,
   writeWorkspaceFile,
 } from "@sidecar/runtime";
@@ -81,7 +80,7 @@ import {
   type ReasoningEffort,
   RUN_ORIGIN,
   type SessionKey,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import {
   dispatchRead,
   SESSION_LOCATION,
@@ -247,8 +246,6 @@ export interface BrainWiring {
   readonly children: ChildRunService;
   /** Settles once every standing follower has published every report taken so far. */
   publicationSettled: () => Promise<void>;
-  /** The registries every configuration resolves against, for the diagnostics view. */
-  readonly registries: RuntimeRegistries;
   /** The standing configuration snapshot, republished whenever the credential policy chooses a source. */
   configuration: () => ResolvedConfiguration;
   /**
@@ -448,11 +445,9 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     ]);
   };
 
-  // The registries hold what this build compiled in; the configuration names
-  // entries by id and is republished, atomically, whenever the credential
-  // policy chooses a source. Every turn takes the snapshot standing when it
-  // is prepared and reads nothing else.
-  const registries = registerBrainBuiltIns(createRuntimeRegistries());
+  // The configuration names built-ins by id and is republished, atomically,
+  // whenever the credential policy chooses a source. Every turn takes the
+  // snapshot standing when it is prepared and reads nothing else.
   // The settable fields a client patched over the protocol, applied to every
   // configuration published after, so a credential change keeps them.
   let settable: SettableConfiguration = {};
@@ -461,9 +456,9 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       agentRuntimeId: TOOL_LOOP_RUNTIME.ID,
       modelAdapterId:
         credential.kind === CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY
-          ? OPENAI_MODEL_ADAPTER_ID
-          : HOSTED_MODEL_ADAPTER_ID,
-      contextEngineId: RESPONSES_CONTEXT_ENGINE_ID,
+          ? BUILTIN_MODEL_ADAPTER.OPENAI
+          : BUILTIN_MODEL_ADAPTER.HOSTED,
+      contextEngineId: BUILTIN_CONTEXT_ENGINE.RESPONSES,
       memoryProviderId: notebookMemoryProviderFor(credential.kind),
       credential,
       workspaceDirectory: dependencies.workspaceDirectory(),
@@ -471,14 +466,11 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     }),
     ...settable,
   });
-  const configurationStore = new ConfigurationStore(
-    registries,
-    configurationFor(dependencies.credential()),
-  );
+  const configurationStore = new ConfigurationStore(configurationFor(dependencies.credential()));
   const publishConfiguration = (credential: CredentialReference): ResolvedConfiguration => {
     const published = configurationStore.publish(configurationFor(credential));
-    if (!published.ok) {
-      dependencies.report(`Brain configuration refused: ${published.refusals.join(", ")}`);
+    if (published.outcome === CONFIGURATION_OUTCOME.REFUSED) {
+      dependencies.report(`Brain configuration refused: ${published.refusal}`);
     }
     return configurationStore.snapshot();
   };
@@ -518,7 +510,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     child?: ChildPolicyContext,
   ): Promise<BrainTurnPreparation & { built: BuiltPrompt }> => {
     const layers = snapshot.configuration.toolPolicy;
-    const catalog = registries.tools.entries();
+    const catalog = brainToolCatalog();
     const trigger = turn.kind === BRAIN_TURN_KIND.TURN ? turn.trigger : undefined;
     const policy = resolveTurnToolPolicy(catalog, layers, trigger, child);
     const discovered = eligibleSkills(
@@ -544,10 +536,8 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     return { prompt: built.text, layers, catalog, built };
   };
 
-  // The runtime is composed here, once per agent, from the entries the
-  // resolved configuration names: the tool loop over the Responses context
-  // engine on whichever adapter the policy chose. A different runtime is a
-  // different registration and configuration, not a change to the host.
+  // The runtime is composed here, once per agent: the tool loop over the
+  // Responses context engine on whichever adapter the policy chose.
   const build = (
     model: ModelAdapter,
     snapshot: ResolvedConfiguration,
@@ -555,11 +545,6 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     sessionKey: SessionKey,
     fork: readonly WireRecord[] | undefined,
   ): BrainAgent => {
-    const runtimeDescriptor = registries.agentRuntimes.get(snapshot.configuration.agentRuntimeId);
-    const engineDescriptor = registries.contextEngines.get(snapshot.configuration.contextEngineId);
-    if (!runtimeDescriptor || !engineDescriptor) {
-      throw new Error("the resolved configuration names entries the registries do not hold");
-    }
     const listed: ListedSkills = { skills: [] };
     const { reasoningEffort, maximumOutputTokens } = snapshot.configuration;
     // An observed conversation looks at its one session and reports each
@@ -592,7 +577,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       ...(memory ? { memory } : undefined),
       ...(flushFor(sessionKey) ? { beforeCompaction: flushFor(sessionKey) } : undefined),
       ...(flushMarkerFor(sessionKey) ? { flushMarker: flushMarkerFor(sessionKey) } : undefined),
-      runtime: runtimeDescriptor.create(model, engineDescriptor),
+      runtime: toolLoopRuntimeOver(model),
       acts,
       roster: dependencies.roster,
       standingContext: dependencies.standingContext,
@@ -913,9 +898,9 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     const previous = settable;
     settable = next;
     const published = configurationStore.publish(configurationFor(dependencies.credential()));
-    if (!published.ok) {
+    if (published.outcome === CONFIGURATION_OUTCOME.REFUSED) {
       settable = previous;
-      return published.refusals;
+      return [published.refusal];
     }
     return [];
   };
@@ -980,7 +965,6 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     },
     children: children.service,
     publicationSettled,
-    registries,
     configuration: () => configurationStore.snapshot(),
     updateConfiguration,
     inspectPrompt: async (turn) => {
@@ -992,14 +976,8 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     seedWorkspace: () => seedWorkspace(dependencies.workspaceDirectory(), BRAIN_WORKSPACE_SEEDS),
     createRuntime: () => {
       const model = liveModel();
-      const snapshot = configurationStore?.snapshot();
-      if (!model || !snapshot) return undefined;
-      const runtimeDescriptor = registries.agentRuntimes.get(snapshot.configuration.agentRuntimeId);
-      const engineDescriptor = registries.contextEngines.get(
-        snapshot.configuration.contextEngineId,
-      );
-      if (!runtimeDescriptor || !engineDescriptor) return undefined;
-      return runtimeDescriptor.create(model, engineDescriptor);
+      if (!model) return undefined;
+      return toolLoopRuntimeOver(model);
     },
   };
 }

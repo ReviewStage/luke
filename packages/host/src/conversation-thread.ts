@@ -4,7 +4,7 @@ import {
   conversationEntryIdentity,
   recordedAfterClear,
 } from "@sidecar/realtime";
-import type { HistoryAppendOutcome } from "@sidecar/runtime-contracts";
+import type { HistoryAppendOutcome } from "@sidecar/runtime/vocabulary";
 
 /**
  * The conversation as the main process holds it between the runtime store and

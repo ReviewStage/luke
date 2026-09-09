@@ -6,7 +6,7 @@ import {
   type EmbeddingAdapter,
   MODEL_RESPONSE_OUTCOME,
   type SessionKey,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import {
   type ConversationLineHit,

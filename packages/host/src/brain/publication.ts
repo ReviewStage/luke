@@ -12,7 +12,7 @@ import {
   replyConversationEntry,
   typedAskConversationEntry,
 } from "@sidecar/realtime";
-import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
+import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime/vocabulary";
 
 /** What the publication owner reaches: the thread, every window, and the delivery owner. */
 export interface BrainPublicationDependencies {

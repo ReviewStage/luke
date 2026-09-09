@@ -15,7 +15,7 @@ import {
   type ToolExecutor,
   type ToolResult,
   type ToolSchema,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { ACT_RESULT_STATUS, isWireString, type WireRecord, wireRecord } from "@sidecar/wire";
 import type { BrainWorkspaceAccess } from "./tool-executor.js";
 import { answer } from "./tool-results.js";
@@ -148,7 +148,7 @@ export async function runMemoryHousekeeping(
   options: MemoryHousekeepingOptions,
 ): Promise<MemoryHousekeepingResult> {
   const schemas = brainToolCatalog()
-    .filter((tool) => HOUSEKEEPING_TOOLS.has(tool.id))
+    .filter((tool) => HOUSEKEEPING_TOOLS.has(tool.schema.name))
     .map((tool) => tool.schema);
   let writes = 0;
   const tools: ToolExecutor = {

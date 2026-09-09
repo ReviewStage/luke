@@ -1,4 +1,4 @@
-import type { ToolInvocation, ToolResult } from "@sidecar/runtime-contracts";
+import type { ToolInvocation, ToolResult } from "@sidecar/runtime/vocabulary";
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 
 /**

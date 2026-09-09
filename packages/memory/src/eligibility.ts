@@ -3,7 +3,7 @@ import {
   type ConversationKind,
   conversationKindOf,
   type SessionKey,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 
 /**
  * Which of an agent's conversations the notebook is kept for and read from:

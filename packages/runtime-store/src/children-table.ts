@@ -3,7 +3,7 @@ import {
   type ChildRunRecord,
   childCompletionRecordFromWire,
   childRunRecordFromWire,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { nullable, type RuntimeDatabase } from "./database.js";
 

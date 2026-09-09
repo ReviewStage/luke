@@ -1,3 +1,13 @@
+/**
+ * The runtime's vocabulary: the identities it keeps apart, the storage
+ * contracts a durable owner of conversation state satisfies, the execution
+ * seams a host composes over, the records delegation keeps, and the one
+ * scheduler handle. A re-export door and nothing else, Node-free by
+ * construction, because packages below the runtime — realtime, hosted,
+ * voice, devtrace, memory — import this door and not the barrel, which
+ * reaches `node:fs` and croner.
+ */
+
 export {
   CHILD_CLEANUP,
   CHILD_CONTEXT_MODE,
@@ -20,10 +30,9 @@ export {
   isChildRunStatus,
   isCompletionDeliveryStatus,
   isTerminalChildRunStatus,
-} from "./children.js";
+} from "./child-records.js";
 export {
   type AgentRuntime,
-  type AgentRuntimeDescriptor,
   type CheckpointFormat,
   CONTEXT_INPUT_KIND,
   type CompactionOptions,
@@ -66,6 +75,7 @@ export {
   type RuntimeEvent,
   type RuntimeEventKind,
   type RuntimeEventListener,
+  type RuntimeIdentity,
   type RuntimeRun,
   type RuntimeRunEnd,
   type RuntimeRunRequest,

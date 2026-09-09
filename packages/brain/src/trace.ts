@@ -1,4 +1,4 @@
-import type { RunOrigin } from "@sidecar/runtime-contracts";
+import type { RunOrigin } from "@sidecar/runtime/vocabulary";
 import type { BrainTurnTrigger } from "./turn.js";
 
 export interface BrainToolCallTrace {

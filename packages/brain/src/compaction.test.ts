@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
+import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import {
   COMPACTION_SOURCE,
   CONTEXT_INPUT_KIND,
@@ -10,7 +11,7 @@ import {
   type ModelResponse,
   TRANSCRIPT_EVENT_KIND,
   type TranscriptEvent,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { BrainAgent } from "./agent.js";
 import {
@@ -29,8 +30,8 @@ import {
   BRAIN_REQUEST_STATUS,
   BRAIN_SUBMISSION_OUTCOME,
 } from "./requests.js";
-import { RESPONSES_ITEM_FORMAT, responsesModelAnswer, userMessageItem } from "./responses-api.js";
-import { TOOL_LOOP_RUNTIME, ToolLoopAgentRuntime } from "./runtime.js";
+import { responsesModelAnswer, userMessageItem } from "./responses-api.js";
+import { ToolLoopAgentRuntime } from "./runtime.js";
 import {
   type BrainPersistedState,
   type BrainStateRepository,
@@ -49,8 +50,8 @@ const TOOL_LOOP_RUNTIME_IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOO
 const CHECKPOINT = {
   runtime: TOOL_LOOP_RUNTIME.ID,
   runtimeVersion: TOOL_LOOP_RUNTIME.VERSION,
-  format: RESPONSES_ITEM_FORMAT.FORMAT,
-  formatVersion: RESPONSES_ITEM_FORMAT.VERSION,
+  format: RESPONSES_ITEM_FORMAT.format,
+  formatVersion: RESPONSES_ITEM_FORMAT.version,
 } as const;
 
 function call(callId: string): WireRecord {
@@ -305,7 +306,7 @@ function agentOver(model: ModelAdapter, repository: RecordingRepository) {
   });
   const runtime = new ToolLoopAgentRuntime({
     model,
-    itemFormat: { format: RESPONSES_ITEM_FORMAT.FORMAT, version: RESPONSES_ITEM_FORMAT.VERSION },
+    itemFormat: RESPONSES_ITEM_FORMAT,
     createContext: () => new ResponsesContextEngine(TOOL_LOOP_RUNTIME_IDENTITY),
   });
   const reports: string[] = [];

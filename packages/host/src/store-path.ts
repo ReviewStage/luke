@@ -1,5 +1,5 @@
 import path from "node:path";
-import { type AgentId, DEFAULT_AGENT_ID } from "@sidecar/runtime-contracts";
+import { type AgentId, DEFAULT_AGENT_ID } from "@sidecar/runtime/vocabulary";
 
 /**
  * Where the runtime store lives and where its worker's code is found, as pure

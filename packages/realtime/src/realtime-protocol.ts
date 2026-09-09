@@ -12,7 +12,7 @@ import {
 } from "@sidecar/wire";
 import { PRESS_AUDIO_SAMPLE_RATE } from "./press-audio.js";
 
-export type { ScheduledTimer } from "@sidecar/runtime-contracts";
+export type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 
 /**
  * The Realtime protocol: how far a call has progressed, the events both sides

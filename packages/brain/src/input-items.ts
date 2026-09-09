@@ -4,7 +4,7 @@ import type {
   ChildSpawnReceipt,
   ConversationRecord,
   SessionKey,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { sessionSummary } from "./observation-inbox.js";
 import type { BrainDelivery, BrainTurnNotice, BrainWakeEvent } from "./wake-events.js";

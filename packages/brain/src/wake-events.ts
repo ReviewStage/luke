@@ -1,4 +1,4 @@
-import type { SessionKey } from "@sidecar/runtime-contracts";
+import type { SessionKey } from "@sidecar/runtime/vocabulary";
 import type { Session, SessionIdentity } from "@sidecar/session";
 import type { ActResultStatus, WireRecord } from "@sidecar/wire";
 import type { BrainTurnTrigger } from "./turn.js";

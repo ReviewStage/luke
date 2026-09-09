@@ -1,5 +1,5 @@
 import { MEMORY_HOUSEKEEPING_OUTCOME, type MemoryHousekeepingOutcome } from "@sidecar/memory";
-import type { SessionKey } from "@sidecar/runtime-contracts";
+import type { SessionKey } from "@sidecar/runtime/vocabulary";
 import type { RuntimeDatabase } from "./database.js";
 
 /**

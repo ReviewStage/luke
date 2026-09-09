@@ -1,147 +1,62 @@
-import type {
-  AgentRuntime,
-  ContextEngine,
-  ModelAdapter,
-  ToolSchema,
-} from "@sidecar/runtime-contracts";
+import type { ReasoningEffort, ToolSchema } from "./execution.js";
+import { type AgentId, DEFAULT_AGENT_ID } from "./identifiers.js";
+import type { ToolPolicyLayers } from "./tool-policy.js";
 
 /**
- * The extension boundaries of the runtime, each a registry of descriptors
- * under fixed ids. A registry holds what a build compiled in — the built-in
- * runtimes, adapters, engines, memory providers, tools, skills, and
- * lifecycle services — and a configuration names entries by id rather than
- * constructing anything itself. Every registry refuses a second entry under
- * an id it holds, so two built-ins can never race for a name, and each kind
- * refuses the combinations its capabilities rule out at registration, so an
- * impossible pairing is a build error rather than a run that fails later.
- * Nothing here loads code: a descriptor is a value the build wrote, and
- * dynamic third-party loading is a decision this build has not made.
+ * What this build compiled in, under the ids a configuration names, and how
+ * a configuration becomes the immutable snapshot a run reads. A
+ * configuration names built-ins by id and a credential by reference;
+ * resolving it checks every name against the built-ins and its own numbers,
+ * and answers a frozen snapshot or the one reason it cannot stand. A store
+ * publishes snapshots atomically: a run takes the snapshot standing when it
+ * opens and reads it alone to its end, a publish replaces the whole snapshot
+ * at once, and a configuration that fails to resolve replaces nothing; a
+ * caller reads the snapshot it needs after its publish, and nothing is
+ * notified. The credential itself never enters a configuration: the
+ * reference says which credential, and the encrypted credential store keeps
+ * the value.
  */
 
-export const REGISTRY_KIND = {
-  AGENT_RUNTIME: "agent-runtime",
-  MODEL_ADAPTER: "model-adapter",
-  CONTEXT_ENGINE: "context-engine",
-  MEMORY_PROVIDER: "memory-provider",
-  TOOL: "tool",
-  SKILL: "skill",
-  LIFECYCLE_SERVICE: "lifecycle-service",
-} as const;
-
-export type RegistryKind = (typeof REGISTRY_KIND)[keyof typeof REGISTRY_KIND];
-
-export const REGISTRATION_REFUSAL = {
-  DUPLICATE_ID: "duplicate-id",
-  EMPTY_ID: "empty-id",
-  INCOMPATIBLE: "incompatible",
-} as const;
-
-export type RegistrationRefusal = (typeof REGISTRATION_REFUSAL)[keyof typeof REGISTRATION_REFUSAL];
-
-export class RegistrationError extends Error {
-  readonly kind: RegistryKind;
-  readonly refusal: RegistrationRefusal;
-  readonly id: string;
-
-  constructor(kind: RegistryKind, refusal: RegistrationRefusal, id: string, detail?: string) {
-    super(`${kind} "${id}" refused: ${refusal}${detail ? ` (${detail})` : ""}`);
-    this.name = "RegistrationError";
-    this.kind = kind;
-    this.refusal = refusal;
-    this.id = id;
-  }
-}
-
-export interface Registered {
-  readonly id: string;
-}
-
-/** Answers why an entry may not join the entries already held, or nothing when it may. */
-export type CompatibilityRule<Entry extends Registered> = (
-  entry: Entry,
-  held: readonly Entry[],
-) => string | undefined;
-
-export class Registry<Entry extends Registered> {
-  readonly kind: RegistryKind;
-  readonly #entries = new Map<string, Entry>();
-  readonly #compatible: CompatibilityRule<Entry> | undefined;
-
-  constructor(kind: RegistryKind, compatible?: CompatibilityRule<Entry>) {
-    this.kind = kind;
-    this.#compatible = compatible;
-  }
-
-  register(entry: Entry): Entry {
-    if (entry.id.length === 0) {
-      throw new RegistrationError(this.kind, REGISTRATION_REFUSAL.EMPTY_ID, entry.id);
-    }
-    if (this.#entries.has(entry.id)) {
-      throw new RegistrationError(this.kind, REGISTRATION_REFUSAL.DUPLICATE_ID, entry.id);
-    }
-    const objection = this.#compatible?.(entry, [...this.#entries.values()]);
-    if (objection !== undefined) {
-      throw new RegistrationError(
-        this.kind,
-        REGISTRATION_REFUSAL.INCOMPATIBLE,
-        entry.id,
-        objection,
-      );
-    }
-    this.#entries.set(entry.id, entry);
-    return entry;
-  }
-
-  get(id: string): Entry | undefined {
-    return this.#entries.get(id);
-  }
-
-  has(id: string): boolean {
-    return this.#entries.has(id);
-  }
-
-  entries(): readonly Entry[] {
-    return [...this.#entries.values()];
-  }
-}
-
-/** The item format a runtime writes and an engine reads; both name it so a pairing can be checked. */
+/** The item format a runtime writes and an engine reads. */
 export interface ItemFormatIdentity {
   readonly format: string;
   readonly version: number;
 }
 
-export interface AgentRuntimeDescriptor extends Registered {
-  readonly itemFormat: ItemFormatIdentity;
-  /** Builds the runtime over the adapter and engine a configuration resolved. */
-  readonly create: (model: ModelAdapter, engine: ContextEngineDescriptor) => AgentRuntime;
-}
+/** The item format every built-in of this build speaks: the Responses input array, first shape. */
+export const RESPONSES_ITEM_FORMAT = {
+  format: "openai-responses-input",
+  version: 1,
+} as const satisfies ItemFormatIdentity;
 
-export interface ModelAdapterDescriptor extends Registered {
-  /** The checkpoint format the adapter's items travel in; a runtime of another format cannot carry them. */
-  readonly itemFormat: ItemFormatIdentity;
-  /** The kind of credential the adapter runs under, by reference: the value stays in the credential store. */
-  readonly credentialKind: string;
-}
+/** The tool-loop runtime's identity, as a checkpoint is stamped with it. */
+export const TOOL_LOOP_RUNTIME = { ID: "tool-loop", VERSION: 1 } as const;
 
-export interface ContextEngineDescriptor extends Registered {
-  readonly itemFormat: ItemFormatIdentity;
-  readonly create: (writer: { id: string; version: number }) => ContextEngine;
-}
+/** The one context engine this build compiles in: the Responses input array. */
+export const BUILTIN_CONTEXT_ENGINE = { RESPONSES: "openai-responses" } as const;
 
-export const MEMORY_CAPABILITY = {
-  KEYWORD: "keyword",
-  VECTOR: "vector",
-  NOTEBOOK: "notebook",
+/** The two model adapters: the developer's own OpenAI key, and Luke's hosted service. */
+export const BUILTIN_MODEL_ADAPTER = {
+  OPENAI: "openai-responses",
+  HOSTED: "hosted-responses",
 } as const;
 
-export type MemoryCapability = (typeof MEMORY_CAPABILITY)[keyof typeof MEMORY_CAPABILITY];
+/**
+ * The notebook index as a memory provider, one id per embedding adapter it
+ * may run vectors on: keyword search over the FTS5 shadow, vector search
+ * over the stored embeddings, and the notebook's own writes. A configuration
+ * names the one matching its credential, as it names the model adapter.
+ */
+export const BUILTIN_MEMORY_PROVIDER = {
+  OPENAI: "notebook-index-openai",
+  HOSTED: "notebook-index-hosted",
+} as const;
 
-export interface MemoryProviderDescriptor extends Registered {
-  readonly capabilities: readonly MemoryCapability[];
-  /** A vector provider needs an embedding adapter; naming none is the incompatibility the registry refuses. */
-  readonly embeddingAdapterId?: string;
-}
+/** The two embedding adapters the notebook providers name. */
+export const BUILTIN_EMBEDDING_ADAPTER = {
+  OPENAI: "openai-embeddings",
+  HOSTED: "hosted-embeddings",
+} as const;
 
 /** How a tool's call is carried out: inside the host, by the host's act performer, or against the agent's own workspace files. */
 export const TOOL_EXECUTION = {
@@ -160,16 +75,34 @@ export const TOOL_EFFECT = {
 
 export type ToolEffect = (typeof TOOL_EFFECT)[keyof typeof TOOL_EFFECT];
 
-/** A tool as the registry holds it: its schema as a model is offered it, where it runs, and what it does. */
-export interface ToolDescriptor extends Registered {
+/**
+ * Where a tool runs and what it does. A performer carries acts and a
+ * workspace tool writes the agent's own files, so neither can be the tool
+ * that speaks: only a host tool may, and the union is what says so rather
+ * than a check something has to remember to run.
+ */
+export type ToolPlacement =
+  | { readonly execution: typeof TOOL_EXECUTION.HOST; readonly effect: ToolEffect }
+  | {
+      readonly execution: typeof TOOL_EXECUTION.PERFORMER | typeof TOOL_EXECUTION.WORKSPACE;
+      readonly effect: typeof TOOL_EFFECT.READ | typeof TOOL_EFFECT.WRITE;
+    };
+
+/**
+ * A tool as the catalog holds it: its schema as a model is offered it, where
+ * it runs, and what it does. The schema's name is the tool's whole identity —
+ * it is both what a model is offered and what dispatch looks up — because a
+ * descriptor carrying a second name could be offered under one and
+ * dispatched under the other.
+ */
+export type ToolDescriptor = {
   readonly schema: ToolSchema;
-  readonly execution: ToolExecution;
-  readonly effect: ToolEffect;
   /** Groups the policy may name in place of the tool: `group:read`, `group:acts`, and so on. */
   readonly groups: readonly string[];
-}
+} & ToolPlacement;
 
-export interface SkillDescriptor extends Registered {
+export interface SkillDescriptor {
+  readonly id: string;
   readonly name: string;
   readonly description: string;
   /** The absolute path of the skill's SKILL.md, loaded on demand and never inlined into a prompt. */
@@ -180,65 +113,262 @@ export interface SkillDescriptor extends Registered {
   readonly agents: readonly string[];
 }
 
-export const LIFECYCLE_HOOK = {
-  BEFORE_COMPACTION: "before-compaction",
-  AFTER_TURN: "after-turn",
-  ON_RESET: "on-reset",
+export const MEMORY_CAPABILITY = {
+  KEYWORD: "keyword",
+  VECTOR: "vector",
+  NOTEBOOK: "notebook",
 } as const;
 
-export type LifecycleHook = (typeof LIFECYCLE_HOOK)[keyof typeof LIFECYCLE_HOOK];
+export type MemoryCapability = (typeof MEMORY_CAPABILITY)[keyof typeof MEMORY_CAPABILITY];
 
-export interface LifecycleServiceDescriptor extends Registered {
-  readonly hooks: readonly LifecycleHook[];
+export const CREDENTIAL_REFERENCE_KIND = {
+  /** The developer's own provider key, held encrypted under the credential provider named. */
+  PROVIDER_KEY: "provider-key",
+  /** Luke's hosted service, under the signed-in account's bearer token. */
+  HOSTED_ACCOUNT: "hosted-account",
+} as const;
+
+export type CredentialReferenceKind =
+  (typeof CREDENTIAL_REFERENCE_KIND)[keyof typeof CREDENTIAL_REFERENCE_KIND];
+
+export type CredentialReference =
+  | { readonly kind: typeof CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY; readonly providerId: string }
+  | { readonly kind: typeof CREDENTIAL_REFERENCE_KIND.HOSTED_ACCOUNT };
+
+interface BuiltinModelAdapter {
+  /** The kind of credential the adapter runs under, by reference: the value stays in the credential store. */
+  readonly credentialKind: CredentialReferenceKind;
 }
 
-export function sameItemFormat(left: ItemFormatIdentity, right: ItemFormatIdentity): boolean {
-  return left.format === right.format && left.version === right.version;
+interface BuiltinMemoryProvider {
+  readonly capabilities: readonly MemoryCapability[];
+  /** The embedding adapter this provider runs its vectors on; a vector provider without one is a type error. */
+  readonly embeddingAdapterId: string;
 }
 
-/** A tool's schema name is its id: a descriptor whose two names disagree would be offered under one and dispatched under the other. */
-const toolCompatible: CompatibilityRule<ToolDescriptor> = (entry) => {
-  if (entry.schema.name !== entry.id) return "schema name differs from id";
-  if (entry.execution === TOOL_EXECUTION.PERFORMER && entry.effect === TOOL_EFFECT.SPEAK) {
-    return "a performer tool cannot speak";
+interface Builtins {
+  readonly agentRuntimeIds: readonly string[];
+  readonly contextEngineIds: readonly string[];
+  readonly modelAdapters: Readonly<Record<string, BuiltinModelAdapter>>;
+  readonly memoryProviders: Readonly<Record<string, BuiltinMemoryProvider>>;
+}
+
+const NOTEBOOK_MEMORY_CAPABILITIES = [
+  MEMORY_CAPABILITY.KEYWORD,
+  MEMORY_CAPABILITY.VECTOR,
+  MEMORY_CAPABILITY.NOTEBOOK,
+] as const;
+
+/**
+ * The built-ins by kind, under the ids a configuration names. The
+ * constructors that turn a name into a runtime or an engine live in the
+ * package that owns them (`@sidecar/brain`), because this table is names and
+ * capabilities, never behavior. Nothing is registered at run time: dynamic
+ * third-party loading is a decision this build has not made, so the table is
+ * a const and a second entry under one id is a syntax error. Runtimes and
+ * engines are kept apart from adapters because the ids collide across kinds:
+ * the Responses context engine and the keyed model adapter are both
+ * `openai-responses`.
+ */
+export const BUILTINS = {
+  agentRuntimeIds: [TOOL_LOOP_RUNTIME.ID],
+  contextEngineIds: [BUILTIN_CONTEXT_ENGINE.RESPONSES],
+  modelAdapters: {
+    [BUILTIN_MODEL_ADAPTER.OPENAI]: {
+      credentialKind: CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY,
+    },
+    [BUILTIN_MODEL_ADAPTER.HOSTED]: {
+      credentialKind: CREDENTIAL_REFERENCE_KIND.HOSTED_ACCOUNT,
+    },
+  },
+  memoryProviders: {
+    [BUILTIN_MEMORY_PROVIDER.OPENAI]: {
+      capabilities: NOTEBOOK_MEMORY_CAPABILITIES,
+      embeddingAdapterId: BUILTIN_EMBEDDING_ADAPTER.OPENAI,
+    },
+    [BUILTIN_MEMORY_PROVIDER.HOSTED]: {
+      capabilities: NOTEBOOK_MEMORY_CAPABILITIES,
+      embeddingAdapterId: BUILTIN_EMBEDDING_ADAPTER.HOSTED,
+    },
+  },
+} as const satisfies Builtins;
+
+export type BuiltinAgentRuntimeId = (typeof BUILTINS.agentRuntimeIds)[number];
+export type BuiltinContextEngineId = (typeof BUILTINS.contextEngineIds)[number];
+export type BuiltinModelAdapterId = keyof typeof BUILTINS.modelAdapters;
+export type BuiltinMemoryProviderId = keyof typeof BUILTINS.memoryProviders;
+
+/** The notebook provider a credential runs on: the same split the model adapter makes. */
+export function notebookMemoryProviderFor(
+  credentialKind: CredentialReferenceKind,
+): BuiltinMemoryProviderId {
+  return credentialKind === CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY
+    ? BUILTIN_MEMORY_PROVIDER.OPENAI
+    : BUILTIN_MEMORY_PROVIDER.HOSTED;
+}
+
+export interface AgentConfiguration {
+  readonly agentId: AgentId;
+  readonly agentRuntimeId: string;
+  readonly modelAdapterId: string;
+  readonly contextEngineId: string;
+  readonly memoryProviderId?: string;
+  readonly credential: CredentialReference;
+  /** The agent's identity workspace: the directory its bootstrap files live in. */
+  readonly workspaceDirectory: string;
+  /** Roots the skill discovery walks, each holding `<skill>/SKILL.md` directories. */
+  readonly skillRoots: readonly string[];
+  readonly toolPolicy: ToolPolicyLayers;
+  readonly reasoningEffort?: ReasoningEffort;
+  readonly maximumOutputTokens?: number;
+}
+
+export const CONFIGURATION_REFUSAL = {
+  /** A name no built-in holds: only a name that arrived over the wire can be one. */
+  UNKNOWN_ID: "unknown-id",
+  CREDENTIAL_KIND_MISMATCH: "credential-kind-mismatch",
+  INVALID_OUTPUT_TOKENS: "invalid-output-tokens",
+  EMPTY_WORKSPACE: "empty-workspace",
+} as const;
+
+export type ConfigurationRefusal =
+  (typeof CONFIGURATION_REFUSAL)[keyof typeof CONFIGURATION_REFUSAL];
+
+/** A snapshot a run holds: the configuration as resolved, frozen, stamped with the revision it was published at. */
+export interface ResolvedConfiguration {
+  readonly revision: number;
+  readonly configuration: AgentConfiguration;
+}
+
+function deepFreeze<Value>(value: Value): Value {
+  if (!(value instanceof Object) || Object.isFrozen(value)) return value;
+  for (const inner of Object.values(value)) deepFreeze(inner);
+  return Object.freeze(value);
+}
+
+export const CONFIGURATION_OUTCOME = {
+  RESOLVED: "resolved",
+  REFUSED: "refused",
+} as const;
+
+export type ConfigurationOutcome =
+  | {
+      readonly outcome: typeof CONFIGURATION_OUTCOME.RESOLVED;
+      readonly configuration: AgentConfiguration;
+    }
+  | {
+      readonly outcome: typeof CONFIGURATION_OUTCOME.REFUSED;
+      readonly refusal: ConfigurationRefusal;
+    };
+
+function refused(refusal: ConfigurationRefusal): ConfigurationOutcome {
+  return { outcome: CONFIGURATION_OUTCOME.REFUSED, refusal };
+}
+
+/**
+ * Checks the names a configuration gives against the built-ins and its own
+ * numbers; answers the configuration frozen, or the one reason it cannot
+ * stand. Only a name that arrived over the wire can be one the built-ins do
+ * not hold: every name a build spells is checked by the derived id unions.
+ */
+export function resolveConfiguration(names: AgentConfiguration): ConfigurationOutcome {
+  // Read through the declared shape rather than the const literal, which is
+  // what lets a name no built-in holds be looked up at all.
+  const table: Builtins = BUILTINS;
+  const adapter = table.modelAdapters[names.modelAdapterId];
+  if (
+    !table.agentRuntimeIds.includes(names.agentRuntimeId) ||
+    !table.contextEngineIds.includes(names.contextEngineId) ||
+    !adapter ||
+    (names.memoryProviderId !== undefined && !table.memoryProviders[names.memoryProviderId])
+  ) {
+    return refused(CONFIGURATION_REFUSAL.UNKNOWN_ID);
   }
-  if (entry.execution === TOOL_EXECUTION.WORKSPACE && entry.effect === TOOL_EFFECT.SPEAK) {
-    return "a workspace tool cannot speak";
+  if (adapter.credentialKind !== names.credential.kind) {
+    return refused(CONFIGURATION_REFUSAL.CREDENTIAL_KIND_MISMATCH);
   }
-  return undefined;
-};
-
-const memoryCompatible: CompatibilityRule<MemoryProviderDescriptor> = (entry) =>
-  entry.capabilities.includes(MEMORY_CAPABILITY.VECTOR) && !entry.embeddingAdapterId
-    ? "a vector provider names no embedding adapter"
-    : undefined;
-
-const skillCompatible: CompatibilityRule<SkillDescriptor> = (entry, held) => {
-  if (entry.name.length === 0) return "a skill needs a name";
-  return held.some((other) => other.location === entry.location)
-    ? "location already registered"
-    : undefined;
-};
-
-/** Every registry the runtime resolves a configuration against. */
-export interface RuntimeRegistries {
-  readonly agentRuntimes: Registry<AgentRuntimeDescriptor>;
-  readonly modelAdapters: Registry<ModelAdapterDescriptor>;
-  readonly contextEngines: Registry<ContextEngineDescriptor>;
-  readonly memoryProviders: Registry<MemoryProviderDescriptor>;
-  readonly tools: Registry<ToolDescriptor>;
-  readonly skills: Registry<SkillDescriptor>;
-  readonly lifecycleServices: Registry<LifecycleServiceDescriptor>;
-}
-
-export function createRuntimeRegistries(): RuntimeRegistries {
+  if (
+    names.maximumOutputTokens !== undefined &&
+    !(Number.isSafeInteger(names.maximumOutputTokens) && names.maximumOutputTokens > 0)
+  ) {
+    return refused(CONFIGURATION_REFUSAL.INVALID_OUTPUT_TOKENS);
+  }
+  if (names.workspaceDirectory.trim().length === 0) {
+    return refused(CONFIGURATION_REFUSAL.EMPTY_WORKSPACE);
+  }
   return {
-    agentRuntimes: new Registry(REGISTRY_KIND.AGENT_RUNTIME),
-    modelAdapters: new Registry(REGISTRY_KIND.MODEL_ADAPTER),
-    contextEngines: new Registry(REGISTRY_KIND.CONTEXT_ENGINE),
-    memoryProviders: new Registry(REGISTRY_KIND.MEMORY_PROVIDER, memoryCompatible),
-    tools: new Registry(REGISTRY_KIND.TOOL, toolCompatible),
-    skills: new Registry(REGISTRY_KIND.SKILL, skillCompatible),
-    lifecycleServices: new Registry(REGISTRY_KIND.LIFECYCLE_SERVICE),
+    outcome: CONFIGURATION_OUTCOME.RESOLVED,
+    configuration: deepFreeze(structuredClone(names)),
+  };
+}
+
+/**
+ * One agent's standing configuration. `publish` resolves and, only when the
+ * whole configuration resolves, replaces the snapshot in one assignment; a
+ * refused publish leaves the standing snapshot exactly as it was. Two agents
+ * are two stores, so a test can stand two isolated agents beside each other
+ * with nothing shared.
+ */
+export class ConfigurationStore {
+  #snapshot: ResolvedConfiguration;
+
+  constructor(initial: AgentConfiguration) {
+    const resolved = resolveConfiguration(initial);
+    if (resolved.outcome === CONFIGURATION_OUTCOME.REFUSED) {
+      throw new Error(`initial configuration refused: ${resolved.refusal}`);
+    }
+    this.#snapshot = Object.freeze({ revision: 1, configuration: resolved.configuration });
+  }
+
+  snapshot(): ResolvedConfiguration {
+    return this.#snapshot;
+  }
+
+  /**
+   * Replaces the snapshot whole, or answers the one reason nothing was
+   * replaced; the caller reads `snapshot()` for what now stands.
+   */
+  publish(next: AgentConfiguration): ConfigurationOutcome {
+    const resolved = resolveConfiguration(next);
+    if (resolved.outcome === CONFIGURATION_OUTCOME.RESOLVED) {
+      this.#snapshot = Object.freeze({
+        revision: this.#snapshot.revision + 1,
+        configuration: resolved.configuration,
+      });
+    }
+    return resolved;
+  }
+}
+
+/** The one agent this build configures, over the ids the built-ins hold. */
+export function defaultAgentConfiguration(options: {
+  agentRuntimeId: BuiltinAgentRuntimeId;
+  modelAdapterId: BuiltinModelAdapterId;
+  contextEngineId: BuiltinContextEngineId;
+  credential: CredentialReference;
+  workspaceDirectory: string;
+  skillRoots?: readonly string[];
+  toolPolicy?: ToolPolicyLayers;
+  memoryProviderId?: BuiltinMemoryProviderId;
+  agentId?: AgentId;
+  reasoningEffort?: ReasoningEffort;
+  maximumOutputTokens?: number;
+}): AgentConfiguration {
+  return {
+    agentId: options.agentId ?? DEFAULT_AGENT_ID,
+    agentRuntimeId: options.agentRuntimeId,
+    modelAdapterId: options.modelAdapterId,
+    contextEngineId: options.contextEngineId,
+    credential: options.credential,
+    workspaceDirectory: options.workspaceDirectory,
+    skillRoots: options.skillRoots ?? [],
+    toolPolicy: options.toolPolicy ?? {},
+    ...(options.memoryProviderId !== undefined
+      ? { memoryProviderId: options.memoryProviderId }
+      : undefined),
+    ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : undefined),
+    ...(options.maximumOutputTokens !== undefined
+      ? { maximumOutputTokens: options.maximumOutputTokens }
+      : undefined),
   };
 }

@@ -7,7 +7,7 @@ import {
   type BrainTranscriptCursors,
   brainPersistedStateFromWire,
 } from "@sidecar/brain";
-import type { SessionKey } from "@sidecar/runtime-contracts";
+import type { SessionKey } from "@sidecar/runtime/vocabulary";
 import { isWireNumber, isWireString, type WireRecord, type WireValue } from "@sidecar/wire";
 import { raiseHistoryCutoff, touchConversation } from "./conversations-table.js";
 import { column, nullable, type RuntimeDatabase } from "./database.js";

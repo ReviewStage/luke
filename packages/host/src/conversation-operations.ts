@@ -1,5 +1,5 @@
 import type { ConversationEntry } from "@sidecar/realtime";
-import type { ConversationRecord, SessionKey } from "@sidecar/runtime-contracts";
+import type { ConversationRecord, SessionKey } from "@sidecar/runtime/vocabulary";
 import {
   type ConversationDeleteOutcome,
   deleteConversationHistoryFlow,

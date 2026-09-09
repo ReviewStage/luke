@@ -11,7 +11,7 @@ import {
 } from "@sidecar/brain/requests-wire";
 import type { GatewayCallResult, GatewayClient } from "@sidecar/gateway";
 import { GATEWAY_EVENT, GATEWAY_METHOD, gatewayEventReader } from "@sidecar/gateway";
-import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
+import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime/vocabulary";
 import { isRecord, isWireBoolean, isWireNumber, isWireString, type WireValue } from "@sidecar/wire";
 import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
 import { REJECTED_SUBMISSION } from "./brain/publication.js";

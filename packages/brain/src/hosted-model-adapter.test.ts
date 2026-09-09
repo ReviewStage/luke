@@ -10,7 +10,7 @@ import {
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
   REASONING_EFFORT,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { isRecord, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import { HostedModelAdapter } from "./hosted-model-adapter.js";
 import {

@@ -26,7 +26,7 @@ import {
   type ToolExecutionContext,
   type ToolExecutor,
   type ToolInvocation,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import type { SessionIdentity } from "@sidecar/session";
 import {
   ACT_RESULT_STATUS,
@@ -167,7 +167,7 @@ export interface ToolExecutorTurn {
 
 /** Whether a tool's call goes through the journal as an effect: every write, and every act the performer carries. */
 export function journaledEffect(policy: EffectiveToolPolicy, name: string): boolean {
-  const tool = policy.allowed.find((candidate) => candidate.id === name);
+  const tool = policy.allowed.find((candidate) => candidate.schema.name === name);
   return (
     tool !== undefined &&
     (tool.effect === TOOL_EFFECT.WRITE || tool.execution === TOOL_EXECUTION.PERFORMER)
@@ -234,7 +234,7 @@ export function createTurnToolExecutor(
 ): ToolExecutor {
   const { policy, context } = turn;
   const descriptors = new Map<string, ToolDescriptor>(
-    policy.allowed.map((tool) => [tool.id, tool]),
+    policy.allowed.map((tool) => [tool.schema.name, tool]),
   );
 
   /**
@@ -381,7 +381,7 @@ export function createTurnToolExecutor(
             : undefined),
           requesterRunId: context.run.runId,
           policy: {
-            allowed: policy.allowed.map((tool) => tool.id),
+            allowed: policy.allowed.map((tool) => tool.schema.name),
             denied: policy.denied.map((denial) => denial.tool),
           },
           fork: () => forkSnapshotOf(context.context),

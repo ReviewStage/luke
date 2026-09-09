@@ -16,7 +16,7 @@
     "@sidecar/acts": "workspace:*",
     "@sidecar/guide": "workspace:*",
     "@sidecar/hosted": "workspace:*",
-    "@sidecar/runtime-contracts": "workspace:*",
+    "@sidecar/runtime": "workspace:*",
     "@sidecar/session": "workspace:*",
     "@sidecar/wire": "workspace:*"
   },

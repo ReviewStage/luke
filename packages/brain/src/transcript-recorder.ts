@@ -13,7 +13,7 @@ import {
   type RuntimeCheckpoint,
   TRANSCRIPT_EVENT_KIND,
   type TranscriptEvent,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
 
 /**

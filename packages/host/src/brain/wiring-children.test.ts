@@ -26,7 +26,7 @@ import {
   conversationKindOf,
   MAIN_SESSION_KEY,
   type SessionKey,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { ACT_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
 import { MemoryBrainStorage } from "../testing/index.js";
 import { type BrainWiring, wireBrain } from "./wiring.js";

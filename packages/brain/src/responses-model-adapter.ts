@@ -1,4 +1,5 @@
 import { HOSTED_BRAIN_OPERATION, type HostedBrainOperation } from "@sidecar/hosted";
+import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import {
   MODEL_RESPONSE_OUTCOME,
   type ModelAdapter,
@@ -8,11 +9,9 @@ import {
   type ModelRequestOptions,
   type ModelResponse,
   type ModelTokenCount,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { HTTP_STATUS, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import { type Failure, type Normalized, payloadOf, throttled } from "./model-adapter-shared.js";
-import { RESPONSES_ITEM_FORMAT } from "./responses-api.js";
-import { TOOL_LOOP_RUNTIME } from "./runtime.js";
 
 /**
  * One model adapter over the two transports that speak the Responses item
@@ -38,8 +37,8 @@ export type ResponsesOperation = (typeof RESPONSES_OPERATION)[keyof typeof RESPO
 export const RESPONSES_CHECKPOINT = {
   runtime: TOOL_LOOP_RUNTIME.ID,
   runtimeVersion: TOOL_LOOP_RUNTIME.VERSION,
-  format: RESPONSES_ITEM_FORMAT.FORMAT,
-  formatVersion: RESPONSES_ITEM_FORMAT.VERSION,
+  format: RESPONSES_ITEM_FORMAT.format,
+  formatVersion: RESPONSES_ITEM_FORMAT.version,
 } as const;
 
 /** What an operation may be built against once the transport admits it, or the failure that stands in its way. */

@@ -50,7 +50,7 @@ import {
   type MaybePromise,
   type SessionKey,
   sessionKey as toSessionKey,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import {
   isRecord,
   isWireNumber,
@@ -294,7 +294,6 @@ function configurationToWire(snapshot: ResolvedConfiguration): WireRecord {
     ...(configuration.maximumOutputTokens !== undefined
       ? { maximumOutputTokens: configuration.maximumOutputTokens }
       : undefined),
-    lifecycleServiceIds: [...configuration.lifecycleServiceIds],
   };
 }
 

@@ -1,5 +1,5 @@
 import type { RealtimeFunctionCall } from "@sidecar/acts";
-import type { RunOrigin } from "@sidecar/runtime-contracts";
+import type { RunOrigin } from "@sidecar/runtime/vocabulary";
 import type { Session, SessionIdentity } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
 

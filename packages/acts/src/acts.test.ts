@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { EMPTY_APP_GUIDE } from "@sidecar/guide";
-import { RUN_ORIGIN } from "@sidecar/runtime-contracts";
+import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { ACT_KIND } from "./act-kinds.js";
 import { actNarration } from "./act-narration.js";

@@ -21,7 +21,7 @@ import {
   VoiceReceiver,
 } from "@sidecar/host";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
-import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
+import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
 import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import { BRIDGE } from "#shared/bridge";
 import { registerBrainIpc } from "./brain";

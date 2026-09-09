@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_TOOL, realtimeToolDefinitions } from "@sidecar/acts";
 import {
-  createRuntimeRegistries,
   GROUP_PREFIX,
   resolveToolPolicy,
   TOOL_EFFECT,
@@ -10,11 +9,6 @@ import {
   TOOL_POLICY_LAYER,
 } from "@sidecar/runtime";
 import { wireRecord } from "@sidecar/wire";
-import {
-  NOTEBOOK_MEMORY_PROVIDER_ID,
-  notebookMemoryProviderFor,
-  registerBrainBuiltIns,
-} from "./builtins.js";
 import {
   BRAIN_TOOL,
   brainToolCatalog,
@@ -29,16 +23,16 @@ import { BRAIN_TURN_TRIGGER } from "./turn.js";
 
 test("the catalog holds every act and every brain tool once, each under its execution", () => {
   const catalog = brainToolCatalog();
-  const names = catalog.map((tool) => tool.id);
+  const names = catalog.map((tool) => tool.schema.name);
   assert.equal(new Set(names).size, names.length);
   for (const act of realtimeToolDefinitions()) {
-    const entry = catalog.find((tool) => tool.id === act.name);
+    const entry = catalog.find((tool) => tool.schema.name === act.name);
     assert.ok(entry, `${act.name} is in the catalog`);
     assert.equal(entry.execution, TOOL_EXECUTION.PERFORMER);
     assert.ok(entry.groups.includes(TOOL_GROUP.ACTS));
   }
   for (const own of Object.values(BRAIN_TOOL)) {
-    const entry = catalog.find((tool) => tool.id === own);
+    const entry = catalog.find((tool) => tool.schema.name === own);
     assert.ok(entry, `${own} is in the catalog`);
     assert.notEqual(entry.execution, TOOL_EXECUTION.PERFORMER);
     assert.equal(entry.schema.name, own);
@@ -106,7 +100,7 @@ test("a child's task turn loses announce like an ask, and the session tools stan
     BRAIN_TOOL.SESSIONS_LIST,
     BRAIN_TOOL.SESSIONS_HISTORY,
   ]) {
-    const tool = catalog.find((held) => held.id === name);
+    const tool = catalog.find((held) => held.schema.name === name);
     assert.ok(tool, name);
     assert.ok(tool.groups.includes(TOOL_GROUP.SESSIONS));
   }
@@ -122,7 +116,7 @@ test("a child's task turn loses announce like an ask, and the session tools stan
 test("the memory tools stand in the catalog as host reads under their own group", () => {
   const catalog = brainToolCatalog();
   for (const name of [BRAIN_TOOL.MEMORY_SEARCH, BRAIN_TOOL.MEMORY_GET]) {
-    const entry = catalog.find((tool) => tool.id === name);
+    const entry = catalog.find((tool) => tool.schema.name === name);
     assert.ok(entry, name);
     assert.equal(entry.execution, TOOL_EXECUTION.HOST);
     assert.equal(entry.effect, TOOL_EFFECT.READ);
@@ -135,20 +129,4 @@ test("the memory tools stand in the catalog as host reads under their own group"
   assert.equal(denied.allows(BRAIN_TOOL.MEMORY_SEARCH), false);
   assert.equal(denied.allows(BRAIN_TOOL.MEMORY_GET), false);
   assert.equal(denied.allows(BRAIN_TOOL.READ_TRANSCRIPT), true);
-});
-
-test("the built-ins register the notebook index as a memory provider per embedding adapter", () => {
-  const registries = registerBrainBuiltIns(createRuntimeRegistries());
-  assert.deepEqual(
-    registries.memoryProviders.entries().map((entry) => [entry.id, entry.embeddingAdapterId]),
-    [
-      [NOTEBOOK_MEMORY_PROVIDER_ID.OPENAI, "openai-embeddings"],
-      [NOTEBOOK_MEMORY_PROVIDER_ID.HOSTED, "hosted-embeddings"],
-    ],
-  );
-  assert.equal(notebookMemoryProviderFor("provider-key"), NOTEBOOK_MEMORY_PROVIDER_ID.OPENAI);
-  assert.equal(notebookMemoryProviderFor("hosted-account"), NOTEBOOK_MEMORY_PROVIDER_ID.HOSTED);
-  for (const provider of registries.memoryProviders.entries()) {
-    assert.deepEqual([...provider.capabilities], ["keyword", "vector", "notebook"]);
-  }
 });

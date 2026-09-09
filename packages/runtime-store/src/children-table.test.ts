@@ -11,7 +11,7 @@ import {
   completionIdFor,
   DEFAULT_AGENT_ID,
   MAIN_SESSION_KEY,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import {
   deleteChildCompletion,
   deleteChildRun,

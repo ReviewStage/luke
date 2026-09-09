@@ -96,9 +96,6 @@ importers:
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
-      '@sidecar/runtime-contracts':
-        specifier: workspace:*
-        version: link:../../packages/runtime-contracts
       '@sidecar/runtime-store':
         specifier: workspace:*
         version: link:../../packages/runtime-store
@@ -277,9 +274,9 @@ importers:
       '@sidecar/issues':
         specifier: workspace:*
         version: link:../issues
-      '@sidecar/runtime-contracts':
+      '@sidecar/runtime':
         specifier: workspace:*
-        version: link:../runtime-contracts
+        version: link:../runtime
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
@@ -348,9 +345,6 @@ importers:
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@sidecar/runtime-contracts':
-        specifier: workspace:*
-        version: link:../runtime-contracts
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
@@ -423,9 +417,9 @@ importers:
       '@sidecar/realtime':
         specifier: workspace:*
         version: link:../realtime
-      '@sidecar/runtime-contracts':
+      '@sidecar/runtime':
         specifier: workspace:*
-        version: link:../runtime-contracts
+        version: link:../runtime
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
@@ -458,9 +452,9 @@ importers:
 
   packages/fixtures:
     dependencies:
-      '@sidecar/runtime-contracts':
+      '@sidecar/runtime':
         specifier: workspace:*
-        version: link:../runtime-contracts
+        version: link:../runtime
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
@@ -480,9 +474,9 @@ importers:
 
   packages/gateway:
     dependencies:
-      '@sidecar/runtime-contracts':
+      '@sidecar/runtime':
         specifier: workspace:*
-        version: link:../runtime-contracts
+        version: link:../runtime
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
@@ -563,9 +557,6 @@ importers:
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@sidecar/runtime-contracts':
-        specifier: workspace:*
-        version: link:../runtime-contracts
       '@sidecar/runtime-store':
         specifier: workspace:*
         version: link:../runtime-store
@@ -600,9 +591,9 @@ importers:
 
   packages/hosted:
     dependencies:
-      '@sidecar/runtime-contracts':
+      '@sidecar/runtime':
         specifier: workspace:*
-        version: link:../runtime-contracts
+        version: link:../runtime
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
@@ -647,9 +638,6 @@ importers:
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@sidecar/runtime-contracts':
-        specifier: workspace:*
-        version: link:../runtime-contracts
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
@@ -712,9 +700,9 @@ importers:
       '@sidecar/credentials':
         specifier: workspace:*
         version: link:../credentials
-      '@sidecar/runtime-contracts':
+      '@sidecar/runtime':
         specifier: workspace:*
-        version: link:../runtime-contracts
+        version: link:../runtime
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
@@ -743,9 +731,9 @@ importers:
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../hosted
-      '@sidecar/runtime-contracts':
+      '@sidecar/runtime':
         specifier: workspace:*
-        version: link:../runtime-contracts
+        version: link:../runtime
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
@@ -765,31 +753,12 @@ importers:
 
   packages/runtime:
     dependencies:
-      '@sidecar/runtime-contracts':
-        specifier: workspace:*
-        version: link:../runtime-contracts
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
       croner:
         specifier: 10.0.1
         version: 10.0.1
-    devDependencies:
-      '@types/node':
-        specifier: 26.2.0
-        version: 26.2.0
-      tsx:
-        specifier: 4.23.12
-        version: 4.23.12
-      typescript:
-        specifier: 7.0.2
-        version: 7.0.2
-
-  packages/runtime-contracts:
-    dependencies:
-      '@sidecar/wire':
-        specifier: workspace:*
-        version: link:../wire
     devDependencies:
       '@types/node':
         specifier: 26.2.0
@@ -818,9 +787,6 @@ importers:
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@sidecar/runtime-contracts':
-        specifier: workspace:*
-        version: link:../runtime-contracts
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
@@ -921,9 +887,9 @@ importers:
       '@sidecar/realtime':
         specifier: workspace:*
         version: link:../realtime
-      '@sidecar/runtime-contracts':
+      '@sidecar/runtime':
         specifier: workspace:*
-        version: link:../runtime-contracts
+        version: link:../runtime
       '@sidecar/settings':
         specifier: workspace:*
         version: link:../settings

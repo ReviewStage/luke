@@ -1,4 +1,4 @@
-import type { ToolResult } from "@sidecar/runtime-contracts";
+import type { ToolResult } from "@sidecar/runtime/vocabulary";
 import {
   isRecord,
   isWireString,

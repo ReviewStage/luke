@@ -10,7 +10,7 @@ import {
   type ModelResponse,
   type ModelUsage,
   type ToolSchema,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import {
   isRecord,
   isWireNumber,
@@ -219,12 +219,6 @@ export function brainResponsesOutput(payload: UnparsedWireValue): BrainResponses
     ...(incompleteReason ? { incompleteReason } : undefined),
   };
 }
-
-/** The provider item format the brain's checkpoints are in: the Responses input array, first shape. */
-export const RESPONSES_ITEM_FORMAT = {
-  FORMAT: "openai-responses-input",
-  VERSION: 1,
-} as const;
 
 export const BRAIN_RESPONSES_COMPACT_PATH = "/responses/compact";
 export const BRAIN_RESPONSES_INPUT_TOKENS_PATH = "/responses/input_tokens";

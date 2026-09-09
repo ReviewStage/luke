@@ -1,4 +1,4 @@
-import { isIdentifier } from "@sidecar/runtime-contracts";
+import { isIdentifier } from "@sidecar/runtime/vocabulary";
 import {
   isRecord,
   isWireBoolean,
