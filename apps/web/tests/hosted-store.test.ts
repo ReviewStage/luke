@@ -760,6 +760,10 @@ test("a pass record moves the attempt every time, the whole read only on success
   });
   await roster.recordPass(userId, { attemptedAt: NOW + 2 });
   assert.deepEqual(await roster.pass(userId), { attemptedAt: NOW + 2, observedAt: NOW + 2 });
+  // A pass that ran long and reports after a later one cannot move the record back.
+  await roster.recordPass(userId, { attemptedAt: NOW + 1, failure: "transient" });
+  await roster.recordPass(userId, { attemptedAt: NOW });
+  assert.deepEqual(await roster.pass(userId), { attemptedAt: NOW + 2, observedAt: NOW + 2 });
 
   const keyed = await database.createUser();
   const unseen = await database.createUser();

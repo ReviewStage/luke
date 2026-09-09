@@ -1,4 +1,16 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, notInArray, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  notInArray,
+  or,
+} from "drizzle-orm";
 import {
   devices,
   observationPass,
@@ -219,6 +231,10 @@ export async function readObservationPass(
  * Records how a pass went. A whole read moves both instants and clears the
  * failure; a failed one moves the attempt, names the failure, and leaves the
  * last whole read standing, since that is still when the snapshot is from.
+ * The record only ever moves forward: an attempt older than the one on
+ * record — a pass that ran long and reports after a later one — writes
+ * nothing, so no writer can put an account back at the head of the
+ * schedule's order.
  */
 export async function recordObservationPass(
   db: HostedStoreDatabase,
@@ -242,6 +258,7 @@ export async function recordObservationPass(
         failure,
         ...(observedAt !== undefined ? { observedAt } : undefined),
       },
+      setWhere: lte(observationPass.attemptedAt, attempt.attemptedAt),
     });
 }
 

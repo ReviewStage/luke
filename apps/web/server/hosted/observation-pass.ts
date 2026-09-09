@@ -129,7 +129,7 @@ export async function observeAndSnapshot(
         : undefined,
       previous?.observedAt,
     );
-    await store.roster.recordPass(userId, { attemptedAt: now });
+    if (landed) await store.roster.recordPass(userId, { attemptedAt: now });
   } catch {
     // A roster read whole that could not be written down is a failed pass
     // for this user; the snapshot on record, if any, is whatever stood.
@@ -145,7 +145,9 @@ export async function observeAndSnapshot(
   }
   if (!landed) {
     // Another pass wrote the roster first; its snapshot is the one that
-    // stands, and the transition it recorded is not recorded again here.
+    // stands, the transition it recorded is not recorded again here, and
+    // its pass record stands too: this pass's own instant is older, and
+    // writing it would put the account back at the head of the schedule.
     const superseded = await storedRoster(store, userId);
     return { complete: true, changed: false, ...(superseded ?? {}) };
   }

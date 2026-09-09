@@ -292,6 +292,12 @@ test("two passes racing over one user record one transition once, and the later 
   assert.equal(late.observedAt, TEST_TIME + 2_000);
   assert.equal(store.snapshots.get("user-1")?.observedAt, TEST_TIME + 2_000);
   assert.equal((await store.roster.pendingDiffs("user-1")).length, 1);
+  // The losing pass leaves the winner's pass record standing rather than
+  // backdating the account to the head of the schedule's order.
+  assert.deepEqual(store.passes.get("user-1"), {
+    attemptedAt: TEST_TIME + 2_000,
+    observedAt: TEST_TIME + 2_000,
+  });
 });
 
 test("a store that cannot take the snapshot is a failed pass, never an unrecorded roster", async () => {

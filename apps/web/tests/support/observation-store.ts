@@ -58,6 +58,7 @@ export function memoryObservationStore(): MemoryObservationStore {
       pass: async (userId) => passes.get(userId),
       recordPass: async (userId, attempt) => {
         const held = passes.get(userId);
+        if (held && held.attemptedAt > attempt.attemptedAt) return;
         passes.set(userId, {
           attemptedAt: attempt.attemptedAt,
           ...(attempt.failure === undefined
