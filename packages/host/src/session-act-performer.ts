@@ -35,6 +35,7 @@ import {
   supersetPressedLink,
 } from "@sidecar/providers";
 import {
+  dispatchAct,
   ExternalOpenAnswerLostError,
   isProviderId,
   type ProviderActResult,
@@ -42,7 +43,7 @@ import {
   type SessionApplicationId,
   type SessionIdentity,
   type SessionOpenResult,
-  type SessionProviderAdapter,
+  type SessionProviderPlugin,
   type SessionRoster,
   type WorkspaceAgentSelection,
 } from "@sidecar/session";
@@ -77,11 +78,11 @@ function unknownOpen(error: ExternalOpenAnswerLostError): SessionOpenResult {
 export interface SessionActPerformerDependencies {
   sessionRegistry: SessionRoster;
   openExternal: (url: string) => Promise<void>;
-  adapterFor: (providerId: string) => SessionProviderAdapter | undefined;
+  pluginFor: (providerId: string) => SessionProviderPlugin | undefined;
   sendsNetwork: boolean;
   settingsStore: Pick<SettingsStore, "get">;
   rememberWorkspaceDefaults: (
-    adapter: SessionProviderAdapter,
+    plugin: SessionProviderPlugin,
     providerProjectId: string,
     providerTargetId: string | undefined,
     selection: WorkspaceAgentSelection | undefined,
@@ -155,7 +156,7 @@ export function createSessionActPerformer(
   const {
     sessionRegistry,
     openExternal,
-    adapterFor,
+    pluginFor,
     sendsNetwork,
     settingsStore,
     rememberWorkspaceDefaults,
@@ -201,22 +202,22 @@ export function createSessionActPerformer(
   async function performSessionAct<Result extends ProviderActResult | UnknownActResult>(
     identity: SessionIdentity,
     counted: ProductSessionAct,
-    act: (adapter: SessionProviderAdapter) => Promise<Result>,
+    act: (plugin: SessionProviderPlugin) => Promise<Result>,
   ): Promise<Result | { status: typeof ACT_RESULT_STATUS.UNSUPPORTED; reason: string }> {
-    const adapter = adapterFor(identity.providerId);
-    if (!adapter) {
+    const plugin = pluginFor(identity.providerId);
+    if (!plugin) {
       return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.PROVIDER_ABSENT };
     }
-    const result = await act(adapter);
+    const result = await act(plugin);
     // A rejection refreshes like an acceptance: a write whose answer never
     // arrived may still have landed, so the roster must catch up with the
     // provider rather than keep advertising what it may have already taken. A
     // rejection that never reached the network is answered from the adapter's
     // cache anyway.
     if (result.status !== ACT_RESULT_STATUS.UNSUPPORTED) {
-      void sessionRegistry.refresh(adapter);
+      void sessionRegistry.refresh(plugin);
     }
-    return countSessionAct(adapter.provider.id, counted, result);
+    return countSessionAct(plugin.provider.id, counted, result);
   }
 
   // What a press fires is the address the roster reported, plus the one
@@ -320,8 +321,8 @@ export function createSessionActPerformer(
         await supersetCli.sendMessage(managed, act.text),
       );
     }
-    return performSessionAct(identity, PRODUCT_SESSION_ACT.MESSAGE_SEND, (adapter) =>
-      adapter.sendMessage(providerSessionMessage(act)),
+    return performSessionAct(identity, PRODUCT_SESSION_ACT.MESSAGE_SEND, (plugin) =>
+      dispatchAct(plugin, "message", providerSessionMessage(act)),
     );
   };
 
@@ -339,8 +340,8 @@ export function createSessionActPerformer(
         await supersetCli.executeControl(managed, control.id),
       );
     }
-    return performSessionAct(identity, PRODUCT_SESSION_ACT.CONTROL_RUN, (adapter) =>
-      adapter.executeControl(providerControlRequest(act)),
+    return performSessionAct(identity, PRODUCT_SESSION_ACT.CONTROL_RUN, (plugin) =>
+      dispatchAct(plugin, "control", providerControlRequest(act)),
     );
   };
 
@@ -360,17 +361,15 @@ export function createSessionActPerformer(
         reason: "This run reaches no provider, so it can create nothing.",
       };
     }
-    const adapter = adapterFor(providerId);
-    if (!adapter) {
+    const plugin = pluginFor(providerId);
+    if (!plugin) {
       return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: "That provider is not connected." };
     }
-    const project = adapter
-      .workspaceProjects()
-      .find(
-        (candidate) =>
-          candidate.providerProjectId === providerProjectId &&
-          candidate.providerTargetId === providerTargetId,
-      );
+    const project = (plugin.projects?.() ?? []).find(
+      (candidate) =>
+        candidate.providerProjectId === providerProjectId &&
+        candidate.providerTargetId === providerTargetId,
+    );
     if (!project) {
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
@@ -392,7 +391,11 @@ export function createSessionActPerformer(
       : undefined;
     if (guard?.isRevoked())
       return { status: ACT_RESULT_STATUS.REJECTED, reason: REFUSAL.TURN_OVER };
-    const result = await adapter.createWorkspace(providerWorkspaceRequest(act, stored));
+    const result = await dispatchAct(
+      plugin,
+      "createWorkspace",
+      providerWorkspaceRequest(act, stored),
+    );
     // A workspace that landed is a session the panel should be showing, so
     // the next look must actually ask rather than serve the cache. A
     // rejection refreshes too: a workspace can stand with its opening task
@@ -406,7 +409,7 @@ export function createSessionActPerformer(
       // refresh, so the very pass that first sees the session resolves it.
       if (result.status === ACT_RESULT_STATUS.ACCEPTED && result.providerSessionId) {
         expectCreatedWorkspace(
-          { providerId: adapter.provider.id, providerSessionId: result.providerSessionId },
+          { providerId: plugin.provider.id, providerSessionId: result.providerSessionId },
           Date.now(),
         );
         // An interval pass can commit the new session while the creation's
@@ -416,7 +419,7 @@ export function createSessionActPerformer(
         // against here, and future commits carry every later arrival.
         openCreatedWorkspaces();
       }
-      void sessionRegistry.refresh(adapter);
+      void sessionRegistry.refresh(plugin);
     }
     // The first workspace that actually lands chooses the default provider,
     // so a later ask that names none has somewhere unsurprising to go. Only
@@ -426,13 +429,13 @@ export function createSessionActPerformer(
     // remembered default, never the workspace that just landed.
     if (result.status === ACT_RESULT_STATUS.ACCEPTED) {
       await rememberWorkspaceDefaults(
-        adapter,
+        plugin,
         providerProjectId,
         providerTargetId,
         act.agentSelection,
         act.agent,
       );
-      countSessionAct(adapter.provider.id, PRODUCT_SESSION_ACT.WORKSPACE_CREATE, result);
+      countSessionAct(plugin.provider.id, PRODUCT_SESSION_ACT.WORKSPACE_CREATE, result);
       // The named session was consumed above; the answer stays what became
       // of the ask, so nothing rides out that the roster will not report on
       // its own.
@@ -459,7 +462,7 @@ export function createSessionActPerformer(
         await supersetCli.createAgent(managed, act.agent, act.task),
       );
     }
-    return performSessionAct(identity, PRODUCT_SESSION_ACT.AGENT_ADD, async (adapter) => {
+    return performSessionAct(identity, PRODUCT_SESSION_ACT.AGENT_ADD, async (plugin) => {
       const stored: WorkspaceAgentSelection | undefined = isProviderId(identity.providerId)
         ? (
             await guardedRead(
@@ -471,7 +474,7 @@ export function createSessionActPerformer(
       if (guard?.isRevoked()) {
         return { status: ACT_RESULT_STATUS.REJECTED, reason: REFUSAL.TURN_OVER };
       }
-      return adapter.spawnWorkspaceAgent(providerWorkspaceAgentRequest(act, stored));
+      return dispatchAct(plugin, "spawnAgent", providerWorkspaceAgentRequest(act, stored));
     });
   };
 
@@ -489,16 +492,16 @@ export function createSessionActPerformer(
         await supersetCli.renameWorkspace(managed, act.name),
       );
     }
-    return performSessionAct(identity, PRODUCT_SESSION_ACT.WORKSPACE_RENAME, (adapter) =>
-      adapter.renameWorkspace(providerWorkspaceRenameRequest(act)),
+    return performSessionAct(identity, PRODUCT_SESSION_ACT.WORKSPACE_RENAME, (plugin) =>
+      dispatchAct(plugin, "renameWorkspace", providerWorkspaceRenameRequest(act)),
     );
   };
 
   const renameSession = async (
     act: ValidatedAct<typeof ACT_KIND.RENAME_SESSION>,
   ): Promise<WireRecord> =>
-    performSessionAct(act.identity, PRODUCT_SESSION_ACT.SESSION_RENAME, (adapter) =>
-      adapter.renameSession(providerSessionRenameRequest(act)),
+    performSessionAct(act.identity, PRODUCT_SESSION_ACT.SESSION_RENAME, (plugin) =>
+      dispatchAct(plugin, "renameSession", providerSessionRenameRequest(act)),
     );
 
   // An issue act is built from observed state alone: the issue's own tracker
