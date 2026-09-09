@@ -53,7 +53,7 @@ export const ACCOUNTS_SORT_FIRST_DIRECTION = {
  * chronological one. A detail column's ordering rides the column itself,
  * because its fields exist only on the rows of the surface that draws it.
  */
-export const SHARED_SORT_VALUE = new Map<
+const SHARED_SORT_VALUE = new Map<
   AccountsSortKey,
   (row: AccountsTableRow) => string | number | null
 >([

@@ -2,17 +2,6 @@ import { LukeMark } from "../../SiteChrome";
 import { type AdminTab, plainLeftClick, tabHref } from "../routing";
 
 /**
- * The admin sidebar: the rail's fold geometry and the navigation drawn over it.
- *
- * The rail folds by moving a single property — its own width — over an inner
- * panel that is always laid out at the expanded width and clipped, never by
- * swapping the panel's contents. That is what keeps the fold from flickering:
- * a label is clipped by the moving rail, never removed and re-inserted, so it
- * cannot pop in, wrap, or shove the icon beside it as the width animates, and
- * nothing inside the panel re-flows while the rail moves.
- */
-
-/**
  * The rail's two widths, in pixels, kept here as the single source the drawn
  * `style` reads so the fold's geometry is one value a test can pin rather than
  * a Tailwind class literal it cannot.

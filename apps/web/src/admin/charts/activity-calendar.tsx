@@ -75,7 +75,7 @@ const CALENDAR_GAP_PX = 3;
 const CALENDAR_WEEKDAY_COLUMN_PX = 28;
 
 /** How many whole week columns fit beside the weekday labels, one at least. */
-export function calendarWeeksThatFit(availableWidth: number): number {
+function calendarWeeksThatFit(availableWidth: number): number {
   return Math.max(
     1,
     Math.floor(
