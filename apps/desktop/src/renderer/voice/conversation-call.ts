@@ -31,8 +31,7 @@ import { REPLY_KIND } from "./captions";
 import { MICROPHONE_PROCESSING } from "./microphone-choice";
 import type { PressCaptureFactory } from "./press-audio-capture";
 import { type MicrophoneSender, PressTurnCapture } from "./press-turn-capture";
-import type { TeardownStep } from "./realtime-call";
-import type { RealtimeServerEventHandlers } from "./realtime-server-events";
+import type { RealtimeServerEventHandlers, TeardownStep } from "./realtime-call";
 import {
   BRAIN_ASK_SETTLE_TIMEOUT_MS,
   type ResponseDoneEvent,

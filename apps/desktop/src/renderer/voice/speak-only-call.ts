@@ -19,8 +19,12 @@ import { voiceExchangeActive } from "#shared/messages/voice-view";
 import type { BuiltRealtimeSessionConfig, SdkToolCallDetails } from "./agents-realtime-transport";
 import { CaptionStrip, REPLY_KIND, type ReplyKind } from "./captions";
 import { type InterruptedSpan, Interruption } from "./interruption";
-import { RealtimeCall, type RealtimeCallOptions, type TeardownStep } from "./realtime-call";
-import type { RealtimeServerEventHandlers } from "./realtime-server-events";
+import {
+  RealtimeCall,
+  type RealtimeCallOptions,
+  type RealtimeServerEventHandlers,
+  type TeardownStep,
+} from "./realtime-call";
 
 /**
  * How long a finished generation may go on playing before the turn is ended

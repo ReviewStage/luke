@@ -2,6 +2,7 @@ import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/devtrace/vocabula
 import type { RealtimeConnection } from "@sidecar/hosted";
 import {
   decodeRealtimePayload,
+  type ParsedRealtimeServerEvent,
   parseRealtimeServerEvent,
   REALTIME_STATUS,
   type RealtimeStatus,
@@ -14,7 +15,6 @@ import {
   type SdkToolCallDetails,
   type SdkTransportFactory,
 } from "./agents-realtime-transport";
-import type { RealtimeServerEventHandlers } from "./realtime-server-events";
 
 /** Bounds the SDK's WebRTC handshake and initial session acknowledgement. */
 const CONNECT_TIMEOUT_MS = 15_000;
@@ -40,6 +40,20 @@ export interface RealtimeCallOptions {
   /** Injectable so a test can hold the clock a truncate measures against. */
   now?: () => number;
 }
+
+/**
+ * One named handler per server event a call acts on, each narrowed to its own
+ * event. The table is deliberately partial: a call answers the events its own
+ * kind of turn-taking needs, and everything else the parser kept — an event
+ * type this build knows but this call has no use for — is simply unhandled.
+ * What a subclass adds or overrides is visible as the keys it spreads over its
+ * parent's, rather than as arms interleaved in one switch.
+ */
+export type RealtimeServerEventHandlers = {
+  [Type in ParsedRealtimeServerEvent["type"]]?: (
+    event: Extract<ParsedRealtimeServerEvent, { type: Type }>,
+  ) => void;
+};
 
 /** Traps a teardown step's failure so the steps after it still run. */
 export type TeardownStep = (action: () => void) => void;
