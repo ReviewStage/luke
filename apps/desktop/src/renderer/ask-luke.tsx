@@ -1,4 +1,8 @@
-import { PRODUCT_ASK_OUTCOME, PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
+import {
+  PRODUCT_ASK_OUTCOME,
+  PRODUCT_SURFACE_EVENT,
+  type ProductAskOutcome,
+} from "@sidecar/analytics";
 import { SendIcon, StopIcon } from "@sidecar/panel";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useCallback, useRef, useState } from "react";
@@ -42,12 +46,27 @@ export function focusAskField(): () => void {
 
 /**
  * Carries one typed ask to the conversation. Answers with why it could not be
- * sent, or with nothing when it was. The reason has already been drawn by the
- * conversation itself — on the caption strip, where the reply would have
- * landed — so the composer reads the answer only to decide whether the draft
- * stays.
+ * sent, or with nothing when it was. The handler has already landed the reason
+ * on the caption strip, where the reply would have — so the composer reads the
+ * answer only to decide whether the draft stays and what to count.
  */
 export type AskHandler = (text: string) => Promise<string | undefined>;
+
+/**
+ * What one answered ask does to the composer. A refusal keeps the draft — a
+ * refused ask is still the developer's words — and counts as refused; an
+ * accepted ask is the conversation's now, so the field empties for the next
+ * one and it counts as sent. Neither draws a word here: the handler that
+ * answered has already put a refusal's sentence on the strip below.
+ */
+export function composerAfterAsk(reason: string | undefined): {
+  outcome: ProductAskOutcome;
+  keepDraft: boolean;
+} {
+  return reason === undefined
+    ? { outcome: PRODUCT_ASK_OUTCOME.SENT, keepDraft: false }
+    : { outcome: PRODUCT_ASK_OUTCOME.REFUSED, keepDraft: true };
+}
 
 /**
  * The panel's own composer: one pill at the foot of the sessions list and of
@@ -60,7 +79,7 @@ export type AskHandler = (text: string) => Promise<string | undefined>;
  * Sending is deliberately quiet. A sent ask clears the field and nothing else:
  * the reply beginning is the confirmation, and a line saying "sent" would sit
  * between the question and its answer. Only a refusal earns a sentence, and
- * that sentence is not the pill's to draw: the conversation lands it on the
+ * that sentence is not the pill's to draw: the ask handler lands it on the
  * caption strip directly below, in the notice tone — the reply's own place,
  * so a refusal reads like every other answer. The draft stays through one,
  * because a refused ask is still the developer's words.
@@ -124,21 +143,15 @@ export function AskLuke({
     askInFlight.current = true;
     setAsking(true);
     try {
-      // A refusal keeps the draft — a refused ask is still the developer's
-      // words — and needs nothing drawn here: the conversation has already
-      // landed the sentence on the caption strip below.
-      const reason = await ask(text);
+      const settled = composerAfterAsk(await ask(text));
       // What the ask carried never travels; whether it reached a conversation
       // at all does, because a field people type into and are refused by is
       // indistinguishable from one nobody uses without it.
       window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.ASK_SUBMIT, {
-        ask_outcome: reason ? PRODUCT_ASK_OUTCOME.REFUSED : PRODUCT_ASK_OUTCOME.SENT,
+        ask_outcome: settled.outcome,
       });
-      if (!reason) {
-        // The ask has become the conversation's; the field empties for the
-        // next one, and the caret stays for it.
-        setDraft("");
-      }
+      // The caret stays either way: for the retry, or for the next ask.
+      if (!settled.keepDraft) setDraft("");
     } finally {
       askInFlight.current = false;
       setAsking(false);
