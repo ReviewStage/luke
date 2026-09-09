@@ -180,14 +180,29 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   let latestVoiceView: VoiceView | undefined;
   let introductionRendererReady = false;
   let resolveIntroductionPanelReady: (() => void) | undefined;
-  let introductionRenderDeadline: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * The takeover's own waits — the render deadline, the handoff, the fade
+   * that hands the panel back — held so the quit can take them back. Each
+   * acts on a window or the keys when it fires, so one landing after the
+   * teardown would re-open the takeover or re-claim the talk key the
+   * teardown had just given back.
+   */
+  const introductionWaits = new Set<ReturnType<typeof setTimeout>>();
+  function afterIntroductionDelay(delayMs: number, run: () => void): void {
+    const wait = setTimeout(() => {
+      introductionWaits.delete(wait);
+      if (!launchStanding()) return;
+      run();
+    }, delayMs);
+    introductionWaits.add(wait);
+  }
   const introductionMinter = introductionRealtimeCredentialMinter({
     serviceBaseUrl: config.hostedServiceBaseUrl,
   });
   const onboarding = onboardingStateFile(() => config.stateRoot, config.report);
 
   async function finishIntroduction(given: boolean): Promise<void> {
-    if (!introductionWindow.active) return;
+    if (!introductionWindow.active || !launchStanding()) return;
     if (given) {
       onboarding.update((current) => ({
         ...current,
@@ -203,17 +218,19 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     raiseVoiceWindow();
     await Promise.race([
       panelReady,
-      new Promise((resolve) => setTimeout(resolve, INTRODUCTION_HANDOFF_READY_MS)),
+      new Promise<void>((resolve) => {
+        afterIntroductionDelay(INTRODUCTION_HANDOFF_READY_MS, resolve);
+      }),
     ]);
     resolveIntroductionPanelReady = undefined;
-    setTimeout(() => {
+    afterIntroductionDelay(INTRODUCTION_FADE_MS, () => {
       introductionWindow.close();
       void hotkeys.reapply(HOTKEY_RANK.TALK);
-    }, INTRODUCTION_FADE_MS);
+    });
   }
 
   async function abandonIntroduction(): Promise<void> {
-    if (!introductionWindow.active) return;
+    if (!introductionWindow.active || !launchStanding()) return;
     introductionWindow.retire();
     panels.reconcile();
     raiseVoiceWindow();
@@ -385,12 +402,11 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       }
       if (giveIntroduction) {
         introductionWindow.open();
-        introductionRenderDeadline = setTimeout(() => {
-          introductionRenderDeadline = undefined;
+        afterIntroductionDelay(INTRODUCTION_RENDER_DEADLINE_MS, () => {
           if (!introductionWindow.active || introductionRendererReady) return;
           config.report("Introduction abandoned: the takeover never reported mounting.");
           void abandonIntroduction();
-        }, INTRODUCTION_RENDER_DEADLINE_MS);
+        });
       }
       panels.setShowOnAllDisplays(settings?.stored.showOnAllDisplays === true);
       panels.setFormFactor(settings?.stored.formFactor ?? DEFAULT_PANEL_FORM_FACTOR);
@@ -419,8 +435,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       powerMonitor.removeListener("resume", wakeHandlers.resume);
       powerMonitor.removeListener("unlock-screen", wakeHandlers["unlock-screen"]);
       powerMonitor.removeListener("user-did-become-active", wakeHandlers["user-did-become-active"]);
-      if (introductionRenderDeadline) clearTimeout(introductionRenderDeadline);
-      introductionRenderDeadline = undefined;
+      for (const wait of introductionWaits) clearTimeout(wait);
+      introductionWaits.clear();
       hotkeys.release();
       voiceWindow.closeForGood();
       panels.clearCollapseTimers();
