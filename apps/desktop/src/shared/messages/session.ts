@@ -10,16 +10,16 @@ import type { UpdateSnapshot } from "./update";
 import type { VoiceView } from "./voice-view";
 
 export {
+  SUPERSET_SIGN_IN_STAGE,
+  type SupersetOrganizationChoice,
+  type SupersetSignInSnapshot,
+} from "@sidecar/providers/superset/sign-in-stage";
+export {
   isWorkspaceProviderId,
   type SessionOpenResult,
   SUPERSET_WORKSPACE_PROVIDER_ID,
   type WorkspaceProviderId,
 } from "@sidecar/session";
-export {
-  SUPERSET_SIGN_IN_STAGE,
-  type SupersetOrganizationChoice,
-  type SupersetSignInSnapshot,
-} from "@sidecar/superset/sign-in-stage";
 export type { WindowMode } from "@sidecar/surface";
 
 /**

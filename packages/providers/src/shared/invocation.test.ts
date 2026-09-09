@@ -36,6 +36,27 @@ test("a process terminated by a signal is a failure, never a successful exit", a
   );
 });
 
+test("a timeout and an output overflow are both plain failures", async () => {
+  await assert.rejects(
+    boundedInvocation({
+      binary: process.execPath,
+      arguments: ["-e", "setTimeout(() => {}, 10_000)"],
+      timeoutMs: 50,
+      maximumOutputBytes: 1024,
+    }),
+    { name: "InvocationError", failure: INVOCATION_FAILURE.FAILED },
+  );
+  await assert.rejects(
+    boundedInvocation({
+      binary: process.execPath,
+      arguments: ["-e", "process.stdout.write('x'.repeat(4096))"],
+      timeoutMs: 2_000,
+      maximumOutputBytes: 16,
+    }),
+    { name: "InvocationError", failure: INVOCATION_FAILURE.FAILED },
+  );
+});
+
 test("an absent binary is a typed unavailable failure", async () => {
   await assert.rejects(
     boundedInvocation({

@@ -1,6 +1,6 @@
-import { numberFromRow, textFromRow } from "@sidecar/providers";
 import { AGENT_IDENTITY, agentIdentityFor, SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
+import { numberFromRow, textFromRow } from "../shared/local-sqlite.js";
 
 /**
  * What one row of Superset's own host state says, and the readers that turn a

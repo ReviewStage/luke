@@ -1,6 +1,6 @@
 import path from "node:path";
-import { readTextFile } from "@sidecar/providers";
 import { text, unparsedWire, type WireBoundaryInput, wireRecord } from "@sidecar/wire";
+import { readTextFile } from "../shared/local-files.js";
 
 const SUPERSET_CONFIG_FILE = "config.json";
 const SUPERSET_CONFIG_FIELD = { ORGANIZATION_ID: "organizationId" } as const;

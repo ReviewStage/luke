@@ -1,14 +1,14 @@
 import path from "node:path";
+import { type WireRecord, wireRecord } from "@sidecar/wire";
+import { readDirectory } from "../shared/local-files.js";
 import {
   canIgnoreSqliteError,
   defaultSqliteModule,
   openReadOnlyDatabase,
-  readDirectory,
   type SqliteDatabase,
   type SqliteModuleLoader,
   textFromRow,
-} from "@sidecar/providers";
-import { type WireRecord, wireRecord } from "@sidecar/wire";
+} from "../shared/local-sqlite.js";
 import { type SupersetSnapshot, supersetSnapshot } from "./snapshot.js";
 import {
   contextFromRow,
