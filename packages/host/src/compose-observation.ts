@@ -64,6 +64,7 @@ import {
   ACT_RESULT_STATUS,
   isRecord,
   isWireString,
+  lateRef,
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
@@ -74,7 +75,6 @@ import type { IssuesComposer } from "./compose-issues.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
-import { lateRef } from "./late-ref.js";
 import { createSessionActPerformer, type SessionActPerformer } from "./session-act-performer.js";
 
 const SESSION_REFRESH_INTERVAL_MS = 60_000;

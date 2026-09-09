@@ -16,7 +16,7 @@ import {
 } from "@sidecar/realtime";
 import { isSpeechOutcome, SPEECH_OUTCOME, type SpeechOutcome } from "@sidecar/realtime/speech";
 import { isIdentifier } from "@sidecar/runtime/vocabulary";
-import { isWireNumber } from "@sidecar/wire";
+import { isWireNumber, lateRef } from "@sidecar/wire";
 import { arrivalBeatOwed, countsFirstAnnouncement } from "./arrival-flow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { CalendarsComposer } from "./compose-calendars.js";
@@ -24,7 +24,6 @@ import type { ObservationComposer } from "./compose-observation.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
-import { lateRef } from "./late-ref.js";
 import { type OnboardingBeatKind, SpeechArbiter } from "./voice/speech-arbiter.js";
 import { VoiceReceiver } from "./voice-receiver.js";
 

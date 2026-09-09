@@ -35,8 +35,10 @@ and giving it to any would hand that composer references to the other five.
 The concerns depend on each other in both directions in five places — the
 account's capability gate starts the loops whose owners read that gate, the
 calendars hold the speech that reconciles against them — so those edges are
-`link()`'s, listed once in the merge and held in a `LateRef` that throws by
-name when read before `link()` has run. Everything else is a constructor
+`link()`'s, listed once in the merge and held in `@sidecar/wire`'s `LateRef`,
+which throws by name when read before `link()` has run. The desktop's own
+composition closes its cycles the same way, which is why the holder lives in
+the package below both rather than in either. Everything else is a constructor
 argument, in the order the composers are built.
 
 ## One drain, in one place

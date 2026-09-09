@@ -1,3 +1,1 @@
-import { startDesktopApp } from "./desktop-app";
-
-startDesktopApp();
+import "./main";

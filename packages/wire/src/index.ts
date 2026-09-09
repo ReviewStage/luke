@@ -37,6 +37,7 @@ export {
   wireRecord,
   withoutTrailingSlash,
 } from "./json.js";
+export { type LateRef, lateRef } from "./late-ref.js";
 export {
   type ArrayOptions,
   type BoundedTextOptions,

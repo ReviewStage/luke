@@ -1,0 +1,115 @@
+import { PRODUCT_EVENT, PRODUCT_UPDATE_ACT, type RecordProductEvent } from "@sidecar/analytics";
+import { jsonStateFile } from "@sidecar/host";
+import { text } from "@sidecar/wire";
+import type { UpdateSnapshot } from "#shared/messages/update";
+import { UPDATE_ENDPOINT, type UpdaterEngine, UpdateService } from "../update-service";
+import type { DesktopConfig } from "./desktop-config";
+import type { DesktopService } from "./service";
+
+export interface UpdateServiceHost extends DesktopService {
+  snapshot: () => UpdateSnapshot;
+  check: () => Promise<UpdateSnapshot>;
+  install: () => void;
+  openLatestRelease: () => void;
+  openChangelog: () => void;
+}
+
+export interface UpdateServiceHostDependencies {
+  config: DesktopConfig;
+  recordProductEvent: RecordProductEvent;
+  /**
+   * The installer this build carries, or none: an unpackaged build, a fixture
+   * run, and a platform Squirrel does not serve all have nothing to install.
+   */
+  engine: UpdaterEngine | undefined;
+  /**
+   * The whole quit's teardown, awaited before Squirrel is let near this
+   * executable. It is the teardown and not the host's drain alone for two
+   * reasons: the restart must not swap the binary over runtime work still
+   * going, and the install's own quit must not be the one `before-quit`
+   * holds back — a prevented `before-quit` aborts the install, so everything
+   * owed has to be given back, and seen to be given back, before the
+   * installer asks to leave.
+   */
+  beforeRestart: () => Promise<void>;
+  /** Every state the row draws, carried to the windows that draw it. */
+  broadcastUpdate: (update: UpdateSnapshot) => void;
+}
+
+/**
+ * The updater's lifecycle and the four acts the Updates row offers. The
+ * `UpdateService` itself holds the feed, the schedule, and the retry budget;
+ * what is here is when it begins, when it gives its timers back, and the
+ * counted event each press files.
+ */
+export function createUpdateServiceHost(
+  dependencies: UpdateServiceHostDependencies,
+): UpdateServiceHost {
+  const { config, recordProductEvent } = dependencies;
+
+  const lastRunVersionFile = jsonStateFile<{ version: string }>({
+    directory: () => config.stateRoot,
+    fileName: "last-run-version.json",
+    read: (record) => {
+      const version = text(record.version);
+      return version === undefined ? undefined : { version };
+    },
+    write: (state) => state,
+    report: config.report,
+  });
+
+  const engine = dependencies.engine;
+  const service = new UpdateService({
+    currentVersion: config.appVersion,
+    onChange: dependencies.broadcastUpdate,
+    engine:
+      engine === undefined
+        ? undefined
+        : {
+            ...engine,
+            quitAndInstall: () => {
+              void dependencies.beforeRestart().finally(() => engine.quitAndInstall());
+            },
+          },
+    lastRunVersion: {
+      read: () => lastRunVersionFile.read()?.version,
+      write: (version) => {
+        lastRunVersionFile.update(() => ({ version }));
+      },
+    },
+  });
+
+  return {
+    name: "updates",
+    snapshot: () => service.snapshot(),
+    check: () => {
+      recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, { update_act: PRODUCT_UPDATE_ACT.CHECK });
+      return service.check();
+    },
+    install: () => {
+      recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, { update_act: PRODUCT_UPDATE_ACT.INSTALL });
+      service.install();
+    },
+    openLatestRelease: () => {
+      recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, {
+        update_act: PRODUCT_UPDATE_ACT.RELEASE_OPEN,
+      });
+      void config.openExternal(UPDATE_ENDPOINT.LATEST_RELEASE_PAGE_URL);
+    },
+    openChangelog: () => {
+      recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, {
+        update_act: PRODUCT_UPDATE_ACT.CHANGELOG_OPEN,
+      });
+      void config.openExternal(UPDATE_ENDPOINT.CHANGELOG_PAGE_URL);
+    },
+    start: async () => {
+      if (config.runMode.sendsNetwork) service.start();
+    },
+    // The timed check and the publishing-window retry are handles the quit
+    // takes back: a check firing into a process already draining reads the
+    // fixed feed for a build that is leaving.
+    stop: async () => {
+      service.stop();
+    },
+  };
+}

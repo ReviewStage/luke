@@ -8,11 +8,10 @@ import {
   gatewayOk,
 } from "@sidecar/gateway";
 import { temporaryDirectory } from "@sidecar/runtime/testing";
-import { isRecord } from "@sidecar/wire";
+import { isRecord, lateRef } from "@sidecar/wire";
 import { composeHost } from "./compose-host.js";
 import { type Composer, mergeMethods } from "./composer.js";
 import { createHostKernel } from "./host-kernel.js";
-import { lateRef } from "./late-ref.js";
 import { runModeFor } from "./run-mode.js";
 import type { SecretCipher } from "./settings-store.js";
 
