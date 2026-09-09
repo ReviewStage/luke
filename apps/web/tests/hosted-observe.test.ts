@@ -4,11 +4,8 @@ import { observeAnswerSchema } from "@sidecar/hosted";
 import { SESSION_STATUS } from "@sidecar/session";
 import { encryptProviderKey } from "../server/hosted/encryption";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
-import {
-  handleObserve,
-  observedSessionForResponse,
-  type VaultKeyRow,
-} from "../server/hosted/observe";
+import { handleObserve, observedSessionForResponse } from "../server/hosted/observe";
+import type { VaultKeyRow } from "../server/hosted/vault-route";
 
 const SECRET = "a".repeat(64);
 

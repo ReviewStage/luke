@@ -7,7 +7,7 @@ import { parseReleaseVersion } from "./release-version.js";
 
 /**
  * What the desktop may count about its own use, and the one reader both sides
- * run over it. `hosted-service.ts` holds the contracts for what Luke's service
+ * run over it. `@sidecar/hosted` holds the contracts for what Luke's service
  * *answers*; this holds the contract for what the desktop *asks* it to record.
  *
  * The vocabulary is the privacy boundary, not a convention on top of one. An

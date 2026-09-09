@@ -1,5 +1,4 @@
 import type { AdminViewer } from "./admin-access.js";
-import { isAdminRole } from "./admin-access.js";
 import {
   ADMIN_ERROR,
   ADMIN_HTTP_STATUS,
@@ -119,7 +118,8 @@ export function buildAdminUserList(
 
 export interface AdminUsersOptions {
   request: Request;
-  resolveViewer: (request: Request) => Promise<AdminViewer | undefined>;
+  /** The signed-in admin the roster is read for: the favorites are theirs. */
+  viewer: AdminViewer;
   /** Reads the roster as one viewer sees it: the favorites are theirs. */
   readUsers: (
     now: number,
@@ -138,23 +138,6 @@ export interface AdminUsersOptions {
  */
 export async function handleAdminUsers(options: AdminUsersOptions): Promise<Response> {
   const { request } = options;
-  if (request.method !== "GET") {
-    return errorResponse(ADMIN_HTTP_STATUS.METHOD_NOT_ALLOWED, ADMIN_ERROR.METHOD_NOT_ALLOWED);
-  }
-
-  let viewer: AdminViewer | undefined;
-  try {
-    viewer = await options.resolveViewer(request);
-  } catch (error) {
-    console.error("admin users viewer resolution failed", error);
-    return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
-  }
-  if (!viewer) {
-    return errorResponse(ADMIN_HTTP_STATUS.UNAUTHORIZED, ADMIN_ERROR.NOT_SIGNED_IN);
-  }
-  if (!isAdminRole(viewer.role)) {
-    return errorResponse(ADMIN_HTTP_STATUS.FORBIDDEN, ADMIN_ERROR.NOT_AUTHORIZED);
-  }
 
   const windowDays = adminMetricsWindow(request.url);
   if (windowDays === undefined) {
@@ -173,7 +156,7 @@ export async function handleAdminUsers(options: AdminUsersOptions): Promise<Resp
       await options.readUsers(
         now,
         adminMetricsScope(request.url),
-        viewer.userId,
+        options.viewer.userId,
         windowDays,
         search.term,
       ),

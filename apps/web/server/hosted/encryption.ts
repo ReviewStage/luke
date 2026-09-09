@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
 
 const ALGORITHM = "aes-256-gcm";
 const NONCE_BYTES = 12;
@@ -47,4 +48,17 @@ export function decryptProviderKey(encoded: string, secret: string): string {
   const decipher = createDecipheriv(ALGORITHM, key, nonce);
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(body), decipher.final()]).toString("utf8");
+}
+
+/**
+ * The trimmed secret, or the 503 every endpoint that needs one answers
+ * without it. Its absence is a kill switch for the whole vault, so the
+ * refusal is the same wherever it is read.
+ */
+export function secretOrUnavailable(secret: string | undefined): { secret: string } | Response {
+  const trimmed = secret?.trim();
+  if (!trimmed) {
+    return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
+  }
+  return { secret: trimmed };
 }

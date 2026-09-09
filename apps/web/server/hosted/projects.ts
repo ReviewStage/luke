@@ -8,11 +8,10 @@ import {
   workspaceAgentModels,
 } from "../core.js";
 import { actUnsupportedReason, REMOTE_SESSION_ACT } from "./act-execute.js";
-import { cloudSessionAdapterFor } from "./cloud-adapters.js";
-import { decryptProviderKey } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
-import type { VaultKeyRow } from "./observe.js";
 import { createRateBrake } from "./rate-brake.js";
+import { observeProviders, readApiKeyFor } from "./vault-keys.js";
+import type { HostedVaultRoute } from "./vault-route.js";
 
 const PROJECTS_RATE_LIMIT = {
   WINDOW_MS: 60_000,
@@ -26,13 +25,11 @@ const projectsRateLimited = createRateBrake({
   maxTrackedUsers: PROJECTS_RATE_LIMIT.MAX_TRACKED_USERS,
 });
 
-export interface ProjectsOptions {
-  request: Request;
-  resolveUserId: (request: Request) => Promise<string | undefined>;
-  /** The value of PROVIDER_KEY_ENCRYPTION_SECRET; undefined means the env var is absent. */
-  encryptionSecret: string | undefined;
-  /** Reads every vault key row the user has stored, for decryption here. */
-  readVaultKeys: (userId: string) => Promise<VaultKeyRow[]>;
+export interface ProjectsOptions
+  extends Pick<
+    HostedVaultRoute,
+    "request" | "resolveUserId" | "encryptionSecret" | "readVaultKeys"
+  > {
   /** Injected in tests; production uses the global fetch. */
   fetch?: CloudFetch;
   now?: () => number;
@@ -71,50 +68,37 @@ export async function handleProjects(options: ProjectsOptions): Promise<Response
   }
 
   const rows = await readVaultKeys(userId);
-  const ciphertextByProviderId = new Map<string, string>(
-    rows.map((row) => [row.providerId, row.ciphertext]),
-  );
+  const readApiKey = readApiKeyFor(rows, secret);
+  const stored = new Set(rows.map((row) => row.providerId));
 
-  const providers = Object.values(CLOUD_AGENT_PROVIDER_ID).filter(
-    (providerId) =>
-      actUnsupportedReason(REMOTE_SESSION_ACT.CREATE_WORKSPACE, providerId) === undefined &&
-      ciphertextByProviderId.has(providerId),
-  );
-
-  const results = await Promise.allSettled(
-    providers.map(async (providerId) => {
-      const adapter = cloudSessionAdapterFor(providerId, {
-        readApiKey: async () => {
-          const ciphertext = ciphertextByProviderId.get(providerId);
-          if (!ciphertext) return undefined;
-          try {
-            return decryptProviderKey(ciphertext, secret);
-          } catch {
-            return undefined;
-          }
-        },
-        ...(options.fetch ? { fetch: options.fetch } : undefined),
-        ...(options.now ? { now: options.now } : undefined),
-      });
+  const passes = await observeProviders({
+    providerIds: Object.values(CLOUD_AGENT_PROVIDER_ID).filter(
+      (providerId) =>
+        actUnsupportedReason(REMOTE_SESSION_ACT.CREATE_WORKSPACE, providerId) === undefined &&
+        stored.has(providerId),
+    ),
+    readApiKey,
+    read: async (adapter) => {
       await adapter.observe();
       return adapter.workspaceProjects();
-    }),
-  );
+    },
+    seams: options,
+  });
 
   const projects: HostedWorkspaceProject[] = [];
   const agentModels: HostedWorkspaceAgentModels[] = [];
-  for (const [i, providerId] of providers.entries()) {
-    const result = results[i];
-    if (result?.status !== "fulfilled") continue;
-    for (const project of result.value) {
-      projects.push(toWireProject(providerId, project));
+  for (const pass of passes) {
+    const reported = pass.answer;
+    if (!reported) continue;
+    for (const project of reported) {
+      projects.push(toWireProject(pass.providerId, project));
     }
     // The build's own agent table for each provider that actually offered a
     // project — documented state riding beside the observed state it applies
     // to, so a provider with nowhere to create advertises no choices either.
-    if (result.value.length > 0) {
-      for (const entry of workspaceAgentModels(providerId)) {
-        agentModels.push({ providerId, ...entry });
+    if (reported.length > 0) {
+      for (const entry of workspaceAgentModels(pass.providerId)) {
+        agentModels.push({ providerId: pass.providerId, ...entry });
       }
     }
   }

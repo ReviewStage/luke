@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { AdminViewer } from "../server/admin/admin-access";
 import { ADMIN_TREND_DAYS, lastNDayKeys } from "../server/admin/admin-metrics";
 import {
   type AdminUserDetail,
@@ -211,8 +210,6 @@ function userRequest(id: string | null = "user-9", method = "GET"): Request {
   return new Request(`https://luke.test/api/admin/user${query}`, { method });
 }
 
-const ADMIN_VIEWER: AdminViewer = { userId: "user-1", role: "admin" };
-
 const readUser = async (
   userId: string,
   now: number,
@@ -220,34 +217,9 @@ const readUser = async (
 ): Promise<AdminUserDetail | undefined> =>
   userId === "user-9" ? buildAdminUserDetail(userSource(), now, windowDays) : undefined;
 
-test("the gate answers 405, 401, 403, 400, 404, and 200 as distinct outcomes", async () => {
-  const wrongMethod = await handleAdminUser({
-    request: userRequest("user-9", "POST"),
-    resolveViewer: async () => ADMIN_VIEWER,
-    readUser,
-  });
-  assert.equal(wrongMethod.status, 405);
-  assert.equal(wrongMethod.headers.get("cache-control"), "no-store");
-
-  const anonymous = await handleAdminUser({
-    request: userRequest(),
-    resolveViewer: async () => undefined,
-    readUser,
-  });
-  assert.equal(anonymous.status, 401);
-  assert.equal((await anonymous.json()).error, ADMIN_ERROR.NOT_SIGNED_IN);
-
-  const forbidden = await handleAdminUser({
-    request: userRequest(),
-    resolveViewer: async () => ({ ...ADMIN_VIEWER, role: "user" }),
-    readUser,
-  });
-  assert.equal(forbidden.status, 403);
-  assert.equal((await forbidden.json()).error, ADMIN_ERROR.NOT_AUTHORIZED);
-
+test("the read answers 400, 404, and 200 as distinct outcomes", async () => {
   const unnamed = await handleAdminUser({
     request: userRequest(null),
-    resolveViewer: async () => ADMIN_VIEWER,
     readUser,
   });
   assert.equal(unnamed.status, 400);
@@ -255,7 +227,6 @@ test("the gate answers 405, 401, 403, 400, 404, and 200 as distinct outcomes", a
 
   const missing = await handleAdminUser({
     request: userRequest("user-gone"),
-    resolveViewer: async () => ADMIN_VIEWER,
     readUser,
   });
   assert.equal(missing.status, 404);
@@ -263,7 +234,6 @@ test("the gate answers 405, 401, 403, 400, 404, and 200 as distinct outcomes", a
 
   const ok = await handleAdminUser({
     request: userRequest(),
-    resolveViewer: async () => ADMIN_VIEWER,
     readUser,
     now: () => NOON_UTC,
   });
@@ -286,7 +256,6 @@ test("the account is read at the window the request asked for; outside the set i
       request: new Request(
         `https://luke.test/api/admin/user?${ADMIN_USER_ID_PARAM}=user-9${query}`,
       ),
-      resolveViewer: async () => ADMIN_VIEWER,
       readUser: countingRead,
     });
 
@@ -302,23 +271,15 @@ test("the account is read at the window the request asked for; outside the set i
   assert.deepEqual(windows, [ADMIN_METRICS_WINDOW.WEEK]);
 });
 
-test("no account is read for a request that fails the gate or names none", async () => {
+test("no account is read for a request that names none", async () => {
   const reads: string[] = [];
   const countingRead = async (userId: string, now: number) => {
     reads.push(userId);
     return readUser(userId, now);
   };
 
-  const anonymous = await handleAdminUser({
-    request: userRequest(),
-    resolveViewer: async () => undefined,
-    readUser: countingRead,
-  });
-  assert.equal(anonymous.status, 401);
-
   const unnamed = await handleAdminUser({
     request: userRequest(null),
-    resolveViewer: async () => ADMIN_VIEWER,
     readUser: countingRead,
   });
   assert.equal(unnamed.status, 400);
@@ -326,7 +287,6 @@ test("no account is read for a request that fails the gate or names none", async
 
   const ok = await handleAdminUser({
     request: userRequest(),
-    resolveViewer: async () => ADMIN_VIEWER,
     readUser: countingRead,
   });
   assert.equal(ok.status, 200);
@@ -334,19 +294,8 @@ test("no account is read for a request that fails the gate or names none", async
 });
 
 test("a seam that throws is a 503 refusal rather than a crash", async () => {
-  const viewerThrew = await handleAdminUser({
-    request: userRequest(),
-    resolveViewer: async () => {
-      throw new Error("auth is down");
-    },
-    readUser,
-  });
-  assert.equal(viewerThrew.status, 503);
-  assert.equal((await viewerThrew.json()).error, ADMIN_ERROR.UNAVAILABLE);
-
   const readThrew = await handleAdminUser({
     request: userRequest(),
-    resolveViewer: async () => ADMIN_VIEWER,
     readUser: async () => {
       throw new Error("database is down");
     },

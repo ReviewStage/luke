@@ -1,7 +1,6 @@
 import type { AccountPreferences } from "@sidecar/settings";
 import { accountPreferencesFromStored } from "@sidecar/settings";
 import { eq } from "drizzle-orm";
-import { auth } from "../../server/auth.js";
 import { getDatabase } from "../../server/db/index.js";
 import { accountPreference, accountWorkspacePreference } from "../../server/db/schema.js";
 import {
@@ -10,13 +9,7 @@ import {
   handleAccountPreferencesRead,
   handleAccountPreferencesWrite,
 } from "../../server/hosted/account-preferences.js";
-import { hostedUserId, oauthUserInfoFromAuthAnswer } from "../../server/hosted/bearer.js";
-
-function resolveUserId(request: Request) {
-  return hostedUserId(request, async (input) =>
-    oauthUserInfoFromAuthAnswer(await auth.api.oauth2UserInfo(input)),
-  );
-}
+import { hostedVaultRoute } from "../../server/hosted/vault-route.js";
 
 function rowPreferences(
   preference: {
@@ -109,85 +102,83 @@ function workspacePreferenceRows(userId: string, preferences: AccountPreferences
   return [...rows.values()];
 }
 
-export default {
-  async fetch(request: Request): Promise<Response> {
-    if (request.method === "GET") {
-      const options: AccountPreferencesReadOptions = {
-        request,
-        resolveUserId,
-        readPreferences: async (userId) => {
-          const database = getDatabase();
-          return database.transaction(async (transaction) => {
-            const [preference] = await transaction
-              .select({
-                voice: accountPreference.voice,
-                voiceSpeed: accountPreference.voiceSpeed,
-                defaultWorkspaceProvider: accountPreference.defaultWorkspaceProvider,
-                updatedAt: accountPreference.updatedAt,
-              })
-              .from(accountPreference)
-              .where(eq(accountPreference.userId, userId))
-              .limit(1);
-            if (!preference) return undefined;
-
-            const workspacePreferences = await transaction
-              .select({
-                providerId: accountWorkspacePreference.providerId,
-                defaultProjectId: accountWorkspacePreference.defaultProjectId,
-                agent: accountWorkspacePreference.agent,
-                model: accountWorkspacePreference.model,
-                effort: accountWorkspacePreference.effort,
-              })
-              .from(accountWorkspacePreference)
-              .where(eq(accountWorkspacePreference.userId, userId));
-
-            return {
-              preferences: rowPreferences(preference, workspacePreferences),
-              updatedAt: preference.updatedAt,
-            };
-          });
-        },
-      };
-      return handleAccountPreferencesRead(options);
-    }
-
-    const options: AccountPreferencesWriteOptions = {
+export default hostedVaultRoute(async ({ request, resolveUserId }) => {
+  if (request.method === "GET") {
+    const options: AccountPreferencesReadOptions = {
       request,
       resolveUserId,
-      writePreferences: async (userId, preferences) => {
+      readPreferences: async (userId) => {
         const database = getDatabase();
-        const updatedAt = new Date();
-        await database.transaction(async (transaction) => {
-          await transaction
-            .insert(accountPreference)
-            .values({
-              userId,
+        return database.transaction(async (transaction) => {
+          const [preference] = await transaction
+            .select({
+              voice: accountPreference.voice,
+              voiceSpeed: accountPreference.voiceSpeed,
+              defaultWorkspaceProvider: accountPreference.defaultWorkspaceProvider,
+              updatedAt: accountPreference.updatedAt,
+            })
+            .from(accountPreference)
+            .where(eq(accountPreference.userId, userId))
+            .limit(1);
+          if (!preference) return undefined;
+
+          const workspacePreferences = await transaction
+            .select({
+              providerId: accountWorkspacePreference.providerId,
+              defaultProjectId: accountWorkspacePreference.defaultProjectId,
+              agent: accountWorkspacePreference.agent,
+              model: accountWorkspacePreference.model,
+              effort: accountWorkspacePreference.effort,
+            })
+            .from(accountWorkspacePreference)
+            .where(eq(accountWorkspacePreference.userId, userId));
+
+          return {
+            preferences: rowPreferences(preference, workspacePreferences),
+            updatedAt: preference.updatedAt,
+          };
+        });
+      },
+    };
+    return handleAccountPreferencesRead(options);
+  }
+
+  const options: AccountPreferencesWriteOptions = {
+    request,
+    resolveUserId,
+    writePreferences: async (userId, preferences) => {
+      const database = getDatabase();
+      const updatedAt = new Date();
+      await database.transaction(async (transaction) => {
+        await transaction
+          .insert(accountPreference)
+          .values({
+            userId,
+            voice: preferences.voice ?? null,
+            voiceSpeed: preferences.voiceSpeed ?? null,
+            defaultWorkspaceProvider: preferences.defaultWorkspaceProvider ?? null,
+            updatedAt,
+          })
+          .onConflictDoUpdate({
+            target: accountPreference.userId,
+            set: {
               voice: preferences.voice ?? null,
               voiceSpeed: preferences.voiceSpeed ?? null,
               defaultWorkspaceProvider: preferences.defaultWorkspaceProvider ?? null,
               updatedAt,
-            })
-            .onConflictDoUpdate({
-              target: accountPreference.userId,
-              set: {
-                voice: preferences.voice ?? null,
-                voiceSpeed: preferences.voiceSpeed ?? null,
-                defaultWorkspaceProvider: preferences.defaultWorkspaceProvider ?? null,
-                updatedAt,
-              },
-            });
+            },
+          });
 
-          await transaction
-            .delete(accountWorkspacePreference)
-            .where(eq(accountWorkspacePreference.userId, userId));
-          const workspaceRows = workspacePreferenceRows(userId, preferences, updatedAt);
-          if (workspaceRows.length > 0) {
-            await transaction.insert(accountWorkspacePreference).values(workspaceRows);
-          }
-        });
-        return updatedAt;
-      },
-    };
-    return handleAccountPreferencesWrite(options);
-  },
-};
+        await transaction
+          .delete(accountWorkspacePreference)
+          .where(eq(accountWorkspacePreference.userId, userId));
+        const workspaceRows = workspacePreferenceRows(userId, preferences, updatedAt);
+        if (workspaceRows.length > 0) {
+          await transaction.insert(accountWorkspacePreference).values(workspaceRows);
+        }
+      });
+      return updatedAt;
+    },
+  };
+  return handleAccountPreferencesWrite(options);
+});

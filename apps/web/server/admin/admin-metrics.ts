@@ -1,5 +1,4 @@
 import { HOSTED_DAILY_LIMIT, utcDayKey } from "../hosted/quota.js";
-import { type AdminViewer, isAdminRole } from "./admin-access.js";
 import {
   ADMIN_ERROR,
   ADMIN_HTTP_STATUS,
@@ -440,11 +439,6 @@ export function buildAdminMetrics(
 
 export interface AdminMetricsOptions {
   request: Request;
-  /**
-   * The signed-in browser viewer, or nothing when no valid session is present.
-   * `viewer.role` is the account's own `role`, read from the session.
-   */
-  resolveViewer: (request: Request) => Promise<AdminViewer | undefined>;
   readMetrics: (
     now: number,
     scope: AdminMetricsScope,
@@ -464,23 +458,6 @@ export interface AdminMetricsOptions {
  */
 export async function handleAdminMetrics(options: AdminMetricsOptions): Promise<Response> {
   const { request } = options;
-  if (request.method !== "GET") {
-    return errorResponse(ADMIN_HTTP_STATUS.METHOD_NOT_ALLOWED, ADMIN_ERROR.METHOD_NOT_ALLOWED);
-  }
-
-  let viewer: AdminViewer | undefined;
-  try {
-    viewer = await options.resolveViewer(request);
-  } catch (error) {
-    console.error("admin metrics viewer resolution failed", error);
-    return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
-  }
-  if (!viewer) {
-    return errorResponse(ADMIN_HTTP_STATUS.UNAUTHORIZED, ADMIN_ERROR.NOT_SIGNED_IN);
-  }
-  if (!isAdminRole(viewer.role)) {
-    return errorResponse(ADMIN_HTTP_STATUS.FORBIDDEN, ADMIN_ERROR.NOT_AUTHORIZED);
-  }
 
   const windowDays = adminMetricsWindow(request.url);
   if (windowDays === undefined) {

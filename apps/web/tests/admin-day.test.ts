@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { AdminViewer } from "../server/admin/admin-access";
 import {
   ADMIN_DAY_ACCOUNTS_LIMIT,
   type AdminDayDetail,
@@ -86,42 +85,15 @@ function dayRequest(day: string | null = DAY, method = "GET", scope?: string): R
   return new Request(`https://luke.test/api/admin/day${query ? `?${query}` : ""}`, { method });
 }
 
-const ADMIN_VIEWER: AdminViewer = { userId: "user-1", role: "admin" };
-
 const readDay = async (
   day: string,
   now: number,
   _scope: AdminMetricsScope,
 ): Promise<AdminDayDetail> => buildAdminDayDetail(daySource(), now, day);
 
-test("the gate answers 405, 401, 403, 400, and 200 as distinct outcomes", async () => {
-  const wrongMethod = await handleAdminDay({
-    request: dayRequest(DAY, "POST"),
-    resolveViewer: async () => ADMIN_VIEWER,
-    readDay,
-  });
-  assert.equal(wrongMethod.status, 405);
-  assert.equal(wrongMethod.headers.get("cache-control"), "no-store");
-
-  const anonymous = await handleAdminDay({
-    request: dayRequest(),
-    resolveViewer: async () => undefined,
-    readDay,
-  });
-  assert.equal(anonymous.status, 401);
-  assert.equal((await anonymous.json()).error, ADMIN_ERROR.NOT_SIGNED_IN);
-
-  const forbidden = await handleAdminDay({
-    request: dayRequest(),
-    resolveViewer: async () => ({ ...ADMIN_VIEWER, role: "user" }),
-    readDay,
-  });
-  assert.equal(forbidden.status, 403);
-  assert.equal((await forbidden.json()).error, ADMIN_ERROR.NOT_AUTHORIZED);
-
+test("the read answers 400 for no real day and 200 past it", async () => {
   const unnamed = await handleAdminDay({
     request: dayRequest(null),
-    resolveViewer: async () => ADMIN_VIEWER,
     readDay,
   });
   assert.equal(unnamed.status, 400);
@@ -129,7 +101,6 @@ test("the gate answers 405, 401, 403, 400, and 200 as distinct outcomes", async 
 
   const unreal = await handleAdminDay({
     request: dayRequest("2026-02-30"),
-    resolveViewer: async () => ADMIN_VIEWER,
     readDay,
   });
   assert.equal(unreal.status, 400);
@@ -137,7 +108,6 @@ test("the gate answers 405, 401, 403, 400, and 200 as distinct outcomes", async 
 
   const ok = await handleAdminDay({
     request: dayRequest(),
-    resolveViewer: async () => ADMIN_VIEWER,
     readDay,
     now: () => NOON_UTC,
   });
@@ -159,7 +129,6 @@ test("the day is read at the scope the request asked for, defaulting to non-admi
   const respond = (scope?: string) =>
     handleAdminDay({
       request: dayRequest(DAY, "GET", scope),
-      resolveViewer: async () => ADMIN_VIEWER,
       readDay: countingRead,
     });
 
@@ -173,23 +142,15 @@ test("the day is read at the scope the request asked for, defaulting to non-admi
   ]);
 });
 
-test("no day is read for a request that fails the gate or names no real day", async () => {
+test("no day is read for a request naming no real day", async () => {
   const reads: string[] = [];
   const countingRead = async (day: string, now: number, scope: AdminMetricsScope) => {
     reads.push(day);
     return readDay(day, now, scope);
   };
 
-  const anonymous = await handleAdminDay({
-    request: dayRequest(),
-    resolveViewer: async () => undefined,
-    readDay: countingRead,
-  });
-  assert.equal(anonymous.status, 401);
-
   const unreal = await handleAdminDay({
     request: dayRequest("2026-13-01"),
-    resolveViewer: async () => ADMIN_VIEWER,
     readDay: countingRead,
   });
   assert.equal(unreal.status, 400);
@@ -197,7 +158,6 @@ test("no day is read for a request that fails the gate or names no real day", as
 
   const ok = await handleAdminDay({
     request: dayRequest(),
-    resolveViewer: async () => ADMIN_VIEWER,
     readDay: countingRead,
   });
   assert.equal(ok.status, 200);
@@ -207,7 +167,6 @@ test("no day is read for a request that fails the gate or names no real day", as
 test("a quiet day is an ordinary answer with empty rows, never a 404", async () => {
   const response = await handleAdminDay({
     request: dayRequest(),
-    resolveViewer: async () => ADMIN_VIEWER,
     readDay: async (day, now) =>
       buildAdminDayDetail({ accounts: [], totals: { accounts: 0, calls: 0 } }, now, day),
   });
@@ -219,19 +178,8 @@ test("a quiet day is an ordinary answer with empty rows, never a 404", async () 
 });
 
 test("a seam that throws is a 503 refusal rather than a crash", async () => {
-  const viewerThrew = await handleAdminDay({
-    request: dayRequest(),
-    resolveViewer: async () => {
-      throw new Error("auth is down");
-    },
-    readDay,
-  });
-  assert.equal(viewerThrew.status, 503);
-  assert.equal((await viewerThrew.json()).error, ADMIN_ERROR.UNAVAILABLE);
-
   const readThrew = await handleAdminDay({
     request: dayRequest(),
-    resolveViewer: async () => ADMIN_VIEWER,
     readDay: async () => {
       throw new Error("database is down");
     },

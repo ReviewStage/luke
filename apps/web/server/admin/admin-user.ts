@@ -1,5 +1,3 @@
-import type { AdminViewer } from "./admin-access.js";
-import { isAdminRole } from "./admin-access.js";
 import {
   ADMIN_TREND_DAYS,
   type AdminDailyUsage,
@@ -167,7 +165,6 @@ export function buildAdminUserDetail(
 
 export interface AdminUserOptions {
   request: Request;
-  resolveViewer: (request: Request) => Promise<AdminViewer | undefined>;
   /** The named account's detail, or nothing when no user row carries that id. */
   readUser: (
     userId: string,
@@ -187,23 +184,6 @@ export interface AdminUserOptions {
  */
 export async function handleAdminUser(options: AdminUserOptions): Promise<Response> {
   const { request } = options;
-  if (request.method !== "GET") {
-    return errorResponse(ADMIN_HTTP_STATUS.METHOD_NOT_ALLOWED, ADMIN_ERROR.METHOD_NOT_ALLOWED);
-  }
-
-  let viewer: AdminViewer | undefined;
-  try {
-    viewer = await options.resolveViewer(request);
-  } catch (error) {
-    console.error("admin user viewer resolution failed", error);
-    return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
-  }
-  if (!viewer) {
-    return errorResponse(ADMIN_HTTP_STATUS.UNAUTHORIZED, ADMIN_ERROR.NOT_SIGNED_IN);
-  }
-  if (!isAdminRole(viewer.role)) {
-    return errorResponse(ADMIN_HTTP_STATUS.FORBIDDEN, ADMIN_ERROR.NOT_AUTHORIZED);
-  }
 
   const userId = adminUserId(request.url);
   if (userId === undefined) {

@@ -14,27 +14,11 @@ function favoriteRequest(method: string, id?: string): Request {
 function respond(overrides: Partial<AdminFavoriteOptions> = {}): Promise<Response> {
   return handleAdminFavorite({
     request: favoriteRequest("PUT", "user-9"),
-    resolveViewer: async () => ADMIN_VIEWER,
+    viewer: ADMIN_VIEWER,
     writeFavorite: async () => true,
     ...overrides,
   });
 }
-
-test("only the two star methods are answered, and the gate refuses in its own words", async () => {
-  for (const method of ["GET", "POST", "PATCH"]) {
-    assert.equal((await respond({ request: favoriteRequest(method, "user-9") })).status, 405);
-  }
-
-  const anonymous = await respond({ resolveViewer: async () => undefined });
-  assert.equal(anonymous.status, 401);
-  assert.equal((await anonymous.json()).error, ADMIN_ERROR.NOT_SIGNED_IN);
-
-  const forbidden = await respond({
-    resolveViewer: async () => ({ ...ADMIN_VIEWER, role: "user" }),
-  });
-  assert.equal(forbidden.status, 403);
-  assert.equal((await forbidden.json()).error, ADMIN_ERROR.NOT_AUTHORIZED);
-});
 
 test("the write is the viewer's own star on the named account, PUT on and DELETE off", async () => {
   const writes: Array<{ adminId: string; userId: string; favorite: boolean }> = [];
@@ -75,14 +59,6 @@ test("a request naming no account is a 400 before the seam, and an unknown one a
 });
 
 test("a seam that throws is a 503 refusal rather than a crash", async () => {
-  const viewerThrew = await respond({
-    resolveViewer: async () => {
-      throw new Error("auth is down");
-    },
-  });
-  assert.equal(viewerThrew.status, 503);
-  assert.equal((await viewerThrew.json()).error, ADMIN_ERROR.UNAVAILABLE);
-
   const writeThrew = await respond({
     writeFavorite: async () => {
       throw new Error("database is down");

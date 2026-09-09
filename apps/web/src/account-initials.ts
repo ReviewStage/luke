@@ -1,4 +1,14 @@
 /**
+ * The one line an account is named by: the provider's own name for it, or the
+ * address when no name was set, so a nameless account still reads as somebody
+ * rather than a blank cell.
+ */
+export function accountLabel(account: { name: string; email: string }): string {
+  const name = account.name.trim();
+  return name || account.email;
+}
+
+/**
  * The signed-in account drawn as letters when it has no avatar image. The
  * provider's own name for the account is the first source; an account that
  * carries only an address falls back to the local part, which is all such an

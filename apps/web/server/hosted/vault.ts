@@ -6,8 +6,9 @@ import {
   type UnparsedWireValue,
   vaultKeyIsStorable,
 } from "../core.js";
-import { encryptProviderKey } from "./encryption.js";
+import { encryptProviderKey, secretOrUnavailable } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
+import type { HostedVaultRoute } from "./vault-route.js";
 
 /**
  * A valid provider key, by the shape rule the wire contract fixes for both
@@ -18,25 +19,10 @@ function parseProviderKey(value: UnparsedWireValue): string | undefined {
   return value;
 }
 
-/**
- * Returns the trimmed secret if present, or a 503 Response if it is absent or
- * blank. All vault endpoints require it; its absence is a kill switch.
- */
-function trimmedSecretOrUnavailable(secret: string | undefined): { secret: string } | Response {
-  const trimmed = secret?.trim();
-  if (!trimmed) {
-    return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
-  }
-  return { secret: trimmed };
-}
-
-export interface VaultKeyStoreOptions {
-  request: Request;
-  resolveUserId: (request: Request) => Promise<string | undefined>;
-  /** The value of PROVIDER_KEY_ENCRYPTION_SECRET; undefined means the env var is absent. */
-  encryptionSecret: string | undefined;
-  storeKey: (userId: string, providerId: string, ciphertext: string) => Promise<void>;
-}
+export type VaultKeyStoreOptions = Pick<
+  HostedVaultRoute,
+  "request" | "resolveUserId" | "encryptionSecret" | "storeKey"
+>;
 
 /** Stores or replaces the provider API key for the signed-in user. */
 export async function handleVaultKeyStore(options: VaultKeyStoreOptions): Promise<Response> {
@@ -49,7 +35,7 @@ export async function handleVaultKeyStore(options: VaultKeyStoreOptions): Promis
     );
   }
 
-  const secretResult = trimmedSecretOrUnavailable(encryptionSecret);
+  const secretResult = secretOrUnavailable(encryptionSecret);
   if (secretResult instanceof Response) return secretResult;
 
   const userId = await resolveUserId(request);
@@ -86,17 +72,10 @@ export async function handleVaultKeyStore(options: VaultKeyStoreOptions): Promis
   return jsonResponse(HOSTED_HTTP_STATUS.OK, { stored: true });
 }
 
-export interface VaultKeyEntry {
-  providerId: string;
-  updatedAt: Date;
-}
-
-export interface VaultKeysListOptions {
-  request: Request;
-  resolveUserId: (request: Request) => Promise<string | undefined>;
-  encryptionSecret: string | undefined;
-  listKeys: (userId: string) => Promise<VaultKeyEntry[]>;
-}
+export type VaultKeysListOptions = Pick<
+  HostedVaultRoute,
+  "request" | "resolveUserId" | "encryptionSecret" | "listKeys"
+>;
 
 /** Lists stored provider keys for the signed-in user. Never returns ciphertext or plaintext. */
 export async function handleVaultKeysList(options: VaultKeysListOptions): Promise<Response> {
@@ -109,7 +88,7 @@ export async function handleVaultKeysList(options: VaultKeysListOptions): Promis
     );
   }
 
-  const secretResult = trimmedSecretOrUnavailable(encryptionSecret);
+  const secretResult = secretOrUnavailable(encryptionSecret);
   if (secretResult instanceof Response) return secretResult;
 
   const userId = await resolveUserId(request);
@@ -134,12 +113,10 @@ export async function handleVaultKeysList(options: VaultKeysListOptions): Promis
   });
 }
 
-export interface VaultKeyDeleteOptions {
-  request: Request;
-  resolveUserId: (request: Request) => Promise<string | undefined>;
-  encryptionSecret: string | undefined;
-  deleteKey: (userId: string, providerId: string) => Promise<boolean>;
-}
+export type VaultKeyDeleteOptions = Pick<
+  HostedVaultRoute,
+  "request" | "resolveUserId" | "encryptionSecret" | "deleteKey"
+>;
 
 /** Deletes the stored provider key for the signed-in user. */
 export async function handleVaultKeyDelete(options: VaultKeyDeleteOptions): Promise<Response> {
@@ -152,7 +129,7 @@ export async function handleVaultKeyDelete(options: VaultKeyDeleteOptions): Prom
     );
   }
 
-  const secretResult = trimmedSecretOrUnavailable(encryptionSecret);
+  const secretResult = secretOrUnavailable(encryptionSecret);
   if (secretResult instanceof Response) return secretResult;
 
   const userId = await resolveUserId(request);

@@ -47,11 +47,11 @@ vercel env run --environment production --scope stage-review -- \
 
 Dynamic client registration stays disabled. Two public clients are compiled in:
 
-- **`luke-desktop`** (`server/desktop-oauth-client.ts`) — the macOS companion
+- **`luke-desktop`** (`server/oauth-clients.ts`) — the macOS companion
   app. It accepts loopback callbacks (`http://127.0.0.1/callback`) via a local
   HTTP server during sign-in.
 
-- **`luke-mobile`** (`server/mobile-oauth-client.ts`) — the iOS companion app.
+- **`luke-mobile`** (`server/oauth-clients.ts`) — the iOS companion app.
   It uses a custom URL scheme (`dev.tryluke.ios://oauth/callback`) because iOS
   sign-in runs through `ASWebAuthenticationSession`, which delivers the callback
   via the registered scheme rather than a local HTTP server. The scheme passes

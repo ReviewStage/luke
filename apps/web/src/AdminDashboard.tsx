@@ -27,8 +27,7 @@ import {
   type AdminMetricsWindow,
   isUtcDayKey,
 } from "../server/admin/http";
-import { accountInitials } from "./account-initials";
-import { accountLabel } from "./account-label";
+import { accountInitials, accountLabel } from "./account-initials";
 import { GitHubMark, GoogleMark } from "./account-marks";
 import { calendarWeeks, DAYS_PER_WEEK, lastWeeks, monthLabels } from "./activity-calendar";
 import {

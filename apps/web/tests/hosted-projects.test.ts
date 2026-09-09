@@ -3,8 +3,8 @@ import test from "node:test";
 import { hostedProjectsAnswerSchema } from "@sidecar/hosted";
 import { encryptProviderKey } from "../server/hosted/encryption";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
-import type { VaultKeyRow } from "../server/hosted/observe";
 import { handleProjects } from "../server/hosted/projects";
+import type { VaultKeyRow } from "../server/hosted/vault-route";
 
 const SECRET = "a".repeat(64);
 
