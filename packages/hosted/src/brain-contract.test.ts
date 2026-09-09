@@ -48,6 +48,27 @@ test("a respond request reads whole and rebuilt, with its options bounded", () =
   });
 });
 
+test("a prompt cache key is admitted within its bound, and refused past it", () => {
+  const keyed = hostedBrainRespondRequestFromWire(
+    respond({ options: { promptCacheKey: "9f86d0818" } }),
+    CATALOG,
+  );
+  assert.ok(keyed.ok);
+  assert.equal(keyed.request.options.promptCacheKey, "9f86d0818");
+  const long = hostedBrainRespondRequestFromWire(
+    respond({
+      options: {
+        promptCacheKey: "x".repeat(HOSTED_BRAIN_OPTION_BOUNDS.PROMPT_CACHE_KEY_CHARS + 1),
+      },
+    }),
+    CATALOG,
+  );
+  assert.ok(!long.ok);
+  assert.equal(long.refusal, HOSTED_BRAIN_REQUEST_REFUSAL.OPTIONS_OUT_OF_BOUNDS);
+  // A request from a desktop that knows nothing of the field still reads.
+  assert.ok(hostedBrainRespondRequestFromWire(respond(), CATALOG).ok);
+});
+
 test("a prompt equal to a refusal word is still a prompt", () => {
   for (const word of Object.values(HOSTED_BRAIN_REQUEST_REFUSAL)) {
     const read = hostedBrainRespondRequestFromWire(respond({ prompt: word }), CATALOG);

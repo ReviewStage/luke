@@ -240,6 +240,9 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
           tools: request.toolSchemas,
           maximumOutputTokens: request.maximumOutputTokens,
           ...(request.reasoningEffort ? { reasoningEffort: request.reasoningEffort } : undefined),
+          ...(request.promptCacheKey !== undefined
+            ? { promptCacheKey: request.promptCacheKey }
+            : undefined),
           signal,
         }),
         signal,

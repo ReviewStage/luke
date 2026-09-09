@@ -148,6 +148,12 @@ export interface ModelRequestOptions {
   readonly tools: readonly ToolSchema[];
   readonly maximumOutputTokens: number;
   readonly reasoningEffort?: ReasoningEffort;
+  /**
+   * Which prefix cache this inference should land against, when the transport
+   * routes by one. A hint and nothing else: it names no session, since the
+   * host hashes whatever it derived the key from before the key travels.
+   */
+  readonly promptCacheKey?: string;
   /** Fires when the run this inference belongs to is cancelled or times out; the request is dropped with it. */
   readonly signal?: AbortSignal;
 }
@@ -155,6 +161,8 @@ export interface ModelRequestOptions {
 export interface ModelUsage {
   readonly inputTokens?: number;
   readonly outputTokens?: number;
+  /** How much of the input the provider answered from its prefix cache, when it says; the trace reads it. */
+  readonly cachedInputTokens?: number;
 }
 
 export const MODEL_RESPONSE_OUTCOME = {
@@ -525,6 +533,8 @@ export interface RuntimeRunRequest {
   readonly ephemeral: () => readonly string[];
   readonly maximumOutputTokens: number;
   readonly reasoningEffort?: ReasoningEffort;
+  /** The prefix cache every inference of this run asks for, when the transport routes by one. */
+  readonly promptCacheKey?: string;
   /** Fires when the host revokes the run; the runtime ends it at the next safe point. */
   readonly signal: AbortSignal;
   readonly onEvent: RuntimeEventListener;

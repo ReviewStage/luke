@@ -268,7 +268,6 @@ export function composeHost(options: HostSeams): Host {
       closeAdmissions: () => service.server.closeAdmissions(),
       cancelActive: async () => {
         supervisor.setEnabled(false);
-        brain.cron.stop();
         const cancelled: string[] = [];
         for (const record of brain.wiring.allRequests()) {
           if (

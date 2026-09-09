@@ -70,15 +70,6 @@ const SEED_BOOTSTRAP = [
   "",
 ].join("\n");
 
-const SEED_HEARTBEAT = [
-  "# HEARTBEAT.md",
-  "",
-  "On a scheduled review: look over the observed sessions against what you remember, note",
-  "anything that has been waiting on the developer for a long time, and say nothing unless",
-  "something merits attention.",
-  "",
-].join("\n");
-
 /** What each file holds when the workspace is first made; SOUL.md is the persona every surface shares. */
 export const BRAIN_WORKSPACE_SEEDS: WorkspaceSeeds = {
   [WORKSPACE_FILE.AGENTS]: SEED_AGENTS,
@@ -87,5 +78,4 @@ export const BRAIN_WORKSPACE_SEEDS: WorkspaceSeeds = {
   [WORKSPACE_FILE.USER]: SEED_USER,
   [WORKSPACE_FILE.MEMORY]: SEED_MEMORY,
   [WORKSPACE_FILE.BOOTSTRAP]: SEED_BOOTSTRAP,
-  [WORKSPACE_FILE.HEARTBEAT]: SEED_HEARTBEAT,
 };

@@ -17,17 +17,13 @@ import {
   EMPTY_APP_GUIDE,
   isAppGuideSnapshot,
 } from "@sidecar/guide";
-import {
-  CREDENTIAL_REFERENCE_KIND,
-  CronScheduler,
-  HEARTBEAT_DEFAULTS,
-  heartbeatJob,
-  LANE,
-} from "@sidecar/runtime";
+import { CREDENTIAL_REFERENCE_KIND } from "@sidecar/runtime";
 import {
   CONVERSATION_KIND,
+  conversationKindOf,
   isIdentifier,
   MAIN_SESSION_KEY,
+  type SessionKey,
   sessionKey as toSessionKey,
 } from "@sidecar/runtime/vocabulary";
 import {
@@ -72,7 +68,6 @@ export interface BrainComposer extends Composer {
   readonly store: StoreWiring;
   readonly conversations: ReturnType<typeof conversationOperations>;
   readonly deliveries: DeliveryLedger<GrantedWords>;
-  readonly cron: CronScheduler;
   memoryMode: () => ReturnType<MemoryWiring["mode"]>;
   syncMemory: () => void;
 }
@@ -142,15 +137,33 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
     },
   });
 
-  function standingContext(): string {
+  /**
+   * What a conversation is handed beside the roster, by which conversation it
+   * is. The recent exchange and the remembered facts reach every conversation,
+   * so an observed session's knows what the developer was just told before it
+   * briefs. The app guide and the projects a workspace could be created in
+   * belong to the conversations the developer actually holds; an observed
+   * session's conversation and a child's brief one session or one task, and
+   * would pay for both on every call and every iteration of their tool loops.
+   */
+  function standingContext(sessionKey: SessionKey): string {
     const sessions = observation.actableSessions();
-    const projects = observation.workspaceProjects();
+    const kind = conversationKindOf(sessionKey);
+    const developerHeld = kind === CONVERSATION_KIND.MAIN || kind === CONVERSATION_KIND.THREAD;
     const defaults = observation.heldWorkspaceDefaults();
     return [
-      workspaceProjectContextText(projects, defaults.defaultProviderId, defaults.defaultProjectIds),
+      ...(developerHeld
+        ? [
+            workspaceProjectContextText(
+              observation.workspaceProjects(),
+              defaults.defaultProviderId,
+              defaults.defaultProjectIds,
+            ),
+          ]
+        : []),
       rememberedFactsText(store.rememberedFacts()),
       conversationLinesText(recentConversationEntries(store.thread().entries()), sessions),
-      appGuideContextText(appGuide),
+      ...(developerHeld ? [appGuideContextText(appGuide)] : []),
     ]
       .filter((part): part is string => part !== undefined && part.trim().length > 0)
       .join("\n\n");
@@ -251,24 +264,6 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
     report,
   });
 
-  const cron = new CronScheduler({
-    store: store.scheduledJobStore(),
-    coordinate: (work) => wiring.lanes.run(LANE.CRON, work),
-    // The heartbeat is the only job this build schedules. A row of any other
-    // id is one a build before this one left behind — the nightly memory
-    // consolidation, until now — and running it as a heartbeat would be a
-    // turn nothing asked for, so it is removed instead.
-    run: async (job) => {
-      if (job.id !== HEARTBEAT_DEFAULTS.JOB_ID) {
-        report(`A scheduled job this build does not run was removed: ${job.id}`);
-        await cron.remove(job.id);
-        return;
-      }
-      await wiring.heartbeat(job.sessionKey);
-    },
-    report,
-  });
-
   const methods: GatewayMethodTable = {
     [GATEWAY_METHOD.GUIDE_REPORT]: (params) => {
       if (!isAppGuideSnapshot(params.guide))
@@ -302,7 +297,6 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
     store,
     conversations,
     deliveries,
-    cron,
     memoryMode: () => memory.mode(),
     syncMemory: () => {
       void memory.sync();
@@ -320,13 +314,10 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
       await wiring.store().load();
       await store.restore();
       stopConversationMaintenance = startConversationMaintenance({ store, brain: wiring });
-      await cron.start();
-      await cron.ensure(heartbeatJob(now()));
     },
     stop: async () => {
       stopConversationMaintenance?.();
       stopConversationMaintenance = undefined;
-      cron.stop();
       wiring.retire();
       memory.stop();
       await store.close();

@@ -29,7 +29,6 @@ const TEST_SEEDS: WorkspaceSeeds = {
   [WORKSPACE_FILE.USER]: testSeed(WORKSPACE_FILE.USER),
   [WORKSPACE_FILE.MEMORY]: testSeed(WORKSPACE_FILE.MEMORY),
   [WORKSPACE_FILE.BOOTSTRAP]: testSeed(WORKSPACE_FILE.BOOTSTRAP),
-  [WORKSPACE_FILE.HEARTBEAT]: testSeed(WORKSPACE_FILE.HEARTBEAT),
 };
 
 async function temporaryDirectory(): Promise<string> {

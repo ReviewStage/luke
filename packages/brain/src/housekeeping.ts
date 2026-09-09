@@ -102,43 +102,6 @@ export async function runPrivateTurn(options: PrivateTurnOptions): Promise<Runti
   }
 }
 
-export interface ToolFreeCompletionOptions {
-  readonly runtime: AgentRuntime;
-  readonly prompt: string;
-  readonly input: string;
-  readonly maximumOutputTokens: number;
-  readonly signal: AbortSignal;
-  readonly runId: string;
-}
-
-/** The refusal every call a tool-free turn still emits is answered with. */
-const TOOL_FREE_EXECUTOR: ToolExecutor = {
-  execute: async () => rejection(REFUSAL_REASON.NOT_OFFERED),
-};
-
-/**
- * One tool-free completion over a fresh, dropped context: no schema is
- * offered and any call the model emits anyway is refused, so the answer is
- * words and nothing else. Nothing when the run did not complete with text.
- */
-export async function completeToolFree(
-  options: ToolFreeCompletionOptions,
-): Promise<string | undefined> {
-  const end = await runPrivateTurn({
-    runtime: options.runtime,
-    tools: TOOL_FREE_EXECUTOR,
-    toolSchemas: [],
-    prompt: options.prompt,
-    ask: options.input,
-    maximumOutputTokens: options.maximumOutputTokens,
-    signal: options.signal,
-    runId: options.runId,
-  });
-  return end.reason === RUN_END_REASON.COMPLETED && end.text.trim().length > 0
-    ? end.text
-    : undefined;
-}
-
 function rejection(reason: string): ToolResult {
   return answer({ status: ACTION_RESULT_STATUS.REJECTED, reason });
 }

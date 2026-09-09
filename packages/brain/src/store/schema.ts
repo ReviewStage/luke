@@ -35,10 +35,6 @@
  * transaction that removed the rows and cleared only once the file it names
  * is published and verified.
  *
- * The scheduler's jobs are one row per job, its payload the job as the
- * scheduler wrote it, so a launch finds what was scheduled and when it last
- * ran without a second store beside the database.
- *
  * The durable observation inbox holds the observations captured for a
  * conversation and not yet consumed by a turn, and the capture cursors that
  * say how far each transcript has been written down — kept apart from the
@@ -279,14 +275,6 @@ export const STORE_SCHEMA_STATEMENTS: readonly string[] = [
     transcript_events INTEGER NOT NULL,
     previous_cutoff INTEGER,
     payload BLOB
-  )`,
-  `CREATE TABLE IF NOT EXISTS scheduled_jobs (
-    job_id TEXT PRIMARY KEY,
-    session_key TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    last_run_at INTEGER,
-    enabled INTEGER NOT NULL,
-    payload TEXT NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS child_runs (
     child_id TEXT PRIMARY KEY,

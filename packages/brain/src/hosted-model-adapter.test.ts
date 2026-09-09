@@ -321,3 +321,16 @@ test("a 429 that names the day's quota waits for the reset; a 429 that names the
     until: NOW + BRAIN_RATE_LIMIT_COOLDOWN_MS,
   });
 });
+
+test("a prompt cache key rides on the hosted request as the routing hint it is", async () => {
+  const forwarding = service({
+    [HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES]: [() => Response.json(capabilities())],
+    [HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2]: [
+      () => Response.json({ status: "completed", output: [] }),
+    ],
+  });
+  await adapter(forwarding.fetch).respond(INPUT, { ...OPTIONS, promptCacheKey: "abc123" });
+  const keyed = forwarding.calls[1]?.body;
+  assert.ok(isRecord(keyed) && isRecord(keyed.options));
+  assert.equal(keyed.options.promptCacheKey, "abc123");
+});

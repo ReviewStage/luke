@@ -120,8 +120,8 @@ that only has to read a row back.
 
 `@sidecar/runtime/vocabulary` is the same rule at the bottom of the graph: the
 identities, the storage contracts, and the execution seams are Node-free, and
-the packages below the runtime import that door so the barrel's `croner` and
-`node:fs` never reach a renderer or a web function. Nothing is behind both
+the packages below the runtime import that door so the barrel's `node:fs`
+never reaches a renderer or a web function. Nothing is behind both
 doors: the barrel re-exports no vocabulary name, so every symbol has exactly
 one way in.
 

@@ -44,10 +44,11 @@ test("session context carries only bounded, redacted fields", () => {
   const text = sessionContextText([observed]);
 
   assert.match(text, /Claude Code/);
-  assert.match(
-    text,
-    /internal session name — never use to refer to the work: Claude Code: checkout-service/,
-  );
+  // The rule about the internal names is stated once, in the header, and each
+  // row carries the name under a plain label.
+  assert.match(text, /internal names/);
+  assert.match(text, /never to refer to the work out loud/);
+  assert.match(text, /title: Claude Code: checkout-service/);
   assert.match(text, /waiting/);
   // The identity is in the roster now — it is what a tool call names a session
   // by, and an opaque id is the user's own data rather than transcript — and
@@ -90,7 +91,7 @@ test("a chat carries its workspace only as an internal reference", () => {
   const text = sessionContextText([chat]);
 
   assert.match(text, /Revamp the notch panel/);
-  assert.match(text, /internal workspace name — never use to refer to the work: lisbon-v2/);
+  assert.match(text, /workspace: lisbon-v2/);
 
   // An unnamed workspace goes unmentioned rather than leaking its internal id
   // off the machine: the id identifies nothing out loud.
@@ -118,7 +119,7 @@ test("a chat carries its workspace only as an internal reference", () => {
       lastActivityAt: OBSERVED_AT,
     },
   );
-  assert.doesNotMatch(sessionContextText([ungrouped]), /workspace/);
+  assert.doesNotMatch(sessionContextText([ungrouped]), /workspace: /);
 });
 
 test("the roster identifies sessions managed by Superset", () => {
@@ -217,10 +218,7 @@ test("the roster keeps a hosted chat's names as internal references", () => {
     },
   );
 
-  assert.match(
-    sessionContextText([hosted]),
-    /- Claude Code in Conductor — internal session name — never use to refer to the work: amber-shoal/,
-  );
+  assert.match(sessionContextText([hosted]), /- Claude Code in Conductor — title: amber-shoal/);
 });
 
 test("an empty roster says so rather than implying Luke sees nothing at all", () => {

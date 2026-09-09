@@ -9,7 +9,6 @@ import type {
   MemorySearchOutcome,
   MemorySearchQuery,
 } from "@sidecar/memory";
-import type { ScheduledJob } from "@sidecar/runtime";
 import type {
   AgentId,
   ArchiveReason,
@@ -48,7 +47,6 @@ import {
 } from "./conversations-table.js";
 import { AGENT_DATABASE_FILE, StoreDatabase } from "./database.js";
 import type { BrainStateSave } from "./envelope.js";
-import { deleteScheduledJob, listScheduledJobs, putScheduledJob } from "./jobs-table.js";
 import { type MaintenanceReport, runConversationMaintenance } from "./maintenance-run.js";
 import { type FlushState, flushState, recordFlush } from "./memory-flush-table.js";
 import {
@@ -194,10 +192,6 @@ export const STORE_OPERATIONS = {
 
   "maintenance.run": (s, p: { now: number; preserve: readonly SessionKey[] }): MaintenanceReport =>
     runConversationMaintenance(s.db, s.agentRoot, p),
-
-  "jobs.list": (s, _p: NoParams): readonly ScheduledJob[] => listScheduledJobs(s.db),
-  "jobs.put": (s, p: { job: ScheduledJob }): boolean => putScheduledJob(s.db, p.job),
-  "jobs.delete": (s, p: { id: string }): boolean => deleteScheduledJob(s.db, p.id),
 
   "children.list": (s, _p: NoParams): readonly ChildRunRecord[] => listChildRuns(s.db),
   "children.put": (s, p: { record: ChildRunRecord }): boolean => putChildRun(s.db, p.record),

@@ -21,6 +21,10 @@ export interface BrainRequestTraceRecord {
   outputItemKinds?: readonly string[];
   inputTokens?: number;
   outputTokens?: number;
+  /** How much of the input the provider answered from its prefix cache, when it reported any. */
+  cachedInputTokens?: number;
+  /** Whether the request asked for a prefix cache at all; the key itself is a hash and is not recorded. */
+  promptCacheKeyed?: boolean;
   error?: string;
 }
 

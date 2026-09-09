@@ -1476,34 +1476,6 @@ test("asks that arrive while a review runs open one turn together, each settled 
   assert.equal((await h.agent.waitAsk(second, 1))?.text, "One reply for both.");
 });
 
-test("a heartbeat opens a turn under its own marker, may announce, and reports a notice; its text is not a reply", async () => {
-  const notices: import("./wake-events.js").BrainTurnReport[] = [];
-  const h = harness({ notice: (notice) => notices.push(notice) });
-  h.client.answers.push(
-    answered([call("call_1", BRAIN_TOOL.ANNOUNCE, { briefing: "One thing needs you." })]),
-    answered([message("nothing spoken")]),
-  );
-  h.agent.heartbeat();
-  await settle();
-  assert.equal(h.client.inputs.length, 2);
-  assert.ok(itemText((h.client.inputs[0] ?? [])[0]).startsWith(BRAIN_INPUT_MARKER.HEARTBEAT));
-  assert.deepEqual(
-    h.deliveries.map((delivery) => delivery.briefing),
-    ["One thing needs you."],
-  );
-  assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.HEARTBEAT);
-  assert.equal(h.traces[0]?.origin, RUN_ORIGIN.HEARTBEAT);
-  assert.equal(notices.length, 1);
-  assert.deepEqual(notices[0]?.briefings, ["One thing needs you."]);
-  assert.equal(notices[0]?.trigger, BRAIN_TURN_TRIGGER.HEARTBEAT);
-  // A quiet heartbeat is the ordinary one: no delivery, a notice with no briefing.
-  h.client.answers.push(answered([message("")]));
-  h.agent.heartbeat();
-  await settle();
-  assert.equal(h.deliveries.length, 1);
-  assert.deepEqual(notices[1]?.briefings, []);
-});
-
 test("opening notes are read once by the next turn and handed back when that turn fails", async () => {
   const note: import("./wake-events.js").BrainTurnNotice = {
     trigger: BRAIN_TURN_TRIGGER.WAKE,
@@ -1576,32 +1548,6 @@ test("a steered companion shares the run's persistence failure: a final write th
   // The reply that formed still travels on both, as the record's own words.
   assert.equal(primary?.text, "Reply for both.");
   assert.equal(companion?.text, "Reply for both.");
-});
-
-test("a developer's ask during a heartbeat is not steered into it: the review keeps its own prompt and origin, and the ask gets a reply turn of its own", async () => {
-  const inner = new FakeClient();
-  const gated = gatedClient(inner);
-  const h = harness({ client: gated.client });
-  inner.answers.push(answered([message("nothing spoken")]), answered([message("Your answer.")]));
-  const tick = h.agent.heartbeat();
-  await settle();
-  const ask = acceptedRunId(await submit(h, "what changed?"));
-  await settle();
-  // Queued behind the review, not riding inside it.
-  assert.equal(h.agent.request(ask)?.status, BRAIN_REQUEST_STATUS.QUEUED);
-  gated.open();
-  await tick;
-  await settle();
-  assert.equal((await h.agent.waitAsk(ask, 1))?.text, "Your answer.");
-  assert.equal(inner.inputs.length, 2);
-  const review = (inner.inputs[0] ?? []).map(itemText).join("\n");
-  assert.ok(review.includes(BRAIN_INPUT_MARKER.HEARTBEAT));
-  assert.ok(!review.includes("what changed?"));
-  assert.ok((inner.inputs[1] ?? []).map(itemText).join("\n").includes("what changed?"));
-  assert.deepEqual(
-    h.traces.map((trace) => trace.origin),
-    [RUN_ORIGIN.HEARTBEAT, RUN_ORIGIN.USER],
-  );
 });
 
 test("a rider settles when the shared turn dies to a thrown hook after its checkpoint, and none is left running", async () => {
@@ -1927,18 +1873,12 @@ test("a Clear with an ask still queued opens nothing for it and leaves no timer 
 });
 
 test("a stop with an ask still queued records it interrupted and opens nothing", async () => {
-  const inner = new FakeClient();
-  const gated = gatedClient(inner);
-  const h = harness({ client: gated.client });
-  inner.answers.push(answered([message("nothing spoken")]));
-  const tick = h.agent.heartbeat();
-  await settle();
+  const { h, inner, release } = await reviewing();
   const queued = acceptedRunId(await submit(h, "queued?"));
   await settle();
   const stopping = h.agent.stop();
-  gated.open();
+  await release();
   await stopping;
-  await tick;
   await settle();
   assert.equal(inner.inputs.length, 1);
   assert.equal(h.agent.request(queued)?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);

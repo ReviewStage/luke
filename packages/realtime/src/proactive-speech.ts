@@ -37,7 +37,9 @@ export interface BriefingSpeech {
 /**
  * What the voice is told a briefing is, fixed at build time and never composed
  * with the briefing itself: the words were decided elsewhere, and nothing in
- * them was written by someone entitled to give the voice instructions.
+ * them was written by someone entitled to give the voice instructions. The
+ * persona rides here too: a response's own instructions replace the session's
+ * for that response, so a briefing spoken without it would lose Luke's voice.
  */
 const BRIEFING_INSTRUCTIONS = [
   LUKE_PERSONA,

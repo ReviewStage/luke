@@ -840,7 +840,7 @@ async function workspacePreparation(
       configuration: store.snapshot(),
       run: { origin: trigger === undefined ? RUN_ORIGIN.MAINTENANCE : runOriginOf(trigger) },
       identity: BRAIN_IDENTITY_LINE,
-      tools: policy.allowed.map((tool) => tool.schema),
+      tools: policy.allowed.map((tool) => ({ name: tool.schema.name, groups: tool.groups })),
       toolNotes: brainToolNotes(),
       runtimeContextMarker: BRAIN_INPUT_MARKER.STANDING_CONTEXT,
       runtimeId: TOOL_LOOP_RUNTIME.ID,

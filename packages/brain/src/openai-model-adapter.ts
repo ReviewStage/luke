@@ -122,6 +122,9 @@ class OpenAiTransport implements ResponsesTransport<undefined> {
         tools: options.tools.map(responsesToolDefinition),
         maximumOutputTokens: options.maximumOutputTokens,
         reasoningEffort: options.reasoningEffort ?? this.#reasoningEffort,
+        ...(options.promptCacheKey !== undefined
+          ? { promptCacheKey: options.promptCacheKey }
+          : undefined),
       }),
       (payload) =>
         responsesModelAnswer(payload) ??

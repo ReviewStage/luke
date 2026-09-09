@@ -282,6 +282,9 @@ export function handleBrainRespondV2(options: BrainV2Options): Promise<Response>
         maximumOutputTokens:
           request.options.maximumOutputTokens ?? HOSTED_BRAIN_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
         reasoningEffort: request.options.reasoningEffort ?? HOSTED_BRAIN_DEFAULTS.REASONING_EFFORT,
+        ...(request.options.promptCacheKey !== undefined
+          ? { promptCacheKey: request.options.promptCacheKey }
+          : undefined),
       }),
     // SAFETY: brainResponsesOutput accepted the payload as a JSON record.
     answer: (payload) =>

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   BRAIN_IDENTITY_LINE,
   BRAIN_INPUT_MARKER,
@@ -123,7 +124,12 @@ export interface BrainWiringDependencies extends ChildWiringDependencies {
   onGenerationReplaced: (sessionKey: SessionKey) => void;
   actions: BrainActionPerformerDependencies;
   roster: () => BrainRoster;
-  standingContext: () => string;
+  /**
+   * The standing context one conversation is handed, rebuilt every turn: the
+   * key is passed because what belongs in it differs by conversation, and the
+   * host decides that, not this wiring.
+   */
+  standingContext: (sessionKey: SessionKey) => string;
   pluginFor: (providerId: string) => SessionProviderPlugin | undefined;
   session: (identity: SessionIdentity) => Session | undefined;
   deliver: (delivery: BrainDelivery) => Promise<void>;
@@ -196,8 +202,6 @@ export interface BrainWiring {
   rosterLook: () => void;
   /** Hands held briefings back to the conversations that decided them, main's for one with no source. */
   releaseHeld: (held: readonly BrainDelivery[]) => void;
-  /** Opens the scheduled review in a conversation, main's by default; settles when its turn has. */
-  heartbeat: (sessionKey?: SessionKey) => Promise<void>;
   /** The compact notices main has not yet read, for inspection. */
   pendingNotices: () => readonly BrainTurnNotice[];
   /** The brain of one conversation as it stands now, main's by default; nothing between transitions and on a run with no key. */
@@ -286,19 +290,28 @@ interface OpenConversation {
 /** How many notices main keeps unread before the oldest go; each is one line about one turn. */
 const MAXIMUM_PENDING_NOTICES = 50;
 
+/**
+ * The prefix cache one conversation's turns ask for: a hash of its key, so
+ * every turn of that conversation lands on the turns before it, across
+ * launches, and no conversation on another's. The key itself never travels —
+ * an observed conversation's carries a provider's session id — so what is
+ * sent is the digest and nothing that could be read back into a session.
+ */
+function promptCacheKeyFor(sessionKey: SessionKey): string {
+  return createHash("sha256").update(sessionKey).digest("hex");
+}
+
 /** What a conversation that is not main is handed: main alone reads the notices its siblings leave. */
 const NO_OPENING_NOTES = {
   take: () => [],
   restore: () => {},
 };
 
-/** The lane a turn runs under, by what opened it: hooks share the cron inner budget, heartbeats are cron work, the rest is the agent's. */
+/** The lane a turn runs under, by what opened it: hooks on their own lane, children on theirs, the rest the agent's. */
 function laneFor(trigger: BrainTurnTrigger): Lane {
   switch (trigger) {
     case BRAIN_TURN_TRIGGER.WAKE:
       return LANE.HOOK_DISPATCH;
-    case BRAIN_TURN_TRIGGER.HEARTBEAT:
-      return LANE.CRON_NESTED;
     case BRAIN_TURN_TRIGGER.CHILD_TASK:
       return LANE.CHILD;
     default:
@@ -315,8 +328,8 @@ function observedName(session: Session | undefined, identity: SessionIdentity): 
  * coding session has a conversation of its own, opened on its first hook or
  * roster look, which reads that session's transcript, briefs the developer
  * about it directly, and leaves main a compact notice of what it did; main
- * is asked things by the developer and runs the scheduled heartbeat, and
- * never reads a provider's transcript on a look. Every conversation's turns
+ * is asked things by the developer and never reads a provider's transcript
+ * on a look. Every conversation's turns
  * run under the shared lanes, one execution per conversation at a time. Nothing here detects a change for a brain — no
  * status edge, no notice — because the brain notices changes itself,
  * against its own memory. Built by `rebuild` whenever the credential policy
@@ -528,7 +541,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
         ...(child ? { child } : undefined),
       },
       identity: BRAIN_IDENTITY_LINE,
-      tools: policy.allowed.map((tool) => tool.schema),
+      tools: policy.allowed.map((tool) => ({ name: tool.schema.name, groups: tool.groups })),
       toolNotes: brainToolNotes(),
       runtimeContextMarker: BRAIN_INPUT_MARKER.STANDING_CONTEXT,
       runtimeId: TOOL_LOOP_RUNTIME.ID,
@@ -583,7 +596,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       runtime: toolLoopRuntimeOver(model),
       actions,
       roster: dependencies.roster,
-      standingContext: dependencies.standingContext,
+      standingContext: () => dependencies.standingContext(sessionKey),
       prepareTurn: (turn) =>
         prepare(
           snapshot,
@@ -594,6 +607,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
         ),
       workspace: workspaceFor(snapshot, listed),
       ...(reasoningEffort ? { reasoningEffort } : undefined),
+      promptCacheKey: promptCacheKeyFor(sessionKey),
       ...(maximumOutputTokens !== undefined ? { maximumOutputTokens } : undefined),
       // Today's and yesterday's notes, primed once into a conversation that
       // just started fresh and read on no ordinary turn.
@@ -935,8 +949,6 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     wake,
     rosterLook,
     releaseHeld,
-    heartbeat: (sessionKey = MAIN_SESSION_KEY) =>
-      current(sessionKey)?.heartbeat() ?? Promise.resolve(),
     pendingNotices: () => notices,
     resetConversation: async (sessionKey) => {
       const cancelled = await children.service.cancelDescendantsOf(sessionKey);

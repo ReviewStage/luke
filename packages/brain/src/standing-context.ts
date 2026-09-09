@@ -199,13 +199,16 @@ export function sessionContextText(sessions: readonly Session[], now: number = D
   const included = prioritizedContextSessions(sessions);
   const overflow = sessions.length - included.length;
   return [
-    "Currently observed sessions:",
+    // The internal names are said once, in this one header line: a caveat
+    // repeated on every row costs more than it teaches, and the header stays
+    // one line so a row is a line.
+    "Currently observed sessions. The title and workspace name on a row are internal names — read them to tell the sessions apart, never to refer to the work out loud:",
     ...included.map((session) => {
       return [
         // A hosted chat is named by the agent having the conversation, with
         // the host beside it, the same way its row leads with the agent mark.
         `- ${sessionSpokenName(session)}`,
-        `internal session name — never use to refer to the work: ${session.title}`,
+        `title: ${session.title}`,
         // The workspace tells siblings' chats apart out loud, so it rides
         // beside the title wherever a provider named one — and only by its
         // name: an internal workspace id identifies nothing out loud, so an
@@ -213,7 +216,7 @@ export function sessionContextText(sessions: readonly Session[], now: number = D
         // the machine, the same rule every observed value follows.
         ...(session.workspace?.name
           ? [
-              `internal workspace name — never use to refer to the work: ${session.workspace.name}${session.workspace.managerName ? ` managed by ${session.workspace.managerName}` : ""}`,
+              `workspace: ${session.workspace.name}${session.workspace.managerName ? ` managed by ${session.workspace.managerName}` : ""}`,
             ]
           : []),
         // An app that independently claims the session is how "my Superset Codex

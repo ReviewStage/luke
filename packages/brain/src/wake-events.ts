@@ -57,7 +57,7 @@ export interface BrainDelivery {
 }
 
 /**
- * What one observation or heartbeat turn amounted to, in the host's own
+ * What one observation turn amounted to, in the host's own
  * counts and never a transcript's words: which sessions it looked at,
  * whether it briefed the developer and with what, and how many actions it
  * carried. An observed conversation hands one to the host after each of its

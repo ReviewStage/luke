@@ -22,6 +22,7 @@ import { drainMicrotasks, temporaryDirectory } from "@sidecar/runtime/testing";
 import {
   CONVERSATION_KIND,
   conversationKindOf,
+  MAIN_SESSION_KEY,
   observedSessionKey,
   observedSessionRefOf,
   type SessionKey,
@@ -214,7 +215,9 @@ function composed(t: TestContext, gate?: Gate): Composed {
       })),
       sessions: roster,
     }),
-    standingContext: () => "",
+    // The host decides what belongs in one conversation's standing context by
+    // its key; this harness reports the key it was asked about.
+    standingContext: (sessionKey) => `standing context for ${sessionKey}`,
     pluginFor: () => ({
       provider: claude,
       observe: async () => [],
@@ -262,6 +265,26 @@ function composed(t: TestContext, gate?: Gate): Composed {
     builds: () => builds,
   };
 }
+
+test("each conversation's standing context is built for its own key", async (t) => {
+  const c = composed(t);
+  await c.wiring.rebuild();
+  c.wiring.rosterLook();
+  await until(() => c.inputs.length >= 2 && c.wiring.pendingNotices().length === 2);
+  const abcKey = observedSessionKey(ABC);
+  const defKey = observedSessionKey(DEF);
+  const texts = c.inputs.map((input) => itemTexts(input).join("\n"));
+  // An observed conversation's ephemeral item is built for that conversation
+  // alone, so what the host omits for it — the app guide, the projects a
+  // workspace could be created in — is omitted where it costs every call.
+  assert.ok(texts.some((text) => text.includes(`standing context for ${abcKey}`)));
+  assert.ok(texts.some((text) => text.includes(`standing context for ${defKey}`)));
+  for (const text of texts) {
+    assert.ok(!text.includes(`standing context for ${MAIN_SESSION_KEY}`));
+  }
+  c.wiring.retire();
+  await c.wiring.rebuild();
+});
 
 test("a roster look opens one conversation per observed session, each reading only its own transcript, and main reads notices instead", async (t) => {
   const c = composed(t);
@@ -547,28 +570,6 @@ test("two opens of one key landing in the same tick, a hook and a held briefing,
   const last = itemTexts(c.inputs[1] ?? []).join("\n");
   assert.ok(last.includes(BRAIN_INPUT_MARKER.OBSERVED_EVENTS));
   assert.ok(last.includes(BRAIN_INPUT_MARKER.HOLD_RELEASED));
-  c.wiring.retire();
-  await c.wiring.rebuild();
-});
-
-test("a heartbeat settles only when its turn has, so a scheduler's tick is over when its work is", async (t) => {
-  const gate: Gate = {
-    holds: (texts) => texts.includes(BRAIN_INPUT_MARKER.HEARTBEAT),
-    release: () => undefined,
-  };
-  const c = composed(t, gate);
-  await c.wiring.rebuild();
-  let settled = false;
-  const tick = c.wiring.heartbeat().then(() => {
-    settled = true;
-  });
-  await until(() => c.inputs.length >= 1);
-  await drainMicrotasks(60);
-  // The review is under way and the tick still open.
-  assert.equal(settled, false);
-  gate.release();
-  await tick;
-  assert.equal(settled, true);
   c.wiring.retire();
   await c.wiring.rebuild();
 });

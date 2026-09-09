@@ -38,7 +38,6 @@ const TEST_SEEDS: WorkspaceSeeds = {
   [WORKSPACE_FILE.USER]: testSeed(WORKSPACE_FILE.USER),
   [WORKSPACE_FILE.MEMORY]: testSeed(WORKSPACE_FILE.MEMORY),
   [WORKSPACE_FILE.BOOTSTRAP]: testSeed(WORKSPACE_FILE.BOOTSTRAP),
-  [WORKSPACE_FILE.HEARTBEAT]: testSeed(WORKSPACE_FILE.HEARTBEAT),
 };
 
 const FILES = boundBootstrapFiles([
@@ -55,8 +54,9 @@ function facts(overrides: Partial<PromptFacts> = {}): PromptFacts {
     profile: PROMPT_PROFILE.FULL,
     identity: "You are the agent under test.",
     tools: [
-      { name: "list_sessions", description: "the roster", parameters: {} },
-      { name: "announce", description: "a briefing", parameters: {} },
+      { name: "list_sessions", groups: ["read"] },
+      { name: "read_transcript", groups: ["read"] },
+      { name: "announce", groups: ["speak"] },
     ],
     toolNotes: ["The turns.", "An ask is the developer speaking."],
     runtimeContextMarker: "[context]",
@@ -72,7 +72,7 @@ function facts(overrides: Partial<PromptFacts> = {}): PromptFacts {
     ],
     workspaceDirectory: "/w",
     bootstrapFiles: FILES,
-    runtime: { agentId: "main", origin: RUN_ORIGIN.USER, runtimeId: "tool-loop", model: "m" },
+    runtime: { agentId: "main", runtimeId: "tool-loop", model: "m" },
     ...overrides,
   };
 }
@@ -109,10 +109,13 @@ test("the full profile emits every section in order, files injected, skills list
   const skillsSection = built.sections.find((section) => section.id === PROMPT_SECTION.SKILLS);
   assert.ok(skillsSection?.text.includes("load_skill"));
   assert.ok(!skillsSection?.text.includes("workspace read tool"));
-  assert.ok(built.stablePrefix.includes("- announce: a briefing"));
+  // Names alone, grouped: the description and the parameters ride in the
+  // schemas the same request carries.
+  assert.ok(built.stablePrefix.includes("- read: list_sessions, read_transcript"));
+  assert.ok(built.stablePrefix.includes("- speak: announce"));
+  assert.ok(!built.stablePrefix.includes("a briefing"));
   assert.ok(!built.stablePrefix.includes("Run pnpm."));
   assert.ok(built.dynamicSuffix.includes("Run pnpm."));
-  assert.ok(built.dynamicSuffix.includes("run origin: user"));
   assert.equal(built.text, `${built.stablePrefix}\n\n${built.dynamicSuffix}`);
   assert.equal(built.chars, built.text.length);
   // The absent BOOTSTRAP.md is the ordinary state after setup, not a diagnostic.
@@ -123,12 +126,10 @@ test("the full profile emits every section in order, files injected, skills list
 });
 
 test("the stable prefix is byte-identical across turns whose dynamic facts differ", () => {
-  const first = buildSystemPrompt(
-    facts({ runtime: { agentId: "main", origin: RUN_ORIGIN.USER, runtimeId: "tool-loop" } }),
-  );
+  const first = buildSystemPrompt(facts({ runtime: { agentId: "main", runtimeId: "tool-loop" } }));
   const second = buildSystemPrompt(
     facts({
-      runtime: { agentId: "main", origin: RUN_ORIGIN.OBSERVATION, runtimeId: "tool-loop" },
+      runtime: { agentId: "main", runtimeId: "tool-loop" },
       executionDirectory: { path: "/elsewhere" },
     }),
   );

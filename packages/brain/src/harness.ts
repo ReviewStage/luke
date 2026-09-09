@@ -672,25 +672,25 @@ export function agentOn(runtime: ToolLoopAgentRuntime, h: Harness) {
 }
 
 /**
- * A conversation held busy by a review. A heartbeat's turn takes no steered
+ * A conversation held busy by a roster look. A look's turn takes no steered
  * words, so asks made while it stands wait in the queue for a turn of their
- * own; releasing ends the review, which drains what waited into one turn.
- * `inner.inputs[0]` is the review; the drained turn is the one after it.
+ * own; releasing ends the look, which drains what waited into one turn.
+ * `inner.inputs[0]` is the look; the drained turn is the one after it.
  */
 export async function reviewing(...replies: readonly BrainClientAnswer[]) {
   const inner = new FakeClient();
   const gated = gatedClient(inner);
   const h = harness({ client: gated.client });
   inner.answers.push(answered([message("nothing spoken")]), ...replies);
-  const tick = h.agent.heartbeat();
+  await h.agent.rosterLook();
   await settle();
   return {
     h,
     inner,
     async release(): Promise<void> {
       gated.open();
-      await tick;
       await settle();
+      while (h.agent.busy()) await settle();
     },
   };
 }

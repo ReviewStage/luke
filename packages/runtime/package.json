@@ -14,8 +14,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@sidecar/wire": "workspace:*",
-    "croner": "10.0.1"
+    "@sidecar/wire": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "26.2.0",

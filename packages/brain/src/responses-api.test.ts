@@ -25,6 +25,8 @@ test("the request asks the API for no compaction of its own, stores nothing, and
   assert.equal(request.store, false);
   // The host schedules compaction itself; a provider policy beside it would compete over one window.
   assert.equal("context_management" in request, false);
+  // No key asked for, none sent: an absent field is not an empty one.
+  assert.equal("prompt_cache_key" in request, false);
   assert.deepEqual(request.include, ["reasoning.encrypted_content"]);
   assert.deepEqual(request.reasoning, { effort: "medium" });
   assert.equal(request.tool_choice, "auto");
@@ -129,4 +131,31 @@ test("a response the provider marks failed, cancelled, or under way is a provide
   assert.ok(incomplete?.outcome === MODEL_RESPONSE_OUTCOME.ANSWERED);
   assert.deepEqual(incomplete.incomplete, { status: "incomplete", reason: "max_output_tokens" });
   assert.equal(responsesModelAnswer({ id: "resp" }), undefined);
+});
+
+test("a prompt cache key rides on the request as the routing hint it is", () => {
+  const request = brainResponsesRequest([userMessageItem("hello")], {
+    model: "gpt-test",
+    instructions: "be Luke",
+    tools: [],
+    maximumOutputTokens: 1234,
+    reasoningEffort: BRAIN_REASONING_EFFORT.MEDIUM,
+    promptCacheKey: "9f86d0818",
+  });
+  assert.equal(request.prompt_cache_key, "9f86d0818");
+  // The key routes a prefix cache; it does not ask the API to keep anything.
+  assert.equal(request.store, false);
+});
+
+test("the cached input tokens the API reports are read for the trace", () => {
+  const answer = responsesModelAnswer({
+    status: "completed",
+    output: [
+      { type: "message", role: "assistant", content: [{ type: "output_text", text: "ok" }] },
+    ],
+    usage: { input_tokens: 900, output_tokens: 12, input_tokens_details: { cached_tokens: 768 } },
+  });
+  assert.ok(answer?.outcome === MODEL_RESPONSE_OUTCOME.ANSWERED);
+  assert.equal(answer.usage?.inputTokens, 900);
+  assert.equal(answer.usage?.cachedInputTokens, 768);
 });

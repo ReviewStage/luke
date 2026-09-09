@@ -113,7 +113,7 @@ export interface BrainAgentOptions {
   ) => Promise<ProviderTranscriptSinceResult>;
   readTranscript: (identity: SessionIdentity) => Promise<ProviderTranscriptResult>;
   deliver: (delivery: BrainDelivery) => void | Promise<void>;
-  /** Hears what each observation, hold-release, or heartbeat turn amounted to, in the host's own counts. */
+  /** Hears what each observation or hold-release turn amounted to, in the host's own counts. */
   notice?: (report: BrainTurnReport) => void;
   /** The lane each turn runs under; absent, turns are bounded only by this conversation's own serial queue. */
   lane?: BrainLane;
@@ -150,12 +150,19 @@ export interface BrainAgentOptions {
   cancel?: (timer: ScheduledTimer) => void;
   maximumOutputTokens?: number;
   reasoningEffort?: ReasoningEffort;
+  /**
+   * The prefix cache this conversation's turns ask for. Stable across
+   * launches so a later turn lands on the earlier turns' prefix, and derived
+   * by the host from the conversation's key by a hash, so the key itself
+   * never travels.
+   */
+  promptCacheKey?: string;
   executionDeadlineMs?: number;
 }
 
 /**
  * The brain: one long-lived agent that is woken by the agents' hooks and by
- * its own scheduled look at the roster, asked things by the developer, and
+ * its own look at the roster, asked things by the developer, and
  * answers with briefings for the voice to speak and actions for the host to
  * carry. Nothing detects a change on its behalf: the roster look carries
  * what stands and what each transcript gained, and the brain notices what is
@@ -279,6 +286,9 @@ export class BrainAgent {
       createRunId: options.createRunId,
       maximumOutputTokens: options.maximumOutputTokens ?? BRAIN_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
       ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : undefined),
+      ...(options.promptCacheKey !== undefined
+        ? { promptCacheKey: options.promptCacheKey }
+        : undefined),
       executionDeadlineMs: options.executionDeadlineMs ?? BRAIN_DEFAULTS.EXECUTION_DEADLINE_MS,
       compactIfNeeded: (turnContext, prompt, countedTokens) =>
         this.#maintenance.compactIfNeeded(turnContext, prompt, countedTokens),
@@ -454,11 +464,6 @@ export class BrainAgent {
    */
   wake(events: readonly BrainWakeEvent[]): Promise<void> {
     return this.#wakes.wake(events);
-  }
-
-  /** The scheduled review, opened on no signal at all; pending observations ride along. */
-  heartbeat(): Promise<void> {
-    return this.#wakes.heartbeat();
   }
 
   /** One look at the whole roster, driven by the host's observation pass rather than an internal timer. */

@@ -217,8 +217,6 @@ export function conversationKindOf(key: SessionKey | string): ConversationKind {
 export const RUN_ORIGIN = {
   USER: "user",
   OBSERVATION: "observation",
-  HEARTBEAT: "heartbeat",
-  CRON: "cron",
   /** A child's own run, opened by its requester's spawn. */
   CHILD: "child",
   CHILD_COMPLETION: "child_completion",
