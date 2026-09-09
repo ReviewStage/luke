@@ -3,7 +3,7 @@ import {
   CREDENTIAL_PROVIDER_ID,
   LinearCredentials,
   LinearIssueTracker,
-  LinearSignIn,
+  linearSignIn,
 } from "@sidecar/credentials";
 import { carried, GATEWAY_METHOD, type GatewayMethodTable, gatewayOk } from "@sidecar/gateway";
 import { ISSUE_TRACKER_ID, normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
@@ -53,7 +53,7 @@ export function composeIssues(dependencies: IssuesDependencies): IssuesComposer 
   const linearTracker = new LinearIssueTracker({
     readAccessToken: () => linearCredentials.accessToken(),
   });
-  const linearSignIn = new LinearSignIn({
+  const linearConsent = linearSignIn({
     openExternal: (url) => void kernel.openExternalThroughNode(url).catch(kernel.reportOpenFailure),
   });
   const issueTrackers = [linearTracker] as const;
@@ -94,7 +94,7 @@ export function composeIssues(dependencies: IssuesDependencies): IssuesComposer 
     [GATEWAY_METHOD.TRACKER_CONNECT]: async (params) => {
       const result = await settings.settingsWrite(
         async () => {
-          const outcome = await linearSignIn.signIn();
+          const outcome = await linearConsent.signIn();
           if ("reason" in outcome) return settings.refusedSettings(outcome.reason);
           return settingsStore.setGrant(CREDENTIAL_PROVIDER_ID.LINEAR, outcome);
         },
@@ -111,11 +111,11 @@ export function composeIssues(dependencies: IssuesDependencies): IssuesComposer 
       return gatewayOk(carried(result));
     },
     [GATEWAY_METHOD.TRACKER_CANCEL_SIGN_IN]: () => {
-      linearSignIn.cancel();
+      linearConsent.cancel();
       return gatewayOk({});
     },
     [GATEWAY_METHOD.TRACKER_REOPEN_SIGN_IN]: () => {
-      linearSignIn.reopen();
+      linearConsent.reopen();
       return gatewayOk({});
     },
     [GATEWAY_METHOD.TRACKER_DISCONNECT]: async (params) => {

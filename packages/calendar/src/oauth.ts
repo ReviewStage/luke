@@ -1,27 +1,21 @@
-import { randomUUID } from "node:crypto";
-import http from "node:http";
-import type { AddressInfo } from "node:net";
-// The same landing page the Luke account sign-in leaves the browser on, so
-// the two flows' tabs cannot dress differently.
-// The same RFC 7636 arithmetic the Luke account sign-in uses: one PKCE, two
-// flows, so neither can drift into a weaker verifier than the other.
+// The one consent trip every provider Luke asks consent of runs: the loopback,
+// the PKCE, and the landing page are all its, so no two of Luke's sign-ins can
+// drift into different servers, weaker verifiers, or differently dressed tabs.
 import {
-  accountLoopbackPage,
-  codeChallenge,
-  createCodeVerifier,
   LOOPBACK_CONNECTION_SOURCE,
-  LOOPBACK_PAGE_TONE,
+  type LoopbackConsent,
+  type LoopbackConsentOutcome,
+  loopbackConsent,
+  unofferedConsent,
 } from "@sidecar/credentials";
 import { isWireString, type UnparsedWireValue, unparsedWire, wireRecord } from "@sidecar/wire";
 
 /**
  * The sign-in behind the Google Calendar row: Google's OAuth flow for an
- * installed app, run the way the platform documents it for one — an
- * authorization page opened in the user's own browser, a code handed back on
- * a loopback redirect that never leaves this machine, and a PKCE-verified
- * exchange at Google's token endpoint. Every address involved is fixed by
- * this build; what the flow produces is a grant scoped to availability and
- * the calendar list alone, and storing it is the caller's act, not this one's.
+ * installed app, run the way the platform documents it for one, on the shared
+ * loopback consent trip. Every address involved is fixed by this build; what
+ * the flow produces is a grant scoped to availability and the calendar list
+ * alone, and storing it is the caller's act, not this one's.
  *
  * The flow exists only when a run holds the whole registration: the client id
  * standing in source below, and the client secret packaging injects — or the
@@ -108,39 +102,15 @@ export const GOOGLE_CALENDAR_SCOPES = [
 
 const CALLBACK_PATH = "/oauth/callback";
 
-/** Long enough to find the right account; not an open door all afternoon. */
-const SIGN_IN_TIMEOUT_MS = 180_000;
-
 const TOKEN_REQUEST_TIMEOUT_MS = 10_000;
 
-/**
- * What the browser tab shows once the flow is over: the same self-contained
- * landing the Luke account sign-in leaves the browser on, worded for the
- * calendar. One page builder for both flows is what keeps the two tabs
- * introducing themselves identically; every string here is fixed by the
- * build, and nothing the redirect carried is ever interpolated.
- */
-function signInPage(granted: boolean): string {
-  return granted
-    ? accountLoopbackPage({
-        tone: LOOPBACK_PAGE_TONE.SETTLED,
-        badge: "Connected",
-        title: "Connected to Google Calendar",
-        body: "You can close this tab and return to Luke.",
-        source: LOOPBACK_CONNECTION_SOURCE.GOOGLE_CALENDAR,
-      })
-    : accountLoopbackPage({
-        tone: LOOPBACK_PAGE_TONE.ATTENTION,
-        badge: "Not connected",
-        title: "Sign-in didn’t complete",
-        body: "You can close this tab and try again from Luke.",
-        source: LOOPBACK_CONNECTION_SOURCE.GOOGLE_CALENDAR,
-      });
+/** The grant one finished sign-in produces. Storing it is the caller's act. */
+export interface GoogleCalendarGrant {
+  refreshToken: string;
+  accessToken: string;
 }
 
-export type GoogleCalendarSignInOutcome =
-  | { refreshToken: string; accessToken: string }
-  | { reason: string };
+export type GoogleCalendarSignInOutcome = LoopbackConsentOutcome<GoogleCalendarGrant>;
 
 export interface GoogleCalendarSignInOptions {
   /**
@@ -156,9 +126,7 @@ export interface GoogleCalendarSignInOptions {
 }
 
 /** Reads the tokens Google answered the exchange with, trusting no shape. */
-function tokensFrom(
-  payload: UnparsedWireValue,
-): { refreshToken: string; accessToken: string } | undefined {
+function tokensFrom(payload: UnparsedWireValue): GoogleCalendarGrant | undefined {
   const record = wireRecord(unparsedWire(payload));
   if (!record) return undefined;
   const refreshToken = record.refresh_token;
@@ -169,165 +137,85 @@ function tokensFrom(
 }
 
 /**
- * Runs one sign-in from button press to refresh token. One at a time: a
- * second press while the browser tab is open is answered with why, rather
- * than a second tab racing the first for the loopback port.
+ * Trades the code for a grant at Google's token endpoint. Google's desktop
+ * client type expects the secret it documents as non-confidential, which is
+ * why a run holding no secret is offered no sign-in at all.
  */
-export class GoogleCalendarSignIn {
-  readonly #options: GoogleCalendarSignInOptions;
-  #running = false;
-  /** Ends the flow now waiting, when there is one — the cancel button's way in. */
-  #abandon: (() => void) | undefined;
-  /** Reopens the waiting flow's own consent page — the lost-tab way back in. */
-  #reopen: (() => void) | undefined;
-
-  constructor(options: GoogleCalendarSignInOptions) {
-    this.#options = options;
-  }
-
-  async signIn(): Promise<GoogleCalendarSignInOutcome> {
-    const config = googleCalendarSignInConfig(this.#options.environment);
-    if (!config) return { reason: "Sign-in is not configured in this build." };
-    if (this.#running) return { reason: "A sign-in is already waiting in your browser." };
-    this.#running = true;
-    try {
-      return await this.#run(config);
-    } finally {
-      this.#running = false;
-      this.#abandon = undefined;
-      this.#reopen = undefined;
-    }
-  }
-
-  /**
-   * Ends the flow now waiting, if any. The browser tab is left where it is —
-   * closing another app's window is not Luke's to do — but the loopback stops
-   * listening, so a grant given after this lands nowhere.
-   */
-  cancel(): void {
-    this.#abandon?.();
-  }
-
-  /**
-   * Opens the waiting flow's consent page again — the very URL, state and
-   * challenge included, the flow is already listening for — for a tab lost
-   * behind other windows or closed by mistake. With no flow waiting there is
-   * no page to reopen, and nothing happens.
-   */
-  reopen(): void {
-    this.#reopen?.();
-  }
-
-  async #run(config: GoogleCalendarSignInConfig): Promise<GoogleCalendarSignInOutcome> {
-    const verifier = createCodeVerifier();
-    const challenge = codeChallenge(verifier);
-    const state = randomUUID();
-
-    let finish: (outcome: GoogleCalendarSignInOutcome) => void = () => undefined;
-    const outcome = new Promise<GoogleCalendarSignInOutcome>((resolve) => {
-      finish = resolve;
+export async function exchangeGoogleCode(
+  config: GoogleCalendarSignInConfig,
+  input: { code: string; redirectUri: string; codeVerifier: string },
+  fetchImplementation: typeof fetch = fetch,
+): Promise<GoogleCalendarSignInOutcome> {
+  const body = new URLSearchParams({
+    code: input.code,
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
+    redirect_uri: input.redirectUri,
+    grant_type: "authorization_code",
+    code_verifier: input.codeVerifier,
+  });
+  try {
+    const response = await fetchImplementation(GOOGLE_TOKEN_URL, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+      signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
     });
-    // Assigned once the loopback has a port, before the browser is opened —
-    // no request can arrive ahead of it.
-    let redirectUri = "";
-
-    const server = http.createServer((request, response) => {
-      const url = new URL(request.url ?? "/", "http://127.0.0.1");
-      // Anything that is not this flow's own redirect — another path, a
-      // stray request, a state this run never issued — is refused without
-      // ending the wait: the real redirect may still be on its way.
-      if (url.pathname !== CALLBACK_PATH || url.searchParams.get("state") !== state) {
-        response.writeHead(404, { "content-type": "text/plain" }).end("Not found");
-        return;
-      }
-      const refused = url.searchParams.get("error");
-      const code = url.searchParams.get("code");
-      if (refused || !code) {
-        response
-          .writeHead(200, { "content-type": "text/html; charset=utf-8" })
-          .end(signInPage(false));
-        finish({ reason: "Google did not grant access." });
-        return;
-      }
-      void this.#exchange(config, code, verifier, redirectUri).then((exchanged) => {
-        const granted = "refreshToken" in exchanged;
-        response
-          .writeHead(200, { "content-type": "text/html; charset=utf-8" })
-          .end(signInPage(granted));
-        finish(exchanged);
-      });
-    });
-
-    // The loopback answers this machine alone: Google's redirect lands in the
-    // user's own browser, which hands the code straight back across localhost.
-    await new Promise<void>((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(0, "127.0.0.1", resolve);
-    });
-    // SAFETY: A TCP server successfully listening on port 0 has an AddressInfo address.
-    const port = (server.address() as AddressInfo).port;
-    redirectUri = `http://127.0.0.1:${port}${CALLBACK_PATH}`;
-
-    const authorization = new URL(GOOGLE_AUTHORIZATION_URL);
-    authorization.searchParams.set("client_id", config.clientId);
-    authorization.searchParams.set("redirect_uri", redirectUri);
-    authorization.searchParams.set("response_type", "code");
-    authorization.searchParams.set("scope", GOOGLE_CALENDAR_SCOPES);
-    authorization.searchParams.set("code_challenge", challenge);
-    authorization.searchParams.set("code_challenge_method", "S256");
-    // Offline access is what a refresh token is, and the consent prompt is
-    // what guarantees Google issues one rather than assuming an earlier grant.
-    authorization.searchParams.set("access_type", "offline");
-    authorization.searchParams.set("prompt", "consent");
-    authorization.searchParams.set("state", state);
-
-    const timeout = setTimeout(() => {
-      finish({ reason: "Sign-in timed out. Try again from the Google Calendar row." });
-    }, this.#options.timeoutMs ?? SIGN_IN_TIMEOUT_MS);
-    timeout.unref();
-    this.#abandon = () => finish({ reason: "Sign-in was cancelled." });
-    this.#reopen = () => this.#options.openExternal(authorization.toString());
-
-    try {
-      this.#options.openExternal(authorization.toString());
-      return await outcome;
-    } finally {
-      clearTimeout(timeout);
-      server.close();
-      // The server holds the process open only while the flow is live; a
-      // browser tab left forever must not be what keeps Luke running.
-      server.unref();
-    }
+    if (!response.ok) return { reason: "Google refused the sign-in exchange." };
+    const tokens = tokensFrom(await response.json());
+    if (!tokens) return { reason: "Google answered the sign-in without a token." };
+    return tokens;
+  } catch {
+    return { reason: "The sign-in exchange with Google did not complete." };
   }
+}
 
-  async #exchange(
-    config: GoogleCalendarSignInConfig,
-    code: string,
-    verifier: string,
-    redirectUri: string,
-  ): Promise<GoogleCalendarSignInOutcome> {
-    const body = new URLSearchParams({
-      code,
-      client_id: config.clientId,
-      client_secret: config.clientSecret,
-      redirect_uri: redirectUri,
-      grant_type: "authorization_code",
-      code_verifier: verifier,
-    });
-    try {
-      const fetchImplementation = this.#options.fetchImplementation ?? fetch;
-      const response = await fetchImplementation(GOOGLE_TOKEN_URL, {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: body.toString(),
-        signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
-      });
-      if (!response.ok) return { reason: "Google refused the sign-in exchange." };
-      const tokens = tokensFrom(await response.json());
-      if (!tokens) return { reason: "Google answered the sign-in without a token." };
-      return tokens;
-    } catch {
-      return { reason: "The sign-in exchange with Google did not complete." };
-    }
-  }
+/**
+ * Runs one sign-in from button press to refresh token. A run that does not
+ * hold the whole registration offers a flow that says so rather than one whose
+ * exchange would fail after the user had already consented.
+ */
+export function googleCalendarSignIn(
+  options: GoogleCalendarSignInOptions,
+): LoopbackConsent<GoogleCalendarGrant> {
+  const config = googleCalendarSignInConfig(options.environment);
+  if (!config) return unofferedConsent();
+  return loopbackConsent<GoogleCalendarGrant>({
+    callbackPath: CALLBACK_PATH,
+    source: LOOPBACK_CONNECTION_SOURCE.GOOGLE_CALENDAR,
+    pages: {
+      granted: {
+        badge: "Connected",
+        title: "Connected to Google Calendar",
+        body: "You can close this tab and return to Luke.",
+      },
+      notGranted: {
+        badge: "Not connected",
+        title: "Sign-in didn’t complete",
+        body: "You can close this tab and try again from Luke.",
+      },
+    },
+    reasons: {
+      refused: "Google did not grant access.",
+      timedOut: "Sign-in timed out. Try again from the Google Calendar row.",
+    },
+    authorizationUrl: ({ state, redirectUri, codeChallenge }) => {
+      const authorization = new URL(GOOGLE_AUTHORIZATION_URL);
+      authorization.searchParams.set("client_id", config.clientId);
+      authorization.searchParams.set("redirect_uri", redirectUri);
+      authorization.searchParams.set("response_type", "code");
+      authorization.searchParams.set("scope", GOOGLE_CALENDAR_SCOPES);
+      authorization.searchParams.set("code_challenge", codeChallenge);
+      authorization.searchParams.set("code_challenge_method", "S256");
+      // Offline access is what a refresh token is, and the consent prompt is
+      // what guarantees Google issues one rather than assuming an earlier grant.
+      authorization.searchParams.set("access_type", "offline");
+      authorization.searchParams.set("prompt", "consent");
+      authorization.searchParams.set("state", state);
+      return authorization.toString();
+    },
+    exchange: (input) => exchangeGoogleCode(config, input, options.fetchImplementation ?? fetch),
+    openExternal: options.openExternal,
+    timeoutMs: options.timeoutMs,
+  });
 }

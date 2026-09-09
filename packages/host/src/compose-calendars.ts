@@ -2,7 +2,7 @@ import { PRODUCT_CALENDAR_SOURCE, PRODUCT_EVENT, PRODUCT_SETTING_VALUE } from "@
 import {
   activeMeetingEnd,
   GoogleCalendarReader,
-  GoogleCalendarSignIn,
+  googleCalendarSignIn,
   type MeetingInterval,
   nextMeetingBoundary,
 } from "@sidecar/calendar";
@@ -102,7 +102,7 @@ export function composeCalendars(dependencies: CalendarsDependencies): Calendars
   const googleCalendar = new GoogleCalendarReader({
     readAccounts: () => settingsStore.readCalendarAccounts(),
   });
-  const googleCalendarSignIn = new GoogleCalendarSignIn({
+  const googleCalendarConsent = googleCalendarSignIn({
     openExternal: (url) => void kernel.openExternalThroughNode(url).catch(kernel.reportOpenFailure),
   });
   /**
@@ -311,7 +311,7 @@ export function composeCalendars(dependencies: CalendarsDependencies): Calendars
     [GATEWAY_METHOD.CALENDAR_CONNECT_GOOGLE]: async (params) => {
       const result = await settings.settingsWrite(
         async () => {
-          const outcome = await googleCalendarSignIn.signIn();
+          const outcome = await googleCalendarConsent.signIn();
           if ("reason" in outcome) return settings.refusedSettings(outcome.reason);
           let primaryId: string | undefined;
           try {
@@ -338,11 +338,11 @@ export function composeCalendars(dependencies: CalendarsDependencies): Calendars
       return gatewayOk(carried(result));
     },
     [GATEWAY_METHOD.CALENDAR_CANCEL_GOOGLE_SIGN_IN]: () => {
-      googleCalendarSignIn.cancel();
+      googleCalendarConsent.cancel();
       return gatewayOk({});
     },
     [GATEWAY_METHOD.CALENDAR_REOPEN_GOOGLE_SIGN_IN]: () => {
-      googleCalendarSignIn.reopen();
+      googleCalendarConsent.reopen();
       return gatewayOk({});
     },
     [GATEWAY_METHOD.CALENDAR_REMOVE_ACCOUNT]: async (params) => {

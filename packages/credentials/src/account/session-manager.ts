@@ -1,3 +1,11 @@
+import {
+  LOOPBACK_CONSENT_CANCELLED,
+  type LoopbackConsent,
+  type LoopbackConsentOutcome,
+  type LoopbackExchange,
+  loopbackConsent,
+} from "../loopback-consent.js";
+import { LOOPBACK_CONNECTION_SOURCE, type LoopbackConnectionSource } from "../loopback-page.js";
 import { singleFlight } from "../single-flight.js";
 import {
   ACCOUNT_FAILURE_ACTION,
@@ -10,12 +18,37 @@ import {
   type StoredAccount,
   withIssuedAccountTokens,
 } from "./client.js";
-import {
-  isSignInCancellation,
-  SIGN_IN_CANCELLED_MESSAGE,
-  startAccountLoopback,
-} from "./loopback.js";
 import { ACCOUNT_STATUS, type AccountProvider, type AccountSnapshot } from "./snapshot.js";
+
+/** The path the hosted authorize route sends the code back to. */
+const CALLBACK_PATH = "/callback";
+
+/**
+ * The landing cards this sign-in leaves the browser on. Every string is fixed
+ * by the build; nothing the redirect carried is ever interpolated.
+ */
+const SIGN_IN_PAGES = {
+  granted: {
+    badge: "Signed in",
+    title: "Signed in to Luke",
+    body: "You can close this tab and return to Luke.",
+  },
+  notGranted: {
+    badge: "Not completed",
+    title: "Sign-in was not completed",
+    body: "Return to Luke and try again.",
+  },
+} as const;
+
+/**
+ * Whose mark the landing card carries. Only the two identity providers have
+ * one; anything else draws Luke's own mark alone rather than a wrong badge.
+ */
+function connectionSource(provider: AccountProvider): LoopbackConnectionSource | undefined {
+  if (provider === LOOPBACK_CONNECTION_SOURCE.GOOGLE) return LOOPBACK_CONNECTION_SOURCE.GOOGLE;
+  if (provider === LOOPBACK_CONNECTION_SOURCE.GITHUB) return LOOPBACK_CONNECTION_SOURCE.GITHUB;
+  return undefined;
+}
 
 export interface AccountSessionStore {
   readAccount(): Promise<StoredAccount | undefined>;
@@ -137,59 +170,85 @@ export class AccountSessionManager {
     this.#account = { status: ACCOUNT_STATUS.SIGNING_IN };
     const generation = ++this.#generation;
     this.#options.onChange(this.#account);
-    let cancelled = false;
-    this.#cancelSignIn = () => {
-      cancelled = true;
-    };
+    const consent = this.#consent(provider, generation);
+    this.#cancelSignIn = () => consent.cancel();
     this.#signInRunning = (async () => {
-      let loopback: Awaited<ReturnType<typeof startAccountLoopback>> | undefined;
       try {
-        const activeLoopback = await startAccountLoopback({ providerHint: provider });
-        loopback = activeLoopback;
-        this.#cancelSignIn = () => activeLoopback.cancel();
-        if (cancelled) activeLoopback.cancel();
-        await this.#options.openExternal(
-          this.#options.client.authorizeUrl({
-            redirectUri: activeLoopback.redirectUri,
-            state: activeLoopback.state,
-            codeChallenge: activeLoopback.codeChallenge,
-          }),
-        );
-        const code = await activeLoopback.waitForCode;
-        await withIssuedAccountTokens({
-          issue: () =>
-            this.#options.client.exchangeCode({
-              code,
-              codeVerifier: activeLoopback.codeVerifier,
-              redirectUri: activeLoopback.redirectUri,
-            }),
-          use: async (tokens) => {
-            const identity = await this.#options.client.userInfo(tokens.accessToken, provider);
-            if (!(await this.#storeCurrent(generation, { ...tokens, ...identity }))) {
-              throw new Error(SIGN_IN_CANCELLED_MESSAGE);
-            }
-            await this.#options.startCapabilities();
-            if (!this.#isCurrent(generation)) throw new Error(SIGN_IN_CANCELLED_MESSAGE);
-          },
-          revoke: (refreshToken) => this.#options.client.revoke(refreshToken),
-          onRevokeFailure: (error) => {
-            const message = error instanceof Error ? error.message : String(error);
-            process.stderr.write(`Rejected account token revocation failed: ${message}\n`);
-          },
-        });
-        this.#options.onChange(this.#account);
-        return this.#account;
-      } catch (error) {
+        const outcome = await consent.signIn();
+        if (!("reason" in outcome)) {
+          this.#options.onChange(this.#account);
+          return this.#account;
+        }
         if (this.#isCurrent(generation)) await this.signOut();
-        if (error instanceof Error && isSignInCancellation(error)) return this.#account;
-        throw error;
+        // A withdrawn sign-in — the developer's own press, or a later attempt
+        // taking the generation out from under this one — is an ordinary end.
+        // Anything else is a failure the panel has to be able to report.
+        if (outcome.reason === LOOPBACK_CONSENT_CANCELLED) return this.#account;
+        throw new Error(outcome.reason);
       } finally {
         this.#cancelSignIn = undefined;
-        await loopback?.close();
         this.#signInRunning = undefined;
       }
     })();
     return this.#signInRunning;
+  }
+
+  #consent(provider: AccountProvider, generation: number): LoopbackConsent<AccountSnapshot> {
+    return loopbackConsent<AccountSnapshot>({
+      callbackPath: CALLBACK_PATH,
+      // The hosted authorize route reads which provider was chosen back off
+      // the state it issued, so the choice rides in front of the entropy.
+      statePrefix: provider,
+      source: connectionSource(provider),
+      pages: SIGN_IN_PAGES,
+      reasons: {
+        refused: "Sign-in was not completed.",
+        timedOut: "Sign-in timed out.",
+      },
+      authorizationUrl: ({ state, redirectUri, codeChallenge }) =>
+        this.#options.client.authorizeUrl({ redirectUri, state, codeChallenge }),
+      exchange: (input) => this.#exchange(provider, generation, input),
+      openExternal: (url) => this.#options.openExternal(url),
+    });
+  }
+
+  /**
+   * Trades the code for tokens and stands the session up on them. Everything
+   * the tokens are for happens inside the issue-and-use guard, so a sign-in
+   * that cannot be completed revokes what it was just issued rather than
+   * leaving a live refresh token nobody holds.
+   */
+  async #exchange(
+    provider: AccountProvider,
+    generation: number,
+    input: LoopbackExchange,
+  ): Promise<LoopbackConsentOutcome<AccountSnapshot>> {
+    try {
+      return await withIssuedAccountTokens({
+        issue: () =>
+          this.#options.client.exchangeCode({
+            code: input.code,
+            codeVerifier: input.codeVerifier,
+            redirectUri: input.redirectUri,
+          }),
+        use: async (tokens) => {
+          const identity = await this.#options.client.userInfo(tokens.accessToken, provider);
+          if (!(await this.#storeCurrent(generation, { ...tokens, ...identity }))) {
+            throw new Error(LOOPBACK_CONSENT_CANCELLED);
+          }
+          await this.#options.startCapabilities();
+          if (!this.#isCurrent(generation)) throw new Error(LOOPBACK_CONSENT_CANCELLED);
+          return this.#account;
+        },
+        revoke: (refreshToken) => this.#options.client.revoke(refreshToken),
+        onRevokeFailure: (error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          process.stderr.write(`Rejected account token revocation failed: ${message}\n`);
+        },
+      });
+    } catch (error) {
+      return { reason: error instanceof Error ? error.message : String(error) };
+    }
   }
 
   async #storeCurrent(generation: number, stored: StoredAccount): Promise<boolean> {

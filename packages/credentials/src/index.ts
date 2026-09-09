@@ -29,10 +29,16 @@ export { ACCESS_TOKEN_EXPIRY_SLACK_MS } from "./expiry.js";
 export { LinearCredentials } from "./linear/credentials.js";
 export {
   type LinearGrant,
-  LinearSignIn,
+  linearSignIn,
   linearSignInConfig,
 } from "./linear/oauth.js";
 export { LinearIssueTracker } from "./linear/tracker.js";
+export {
+  type LoopbackConsent,
+  type LoopbackConsentOutcome,
+  loopbackConsent,
+  unofferedConsent,
+} from "./loopback-consent.js";
 export {
   accountLoopbackPage,
   LOOPBACK_CONNECTION_SOURCE,
