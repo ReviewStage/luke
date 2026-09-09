@@ -8,6 +8,7 @@ import type {
   CONVERSATION_ENTRY_KIND,
   ConversationEntry,
   ConversationEntryAction,
+  ObservedWorkspaceProject,
   Session,
   SessionApplicationId,
   SessionIdentity,
@@ -18,6 +19,23 @@ import {
   type CarriedAction,
   type CarriedSessionAction,
 } from "./action-kinds.js";
+
+/**
+ * What the narration names things by: the roster the action was admitted
+ * against, and the projects a provider listed on the same pass, which is
+ * where a creation's provider has a display name at all.
+ */
+export interface ActionNarrationContext {
+  sessions: readonly Session[];
+  projects: readonly ObservedWorkspaceProject[];
+}
+
+function observedProviderName(
+  providerId: string,
+  projects: readonly ObservedWorkspaceProject[],
+): string {
+  return projects.find((project) => project.providerId === providerId)?.providerName ?? providerId;
+}
 
 function observedSessionName(identity: SessionIdentity, sessions: readonly Session[]): string {
   const session = sessions.find(
@@ -45,23 +63,25 @@ function observedApplicationName(
 }
 
 const ACTION_NARRATION = {
-  [ACTION_KIND.MESSAGE]: (action, sessions) =>
+  [ACTION_KIND.MESSAGE]: (action, { sessions }) =>
     `sent a message to ${observedSessionName(action.identity, sessions)}: "${action.text}"`,
-  [ACTION_KIND.CONTROL]: (action, sessions) =>
+  [ACTION_KIND.CONTROL]: (action, { sessions }) =>
     `ran "${action.control.label}" on ${observedSessionName(action.identity, sessions)}`,
-  [ACTION_KIND.OPEN]: (action, sessions) => {
+  [ACTION_KIND.OPEN]: (action, { sessions }) => {
     const name = observedSessionName(action.identity, sessions);
     return action.applicationId
       ? `opened ${name} in ${observedApplicationName(action.identity, action.applicationId, sessions)}`
       : `opened ${name}`;
   },
-  [ACTION_KIND.CREATE_WORKSPACE]: (action) =>
-    `asked ${action.providerId} to create a workspace${action.name ? ` named "${action.name}"` : ""}`,
-  [ACTION_KIND.ADD_AGENT]: (action, sessions) =>
+  // The past tense every other kind uses: the line records the act, and the
+  // reply voicing the outcome is its own line.
+  [ACTION_KIND.CREATE_WORKSPACE]: (action, { projects }) =>
+    `created a new workspace${action.name ? ` "${action.name}"` : ""} in ${observedProviderName(action.providerId, projects)}`,
+  [ACTION_KIND.ADD_AGENT]: (action, { sessions }) =>
     `added a ${action.agent} agent to ${observedSessionName(action.identity, sessions)}`,
-  [ACTION_KIND.RENAME_WORKSPACE]: (action, sessions) =>
+  [ACTION_KIND.RENAME_WORKSPACE]: (action, { sessions }) =>
     `renamed the workspace of ${observedSessionName(action.identity, sessions)} to "${action.name}"`,
-  [ACTION_KIND.RENAME_SESSION]: (action, sessions) =>
+  [ACTION_KIND.RENAME_SESSION]: (action, { sessions }) =>
     `renamed ${observedSessionName(action.identity, sessions)} to "${action.name}"`,
   [ACTION_KIND.ISSUE_STATE]: (action) =>
     `moved issue ${action.identity.identifier} to "${action.transition.name}"`,
@@ -76,17 +96,17 @@ const ACTION_NARRATION = {
       : `remembered "${action.words}"`,
   [ACTION_KIND.FORGET]: () => "forgot something remembered before",
 } as const satisfies {
-  [K in ActionKind]: (action: CarriedAction<K>, sessions: readonly Session[]) => string;
+  [K in ActionKind]: (action: CarriedAction<K>, context: ActionNarrationContext) => string;
 };
 
 /** The Conversation sentence declared by the same vocabulary that declared the action. */
-export function actionNarration(action: CarriedAction, sessions: readonly Session[]): string {
+export function actionNarration(action: CarriedAction, context: ActionNarrationContext): string {
   const narrate = ACTION_NARRATION[action.kind];
   // SAFETY: the record is keyed by the same union `action.kind` ranges over, so the
   // entry selected is the one written for this action's own shape.
-  return (narrate as (action: CarriedAction, sessions: readonly Session[]) => string)(
+  return (narrate as (action: CarriedAction, context: ActionNarrationContext) => string)(
     action,
-    sessions,
+    context,
   );
 }
 
@@ -105,11 +125,11 @@ export function actionNarration(action: CarriedAction, sessions: readonly Sessio
  */
 export function sessionActionConversationEntry(
   action: CarriedSessionAction,
-  sessions: readonly Session[],
+  context: ActionNarrationContext,
   kind: typeof CONVERSATION_ENTRY_KIND.ACTION | typeof CONVERSATION_ENTRY_KIND.OWN_ACTION,
   runId: string,
 ): ConversationEntry {
-  const words = actionNarration(action, sessions);
+  const words = actionNarration(action, context);
   const carried: ConversationEntryAction = { kind: action.kind, runId };
   if (action.kind === ACTION_KIND.CREATE_WORKSPACE) carried.providerId = action.providerId;
   const entry: ConversationEntry = { kind, words, action: carried };

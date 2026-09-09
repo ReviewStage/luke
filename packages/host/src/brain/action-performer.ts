@@ -148,7 +148,7 @@ export function createBrainActionPerformer(
     dependencies.recordConversationEntry(
       sessionActionConversationEntry(
         action,
-        dependencies.sessions(),
+        { sessions: dependencies.sessions(), projects: dependencies.workspaceProjects() },
         execution.origin === RUN_ORIGIN.USER
           ? CONVERSATION_ENTRY_KIND.ACTION
           : CONVERSATION_ENTRY_KIND.OWN_ACTION,

@@ -9,6 +9,7 @@ import {
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
   SESSION_STATUS,
+  WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { ACTION_KIND } from "./action-kinds.js";
@@ -54,7 +55,7 @@ test("a setting action narrates the setting label and accepted value", async () 
         },
         value: "on",
       },
-      [],
+      { sessions: [], projects: [] },
     ),
     "changed Captions to on",
   );
@@ -220,11 +221,20 @@ function rosterSession(providerSessionId: string, title: string) {
 
 test("an action's line records the ask in words, with the identity it named", () => {
   const sessions = [rosterSession("session-a", "checkout-service")];
+  const projects = [
+    {
+      providerId: "conductor",
+      providerName: "Conductor",
+      providerProjectId: "p1",
+      repository: "luke",
+      taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+    },
+  ];
   const identity = { providerId: "claude-code", providerSessionId: "session-a" };
 
   const message = sessionActionConversationEntry(
     { kind: ACTION_KIND.MESSAGE, identity, text: "please add tests" },
-    sessions,
+    { sessions, projects },
     CONVERSATION_ENTRY_KIND.ACTION,
     "run-1",
   );
@@ -238,7 +248,7 @@ test("an action's line records the ask in words, with the identity it named", ()
   assert.equal(
     sessionActionConversationEntry(
       { kind: ACTION_KIND.CONTROL, identity, control },
-      sessions,
+      { sessions, projects },
       CONVERSATION_ENTRY_KIND.ACTION,
       "run-1",
     ).words,
@@ -249,7 +259,7 @@ test("an action's line records the ask in words, with the identity it named", ()
   assert.equal(
     sessionActionConversationEntry(
       { kind: ACTION_KIND.OPEN, identity },
-      [],
+      { sessions: [], projects },
       CONVERSATION_ENTRY_KIND.ACTION,
       "run-1",
     ).words,
@@ -283,25 +293,30 @@ test("an action's line records the ask in words, with the identity it named", ()
   assert.equal(
     sessionActionConversationEntry(
       openedInApp,
-      [heldByApp],
+      { sessions: [heldByApp], projects },
       CONVERSATION_ENTRY_KIND.ACTION,
       "run-1",
     ).words,
     'opened "checkout-service" in Superset',
   );
   assert.equal(
-    sessionActionConversationEntry(openedInApp, [], CONVERSATION_ENTRY_KIND.ACTION, "run-1").words,
+    sessionActionConversationEntry(
+      openedInApp,
+      { sessions: [], projects },
+      CONVERSATION_ENTRY_KIND.ACTION,
+      "run-1",
+    ).words,
     "opened a session in superset",
   );
 
   // A workspace creation aims at no session, so its line carries no identity.
   const created = sessionActionConversationEntry(
     { kind: ACTION_KIND.CREATE_WORKSPACE, providerId: "conductor", providerProjectId: "p1" },
-    sessions,
+    { sessions, projects },
     CONVERSATION_ENTRY_KIND.ACTION,
     "run-1",
   );
-  assert.equal(created.words, "asked conductor to create a workspace");
+  assert.equal(created.words, "created a new workspace in Conductor");
   assert.equal(created.identity, undefined);
   // With no identity to name it, the creation's line names the provider it asked.
   assert.deepEqual(created.action, {
@@ -316,12 +331,9 @@ test("an action's line records the ask in words, with the identity it named", ()
       providerProjectId: "p1",
       name: "Notch panel clipping",
     },
-    sessions,
+    { sessions, projects },
     CONVERSATION_ENTRY_KIND.ACTION,
     "run-1",
   );
-  assert.equal(
-    createdNamed.words,
-    'asked conductor to create a workspace named "Notch panel clipping"',
-  );
+  assert.equal(createdNamed.words, 'created a new workspace "Notch panel clipping" in Conductor');
 });
