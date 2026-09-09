@@ -285,12 +285,31 @@ final class DeviceRegistrarTests: XCTestCase {
 
         let registering = subject.register()
         while http.waiting == 0 { await Task.yield() }
-        await subject.forget(accessToken: "departing")
+        let forgetting = subject.forget(accessToken: "departing")
         http.open()
         await registering.value
+        await forgetting.value
 
         XCTAssertNil(subject.deviceId, "the row the late answer names was let go of at sign-out")
         XCTAssertEqual(http.sent.map(\.method), ["POST"], "nothing was registered, so nothing was forgotten")
+    }
+
+    func testARegisterAskedRightAfterAForgetRunsBehindIt() async {
+        let store = makeStore()
+        let http = RecordingHTTP(answers: [
+            (200, ["deviceId": deviceId]),
+            (200, ["deleted": true]),
+            (200, ["deviceId": otherDeviceId]),
+        ])
+        let subject = registrar(store: store, http: http)
+        await subject.register().value
+
+        subject.forget(accessToken: "departing")
+        await subject.register().value
+
+        XCTAssertEqual(http.sent.map(\.method), ["POST", "DELETE", "POST"])
+        XCTAssertEqual(http.sent[1].token, "Bearer departing")
+        XCTAssertEqual(subject.deviceId, otherDeviceId, "the row the new sign-in registered stands")
     }
 
     func testForgetUsesTheDepartingTokenAndDropsTheRowIdFirst() async {
@@ -302,7 +321,7 @@ final class DeviceRegistrarTests: XCTestCase {
         let subject = registrar(store: store, http: http)
         await subject.register().value
 
-        await subject.forget(accessToken: "departing")
+        await subject.forget(accessToken: "departing").value
 
         XCTAssertEqual(http.sent[1].method, "DELETE")
         XCTAssertEqual(http.sent[1].token, "Bearer departing")
@@ -310,7 +329,7 @@ final class DeviceRegistrarTests: XCTestCase {
         XCTAssertNil(subject.deviceId)
         XCTAssertTrue(DeviceClient.isWireId(subject.installationId))
 
-        await subject.forget(accessToken: "departing")
+        await subject.forget(accessToken: "departing").value
         XCTAssertEqual(http.sent.count, 2, "nothing to forget sends nothing")
     }
 }

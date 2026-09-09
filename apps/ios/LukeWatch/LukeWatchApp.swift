@@ -36,7 +36,7 @@ struct LukeWatchApp: App {
         )
         self.devices = devices
         watchSession.onSignedIn = { devices.register() }
-        watchSession.onSignOut = { token in await devices.forget(accessToken: token) }
+        watchSession.onSignOut = { token in devices.forget(accessToken: token) }
         if case .signedIn = watchSession.state { devices.register() }
         // Account edges are not counted here: a sign-in on the watch is the
         // phone's relay, and the phone already counted it.

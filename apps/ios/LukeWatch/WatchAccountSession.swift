@@ -28,8 +28,10 @@ final class WatchAccountSession {
     @ObservationIgnored var onCredentialsNeeded: (() -> Void)?
     /// Tokens landed from the phone: the moment this watch registers its device row.
     @ObservationIgnored var onSignedIn: (@MainActor () -> Void)?
-    /// The phone signed out: the row is forgotten on the token the watch still held.
-    @ObservationIgnored var onSignOut: ((String) async -> Void)?
+    /// The phone signed out: the row is forgotten on the token the watch still
+    /// held. Called in place, before this method returns, so what the next
+    /// payload asks for is queued behind the forget rather than beside it.
+    @ObservationIgnored var onSignOut: (@MainActor (String) -> Void)?
 
     private var accessToken: String?
     private var tokenExpiry: Date?
@@ -44,9 +46,7 @@ final class WatchAccountSession {
         if payload["event"] as? String == "signedOut" {
             let departing = accessToken
             signOut()
-            if let departing, let onSignOut {
-                Task { await onSignOut(departing) }
-            }
+            if let departing { onSignOut?(departing) }
             return
         }
         guard

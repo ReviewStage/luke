@@ -90,17 +90,21 @@ public final class DeviceRegistrar {
     }
 
     /// Forgets the row on the departing account's own token, handed in because
-    /// the session has already let go of it. The stored row id goes first: the
-    /// account is leaving whether or not the service heard, and a row it still
-    /// holds is re-keyed by the next sign-in's registration.
-    public func forget(accessToken: String) async {
+    /// the session has already let go of it. The generation moves at once, so
+    /// a register or heartbeat already past its guard installs nothing, and
+    /// the delete itself takes its turn in the queue, so a registration the
+    /// next sign-in asks for runs after it rather than racing it. The stored
+    /// row id goes first: the account is leaving whether or not the service
+    /// heard, and a row it still holds is re-keyed by the next registration.
+    @discardableResult
+    public func forget(accessToken: String) -> Task<Void, Never> {
         generation += 1
-        task?.cancel()
-        task = nil
         pushAcknowledged = false
-        guard let deviceId else { return }
-        store.removeObject(forKey: Key.deviceId)
-        _ = try? await client.forget(deviceId: deviceId, accessToken: accessToken)
+        return enqueue {
+            guard let deviceId = self.deviceId else { return }
+            self.store.removeObject(forKey: Key.deviceId)
+            _ = try? await self.client.forget(deviceId: deviceId, accessToken: accessToken)
+        }
     }
 
     private func registerNow() async {
@@ -145,12 +149,13 @@ public final class DeviceRegistrar {
     }
 
     /// One call at a time, in order, so a heartbeat cannot overtake the
-    /// registration whose row id it needs.
+    /// registration whose row id it needs and a registration cannot overtake
+    /// the forget before it. Work queued under an account that has since
+    /// signed out finds no token and does nothing.
     private func enqueue(_ work: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
         let previous = task
         let next = Task { @MainActor in
             await previous?.value
-            guard !Task.isCancelled else { return }
             await work()
         }
         task = next

@@ -39,7 +39,7 @@ struct LukeApp: App {
         self.devices = devices
         // The row is forgotten on the account's own way out, while its token
         // still stands: the state change below arrives after the token is gone.
-        session.onSignOut = { token in await devices.forget(accessToken: token) }
+        session.onSignOut = { token in await devices.forget(accessToken: token).value }
         // XCTest launches this app as its suites' host, and a test run's
         // counts and recording would be a test's, not a developer's — the
         // desktop's fixture and evidence gate, at this app's one seam.
