@@ -16,7 +16,7 @@ import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
 import { GatewayClient } from "./client.js";
 import { NodeRegistry } from "./nodes.js";
 import { GatewayServer, gatewayError, gatewayOk } from "./server.js";
-import { type GatewayTransport, InProcessTransport, LoopbackTransport } from "./transport.js";
+import { type GatewayTransport, InProcessTransport, TextLoopbackTransport } from "./transport.js";
 
 const OPERATOR: GatewayClientIdentity = {
   clientId: "operator",
@@ -98,7 +98,7 @@ type TransportKind = "in-process" | "loopback";
 function transportFor(kind: TransportKind, server: GatewayServer, identity = OPERATOR) {
   return kind === "in-process"
     ? new InProcessTransport(server, identity)
-    : new LoopbackTransport(server, identity);
+    : new TextLoopbackTransport(server, identity);
 }
 
 /** Holds every answer of the transport until the scheduled work is fired, so an event can land mid-request. */
@@ -249,11 +249,11 @@ for (const kind of ["in-process", "loopback"] as const) {
     h.server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
     assert.deepEqual(seen, [1, 2]);
     // The wire loses two events; the third to arrive shows the gap.
-    if (transport instanceof LoopbackTransport) transport.dropNextEvents(2);
+    if (transport instanceof TextLoopbackTransport) transport.dropNextEvents(2);
     else transport.setConnected(false);
     h.server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
     h.server.emit(GATEWAY_EVENT.DIRECTORY_CHANGED, { entries: [] });
-    if (!(transport instanceof LoopbackTransport)) transport.setConnected(true);
+    if (!(transport instanceof TextLoopbackTransport)) transport.setConnected(true);
     h.server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
     await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setImmediate(resolve));
@@ -269,15 +269,15 @@ for (const kind of ["in-process", "loopback"] as const) {
     };
     const inner = transportFor(kind, h.server);
     const transport =
-      inner instanceof LoopbackTransport
-        ? new LoopbackTransport(h.server, OPERATOR, { responseDelayMs: 50, schedule })
+      inner instanceof TextLoopbackTransport
+        ? new TextLoopbackTransport(h.server, OPERATOR, { responseDelayMs: 50, schedule })
         : answeringLate(inner, schedule);
     const c = client(transport);
     const seen: number[] = [];
     c.onEvery((event) => seen.push(event.sequence));
     h.server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
     // The wire loses event 2; event 3 shows the gap and opens the reconnection.
-    if (transport instanceof LoopbackTransport) transport.dropNextEvents(1);
+    if (transport instanceof TextLoopbackTransport) transport.dropNextEvents(1);
     else inner.setConnected(false);
     h.server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
     inner.setConnected(true);
@@ -369,7 +369,7 @@ for (const kind of ["in-process", "loopback"] as const) {
 
 test("the loopback transport refuses a request or answer that does not survive the wire", async () => {
   const h = harness();
-  const transport = new LoopbackTransport(h.server, OPERATOR);
+  const transport = new TextLoopbackTransport(h.server, OPERATOR);
   // SAFETY: a method name outside the vocabulary, as a foreign client might send; the transport must refuse it.
   const foreign = await transport.request({
     protocolVersion: GATEWAY_PROTOCOL_VERSION,
@@ -384,7 +384,7 @@ test("the loopback transport refuses a request or answer that does not survive t
 test("a delayed answer still lands, and a late acknowledgement after it changes nothing more", async () => {
   const h = harness();
   const timers: Array<() => void> = [];
-  const transport = new LoopbackTransport(h.server, OPERATOR, {
+  const transport = new TextLoopbackTransport(h.server, OPERATOR, {
     responseDelayMs: 50,
     schedule: (work) => {
       timers.push(work);

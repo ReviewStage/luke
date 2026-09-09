@@ -5,21 +5,23 @@ import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/reque
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
 import {
   type ChildRunService,
-  createGatewayToken,
   DeliveryLedger,
   GATEWAY_SHUTDOWN_DEFAULTS,
   GatewayClient,
-  GATEWAY_LOOPBACK_HOST as HOST,
   type ResolvedConfiguration,
   shutdownGateway,
 } from "@sidecar/runtime";
-import { connectLocalGateway, LocalGatewayHost } from "@sidecar/runtime/local-gateway";
+import {
+  bearerAuthentication,
+  connectWebSocketGateway,
+  WEB_SOCKET_GATEWAY_DEFAULTS,
+  WebSocketTransport,
+} from "@sidecar/runtime/local-gateway";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_ERROR,
+  GATEWAY_HANDSHAKE_HEADER,
   GATEWAY_METHOD,
-  GATEWAY_PROTOCOL_VERSION,
-  type GatewayBuildIdentity,
   MAIN_SESSION_KEY,
   NODE_CAPABILITY_STATUS,
 } from "@sidecar/runtime-contracts";
@@ -31,17 +33,14 @@ import { DESKTOP_NATIVE_NODE_ID, NODE_CAPABILITY } from "./desktop-node";
 import { createGatewayService, type GrantedWords } from "./service";
 
 /**
- * The ownership the process split claims, exercised over a real loopback
+ * The ownership the client and host boundary claims, exercised over a real
  * socket: the host holds the asks, the History, and the receiver; a client
  * that dies takes none of it with it; the next client finds it all; the
  * host's native asks answer typed unavailable while no client stands; and
  * the explicit shutdown counts what the durable records still hold.
  */
 const NOW = 1_800_000_000_000;
-const BUILD: GatewayBuildIdentity = {
-  protocolVersion: GATEWAY_PROTOCOL_VERSION,
-  buildVersion: "test@1.0.0",
-};
+const TOKEN = "a-shared-secret";
 
 function record(overrides: Partial<BrainRequestRecord> = {}): BrainRequestRecord {
   return {
@@ -137,17 +136,19 @@ function fakeHost(options: { persistCancellations?: boolean } = {}) {
 }
 
 async function listen(service: ReturnType<typeof fakeHost>["service"]) {
-  const token = createGatewayToken();
-  const host = new LocalGatewayHost({ server: service.server, token, build: BUILD });
-  const port = await host.listen();
-  return { host, token, port };
+  const host = new WebSocketTransport({
+    server: service.server,
+    authenticate: bearerAuthentication(TOKEN),
+  });
+  const port = await host.bind();
+  return { host, port };
 }
 
-async function client(port: number, token: string, clientId: string) {
-  const connected = await connectLocalGateway({
-    record: { host: HOST, port, token },
+async function client(port: number, clientId: string) {
+  const connected = await connectWebSocketGateway({
+    url: `ws://${WEB_SOCKET_GATEWAY_DEFAULTS.HOST}:${port}/`,
+    headers: { [GATEWAY_HANDSHAKE_HEADER.AUTHORIZATION]: `Bearer ${TOKEN}` },
     client: { clientId, role: GATEWAY_CLIENT_ROLE.OPERATOR },
-    build: BUILD,
   });
   assert.ok(connected.ok);
   let ids = 0;
@@ -165,9 +166,9 @@ function recordOf(value: WireValue | undefined) {
 
 test("an ask and its History line survive the client that submitted them dying, and the next client reads them from the host", async () => {
   const f = fakeHost();
-  const { host, token, port } = await listen(f.service);
+  const { host, port } = await listen(f.service);
   try {
-    const first = await client(port, token, "desktop-1");
+    const first = await client(port, "desktop-1");
     const submitted = await first.gateway.call(
       GATEWAY_METHOD.RUN_SUBMIT,
       { submissionId: "sub-1", question: "what needs me?", origin: BRAIN_REQUEST_ORIGIN.TYPED },
@@ -182,7 +183,7 @@ test("an ask and its History line survive the client that submitted them dying, 
     assert.equal(f.history.length, 1);
     assert.equal(f.history[0]?.kind, CONVERSATION_ENTRY_KIND.TYPED_ASK);
     // The next client's hello snapshot and reads find the run and the line.
-    const second = await client(port, token, "desktop-2");
+    const second = await client(port, "desktop-2");
     const hello = await second.gateway.call(GATEWAY_METHOD.HELLO);
     assert.ok(hello.ok);
     const snapshot = recordOf(recordOf(hello.result).snapshot);
@@ -199,9 +200,9 @@ test("an ask and its History line survive the client that submitted them dying, 
 
 test("while no client stands, a native capability the host needs answers unavailable and the receiver epoch has ended", async () => {
   const f = fakeHost();
-  const { host, token, port } = await listen(f.service);
+  const { host, port } = await listen(f.service);
   try {
-    const desktop = await client(port, token, "desktop");
+    const desktop = await client(port, "desktop");
     desktop.connection.serveInvocations?.(async () => ({
       status: NODE_CAPABILITY_STATUS.OK,
       value: undefined,
@@ -236,9 +237,9 @@ test("while no client stands, a native capability the host needs answers unavail
 test("the explicit shutdown closes admissions, cancels what runs, and counts unresolved from the persisted records, so a cancellation that never landed stays recoverable", async () => {
   for (const persistCancellations of [true, false]) {
     const f = fakeHost({ persistCancellations });
-    const { host, token, port } = await listen(f.service);
+    const { host, port } = await listen(f.service);
     try {
-      const desktop = await client(port, token, "desktop");
+      const desktop = await client(port, "desktop");
       const submitted = await desktop.gateway.call(
         GATEWAY_METHOD.RUN_SUBMIT,
         { submissionId: "sub-q", question: "long", origin: BRAIN_REQUEST_ORIGIN.TYPED },

@@ -21,10 +21,10 @@ import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import { BRIDGE } from "#shared/bridge";
 import type { BrainAskWait, BrainReplyClaimResult } from "#shared/messages/brain";
 import { drainMicrotasks } from "#testing/drain";
+import { operatorOverBrain } from "#testing/operator-over-brain";
 import type { ConversationOperations } from "../conversation-operations";
 import { createGatewayOperator } from "../gateway/operator";
 import { createGatewayService, type GrantedWords } from "../gateway/service";
-import { operatorOverBrain } from "../gateway/testing";
 import { VoiceReceiver } from "../voice-receiver";
 import { followBrainRequests, publishRuns, registerBrainIpc } from "./ipc";
 

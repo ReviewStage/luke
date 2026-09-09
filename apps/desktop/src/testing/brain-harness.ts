@@ -24,13 +24,13 @@ import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { BrainHost } from "#main/brain/host";
 import { followBrainRequests } from "#main/brain/ipc";
 import { deliverable, type GrantedWords, ledgerContext } from "#main/gateway/service";
-import { operatorOverBrain } from "#main/gateway/testing";
 import { VoiceReceiver } from "#main/voice-receiver";
 import type {
   BrainReplyClaimResult,
   BrainReplyOffer,
   BrainRequestSnapshot,
 } from "#shared/messages/brain";
+import { operatorOverBrain } from "#testing/operator-over-brain";
 import { drainMicrotasks } from "./drain";
 
 /** The instant every clock in a brain fixture reads. */

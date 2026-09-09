@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { Worker } from "node:worker_threads";
 import * as Sentry from "@sentry/electron/main";
 import {
   PRODUCT_CREDENTIAL_SOURCE,
@@ -14,7 +15,7 @@ import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidec
 import { fixtureSnapshot } from "@sidecar/fixtures";
 import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { peekLocalSessions } from "@sidecar/providers";
-import { type GatewayTransport, InProcessTransport } from "@sidecar/runtime";
+import { InProcessTransport, shutdownGateway } from "@sidecar/runtime";
 import { GATEWAY_CLIENT_ROLE, MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
@@ -57,14 +58,10 @@ import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/messages/voice-view";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
 import { runAppleCalendarHelper } from "./apple-calendar";
 import { registerBrainIpc } from "./brain/ipc";
-import { followReattachments, retryAttachWhileFailed, waitForHost } from "./gateway/attachment";
 import { DESKTOP_OPERATOR_CLIENT_ID } from "./gateway/desktop-node";
-import { currentBuildIdentity } from "./gateway/gateway-process";
 import type { HostBootstrap, HostSessionReplay } from "./gateway/host-operator";
-import { createGatewayLauncher } from "./gateway/launcher";
-import { gatewayStateRootArgument, registersProviderHooks } from "./gateway/process-mode";
 import { wireGateway } from "./gateway/wiring";
-import { composeRuntimeHost, type RuntimeHost } from "./host/runtime-host";
+import { composeRuntimeHost } from "./host/runtime-host";
 import {
   INTRODUCTION_FADE_MS,
   INTRODUCTION_HANDOFF_READY_MS,
@@ -90,6 +87,7 @@ import {
 import { onboardingStateFile } from "./onboarding-state";
 import { type BridgeContext, registerBridge, registerBridgeEntry } from "./register-bridge";
 import { runModeFor, sentryReportingEnabled } from "./run-mode";
+import { runtimeStoreWorkerPath } from "./runtime-store-path";
 import { createSettingsHandler } from "./settings-handler";
 import { createElectronUpdaterEngine } from "./update-installer";
 import { UPDATE_ENDPOINT, type UpdaterEngine, UpdateService } from "./update-service";
@@ -106,10 +104,9 @@ import { VoiceWindow } from "./window/voice-window";
  * reaches everything else — the store, the brain, the credentials, the
  * observation, the accounts — through the Gateway protocol as one operator,
  * and offers this machine's native capabilities back to the host as one node.
- * A live run attaches to the Gateway process, or starts it; a fixture or
- * capture run composes the same host in this process, memory-only and
- * network-silent, over the in-process transport, so the client code path is
- * one either way.
+ * The host it operates is composed here, in this process, and reached over
+ * the in-process transport; a host on the other side of a socket is the same
+ * client over another transport, and nothing above the transport changes.
  */
 
 // Which Luke this process is decides where its state lives and which Keychain
@@ -120,12 +117,7 @@ const appName = resolveAppName({
   developerIdSigned: buildCarriesDeveloperIdSigning(),
 });
 app.setName(appName);
-// The state root is Luke's application data under that name, or the one an
-// explicit `--state-root=` names: the same argument the Gateway takes, so a
-// validation run can stand a whole desktop and Gateway pair on a temporary
-// root without touching the real one or repurposing the home directory.
-const stateRoot =
-  gatewayStateRootArgument(process.argv) ?? path.join(app.getPath("appData"), appName);
+const stateRoot = path.join(app.getPath("appData"), appName);
 app.setPath("userData", stateRoot);
 app.setPath("sessionData", stateRoot);
 
@@ -417,48 +409,42 @@ function performBrainAppAct(action: BrainAppActRequest["action"]): Promise<WireR
 }
 
 /**
- * The Gateway. A live run attaches to the Gateway process, which owns the
- * runtime, or starts it; a fixture or capture run composes the same host in
- * this process, memory-only and network-silent, and speaks to it in-process.
- * Either way this process is one operator over one transport, and one node.
+ * The host this client operates, composed here and reached in-process. A
+ * live run keeps its state on disk under Luke's own application data; a
+ * fixture or capture run keeps nothing and is network-silent, and its store
+ * worker is never asked for. Either way this process is one operator over
+ * one transport, and one node.
  */
-const gatewayLauncher = runMode.observesProviders
-  ? createGatewayLauncher({
-      stateRoot: app.getPath("userData"),
-      build: currentBuildIdentity(appName),
-      registerProviderHooks: registersProviderHooks(process.argv),
-      report,
-    })
-  : undefined;
-let localRuntime: RuntimeHost | undefined;
-const transport: GatewayTransport = gatewayLauncher
-  ? gatewayLauncher.transport
-  : (() => {
-      localRuntime = composeRuntimeHost({
-        stateRoot: app.getPath("userData"),
-        runMode,
-        appVersion: app.getVersion(),
-        packaged: app.isPackaged,
-        homeDirectory: app.getPath("home"),
-        environment: process.env,
-        cipher: {
-          isAvailable: () => safeStorage.isEncryptionAvailable(),
-          encrypt: (plainText) => safeStorage.encryptString(plainText),
-          decrypt: (cipherText) => safeStorage.decryptString(cipherText),
-        },
-        createWorker: () => {
-          throw new Error("a fixture run keeps nothing on disk and starts no store worker");
-        },
-        registerProviderHooks: false,
-        now: Date.now,
-        createId: () => randomUUID(),
-        report,
-      });
-      return new InProcessTransport(localRuntime.service.server, {
-        clientId: DESKTOP_OPERATOR_CLIENT_ID,
-        role: GATEWAY_CLIENT_ROLE.OPERATOR,
-      });
-    })();
+const runtimeHost = composeRuntimeHost({
+  stateRoot: app.getPath("userData"),
+  runMode,
+  appVersion: app.getVersion(),
+  packaged: app.isPackaged,
+  homeDirectory: app.getPath("home"),
+  environment: process.env,
+  cipher: {
+    isAvailable: () => safeStorage.isEncryptionAvailable(),
+    encrypt: (plainText) => safeStorage.encryptString(plainText),
+    decrypt: (cipherText) => safeStorage.decryptString(cipherText),
+  },
+  createWorker: () => {
+    if (!runMode.observesProviders) {
+      throw new Error("a fixture run keeps nothing on disk and starts no store worker");
+    }
+    return new Worker(runtimeStoreWorkerPath(__dirname), { name: "runtime-store" });
+  },
+  registerProviderHooks: runMode.observesProviders,
+  now: Date.now,
+  createId: () => randomUUID(),
+  report,
+  // The protocol's shutdown answers accepted at once; the quit that follows
+  // is the one drain, in `before-quit`.
+  onShutdownRequested: () => app.quit(),
+});
+const transport = new InProcessTransport(runtimeHost.service.server, {
+  clientId: DESKTOP_OPERATOR_CLIENT_ID,
+  role: GATEWAY_CLIENT_ROLE.OPERATOR,
+});
 const gateway = wireGateway({
   transport,
   createId: () => randomUUID(),
@@ -547,9 +533,10 @@ function adoptBootstrap(boot: HostBootstrap): void {
 /**
  * What every attachment owes the host: its stream adopted and this process's
  * node registered on the connection that now stands, the guide the panel last
- * reported, and a bootstrap read. A reattachment after the Gateway went away
- * also recycles the voice window, because the epoch its renderer holds was the
- * old host's, and tells every window what the host now holds.
+ * reported, and a bootstrap read. A host composed in this process is attached
+ * once and never goes away; over a transport that can drop, a later
+ * attachment also recycles the voice window, because the epoch its renderer
+ * holds was the old host's, and tells every window what the host now holds.
  */
 let attachments = 0;
 async function onAttached(): Promise<void> {
@@ -937,23 +924,99 @@ function handleDisplayChange(): void {
 }
 
 /**
- * The explicit quit's stop of the Gateway, made once whichever path asks for
- * it: Quit itself, or the updater's restart into a downloaded build. Squirrel
- * swaps the executable at quit, and a Gateway of the old build left standing
- * would otherwise have to be found and drained by the new build at its next
- * launch; asking it to leave first, and waiting, is the drain.
+ * Where the runtime's one drain stands. Nothing is owed before the host has
+ * started or after a drain has finished, so a quit in either state waits for
+ * nothing; between them a quit waits, whether the drain is owed or already
+ * under way behind an earlier ask.
  */
-let gatewayStopped = gatewayLauncher === undefined;
-function stopGatewayOnce(): Promise<void> {
-  if (gatewayStopped || !gatewayLauncher) return Promise.resolve();
-  gatewayStopped = true;
-  return gatewayLauncher.stop();
+const HOST_DRAIN = {
+  NOTHING_OWED: "nothing-owed",
+  OWED: "owed",
+  UNDER_WAY: "under-way",
+} as const;
+
+type HostDrain = (typeof HOST_DRAIN)[keyof typeof HOST_DRAIN];
+
+let hostDrain: HostDrain = HOST_DRAIN.NOTHING_OWED;
+/** The standup, so a drain never overtakes it; `start` cannot be cancelled once it is under way. */
+let hostStandup: Promise<unknown> = Promise.resolve();
+let draining: Promise<void> | undefined;
+
+/**
+ * How long a drain waits on the standup it interrupted before draining
+ * anyway. The wait is what keeps `start` from re-arming the runtime behind
+ * the close, but it cannot be the whole quit: a store open or a bootstrap
+ * that never answers would otherwise hold the quit forever, and this process
+ * holds the single-instance lock, so the next launch could only report that
+ * Luke is already running.
+ */
+const STANDUP_DRAIN_WAIT_MS = 5_000;
+
+/**
+ * How long the drain waits on the store's own close. Past it the process
+ * leaves and the operating system reclaims the worker: what did not settle
+ * was already counted and persisted, so the next launch recovers it, and a
+ * store that never answers must not wedge this process on the
+ * single-instance lock. With the standup wait and the coordinator's own
+ * deadline, the whole quit is bounded at twenty seconds.
+ */
+const HOST_CLOSE_WAIT_MS = 5_000;
+
+function after(delayMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
+
+/**
+ * The one drain, made once whichever path asks for it: the explicit Quit, or
+ * the updater's restart into a downloaded build, which swaps this executable
+ * and must not do it over runtime work still going. Admissions close, every
+ * run and child under way is cancelled, the publication is given a bounded
+ * wait, and what did not settle is counted from the persisted envelopes and
+ * left for the next launch's recovery rather than finished on paper. Every
+ * later ask is handed the drain already under way rather than a second one.
+ */
+function drainHostOnce(): Promise<void> {
+  if (hostDrain === HOST_DRAIN.OWED) {
+    hostDrain = HOST_DRAIN.UNDER_WAY;
+    draining = drainHost().finally(() => {
+      hostDrain = HOST_DRAIN.NOTHING_OWED;
+    });
+  }
+  return draining ?? Promise.resolve();
+}
+
+async function drainHost(): Promise<void> {
+  // A drain that overtook the standup it interrupted would close the store
+  // and then have `start` reopen it and re-arm the scheduler, the hooks, and
+  // the observation behind the close, which is the one thing a quit must not
+  // leave running.
+  await Promise.race([hostStandup.catch(() => undefined), after(STANDUP_DRAIN_WAIT_MS)]);
+  // A drain that cannot finish still says so and still closes the store: what
+  // it could not settle is what the next launch marks interrupted, and a quit
+  // must leave either way rather than on an unhandled failure.
+  try {
+    const outcome = await shutdownGateway(runtimeHost.shutdownSteps);
+    report(
+      `shutting down: ${outcome.settled ? "settled" : "unsettled"}, ${outcome.cancelled.length} cancelled, ${outcome.unresolved} unresolved`,
+    );
+  } catch (error) {
+    report(`the drain did not finish: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  const closed = runtimeHost.close().catch((error: Error) => {
+    report(`the runtime did not close cleanly: ${error.message}`);
+  });
+  const closedInTime = await Promise.race([
+    closed.then(() => true),
+    after(HOST_CLOSE_WAIT_MS).then(() => false),
+  ]);
+  if (!closedInTime) report("the runtime did not close in time; leaving it to the exit");
+}
+
 function drainingEngine(engine: UpdaterEngine): UpdaterEngine {
   return {
     ...engine,
     quitAndInstall: () => {
-      void stopGatewayOnce().finally(() => engine.quitAndInstall());
+      void drainHostOnce().finally(() => engine.quitAndInstall());
     },
   };
 }
@@ -992,39 +1055,37 @@ export function startDesktopApp(): void {
     void app.whenReady().then(async () => {
       if (process.platform === "darwin") app.setActivationPolicy("accessory");
       Menu.setApplicationMenu(null);
-      // The host stands first: attached, or started, or composed here, and
-      // its first bootstrap read before anything is decided from it. The
-      // introduction plays only on a host actually reached: a launch that
-      // cannot reach its runtime knows nothing of the account and must not
-      // greet a signed-in developer as a stranger.
-      if (gatewayLauncher) {
-        const onStateChanged = (listener: Parameters<typeof gatewayLauncher.onStateChanged>[0]) =>
-          gatewayLauncher.onStateChanged(listener);
-        // The retries begin the moment an attach fails, and the launch waits
-        // on whichever attachment first reads a bootstrap; its tail below
-        // runs once, over that bootstrap, and a reattachment after it runs
-        // only the attachment work.
-        retryAttachWhileFailed({
-          onStateChanged,
-          attach: () => gatewayLauncher.attach(),
-          report,
-        });
-        const first = await waitForHost({
-          onStateChanged,
-          attach: () => gatewayLauncher.attach(),
-          onAttached,
-          report,
-        });
-        report(
-          first.result.outcome === "failed"
-            ? `Gateway attached after a failed first attempt (${first.result.failure})`
-            : `Gateway ${first.result.outcome} (pid ${first.result.pid})`,
-        );
-        followReattachments({ onStateChanged, onAttached, report });
-      } else if (localRuntime) {
-        await localRuntime.start();
+      // The host stands first, and its first bootstrap is read before
+      // anything is decided from it. The introduction plays only on a host
+      // actually reached: a launch that cannot reach its runtime knows
+      // nothing of the account and must not greet a signed-in developer as
+      // a stranger. The drain is owed from before the start rather than
+      // after it, because `start` opens the store and arms the scheduler,
+      // the hooks, and the observation before it answers, and a Quit in that
+      // window must cancel that work rather than have it killed mid-write.
+      hostDrain = HOST_DRAIN.OWED;
+      hostStandup = (async () => {
+        await runtimeHost.start();
         await onAttached();
+      })();
+      try {
+        await hostStandup;
+      } catch (error) {
+        // A start that cannot finish leaves nothing to draw, so this process
+        // drains what it did arm and goes, rather than sitting on the
+        // single-instance lock with no window and no way for the next launch
+        // in. The drain is waited for here, because a quit past it would not.
+        report(
+          `the runtime could not stand up: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        await drainHostOnce();
+        app.quit();
+        return;
       }
+      // A Quit that landed during standup drained the host and took it down;
+      // the launch must not go on to draw windows over it, which would also
+      // abort the quit it interrupted.
+      if (hostDrain !== HOST_DRAIN.OWED) return;
       const giveIntroduction = shouldRunIntroduction({
         requiresAccount: runMode.requiresAccount,
         signedIn: account.status === ACCOUNT_STATUS.SIGNED_IN,
@@ -1036,6 +1097,11 @@ export function startDesktopApp(): void {
       dock.watchTheme();
       const settings = latestSettings ?? (await gateway.host.settingsSnapshot());
       latestSettings = settings;
+      // A Quit landing inside one of the launch's own waits is already
+      // draining the host; nothing is opened or armed over it. This check
+      // and the one below sit after each wait that still has a window
+      // behind it.
+      if (hostDrain !== HOST_DRAIN.OWED) return;
       if (settings?.stored.showInDock) dock.apply(true);
       applyLoginItem(settings?.stored.openAtLogin ?? APP_SETTING_SCHEMA.openAtLogin.default);
       if (runMode.observesProviders) {
@@ -1058,6 +1124,7 @@ export function startDesktopApp(): void {
       hotkeys.setChosen(HOTKEY_RANK.ASK, settings?.stored.askHotkey);
       hotkeys.setChosen(HOTKEY_RANK.STOP, settings?.stored.stopHotkey);
       await hotkeys.reapply(HOTKEY_RANK.TALK);
+      if (hostDrain !== HOST_DRAIN.OWED) return;
       startOutputVolumeWatch();
       startMicrophoneRouteWatch();
       if (!introductionWindow.active) panels.reconcile();
@@ -1105,16 +1172,15 @@ export function startDesktopApp(): void {
   });
 
   app.on("before-quit", (event) => {
-    // The explicit Quit is the one thing that stops the Gateway: it is asked
-    // to shut down and waited for, bounded, before this process leaves, so
-    // no runtime work of Luke's continues after an intentional quit.
-    if (!gatewayStopped && gatewayLauncher) {
+    // The explicit Quit drains the runtime before this process leaves, so no
+    // runtime work of Luke's continues after an intentional quit. A drain
+    // already under way is waited for rather than begun again.
+    if (hostDrain !== HOST_DRAIN.NOTHING_OWED) {
       event.preventDefault();
-      void stopGatewayOnce().finally(() => app.quit());
+      void drainHostOnce().finally(() => app.quit());
       return;
     }
     voiceWindow.closeForGood();
-    if (localRuntime) void localRuntime.close();
     panels.clearCollapseTimers();
   });
 

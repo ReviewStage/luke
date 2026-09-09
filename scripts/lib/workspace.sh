@@ -105,13 +105,6 @@ sidecar_stop_running_app() {
     local app_names
     app_names=$(sidecar_app_names) || return 1
 
-    # Each build's Gateway process holds its own lock under the build's state
-    # directory; it is stopped the same way, so a relaunch never finds a Gateway
-    # of the code it just replaced.
-    app_names=$(while IFS= read -r app_name; do
-        printf '%s\n%s/gateway-profile\n' "$app_name" "$app_name"
-    done <<<"$app_names")
-
     local app_name pid
     while IFS= read -r app_name; do
         pid=$(sidecar_app_lock_holder_pid "$app_name") || return 1

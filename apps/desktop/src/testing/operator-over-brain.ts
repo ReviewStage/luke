@@ -2,13 +2,13 @@ import type { BrainAgent } from "@sidecar/brain";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
 import { DeliveryLedger, GatewayClient, InProcessTransport } from "@sidecar/runtime";
 import { GATEWAY_CLIENT_ROLE, MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
-import type { ConversationOperations } from "../conversation-operations";
-import { createGatewayOperator, type GatewayOperator } from "./operator";
+import type { ConversationOperations } from "#main/conversation-operations";
+import { createGatewayOperator, type GatewayOperator } from "#main/gateway/operator";
 import {
   createGatewayService,
   type GatewayServiceDependencies,
   type GrantedWords,
-} from "./service";
+} from "#main/gateway/service";
 
 /**
  * Test support: the operator a window's ask crosses, stood over one brain

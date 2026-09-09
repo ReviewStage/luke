@@ -377,115 +377,106 @@ Trust constraints:
   workspace: a host prepares every turn from the resolved configuration and
   the workspace files, and the runtime package that composes it knows the
   files' names and bounds but none of their words, which the brain supplies.
-- The desktop reaches the judgment through one boundary, the Gateway
+- Every client reaches the judgment through one boundary, the Gateway
   protocol in `runtime-contracts` (`protocol.ts`): versioned request,
-  response, and event envelopes, a fixed method vocabulary, and typed error
-  codes. The host side (`GatewayServer` in `packages/runtime`, composed as the
-  desktop's `GatewayService`) owns the idempotency ledger (every mutating
-  method carries an idempotency key; the same key finds the first answer, the
-  same key with other parameters is a conflict, never a second effect), the
+  response, and event envelopes, a fixed method vocabulary whose every entry
+  says whether it mutates, and typed error codes. The host side
+  (`GatewayServer` in `packages/runtime`, composed as the desktop's
+  `GatewayService`) owns the idempotency ledger (every mutating method
+  carries an idempotency key; the same key finds the first answer, the same
+  key with other parameters is a conflict, never a second effect), the
   revision checks (a request built over a replaced conversation lifetime or
   configuration is refused before its handler runs), and the event log,
   numbered from one, whose bounded replay window a reconnecting client is
   replayed from or, past it, handed a fresh snapshot rather than a silent
   skip. The client side (`GatewayClient`, the desktop's operator) mints
   request ids, keys mutations, follows the sequence, and fills a gap from the
-  host's log before delivering anything later. Desktop main is the one
+  host's log before delivering anything later. Every attachment adopts the
+  host's event stream anew (its sequence and snapshot), so a replaced host's
+  events are never dropped against the old host's count, registers the
+  client's node on the connection that now stands, and reads one bootstrap
+  before the launch decides anything from it. Desktop main is the one
   operator client; the renderer and voice windows keep the narrow preload
-  bridge and never speak the protocol. The native capabilities the brain's
-  own acts reach (opening an address a validated act named with the
-  operating system, carrying an app act to the panel) are registered as one
-  node's capabilities and asked for by name; a capability no connected node
-  offers answers a typed unavailable, and the act that needed it is left
-  undone and recorded as such, never as carried. An open the desktop performs for itself (the microphone or calendar
-  privacy pane, a provider's API-keys page, the releases page, the
-  changelog) reaches the operating system directly, as the client's own
-  act, and crosses no node; an open a host-owned flow needs (a session's
-  address, an OAuth consent page, a Superset or Conductor link) crosses the
-  native node, because the flow that asks for it runs in the Gateway.
-  Microphone, playback, window control, and OS opening stay the client's;
-  scheduling, tool decisions, history, provider operations, and delivery
-  policy stay the host's. Replies to the ear keep the reply-grant ledger's
-  guarantee with its states named (queued, offered, claimed, acknowledged,
-  granted on call, withdrawn): the History write precedes any offer, the
-  generation and the one current receiver epoch are checked at the grant, an
-  offer a vanished renderer never claimed is offered again to the next epoch,
-  a claimed one never is, and what is guaranteed is at most one authorization
-  to speak per run, never that the words were heard. Meeting and pause holds
-  stay in the host's speech arbiter, and a held observation briefing is
-  re-decided in the conversation that decided it, never through main. The boundary has a process on each side of it. The one signed
-  executable runs in two modes decided by its arguments: the desktop, which
-  draws, and the Gateway (`--gateway`), which draws nothing, keeps a distinct
-  Electron profile and single-instance lock under `gateway-profile/`, and is
-  handed Luke's existing state root explicitly (`--state-root=`), so what it
-  owns is the state the desktop always kept and nothing of it derives from
-  the profile directory. The Gateway process composes and owns the runtime:
-  the settings store and its `safeStorage` cipher (so the credentials are
-  decrypted in the Gateway, under the same app name and Keychain entry, with
-  no desktop-side owner to fall back to), the account session and its
-  refresh, the provider-key vault sync, the counted events, every provider
-  registration and the roster and observation loops, Superset and Conductor,
-  the hook registration and spool watchers under that state root, Linear,
-  the calendar readers and their holds, the speech arbiter, the reply
-  deliveries and the receiver epochs, the runtime store worker, the notebook
-  and its maintenance, the brain, the conversation operations, history
-  maintenance, the scheduler, the development trace, and the arrival and
-  calendar-onboarding records. The desktop keeps the windows, the keys, the
-  Dock, the login item, the media duck, the output and microphone watchers,
-  the microphone permission, the updater, the feedback courier, and the
-  introduction; every bridge handler proxies to the host through one
-  operator client, so the renderer and preload contract is unchanged. A
-  fixture or capture run composes the same host in the desktop process,
-  memory-only and network-silent, over the in-process transport, and starts
-  no Gateway. A live desktop launch finds a healthy Gateway of its own build
-  through an owner-only discovery record (`gateway/` `discovery.json`:
-  loopback port, per-process token, pid) and reattaches, or starts one,
-  detached, so a client that crashes or reloads leaves the Gateway standing
-  and the next client finds it; a Gateway of another build is asked to shut
-  down and drained before this build starts its own, never run beside; and
-  at most three automatic restarts a minute are made while a client is
-  attached, after which the typed disconnected error stands on the existing
-  path and nothing new is drawn. Every attachment adopts the host's event
-  stream anew (its sequence and snapshot), so a replaced host's events are
-  never dropped against the old host's count, registers the desktop's node
-  on the connection that now stands, and reads one bootstrap before the
-  launch decides anything from it. The transport between them is a
-  WebSocket on `127.0.0.1` at an ephemeral port, the token compared in
-  constant time on the handshake's authorization header and never in an
-  address, the protocol version refused when it differs, and a build that
-  differs admitted drain-only (hello, reconnect, shutdown). A node's
-  capabilities are invoked on that node's own authenticated connection as
-  transport frames, never as events, so no reconnection can replay an ask
-  to act; the host settles an ask whose connection closed before it
-  answered as unknown (dispatched, effect uncertain), answers an ask made
-  after as unavailable (never dispatched), and the two reach the act
-  journal as an unknown act and a refusal respectively, an unknown act never
-  retried on Luke's own initiative; the node performs each invocation id
-  once, answering a repeated frame from the first performance. The Gateway
-  leaves only at the explicit Quit, or the updater's restart into a
-  downloaded build, each of which asks it to shut down and waits, bounded
-  even under a host that stops answering: admissions closed, every run and
-  child under way cancelled, the publication drained, ten seconds for it to
-  settle, and whatever did not settle counted from the persisted envelopes
-  and left for recovery, which marks it interrupted and replays nothing.
-  Nothing installs it at login and nothing restarts it after an intentional
-  quit. The same protocol suite runs over the in-process transport, the
-  loopback text transport, and the socket. The method vocabulary the split
-  needed is additive and named in `protocol.ts` (`client.bootstrap`, the
-  `settings`, `credential`, `account`, `calendar`, `tracker`, `superset`,
-  `session`, `workspace`, `speech`, `receiver`, `voice`, `guide`,
-  `analytics`, `conversation.append`, and `onboarding` methods, and the
-  change events beside them; `voice.recordTrace` carries the renderer's
-  tapped realtime events to the development trace writer the Gateway owns,
-  under the same gate, so an untraced run drops them at the host); no
-  credential or account secret travels in any answer or event, and the one
-  secret that reaches the voice client is the
-  ephemeral realtime credential the host minted. Widening the method
-  vocabulary, the event set, or what a node may be asked is a product
-  decision, not an implementation detail. The same protocol suite runs over the in-process transport, the
-  loopback text transport, and the socket; widening the method vocabulary,
-  the event set, or what a node may be asked is a product decision, not an
-  implementation detail.
+  bridge and never speak the protocol. A connection is authenticated on its
+  own handshake and never in an address: the protocol version is refused
+  outright when it differs, and who is asking is decided by the credential
+  check the binding is handed, compared where it is understood — a shared
+  secret in constant time today, an account's bearer on a server — so the
+  protocol itself learns no credential. The same protocol suite runs over
+  the in-process transport, the text loopback transport, and the socket, and
+  the method vocabulary is additive and named in `protocol.ts`
+  (`client.bootstrap`, the `settings`, `credential`, `account`, `calendar`,
+  `tracker`, `superset`, `session`, `workspace`, `speech`, `receiver`,
+  `voice`, `guide`, `analytics`, `conversation.append`, and `onboarding`
+  methods, and the change events beside them; `voice.recordTrace` carries
+  the renderer's tapped realtime events to the development trace writer the
+  host owns, under the same gate, so an untraced run drops them at the
+  host). No credential or account secret travels in any answer or event, and
+  the one secret that reaches the voice client is the ephemeral realtime
+  credential the host minted. Widening the method vocabulary, the event set,
+  or what a node may be asked is a product decision, not an implementation
+  detail.
+- The host is what composes and owns the runtime, and it draws nothing: the
+  settings store and its cipher (so the credentials are decrypted where the
+  host runs, under the same app name and Keychain entry), the account
+  session and its refresh, the provider-key vault sync, the counted events,
+  every provider registration and the roster and observation loops, Superset
+  and Conductor, the hook registration and spool watchers under the state
+  root it is handed, Linear, the calendar readers and their holds, the
+  speech arbiter, the reply deliveries and the receiver epochs, the runtime
+  store worker, the notebook and its maintenance, the brain, the
+  conversation operations, history maintenance, the scheduler, the
+  development trace, and the arrival and calendar-onboarding records. The
+  state root is given to it explicitly and nothing of it is derived from the
+  hosting process's own profile. The desktop composes that host in its own
+  process today and reaches it over the in-process transport; a process on
+  the other side of the socket is the same host reached over another
+  transport, and nothing above the transport changes, because the desktop is
+  one operator client either way. What the desktop keeps for itself is the
+  windows, the keys, the Dock, the login item, the media duck, the output
+  and microphone watchers, the microphone permission, the updater, the
+  feedback courier, and the introduction; every bridge handler proxies to
+  the host through that one operator client, so the renderer and preload
+  contract is unchanged. Scheduling, tool decisions, history, provider
+  operations, and delivery policy stay the host's; microphone, playback,
+  window control, and OS opening stay the client's.
+- The native capabilities the brain's own acts reach (opening an address a
+  validated act named with the operating system, carrying an app act to the
+  panel, running this Mac's Calendar helper) are registered as one node's
+  capabilities and asked for by name. A capability no connected node offers
+  answers a typed unavailable, and the act that needed it is left undone and
+  recorded as such, never as carried. An open the desktop performs for
+  itself (the microphone or calendar privacy pane, a provider's API-keys
+  page, the releases page, the changelog) reaches the operating system
+  directly, as the client's own act, and crosses no node; an open a
+  host-owned flow needs (a session's address, an OAuth consent page, a
+  Superset or Conductor link) crosses the native node, because the flow that
+  asks for it runs in the host. A node's capabilities are invoked on that
+  node's own authenticated connection as transport frames, never as events,
+  so no reconnection can replay an ask to act; the host settles an ask whose
+  connection closed before it answered as unknown (dispatched, effect
+  uncertain), answers an ask made after as unavailable (never dispatched),
+  and the two reach the act journal as an unknown act and a refusal
+  respectively, an unknown act never retried on Luke's own initiative; the
+  node performs each invocation id once, answering a repeated frame from the
+  first performance.
+- Replies to the ear keep the reply-grant ledger's guarantee with its states
+  named (queued, offered, claimed, acknowledged, granted on call,
+  withdrawn): the History write precedes any offer, the generation and the
+  one current receiver epoch are checked at the grant, an offer a vanished
+  renderer never claimed is offered again to the next epoch, a claimed one
+  never is, and what is guaranteed is at most one authorization to speak per
+  run, never that the words were heard. Meeting and pause holds stay in the
+  host's speech arbiter, and a held observation briefing is re-decided in
+  the conversation that decided it, never through main.
+- The runtime is drained at the explicit Quit and at the updater's restart
+  into a downloaded build, each of which asks for the drain and waits,
+  bounded even under work that stops answering: admissions closed, every run
+  and child under way cancelled, the publication drained, ten seconds for it
+  to settle, and whatever did not settle counted from the persisted
+  envelopes and left for recovery, which marks it interrupted and replays
+  nothing. Nothing of Luke's runtime work continues after an intentional
+  quit.
 - The hosted tier speaks one brain contract (`/api/brain/capabilities`,
   `/api/brain/v2/respond`, `/api/brain/v2/count-tokens`,
   `/api/brain/v2/compact`). It lets the desktop prepare the prompt — bounded to
@@ -872,7 +863,7 @@ Trust constraints:
   JSONL under the developer's chosen directory and
   sent nowhere; `pnpm trace:export` turns one file into a document a local
   viewer opens. The tap only observes: nothing reads its result, and the
-  Gateway drops the renderer's tapped events whenever no writer stands.
+  host drops the renderer's tapped events whenever no writer stands.
   A trace carries real titles, branches, and spoken words, so trace files are
   never committed, for the same reason fixtures stay synthetic. Widening what
   a trace records is a product decision, not an implementation detail.
@@ -926,12 +917,12 @@ Trust constraints:
   open still speak, and the switch reaches no write path. This Mac's own Calendar is read under the same rule
   with no credential at all, through a native helper behind macOS's own
   consent dialog. The helper is a device capability, so it runs in the
-  desktop process at the Gateway's ask through the native node
+  desktop process at the host's ask through the native node
   (`appleCalendar.runHelper`), each invocation a command fixed by the build
   with the window's instants and the chosen calendar ids; the calendar
-  policy, the stored connection, and the intervals stay the Gateway's, and a
-  desktop that is not connected is a failed read that keeps the last
-  intervals standing. The dialog is the connection, and nothing is stored but
+  policy, the stored connection, and the intervals stay the host's, and a
+  node that does not answer is a failed read that keeps the last intervals
+  standing. The dialog is the connection, and nothing is stored but
   the fact of it and the user's calendar choices. EventKit publishes no
   free/busy, so full calendar access is the grant the system asks for, and
   the helper is where the narrowing happens: an event is read for its start

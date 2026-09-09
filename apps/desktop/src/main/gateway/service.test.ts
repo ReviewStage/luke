@@ -8,7 +8,7 @@ import {
   DeliveryLedger,
   GatewayClient,
   InProcessTransport,
-  LoopbackTransport,
+  TextLoopbackTransport,
 } from "@sidecar/runtime";
 import {
   DELIVERY_STATE,
@@ -155,7 +155,7 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
   const transport =
     transportKind === "in-process"
       ? new InProcessTransport(service.server, identity)
-      : new LoopbackTransport(service.server, identity);
+      : new TextLoopbackTransport(service.server, identity);
   const operator = createGatewayOperator({
     client: new GatewayClient({ transport, createId: () => `request-${++ids}` }),
   });

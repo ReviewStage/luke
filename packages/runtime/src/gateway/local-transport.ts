@@ -4,7 +4,6 @@ import {
   GATEWAY_HANDSHAKE_HEADER,
   GATEWAY_HANDSHAKE_REFUSAL,
   GATEWAY_PROTOCOL_VERSION,
-  type GatewayBuildIdentity,
   type GatewayClientIdentity,
   type GatewayEvent,
   type GatewayHandshakeRefusal,
@@ -18,40 +17,41 @@ import {
 } from "@sidecar/runtime-contracts";
 import { isRecord, type UnparsedWireValue, type WireValue } from "@sidecar/wire";
 import { WebSocket } from "ws";
-import type { GatewayDiscoveryRecord } from "./discovery.js";
 import {
   InvocationMemory,
   NODE_INVOCATION_REFUSAL,
   type NodeInvocationHandler,
   unavailableInvocation,
 } from "./invocations.js";
-import { GATEWAY_REFUSAL_HEADER, LOCAL_GATEWAY_FRAME } from "./local-host.js";
-import {
-  GATEWAY_CONNECT_FAILURE,
-  type GatewayConnection,
-  type GatewayConnectResult,
-} from "./supervisor.js";
-import type { GatewayEventSink } from "./transport.js";
+import { GATEWAY_FRAME, GATEWAY_REFUSAL_HEADER } from "./local-host.js";
+import type { GatewayEventSink, GatewayTransport } from "./transport.js";
 
 /**
- * The client end of the loopback socket. The token rides on the upgrade
+ * The client end of the socket. The credential rides on the upgrade
  * request's authorization header and is dropped from memory once the
- * handshake ends; the address the socket opens names only the host and port.
- * A request that is in flight when the socket closes answers the typed
- * disconnected error rather than hanging, and the host's build, read from the
- * handshake's own answer, is what the supervisor compares before operating.
+ * handshake ends; the address the socket opens names only the host. A
+ * request that is in flight when the socket closes answers the typed
+ * disconnected error rather than hanging.
  */
-export interface LocalGatewayConnectOptions {
-  record: Pick<GatewayDiscoveryRecord, "host" | "port" | "token">;
+export interface WebSocketGatewayConnectOptions {
+  url: string;
+  /** What authenticates this client, in the header its host's own `authenticate` reads. */
+  headers?: Readonly<Record<string, string>>;
   client: GatewayClientIdentity;
-  build: GatewayBuildIdentity;
   /** How long the handshake may take before the attempt is unreachable. */
   timeoutMs?: number;
 }
 
-export const LOCAL_GATEWAY_CONNECT_DEFAULTS = {
+export const WEB_SOCKET_GATEWAY_CONNECT_DEFAULTS = {
   TIMEOUT_MS: 5_000,
 } as const;
+
+/** A handshake that did not end in a connection: the refusal the host named, or no host at all. */
+export const GATEWAY_UNREACHABLE = "unreachable";
+
+export type GatewayConnectResult =
+  | { ok: true; connection: WebSocketGatewayConnection }
+  | { ok: false; failure: GatewayHandshakeRefusal | typeof GATEWAY_UNREACHABLE };
 
 function isRefusal(value: string | undefined): value is GatewayHandshakeRefusal {
   return Object.values(GATEWAY_HANDSHAKE_REFUSAL).some((held) => held === value);
@@ -81,8 +81,7 @@ function disconnected(id: string): GatewayResponse {
   };
 }
 
-export class LocalGatewayConnection implements GatewayConnection {
-  readonly hostBuild: GatewayBuildIdentity;
+export class WebSocketGatewayConnection implements GatewayTransport {
   readonly #socket: WebSocket;
   readonly #pending = new Map<string, (response: GatewayResponse) => void>();
   readonly #sinks = new Set<GatewayEventSink>();
@@ -90,9 +89,8 @@ export class LocalGatewayConnection implements GatewayConnection {
   #memory: InvocationMemory | undefined;
   #open = true;
 
-  constructor(socket: WebSocket, hostBuild: GatewayBuildIdentity) {
+  constructor(socket: WebSocket) {
     this.#socket = socket;
-    this.hostBuild = hostBuild;
     socket.on("message", (data, isBinary) => {
       if (isBinary) return;
       this.#take(data.toString());
@@ -109,7 +107,7 @@ export class LocalGatewayConnection implements GatewayConnection {
       this.#pending.set(request.id, resolve);
       this.#socket.send(
         JSON.stringify({
-          kind: LOCAL_GATEWAY_FRAME.REQUEST,
+          kind: GATEWAY_FRAME.REQUEST,
           envelope: requestToWire(request),
         }),
         (error) => {
@@ -169,7 +167,7 @@ export class LocalGatewayConnection implements GatewayConnection {
     }
     if (!isRecord(value) || !isRecord(value.envelope)) return;
     const { kind, envelope } = value;
-    if (kind === LOCAL_GATEWAY_FRAME.RESPONSE) {
+    if (kind === GATEWAY_FRAME.RESPONSE) {
       const response = gatewayResponseFromWire(envelope);
       if (!response) return;
       const resolve = this.#pending.get(response.id);
@@ -178,13 +176,13 @@ export class LocalGatewayConnection implements GatewayConnection {
       resolve(response);
       return;
     }
-    if (kind === LOCAL_GATEWAY_FRAME.EVENT) {
+    if (kind === GATEWAY_FRAME.EVENT) {
       const event: GatewayEvent | undefined = gatewayEventFromWire(envelope);
       if (!event) return;
       for (const sink of [...this.#sinks]) sink(event);
       return;
     }
-    if (kind === LOCAL_GATEWAY_FRAME.INVOCATION) {
+    if (kind === GATEWAY_FRAME.INVOCATION) {
       const invocation = nodeInvocationFromWire(envelope);
       if (!invocation) return;
       void this.#answer(invocation);
@@ -202,7 +200,7 @@ export class LocalGatewayConnection implements GatewayConnection {
     if (!this.connected()) return;
     this.#socket.send(
       JSON.stringify({
-        kind: LOCAL_GATEWAY_FRAME.ANSWER,
+        kind: GATEWAY_FRAME.ANSWER,
         envelope: nodeInvocationAnswerToWire(answer),
       }),
     );
@@ -219,59 +217,40 @@ export class LocalGatewayConnection implements GatewayConnection {
   }
 }
 
-export function connectLocalGateway(
-  options: LocalGatewayConnectOptions,
+export function connectWebSocketGateway(
+  options: WebSocketGatewayConnectOptions,
 ): Promise<GatewayConnectResult> {
-  const { record, client, build } = options;
-  const timeoutMs = options.timeoutMs ?? LOCAL_GATEWAY_CONNECT_DEFAULTS.TIMEOUT_MS;
+  const { url, client } = options;
+  const timeoutMs = options.timeoutMs ?? WEB_SOCKET_GATEWAY_CONNECT_DEFAULTS.TIMEOUT_MS;
   return new Promise((resolve) => {
-    const socket = new WebSocket(`ws://${record.host}:${record.port}/`, {
+    const socket = new WebSocket(url, {
       headers: {
-        [GATEWAY_HANDSHAKE_HEADER.AUTHORIZATION]: `Bearer ${record.token}`,
+        ...options.headers,
         [GATEWAY_HANDSHAKE_HEADER.PROTOCOL_VERSION]: String(GATEWAY_PROTOCOL_VERSION),
-        [GATEWAY_HANDSHAKE_HEADER.BUILD_VERSION]: build.buildVersion,
         [GATEWAY_HANDSHAKE_HEADER.CLIENT_ID]: client.clientId,
         [GATEWAY_HANDSHAKE_HEADER.CLIENT_ROLE]: client.role,
       },
       handshakeTimeout: timeoutMs,
       perMessageDeflate: false,
     });
-    let hostBuild: GatewayBuildIdentity | undefined;
     let settled = false;
     const settle = (result: GatewayConnectResult) => {
       if (settled) return;
       settled = true;
       resolve(result);
     };
-    socket.once("upgrade", (response: IncomingMessage) => {
-      const protocol = Number(response.headers[GATEWAY_HANDSHAKE_HEADER.PROTOCOL_VERSION]);
-      const buildVersion = response.headers[GATEWAY_HANDSHAKE_HEADER.BUILD_VERSION];
-      hostBuild = {
-        protocolVersion: Number.isInteger(protocol) ? protocol : 0,
-        buildVersion: (Array.isArray(buildVersion) ? buildVersion[0] : buildVersion) ?? "",
-      };
-    });
     socket.once("unexpected-response", (_request, response: IncomingMessage) => {
       const refusal = response.headers[GATEWAY_REFUSAL_HEADER];
       const named = Array.isArray(refusal) ? refusal[0] : refusal;
       response.resume();
       socket.terminate();
-      settle({
-        ok: false,
-        failure: isRefusal(named) ? named : GATEWAY_CONNECT_FAILURE.UNREACHABLE,
-      });
+      settle({ ok: false, failure: isRefusal(named) ? named : GATEWAY_UNREACHABLE });
     });
     socket.once("error", () => {
-      settle({ ok: false, failure: GATEWAY_CONNECT_FAILURE.UNREACHABLE });
+      settle({ ok: false, failure: GATEWAY_UNREACHABLE });
     });
     socket.once("open", () => {
-      settle({
-        ok: true,
-        connection: new LocalGatewayConnection(
-          socket,
-          hostBuild ?? { protocolVersion: 0, buildVersion: "" },
-        ),
-      });
+      settle({ ok: true, connection: new WebSocketGatewayConnection(socket) });
     });
   });
 }
