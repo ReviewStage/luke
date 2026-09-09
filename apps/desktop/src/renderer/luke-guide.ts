@@ -47,18 +47,18 @@ import {
 } from "@sidecar/settings";
 import { ACT_RESULT_STATUS, type ActResult } from "@sidecar/wire";
 import type { AppBridge } from "#shared/bridge";
-import type { AccountSnapshot, CredentialSource } from "#shared/wire/account";
+import type { AccountSnapshot, CredentialSource } from "#shared/messages/account";
 import {
   ACCOUNT_PROVIDER,
   ACCOUNT_STATUS,
   CREDENTIAL_SOURCE,
   SECRET_STORAGE,
-} from "#shared/wire/account";
-import type { MicrophoneStatus } from "#shared/wire/audio";
-import type { AppSettings, AppSettingsView, SettingsUpdateResult } from "#shared/wire/settings";
-import { CLI_CONNECTION } from "#shared/wire/settings";
-import type { UpdateSnapshot } from "#shared/wire/update";
-import { UPDATE_STATUS } from "#shared/wire/update";
+} from "#shared/messages/account";
+import { MICROPHONE_STATUS, type MicrophoneStatus } from "#shared/messages/audio";
+import type { AppSettings, AppSettingsView, SettingsUpdateResult } from "#shared/messages/settings";
+import { CLI_CONNECTION } from "#shared/messages/settings";
+import type { UpdateSnapshot } from "#shared/messages/update";
+import { UPDATE_STATUS } from "#shared/messages/update";
 import { UPDATE_ROW_ACTION, type UpdateRowAction, updateRow } from "./update-row";
 
 export type { AppSettingId } from "@sidecar/settings";
@@ -160,22 +160,23 @@ function askKeyFact(askKey: string | undefined, removed: boolean | undefined): A
 }
 
 const MICROPHONE_DETAIL = {
-  granted:
+  [MICROPHONE_STATUS.GRANTED]:
     "Granted. The microphone opens only when the talk key takes a turn, sends nothing after " +
     "the key comes up, and closes once the exchange settles. Typing to Luke never opens it.",
-  denied:
+  [MICROPHONE_STATUS.DENIED]:
     "Denied, so the talk key cannot capture. Typing to Luke still works: a typed ask opens no " +
     "capture device, and the reply is spoken either way. It can only be granted back in " +
     "System Settings, under Privacy & Security, Microphone.",
-  restricted:
+  [MICROPHONE_STATUS.RESTRICTED]:
     "Restricted by a system policy, which only the system's manager can change. Typing to " +
     "Luke still works: a typed ask opens no capture device.",
-  "not-determined":
+  [MICROPHONE_STATUS.NOT_DETERMINED]:
     "Not asked yet — typing to Luke needs no permission, and only the talk key's capture " +
     "does. The Permissions section on the Settings tab's Voice page can ask while voice is " +
     "available.",
-  unknown: "Unknown. The Permissions section on the Settings tab's Voice page shows its state.",
-};
+  [MICROPHONE_STATUS.UNKNOWN]:
+    "Unknown. The Permissions section on the Settings tab's Voice page shows its state.",
+} satisfies Record<MicrophoneStatus, string>;
 
 /** The same three answers a credential row gives, in words a fact can carry. */
 function connectionWord(source: CredentialSource): string {

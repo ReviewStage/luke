@@ -1,8 +1,4 @@
-import {
-  ACCOUNT_PROVIDER,
-  type AccountProvider,
-  type AccountSnapshot,
-} from "@sidecar/account/snapshot";
+import type { AccountProvider, AccountSnapshot } from "@sidecar/account/snapshot";
 import { APP_TOOL_KIND } from "@sidecar/acts";
 import {
   isProductExchangeKind,
@@ -55,19 +51,25 @@ import type { WindowMode } from "@sidecar/surface";
 import {
   type ActResult,
   isActResult,
+  isOptionalWireString,
   isRecord,
+  isUnitLevel,
   isWireBoolean,
   isWireNumber,
   isWireString,
   type UnparsedWireValue,
+  unparsedWire,
+  type WireBoundaryInput,
 } from "@sidecar/wire";
 import type { AppleCalendarAccess } from "./apple-calendar";
-import type {
-  MicrophoneRoute,
-  MicrophoneStatus,
-  OutputAudioState,
-  VoiceHotkeyState,
-} from "./wire/audio";
+import { isAccountProvider } from "./messages/account";
+import {
+  MICROPHONE_STATUS,
+  type MicrophoneRoute,
+  type MicrophoneStatus,
+  type OutputAudioState,
+  type VoiceHotkeyState,
+} from "./messages/audio";
 import {
   type BrainAppActAnswer,
   type BrainAppActRequest,
@@ -85,7 +87,7 @@ import {
   isBrainRequestSnapshot,
   isBrainRequestSnapshotList,
   isReceiverEpoch,
-} from "./wire/brain";
+} from "./messages/brain";
 import {
   type AppBootstrap,
   type ConversationHistoryPayload,
@@ -96,8 +98,8 @@ import {
   type VoiceBootstrap,
   WINDOW_ROLE,
   type WindowRole,
-} from "./wire/session";
-import type { AppSettings, SettingsUpdateResult } from "./wire/settings";
+} from "./messages/session";
+import type { AppSettings, SettingsUpdateResult } from "./messages/settings";
 import {
   isSpeechOffer,
   isSpeechOutcome,
@@ -105,8 +107,8 @@ import {
   type SpeechOffer,
   type SpeechOutcome,
   type SpeechWithdrawal,
-} from "./wire/speech";
-import type { UpdateSnapshot } from "./wire/update";
+} from "./messages/speech";
+import type { UpdateSnapshot } from "./messages/update";
 import {
   isVoiceCommand,
   isVoiceCommandOutcome,
@@ -115,7 +117,7 @@ import {
   type VoiceCommandOutcome,
   type VoiceView,
   voiceExchangeActive,
-} from "./wire/voice-view";
+} from "./messages/voice-view";
 
 export interface WireGuard<Value> {
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A bridge guard is the parser at the IPC boundary.
@@ -161,13 +163,8 @@ function args<Arguments extends BridgeArguments>(
 function result<Result>(
   guard: (value: UnparsedWireValue) => boolean = isWireValue,
 ): WireGuard<Result> {
-  return (value) => guard(wireValue(value));
-}
-
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the single conversion into the structured-clone parser vocabulary.
-function wireValue(value: unknown): UnparsedWireValue {
-  // SAFETY: callers immediately parse the runtime value; the assertion grants no domain type.
-  return value as UnparsedWireValue;
+  // SAFETY: an IPC payload is structured-clone data; unparsedWire is the boundary the guards parse.
+  return (value) => guard(unparsedWire(value as WireBoundaryInput));
 }
 
 function isWireValue(value: UnparsedWireValue): boolean {
@@ -183,35 +180,22 @@ const noArgs = args<[]>((values) => values.length === 0);
 const oneString = args<[string]>((values) => values.length === 1 && isWireString(values[0]));
 const oneBoolean = args<[boolean]>((values) => values.length === 1 && isWireBoolean(values[0]));
 
-function isAccountProvider(value: UnparsedWireValue): value is AccountProvider {
-  return value === ACCOUNT_PROVIDER.GOOGLE || value === ACCOUNT_PROVIDER.GITHUB;
-}
-
-function isUnitLevel(value: UnparsedWireValue): value is number {
-  return isWireNumber(value) && Number.isFinite(value) && value >= 0 && value <= 1;
-}
-
-const MICROPHONE_STATUSES: ReadonlySet<string> = new Set<MicrophoneStatus>([
-  "not-determined",
-  "granted",
-  "denied",
-  "restricted",
-  "unknown",
-]);
+const MICROPHONE_STATUSES: ReadonlySet<string> = new Set(Object.values(MICROPHONE_STATUS));
 
 function isMicrophoneStatus(value: UnparsedWireValue): value is MicrophoneStatus {
   return isWireString(value) && MICROPHONE_STATUSES.has(value);
 }
 
+const WINDOW_ROLES: ReadonlySet<string> = new Set(Object.values(WINDOW_ROLE));
+
 function isWindowRole(value: UnparsedWireValue): value is WindowRole {
-  return (
-    value === WINDOW_ROLE.PANEL || value === WINDOW_ROLE.INTRODUCTION || value === WINDOW_ROLE.VOICE
-  );
+  return isWireString(value) && WINDOW_ROLES.has(value);
 }
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This function parses an IPC field into a domain identity.
 function isSessionIdentity(value: unknown): value is SessionIdentity {
-  const wire = wireValue(value);
+  // SAFETY: an IPC payload is structured-clone data; unparsedWire is the boundary the guards parse.
+  const wire = unparsedWire(value as WireBoundaryInput);
   if (!isRecord(wire)) return false;
   return (
     isWireString(wire.providerId) &&
@@ -220,9 +204,6 @@ function isSessionIdentity(value: unknown): value is SessionIdentity {
     wire.providerSessionId.length > 0
   );
 }
-
-const optionalString = (value: UnparsedWireValue): value is string | undefined =>
-  value === undefined || isWireString(value);
 
 type PlainSettingField = Exclude<AppSettingField, KeyedAppSettingField>;
 type UpdateSettingArguments = {
@@ -313,7 +294,7 @@ export const BRIDGE = {
     kind: "invoke",
     channel: "app:set-provider-api-key",
     args: args<[CredentialProviderId, string | undefined]>(
-      (v) => v.length === 2 && isCredentialProviderId(v[0]) && optionalString(v[1]),
+      (v) => v.length === 2 && isCredentialProviderId(v[0]) && isOptionalWireString(v[1]),
     ),
     result: result<SettingsUpdateResult>(),
   }),
@@ -921,7 +902,7 @@ export const BRIDGE = {
     kind: "subscribe",
     channel: "app:ask-hotkey-changed",
     args: noArgs,
-    result: result<string | undefined>(optionalString),
+    result: result<string | undefined>(isOptionalWireString),
   }),
   onStopHotkeyPress: entry({
     kind: "subscribe",
@@ -933,7 +914,7 @@ export const BRIDGE = {
     kind: "subscribe",
     channel: "app:stop-hotkey-changed",
     args: noArgs,
-    result: result<string | undefined>(optionalString),
+    result: result<string | undefined>(isOptionalWireString),
   }),
   onOutputAudioChanged: entry({
     kind: "subscribe",

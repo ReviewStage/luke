@@ -6,7 +6,8 @@ import {
 } from "@sidecar/settings";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { type BrowserWindow, globalShortcut, type WebContents } from "electron";
-import { channels, type WindowMode } from "#shared/contracts";
+import { channels } from "#shared/bridge";
+import type { WindowMode } from "#shared/messages/session";
 import { type TalkKeyEdges, TalkKeyWatcher } from "../native/talk-key";
 
 /**

@@ -54,7 +54,7 @@ import {
 } from "@sidecar/wire";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { BRIDGE } from "#shared/bridge";
-import type { SessionOpenResult } from "#shared/contracts";
+import type { SessionOpenResult } from "#shared/messages/session";
 import { createActionHandler } from "../action-handler";
 import type { SettingsStore } from "../settings-store";
 

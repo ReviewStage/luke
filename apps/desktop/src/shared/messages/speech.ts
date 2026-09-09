@@ -1,9 +1,4 @@
-import {
-  ARRIVAL_SPEECH_KIND,
-  BRIEFING_SPEECH_KIND,
-  CALENDAR_ONBOARDING_SPEECH_KIND,
-  type ProactiveSpeechTurn,
-} from "@sidecar/realtime";
+import { isProactiveSpeechTurn, type ProactiveSpeechTurn } from "@sidecar/realtime";
 import {
   isRecord,
   isWireNumber,
@@ -52,27 +47,6 @@ export const SPEECH_OUTCOME = {
 
 export type SpeechOutcome = (typeof SPEECH_OUTCOME)[keyof typeof SPEECH_OUTCOME];
 
-const optionalString = (value: UnparsedWireValue): boolean =>
-  value === undefined || isWireString(value);
-
-export function isProactiveSpeechTurn(
-  value: UnparsedWireValue,
-): value is ProactiveSpeechTurn & WireRecord {
-  if (!isRecord(value) || !isWireNumber(value.decidedAt) || !Number.isFinite(value.decidedAt)) {
-    return false;
-  }
-  switch (value.kind) {
-    case BRIEFING_SPEECH_KIND:
-      return isWireString(value.briefing);
-    case ARRIVAL_SPEECH_KIND:
-      return optionalString(value.sessionTitle) && optionalString(value.talkKeyLabel);
-    case CALENDAR_ONBOARDING_SPEECH_KIND:
-      return true;
-    default:
-      return false;
-  }
-}
-
 export function isSpeechOffer(value: UnparsedWireValue): value is SpeechOffer & WireRecord {
   return (
     isRecord(value) &&
@@ -90,11 +64,8 @@ export function isSpeechWithdrawal(
   return isRecord(value) && isWireString(value.id) && value.id.length > 0;
 }
 
+const SPEECH_OUTCOMES: ReadonlySet<string> = new Set(Object.values(SPEECH_OUTCOME));
+
 export function isSpeechOutcome(value: UnparsedWireValue): value is SpeechOutcome {
-  return (
-    value === SPEECH_OUTCOME.SPOKEN ||
-    value === SPEECH_OUTCOME.REFUSED ||
-    value === SPEECH_OUTCOME.HELD ||
-    value === SPEECH_OUTCOME.STALE
-  );
+  return isWireString(value) && SPEECH_OUTCOMES.has(value);
 }

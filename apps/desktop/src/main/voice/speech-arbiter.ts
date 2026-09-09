@@ -6,7 +6,7 @@ import {
   CALENDAR_ONBOARDING_SPEECH_KIND,
   type ProactiveSpeechTurn,
 } from "@sidecar/realtime";
-import { SPEECH_OUTCOME, type SpeechOffer, type SpeechOutcome } from "#shared/wire/speech";
+import { SPEECH_OUTCOME, type SpeechOffer, type SpeechOutcome } from "#shared/messages/speech";
 
 /**
  * How long a proactive turn stays worth saying. News about a session is news

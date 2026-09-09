@@ -1,6 +1,6 @@
 import type { FeedbackImage, FeedbackKind } from "@sidecar/feedback";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS } from "@sidecar/feedback";
-import { ACCOUNT_STATUS, type AccountSnapshot } from "#shared/wire/account";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "#shared/messages/account";
 
 /**
  * A note to the founders being written, wherever the panel happens to be.

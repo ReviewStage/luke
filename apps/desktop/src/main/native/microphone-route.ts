@@ -4,7 +4,7 @@ import {
   MICROPHONE_TRANSPORT,
   type MicrophoneRoute,
   type MicrophoneTransport,
-} from "#shared/contracts";
+} from "#shared/messages/audio";
 import { NativeHelper, type NativeHelperProcess } from "./native-helper";
 
 /** The one word the helper takes; its one line is read by the parser below. */

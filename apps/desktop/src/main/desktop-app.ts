@@ -37,21 +37,23 @@ import {
   type WebContents,
 } from "electron";
 import { BRIDGE, channels } from "#shared/bridge";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "#shared/messages/account";
 import {
-  ACCOUNT_STATUS,
-  type AccountSnapshot,
-  type AppBootstrap,
-  type AppSettings,
-  type BrainAppActRequest,
+  MICROPHONE_STATUS,
   type MicrophoneRoute,
   type MicrophoneStatus,
   type OutputAudioState,
+} from "#shared/messages/audio";
+import type { BrainAppActRequest } from "#shared/messages/brain";
+import {
+  type AppBootstrap,
   type SessionReplayBootstrap,
   type VoiceBootstrap,
   WINDOW_ROLE,
-} from "#shared/contracts";
-import type { SpeechOutcome } from "#shared/wire/speech";
-import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/wire/voice-view";
+} from "#shared/messages/session";
+import type { AppSettings } from "#shared/messages/settings";
+import type { SpeechOutcome } from "#shared/messages/speech";
+import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/messages/voice-view";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
 import { runAppleCalendarHelper } from "./apple-calendar";
 import { registerBrainIpc } from "./brain/ipc";
@@ -359,14 +361,14 @@ function argumentValue(name: string): string | undefined {
 }
 
 function microphoneStatus(): MicrophoneStatus {
-  if (process.platform !== "darwin") return "granted";
+  if (process.platform !== "darwin") return MICROPHONE_STATUS.GRANTED;
   // SAFETY: MicrophoneStatus mirrors Electron's documented media-access status union.
   return systemPreferences.getMediaAccessStatus("microphone") as MicrophoneStatus;
 }
 
 async function requestMicrophone(): Promise<MicrophoneStatus> {
-  if (process.platform !== "darwin") return "granted";
-  if (microphoneStatus() === "not-determined") {
+  if (process.platform !== "darwin") return MICROPHONE_STATUS.GRANTED;
+  if (microphoneStatus() === MICROPHONE_STATUS.NOT_DETERMINED) {
     await systemPreferences.askForMediaAccess("microphone");
   }
   const status = microphoneStatus();

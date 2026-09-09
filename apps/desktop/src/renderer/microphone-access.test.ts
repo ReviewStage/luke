@@ -5,7 +5,7 @@ import {
   REALTIME_MINT_OUTCOME,
   type RealtimeDiagnostics,
 } from "@sidecar/realtime";
-import { VOICE_SOURCE } from "#shared/wire/settings";
+import { VOICE_SOURCE } from "#shared/messages/settings";
 import {
   HOSTED_VOICE_UNAVAILABLE_NOTE,
   hostedVoiceUnavailableNote,

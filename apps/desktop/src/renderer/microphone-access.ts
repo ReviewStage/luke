@@ -1,6 +1,6 @@
 import { REALTIME_MINT_OUTCOME, type RealtimeDiagnostics } from "@sidecar/realtime";
-import type { MicrophoneStatus } from "#shared/wire/audio";
-import { VOICE_SOURCE, type VoiceSource } from "#shared/wire/settings";
+import { MICROPHONE_STATUS, type MicrophoneStatus } from "#shared/messages/audio";
+import { VOICE_SOURCE, type VoiceSource } from "#shared/messages/settings";
 
 /**
  * Why voice as a whole is off: nothing it can run on stands — no signed-in
@@ -51,11 +51,11 @@ export const MICROPHONE_UNGRANTED_NOTE = "Luke cannot listen: the microphone is 
  */
 function microphoneStatusDetail(status: MicrophoneStatus): string | undefined {
   switch (status) {
-    case "denied":
+    case MICROPHONE_STATUS.DENIED:
       return "Allow Luke in System Settings › Privacy & Security › Microphone.";
-    case "restricted":
+    case MICROPHONE_STATUS.RESTRICTED:
       return "This Mac does not permit microphone access.";
-    case "unknown":
+    case MICROPHONE_STATUS.UNKNOWN:
       return "Luke could not read the microphone permission.";
     default:
       return undefined;
@@ -99,9 +99,10 @@ export function microphoneAccessRow(input: {
     };
   }
   const row: MicrophoneAccessRow = {
-    offerAccess: input.status === "not-determined",
-    offerSystemSettings: input.status === "granted" || input.status === "denied",
-    ready: input.status === "granted",
+    offerAccess: input.status === MICROPHONE_STATUS.NOT_DETERMINED,
+    offerSystemSettings:
+      input.status === MICROPHONE_STATUS.GRANTED || input.status === MICROPHONE_STATUS.DENIED,
+    ready: input.status === MICROPHONE_STATUS.GRANTED,
   };
   const detail = microphoneStatusDetail(input.status);
   if (detail !== undefined) row.detail = detail;

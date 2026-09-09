@@ -1,4 +1,4 @@
-import type { WindowMode } from "#shared/wire/session";
+import type { WindowMode } from "#shared/messages/session";
 
 /**
  * What the surface is currently drawn as. The capsule and the peek share one

@@ -47,7 +47,11 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
-import type { BrainAskWait, BrainReplyClaimResult, BrainRequestSnapshot } from "#shared/wire/brain";
+import type {
+  BrainAskWait,
+  BrainReplyClaimResult,
+  BrainRequestSnapshot,
+} from "#shared/messages/brain";
 import { publishAsk } from "../brain/ipc";
 import type { BrainReplyDeliveries } from "../brain/reply-delivery";
 import type { SettableConfigurationPatch } from "../brain/wiring";

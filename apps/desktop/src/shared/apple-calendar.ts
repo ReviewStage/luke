@@ -1,7 +1,3 @@
-// Keep the desktop contract stable while the shared panel and calendar logic
-// consume the canonical identity directly from the renderer-safe vocabulary.
-export { APPLE_CALENDAR_ID, APPLE_CALENDAR_NAME } from "@sidecar/calendar/vocabulary";
-
 /**
  * The helper's answer to how far macOS lets the read go, shared because both
  * sides of the bridge speak it: the renderer asks the status probe whether

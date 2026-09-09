@@ -17,7 +17,7 @@ import {
   type BrainRequestSnapshot,
   isBrainAskSubmissionResult,
   isBrainReplyOffer,
-} from "#shared/wire/brain";
+} from "#shared/messages/brain";
 import { CONVERSATION_DELETE_OUTCOME } from "../brain/conversation-deletion";
 import { REJECTED_SUBMISSION } from "../brain/ipc";
 

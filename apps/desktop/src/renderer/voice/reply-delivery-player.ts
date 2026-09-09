@@ -1,6 +1,7 @@
 import type { BrainRequestOrigin } from "@sidecar/brain/requests";
 import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
-import type { BrainReplyClaimResult, BrainReplyOffer } from "#shared/wire/brain";
+import type { BrainReplyClaimResult, BrainReplyOffer } from "#shared/messages/brain";
+import { voiceExchangeActive } from "#shared/messages/voice-view";
 
 /** The slice of the voice session a delivered reply is spoken through. */
 export interface ReplyDeliverySession {
@@ -50,14 +51,6 @@ interface HeldGrant {
   offer: BrainReplyOffer;
   words: string;
   origin: BrainRequestOrigin;
-}
-
-function busy(status: RealtimeStatus): boolean {
-  return (
-    status === REALTIME_STATUS.LISTENING ||
-    status === REALTIME_STATUS.RESPONDING ||
-    status === REALTIME_STATUS.CONNECTING
-  );
 }
 
 export class ReplyDeliveryPlayer {
@@ -147,7 +140,7 @@ export class ReplyDeliveryPlayer {
     if (this.#attempting || this.#active) return;
     const held = this.#granted;
     const offer = held?.offer ?? this.#pending;
-    if (!offer || busy(this.#options.session().status)) return;
+    if (!offer || voiceExchangeActive(this.#options.session().status)) return;
     const generation = this.#options.conversationGeneration();
     const withdrawals = this.#withdrawals;
     const moved = () =>
@@ -179,7 +172,7 @@ export class ReplyDeliveryPlayer {
       }
       // The developer may have taken the turn meanwhile: the grant waits for
       // the next quiet status rather than speaking over them.
-      if (busy(this.#options.session().status)) return;
+      if (voiceExchangeActive(this.#options.session().status)) return;
       this.#granted = undefined;
       if (this.#options.session().speakReply(grant.words, grant.offer.runId)) {
         this.#active = grant.offer;

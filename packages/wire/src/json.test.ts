@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  isOptionalWireString,
   isRecord,
+  isUnitLevel,
   isWireBoolean,
   isWireNumber,
   isWireString,
@@ -78,4 +80,26 @@ test("a boxed primitive is not the primitive it prints as", () => {
   assert.equal(isWireBoolean(boxed(true)), false);
   assert.equal(isRecord(boxed("x")), false);
   assert.equal(text(boxed("x")), undefined);
+});
+
+test("isOptionalWireString takes a string or its absence, and nothing else", () => {
+  assert.equal(isOptionalWireString(undefined), true);
+  assert.equal(isOptionalWireString(""), true);
+  assert.equal(isOptionalWireString("a"), true);
+  assert.equal(isOptionalWireString(null), false);
+  assert.equal(isOptionalWireString(1), false);
+  assert.equal(isOptionalWireString(boxed("x")), false);
+});
+
+test("isUnitLevel refuses anything outside the 0-to-1 scale", () => {
+  assert.equal(isUnitLevel(0), true);
+  assert.equal(isUnitLevel(1), true);
+  assert.equal(isUnitLevel(0.5), true);
+  assert.equal(isUnitLevel(-0.1), false);
+  assert.equal(isUnitLevel(1.1), false);
+  assert.equal(isUnitLevel(Number.POSITIVE_INFINITY), false);
+  assert.equal(isUnitLevel(Number.NaN), false);
+  assert.equal(isUnitLevel("1"), false);
+  assert.equal(isUnitLevel(undefined), false);
+  assert.equal(isUnitLevel(boxed(0.5)), false);
 });

@@ -6,8 +6,13 @@ import {
   type AppSettingValue,
   type StoredAppSettings,
 } from "@sidecar/settings";
-import type { AppBridge, SettingsUpdateResult } from "#shared/contracts";
-import type { AppSettings, AppSettingsView, RuntimeStatus } from "#shared/wire/settings";
+import type { AppBridge } from "#shared/bridge";
+import type {
+  AppSettings,
+  AppSettingsView,
+  RuntimeStatus,
+  SettingsUpdateResult,
+} from "#shared/messages/settings";
 
 export type SpokenSettingBridge = Pick<AppBridge, "updateSetting" | "updateSettingEntry">;
 

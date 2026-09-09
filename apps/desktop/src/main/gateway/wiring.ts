@@ -18,7 +18,8 @@ import {
 } from "@sidecar/wire";
 import type { WebContents } from "electron";
 import { channels } from "#shared/bridge";
-import type { BrainAppActRequest, ConversationHistoryPayload } from "#shared/contracts";
+import type { BrainAppActRequest } from "#shared/messages/brain";
+import type { ConversationHistoryPayload } from "#shared/messages/session";
 import { DESKTOP_NATIVE_NODE_ID, NODE_CAPABILITY, NODE_CAPABILITY_LIST } from "./desktop-node";
 import { createHostOperator, type HostOperator } from "./host-operator";
 import { createGatewayOperator, type GatewayOperator } from "./operator";

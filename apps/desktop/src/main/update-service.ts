@@ -3,7 +3,7 @@ import {
   type UpdateProgress,
   type UpdateSnapshot,
   type UpdateStatus,
-} from "#shared/contracts";
+} from "#shared/messages/update";
 
 /**
  * The addresses updating ever touches, fixed here rather than passed in,

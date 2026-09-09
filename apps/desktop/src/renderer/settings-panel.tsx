@@ -1,5 +1,10 @@
 import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
-import { GOOGLE_CALENDAR_ID, GOOGLE_CALENDAR_NAME } from "@sidecar/calendar/vocabulary";
+import {
+  APPLE_CALENDAR_ID,
+  APPLE_CALENDAR_NAME,
+  GOOGLE_CALENDAR_ID,
+  GOOGLE_CALENDAR_NAME,
+} from "@sidecar/calendar/vocabulary";
 import type { CredentialProvider } from "@sidecar/credentials/vocabulary";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
@@ -34,6 +39,7 @@ import {
   DEFAULT_VOICE_HOTKEYS,
   isAppSettingId,
   SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
+  SETTINGS_VIEW_COUNTED_AS,
   settingFieldForGuideId,
   settingGuideEntries,
   settingsScopeChanged,
@@ -50,40 +56,36 @@ import {
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACT_RESULT_STATUS, type ActResult } from "@sidecar/wire";
 import { Fragment, useEffect, useRef, useState } from "react";
-import { APPLE_CALENDAR_ID, APPLE_CALENDAR_NAME } from "#shared/apple-calendar";
-import { SETTINGS_VIEW_COUNTED_AS } from "#shared/product-vocabulary";
-import type { AccountSnapshot, CredentialSource } from "#shared/wire/account";
+import type { AccountSnapshot, CredentialSource } from "#shared/messages/account";
 import {
   ACCOUNT_PROVIDER,
   ACCOUNT_STATUS,
   CREDENTIAL_SOURCE,
   SECRET_STORAGE,
-} from "#shared/wire/account";
-import type { MicrophoneStatus } from "#shared/wire/audio";
+} from "#shared/messages/account";
+import type { MicrophoneStatus } from "#shared/messages/audio";
+import type { WorkspaceProviderId } from "#shared/messages/session";
+import { SUPERSET_WORKSPACE_PROVIDER_ID } from "#shared/messages/session";
 import type {
   AccountCalendar,
-  CalendarAccount,
-  ObservedAccountCalendars,
-} from "#shared/wire/calendar";
-import type { WorkspaceProviderId } from "#shared/wire/session";
-import { SUPERSET_WORKSPACE_PROVIDER_ID } from "#shared/wire/session";
-import type {
   AppSettingField,
   AppSettings,
   AppSettingsView,
   AppSettingValue,
+  CalendarAccount,
   KeyedAppSettingField,
+  ObservedAccountCalendars,
   SettingEntryValue,
   SettingsResetScope,
-} from "#shared/wire/settings";
+} from "#shared/messages/settings";
 import {
   CLI_CONNECTION,
   type CliConnection,
   SETTINGS_RESET_SCOPE,
   VOICE_SOURCE,
   type VoiceSource,
-} from "#shared/wire/settings";
-import type { UpdateSnapshot } from "#shared/wire/update";
+} from "#shared/messages/settings";
+import type { UpdateSnapshot } from "#shared/messages/update";
 import {
   CREDENTIAL_PLACEHOLDER,
   type CredentialEntryControl,

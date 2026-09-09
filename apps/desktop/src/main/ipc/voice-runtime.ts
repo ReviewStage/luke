@@ -16,7 +16,7 @@ import {
   VOICE_COMMAND_OUTCOME,
   type VoiceView,
   voiceExchangeActive,
-} from "#shared/wire/voice-view";
+} from "#shared/messages/voice-view";
 import { registerBridge } from "../register-bridge";
 import type { PanelManager } from "../window/panel-manager";
 

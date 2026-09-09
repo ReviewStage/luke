@@ -10,10 +10,10 @@ import {
 } from "@sidecar/guide";
 import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
-import { ACCOUNT_STATUS, CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/wire/account";
-import type { AppSettingsView } from "#shared/wire/settings";
-import { APP_SETTING_DEFAULTS, CLI_CONNECTION, VOICE_SOURCE } from "#shared/wire/settings";
-import { UPDATE_STATUS } from "#shared/wire/update";
+import { ACCOUNT_STATUS, CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/messages/account";
+import type { AppSettingsView } from "#shared/messages/settings";
+import { APP_SETTING_DEFAULTS, CLI_CONNECTION, VOICE_SOURCE } from "#shared/messages/settings";
+import { UPDATE_STATUS } from "#shared/messages/update";
 import {
   captionRoom,
   ERRAND_TARGET,

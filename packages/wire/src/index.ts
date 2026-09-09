@@ -11,7 +11,9 @@ export {
 export {
   type CloudFetch,
   HTTP_STATUS,
+  isOptionalWireString,
   isRecord,
+  isUnitLevel,
   isWireBoolean,
   isWireNumber,
   isWireString,

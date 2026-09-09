@@ -4,18 +4,14 @@ import {
   type ProductCredentialSource,
   type ProductSettingsView,
 } from "@sidecar/analytics";
-import {
-  SETTINGS_PAGE,
-  type SettingsPage,
-  VOICE_SOURCE,
-  type VoiceSource,
-} from "@sidecar/settings";
+import { SETTINGS_PAGE, type SettingsPage, VOICE_SOURCE, type VoiceSource } from "./schema.js";
 
 /**
- * How the desktop's own value sets are said in the counting vocabulary. Each
- * bridge is a total `Record`, which is the whole point: a third voice source
- * or a new settings page does not build until the analytics vocabulary in
- * `@sidecar/analytics` has answered for it, rather than quietly arriving on
+ * How this package's own value sets are said in the counting vocabulary. The
+ * analytics package cannot import this one — the edge would close a loop — so
+ * each bridge lives here as a total `Record`, which is the whole point: a
+ * third voice source or a new settings page does not build until the
+ * analytics vocabulary has answered for it, rather than quietly arriving on
  * the wire under a name nothing documents.
  */
 

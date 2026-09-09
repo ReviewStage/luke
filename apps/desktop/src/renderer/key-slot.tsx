@@ -5,7 +5,7 @@ import {
 } from "@sidecar/credentials/vocabulary";
 import { CloudBadge, ProviderMark } from "@sidecar/panel";
 import { useEffect, useRef } from "react";
-import type { CredentialSource } from "#shared/wire/account";
+import type { CredentialSource } from "#shared/messages/account";
 import {
   CREDENTIAL_PLACEHOLDER,
   type CredentialEntryControl,

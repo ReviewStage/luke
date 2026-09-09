@@ -35,10 +35,25 @@ export function isWireString(value: UnparsedWireValue): value is string {
   return typeof value === "string";
 }
 
+/** An optional wire string: present as a string, or absent. */
+export function isOptionalWireString(value: UnparsedWireValue): value is string | undefined {
+  return value === undefined || isWireString(value);
+}
+
 /** Narrows a wire value to number; `typeof` for the reason {@link isWireString} gives. */
 export function isWireNumber(value: UnparsedWireValue): value is number {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard is the wire boundary's own decoder; every other module narrows by calling it.
   return typeof value === "number";
+}
+
+/**
+ * A level a fraction of full, as every volume and pace on the wire is said:
+ * finite and within 0 to 1 inclusive, so a bare {@link isWireNumber} cannot
+ * pass an infinity or a value outside the scale into something that
+ * multiplies by it.
+ */
+export function isUnitLevel(value: UnparsedWireValue): value is number {
+  return isWireNumber(value) && Number.isFinite(value) && value >= 0 && value <= 1;
 }
 
 /** A non-empty array of wire numbers, or nothing; `width` pins the length when the caller knows it. */

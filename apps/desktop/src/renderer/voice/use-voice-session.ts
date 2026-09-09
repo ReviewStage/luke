@@ -1,4 +1,10 @@
-import { BRAIN_REQUEST_ORIGIN, BRAIN_SUBMISSION_OUTCOME } from "@sidecar/brain/requests";
+import {
+  BRAIN_ASK_PENDING_NOTE,
+  BRAIN_ASK_REFUSAL,
+  BRAIN_REQUEST_ORIGIN,
+  BRAIN_SUBMISSION_OUTCOME,
+  brainReplyWords,
+} from "@sidecar/brain/requests";
 import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
 import {
   type ArrivalSpeech,
@@ -24,23 +30,25 @@ import { SESSION_STATUS, type Session } from "@sidecar/session";
 import { TALK_KEY_RELEASE, talkKeyRelease, voiceHotkeyLabel } from "@sidecar/settings";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { MicrophoneStatus, OutputAudioState, VoiceHotkeyState } from "#shared/wire/audio";
 import {
-  BRAIN_ASK_PENDING_NOTE,
+  MICROPHONE_STATUS,
+  type MicrophoneStatus,
+  type OutputAudioState,
+  type VoiceHotkeyState,
+} from "#shared/messages/audio";
+import {
   BRAIN_ASK_PENDING_STATUS,
-  BRAIN_ASK_REFUSAL,
   type BrainAskResult,
-  brainReplyWords,
   brainRequestPending,
-} from "#shared/wire/brain";
-import type { VoiceBootstrap } from "#shared/wire/session";
-import { type AppSettingsView, appSettingsView } from "#shared/wire/settings";
+} from "#shared/messages/brain";
+import type { VoiceBootstrap } from "#shared/messages/session";
+import { type AppSettingsView, appSettingsView } from "#shared/messages/settings";
 import {
   VOICE_COMMAND,
   type VoiceView,
   voiceExchangeActive,
   voiceExchangeKind,
-} from "#shared/wire/voice-view";
+} from "#shared/messages/voice-view";
 import { hostedVoiceUnavailableNote } from "../microphone-access";
 import { useStateWithRef } from "../use-state-with-ref";
 import { outputSilent } from "../volume-hint";
@@ -423,8 +431,9 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   );
 
   // Read only inside the press's own closure, so the ref is the half that matters.
-  const [, setMicrophoneStatus, microphoneStatusNow] =
-    useStateWithRef<MicrophoneStatus>("not-determined");
+  const [, setMicrophoneStatus, microphoneStatusNow] = useStateWithRef<MicrophoneStatus>(
+    MICROPHONE_STATUS.NOT_DETERMINED,
+  );
   /** A status learned from a push or this window's own ask, which a late bootstrap must not undo. */
   const learnMicrophoneStatus = useCallback(
     (status: MicrophoneStatus) => {
@@ -1084,7 +1093,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     const session = ensureVoiceSession();
     const permission = await window.sidecar.requestMicrophone();
     learnMicrophoneStatus(permission);
-    if (permission !== "granted") {
+    if (permission !== MICROPHONE_STATUS.GRANTED) {
       // The press that asked for this is still waiting for a call that is now
       // not coming. The status never changes on this path, so the meter the
       // press put up is taken down here rather than by a status settling.
@@ -1136,11 +1145,11 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     // turn opens: refused, the press is dropped here — before its device
     // request could fail a standing call that was carrying the typed
     // conversation fine.
-    if (microphoneStatusNow() !== "granted") {
+    if (microphoneStatusNow() !== MICROPHONE_STATUS.GRANTED) {
       const pressedAt = talkPressedAt.current;
       const permission = await window.sidecar.requestMicrophone();
       learnMicrophoneStatus(permission);
-      if (permission !== "granted") {
+      if (permission !== MICROPHONE_STATUS.GRANTED) {
         // Said where the device failure used to land it: the caption strip.
         setVoiceError(
           "The talk key needs the microphone. Allow it in System Settings, " +

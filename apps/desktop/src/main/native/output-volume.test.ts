@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { OutputAudioState } from "#shared/contracts";
+import type { OutputAudioState } from "#shared/messages/audio";
 import { OutputVolumeWatcher, parseOutputLine } from "./output-volume";
 
 interface Harness {

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { BRAIN_ASK_REFUSAL } from "@sidecar/brain/requests";
 import { REALTIME_STATUS } from "@sidecar/realtime";
-import { BRAIN_ASK_REFUSAL } from "#shared/wire/brain";
-import { IDLE_VOICE_VIEW } from "#shared/wire/voice-view";
+import { IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
 import {
   ASK_UNSENT_REASON,
   askDraftReason,

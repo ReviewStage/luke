@@ -25,14 +25,8 @@ import {
 } from "@sidecar/settings";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { type UnparsedWireValue, unparsedWire, type WireRecord } from "@sidecar/wire";
-import {
-  ACCOUNT_STATUS,
-  appSettingsView,
-  CREDENTIAL_SOURCE,
-  SECRET_STORAGE,
-  SETTINGS_RESET_SCOPE,
-  VOICE_SOURCE,
-} from "#shared/contracts";
+import { ACCOUNT_STATUS, CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/messages/account";
+import { appSettingsView, SETTINGS_RESET_SCOPE, VOICE_SOURCE } from "#shared/messages/settings";
 import { type SecretCipher, SettingsStore, type SettingsStoreOptions } from "./settings-store";
 
 const TEST_API_KEY = "conductor-live-key";

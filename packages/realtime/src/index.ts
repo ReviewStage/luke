@@ -79,6 +79,7 @@ export {
   isArrivalSpeech,
   isBriefingSpeech,
   isCalendarOnboardingSpeech,
+  isProactiveSpeechTurn,
   type MouthToolDefinition,
   maximumTypedAskLength,
   mouthToolDefinitions,

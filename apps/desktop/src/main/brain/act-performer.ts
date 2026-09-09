@@ -31,7 +31,7 @@ import {
   workspaceAgentModels,
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS, isWireString, type WireRecord } from "@sidecar/wire";
-import type { BrainAppActRequest } from "#shared/contracts";
+import type { BrainAppActRequest } from "#shared/messages/brain";
 import type { SessionActPerformer } from "../ipc/session-acts";
 
 /** The developer's saved creation tie-breaks, as the projects context narrates them. */

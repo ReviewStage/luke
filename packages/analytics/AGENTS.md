@@ -38,10 +38,10 @@ A value set another package already declares is imported where the graph
 allows it: `connection_id` is `CREDENTIAL_PROVIDER_ID` itself, read from
 `@sidecar/credentials/vocabulary`, so there is no second list to drift. A set
 whose package reads this one — the diagnostic kinds, the settings pages —
-still repeats it, because the edge would close a loop; the desktop closes each
-of those gaps with a total `Record` bridge in
-`apps/desktop/src/shared/product-vocabulary.ts`, so a new member does not build
-until this vocabulary has answered for it.
+still repeats it, because the edge would close a loop; each of those gaps is
+closed by a total `Record` bridge in the package that reads this one
+(`packages/settings/src/counted.ts`), so a new member does not build until this
+vocabulary has answered for it.
 
 `PRODUCT_SURFACE_EVENT` is the subset the renderer may ask for: surface motion
 the main process cannot see. It exists to be the narrowing — the main process

@@ -32,6 +32,7 @@ import {
   type MeetingInterval,
   nextMeetingBoundary,
 } from "@sidecar/calendar";
+import { APPLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
 import {
   CREDENTIAL_PROVIDER_ID,
   type CredentialProviderId,
@@ -137,6 +138,7 @@ import {
   settingAnalytics,
   settingEntryGuard,
   VOICE_SOURCE,
+  VOICE_SOURCE_COUNTED_AS,
 } from "@sidecar/settings";
 import {
   SUPERSET_SIGN_IN_STAGE,
@@ -160,18 +162,11 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
-import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "#shared/apple-calendar";
-import {
-  ACCOUNT_PROVIDER,
-  ACCOUNT_STATUS,
-  type AccountProvider,
-  type AccountSnapshot,
-  type BrainAppActRequest,
-  type ObservedAccountCalendars,
-  type SettingsUpdateResult,
-} from "#shared/contracts";
-import { VOICE_SOURCE_COUNTED_AS } from "#shared/product-vocabulary";
-import { isSpeechOutcome, SPEECH_OUTCOME, type SpeechOutcome } from "#shared/wire/speech";
+import { APPLE_CALENDAR_ACCESS } from "#shared/apple-calendar";
+import { ACCOUNT_STATUS, type AccountSnapshot, isAccountProvider } from "#shared/messages/account";
+import type { BrainAppActRequest } from "#shared/messages/brain";
+import type { ObservedAccountCalendars, SettingsUpdateResult } from "#shared/messages/settings";
+import { isSpeechOutcome, SPEECH_OUTCOME, type SpeechOutcome } from "#shared/messages/speech";
 import {
   APPLE_CALENDAR_ACCESS_REFUSAL,
   type AppleCalendarHelperRun,
@@ -290,10 +285,6 @@ const DIAGNOSTIC_COUNTED_AS = {
 
 function invalid(message: string) {
   return gatewayError(GATEWAY_ERROR.INVALID_PARAMS, message);
-}
-
-function isAccountProvider(value: UnparsedWireValue): value is AccountProvider {
-  return value === ACCOUNT_PROVIDER.GOOGLE || value === ACCOUNT_PROVIDER.GITHUB;
 }
 
 function isSessionIdentity(value: UnparsedWireValue): value is SessionIdentity & WireRecord {
