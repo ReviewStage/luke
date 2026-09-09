@@ -373,3 +373,36 @@ test("nothing the guide says about a setting names a credential or its shape", (
     }
   }
 });
+
+test("a setting states a default a spoken change could name, and answers to every word it offers", () => {
+  for (const field of APP_SETTING_FIELDS) {
+    const entry = APP_SETTING_SCHEMA[field];
+    for (const guideEntry of entriesFor(field)) {
+      const offered =
+        guideEntry.kind === APP_SETTING_KIND.TOGGLE ? ["on", "off"] : (guideEntry.choices ?? []);
+
+      // "Back to the default" is an ask the guide can always ground: a
+      // toggle's default is one of its two words, a choice's one it offers.
+      assert.ok(
+        offered.includes(guideEntry.defaultValue ?? ""),
+        `${guideEntry.id}'s default is a value a spoken change can set`,
+      );
+
+      // An entry a hand alone changes carries its by-hand path instead of a
+      // parse, because the refusal Luke voices is itself the guidance.
+      if (!guideEntry.adjustable || !entry.spokenValue) continue;
+      for (const word of offered) {
+        const parsed = spokenSettingValue(field, word);
+        if (parsed === undefined) {
+          // The one word that may mean nothing is the word for nothing, so a
+          // pace asked for by its multiple can never fall through as cleared.
+          assert.equal(entry.default, undefined, `${guideEntry.id} clears on "${word}"`);
+          assert.equal(word, guideEntry.defaultValue, `${guideEntry.id} answers for "${word}"`);
+          continue;
+        }
+        // SAFETY: A parsed spoken value is a stored value, which the guard reads.
+        assert.equal(entry.guard(parsed as never).valid, true, `${guideEntry.id}: "${word}"`);
+      }
+    }
+  }
+});

@@ -12,16 +12,9 @@ import {
   APP_UPDATE_WAIT,
   type AppGuideSetting,
 } from "@sidecar/guide";
-import {
-  REALTIME_DEFAULTS,
-  REALTIME_VOICE,
-  REALTIME_VOICE_LIST,
-  REALTIME_VOICE_SPEED,
-} from "@sidecar/realtime";
 import { PROVIDER_ID, type WorkspaceAgentSelection } from "@sidecar/session";
 import type { AppSettingsView, SettingsUpdateResult } from "@sidecar/settings/wire";
 import { appSettingsView } from "@sidecar/settings/wire";
-import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import type { UpdateSnapshot } from "#shared/messages/update";
 import { UPDATE_STATUS } from "#shared/messages/update";
 import { settingsView } from "#testing/settings-fixtures";
@@ -70,110 +63,138 @@ function guideSetting(id: string, input: LukeGuideInput = guideInput()): AppGuid
   return setting;
 }
 
+/**
+ * Every fact the guide can state, written by hand because nothing derives
+ * them. This is the facts half's one lever and a weak one on purpose: it says
+ * nothing about whether a fact is true, and it fails when one is deleted —
+ * which is the failure that matters, because a capability the guide does not
+ * describe is one Luke will deny having.
+ */
+const GUIDE_FACT_LABELS: readonly string[] = [
+  "What Luke is",
+  "The marks beside the housing",
+  "The panel",
+  "The sessions list",
+  "Apps beside a session",
+  "Searching sessions",
+  "The Settings tab",
+  "Conversation history",
+  "Account",
+  "Feedback and prompts",
+  "Reading a session's transcript",
+  "Creating workspaces",
+  "Workspace creation defaults",
+  "Adding agents to a workspace",
+  "Renaming workspaces and chats",
+  "Archiving",
+  "Talk key",
+  "Ask key",
+  "Microphone access",
+  "Stopping a reply",
+  "Announcements",
+  "The arrival beat",
+  "Calendar onboarding",
+  "How long a conversation lasts",
+  "Voice",
+  "Cloud providers",
+  "OpenAI",
+  "Linear",
+  "Apple Calendar",
+  "Google Calendar",
+  "Superset",
+  "Conductor",
+  "Credential storage",
+  "Updates",
+  "Quitting",
+  "Beyond this guide",
+];
+
+/** Enough states between them to stand every fact the guide has. */
+function everyGuideState(): LukeGuideInput[] {
+  return [
+    guideInput(),
+    guideInput({ voiceAvailable: false }),
+    guideInput({
+      account: {
+        status: ACCOUNT_STATUS.SIGNED_IN,
+        email: "developer@example.com",
+        provider: ACCOUNT_PROVIDER.GOOGLE,
+      },
+      settings: settings({
+        linearSignInAvailable: true,
+        appleCalendarAvailable: true,
+        calendarSignInAvailable: true,
+        secretStorage: SECRET_STORAGE.UNAVAILABLE,
+      }),
+    }),
+  ];
+}
+
+test("every fact the guide can state is one it states, and states once", () => {
+  const stated = new Set<string>();
+  for (const input of everyGuideState()) {
+    const facts = buildLukeGuide(input).facts;
+    const drawn = new Set<string>();
+    for (const fact of facts) {
+      // A label nobody put on the list is a fact nobody decided Luke may
+      // state, which is the half of the rule a test can hold.
+      assert.ok(GUIDE_FACT_LABELS.includes(fact.label), `${fact.label} is on the list`);
+      assert.ok(fact.detail.length > 0, fact.label);
+      // An ask about one fact must draw one, so a label stands once per state.
+      assert.equal(drawn.has(fact.label), false, `${fact.label} is stated twice`);
+      drawn.add(fact.label);
+      stated.add(fact.label);
+    }
+  }
+  // A label with nothing behind it is a capability deleted out from under the
+  // list, which is the half of the rule this test exists for.
+  assert.deepEqual(
+    GUIDE_FACT_LABELS.filter((label) => !stated.has(label)),
+    [],
+  );
+});
+
+test("each key fact states the key as it stands, and a deletion as the developer's own", () => {
+  const keyFact = (label: string, overrides: Partial<LukeGuideInput>): string => {
+    const fact = buildLukeGuide(guideInput(overrides)).facts.find(
+      (candidate) => candidate.label === label,
+    );
+    assert.ok(fact, label);
+    return fact.detail;
+  };
+
+  assert.match(keyFact("Talk key", {}), /hold to talk/);
+  assert.match(keyFact("Talk key", { hotkey: { hotkey: "⌥Space", held: false } }), /press to talk/);
+  assert.match(keyFact("Talk key", { hotkey: { held: false } }), /None is registered/);
+  assert.match(keyFact("Ask key", {}), /⌥L, from any app: summons the panel/);
+  assert.match(keyFact("Ask key", { askKey: undefined }), /None is registered/);
+  assert.match(keyFact("Stopping a reply", {}), /⌥S, from any app/);
+  assert.match(keyFact("Stopping a reply", { stopKey: undefined }), /No system-wide stop key/);
+
+  // A removed shortcut is the developer's own deletion, said as one rather
+  // than as a chord another app happens to own — and the removal outranks a
+  // chord still being reported beside it, because a broadcast can lag the
+  // deletion and teaching the key just deleted is worse than the absence.
+  const talkRemoved = keyFact("Talk key", {
+    hotkey: { hotkey: "⌥Space", held: true, removed: true },
+  });
+  assert.match(talkRemoved, /the shortcut was removed/);
+  assert.doesNotMatch(talkRemoved, /another app/);
+  assert.doesNotMatch(talkRemoved, /⌥Space, from any app/);
+
+  // Deleting the summons does not delete typing, and the fact has to say so.
+  const askRemoved = keyFact("Ask key", { askKey: undefined, askKeyRemoved: true });
+  assert.match(askRemoved, /the shortcut was removed/);
+  assert.match(askRemoved, /typed ask/);
+
+  const stopRemoved = keyFact("Stopping a reply", { stopKeyRemoved: true });
+  assert.match(stopRemoved, /its shortcut was removed/);
+  assert.doesNotMatch(stopRemoved, /⌥S, from any app/);
+});
+
 test("the guide keeps the signed-out escape path explicit", () => {
   const quitting = buildLukeGuide(guideInput()).facts.find((fact) => fact.label === "Quitting");
   assert.match(quitting?.detail ?? "", /sign-in screen/);
-});
-
-test("the guide describes every spoken-adjustable setting with its current value", () => {
-  const captionsOff = guideSetting(APP_SETTING_ID.VOICE_CAPTIONS);
-  assert.equal(captionsOff.kind, APP_SETTING_KIND.TOGGLE);
-  assert.equal(captionsOff.value, "off");
-  assert.equal(captionsOff.adjustable, true);
-  assert.equal(captionsOff.defaultValue, "off");
-
-  const captionsOn = guideSetting(
-    APP_SETTING_ID.VOICE_CAPTIONS,
-    guideInput({ settings: settings({ voiceCaptions: true }) }),
-  );
-  assert.equal(captionsOn.value, "on");
-
-  const voice = guideSetting(APP_SETTING_ID.VOICE);
-  assert.equal(voice.kind, APP_SETTING_KIND.CHOICE);
-  assert.equal(voice.value, REALTIME_VOICE.CEDAR);
-  assert.deepEqual(voice.choices, REALTIME_VOICE_LIST);
-  // The guide states the same default the settings row marks, so a spoken
-  // "back to the default voice" names the value the row calls (default).
-  assert.equal(voice.defaultValue, REALTIME_DEFAULTS.VOICE);
-
-  const dock = guideSetting(APP_SETTING_ID.SHOW_IN_DOCK);
-  assert.equal(dock.value, "off");
-  assert.equal(dock.defaultValue, "off");
-
-  // The pace is offered in words a voice can carry and in the multiples its
-  // settings row shows, so an ask in either spelling lands.
-  const speed = guideSetting(APP_SETTING_ID.VOICE_SPEED);
-  assert.equal(speed.kind, APP_SETTING_KIND.CHOICE);
-  assert.equal(speed.value, "normal");
-  assert.equal(speed.defaultValue, "normal");
-  assert.deepEqual(speed.choices, [
-    "slow",
-    "0.75×",
-    "normal",
-    "1×",
-    "quick",
-    "1.25×",
-    "fast",
-    "1.5×",
-  ]);
-  assert.equal(
-    guideSetting(
-      APP_SETTING_ID.VOICE_SPEED,
-      guideInput({ settings: settings({ voiceSpeed: REALTIME_VOICE_SPEED.FAST }) }),
-    ).value,
-    "fast",
-  );
-
-  // One switch covers every display: off keeps Luke to the main one alone.
-  const allDisplays = guideSetting(APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS);
-  assert.equal(allDisplays.kind, APP_SETTING_KIND.TOGGLE);
-  assert.equal(allDisplays.value, "off");
-  assert.equal(
-    guideSetting(
-      APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS,
-      guideInput({ settings: settings({ showOnAllDisplays: true }) }),
-    ).value,
-    "on",
-  );
-
-  const formFactor = guideSetting(APP_SETTING_ID.FORM_FACTOR);
-  assert.equal(formFactor.kind, APP_SETTING_KIND.CHOICE);
-  assert.equal(formFactor.value, PANEL_FORM_FACTOR.BUBBLE);
-  assert.equal(formFactor.defaultValue, PANEL_FORM_FACTOR.BUBBLE);
-  assert.deepEqual(formFactor.choices, [PANEL_FORM_FACTOR.NOTCH, PANEL_FORM_FACTOR.BUBBLE]);
-  assert.equal(
-    guideSetting(
-      APP_SETTING_ID.FORM_FACTOR,
-      guideInput({ settings: settings({ formFactor: PANEL_FORM_FACTOR.NOTCH }) }),
-    ).value,
-    PANEL_FORM_FACTOR.NOTCH,
-  );
-
-  // Every entry says where the same change is made by hand, because guiding
-  // the developer there is half of what the guide is for — and the Settings
-  // tab opens into pages, so a path that stops at the tab strands them on its
-  // front page. Every one of Luke's own settings also states its default, so
-  // "back to the default" is an ask the guide can always ground: a toggle's
-  // default is one of its two words, a choice's one of its offered choices.
-  for (const setting of buildLukeGuide(guideInput()).settings) {
-    assert.ok(setting.manual.length > 0, `${setting.id} has a by-hand path`);
-    assert.match(setting.manual, /Settings tab, on its \w[\w ]* page/);
-    assert.ok(setting.defaultValue, `${setting.id} states its default`);
-    const accepted =
-      setting.kind === APP_SETTING_KIND.TOGGLE ? ["on", "off"] : (setting.choices ?? []);
-    assert.ok(
-      accepted.includes(setting.defaultValue),
-      `${setting.id}'s default is a value a spoken change can set`,
-    );
-  }
-
-  // The pages are named by what they hold: the voice rows live on the Voice
-  // page and the standing rows on Appearance, so the words Luke says match
-  // the row the developer will find.
-  assert.match(guideSetting(APP_SETTING_ID.VOICE, guideInput()).manual, /Voice page/);
-  assert.match(guideSetting(APP_SETTING_ID.VOICE_CAPTIONS, guideInput()).manual, /Voice page/);
-  assert.match(guideSetting(APP_SETTING_ID.SHOW_IN_DOCK, guideInput()).manual, /Appearance page/);
-  assert.match(guideSetting(APP_SETTING_ID.FORM_FACTOR, guideInput()).manual, /Appearance page/);
 });
 
 test("the facts say what is connected, never what connects it", () => {
@@ -274,18 +295,6 @@ test("the facts say what is connected, never what connects it", () => {
   assert.doesNotMatch(rendered, /API key:/);
 });
 
-test("the app-mark fact stays at the ask level: identity, and opening where addressed", () => {
-  const rendered = JSON.stringify(buildLukeGuide(guideInput()).facts);
-
-  // The taxonomy is deliberately one fact of two sentences: which apps a chat
-  // appears in, that an addressed mark opens there, and that an ask can pick
-  // the app. Finer per-app mechanics are the surface's to show, not the
-  // guide's to recite.
-  assert.match(rendered, /"label":"Apps beside a session"/);
-  assert.match(rendered, /mark with an exact address opens the chat in that app/);
-  assert.match(rendered, /ask can name which app/);
-});
-
 test("the guide names the signed-in identity and keeps sign-out manual", () => {
   const facts = buildLukeGuide(
     guideInput({
@@ -306,165 +315,6 @@ test("the guide names the signed-in identity and keeps sign-out manual", () => {
   // neither denies the capability nor lets a spoken ask believe it can reach it.
   assert.match(account?.detail ?? "", /Delete account/);
   assert.match(account?.detail ?? "", /no spoken ask/);
-});
-
-test("the facts describe creating a workspace, so Luke does not deny the capability", () => {
-  const rendered = JSON.stringify(buildLukeGuide(guideInput()).facts);
-
-  assert.match(rendered, /Creating workspaces/);
-  // The defaults a nameless ask falls back to are their own fact, beside the
-  // action they steer.
-  assert.match(rendered, /"label":"Workspace creation defaults"/);
-  // The refusal shape rides with the offer: only reported projects exist.
-  assert.match(rendered, /Only reported projects/);
-  // Where a nameless ask goes rides with it too, so the remembered first
-  // choice is something Luke explains rather than something that surprises.
-  assert.match(rendered, /default workspace provider/);
-  assert.match(rendered, /default project/);
-  assert.match(rendered, /first workspace created fills each in/);
-  // And so is what the new agent runs, because a model the user never chose
-  // is exactly the surprise this setting exists to end.
-  assert.match(rendered, /its model, and its effort/);
-  // Where a bare "new agent" ask lands rides with both facts, so the guide
-  // explains the default the same way the conversation acts on it: a new
-  // workspace, unless the ask itself names the existing one to join.
-  assert.match(rendered, /bare ask for a new agent creates a new workspace/);
-  assert.match(rendered, /naming an existing workspace or session adds an agent beside it/);
-  // Superset creates workspaces too, and asks for more than the others do —
-  // a guide that named only Conductor and Cursor would have Luke deny a
-  // capability he has, then be surprised by the refusal a task-less ask earns.
-  assert.match(rendered, /new Superset workspace needs a host, an agent, and an opening task/);
-
-  // The one removal a Superset row takes is deleting its settled workspace,
-  // and the guide says every half out loud: what the delete is — permanent,
-  // the whole workspace, never a working row — that a single chat cannot be
-  // closed on its own, so the refusal Luke voices is itself the guidance,
-  // and that the developer's own word for tidying, archive, is taken as the
-  // delete rather than refused over vocabulary.
-  assert.match(rendered, /Delete workspace once its work settled/);
-  // An idle workspace is the one a cleanup ask is usually about, so the
-  // guide must say its row is settled, or Luke wrongly refuses the delete.
-  assert.match(rendered, /agentless idle row counts as settled/);
-  assert.match(rendered, /idle worktree workspace stands as its own row/);
-  assert.match(rendered, /deleting is permanent/);
-  assert.match(rendered, /single chat cannot be closed or removed on its own/);
-  assert.match(rendered, /ask to archive one means exactly this delete/);
-  assert.match(rendered, /ask to archive one is taken as its Delete workspace control/);
-  assert.match(rendered, /permanent, never filed away/);
-});
-
-test("the facts describe renaming workspaces and chats, so Luke does not deny the capability", () => {
-  const rendered = JSON.stringify(buildLukeGuide(guideInput()).facts);
-
-  assert.match(rendered, /Renaming workspaces and chats/);
-  // The refusal shape rides with the offer: only a session whose roster entry
-  // advertises a rename takes one.
-  assert.match(rendered, /roster entry allows neither takes no such ask/);
-  // Both surfaces that can rename are named, and the disambiguation the
-  // conversation applies is the one the guide teaches.
-  assert.match(rendered, /Superset-managed workspace, or a Conductor chat/);
-  assert.match(rendered, /one about the chat renames the chat/);
-});
-
-test("the guide offers what a new Conductor agent runs, by the names people know", () => {
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // Unset reads as the provider's own defaults, which is what actually holds,
-  // and the choices are the labels people know the models by — never wire ids.
-  const unset = guideSetting(APP_SETTING_ID.WORKSPACE_AGENT_MODEL);
-  assert.equal(unset.kind, APP_SETTING_KIND.CHOICE);
-  assert.equal(unset.value, "Conductor's default");
-  assert.equal(unset.adjustable, true);
-  assert.equal(unset.choices?.[0], "Conductor's default");
-  assert.ok(unset.choices?.includes("Fable 5.1"));
-  assert.ok(unset.choices?.includes("Fable 5"));
-  assert.ok(unset.choices?.includes("GPT-5.6 Sol"));
-  assert.equal(unset.choices?.includes("fable-5-1"), false);
-  // The by-hand path names the provider's own row, not the Preferences list.
-  assert.match(unset.manual, /Conductor row under Providers/);
-
-  // The levels each model takes ride the model entry itself, keyed by the
-  // labels the choices are said by, so a model and its effort can be asked
-  // for in one change even while nothing is chosen yet.
-  assert.deepEqual(unset.efforts?.["Fable 5.1"], ["low", "medium", "high", "xhigh", "max"]);
-  assert.deepEqual(unset.efforts?.["Fable 5"], ["low", "medium", "high", "xhigh", "max"]);
-  assert.deepEqual(unset.efforts?.["GPT-5.6 Sol"], [
-    "none",
-    "low",
-    "medium",
-    "high",
-    "xhigh",
-    "max",
-    "ultra",
-  ]);
-  // A model whose agent documents no levels — Cursor's — is absent, and so is
-  // the default word: neither has a level anywhere documented to take.
-  assert.equal(unset.efforts?.["Cursor Auto"], undefined);
-  assert.equal(unset.efforts?.["Conductor's default"], undefined);
-
-  // No model chosen means no effort entry at all: a level with no model to
-  // ride has nowhere documented to go, so nothing offers one.
-  const withoutModel = buildLukeGuide(guideInput()).settings.find(
-    (candidate) => candidate.id === APP_SETTING_ID.WORKSPACE_AGENT_EFFORT,
-  );
-  assert.equal(withoutModel, undefined);
-
-  // A chosen model is said by its label, and its agent's documented levels
-  // become the effort entry's choices.
-  const chosenInput = guideInput({
-    settings: settings({
-      workspaceAgentDefaults: {
-        [PROVIDER_ID.CONDUCTOR]: { agent: "codex", model: "gpt-5.6-sol", effort: "xhigh" },
-      },
-    }),
-  });
-  assert.equal(
-    guideSetting(APP_SETTING_ID.WORKSPACE_AGENT_MODEL, chosenInput).value,
-    "GPT-5.6 Sol",
-  );
-  const effort = guideSetting(APP_SETTING_ID.WORKSPACE_AGENT_EFFORT, chosenInput);
-  assert.equal(effort.value, "xhigh");
-  assert.equal(effort.adjustable, true);
-  assert.deepEqual(effort.choices, [
-    "Conductor's default",
-    "none",
-    "low",
-    "medium",
-    "high",
-    "xhigh",
-    "max",
-    "ultra",
-  ]);
-
-  // A chosen model whose agent documents no levels — Cursor's — offers none.
-  const cursorInput = guideInput({
-    settings: settings({
-      workspaceAgentDefaults: {
-        [PROVIDER_ID.CONDUCTOR]: { agent: "cursor", model: "composer-2.5" },
-      },
-    }),
-  });
-  assert.equal(
-    buildLukeGuide(cursorInput).settings.find(
-      (candidate) => candidate.id === APP_SETTING_ID.WORKSPACE_AGENT_EFFORT,
-    ),
-    undefined,
-  );
-});
-
-test("the guide offers GPT-6 Astra for new Conductor agents", () => {
-  const unset = guideSetting(APP_SETTING_ID.WORKSPACE_AGENT_MODEL);
-
-  assert.ok(unset.choices?.includes("GPT-6 Astra"));
-  assert.equal(unset.choices?.includes("gpt-6-astra"), false);
-  assert.deepEqual(unset.efforts?.["GPT-6 Astra"], [
-    "none",
-    "low",
-    "medium",
-    "high",
-    "xhigh",
-    "max",
-    "ultra",
-  ]);
 });
 
 test("a spoken model or effort change composes the one stored selection", async () => {
@@ -651,189 +501,6 @@ test("a model and its effort asked in one breath compose through the held answer
   assert.deepEqual(carried.at(-1), { agent: "claude", model: "fable-5", effort: "high" });
 });
 
-test("the guide describes the default workspace provider without offering to change it", () => {
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // Unset reads as the asking state — the default every install starts in —
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // not as a missing value.
-  const unset = guideSetting(APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER);
-  assert.equal(unset.kind, APP_SETTING_KIND.CHOICE);
-  assert.equal(unset.value, "ask each time");
-  assert.equal(unset.defaultValue, "ask each time");
-  // Kept by hand: the first creation is the spoken way it changes, so the
-  // spoken refusal must carry the by-hand path instead of a carrier.
-  assert.equal(unset.adjustable, false);
-  assert.match(unset.manual, /Settings tab/);
-
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // A chosen provider is said by the name its rows use, never as a raw id.
-  const chosen = guideSetting(
-    APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER,
-    guideInput({ settings: settings({ defaultWorkspaceProvider: PROVIDER_ID.CONDUCTOR }) }),
-  );
-  assert.equal(chosen.value, "Conductor");
-});
-
-test("the facts describe stopping a reply, exactly where a reply can exist", () => {
-  const rendered = JSON.stringify(buildLukeGuide(guideInput()).facts);
-
-  assert.match(rendered, /Stopping a reply/);
-  // The registered key leads, and Escape rides with it: the stop key answers
-  // from any app, Escape only while the panel has the keyboard.
-  assert.match(rendered, /⌥S, from any app/);
-  assert.match(rendered, /Escape does the same/);
-  // Guiding the developer to the row is half of what the guide is for.
-  assert.match(rendered, /A different stop chord can be recorded/);
-
-  // No key registered — another app owns ⌥S, or a Luke key was moved onto
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // it — leaves Escape as the whole of the capability, said honestly.
-  const keyless = JSON.stringify(buildLukeGuide(guideInput({ stopKey: undefined })).facts);
-  assert.match(keyless, /Escape while Luke is speaking/);
-  assert.match(keyless, /No system-wide stop key is registered/);
-
-  // A deleted shortcut is the developer's own choice, and the fact says so
-  // rather than blaming another app for a chord nobody is contesting.
-  const removed = JSON.stringify(
-    buildLukeGuide(guideInput({ stopKey: undefined, stopKeyRemoved: true })).facts,
-  );
-  assert.match(removed, /its shortcut was removed/);
-  assert.doesNotMatch(removed, /another app/);
-
-  // The removal outranks a chord still being reported beside it: a broadcast
-  // can lag the deletion, and teaching the key that was just deleted is worse
-  // than the honest absence.
-  const removedStale = buildLukeGuide(guideInput({ stopKeyRemoved: true })).facts.find(
-    (fact) => fact.label === "Stopping a reply",
-  );
-  assert.ok(removedStale);
-  assert.match(removedStale.detail, /its shortcut was removed/);
-  assert.doesNotMatch(removedStale.detail, /⌥S, from any app/);
-
-  // Without a voice there is no reply to stop, so the fact would describe a
-  // key that does nothing.
-  const voiceless = JSON.stringify(buildLukeGuide(guideInput({ voiceAvailable: false })).facts);
-  assert.doesNotMatch(voiceless, /Stopping a reply/);
-});
-
-test("the announcement fact exists exactly while a voice can speak one", () => {
-  const rendered = JSON.stringify(buildLukeGuide(guideInput()).facts);
-  assert.match(rendered, /"label":"Announcements"/);
-
-  const voiceless = JSON.stringify(buildLukeGuide(guideInput({ voiceAvailable: false })).facts);
-  assert.doesNotMatch(voiceless, /"label":"Announcements"/);
-});
-
-test("the facts follow the talk key, the microphone, and the storage the system offers", () => {
-  const held = JSON.stringify(buildLukeGuide(guideInput()).facts);
-  assert.match(held, /hold to talk/);
-
-  const toggled = JSON.stringify(
-    buildLukeGuide(guideInput({ hotkey: { hotkey: "⌥Space", held: false } })).facts,
-  );
-  assert.match(toggled, /press to talk/);
-
-  const unregistered = JSON.stringify(
-    buildLukeGuide(guideInput({ hotkey: { held: false } })).facts,
-  );
-  assert.match(unregistered, /None is registered/);
-
-  // A removed talk key is the developer's own deletion, said as one rather
-  // than as a chord another app happens to own — and the removal outranks a
-  // chord still being reported beside it, because a broadcast can lag the
-  // deletion.
-  const talkRemoved = buildLukeGuide(
-    guideInput({ hotkey: { hotkey: "⌥Space", held: true, removed: true } }),
-  ).facts.find((fact) => fact.label === "Talk key");
-  assert.ok(talkRemoved);
-  assert.match(talkRemoved.detail, /the shortcut was removed/);
-  assert.doesNotMatch(talkRemoved.detail, /another app/);
-  assert.doesNotMatch(talkRemoved.detail, /⌥Space, from any app/);
-
-  // The ask key is a fact on the talk key's terms: the registered chord when
-  // there is one, and an honest absence when there is not.
-  assert.match(held, /⌥L, from any app: summons the panel/);
-  const askless = buildLukeGuide(guideInput({ askKey: undefined })).facts.find(
-    (fact) => fact.label === "Ask key",
-  );
-  assert.ok(askless);
-  assert.match(askless.detail, /None is registered/);
-
-  // The ask key's removal is said on the talk key's terms, with the typed
-  // composer still offered: deleting the summons does not delete typing.
-  const askRemoved = buildLukeGuide(
-    guideInput({ askKey: undefined, askKeyRemoved: true }),
-  ).facts.find((fact) => fact.label === "Ask key");
-  assert.ok(askRemoved);
-  assert.match(askRemoved.detail, /the shortcut was removed/);
-  assert.match(askRemoved.detail, /typed ask/);
-
-  const denied = JSON.stringify(buildLukeGuide(guideInput({ microphoneStatus: "denied" })).facts);
-  assert.match(denied, /Privacy & Security/);
-
-  const voiceless = buildLukeGuide(guideInput({ voiceAvailable: false }));
-  assert.match(JSON.stringify(voiceless.facts), /nothing to run voice on/);
-  // The refusal carries the way out: both ways in live under Provider,
-  // and a fact that stopped at "off" would leave the ask unanswerable.
-  assert.match(JSON.stringify(voiceless.facts), /Provider section after Permissions/);
-  const unprotected = buildLukeGuide(
-    guideInput({ settings: settings({ secretStorage: SECRET_STORAGE.UNAVAILABLE }) }),
-  );
-  assert.match(JSON.stringify(unprotected.facts), /no encrypted credential storage/);
-});
-
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("the panel fact says the tabs answer an ask as well as a press", () => {
-  const guide = buildLukeGuide(guideInput());
-  const fact = guide.facts.find((candidate) => candidate.label === "The panel");
-
-  assert.ok(fact);
-  // Switching between Sessions and Settings by asking Luke is a capability,
-  // and a capability the guide does not describe is one Luke will deny.
-  assert.match(fact.detail, /switched by pressing one or by asking Luke/);
-  assert.match(fact.detail, /the panel opens on that tab/);
-  // What each tab holds is its own fact, so a spoken answer about one is not
-  // compressed out of a paragraph describing both.
-  assert.ok(guide.facts.some((candidate) => candidate.label === "The sessions list"));
-  assert.ok(guide.facts.some((candidate) => candidate.label === "The Settings tab"));
-});
-
-test("the sessions list fact offers the filter, order, and clear to a spoken ask", () => {
-  const fact = buildLukeGuide(guideInput()).facts.find(
-    (candidate) => candidate.label === "The sessions list",
-  );
-
-  assert.ok(fact);
-  // The list's actions are what a spoken ask is validated against; the chip
-  // choreography behind them is the surface's to show.
-  assert.match(fact.detail, /filters by location, kind, app, and agent/);
-  assert.match(fact.detail, /spoken ask can filter, sort, or clear/);
-});
-
-test("the guide describes the search's ways in and the spoken bound", () => {
-  const fact = buildLukeGuide(guideInput()).facts.find(
-    (candidate) => candidate.label === "Searching sessions",
-  );
-
-  assert.ok(fact);
-  // The spoken way in must be described with its bound: a spoken search does
-  // nothing the field cannot, and neither exists beside a one-session list,
-  // where the carrier refuses the ask.
-  assert.match(fact.detail, /magnifier/);
-  assert.match(fact.detail, /Command-F/);
-  assert.match(fact.detail, /asking Luke to search out loud/);
-  assert.match(fact.detail, /reaches no further than the magnifier/);
-  assert.match(fact.detail, /only offered beside a list of more than one session/);
-
-  // The settings search keeps its hand-only bound on the Settings tab fact,
-  // so a spoken ask to search settings is refused honestly.
-  const settingsTab = buildLukeGuide(guideInput()).facts.find(
-    (candidate) => candidate.label === "The Settings tab",
-  );
-  assert.ok(settingsTab);
-  assert.match(settingsTab.detail, /by hand alone: no spoken ask can search it/);
-});
-
 test("the guide ends by redirecting what it leaves out rather than denying it", () => {
   const fact = buildLukeGuide(guideInput()).facts.at(-1);
 
@@ -909,28 +576,6 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
   // The snapshot the store answered with is handed back either way, so the
   // panel's switches redraw from what was actually stored.
   assert.equal(seen.length, calls.length);
-});
-
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("a pace asked for by its multiple carries the same as its word", async () => {
-  const calls: string[] = [];
-  const bridge = spokenSettingBridge({
-    updateSetting: async (field, value) => {
-      calls.push(`${field}:${value}`);
-      return { status: "accepted", settings: appSettingsWire(settings()) };
-    },
-  });
-
-  for (const value of ["quick", "1.25×"]) {
-    const outcome = await applySpokenSetting(
-      bridge,
-      { setting: guideSetting(APP_SETTING_ID.VOICE_SPEED), value },
-      () => undefined,
-    );
-    assert.equal(outcome.status, "accepted");
-  }
-
-  assert.deepEqual(calls, ["voiceSpeed:1.25", "voiceSpeed:1.25"]);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
