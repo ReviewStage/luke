@@ -366,9 +366,9 @@ test("a conversation that looks at one session reads only it, and a repeated unc
   assert.equal(h.client.inputs.length, 2);
 });
 
-test("a session the developer is speaking with wakes nothing until the exchange ends, and stays on the roster throughout", async () => {
+test("a session the developer is speaking with wakes nothing, and the exchange over is read past rather than replayed", async () => {
   let live = true;
-  let text = `${TRANSCRIPT_SECRET} said aloud`;
+  let transcript = `${TRANSCRIPT_SECRET} said aloud`;
   const h = harness({
     observes: { kind: LOOK_SUBJECT.SESSION, identity: ABC },
     roster: () => ({
@@ -381,15 +381,18 @@ test("a session the developer is speaking with wakes nothing until the exchange 
         }),
       ],
     }),
-    readTranscriptSince: async () => ({
+    // The cursor is a position in the transcript, so each read starts where the
+    // last one stopped, the way a provider's own reader does.
+    readTranscriptSince: async (_identity, cursor) => ({
       status: ACTION_RESULT_STATUS.ACCEPTED,
-      text,
-      cursor: `abc-${text.length}`,
+      text: transcript.slice(Number(cursor ?? 0)),
+      cursor: String(transcript.length),
       truncated: false,
     }),
   });
   // Neither the look nor the provider's own hook opens an inference over an
-  // exchange being heard first-hand, and nothing is captured to open one later.
+  // exchange being heard first-hand, and nothing is written down to open one
+  // later — but the capture cursor moves past what was said.
   h.agent.rosterLook();
   await settle();
   await h.agent.wake([
@@ -401,15 +404,25 @@ test("a session the developer is speaking with wakes nothing until the exchange 
   await settle();
   assert.equal(h.client.inputs.length, 0);
   assert.equal(h.repository.state?.inbox.length ?? 0, 0);
+  assert.equal(h.repository.state?.captureCursors["claude-code"]?.abc, String(transcript.length));
 
-  // The exchange over, the next look reads the session again.
+  // The exchange ending is not news: with nothing gained since, the look
+  // opens nothing and replays none of what the developer heard themselves.
   live = false;
-  text = "assistant: back to typing";
+  h.agent.rosterLook();
+  await settle();
+  assert.equal(h.client.inputs.length, 0);
+
+  // A fresh turn after it is read from where the exchange left off.
+  transcript += "\nassistant: back to typing";
   h.client.answers.push(answered([message("")]));
   h.agent.rosterLook();
   await settle();
   assert.equal(h.client.inputs.length, 1);
-  assert.ok(itemText((h.client.inputs[0] ?? [])[0]).includes("back to typing"));
+  const opening = itemText((h.client.inputs[0] ?? [])[0]);
+  assert.ok(opening.includes("back to typing"));
+  assert.ok(!opening.includes(TRANSCRIPT_SECRET));
+  assert.equal(h.repository.state?.captureCursors["claude-code"]?.abc, String(transcript.length));
   await h.agent.stop();
 });
 

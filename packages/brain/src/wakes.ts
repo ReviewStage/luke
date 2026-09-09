@@ -133,10 +133,8 @@ export class WakeCapture {
    * Settles once the capture has landed or been refused.
    */
   wake(events: readonly BrainWakeEvent[]): Promise<void> {
-    if (this.#seam.stopped()) return Promise.resolve();
-    const heard = events.filter((event) => !event.session || !developerSpeakingWith(event.session));
-    if (heard.length === 0) return Promise.resolve();
-    return this.#capture(heard).then((captured) => {
+    if (this.#seam.stopped() || events.length === 0) return Promise.resolve();
+    return this.#capture(events).then((captured) => {
       if (this.#seam.stopped()) return;
       const generation = this.#seam.generation();
       if (!generation) return;
@@ -207,10 +205,11 @@ export class WakeCapture {
    * batch is read once from its capture cursor; an event that names a hook
    * the inbox already holds — the same hook, session, and instant delivered
    * twice — is not captured again; a roster edge that gained nothing over a
-   * session standing exactly as it last stood is not captured at all. What
-   * remains is written with the advanced capture cursors in one save, and a
-   * save the store refuses moves no cursor in memory either. Answers how many
-   * entries were captured.
+   * session standing exactly as it last stood is not captured at all; and an
+   * event on a session the developer is speaking with moves its cursor past
+   * what was read and leaves no entry. What remains is written with the
+   * advanced capture cursors in one save, and a save the store refuses moves
+   * no cursor in memory either. Answers how many entries were captured.
    */
   #capture(events: readonly BrainWakeEvent[]): Promise<number> {
     const work = async (): Promise<number> => {
@@ -229,6 +228,7 @@ export class WakeCapture {
         cursor: string | undefined;
       }>();
       const entries: BrainObservationEntry[] = [];
+      let heardFirstHand = false;
       const now = this.#seam.now();
       for (const event of fresh) {
         let read = reads.get(event.identity.providerId, event.identity.providerSessionId);
@@ -257,6 +257,10 @@ export class WakeCapture {
             cursor: read.cursor,
           };
         }
+        if (event.session && developerSpeakingWith(event.session)) {
+          heardFirstHand = true;
+          continue;
+        }
         if (
           event.kind === BRAIN_WAKE_KIND.ROSTER &&
           !read.delta?.text &&
@@ -269,7 +273,7 @@ export class WakeCapture {
           entryFromEvent(event, this.#options.createRunId(), now, read.delta, read.cursor),
         );
       }
-      if (entries.length === 0) {
+      if (entries.length === 0 && !heardFirstHand) {
         generation.captureCursors.rollback(mark);
         return 0;
       }
@@ -320,7 +324,6 @@ export class WakeCapture {
       if (subject.kind === LOOK_SUBJECT.SESSION && !sameIdentity(subject.identity, identity)) {
         return [];
       }
-      if (developerSpeakingWith(session)) return [];
       const readBefore = cursors.cursor(identity) !== undefined;
       const live =
         session.status === SESSION_STATUS.WORKING || session.status === SESSION_STATUS.WAITING;
@@ -369,10 +372,12 @@ export class WakeCapture {
 /**
  * A session the developer is speaking with first-hand wakes nothing: its turn
  * boundaries are the rhythm of a conversation being heard as it happens, and a
- * briefing read over them would talk over the very exchange it reports. The
- * hook and the look are dropped rather than held, so the exchange ending never
- * replays what happened inside it; the session stays on the roster and in the
- * standing context throughout, because the developer may still ask about it.
+ * briefing read over them would talk over the very exchange it reports. Its
+ * hooks and looks still read what the transcript gained, so the capture cursor
+ * moves past the exchange, but they write no entry and open no turn — the text
+ * is read past rather than read out, and the exchange ending never replays
+ * what happened inside it. The session stays on the roster and in the standing
+ * context throughout, because the developer may still ask about it.
  */
 function developerSpeakingWith(session: Session): boolean {
   return session.realtimeVoiceLive === true;
