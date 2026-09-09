@@ -19,6 +19,7 @@ import {
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
 } from "@sidecar/session";
+import { admittedForTest } from "@sidecar/wire/testing";
 
 const cursor: SessionProvider = { id: "cursor", displayName: "Cursor" };
 const codex: SessionProvider = { id: "codex", displayName: "Codex" };
@@ -185,7 +186,9 @@ test("carries a message past observers that have never seen the session", async 
     ],
   });
 
-  const result = await adapter.sendMessage({ providerSessionId: "cloud-agent", text: "go on" });
+  const result = await adapter.sendMessage(
+    admittedForTest({ providerSessionId: "cloud-agent", text: "go on" }),
+  );
 
   assert.deepEqual(result, { status: ACT_RESULT_STATUS.ACCEPTED });
   assert.deepEqual(sent, [{ providerSessionId: "cloud-agent", text: "go on" }]);
@@ -207,7 +210,9 @@ test("lets the observer that holds the session refuse for itself", async () => {
     ],
   });
 
-  const result = await adapter.sendMessage({ providerSessionId: "cloud-agent", text: "go on" });
+  const result = await adapter.sendMessage(
+    admittedForTest({ providerSessionId: "cloud-agent", text: "go on" }),
+  );
 
   // A rejection is the session's own answer, so it must not be shopped past
   // the observer that gave it to one that would say yes to a different session.
@@ -221,7 +226,9 @@ test("answers unsupported when no observer can carry a message", async () => {
     adapters: [observerOf(cursor, [observation("local-session")])],
   });
 
-  const result = await adapter.sendMessage({ providerSessionId: "local-session", text: "go on" });
+  const result = await adapter.sendMessage(
+    admittedForTest({ providerSessionId: "local-session", text: "go on" }),
+  );
 
   assert.deepEqual(result, {
     status: ACT_RESULT_STATUS.UNSUPPORTED,
@@ -291,7 +298,7 @@ test("offers every observer's projects and carries a creation ask to the one tha
     },
   ]);
 
-  const result = await adapter.createWorkspace({ providerProjectId: "proj-2" });
+  const result = await adapter.createWorkspace(admittedForTest({ providerProjectId: "proj-2" }));
 
   assert.deepEqual(result, { status: ACT_RESULT_STATUS.ACCEPTED });
   assert.deepEqual(created, [{ providerProjectId: "proj-2" }]);
@@ -304,10 +311,13 @@ test("answers unsupported when no observer offers workspace creation", async () 
   });
 
   assert.deepEqual(adapter.workspaceProjects(), []);
-  assert.deepEqual(await adapter.createWorkspace({ providerProjectId: "proj-1" }), {
-    status: ACT_RESULT_STATUS.UNSUPPORTED,
-    reason: "No provider adapter supports that act.",
-  });
+  assert.deepEqual(
+    await adapter.createWorkspace(admittedForTest({ providerProjectId: "proj-1" })),
+    {
+      status: ACT_RESULT_STATUS.UNSUPPORTED,
+      reason: "No provider adapter supports that act.",
+    },
+  );
 });
 
 test("carries a rename past observers that have never seen the session", async () => {
@@ -326,10 +336,12 @@ test("carries a rename past observers that have never seen the session", async (
     ],
   });
 
-  const result = await adapter.renameWorkspace({
-    providerSessionId: "cloud-agent",
-    name: "Payments rollout",
-  });
+  const result = await adapter.renameWorkspace(
+    admittedForTest({
+      providerSessionId: "cloud-agent",
+      name: "Payments rollout",
+    }),
+  );
 
   assert.deepEqual(result, { status: ACT_RESULT_STATUS.ACCEPTED });
   assert.deepEqual(renamed, [{ providerSessionId: "cloud-agent", name: "Payments rollout" }]);
@@ -342,7 +354,9 @@ test("answers unsupported when no observer can rename a workspace", async () => 
   });
 
   assert.deepEqual(
-    await adapter.renameWorkspace({ providerSessionId: "local-session", name: "Payments" }),
+    await adapter.renameWorkspace(
+      admittedForTest({ providerSessionId: "local-session", name: "Payments" }),
+    ),
     {
       status: ACT_RESULT_STATUS.UNSUPPORTED,
       reason: "No provider adapter supports that act.",

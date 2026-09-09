@@ -12,7 +12,7 @@ import {
   UNSUPPORTED_BY_OBSERVATION,
 } from "@sidecar/session";
 import { type CloudFetch, isWireString } from "@sidecar/wire";
-import { HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
+import { admittedForTest, HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
 import { ADAPTER_DIAGNOSTIC_KIND, type AdapterDiagnosticCallback } from "./adapter-diagnostics.js";
 import { type CloudAdapterOptions, CloudSessionAdapter } from "./cloud-session-adapter.js";
 import {
@@ -162,10 +162,13 @@ test("answers unsupported explicitly when no observed route exists", async () =>
     baseUrl: TEST_BASE_URL,
   });
   for (const adapter of [stub, observer]) {
-    assert.deepEqual(await adapter.sendMessage({ providerSessionId: "missing", text: "hello" }), {
-      status: ACT_RESULT_STATUS.UNSUPPORTED,
-      reason: UNSUPPORTED_BY_OBSERVATION,
-    });
+    assert.deepEqual(
+      await adapter.sendMessage(admittedForTest({ providerSessionId: "missing", text: "hello" })),
+      {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: UNSUPPORTED_BY_OBSERVATION,
+      },
+    );
     assert.deepEqual(adapter.workspaceProjects(), []);
   }
 });
@@ -499,7 +502,9 @@ test("sends a user message through the route and body the provider documents", a
   adapter.collected = [observation("session-one", { advertises: [{ kind: ACT_KIND.MESSAGE }] })];
   await adapter.observe();
 
-  const result = await adapter.sendMessage({ providerSessionId: "session-one", text: "  go on  " });
+  const result = await adapter.sendMessage(
+    admittedForTest({ providerSessionId: "session-one", text: "go on" }),
+  );
 
   assert.deepEqual(result, { status: "accepted" });
   const write = stub.requests.at(-1);
@@ -512,53 +517,6 @@ test("sends a user message through the route and body the provider documents", a
   assert.deepEqual(JSON.parse(write?.body ?? ""), { prompt: "go on" });
 });
 
-test("refuses a message for any session that did not advertise taking one", async () => {
-  const stub = stubFetch();
-  const adapter = adapterFor(stub.fetch);
-  adapter.collected = [observation("session-quiet")];
-  await adapter.observe();
-  const observationRequests = stub.requests.length;
-
-  const unadvertised = await adapter.sendMessage({
-    providerSessionId: "session-quiet",
-    text: "go on",
-  });
-  const unobserved = await adapter.sendMessage({
-    providerSessionId: "session-unknown",
-    text: "go on",
-  });
-
-  // Neither refusal may spend a request: a session that advertised nothing has
-  // been promised nothing, and no request should exist to find that out.
-  assert.deepEqual(unadvertised, {
-    status: "unsupported",
-    reason: UNSUPPORTED_BY_OBSERVATION,
-  });
-  assert.deepEqual(unobserved, {
-    status: "unsupported",
-    reason: UNSUPPORTED_BY_OBSERVATION,
-  });
-  assert.equal(stub.requests.length, observationRequests);
-});
-
-test("refuses text outside the message bound without spending a request", async () => {
-  const stub = stubFetch();
-  const adapter = adapterFor(stub.fetch);
-  adapter.collected = [observation("session-one", { advertises: [{ kind: ACT_KIND.MESSAGE }] })];
-  await adapter.observe();
-  const observationRequests = stub.requests.length;
-
-  const empty = await adapter.sendMessage({ providerSessionId: "session-one", text: "   " });
-  const oversized = await adapter.sendMessage({
-    providerSessionId: "session-one",
-    text: "a".repeat(4_001),
-  });
-
-  assert.equal(empty.status, "rejected");
-  assert.equal(oversized.status, "rejected");
-  assert.equal(stub.requests.length, observationRequests);
-});
-
 test("refuses to send once the credential is gone, whatever was observed with it", async () => {
   const stub = stubFetch();
   let apiKey: string | undefined = TEST_API_KEY;
@@ -568,7 +526,9 @@ test("refuses to send once the credential is gone, whatever was observed with it
   const observationRequests = stub.requests.length;
 
   apiKey = undefined;
-  const result = await adapter.sendMessage({ providerSessionId: "session-one", text: "go on" });
+  const result = await adapter.sendMessage(
+    admittedForTest({ providerSessionId: "session-one", text: "go on" }),
+  );
 
   // A refusal with the actual reason, not "unsupported": the session
   // advertised taking messages while a key stood behind it, and a key that has
@@ -588,13 +548,13 @@ test("reports what became of a send the provider refused", async () => {
   const message = { providerSessionId: "session-one", text: "go on" };
 
   status = HTTP_STATUS.UNAUTHORIZED;
-  const unauthorized = await adapter.sendMessage(message);
+  const unauthorized = await adapter.sendMessage(admittedForTest(message));
   status = HTTP_STATUS.NOT_FOUND;
-  const missing = await adapter.sendMessage(message);
+  const missing = await adapter.sendMessage(admittedForTest(message));
   status = HTTP_STATUS.CONFLICT;
-  const conflicted = await adapter.sendMessage(message);
+  const conflicted = await adapter.sendMessage(admittedForTest(message));
   status = HTTP_STATUS.SERVER_ERROR;
-  const failed = await adapter.sendMessage(message);
+  const failed = await adapter.sendMessage(admittedForTest(message));
 
   assert.equal(unauthorized.status, "rejected");
   assert.match(unauthorized.status === "rejected" ? unauthorized.reason : "", /API key/);
@@ -617,7 +577,9 @@ test("reports an unanswered send as indeterminate and makes the next refresh ask
   await adapter.observe();
 
   failWrites = true;
-  const result = await adapter.sendMessage({ providerSessionId: "session-one", text: "go on" });
+  const result = await adapter.sendMessage(
+    admittedForTest({ providerSessionId: "session-one", text: "go on" }),
+  );
 
   // A thrown fetch cannot say whether the request landed — the provider may
   // have taken it and only the answer was lost — so the refusal must hedge
@@ -638,7 +600,9 @@ test("a write answered with an unnamed status makes the next refresh ask", async
   await adapter.observe();
 
   status = HTTP_STATUS.SERVER_ERROR;
-  const result = await adapter.sendMessage({ providerSessionId: "session-one", text: "go on" });
+  const result = await adapter.sendMessage(
+    admittedForTest({ providerSessionId: "session-one", text: "go on" }),
+  );
 
   assert.equal(result.status, "rejected");
   assert.match(result.status === "rejected" ? result.reason : "", /may not have landed/);
@@ -662,10 +626,12 @@ test("a write runs on the deadline its own route asked for", async () => {
   await adapter.observe();
 
   const startedAt = performance.now();
-  const result = await adapter.executeControl({
-    providerSessionId: "session-slow",
-    control: STUB_SLOW_ACT_CONTROL,
-  });
+  const result = await adapter.executeControl(
+    admittedForTest({
+      providerSessionId: "session-slow",
+      control: STUB_SLOW_ACT_CONTROL,
+    }),
+  );
 
   assert.equal(result.status, "rejected");
   assert.match(result.status === "rejected" ? result.reason : "", /may not have landed/);
@@ -701,18 +667,24 @@ test("runs an advertised control through its documented route, sending no body",
   await adapter.observe();
   const observationRequests = stub.requests.length;
 
-  const approved = await adapter.executeControl({
-    providerSessionId: "session-plan",
-    control: STUB_APPROVE_CONTROL,
-  });
-  const unadvertised = await adapter.executeControl({
-    providerSessionId: "session-quiet",
-    control: STUB_APPROVE_CONTROL,
-  });
-  const unknown = await adapter.executeControl({
-    providerSessionId: "session-plan",
-    control: { kind: ACT_KIND.CONTROL, id: "terminate", label: "Terminate" },
-  });
+  const approved = await adapter.executeControl(
+    admittedForTest({
+      providerSessionId: "session-plan",
+      control: STUB_APPROVE_CONTROL,
+    }),
+  );
+  const unadvertised = await adapter.executeControl(
+    admittedForTest({
+      providerSessionId: "session-quiet",
+      control: STUB_APPROVE_CONTROL,
+    }),
+  );
+  const unknown = await adapter.executeControl(
+    admittedForTest({
+      providerSessionId: "session-plan",
+      control: { kind: ACT_KIND.CONTROL, id: "terminate", label: "Terminate" },
+    }),
+  );
 
   assert.deepEqual(approved, { status: "accepted" });
   const write = stub.requests.at(-1);

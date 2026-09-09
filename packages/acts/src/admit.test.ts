@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ISSUE_TRACKER_ID, normalizeTrackedIssue } from "@sidecar/issues";
+import { ISSUE_TRACKER_ID, normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
 import { RUN_ORIGIN } from "@sidecar/runtime-contracts";
 import type { ObservedWorkspaceProject as ListedProject, Session } from "@sidecar/session";
 import {
@@ -28,52 +28,24 @@ import {
   SESSION_LIST_VOICE,
   toolAction,
 } from "./index.js";
-import {
-  issueToolAction as legacyIssueToolAction,
-  sessionToolAction as legacySessionToolAction,
-} from "./legacy-validation.js";
 import { withoutAdmission } from "./testing/admitted.js";
 import { itemEnum, objectProperties } from "./testing/json-schema.js";
 
 /**
- * Every case below runs the validator the intakes used before `admit` existed
- * and `admit` itself, on the same input, and refuses to pass unless the two
- * answer identically. It is the whole of what makes this a refactor rather
- * than a rewrite of the gauntlet, and it goes when the old validators do.
+ * One tool call admitted, as the payload alone: the brand and the origin are
+ * dropped so a case can say what was admitted without restating either. Every
+ * case below reads admission's own answer, which is the only answer there is.
  */
-async function agreed<Legacy extends { kind?: string }>(
-  call: RealtimeFunctionCall,
-  legacy: Legacy,
-  context: Parameters<typeof toolAction>[1],
-): Promise<Legacy> {
-  // Which family a name belongs to was the caller's question before admission
-  // and is the caller's question still; only what a named act admits to is
-  // compared here.
-  if (realtimeToolFamily(call.name) !== undefined) {
-    assert.deepEqual(withoutAdmission(await toolAction(call, context)), legacy);
-  }
-  return legacy;
-}
-
 async function sessionToolAction(
   call: RealtimeFunctionCall,
   sessions: readonly Session[],
   workspaceProjects: readonly ListedProject[] = [],
-  agentModels: Parameters<typeof legacySessionToolAction>[3] = () => [],
+  agentModels: (providerId: string) => readonly WorkspaceAgentModels[] = () => [],
   defaultProviderId?: string,
   defaultProjectIds?: Readonly<Partial<Record<string, string>>>,
 ) {
-  return agreed(
-    call,
-    legacySessionToolAction(
-      call,
-      sessions,
-      workspaceProjects,
-      agentModels,
-      defaultProviderId,
-      defaultProjectIds,
-    ),
-    {
+  return withoutAdmission(
+    await toolAction(call, {
       origin: RUN_ORIGIN.USER,
       roster: { read: async () => sessions },
       projects: {
@@ -81,19 +53,18 @@ async function sessionToolAction(
         defaults: async () => ({ defaultProviderId, defaultProjectIds }),
         agentModels,
       },
-    },
+    }),
   );
 }
 
-async function issueToolAction(
-  call: RealtimeFunctionCall,
-  issues: Parameters<typeof legacyIssueToolAction>[1],
-) {
-  return agreed(call, legacyIssueToolAction(call, issues), {
-    origin: RUN_ORIGIN.USER,
-    roster: { read: async () => [] },
-    issues,
-  });
+async function issueToolAction(call: RealtimeFunctionCall, issues: readonly TrackedIssue[]) {
+  return withoutAdmission(
+    await toolAction(call, {
+      origin: RUN_ORIGIN.USER,
+      roster: { read: async () => [] },
+      issues,
+    }),
+  );
 }
 
 const DECIDED_AT = 1_800_000_000_000;

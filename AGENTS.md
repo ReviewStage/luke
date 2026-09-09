@@ -124,8 +124,11 @@ Trust constraints:
   own advertisement of the acts its provider documents for it now, by
   `@sidecar/acts`'s `admit()` — the one function that mints the validated act,
   reading the roster for itself rather than taking a caller's copy of it — and
-  by the layers beneath it that still hold the same rule until they are
-  deleted, before an adapter sees it.
+  by nothing else anywhere: a provider adapter's write takes only what
+  admission minted, so no path reaches an adapter without it, and what an
+  adapter still answers for is its own route — the advertised control, spawn
+  target, rename target, or listed project it reads back from its own latest
+  pass — and the provider's documented shape.
   Observation passes stay read-only by construction; where a provider's
   documented read answers only a POSTed query (Conductor's transcripts view,
   like Linear's GraphQL), observation sends a read document fixed by the
@@ -810,9 +813,9 @@ Trust constraints:
   store keeps only provenance beside it (the entry's id, when it was written,
   whether it came from the developer's hand, Luke's tool, or the fact table an
   earlier build kept, and the file hash last reconciled). The write runs the
-  same act gauntlet as every other write — validated in the renderer,
-  validated again in the main process, and admitted by the effective tool
-  policy — and every mutation of the notebook is one request to the store's
+  same act gauntlet as every other write — admitted once, against the
+  notebook's standing entries, by the same `admit()` every act runs, and
+  admitted by the effective tool policy — and every mutation of the notebook is one request to the store's
   worker, which answers one at a time per workspace and reads the file again
   before writing it, so two conversations or a child remembering at once
   cannot drop each other's entry and a line edited by hand is folded in rather
@@ -894,8 +897,8 @@ Trust constraints:
   observation listed and adding a comment, happen only as the direct product of
   a turn the developer opened themselves, through the tracker's own documented
   endpoint under the same grant, admitted against the observed issue roster by
-  the same `admit()` every session act runs, and validated again in the main
-  process before the tracker client sees anything. Observation sends only the read document; the write documents are
+  the same `admit()` every session act runs, before the tracker client sees
+  anything. Observation sends only the read document; the write documents are
   fixed by the build and issued only for a validated act.
 - The calendar is the same rule with no write path at all. Luke reads when
   the user's meetings start and end, under accounts the user signed in, and

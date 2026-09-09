@@ -1,31 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { JsonObject } from "../../../packages/wire/src/testing/json.js";
+import { ACT_KIND, ACT_REFUSAL, type WireRecord } from "../server/core";
 import {
-  ACT_KIND,
-  admit,
-  normalizeSession,
-  PROVIDER_IDENTITY_BY_ID,
-  RECORD_EXTRA_KEYS,
-  RUN_ORIGIN,
-  type Session,
-  s,
-  type WorkspaceAgentSelection,
-} from "../server/core";
-import {
+  type ActExecutionAnswer,
   actUnsupportedReason,
-  CONTROL_ACT,
-  executeCreateWorkspaceAct,
   executeSessionAct,
-  MESSAGE_ACT,
-  REMOTE_SESSION_ACT,
+  type HostedSessionActKind,
 } from "../server/hosted/act-execute";
-import {
-  handleSessionAct,
-  handleWorkspaceAct,
-  type SessionActOptions,
-} from "../server/hosted/act-session";
-import { cloudSessionAdapterFor } from "../server/hosted/cloud-adapters";
+import { handleSessionAct, type SessionActOptions } from "../server/hosted/act-session";
 import { encryptProviderKey } from "../server/hosted/encryption";
 
 const SECRET = "a".repeat(64);
@@ -38,48 +21,33 @@ function actRequest(path: string, fields: Record<string, string>): Request {
   });
 }
 
-type MessageFields = { text: string };
-
-function messageOptions(
-  overrides: Partial<SessionActOptions<MessageFields, true>> = {},
-): SessionActOptions<MessageFields, true> {
+function messageOptions(overrides: Partial<SessionActOptions> = {}): SessionActOptions {
   return {
     request: actRequest("/api/acts/message", {
       providerId: "conductor",
       providerSessionId: "session-1",
       text: "hello",
     }),
+    kind: ACT_KIND.MESSAGE,
     encryptionSecret: SECRET,
     resolveUserId: async () => "user-1",
     readKey: async () => ({ ciphertext: encryptProviderKey("key-1", SECRET) }),
-    plan: MESSAGE_ACT,
-    fields: s.record({ text: s.text() }, { extraKeys: RECORD_EXTRA_KEYS.IGNORE }),
     unsupportedReason: () => undefined,
     execute: async () => ({ result: "accepted" }),
     ...overrides,
   };
 }
 
-function workspaceRequest(fields: Record<string, string>): Request {
-  return actRequest("/api/acts/workspace", fields);
-}
-
-function workspaceOptions(
-  overrides: Partial<Parameters<typeof handleWorkspaceAct>[0]> = {},
-): Parameters<typeof handleWorkspaceAct>[0] {
-  return {
-    request: workspaceRequest({
+function workspaceOptions(overrides: Partial<SessionActOptions> = {}): SessionActOptions {
+  return messageOptions({
+    request: actRequest("/api/acts/workspace", {
       providerId: "conductor",
       providerProjectId: "project-1",
       task: "build the thing",
     }),
-    encryptionSecret: SECRET,
-    resolveUserId: async () => "user-1",
-    readKey: async () => ({ ciphertext: encryptProviderKey("key-1", SECRET) }),
-    unsupportedReason: () => undefined,
-    executeCreateWorkspace: async () => ({ result: "accepted" }),
+    kind: ACT_KIND.CREATE_WORKSPACE,
     ...overrides,
-  };
+  });
 }
 
 // --- Unsupported providers answer before the key requirement ---
@@ -102,12 +70,12 @@ test("an unsupported provider gets 'unsupported' even with no key stored", async
 });
 
 test("an unsupported workspace provider gets 'unsupported' even with no key stored", async () => {
-  const response = await handleWorkspaceAct(
+  const response = await handleSessionAct(
     workspaceOptions({
       unsupportedReason: () => "Not available.",
       readKey: async () => undefined,
-      executeCreateWorkspace: async () => {
-        throw new Error("executeCreateWorkspace must not run for an unsupported provider");
+      execute: async () => {
+        throw new Error("execute must not run for an unsupported provider");
       },
     }),
   );
@@ -129,18 +97,18 @@ test("a supported provider with no key stored gets 'rejected'", async () => {
   assert.match(body.reason, /No provider key stored/);
 });
 
-// --- The act's own fields are bounded before anything else runs ---
+// --- The one bound the route still keeps: a session id becomes a URL segment ---
 
-test("an act whose fields fail their bound is an invalid request", async () => {
+test("a session id that could not be a URL segment is an invalid request", async () => {
   const response = await handleSessionAct(
     messageOptions({
       request: actRequest("/api/acts/message", {
         providerId: "conductor",
-        providerSessionId: "session-1",
-        text: "",
+        providerSessionId: "sessions/../session-1",
+        text: "hello",
       }),
       execute: async () => {
-        throw new Error("execute must not run for unbounded fields");
+        throw new Error("execute must not run for an unbounded session id");
       },
     }),
   );
@@ -148,12 +116,63 @@ test("an act whose fields fail their bound is an invalid request", async () => {
   assert.equal(response.status, 400);
 });
 
+test("an act aimed at no session at all is an invalid request", async () => {
+  const response = await handleSessionAct(
+    messageOptions({
+      request: actRequest("/api/acts/message", { providerId: "conductor", text: "hello" }),
+      execute: async () => {
+        throw new Error("execute must not run without a session");
+      },
+    }),
+  );
+
+  assert.equal(response.status, 400);
+});
+
+// --- The ask reaches admission renamed and unparsed ---
+
+test("the ask arrives at the executor as admission's own field names", async () => {
+  let received: WireRecord | undefined;
+  await handleSessionAct(
+    messageOptions({
+      execute: async (options) => {
+        received = options.fields;
+        return { result: "accepted" };
+      },
+    }),
+  );
+
+  assert.deepEqual(received, {
+    provider_id: "conductor",
+    provider_session_id: "session-1",
+    text: "hello",
+  });
+});
+
+test("a creation names a project rather than a session, and carries none", async () => {
+  let received: WireRecord | undefined;
+  await handleSessionAct(
+    workspaceOptions({
+      execute: async (options) => {
+        received = options.fields;
+        return { result: "accepted" };
+      },
+    }),
+  );
+
+  assert.deepEqual(received, {
+    provider_id: "conductor",
+    project_id: "project-1",
+    task: "build the thing",
+  });
+});
+
 // --- The execute result travels to the wire unchanged ---
 
 test("a rejected execute result carries its reason and session id to the wire", async () => {
-  const response = await handleWorkspaceAct(
+  const response = await handleSessionAct(
     workspaceOptions({
-      executeCreateWorkspace: async () => ({
+      execute: async () => ({
         result: "rejected",
         providerSessionId: "session-9",
         reason: "Workspace was created, but the opening task could not be delivered.",
@@ -169,9 +188,9 @@ test("a rejected execute result carries its reason and session id to the wire", 
 });
 
 test("an accepted execute result carries the created session id to the wire", async () => {
-  const response = await handleWorkspaceAct(
+  const response = await handleSessionAct(
     workspaceOptions({
-      executeCreateWorkspace: async () => ({ result: "accepted", providerSessionId: "session-9" }),
+      execute: async () => ({ result: "accepted", providerSessionId: "session-9" }),
     }),
   );
 
@@ -181,33 +200,30 @@ test("an accepted execute result carries the created session id to the wire", as
   assert.equal(body.providerSessionId, "session-9");
 });
 
-test("a session act answer carries a created session id to the wire", async () => {
-  const response = await handleSessionAct(
-    messageOptions({
-      execute: async () => ({ result: "accepted", providerSessionId: "chat-2" }),
-    }),
-  );
-
-  assert.equal(response.status, 200);
-  const body = await response.json();
-  assert.equal(body.result, "accepted");
-  assert.equal(body.providerSessionId, "chat-2");
-});
-
 // --- The capability map mirrors the adapters exactly ---
 
 test("the capability map matches each desktop adapter's implemented writes", () => {
-  const supported = (act: (typeof REMOTE_SESSION_ACT)[keyof typeof REMOTE_SESSION_ACT]) =>
-    (["conductor"] as const).filter(
-      (providerId) => actUnsupportedReason(act, providerId) === undefined,
-    );
+  const acts: readonly HostedSessionActKind[] = [
+    ACT_KIND.MESSAGE,
+    ACT_KIND.CONTROL,
+    ACT_KIND.ADD_AGENT,
+    ACT_KIND.RENAME_SESSION,
+    ACT_KIND.RENAME_WORKSPACE,
+    ACT_KIND.CREATE_WORKSPACE,
+  ];
 
-  for (const act of Object.values(REMOTE_SESSION_ACT)) {
-    assert.deepEqual(supported(act), ["conductor"], act);
+  for (const act of acts) {
+    assert.deepEqual(
+      (["conductor"] as const).filter(
+        (providerId) => actUnsupportedReason(act, providerId) === undefined,
+      ),
+      ["conductor"],
+      act,
+    );
   }
 });
 
-// --- Executors re-observe and act through the provider's adapter ---
+// --- One executor admits every act, over the pass it observed ---
 
 const CONDUCTOR_PROJECT_ID = "project-1";
 const CONDUCTOR_WORKSPACE_ID = "workspace-1";
@@ -303,14 +319,26 @@ function conductorApi(status: string) {
 /** The fake API one case runs against: its fetch, and what the act posted through it. */
 type ConductorApi = ReturnType<typeof conductorApi>;
 
-test("a message to a messageable Conductor session lands on its sendMessage method", async () => {
-  const api = conductorApi("idle");
-  const answer = await executeSessionAct(MESSAGE_ACT, {
+/** One act asked of the fake API, admitted and carried by the one executor. */
+function ask(
+  api: ConductorApi,
+  kind: HostedSessionActKind,
+  fields: Record<string, string>,
+): Promise<ActExecutionAnswer> {
+  return executeSessionAct({
+    kind,
     providerId: "conductor",
-    providerSessionId: CONDUCTOR_SESSION_ID,
-    fields: { text: "please continue" },
+    fields: { provider_id: "conductor", ...fields },
     apiKey: "key-1",
     seams: { fetch: api.fetch },
+  });
+}
+
+test("a message to a messageable Conductor session lands on its sendMessage method", async () => {
+  const api = conductorApi("idle");
+  const answer = await ask(api, ACT_KIND.MESSAGE, {
+    provider_session_id: CONDUCTOR_SESSION_ID,
+    text: "please continue",
   });
 
   assert.equal(answer.result, "accepted");
@@ -321,27 +349,33 @@ test("a message to a messageable Conductor session lands on its sendMessage meth
 
 test("a message to an errored Conductor session is rejected without a write", async () => {
   const api = conductorApi("error");
-  const answer = await executeSessionAct(MESSAGE_ACT, {
-    providerId: "conductor",
-    providerSessionId: CONDUCTOR_SESSION_ID,
-    fields: { text: "hello" },
-    apiKey: "key-1",
-    seams: { fetch: api.fetch },
+  const answer = await ask(api, ACT_KIND.MESSAGE, {
+    provider_session_id: CONDUCTOR_SESSION_ID,
+    text: "hello",
   });
 
   assert.equal(answer.result, "rejected");
-  assert.match(answer.reason ?? "", /not currently accepting messages/);
+  assert.equal(answer.reason, ACT_REFUSAL.NO_MESSAGES);
+  assert.deepEqual(api.posts, []);
+});
+
+test("a message outside its bound is refused without a write", async () => {
+  const api = conductorApi("idle");
+  const answer = await ask(api, ACT_KIND.MESSAGE, {
+    provider_session_id: CONDUCTOR_SESSION_ID,
+    text: "  ",
+  });
+
+  assert.equal(answer.result, "rejected");
+  assert.equal(answer.reason, ACT_REFUSAL.MESSAGE_BOUND);
   assert.deepEqual(api.posts, []);
 });
 
 test("a message to a session the fresh pass did not observe is rejected", async () => {
   const api = conductorApi("idle");
-  const answer = await executeSessionAct(MESSAGE_ACT, {
-    providerId: "conductor",
-    providerSessionId: "session-9",
-    fields: { text: "hello" },
-    apiKey: "key-1",
-    seams: { fetch: api.fetch },
+  const answer = await ask(api, ACT_KIND.MESSAGE, {
+    provider_session_id: "session-9",
+    text: "hello",
   });
 
   assert.equal(answer.result, "rejected");
@@ -350,10 +384,14 @@ test("a message to a session the fresh pass did not observe is rejected", async 
 });
 
 test("a key the provider refuses is named as the reason, not a missing session", async () => {
-  const answer = await executeSessionAct(MESSAGE_ACT, {
+  const answer = await executeSessionAct({
+    kind: ACT_KIND.MESSAGE,
     providerId: "conductor",
-    providerSessionId: CONDUCTOR_SESSION_ID,
-    fields: { text: "hello" },
+    fields: {
+      provider_id: "conductor",
+      provider_session_id: CONDUCTOR_SESSION_ID,
+      text: "hello",
+    },
     apiKey: "key-1",
     seams: { fetch: async () => new Response("{}", { status: 401 }) },
   });
@@ -363,10 +401,14 @@ test("a key the provider refuses is named as the reason, not a missing session",
 });
 
 test("a provider that cannot be reached is named as the reason", async () => {
-  const answer = await executeSessionAct(MESSAGE_ACT, {
+  const answer = await executeSessionAct({
+    kind: ACT_KIND.MESSAGE,
     providerId: "conductor",
-    providerSessionId: CONDUCTOR_SESSION_ID,
-    fields: { text: "hello" },
+    fields: {
+      provider_id: "conductor",
+      provider_session_id: CONDUCTOR_SESSION_ID,
+      text: "hello",
+    },
     apiKey: "key-1",
     seams: {
       fetch: async () => {
@@ -381,12 +423,9 @@ test("a provider that cannot be reached is named as the reason", async () => {
 
 test("an advertised control runs through the provider's documented endpoint", async () => {
   const api = conductorApi("working");
-  const answer = await executeSessionAct(CONTROL_ACT, {
-    providerId: "conductor",
-    providerSessionId: CONDUCTOR_SESSION_ID,
-    fields: { controlId: "cancel-turn" },
-    apiKey: "key-1",
-    seams: { fetch: api.fetch },
+  const answer = await ask(api, ACT_KIND.CONTROL, {
+    provider_session_id: CONDUCTOR_SESSION_ID,
+    control_id: "cancel-turn",
   });
 
   assert.equal(answer.result, "accepted");
@@ -398,28 +437,22 @@ test("an advertised control runs through the provider's documented endpoint", as
 
 test("a control the fresh pass did not advertise is rejected without a write", async () => {
   const api = conductorApi("idle");
-  const answer = await executeSessionAct(CONTROL_ACT, {
-    providerId: "conductor",
-    providerSessionId: CONDUCTOR_SESSION_ID,
-    fields: { controlId: "cancel-turn" },
-    apiKey: "key-1",
-    seams: { fetch: api.fetch },
+  const answer = await ask(api, ACT_KIND.CONTROL, {
+    provider_session_id: CONDUCTOR_SESSION_ID,
+    control_id: "cancel-turn",
   });
 
   assert.equal(answer.result, "rejected");
-  assert.match(answer.reason ?? "", /not currently offered/);
+  assert.equal(answer.reason, ACT_REFUSAL.NO_CONTROL);
   assert.deepEqual(api.posts, []);
 });
 
 test("a Conductor workspace creation lands in a reported project with the task inline", async () => {
   const api = conductorApi("idle");
-  const answer = await executeCreateWorkspaceAct({
-    providerId: "conductor",
-    providerProjectId: CONDUCTOR_PROJECT_ID,
+  const answer = await ask(api, ACT_KIND.CREATE_WORKSPACE, {
+    project_id: CONDUCTOR_PROJECT_ID,
     name: "Fix the flaky test",
     task: "Fix the flaky test in CI",
-    apiKey: "key-1",
-    seams: { fetch: api.fetch },
   });
 
   assert.equal(answer.result, "accepted");
@@ -438,13 +471,9 @@ test("a Conductor workspace creation lands in a reported project with the task i
 
 test("a workspace creation naming an unreported project is rejected without a write", async () => {
   const api = conductorApi("idle");
-  const answer = await executeCreateWorkspaceAct({
-    providerId: "conductor",
-    providerProjectId: "project-other",
-    name: undefined,
+  const answer = await ask(api, ACT_KIND.CREATE_WORKSPACE, {
+    project_id: "project-other",
     task: "Do the thing",
-    apiKey: "key-1",
-    seams: { fetch: api.fetch },
   });
 
   assert.equal(answer.result, "rejected");
@@ -452,145 +481,46 @@ test("a workspace creation naming an unreported project is rejected without a wr
   assert.deepEqual(api.posts, []);
 });
 
-// --- The workspace act's agent selection is held to the build's table ---
+// --- The creation's agent selection is held to the build's own table ---
 
-test("a listed agent selection reaches the executor whole", async () => {
-  let received: WorkspaceAgentSelection | undefined;
-  const response = await handleWorkspaceAct(
-    workspaceOptions({
-      request: workspaceRequest({
-        providerId: "conductor",
-        providerProjectId: "project-1",
-        task: "build the thing",
-        agent: "claude",
-        model: "fable-5",
-        effort: "high",
-      }),
-      executeCreateWorkspace: async (options) => {
-        received = options.agentSelection;
-        return { result: "accepted" };
-      },
-    }),
-  );
+test("a listed model resolves to the pairing the build documents", async () => {
+  const api = conductorApi("idle");
+  const answer = await ask(api, ACT_KIND.CREATE_WORKSPACE, {
+    project_id: CONDUCTOR_PROJECT_ID,
+    task: "build the thing",
+    model: "fable-5",
+    effort: "high",
+  });
 
-  assert.equal(response.status, 200);
-  assert.deepEqual(received, { agent: "claude", model: "fable-5", effort: "high" });
+  assert.equal(answer.result, "accepted");
+  const creation = JSON.parse(api.posts[0]?.body ?? "");
+  assert.equal(creation.agent, "claude");
+  assert.equal(creation.model, "fable-5");
+  assert.equal(creation.effort, "high");
 });
 
-test("an agent selection outside the build's table is an invalid request", async () => {
-  const response = await handleWorkspaceAct(
-    workspaceOptions({
-      request: workspaceRequest({
-        providerId: "conductor",
-        providerProjectId: "project-1",
-        task: "build the thing",
-        agent: "claude",
-        model: "not-a-listed-model",
-      }),
-      executeCreateWorkspace: async () => {
-        throw new Error("executeCreateWorkspace must not run for an unlisted selection");
-      },
-    }),
-  );
+test("a model outside the build's table is refused without a write", async () => {
+  const api = conductorApi("idle");
+  const answer = await ask(api, ACT_KIND.CREATE_WORKSPACE, {
+    project_id: CONDUCTOR_PROJECT_ID,
+    task: "build the thing",
+    model: "not-a-listed-model",
+  });
 
-  assert.equal(response.status, 400);
+  assert.equal(answer.result, "rejected");
+  assert.equal(answer.reason, ACT_REFUSAL.NO_MODEL);
+  assert.deepEqual(api.posts, []);
 });
 
-test("no selection fields is no selection, never a guess", async () => {
-  let received: WorkspaceAgentSelection | undefined;
-  let ran = false;
-  await handleWorkspaceAct(
-    workspaceOptions({
-      executeCreateWorkspace: async (options) => {
-        received = options.agentSelection;
-        ran = true;
-        return { result: "accepted" };
-      },
-    }),
-  );
+test("no model named is no selection, never a guess", async () => {
+  const api = conductorApi("idle");
+  const answer = await ask(api, ACT_KIND.CREATE_WORKSPACE, {
+    project_id: CONDUCTOR_PROJECT_ID,
+    task: "build the thing",
+  });
 
-  assert.equal(ran, true);
-  assert.equal(received, undefined);
-});
-
-/**
- * The hosted executors answer "may this act run?" with checks of their own,
- * against the observations of their own fresh pass. `admit` answers the same
- * question against the same observations, and this is what says the two agree
- * before the executors' copies are deleted: every case below is run through
- * both, and a disagreement on whether the act may run fails here.
- */
-async function observedSessions(fetch: ConductorApi["fetch"]): Promise<readonly Session[]> {
-  const adapter = cloudSessionAdapterFor("conductor", { readApiKey: async () => "key-1", fetch });
-  const observations = await adapter.observe();
-  return observations.map((observation) =>
-    normalizeSession(PROVIDER_IDENTITY_BY_ID.conductor, observation),
-  );
-}
-
-async function admits(
-  fetch: ConductorApi["fetch"],
-  kind: typeof ACT_KIND.MESSAGE | typeof ACT_KIND.CONTROL,
-  fields: Record<string, string>,
-): Promise<boolean> {
-  const sessions = await observedSessions(fetch);
-  const admitted = await admit(
-    { kind, fields },
-    { origin: RUN_ORIGIN.USER, roster: { read: async () => sessions } },
-  );
-  return admitted.kind !== undefined;
-}
-
-test("admission answers each hosted act exactly as the executor's own checks do", async () => {
-  const messages = [
-    { status: "idle", providerSessionId: CONDUCTOR_SESSION_ID },
-    { status: "error", providerSessionId: CONDUCTOR_SESSION_ID },
-    { status: "idle", providerSessionId: "session-9" },
-  ] as const;
-  for (const { status, providerSessionId } of messages) {
-    const executor = conductorApi(status);
-    const admission = conductorApi(status);
-    const executed = await executeSessionAct(MESSAGE_ACT, {
-      providerId: "conductor",
-      providerSessionId,
-      fields: { text: "please continue" },
-      apiKey: "key-1",
-      seams: { fetch: executor.fetch },
-    });
-    assert.equal(
-      await admits(admission.fetch, ACT_KIND.MESSAGE, {
-        provider_id: "conductor",
-        provider_session_id: providerSessionId,
-        text: "please continue",
-      }),
-      executed.result === "accepted",
-      `message on a ${status} ${providerSessionId}`,
-    );
-  }
-
-  const controls = [
-    { status: "working", controlId: "cancel-turn" },
-    { status: "idle", controlId: "cancel-turn" },
-    { status: "working", controlId: "terminate" },
-  ] as const;
-  for (const { status, controlId } of controls) {
-    const executor = conductorApi(status);
-    const admission = conductorApi(status);
-    const executed = await executeSessionAct(CONTROL_ACT, {
-      providerId: "conductor",
-      providerSessionId: CONDUCTOR_SESSION_ID,
-      fields: { controlId },
-      apiKey: "key-1",
-      seams: { fetch: executor.fetch },
-    });
-    assert.equal(
-      await admits(admission.fetch, ACT_KIND.CONTROL, {
-        provider_id: "conductor",
-        provider_session_id: CONDUCTOR_SESSION_ID,
-        control_id: controlId,
-      }),
-      executed.result === "accepted",
-      `${controlId} on a ${status} session`,
-    );
-  }
+  assert.equal(answer.result, "accepted");
+  const creation = JSON.parse(api.posts[0]?.body ?? "");
+  assert.equal(creation.agent, undefined);
+  assert.equal(creation.model, undefined);
 });

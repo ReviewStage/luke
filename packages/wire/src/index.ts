@@ -8,6 +8,7 @@ export {
   UNSUPPORTED_BY_OBSERVATION,
   type UnknownActResult,
 } from "./act-result.js";
+export { type Admitted, reshapeAdmitted } from "./admitted.js";
 export {
   type CloudFetch,
   HTTP_STATUS,

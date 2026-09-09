@@ -47,6 +47,7 @@ import {
 } from "@sidecar/session";
 import {
   ACT_RESULT_STATUS,
+  type Admitted,
   isWireString,
   type UnparsedWireValue,
   type WireRecord,
@@ -84,22 +85,16 @@ import {
 } from "./memory.js";
 
 /**
- * Not exported, and this module holds no factory but {@link admit}: nothing
- * elsewhere can spell this key, so no object literal is an admitted act and a
- * payload never reaches a performer's parameter on its own. Exporting it would
- * be the one way to reintroduce the bug the whole file exists to prevent.
- */
-const ADMITTED: unique symbol = Symbol("admitted act");
-
-/**
  * An act that ran the gauntlet, carrying the turn's origin for History to
- * record. What the brand buys is that admission cannot be skipped by accident;
- * a deliberate `as ValidatedAct` would still compile, since the admitted act is
- * a subtype of its own payload, and that assertion appears nowhere in this
- * repository — `validated-act.type-test.ts` says both in as many words.
+ * record. The brand is `@sidecar/wire`'s, whose key nothing anywhere can spell,
+ * and {@link admit} below is the one place in the repository that enters the
+ * admitted set: everything downstream re-shapes what it already holds. What the
+ * brand buys is that admission cannot be skipped by accident; a deliberate
+ * `as ValidatedAct` would still compile, since the admitted act is a subtype of
+ * its own payload, and that assertion appears nowhere but in `admit` itself —
+ * `validated-act.type-test.ts` says both in as many words.
  */
-export type ValidatedAct<Kind extends ActKind = ActKind> = CarriedAct<Kind> & {
-  readonly [ADMITTED]: true;
+export type ValidatedAct<Kind extends ActKind = ActKind> = Admitted<CarriedAct<Kind>> & {
   /** Who opened the turn; recorded, never a permission. */
   readonly origin: RunOrigin;
 };
@@ -492,13 +487,13 @@ const UPDATE_BUTTON_STANDING = {
   [APP_UPDATE_WAIT.DOWNLOADING]: "Nothing is pressable while the download runs.",
 } as const satisfies Record<AppGuideUpdate["button"], string>;
 
-type Admitted<Kind extends ActKind> = ({ kind: Kind } & ActPayloads[Kind]) | Refusal;
+type AdmittedPayload<Kind extends ActKind> = ({ kind: Kind } & ActPayloads[Kind]) | Refusal;
 
 type Admitter<Kind extends ActKind> = (
   fields: WireRecord,
   context: AdmitContext,
   reads: AdmittedReads,
-) => Promise<Admitted<Kind>> | Admitted<Kind>;
+) => Promise<AdmittedPayload<Kind>> | AdmittedPayload<Kind>;
 
 async function admittedSession(
   fields: WireRecord,
@@ -958,7 +953,7 @@ export async function admit<Kind extends ActKind>(
   // Asked once more after every await admission made, so an act whose turn
   // ended while the roster was refreshing refuses rather than being minted.
   if (context.guard?.isRevoked()) return refuse(ACT_REFUSAL.TURN_OVER);
-  // SAFETY: the brand is nominal and this is its one producer; the payload
-  // stands exactly as the admitter built it.
-  return { ...admitted, origin: context.origin, [ADMITTED]: true } as ValidatedAct<Kind>;
+  // SAFETY: the brand is nominal and this is its one producer in the
+  // repository; the payload stands exactly as the admitter built it.
+  return { ...admitted, origin: context.origin } as ValidatedAct<Kind>;
 }

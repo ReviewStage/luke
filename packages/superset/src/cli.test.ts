@@ -10,6 +10,7 @@ import {
   UNSUPPORTED_BY_OBSERVATION,
 } from "@sidecar/session";
 import { isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
+import { admittedForTest } from "@sidecar/wire/testing";
 import {
   isSupersetControlId,
   SUPERSET_CONTROL_ID,
@@ -361,12 +362,14 @@ test("discovers host-scoped projects and creates a workspace with a generated br
     },
   ]);
   assert.deepEqual(
-    await cli.createWorkspace({
-      providerProjectId: "project-1",
-      providerTargetId: "local",
-      agent: "codex",
-      task: "Fix the panel transitions",
-    }),
+    await cli.createWorkspace(
+      admittedForTest({
+        providerProjectId: "project-1",
+        providerTargetId: "local",
+        agent: "codex",
+        task: "Fix the panel transitions",
+      }),
+    ),
     { status: ACT_RESULT_STATUS.ACCEPTED },
   );
   assert.deepEqual(mutableCommands, [
@@ -513,12 +516,14 @@ test("creates on an observed remote host and preserves success when opening fail
   });
 
   assert.deepEqual(
-    await cli.createWorkspace({
-      providerProjectId: "project-1",
-      providerTargetId: "host-1",
-      agent: "codex",
-      task: "Review the branch",
-    }),
+    await cli.createWorkspace(
+      admittedForTest({
+        providerProjectId: "project-1",
+        providerTargetId: "host-1",
+        agent: "codex",
+        task: "Review the branch",
+      }),
+    ),
     {
       status: ACT_RESULT_STATUS.ACCEPTED,
       warning: "The workspace was created, but Superset could not open it.",
@@ -541,12 +546,14 @@ test("workspace creation never repeats the CLI's stderr", async (t) => {
   });
 
   assert.deepEqual(
-    await cli.createWorkspace({
-      providerProjectId: "project-1",
-      providerTargetId: "local",
-      agent: "codex",
-      task: "private task text",
-    }),
+    await cli.createWorkspace(
+      admittedForTest({
+        providerProjectId: "project-1",
+        providerTargetId: "local",
+        agent: "codex",
+        task: "private task text",
+      }),
+    ),
     {
       status: ACT_RESULT_STATUS.REJECTED,
       reason: "Branch names cannot begin with that prefix.",

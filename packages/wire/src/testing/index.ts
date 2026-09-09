@@ -1,3 +1,4 @@
+export { admittedForTest } from "./admitted.js";
 export {
   type FakeCloudApi,
   type FakeCloudRoute,

@@ -10,6 +10,7 @@ import {
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
 import { UNKNOWN_ACT_STATUS } from "@sidecar/wire";
+import { admittedForTest } from "@sidecar/wire/testing";
 import {
   ConductorLocalWorkspaceAdapter,
   ConductorRepositoryReader,
@@ -212,11 +213,13 @@ test("creating a workspace fires Conductor's create link for the offered reposit
     },
   });
   await adapter.refresh();
-  const result = await adapter.createWorkspace({
-    providerProjectId: "repo-luke",
-    providerTargetId: "/Users/dev/repos/luke",
-    task: "Start on the parser",
-  });
+  const result = await adapter.createWorkspace(
+    admittedForTest({
+      providerProjectId: "repo-luke",
+      providerTargetId: "/Users/dev/repos/luke",
+      task: "Start on the parser",
+    }),
+  );
   assert.equal(result.status, ACT_RESULT_STATUS.ACCEPTED);
   assert.equal(opened.length, 1);
   const parsed = parseConductorCreateLink(opened[0] ?? "");
@@ -276,7 +279,7 @@ test("creating a workspace with no task lands clean, with no send warning", asyn
     openExternal: async () => {},
   });
   await adapter.refresh();
-  const result = await adapter.createWorkspace({ providerProjectId: "repo-luke" });
+  const result = await adapter.createWorkspace(admittedForTest({ providerProjectId: "repo-luke" }));
   assert.equal(result.status, ACT_RESULT_STATUS.ACCEPTED);
   // Nothing was pre-filled, so there is nothing to press Return on.
   assert.ok(!("warning" in result && result.warning));
@@ -298,11 +301,13 @@ test("creating a workspace uses the offered root path, never the request's", asy
   await adapter.refresh();
   // A request naming a different target than the one offered is not the project
   // this pass reported, so it is refused rather than fired at a path of its own.
-  const result = await adapter.createWorkspace({
-    providerProjectId: "repo-luke",
-    providerTargetId: "/etc/passwd",
-    task: "anything",
-  });
+  const result = await adapter.createWorkspace(
+    admittedForTest({
+      providerProjectId: "repo-luke",
+      providerTargetId: "/etc/passwd",
+      task: "anything",
+    }),
+  );
   assert.equal(result.status, ACT_RESULT_STATUS.UNSUPPORTED);
   assert.equal(opened.length, 0);
 });
@@ -321,7 +326,9 @@ test("creating a workspace in an unoffered project is unsupported", async (t) =>
     },
   });
   await adapter.refresh();
-  const result = await adapter.createWorkspace({ providerProjectId: "repo-unknown" });
+  const result = await adapter.createWorkspace(
+    admittedForTest({ providerProjectId: "repo-unknown" }),
+  );
   assert.equal(result.status, ACT_RESULT_STATUS.UNSUPPORTED);
   assert.equal(opened.length, 0);
 });
@@ -339,7 +346,7 @@ test("a failed open is reported as a rejection the user can act on", async (t) =
     },
   });
   await adapter.refresh();
-  const result = await adapter.createWorkspace({ providerProjectId: "repo-luke" });
+  const result = await adapter.createWorkspace(admittedForTest({ providerProjectId: "repo-luke" }));
   assert.equal(result.status, ACT_RESULT_STATUS.REJECTED);
   assert.match(
     "reason" in result ? result.reason : "",
@@ -372,11 +379,13 @@ test("a create whose deep link was handed to the machine and never answered is u
     },
   });
   await adapter.refresh();
-  const result = await adapter.createWorkspace({
-    providerProjectId: "repo-luke",
-    providerTargetId: "/Users/dev/repos/luke",
-    task: "Start on the parser",
-  });
+  const result = await adapter.createWorkspace(
+    admittedForTest({
+      providerProjectId: "repo-luke",
+      providerTargetId: "/Users/dev/repos/luke",
+      task: "Start on the parser",
+    }),
+  );
   // The link may have created the workspace: neither a refusal to report nor an act to repeat.
   assert.equal(result.status, UNKNOWN_ACT_STATUS);
   const refused = new ConductorLocalWorkspaceAdapter({
@@ -386,9 +395,11 @@ test("a create whose deep link was handed to the machine and never answered is u
     },
   });
   await refused.refresh();
-  const rejected = await refused.createWorkspace({
-    providerProjectId: "repo-luke",
-    providerTargetId: "/Users/dev/repos/luke",
-  });
+  const rejected = await refused.createWorkspace(
+    admittedForTest({
+      providerProjectId: "repo-luke",
+      providerTargetId: "/Users/dev/repos/luke",
+    }),
+  );
   assert.equal(rejected.status, ACT_RESULT_STATUS.REJECTED);
 });

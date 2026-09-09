@@ -9,12 +9,15 @@ modules belong in an app when they import `electron`, `react`, or a DOM API.
 Everything else is logic and can be tested with `node --test` and no harness.
 
 Whether an act may run is decided once, by `admit()` in `@sidecar/acts`, which
-mints the only `ValidatedAct` there is: its brand is a module-private symbol, so
-nothing outside that module can write one down, and a signature that takes one
-says the gauntlet ran. The direction stays acts → session → wire, and
-`@sidecar/session` keeps the narrower act vocabulary an observation advertises
-with; the two are proven to be the same strings where `@sidecar/acts` declares
-the whole of it.
+mints the only `ValidatedAct` there is: its brand is `@sidecar/wire`'s
+module-private symbol, which nothing anywhere can spell, so `admit` is the one
+place the repository enters the admitted set and a signature that takes one says
+the gauntlet ran. Everything below it re-shapes what it already holds through
+`reshapeAdmitted`, which needs an admitted value to answer at all — which is how
+a provider adapter's write signature enforces the requirement rather than
+restating it. The direction stays acts → session → wire, and `@sidecar/session`
+keeps the narrower act vocabulary an observation advertises with; the two are
+proven to be the same strings where `@sidecar/acts` declares the whole of it.
 
 A wire value's rules are declared once, as a `Schema` in `@sidecar/wire`,
 which both parses the untrusted value and emits the JSON Schema a model is
