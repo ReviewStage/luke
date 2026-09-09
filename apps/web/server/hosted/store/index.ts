@@ -140,12 +140,17 @@ export interface HostedStore {
   roster: {
     read(userId: string): Promise<RosterSnapshotRecord | undefined>;
     write(userId: string, snapshot: RosterSnapshotRecord): Promise<void>;
-    /** Replaces the snapshot and records the diff against the one it replaced, in one transaction. */
+    /**
+     * Replaces the snapshot and records the diff against the one it replaced,
+     * in one transaction, only while the snapshot standing is still the one
+     * observed at `previousObservedAt` (absent for none); answers whether it landed.
+     */
     advance(
       userId: string,
       snapshot: RosterSnapshotRecord,
       diff: RosterDiffInsert | undefined,
-    ): Promise<void>;
+      previousObservedAt: number | undefined,
+    ): Promise<boolean>;
     pendingDiffs(userId: string): Promise<readonly RosterDiffRecord[]>;
     consumeDiff(userId: string, id: string, now: number): Promise<boolean>;
     pass(userId: string): Promise<ObservationPassRecord | undefined>;
@@ -225,8 +230,8 @@ export function hostedStore({ db, keys }: HostedStoreContext): HostedStore {
     roster: {
       read: (userId) => readRosterSnapshot(db, sealFor(userId), userId),
       write: (userId, snapshot) => writeRosterSnapshot(db, sealFor(userId), userId, snapshot),
-      advance: (userId, snapshot, diff) =>
-        advanceRosterSnapshot(db, sealFor(userId), userId, snapshot, diff),
+      advance: (userId, snapshot, diff, previousObservedAt) =>
+        advanceRosterSnapshot(db, sealFor(userId), userId, snapshot, diff, previousObservedAt),
       pendingDiffs: (userId) => listPendingRosterDiffs(db, sealFor(userId), userId),
       consumeDiff: (userId, id, now) => consumeRosterDiff(db, userId, id, now),
       pass: (userId) => readObservationPass(db, userId),

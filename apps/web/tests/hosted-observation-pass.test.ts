@@ -258,6 +258,42 @@ test("the attempt is on record as unfinished before the provider is asked, and t
   });
 });
 
+test("two passes racing over one user record one transition once, and the later one adopts the roster that landed", async () => {
+  const store = memoryObservationStore();
+  const pass = (status: string, now: number, gate?: Promise<void>) =>
+    observeAndSnapshot({
+      userId: "user-1",
+      rows: KEY_ROWS,
+      secret: SECRET,
+      store,
+      seams: {
+        fetch: async (url, init) => {
+          await gate;
+          return api(status).fetch(url, init);
+        },
+        now: () => now,
+      },
+      now,
+    });
+  await pass(TEST_CONDUCTOR_STATUS.WORKING, TEST_TIME);
+
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const slow = pass(TEST_CONDUCTOR_STATUS.ERROR, TEST_TIME + 1_000, held);
+  const quick = await pass(TEST_CONDUCTOR_STATUS.ERROR, TEST_TIME + 2_000);
+  release();
+  const late = await slow;
+
+  assert.equal(quick.changed, true);
+  assert.equal(late.complete, true);
+  assert.equal(late.changed, false);
+  assert.equal(late.observedAt, TEST_TIME + 2_000);
+  assert.equal(store.snapshots.get("user-1")?.observedAt, TEST_TIME + 2_000);
+  assert.equal((await store.roster.pendingDiffs("user-1")).length, 1);
+});
+
 test("a store that cannot take the snapshot is a failed pass, never an unrecorded roster", async () => {
   const store = memoryObservationStore();
   store.roster.advance = async () => {

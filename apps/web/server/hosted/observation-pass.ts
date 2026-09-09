@@ -114,8 +114,9 @@ export async function observeAndSnapshot(
   };
   const diff = previous ? rosterDiff(previous.roster, roster) : undefined;
   const changed = diff !== undefined && !rosterDiffIsEmpty(diff);
+  let landed: boolean;
   try {
-    await store.roster.advance(
+    landed = await store.roster.advance(
       userId,
       { body: encodeObservedRoster(roster), observedAt: now },
       changed && diff && previous
@@ -126,6 +127,7 @@ export async function observeAndSnapshot(
             payload: encodeRosterDiff(diff),
           }
         : undefined,
+      previous?.observedAt,
     );
     await store.roster.recordPass(userId, { attemptedAt: now });
   } catch {
@@ -140,6 +142,12 @@ export async function observeAndSnapshot(
       changed: false,
       ...standing,
     };
+  }
+  if (!landed) {
+    // Another pass wrote the roster first; its snapshot is the one that
+    // stands, and the transition it recorded is not recorded again here.
+    const superseded = await storedRoster(store, userId);
+    return { complete: true, changed: false, ...(superseded ?? {}) };
   }
   return { complete: true, changed, roster, observedAt: now };
 }

@@ -81,8 +81,13 @@ export async function writeRosterSnapshot(
 /**
  * Replaces the snapshot and records the diff the pass read against the one
  * it replaced, in one transaction, so no reader finds a new snapshot with
- * no diff behind it or a diff ahead of the snapshot it describes. A pass
- * that found nothing changed hands no diff and only the snapshot moves.
+ * no diff behind it or a diff ahead of the snapshot it describes. The write
+ * is a compare-and-set on the instant of the snapshot the pass read: under
+ * the user's pass row lock it checks that the snapshot standing is still
+ * the one the diff was taken against, and answers false without writing
+ * when another pass — the schedule, a fresh read, a seeding action — landed
+ * first, so one transition is recorded once however many passes saw it. A
+ * pass that found nothing changed hands no diff and only the snapshot moves.
  */
 export function advanceRosterSnapshot(
   db: HostedStoreDatabase,
@@ -90,10 +95,22 @@ export function advanceRosterSnapshot(
   userId: string,
   snapshot: RosterSnapshotRecord,
   diff: RosterDiffInsert | undefined,
-): Promise<void> {
+  previousObservedAt: number | undefined,
+): Promise<boolean> {
   return db.transaction(async (tx) => {
+    await tx
+      .select({ userId: observationPass.userId })
+      .from(observationPass)
+      .where(eq(observationPass.userId, userId))
+      .for("update");
+    const [standing] = await tx
+      .select({ observedAt: rosterSnapshot.observedAt })
+      .from(rosterSnapshot)
+      .where(eq(rosterSnapshot.userId, userId));
+    if (standing?.observedAt !== previousObservedAt) return false;
     await writeRosterSnapshot(tx, seal, userId, snapshot);
     if (diff) await insertRosterDiff(tx, seal, userId, diff);
+    return true;
   });
 }
 

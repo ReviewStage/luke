@@ -35,13 +35,15 @@ export function memoryObservationStore(): MemoryObservationStore {
       write: async (userId, snapshot) => {
         snapshots.set(userId, snapshot);
       },
-      advance: async (userId, snapshot, diff) => {
+      advance: async (userId, snapshot, diff, previousObservedAt) => {
+        if (snapshots.get(userId)?.observedAt !== previousObservedAt) return false;
         snapshots.set(userId, snapshot);
         advances.push({ userId, observedAt: snapshot.observedAt, diff: diff !== undefined });
-        if (!diff) return;
+        if (!diff) return true;
         const pending = (diffs.get(userId) ?? []).filter((one) => one.consumedAt === undefined);
         pending.push({ ...diff });
         diffs.set(userId, pending.slice(-MAXIMUM_PENDING_ROSTER_DIFFS));
+        return true;
       },
       pendingDiffs: async (userId) =>
         (diffs.get(userId) ?? []).filter((one) => one.consumedAt === undefined),

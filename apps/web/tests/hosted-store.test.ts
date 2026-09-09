@@ -667,17 +667,44 @@ test("the roster snapshot is one sealed row per user, replaced whole", async () 
 test("a pass advances the snapshot and its diff together, diffs wait sealed until consumed once, and the pending bound drops the oldest", async () => {
   const { database, userId } = await conversationFor();
   const { roster } = database.store;
-  await roster.advance(
-    userId,
-    { body: JSON.stringify({ first: true }), observedAt: NOW },
-    undefined,
+  assert.equal(
+    await roster.advance(
+      userId,
+      { body: JSON.stringify({ first: true }), observedAt: NOW },
+      undefined,
+      undefined,
+    ),
+    true,
   );
   assert.deepEqual(await roster.pendingDiffs(userId), []);
 
-  await roster.advance(
-    userId,
-    { body: JSON.stringify({ second: true }), observedAt: NOW + 1 },
-    { id: "diff-1", observedAt: NOW + 1, previousObservedAt: NOW, payload: "a session appeared" },
+  assert.equal(
+    await roster.advance(
+      userId,
+      { body: JSON.stringify({ second: true }), observedAt: NOW + 1 },
+      { id: "diff-1", observedAt: NOW + 1, previousObservedAt: NOW, payload: "a session appeared" },
+      NOW,
+    ),
+    true,
+  );
+  // A pass that read the first snapshot but lands after the second writes nothing.
+  assert.equal(
+    await roster.advance(
+      userId,
+      { body: JSON.stringify({ stale: true }), observedAt: NOW + 2 },
+      {
+        id: "diff-stale",
+        observedAt: NOW + 2,
+        previousObservedAt: NOW,
+        payload: "the same change",
+      },
+      NOW,
+    ),
+    false,
+  );
+  assert.equal(
+    await roster.advance(userId, { body: "{}", observedAt: NOW + 2 }, undefined, undefined),
+    false,
   );
   assert.equal((await roster.read(userId))?.observedAt, NOW + 1);
   assert.deepEqual(await roster.pendingDiffs(userId), [
@@ -701,6 +728,7 @@ test("a pass advances the snapshot and its diff together, diffs wait sealed unti
         previousObservedAt: NOW + 9 + index,
         payload: `change ${index}`,
       },
+      index === 0 ? NOW + 1 : NOW + 9 + index,
     );
   }
   const pending = await roster.pendingDiffs(userId);
@@ -761,6 +789,7 @@ test("a pass record moves the attempt every time, the whole read only on success
       id,
       { body: "{}", observedAt: NOW },
       { id: "diff-1", observedAt: NOW, previousObservedAt: NOW - 1, payload: "x" },
+      undefined,
     );
     await roster.recordPass(id, { attemptedAt: NOW });
   }
@@ -864,6 +893,7 @@ test("deleting the user row cascades through every conversation table and leaves
       id,
       { body: "{}", observedAt: NOW },
       { id: "diff-1", observedAt: NOW, previousObservedAt: NOW - 1, payload: "x" },
+      undefined,
     );
     await database.store.roster.recordPass(id, { attemptedAt: NOW });
     await database.store.briefings.insert(id, {
