@@ -186,6 +186,13 @@ export function cloudPass(input: CloudPassInput): CloudPass {
   let lastAttemptAt = Number.NEGATIVE_INFINITY;
   let collectPass = 0;
 
+  /**
+   * One observer must never abort the shared refresh pass, so a settings read
+   * that fails is treated the same as having no credential at all — here, and
+   * for the act that reads the credential again at its own moment.
+   */
+  const readApiKey = (): Promise<string | undefined> => input.readApiKey().catch(() => undefined);
+
   const forgetObservedState = (): void => {
     // A pass still in flight was started under a credential that no longer
     // stands, so its result must not land — and neither may a slow read's.
@@ -298,9 +305,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
 
   return {
     async run() {
-      // One observer must never abort the shared refresh pass, so a settings
-      // read that fails is treated the same as having no credential at all.
-      const apiKey = await input.readApiKey().catch(() => undefined);
+      const apiKey = await readApiKey();
       if (!apiKey) {
         credential = undefined;
         forgetObservedState();
@@ -350,7 +355,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
 
     latest: () => observations,
 
-    readApiKey: () => input.readApiKey().catch(() => undefined),
+    readApiKey,
 
     reportDiagnostic(kind, error) {
       input.onDiagnostic?.(kind, error);
@@ -475,16 +480,4 @@ export function cloudPass(input: CloudPassInput): CloudPass {
       apply(body);
     },
   };
-}
-
-/** Keeps one failed resource from discarding an otherwise complete pass. */
-export async function tolerateItemFailure<Result>(
-  operation: () => Promise<Result>,
-): Promise<Result | undefined> {
-  try {
-    return await operation();
-  } catch (error) {
-    if (error instanceof AdapterFailure && clearsObservedState(error.failure)) throw error;
-    return undefined;
-  }
 }

@@ -9,7 +9,6 @@ import { type HostClaims, hostClaims, type WorkspaceHostContexts } from "./host-
  */
 export abstract class WorkspaceHostSnapshot<Context> {
   readonly #contexts: WorkspaceHostContexts<Context>;
-  #claims: HostClaims | undefined;
 
   constructor(sessionsByProvider: WorkspaceHostContexts<Context> = new Map()) {
     this.#contexts = sessionsByProvider;
@@ -34,28 +33,28 @@ export abstract class WorkspaceHostSnapshot<Context> {
   ): ProviderSessionObservation;
 
   /**
-   * A subclass's own fields are not assigned while the base constructor runs
-   * and `applicationId` is one of them, so the claims are built on first use.
+   * The claims hold no state of their own, and `applicationId` is a subclass
+   * field that is not assigned while the base constructor runs, so they are
+   * built where they are asked for rather than held.
    */
-  #resolved(): HostClaims {
-    this.#claims ??= hostClaims<Context>({
+  #claims(): HostClaims {
+    return hostClaims<Context>({
       applicationId: this.applicationId,
       contexts: this.#contexts,
       retains: (context) => this.retains(context),
       annotate: ({ observation, context, hostSessions }) =>
         this.annotate(observation, context, hostSessions),
     });
-    return this.#claims;
   }
 
   has(providerId: string, providerSessionId: string): boolean {
-    return this.#resolved().has(providerId, providerSessionId);
+    return this.#claims().has(providerId, providerSessionId);
   }
 
   enrich(
     providerId: string,
     observations: readonly ProviderSessionObservation[],
   ): readonly ProviderSessionObservation[] {
-    return this.#resolved().enrich(providerId, observations);
+    return this.#claims().enrich(providerId, observations);
   }
 }

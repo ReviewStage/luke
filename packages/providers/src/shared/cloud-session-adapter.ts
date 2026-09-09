@@ -26,7 +26,8 @@ import {
 } from "@sidecar/session";
 import type { CloudFetch, WireRecord } from "@sidecar/wire";
 import type { AdapterDiagnosticCallback, AdapterDiagnosticKind } from "./adapter-diagnostics.js";
-import { type CloudPass, cloudPass, tolerateItemFailure, WRITE_SUBJECT } from "./cloud-pass.js";
+import { tolerateItemFailure } from "./adapter-failure.js";
+import { type CloudPass, cloudPass, WRITE_SUBJECT } from "./cloud-pass.js";
 import type { CloudRequest, CloudWriteRoute } from "./cloud-wire.js";
 
 export interface CloudAdapterOptions {

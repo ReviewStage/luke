@@ -123,44 +123,12 @@ export function adapterAsPlugin(adapter: SessionProviderAdapter): SessionProvide
     latest: () => observed,
     projects: () => adapter.workspaceProjects(),
     acts: {
-      message: ({ request, observation }) =>
-        adapter.sendMessage({
-          providerSessionId: observation.providerSessionId,
-          text: request.text,
-        }),
-      control: ({ request, observation }) =>
-        adapter.executeControl({
-          providerSessionId: observation.providerSessionId,
-          control: request.control,
-        }),
-      createWorkspace: (input) =>
-        adapter.createWorkspace({
-          providerProjectId: input.project.providerProjectId,
-          ...(input.name === undefined ? undefined : { name: input.name }),
-          ...(input.task === undefined ? undefined : { task: input.task }),
-          ...(input.agentSelection === undefined
-            ? undefined
-            : { agentSelection: input.agentSelection }),
-        }),
-      spawnAgent: ({ request, observation }) =>
-        adapter.spawnWorkspaceAgent({
-          providerSessionId: observation.providerSessionId,
-          agent: request.agent,
-          ...(request.name === undefined ? undefined : { name: request.name }),
-          ...(request.task === undefined ? undefined : { task: request.task }),
-          ...(request.model === undefined ? undefined : { model: request.model }),
-          ...(request.effort === undefined ? undefined : { effort: request.effort }),
-        }),
-      renameWorkspace: ({ request, observation }) =>
-        adapter.renameWorkspace({
-          providerSessionId: observation.providerSessionId,
-          name: request.name,
-        }),
-      renameSession: ({ request, observation }) =>
-        adapter.renameSession({
-          providerSessionId: observation.providerSessionId,
-          name: request.name,
-        }),
+      message: (input) => adapter.sendMessage(ACT_REQUEST_FROM.message(input)),
+      control: (input) => adapter.executeControl(ACT_REQUEST_FROM.control(input)),
+      createWorkspace: (input) => adapter.createWorkspace(ACT_REQUEST_FROM.createWorkspace(input)),
+      spawnAgent: (input) => adapter.spawnWorkspaceAgent(ACT_REQUEST_FROM.spawnAgent(input)),
+      renameWorkspace: (input) => adapter.renameWorkspace(ACT_REQUEST_FROM.renameWorkspace(input)),
+      renameSession: (input) => adapter.renameSession(ACT_REQUEST_FROM.renameSession(input)),
     },
     reads: {
       transcript: (providerSessionId) => adapter.readTranscript(providerSessionId),
@@ -381,6 +349,49 @@ const ACT_DISPATCHERS: ActDispatchers = {
 };
 
 /**
+ * The ask each act's handler input was built from. `dispatchAct` resolves an
+ * ask into a handler input; a caller holding the input and needing the ask
+ * again — an adapter behind a plugin, or one of several observers being asked
+ * in turn — reads it back through here, so the two directions cannot drift.
+ */
+export type ActRequestFrom = {
+  [Kind in PluginActKind]: (input: Parameters<ActHandlers[Kind]>[0]) => PluginActRequests[Kind];
+};
+
+export const ACT_REQUEST_FROM: ActRequestFrom = {
+  message: ({ request, observation }) => ({
+    providerSessionId: observation.providerSessionId,
+    text: request.text,
+  }),
+  control: ({ request, observation }) => ({
+    providerSessionId: observation.providerSessionId,
+    control: request.control,
+  }),
+  createWorkspace: (input) => ({
+    providerProjectId: input.project.providerProjectId,
+    ...(input.name === undefined ? undefined : { name: input.name }),
+    ...(input.task === undefined ? undefined : { task: input.task }),
+    ...(input.agentSelection === undefined ? undefined : { agentSelection: input.agentSelection }),
+  }),
+  spawnAgent: ({ request, observation }) => ({
+    providerSessionId: observation.providerSessionId,
+    agent: request.agent,
+    ...(request.name === undefined ? undefined : { name: request.name }),
+    ...(request.task === undefined ? undefined : { task: request.task }),
+    ...(request.model === undefined ? undefined : { model: request.model }),
+    ...(request.effort === undefined ? undefined : { effort: request.effort }),
+  }),
+  renameWorkspace: ({ request, observation }) => ({
+    providerSessionId: observation.providerSessionId,
+    name: request.name,
+  }),
+  renameSession: ({ request, observation }) => ({
+    providerSessionId: observation.providerSessionId,
+    name: request.name,
+  }),
+};
+
+/**
  * The only route to an act handler. It resolves every target from the
  * plugin's own latest roster — the advertised control, the `add-agent` and
  * `rename-workspace` targets, and the target's own observation — so an act
@@ -528,6 +539,16 @@ export function mergePlugins(
     reason: "No provider observer supports that act.",
   } as const;
 
+  /** One act, asked of each observer in turn with the ask it was built from. */
+  const askEach = <Kind extends PluginActKind>(
+    kind: Kind,
+    input: Parameters<ActHandlers[Kind]>[0],
+  ): Promise<PluginActResults[Kind]> =>
+    firstFirmAnswer<PluginActResults[Kind]>(
+      (plugin) => dispatchAct(plugin, kind, ACT_REQUEST_FROM[kind](input)),
+      exhausted,
+    );
+
   return {
     provider,
 
@@ -547,70 +568,12 @@ export function mergePlugins(
     projects: () => plugins.flatMap((plugin) => plugin.projects?.() ?? []),
 
     acts: {
-      message: (input) =>
-        firstFirmAnswer(
-          (plugin) =>
-            dispatchAct(plugin, "message", {
-              providerSessionId: input.observation.providerSessionId,
-              text: input.request.text,
-            }),
-          exhausted,
-        ),
-      control: (input) =>
-        firstFirmAnswer(
-          (plugin) =>
-            dispatchAct(plugin, "control", {
-              providerSessionId: input.observation.providerSessionId,
-              control: input.request.control,
-            }),
-          exhausted,
-        ),
-      createWorkspace: (input) =>
-        firstFirmAnswer<ProviderWorkspaceResult>(
-          (plugin) =>
-            dispatchAct(plugin, "createWorkspace", {
-              providerProjectId: input.project.providerProjectId,
-              ...(input.name === undefined ? undefined : { name: input.name }),
-              ...(input.task === undefined ? undefined : { task: input.task }),
-              ...(input.agentSelection === undefined
-                ? undefined
-                : { agentSelection: input.agentSelection }),
-            }),
-          exhausted,
-        ),
-      spawnAgent: (input) =>
-        firstFirmAnswer<ProviderWorkspaceResult>(
-          (plugin) =>
-            dispatchAct(plugin, "spawnAgent", {
-              providerSessionId: input.observation.providerSessionId,
-              agent: input.request.agent,
-              ...(input.request.name === undefined ? undefined : { name: input.request.name }),
-              ...(input.request.task === undefined ? undefined : { task: input.request.task }),
-              ...(input.request.model === undefined ? undefined : { model: input.request.model }),
-              ...(input.request.effort === undefined
-                ? undefined
-                : { effort: input.request.effort }),
-            }),
-          exhausted,
-        ),
-      renameWorkspace: (input) =>
-        firstFirmAnswer(
-          (plugin) =>
-            dispatchAct(plugin, "renameWorkspace", {
-              providerSessionId: input.observation.providerSessionId,
-              name: input.request.name,
-            }),
-          exhausted,
-        ),
-      renameSession: (input) =>
-        firstFirmAnswer(
-          (plugin) =>
-            dispatchAct(plugin, "renameSession", {
-              providerSessionId: input.observation.providerSessionId,
-              name: input.request.name,
-            }),
-          exhausted,
-        ),
+      message: (input) => askEach("message", input),
+      control: (input) => askEach("control", input),
+      createWorkspace: (input) => askEach("createWorkspace", input),
+      spawnAgent: (input) => askEach("spawnAgent", input),
+      renameWorkspace: (input) => askEach("renameWorkspace", input),
+      renameSession: (input) => askEach("renameSession", input),
     },
 
     reads: {

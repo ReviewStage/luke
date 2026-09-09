@@ -36,3 +36,19 @@ export class AdapterFailure extends Error {
 export function clearsObservedState(failure: AdapterFailureKind): boolean {
   return failure !== ADAPTER_FAILURE.TRANSIENT;
 }
+
+/**
+ * Keeps one failed resource from discarding an otherwise complete pass. A
+ * failure that clears observed state is not one resource's problem, so it
+ * still ends the pass.
+ */
+export async function tolerateItemFailure<Result>(
+  operation: () => Promise<Result>,
+): Promise<Result | undefined> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error instanceof AdapterFailure && clearsObservedState(error.failure)) throw error;
+    return undefined;
+  }
+}
