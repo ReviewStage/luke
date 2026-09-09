@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AdminViewer } from "../server/admin/admin-access";
-import { ADMIN_TREND_DAYS, type AdminUsageDay, lastNDayKeys } from "../server/admin/admin-metrics";
+import { ADMIN_TREND_DAYS, lastNDayKeys } from "../server/admin/admin-metrics";
 import {
   type AdminUserDetail,
   type AdminUserSource,
@@ -56,9 +56,9 @@ function build(
 test("the daily series is zero-filled and the window counts fold from it", () => {
   const detail = build({
     byDay: new Map([
-      ["2026-08-17", { calls: 3 }],
-      ["2026-08-10", { calls: 5 }],
-      ["2026-07-19", { calls: 7 }],
+      ["2026-08-17", 3],
+      ["2026-08-10", 5],
+      ["2026-07-19", 7],
     ]),
   });
 
@@ -73,8 +73,8 @@ test("the daily series is zero-filled and the window counts fold from it", () =>
 test("the calendar series spans the trailing year, opening on a Sunday", () => {
   const detail = build({
     calendarByDay: new Map([
-      ["2025-09-01", { calls: 6 }],
-      ["2026-08-17", { calls: 1 }],
+      ["2025-09-01", 6],
+      ["2026-08-17", 1],
     ]),
   });
 
@@ -90,7 +90,7 @@ test("the calendar series spans the trailing year, opening on a Sunday", () => {
 });
 
 test("the calendar series keeps its year whatever window the page is read at", () => {
-  const calendarByDay = new Map<string, AdminUsageDay>([["2025-12-25", { calls: 4 }]]);
+  const calendarByDay = new Map([["2025-12-25", 4]]);
   const week = build({ calendarByDay }, ADMIN_METRICS_WINDOW.WEEK);
   const quarter = build({ calendarByDay }, ADMIN_METRICS_WINDOW.QUARTER);
 
@@ -102,11 +102,11 @@ test("the calendar series keeps its year whatever window the page is read at", (
 test("a streak ending today counts back to its first gap", () => {
   const detail = build({
     byDay: new Map([
-      ["2026-08-17", { calls: 1 }],
-      ["2026-08-16", { calls: 1 }],
-      ["2026-08-15", { calls: 3 }],
+      ["2026-08-17", 1],
+      ["2026-08-16", 1],
+      ["2026-08-15", 3],
       // 2026-08-14 is the gap; this day must not extend the streak.
-      ["2026-08-13", { calls: 18 }],
+      ["2026-08-13", 18],
     ]),
   });
   assert.equal(detail.activity.currentStreakDays, 3);
@@ -115,8 +115,8 @@ test("a streak ending today counts back to its first gap", () => {
 test("a quiet today does not break a streak that ran through yesterday", () => {
   const detail = build({
     byDay: new Map([
-      ["2026-08-16", { calls: 1 }],
-      ["2026-08-15", { calls: 1 }],
+      ["2026-08-16", 1],
+      ["2026-08-15", 1],
     ]),
   });
   assert.equal(detail.activity.currentStreakDays, 2);
@@ -125,16 +125,16 @@ test("a quiet today does not break a streak that ran through yesterday", () => {
 test("a streak broken before yesterday is over, whatever came earlier", () => {
   const detail = build({
     byDay: new Map([
-      ["2026-08-14", { calls: 1 }],
-      ["2026-08-13", { calls: 1 }],
+      ["2026-08-14", 1],
+      ["2026-08-13", 1],
     ]),
   });
   assert.equal(detail.activity.currentStreakDays, 0);
 });
 
 test("a streak covering the whole window reports the window's length", () => {
-  const byDay = new Map<string, AdminUsageDay>(
-    lastNDayKeys(NOON_UTC, ADMIN_METRICS_WINDOW_DEFAULT).map((day) => [day, { calls: 1 }]),
+  const byDay = new Map(
+    lastNDayKeys(NOON_UTC, ADMIN_METRICS_WINDOW_DEFAULT).map((day) => [day, 1] as const),
   );
   const detail = build({ byDay });
   assert.equal(detail.activity.currentStreakDays, ADMIN_METRICS_WINDOW_DEFAULT);
@@ -146,10 +146,10 @@ test("a 7-day window narrows the series while its trends still see the week befo
     {
       byDay: new Map([
         // Inside the 7-day window (2026-08-11 through 2026-08-17).
-        ["2026-08-16", { calls: 4 }],
+        ["2026-08-16", 4],
         // Outside the window but inside the trend's prior run.
-        ["2026-08-05", { calls: 2 }],
-        ["2026-08-04", { calls: 1 }],
+        ["2026-08-05", 2],
+        ["2026-08-04", 1],
       ]),
     },
     ADMIN_METRICS_WINDOW.WEEK,
@@ -172,9 +172,9 @@ test("the active-days trend counts days present, not volume spent", () => {
     byDay: new Map([
       // The recent run is 2026-08-11 through 2026-08-17; one loud day cannot
       // outweigh two quiet ones the week before.
-      ["2026-08-16", { calls: 1000 }],
-      ["2026-08-09", { calls: 1 }],
-      ["2026-08-07", { calls: 1 }],
+      ["2026-08-16", 1000],
+      ["2026-08-09", 1],
+      ["2026-08-07", 1],
     ]),
   });
   assert.deepEqual(detail.activity.activeDaysTrend, {

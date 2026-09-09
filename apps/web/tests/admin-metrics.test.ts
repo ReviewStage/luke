@@ -81,8 +81,8 @@ test("the usage series is zero-filled and totalled across the window", () => {
     source({
       usage: {
         byDay: new Map([
-          ["2026-08-17", { calls: 44 }],
-          ["2026-08-10", { calls: 5 }],
+          ["2026-08-17", 44],
+          ["2026-08-10", 5],
         ]),
         activeUsersToday: 2,
         activeUsersWindow: 9,
@@ -172,8 +172,8 @@ test("a trend is the trailing run beside the run immediately before it", () => {
       },
       usage: {
         byDay: new Map([
-          ["2026-08-12", { calls: 5 }],
-          ["2026-08-05", { calls: 2 }],
+          ["2026-08-12", 5],
+          ["2026-08-05", 2],
         ]),
         activeUsersToday: 0,
         activeUsersWindow: 3,
@@ -206,8 +206,8 @@ test("a 7-day window narrows the series while its trend still sees the week befo
       },
       usage: {
         byDay: new Map([
-          ["2026-08-16", { calls: 4 }],
-          ["2026-08-05", { calls: 2 }],
+          ["2026-08-16", 4],
+          ["2026-08-05", 2],
         ]),
         activeUsersToday: 0,
         activeUsersWindow: 1,

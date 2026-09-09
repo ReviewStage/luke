@@ -48,13 +48,10 @@ const WEEK_MS = 7 * DAY_MS;
  */
 export const ADMIN_RETENTION_WEEKS = 8;
 
-export interface AdminUsageDay {
-  calls: number;
-}
-
-export interface AdminDailyUsage extends AdminUsageDay {
-  /** The UTC day the counters cover, as YYYY-MM-DD. */
+export interface AdminDailyUsage {
+  /** The UTC day the count covers, as YYYY-MM-DD. */
   day: string;
+  calls: number;
 }
 
 export interface AdminDailySignups {
@@ -268,7 +265,7 @@ export interface AdminMetricsSource {
     signupsByDay: ReadonlyMap<string, number>;
   };
   usage: {
-    byDay: ReadonlyMap<string, AdminUsageDay>;
+    byDay: ReadonlyMap<string, number>;
     activeUsersToday: number;
     activeUsersWindow: number;
     topUsers: readonly AdminTopUser[];
@@ -390,7 +387,7 @@ export function buildAdminMetrics(
 
   const daily = dayKeys.map((day) => ({
     day,
-    calls: source.usage.byDay.get(day)?.calls ?? 0,
+    calls: source.usage.byDay.get(day) ?? 0,
   }));
 
   // Every windowed count is folded from the zero-filled series rather than
@@ -413,12 +410,12 @@ export function buildAdminMetrics(
       dailySignups,
     },
     featureUsage: {
-      callsToday: source.usage.byDay.get(todayKey)?.calls ?? 0,
+      callsToday: source.usage.byDay.get(todayKey) ?? 0,
       callsWindow,
       activeUsersToday: source.usage.activeUsersToday,
       activeUsersWindow: source.usage.activeUsersWindow,
       usageTrend: trailingTrend(
-        trendKeys.map((day) => source.usage.byDay.get(day)?.calls ?? 0),
+        trendKeys.map((day) => source.usage.byDay.get(day) ?? 0),
         ADMIN_TREND_DAYS,
       ),
       daily,

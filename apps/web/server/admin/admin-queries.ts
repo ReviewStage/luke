@@ -27,7 +27,6 @@ import {
   type AdminIntegration,
   type AdminMetricsSource,
   type AdminTopUser,
-  type AdminUsageDay,
   countSignInMethods,
   lastNDayKeys,
   lastNWeekStartKeys,
@@ -176,9 +175,9 @@ async function readUsageMetrics(
       .limit(ADMIN_TOP_USERS_LIMIT),
   ]);
 
-  const byDay = new Map<string, AdminUsageDay>();
+  const byDay = new Map<string, number>();
   for (const row of usageRows) {
-    byDay.set(row.day, { calls: toNumber(row.calls) });
+    byDay.set(row.day, toNumber(row.calls));
   }
 
   const topUsers: AdminTopUser[] = topUserRows.map((row) => ({
@@ -433,14 +432,14 @@ export async function readAdminUserSource(
   const row = userRows[0];
   if (!row) return undefined;
 
-  const byDay = new Map<string, AdminUsageDay>();
+  const byDay = new Map<string, number>();
   for (const usageRow of windowRows) {
-    byDay.set(usageRow.day, { calls: usageRow.calls });
+    byDay.set(usageRow.day, usageRow.calls);
   }
 
-  const calendarByDay = new Map<string, AdminUsageDay>();
+  const calendarByDay = new Map<string, number>();
   for (const usageRow of calendarRows) {
-    calendarByDay.set(usageRow.day, { calls: usageRow.calls });
+    calendarByDay.set(usageRow.day, usageRow.calls);
   }
 
   return {

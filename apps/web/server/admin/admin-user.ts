@@ -4,7 +4,6 @@ import {
   ADMIN_TREND_DAYS,
   type AdminDailyUsage,
   type AdminTrend,
-  type AdminUsageDay,
   lastNDayKeys,
   sum,
   trailingTrend,
@@ -78,9 +77,9 @@ export interface AdminUserAllTime {
 export interface AdminUserSource {
   account: AdminUserAccount;
   usage: {
-    byDay: ReadonlyMap<string, AdminUsageDay>;
+    byDay: ReadonlyMap<string, number>;
     /** The calendar's own rows, read at the trailing-year bound. */
-    calendarByDay: ReadonlyMap<string, AdminUsageDay>;
+    calendarByDay: ReadonlyMap<string, number>;
     allTime: AdminUserAllTime;
     /** Window days on which this account reached a hosted daily ceiling. */
     quotaLimitedDaysWindow: number;
@@ -125,16 +124,16 @@ export function buildAdminUserDetail(
   // The trends read the byDay map through their own trailing keys, like the
   // overview's, so a 7-day view still compares against the week before it.
   const trendKeys = lastNDayKeys(now, ADMIN_TREND_DAYS * 2);
-  const trendTotals = trendKeys.map((day) => source.usage.byDay.get(day)?.calls ?? 0);
+  const trendTotals = trendKeys.map((day) => source.usage.byDay.get(day) ?? 0);
 
   const daily = dayKeys.map((day) => ({
     day,
-    calls: source.usage.byDay.get(day)?.calls ?? 0,
+    calls: source.usage.byDay.get(day) ?? 0,
   }));
 
   const calendarDaily = calendarDayKeys(now).map((day) => ({
     day,
-    calls: source.usage.calendarByDay.get(day)?.calls ?? 0,
+    calls: source.usage.calendarByDay.get(day) ?? 0,
   }));
 
   const activeFlags = daily.map((day) => day.calls > 0);
