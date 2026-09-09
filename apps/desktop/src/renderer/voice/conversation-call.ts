@@ -39,6 +39,7 @@ import {
   SpeakOnlyCall,
   type SpeakOnlyCallOptions,
 } from "./speak-only-call";
+import { ToolFollowUp } from "./tool-follow-up";
 
 /**
  * Carries one app act the brain decided — a settings change, the panel shown,
@@ -111,15 +112,6 @@ function askQuestion(argumentsJson: string): string | undefined {
   }
 }
 
-interface SdkToolBatch {
-  responseId: string;
-  callIds: Set<string>;
-  outputCallIds: Set<string>;
-  epoch: number;
-  responseDone: boolean;
-  followUpStarted: boolean;
-}
-
 /**
  * Drives one Realtime conversation the developer can speak on: the speak-only
  * call with a capture device and the voice's one tool added.
@@ -170,16 +162,17 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
    */
   #pendingTurn = false;
   /**
-   * Whether an armed reply's calls are being answered and the follow-up
-   * voicing their outcomes is still owed. The turn holds through the writes
-   * — a READY offered mid-write is the edge the announcer rides, and a reply
-   * taken there bumps the epoch and abandons the follow-up — so the audio
-   * draining then is remembered rather than an ending. Lowered by whatever
-   * reply comes next, the finish that ends the hold, or the interrupt of a
-   * developer moving on.
+   * The calls an armed reply asked for, and whether the follow-up voicing
+   * their outcomes is still owed. The turn holds through the writes — a READY
+   * offered mid-write is the edge the announcer rides, and a reply taken
+   * there bumps the epoch and abandons the follow-up — so the audio draining
+   * then is remembered rather than an ending.
    */
-  #toolBatch: SdkToolBatch | undefined;
-  #toolCallResponseIds = new Map<string, string>();
+  #tools = new ToolFollowUp({
+    epoch: () => this.turnEpoch,
+    connected: () => this.isConnected,
+    openFollowUp: () => this.startResponse(functionCallFollowUpEvents(), { keepCaption: true }),
+  });
 
   /**
    * Whether the call that is up — or coming up — is one the developer can take
@@ -453,7 +446,7 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
   }
 
   protected override onRawRecord(record: WireRecord): void {
-    this.#observeSdkToolCall(record);
+    this.#tools.observe(record);
   }
 
   protected override handleEvent(event: ParsedRealtimeServerEvent): void {
@@ -482,63 +475,36 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
   }
 
   protected override onResponseCreated(responseId: string): void {
-    this.#toolBatch = {
-      responseId,
-      callIds: new Set(),
-      outputCallIds: new Set(),
-      epoch: this.turnEpoch,
-      responseDone: false,
-      followUpStarted: false,
-    };
+    this.#tools.opened(responseId);
   }
 
   protected override replyResumes(event: ResponseDoneEvent, fresh: boolean): boolean {
-    let batch: SdkToolBatch | undefined;
-    if (fresh && event.responseId) {
-      batch =
-        this.#toolBatch?.responseId === event.responseId
-          ? this.#toolBatch
-          : {
-              responseId: event.responseId,
-              callIds: new Set<string>(),
-              outputCallIds: new Set<string>(),
-              epoch: this.turnEpoch,
-              responseDone: false,
-              followUpStarted: false,
-            };
-    }
-    if (batch && batch.responseId === event.responseId) {
-      this.#toolBatch = batch;
-      batch.responseDone = true;
-      for (const call of event.calls) {
-        batch.callIds.add(call.callId);
-        this.#toolCallResponseIds.set(call.callId, batch.responseId);
-      }
-    }
-    if (!batch) return false;
-    // The turn now holds for the follow-up, because the READY an
-    // ending here would offer while the brain thinks is the edge the
-    // queue rides — a briefing taken there bumps the epoch, and the
-    // follow-up voicing the answer stands down against it, the
-    // developer's answer abandoned for a briefing. The hold is the
-    // ask's, so it gets a clock of its own, long enough for a brain
-    // turn that reads and acts before it answers — while an ask that
-    // hangs past even that still meets a backstop, because a turn
+    const resumes = this.#tools.done({
+      responseId: event.responseId,
+      callIds: event.calls.map((call) => call.callId),
+      fresh,
+    });
+    if (!resumes) return false;
+    // The turn now holds for the follow-up, because the READY an ending here
+    // would offer while the brain thinks is the edge the queue rides — a
+    // briefing taken there bumps the epoch, and the follow-up voicing the
+    // answer stands down against it, the developer's answer abandoned for a
+    // briefing. The hold is the ask's, so it gets a clock of its own, long
+    // enough for a brain turn that reads and acts before it answers — while
+    // an ask that hangs past even that still meets a backstop, because a turn
     // that never ends is worse than one that ends early.
     this.clearSettleTimer();
     this.armSettleTimer(BRAIN_ASK_SETTLE_TIMEOUT_MS);
-    this.#startToolFollowUpIfReady();
+    this.#tools.startIfReady();
     return true;
   }
 
   protected override get turnHolds(): boolean {
-    const batch = this.#toolBatch;
-    return Boolean(batch?.responseDone && !batch.followUpStarted && batch.callIds.size > 0);
+    return this.#tools.holds;
   }
 
   protected override onTurnBoundary(): void {
-    this.#toolBatch = undefined;
-    this.#toolCallResponseIds.clear();
+    this.#tools.reset();
   }
 
   protected override async executeTool(
@@ -555,48 +521,14 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
     if (argumentsJson === undefined) {
       return { status: ACT_RESULT_STATUS.REJECTED, reason: "The tool arguments were malformed." };
     }
-    const responseId = this.#toolCallResponseIds.get(callId);
-    const batch = responseId === this.#toolBatch?.responseId ? this.#toolBatch : undefined;
     // Only the reply now under way may ask the brain: a cancelled reply's
     // late call — the developer already talked over it — is answered with a
     // refusal rather than an ask the developer moved on from.
-    const current = Boolean(batch && batch.epoch === this.turnEpoch && batch.callIds.has(callId));
-    return this.#toolCallOutput({ name, callId, argumentsJson }, current);
+    return this.#toolCallOutput({ name, callId, argumentsJson }, this.#tools.current(callId));
   }
 
   protected override onToolOutputSent(callId: string): void {
-    const responseId = this.#toolCallResponseIds.get(callId);
-    const batch = responseId === this.#toolBatch?.responseId ? this.#toolBatch : undefined;
-    if (!batch?.callIds.has(callId)) return;
-    batch.outputCallIds.add(callId);
-    this.#startToolFollowUpIfReady();
-  }
-
-  #observeSdkToolCall(record: WireRecord): void {
-    if (record.type !== "response.output_item.done") return;
-    const item = isRecord(record.item) ? record.item : undefined;
-    if (item?.type !== "function_call") return;
-    const responseId = text(record.response_id);
-    const callId = text(item.call_id);
-    if (!responseId || !callId) return;
-    this.#toolCallResponseIds.set(callId, responseId);
-    const batch = this.#toolBatch;
-    if (batch?.responseId === responseId) batch.callIds.add(callId);
-  }
-
-  #startToolFollowUpIfReady(): void {
-    const batch = this.#toolBatch;
-    if (
-      !batch?.responseDone ||
-      batch.followUpStarted ||
-      batch.epoch !== this.turnEpoch ||
-      !this.isConnected ||
-      [...batch.callIds].some((callId) => !batch.outputCallIds.has(callId))
-    ) {
-      return;
-    }
-    batch.followUpStarted = true;
-    this.startResponse(functionCallFollowUpEvents(), { keepCaption: true });
+    this.#tools.outputSent(callId);
   }
 
   /**
