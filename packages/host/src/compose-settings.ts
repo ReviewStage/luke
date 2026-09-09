@@ -37,11 +37,10 @@ import {
   settingEntryGuard,
 } from "@sidecar/settings";
 import type { CliConnection, SettingsUpdateResult } from "@sidecar/settings/wire";
-import { ACT_RESULT_STATUS, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, isWireString, lateRef, type UnparsedWireValue } from "@sidecar/wire";
 import { AccountPreferencesClient } from "./account-preferences-client.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
-import { lateRef } from "./late-ref.js";
 import { ProviderKeyVaultSync, type VaultSyncAccount } from "./provider-key-vault-sync.js";
 import { SettingsStore } from "./settings-store.js";
 import { reporterOf } from "./wire-helpers.js";

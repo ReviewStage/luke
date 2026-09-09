@@ -24,7 +24,7 @@ import { ARRIVAL_SPEECH_KIND, CALENDAR_ONBOARDING_SPEECH_KIND } from "@sidecar/r
 import { ObservationLoop } from "@sidecar/runtime";
 import { APP_SETTING_ID, APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { ObservedAccountCalendars } from "@sidecar/settings/wire";
-import { ACT_RESULT_STATUS, isWireBoolean, isWireString } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, isWireBoolean, isWireString, lateRef } from "@sidecar/wire";
 import {
   APPLE_CALENDAR_ACCESS_REFUSAL,
   type AppleCalendarHelperRun,
@@ -34,7 +34,6 @@ import { calendarOnboardingOwed } from "./calendar-onboarding-flow.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
-import { lateRef } from "./late-ref.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { type OnboardingState, onboardingStateFile } from "./onboarding-state.js";
 import type { OnboardingBeatKind } from "./voice/speech-arbiter.js";

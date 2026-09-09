@@ -17,10 +17,10 @@ import {
 } from "@sidecar/gateway";
 import { VOICE_SOURCE_COUNTED_AS } from "@sidecar/settings";
 import { VoiceCapabilityAssembler } from "@sidecar/voice";
+import { lateRef } from "@sidecar/wire";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
-import { lateRef } from "./late-ref.js";
 import { transitionVoiceCredential } from "./voice-credential-transition.js";
 
 const ACCOUNT_CLIENT_ID = "luke-desktop";

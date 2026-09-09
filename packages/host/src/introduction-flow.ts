@@ -2,7 +2,7 @@
  * When the one-time spoken introduction runs, and how long its takeover has
  * for each beat of the handoff. The decisions are pure so they can be tested
  * without Electron; the takeover window and the wiring that acts on them live
- * in desktop-app and window/introduction-window.
+ * in the desktop's window service and window/introduction-window.
  */
 
 /**
