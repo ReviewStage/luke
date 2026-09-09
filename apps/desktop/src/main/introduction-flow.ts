@@ -1,19 +1,9 @@
-import { isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
-
 /**
- * When the one-time spoken introduction runs, and how its completion is
- * remembered. The decisions are pure so they can be tested without Electron;
- * the takeover window and the wiring that acts on them live in desktop-app
- * and window/introduction-window.
+ * When the one-time spoken introduction runs, and how long its takeover has
+ * for each beat of the handoff. The decisions are pure so they can be tested
+ * without Electron; the takeover window and the wiring that acts on them live
+ * in desktop-app and window/introduction-window.
  */
-
-/**
- * The introduction's completion record, beside `last-run-version.json` in the
- * app's own state directory and under the same idiom: a missing or unreadable
- * file means the introduction has never finished, which is exactly the answer
- * a fresh install must get.
- */
-export const INTRODUCTION_STATE_FILE = "introduction.json";
 
 /**
  * How recently a detected session must have moved to be worth introducing.
@@ -61,20 +51,4 @@ export function shouldRunIntroduction(input: {
   completed: boolean;
 }): boolean {
   return input.requiresAccount && !input.signedIn && !input.completed;
-}
-
-/** Whether a stored record says the introduction finished. */
-export function introductionCompleted(stored: string | undefined): boolean {
-  if (stored === undefined) return false;
-  try {
-    const parsed: UnparsedWireValue = JSON.parse(stored);
-    return isRecord(parsed) && text(parsed.completedAt) !== undefined;
-  } catch {
-    return false;
-  }
-}
-
-/** The record a finished introduction persists. */
-export function introductionRecord(completedAtIso: string): string {
-  return `${JSON.stringify({ completedAt: completedAtIso })}\n`;
 }

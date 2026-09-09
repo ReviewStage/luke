@@ -177,31 +177,19 @@ import {
   type AppleCalendarHelperRun,
   AppleCalendarReader,
 } from "../apple-calendar";
-import {
-  ARRIVAL_STATE_FILE,
-  type ArrivalState,
-  arrivalBeatOwed,
-  arrivalRecord,
-  arrivalStateFromStored,
-  countsFirstAnnouncement,
-} from "../arrival-flow";
+import { arrivalBeatOwed, countsFirstAnnouncement } from "../arrival-flow";
 import type { WorkspaceCreationDefaults } from "../brain/act-performer";
 import { wakeEventsFromHooks } from "../brain/flow";
 import { BrainReplyDeliveries } from "../brain/reply-delivery";
 import { wireBrain } from "../brain/wiring";
-import {
-  CALENDAR_ONBOARDING_STATE_FILE,
-  type CalendarOnboardingState,
-  calendarOnboardingOwed,
-  calendarOnboardingRecord,
-  calendarOnboardingStateFromStored,
-} from "../calendar-onboarding-flow";
+import { calendarOnboardingOwed } from "../calendar-onboarding-flow";
 import { conversationOperations, startHistoryMaintenance } from "../conversation-operations";
 import { NODE_CAPABILITY } from "../gateway/desktop-node";
 import { createGatewayService, type GatewayService } from "../gateway/service";
 import { createSessionActPerformer, NodeAnswerLostError } from "../ipc/session-acts";
 import { wireMemoryMaintenance } from "../memory-maintenance";
 import { wireMemory } from "../memory-wiring";
+import { type OnboardingState, onboardingStateFile } from "../onboarding-state";
 import { ProviderKeyVaultSync, type VaultSyncAccount } from "../provider-key-vault-sync";
 import type { RunMode } from "../run-mode";
 import { agentRootPath } from "../runtime-store-path";
@@ -430,16 +418,16 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
       // at the gate and relaunching finds it standing. Written before the
       // account event below, so the gate is already standing when the
       // renderer learns it is signed in.
-      if (signedIn && !wasSignedIn && calendarOnboardingState === undefined) {
-        writeCalendarOnboardingState({ requiredAt: new Date(now()).toISOString() });
+      if (signedIn && !wasSignedIn && onboardingState?.calendarOnboardingRequiredAt === undefined) {
+        writeOnboardingState({ calendarOnboardingRequiredAt: new Date(now()).toISOString() });
         void settleCalendarOnboardingIfConnected();
       }
       emit(GATEWAY_EVENT.ACCOUNT_CHANGED, wire(account));
       void emitSettings();
       void emitSessionReplay();
       if (signedIn && !wasSignedIn) productEvents.record(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
-      if (signedIn && !wasSignedIn && arrivalState === undefined) {
-        writeArrivalState({ signedInAt: new Date(now()).toISOString() });
+      if (signedIn && !wasSignedIn && onboardingState?.arrivalSignedInAt === undefined) {
+        writeOnboardingState({ arrivalSignedInAt: new Date(now()).toISOString() });
       }
     },
   });
@@ -804,62 +792,34 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     await emitSettings();
   }
 
-  const arrivalStatePath = () => path.join(stateRoot, ARRIVAL_STATE_FILE);
-  let arrivalState: ArrivalState | undefined;
-  function arrivalStateFromDisk(): ArrivalState | undefined {
-    try {
-      return arrivalStateFromStored(fs.readFileSync(arrivalStatePath(), "utf8"));
-    } catch {
-      return undefined;
-    }
-  }
-  function writeArrivalState(state: ArrivalState): void {
-    arrivalState = state;
-    try {
-      fs.writeFileSync(arrivalStatePath(), arrivalRecord(state));
-    } catch (error) {
-      report(
-        `Could not persist the arrival record: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-    if (state.settledAt !== undefined) withdrawBeat(ARRIVAL_SPEECH_KIND);
-  }
-
-  const calendarOnboardingStatePath = () => path.join(stateRoot, CALENDAR_ONBOARDING_STATE_FILE);
-  let calendarOnboardingState: CalendarOnboardingState | undefined;
-  function calendarOnboardingStateFromDisk(): CalendarOnboardingState | undefined {
-    try {
-      return calendarOnboardingStateFromStored(
-        fs.readFileSync(calendarOnboardingStatePath(), "utf8"),
-      );
-    } catch {
-      return undefined;
-    }
-  }
+  const onboarding = onboardingStateFile(() => stateRoot, report);
+  let onboardingState: OnboardingState | undefined;
+  let announcedCalendarGateOwed: boolean | undefined;
   function calendarOnboardingGateOwed(): boolean {
-    return runMode.requiresAccount && calendarOnboardingOwed(calendarOnboardingState);
+    return runMode.requiresAccount && calendarOnboardingOwed(onboardingState);
   }
-  function writeCalendarOnboardingState(state: CalendarOnboardingState): void {
-    calendarOnboardingState = state;
-    try {
-      fs.writeFileSync(calendarOnboardingStatePath(), calendarOnboardingRecord(state));
-    } catch (error) {
-      report(
-        `Could not persist the calendar onboarding record: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
+  /**
+   * The one onboarding write, taking the moment it records and merging it over
+   * the record as it stands on disk — the desktop process writes the
+   * introduction's own moment into the same file. Every moment lives in one
+   * record, so each write reconciles both beats; the gate event stays fenced
+   * on a changed answer, so writing an arrival moment cannot tell the renderer
+   * about a gate that did not move.
+   */
+  function writeOnboardingState(moment: OnboardingState): void {
+    onboardingState = onboarding.update((current) => ({ ...current, ...moment }));
+    if (moment.arrivalSpokenAt !== undefined) withdrawBeat(ARRIVAL_SPEECH_KIND);
     const owed = calendarOnboardingGateOwed();
     if (!owed) withdrawBeat(CALENDAR_ONBOARDING_SPEECH_KIND);
+    if (owed === announcedCalendarGateOwed) return;
+    announcedCalendarGateOwed = owed;
     emit(GATEWAY_EVENT.CALENDAR_ONBOARDING_CHANGED, { owed });
   }
   async function settleCalendarOnboardingIfConnected(): Promise<void> {
-    if (!calendarOnboardingOwed(calendarOnboardingState)) return;
+    if (!calendarOnboardingOwed(onboardingState)) return;
     const connected = await settingsStore.calendarConnectionStored();
-    if (!connected || !calendarOnboardingOwed(calendarOnboardingState)) return;
-    writeCalendarOnboardingState({
-      ...(calendarOnboardingState ?? {}),
-      settledAt: new Date(now()).toISOString(),
-    });
+    if (!connected || !calendarOnboardingOwed(onboardingState)) return;
+    writeOnboardingState({ calendarOnboardingSettledAt: new Date(now()).toISOString() });
   }
   async function calendarGateOfferable(): Promise<boolean> {
     if (!calendarOnboardingGateOwed()) return false;
@@ -875,23 +835,23 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
       void reconcileSpeech();
       return;
     }
-    if (!arrivalBeatOwed(arrivalState)) return;
+    if (!arrivalBeatOwed(onboardingState)) return;
     await sessionObservationLoop.refresh().catch(() => undefined);
-    if (account.status !== ACCOUNT_STATUS.SIGNED_IN || !arrivalBeatOwed(arrivalState)) return;
+    if (account.status !== ACCOUNT_STATUS.SIGNED_IN || !arrivalBeatOwed(onboardingState)) return;
     speechArbiter.request({ kind: ARRIVAL_SPEECH_KIND });
     void reconcileSpeech();
   }
   function markFirstAnnouncementSpoken(): void {
-    if (!countsFirstAnnouncement(arrivalState)) return;
-    const state = arrivalState ?? {};
+    if (!countsFirstAnnouncement(onboardingState)) return;
+    const signedInAt = onboardingState?.arrivalSignedInAt;
     const at = now();
-    const signedInAtMs = state.signedInAt !== undefined ? Date.parse(state.signedInAt) : Number.NaN;
+    const signedInAtMs = signedInAt !== undefined ? Date.parse(signedInAt) : Number.NaN;
     if (Number.isFinite(signedInAtMs)) {
       productEvents.record(PRODUCT_EVENT.VOICE_FIRST_ANNOUNCEMENT, {
         sign_in_age: productSignInAge(at - signedInAtMs),
       });
     }
-    writeArrivalState({ ...state, firstAnnouncementAt: new Date(at).toISOString() });
+    writeOnboardingState({ arrivalFirstAnnouncementAt: new Date(at).toISOString() });
   }
 
   const supersetSignIn = new SupersetSignIn({
@@ -1537,8 +1497,8 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         productEvents.record(PRODUCT_EVENT.VOICE_ANNOUNCEMENT_SPEAK, {});
         markFirstAnnouncementSpoken();
       }
-      if (settled.kind === ARRIVAL_SPEECH_KIND && arrivalBeatOwed(arrivalState)) {
-        writeArrivalState({ ...(arrivalState ?? {}), settledAt: new Date(now()).toISOString() });
+      if (settled.kind === ARRIVAL_SPEECH_KIND && arrivalBeatOwed(onboardingState)) {
+        writeOnboardingState({ arrivalSpokenAt: new Date(now()).toISOString() });
       }
     }
     void reconcileSpeech();
@@ -2406,21 +2366,15 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     [GATEWAY_METHOD.ONBOARDING_STATE]: () =>
       gatewayOk({ calendarOnboardingOwed: calendarOnboardingGateOwed() }),
     [GATEWAY_METHOD.ONBOARDING_SKIP_CALENDAR]: () => {
-      if (calendarOnboardingOwed(calendarOnboardingState)) {
-        writeCalendarOnboardingState({
-          ...(calendarOnboardingState ?? {}),
-          skippedAt: new Date(now()).toISOString(),
-        });
+      if (calendarOnboardingOwed(onboardingState)) {
+        writeOnboardingState({ calendarOnboardingSkippedAt: new Date(now()).toISOString() });
         void requestOnboardingBeat();
       }
       return gatewayOk({});
     },
     [GATEWAY_METHOD.ONBOARDING_COMPLETE_CALENDAR]: () => {
-      if (calendarOnboardingOwed(calendarOnboardingState)) {
-        writeCalendarOnboardingState({
-          ...(calendarOnboardingState ?? {}),
-          settledAt: new Date(now()).toISOString(),
-        });
+      if (calendarOnboardingOwed(onboardingState)) {
+        writeOnboardingState({ calendarOnboardingSettledAt: new Date(now()).toISOString() });
         void requestOnboardingBeat();
       }
       return gatewayOk({});
@@ -2468,7 +2422,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
       ? await settingsStore.accountSnapshot()
       : { status: ACCOUNT_STATUS.SIGNED_OUT };
     accountSession.initialize(account);
-    arrivalState = arrivalStateFromDisk();
+    onboardingState = onboarding.read();
     if (runMode.observesProviders) {
       await runtimeStoreWiring.open();
       await seedWorkspaceThenStartMemory({
@@ -2488,7 +2442,6 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
       await cronScheduler.ensure(heartbeatJob(now()));
       await cronScheduler.ensure(consolidationJob(now()));
     }
-    calendarOnboardingState = calendarOnboardingStateFromDisk();
     void settleCalendarOnboardingIfConnected();
     void settingsStore.snapshot();
     productEvents.arm();
