@@ -12,6 +12,7 @@ import {
 
 const NOW = 1_800_000_000_000;
 const BASE = "https://luke.test";
+const TRANSCRIPT = '{"input":"what the session said"}';
 
 interface Call {
   url: string;
@@ -53,10 +54,13 @@ function keyed(answers: readonly (() => Response)[], baseUrl = `${BASE}/v1/`) {
 function hosted(
   answers: readonly (() => Response)[],
   tokens: (string | undefined)[] = ["token-1"],
+  accounts?: string[],
 ) {
   const { fetch, calls } = recorder(answers);
   const queue = [...tokens];
+  const holders = accounts ? [...accounts] : undefined;
   let current = queue.shift();
+  let holder = holders?.shift();
   const refreshes: number[] = [];
   const transport = hostedBrainTransport({
     baseUrl: BASE,
@@ -64,8 +68,10 @@ function hosted(
     refreshAccount: () => {
       refreshes.push(1);
       current = queue.shift() ?? current;
+      holder = holders?.shift() ?? holder;
       return Promise.resolve();
     },
+    ...(holders ? { readAccountKey: () => Promise.resolve(holder) } : undefined),
     fetch,
     now: () => NOW,
   });
@@ -130,6 +136,18 @@ test("a refusal that outlived a renewed token is the caller's to read, not a fai
   const refusal = await unchanged.transport.send("/responses", HTTP_METHOD.POST, "{}");
   assert.ok(refusal instanceof Response && refusal.status === 401);
   assert.equal(unchanged.refreshes.length, 1);
+});
+
+test("a token refreshed for another account never carries this turn's input", async () => {
+  const crossed = hosted(
+    [() => new Response("", { status: 401 })],
+    ["stale", "fresh"],
+    ["ada@luke.test", "grace@luke.test"],
+  );
+  const failure = await crossed.transport.send("/responses", HTTP_METHOD.POST, TRANSCRIPT);
+  assert.ok(!(failure instanceof Response) && failure.failure === MODEL_FAILURE.CREDENTIAL);
+  assert.equal(crossed.calls.length, 1);
+  assert.equal(crossed.calls[0]?.authorization, "Bearer stale");
 });
 
 test("the brain asks for its own deadline, and an explicit one replaces it", () => {

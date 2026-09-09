@@ -52,7 +52,13 @@ export interface VoiceSettings {
   readVoiceSource(): Promise<VoiceSource>;
   readApiKey(providerId: typeof VOICE_CREDENTIAL_PROVIDER_ID): Promise<string | undefined>;
   get<Field extends AppSettingField>(field: Field): Promise<AppSettingValue<Field>>;
-  readAccount(): Promise<{ accessToken: string } | undefined>;
+  /**
+   * The signed-in account, as the hosted callers need it: the token every
+   * attempt is authorized with, and the identity that token answers for, so a
+   * refreshed one is never carried on behalf of an account that signed in
+   * behind it.
+   */
+  readAccount(): Promise<{ accessToken: string; email?: string } | undefined>;
 }
 
 export interface VoiceCapabilityAssemblerOptions {
@@ -184,6 +190,7 @@ export class VoiceCapabilityAssembler {
       serviceBaseUrl: this.#options.hostedServiceBaseUrl,
       readAccessToken: async () => (await this.#options.settings.readAccount())?.accessToken,
       refreshAccount: this.#options.refreshAccount,
+      readAccountKey: async () => (await this.#options.settings.readAccount())?.email,
       ...(this.#options.fetch ? { fetch: this.#options.fetch } : undefined),
     };
     const [voice, speed] = await Promise.all([
