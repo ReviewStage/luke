@@ -20,10 +20,10 @@ export {
 } from "./brain/publication.js";
 export { calendarOnboardingOwed } from "./calendar-onboarding-flow.js";
 export {
-  composeRuntimeHost,
+  composeHost,
+  type Host,
+  type HostSeams,
   RECEIVER_REPORT_KIND,
-  type RuntimeHost,
-  type RuntimeHostOptions,
 } from "./compose-host.js";
 export {
   type ConversationOperations,

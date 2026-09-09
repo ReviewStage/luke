@@ -57,11 +57,14 @@ import {
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethodTable,
+  type GatewayServer,
+  type GatewayShutdownOptions,
   type GatewayShutdownSteps,
   gatewayOk,
   invalid,
   NODE_CAPABILITY_STATUS,
   NodeRegistry,
+  shutdownGateway,
 } from "@sidecar/gateway";
 import {
   APP_SETTING_ID,
@@ -220,7 +223,7 @@ import { VoiceReceiver } from "./voice-receiver.js";
  * process, memory-only and network-silent, for a fixture or capture run; the
  * client code path is one either way.
  */
-export interface RuntimeHostOptions {
+export interface HostSeams {
   /** Luke's own application-state root, given explicitly: never derived from the hosting process's profile. */
   stateRoot: string;
   runMode: RunMode;
@@ -251,15 +254,21 @@ export interface RuntimeHostOptions {
   onShutdownRequested?: () => void;
 }
 
-export interface RuntimeHost {
-  readonly service: GatewayService;
-  readonly nodes: NodeRegistry;
+export interface Host {
+  /** The one boundary a client reaches this host through. */
+  readonly server: GatewayServer;
   /** Opens the store, seeds the workspace, starts maintenance, scheduling, hooks, and observation. */
   start: () => Promise<void>;
-  /** The explicit quit's steps, run by the shutdown coordinator in its order. */
-  readonly shutdownSteps: GatewayShutdownSteps;
-  /** Stops what start began and closes the store; run after the coordinator has settled or given up. */
-  close: () => Promise<void>;
+  /**
+   * The whole quit, in the coordinator's fixed order: admissions closed,
+   * everything under way cancelled, a bounded wait for it to settle,
+   * whatever did not settle written down as unresolved for the next launch's
+   * recovery, and only then the store closed. A caller that ran the steps
+   * itself would be a second order for the same quit, so there is none to
+   * run: what became of it is reported, never answered, because nothing a
+   * client could do with the answer is left to do.
+   */
+  stop: (options?: GatewayShutdownOptions) => Promise<void>;
 }
 
 const ACCOUNT_CLIENT_ID = "luke-desktop";
@@ -287,6 +296,14 @@ const APPLE_ACCESS_POLL_INTERVAL_MS = 10_000;
 
 /** The agent's identity workspace and the skills beside it, under the agent's own directory. */
 const AGENT_WORKSPACE_DIRECTORY = "workspace";
+
+/**
+ * How long the quit waits for the store to close after the drain has
+ * settled. A close that hangs on a disk must not hold the process open past
+ * its quit: what it could not write is what the next launch marks
+ * interrupted, which is the same answer an unsettled drain leaves.
+ */
+const HOST_CLOSE_WAIT_MS = 5_000;
 const AGENT_SKILLS_DIRECTORY = "skills";
 
 const DIAGNOSTIC_COUNTED_AS = {
@@ -394,7 +411,7 @@ export function composeNotebookMemory(dependencies: NotebookMemoryDependencies):
   return memory;
 }
 
-export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
+export function composeHost(options: HostSeams): Host {
   const { stateRoot, runMode, report, now, createId } = options;
   const userData = () => stateRoot;
 
@@ -2584,7 +2601,31 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     await runtimeStoreWiring.close();
   };
 
-  return { service, nodes, start, shutdownSteps, close };
+  const stop = async (shutdown: GatewayShutdownOptions = {}): Promise<void> => {
+    // A drain that cannot finish still says so and still closes the store:
+    // what it could not settle is what the next launch marks interrupted, and
+    // a quit must leave either way rather than on an unhandled failure.
+    try {
+      const outcome = await shutdownGateway(shutdownSteps, shutdown);
+      report(
+        `shutting down: ${outcome.settled ? "settled" : "unsettled"}, ${outcome.cancelled.length} cancelled, ${outcome.unresolved} unresolved`,
+      );
+    } catch (error) {
+      report(`the drain did not finish: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    const closed = close().catch((error: Error) => {
+      report(`the runtime did not close cleanly: ${error.message}`);
+    });
+    const closedInTime = await Promise.race([
+      closed.then(() => true),
+      new Promise<false>((resolve) => {
+        setTimeout(() => resolve(false), HOST_CLOSE_WAIT_MS);
+      }),
+    ]);
+    if (!closedInTime) report("the runtime did not close in time; leaving it to the exit");
+  };
+
+  return { server: service.server, start, stop };
 }
 
 /** How a receiver report names the moment it reports. */

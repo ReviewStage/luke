@@ -15,10 +15,10 @@ import {
 import type { BrainAppActRequest } from "@sidecar/brain/requests-wire";
 import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidecar/feedback";
 import { fixtureSnapshot } from "@sidecar/fixtures";
-import { GATEWAY_CLIENT_ROLE, InProcessTransport, shutdownGateway } from "@sidecar/gateway";
+import { GATEWAY_CLIENT_ROLE, InProcessTransport } from "@sidecar/gateway";
 import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import {
-  composeRuntimeHost,
+  composeHost,
   HOST_OPERATOR_CLIENT_ID,
   INTRODUCTION_FADE_MS,
   INTRODUCTION_HANDOFF_READY_MS,
@@ -386,8 +386,8 @@ function trustedSender(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
  * brain's turn open in the host.
  */
 function performBrainAppAct(action: BrainAppActRequest["action"]): Promise<WireRecord> {
-  const host = panels.primaryPanel();
-  if (!host) {
+  const panel = panels.primaryPanel();
+  if (!panel) {
     return Promise.resolve({
       status: ACT_RESULT_STATUS.REJECTED,
       reason: "No panel is open to carry that.",
@@ -405,7 +405,7 @@ function performBrainAppAct(action: BrainAppActRequest["action"]): Promise<WireR
       resolve(answer);
     });
     const request: BrainAppActRequest = { requestId, action };
-    host.webContents.send(channels.onBrainAppAct, request);
+    panel.webContents.send(channels.onBrainAppAct, request);
   });
 }
 
@@ -416,7 +416,7 @@ function performBrainAppAct(action: BrainAppActRequest["action"]): Promise<WireR
  * worker is never asked for. Either way this process is one operator over
  * one transport, and one node.
  */
-const runtimeHost = composeRuntimeHost({
+const host = composeHost({
   stateRoot: app.getPath("userData"),
   runMode,
   appVersion: app.getVersion(),
@@ -442,7 +442,7 @@ const runtimeHost = composeRuntimeHost({
   // is the one drain, in `before-quit`.
   onShutdownRequested: () => app.quit(),
 });
-const transport = new InProcessTransport(runtimeHost.service.server, {
+const transport = new InProcessTransport(host.server, {
   clientId: HOST_OPERATOR_CLIENT_ID,
   role: GATEWAY_CLIENT_ROLE.OPERATOR,
 });
@@ -953,16 +953,6 @@ let draining: Promise<void> | undefined;
  */
 const STANDUP_DRAIN_WAIT_MS = 5_000;
 
-/**
- * How long the drain waits on the store's own close. Past it the process
- * leaves and the operating system reclaims the worker: what did not settle
- * was already counted and persisted, so the next launch recovers it, and a
- * store that never answers must not wedge this process on the
- * single-instance lock. With the standup wait and the coordinator's own
- * deadline, the whole quit is bounded at twenty seconds.
- */
-const HOST_CLOSE_WAIT_MS = 5_000;
-
 function after(delayMs: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
@@ -992,25 +982,10 @@ async function drainHost(): Promise<void> {
   // the observation behind the close, which is the one thing a quit must not
   // leave running.
   await Promise.race([hostStandup.catch(() => undefined), after(STANDUP_DRAIN_WAIT_MS)]);
-  // A drain that cannot finish still says so and still closes the store: what
-  // it could not settle is what the next launch marks interrupted, and a quit
-  // must leave either way rather than on an unhandled failure.
-  try {
-    const outcome = await shutdownGateway(runtimeHost.shutdownSteps);
-    report(
-      `shutting down: ${outcome.settled ? "settled" : "unsettled"}, ${outcome.cancelled.length} cancelled, ${outcome.unresolved} unresolved`,
-    );
-  } catch (error) {
-    report(`the drain did not finish: ${error instanceof Error ? error.message : String(error)}`);
-  }
-  const closed = runtimeHost.close().catch((error: Error) => {
-    report(`the runtime did not close cleanly: ${error.message}`);
-  });
-  const closedInTime = await Promise.race([
-    closed.then(() => true),
-    after(HOST_CLOSE_WAIT_MS).then(() => false),
-  ]);
-  if (!closedInTime) report("the runtime did not close in time; leaving it to the exit");
+  // The drain itself is the host's, in one place and in one order, and it is
+  // bounded on both halves: with the standup wait above, the whole quit is
+  // bounded at twenty seconds.
+  await host.stop();
 }
 
 function drainingEngine(engine: UpdaterEngine): UpdaterEngine {
@@ -1066,7 +1041,7 @@ export function startDesktopApp(): void {
       // window must cancel that work rather than have it killed mid-write.
       hostDrain = HOST_DRAIN.OWED;
       hostStandup = (async () => {
-        await runtimeHost.start();
+        await host.start();
         await onAttached();
       })();
       try {
@@ -1139,8 +1114,8 @@ export function startDesktopApp(): void {
             return;
           }
           if (argv.includes("--expanded")) {
-            const host = panels.primaryPanel();
-            const displayId = host ? panels.displayIdFor(host.webContents) : undefined;
+            const panel = panels.primaryPanel();
+            const displayId = panel ? panels.displayIdFor(panel.webContents) : undefined;
             if (displayId !== undefined) panels.setMode(displayId, "expanded", true);
             return;
           }
