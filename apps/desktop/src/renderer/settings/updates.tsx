@@ -2,7 +2,7 @@ import { CheckIcon, DownloadIcon, ExternalIcon } from "@sidecar/panel";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACT_KIND } from "#shared/messages/acts";
 import { tell } from "../act";
-import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-search";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import { UPDATE_ROW_ACTION, type UpdateRowAction, updateRow } from "../update-row";
 import type { UpdateControl } from "./controls";
 

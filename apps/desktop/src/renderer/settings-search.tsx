@@ -8,12 +8,6 @@ import {
   UserIcon,
 } from "@sidecar/panel";
 import {
-  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
-  PROVIDER_ID,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
-  type WorkspaceProviderId,
-} from "@sidecar/session";
-import {
   APP_SETTING_SCHEMA,
   type SettingsRowsInput,
   settingFieldForGuideId,
@@ -28,6 +22,11 @@ import { ERRAND_TARGET_ATTRIBUTE } from "./luke-errand";
 import { matchesTokens, searchTokens } from "./session-model";
 import { Highlighted } from "./session-search";
 import { type ConnectionVisibility, offeredConnections } from "./settings/connection-schema";
+import {
+  defaultProjectRowId,
+  SETTINGS_SEARCH_ANCHOR_ATTRIBUTE,
+  SETTINGS_SEARCH_ROW,
+} from "./settings-anchors";
 import {
   SETTINGS_SUBVIEW_LIST,
   SETTINGS_VIEW,
@@ -69,66 +68,6 @@ const SEARCH_PLACEHOLDER = "Search settings…";
  * page it may have to turn lives, and the field it lands in is here.
  */
 export const SETTINGS_SEARCH_INPUT_ID = "settings-search-input";
-
-/**
- * How a row says a pressed result may land on it. The settings' own controls
- * already wear their errand marks, so the anchor exists for the rows that are
- * not settings — a credential line, a shortcut, a section's one row — and the
- * landing looks for either.
- */
-export const SETTINGS_SEARCH_ANCHOR_ATTRIBUTE = "data-search-anchor";
-
-/** What a row spreads onto itself to be somewhere a pressed result lands. */
-export function searchAnchorProps(id: string) {
-  return { [SETTINGS_SEARCH_ANCHOR_ATTRIBUTE]: id } satisfies Record<string, string>;
-}
-
-/**
- * The ids of the searchable rows that are not stored settings, shared with
- * the panel so the entry and the anchor its row wears cannot drift apart.
- * Rows that already have an id of their own — a provider's, the calendar's —
- * anchor by that id instead.
- */
-export const SETTINGS_SEARCH_ROW = {
-  UPDATES: "updates",
-  CHANGELOG: "changelog",
-  FEEDBACK: "feedback",
-  SIGN_OUT: "sign-out",
-  DELETE_ACCOUNT: "delete-account",
-  QUIT: "quit",
-  MICROPHONE: "microphone",
-  TALK_KEY: "talk-key",
-  ASK_KEY: "ask-key",
-  STOP_KEY: "stop-key",
-} as const;
-
-/**
- * Each provider's Default project row, by the provider it belongs to: several
- * providers draw one, so a shared id would land a press on whichever row
- * happens to stand first. A literal table rather than a composed string, and
- * deliberately only the providers that create workspaces today — a provider
- * it does not name draws its row unfound rather than mislanding a press, and
- * widening it is one line beside the capability that widened.
- */
-type DefaultProjectProviderId =
-  | typeof PROVIDER_ID.CONDUCTOR
-  | typeof CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID
-  | typeof PROVIDER_ID.CODEX
-  | typeof SUPERSET_WORKSPACE_PROVIDER_ID;
-
-const DEFAULT_PROJECT_ROW_ID = {
-  [PROVIDER_ID.CONDUCTOR]: "default-project-conductor",
-  [CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID]: "default-project-conductor-local",
-  [PROVIDER_ID.CODEX]: "default-project-codex",
-  [SUPERSET_WORKSPACE_PROVIDER_ID]: "default-project-superset",
-} as const satisfies Readonly<Record<DefaultProjectProviderId, string>>;
-
-/** The anchor a provider's Default project row wears, if the table names it. */
-export function defaultProjectRowId(providerId: WorkspaceProviderId): string | undefined {
-  if (!Object.hasOwn(DEFAULT_PROJECT_ROW_ID, providerId)) return undefined;
-  // SAFETY: hasOwn narrows the id to the table's own keys.
-  return DEFAULT_PROJECT_ROW_ID[providerId as keyof typeof DEFAULT_PROJECT_ROW_ID];
-}
 
 /** One row a query can find, and where pressing it leads. */
 export interface SettingsSearchEntry {

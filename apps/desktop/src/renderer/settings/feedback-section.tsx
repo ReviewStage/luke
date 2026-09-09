@@ -2,7 +2,7 @@ import { FEEDBACK_KIND, type FeedbackKind } from "@sidecar/feedback";
 import { CheckIcon, MegaphoneIcon } from "@sidecar/panel";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { FEEDBACK_COPY, type FeedbackEntryControl } from "../feedback-entry";
-import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-search";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 
 /**
  * One button that offers a kind: its name is the whole line, and pressing it

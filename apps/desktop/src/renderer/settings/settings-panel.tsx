@@ -10,13 +10,12 @@ import type { CredentialEntryControl } from "../credential-entry";
 import type { FeedbackEntryControl } from "../feedback-entry";
 import { microphoneAccessRow, voiceAttentionNote } from "../microphone-access";
 import { PANEL_TAB, panelPanelId, panelTabId } from "../panel-tabs";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import {
   landOnSettingsRow,
-  SETTINGS_SEARCH_ROW,
   SettingsSearch,
   type SettingsSearchEntry,
   SettingsSearchResults,
-  searchAnchorProps,
   searchSettings,
   settingsSearchEntries,
 } from "../settings-search";

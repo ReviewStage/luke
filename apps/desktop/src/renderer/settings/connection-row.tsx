@@ -1,6 +1,6 @@
 import { CheckIcon, PencilIcon, RefreshIcon, TrashIcon } from "@sidecar/panel";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { searchAnchorProps } from "../settings-search";
+import { searchAnchorProps } from "../settings-anchors";
 import { useConfirm } from "./confirm-state";
 import { ConfirmSwap } from "./confirm-swap";
 import {

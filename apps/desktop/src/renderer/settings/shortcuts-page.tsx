@@ -17,7 +17,7 @@ import { ACT_KIND } from "#shared/messages/acts";
 import { tell } from "../act";
 import { Keycaps } from "../keycaps";
 import { VOICE_KEYLESS_NOTE } from "../microphone-access";
-import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-search";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import type { ShortcutControl } from "./controls";
 import { AttentionMark, ChangedMark } from "./marks";
 import { SchemaSettingRows } from "./schema-rows";

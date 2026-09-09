@@ -22,7 +22,7 @@ import {
   VOICE_SOURCE_LABEL,
   voiceSourceLabel,
 } from "../microphone-access";
-import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-search";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import { SETTINGS_VIEW } from "../settings-views";
 import { ConnectionRow } from "./connection-row";
 import { CONNECTION_SECTION, type ConnectionInput, connectionsFor } from "./connection-schema";

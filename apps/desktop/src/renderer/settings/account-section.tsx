@@ -4,7 +4,7 @@ import { UserIcon } from "@sidecar/panel";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 
-import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-search";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import { useConfirm, useConfirmGroup } from "./confirm-state";
 import { ConfirmSwap } from "./confirm-swap";
 

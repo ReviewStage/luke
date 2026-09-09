@@ -3,7 +3,7 @@ import type { ActionResult } from "@sidecar/wire";
 import { ACT_KIND } from "#shared/messages/acts";
 import { tell } from "../act";
 import { type ErrandTarget, errandTargetProps } from "../luke-errand";
-import { searchAnchorProps } from "../settings-search";
+import { searchAnchorProps } from "../settings-anchors";
 import { ChangedMark } from "./marks";
 import { useSettingWrite } from "./use-setting-write";
 
