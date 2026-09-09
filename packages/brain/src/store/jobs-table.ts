@@ -1,7 +1,7 @@
 import type { ScheduledJob } from "@sidecar/runtime";
 import { scheduledJobFromWire } from "@sidecar/runtime";
 import type { UnparsedWireValue } from "@sidecar/wire";
-import type { RuntimeDatabase } from "./database.js";
+import type { StoreDatabase } from "./database.js";
 
 /**
  * The scheduler's jobs, one row each. The row's payload is the job as the
@@ -13,7 +13,7 @@ import type { RuntimeDatabase } from "./database.js";
  * and a launch reads the last run from the payload through `nextRunAt`.
  */
 
-export function listScheduledJobs(database: RuntimeDatabase): readonly ScheduledJob[] {
+export function listScheduledJobs(database: StoreDatabase): readonly ScheduledJob[] {
   // SAFETY: the payload column is text; the validator decides what it holds.
   const rows = database
     .prepare("SELECT payload FROM scheduled_jobs ORDER BY created_at, job_id")
@@ -33,7 +33,7 @@ export function listScheduledJobs(database: RuntimeDatabase): readonly Scheduled
   return jobs;
 }
 
-export function putScheduledJob(database: RuntimeDatabase, job: ScheduledJob): boolean {
+export function putScheduledJob(database: StoreDatabase, job: ScheduledJob): boolean {
   if (!scheduledJobFromWire(JSON.parse(JSON.stringify(job)))) return false;
   database
     .prepare(
@@ -56,7 +56,7 @@ export function putScheduledJob(database: RuntimeDatabase, job: ScheduledJob): b
   return true;
 }
 
-export function deleteScheduledJob(database: RuntimeDatabase, id: string): boolean {
+export function deleteScheduledJob(database: StoreDatabase, id: string): boolean {
   const result = database.prepare("DELETE FROM scheduled_jobs WHERE job_id = ?").run(id);
   return Number(result.changes) > 0;
 }

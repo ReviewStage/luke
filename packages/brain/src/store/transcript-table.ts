@@ -11,7 +11,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { touchConversation } from "./conversations-table.js";
-import { nullable, type RuntimeDatabase } from "./database.js";
+import { nullable, type StoreDatabase } from "./database.js";
 
 /**
  * The retained transcript: every input the context engine ingested, in
@@ -33,7 +33,7 @@ type TranscriptRow = {
 
 /** Appends events under the lifetime named, taking the next sequences from the conversation's counter. */
 export function appendTranscript(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKey: SessionKey,
   sessionId: string | undefined,
   events: readonly TranscriptEvent[],
@@ -80,7 +80,7 @@ export function appendTranscript(
   });
 }
 
-function nextTranscriptSequence(database: RuntimeDatabase, sessionKey: SessionKey): number {
+function nextTranscriptSequence(database: StoreDatabase, sessionKey: SessionKey): number {
   // SAFETY: RETURNING yields the one integer expression named `sequence`, or no row.
   const row = database
     .prepare(
@@ -110,7 +110,7 @@ export interface TranscriptListOptions {
 const DEFAULT_TRANSCRIPT_LIMIT = 10_000;
 
 export function listTranscript(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKey: SessionKey,
   options: TranscriptListOptions = {},
 ): readonly StoredTranscriptEvent[] {
@@ -135,7 +135,7 @@ export function listTranscript(
  * no item for its meaning.
  */
 export function searchTranscript(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKey: SessionKey,
   query: string,
   limit = 50,
@@ -162,7 +162,7 @@ export interface StoredCompactionBoundary {
 }
 
 export function listCompactionBoundaries(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKey: SessionKey,
 ): readonly StoredCompactionBoundary[] {
   // SAFETY: the columns selected are the ones the row type names.

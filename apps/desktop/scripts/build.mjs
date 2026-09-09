@@ -64,9 +64,9 @@ await Promise.all([
   build({
     // The runtime store's worker thread. It is a bundle of its own because
     // a worker starts from a file, and it is unpacked from the archive by the
-    // packaging config for the same reason; see runtime-store-path.ts.
-    entryPoints: [path.join(appRoot, "src/main/runtime-store-worker.ts")],
-    outfile: path.join(outputRoot, "runtime-store-worker.js"),
+    // packaging config for the same reason; see store-path.ts.
+    entryPoints: [path.join(appRoot, "src/main/store-worker.ts")],
+    outfile: path.join(outputRoot, "store-worker.js"),
     bundle: true,
     platform: "node",
     format: "cjs",

@@ -5,7 +5,7 @@ import {
   deleteConversationHistoryFlow,
 } from "./brain/conversation-deletion.js";
 import type { BrainWiring } from "./brain/wiring.js";
-import type { RuntimeStoreWiring } from "./store-wiring.js";
+import type { StoreWiring } from "./store-wiring.js";
 
 /**
  * The conversation operations the host carries out over the two wirings,
@@ -21,10 +21,7 @@ export interface ConversationOperations {
 }
 
 export interface ConversationOperationsDependencies {
-  store: Pick<
-    RuntimeStoreWiring,
-    "directory" | "holds" | "thread" | "historyCutoff" | "eraseHistory"
-  >;
+  store: Pick<StoreWiring, "directory" | "holds" | "thread" | "historyCutoff" | "eraseHistory">;
   brain: Pick<BrainWiring, "store">;
   now: () => number;
   report: (message: string) => void;
@@ -62,7 +59,7 @@ export function conversationOperations(
 export const HISTORY_MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000;
 
 export interface HistoryMaintenanceDependencies {
-  store: Pick<RuntimeStoreWiring, "runMaintenance">;
+  store: Pick<StoreWiring, "runMaintenance">;
   brain: Pick<BrainWiring, "busyConversations">;
 }
 

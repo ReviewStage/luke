@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BRAIN_REQUEST_STATUS, freshBrainState } from "@sidecar/brain";
+import { BRAIN_REQUEST_STATUS } from "../requests.js";
+import { freshBrainState } from "../state-store.js";
 import { brainStateSave, SAVE_KIND } from "./envelope.js";
 import { NOW, populatedState, receipt, request } from "./testing.js";
 

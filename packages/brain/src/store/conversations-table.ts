@@ -10,7 +10,7 @@ import {
   isConversationKind,
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
-import { nullable, type RuntimeDatabase } from "./database.js";
+import { nullable, type StoreDatabase } from "./database.js";
 
 /**
  * The conversation directory: every logical conversation the agent holds,
@@ -59,7 +59,7 @@ function recordFromRow(row: ConversationRow): ConversationRecord {
   };
 }
 
-export function listConversations(database: RuntimeDatabase): readonly ConversationRecord[] {
+export function listConversations(database: StoreDatabase): readonly ConversationRecord[] {
   // SAFETY: the columns selected are the ones the row type names, typed by the schema.
   const rows = database
     .prepare(
@@ -70,7 +70,7 @@ export function listConversations(database: RuntimeDatabase): readonly Conversat
 }
 
 export function conversationRecord(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKey: SessionKey,
 ): ConversationRecord | undefined {
   // SAFETY: as above, for one row or none.
@@ -91,7 +91,7 @@ export interface ConversationCreation {
 
 /** Creates the conversation, or answers the one that already stands at the key; idempotent. */
 export function createConversation(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   creation: ConversationCreation,
 ): ConversationRecord {
   return database.transaction(() => {
@@ -119,10 +119,7 @@ export function createConversation(
 }
 
 /** The conversation's durable Clear cutoff, which outlives the generation whose marker raised it. */
-export function historyCutoff(
-  database: RuntimeDatabase,
-  sessionKey: SessionKey,
-): number | undefined {
+export function historyCutoff(database: StoreDatabase, sessionKey: SessionKey): number | undefined {
   // SAFETY: the query selects the one nullable integer column the row type names.
   const row = database
     .prepare("SELECT history_cleared_at FROM conversations WHERE session_key = ?")
@@ -132,7 +129,7 @@ export function historyCutoff(
 
 /** Raises the conversation's durable cutoff to `clearedAt`; never lowers it. */
 export function raiseHistoryCutoff(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKey: SessionKey,
   clearedAt: number,
 ): void {
@@ -146,7 +143,7 @@ export function raiseHistoryCutoff(
 
 /** Moves the conversation's latest activity forward to `now`; never back. */
 export function touchConversation(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKey: SessionKey,
   now: number,
 ): void {
@@ -159,7 +156,7 @@ export function touchConversation(
 
 /** Archives the conversation for the reason given; a main conversation cannot be archived at all. */
 export function archiveConversation(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKey: SessionKey,
   now: number,
   reason: ArchiveReason,
@@ -173,7 +170,7 @@ export function archiveConversation(
   return true;
 }
 
-export function unarchiveConversation(database: RuntimeDatabase, sessionKey: SessionKey): boolean {
+export function unarchiveConversation(database: StoreDatabase, sessionKey: SessionKey): boolean {
   const { changes } = database
     .prepare(
       "UPDATE conversations SET archived_at = NULL, archive_reason = NULL WHERE session_key = ?",
@@ -183,7 +180,7 @@ export function unarchiveConversation(database: RuntimeDatabase, sessionKey: Ses
 }
 
 export function pinConversation(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKey: SessionKey,
   pinnedAt: number | undefined,
 ): boolean {
@@ -202,7 +199,7 @@ export function pinConversation(
  * recoverable deletion and maintenance are the two callers, and each has
  * committed or needs no archive by the time it gets here.
  */
-export function removeConversationRows(database: RuntimeDatabase, sessionKey: SessionKey): void {
+export function removeConversationRows(database: StoreDatabase, sessionKey: SessionKey): void {
   database.prepare("DELETE FROM history_events WHERE session_key = ?").run(sessionKey);
   database.prepare("DELETE FROM compaction_boundaries WHERE session_key = ?").run(sessionKey);
   database.prepare("DELETE FROM transcript_events WHERE session_key = ?").run(sessionKey);
@@ -217,7 +214,7 @@ export function removeConversationRows(database: RuntimeDatabase, sessionKey: Se
  * deletion waited on the disk — is not the deletion's to take.
  */
 export function removeConversationRowsAtOrBefore(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKey: SessionKey,
   instant: number,
   keepSessionId: string | undefined,
@@ -237,6 +234,6 @@ export function removeConversationRowsAtOrBefore(
 }
 
 /** Removes the conversation row itself, after the rows under it are gone. */
-export function removeConversationRow(database: RuntimeDatabase, sessionKey: SessionKey): void {
+export function removeConversationRow(database: StoreDatabase, sessionKey: SessionKey): void {
   database.prepare("DELETE FROM conversations WHERE session_key = ?").run(sessionKey);
 }

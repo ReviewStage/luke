@@ -1,13 +1,14 @@
 import type { BrainMemoryAccess } from "@sidecar/brain";
 import { EMBEDDING_BATCH_SIZE } from "@sidecar/brain";
+import type { StoreClient } from "@sidecar/brain/store";
 import {
   type MemorySyncReport,
   NotebookMemory,
+  type NotebookMemoryStore,
   RETRIEVAL_MODE,
   type RetrievalMode,
 } from "@sidecar/memory";
 import type { ConversationRecord, EmbeddingAdapter, SessionKey } from "@sidecar/runtime/vocabulary";
-import type { RuntimeStoreClient } from "@sidecar/runtime-store";
 
 /** The notebook's index as the host holds it, and what a run without one still answers. */
 export interface MemoryWiring {
@@ -32,7 +33,7 @@ export const INERT_MEMORY_WIRING: MemoryWiring = {
 };
 
 export interface NotebookMemoryDependencies {
-  client: () => RuntimeStoreClient;
+  client: () => StoreClient;
   /** The embedding adapter the credential policy built, or nothing when no credential stands. */
   embeddingAdapter: () => EmbeddingAdapter | undefined;
   /** Hears every credential change that may have replaced the adapter; the index is synced again so keyword-only chunks gain their vectors. */
@@ -52,9 +53,27 @@ export interface NotebookMemoryDependencies {
  * the store's worker and the embedding adapter the credential policy built.
  * This composes only; the sync and the search live in `NotebookMemory`.
  */
+/** The store's operations under the names the memory package's host asks for. */
+function notebookMemoryStore(client: StoreClient): NotebookMemoryStore {
+  return {
+    planMemorySync: (identity, now) =>
+      client["memory.plan-sync"]({ ...(identity ? { identity } : undefined), now }),
+    applyMemorySync: (apply) => client["memory.apply-sync"](apply),
+    searchMemory: (query) => client["memory.search"](query),
+    readMemory: (path, from, lines) =>
+      client["memory.get"]({
+        path,
+        ...(from !== undefined ? { from } : undefined),
+        ...(lines !== undefined ? { lines } : undefined),
+      }),
+    searchHistory: (sessionKeys, query, limit, now) =>
+      client["history.search"]({ sessionKeys, query, limit, now }),
+  };
+}
+
 export function composeNotebookMemory(dependencies: NotebookMemoryDependencies): NotebookMemory {
   const memory = new NotebookMemory({
-    store: dependencies.client,
+    store: () => notebookMemoryStore(dependencies.client()),
     embeddingAdapter: dependencies.embeddingAdapter,
     embeddingBatchSize: EMBEDDING_BATCH_SIZE,
     workspaceDirectory: dependencies.workspaceDirectory,

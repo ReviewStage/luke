@@ -1,12 +1,9 @@
-import type {
-  BrainJournalEntry,
-  BrainObservationEntry,
-  BrainPersistedState,
-  BrainRequestRecord,
-  BrainTranscriptCursors,
-  ResponsesInputItem,
-} from "@sidecar/brain";
 import type { TranscriptEvent } from "@sidecar/runtime/vocabulary";
+import type { BrainJournalEntry } from "../journal.js";
+import type { BrainObservationEntry } from "../observation-inbox.js";
+import type { BrainRequestRecord } from "../requests.js";
+import type { ResponsesInputItem } from "../responses-api.js";
+import type { BrainPersistedState, BrainTranscriptCursors } from "../state-store.js";
 import type { EnvelopeRead } from "./brain-envelope.js";
 
 /**

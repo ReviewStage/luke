@@ -1,5 +1,14 @@
 import type { RememberedFact } from "@sidecar/acts";
-import { type BrainStateRepository, brainStateRepositoryFromStorage } from "@sidecar/brain";
+import type { BrainPersistedState, BrainStateRepository } from "@sidecar/brain";
+import {
+  type DeletionOutcome,
+  type MaintenanceReport,
+  type NotebookEntry,
+  type NotebookMutation,
+  type StoreClient,
+  type StorePort,
+  storeClient,
+} from "@sidecar/brain/store";
 import type { ConversationEntry } from "@sidecar/realtime";
 import {
   type ChildStore,
@@ -17,18 +26,11 @@ import {
   MAIN_SESSION_KEY,
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
-import type { NotebookEntry, NotebookMutation } from "@sidecar/runtime-store";
-import {
-  type DeletionOutcome,
-  type MaintenanceReport,
-  RuntimeStoreClient,
-  type RuntimeStorePort,
-} from "@sidecar/runtime-store";
 import type { CutoffBefore } from "./brain/conversation-deletion.js";
 import { ConversationThread, MemoryHistoryStore } from "./conversation-thread.js";
 
 /**
- * The runtime store as the host composes it: one database under the
+ * The brain's store as the host composes it: one database under the
  * agent's own directory, spoken to on its own worker thread so the main
  * thread never waits on the disk. It holds every conversation's envelope,
  * thread, and transcript, the notebook's provenance and search index, and
@@ -41,10 +43,10 @@ import { ConversationThread, MemoryHistoryStore } from "./conversation-thread.js
  * beside it the conversations a run with nothing on disk holds in this
  * process alone, which are gone at the next launch.
  */
-export interface RuntimeStoreWiringDependencies {
+export interface StoreWiringDependencies {
   /** Whether this run keeps anything on disk; a fixture or capture run does not. */
   persistent: boolean;
-  createWorker: () => RuntimeStorePort;
+  createWorker: () => StorePort;
   /** The agent's directory under Luke's application data, created on open. */
   agentRoot: () => string;
   /** The agent's identity workspace, the notebook's root; the worker writes USER.md there. */
@@ -74,9 +76,9 @@ export type HistoryReporter = string;
 /** How the store's side of a deletion ended; the archive itself stays with the store. */
 export type HistoryErasure = Pick<DeletionOutcome, "published">;
 
-export interface RuntimeStoreWiring {
+export interface StoreWiring {
   /** The client, started on first use; the worker's answers stand behind every method below. */
-  client: () => RuntimeStoreClient;
+  client: () => StoreClient;
   /** One conversation's thread, relayed between windows through this process; created on first use. */
   thread: (sessionKey?: SessionKey) => ConversationThread;
   /** A conversation's envelope, for the brain wiring to build its writer on: the store's, or memory alone where nothing is kept on disk. */
@@ -167,11 +169,11 @@ export interface RuntimeStoreWiring {
   refreshDirectory: () => Promise<void>;
 }
 
-export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): RuntimeStoreWiring {
-  let runtimeStore: RuntimeStoreClient | undefined;
-  const client = (): RuntimeStoreClient => {
-    runtimeStore ??= new RuntimeStoreClient(dependencies.createWorker());
-    return runtimeStore;
+export function wireStore(dependencies: StoreWiringDependencies): StoreWiring {
+  let store: StoreClient | undefined;
+  const client = (): StoreClient => {
+    store ??= storeClient(dependencies.createWorker());
+    return store;
   };
 
   const threads = new Map<SessionKey, ConversationThread>();
@@ -197,7 +199,8 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
       dependencies.persistent && !temporary.has(sessionKey)
         ? new ConversationThread({
             store: {
-              appendHistory: (entries, now) => client().appendHistory(sessionKey, entries, now),
+              appendHistory: (entries, now) =>
+                client()["history.append"]({ sessionKey, entries, now }),
             },
             now: dependencies.now,
             onChanged: (entries, except) =>
@@ -213,14 +216,14 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
   const announce = () => dependencies.onDirectoryChanged(directory());
 
   const refreshDirectory = async (): Promise<void> => {
-    if (dependencies.persistent) stored = await client().listConversations();
+    if (dependencies.persistent) stored = await client()["conversations.list"]({});
     announce();
   };
 
   const restoreThread = async (sessionKey: SessionKey): Promise<void> => {
     const [entries, clearedAt] = await Promise.all([
-      client().listHistory(sessionKey, dependencies.now()),
-      client().historyClearedAt(sessionKey),
+      client()["history.list"]({ sessionKey, now: dependencies.now() }),
+      client()["history.cutoff"]({ sessionKey }),
     ]);
     thread(sessionKey).restore(entries, clearedAt);
   };
@@ -244,14 +247,14 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
 
   /** A memory-held conversation's envelope: kept for as long as the brain over it stands, and gone with it. */
   const memoryRepository = (): BrainStateRepository => {
-    let record: string | undefined;
-    return brainStateRepositoryFromStorage({
-      read: () => record,
-      write: (contents) => {
-        record = contents;
+    let held: BrainPersistedState | undefined;
+    return {
+      load: () => (held ? { state: held } : {}),
+      save: (state) => {
+        held = state;
         return true;
       },
-    });
+    };
   };
 
   /**
@@ -281,7 +284,7 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
 
   const unarchive = async (sessionKey: SessionKey): Promise<boolean> => {
     if (temporary.has(sessionKey) || !dependencies.persistent) return false;
-    const restored = await client().unarchiveConversation(sessionKey);
+    const restored = await client()["conversations.unarchive"]({ sessionKey });
     if (restored) await restoreThread(sessionKey);
     await refreshDirectory();
     return restored;
@@ -293,7 +296,7 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
   const refreshNotebook = async (): Promise<readonly NotebookEntry[]> => {
     if (!dependencies.persistent) return notebookEntries;
     try {
-      notebookEntries = await client().listNotebookEntries(dependencies.now());
+      notebookEntries = await client()["notebook.list"]({ now: dependencies.now() });
     } catch (error) {
       dependencies.report(
         `Could not read Luke's notebook: ${error instanceof Error ? error.message : String(error)}`,
@@ -302,7 +305,7 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
     return notebookEntries;
   };
   const mutateNotebook = async (
-    request: (store: RuntimeStoreClient, now: number) => Promise<NotebookMutation>,
+    request: (store: StoreClient, now: number) => Promise<NotebookMutation>,
   ): Promise<boolean> => {
     if (!dependencies.persistent) return false;
     try {
@@ -317,9 +320,9 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
     }
   };
   const rememberNotebookEntry = (ask: { id: string; words: string; replaces?: string }) =>
-    mutateNotebook((store, now) => store.rememberNotebookEntry({ ...ask, now }));
+    mutateNotebook((store, now) => store["notebook.remember"]({ ...ask, now }));
   const forgetNotebookEntry = (id: string) =>
-    mutateNotebook((store, now) => store.forgetNotebookEntry(id, now));
+    mutateNotebook((store, now) => store["notebook.forget"]({ id, now }));
 
   const memoryJobs = memoryScheduledJobStore();
 
@@ -329,9 +332,9 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
     client,
     thread,
     close: async () => {
-      if (!runtimeStore) return;
-      const held = runtimeStore;
-      runtimeStore = undefined;
+      if (!store) return;
+      const held = store;
+      store = undefined;
       await held.close().catch(() => undefined);
     },
     brainStateRepository: (sessionKey = MAIN_SESSION_KEY) =>
@@ -385,7 +388,7 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
         await unarchive(sessionKey);
         return stored.find((record) => record.sessionKey === sessionKey) ?? held;
       }
-      const created = await client().createConversation({
+      const created = await client()["conversations.create"]({
         agentId: DEFAULT_AGENT_ID,
         sessionKey,
         name,
@@ -401,18 +404,18 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
       // Archiving preserves history, and a memory-held conversation has
       // nowhere to preserve it: the ask is refused and it is left as it was.
       if (temporary.has(sessionKey) || !dependencies.persistent) return false;
-      const archived = await client().archiveConversation(
+      const archived = await client()["conversations.archive"]({
         sessionKey,
-        dependencies.now(),
-        ARCHIVE_REASON.USER,
-      );
+        now: dependencies.now(),
+        reason: ARCHIVE_REASON.USER,
+      });
       await refreshDirectory();
       return archived;
     },
     historyCutoff: async (sessionKey) => {
       if (temporary.has(sessionKey) || !dependencies.persistent) return { value: undefined };
       try {
-        return { value: await client().historyClearedAt(sessionKey) };
+        return { value: await client()["history.cutoff"]({ sessionKey }) };
       } catch (error) {
         dependencies.report(
           `Could not read the conversation's cutoff: ${error instanceof Error ? error.message : String(error)}`,
@@ -426,7 +429,9 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
         return { published: true };
       }
       try {
-        return await client().deleteConversationHistory(sessionKey, now, {
+        return await client()["conversations.delete"]({
+          sessionKey,
+          now,
           keepSessionId,
           cutoffBefore: { value: cutoffBefore },
         });
@@ -442,7 +447,7 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
     runMaintenance: async (preserve) => {
       if (!dependencies.persistent) return undefined;
       try {
-        const report = await client().runMaintenance({ now: dependencies.now(), preserve });
+        const report = await client()["maintenance.run"]({ now: dependencies.now(), preserve });
         if (report.unpublishedArchives.length > 0) {
           dependencies.report(
             `${report.unpublishedArchives.length} history archive(s) could not be published; the next launch retries`,

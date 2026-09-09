@@ -76,8 +76,8 @@ export function createElectronBuilderConfig(env = process.env) {
     },
     asar: true,
     // The runtime store's worker thread starts from a real file path, so its
-    // bundle is unpacked beside the archive; runtime-store-path.ts resolves it.
-    asarUnpack: ["dist/runtime-store-worker.js"],
+    // bundle is unpacked beside the archive; store-path.ts resolves it.
+    asarUnpack: ["dist/store-worker.js"],
     npmRebuild: false,
     files: ["dist/**/*", "package.json", "!dist/**/*.map"],
     extraResources: [

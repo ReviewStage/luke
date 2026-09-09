@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { maximumRememberedFacts } from "@sidecar/acts";
-import { BRAIN_WORKSPACE_SEEDS } from "@sidecar/brain";
 import {
   appendNotebookEntry,
   hashText,
@@ -11,7 +10,8 @@ import {
   parseNotebook,
   removeNotebookEntry,
 } from "@sidecar/memory";
-import type { RuntimeDatabase } from "./database.js";
+import { BRAIN_WORKSPACE_SEEDS } from "../workspace-seeds.js";
+import type { StoreDatabase } from "./database.js";
 import { readWorkspaceFileSync, writeWorkspaceFileSync } from "./workspace-files.js";
 
 /**
@@ -76,7 +76,7 @@ function writeUserFile(root: string, content: string): void {
   writeWorkspaceFileSync(root, NOTEBOOK_FILE.USER, content);
 }
 
-function selectEntries(database: RuntimeDatabase): readonly NotebookEntry[] {
+function selectEntries(database: StoreDatabase): readonly NotebookEntry[] {
   // SAFETY: the columns selected are the ones the row type names.
   const rows = database
     .prepare(
@@ -87,7 +87,7 @@ function selectEntries(database: RuntimeDatabase): readonly NotebookEntry[] {
   return rows.map(entryOf);
 }
 
-function recordedHash(database: RuntimeDatabase): string | undefined {
+function recordedHash(database: StoreDatabase): string | undefined {
   // SAFETY: the one text column selected is the hash.
   const row = database
     .prepare("SELECT hash FROM notebook_files WHERE path = ?")
@@ -95,7 +95,7 @@ function recordedHash(database: RuntimeDatabase): string | undefined {
   return row?.hash;
 }
 
-function recordHash(database: RuntimeDatabase, hash: string, now: number): void {
+function recordHash(database: StoreDatabase, hash: string, now: number): void {
   database
     .prepare(
       `INSERT INTO notebook_files (path, hash, reconciled_at) VALUES (?, ?, ?)
@@ -105,7 +105,7 @@ function recordHash(database: RuntimeDatabase, hash: string, now: number): void 
 }
 
 function insertEntry(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   entry: { id: string; words: string; origin: MemoryOrigin; migratedFactId?: string },
   now: number,
 ): void {
@@ -131,7 +131,7 @@ function insertEntry(
  * Answers the entries as they then stand and the content that was read.
  */
 export function reconcileNotebook(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   root: string,
   now: number,
 ): NotebookReconciliation {
@@ -164,7 +164,7 @@ export function reconcileNotebook(
 }
 
 export function listNotebookEntries(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   root: string,
   now: number,
 ): readonly NotebookEntry[] {
@@ -195,7 +195,7 @@ export const NOTEBOOK_REFUSAL = {
  * of the developer's origin, and the caller still sees a failure, not an id.
  */
 export function rememberNotebookEntry(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   root: string,
   ask: { id: string; words: string; replaces?: string },
   now: number,
@@ -230,7 +230,7 @@ export function rememberNotebookEntry(
 }
 
 export function forgetNotebookEntry(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   root: string,
   id: string,
   now: number,
@@ -257,7 +257,7 @@ export function forgetNotebookEntry(
  * launch that finds the table empty does nothing.
  */
 export function migrateFactsIntoNotebook(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   root: string,
   now: number,
 ): number {

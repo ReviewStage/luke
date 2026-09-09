@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
+import { type StorePort, serveStore, storeClient } from "@sidecar/brain/store";
 import { MEMORY_HOUSEKEEPING_OUTCOME } from "@sidecar/memory";
 import { recentDailyNotes } from "@sidecar/runtime";
 import { temporaryDirectory } from "@sidecar/runtime/testing";
@@ -14,11 +15,6 @@ import {
   type RuntimeRunRequest,
   threadSessionKey,
 } from "@sidecar/runtime/vocabulary";
-import {
-  RuntimeStoreClient,
-  type RuntimeStorePort,
-  serveRuntimeStore,
-} from "@sidecar/runtime-store";
 import { type MemoryMaintenanceDependencies, wireMemoryMaintenance } from "./memory-maintenance.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -35,9 +31,9 @@ const TWO_DAYS_AGO = stamp(NOW - 2 * DAY_MS);
 function client() {
   const channel = new MessageChannel();
   // SAFETY: a MessagePort posts and receives structured-clone values on the same events the port contract names.
-  serveRuntimeStore(channel.port2 as unknown as RuntimeStorePort);
+  serveStore(channel.port2 as unknown as StorePort);
   // SAFETY: as above, for the client's end of the same channel.
-  const store = new RuntimeStoreClient(channel.port1 as unknown as RuntimeStorePort);
+  const store = storeClient(channel.port1 as unknown as StorePort);
   return {
     store,
     close: () => {
@@ -98,7 +94,7 @@ async function harness(
   });
   const thread = threadSessionKey("11111111-1111-1111-1111-111111111111");
   const temporary = threadSessionKey("22222222-2222-2222-2222-222222222222");
-  await store.createConversation({
+  await store["conversations.create"]({
     agentId: DEFAULT_AGENT_ID,
     sessionKey: thread,
     name: "Thread",

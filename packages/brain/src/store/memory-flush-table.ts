@@ -1,6 +1,6 @@
 import { MEMORY_HOUSEKEEPING_OUTCOME, type MemoryHousekeepingOutcome } from "@sidecar/memory";
 import type { SessionKey } from "@sidecar/runtime/vocabulary";
-import type { RuntimeDatabase } from "./database.js";
+import type { StoreDatabase } from "./database.js";
 
 /**
  * Where one conversation's flush marker outlives the process: the generation
@@ -20,7 +20,7 @@ export interface FlushState {
 
 /** The conversation's flush marker, only when it was written under the generation asked about. */
 export function flushState(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKey: SessionKey,
   generationId: string,
 ): FlushState | undefined {
@@ -46,7 +46,7 @@ export function flushState(
 }
 
 export function recordFlush(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKey: SessionKey,
   state: FlushState,
 ): void {

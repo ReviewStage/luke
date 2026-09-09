@@ -5,7 +5,7 @@ import {
   childRunRecordFromWire,
 } from "@sidecar/runtime/vocabulary";
 import type { UnparsedWireValue } from "@sidecar/wire";
-import { nullable, type RuntimeDatabase } from "./database.js";
+import { nullable, type StoreDatabase } from "./database.js";
 
 /**
  * Child runs and their completions, one row each. The payload is the record
@@ -25,7 +25,7 @@ function parsed(payload: string): UnparsedWireValue | undefined {
   }
 }
 
-export function listChildRuns(database: RuntimeDatabase): readonly ChildRunRecord[] {
+export function listChildRuns(database: StoreDatabase): readonly ChildRunRecord[] {
   // SAFETY: the payload column is text; the validator decides what it holds.
   const rows = database
     .prepare("SELECT payload FROM child_runs ORDER BY accepted_at, child_id")
@@ -38,7 +38,7 @@ export function listChildRuns(database: RuntimeDatabase): readonly ChildRunRecor
   return records;
 }
 
-export function putChildRun(database: RuntimeDatabase, record: ChildRunRecord): boolean {
+export function putChildRun(database: StoreDatabase, record: ChildRunRecord): boolean {
   const payload = JSON.stringify(record);
   if (!childRunRecordFromWire(parsed(payload))) return false;
   database
@@ -64,12 +64,12 @@ export function putChildRun(database: RuntimeDatabase, record: ChildRunRecord): 
   return true;
 }
 
-export function deleteChildRun(database: RuntimeDatabase, childId: string): boolean {
+export function deleteChildRun(database: StoreDatabase, childId: string): boolean {
   const result = database.prepare("DELETE FROM child_runs WHERE child_id = ?").run(childId);
   return Number(result.changes) > 0;
 }
 
-export function listChildCompletions(database: RuntimeDatabase): readonly ChildCompletionRecord[] {
+export function listChildCompletions(database: StoreDatabase): readonly ChildCompletionRecord[] {
   // SAFETY: the payload column is text; the validator decides what it holds.
   const rows = database
     .prepare("SELECT payload FROM child_completions ORDER BY created_at, completion_id")
@@ -83,7 +83,7 @@ export function listChildCompletions(database: RuntimeDatabase): readonly ChildC
 }
 
 export function putChildCompletion(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   completion: ChildCompletionRecord,
 ): boolean {
   const payload = JSON.stringify(completion);
@@ -109,7 +109,7 @@ export function putChildCompletion(
   return true;
 }
 
-export function deleteChildCompletion(database: RuntimeDatabase, completionId: string): boolean {
+export function deleteChildCompletion(database: StoreDatabase, completionId: string): boolean {
   const result = database
     .prepare("DELETE FROM child_completions WHERE completion_id = ?")
     .run(completionId);

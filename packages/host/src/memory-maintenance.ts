@@ -1,5 +1,6 @@
 import type { BrainFlushInput, BrainFlushMarkerStore } from "@sidecar/brain";
 import { runMemoryHousekeeping } from "@sidecar/brain";
+import type { StoreClient } from "@sidecar/brain/store";
 import {
   type HousekeepingPrompt,
   housekeepingCompleted,
@@ -13,7 +14,6 @@ import {
 } from "@sidecar/memory";
 import { readWorkspaceFile, writeWorkspaceFile } from "@sidecar/runtime";
 import type { AgentRuntime, SessionKey } from "@sidecar/runtime/vocabulary";
-import type { RuntimeStoreClient } from "@sidecar/runtime-store";
 import type { WireRecord } from "@sidecar/wire";
 
 /**
@@ -27,7 +27,7 @@ import type { WireRecord } from "@sidecar/wire";
 
 export interface MemoryMaintenanceDependencies {
   persistent: boolean;
-  client: () => RuntimeStoreClient;
+  client: () => StoreClient;
   /** A runtime for the housekeeping runs, or nothing when no brain may stand. */
   createRuntime: () => AgentRuntime | undefined;
   workspaceDirectory: () => string;
@@ -112,15 +112,21 @@ export function wireMemoryMaintenance(
     if (!eligible(sessionKey)) return undefined;
     return {
       read: async (generationId) => {
-        const state = await dependencies.client().memoryFlushState(sessionKey, generationId);
+        const state = await dependencies.client()["memory.flush-state.get"]({
+          sessionKey,
+          generationId,
+        });
         return state && housekeepingCompleted(state.outcome) ? state.compactionCount : undefined;
       },
       write: async (generationId, compactionCount) => {
-        const recorded = await dependencies.client().recordMemoryFlush(sessionKey, {
-          generationId,
-          compactionCount,
-          outcome: MEMORY_HOUSEKEEPING_OUTCOME.COMPLETED,
-          flushedAt: dependencies.now(),
+        const recorded = await dependencies.client()["memory.flush-state.put"]({
+          sessionKey,
+          state: {
+            generationId,
+            compactionCount,
+            outcome: MEMORY_HOUSEKEEPING_OUTCOME.COMPLETED,
+            flushedAt: dependencies.now(),
+          },
         });
         if (!recorded) throw new Error("the store refused the flush marker");
       },

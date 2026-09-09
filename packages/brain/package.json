@@ -7,6 +7,8 @@
     ".": "./src/index.js",
     "./requests": "./src/requests.js",
     "./requests-wire": "./src/requests-wire.js",
+    "./store": "./src/store/index.js",
+    "./store-worker": "./src/store/worker-entry.js",
     "./testing": "./src/testing.js"
   },
   "types": "./src/index.ts",

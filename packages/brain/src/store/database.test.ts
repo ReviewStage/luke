@@ -5,22 +5,22 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import {
-  BRAIN_GENERATION_LIFETIME_MS,
-  BRAIN_REQUEST_STATUS,
-  type BrainPersistedState,
-  BrainStateStore,
-  freshBrainState,
-} from "@sidecar/brain";
-import {
   CONVERSATION_ENTRY_KIND,
   maximumStoredConversationEntries,
   storedConversationMaximumAgeMs,
 } from "@sidecar/realtime";
 import { DEFAULT_AGENT_ID, MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
+import { BRAIN_REQUEST_STATUS } from "../requests.js";
+import {
+  BRAIN_GENERATION_LIFETIME_MS,
+  type BrainPersistedState,
+  BrainStateStore,
+  freshBrainState,
+} from "../state-store.js";
 import { deleteConversationHistory } from "./archives.js";
 import { loadBrainEnvelope, saveBrainEnvelope } from "./brain-envelope.js";
 import { createConversation, raiseHistoryCutoff } from "./conversations-table.js";
-import { RuntimeDatabase } from "./database.js";
+import { StoreDatabase } from "./database.js";
 import { EnvelopeTracker, SAVE_KIND } from "./envelope.js";
 import {
   appendHistory,
@@ -29,11 +29,11 @@ import {
   listHistory,
   searchHistory,
 } from "./history-table.js";
-import { RUNTIME_SCHEMA_VERSION } from "./schema.js";
+import { STORE_SCHEMA_VERSION } from "./schema.js";
 import { inspectHistory, line, NOW, openTestDatabase, populatedState, request } from "./testing.js";
 
 /** A repository over the database in-thread, tracking the last envelope it saw land as the client does. */
-function repository(database: RuntimeDatabase) {
+function repository(database: StoreDatabase) {
   const tracker = new EnvelopeTracker();
   tracker.observe(loadBrainEnvelope(database, MAIN_SESSION_KEY));
   return {
@@ -515,7 +515,7 @@ test("the reproduced boundary: marker written, erase failed, store load at exact
   assert.deepEqual(listHistory(first, MAIN_SESSION_KEY, clock), []);
   first.close();
   // The next launch opens the same file: the cutoff is the conversation's, not the dead generation's.
-  const relaunch = RuntimeDatabase.open(location);
+  const relaunch = StoreDatabase.open(location);
   assert.equal(historyClearedAt(relaunch, MAIN_SESSION_KEY), cutoff);
   assert.deepEqual(listHistory(relaunch, MAIN_SESSION_KEY, clock), []);
   assert.deepEqual(listHistory(relaunch, MAIN_SESSION_KEY, clock + 1), []);
@@ -546,7 +546,7 @@ test("a line keeps its Markdown line structure through the store and a relaunch"
   );
   assert.equal(appended.entries[0]?.words, words);
   database.close();
-  const relaunch = RuntimeDatabase.open(location);
+  const relaunch = StoreDatabase.open(location);
   assert.equal(listHistory(relaunch, MAIN_SESSION_KEY, NOW)[0]?.words, words);
   relaunch.close();
 });
@@ -590,7 +590,7 @@ test("the checkpoint stamp lives on the generation: an empty foreign checkpoint 
 });
 
 test("a version-1 database is walked forward: its item-tagged generation gains the legacy stamp, an empty one none, and a newer database is refused", () => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "luke-runtime-store-"));
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "luke-store-"));
   const location = path.join(directory, "agent.sqlite");
   const raw = new DatabaseSync(location);
   raw.exec(`CREATE TABLE schema_version (version INTEGER NOT NULL)`);
@@ -630,7 +630,7 @@ test("a version-1 database is walked forward: its item-tagged generation gains t
     );
   raw.close();
 
-  const database = RuntimeDatabase.open(location);
+  const database = StoreDatabase.open(location);
   const loaded = loadBrainEnvelope(database, MAIN_SESSION_KEY);
   assert.equal(loaded.state?.checkpointFormat, "tool-loop@1:openai-responses-input/1");
   assert.equal(loaded.state?.items.length, 1);
@@ -638,7 +638,7 @@ test("a version-1 database is walked forward: its item-tagged generation gains t
   const version = database.prepare("SELECT version FROM schema_version").get() as {
     version: number;
   };
-  assert.equal(version.version, RUNTIME_SCHEMA_VERSION);
+  assert.equal(version.version, STORE_SCHEMA_VERSION);
   // SAFETY: the columns version 3 added to the conversation row.
   const migrated = database
     .prepare("SELECT kind, last_activity_at FROM conversations WHERE session_key = ?")
@@ -647,11 +647,11 @@ test("a version-1 database is walked forward: its item-tagged generation gains t
   assert.equal(migrated.last_activity_at, NOW);
   database.close();
   // Reopening at the current version is a no-op, and a newer database is refused.
-  RuntimeDatabase.open(location).close();
+  StoreDatabase.open(location).close();
   const newer = new DatabaseSync(location);
   newer.exec("UPDATE schema_version SET version = 99");
   newer.close();
-  assert.throws(() => RuntimeDatabase.open(location), /schema version 99/u);
+  assert.throws(() => StoreDatabase.open(location), /schema version 99/u);
   fs.rmSync(directory, { recursive: true, force: true });
 });
 

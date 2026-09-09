@@ -1,11 +1,3 @@
-import {
-  BRAIN_REQUEST_ORIGIN,
-  BRAIN_REQUEST_STATUS,
-  type BrainJournalEntry,
-  type BrainPersistedState,
-  type BrainRequestRecord,
-  freshBrainState,
-} from "@sidecar/brain";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
 import {
   DEFAULT_AGENT_ID,
@@ -13,15 +5,22 @@ import {
   MAIN_SESSION_KEY,
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
+import type { BrainJournalEntry } from "../journal.js";
+import {
+  BRAIN_REQUEST_ORIGIN,
+  BRAIN_REQUEST_STATUS,
+  type BrainRequestRecord,
+} from "../requests.js";
+import { type BrainPersistedState, freshBrainState } from "../state-store.js";
 import { createConversation } from "./conversations-table.js";
-import { RuntimeDatabase } from "./database.js";
+import { StoreDatabase } from "./database.js";
 
 /** Synthetic fixtures for the store's own tests: no real title, branch, or transcript anywhere. */
 
 export const NOW = 1_800_000_000_000;
 
-export function openTestDatabase(location = ":memory:"): RuntimeDatabase {
-  const database = RuntimeDatabase.open(location);
+export function openTestDatabase(location = ":memory:"): StoreDatabase {
+  const database = StoreDatabase.open(location);
   createConversation(database, {
     agentId: DEFAULT_AGENT_ID,
     sessionKey: MAIN_SESSION_KEY,
@@ -107,7 +106,7 @@ export interface HistoryTableContents {
 }
 
 export function inspectHistory(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKey: SessionKey,
 ): HistoryTableContents {
   // SAFETY: each query selects the one column its row type names.

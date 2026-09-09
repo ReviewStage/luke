@@ -1,19 +1,17 @@
 import { type ConversationLineHit, tokenize } from "@sidecar/memory";
 import {
   type ConversationEntry,
+  conversationEntryIdentity,
   maximumStoredConversationEntries,
+  recordedAfterClear,
+  storedConversationEntry,
   storedConversationMaximumAgeMs,
 } from "@sidecar/realtime";
 import type { HistoryAppendOutcome, SessionKey } from "@sidecar/runtime/vocabulary";
+import type { UnparsedWireValue } from "@sidecar/wire";
 import { standingGeneration } from "./brain-envelope.js";
 import { historyCutoff } from "./conversations-table.js";
-import { nullable, type RuntimeDatabase } from "./database.js";
-import {
-  historyEntryAdmitted,
-  historyEntryFromPayload,
-  historyEventKey,
-  historyPayload,
-} from "./history.js";
+import { nullable, type StoreDatabase } from "./database.js";
 
 /**
  * The conversation's history as the panel draws it, kept apart from the
@@ -28,7 +26,7 @@ import {
  * which outlives the generation.
  */
 export function historyClearedAt(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKey: SessionKey,
 ): number | undefined {
   const durable = historyCutoff(database, sessionKey);
@@ -47,7 +45,7 @@ export function historyClearedAt(
  * the thread may show.
  */
 export function appendHistory(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKey: SessionKey,
   entries: readonly ConversationEntry[],
   now: number,
@@ -67,7 +65,7 @@ export function appendHistory(
 }
 
 function appendOne(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKey: SessionKey,
   sessionId: string | undefined,
   entry: ConversationEntry & { recordedAt: number },
@@ -104,7 +102,7 @@ function appendOne(
 }
 
 function insertLine(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKey: SessionKey,
   sessionId: string | undefined,
   entry: ConversationEntry & { recordedAt: number },
@@ -133,7 +131,7 @@ function insertLine(
 }
 
 /** The conversation's next sequence, taken from its counter so a number is never handed out twice. */
-function nextHistorySequence(database: RuntimeDatabase, sessionKey: SessionKey): number {
+function nextHistorySequence(database: StoreDatabase, sessionKey: SessionKey): number {
   // SAFETY: RETURNING yields the one integer expression named `sequence`, or no row.
   const row = database
     .prepare(
@@ -147,7 +145,7 @@ function nextHistorySequence(database: RuntimeDatabase, sessionKey: SessionKey):
 
 /** Whether the run's line of this kind already stands, read through the once-published index. */
 function published(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKey: SessionKey,
   requestId: string,
   kind: string,
@@ -161,7 +159,7 @@ function published(
 
 /** The thread as the panel draws it: retained lines in the order they happened, oldest first. */
 export function listHistory(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKey: SessionKey,
   now: number,
 ): readonly ConversationEntry[] {
@@ -169,7 +167,7 @@ export function listHistory(
 }
 
 function listRetained(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKey: SessionKey,
   now: number,
   clearedAt: number | undefined,
@@ -221,7 +219,7 @@ export const HISTORY_SEARCH_MAXIMUM_SCANNED_ROWS = 2_000;
  * Clear hides its lines here as it does everywhere.
  */
 export function searchHistory(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKeys: readonly SessionKey[],
   query: string,
   limit: number,
@@ -273,4 +271,43 @@ export function searchHistory(
     if (rows.length < asked) break;
   }
   return hits;
+}
+
+/** Whether a canonical line may stand now: recorded no later than now and after any Clear. */
+function historyEntryAdmitted(
+  entry: ConversationEntry,
+  now: number,
+  clearedAt: number | undefined,
+): entry is ConversationEntry & { recordedAt: number } {
+  if (!recordedAfterClear(entry, clearedAt)) return false;
+  return entry.recordedAt <= now;
+}
+
+const EXPLICIT_EVENT_KEY_PREFIX = "event:";
+const VALUE_EVENT_KEY_PREFIX = "value:";
+/**
+ * What an append is idempotent on: the line's identity, prefixed by which
+ * kind it is so an id can never collide with a value key in the one column
+ * that holds both.
+ */
+function historyEventKey(entry: ConversationEntry): string {
+  const identity = conversationEntryIdentity(entry);
+  return entry.eventId !== undefined
+    ? `${EXPLICIT_EVENT_KEY_PREFIX}${identity}`
+    : `${VALUE_EVENT_KEY_PREFIX}${identity}`;
+}
+
+/** The payload a line is kept as, exactly the entry, so the projection is the record read back. */
+function historyPayload(entry: ConversationEntry): string {
+  return JSON.stringify(entry);
+}
+
+/** A payload read back, or nothing for one this build cannot vouch for. */
+function historyEntryFromPayload(payload: string): ConversationEntry | undefined {
+  try {
+    // SAFETY: JSON.parse returns a wire value; the stored-entry reader is the validation.
+    return storedConversationEntry(JSON.parse(payload) as UnparsedWireValue);
+  } catch {
+    return undefined;
+  }
 }
