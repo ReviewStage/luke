@@ -2,7 +2,7 @@ import type { NotebookMemoryStore } from "@sidecar/memory";
 import type { ChildStore, ScheduledJobStore } from "@sidecar/runtime";
 import type { SessionKey, TranscriptEvent } from "@sidecar/runtime/vocabulary";
 import type { UnparsedWireValue } from "@sidecar/wire";
-import type { BrainPersistedState, BrainStateLoad, BrainStateRepository } from "../state-store.js";
+import type { BrainPersistedState, BrainStateLoad, BrainStateRepository } from "../envelope.js";
 import { EnvelopeTracker } from "./envelope.js";
 import {
   type AnyOperationParams,

@@ -46,6 +46,24 @@ export interface BrainObservationEntry {
   readonly cursor?: string;
 }
 
+/**
+ * How many captured observations one turn opens with. It bounds what a
+ * model reads, never what the store keeps: every capture stands in the inbox
+ * until a turn consumes it, because each entry carries the transcript delta
+ * read for it and the capture cursor has already moved past that text, so a
+ * dropped entry would be words no later read could recover.
+ */
+export const INBOX_CAPACITY = 20;
+
+/**
+ * The captured observations a turn opens with, oldest first and at most the
+ * inbox's turn depth. What stands beyond it waits, whole, for the next wake
+ * or look, which opens a turn whenever the inbox holds anything.
+ */
+export function inboxEvents(inbox: readonly BrainObservationEntry[]): readonly BrainWakeEvent[] {
+  return inbox.slice(0, INBOX_CAPACITY).map(eventFromEntry);
+}
+
 const WAKE_KIND_LIST: readonly BrainWakeKind[] = Object.values(BRAIN_WAKE_KIND);
 
 function isWakeKind(value: UnparsedWireValue): value is BrainWakeKind {

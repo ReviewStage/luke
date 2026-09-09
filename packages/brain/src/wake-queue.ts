@@ -1,4 +1,5 @@
 import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
+import { sameObservation } from "./observation-inbox.js";
 import type { BrainWakeEvent } from "./wake-events.js";
 
 /**
@@ -46,15 +47,7 @@ export class WakeQueue {
   push(events: readonly BrainWakeEvent[]): void {
     if (events.length === 0) return;
     for (const event of events) {
-      const duplicate = this.#pending.some(
-        (held) =>
-          held.kind === event.kind &&
-          held.hookEvent === event.hookEvent &&
-          held.atMs === event.atMs &&
-          held.identity.providerId === event.identity.providerId &&
-          held.identity.providerSessionId === event.identity.providerSessionId,
-      );
-      if (!duplicate) this.#pending.push(event);
+      if (!this.#pending.some((held) => sameObservation(held, event))) this.#pending.push(event);
     }
     while (this.#pending.length > this.#options.capacity) this.#pending.shift();
     this.#arm(this.#options.coalesceMs);

@@ -1,4 +1,4 @@
-import { checkpointFormatTag } from "@sidecar/runtime/vocabulary";
+import type { BrainStoreLease } from "./envelope.js";
 import type { Generation } from "./generation.js";
 import type { BrainObservationEntry } from "./observation-inbox.js";
 import {
@@ -7,29 +7,23 @@ import {
   type BrainRequestFailure,
   type BrainRequestRecord,
   isTerminalBrainRequestStatus,
+  type RecordChanges,
 } from "./requests.js";
-import type { BrainStateStore, BrainStoreLease } from "./state-store.js";
+import type { BrainSaveResult, BrainStateStore } from "./state-store.js";
 import type { RecordingContextEngine } from "./transcript-recorder.js";
 import type { RunControl, TurnContext } from "./turn.js";
 
 /**
  * The host's ledger: the one way a generation reaches the store, and the one
- * place the scope of a save is decided. Every envelope is composed inside the
- * store's serialized queue from the store's committed state — never from a
- * copy taken before entering the queue, and never from live state the save
- * does not own — so a save can only add what it owns to what the saves
- * before it kept. What a save may own: the working context, cursors, and
- * journal, when it is the checkpoint of the turn holding them; one record's
- * fields, when it is that record's acceptance, transition, accounting, end,
- * or mark; or the whole generation, when it is the restore that just loaded
- * it. Owned record fields land on the live record in the queue step that
- * keeps them. A generation whose checkpoint this runtime could not load never
- * has a working scope, and its whole scope carries the stored items and stamp
- * exactly as committed: the memory is kept, never rewritten by a runtime that
- * cannot read it.
+ * place the kind of a save is named. What a save may own: the working
+ * context, cursors, and journal, when it is the checkpoint of the turn
+ * holding them; one record's fields, when it is that record's acceptance,
+ * transition, accounting, end, or mark; the whole generation, when it is the
+ * restore that just loaded it; or the inbox, when it is a capture. Each is a
+ * method of the store, which composes the envelope inside its own queue and
+ * applies what the save owns to live state in the same step; the ledger's own
+ * work is deciding which save a caller means and what its answer says.
  */
-
-export type RecordChanges = Partial<Omit<BrainRequestRecord, "runId" | "revision">>;
 
 /** The two markers the host's thread writes onto a run, each once. */
 export const PENDING_MARK_FIELD = {
@@ -38,62 +32,6 @@ export const PENDING_MARK_FIELD = {
 } as const;
 
 export type PendingMarkField = (typeof PENDING_MARK_FIELD)[keyof typeof PENDING_MARK_FIELD];
-
-/** One record's fields over the committed record — or the record itself, for its own acceptance. */
-export interface RecordChange {
-  runId: string;
-  changes: RecordChanges;
-  insert?: BrainRequestRecord;
-}
-
-export const SAVE_SCOPE = {
-  WORKING: "working",
-  WHOLE: "whole",
-  RECORD: "record",
-  /** Observations captured into the inbox, with the capture cursors they advanced. */
-  CAPTURE: "capture",
-} as const;
-
-/**
- * How many captured observations one turn opens with. It bounds what a
- * model reads, never what the store keeps: every capture stands in the inbox
- * until a turn consumes it, because each entry carries the transcript delta
- * read for it and the capture cursor has already moved past that text, so a
- * dropped entry would be words no later read could recover.
- */
-export const INBOX_CAPACITY = 20;
-
-/**
- * What one save owns. A working scope commits the turn's context, cursors,
- * and journal, and the owning run's accounting beside them. A record scope
- * changes one record alone. The whole scope is the restore's alone, and
- * carries the context only when the runtime loaded one.
- */
-export type SaveScope =
-  | {
-      kind: typeof SAVE_SCOPE.WORKING;
-      context: RecordingContextEngine;
-      record?: RecordChange;
-      /** The inbox entries the turn consumed, gone from the inbox in the same write as the checkpoint. */
-      consumes?: readonly string[];
-    }
-  | { kind: typeof SAVE_SCOPE.WHOLE; context: RecordingContextEngine | undefined }
-  | ({ kind: typeof SAVE_SCOPE.RECORD } & RecordChange)
-  | { kind: typeof SAVE_SCOPE.CAPTURE; entries: readonly BrainObservationEntry[] };
-
-/** What composing the requests of one save decided, read once the store has answered. */
-interface SaveOutcome {
-  requests: readonly BrainRequestRecord[];
-  /** The record as written, when the scope owned one. */
-  owned?: BrainRequestRecord;
-  /** The scope named a record the committed state does not hold, and inserted none. */
-  missing: boolean;
-}
-
-function recordChangeOf(scope: SaveScope): RecordChange | undefined {
-  if (scope.kind === SAVE_SCOPE.RECORD) return scope;
-  return scope.kind === SAVE_SCOPE.WORKING ? scope.record : undefined;
-}
 
 /** What a run's end carries into its record beyond the status. */
 export interface RunEnd {
@@ -169,7 +107,18 @@ export class BrainRequestLedger {
    * other record or of a turn still in flight rides along.
    */
   commit(generation: Generation, runId: string, changes: RecordChanges): Promise<boolean> {
-    return this.save(generation, { kind: SAVE_SCOPE.RECORD, runId, changes });
+    return this.#landed(this.#store.saveRecord(this.#lease, generation, { runId, changes }));
+  }
+
+  /** A record's own acceptance: the record itself, inserted into the committed list. */
+  accept(generation: Generation, record: BrainRequestRecord): Promise<boolean> {
+    return this.#landed(
+      this.#store.saveRecord(this.#lease, generation, {
+        runId: record.runId,
+        changes: {},
+        insert: record,
+      }),
+    );
   }
 
   /**
@@ -181,135 +130,49 @@ export class BrainRequestLedger {
    */
   checkpoint(turnContext: Omit<TurnContext, "run"> & { run?: RunControl }): Promise<boolean> {
     const { generation, context, run, consumes } = turnContext;
-    return this.save(generation, {
-      kind: SAVE_SCOPE.WORKING,
-      context,
-      ...(consumes && consumes.length > 0 ? { consumes } : undefined),
-      ...(run?.recorded
-        ? {
-            record: {
-              runId: run.runId,
-              changes: { performedActs: run.performedActs, unknownActs: run.unknownActs },
-            },
-          }
-        : undefined),
-    });
+    return this.#landed(
+      this.#store.saveWorking(this.#lease, generation, {
+        context,
+        ...(consumes && consumes.length > 0 ? { consumes } : undefined),
+        ...(run?.recorded
+          ? {
+              record: {
+                runId: run.runId,
+                changes: { performedActs: run.performedActs, unknownActs: run.unknownActs },
+              },
+            }
+          : undefined),
+      }),
+    );
   }
 
-  async save(generation: Generation, scope: SaveScope): Promise<boolean> {
-    let outcome: SaveOutcome | undefined;
-    let pruned = false;
-    let carried = 0;
-    let inbox: readonly BrainObservationEntry[] | undefined;
-    const context =
-      scope.kind === SAVE_SCOPE.RECORD || scope.kind === SAVE_SCOPE.CAPTURE
-        ? undefined
-        : scope.context;
-    const written = await this.#store.write(
-      this.#lease,
-      generation.id,
-      (state) => {
-        const checkpoint = context?.checkpoint();
-        outcome = this.#requestsOf(generation, scope, state.requests);
-        const checkpointFormat = checkpoint
-          ? checkpointFormatTag(checkpoint.format)
-          : state.checkpointFormat;
-        // The transcript events the checkpoint carries: everything recorded
-        // since the last checkpoint landed, written in the same transaction
-        // so the record and the projection cannot disagree about what entered.
-        const transcript = context?.pending() ?? [];
-        carried = transcript.length;
-        // The inbox is composed from the committed list: a capture appends
-        // to it and a checkpoint removes what its turn consumed, so a
-        // capture landing during a turn is neither lost nor consumed early,
-        // and nothing captured is let go of before a turn has read it.
-        if (scope.kind === SAVE_SCOPE.CAPTURE) {
-          inbox = [...state.inbox, ...scope.entries];
-        } else if (scope.kind === SAVE_SCOPE.WORKING && scope.consumes) {
-          const consumed = new Set(scope.consumes);
-          inbox = state.inbox.filter((entry) => !consumed.has(entry.id));
-        }
-        return {
-          ...(checkpointFormat !== undefined ? { checkpointFormat } : undefined),
-          items: checkpoint ? checkpoint.items : state.items,
-          compactionCount: context ? generation.compactionCount : state.compactionCount,
-          cursors: context ? generation.cursors.persisted() : state.cursors,
-          captureCursors:
-            scope.kind === SAVE_SCOPE.CAPTURE || scope.kind === SAVE_SCOPE.WHOLE
-              ? generation.captureCursors.persisted()
-              : state.captureCursors,
-          inbox: inbox ?? state.inbox,
-          journal: context ? generation.journal.entries() : state.journal,
-          requests: outcome.requests,
-          ...(transcript.length > 0 ? { transcript } : undefined),
-        };
-      },
-      (commit) => {
-        if (carried > 0) context?.retained(carried);
-        if (inbox) generation.inbox = inbox;
-        // Retention decided inside the same queue step: the runs the store
-        // let go of leave the working copy too, or the next checkpoint of
-        // the journal would write them straight back.
-        if (commit.prunedRunIds.length > 0) {
-          for (const runId of commit.prunedRunIds) generation.requests.delete(runId);
-          generation.journal.dropRuns(commit.prunedRunIds);
-          pruned = true;
-        }
-        const owned = outcome?.owned;
-        const change = recordChangeOf(scope);
-        if (!owned || !change) return;
-        const live = generation.requests.get(owned.runId);
-        if (live) {
-          generation.requests.set(owned.runId, {
-            ...live,
-            ...change.changes,
-            revision: owned.revision,
-          });
-        }
-      },
-    );
-    if (!written || outcome?.missing) {
+  /**
+   * The restore's own save: the working requests whole, carrying the context
+   * only when the runtime loaded one.
+   */
+  restored(generation: Generation, context: RecordingContextEngine | undefined): Promise<boolean> {
+    return this.#landed(this.#store.saveWhole(this.#lease, generation, context));
+  }
+
+  /** Observations captured into the inbox, with the capture cursors they advanced. */
+  captured(generation: Generation, entries: readonly BrainObservationEntry[]): Promise<boolean> {
+    return this.#landed(this.#store.saveCapture(this.#lease, generation, entries));
+  }
+
+  /**
+   * Reads one save's outcome the way every caller here does: a save that did
+   * not land whole is reported once and answered false, and runs retention
+   * let go of are gone from the list every window draws, which hears it now
+   * rather than on the next unrelated change.
+   */
+  async #landed(saving: Promise<BrainSaveResult>): Promise<boolean> {
+    const result = await saving;
+    if (!result.saved) {
       this.#report("Brain memory could not be checkpointed");
       return false;
     }
-    // Runs retention let go of are gone from the list every window draws,
-    // and the windows hear it now rather than on the next unrelated change.
-    if (pruned) this.#notify();
+    if (result.prunedRunIds.length > 0) this.#notify();
     return true;
-  }
-
-  /** The requests a save writes: the working copy whole, or the committed list with the scope's one record changed or inserted. */
-  #requestsOf(
-    generation: Generation,
-    scope: SaveScope,
-    committed: readonly BrainRequestRecord[],
-  ): SaveOutcome {
-    if (scope.kind === SAVE_SCOPE.WHOLE) {
-      return {
-        requests: [...generation.requests.values()].map((record) => ({ ...record })),
-        missing: false,
-      };
-    }
-    const change = recordChangeOf(scope);
-    if (!change) return { requests: committed, missing: false };
-    const existing = committed.find((record) => record.runId === change.runId);
-    if (existing) {
-      const changed: BrainRequestRecord = {
-        ...existing,
-        ...change.changes,
-        revision: existing.revision + 1,
-      };
-      return {
-        requests: committed.map((record) => (record.runId === change.runId ? changed : record)),
-        owned: changed,
-        missing: false,
-      };
-    }
-    if (change.insert) {
-      const owned = { ...change.insert };
-      return { requests: [...committed, owned], owned, missing: false };
-    }
-    return { requests: committed, missing: true };
   }
 
   #update(generation: Generation, runId: string, changes: RecordChanges): void {

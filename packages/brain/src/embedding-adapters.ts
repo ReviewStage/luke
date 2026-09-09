@@ -14,7 +14,17 @@ import {
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
 } from "@sidecar/runtime/vocabulary";
-import { type CloudFetch, HTTP_STATUS, positiveInteger, text } from "@sidecar/wire";
+import {
+  type CloudFetch,
+  HTTP_STATUS,
+  isRecord,
+  isWireNumber,
+  isWireString,
+  numberVectors,
+  positiveInteger,
+  text,
+  type UnparsedWireValue,
+} from "@sidecar/wire";
 import {
   BRAIN_REQUEST_TIMEOUT_MS,
   failed,
@@ -28,12 +38,6 @@ import {
   throttled,
 } from "./model-adapter-shared.js";
 import { BRAIN_OPENAI_DEFAULTS } from "./openai-model-adapter.js";
-import {
-  BRAIN_EMBEDDING_MODEL,
-  BRAIN_EMBEDDINGS_PATH,
-  brainEmbeddingsRequest,
-  embeddingsVectors,
-} from "./responses-api.js";
 
 /**
  * The two embedding adapters the notebook index runs on, one per credential:
@@ -45,6 +49,39 @@ import {
  * operation is a compatibility failure, which the automatic provider
  * selection degrades to keyword search and an explicit selection reports.
  */
+
+/** OpenAI's embeddings endpoint, the one call the notebook index makes on a key. */
+export const BRAIN_EMBEDDINGS_PATH = "/embeddings";
+
+/** The embedding model the notebook index runs on by default; a build-fixed choice, not a request field. */
+export const BRAIN_EMBEDDING_MODEL = "text-embedding-3-small";
+
+/** The embeddings request: the texts and the model, and no retention asked for. */
+export function brainEmbeddingsRequest(texts: readonly string[], options: { model: string }) {
+  return { model: options.model, input: texts, encoding_format: "float" };
+}
+
+export type BrainEmbeddingsRequest = ReturnType<typeof brainEmbeddingsRequest>;
+
+/**
+ * The vectors an embeddings answer carries, in the order of the texts sent,
+ * or nothing for a payload of any other shape or a vector of another width.
+ */
+export function embeddingsVectors(
+  payload: UnparsedWireValue | undefined,
+): { model: string; vectors: number[][] } | undefined {
+  if (!isRecord(payload) || !Array.isArray(payload.data)) return undefined;
+  const model = isWireString(payload.model) && payload.model.length > 0 ? payload.model : undefined;
+  if (!model) return undefined;
+  const indexed: { index: number; embedding: UnparsedWireValue }[] = [];
+  for (const entry of payload.data) {
+    if (!isRecord(entry) || !isWireNumber(entry.index)) return undefined;
+    indexed.push({ index: entry.index, embedding: entry.embedding });
+  }
+  indexed.sort((a, b) => a.index - b.index);
+  const vectors = numberVectors(indexed.map((entry) => entry.embedding));
+  return vectors ? { model, vectors } : undefined;
+}
 
 /** Batches wider than the hosted bound are cut to it on both transports, so the two behave alike. */
 export const EMBEDDING_BATCH_SIZE = HOSTED_BRAIN_EMBED_BOUNDS.MAXIMUM_TEXTS;

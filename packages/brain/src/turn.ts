@@ -166,6 +166,15 @@ export interface TurnContext {
 }
 
 /**
+ * Whether a turn's work may still have an effect: its own signal covers the
+ * developer's cancel, the deadline, and the generation's replacement, and the
+ * agent's stop is the one flag the signal does not carry.
+ */
+export function turnRevoked(stopped: boolean, context: Pick<TurnContext, "signal">): boolean {
+  return stopped || context.signal.aborted;
+}
+
+/**
  * What a host prepared a turn with: the prompt the model reads, the
  * configured policy layers, and the catalog they resolve over. The host
  * never resolves the policy itself; the agent does, once, adding the turn's

@@ -7,8 +7,8 @@ import {
   type ContextOpening,
 } from "@sidecar/runtime/vocabulary";
 import { ResponsesContextEngine } from "./context-engine.js";
+import { freshBrainState } from "./envelope.js";
 import { CONTEXT_OPENING, generationFrom } from "./generation.js";
-import { freshBrainState } from "./state-store.js";
 
 const TOOL_LOOP_IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOOP_RUNTIME.VERSION };
 

@@ -23,6 +23,7 @@ import {
   shouldCompact,
 } from "./compaction.js";
 import { ResponsesContextEngine } from "./context-engine.js";
+import type { BrainPersistedState } from "./envelope.js";
 import {
   BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_ORIGIN,
@@ -31,7 +32,7 @@ import {
 } from "./requests.js";
 import { responsesModelAnswer, userMessageItem } from "./responses-api.js";
 import { ToolLoopAgentRuntime } from "./runtime.js";
-import { type BrainPersistedState, BrainStateStore } from "./state-store.js";
+import { BrainStateStore } from "./state-store.js";
 import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
 import { RecordingContextEngine } from "./transcript-recorder.js";
 

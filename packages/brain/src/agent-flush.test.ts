@@ -186,11 +186,15 @@ async function ask(agent: BrainAgent, question: string) {
 }
 
 test("a turn that leaves the context over the flush threshold runs the flush once, over a copy of the items, and not again in the same cycle", async () => {
+  const marker = new FakeMarkerStore();
   const calls: BrainFlushInput[] = [];
-  const h = agentWith(async (input) => {
-    calls.push(input);
-    return { outcome: MEMORY_HOUSEKEEPING_OUTCOME.COMPLETED, writes: 1 };
-  });
+  const h = agentWith(
+    async (input) => {
+      calls.push(input);
+      return { outcome: MEMORY_HOUSEKEEPING_OUTCOME.COMPLETED, writes: 1 };
+    },
+    { marker },
+  );
   await ask(h.agent, "short");
   assert.equal(calls.length, 0, "a small context flushes nothing");
   await ask(h.agent, OVER_FLUSH_THRESHOLD);
@@ -206,7 +210,7 @@ test("a turn that leaves the context over the flush threshold runs the flush onc
   assert.notEqual(snapshot, flush.items, "a copy, never the engine's own array");
   await ask(h.agent, "another small ask");
   assert.equal(calls.length, 1, "already flushed in this compaction cycle");
-  assert.deepEqual(h.agent.flushCycle(), { compactionCount: 0, lastFlushCompactionCount: 0 });
+  assert.equal(marker.markers.get(h.store.generationId() ?? ""), 0, "cycle zero is marked");
   await h.agent.stop();
 });
 
@@ -216,11 +220,15 @@ test("an interrupted or failed flush is reported and runs again at the next asse
     writes: 1,
     reason: "cancelled",
   };
+  const marker = new FakeMarkerStore();
   let calls = 0;
-  const h = agentWith(async () => {
-    calls += 1;
-    return outcome;
-  });
+  const h = agentWith(
+    async () => {
+      calls += 1;
+      return outcome;
+    },
+    { marker },
+  );
   await ask(h.agent, "y".repeat(3_000));
   assert.equal(calls, 1);
   assert.ok(
@@ -228,11 +236,11 @@ test("an interrupted or failed flush is reported and runs again at the next asse
       /Memory flush did not complete \(interrupted: cancelled\)/u.test(line),
     ),
   );
-  assert.deepEqual(h.agent.flushCycle(), { compactionCount: 0 });
+  assert.equal(marker.markers.size, 0, "an interrupted flush marks nothing");
   outcome = { outcome: MEMORY_HOUSEKEEPING_OUTCOME.NOTHING_TO_STORE, writes: 0 };
   await ask(h.agent, "again");
   assert.equal(calls, 2, "the unflushed cycle is assessed again");
-  assert.deepEqual(h.agent.flushCycle(), { compactionCount: 0, lastFlushCompactionCount: 0 });
+  assert.equal(marker.markers.get(h.store.generationId() ?? ""), 0, "the completed flush marks it");
   await ask(h.agent, "once more");
   assert.equal(calls, 2);
   await h.agent.stop();
@@ -262,10 +270,10 @@ test("restart: a flushed cycle is not flushed again after a relaunch, and a comp
   const second = agentWith(hook, { repository: first.repository, marker, compacts: true });
   await ask(second.agent, "still over the threshold");
   assert.equal(calls, 1, "cycle zero was flushed before the relaunch");
-  assert.deepEqual(second.agent.flushCycle(), { compactionCount: 0, lastFlushCompactionCount: 0 });
+  assert.equal(marker.markers.get(generation), 0, "the relaunch read the standing marker");
   // A turn that leaves the context over the reserve compacts it in maintenance; cycle one begins.
   await ask(second.agent, OVER_COMPACTION_THRESHOLD);
-  assert.equal(second.agent.flushCycle().compactionCount, 1, "the compaction was counted");
+  assert.equal(second.store.current()?.compactionCount, 1, "the compaction was counted");
   assert.equal(calls, 1, "cycle zero flushed once; the fold itself is not a flush");
   await second.agent.stop();
 
@@ -293,7 +301,7 @@ test("reset: after Start fresh the new generation starts at cycle zero, reads no
   assert.equal(await h.store.reset(), true);
   const after = h.store.generationId();
   assert.ok(after && after !== before);
-  assert.deepEqual(h.agent.flushCycle(), { compactionCount: 0 });
+  assert.equal(marker.markers.has(after), false, "the fresh generation has no marker of its own");
   await ask(h.agent, OVER_FLUSH_THRESHOLD);
   assert.equal(
     calls,
@@ -338,15 +346,11 @@ test("failed persistence: a marker write that fails is reported and leaves the c
       ),
     ),
   );
-  assert.deepEqual(
-    h.agent.flushCycle(),
-    { compactionCount: 0 },
-    "not marked done in memory either",
-  );
+  assert.equal(marker.markers.size, 0, "not marked done in the store either");
   marker.failWrites = false;
   await ask(h.agent, "next assessment");
   assert.equal(calls, 2, "the unflushed cycle is flushed again");
-  assert.deepEqual(h.agent.flushCycle(), { compactionCount: 0, lastFlushCompactionCount: 0 });
+  assert.equal(marker.markers.get(h.store.generationId() ?? ""), 0, "the retry marked the cycle");
   await h.agent.stop();
 
   const failing = new FakeMarkerStore();
@@ -399,7 +403,6 @@ test("a marker write still out when the turn is revoked is waited for at the nex
   assert.equal(marker.markers.get(generation), 0, "the late write landed under the generation");
   assert.equal(marker.writes, 1, "the write was issued once and never retried");
   assert.equal(calls, 1, "the flushed cycle is not run again");
-  assert.deepEqual(h.agent.flushCycle(), { compactionCount: 0, lastFlushCompactionCount: 0 });
   await ask(h.agent, "another");
   assert.equal(calls, 1);
   await h.agent.stop();

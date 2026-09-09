@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { FakeClock } from "@sidecar/runtime/testing";
-import { BrainGenerationClock } from "./generation-clock.js";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
   type BrainPersistedState,
-  BrainStateStore,
   freshBrainState,
-} from "./state-store.js";
+} from "./envelope.js";
+import { BrainGenerationClock } from "./generation-clock.js";
+import { BrainStateStore } from "./state-store.js";
 import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
 
 /**

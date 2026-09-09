@@ -18,8 +18,9 @@ import {
   threadSessionKey,
 } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND } from "@sidecar/session";
+import { freshBrainState } from "../envelope.js";
 import { userMessageItem } from "../responses-api.js";
-import { BrainStateStore, freshBrainState } from "../state-store.js";
+import { BrainStateStore } from "../state-store.js";
 import {
   archiveDirectory,
   deleteConversationHistory,

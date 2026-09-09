@@ -234,16 +234,8 @@ function prepared<Result>(
  * the host's.
  */
 export class OpenAiModelAdapter extends ResponsesModelAdapter<undefined> {
-  readonly #transport: OpenAiTransport;
-
   constructor(options: OpenAiModelAdapterOptions) {
-    const transport = new OpenAiTransport(options);
-    super(transport, options);
-    this.#transport = transport;
-  }
-
-  override get model(): string {
-    return this.#transport.model();
+    super(new OpenAiTransport(options), options);
   }
 }
 

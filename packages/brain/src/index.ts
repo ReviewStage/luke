@@ -23,10 +23,24 @@ export {
   TERMINAL_DELIVERY_STATES,
 } from "./delivery.js";
 export {
+  BRAIN_EMBEDDING_MODEL,
+  BRAIN_EMBEDDINGS_PATH,
+  type BrainEmbeddingsRequest,
+  brainEmbeddingsRequest,
   EMBEDDING_BATCH_SIZE,
+  embeddingsVectors,
   HostedEmbeddingAdapter,
   OpenAiEmbeddingAdapter,
 } from "./embedding-adapters.js";
+export {
+  BRAIN_GENERATION_LIFETIME_MS,
+  type BrainPersistedState,
+  type BrainStateLoad,
+  type BrainStateRepository,
+  type BrainTranscriptCursors,
+  brainPersistedStateFromWire,
+  freshBrainState,
+} from "./envelope.js";
 export { BrainGenerationClock } from "./generation-clock.js";
 export { HostedModelAdapter } from "./hosted-model-adapter.js";
 export {
@@ -60,21 +74,16 @@ export {
   type BrainSubmission,
 } from "./requests.js";
 export {
-  BRAIN_EMBEDDING_MODEL,
-  BRAIN_EMBEDDINGS_PATH,
   BRAIN_RESPONSES_COMPACT_PATH,
   BRAIN_RESPONSES_INPUT_TOKENS_PATH,
   BRAIN_RESPONSES_PATH,
   type BrainCompactRequest,
-  type BrainEmbeddingsRequest,
   type BrainInputTokensRequest,
   type BrainResponsesRequest,
   brainCompactRequest,
-  brainEmbeddingsRequest,
   brainInputTokensRequest,
   brainResponsesOutput,
   brainResponsesRequest,
-  embeddingsVectors,
   type ResponsesFunctionTool,
   type ResponsesInputItem,
   type ResponsesToolDefinition,
@@ -91,16 +100,7 @@ export {
   sessionContextText,
   workspaceProjectContextText,
 } from "./standing-context.js";
-export {
-  BRAIN_GENERATION_LIFETIME_MS,
-  type BrainPersistedState,
-  type BrainStateLoad,
-  type BrainStateRepository,
-  BrainStateStore,
-  type BrainTranscriptCursors,
-  brainPersistedStateFromWire,
-  freshBrainState,
-} from "./state-store.js";
+export { BrainStateStore } from "./state-store.js";
 export type { BrainChildAccess, BrainMemoryAccess } from "./tool-executor.js";
 export {
   BRAIN_TOOL,

@@ -1,11 +1,5 @@
-import type {
-  ChildCompletionRecord,
-  ChildRunRecord,
-  ChildSpawnReceipt,
-  ConversationRecord,
-  SessionKey,
-} from "@sidecar/runtime/vocabulary";
-import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import type { ChildCompletionRecord, ChildRunRecord } from "@sidecar/runtime/vocabulary";
+import type { WireRecord } from "@sidecar/wire";
 import { sessionSummary } from "./observation-inbox.js";
 import type { BrainDelivery, BrainTurnNotice, BrainWakeEvent } from "./wake-events.js";
 
@@ -204,75 +198,6 @@ export function childCompletionInputText(
 }
 
 /**
- * The session tools' answers, in the records the model reads. Each is the
- * host's typed answer rendered here and nowhere else, so the wire shape a
- * conversation reads of its children is the brain's own.
- */
-
-/** A spawn's receipt as the model reads it: accepted, never done, with the completion's route named. */
-export function childSpawnReceiptRecord(receipt: ChildSpawnReceipt): WireRecord {
-  return {
-    status: ACT_RESULT_STATUS.ACCEPTED,
-    accepted: true,
-    completed: false,
-    child_id: receipt.childId,
-    child_session_key: receipt.childSessionKey,
-    child_run_id: receipt.childRunId,
-    ...(receipt.model ? { model: receipt.model } : undefined),
-    context: receipt.context,
-    ...(receipt.contextNote ? { context_note: receipt.contextNote } : undefined),
-    depth: receipt.depth,
-    completion:
-      "arrives in this conversation as its own item when the child ends; do not poll for it",
-  };
-}
-
-/** One child as `subagents` lists it: its record's standing and, once it has one, its completion's delivery. */
-export function childSummaryRecord(
-  record: ChildRunRecord,
-  completion: ChildCompletionRecord | undefined,
-): WireRecord {
-  return {
-    child_id: record.childId,
-    ...(record.label !== undefined ? { label: record.label } : undefined),
-    status: record.status,
-    depth: record.depth,
-    context: record.context,
-    accepted_at: new Date(record.acceptedAt).toISOString(),
-    ...(record.settledAt !== undefined
-      ? { settled_at: new Date(record.settledAt).toISOString() }
-      : undefined),
-    ...(record.resultText !== undefined ? { has_result: true } : undefined),
-    ...(completion ? { delivery: completion.delivery, attempts: completion.attempts } : undefined),
-  };
-}
-
-/** The unarchived conversations as `sessions_list` answers them, the asking one marked current. */
-export function conversationListingRecord(
-  directory: readonly ConversationRecord[],
-  current: SessionKey,
-): WireRecord {
-  return {
-    status: ACT_RESULT_STATUS.ACCEPTED,
-    conversations: directory
-      .filter((record) => record.archivedAt === undefined)
-      .map((record) => ({
-        session_key: record.sessionKey,
-        kind: record.kind,
-        name: record.name,
-        last_activity_at: new Date(record.lastActivityAt).toISOString(),
-        ...(record.sessionKey === current ? { current: true } : undefined),
-      })),
-  };
-}
-
-/**
- * The words that carry sibling conversations' activity into a turn: one line
- * per notice, each the host's own compact account and never a transcript's
- * text, so main can say what its observed conversations did without having
- * read what the agents wrote.
- */
-/**
  * One compact line about a sibling conversation's turn, from the host's own
  * counts, the name it resolved for the session, and the words Luke himself
  * chose to say: never a transcript's text.
@@ -290,7 +215,12 @@ function noticeLine(notice: BrainTurnNotice): string {
   return `${new Date(notice.at).toISOString()} ${who}: ${notice.trigger} turn, ${said}${acts}`;
 }
 
-/** What the sibling conversations did since this one last ran, one line each. */
+/**
+ * What the sibling conversations did since this one last ran, one line each:
+ * the host's own compact account and never a transcript's text, so main can
+ * say what its observed conversations did without having read what the agents
+ * wrote.
+ */
 export function activityNoticesInputText(notices: readonly BrainTurnNotice[], now: number): string {
   return marked(
     BRAIN_INPUT_MARKER.ACTIVITY_NOTICES,

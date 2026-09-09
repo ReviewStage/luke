@@ -5,7 +5,7 @@ import {
   type SessionIdentity,
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { rejection, sameIdentity } from "./generation.js";
+import { rejection, sameIdentity } from "./records.js";
 import { type Settled, settledUnlessAborted } from "./settled.js";
 import { REFUSAL_REASON } from "./turn.js";
 import type { BrainTranscriptDelta, BrainWakeEvent } from "./wake-events.js";
