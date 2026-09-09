@@ -4,7 +4,11 @@ import type { CloudFetch } from "@sidecar/wire";
 import type { AdapterDiagnosticCallback } from "../shared/adapter-diagnostics.js";
 import { cloudPass } from "../shared/cloud-pass.js";
 import { conductorActions } from "./actions.js";
-import { conductorConversationEnds, readConductorConversation } from "./conversation.js";
+import {
+  conductorConversationEnds,
+  readConductorConversation,
+  readConductorTranscript,
+} from "./conversation.js";
 import { type ConductorPassCache, conductorObservations } from "./observe.js";
 import {
   CONDUCTOR_DEFAULT_API_URL,
@@ -32,9 +36,13 @@ export interface ConductorPluginOptions {
  * thing a press opens and a write reaches, and a workspace holding two chats
  * in two states is two facts, not one.
  *
- * No observation pass reads a word of a conversation. The one read of it is
- * the `conversation` handler, reached only at a developer's own ask, and it
- * keeps nothing but where in each transcript it last got to.
+ * No observation pass reads a word of a conversation. Its two reads are the
+ * `conversation` handler, reached at a developer's own press on a chat's
+ * screen, and the `transcript` handler, reached by the brain's own read tool
+ * in a turn, and between them they keep nothing but where in each transcript
+ * the last read got to. Neither takes a cursor from a pass: the incremental
+ * `transcriptSince` read stays unanswered, so an observation pass judges a
+ * cloud chat from what Conductor reports about it.
  */
 export function conductorPlugin(options: ConductorPluginOptions): SessionProviderPlugin {
   /**
@@ -81,6 +89,7 @@ export function conductorPlugin(options: ConductorPluginOptions): SessionProvide
     actions: conductorActions(pass),
 
     reads: {
+      transcript: (providerSessionId) => readConductorTranscript(pass, ends, providerSessionId),
       conversation: ({ request, observation }) =>
         readConductorConversation(pass, ends, observation.providerSessionId, request),
     },

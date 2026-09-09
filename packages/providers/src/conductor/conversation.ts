@@ -1,13 +1,21 @@
 import {
   ACTION_RESULT_STATUS,
+  CONVERSATION_MESSAGE_AUTHOR,
   type ConversationPage,
+  OMISSION_MARKER,
   type ProviderConversationMessage,
   type ProviderConversationResult,
+  type ProviderTranscriptResult,
 } from "@sidecar/session";
-import type { WireRecord } from "@sidecar/wire";
+import { oneLine, type WireRecord } from "@sidecar/wire";
 import { ADAPTER_FAILURE, AdapterFailure } from "../shared/adapter-failure.js";
 import type { CloudPass } from "../shared/cloud-pass.js";
 import { isDefined, recordsFromPage, textFromRecord } from "../shared/cloud-wire.js";
+import {
+  boundedTranscript,
+  TRANSCRIPT_BOUNDS,
+  transcriptLine,
+} from "../shared/jsonl-transcript.js";
 import { CONDUCTOR_PROVIDER_NAME, UUID_PATTERN } from "./vocabulary.js";
 import {
   CONDUCTOR_CONVERSATION_BOUNDS,
@@ -20,15 +28,18 @@ import {
 
 /**
  * One observed chat's stored conversation, through the documented transcript
- * read `GET …/sessions/{id}/messages`, only at a developer's own ask — never
- * from an observation pass. It reads the way a chat screen does: opened plain
- * it answers the newest page, walking to the transcript's end because the
- * endpoint pages ascending; handed `beforeOffset` it answers the older
- * history just before what the screen holds; handed `afterMessageId` it
- * answers only what is newer, behind the endpoint's own polling cursor. Every
- * mode keeps only the messages the store itself attributes, and everything
- * else is dropped unread. The page is answered to the caller and nothing is
- * kept here: the conversation stays the provider's.
+ * read `GET …/sessions/{id}/messages`, never from an observation pass. Two
+ * callers ask for it. A conversation screen reads the way a chat screen does:
+ * opened plain it answers the newest page, walking to the transcript's end
+ * because the endpoint pages ascending; handed `beforeOffset` it answers the
+ * older history just before what the screen holds; handed `afterMessageId`
+ * it answers only what is newer, behind the endpoint's own polling cursor.
+ * The brain's transcript read takes the same newest page, rendered in the
+ * line vocabulary every local transcript reader speaks, so one shape
+ * describes an agent wherever it runs. Every mode keeps only the messages the
+ * store itself attributes, and everything else is dropped unread. The page is
+ * answered to the caller and nothing is kept here: the conversation stays the
+ * provider's.
  */
 
 /**
@@ -266,6 +277,78 @@ function rememberEnd(
   }
 }
 
+/**
+ * What an agent message is spoken as when the pass could not map the chat's
+ * agent kind: Conductor is the one that stored it, so Conductor's name stands
+ * rather than a guess at whose words they are.
+ */
+const CONDUCTOR_SPEAKER_NAME = CONDUCTOR_PROVIDER_NAME;
+
+/** A read Conductor refused, named without echoing the provider's own words. */
+function readRefusal(failure: AdapterFailure, subject: string) {
+  return {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason:
+      failure.failure === ADAPTER_FAILURE.UNAUTHORIZED
+        ? `${CONDUCTOR_PROVIDER_NAME} rejected the configured API key.`
+        : `${CONDUCTOR_PROVIDER_NAME} did not answer, so the ${subject} could not be read.`,
+  };
+}
+
+/**
+ * The brain's whole-transcript read of one cloud chat: the newest page of its
+ * stored conversation, rendered one attributed message per line. It reaches
+ * the provider, so it answers only for a session the latest pass reported,
+ * the same guard the conversation read stands behind. A tail that history
+ * precedes opens with the omission marker, so the reader knows the chat did
+ * not begin there; a chat with no attributed message yet is not found rather
+ * than rendered empty.
+ */
+export async function readConductorTranscript(
+  pass: CloudPass,
+  ends: ConductorConversationEnds,
+  providerSessionId: string,
+): Promise<ProviderTranscriptResult> {
+  const observation = pass
+    .latest()
+    .find((candidate) => candidate.providerSessionId === providerSessionId);
+  if (!observation || !UUID_PATTERN.test(providerSessionId)) {
+    return {
+      status: ACTION_RESULT_STATUS.UNSUPPORTED,
+      reason: "That session is not one the latest observation pass reported.",
+    };
+  }
+  let tail: ProviderConversationResult;
+  try {
+    tail = await readTailPage(pass, ends, providerSessionId);
+  } catch (error) {
+    if (error instanceof AdapterFailure) return readRefusal(error, "transcript");
+    throw error;
+  }
+  if (tail.status !== ACTION_RESULT_STATUS.ACCEPTED) return tail;
+  const speaker = observation.agent?.displayName ?? CONDUCTOR_SPEAKER_NAME;
+  const lines = tail.messages.flatMap((message) => {
+    const words = oneLine(message.text, TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
+    if (!words) return [];
+    return [
+      message.author === CONVERSATION_MESSAGE_AUTHOR.USER
+        ? transcriptLine.developer(words)
+        : transcriptLine.agent(speaker, words),
+    ];
+  });
+  const rendered = boundedTranscript(lines);
+  if (rendered === undefined) {
+    return {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: "That session's transcript could not be found.",
+    };
+  }
+  return {
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+    transcript: tail.hasOlder ? `${OMISSION_MARKER}\n${rendered}` : rendered,
+  };
+}
+
 export async function readConductorConversation(
   pass: CloudPass,
   ends: ConductorConversationEnds,
@@ -313,15 +396,7 @@ export async function readConductorConversation(
     }
     return await readTailPage(pass, ends, providerSessionId);
   } catch (error) {
-    if (error instanceof AdapterFailure) {
-      return {
-        status: ACTION_RESULT_STATUS.REJECTED,
-        reason:
-          error.failure === ADAPTER_FAILURE.UNAUTHORIZED
-            ? `${CONDUCTOR_PROVIDER_NAME} rejected the configured API key.`
-            : `${CONDUCTOR_PROVIDER_NAME} did not answer, so the conversation could not be read.`,
-      };
-    }
+    if (error instanceof AdapterFailure) return readRefusal(error, "conversation");
     throw error;
   }
 }

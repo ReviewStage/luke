@@ -58,7 +58,8 @@ him to forget it.
 Luke speaks up when an agent is waiting for you, hits an error, or finishes. For
 a local agent whose transcript he can read (Claude Code, Codex, and OMP today)
 he reads what the transcript gained since he last looked; for a cloud agent he
-goes by what its provider reports about it. Either way he judges whether it is
+goes by what its provider reports about it, and for a Conductor agent he can
+also read the conversation itself when the status is not enough. Either way he judges whether it is
 worth interrupting you for, and says everything worth saying in one breath
 rather than a sentence per event.
 

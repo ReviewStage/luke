@@ -32,6 +32,7 @@ describeProviderContract(
     ],
     unadvertised: [],
     targetedControlId: "archive-workspace",
+    transcript: { sessionId: CONDUCTOR_SESSION_ID.IDLE, throughMessagesEndpoint: true },
     conversation: { sessionId: CONDUCTOR_SESSION_ID.IDLE },
   },
 );

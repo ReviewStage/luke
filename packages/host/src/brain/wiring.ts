@@ -635,12 +635,9 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
             reason: "No observed session matches that identity.",
           });
         }
-        if (session.location !== SESSION_LOCATION.LOCAL) {
-          return Promise.resolve({
-            status: ACTION_RESULT_STATUS.UNSUPPORTED,
-            reason: "A cloud session's conversation lives with its provider, not on this machine.",
-          });
-        }
+        // Whether a session's transcript can be read is the provider's own
+        // word: a local reader opens its file, Conductor reads its documented
+        // messages endpoint, and a provider naming no handler refuses.
         return dispatchRead(plugin, "transcript", identity.providerSessionId);
       },
       deliver: (delivery) => dependencies.deliver({ ...delivery, sessionKey }),

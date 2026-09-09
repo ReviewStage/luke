@@ -171,6 +171,37 @@ test("a transcript read stops at the observer that holds the session", async () 
   assert.deepEqual(asked, ["local"]);
 });
 
+test("a transcript read goes to the observer that reported the session, so a cloud session keeps its honest refusal", async () => {
+  const asked: string[] = [];
+  const local: SessionProviderPlugin = {
+    provider: { id: "merged", displayName: "merged" },
+    observe: async () => [OBSERVATION],
+    latest: () => [OBSERVATION],
+    reads: {
+      transcript: async () => {
+        asked.push("local");
+        return { status: ACTION_RESULT_STATUS.REJECTED, reason: "not found" };
+      },
+    },
+  };
+  const cloud: SessionProviderPlugin = {
+    provider: { id: "merged", displayName: "merged" },
+    observe: async () => [CLOUD_OBSERVATION],
+    latest: () => [CLOUD_OBSERVATION],
+  };
+  const merged = mergePlugins({ id: "merged", displayName: "Merged" }, [local, cloud]);
+
+  const read = await merged.reads?.transcript?.(CLOUD_OBSERVATION.providerSessionId);
+
+  assert.equal(read?.status, ACTION_RESULT_STATUS.UNSUPPORTED);
+  assert.deepEqual(asked, []);
+  assert.equal(
+    (await merged.reads?.transcript?.(OBSERVATION.providerSessionId))?.status,
+    ACTION_RESULT_STATUS.REJECTED,
+  );
+  assert.deepEqual(asked, ["local"]);
+});
+
 test("merging an observer of another provider is refused outright", () => {
   const other: SessionProviderPlugin = {
     provider: { id: "other", displayName: "Other" },

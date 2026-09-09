@@ -110,6 +110,11 @@ export interface ProviderFixtures {
     readonly sessionId: string;
     /** An observed session whose stored shape this build renders nothing from. */
     readonly unrenderableSessionId?: string;
+    /**
+     * Set for a cloud provider whose transcript read is its documented
+     * messages endpoint: the read reaches the provider, and only that route.
+     */
+    readonly throughMessagesEndpoint?: boolean;
   };
   /** Set when this provider documents a conversation read. */
   readonly conversation?: { readonly sessionId: string };
@@ -697,10 +702,10 @@ export function describeProviderContract(
     });
   }
 
-  // "The read performs nothing, reaches no provider, and answers only for a
-  // local session whose provider's transcript this build documents reading …;
-  // a cloud session's conversation lives with its provider and is never
-  // fetched."
+  // "The read performs nothing and answers only for a session whose provider's
+  // transcript this build documents reading: a local provider's own file, or
+  // a cloud provider's documented messages endpoint (Conductor today), which
+  // the read reaches and nothing else does."
   test(named("reads a transcript only where this build documents reading one"), async (t) => {
     const { plugin, api, cli } = await contractCase(t);
     await plugin.observe();
@@ -721,7 +726,15 @@ export function describeProviderContract(
         "a session whose transcript this build does not read answered with one",
       );
     }
-    assert.equal(api.requests().length, requestsAfterPass);
+    if (fixtures.transcript?.throughMessagesEndpoint) {
+      const routes = recordedRoutes(api.requests().slice(requestsAfterPass));
+      assert.ok(routes.length > 0, "the transcript read reached no messages endpoint");
+      for (const route of routes) {
+        assert.ok(route.includes("/messages"), `a transcript read reached ${route}`);
+      }
+    } else {
+      assert.equal(api.requests().length, requestsAfterPass);
+    }
     assert.equal(cli.invocations().length, invocationsAfterPass);
   });
 

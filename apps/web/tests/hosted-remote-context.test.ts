@@ -26,7 +26,6 @@ test("every phone row opens, and the newest per provider wears both recency labe
   );
   const [, newest, older] = text.split("\n");
   assert.ok(newest?.includes("open=true"));
-  assert.ok(newest?.includes("transcript=false"));
   assert.ok(newest?.includes("most_recent_for_provider=true"));
   assert.ok(newest?.includes("most_recent_openable_for_provider=true"));
   assert.ok(older?.includes("open=true"));
