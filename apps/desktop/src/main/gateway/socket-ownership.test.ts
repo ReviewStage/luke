@@ -6,6 +6,7 @@ import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realti
 import {
   type ChildRunService,
   createGatewayToken,
+  DeliveryLedger,
   GATEWAY_SHUTDOWN_DEFAULTS,
   GatewayClient,
   GATEWAY_LOOPBACK_HOST as HOST,
@@ -24,11 +25,10 @@ import {
 } from "@sidecar/runtime-contracts";
 import { isRecord, type WireValue } from "@sidecar/wire";
 import { CONVERSATION_DELETE_OUTCOME } from "../brain/conversation-deletion";
-import { BrainReplyDeliveries } from "../brain/reply-delivery";
 import type { ConversationOperations } from "../conversation-operations";
 import { VoiceReceiver } from "../voice-receiver";
 import { DESKTOP_NATIVE_NODE_ID, NODE_CAPABILITY } from "./desktop-node";
-import { createGatewayService } from "./service";
+import { createGatewayService, type GrantedWords } from "./service";
 
 /**
  * The ownership the process split claims, exercised over a real loopback
@@ -95,7 +95,9 @@ function fakeHost(options: { persistCancellations?: boolean } = {}) {
     },
     markAskRecorded: async () => true,
   } as unknown as BrainAgent;
-  const deliveries = new BrainReplyDeliveries({ nextDeliveryId: () => `delivery-${++ids}` });
+  const deliveries = new DeliveryLedger<GrantedWords>({
+    nextDeliveryId: () => `delivery-${++ids}`,
+  });
   const receiver = new VoiceReceiver();
   const service = createGatewayService({
     brain: {

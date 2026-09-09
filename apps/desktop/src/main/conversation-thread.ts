@@ -56,25 +56,27 @@ export class MemoryHistoryStore implements ConversationThreadStore {
   }
 }
 
-export interface ConversationThreadOptions<Reporter> {
+export interface ConversationThreadOptions {
   store: ConversationThreadStore;
   now?: () => number;
-  /** Hears the thread as every window should now draw it, less the window that reported the change. */
-  onChanged: (entries: readonly ConversationEntry[], except?: Reporter) => void;
+  /**
+   * Hears the thread as every window should now draw it, less the window that
+   * reported the change, named by the opaque token its client minted.
+   */
+  onChanged: (entries: readonly ConversationEntry[], except?: string) => void;
   report?: (message: string) => void;
 }
 
-/** `Reporter` is whatever names the window a change came from; the desktop hands its WebContents. */
-export class ConversationThread<Reporter = never> {
+export class ConversationThread {
   readonly #store: ConversationThreadStore;
   readonly #now: () => number;
-  readonly #onChanged: ConversationThreadOptions<Reporter>["onChanged"];
+  readonly #onChanged: ConversationThreadOptions["onChanged"];
   readonly #report: (message: string) => void;
   #entries: readonly ConversationEntry[] = [];
   #clearedAt: number | undefined;
   #epoch = 0;
 
-  constructor(options: ConversationThreadOptions<Reporter>) {
+  constructor(options: ConversationThreadOptions) {
     this.#store = options.store;
     this.#now = options.now ?? Date.now;
     this.#onChanged = options.onChanged;
@@ -98,7 +100,7 @@ export class ConversationThread<Reporter = never> {
    * is not taken, a line the store refused answers false, and a line whose
    * answer arrived after a later Clear is that Clear's to erase.
    */
-  async append(entries: readonly ConversationEntry[], except?: Reporter): Promise<boolean> {
+  async append(entries: readonly ConversationEntry[], except?: string): Promise<boolean> {
     const admitted = entries.filter((entry) => this.#afterClear(entry));
     if (admitted.length === 0) return true;
     const epoch = this.#epoch;

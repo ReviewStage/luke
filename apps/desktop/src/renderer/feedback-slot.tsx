@@ -1,6 +1,6 @@
 import type { FeedbackImage } from "@sidecar/feedback";
 import { FEEDBACK_LIMITS } from "@sidecar/feedback";
-import { WingFace as LukeFace } from "@sidecar/panel";
+import { ImageIcon, WingFace as LukeFace, RemoveIcon } from "@sidecar/panel";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useStagedFocus } from "./credential-entry";
 import { CONFIRMATION_ENTRANCE_MS, type FeedbackConfirmation } from "./feedback-confirmation";
@@ -13,7 +13,6 @@ import {
 import { imageFiles } from "./feedback-images";
 import { HIT_REGION } from "./panel-state";
 import { parseMilliseconds, parsePixels, STILL_MS } from "./session-motion";
-import { ImageIcon, RemoveIcon } from "./settings-icons";
 
 const MESSAGE_FIELD_ID = "feedback-message";
 

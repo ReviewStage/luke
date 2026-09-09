@@ -1,8 +1,8 @@
+import { CloseIcon, SearchIcon } from "@sidecar/panel";
 import { useRef } from "react";
 import { FOCUS_FRAME_LIMIT } from "./credential-entry";
 import { ERRAND_TARGET, errandTargetProps } from "./luke-errand";
 import { type ArrangedSessions, matchRanges, type SessionArrangement } from "./session-model";
-import { CloseIcon, SearchIcon } from "./settings-icons";
 
 /**
  * What the field is for, in the words the rows themselves use: it finds

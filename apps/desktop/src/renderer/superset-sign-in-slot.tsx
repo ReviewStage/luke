@@ -1,4 +1,4 @@
-import { ProviderMark } from "@sidecar/panel";
+import { ExternalIcon, ProviderMark } from "@sidecar/panel";
 import { SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/session";
 import { useEffect, useRef, useState } from "react";
 import { CREDENTIAL_SOURCE } from "#shared/messages/account";
@@ -7,7 +7,6 @@ import { SUPERSET_SIGN_IN_STAGE } from "#shared/messages/session";
 import { CREDENTIAL_PLACEHOLDER, useStagedFocus } from "./credential-entry";
 import { DestinationNote } from "./destination-note";
 import { HIT_REGION } from "./panel-state";
-import { ExternalIcon } from "./settings-icons";
 
 /**
  * The panel stood down to Superset's sign-in code, on the key slot's exact

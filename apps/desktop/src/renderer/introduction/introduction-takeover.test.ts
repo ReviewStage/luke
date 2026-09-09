@@ -5,7 +5,7 @@ import {
   INTRODUCTION_EVENT,
   type IntroductionBeat,
   nextIntroductionBeat,
-} from "./introduction-beats";
+} from "./introduction-takeover";
 
 test("the happy path walks every beat in order", () => {
   const walk = [

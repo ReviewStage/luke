@@ -7,11 +7,13 @@ import {
   SETTING_SIDE_EFFECT,
 } from "@sidecar/settings";
 import { ACT_RESULT_STATUS, isWireString } from "@sidecar/wire";
+import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
+import { APPLE_CALENDAR_ACCESS } from "#shared/apple-calendar";
 import { BRIDGE, type BridgeArgumentsFor } from "#shared/bridge";
 import type { AppSettings } from "#shared/messages/settings";
 import type { HostOperator } from "../gateway/host-operator";
 import type { MediaDuckController } from "../native/media-duck";
-import type { BridgeContext } from "../register-bridge";
+import { type BridgeContext, registerBridge } from "../register-bridge";
 import { type createSettingsHandler, SettingsRefusal } from "../settings-handler";
 import type { DockPresence } from "../window/dock-presence";
 import { HOTKEY_RANK, type HotkeyRegistrar } from "../window/hotkey-registrar";
@@ -26,6 +28,8 @@ import type { PanelManager } from "../window/panel-manager";
  * displays, the form factor, the keys, the duck.
  */
 export interface SettingsRowsIpcDependencies {
+  ipcMain: Pick<IpcMain, "handle" | "on">;
+  trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
   registerSettingHandler: ReturnType<typeof createSettingsHandler>;
   host: HostOperator;
   /** The opaque token naming the window that asked, so the host's change event is not echoed back to it. */
@@ -38,6 +42,8 @@ export interface SettingsRowsIpcDependencies {
   panels: PanelManager;
   mediaDuck: MediaDuckController;
   recordProductEvent: RecordProductEvent;
+  /** Opens a page in the default browser; the address lives in this file. */
+  openExternal: (url: string) => void;
 }
 
 export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencies): void {
@@ -184,4 +190,85 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     },
     refusal: "Could not reset those settings on this system.",
   });
+
+  registerConnectionRows(dependencies);
+}
+
+const CALENDAR_PRIVACY_PANE_URL =
+  "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars";
+
+/**
+ * The Linear and calendar rows, proxied to the host that owns each grant: the
+ * consent flows, the loopback redirects, the exchanges, the stored accounts
+ * and selections, the renewals and the revocations all run there, and the
+ * renderer's reply is the settings snapshot alone. The EventKit helper itself
+ * runs here, at the host's ask through the native node, so the consent dialog
+ * a connect raises is still raised on this machine by the press that asked for
+ * it. The one address opened from here — the Privacy pane a row's press names
+ * — is the client's own act.
+ */
+function registerConnectionRows(
+  dependencies: Pick<
+    SettingsRowsIpcDependencies,
+    "ipcMain" | "trustedSender" | "registerSettingHandler" | "host" | "reporterOf" | "openExternal"
+  >,
+): void {
+  const { ipcMain, trustedSender, registerSettingHandler, host, reporterOf, openExternal } =
+    dependencies;
+  registerSettingHandler(BRIDGE.connectLinear, {
+    validate: () => undefined,
+    save: (_value, context) => host.connectLinear(reporterOf(context)),
+    refusal: "Could not connect Linear on this system.",
+  });
+  registerSettingHandler(BRIDGE.disconnectLinear, {
+    validate: () => undefined,
+    save: (_value, context) => host.disconnectLinear(reporterOf(context)),
+    refusal: "Could not disconnect Linear on this system.",
+  });
+  registerSettingHandler(BRIDGE.connectGoogleCalendar, {
+    validate: () => undefined,
+    save: (_value, context) => host.connectGoogleCalendar(reporterOf(context)),
+    refusal: "Could not connect Google Calendar on this system.",
+  });
+  registerSettingHandler(BRIDGE.removeCalendarAccount, {
+    validate(accountId) {
+      return accountId;
+    },
+    save: (accountId, context) => host.removeCalendarAccount(accountId, reporterOf(context)),
+    refusal: "Could not disconnect that account on this system.",
+  });
+  registerSettingHandler(BRIDGE.connectAppleCalendar, {
+    validate: () => undefined,
+    save: (_value, context) => host.connectAppleCalendar(reporterOf(context)),
+    refusal: "Could not connect Apple Calendar on this system.",
+  });
+  registerSettingHandler(BRIDGE.disconnectAppleCalendar, {
+    validate: () => undefined,
+    save: (_value, context) => host.disconnectAppleCalendar(reporterOf(context)),
+    refusal: "Could not disconnect Apple Calendar on this system.",
+  });
+  registerSettingHandler(BRIDGE.setCalendarSelected, {
+    validate(accountId, calendarId, selected) {
+      return { accountId, calendarId, selected };
+    },
+    save: ({ accountId, calendarId, selected }, context) =>
+      host.setCalendarSelected(accountId, calendarId, selected, reporterOf(context)),
+    refusal: "Could not save that calendar choice on this system.",
+  });
+  registerBridge(
+    BRIDGE,
+    {
+      cancelLinearSignIn: () => host.cancelLinearSignIn(),
+      reopenLinearSignIn: () => host.reopenLinearSignIn(),
+      cancelGoogleCalendarSignIn: () => host.cancelGoogleCalendarSignIn(),
+      reopenGoogleCalendarSignIn: () => host.reopenGoogleCalendarSignIn(),
+      cancelAppleCalendarConnect: () => host.cancelAppleCalendarConnect(),
+      async appleCalendarAccessStatus() {
+        return (await host.appleCalendarAccessStatus()) ?? APPLE_CALENDAR_ACCESS.NOT_DETERMINED;
+      },
+      refreshCalendars: () => host.refreshCalendars(),
+      openCalendarSettings: () => openExternal(CALENDAR_PRIVACY_PANE_URL),
+    },
+    { ipcMain, trustedSender },
+  );
 }

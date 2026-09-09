@@ -15,18 +15,17 @@ import {
   maximumTypedAskLength,
 } from "@sidecar/realtime";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
-import { GatewayClient, InProcessTransport } from "@sidecar/runtime";
+import { DeliveryLedger, GatewayClient, InProcessTransport } from "@sidecar/runtime";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_EVENT, MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import { BRIDGE } from "#shared/bridge";
 import type { BrainAskWait, BrainReplyClaimResult } from "#shared/messages/brain";
 import type { ConversationOperations } from "../conversation-operations";
 import { createGatewayOperator } from "../gateway/operator";
-import { createGatewayService } from "../gateway/service";
+import { createGatewayService, type GrantedWords } from "../gateway/service";
 import { operatorOverBrain } from "../gateway/testing";
 import { VoiceReceiver } from "../voice-receiver";
 import { followBrainRequests, publishRuns, registerBrainIpc } from "./ipc";
-import { BrainReplyDeliveries } from "./reply-delivery";
 
 const NOW = 1_800_000_000_000;
 
@@ -518,7 +517,9 @@ function registered(live: () => BrainRequestRecord | undefined) {
   // SAFETY: as above, the panel.
   const panelSender = {} as WebContents;
   let ids = 0;
-  const deliveries = new BrainReplyDeliveries({ nextDeliveryId: () => `delivery-${++ids}` });
+  const deliveries = new DeliveryLedger<GrantedWords>({
+    nextDeliveryId: () => `delivery-${++ids}`,
+  });
   const receiver = new VoiceReceiver();
   const acknowledged: string[] = [];
   const offered: unknown[] = [];
@@ -628,8 +629,8 @@ test("a claim is granted only to the voice window, for the epoch the offer went 
   const f = registered(() => ended);
   const first = f.receiver.begin();
   f.receiver.markReady(first);
-  f.deliveries.observe([record({ status: BRAIN_REQUEST_STATUS.RUNNING })]);
-  f.deliveries.published(ended, "gen-1");
+  f.deliveries.observe([{ runId: "run-1", ended: false }]);
+  f.deliveries.published(ended.runId, "gen-1");
   const offer = f.deliveries.nextOffer(first);
   assert.ok(offer);
   // A panel naming the right ids and epoch is refused.
@@ -669,7 +670,7 @@ test("a wait grants the asking call the words only for the current voice rendere
   const f = registered(() => live);
   const epoch = f.receiver.begin();
   f.receiver.markReady(epoch);
-  f.deliveries.observe([live]);
+  f.deliveries.observe([{ runId: live.runId, ended: false }]);
   // Still running: the record, no grant. The record crossed the wire, so a
   // field the fixture left explicitly undefined is simply absent.
   assert.deepEqual(await f.wait(f.voiceSender, "run-1", epoch), {
@@ -684,7 +685,7 @@ test("a wait grants the asking call the words only for the current voice rendere
   assert.equal((await f.wait(f.panelSender, "run-1", epoch)).speak, false);
   assert.equal((await f.wait(f.voiceSender, "run-1", epoch - 1)).speak, false);
   // The offer path had already offered it; the call's grant withdraws that offer.
-  f.deliveries.published(live, "gen-1");
+  f.deliveries.published(live.runId, "gen-1");
   const offer = f.deliveries.nextOffer(epoch);
   assert.ok(offer);
   assert.deepEqual(await f.wait(f.voiceSender, "run-1", epoch), {

@@ -1,11 +1,14 @@
 import type { BrainAgent } from "@sidecar/brain";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
-import { GatewayClient, InProcessTransport } from "@sidecar/runtime";
+import { DeliveryLedger, GatewayClient, InProcessTransport } from "@sidecar/runtime";
 import { GATEWAY_CLIENT_ROLE, MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
-import { BrainReplyDeliveries } from "../brain/reply-delivery";
 import type { ConversationOperations } from "../conversation-operations";
 import { createGatewayOperator, type GatewayOperator } from "./operator";
-import { createGatewayService, type GatewayServiceDependencies } from "./service";
+import {
+  createGatewayService,
+  type GatewayServiceDependencies,
+  type GrantedWords,
+} from "./service";
 
 /**
  * Test support: the operator a window's ask crosses, stood over one brain
@@ -38,7 +41,7 @@ export function operatorOverBrain(options: {
     conversations: {} as ConversationOperations,
     memory: { status: () => ({}) },
     observedSessionCount: () => 0,
-    deliveries: new BrainReplyDeliveries({ nextDeliveryId: () => `delivery-${++ids}` }),
+    deliveries: new DeliveryLedger<GrantedWords>({ nextDeliveryId: () => `delivery-${++ids}` }),
     receiver: { isReady: () => false, epoch: () => 0 },
     recordConversationEntry: options.recordConversationEntry,
     now: Date.now,

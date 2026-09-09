@@ -9,7 +9,17 @@ import {
   CREDENTIAL_PROVIDER_ID,
   VOICE_CREDENTIAL_PROVIDER,
 } from "@sidecar/credentials/vocabulary";
-import { ProviderMark } from "@sidecar/panel";
+import {
+  ChevronIcon,
+  CloseIcon,
+  DownloadIcon,
+  MegaphoneIcon,
+  PlugIcon,
+  PowerIcon,
+  ProviderMark,
+  SearchIcon,
+  UserIcon,
+} from "@sidecar/panel";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   PROVIDER_ID,
@@ -33,16 +43,6 @@ import { FOCUS_FRAME_LIMIT } from "./credential-entry";
 import { ERRAND_TARGET_ATTRIBUTE } from "./luke-errand";
 import { searchTokens } from "./session-model";
 import { Highlighted } from "./session-search";
-import {
-  ChevronIcon,
-  CloseIcon,
-  DownloadIcon,
-  MegaphoneIcon,
-  PlugIcon,
-  PowerIcon,
-  SearchIcon,
-  UserIcon,
-} from "./settings-icons";
 import {
   SETTINGS_SUBVIEW_LIST,
   SETTINGS_VIEW,

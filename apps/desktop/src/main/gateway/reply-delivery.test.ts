@@ -1,9 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { BrainRequestRecord } from "@sidecar/brain";
-import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
+import {
+  BRAIN_REQUEST_ORIGIN,
+  BRAIN_REQUEST_STATUS,
+  isTerminalBrainRequestStatus,
+} from "@sidecar/brain/requests";
+import { DeliveryLedger, type DeliveryRecord } from "@sidecar/runtime";
 import { DELIVERY_STATE } from "@sidecar/runtime-contracts";
-import { type BrainReplyClaimContext, BrainReplyDeliveries } from "./reply-delivery";
+import type { BrainReplyClaimResult } from "#shared/messages/brain";
+import {
+  type BrainReplyClaimContext,
+  deliverable,
+  type GrantedWords,
+  ledgerContext,
+} from "./service";
 
 const NOW = 1_800_000_000_000;
 
@@ -35,9 +46,58 @@ function ended(overrides: Partial<BrainRequestRecord> = {}): BrainRequestRecord 
   });
 }
 
+/**
+ * The ledger as the Gateway service drives it: the service's own `deliverable`
+ * and `ledgerContext` over `DeliveryLedger`, so these cases exercise the
+ * expressions production runs rather than a copy of them.
+ */
 function ledger() {
   let ids = 0;
-  return new BrainReplyDeliveries({ nextDeliveryId: () => `delivery-${++ids}` });
+  const deliveries = new DeliveryLedger<GrantedWords>({
+    nextDeliveryId: () => `delivery-${++ids}`,
+  });
+  return {
+    observe: (records: readonly BrainRequestRecord[]): void =>
+      deliveries.observe(
+        records.map((record) => ({
+          runId: record.runId,
+          ended: isTerminalBrainRequestStatus(record.status),
+        })),
+      ),
+    published: (record: BrainRequestRecord, generationId: string): DeliveryRecord | undefined =>
+      deliverable(record) ? deliveries.published(record.runId, generationId) : undefined,
+    grantOnCall: (
+      record: BrainRequestRecord,
+      generationId: string,
+      epoch: number,
+      context: BrainReplyClaimContext,
+    ): boolean =>
+      deliverable(record) &&
+      deliveries.grantOnCall(record.runId, generationId, epoch, ledgerContext(context)),
+    claim: (
+      runId: string,
+      deliveryId: string,
+      epoch: number,
+      context: BrainReplyClaimContext,
+    ): BrainReplyClaimResult => {
+      const claim = deliveries.claim(runId, deliveryId, epoch, ledgerContext(context));
+      return claim.granted
+        ? { granted: true, words: claim.words.words, origin: claim.words.origin }
+        : { granted: false };
+    },
+    acknowledge: (runId: string, deliveryId: string, epoch: number): boolean =>
+      deliveries.acknowledge(runId, deliveryId, epoch),
+    nextOffer: (epoch: number) => deliveries.nextOffer(epoch),
+    reset: () => deliveries.reset(),
+    /** Queued or offered: everything owed that no receiver has taken in hand. */
+    unclaimed: (): readonly DeliveryRecord[] =>
+      deliveries
+        .records()
+        .filter(
+          (delivery) =>
+            delivery.state === DELIVERY_STATE.QUEUED || delivery.state === DELIVERY_STATE.OFFERED,
+        ),
+  };
 }
 
 /** A receiver ready on the epoch given, a store holding "gen-1", and a brain holding the record given. */

@@ -1,4 +1,4 @@
-import { ProviderMark } from "@sidecar/panel";
+import { ExternalIcon, ProviderMark } from "@sidecar/panel";
 import { useRef } from "react";
 import {
   CONSENT_SERVICE_NAME,
@@ -6,7 +6,6 @@ import {
   type ConsentServiceId,
 } from "#shared/consent-services";
 import { HIT_REGION } from "./panel-state";
-import { ExternalIcon } from "./settings-icons";
 
 /**
  * What the connect entry holds: nothing to type, only which service's page is

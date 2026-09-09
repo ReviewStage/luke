@@ -23,12 +23,12 @@ import {
   serveRuntimeStore,
 } from "@sidecar/runtime-store";
 import { isRecord, type WireRecord } from "@sidecar/wire";
-import { type MemoryWiringDependencies, wireMemory } from "./memory-wiring";
+import { composeNotebookMemory, type NotebookMemoryDependencies } from "./runtime-host";
 
 const NOW = 1_800_000_000_000;
 
 function agentRoot() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "luke-memory-wiring-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "luke-notebook-memory-"));
   fs.mkdirSync(path.join(root, "workspace", "memory"), { recursive: true });
   fs.writeFileSync(
     path.join(root, "workspace", "MEMORY.md"),
@@ -81,7 +81,7 @@ function adapter(
   return built;
 }
 
-async function harness(overrides: Partial<MemoryWiringDependencies> = {}) {
+async function harness(overrides: Partial<NotebookMemoryDependencies> = {}) {
   const root = agentRoot();
   const { store, close } = client();
   await store.open({
@@ -116,8 +116,7 @@ async function harness(overrides: Partial<MemoryWiringDependencies> = {}) {
   const history = new Map<SessionKey, ConversationEntry[]>();
   const embedding = adapter();
   const reports: string[] = [];
-  const wiring = wireMemory({
-    persistent: true,
+  const wiring = composeNotebookMemory({
     client: () => store,
     embeddingAdapter: () => embedding,
     workspaceDirectory: () => path.join(root, "workspace"),

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { usePrefersReducedMotion } from "./luke-face-mood";
+import { usePrefersReducedMotion } from "./use-reduced-motion";
 import { frameLevel, VOICE_ACTIVITY_THRESHOLD, voiceActiveAt } from "./voice/voice-level-meter";
 
 /**
