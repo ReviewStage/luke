@@ -13,7 +13,7 @@ import {
   type JsonValue,
 } from "@sidecar/wire/testing";
 import { ADAPTER_FAILURE, AdapterFailure } from "../shared/adapter-failure.js";
-import type { CliRun } from "../shared/cli-session-adapter.js";
+import type { CliRun } from "../shared/cli-pass.js";
 
 /**
  * What a recorded provider fixture is, and how one is read back: the home a

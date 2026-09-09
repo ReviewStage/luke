@@ -11,7 +11,7 @@ import {
   type WorkspaceProject,
 } from "@sidecar/session";
 import { text, UNKNOWN_ACT_STATUS, wireRecord } from "@sidecar/wire";
-import { repositoryLabel } from "../shared/cloud-session-adapter.js";
+import { repositoryLabel } from "../shared/cloud-wire.js";
 import {
   canIgnoreSqliteError,
   defaultSqliteModule,

@@ -11,19 +11,17 @@ import {
   SESSION_STATUS,
   UNSUPPORTED_BY_OBSERVATION,
 } from "@sidecar/session";
-import { isWireString } from "@sidecar/wire";
+import { type CloudFetch, isWireString } from "@sidecar/wire";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
 import { ADAPTER_DIAGNOSTIC_KIND, type AdapterDiagnosticCallback } from "./adapter-diagnostics.js";
+import { type CloudAdapterOptions, CloudSessionAdapter } from "./cloud-session-adapter.js";
 import {
   CLOUD_ADAPTER_DEFAULTS,
-  type CloudAdapterOptions,
-  type CloudFetch,
   type CloudRequest,
-  CloudSessionAdapter,
   isDefined,
   knownValue,
   requestDeadlineMs,
-} from "./cloud-session-adapter.js";
+} from "./cloud-wire.js";
 
 const TEST_TIME = Date.parse("2026-08-12T02:45:00.000Z");
 const TEST_BASE_URL = "https://api.provider.test";
@@ -70,8 +68,11 @@ class StubCloudAdapter extends CloudSessionAdapter {
   collected: readonly ProviderSessionObservation[] = [];
   collectError: Error | undefined;
 
-  constructor(options: CloudAdapterOptions) {
-    super({ provider: STUB_PROVIDER, defaultBaseUrl: TEST_BASE_URL }, options);
+  constructor({
+    requestHeaders,
+    ...options
+  }: CloudAdapterOptions & { requestHeaders?: Readonly<Record<string, string>> }) {
+    super({ provider: STUB_PROVIDER, defaultBaseUrl: TEST_BASE_URL, requestHeaders }, options);
   }
 
   protected override forgetCachedIdentity(): void {
@@ -142,8 +143,11 @@ function adapterFor(
 
 /** A cloud adapter that observes and routes nothing. */
 class ObservationOnlyAdapter extends CloudSessionAdapter {
-  constructor(options: CloudAdapterOptions) {
-    super({ provider: STUB_PROVIDER, defaultBaseUrl: TEST_BASE_URL }, options);
+  constructor({
+    requestHeaders,
+    ...options
+  }: CloudAdapterOptions & { requestHeaders?: Readonly<Record<string, string>> }) {
+    super({ provider: STUB_PROVIDER, defaultBaseUrl: TEST_BASE_URL, requestHeaders }, options);
   }
 
   protected async collect(): Promise<readonly ProviderSessionObservation[]> {
@@ -196,16 +200,10 @@ test("authenticates a bounded read and encodes the route a subclass asked for", 
   assert.equal(request.body, undefined);
 });
 
-/** Stands in for a provider that asks for its own media type and version pin. */
-class PinnedHeaderAdapter extends StubCloudAdapter {
-  protected override requestHeaders() {
-    return { Accept: "application/vnd.stub+json", "X-Stub-Api-Version": "2026-03-10" };
-  }
-}
-
-test("lets a subclass pin its own request headers without touching the credential", async () => {
+test("lets a provider pin its own request headers without touching the credential", async () => {
   const { fetch, requests } = recordingFetch(() => jsonResponse({}));
-  const adapter = new PinnedHeaderAdapter({
+  const adapter = new StubCloudAdapter({
+    requestHeaders: { Accept: "application/vnd.stub+json", "X-Stub-Api-Version": "2026-03-10" },
     readApiKey: async () => TEST_API_KEY,
     baseUrl: TEST_BASE_URL,
     fetch,
@@ -325,8 +323,11 @@ function deferred() {
  * by the account that answers, not by anything cached on the adapter.
  */
 class AccountBoundAdapter extends CloudSessionAdapter {
-  constructor(options: CloudAdapterOptions) {
-    super({ provider: STUB_PROVIDER, defaultBaseUrl: TEST_BASE_URL }, options);
+  constructor({
+    requestHeaders,
+    ...options
+  }: CloudAdapterOptions & { requestHeaders?: Readonly<Record<string, string>> }) {
+    super({ provider: STUB_PROVIDER, defaultBaseUrl: TEST_BASE_URL, requestHeaders }, options);
   }
 
   protected async collect(request: CloudRequest): Promise<readonly ProviderSessionObservation[]> {

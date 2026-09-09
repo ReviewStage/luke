@@ -29,11 +29,10 @@ import {
 } from "@sidecar/session";
 import { isRecord, text, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import { ADAPTER_FAILURE, AdapterFailure } from "../shared/adapter-failure.js";
+import { type CloudAdapterOptions, CloudSessionAdapter } from "../shared/cloud-session-adapter.js";
 import {
   CLOUD_ADAPTER_DEFAULTS,
-  type CloudAdapterOptions,
   type CloudRequest,
-  CloudSessionAdapter,
   type CloudWriteRoute,
   isDefined,
   knownValue,
@@ -41,7 +40,7 @@ import {
   repositoryLabel,
   textFromRecord,
   timestampFromRecord,
-} from "../shared/cloud-session-adapter.js";
+} from "../shared/cloud-wire.js";
 import { CONDUCTOR_AGENT_BY_TYPE } from "./session-applications.js";
 
 // Shared with the credential registry so the key the user saves and the

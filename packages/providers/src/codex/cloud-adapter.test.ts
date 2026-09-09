@@ -14,7 +14,7 @@ import {
   type AdapterDiagnosticCallback,
 } from "../shared/adapter-diagnostics.js";
 import { ADAPTER_FAILURE, AdapterFailure } from "../shared/adapter-failure.js";
-import { CLI_ADAPTER_DEFAULTS, type CliRun } from "../shared/cli-session-adapter.js";
+import { CLI_ADAPTER_DEFAULTS, type CliRun } from "../shared/cli-pass.js";
 import { CodexCloudSessionAdapter } from "./cloud-adapter.js";
 
 const TEST_TIME = Date.parse("2026-08-18T02:45:00.000Z");

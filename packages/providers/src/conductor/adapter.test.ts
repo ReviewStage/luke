@@ -8,9 +8,10 @@ import {
   SESSION_STATUS,
   UNSUPPORTED_BY_OBSERVATION,
 } from "@sidecar/session";
+import type { CloudFetch } from "@sidecar/wire";
 import type { JsonObject, JsonValue } from "@sidecar/wire/testing";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
-import { CLOUD_ADAPTER_DEFAULTS, type CloudFetch } from "../shared/cloud-session-adapter.js";
+import { CLOUD_ADAPTER_DEFAULTS } from "../shared/cloud-wire.js";
 import { CONDUCTOR_PROVIDER, ConductorSessionAdapter } from "./adapter.js";
 
 const TEST_TIME = Date.parse("2026-08-12T02:45:00.000Z");

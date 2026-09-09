@@ -29,7 +29,7 @@ import {
   recordedRoutes,
   temporaryDirectory,
 } from "@sidecar/wire/testing";
-import type { CliRun } from "../shared/cli-session-adapter.js";
+import type { CliRun } from "../shared/cli-pass.js";
 import {
   assertGoldenJson,
   assertGoldenText,

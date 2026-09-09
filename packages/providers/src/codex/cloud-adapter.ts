@@ -12,11 +12,8 @@ import {
   type WorkspaceProject,
 } from "@sidecar/session";
 import { isRecord, isWireNumber, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
-import {
-  type CliAdapterOptions,
-  type CliReadRequest,
-  CliSessionAdapter,
-} from "../shared/cli-session-adapter.js";
+import type { CliReadRequest } from "../shared/cli-pass.js";
+import { type CliAdapterOptions, CliSessionAdapter } from "../shared/cli-session-adapter.js";
 import {
   isDefined,
   knownValue,
@@ -24,7 +21,7 @@ import {
   repositoryLabel,
   textFromRecord,
   timestampFromRecord,
-} from "../shared/cloud-session-adapter.js";
+} from "../shared/cloud-wire.js";
 import { CODEX_PROVIDER } from "./adapter.js";
 
 /**
