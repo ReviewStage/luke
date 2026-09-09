@@ -110,6 +110,15 @@ test("stopping kills the helper and silences everything after", () => {
   assert.deepEqual(context.events, []);
 });
 
+test("a second start is refused rather than standing up a helper nobody reads", () => {
+  const context = harness();
+  assert.equal(context.watcher.start(), true);
+  assert.equal(context.watcher.start(), false);
+
+  context.emit("output muted=1 volume=0.42\n");
+  assert.deepEqual(context.events, ["state:1:0.42"]);
+});
+
 test("a line that does not parse is dropped rather than guessed at", () => {
   assert.equal(parseOutputLine("output muted=2 volume=0.5"), undefined);
   assert.equal(parseOutputLine("output muted=1 volume=1.5"), undefined);

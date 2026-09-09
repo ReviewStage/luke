@@ -84,6 +84,10 @@ export function lineWatcher<State>(options: LineWatcherOptions<State>): LineWatc
 
   return {
     start(): boolean {
+      // One helper per watcher: a second start would orphan a live process
+      // whose lines no one reads, and a restart after an ending would reopen a
+      // watch already reported unavailable.
+      if (helper || done) return false;
       const started = new NativeHelper({
         binary: options.binary,
         ...(options.arguments ? { arguments: options.arguments } : undefined),

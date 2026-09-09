@@ -61,6 +61,8 @@ export function microphoneRouteWatcher(
     ...(spawnHelper ? { spawnProcess: spawnHelper } : undefined),
   });
 
+  // The watcher's own `send` stays off the caller-facing shape: the one word
+  // ever written to this helper is the probe the build fixed.
   return {
     start: () => watch.start(),
     probe: () => {
