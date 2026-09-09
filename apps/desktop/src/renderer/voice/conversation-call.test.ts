@@ -477,6 +477,42 @@ function settleReply(context: Harness): void {
   context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
 }
 
+/**
+ * A developer's turn committed and the reply to it confirmed: the state every
+ * question about how a reply ends is asked from.
+ */
+async function replyUnderWay(): Promise<Harness> {
+  const context = harness();
+  await context.session.connect();
+  await holdTurn(context);
+  context.session.endTurn(true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  return context;
+}
+
+/** The server saying it has finished producing the reply. */
+function generationFinished(context: Harness): void {
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE, response: { id: "resp-1" } });
+}
+
+/** The server saying the reply's audio has run out. */
+function serverDrainedTheAudio(context: Harness): void {
+  context.emit({
+    type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED,
+    response_id: "resp-1",
+  });
+}
+
+/**
+ * The meter reporting a silence it has already decided is Luke's and long
+ * enough to be an ending — the only ending a call that reports none of its own
+ * ever gets.
+ */
+function meterWentQuiet(context: Harness): void {
+  context.session.reportRemoteAudioIdle();
+}
+
 /** One briefing the brain decided, worded about one session, decided a moment ago. */
 function briefingAbout(id: string, briefing = `Claude Code finished ${id}.`): BriefingSpeech {
   return { kind: BRIEFING_SPEECH_KIND, briefing, decidedAt: Date.now() };
@@ -1113,116 +1149,78 @@ test("a press does not outlive the call it failed to open", async () => {
   assert.equal(context.microphoneEnabled(), false);
 });
 
-test("a reply that runs out before the model says so still ends", async () => {
-  const context = harness();
-  await context.session.connect();
-  await holdTurn(context);
-  context.session.endTurn(true);
-  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+test("a reply ends on the second of its two endings, in either order", async (t) => {
+  // Generation finishing and playback finishing are two facts with no fixed
+  // order, and the turn holds until both have landed. Both endings the call
+  // can be told of run both ways round: the meter's quiet, on a call that has
+  // never reported an ending of its own, and the server's own drain.
+  for (const endingFirst of [false, true]) {
+    for (const ending of [meterWentQuiet, serverDrainedTheAudio]) {
+      const context = await replyUnderWay();
+      const [first, second] = endingFirst
+        ? [ending, generationFinished]
+        : [generationFinished, ending];
 
-  // Playback finishing and generation finishing have no fixed order. The meter
-  // reports an edge, so this quiet is the only one there will be — waiting for
-  // a second would hold the turn open until the settle timeout.
-  context.session.reportRemoteAudioIdle();
-  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
-  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
+      first(context);
+      // A turn ended on one of the two takes the meter and the face down
+      // while Luke is still audible, and lets the next press land over him.
+      assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 
-  assert.equal(context.session.status, REALTIME_STATUS.READY);
-});
+      second(context);
+      assert.equal(context.session.status, REALTIME_STATUS.READY);
+      assert.deepEqual(reportedErrors(context), []);
+    }
+  }
 
-test("the reply ends when the server says the audio ran out", async () => {
-  const context = harness();
-  await context.session.connect();
-  await holdTurn(context);
-  context.session.endTurn(true);
-  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
-
-  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
-  // Generation finishing is not speech finishing, so the turn holds.
-  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
-
-  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
-  assert.equal(context.session.status, REALTIME_STATUS.READY);
-});
-
-test("audio draining before response.done does not free the turn early", async () => {
-  const context = harness();
-  await context.session.connect();
-  await holdTurn(context);
-  context.session.endTurn(true);
-  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
-
-  // The audio runs out while the server still owes the reply its done —
-  // generation finishing and playback finishing have no fixed order. Until
-  // that done the conversation holds an active response, and a turn ended
-  // here offers READY to callers with a reply of their own to ask for.
-  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
-  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
-
+  // Until the `done` lands the conversation still holds an active response.
   // The briefing that queued behind the reply is refused rather than sent:
-  // the create it would open is the one the service refuses as a
-  // conversation already in progress, surfacing the refusal as a voice error
-  // with the briefing lost behind it.
-  assert.equal(context.session.speak(briefingAbout("session-a")), false);
-  assert.equal(
-    context.sent.filter((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE).length,
-    1,
-  );
+  // the create it would open is the one the service refuses as a conversation
+  // already in progress, surfacing the refusal as a voice error with the
+  // briefing lost behind it.
+  const holding = await replyUnderWay();
+  serverDrainedTheAudio(holding);
+  assert.equal(holding.session.speak(briefingAbout("session-a")), false);
+  assert.equal(responseCreates(holding).length, 1);
+  generationFinished(holding);
+  assert.equal(holding.session.speak(briefingAbout("session-a")), true);
+  assert.deepEqual(reportedErrors(holding), []);
 
-  // The server concluding the reply is what ends the turn — the drain's
-  // deferred ending lands with the done — and only then is the next reply
-  // welcome.
-  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE, response: { id: "resp-1" } });
-  assert.equal(context.session.status, REALTIME_STATUS.READY);
-  assert.equal(context.session.speak(briefingAbout("session-a")), true);
-  assert.deepEqual(reportedErrors(context), []);
+  // A turn that never ends is worse than one that ends early: the settle
+  // backstop closes what a missing `done` left open.
+  const stranded = await replyUnderWay();
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  serverDrainedTheAudio(stranded);
+  assert.equal(stranded.session.status, REALTIME_STATUS.RESPONDING);
+  t.mock.timers.tick(REALTIME_SETTLE_TIMEOUT_MS);
+  assert.equal(stranded.session.status, REALTIME_STATUS.READY);
 });
 
-test("audio resuming after a mid-reply drain keeps the turn for the second half", async () => {
-  const context = harness();
-  await context.session.connect();
-  await holdTurn(context);
-  context.session.endTurn(true);
-  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
+test("audio resuming un-remembers the drain and restarts its backstop", async (t) => {
+  const context = await replyUnderWay();
+  t.mock.timers.enable({ apis: ["setTimeout"] });
 
   // A reply with two things to say can drain the buffer between them. The
-  // stop is remembered as a deferred ending, and the audio starting again is
+  // drain is remembered as a deferred ending, and the audio starting again is
   // what says it was a pause instead.
-  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
-  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STARTED });
-
-  // Generation concludes while the second half is still audible. A stale
-  // drain here ended the turn under it — the face and the duck released
-  // while Luke was still speaking.
-  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE, response: { id: "resp-1" } });
-  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
-
-  // The second half's own drain is the ending that lands.
-  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
-  assert.equal(context.session.status, REALTIME_STATUS.READY);
-  assert.deepEqual(reportedErrors(context), []);
-});
-
-test("a drain's backstop restarts when the audio resumes", async (t) => {
-  const context = harness();
-  await context.session.connect();
-  await holdTurn(context);
-  context.session.endTurn(true);
-  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
-
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
+  serverDrainedTheAudio(context);
   t.mock.timers.tick(REALTIME_SETTLE_TIMEOUT_MS - 1_000);
-
-  // The resume is when Luke was last heard, so the backstop measures from
-  // it: the pause's nearly spent clock must not cut the second half short.
   context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STARTED });
+
+  // The resume is when Luke was last heard, so the backstop measures from it:
+  // the pause's nearly spent clock must not cut the second half short.
   t.mock.timers.tick(1_000);
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 
-  // A done that never comes still meets the restarted backstop.
-  t.mock.timers.tick(REALTIME_SETTLE_TIMEOUT_MS);
+  // Generation concludes while the second half is still audible. A stale
+  // drain here ended the turn under it — the face and the duck released while
+  // Luke was still speaking.
+  generationFinished(context);
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+
+  // The second half's own drain is the ending that lands.
+  serverDrainedTheAudio(context);
   assert.equal(context.session.status, REALTIME_STATUS.READY);
+  assert.deepEqual(reportedErrors(context), []);
 });
 
 test("a briefing offered mid-reply waits out the server's own ending", async () => {
@@ -1283,23 +1281,6 @@ test("a briefing offered mid-reply waits out the server's own ending", async () 
   assert.deepEqual(reportedErrors(context), []);
 });
 
-test("a done that never follows the drained audio still ends the turn", async (t) => {
-  const context = harness();
-  await context.session.connect();
-  await holdTurn(context);
-  context.session.endTurn(true);
-  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
-
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
-  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
-
-  // A turn that never ends is worse than one that ends early: the settle
-  // backstop closes what the missing done left open.
-  t.mock.timers.tick(REALTIME_SETTLE_TIMEOUT_MS);
-  assert.equal(context.session.status, REALTIME_STATUS.READY);
-});
-
 test("an error behind a confirmed reply does not end the turn under it", async () => {
   const context = harness();
   await context.session.connect();
@@ -1351,28 +1332,33 @@ test("a reply the server says made no sound ends at response.done", async () => 
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 });
 
-test("two sentences are one reply, whatever the pause between them", async () => {
+test("quiet between two sentences is not an ending", async () => {
   const context = harness();
   await context.session.connect();
   context.deliverRemoteTrack();
 
-  // One reply that ends properly, which is how this call shows it reports the
-  // end of its own audio.
+  // One reply, with a breath drawn mid-sentence before generation has even
+  // finished: nothing about this call yet says it reports its own endings, and
+  // the reply is still coming.
   await holdTurn(context);
   context.session.endTurn(true);
-  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
-  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
+  context.session.reportRemoteAudioActive();
+  context.session.reportRemoteAudioIdle();
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING, "he is still talking");
+  context.session.reportRemoteAudioActive();
+  settleReply(context);
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 
-  // A longer one. Generation finishes while he is still on the first sentence.
+  // A longer one, on a call that has now shown it reports real endings.
+  // Generation finishes while Luke is still on the first sentence.
   await holdTurn(context);
   context.session.endTurn(true);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
   context.session.reportRemoteAudioActive();
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
 
-  // The gap before the second sentence. Silence long enough to look like an
-  // ending, on a call that has already shown it reports real ones.
+  // The gap before the second sentence: silence long enough to look like an
+  // ending, which is exactly what taking the turn down here would read it as.
   context.session.reportRemoteAudioIdle();
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING, "he is still talking");
   context.session.reportRemoteAudioActive();
@@ -1462,34 +1448,6 @@ test("the quiet before Luke starts is not Luke going quiet", () => {
   // meter last heard.
   assert.equal(quietIsLukesOwn({ status: REALTIME_STATUS.LISTENING, heardLuke: true }), false);
   assert.equal(quietIsLukesOwn({ status: REALTIME_STATUS.RESPONDING, heardLuke: true }), true);
-});
-
-test("a reply is not over when the model stops producing it", async () => {
-  const context = harness();
-  await context.session.connect();
-  await holdTurn(context);
-  context.session.endTurn(true);
-  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
-
-  // `response.done` says generation finished. The audio it produced is still
-  // playing, so taking the turn down here strips the meter off a talking Luke.
-  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
-  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
-
-  context.session.reportRemoteAudioIdle();
-  assert.equal(context.session.status, REALTIME_STATUS.READY);
-});
-
-test("quiet before the model has finished is a pause, not the end", async () => {
-  const context = harness();
-  await context.session.connect();
-  await holdTurn(context);
-  context.session.endTurn(true);
-
-  // Luke draws breath mid-sentence; the reply is still coming.
-  context.session.reportRemoteAudioIdle();
-
-  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 });
 
 test("a finished response returns the session to ready", async () => {

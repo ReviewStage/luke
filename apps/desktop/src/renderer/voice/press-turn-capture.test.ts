@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_CLIENT_EVENT } from "@sidecar/realtime";
-import type { WireRecord } from "@sidecar/wire";
+import { text, type WireRecord } from "@sidecar/wire";
 import type { PressCaptureSource } from "./press-audio-capture";
 import { type MicrophoneSender, PressTurnCapture } from "./press-turn-capture";
 
@@ -17,6 +17,18 @@ interface Harness {
   /** Takes the device away, as a teardown or a release does. */
   closeDevice: () => void;
   disconnect: () => void;
+}
+
+/** The capture hands the stream straight to the injected source and never reads it. */
+function asStream(): MediaStream {
+  // SAFETY: the injected capture source is this file's own and ignores its stream.
+  return {} as MediaStream;
+}
+
+/** The capture reads and writes one member of the track: whether it is enabled. */
+function asTrack(track: { enabled: boolean }): MediaStreamTrack {
+  // SAFETY: the capture only opens and closes the track, and hands it to the sender.
+  return track as unknown as MediaStreamTrack;
 }
 
 function harness(): Harness {
@@ -42,16 +54,7 @@ function harness(): Harness {
         },
       };
     },
-    device: () =>
-      device
-        ? {
-            // SAFETY: the capture hands the stream straight to the injected
-            // source, which is this harness's own, and never reads it.
-            stream: {} as MediaStream,
-            track: track as unknown as MediaStreamTrack,
-            sender,
-          }
-        : undefined,
+    device: () => (device ? { stream: asStream(), track: asTrack(track), sender } : undefined),
     connected: () => connected,
   });
   return {
@@ -70,8 +73,12 @@ function harness(): Harness {
   };
 }
 
-function types(sent: readonly WireRecord[]): readonly unknown[] {
-  return sent.map((event) => event.type);
+function types(sent: readonly WireRecord[]): readonly string[] {
+  return sent.map((event) => {
+    const type = text(event.type);
+    assert.ok(type, "every event sent names its type");
+    return type;
+  });
 }
 
 const FLUSH_OPENING = [
@@ -212,7 +219,7 @@ test("the retired capture hands the track to the sender for the turns after the 
 
   context.capture.reset();
 
-  assert.deepEqual(context.replaced, [context.track as unknown as MediaStreamTrack]);
+  assert.deepEqual(context.replaced, [asTrack(context.track)]);
 });
 
 test("a capture retired with no call left hands the track nowhere", () => {

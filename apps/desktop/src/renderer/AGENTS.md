@@ -31,7 +31,14 @@ A call Luke opens for himself is a `SpeakOnlyCall`
 microphone member to open — the guarantee `CLAUDE.md` states for a briefing is
 the type rather than a flag, and `ConversationCall` is the subclass that adds
 the device and the one tool, over the transport both share in
-`voice/realtime-call.ts`.
+`voice/realtime-call.ts`. Neither class keeps a concern it can hand to an
+object that owns its own fields and its own reset: the words of the reply
+under way are `voice/captions.ts`, cutting one off is
+`voice/interruption.ts`, the audio a press speaks into a handshake is
+`voice/press-turn-capture.ts`, and the calls an armed reply asked for are
+`voice/tool-follow-up.ts`. What each call acts on is a table of named
+handlers rather than a switch, so what a subclass adds is the keys it spreads
+over its parent's.
 
 The same trap arrives through a package barrel, where nothing greps for it.
 Importing `@sidecar/calendar` for one string constant resolves that package's

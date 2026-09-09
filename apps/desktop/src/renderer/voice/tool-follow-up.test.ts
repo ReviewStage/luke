@@ -1,28 +1,24 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { WireRecord } from "@sidecar/wire";
 import { ToolFollowUp } from "./tool-follow-up";
 
-interface Harness {
-  tools: ToolFollowUp;
-  followUps: number;
-  epoch: number;
-  connected: boolean;
-}
-
-function harness(): Harness {
-  const state = { followUps: 0, epoch: 1, connected: true } as Harness;
-  state.tools = new ToolFollowUp({
-    epoch: () => state.epoch,
-    connected: () => state.connected,
+/** The turn a follow-up is being answered into, as the call would hold it. */
+class Harness {
+  followUps = 0;
+  epoch = 1;
+  connected = true;
+  readonly tools = new ToolFollowUp({
+    epoch: () => this.epoch,
+    connected: () => this.connected,
     openFollowUp: () => {
-      state.followUps += 1;
+      this.followUps += 1;
     },
   });
-  return state;
 }
 
 /** The raw finished output item the SDK's call ids are learned from. */
-function functionCallItem(responseId: string, callId: string) {
+function functionCallItem(responseId: string, callId: string): WireRecord {
   return {
     type: "response.output_item.done",
     response_id: responseId,
@@ -38,7 +34,7 @@ function armOneCall(context: Harness, callId = "call-1"): void {
 }
 
 test("a reply the developer already talked over resumes nothing", () => {
-  const context = harness();
+  const context = new Harness();
   context.tools.opened("resp-1");
 
   assert.equal(
@@ -49,7 +45,7 @@ test("a reply the developer already talked over resumes nothing", () => {
 });
 
 test("a reply the server named nothing resumes nothing", () => {
-  const context = harness();
+  const context = new Harness();
 
   assert.equal(
     context.tools.done({ responseId: undefined, callIds: ["call-1"], fresh: true }),
@@ -58,14 +54,14 @@ test("a reply the server named nothing resumes nothing", () => {
 });
 
 test("the turn holds while a follow-up is owed", () => {
-  const context = harness();
+  const context = new Harness();
   armOneCall(context);
 
   assert.equal(context.tools.holds, true);
 });
 
 test("the follow-up opens once every call's output has reached the wire", () => {
-  const context = harness();
+  const context = new Harness();
   context.tools.opened("resp-1");
   for (const callId of ["call-1", "call-2"]) {
     context.tools.observe(functionCallItem("resp-1", callId));
@@ -81,7 +77,7 @@ test("the follow-up opens once every call's output has reached the wire", () => 
 });
 
 test("the follow-up opens once, however often it is asked for", () => {
-  const context = harness();
+  const context = new Harness();
   armOneCall(context);
 
   context.tools.outputSent("call-1");
@@ -92,7 +88,7 @@ test("the follow-up opens once, however often it is asked for", () => {
 });
 
 test("a turn the developer took back opens no follow-up", () => {
-  const context = harness();
+  const context = new Harness();
   armOneCall(context);
 
   // The press bumps the epoch: the answer being written belongs to a turn
@@ -104,7 +100,7 @@ test("a turn the developer took back opens no follow-up", () => {
 });
 
 test("a call with no connection left opens no follow-up", () => {
-  const context = harness();
+  const context = new Harness();
   armOneCall(context);
 
   context.connected = false;
@@ -114,21 +110,21 @@ test("a call with no connection left opens no follow-up", () => {
 });
 
 test("the call the turn armed is the turn's to answer", () => {
-  const context = harness();
+  const context = new Harness();
   armOneCall(context);
 
   assert.equal(context.tools.current("call-1"), true);
 });
 
 test("a call the turn never armed is refused", () => {
-  const context = harness();
+  const context = new Harness();
   armOneCall(context);
 
   assert.equal(context.tools.current("call-unknown"), false);
 });
 
 test("a superseded reply's late call is not the current turn's", () => {
-  const context = harness();
+  const context = new Harness();
   armOneCall(context, "call-old");
 
   // The developer talked over it, and the reply that replaced it was
@@ -140,7 +136,7 @@ test("a superseded reply's late call is not the current turn's", () => {
 });
 
 test("a call answered out of the turn that asked is refused", () => {
-  const context = harness();
+  const context = new Harness();
   armOneCall(context);
 
   context.epoch += 1;
@@ -149,7 +145,7 @@ test("a call answered out of the turn that asked is refused", () => {
 });
 
 test("only a finished function call teaches the batch a call id", () => {
-  const context = harness();
+  const context = new Harness();
   context.tools.opened("resp-1");
 
   context.tools.observe({ type: "response.output_item.added", response_id: "resp-1" });
@@ -167,7 +163,7 @@ test("only a finished function call teaches the batch a call id", () => {
 });
 
 test("the calls the parser never carried are still answered", () => {
-  const context = harness();
+  const context = new Harness();
   context.tools.opened("resp-1");
   // The parsed `response.done` names the calls; the raw item is what the
   // SDK's own bridge answers by, and both reach the same batch.
@@ -180,7 +176,7 @@ test("the calls the parser never carried are still answered", () => {
 });
 
 test("a turn boundary spends whatever the last turn left owed", () => {
-  const context = harness();
+  const context = new Harness();
   armOneCall(context);
 
   context.tools.reset();

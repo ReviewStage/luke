@@ -13,7 +13,13 @@ interface Ended {
   runId: string | undefined;
 }
 
-function strip(): { strip: CaptionStrip; drawn: Drawn[]; ended: Ended[] } {
+interface Harness {
+  strip: CaptionStrip;
+  drawn: Drawn[];
+  ended: Ended[];
+}
+
+function harness(): Harness {
   const drawn: Drawn[] = [];
   const ended: Ended[] = [];
   return {
@@ -31,7 +37,7 @@ function latest(drawn: readonly Drawn[]): Drawn | undefined {
 }
 
 test("the words grow as they arrive, and each piece redraws", () => {
-  const context = strip();
+  const context = harness();
   context.strip.append("item-1", "Two agents ");
   context.strip.append("item-1", "are waiting.");
 
@@ -42,7 +48,7 @@ test("the words grow as they arrive, and each piece redraws", () => {
 });
 
 test("the item's own final transcript supersedes the deltas that approximated it", () => {
-  const context = strip();
+  const context = harness();
   context.strip.append("item-1", "Two agents are waitin");
   context.strip.settle("item-1", "Two agents are waiting.");
 
@@ -50,7 +56,7 @@ test("the item's own final transcript supersedes the deltas that approximated it
 });
 
 test("a second item stacks as its own segment instead of running onto the first", () => {
-  const context = strip();
+  const context = harness();
   context.strip.append("item-1", "Looking now.");
   context.strip.append("item-2", "Two agents are waiting.");
 
@@ -58,7 +64,7 @@ test("a second item stacks as its own segment instead of running onto the first"
 });
 
 test("an item's transcript lands on its own segment after the turn has moved past it", () => {
-  const context = strip();
+  const context = harness();
   context.strip.append("item-1", "Looking no");
   context.strip.append("item-2", "Two agents are waiting.");
 
@@ -70,7 +76,7 @@ test("an item's transcript lands on its own segment after the turn has moved pas
 });
 
 test("only the newest segments stay up", () => {
-  const context = strip();
+  const context = harness();
   for (const index of [1, 2, 3, 4]) context.strip.append(`item-${index}`, `Sentence ${index}.`);
 
   assert.equal(latest(context.drawn)?.texts?.length, CAPTION_SEGMENT_LIMIT);
@@ -78,7 +84,7 @@ test("only the newest segments stay up", () => {
 });
 
 test("a transcript whose item holds no segment writes nothing", () => {
-  const context = strip();
+  const context = harness();
   context.strip.append("item-1", "Two agents are waiting.");
   const drawnBefore = context.drawn.length;
 
@@ -90,7 +96,7 @@ test("a transcript whose item holds no segment writes nothing", () => {
 });
 
 test("a transcript that says what the words already say redraws nothing", () => {
-  const context = strip();
+  const context = harness();
   context.strip.append("item-1", "Two agents are waiting.");
   const drawnBefore = context.drawn.length;
 
@@ -100,7 +106,7 @@ test("a transcript that says what the words already say redraws nothing", () => 
 });
 
 test("ending hands the words over once, then empties", () => {
-  const context = strip();
+  const context = harness();
   context.strip.mark(REPLY_KIND.BRIEFING);
   context.strip.append("item-1", "Two agents are waiting.");
 
@@ -114,7 +120,7 @@ test("ending hands the words over once, then empties", () => {
 });
 
 test("the kind and the run are the reply's, and leave with it", () => {
-  const context = strip();
+  const context = harness();
   context.strip.mark(REPLY_KIND.REPLY, "run-7");
   assert.equal(context.strip.kinded, true);
   assert.deepEqual(latest(context.drawn), { texts: undefined, kind: REPLY_KIND.REPLY });
@@ -126,7 +132,7 @@ test("the kind and the run are the reply's, and leave with it", () => {
 });
 
 test("a reply that said nothing and named no run hands nothing over", () => {
-  const context = strip();
+  const context = harness();
   context.strip.end();
 
   assert.deepEqual(context.ended, []);
@@ -134,7 +140,7 @@ test("a reply that said nothing and named no run hands nothing over", () => {
 });
 
 test("discarding empties without admitting anything to History", () => {
-  const context = strip();
+  const context = harness();
   context.strip.mark(REPLY_KIND.BRIEFING, "run-7");
   context.strip.append("item-1", "A briefing nobody heard.");
 

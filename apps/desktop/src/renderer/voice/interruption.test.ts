@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_CLIENT_EVENT } from "@sidecar/realtime";
-import type { WireRecord } from "@sidecar/wire";
+import { text, type WireRecord } from "@sidecar/wire";
 import { Interruption } from "./interruption";
 
 const SPAN = { itemId: "item-1", audioEndMs: 1_200 } as const;
 
-function ledger(): { interruption: Interruption; sent: WireRecord[]; errors: string[] } {
+interface Harness {
+  interruption: Interruption;
+  sent: WireRecord[];
+  errors: string[];
+}
+
+function harness(): Harness {
   const sent: WireRecord[] = [];
   const errors: string[] = [];
   return {
@@ -19,16 +25,23 @@ function ledger(): { interruption: Interruption; sent: WireRecord[]; errors: str
   };
 }
 
-function types(sent: readonly WireRecord[]): readonly unknown[] {
-  return sent.map((event) => event.type);
+function types(sent: readonly WireRecord[]): readonly string[] {
+  return sent.map((event) => {
+    const type = text(event.type);
+    assert.ok(type, "every event sent names its type");
+    return type;
+  });
 }
 
-function eventId(sent: readonly WireRecord[], type: string): unknown {
-  return sent.find((event) => event.type === type)?.event_id;
+/** The name one request was stamped with, as the ledger will match its error by. */
+function eventId(sent: readonly WireRecord[], type: string): string {
+  const stamped = text(sent.find((event) => event.type === type)?.event_id);
+  assert.ok(stamped, `no ${type} was sent`);
+  return stamped;
 }
 
 test("a cut with generation outstanding cancels, clears, and trims", () => {
-  const context = ledger();
+  const context = harness();
   context.interruption.cut({ cancelGeneration: true, truncate: SPAN });
 
   assert.deepEqual(types(context.sent), [
@@ -39,7 +52,7 @@ test("a cut with generation outstanding cancels, clears, and trims", () => {
 });
 
 test("a reply the server has already concluded is cleared without a cancel", () => {
-  const context = ledger();
+  const context = harness();
   context.interruption.cut({ cancelGeneration: false, truncate: SPAN });
 
   assert.deepEqual(types(context.sent), [
@@ -49,7 +62,7 @@ test("a reply the server has already concluded is cleared without a cancel", () 
 });
 
 test("nothing heard leaves nothing to correct", () => {
-  const context = ledger();
+  const context = harness();
   context.interruption.cut({ cancelGeneration: true, truncate: undefined });
 
   assert.deepEqual(types(context.sent), [
@@ -59,7 +72,7 @@ test("nothing heard leaves nothing to correct", () => {
 });
 
 test("each cut stamps its own names, so no two cuts' refusals can be confused", () => {
-  const context = ledger();
+  const context = harness();
   context.interruption.cut({ cancelGeneration: true, truncate: SPAN });
   const first = eventId(context.sent, REALTIME_CLIENT_EVENT.RESPONSE_CANCEL);
   context.sent.length = 0;
@@ -69,7 +82,7 @@ test("each cut stamps its own names, so no two cuts' refusals can be confused", 
 });
 
 test("the answers still owed are bounded, oldest dropped first", () => {
-  const context = ledger();
+  const context = harness();
   // Twelve cuts of two requests each fill the bound exactly; the thirteenth
   // has to evict the first cut's names to fit.
   for (let index = 0; index < 13; index += 1) {
@@ -96,9 +109,9 @@ test("the answers still owed are bounded, oldest dropped first", () => {
 });
 
 test("the documented no-active-response race is answered and never shown", () => {
-  const context = ledger();
+  const context = harness();
   context.interruption.cut({ cancelGeneration: true, truncate: undefined });
-  const cancellationEventId = String(eventId(context.sent, REALTIME_CLIENT_EVENT.RESPONSE_CANCEL));
+  const cancellationEventId = eventId(context.sent, REALTIME_CLIENT_EVENT.RESPONSE_CANCEL);
 
   const answered = context.interruption.error({
     message: "Cancellation failed: no active response.",
@@ -111,9 +124,9 @@ test("the documented no-active-response race is answered and never shown", () =>
 });
 
 test("a cancellation refused for any other reason still reaches the developer", () => {
-  const context = ledger();
+  const context = harness();
   context.interruption.cut({ cancelGeneration: true, truncate: undefined });
-  const cancellationEventId = String(eventId(context.sent, REALTIME_CLIENT_EVENT.RESPONSE_CANCEL));
+  const cancellationEventId = eventId(context.sent, REALTIME_CLIENT_EVENT.RESPONSE_CANCEL);
 
   const answered = context.interruption.error({
     message: "Cancellation failed: the session is closed.",
@@ -126,11 +139,9 @@ test("a cancellation refused for any other reason still reaches the developer", 
 });
 
 test("a clear or a trim refused is reported however the cancel would have been read", () => {
-  const context = ledger();
+  const context = harness();
   context.interruption.cut({ cancelGeneration: true, truncate: SPAN });
-  const truncationEventId = String(
-    eventId(context.sent, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_TRUNCATE),
-  );
+  const truncationEventId = eventId(context.sent, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_TRUNCATE);
 
   // The benign sentence belongs to a cancellation alone: read against a trim
   // it is an error nobody has explained, and staying quiet would hide it.
@@ -144,7 +155,7 @@ test("a clear or a trim refused is reported however the cancel would have been r
 });
 
 test("an error naming no event, or one this ledger never sent, is not its own", () => {
-  const context = ledger();
+  const context = harness();
   context.interruption.cut({ cancelGeneration: true, truncate: undefined });
 
   assert.equal(context.interruption.error({ message: "The session expired." }), false);
@@ -156,11 +167,9 @@ test("an error naming no event, or one this ledger never sent, is not its own", 
 });
 
 test("an answer is taken once", () => {
-  const context = ledger();
+  const context = harness();
   context.interruption.cut({ cancelGeneration: false, truncate: undefined });
-  const clearEventId = String(
-    eventId(context.sent, REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR),
-  );
+  const clearEventId = eventId(context.sent, REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR);
 
   assert.equal(context.interruption.error({ message: "Refused.", eventId: clearEventId }), true);
   assert.equal(context.interruption.error({ message: "Refused.", eventId: clearEventId }), false);
@@ -176,11 +185,9 @@ test("a trim refused past the audio's end is recognized by its sentence alone", 
 });
 
 test("a call's answers go with it, and the names keep counting", () => {
-  const context = ledger();
+  const context = harness();
   context.interruption.cut({ cancelGeneration: false, truncate: undefined });
-  const clearEventId = String(
-    eventId(context.sent, REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR),
-  );
+  const clearEventId = eventId(context.sent, REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR);
   context.sent.length = 0;
 
   context.interruption.reset();
