@@ -490,8 +490,8 @@ Trust constraints:
   `/api/brain/v2/compact`) lets the desktop prepare the prompt — bounded to
   its own 200,000-character envelope, refused past it, never cut — and name
   the tools it offers, each a registered name the service holds a schema
-  for; a caller can never upload a schema, and an unregistered name refuses
-  the request. The service still fixes the model, the upstream, its
+  for, emitted from the same declaration that parses the request; a caller
+  can never upload a schema, and an unregistered name refuses the request. The service still fixes the model, the upstream, its
   credential, the refusal to store, the output budget's ceiling, and the
   2 MiB body bound, spends the same review allowance per operation, keeps
   no conversation, executes no tool, and answers an explicit compaction's

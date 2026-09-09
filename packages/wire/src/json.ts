@@ -1,7 +1,11 @@
 /**
- * Defensive readers for values a provider, API, or model may have shaped
- * differently than this build expects. A missing or mistyped field is
- * undefined, never a throw, so one bad record cannot fail an observation.
+ * The wire boundary: the values that arrive from outside this build, the
+ * defensive readers that decode them, and the HTTP vocabulary the readers
+ * answer for. A missing or mistyped field is undefined, never a throw, so one
+ * bad record cannot fail an observation. The HTTP statuses and the injected
+ * fetch sit here rather than with the adapters that read them, so the fake
+ * that speaks this vocabulary is reachable without depending on every
+ * provider.
  */
 
 /** A JSON primitive before this build has validated field names. */
@@ -19,18 +23,22 @@ export type WireValue = WirePrimitive | WireRecord | readonly WireValue[];
  */
 export type UnparsedWireValue = WireValue | undefined;
 
-function runtimeTag(value: UnparsedWireValue): string {
-  return Object.prototype.toString.call(value);
-}
-
-/** Narrows a wire value to string without trusting a runtime typeof check. */
+/**
+ * Narrows a wire value to string. `typeof` rather than the runtime tag,
+ * because `Object.prototype.toString.call(new String("x"))` is
+ * `"[object String]"`: a boxed primitive arriving over structured clone would
+ * satisfy the tag and then fail every string operation the caller believes it
+ * has narrowed to.
+ */
 export function isWireString(value: UnparsedWireValue): value is string {
-  return runtimeTag(value) === "[object String]";
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard is the wire boundary's own decoder; every other module narrows by calling it.
+  return typeof value === "string";
 }
 
-/** Narrows a wire value to number without trusting a runtime typeof check. */
+/** Narrows a wire value to number; `typeof` for the reason {@link isWireString} gives. */
 export function isWireNumber(value: UnparsedWireValue): value is number {
-  return runtimeTag(value) === "[object Number]";
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard is the wire boundary's own decoder; every other module narrows by calling it.
+  return typeof value === "number";
 }
 
 /** A non-empty array of wire numbers, or nothing; `width` pins the length when the caller knows it. */
@@ -62,14 +70,15 @@ export function numberVectors(
   return vectors;
 }
 
-/** Narrows a wire value to boolean without trusting a runtime typeof check. */
+/** Narrows a wire value to boolean; `typeof` for the reason {@link isWireString} gives. */
 export function isWireBoolean(value: UnparsedWireValue): value is boolean {
-  return runtimeTag(value) === "[object Boolean]";
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard is the wire boundary's own decoder; every other module narrows by calling it.
+  return typeof value === "boolean";
 }
 
 export function isRecord(value: UnparsedWireValue): value is WireRecord {
   if (value === null || value === undefined) return false;
-  if (runtimeTag(value) !== "[object Object]") return false;
+  if (Object.prototype.toString.call(value) !== "[object Object]") return false;
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
 }
@@ -176,3 +185,35 @@ export function resolveOptions<K extends string>(
   }
   return resolved;
 }
+
+/** JSON or structured-clone input before wire guards run. */
+export type WireBoundaryInput =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | readonly WireBoundaryInput[]
+  | { readonly [key: string]: WireBoundaryInput };
+
+/** Accepts JSON or structured-clone input before wire guards run. */
+export function unparsedWire(value: WireBoundaryInput): UnparsedWireValue {
+  // SAFETY: WireBoundaryInput is the structured-clone shape; UnparsedWireValue is the same boundary one step in.
+  return value as UnparsedWireValue;
+}
+
+/** Narrows JSON or IPC input before field guards run. */
+export function wireRecord(value: UnparsedWireValue): WireRecord | undefined {
+  return isRecord(value) ? value : undefined;
+}
+
+/** The statuses this build branches on at the HTTP boundary. */
+export const HTTP_STATUS = {
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  CONFLICT: 409,
+} as const;
+
+/** The fetch a caller is given, so a test can answer for the network. */
+export type CloudFetch = (url: string, init: RequestInit) => Promise<Response>;

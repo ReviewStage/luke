@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { HTTP_STATUS as BOUNDARY_HTTP_STATUS, type CloudFetch } from "../http.js";
+import { HTTP_STATUS as BOUNDARY_HTTP_STATUS, type CloudFetch } from "../json.js";
 import type { JsonValue } from "./json.js";
 
 /**
