@@ -21,7 +21,9 @@ Canonical commands:
 | `pnpm evidence:record` | Record the fixture transition on a physical Mac |
 | `pnpm lint:fix` | Apply repository formatting and safe lint fixes |
 
-Trust constraints:
+## Trust constraints
+
+### Writes, terminal input, and the workspace exceptions
 
 - Never write provider transcripts or session-state files. Reading them is what
   Luke is for; writing to them is never.
@@ -65,6 +67,9 @@ Trust constraints:
   offered the delete. This does not authorize any other Superset CLI command,
   deletion
   of anything else, tasks, automations, account changes, or settings changes.
+
+### Providers, cloud CLIs, and hook registration
+
 - Product behavior must not require provider MCP, plugins, hooks, wrappers,
   credentials, or live sessions. A provider whose sessions exist only in a cloud
   service may read a user-supplied API key, but it must observe nothing until
@@ -115,6 +120,9 @@ Trust constraints:
   review gate, which shows a new entry to the user and runs nothing until they
   trust it. Widening it to another provider or another lifecycle event is a
   product decision, not an implementation detail.
+
+### Acts on a session
+
 - The one thing Luke may change about a session is what the user just asked to
   send it: a message typed on its row, a control its provider advertised for
   it, or the same two actions asked of Luke, out loud or typed into his own
@@ -217,6 +225,9 @@ Trust constraints:
   with its generation under the next rule; what reaches the developer is the
   reply the brain writes from it, which may quote or summarize the reading
   and which Conversation keeps as Luke's words under the thread's own retention.
+
+### The brain and transcript reads
+
 - The brain's transcript reads are the one place transcript content reaches
   a model unbidden, and both the read and what it leaves behind are bounded
   on every side. Luke's judgment is one agent with several conversations in
@@ -308,6 +319,9 @@ Trust constraints:
   trace records a turn's about-fields and byte counts under its own gate,
   never a transcript's text, and of the cache key it records only that one
   was asked for.
+
+### The judgment's parts and its prompt
+
 - The judgment is a host over replaceable parts, and the seams are the
   contracts in the runtime's vocabulary (`@sidecar/runtime/vocabulary`). The
   host (`BrainAgent`) owns the conversation's standing — accepting asks into runs, queueing turns, the
@@ -390,6 +404,9 @@ Trust constraints:
   workspace: a host prepares every turn from the resolved configuration and
   the workspace files, and the runtime package that composes it knows the
   files' names and bounds but none of their words, which the brain supplies.
+
+### The Gateway and the host
+
 - Every client reaches the judgment through one boundary, the Gateway
   protocol in `packages/gateway` (`protocol.ts`): versioned request,
   response, and event envelopes, a fixed method vocabulary whose every entry
@@ -493,6 +510,9 @@ Trust constraints:
   respectively, an unknown action never retried on Luke's own initiative; the
   node performs each invocation id once, answering a repeated frame from the
   first performance.
+
+### Replies, the drain, and the hosted tier
+
 - Replies to the ear keep the reply-grant ledger's guarantee with its states
   named (queued, offered, claimed, acknowledged, granted on call,
   withdrawn): the Conversation write precedes any offer, the generation and the
@@ -526,6 +546,9 @@ Trust constraints:
   lacks them; there is no older contract to fall back to. The service
   therefore deploys before such a desktop ships, and widening the contract
   is a product decision, not an implementation detail.
+
+### Storage, retention, and conversation maintenance
+
 - What the brain keeps is one generation per conversation, in one database
   under one writer, and the generation's shape is the retention rule for the
   model's context alone. The database is the brain's store
@@ -653,6 +676,9 @@ Trust constraints:
   how long a generation stands, what a deletion leaves, or what maintenance
   may remove is a product decision, not an implementation detail, and
   `PRIVACY.md` says each in as many words.
+
+### The notebook
+
 - The notebook maintains itself, and every maintenance write is bounded,
   reviewable, and reversible. Two things write it without an ask. The
   pre-compaction flush, following OpenClaw `b7528507`'s memory flush: once
@@ -693,6 +719,9 @@ Trust constraints:
   recoverable operation. Widening what the flush may write, or what a forget
   reaches, is a product decision, not an implementation detail, and
   `PRIVACY.md` says each in as many words.
+
+### Counting, recording, and crash reporting
+
 - Counting is three streams with three different guarantees, and the
   difference is the thing to keep straight. Only the first carries the
   guarantee, and the other two must never be described as though they
@@ -806,6 +835,9 @@ Trust constraints:
   stops reporting nor identifies earlier anonymous reports for deletion.
   Widening what Sentry captures is a product decision, not an implementation
   detail.
+
+### The conversation, the developer's facts, and the trace
+
 - The conversation Luke holds outlives the app, and one narrower thing beside
   it does too. The thread itself is words that were already said — the
   developer's asks, what Luke spoke or announced, the actions he carried at their
@@ -899,6 +931,9 @@ Trust constraints:
   A trace carries real titles, branches, and spoken words, so trace files are
   never committed, for the same reason fixtures stay synthetic. Widening what
   a trace records is a product decision, not an implementation detail.
+
+### Integrations
+
 - The issue tracker follows the same rule at one remove, and is connected the
   way the calendar is rather than the way a cloud provider is. Luke reads the
   issues a tracker lists for the user under a grant the tracker's own consent
@@ -971,6 +1006,9 @@ Trust constraints:
   grant stays the user's own in System Settings, withdrawable there like
   every system permission. The intervals pool with the signed-in accounts'
   and decide nothing more than theirs do.
+
+### Device helpers
+
 - Quieting other media is bounded the way the talk key is: a native helper that
   can do one narrow thing. While a spoken exchange is live, Luke may lower the
   volume of the players the helper names (Music and Spotify, through their own
@@ -1011,6 +1049,9 @@ Trust constraints:
   the press opened, opened by the press and closed when the exchange settles,
   and never outlives it; typed asks never open one at all. An unreadable
   route means the browser's default device, never a refusal to listen.
+
+### Updating
+
 - Updating is the one thing Luke does on the network with no user-supplied
   key at all, and it follows the same shape Superset's production updater
   keeps: electron-updater reads this repository's release manifest from a
@@ -1043,6 +1084,9 @@ Trust constraints:
   that serves a build which cannot install in place at all. Widening what
   the updater sends, reads, or does is a product decision, not an
   implementation detail.
+
+### The introduction
+
 - The spoken introduction is the one moment Luke runs before the account gate,
   and it is bounded on every side. It plays on the first interactive launch,
   before any account exists, at most once to the end: a completion on file
@@ -1072,6 +1116,9 @@ Trust constraints:
   that cannot speak stands down to the ordinary signed-out launch and writes
   nothing. Widening what the introduction reads, sends, or can do is a
   product decision, not an implementation detail.
+
+### The surface and its fixtures
+
 - Keep unsupported capabilities explicit; do not invent fallback controls.
 - Keep Electron renderers sandboxed with context isolation and narrow IPC: one
   state channel in, one act channel out, and beside them only the named event
@@ -1080,7 +1127,9 @@ Trust constraints:
   harder as Luke observes more: a fixture copied from a real session now carries
   a real title and branch.
 
-What Luke may show:
+## What Luke may show
+
+### What a row shows
 
 - Show whatever the local surface can read. A session's own title, branch,
   model, current tool, and failure all
@@ -1090,6 +1139,9 @@ What Luke may show:
 - Label a session by what its provider named it, falling back to the workspace
   or repository only when there is no name yet. Do not compose a sentence in a
   provider; report the fields and let the surface word them.
+
+### Reading a session's conversation
+
 - A session's conversation itself is read in exactly one place, and the place
   is deliberate: in the open, at the developer's own press, never behind an
   observation pass, which reads no message of any chat. When the developer opens a
@@ -1125,6 +1177,9 @@ What Luke may show:
   of its own; widening this read to another provider, another caller, an unattributed
   message kind, or anything stored is a product decision, not an
   implementation detail.
+
+### What leaves the machine
+
 - On the brain and speech paths, session material leaves the machine
   unbidden in exactly two places, each with its own narrower rule; the
   analytics, replay, and crash streams above are disclosed on their own terms
