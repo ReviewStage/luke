@@ -208,14 +208,21 @@ export function useConfirm(
     run: () => {
       setHeld(CONFIRM_STAGE.ACTING);
       group?.began();
-      void action().then((result) => {
-        group?.ended();
-        setRejection(result.status === ACTION_RESULT_STATUS.ACCEPTED ? undefined : result.reason);
-        // Answered either way. A refusal is an answer too, and asking again is
-        // a fresh decision rather than a confirm left standing over a subject
-        // that turned out to still be there.
-        setHeld(CONFIRM_STAGE.RESTING);
-      });
+      void action()
+        .then((result) => {
+          setRejection(result.status === ACTION_RESULT_STATUS.ACCEPTED ? undefined : result.reason);
+        })
+        // Settled in `finally` rather than after the answer, because a carrier
+        // that rejects rather than answering is still a line that has to be
+        // handed back: one left `ACTING` would draw a confirm nobody can take
+        // back, and a group left counting it would still every sibling for the
+        // rest of the run. Answered either way — a refusal is an answer too,
+        // and asking again is a fresh decision rather than a confirm left
+        // standing over a subject that turned out to still be there.
+        .finally(() => {
+          group?.ended();
+          setHeld(CONFIRM_STAGE.RESTING);
+        });
     },
   };
 }
