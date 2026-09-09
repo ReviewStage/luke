@@ -12,9 +12,9 @@ import {
   type SessionProviderAdapter,
 } from "@sidecar/session";
 import { CLAUDE_HOOK_EVENT, installClaudeCodeObservationHooks } from "./claude-code/hooks.js";
-import { CODEX_PROVIDER } from "./codex/adapter.js";
 import type { CodexCloudSessionAdapter } from "./codex/cloud-adapter.js";
 import { CODEX_HOOK_EVENT, installCodexObservationHooks } from "./codex/hooks.js";
+import { CODEX_PROVIDER } from "./codex/observe.js";
 import { ConductorSessionAdapter } from "./conductor/adapter.js";
 import type { ObservationHookProviderId } from "./hook-registry.js";
 import { localSessionAdapters } from "./local-adapters.js";
@@ -109,7 +109,7 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
   // documented read under the ChatGPT login the user already gave that CLI.
   const codex = new CompositeSessionProviderAdapter({
     provider: CODEX_PROVIDER,
-    adapters: [locals.codexLocal, options.codexCloudAdapter],
+    adapters: [pluginAsAdapter(locals.codexLocal), options.codexCloudAdapter],
   });
 
   return {

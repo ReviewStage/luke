@@ -21,7 +21,7 @@ import {
   textFromRecord,
   timestampFromRecord,
 } from "../shared/cloud-wire.js";
-import { CODEX_PROVIDER } from "./adapter.js";
+import { CODEX_PROVIDER } from "./observe.js";
 
 /**
  * The invocations this adapter is allowed to make, fixed by the build the way

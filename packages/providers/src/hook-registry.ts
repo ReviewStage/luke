@@ -1,7 +1,7 @@
 import path from "node:path";
 import { PROVIDER_ID } from "@sidecar/session";
 import { CLAUDE_HOOK_SCRIPT_NAME, defaultClaudeHome } from "./claude-code/hooks.js";
-import { defaultCodexHome } from "./codex/adapter.js";
+import { defaultCodexHome } from "./codex/config.js";
 import { CODEX_HOOK_SCRIPT_NAME } from "./codex/hooks.js";
 import type { ObservationHookInstallation } from "./shared/hook-merge.js";
 

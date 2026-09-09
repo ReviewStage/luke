@@ -1,29 +1,30 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
-import {
-  ACT_RESULT_STATUS,
-  CompositeSessionProviderAdapter,
-  type ProviderSessionObservation,
-  type ProviderTranscriptSinceResult,
-  SessionProviderAdapterBase,
-} from "@sidecar/session";
-import type { ParsedJsonObject } from "@sidecar/wire/testing";
-import { CODEX_PROVIDER, CodexSessionAdapter } from "./adapter.js";
-import { readCodexSessionTranscript } from "./transcript.js";
+import { dispatchRead } from "@sidecar/session";
+import { type ParsedJsonObject, temporaryDirectory } from "@sidecar/wire/testing";
+import { codexLocalPlugin } from "./index.js";
 
 const TEST_SESSION_ID = "0198c1f2-4d5e-7789-abcd-ef0123456789";
 const CODEX_STATE_DATABASE = "state_5.sqlite";
 
-async function temporaryCodexHome(t: TestContext): Promise<string> {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-codex-transcript-"));
-  t.after(async () => {
-    await fs.rm(directory, { recursive: true, force: true });
-  });
-  return directory;
+function temporaryCodexHome(t: TestContext): Promise<string> {
+  return temporaryDirectory(t, "luke-codex-transcript-");
+}
+
+/** Reads the way the brain's own ask does, through the plugin's read seam. */
+async function readCodexSessionTranscript(request: {
+  codexHome: string;
+  providerSessionId: string;
+}): Promise<string | undefined> {
+  const result = await dispatchRead(
+    codexLocalPlugin({ codexHome: request.codexHome }),
+    "transcript",
+    request.providerSessionId,
+  );
+  return result.status === "accepted" ? result.transcript : undefined;
 }
 
 async function writeThreadRow(
@@ -305,7 +306,7 @@ test("reads nothing when Codex has no state database at all", async (t) => {
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("reads what a rollout gained since the cursor an earlier read minted", async (t) => {
   const codexHome = await temporaryCodexHome(t);
-  const adapter = new CodexSessionAdapter({ codexHome });
+  const plugin = codexLocalPlugin({ codexHome });
   await writeSession(codexHome, [
     {
       timestamp: "2026-08-16T20:00:00.000Z",
@@ -318,7 +319,7 @@ test("reads what a rollout gained since the cursor an earlier read minted", asyn
     },
   ]);
 
-  const first = await adapter.readTranscriptSince(TEST_SESSION_ID);
+  const first = await dispatchRead(plugin, "transcriptSince", TEST_SESSION_ID);
   assert.equal(first.status, "accepted");
   if (first.status !== "accepted") return;
   assert.equal(first.text, "Developer: Fix the flaky test");
@@ -337,7 +338,7 @@ test("reads what a rollout gained since the cursor an earlier read minted", asyn
     })}\n`,
   );
 
-  const second = await adapter.readTranscriptSince(TEST_SESSION_ID, first.cursor);
+  const second = await dispatchRead(plugin, "transcriptSince", TEST_SESSION_ID, first.cursor);
   assert.equal(second.status, "accepted");
   if (second.status !== "accepted") return;
   assert.equal(second.text, "Codex: Fixed and green.");
@@ -351,48 +352,23 @@ test("an incremental read of a compressed rollout is refused in its own words, n
     TEST_SESSION_ID,
     path.join(codexHome, `rollout-${TEST_SESSION_ID}.jsonl.zst`),
   );
-  const adapter = new CodexSessionAdapter({ codexHome });
+  const plugin = codexLocalPlugin({ codexHome });
 
-  const since = await adapter.readTranscriptSince(TEST_SESSION_ID);
-  const unknown = await adapter.readTranscriptSince("0198c1f2-4d5e-7789-abcd-000000000000");
-
-  assert.equal(since.status, "rejected");
-  if (since.status === "rejected") assert.match(since.reason, /compressed/);
-  assert.equal(unknown.status, "rejected");
-});
-
-class NeverAskedAdapter extends SessionProviderAdapterBase {
-  readonly provider = CODEX_PROVIDER;
-  readonly reads: string[] = [];
-
-  async observe(): Promise<readonly ProviderSessionObservation[]> {
-    return [];
-  }
-
-  override async readTranscriptSince(
-    providerSessionId: string,
-  ): Promise<ProviderTranscriptSinceResult> {
-    this.reads.push(providerSessionId);
-    return { status: ACT_RESULT_STATUS.ACCEPTED, text: "cloud words", truncated: false };
-  }
-}
-
-test("a compressed rollout's refusal stands at the composite instead of falling through", async (t) => {
-  const codexHome = await temporaryCodexHome(t);
-  await writeThreadRow(
-    codexHome,
-    TEST_SESSION_ID,
-    path.join(codexHome, `rollout-${TEST_SESSION_ID}.jsonl.zst`),
+  const since = await dispatchRead(plugin, "transcriptSince", TEST_SESSION_ID);
+  const whole = await dispatchRead(plugin, "transcript", TEST_SESSION_ID);
+  const unknown = await dispatchRead(
+    plugin,
+    "transcriptSince",
+    "0198c1f2-4d5e-7789-abcd-000000000000",
   );
-  const cloud = new NeverAskedAdapter();
-  const composite = new CompositeSessionProviderAdapter({
-    provider: CODEX_PROVIDER,
-    adapters: [new CodexSessionAdapter({ codexHome }), cloud],
-  });
 
-  const since = await composite.readTranscriptSince(TEST_SESSION_ID);
-
+  // The thread is known here, so the refusal has to be this provider's own
+  // answer rather than an unsupported one that would send the ask on to the
+  // next observer of the same provider.
   assert.equal(since.status, "rejected");
   if (since.status === "rejected") assert.match(since.reason, /compressed/);
-  assert.deepEqual(cloud.reads, []);
+  assert.equal(whole.status, "rejected");
+  if (whole.status === "rejected") assert.match(whole.reason, /compressed/);
+  assert.equal(unknown.status, "rejected");
+  if (unknown.status === "rejected") assert.doesNotMatch(unknown.reason, /compressed/);
 });

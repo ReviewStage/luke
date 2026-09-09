@@ -1,4 +1,3 @@
-import { ACT_RESULT_STATUS, type ProviderTranscriptSinceResult } from "@sidecar/session";
 import {
   isRecord,
   isWireString,
@@ -8,33 +7,15 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import {
-  boundedTranscript,
-  readRecordsSince,
-  TRANSCRIPT_BOUNDS,
-  type TranscriptPathCache,
-  transcriptLine,
-} from "../shared/jsonl-transcript.js";
-import { readTail, tailRecords } from "../shared/local-files.js";
-import {
-  canIgnoreSqliteError,
-  defaultSqliteModule,
-  openReadOnlyDatabase,
-  type SqliteModuleLoader,
-} from "../shared/local-sqlite.js";
-import {
-  argumentPhrase,
-  CODEX_CALL_ARGUMENT_KEY,
-  defaultCodexHome,
-  stateDatabasePaths,
-} from "./adapter.js";
+import { TRANSCRIPT_BOUNDS, transcriptLine } from "../shared/jsonl-transcript.js";
+import { argumentPhrase, CODEX_CALL_ARGUMENT_KEY } from "./records.js";
 
 /**
  * On-demand reading of one Codex session's transcript, for a question the
  * developer just asked. The rollout JSONL named by the thread's own
- * `rollout_path` is the transcript — the same file the adapter already reads
- * a boundary event from, and the one the hook envelope's `transcript_path`
- * names — so this reads it the way the adapter reads its tail, only deeper: a
+ * `rollout_path` is the transcript — the same file the pass already reads a
+ * boundary event from, and the one the hook envelope's `transcript_path`
+ * names — so this reads it the way the pass reads its tail, only deeper: a
  * bounded slice, parsed in memory, rendered into a bounded conversation, and
  * discarded. Nothing here is retained, watched, or written; a session is
  * re-read the next time it is asked about.
@@ -86,27 +67,6 @@ const CODEX_USER_MESSAGE_MARKER = "## My request for Codex:";
  * not something the developer said.
  */
 const CODEX_SCAFFOLDING_PATTERN = /^<([a-z_]+)>[\s\S]*<\/\1>$/;
-
-const CODEX_ROLLOUT_TAIL_BYTES = TRANSCRIPT_BOUNDS.READ_TAIL_BYTES;
-
-const CODEX_THREAD_ROLLOUT_QUERY = `
-  SELECT rollout_path
-  FROM threads
-  WHERE id = ?
-`;
-
-export interface CodexTranscriptRequest {
-  codexHome?: string;
-  sqliteHome?: string;
-  providerSessionId: string;
-  sqlite?: SqliteModuleLoader;
-  maximumRenderedLength?: number;
-}
-
-export interface CodexTranscriptSinceRequest extends CodexTranscriptRequest {
-  cursor?: string;
-  pathCache: TranscriptPathCache;
-}
 
 const CODEX_COMPRESSED_ROLLOUT_EXTENSION = ".zst";
 
@@ -239,7 +199,7 @@ function linesFromEvent(payload: WireRecord): string[] {
 }
 
 /** Renders one rollout line into the lines a conversation can carry. */
-function linesFromRecord(record: WireRecord): string[] {
+export function linesFromCodexRecord(record: WireRecord): string[] {
   const payload = isRecord(record.payload) ? record.payload : undefined;
   if (!payload) return [];
   if (record.type === CODEX_ROLLOUT_LINE_TYPE.RESPONSE_ITEM) {
@@ -250,81 +210,13 @@ function linesFromRecord(record: WireRecord): string[] {
 }
 
 /**
- * Finds the session's rollout file the way observation does: named by the
- * thread's own row in the state database, read through a parameterized
- * lookup, never composed from the id. A compressed rollout is named as it
- * stands, for each reader to refuse in its own words: a bounded window cannot
- * be cut from one.
- */
-async function rolloutPathForThread(request: CodexTranscriptRequest): Promise<string | undefined> {
-  const codexHome = request.codexHome ?? defaultCodexHome();
-  const sqlite = request.sqlite ?? defaultSqliteModule;
-  for (const databasePath of await stateDatabasePaths(codexHome, request.sqliteHome)) {
-    const database = await openReadOnlyDatabase(sqlite, databasePath);
-    if (!database) continue;
-    try {
-      const row = database.prepare(CODEX_THREAD_ROLLOUT_QUERY).all(request.providerSessionId)[0];
-      const rolloutPath = isRecord(row) ? text(row.rollout_path) : undefined;
-      if (rolloutPath) return rolloutPath;
-    } catch (error) {
-      if (!(error instanceof Error) || !canIgnoreSqliteError(error)) throw error;
-    } finally {
-      database.close();
-    }
-  }
-  return undefined;
-}
-
-function isCompressedRollout(rolloutPath: string): boolean {
-  return rolloutPath.endsWith(CODEX_COMPRESSED_ROLLOUT_EXTENSION);
-}
-
-/**
- * Reads one session's recent transcript into a bounded rendering, or nothing
- * when no rollout file exists for that id or the rollout is compressed.
- */
-export async function readCodexSessionTranscript(
-  request: CodexTranscriptRequest,
-): Promise<string | undefined> {
-  const rolloutPath = await rolloutPathForThread(request);
-  if (!rolloutPath || isCompressedRollout(rolloutPath)) return undefined;
-
-  const tail = await readTail(rolloutPath, CODEX_ROLLOUT_TAIL_BYTES);
-  const lines = tailRecords(tail).flatMap(linesFromRecord);
-  return boundedTranscript(lines, request.maximumRenderedLength);
-}
-
-/**
- * Renders what the session's rollout has gained since `cursor`. A thread with
- * no rollout file answers rejected, and so does a compressed rollout, in its
- * own words: the thread is known here, so the refusal must be this adapter's
+ * Codex compresses an old rollout, and a bounded window cannot be cut from
+ * one. The thread is known here, so the refusal must be this provider's own
  * answer rather than an unsupported that would send the ask on to the next
  * observer of the same provider.
  */
-export async function readCodexSessionTranscriptSince(
-  request: CodexTranscriptSinceRequest,
-): Promise<ProviderTranscriptSinceResult> {
-  const rolloutPath = await request.pathCache.resolve(request.providerSessionId, () =>
-    rolloutPathForThread(request),
-  );
-  if (!rolloutPath) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: "That session's transcript could not be found.",
-    };
-  }
-  if (isCompressedRollout(rolloutPath)) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: "That session's rollout is compressed, which this build cannot read incrementally.",
-    };
-  }
-
-  const since = await readRecordsSince(rolloutPath, request.cursor, CODEX_ROLLOUT_TAIL_BYTES);
-  return {
-    status: ACT_RESULT_STATUS.ACCEPTED,
-    text: boundedTranscript(since.records.flatMap(linesFromRecord)) ?? "",
-    cursor: since.cursor,
-    truncated: since.truncated,
-  };
+export function codexRolloutRefusal(rolloutPath: string): string | undefined {
+  return rolloutPath.endsWith(CODEX_COMPRESSED_ROLLOUT_EXTENSION)
+    ? "That session's rollout is compressed, which this build cannot read."
+    : undefined;
 }
