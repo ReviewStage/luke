@@ -1,10 +1,14 @@
 import type { CloudFetch } from "../http.js";
 import { HTTP_STATUS, jsonResponse, type RecordedRequest, recordingFetch } from "./http-fake.js";
-import type { JsonObject, JsonValue } from "./json.js";
+import { isJsonObject, type JsonObject, type JsonValue } from "./json.js";
 
-/** What one route answers, and with which status. */
+/**
+ * What one route answers. The answer is a function of the request rather than
+ * a value, because a documented endpoint that pages answers windows of what it
+ * holds; a route with nothing to vary on ignores its argument.
+ */
 export interface FakeCloudRoute {
-  readonly body: JsonValue | ((request: RecordedRequest) => JsonValue);
+  readonly answer: (request: RecordedRequest) => JsonValue;
   readonly status?: number;
 }
 
@@ -25,8 +29,9 @@ export interface FakeCloudApi {
 
 const AUTHORIZATION_SCHEME_PREFIX = "Bearer ";
 
-function isRoute(value: FakeCloudRoute | JsonValue): value is FakeCloudRoute {
-  return typeof value === "object" && value !== null && !Array.isArray(value) && "body" in value;
+/** A route that answers the same recorded body however it is asked. */
+export function fixedAnswer(body: JsonValue): FakeCloudRoute {
+  return { answer: () => body };
 }
 
 function routeKey(method: string, pathname: string): string {
@@ -43,20 +48,16 @@ function routeKey(method: string, pathname: string): string {
  * build never fixed fails loudly, where an empty answer would let it read as
  * a provider that simply had nothing to report.
  */
-export function fakeCloudApi(
-  routes: Readonly<Record<string, FakeCloudRoute | JsonValue>>,
-): FakeCloudApi {
+export function fakeCloudApi(routes: Readonly<Record<string, FakeCloudRoute>>): FakeCloudApi {
   let failureStatus: number | undefined;
   const recording = recordingFetch((request) => {
     const key = routeKey(request.method, request.pathname);
-    const entry = routes[key];
-    if (entry === undefined) {
+    const route = routes[key];
+    if (route === undefined) {
       throw new Error(`the fake cloud API has no route for ${key}`);
     }
-    const route: FakeCloudRoute = isRoute(entry) ? entry : { body: entry };
     if (failureStatus !== undefined) return jsonResponse({}, failureStatus);
-    const body = typeof route.body === "function" ? route.body(request) : route.body;
-    return jsonResponse(body, route.status ?? HTTP_STATUS.OK);
+    return jsonResponse(route.answer(request), route.status ?? HTTP_STATUS.OK);
   });
   return {
     fetch: recording.fetch,
@@ -94,6 +95,8 @@ export function recordedRoutes(requests: readonly RecordedRequest[]): readonly s
 /** The JSON body a recorded write carried, for a test asserting the document. */
 export function recordedBody(request: RecordedRequest): JsonObject | undefined {
   if (request.body === undefined) return undefined;
-  // SAFETY: every fake route in this repository is handed a JSON body or none.
-  return JSON.parse(request.body) as JsonObject;
+  // SAFETY: `parsedJson` answers the parsed value; `isJsonObject` narrows it to
+  // an object before it is handed back, so nothing unparsed escapes here.
+  const parsed: JsonValue = JSON.parse(request.body);
+  return isJsonObject(parsed) ? parsed : undefined;
 }

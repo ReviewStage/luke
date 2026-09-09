@@ -16,9 +16,11 @@ import {
   maximumSessionMessageLength,
   normalizeSession,
   type ProviderActResult,
+  type ProviderConversationResult,
   type ProviderSessionObservation,
   type ProviderWorkspaceResult,
   SESSION_STATUS,
+  type Session,
   type SessionProviderPlugin,
   type WorkspaceProject,
 } from "@sidecar/session";
@@ -26,6 +28,8 @@ import {
   type FakeCloudApi,
   type FakeCloudRoute,
   fakeCloudApi,
+  isJsonObject,
+  type JsonObject,
   type JsonValue,
   recordedRoutes,
   temporaryDirectory,
@@ -123,6 +127,8 @@ const ADVERTISED_ACT_KINDS = Object.values({
 const CONTRACT_API_KEY = "contract-initial-key";
 const REPLACEMENT_API_KEY = "contract-replacement-key";
 const REFRESH_INTERVAL_MS = 15_000;
+/** The one body key a POSTed read document rides under. */
+const READ_DOCUMENT_FIELD = "query";
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_SERVER_ERROR = 500;
 /** Every file the fixture copies lands here unless `mtimes.json` says otherwise. */
@@ -139,20 +145,30 @@ export function providerFixtureRoot(providerId: string): string {
   );
 }
 
-function sortedJson(value: unknown): string {
-  return `${JSON.stringify(
-    value,
-    (_key, entry: unknown) => {
-      if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return entry;
-      const record = entry as Record<string, unknown>;
-      return Object.fromEntries(
-        Object.keys(record)
-          .sort()
-          .map((key) => [key, record[key]]),
-      );
-    },
-    2,
-  )}\n`;
+/**
+ * Everything the suite records as a golden answer: what a pass observed, what
+ * it offered to create in, the routes it issued, and one conversation read.
+ */
+type GoldenAnswer =
+  | readonly Session[]
+  | readonly WorkspaceProject[]
+  | readonly string[]
+  | ProviderConversationResult;
+
+/** The same value with every object's keys in one order, at every depth. */
+function sortedValue(value: JsonValue): JsonValue {
+  if (Array.isArray(value)) return value.map(sortedValue);
+  if (!isJsonObject(value)) return value;
+  const record: JsonObject = value;
+  return Object.fromEntries(
+    Object.keys(record)
+      .sort()
+      .map((key) => [key, sortedValue(record[key] ?? null)]),
+  );
+}
+
+function sortedJson(value: JsonValue): string {
+  return `${JSON.stringify(sortedValue(value), undefined, 2)}\n`;
 }
 
 async function readOptionalFile(filePath: string): Promise<string | undefined> {
@@ -164,8 +180,10 @@ async function readOptionalFile(filePath: string): Promise<string | undefined> {
  * committed in exactly the shape `sortedJson` writes, so a hand edit reads as
  * drift rather than passing quietly.
  */
-async function assertGoldenJson(goldenPath: string, actual: unknown): Promise<void> {
-  const serialized = sortedJson(actual);
+async function assertGoldenJson(goldenPath: string, actual: GoldenAnswer): Promise<void> {
+  // SAFETY: every member of `GoldenAnswer` is assembled from wire records and
+  // bounded scalars, so a round trip through JSON reproduces it exactly.
+  const serialized = sortedJson(JSON.parse(JSON.stringify(actual)) as JsonValue);
   if (UPDATE_FIXTURES) {
     await fs.mkdir(path.dirname(goldenPath), { recursive: true });
     await fs.writeFile(goldenPath, serialized);
@@ -215,16 +233,10 @@ async function seedHome(root: string, home: string, now: number): Promise<void> 
   if (!seeded) return;
   await fs.cp(source, home, { recursive: true, dereference: false });
   // Git records no mtimes, and several providers place a session in time by
-  // the file's own clock, so every seeded file is dated here and a fixture
-  // that needs a particular age says so in `mtimes.json`.
-  const overrides = JSON.parse(
-    (await readOptionalFile(path.join(root, "mtimes.json"))) ?? "{}",
-  ) as Record<string, string>;
-  const manifest = await homeManifest(home);
-  for (const relativePath of Object.keys(manifest)) {
-    const override = overrides[relativePath];
-    const mtimeMs = override === undefined ? now - DEFAULT_FIXTURE_AGE_MS : Date.parse(override);
-    const seconds = mtimeMs / 1000;
+  // the file's own clock, so every seeded file is dated against the fixture's
+  // own instant rather than against whenever the checkout happened.
+  const seconds = (now - DEFAULT_FIXTURE_AGE_MS) / 1000;
+  for (const relativePath of Object.keys(await homeManifest(home))) {
     await fs.utimes(path.join(home, relativePath), seconds, seconds);
   }
 }
@@ -243,6 +255,7 @@ interface RecordedApiFile {
 }
 
 const PAGE_QUERY = { AFTER: "after", LIMIT: "limit", OFFSET: "offset" } as const;
+const PAGE_FIELD = { DATA: "data", ID: "id" } as const;
 const DEFAULT_RECORDED_PAGE_SIZE = 100;
 
 /** One window of a recorded page, answered as the paged endpoints document it. */
@@ -251,7 +264,9 @@ function pagedAnswer(stored: readonly JsonValue[], searchParams: URLSearchParams
   const limit = Number(searchParams.get(PAGE_QUERY.LIMIT) ?? DEFAULT_RECORDED_PAGE_SIZE);
   let offset = Number(searchParams.get(PAGE_QUERY.OFFSET) ?? 0);
   if (after !== null) {
-    const index = stored.findIndex((entry) => (entry as { id?: string } | null)?.id === after);
+    const index = stored.findIndex(
+      (entry) => isJsonObject(entry) && entry[PAGE_FIELD.ID] === after,
+    );
     // The real store refuses a cursor it never issued.
     if (index < 0) return { data: [], offset: 0, hasMore: false };
     offset = index + 1;
@@ -273,6 +288,8 @@ async function recordedApi(root: string): Promise<FakeCloudApi> {
   const directory = path.join(root, "api");
   const routes: Record<string, FakeCloudRoute> = {};
   for (const name of await readDirectoryFiles(directory)) {
+    // SAFETY: every file under a fixture's `api/` is recorded by hand in this
+    // shape, and the route assertion below is what proves the file is one.
     const file = JSON.parse(
       await fs.readFile(path.join(directory, name), "utf8"),
     ) as RecordedApiFile;
@@ -281,12 +298,11 @@ async function recordedApi(root: string): Promise<FakeCloudApi> {
       name,
       `${name} records the route ${file.route}, which slugs to another name`,
     );
-    const stored =
-      file.paged === true && typeof file.body === "object" && file.body !== null
-        ? ((file.body as { data?: readonly JsonValue[] }).data ?? [])
-        : undefined;
+    const recorded: JsonValue = file.body;
+    const held = isJsonObject(recorded) ? recorded[PAGE_FIELD.DATA] : undefined;
+    const stored = file.paged === true && Array.isArray(held) ? held : undefined;
     routes[file.route] = {
-      body: stored ? (request) => pagedAnswer(stored, request.searchParams) : file.body,
+      answer: stored ? (request) => pagedAnswer(stored, request.searchParams) : () => file.body,
       ...(file.status === undefined ? undefined : { status: file.status }),
     };
   }
@@ -395,7 +411,7 @@ async function askAct(
   plugin: SessionProviderPlugin,
   kind: AdvertisedActKind,
   providerSessionId: string,
-  overrides: { control?: AdvertisedControl; text?: string; agent?: string } = {},
+  overrides: ActOverrides = {},
 ): Promise<ProviderActResult | ProviderWorkspaceResult> {
   const observation = observationFor(plugin, providerSessionId);
   const input = <Request>(request: Request): ActInput<Request> => ({ request, observation });
@@ -427,12 +443,19 @@ async function askAct(
   }
 }
 
+/** What an act's request carries from the observation's own advertisement. */
+interface ActOverrides {
+  control?: AdvertisedControl;
+  text?: string;
+  agent?: string;
+}
+
 /** The advertisement one act kind stands on for the fixture's own session. */
 function advertisementFor(
   plugin: SessionProviderPlugin,
   fixtures: ProviderFixtures,
   kind: AdvertisedActKind,
-): { control?: AdvertisedControl; agent?: string } {
+): ActOverrides {
   const observation = observationFor(plugin, fixtures.sessionId);
   if (kind === ACT_KIND.CONTROL) {
     const control = advertisedControls(observation)[0];
@@ -575,13 +598,18 @@ export function describeProviderContract(
       for (const request of api.requests()) {
         if (request.method === "GET") continue;
         assert.equal(request.method, "POST", "a read rode a method the build never fixed");
-        const body = JSON.parse(request.body ?? "{}") as Record<string, unknown>;
+        const body: JsonValue = JSON.parse(request.body ?? "{}");
+        if (!isJsonObject(body)) {
+          assert.fail("a POSTed read carried no document at all");
+          return;
+        }
+        const readDocument: JsonObject = body;
         assert.deepEqual(
-          Object.keys(body),
-          ["query"],
+          Object.keys(readDocument),
+          [READ_DOCUMENT_FIELD],
           "a POSTed read carried more than a document",
         );
-        const document = String(body.query);
+        const document = String(readDocument[READ_DOCUMENT_FIELD]);
         for (const quoted of document.matchAll(/'([^']*)'/g)) {
           assert.ok(
             reported.has(quoted[1] ?? ""),
@@ -877,7 +905,8 @@ export function describeProviderContract(
         observation: observationFor(plugin, fixtures.conversation?.sessionId ?? ""),
       });
 
-      assert.equal(read?.status, ACT_RESULT_STATUS.ACCEPTED);
+      assert.ok(read, "the conversation read answered nothing at all");
+      assert.equal(read.status, ACT_RESULT_STATUS.ACCEPTED);
       await assertGoldenJson(golden("conversation.json"), read);
       for (const route of passRoutes) {
         assert.ok(

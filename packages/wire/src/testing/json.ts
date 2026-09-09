@@ -32,3 +32,13 @@ export interface MutableWireRecord {
  * for what a provider actually sent, and every consumer takes it as such.
  */
 export type ParsedJsonObject = WireRecord;
+
+/**
+ * Whether a JSON value is an object rather than an array or a scalar. Read
+ * through its runtime tag rather than `typeof`, which cannot tell an object
+ * from `null` and says nothing about the value's contract.
+ */
+export function isJsonObject(value: JsonValue | undefined): value is JsonObject {
+  if (value === null || value === undefined || Array.isArray(value)) return false;
+  return Object.prototype.toString.call(value) === "[object Object]";
+}
