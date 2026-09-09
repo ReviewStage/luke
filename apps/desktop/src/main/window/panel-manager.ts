@@ -38,6 +38,13 @@ export interface PanelManagerOptions {
    * say so once a hidden window of Luke's own stands beside them.
    */
   onAllClosed?: () => void;
+  /**
+   * A fact one window answers for has moved — its mode, or the geometry of
+   * the display under it. Neither is a slice of the app-state document, and
+   * both ride the snapshot a window is handed, so the document has to be
+   * announced again for the window to be handed one.
+   */
+  onWindowFactsChanged?: () => void;
 }
 
 /**
@@ -69,6 +76,7 @@ export class PanelManager {
   readonly #rendererHtmlPath: string;
   readonly #rendererUrl: string;
   readonly #onAllClosed: (() => void) | undefined;
+  readonly #onWindowFactsChanged: (() => void) | undefined;
   readonly initialMode: WindowMode;
   /**
    * One panel window per display Luke stands on, keyed by the display's id, each
@@ -97,6 +105,7 @@ export class PanelManager {
     this.#rendererHtmlPath = options.rendererHtmlPath;
     this.#rendererUrl = options.rendererUrl;
     this.#onAllClosed = options.onAllClosed;
+    this.#onWindowFactsChanged = options.onWindowFactsChanged;
     this.initialMode = initialWindowMode(options.runMode, options.argv ?? process.argv);
   }
 
@@ -173,6 +182,7 @@ export class PanelManager {
     } else {
       window.showInactive();
     }
+    this.#onWindowFactsChanged?.();
     return mode;
   }
 
@@ -203,6 +213,15 @@ export class PanelManager {
       if (!window.isDestroyed()) return window;
     }
     return undefined;
+  }
+
+  /** Every living panel's renderer, for a payload composed per window. */
+  senders(): readonly WebContents[] {
+    const senders: WebContents[] = [];
+    for (const window of this.#windows.values()) {
+      if (!window.isDestroyed()) senders.push(window.webContents);
+    }
+    return senders;
   }
 
   /** The display a renderer message came from, so each window answers for itself. */
@@ -374,13 +393,13 @@ export class PanelManager {
       width: layout.width,
       height: layout.height,
     });
-    window.webContents.send(channels.onDisplayChanged, this.diagnostic(display));
+    this.#onWindowFactsChanged?.();
   }
 
   /**
    * Moves a living window to another display, state and all: its mode, its
    * collapse-in-flight, its exchange report, and the renderer behind it — which
-   * learns its new ground from the `displayChanged` the repositioning sends,
+   * learns its new ground from the snapshot the repositioning has it handed,
    * exactly as it would for a geometry change in place.
    */
   #rebind(fromDisplayId: number, toDisplayId: number): void {

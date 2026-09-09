@@ -125,10 +125,7 @@ export function wireGateway(dependencies: GatewayWiringDependencies): GatewayWir
     const entries = change.entries
       .map((entry) => storedConversationEntry(entry, { strict: false }))
       .filter((entry): entry is ConversationEntry => entry !== undefined);
-    state.update(
-      { conversation: { entries, cleared: change.cleared } },
-      change.reporter === undefined ? undefined : { reporter: change.reporter },
-    );
+    state.update({ conversation: { entries, cleared: change.cleared } });
   });
 
   /**

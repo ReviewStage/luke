@@ -410,10 +410,14 @@ Trust constraints:
   operator client; the renderer and voice windows keep the narrow preload
   bridge and never speak the protocol. Everything main keeps of what the host
   tells it is one versioned `AppState` document in
+  `apps/desktop/src/shared/messages/app-state.ts`, held by the store in
   `apps/desktop/src/main/app-state.ts`, updated only through
   `AppStateStore.update` and pushed to the windows from the one subscriber
   over it, so the state a window is handed and the state main answers a call
-  from cannot differ. A connection is authenticated on its
+  from cannot differ. A window reads it on one channel, `app:state`, whose
+  first delivery is that window's bootstrap and whose every later one carries
+  a version at least as high, composed with the facts that window alone
+  answers for — its role, its mode, and the display under it. A connection is authenticated on its
   own handshake and never in an address: the protocol version is refused
   outright when it differs, and who is asking is decided by the credential
   check the binding is handed, compared where it is understood — a shared
@@ -1064,7 +1068,9 @@ Trust constraints:
   nothing. Widening what the introduction reads, sends, or can do is a
   product decision, not an implementation detail.
 - Keep unsupported capabilities explicit; do not invent fallback controls.
-- Keep Electron renderers sandboxed with context isolation and narrow IPC.
+- Keep Electron renderers sandboxed with context isolation and narrow IPC: one
+  state channel in, and beside it only the named event channels a document's
+  version could not carry.
 - Commit only synthetic fixtures and repository-relative paths. This binds
   harder as Luke observes more: a fixture copied from a real session now carries
   a real title and branch.

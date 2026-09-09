@@ -14,13 +14,13 @@ import {
   type SessionProvider,
 } from "@sidecar/session";
 import { fixtureSnapshot } from "@sidecar/session/fixtures";
-import type { AppBootstrap } from "#shared/messages/session";
 import {
   arrangeSessions,
   DEFAULT_SESSION_VIEW,
-  displaySessions,
+  fixtureSessions,
   lastActivityLabel,
   matchRanges,
+  observedSessions,
   SESSION_FILTER,
   SESSION_FILTER_AXIS,
   SESSION_SORT,
@@ -39,12 +39,9 @@ import {
 const CLAUDE_PROVIDER = { id: PROVIDER_ID.CLAUDE_CODE, displayName: "Claude Code" };
 const CODEX_PROVIDER = { id: PROVIDER_ID.CODEX, displayName: "Codex" };
 
-function bootstrap(fixtureMode: boolean): AppBootstrap {
-  // SAFETY: Smoke fixture bootstrap carries only fixtureMode and snapshot for tests.
-  return {
-    fixtureMode,
-    fixture: fixtureSnapshot("smoke"),
-  } as AppBootstrap;
+/** The smoke fixture's own rows, which a fixture run draws instead of a roster. */
+function fixtureRows(): readonly SessionView[] {
+  return fixtureSessions(fixtureSnapshot("smoke"));
 }
 
 function liveSession(
@@ -61,7 +58,7 @@ function liveSession(
   });
 }
 
-const FIXTURE_SESSIONS = displaySessions(bootstrap(true), []);
+const FIXTURE_SESSIONS = fixtureRows();
 
 /** The smoke fixture's two local rows, in urgency order. */
 const LOCAL_IDS = ["claude-review", "codex-bootstrap"];
@@ -75,7 +72,7 @@ const CLOUD_IDS = [
 
 /** The rows a live launch would draw for these sessions. */
 function liveRows(...sessions: readonly Session[]): readonly SessionView[] {
-  return displaySessions(bootstrap(false), sessions);
+  return observedSessions(sessions);
 }
 
 /**
@@ -111,7 +108,7 @@ function shownIds(
 }
 
 test("the most urgent sessions are listed first in either data source", () => {
-  const fixtureUrgencies = displaySessions(bootstrap(true), []).map((session) => session.urgency);
+  const fixtureUrgencies = fixtureRows().map((session) => session.urgency);
   assert.deepEqual(fixtureUrgencies, [
     SESSION_URGENCY.ATTENTION,
     SESSION_URGENCY.WORKING,
@@ -135,9 +132,7 @@ test("the most urgent sessions are listed first in either data source", () => {
 });
 
 test("a row carries where its session runs, from either data source", () => {
-  const fixture = new Map(
-    displaySessions(bootstrap(true), []).map((session) => [session.id, session.location]),
-  );
+  const fixture = new Map(fixtureRows().map((session) => [session.id, session.location]));
 
   assert.equal(fixture.get("conductor-cursor-agent"), SESSION_LOCATION.CLOUD);
   assert.equal(fixture.get("conductor-chat-tidy"), SESSION_LOCATION.CLOUD);
@@ -300,7 +295,7 @@ test("how long ago a session was seen is worded by the unit that has begun", () 
 });
 
 test("the tally counts per state and per app", () => {
-  const tally = sessionTally(displaySessions(bootstrap(true), []));
+  const tally = sessionTally(fixtureRows());
 
   assert.deepEqual(
     { ...tally, providers: undefined },
@@ -437,8 +432,7 @@ test("a spoken narrowing of several values reads as the matching chips combined"
 // narrow to, and one whose chip does not match its sessions is worse — a filter
 // that empties a list the capsule is still counting.
 test("every agent this build knows can be narrowed down to", () => {
-  const sessions = displaySessions(
-    bootstrap(false),
+  const sessions = observedSessions(
     PROVIDER_ID_LIST.map((providerId, index) =>
       normalizeSession(
         { id: providerId, displayName: providerId },

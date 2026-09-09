@@ -29,22 +29,16 @@ import {
   replyConversationEntry,
   retainedConversationEntries,
   SESSION_STATUS,
-  type Session,
   storedConversationMaximumAgeMs,
   streamingConversationEntry,
   withConversationEntryRequest,
 } from "@sidecar/session";
 import { TALK_KEY_RELEASE, talkKeyRelease, voiceHotkeyLabel } from "@sidecar/settings";
-import { type AppSettingsView, appSettingsView } from "@sidecar/settings/wire";
+import { appSettingsView } from "@sidecar/settings/wire";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  MICROPHONE_STATUS,
-  type MicrophoneStatus,
-  type OutputAudioState,
-  type VoiceHotkeyState,
-} from "#shared/messages/audio";
-import type { VoiceBootstrap } from "#shared/messages/session";
+import type { AppConversationSlice } from "#shared/messages/app-state";
+import { MICROPHONE_STATUS, type MicrophoneStatus } from "#shared/messages/audio";
 import {
   VOICE_COMMAND,
   type VoiceView,
@@ -52,6 +46,7 @@ import {
   voiceExchangeKind,
 } from "#shared/messages/voice-view";
 import { hostedVoiceUnavailableNote } from "../microphone-access";
+import { appSettingsNow, appStateNow, useAppState } from "../use-app-state";
 import { useStateWithRef } from "../use-state-with-ref";
 import { outputSilent } from "../volume-hint";
 import { REPLY_KIND, type ReplyKind } from "./captions";
@@ -65,11 +60,11 @@ import { startVoiceLevelMeter } from "./voice-level-meter";
 
 /**
  * What the hidden voice window must have standing before the main process
- * may send it anything: each of these subscriptions, and the bootstrap
- * applied. React installs effects in an order the main process cannot see and
+ * may send it anything: each of these subscriptions, and the document
+ * adopted. React installs effects in an order the main process cannot see and
  * must not assume, so readiness is not "mounted" or "an effect ran": it is
  * this ledger reporting that every named piece is in place, once, under the
- * receiver epoch the bootstrap carried.
+ * receiver epoch the document's first adoption named.
  */
 export const VOICE_READINESS_PART = {
   COMMANDS: "commands",
@@ -104,7 +99,7 @@ export class VoiceReadiness {
     this.#installed.delete(part);
   }
 
-  /** The bootstrap has been applied, naming the epoch the main process gave this load. */
+  /** The document has been adopted, naming the epoch the main process gave this load. */
   bootstrapped(epoch: number | undefined): void {
     if (epoch === undefined) return;
     this.#epoch = epoch;
@@ -341,92 +336,13 @@ export function rebaseSpokenTurnMarks(
   for (const mark of marks) mark.after ??= restoredTail;
 }
 
-/** Holds the first call until bootstrap has supplied its durable reply context. */
+/** Holds the first call until the document has supplied its durable reply context. */
 export function waitForConversationContext(
   ready: boolean,
   waiters: Set<() => void>,
 ): Promise<void> {
   if (ready) return Promise.resolve();
   return new Promise((resolve) => waiters.add(resolve));
-}
-
-/**
- * The state the voice window reads from the main process rather than owns:
- * the settings that shape a call, the roster the arrival beat is worded from,
- * the talk key its suggestion names, and the output the captions answer.
- * Seeded from the bootstrap and kept current by the same pushes every panel
- * receives.
- */
-interface VoiceSurroundings {
-  settings: AppSettingsView | undefined;
-  agentTraceEnabled: boolean;
-  sessions: readonly Session[];
-  bootstrapVoiceHotkey: string | undefined;
-  voiceHotkey: VoiceHotkeyState | undefined;
-  outputAudio: OutputAudioState | undefined;
-  announcementsHeld: boolean;
-  /** Whether restored history and personal memory are ready for the first turn. */
-  conversationContextReady: boolean;
-}
-
-const INITIAL_SURROUNDINGS: VoiceSurroundings = {
-  settings: undefined,
-  agentTraceEnabled: false,
-  sessions: [],
-  bootstrapVoiceHotkey: undefined,
-  voiceHotkey: undefined,
-  outputAudio: undefined,
-  announcementsHeld: false,
-  conversationContextReady: false,
-};
-
-/**
- * Which values a push, or this window's own act, has already set while the
- * bootstrap was still in flight. Each is tracked as a flag rather than read
- * off the value, because the pushed value may look like an absence: an empty
- * roster is a real observation (the last row gone, or a sign-out), a hold
- * released is `false`, and a permission can be pushed back to undetermined.
- */
-export interface VoiceValuesPushedBeforeBootstrap {
-  sessions: boolean;
-  announcementsHeld: boolean;
-  microphoneStatus: boolean;
-}
-
-/**
- * What the bootstrap may fill in once it lands. A push is newer than any
- * bootstrap still in flight, so a value already pushed is kept and only the
- * gaps are taken from the snapshot: merged the other way, a false push would
- * be overwritten back to held, an emptied roster back to a session that has
- * gone, or a permission the developer just granted back to its old answer.
- * The microphone status is answered separately because it is not a
- * surrounding: `undefined` says the bootstrap has nothing to set.
- */
-export interface VoiceBootstrapApplication {
-  surroundings: Partial<VoiceSurroundings>;
-  /** Absent when a push or this window's own ask already answered it. */
-  microphoneStatus: MicrophoneStatus | undefined;
-}
-
-export function applyVoiceBootstrap(
-  current: Pick<VoiceSurroundings, "settings" | "sessions" | "outputAudio" | "announcementsHeld">,
-  bootstrap: VoiceBootstrap,
-  pushed: VoiceValuesPushedBeforeBootstrap,
-): VoiceBootstrapApplication {
-  return {
-    surroundings: {
-      settings: current.settings ?? appSettingsView(bootstrap.settings),
-      agentTraceEnabled: bootstrap.agentTraceEnabled,
-      sessions: pushed.sessions ? current.sessions : bootstrap.sessionRoster.sessions,
-      bootstrapVoiceHotkey: bootstrap.voiceHotkey,
-      outputAudio: current.outputAudio ?? bootstrap.outputAudio,
-      announcementsHeld: pushed.announcementsHeld
-        ? current.announcementsHeld
-        : bootstrap.announcementsHeld,
-      conversationContextReady: true,
-    },
-    microphoneStatus: pushed.microphoneStatus ? undefined : bootstrap.microphoneStatus,
-  };
 }
 
 /**
@@ -451,36 +367,18 @@ interface SpokenTurnMark {
  * the main process hands to every panel. Nothing is drawn here.
  */
 export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>): void {
-  const [surroundings, setSurroundings, surroundingsNow] =
-    useStateWithRef<VoiceSurroundings>(INITIAL_SURROUNDINGS);
   /**
-   * Which values have been pushed, or set by this window's own act, before
-   * the bootstrap answered. A push is newer than any bootstrap still in
-   * flight, so once one has landed the bootstrap's answer for it is not read.
+   * Everything this window reads rather than owns — the settings that shape a
+   * call, the roster the arrival beat is worded from, the talk key its
+   * suggestion names, the output the captions answer, and the thread the last
+   * launch left — on the one channel main holds it on. Nothing here is
+   * reconciled against a second reading: the document arrives whole at a
+   * version that only rises.
    */
-  const pushedBeforeBootstrap = useRef<VoiceValuesPushedBeforeBootstrap>({
-    sessions: false,
-    announcementsHeld: false,
-    microphoneStatus: false,
-  });
-  const amend = useCallback(
-    (change: Partial<VoiceSurroundings>) => {
-      setSurroundings({ ...surroundingsNow(), ...change });
-    },
-    [setSurroundings, surroundingsNow],
-  );
-
-  // Read only inside the press's own closure, so the ref is the half that matters.
-  const [, setMicrophoneStatus, microphoneStatusNow] = useStateWithRef<MicrophoneStatus>(
-    MICROPHONE_STATUS.NOT_DETERMINED,
-  );
-  /** A status learned from a push or this window's own ask, which a late bootstrap must not undo. */
-  const learnMicrophoneStatus = useCallback(
-    (status: MicrophoneStatus) => {
-      pushedBeforeBootstrap.current.microphoneStatus = true;
-      setMicrophoneStatus(status);
-    },
-    [setMicrophoneStatus],
+  const state = useAppState();
+  const settings = useMemo(
+    () => (state?.settings ? appSettingsView(state.settings) : undefined),
+    [state?.settings],
   );
   const [voiceError, setVoiceError] = useState<string>();
   const [voiceNotice, setVoiceNotice] = useState<string>();
@@ -538,12 +436,12 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   const typedExchange = useRef(false);
   /**
    * What this window must have standing before the main process may send it
-   * anything, reported once under the epoch the bootstrap named. Built here
+   * anything, reported once under the epoch the document named. Built here
    * so the effects below can mark their subscriptions as they install.
    */
   const readiness = useRef<VoiceReadiness | undefined>(undefined);
   readiness.current ??= new VoiceReadiness((epoch) => void window.sidecar.reportVoiceReady(epoch));
-  /** The receiver epoch the bootstrap gave this load, which every grant asked of the main process names. */
+  /** The receiver epoch the document gave this load, which every grant asked of the main process names. */
   const voiceEpochRef = useRef<number | undefined>(undefined);
   /** The receiving end of reply deliveries; built beside the session, below. */
   const replyPlayer = useRef<ReplyDeliveryPlayer | undefined>(undefined);
@@ -561,21 +459,34 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   const conversationRef = useRef<readonly ConversationEntry[]>([]);
   const conversationContextWaitersRef = useRef(new Set<() => void>());
   /**
-   * Whether the stored thread has been placed. Once, at the bootstrap that
-   * carries it: a second seeding would re-add lines the developer had already
-   * cleared, and a Clear that lands before the bootstrap must stay cleared.
+   * Whether the stored thread has been placed. Once, from the first snapshot
+   * that carries it: a second seeding would re-add lines the developer had
+   * already cleared, and a Clear that lands before it must stay cleared.
    */
   const conversationSeeded = useRef(false);
+  /**
+   * The conversation slice this window adopted, which is both the mark that
+   * the document has been adopted at all and the one slice the merge below
+   * must not run over: the adoption placed it already.
+   */
+  const adoptedConversation = useRef<AppConversationSlice | undefined>(undefined);
   /** Rises when Clear retires every event that began before that press. */
   const conversationGenerationRef = useRef(0);
   // State is the ref's identical copy, so the retention timer below reads the
   // thread React can see.
   const [conversationHistory, setConversationHistory] = useState<readonly ConversationEntry[]>([]);
+  /**
+   * Whether the stored thread has been placed. The first call reads it from a
+   * callback that cannot wait a render, and the waiters below are released by
+   * a render, so it is both.
+   */
+  const [conversationContextReady, setConversationContextReady, conversationContextReadyNow] =
+    useStateWithRef(false);
   useEffect(() => {
-    if (!surroundings.conversationContextReady) return;
+    if (!conversationContextReady) return;
     for (const resolve of conversationContextWaitersRef.current) resolve();
     conversationContextWaitersRef.current.clear();
-  }, [surroundings.conversationContextReady]);
+  }, [conversationContextReady]);
   /** Where each server-identified spoken turn belongs when its transcript returns. */
   const spokenTurnMarksRef = useRef(new Map<string, SpokenTurnMark>());
   /** Local turn-close marks waiting for the server item ids that name them. */
@@ -692,7 +603,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
    */
   const clearConversation = useCallback(() => {
     conversationGenerationRef.current += 1;
-    // Seeded even if the bootstrap has not landed, so one still in flight
+    // Seeded even if no snapshot has landed, so one still in flight
     // cannot deliver the very thread this press just cleared.
     conversationSeeded.current = true;
     conversationRef.current = [];
@@ -715,7 +626,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   }, []);
 
   /**
-   * The stored thread, placed once from the bootstrap that carries it. Turns
+   * The stored thread, placed once from the snapshot that carries it. Turns
    * opened before it landed are moved behind it, so a transcript arriving
    * late is inserted after the restored lines rather than ahead of them.
    */
@@ -745,26 +656,29 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   );
 
   // The main process's own lines in the thread — the ask a carried act was —
-  // relayed here as to every panel, so this window's next whole report
-  // carries them rather than standing them back down. A Clear travels on its
-  // own command instead, so a relay that says cleared has nothing left to do.
-  useEffect(
-    () =>
-      window.sidecar.onConversationHistoryChanged((payload) => {
-        if (payload.cleared) return;
-        noteReported(payload.entries);
-        // The relay is the store's thread as another writer left it; a line of
-        // this window's still awaiting the store's acknowledgement is kept.
-        const reporter = reporterRef.current;
-        conversationRef.current = withPendingLines(
-          adoptConversationThread(conversationRef.current, payload.entries),
-          conversationRef.current,
-          (entry) => reporter.pending(entry),
-        );
-        setConversationHistory(conversationRef.current);
-      }),
-    [noteReported],
-  );
+  // reaching this window as they reach every panel, so this window's next
+  // whole report carries them rather than standing them back down. A Clear
+  // travels on its own command instead, so a slice that says cleared has
+  // nothing left to do, and the slice the adoption above already placed is
+  // not merged a second time.
+  const conversation = state?.conversation;
+  useEffect(() => {
+    // Before the adoption there is nothing to merge into: the thread it is
+    // about to place is the same one this slice carries.
+    if (adoptedConversation.current === undefined) return;
+    if (conversation === undefined || conversation === adoptedConversation.current) return;
+    if (conversation.cleared) return;
+    noteReported(conversation.entries);
+    // The slice is the store's thread as another writer left it; a line of
+    // this window's still awaiting the store's acknowledgement is kept.
+    const reporter = reporterRef.current;
+    conversationRef.current = withPendingLines(
+      adoptConversationThread(conversationRef.current, conversation.entries),
+      conversationRef.current,
+      (entry) => reporter.pending(entry),
+    );
+    setConversationHistory(conversationRef.current);
+  }, [conversation, noteReported]);
 
   /**
    * Records a spoken ask where its turn happened rather than where its
@@ -849,7 +763,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       // Read at each handshake rather than captured, so a voice or a pace
       // changed between calls is the one the next call is configured with.
       voice: () => {
-        const settings = surroundingsNow().settings;
+        const settings = appSettingsNow();
         return {
           ...(settings?.voice ? { voice: settings.voice } : undefined),
           ...(settings?.voiceSpeed ? { speed: settings.voiceSpeed } : undefined),
@@ -881,15 +795,15 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
         rememberConversationEntry(replyConversationEntry(texts.join(" ")), generation);
       },
       // The development trace's tap, checked at each event rather than at
-      // construction because the session outlives the bootstrap that says
-      // whether a writer stands behind the bridge. The audio is stripped
-      // here, before the event ever crosses the sandbox.
+      // construction because a call outlives any one version of the document
+      // that says whether a writer stands behind the bridge. The audio is
+      // stripped here, before the event ever crosses the sandbox.
       onWireEvent: (direction, event) => {
-        if (!surroundingsNow().agentTraceEnabled) return;
+        if (appStateNow()?.run.agentTraceEnabled !== true) return;
         window.sidecar.recordAgentTrace({ direction, event: sanitizedTraceEvent(event) });
       },
     }),
-    [rememberConversationEntry, remoteAudio, setVoiceStatus, surroundingsNow],
+    [rememberConversationEntry, remoteAudio, setVoiceStatus],
   );
 
   /** The developer's own call, built once and reused across its connections. */
@@ -904,7 +818,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       requestMicrophoneStream: () =>
         openPreferredMicrophone({
           route: () =>
-            (surroundingsNow().settings?.preferBuiltInMicrophone ?? true)
+            (appSettingsNow()?.preferBuiltInMicrophone ?? true)
               ? window.sidecar.getMicrophoneRoute()
               : Promise.resolve(undefined),
           enumerate: () => navigator.mediaDevices.enumerateDevices(),
@@ -999,7 +913,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       onSpokenAskFailed: dropSpokenAskPreview,
     });
     return conversationCall.current;
-  }, [callOptions, dropSpokenAskPreview, rememberSpokenAsk, surroundingsNow, tieSpokenTurnToRun]);
+  }, [callOptions, dropSpokenAskPreview, rememberSpokenAsk, tieSpokenTurnToRun]);
 
   /**
    * The call Luke opens for himself. It carries no microphone and no tools by
@@ -1074,27 +988,23 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
    * of them. The title is read from the same observed roster every row draws,
    * and the spoken try is only suggested while voice could actually take it.
    */
-  const wordedArrival = useCallback(
-    (speech: ArrivalSpeech): ArrivalSpeech => {
-      const current = surroundingsNow();
-      const working = current.sessions.find(
-        (session) => session.status === SESSION_STATUS.WORKING && session.realtimeVoice !== true,
-      );
-      // A change wins whole, exactly as `voiceHotkeyToShow` reads the pair: a
-      // changed state with no chord is a key deleted or lost, and falling back
-      // to bootstrap would speak a chord that no longer answers.
-      const changedTalkKey = current.voiceHotkey;
-      const talkKey = changedTalkKey ? changedTalkKey.hotkey : current.bootstrapVoiceHotkey;
-      return {
-        ...speech,
-        ...(working ? { sessionTitle: working.title } : undefined),
-        ...(current.settings?.voiceAvailable && talkKey !== undefined
-          ? { talkKeyLabel: voiceHotkeyLabel(talkKey) }
-          : undefined),
-      };
-    },
-    [surroundingsNow],
-  );
+  const wordedArrival = useCallback((speech: ArrivalSpeech): ArrivalSpeech => {
+    const held = appStateNow();
+    const working = held?.sessions.roster.sessions.find(
+      (session) => session.status === SESSION_STATUS.WORKING && session.realtimeVoice !== true,
+    );
+    // The chord read as the document holds it: a key deleted or refused its
+    // chord is absent there, so no beat can name one that no longer answers.
+    const talkKey = held?.hotkeys.talk;
+    const voiceAvailable = held?.settings?.status.voiceAvailable === true;
+    return {
+      ...speech,
+      ...(working ? { sessionTitle: working.title } : undefined),
+      ...(voiceAvailable && talkKey !== undefined
+        ? { talkKeyLabel: voiceHotkeyLabel(talkKey) }
+        : undefined),
+    };
+  }, []);
 
   /**
    * The mouth that lets Luke speak into silence: it takes the one turn the
@@ -1158,13 +1068,13 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     await closeCalls();
   }, [closeCalls]);
 
-  // Voice arriving and voice going away. It is not read from bootstrap alone,
+  // Voice arriving and voice going away. It is not read once and kept,
   // because it is not only true of a launch: a key entered in the panel turns
   // a session that reported itself unavailable into one that can connect,
   // without a relaunch — and deleting that key has to close whatever call is
   // open rather than leave a live microphone answering a talk key the main
   // process has already given back.
-  const voiceAvailable = surroundings.settings?.voiceAvailable;
+  const voiceAvailable = settings?.voiceAvailable;
   useEffect(() => {
     // Not yet known. Saying "off" before the answer arrives would draw the
     // unavailable state over a working key for the first frames of every launch.
@@ -1174,7 +1084,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
         // The close is async. A key deleted and reconnected while it was in
         // flight has already rebuilt a minter; forcing unavailable then would
         // leave the talk key looking dead over a live credential.
-        if (surroundingsNow().settings?.voiceAvailable === false) {
+        if (appStateNow()?.settings?.status.voiceAvailable === false) {
           setVoiceStatus(REALTIME_STATUS.UNAVAILABLE);
         }
       });
@@ -1185,7 +1095,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     if (voiceStatusNow() === REALTIME_STATUS.UNAVAILABLE) {
       setVoiceStatus(REALTIME_STATUS.IDLE);
     }
-  }, [voiceAvailable, setVoiceStatus, stopMicrophone, surroundingsNow, voiceStatusNow]);
+  }, [voiceAvailable, setVoiceStatus, stopMicrophone, voiceStatusNow]);
 
   /**
    * Opens the developer's call. Nothing is fed to it: the roster, the history,
@@ -1197,14 +1107,14 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
    */
   const startConversation = useCallback(async (): Promise<boolean> => {
     await waitForConversationContext(
-      surroundingsNow().conversationContextReady,
+      conversationContextReadyNow(),
       conversationContextWaitersRef.current,
     );
     setVoiceError(undefined);
     setVoiceNotice(undefined);
     standDownSpeakOnlyCall();
     return ensureConversationCall().connect();
-  }, [ensureConversationCall, standDownSpeakOnlyCall, surroundingsNow]);
+  }, [conversationContextReadyNow, ensureConversationCall, standDownSpeakOnlyCall]);
 
   /**
    * The press's way in: asks the system about the microphone, then opens the
@@ -1218,7 +1128,6 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     setVoiceError(undefined);
     const session = ensureConversationCall();
     const permission = await window.sidecar.requestMicrophone();
-    learnMicrophoneStatus(permission);
     if (permission !== MICROPHONE_STATUS.GRANTED) {
       // The press that asked for this is still waiting for a call that is now
       // not coming. The status never changes on this path, so the meter the
@@ -1229,7 +1138,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     }
     await startConversation();
     return permission;
-  }, [ensureConversationCall, learnMicrophoneStatus, startConversation]);
+  }, [ensureConversationCall, startConversation]);
 
   /** The neutral note used when the hosted service's emergency brake refuses a call. */
   const hostedUnavailableNote = useCallback(async (): Promise<string | undefined> => {
@@ -1243,8 +1152,10 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
    * and the panel's row must not be a second way to it.
    */
   const requestMicrophoneAccess = useCallback(async () => {
-    learnMicrophoneStatus(await window.sidecar.requestMicrophone());
-  }, [learnMicrophoneStatus]);
+    // The system's answer reaches this window as a version of the document,
+    // which the ask itself is what moves; nothing is kept here.
+    await window.sidecar.requestMicrophone();
+  }, []);
 
   /**
    * What the talk key means, wherever it was pressed. A first press has to open
@@ -1274,10 +1185,9 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     // turn opens: refused, the press is dropped here — before its device
     // request could fail a standing call that was carrying the typed
     // conversation fine.
-    if (microphoneStatusNow() !== MICROPHONE_STATUS.GRANTED) {
+    if (appStateNow()?.audio.microphoneStatus !== MICROPHONE_STATUS.GRANTED) {
       const pressedAt = talkPressedAt.current;
       const permission = await window.sidecar.requestMicrophone();
-      learnMicrophoneStatus(permission);
       if (permission !== MICROPHONE_STATUS.GRANTED) {
         // Said where the device failure used to land it: the caption strip.
         setVoiceError(
@@ -1320,14 +1230,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       const unavailable = await hostedUnavailableNote();
       if (unavailable) setVoiceNotice(unavailable);
     }
-  }, [
-    ensureConversationCall,
-    hostedUnavailableNote,
-    learnMicrophoneStatus,
-    microphoneStatusNow,
-    standDownSpeakOnlyCall,
-    startMicrophone,
-  ]);
+  }, [ensureConversationCall, hostedUnavailableNote, standDownSpeakOnlyCall, startMicrophone]);
 
   /**
    * The talk key coming up. How long it was held is the whole of the decision:
@@ -1451,63 +1354,22 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     conversationCall.current?.stopListening(false);
   }, []);
 
-  // The voice's own bootstrap, read once: the settings that shape a call,
-  // the thread the last launch left, and the facts pushes will keep current
-  // from here on. It is the voice's narrow bootstrap rather than the panel's,
-  // so the readiness report is not held behind reads the voice never uses.
+  /**
+   * The document adopted once: the stored thread placed, the receiver epoch
+   * this load was given, and the context the first turn waits on. Held until
+   * the settings arrive, because a snapshot without them is one the host has
+   * not answered for yet and the thread it carries is empty by default rather
+   * than by fact.
+   */
   useEffect(() => {
-    let cancelled = false;
-    void window.sidecar.getVoiceBootstrap().then((value: VoiceBootstrap) => {
-      if (cancelled) return;
-      seedConversationHistory(value.conversationHistory);
-      const applied = applyVoiceBootstrap(surroundingsNow(), value, pushedBeforeBootstrap.current);
-      if (applied.microphoneStatus !== undefined) setMicrophoneStatus(applied.microphoneStatus);
-      amend(applied.surroundings);
-      // Applied, so the readiness report may name the epoch this load was given.
-      voiceEpochRef.current = value.voiceEpoch;
-      readiness.current?.bootstrapped(value.voiceEpoch);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [amend, seedConversationHistory, setMicrophoneStatus, surroundingsNow]);
-
-  useEffect(
-    () =>
-      window.sidecar.onSettingsChanged((pushed) => amend({ settings: appSettingsView(pushed) })),
-    [amend],
-  );
-  useEffect(
-    () =>
-      window.sidecar.onSessionsChanged((pushed) => {
-        pushedBeforeBootstrap.current.sessions = true;
-        amend({ sessions: pushed.sessions });
-      }),
-    [amend],
-  );
-  useEffect(
-    () =>
-      window.sidecar.onAnnouncementsHeldChanged((held) => {
-        pushedBeforeBootstrap.current.announcementsHeld = true;
-        amend({ announcementsHeld: held });
-      }),
-    [amend],
-  );
-  useEffect(
-    () => window.sidecar.onVoiceHotkeyChanged((state) => amend({ voiceHotkey: state })),
-    [amend],
-  );
-  useEffect(
-    () => window.sidecar.onOutputAudioChanged((state) => amend({ outputAudio: state })),
-    [amend],
-  );
-  // The system's answer as the main process last learned it — a panel's row
-  // asked, or this window's own press did — so a press here reads the same
-  // status the rows draw.
-  useEffect(
-    () => window.sidecar.onMicrophoneStatusChanged(learnMicrophoneStatus),
-    [learnMicrophoneStatus],
-  );
+    if (adoptedConversation.current !== undefined || !state?.settings) return;
+    adoptedConversation.current = state.conversation;
+    seedConversationHistory(state.conversation.entries);
+    // Adopted, so the readiness report may name the epoch this load was given.
+    voiceEpochRef.current = state.voice.epoch;
+    readiness.current?.bootstrapped(state.voice.epoch);
+    setConversationContextReady(true);
+  }, [state, seedConversationHistory, setConversationContextReady]);
 
   // A panel's ask, validated and forwarded by the main process. Each command
   // is the same act the panel used to perform on its own session; none opens
@@ -1527,7 +1389,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   }, [clearConversation, discardListening, liveCall, requestMicrophoneAccess]);
 
   const heardSpeed = useRef<RealtimeVoiceSpeed | undefined>(undefined);
-  const voiceSpeed = surroundings.settings?.voiceSpeed;
+  const voiceSpeed = settings?.voiceSpeed;
   useEffect(() => {
     if (voiceSpeed === undefined) return;
     const previous = heardSpeed.current;
@@ -1538,7 +1400,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
 
   const heardVoice = useRef<RealtimeVoice | undefined>(undefined);
   const voiceRestartDue = useRef(false);
-  const voice = surroundings.settings?.voice;
+  const voice = settings?.voice;
   useEffect(() => {
     const decided = voiceRestartAction({
       previous: heardVoice.current,
@@ -1704,9 +1566,9 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   // ending has nothing here to wake, because the main process offers what it
   // held once the quiet ends.
   useEffect(() => {
-    if (surroundings.announcementsHeld) ensureMouth().setHeld(true);
+    if (state?.announcements.held === true) ensureMouth().setHeld(true);
     else mouth.current?.setHeld(false);
-  }, [ensureMouth, surroundings.announcementsHeld]);
+  }, [ensureMouth, state?.announcements.held]);
 
   // The talk key is registered by the main process so it answers from any app,
   // which is the whole point: no window to find, nothing to focus first. Both
@@ -1747,9 +1609,9 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   );
 
   const lukeCaptions = lukeCaptionsToShow({
-    captionsEnabled: surroundings.settings?.voiceCaptions === true,
+    captionsEnabled: settings?.voiceCaptions === true,
     typedAsk,
-    outputSilent: outputSilent(surroundings.outputAudio),
+    outputSilent: outputSilent(state?.audio.outputAudio),
     status: voiceStatus,
     captions: voiceCaption.texts,
   });

@@ -64,7 +64,6 @@ export function registerBrainIpc(registration: BrainIpcRegistration): void {
         return operator.wait(runId, submitters.voice(context.sender) ? epoch : undefined);
       },
       cancelBrainAsk: (_context, runId) => operator.cancel(runId),
-      brainRequestSnapshots: () => operator.runs(),
       claimBrainReply(context, runId, deliveryId, epoch): Promise<BrainReplyClaimResult> {
         if (!submitters.voice(context.sender)) return Promise.resolve({ granted: false });
         return operator.claim(runId, deliveryId, epoch);

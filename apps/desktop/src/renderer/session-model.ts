@@ -27,8 +27,9 @@ import {
   sessionChangeNumber,
   sessionFilterAxis,
 } from "@sidecar/session";
+import type { FixtureSnapshot } from "@sidecar/session/fixtures";
 import { compareSessionsByUrgency, urgencyLabel } from "@sidecar/surface";
-import type { AppBootstrap } from "#shared/messages/session";
+import type { AppState } from "#shared/messages/app-state";
 
 /**
  * The narrowings and their vocabulary live in core so the stored selection is
@@ -483,92 +484,105 @@ function bySort(sort: SessionSort): (first: SessionView, second: SessionView) =>
   return sort === SESSION_SORT.RECENCY ? byRecency : byUrgency;
 }
 
-export function displaySessions(
-  bootstrap: AppBootstrap,
-  sessions: readonly Session[],
-): readonly SessionView[] {
-  const visible: readonly SessionView[] = bootstrap.fixtureMode
-    ? bootstrap.fixture.sessions.map((session) => ({
-        ...session,
-        // The same wording rule the live path applies: a fixture row whose
-        // provider said nothing states its own state, so the evidence shows
-        // the fallback rather than a gap.
-        detail: session.detail || urgencyLabel(session.urgency),
-        label: urgencyLabel(session.urgency),
-        // A fixture stands for sessions that are not on the machine drawing
-        // them, so there is nothing for a press to open. The pull-request chip
-        // is still drawn where the fixture says a live session would have it —
-        // the evidence has to show it — but a fixture run cannot reach a
-        // provider: the main process refuses every act against its empty
-        // registry.
+/**
+ * A fixture's rows. A fixture stands for sessions that are not on the machine
+ * drawing them, so nothing in one is openable: the pull-request chip is still
+ * drawn where the fixture says a live session would have it — the evidence has
+ * to show it — but a fixture run cannot reach a provider, since the main
+ * process refuses every act against its empty registry.
+ */
+export function fixtureSessions(fixture: FixtureSnapshot): readonly SessionView[] {
+  return [...fixture.sessions]
+    .map((session) => ({
+      ...session,
+      // The same wording rule the observed path applies: a fixture row whose
+      // provider said nothing states its own state, so the evidence shows the
+      // fallback rather than a gap.
+      detail: session.detail || urgencyLabel(session.urgency),
+      label: urgencyLabel(session.urgency),
+      openable: false,
+      applications: (session.applications ?? []).map((application) => ({
+        ...application,
         openable: false,
-        applications: (session.applications ?? []).map((application) => ({
-          ...application,
-          openable: false,
-        })),
-        hasChange: session.hasChange === true,
-      }))
-    : sessions.map((session) => {
-        const urgency = sessionUrgency(session);
-        const changeNumber = session.detail.change
-          ? sessionChangeNumber(session.detail.change)
-          : undefined;
-        const openApplication = session.applications.find(
-          (application) => application.link === session.detail.link,
-        );
-        const displaySession: SessionView = {
-          id: session.providerSessionId,
-          title: session.title,
-          providerId: session.providerId,
-          provider: session.provider.displayName,
-          ...(session.agent
-            ? { agentId: session.agent.id, agent: session.agent.displayName }
-            : undefined),
-          applications: session.applications.map((application) => ({
-            id: application.id,
-            name: application.displayName,
-            scope: application.scope,
-            openable: application.link !== undefined,
-          })),
-          detail: sessionDetail(session, urgency),
-          repository: session.detail.repository,
-          branch: session.detail.branch,
-          model: session.detail.model,
-          ...(session.detail.diff ? { diff: sessionDiffLabel(session.detail.diff) } : undefined),
-          urgency,
-          label: urgencyLabel(urgency),
-          location: session.location,
-          lastActivityAt: session.lastActivityAt,
-          openable: session.detail.link !== undefined,
-          ...(openApplication ? { openApplication: openApplication.displayName } : undefined),
-          hasChange: session.detail.change !== undefined,
-          ...(changeNumber !== undefined ? { changeNumber } : undefined),
-          // A workspace the provider left unnamed still groups its chats; the
-          // id is at least stable, where a made-up name would claim knowledge
-          // the provider never reported.
-          ...(session.workspace
-            ? {
-                workspace: (() => {
-                  const workspace: DisplayWorkspace = {
-                    id: session.workspace.providerWorkspaceId,
-                    name: session.workspace.name ?? session.workspace.providerWorkspaceId,
-                  };
-                  if (session.workspace.scopeId) {
-                    workspace.scopeId = session.workspace.scopeId;
-                  }
-                  if (session.workspace.managerName) {
-                    workspace.managerName = session.workspace.managerName;
-                  }
-                  return workspace;
-                })(),
-              }
-            : undefined),
-        };
-        if (session.realtimeVoice === true) displaySession.realtimeVoice = true;
-        return displaySession;
-      });
+      })),
+      hasChange: session.hasChange === true,
+    }))
+    .sort(byUrgency);
+}
 
-  return [...visible].sort(byUrgency);
+/** An observed roster's rows, most urgent first. */
+export function observedSessions(sessions: readonly Session[]): readonly SessionView[] {
+  return sessions
+    .map((session) => {
+      const urgency = sessionUrgency(session);
+      const changeNumber = session.detail.change
+        ? sessionChangeNumber(session.detail.change)
+        : undefined;
+      const openApplication = session.applications.find(
+        (application) => application.link === session.detail.link,
+      );
+      const displaySession: SessionView = {
+        id: session.providerSessionId,
+        title: session.title,
+        providerId: session.providerId,
+        provider: session.provider.displayName,
+        ...(session.agent
+          ? { agentId: session.agent.id, agent: session.agent.displayName }
+          : undefined),
+        applications: session.applications.map((application) => ({
+          id: application.id,
+          name: application.displayName,
+          scope: application.scope,
+          openable: application.link !== undefined,
+        })),
+        detail: sessionDetail(session, urgency),
+        repository: session.detail.repository,
+        branch: session.detail.branch,
+        model: session.detail.model,
+        ...(session.detail.diff ? { diff: sessionDiffLabel(session.detail.diff) } : undefined),
+        urgency,
+        label: urgencyLabel(urgency),
+        location: session.location,
+        lastActivityAt: session.lastActivityAt,
+        openable: session.detail.link !== undefined,
+        ...(openApplication ? { openApplication: openApplication.displayName } : undefined),
+        hasChange: session.detail.change !== undefined,
+        ...(changeNumber !== undefined ? { changeNumber } : undefined),
+        // A workspace the provider left unnamed still groups its chats; the
+        // id is at least stable, where a made-up name would claim knowledge
+        // the provider never reported.
+        ...(session.workspace
+          ? {
+              workspace: (() => {
+                const workspace: DisplayWorkspace = {
+                  id: session.workspace.providerWorkspaceId,
+                  name: session.workspace.name ?? session.workspace.providerWorkspaceId,
+                };
+                if (session.workspace.scopeId) {
+                  workspace.scopeId = session.workspace.scopeId;
+                }
+                if (session.workspace.managerName) {
+                  workspace.managerName = session.workspace.managerName;
+                }
+                return workspace;
+              })(),
+            }
+          : undefined),
+      };
+      if (session.realtimeVoice === true) displaySession.realtimeVoice = true;
+      return displaySession;
+    })
+    .sort(byUrgency);
+}
+
+/**
+ * The rows this window draws, read from the document alone: a fixture run's
+ * own sessions, or the roster the observation passes reported.
+ */
+export function displaySessions(state: Pick<AppState, "run" | "sessions">): readonly SessionView[] {
+  return state.run.fixtureMode
+    ? fixtureSessions(state.run.fixture)
+    : observedSessions(state.sessions.roster.sessions);
 }
 
 const LOCATION_LABEL = {

@@ -7,12 +7,10 @@ import { INTRODUCTION_PEEK_FRESH_MS } from "@sidecar/host";
 import { peekLocalSessions } from "@sidecar/providers";
 import type { SpeechOutcome } from "@sidecar/realtime/speech";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
-import type { AppSettings } from "@sidecar/settings/wire";
 import type { WireRecord } from "@sidecar/wire";
-import { BrowserWindow, clipboard, ipcMain, screen } from "electron";
+import { BrowserWindow, clipboard, ipcMain } from "electron";
 import { BRIDGE } from "#shared/bridge";
-import { type AppBootstrap, type VoiceBootstrap, WINDOW_ROLE } from "#shared/messages/session";
-import { sessionReplayBootstrap } from "../app-state";
+import type { AppStateSnapshot } from "#shared/messages/app-state";
 import { type BridgeContext, registerBridge, registerBridgeEntry } from "../register-bridge";
 import type { DesktopServices } from "../services/compose-desktop";
 import { createSettingsHandler } from "../settings-handler";
@@ -55,78 +53,19 @@ export function registerDesktopIpc(services: DesktopServices): void {
     snapshot: async () => operator.settings() ?? (await operator.host.settingsSnapshot()),
   });
 
-  const unreachableSettings = async (): Promise<AppSettings> => {
-    const settings = await operator.host.settingsSnapshot();
-    if (!settings) throw new Error("Luke's runtime is not reachable right now.");
-    return settings;
-  };
-
   /**
-   * The fields the hidden voice window reads, read from the one document
-   * every window is answered from and this window's own facts: the receiver
-   * epoch the host minted for this load, which only the voice window is told,
-   * and the microphone, whose answer is macOS's to move and so is taken
-   * afresh rather than trusted.
+   * The document as one window stands, answered before anything is drawn over
+   * it: the host read once so no window is handed a state it never told, and
+   * the microphone taken afresh, because macOS's answer is its own to move
+   * and moves while Luke runs. Every later reading of the same document
+   * arrives on `app:state`.
    */
-  const voiceBootstrapFields = async (context: BridgeContext): Promise<VoiceBootstrap> => {
-    native.refreshMicrophoneStatus();
-    const held = state.snapshot();
-    return {
-      agentTraceEnabled: held.run.agentTraceEnabled,
-      microphoneStatus: held.audio.microphoneStatus,
-      ...(voiceWindow.owns(context.sender) && held.voice.epoch !== undefined
-        ? { voiceEpoch: held.voice.epoch }
-        : undefined),
-      ...(held.hotkeys.talk ? { voiceHotkey: held.hotkeys.talk } : undefined),
-      ...(held.audio.outputAudio ? { outputAudio: held.audio.outputAudio } : undefined),
-      sessionRoster: held.sessions.roster,
-      announcementsHeld: held.announcements.held,
-      conversationHistory: held.conversation.entries,
-      settings: held.settings ?? (await unreachableSettings()),
-    };
-  };
-  registerContextHandler(BRIDGE.getVoiceBootstrap, async (context: BridgeContext) => {
-    await operator.readBootstrap();
-    return await voiceBootstrapFields(context);
-  });
   registerContextHandler(
-    BRIDGE.getBootstrap,
-    async (context: BridgeContext): Promise<AppBootstrap> => {
-      const displayId = panels.displayIdFor(context.sender);
-      const display = voiceWindow.owns(context.sender)
-        ? undefined
-        : ((displayId !== undefined ? panels.display(displayId) : undefined) ??
-          screen.getPrimaryDisplay());
+    BRIDGE.requestAppState,
+    async (context: BridgeContext): Promise<AppStateSnapshot> => {
       await operator.readBootstrap();
-      const voiceFields = await voiceBootstrapFields(context);
-      const held = state.snapshot();
-      return {
-        ...voiceFields,
-        mode: displayId !== undefined ? panels.modeFor(displayId) : panels.initialMode,
-        startPeeked: held.run.startPeeked,
-        startInSlot: held.run.startInSlot,
-        profile: held.run.profile,
-        fixture: held.run.fixture,
-        captureMode: held.run.captureMode,
-        fixtureMode: held.run.fixtureMode,
-        supersetInstalled: held.superset.installed,
-        supersetConnected: held.superset.connected,
-        accountRequired: held.run.accountRequired,
-        account: held.account,
-        packaged: held.run.packaged,
-        platform: held.run.platform,
-        voiceHotkeyHeld: held.hotkeys.talkHeld,
-        ...(held.hotkeys.ask ? { askHotkey: held.hotkeys.ask } : undefined),
-        ...(held.hotkeys.stop ? { stopHotkey: held.hotkeys.stop } : undefined),
-        display: display ? panels.diagnostic(display) : undefined,
-        update: held.update,
-        sessionsSettled: held.sessions.settled,
-        workspaceProjects: held.sessions.workspaceProjects,
-        calendars: held.calendars,
-        voiceView: held.voice.view,
-        calendarOnboardingOwed: held.onboarding.calendarOwed,
-        sessionReplay: sessionReplayBootstrap(held),
-      };
+      native.refreshMicrophoneStatus();
+      return { ...state.snapshot(), window: windows.windowFactsFor(context.sender) };
     },
   );
   // The voice window's appends to the conversation, carried to the host's
@@ -268,14 +207,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
 
   registerHandler(BRIDGE.sendFeedback, (submission: FeedbackSubmission) =>
     telemetry.deliverFeedback(submission),
-  );
-
-  registerContextHandler(BRIDGE.getWindowRole, (context: BridgeContext) =>
-    introductionWindow.owns(context.sender)
-      ? WINDOW_ROLE.INTRODUCTION
-      : voiceWindow.owns(context.sender)
-        ? WINDOW_ROLE.VOICE
-        : WINDOW_ROLE.PANEL,
   );
 
   // The introduction's one-shot keyless read of this machine's local

@@ -5,7 +5,7 @@ import {
   PRODUCT_SURFACE_EVENT,
 } from "@sidecar/analytics";
 import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
-import type { AccountProvider, AccountSnapshot } from "@sidecar/credentials/snapshot";
+import type { AccountProvider } from "@sidecar/credentials/snapshot";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import type { CredentialProviderId } from "@sidecar/credentials/vocabulary";
 import {
@@ -25,14 +25,8 @@ import {
   workspaceProjectSelectionId,
 } from "@sidecar/session";
 import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTION } from "@sidecar/session/fixtures";
-import {
-  APP_SETTING_SCHEMA,
-  VOICE_HOTKEY_NONE,
-  voiceHotkeyLabel,
-  voiceHotkeyToShow,
-} from "@sidecar/settings";
+import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE, voiceHotkeyLabel } from "@sidecar/settings";
 import type {
-  AppSettings,
   AppSettingsView,
   ObservedAccountCalendars,
   SettingsUpdateResult,
@@ -51,12 +45,9 @@ import {
   useState,
 } from "react";
 import { CONSENT_SERVICE_ID, type ConsentServiceId } from "#shared/consent-services";
-import type { OutputAudioState } from "#shared/messages/audio";
+import { type AppStateSnapshot, sessionReplayBootstrap } from "#shared/messages/app-state";
 import type {
-  AppBootstrap,
   DisplayDiagnostic,
-  SessionReplayBootstrap,
-  SessionRosterPayload,
   SupersetSignInSnapshot,
   WorkspaceProviderId,
 } from "#shared/messages/session";
@@ -65,7 +56,6 @@ import {
   SUPERSET_SIGN_IN_STAGE,
   SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "#shared/messages/session";
-import type { UpdateSnapshot } from "#shared/messages/update";
 import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
 import type { CalendarGateControl } from "./calendar-gate";
 import { type ConsentConnectEntry, ConsentConnectSlot } from "./consent-connect-slot";
@@ -85,7 +75,6 @@ import {
   NOTHING_HELD,
   nextErrand,
   type PendingErrand,
-  supersedeErrandSettings,
 } from "./errand-queue";
 import {
   confirmationHoldMs,
@@ -158,7 +147,7 @@ import {
 } from "./strip-hold";
 import { SupersetSignInSlot } from "./superset-sign-in-slot";
 import { UPDATE_ROW_ACTION, updateRow } from "./update-row";
-import { useBootstrapRacedChannel } from "./use-bootstrap-raced-channel";
+import { appSettingsNow, appStateNow, useAppState } from "./use-app-state";
 import { useMeasuredHeight } from "./use-measured-height";
 import { panelEntryOpen, usePanelEntry } from "./use-panel-entry";
 import { usePanelPresentation } from "./use-panel-presentation";
@@ -288,6 +277,34 @@ function surfaceHeightStyle(
 const COLLAPSE_ANIMATION_MS = MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SURFACE;
 
 /**
+ * What each list-shaped slice reads as before the first snapshot lands. Held
+ * as constants so a render before it redraws nothing that was already drawn.
+ */
+const EMPTY_WORKSPACE_PROJECTS: readonly ObservedWorkspaceProject[] = [];
+const EMPTY_CALENDARS: readonly ObservedAccountCalendars[] = [];
+
+/** No Superset sign-in under way, which is every moment but a wait's own. */
+const IDLE_SUPERSET_SIGN_IN: SupersetSignInSnapshot = {
+  stage: SUPERSET_SIGN_IN_STAGE.IDLE,
+  organizations: [],
+};
+
+/**
+ * What a spoken settings change composes against: this window's own last
+ * answer while the document has not moved since, and the document itself
+ * from that version onward — by which point it carries the answer, and any
+ * newer word from another window or hand with it.
+ */
+function composeSettingsAgainst(
+  answered: { view: AppSettingsView; atVersion: number } | undefined,
+): AppSettingsView | undefined {
+  if (answered !== undefined && answered.atVersion === appStateNow()?.version) {
+    return answered.view;
+  }
+  return appSettingsNow();
+}
+
+/**
  * True from the render that leaves the panel for a compact shape until the
  * collapse has settled — the window's own collapse clock, exit plus shape.
  * The stylesheet spends it to hold the surface behind the content it is
@@ -313,33 +330,20 @@ function useLeavingPanel(presentation: PanelPresentation): boolean {
 }
 
 export function App(): React.JSX.Element {
-  const [bootstrap, setBootstrap] = useState<AppBootstrap>();
-  const bootstrapSettings = useMemo(
-    () => (bootstrap ? appSettingsView(bootstrap.settings) : undefined),
-    [bootstrap],
-  );
-  const [supersetConnected, setSupersetConnected] = useState<boolean>();
-  const [supersetSignIn, setSupersetSignIn] = useState<SupersetSignInSnapshot>({
-    stage: SUPERSET_SIGN_IN_STAGE.IDLE,
-    organizations: [],
-  });
-  // Readable from a callback as well as rendered: opening the feedback
-  // composer signs a fresh note from the account without re-wiring the
-  // lifecycle subscription to every sign-in change.
-  const [account, setAccount, accountNow] = useStateWithRef<AccountSnapshot | undefined>(undefined);
-  const [sessionRoster, setSessionRoster] = useState<SessionRosterPayload>({
-    sessions: [],
-  });
-  const sessions = sessionRoster.sessions;
-  // Whether the roster above has been read at all yet. It only ever settles —
-  // the bootstrap can say a reading already happened, and any push is one —
-  // so a bootstrap replying "not yet" after a push raced past it clobbers
-  // nothing, and the wing stops saying "loading" the moment either arrives.
-  const [sessionsSettled, setSessionsSettled] = useState(false);
-  const [workspaceProjects, setWorkspaceProjects] = useState<readonly ObservedWorkspaceProject[]>(
-    [],
-  );
-  const [display, setDisplay] = useState<DisplayDiagnostic>();
+  // Everything main holds, on the one channel it holds it on, and this
+  // window's own facts beside it. There is no second reading to reconcile
+  // against: what arrives is the whole document at a version that only rises.
+  const state = useAppState();
+  const account = state?.account;
+  const sessionsSettled = state?.sessions.settled === true;
+  const workspaceProjects = state?.sessions.workspaceProjects ?? EMPTY_WORKSPACE_PROJECTS;
+  const calendars = state?.calendars ?? EMPTY_CALENDARS;
+  const announcementsHeld = state?.announcements.held === true;
+  const calendarOnboardingOwed = state?.onboarding.calendarOwed === true;
+  const outputAudio = state?.audio.outputAudio;
+  const display = state?.window.display;
+  const supersetSignIn = state?.superset.signIn ?? IDLE_SUPERSET_SIGN_IN;
+  const supersetConnected = state?.superset.connected === true;
   const [tab, setTab, tabNow] = useStateWithRef<PanelTab>(PANEL_TAB.SESSIONS);
   const [settingsView, setSettingsView, settingsViewNow] = useStateWithRef<SettingsView>(
     SETTINGS_VIEW.ROOT,
@@ -351,12 +355,19 @@ export function App(): React.JSX.Element {
   // magnifier beside the tab bar answers for it, and its query lives with the
   // field in the settings panel — closing here is what lets that query go.
   const [settingsSearchOpen, setSettingsSearchOpen] = useState(false);
-  // The latest is needed from the spoken-settings carrier, which cannot wait
-  // a render: two changes asked for in one breath arrive as two calls in one
-  // turn, and the second composes against whatever the first just stored.
-  const [settings, setSettings, settingsNow] = useStateWithRef<AppSettingsView | undefined>(
-    undefined,
+  /**
+   * The settings the panel is drawing, which is the document's own unless an
+   * errand is holding one back: a switch Luke is on his way to move has to
+   * still read as it did when he set off, and the document moves the moment
+   * the store answers. Released when the run is over, so the newest word —
+   * including a change another window made mid-flight — is the document's.
+   */
+  const [heldSettings, setHeldSettings] = useState<AppSettingsView>();
+  const liveSettings = useMemo(
+    () => (state?.settings ? appSettingsView(state.settings) : undefined),
+    [state?.settings],
   );
+  const settings = heldSettings ?? liveSettings;
   const [errand, setErrand] = useState<Errand>();
   const [feedbackNotice, setFeedbackNotice] = useState<string>();
   /**
@@ -386,34 +397,6 @@ export function App(): React.JSX.Element {
     const next = parsePixels(style.paddingTop) + parsePixels(style.paddingBottom);
     setCaptionPadding((previous) => (previous === next ? previous : next));
   });
-  /**
-   * The ask key as last re-taken, superseding bootstrap's once it has changed
-   * at all: moving the talk key re-registers every global chord, and the ask
-   * key can land somewhere new or nowhere. Wrapped so "changed to none" is
-   * told apart from "never changed" — the same reading order the talk key's
-   * own state follows.
-   */
-  const [askHotkeyChange, setAskHotkeyChange] = useState<{ accelerator?: string }>();
-  /** The stop key on the ask key's exact terms, for the guide's sake. */
-  const [stopHotkeyChange, setStopHotkeyChange] = useState<{ accelerator?: string }>();
-  /**
-   * The Mac's output as last read — its mute switch and volume — absent
-   * wherever it cannot be read, which is drawn as audible. While it says
-   * Luke's voice would land on silence, his words are captioned whatever the
-   * preference says, and a hint under them asks for volume.
-   */
-  const [outputAudio, setOutputAudio] = useState<OutputAudioState>();
-  /** Each connected account's calendars, for the settings rows' checkboxes. */
-  const [calendars, setCalendars] = useState<readonly ObservedAccountCalendars[]>([]);
-  /** Whether announcements are held — the announce switch off or a meeting — and the face sleeps on it. */
-  const [announcementsHeld, setAnnouncementsHeld] = useState(false);
-  /** Whether the mandatory calendar step of onboarding still stands. */
-  const [calendarOnboardingOwed, setCalendarOnboardingOwed] = useState(false);
-  /**
-   * Where the app stands against the latest release, as last pushed or
-   * answered. Absent until bootstrap carries the main process's snapshot.
-   */
-  const [update, setUpdate] = useState<UpdateSnapshot>();
   /**
    * Which stretch of unbroken silence is on screen, advanced each time one
    * begins. A "Got it" is remembered against the stretch it answered, so it
@@ -479,72 +462,94 @@ export function App(): React.JSX.Element {
   const errands = useRef(0);
 
   /**
-   * The way to tell the conversation what the store now holds, for the spoken
-   * carrier below. Only the drawing waits for Luke: the guide has to describe
-   * the store's answer at once, because the next call in the same turn is
-   * validated against it — an effort named in the same breath as a model only
-   * exists in the guide the model change just made true. A ref because the
-   * carrier is created before the conversation hook that owns the publisher.
-   */
-  const publishGuideRef = useRef<(next: AppSettingsView) => void>(() => {});
-  /**
-   * The newest snapshot this window has seen, drawn or still held back.
+   * The store's own answer to this window's last spoken settings write, and
+   * the document version that stood when it landed.
    *
-   * What waits for Luke is the drawing alone. What the next call of the same
-   * turn composes against has to be current, or a model and the effort named
-   * in the same breath would compose the second against the selection the
-   * first just replaced. So the spoken carrier writes this the moment the
-   * store answers, before any of it is drawn.
-   *
-   * It cannot be only the spoken answers, though, or a switch pressed by hand
-   * between two spoken changes would be shadowed by a snapshot older than it.
-   * So every write goes through {@link applySettings} and this is always at
-   * least as new as the drawn state, whichever path wrote it.
+   * A spoken change composes against it — two changes asked in one breath are
+   * two calls in one turn, and the second has to compose against what the
+   * first stored, before any version of the document could have carried it
+   * back. It is read only while the document has not moved since: from the
+   * version that carries the write onward the document is the newer word,
+   * whichever window or hand wrote it.
    */
-  const answeredSettings = useRef<AppSettingsView | undefined>(undefined);
-  /**
-   * What this run was told about recording, kept so a settings change can
-   * re-decide without asking for another bootstrap. Absent until bootstrap
-   * answers, which is also the whole window in which nothing can record.
-   */
-  const replayBootstrap = useRef<SessionReplayBootstrap | undefined>(undefined);
+  const answeredSettings = useRef<{ view: AppSettingsView; atVersion: number } | undefined>(
+    undefined,
+  );
   /**
    * Recording follows the account: a sign-out ends it rather than leaving it
    * filed under the person who just left, and a sign-in can start one without
-   * waiting for a relaunch.
-   *
-   * It rides the raced-bootstrap rule for a sharper reason than the lists do.
-   * Sign-out and deletion halt recording before the account is cleared, so the
-   * bootstrap answer still in flight behind that halt describes a person who
-   * has already left — and applying it would restart recording under them, or
-   * under one whose erasure has just been queued. A push is the newer reading,
-   * so the older snapshot is dropped rather than allowed to clobber it.
+   * waiting for a relaunch. The document is the whole of what decides it, so
+   * a halt raised before the account was cleared can never be undone by an
+   * older reading arriving behind it.
    */
-  const acceptSessionReplayBootstrap = useBootstrapRacedChannel(
-    (onChange) => window.sidecar.onSessionReplayChanged(onChange),
-    (replay: SessionReplayBootstrap) => {
-      replayBootstrap.current = replay;
-      applySessionReplay(replay);
-    },
-  );
+  const sessionReplay = state?.sessionReplay;
+  const run = state?.run;
+  useEffect(() => {
+    if (!sessionReplay || !run) return;
+    applySessionReplay(sessionReplayBootstrap({ run, sessionReplay }));
+  }, [run, sessionReplay]);
+  /**
+   * The guide as last reported, serialized, so an identical one is not sent
+   * again. The panel rebuilds it on every version of the document — the
+   * cheapest honest trigger, since the guide reads five of its slices — and
+   * most versions move the roster and nothing the guide describes.
+   */
+  const reportedGuide = useRef<string | undefined>(undefined);
+
+  // Keep the conversation's view of Luke himself current, so a spoken question
+  // about a setting is answered from the value the store actually holds, and a
+  // change made in the panel is known to the conversation the moment it lands.
+  const publishGuide = useCallback((held: AppStateSnapshot, current: AppSettingsView) => {
+    // All three keys reach the guide labelled: it is spoken and read, so a
+    // chord belongs there as the one word macOS writes it as rather than as
+    // the keys the panel draws apart.
+    const guide = buildLukeGuide({
+      account: held.account,
+      settings: current,
+      update: held.update,
+      voiceAvailable: current.voiceAvailable,
+      microphoneStatus: held.audio.microphoneStatus,
+      // A removed key reaches the guide as the removal rather than a bare
+      // absence, so Luke says the developer deleted it instead of blaming
+      // another app for a chord nobody is contesting.
+      hotkey: {
+        ...(held.hotkeys.talk ? { hotkey: voiceHotkeyLabel(held.hotkeys.talk) } : undefined),
+        held: held.hotkeys.talkHeld,
+        removed: current.voiceHotkey === VOICE_HOTKEY_NONE,
+      },
+      ...(held.hotkeys.ask ? { askKey: voiceHotkeyLabel(held.hotkeys.ask) } : undefined),
+      askKeyRemoved: current.askHotkey === VOICE_HOTKEY_NONE,
+      ...(held.hotkeys.stop ? { stopKey: voiceHotkeyLabel(held.hotkeys.stop) } : undefined),
+      stopKeyRemoved: current.stopHotkey === VOICE_HOTKEY_NONE,
+    });
+    const wire = JSON.stringify(guide);
+    if (wire === reportedGuide.current) return;
+    reportedGuide.current = wire;
+    // The guide goes to the main process, where the brain reads it and an
+    // app act the brain asks for is validated against it; the voice itself
+    // is told nothing about the app.
+    window.sidecar.reportAppGuide(guide);
+  }, []);
 
   /**
-   * The one way settings are drawn. Every path travels it — a row's own press,
-   * a key stored or removed, another window's push, and an errand's hold
-   * coming down — so the snapshot the next spoken change composes against is
-   * never older than the panel it is drawn on.
+   * Every act this reply asked Luke to sign, in the order he will sign them.
+   * One flight at a time: a second act handed straight to the flight ends the
+   * first one mid-air, which is both switches flipping at once with nobody
+   * seen doing either.
    */
-  const applySettingsView = useCallback(
-    (next: AppSettingsView) => {
-      answeredSettings.current = next;
-      setSettings(next);
-    },
-    [setSettings],
-  );
-  const applySettings = useCallback(
-    (wire: AppSettings) => applySettingsView(appSettingsView(wire)),
-    [applySettingsView],
-  );
+  const errandRun = useRef<ErrandRun>(EMPTY_ERRAND_RUN);
+
+  /**
+   * Stops the panel following the document's settings, from before the write
+   * that is about to move them: the store answers before the errand is even
+   * armed, and the switch Luke is on his way to move has to still read as it
+   * did when he set off. A freeze already standing is kept, because the run
+   * signs its acts in turn and the oldest is the one still owed its tap.
+   */
+  const deferSettings = useCallback(() => {
+    setHeldSettings((held) => held ?? appSettingsNow());
+  }, []);
+
   /**
    * Draws what the panel was not drawing yet, because Luke had not reached it.
    *
@@ -564,29 +569,23 @@ export function App(): React.JSX.Element {
    * flight they are timing, and an errand whose callbacks changed identity
    * would be torn down and rebuilt mid-air.
    */
-  const drawErrandHold = useCallback(
-    (hold: ErrandHold) => {
-      if (hold.settings !== undefined) applySettingsView(hold.settings);
-      // Folded into whatever the view is at the moment it lands rather than the
-      // moment it was chosen: the list corrects its own filter during render
-      // when one empties, and a snapshot taken at the ask would undo that.
-      const view = hold.view;
-      if (view !== undefined) setSessionView((current) => ({ ...current, ...view }));
-      // A query landing opens the field it fills, on the rule the field's own
-      // closing keeps: a narrowing in force behind no visible control would
-      // hide sessions with nothing on screen admitting it.
-      if (view?.query) setSearchOpen(true);
-    },
-    [applySettingsView],
-  );
-
-  /**
-   * Every act this reply asked Luke to sign, in the order he will sign them.
-   * One flight at a time: a second act handed straight to the flight ends the
-   * first one mid-air, which is both switches flipping at once with nobody
-   * seen doing either.
-   */
-  const errandRun = useRef<ErrandRun>(EMPTY_ERRAND_RUN);
+  const drawErrandHold = useCallback((hold: ErrandHold) => {
+    if (hold.settings !== undefined) setHeldSettings(hold.settings);
+    // Folded into whatever the view is at the moment it lands rather than the
+    // moment it was chosen: the list corrects its own filter during render
+    // when one empties, and a snapshot taken at the ask would undo that.
+    const view = hold.view;
+    if (view !== undefined) setSessionView((current) => ({ ...current, ...view }));
+    // A query landing opens the field it fills, on the rule the field's own
+    // closing keeps: a narrowing in force behind no visible control would
+    // hide sessions with nothing on screen admitting it.
+    if (view?.query) setSearchOpen(true);
+    // The panel goes back on the document's own settings once nothing is
+    // left to sign: every hold this run caught has been drawn by then, and
+    // the newest word — including a change another window made mid-flight
+    // — is the document's.
+    if (errandRunIdle(errandRun.current)) setHeldSettings(undefined);
+  }, []);
 
   /** The tap has landed, so the act in the air may finally be drawn. */
   const releaseErrandChange = useCallback(() => {
@@ -648,8 +647,7 @@ export function App(): React.JSX.Element {
    * Luke is idle, at capsule scale.
    */
   const accountGated =
-    bootstrap?.accountRequired === true &&
-    (account ?? bootstrap.account).status !== ACCOUNT_STATUS.SIGNED_IN;
+    state?.run.accountRequired === true && account?.status !== ACCOUNT_STATUS.SIGNED_IN;
 
   /** Whether this window has already opened its one sign-in greeting. */
   const greeted = useRef(false);
@@ -665,7 +663,6 @@ export function App(): React.JSX.Element {
   const {
     presentation,
     current: presentationOf,
-    generation: modeGenerationOf,
     pointerInside: pointerIsInside,
     heldAgainstPointer,
     applyPresentation,
@@ -811,21 +808,8 @@ export function App(): React.JSX.Element {
   }, [changeTab, expand, setSettingsView]);
 
   /**
-   * Applies a settings write's reply: the snapshot the store actually holds,
-   * and any refusal for the row to show. Every settings row travels this
-   * road so it redraws from what was stored rather than from the press.
-   */
-  const applySettingsReply = useCallback(
-    (result: SettingsUpdateResult) => {
-      applySettings(result.settings);
-      return result;
-    },
-    [applySettings],
-  );
-
-  /**
    * The selection as last stored, so only a change of selection writes.
-   * Seeded from bootstrap's snapshot rather than from nothing, because
+   * Seeded from the document's own snapshot rather than from nothing, because
    * restoring the stored chips must not read as a fresh choice to store
    * again. A ref rather than reading the settings state: a stored write's
    * reply races the next chip press, and the last value this window sent is
@@ -837,23 +821,21 @@ export function App(): React.JSX.Element {
   // so the store follows the view from one place. Never in a fixture or
   // capture run, which must not write a developer's own settings file.
   useEffect(() => {
-    if (!bootstrap || bootstrap.fixtureMode) return;
-    storedSessionFilters.current ??= bootstrapSettings?.sessionFilters ?? [];
+    if (state === undefined || state.run.fixtureMode) return;
+    storedSessionFilters.current ??= liveSettings?.sessionFilters ?? [];
     const filters = sessionView.filters;
     if (sameSessionFilters(storedSessionFilters.current, filters)) return;
     storedSessionFilters.current = filters;
-    void window.sidecar
-      .updateSetting(
-        APP_SETTING_SCHEMA.sessionFilters.field,
-        filters.length > 0 ? filters : undefined,
-      )
-      .then(applySettingsReply);
-  }, [bootstrap, sessionView.filters, applySettingsReply, bootstrapSettings?.sessionFilters]);
+    void window.sidecar.updateSetting(
+      APP_SETTING_SCHEMA.sessionFilters.field,
+      filters.length > 0 ? filters : undefined,
+    );
+  }, [state, sessionView.filters, liveSettings?.sessionFilters]);
 
   /**
    * The search query as last stored, on the filter selection's own terms:
-   * seeded from bootstrap's snapshot so restoring the stored words must not
-   * read as fresh typing to store again.
+   * seeded from the document's snapshot so restoring the stored words must
+   * not read as fresh typing to store again.
    */
   const storedSessionQuery = useRef<string | undefined>(undefined);
   // The query funnels through the view the way the selection does — typing,
@@ -865,18 +847,16 @@ export function App(): React.JSX.Element {
   // somewhere, and a quit inside a waited write would bring back a search the
   // developer deliberately let go.
   useEffect(() => {
-    if (!bootstrap || bootstrap.fixtureMode) return;
-    storedSessionQuery.current ??= bootstrapSettings?.sessionSearchQuery ?? "";
+    if (state === undefined || state.run.fixtureMode) return;
+    storedSessionQuery.current ??= liveSettings?.sessionSearchQuery ?? "";
     const query = sessionView.query;
     if (storedSessionQuery.current === query) return;
     const store = () => {
       storedSessionQuery.current = query;
-      void window.sidecar
-        .updateSetting(
-          APP_SETTING_SCHEMA.sessionSearchQuery.field,
-          query !== "" ? query : undefined,
-        )
-        .then(applySettingsReply);
+      void window.sidecar.updateSetting(
+        APP_SETTING_SCHEMA.sessionSearchQuery.field,
+        query !== "" ? query : undefined,
+      );
     };
     if (query === "") {
       store();
@@ -884,37 +864,28 @@ export function App(): React.JSX.Element {
     }
     const settled = window.setTimeout(store, SEARCH_QUERY_STORE_DELAY_MS);
     return () => window.clearTimeout(settled);
-  }, [bootstrap, sessionView.query, applySettingsReply, bootstrapSettings?.sessionSearchQuery]);
+  }, [state, sessionView.query, liveSettings?.sessionSearchQuery]);
 
   const removeCalendarAccount = useCallback(
-    async (accountId: string) =>
-      applySettingsReply(await window.sidecar.removeCalendarAccount(accountId)),
-    [applySettingsReply],
+    (accountId: string) => window.sidecar.removeCalendarAccount(accountId),
+    [],
   );
 
   const toggleCalendarSelected = useCallback(
-    async (accountId: string, calendarId: string, selected: boolean) =>
-      applySettingsReply(await window.sidecar.setCalendarSelected(accountId, calendarId, selected)),
-    [applySettingsReply],
+    (accountId: string, calendarId: string, selected: boolean) =>
+      window.sidecar.setCalendarSelected(accountId, calendarId, selected),
+    [],
   );
 
-  const disconnectAppleCalendar = useCallback(
-    async () => applySettingsReply(await window.sidecar.disconnectAppleCalendar()),
-    [applySettingsReply],
-  );
+  const disconnectAppleCalendar = useCallback(() => window.sidecar.disconnectAppleCalendar(), []);
 
   const toggleAppleCalendarSelected = useCallback(
-    async (calendarId: string, selected: boolean) =>
-      applySettingsReply(
-        await window.sidecar.setCalendarSelected(APPLE_CALENDAR_ID, calendarId, selected),
-      ),
-    [applySettingsReply],
+    (calendarId: string, selected: boolean) =>
+      window.sidecar.setCalendarSelected(APPLE_CALENDAR_ID, calendarId, selected),
+    [],
   );
 
-  const disconnectLinear = useCallback(
-    async () => applySettingsReply(await window.sidecar.disconnectLinear()),
-    [applySettingsReply],
-  );
+  const disconnectLinear = useCallback(() => window.sidecar.disconnectLinear(), []);
 
   /**
    * A consent sign-in is asking for one thing too, so the panel gets out of
@@ -936,7 +907,6 @@ export function App(): React.JSX.Element {
       // Which service is being connected decides which documented act runs,
       // and nothing else does: the entry names a row of the acts table.
       const result = await CONSENT_ACTS[sending.serviceId].connect();
-      applySettings(result.settings);
       return result.reason ? { rejection: result.reason } : {};
     },
     pointerInside: pointerIsInside,
@@ -980,12 +950,12 @@ export function App(): React.JSX.Element {
     let granted = false;
     try {
       granted = (await window.sidecar.appleCalendarAccessStatus()) === APPLE_CALENDAR_ACCESS.FULL;
-      if (granted) applySettingsReply(await window.sidecar.connectAppleCalendar());
+      if (granted) await window.sidecar.connectAppleCalendar();
     } finally {
       setAppleCalendarBusy(false);
     }
     if (!granted) beginConsentSignIn(CONSENT_SERVICE_ID.APPLE_CALENDAR);
-  }, [applySettingsReply, beginConsentSignIn]);
+  }, [beginConsentSignIn]);
 
   /** The Mac's own entry in the latest calendars broadcast, for its block. */
   const appleCalendarObserved = calendars.find((choice) => choice.accountId === APPLE_CALENDAR_ID);
@@ -1007,11 +977,13 @@ export function App(): React.JSX.Element {
     consentConnect.cancel();
   }, [consentConnect.cancel, consentConnect.latest]);
 
+  // The stage the slot draws is the document's throughout: the flow moves it
+  // as it goes — browser code, exchanging, the organization choice — and each
+  // stage reaches every window before the press's own reply returns.
   const beginSupersetSignIn = useCallback(() => {
     if (supersetSignInHeld.current) {
       if (supersetSignIn.stage === SUPERSET_SIGN_IN_STAGE.FAILURE) {
-        setSupersetSignIn({ stage: SUPERSET_SIGN_IN_STAGE.BROWSER_CODE, organizations: [] });
-        void window.sidecar.beginSupersetSignIn().then(setSupersetSignIn);
+        void window.sidecar.beginSupersetSignIn();
       }
       return;
     }
@@ -1019,27 +991,19 @@ export function App(): React.JSX.Element {
     supersetSignInHeld.current = true;
     slotOccupant.current = PANEL_STAND_DOWN.SUPERSET;
     standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.SUPERSET });
-    setSupersetSignIn({ stage: SUPERSET_SIGN_IN_STAGE.BROWSER_CODE, organizations: [] });
     cancelHover();
     applyPresentation(PANEL_PRESENTATION.SLOT);
-    void window.sidecar.beginSupersetSignIn().then(setSupersetSignIn);
+    void window.sidecar.beginSupersetSignIn();
   }, [applyPresentation, cancelHover, supersetSignIn.stage]);
 
   const cancelSupersetSignIn = useCallback(() => {
     if (!supersetSignInHeld.current) return;
     window.sidecar.cancelSupersetSignIn();
     supersetSignInHeld.current = false;
-    setSupersetSignIn({ stage: SUPERSET_SIGN_IN_STAGE.IDLE, organizations: [] });
     if (presentationOf() === PANEL_PRESENTATION.SLOT) restorePanel();
   }, [presentationOf, restorePanel]);
 
-  const disconnectSuperset = useCallback(async () => {
-    const result = await window.sidecar.disconnectSuperset();
-    // The idle broadcast the sign-out fires says the same thing to every other
-    // window; this window should not wait a round trip to agree with itself.
-    if (result.status === ACT_RESULT_STATUS.ACCEPTED) setSupersetConnected(false);
-    return result;
-  }, []);
+  const disconnectSuperset = useCallback(() => window.sidecar.disconnectSuperset(), []);
 
   /**
    * Asking to write a key is asking for one thing, so the panel gets out of the
@@ -1054,7 +1018,6 @@ export function App(): React.JSX.Element {
     isSendable: isSubmittable,
     send: async (sending) => {
       const result = await window.sidecar.setProviderApiKey(sending.providerId, sending.draft);
-      applySettings(result.settings);
       return result.reason ? { rejection: result.reason } : {};
     },
     pointerInside: pointerIsInside,
@@ -1124,7 +1087,6 @@ export function App(): React.JSX.Element {
   const removeProviderApiKey = useCallback(
     async (providerId: CredentialProviderId) => {
       const result = await window.sidecar.setProviderApiKey(providerId, undefined);
-      applySettings(result.settings);
       // Delete and the field are on the row together once the panel has been
       // brought back around an entry, and a key that has been removed cannot be
       // replaced.
@@ -1133,7 +1095,7 @@ export function App(): React.JSX.Element {
       }
       return result;
     },
-    [applySettings, credentialsEntry.apply, credentialsEntry.latest],
+    [credentialsEntry.apply, credentialsEntry.latest],
   );
 
   const credentials: CredentialEntryControl = {
@@ -1209,15 +1171,13 @@ export function App(): React.JSX.Element {
   }, [expand, presentationOf, setSignInWait, signInWaitNow]);
 
   const changeSupersetAgentDefault = useCallback(
-    async (agent: string | undefined) =>
-      applySettingsReply(
-        await window.sidecar.updateSettingEntry(
-          APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-          SUPERSET_WORKSPACE_PROVIDER_ID,
-          agent === undefined ? undefined : { agent },
-        ),
+    (agent: string | undefined) =>
+      window.sidecar.updateSettingEntry(
+        APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
+        SUPERSET_WORKSPACE_PROVIDER_ID,
+        agent === undefined ? undefined : { agent },
       ),
-    [applySettingsReply],
+    [],
   );
 
   /**
@@ -1397,19 +1357,13 @@ export function App(): React.JSX.Element {
         ...(draft !== undefined ? { draft } : undefined),
         // A fresh note starts signed with the account; a note already there
         // keeps its fields as its author left them, cleared ones included.
-        signature: accountSignature(accountNow()),
+        signature: accountSignature(appStateNow()?.account),
       });
       if (opened.entry) feedbackEntry.apply(opened.entry);
       feedbackEntry.standDown();
       return opened.drafted;
     },
-    [
-      accountNow,
-      dropFeedbackConfirmation,
-      feedbackEntry.apply,
-      feedbackEntry.latest,
-      feedbackEntry.standDown,
-    ],
+    [dropFeedbackConfirmation, feedbackEntry.apply, feedbackEntry.latest, feedbackEntry.standDown],
   );
 
   /**
@@ -1499,30 +1453,24 @@ export function App(): React.JSX.Element {
    * carries only the stored choice and any refusal.
    */
   const changeVoiceHotkey = useCallback(
-    async (accelerator: string | undefined) =>
-      applySettingsReply(
-        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.voiceHotkey.field, accelerator),
-      ),
-    [applySettingsReply],
+    (accelerator: string | undefined) =>
+      window.sidecar.updateSetting(APP_SETTING_SCHEMA.voiceHotkey.field, accelerator),
+    [],
   );
 
   // The ask key, under the same rule: the key the row shows follows the main
   // process's own announcement of what actually registered.
   const changeAskHotkey = useCallback(
-    async (accelerator: string | undefined) =>
-      applySettingsReply(
-        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.askHotkey.field, accelerator),
-      ),
-    [applySettingsReply],
+    (accelerator: string | undefined) =>
+      window.sidecar.updateSetting(APP_SETTING_SCHEMA.askHotkey.field, accelerator),
+    [],
   );
 
   // The stop key, under the same rule again.
   const changeStopHotkey = useCallback(
-    async (accelerator: string | undefined) =>
-      applySettingsReply(
-        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.stopHotkey.field, accelerator),
-      ),
-    [applySettingsReply],
+    (accelerator: string | undefined) =>
+      window.sidecar.updateSetting(APP_SETTING_SCHEMA.stopHotkey.field, accelerator),
+    [],
   );
 
   // True while a settings row is recording a chord. Both Luke keys stay
@@ -1714,11 +1662,10 @@ export function App(): React.JSX.Element {
     async (action) =>
       dispatchByKind(action, {
         [ACT_KIND.SETTING]: async (action): Promise<WireRecord> => {
-          // The store's answer is caught rather than drawn: the switch is what
-          // Luke is on his way to move, so it waits for him to reach it. It is
-          // caught in a local and handed to this act alone, because one reply
-          // can change two settings and each switch waits for its own tap.
-          // Every path out of here releases it, and the outcome the
+          // The drawing is held back before the write, not after it: the store
+          // answers by moving the document, and the switch is what Luke is on
+          // his way to move, so it has to still read as it did when he set
+          // off. Every path out of here releases the hold, and the outcome the
           // conversation is told is the store's own either way — what is
           // delayed is the drawing, never the change or the report of it.
           //
@@ -1726,10 +1673,11 @@ export function App(): React.JSX.Element {
           // guide has to describe the store's answer at once, because the next
           // call in this same turn is validated against it — an effort named in
           // the same breath as a model only exists in the guide the model
-          // change just made true. And the freshest answer this window has seen
-          // is what that next call composes against, which is why it is
-          // remembered outside the hold: the hold belongs to one act, and every
-          // act after it has to read this.
+          // change just made true. And that next call composes against the
+          // same answer, before any version of the document could have carried
+          // it back, which is why it is remembered outside the hold: the hold
+          // belongs to one act, and every act after it has to read this.
+          deferSettings();
           let caught: AppSettingsView | undefined;
           const outcome = await applySpokenSetting(
             window.sidecar,
@@ -1737,10 +1685,11 @@ export function App(): React.JSX.Element {
             (wire) => {
               const next = appSettingsView(wire);
               caught = next;
-              answeredSettings.current = next;
-              publishGuideRef.current(next);
+              const held = appStateNow();
+              answeredSettings.current = { view: next, atVersion: held?.version ?? -1 };
+              if (held) publishGuide(held, next);
             },
-            answeredSettings.current ?? settingsNow() ?? bootstrapSettings,
+            composeSettingsAgainst(answeredSettings.current),
           );
           const hold: ErrandHold = caught === undefined ? NOTHING_HELD : { settings: caught };
           // Nothing to show and nothing to sign: a refused change must not stand
@@ -1799,7 +1748,7 @@ export function App(): React.JSX.Element {
             kind,
             fromPanel: false,
             ...(action.draft === undefined ? undefined : { draft: action.draft }),
-            signature: accountSignature(accountNow()),
+            signature: accountSignature(appStateNow()?.account),
           }).drafted;
           spokenFeedbackDraft.current = action.draft;
           try {
@@ -1855,9 +1804,10 @@ export function App(): React.JSX.Element {
           // view the hold is about to land: the reply voices this outcome, and
           // it must not claim rows the list will not draw. Only the drawing
           // waits for the flight, never the report.
+          const held = appStateNow();
           const searched =
-            action.query !== undefined && bootstrap !== undefined
-              ? spokenSearchOutcome(displaySessions(bootstrap, sessions), {
+            action.query !== undefined && held !== undefined
+              ? spokenSearchOutcome(displaySessions(held), {
                   ...sessionView,
                   ...view,
                 })
@@ -1903,7 +1853,6 @@ export function App(): React.JSX.Element {
             // Answered rather than fire-and-forget, like the row's own press,
             // so the outcome voiced is the answer the check actually returned.
             const answered = await window.sidecar.checkForUpdates();
-            setUpdate(answered);
             return { status: ACT_RESULT_STATUS.ACCEPTED, outcome: updateRow(answered).detail };
           }
           if (action.act === APP_UPDATE_ACT.DOWNLOAD) {
@@ -1919,7 +1868,7 @@ export function App(): React.JSX.Element {
           // stands. The main process quietly refuses a stale ask either way;
           // this makes the refusal a sentence rather than a claimed restart
           // that never comes.
-          const standing = update ?? bootstrap?.update;
+          const standing = appStateNow()?.update;
           const row = standing ? updateRow(standing) : undefined;
           if (row?.action !== UPDATE_ROW_ACTION.RESTART) {
             return {
@@ -1935,18 +1884,14 @@ export function App(): React.JSX.Element {
         },
       }),
     [
-      accountNow,
       armErrandFlight,
       changeMode,
-      settingsNow,
-      bootstrap,
-      update,
+      deferSettings,
       drawErrandHold,
       feedbackEntry.latest,
       presentationOf,
-      sessions,
+      publishGuide,
       sessionView,
-      bootstrapSettings,
     ],
   );
 
@@ -1972,18 +1917,14 @@ export function App(): React.JSX.Element {
 
   // The muted evidence run is the speaking run with the hint drawn over it: a
   // capture has no system output to read, so the state is asked for directly.
-  const fixtureMuted = bootstrap?.profile === "muted";
-  const fixtureSpeaking = bootstrap?.profile === "speaking" || fixtureMuted;
+  const fixtureMuted = state?.run.profile === "muted";
+  const fixtureSpeaking = state?.run.profile === "speaking" || fixtureMuted;
   const {
     view: voiceView,
     speaking,
     voiceTurn,
     level: voiceLevel,
     voiceActive,
-    microphoneStatus,
-    voiceHotkey,
-    conversationHistory,
-    acceptBootstrap: acceptVoiceBootstrap,
     askLuke,
     brainRequests,
     cancelBrainAsk,
@@ -2107,72 +2048,6 @@ export function App(): React.JSX.Element {
   const shownCaptionHeight = leavingPanel ? heldCaptionHeight.current : captionTextHeight;
 
   /**
-   * A live push beats a bootstrap snapshot still in flight. The main process
-   * will not repeat a list it believes it already announced, so the older
-   * snapshot must not clobber one that raced past it.
-   */
-  const acceptProjectsBootstrap = useBootstrapRacedChannel(
-    (onChange) => window.sidecar.onWorkspaceProjectsChanged(onChange),
-    setWorkspaceProjects,
-  );
-  // The roster itself rides the same rule, and settling rides with it: any
-  // push is a reading — the main process broadcasts even an empty first
-  // pass — so an older bootstrap snapshot can neither clobber a roster that
-  // raced past it nor leave the settled flag standing over a blank it
-  // reintroduced.
-  const acceptSessionsBootstrap = useBootstrapRacedChannel(
-    (onChange) =>
-      window.sidecar.onSessionsChanged((pushed) => {
-        setSessionsSettled(true);
-        onChange(pushed);
-      }),
-    setSessionRoster,
-  );
-  // Another window's settings change: this window's rows and guide redraw
-  // from the same snapshot its reply carried, so no window describes a
-  // state the store no longer holds.
-  const acceptSettingsBootstrap = useBootstrapRacedChannel(
-    (onChange) =>
-      window.sidecar.onSettingsChanged((pushed) => {
-        // A push is newer than anything the run is still carrying, so it takes
-        // every held snapshot with it: released afterwards, one caught before
-        // this arrived would draw the store as it was rather than as it is.
-        errandRun.current = supersedeErrandSettings(errandRun.current);
-        onChange(pushed);
-      }),
-    applySettings,
-  );
-  const acceptAccountBootstrap = useBootstrapRacedChannel(
-    (onChange) => window.sidecar.onAccountChanged(onChange),
-    setAccount,
-  );
-  // Where the app stands against the latest release: the timed check's
-  // pushes beat a bootstrap snapshot still in flight, like the settings'.
-  const acceptUpdateBootstrap = useBootstrapRacedChannel(
-    (onChange) => window.sidecar.onUpdateChanged(onChange),
-    setUpdate,
-  );
-  const acceptOutputAudioBootstrap = useBootstrapRacedChannel(
-    (onChange) => window.sidecar.onOutputAudioChanged(onChange),
-    setOutputAudio,
-  );
-  // Each connected account's calendars, for the checkboxes on its rows.
-  const acceptCalendarsBootstrap = useBootstrapRacedChannel(
-    (onChange) => window.sidecar.onCalendarsChanged(onChange),
-    setCalendars,
-  );
-  // Whether announcements are held, for the face alone.
-  const acceptAnnouncementsHeldBootstrap = useBootstrapRacedChannel(
-    (onChange) => window.sidecar.onAnnouncementsHeldChanged(onChange),
-    setAnnouncementsHeld,
-  );
-  // Whether the calendar step of onboarding stands, for the gate alone.
-  const acceptCalendarOnboardingBootstrap = useBootstrapRacedChannel(
-    (onChange) => window.sidecar.onCalendarOnboardingChanged(onChange),
-    setCalendarOnboardingOwed,
-  );
-
-  /**
    * The one act a row's chip can ask for, handed to the main process by
    * session identity. Unlike opening the session, it leaves the panel up: a
    * refusal lands back on the row that asked.
@@ -2231,68 +2106,57 @@ export function App(): React.JSX.Element {
     };
   }, []);
 
+  /**
+   * What the panel does once with the state it opened on: the mode main
+   * decided, the stored way of viewing the list, and the two shapes an
+   * evidence run has no press to reach. Once, on the first snapshot that
+   * carries settings — from here on the view leads and the store follows.
+   * The mode needs no guard against a developer who moved it meanwhile: the
+   * snapshot carries the mode main holds as it publishes, so it is the same
+   * word the lifecycle relay would carry for whatever moved it.
+   */
+  const opened = useRef(false);
   useEffect(() => {
-    const bootstrapGeneration = modeGenerationOf();
-    void window.sidecar.getBootstrap().then((value) => {
-      setBootstrap(value);
-      acceptSessionsBootstrap(value.sessionRoster);
-      if (value.sessionsSettled) setSessionsSettled(true);
-      // Only fill in what no push has said yet: the bootstrap snapshot is
-      // older than any change that raced past it, and the main process will
-      // not repeat a list it believes it already announced.
-      acceptProjectsBootstrap(value.workspaceProjects);
-      acceptCalendarsBootstrap(value.calendars);
-      acceptAnnouncementsHeldBootstrap(value.announcementsHeld);
-      // The voice snapshots ride the same rule: the voice window's pushes
-      // beat a bootstrap still in flight.
-      acceptVoiceBootstrap(value);
-      acceptCalendarOnboardingBootstrap(value.calendarOnboardingOwed);
-      acceptSessionReplayBootstrap(value.sessionReplay);
-      acceptSettingsBootstrap(value.settings);
-      // The stored filter chips and search words come back with the panel:
-      // each is a standing way of viewing the list, and this is the one
-      // moment they are read from the store — from here on the view leads and
-      // the store follows. Never in a fixture or capture run, whose evidence
-      // must not vary with what a developer last chose.
-      const storedFilters = value.settings.stored.sessionFilters;
-      const storedQuery = value.settings.stored.sessionSearchQuery;
-      if (!value.fixtureMode && (storedFilters !== undefined || storedQuery !== undefined)) {
-        setSessionView((current) => ({
-          ...current,
-          ...(storedFilters !== undefined ? { filters: storedFilters } : undefined),
-          ...(storedQuery !== undefined ? { query: storedQuery } : undefined),
-        }));
-        // A restored query opens the field it refills, on the rule the
-        // field's own closing keeps: a narrowing in force behind no visible
-        // control would hide sessions with nothing on screen admitting it.
-        if (storedQuery !== undefined) setSearchOpen(true);
-      }
-      acceptAccountBootstrap(value.account);
-      acceptUpdateBootstrap(value.update);
-      setDisplay(value.display);
-      if (modeGenerationOf() === bootstrapGeneration) {
-        applyAuthoritativeMode(value.mode);
-        if (value.startPeeked && value.mode === "compact") {
-          applyPresentation(PANEL_PRESENTATION.PEEK);
-        }
-        // Evidence only, and the same trick the peek uses: the slot is reached
-        // by pressing Connect, which a capture run has no way to do, so the
-        // entry the press would have begun is asked for directly. It carries
-        // the shape with it, as it does anywhere else.
-        const [firstProvider] = CREDENTIAL_PROVIDER_LIST;
-        if (value.startInSlot && value.mode === "expanded" && firstProvider) {
-          // The tab and page an entry begins on, so pressing the capsule from
-          // here lands where it would have in the flow this is standing in for.
-          changeTab(PANEL_TAB.SETTINGS);
-          setSettingsView(credentialSettingsPage(firstProvider.id));
-          beginEntry(firstProvider.id);
-        }
-      }
-      // Only fill in what no push has said yet, like the issue roster: the
-      // bootstrap snapshot is older than any change that raced past it.
-      if (value.outputAudio) acceptOutputAudioBootstrap(value.outputAudio);
-      window.sidecar.notifyReady();
-    });
+    if (opened.current || !state?.settings) return;
+    opened.current = true;
+    const { run, window: pane } = state;
+    // Never in a fixture or capture run, whose evidence must not vary with
+    // what a developer last chose.
+    const storedFilters = state.settings.stored.sessionFilters;
+    const storedQuery = state.settings.stored.sessionSearchQuery;
+    if (!run.fixtureMode && (storedFilters !== undefined || storedQuery !== undefined)) {
+      setSessionView((current) => ({
+        ...current,
+        ...(storedFilters !== undefined ? { filters: storedFilters } : undefined),
+        ...(storedQuery !== undefined ? { query: storedQuery } : undefined),
+      }));
+      // A restored query opens the field it refills, on the rule the field's
+      // own closing keeps: a narrowing in force behind no visible control
+      // would hide sessions with nothing on screen admitting it.
+      if (storedQuery !== undefined) setSearchOpen(true);
+    }
+    applyAuthoritativeMode(pane.mode);
+    if (run.startPeeked && pane.mode === "compact") {
+      applyPresentation(PANEL_PRESENTATION.PEEK);
+    }
+    // Evidence only, and the same trick the peek uses: the slot is reached
+    // by pressing Connect, which a capture run has no way to do, so the
+    // entry the press would have begun is asked for directly. It carries
+    // the shape with it, as it does anywhere else.
+    const [firstProvider] = CREDENTIAL_PROVIDER_LIST;
+    if (run.startInSlot && pane.mode === "expanded" && firstProvider) {
+      // The tab and page an entry begins on, so pressing the capsule from
+      // here lands where it would have in the flow this is standing in for.
+      changeTab(PANEL_TAB.SETTINGS);
+      setSettingsView(credentialSettingsPage(firstProvider.id));
+      beginEntry(firstProvider.id);
+    }
+    window.sidecar.notifyReady();
+  }, [state, applyAuthoritativeMode, applyPresentation, beginEntry, changeTab, setSettingsView]);
+
+  // The mode main decided, and the two events only a window can be told: the
+  // ask field summoned from any app, and the composer a spoken request opens.
+  useEffect(() => {
     const removeLifecycle = window.sidecar.onLifecycle((eventName) => {
       if (eventName === "mode:compact") applyAuthoritativeMode("compact");
       if (eventName === "mode:expanded") applyAuthoritativeMode("expanded");
@@ -2314,46 +2178,22 @@ export function App(): React.JSX.Element {
         beginFeedback(feedbackKind, false, draft);
       }
     });
-    const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);
-    const removeSupersetSignIn = window.sidecar.onSupersetSignInChanged((next) => {
-      setSupersetConnected(next.stage === SUPERSET_SIGN_IN_STAGE.CONNECTED);
-      if (!supersetSignInHeld.current) return;
-      setSupersetSignIn(next);
-      if (next.stage !== SUPERSET_SIGN_IN_STAGE.CONNECTED) return;
-      supersetSignInHeld.current = false;
-      setSupersetConnected(true);
-      if (presentationOf() === PANEL_PRESENTATION.SLOT) restorePanel();
-    });
     return () => {
       cancelHover();
       removeLifecycle();
-      removeDisplay();
-      removeSupersetSignIn();
     };
-  }, [
-    acceptAccountBootstrap,
-    acceptCalendarOnboardingBootstrap,
-    acceptCalendarsBootstrap,
-    acceptAnnouncementsHeldBootstrap,
-    acceptOutputAudioBootstrap,
-    acceptProjectsBootstrap,
-    acceptSessionReplayBootstrap,
-    acceptSessionsBootstrap,
-    acceptSettingsBootstrap,
-    acceptUpdateBootstrap,
-    acceptVoiceBootstrap,
-    applyAuthoritativeMode,
-    applyPresentation,
-    beginEntry,
-    beginFeedback,
-    cancelHover,
-    changeTab,
-    setSettingsView,
-    summonAsk,
-    modeGenerationOf,
-    presentationOf,
-    restorePanel,
-  ]);
+  }, [applyAuthoritativeMode, beginFeedback, cancelHover, changeTab, summonAsk]);
+
+  // A Superset sign-in carried through to the end gives the panel back around
+  // the newly connected service. Only the wait's own slot is answered: a
+  // connection the document reports for any other reason has no slot standing
+  // to come back from.
+  useEffect(() => {
+    if (!supersetSignInHeld.current) return;
+    if (supersetSignIn.stage !== SUPERSET_SIGN_IN_STAGE.CONNECTED) return;
+    supersetSignInHeld.current = false;
+    if (presentationOf() === PANEL_PRESENTATION.SLOT) restorePanel();
+  }, [supersetSignIn, presentationOf, restorePanel]);
 
   // The one greeting an unauthed launch gets: the panel opens on the sign-in
   // gate exactly once, then behaves like any panel — Escape, the pointer, and
@@ -2386,57 +2226,11 @@ export function App(): React.JSX.Element {
     setHintDismissal({ at: Date.now(), stretch: silenceStretch });
   }, [silenceStretch]);
 
-  // Keep the conversation's view of Luke himself current, so a spoken question
-  // about a setting is answered from the value the store actually holds, and a
-  // change made in the panel is known to the conversation the moment it lands.
-  const publishGuide = useCallback(
-    (current: AppSettingsView) => {
-      if (!bootstrap) return;
-      const askAccelerator = askHotkeyChange ? askHotkeyChange.accelerator : bootstrap.askHotkey;
-      const stopAccelerator = stopHotkeyChange
-        ? stopHotkeyChange.accelerator
-        : bootstrap.stopHotkey;
-      // All three keys reach the guide labelled: it is spoken and read, so a
-      // chord belongs there as the one word macOS writes it as rather than as
-      // the keys the panel draws apart.
-      const talkKey = voiceHotkeyToShow(bootstrap, voiceHotkey);
-      const guide = buildLukeGuide({
-        account: account ?? bootstrap.account,
-        settings: current,
-        update: update ?? bootstrap.update,
-        voiceAvailable: current.voiceAvailable,
-        microphoneStatus,
-        // A removed key reaches the guide as the removal rather than a bare
-        // absence, so Luke says the developer deleted it instead of blaming
-        // another app for a chord nobody is contesting.
-        hotkey: {
-          ...(talkKey.hotkey ? { hotkey: voiceHotkeyLabel(talkKey.hotkey) } : undefined),
-          held: talkKey.held,
-          removed: current.voiceHotkey === VOICE_HOTKEY_NONE,
-        },
-        ...(askAccelerator ? { askKey: voiceHotkeyLabel(askAccelerator) } : undefined),
-        askKeyRemoved: current.askHotkey === VOICE_HOTKEY_NONE,
-        ...(stopAccelerator ? { stopKey: voiceHotkeyLabel(stopAccelerator) } : undefined),
-        stopKeyRemoved: current.stopHotkey === VOICE_HOTKEY_NONE,
-      });
-      // The guide goes to the main process, where the brain reads it and an
-      // app act the brain asks for is validated against it; the voice itself
-      // is told nothing about the app.
-      window.sidecar.reportAppGuide(guide);
-    },
-    [bootstrap, account, update, microphoneStatus, voiceHotkey, askHotkeyChange, stopHotkeyChange],
-  );
+  // Rebuilt on every version of the document and sent only where it moved: a
+  // version that touched the roster alone says nothing about Luke himself.
   useEffect(() => {
-    if (!bootstrap) return;
-    publishGuide(settings ?? bootstrapSettings ?? appSettingsView(bootstrap.settings));
-  }, [bootstrap, settings, publishGuide, bootstrapSettings]);
-  // The spoken carrier publishes the store's answer through this ref the
-  // moment the change is made, because the settings state above it is still
-  // held for Luke's flight — and identical guides are not resent, so the
-  // landing republishing the same snapshot costs nothing.
-  useEffect(() => {
-    publishGuideRef.current = publishGuide;
-  }, [publishGuide]);
+    if (state && settings) publishGuide(state, settings);
+  }, [state, settings, publishGuide]);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -2549,24 +2343,6 @@ export function App(): React.JSX.Element {
     voiceView.voiceStatus,
   ]);
 
-  // A broadcast with no accelerator is still a change — the key was deleted
-  // or lost its chord — so it is kept as one rather than as no news at all,
-  // or bootstrap's old chord would keep winning for the rest of the session.
-  useEffect(
-    () =>
-      window.sidecar.onAskHotkeyChanged((accelerator) =>
-        setAskHotkeyChange(accelerator ? { accelerator } : {}),
-      ),
-    [],
-  );
-  useEffect(
-    () =>
-      window.sidecar.onStopHotkeyChanged((accelerator) =>
-        setStopHotkeyChange(accelerator ? { accelerator } : {}),
-      ),
-    [],
-  );
-
   // The rows say how long ago each session was seen, and a label left alone
   // goes stale the moment a minute passes with no session changing — the very
   // sessions worth noticing are the ones nothing is updating. A slow tick keeps
@@ -2576,10 +2352,10 @@ export function App(): React.JSX.Element {
   // nothing — and a capture run must not risk a re-render mid-shutter.
   useEffect(() => {
     if (presentation !== PANEL_PRESENTATION.PANEL) return;
-    if (bootstrap?.fixtureMode !== false) return;
+    if (state?.run.fixtureMode !== false) return;
     const timer = window.setInterval(() => setClock((tick) => tick + 1), 30_000);
     return () => window.clearInterval(timer);
-  }, [presentation, bootstrap?.fixtureMode]);
+  }, [presentation, state?.run.fixtureMode]);
 
   // A press anywhere else is the same dismissal Escape is, and the one a sheet
   // over a list has to answer: what is behind it can only be reached by asking
@@ -2604,9 +2380,11 @@ export function App(): React.JSX.Element {
     return () => window.removeEventListener("pointerdown", handlePointerDown, { capture: true });
   }, [optionsOpen]);
 
-  if (!bootstrap || !display) return <div />;
+  // Nothing is drawn over a state the window has not been told, nor over a
+  // runtime that could not answer for the settings every row reads.
+  if (!state || !settings || !display) return <div />;
 
-  const visibleSessions = displaySessions(bootstrap, sessions);
+  const visibleSessions = displaySessions(state);
   // The tally is taken before the list is narrowed — the capsule reports what
   // Luke is watching, not what the panel is currently showing — but it reads
   // in the list's own sort, so the wing's marks sit in the order the rows do.
@@ -2654,10 +2432,9 @@ export function App(): React.JSX.Element {
   // Which clock the rows' ages are honest against. Fixture observations are
   // measured back from the fixture's own epoch precisely so that no capture
   // run reads them against the time it happened to run at.
-  const now = bootstrap.fixtureMode ? FIXTURE_EPOCH_MS : Date.now();
-  const shownHotkey = voiceHotkeyToShow(bootstrap, voiceHotkey);
-  const shownAskHotkey = askHotkeyChange ? askHotkeyChange.accelerator : bootstrap.askHotkey;
-  const shownStopHotkey = stopHotkeyChange ? stopHotkeyChange.accelerator : bootstrap.stopHotkey;
+  const now = state.run.fixtureMode ? FIXTURE_EPOCH_MS : Date.now();
+  const shownAskHotkey = state.hotkeys.ask;
+  const shownStopHotkey = state.hotkeys.stop;
   const hasAudioSignal = fixtureSpeaking || voiceTurn !== undefined;
   const outputIsSilent = outputSilent(outputAudio);
   // Live words win; the held snapshot only ever finishes being read. A held
@@ -2695,25 +2472,24 @@ export function App(): React.JSX.Element {
       ? settings.credentialSources[credentialsEntry.entry.providerId]
       : CREDENTIAL_SOURCE.NONE;
   const microphone: MicrophoneControl = {
-    status: microphoneStatus,
-    voiceAvailable: (settings ?? bootstrapSettings ?? appSettingsView(bootstrap.settings))
-      .voiceAvailable,
+    status: state.audio.microphoneStatus,
+    voiceAvailable: settings.voiceAvailable,
     onRequest: requestMicrophoneAccess,
     onOpenSettings: () => window.sidecar.openMicrophoneSettings(),
   };
   const updates: UpdateControl = {
-    update: update ?? bootstrap.update,
+    update: state.update,
     // Answered rather than fire-and-forget so the row that asked redraws from
     // the same snapshot the broadcast carries to every other window.
     onCheck: async () => {
-      setUpdate(await window.sidecar.checkForUpdates());
+      await window.sidecar.checkForUpdates();
     },
     onInstall: () => window.sidecar.installUpdate(),
     onOpenLatest: () => window.sidecar.openLatestRelease(),
   };
   const shortcuts: ShortcutControl = {
-    ...(shownHotkey.hotkey ? { voiceHotkey: shownHotkey.hotkey } : undefined),
-    voiceHotkeyHeld: shownHotkey.held,
+    ...(state.hotkeys.talk ? { voiceHotkey: state.hotkeys.talk } : undefined),
+    voiceHotkeyHeld: state.hotkeys.talkHeld,
     voiceChosen: settings?.voiceHotkey !== undefined,
     voiceOff: settings?.voiceHotkey === VOICE_HOTKEY_NONE,
     onVoiceHotkeyChange: changeVoiceHotkey,
@@ -2736,7 +2512,7 @@ export function App(): React.JSX.Element {
   // does not lower it: the panel body hands the gate the Connections page's
   // own calendar block to review, until Done or the skip answers the step and
   // the record's broadcast takes it down.
-  const gateSettings = settings ?? bootstrapSettings ?? appSettingsView(bootstrap.settings);
+  const gateSettings = settings;
   const calendarGate: CalendarGateControl | undefined =
     calendarOnboardingOwed &&
     (gateSettings.appleCalendarAvailable || gateSettings.calendarSignInAvailable)
@@ -2797,7 +2573,7 @@ export function App(): React.JSX.Element {
       // Whether sign-in still stands between Luke and anything to watch, so the
       // stylesheet knows the strip holds nothing while a popup is drawn.
       data-gated={String(accountGated)}
-      data-capture={String(bootstrap.captureMode)}
+      data-capture={String(state.run.captureMode)}
       style={{
         ...notchStyle(display),
         // One slot shape, three possible occupants: the surface follows the
@@ -2825,8 +2601,8 @@ export function App(): React.JSX.Element {
       <div className="expanded-stage" aria-hidden={!panelOpen} inert={!panelOpen}>
         <section className="expanded-panel" ref={panelElement} data-hit-region={HIT_REGION.PANEL}>
           <PanelBody
-            accountRequired={bootstrap.accountRequired}
-            account={account ?? bootstrap.account}
+            accountRequired={state.run.accountRequired}
+            account={state.account}
             onBeginSignIn={beginSignIn}
             {...(signInFailure ? { signInFailure } : undefined)}
             {...(calendarGate ? { calendarGate } : undefined)}
@@ -2839,7 +2615,7 @@ export function App(): React.JSX.Element {
             onOpenSession={openSession}
             onOpenSessionApplication={openSessionApplication}
             writes={sessionWrites}
-            conversationHistory={conversationHistory}
+            conversationHistory={state.conversation.entries}
             liveConversationEntries={liveConversationEntries}
             onClearConversationHistory={clearConversationHistory}
             brainRequests={brainRequests}
@@ -2861,15 +2637,15 @@ export function App(): React.JSX.Element {
             tab={tab}
             onTabChange={changeTab}
             settings={{
-              account: account ?? bootstrap.account,
+              account: state.account,
               onSignOut: async () => {
-                setAccount(await window.sidecar.signOut());
+                await window.sidecar.signOut();
               },
               // The delete happens at the service before anything local moves,
               // so a failure resolves to why and the account is still standing.
               onDeleteAccount: async () => {
                 try {
-                  setAccount(await window.sidecar.deleteAccount());
+                  await window.sidecar.deleteAccount();
                   return { status: ACT_RESULT_STATUS.ACCEPTED };
                 } catch {
                   return {
@@ -2884,7 +2660,6 @@ export function App(): React.JSX.Element {
               microphone,
               updates,
               settings,
-              onSettingsChange: applySettings,
               credentials,
               feedback: feedbackControl,
               panelOpen,
@@ -2916,14 +2691,11 @@ export function App(): React.JSX.Element {
                 onDisconnect: disconnectLinear,
               },
               superset: (() => {
-                const supersetAgentDefault = (
-                  settings ??
-                  bootstrapSettings ??
-                  appSettingsView(bootstrap.settings)
-                ).workspaceAgentDefaults?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent;
+                const supersetAgentDefault =
+                  settings.workspaceAgentDefaults?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent;
                 const superset: SupersetControl = {
-                  installed: bootstrap.supersetInstalled,
-                  connected: supersetConnected ?? bootstrap.supersetConnected,
+                  installed: state.superset.installed,
+                  connected: supersetConnected,
                   held: credentialHeld.current || consentConnectHeld.current,
                   connecting: supersetSignInHeld.current,
                   onConnect: beginSupersetSignIn,

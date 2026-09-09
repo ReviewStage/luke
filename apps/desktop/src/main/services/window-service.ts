@@ -26,6 +26,8 @@ import {
   type WebContents,
 } from "electron";
 import { channels } from "#shared/bridge";
+import type { AppStateSnapshot, AppWindowFacts } from "#shared/messages/app-state";
+import { WINDOW_ROLE } from "#shared/messages/session";
 import type { AppStateStore } from "../app-state";
 import type { BridgeContext } from "../register-bridge";
 import { DockPresence } from "../window/dock-presence";
@@ -68,11 +70,29 @@ export interface WindowService extends DesktopService {
   readonly introductionMinter: RealtimeCredentialMinter;
   /** Hands a payload to every panel and the voice window, less the window given. */
   broadcast: <Payload>(channel: string, payload: Payload, except?: WebContents) => void;
+  /**
+   * One `app:state` per window, each composed with that window's own facts.
+   * The one place the document becomes a push, so what a window is told and
+   * what `app:state-request` answers it are the same document read twice.
+   * The introduction takeover is deliberately not among them: it reads the
+   * document once, before it mounts, and its own beats are what carry it from
+   * there.
+   */
+  publishAppState: () => void;
+  /**
+   * What one window answers for and the document cannot: which surface it
+   * draws, how big it stands, and the display under it. Decided here by which
+   * window asked.
+   */
+  windowFactsFor: (sender: WebContents) => AppWindowFacts;
   /** Hands a payload to the voice window alone, the one receiver of offers and withdrawals. */
   sendToVoice: <Payload>(channel: string, payload: Payload) => void;
-  /** The window an opaque reporter names in this process, so its own report is not echoed back to it. */
+  /**
+   * The opaque name one window's writes travel to the host under. It names
+   * nothing about the window to anyone else, and the host records it beside
+   * the change it produced.
+   */
   reporterOf: (context: BridgeContext) => string;
-  webContentsByReporter: (reporter: string) => WebContents | undefined;
   /** Only this build's own renderer may reach a bridge entry. */
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
   /** The one window an act only a renderer can perform is carried to; false when none is open. */
@@ -100,14 +120,11 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   const recordProductEvent = telemetry.recordProductEvent;
 
   const reporters = new WeakMap<WebContents, string>();
-  const windowsByReporter = new Map<string, WebContents>();
   function reporterOf(context: BridgeContext): string {
     const held = reporters.get(context.sender);
     if (held) return held;
     const minted = randomUUID();
     reporters.set(context.sender, minted);
-    windowsByReporter.set(minted, context.sender);
-    context.sender.once("destroyed", () => windowsByReporter.delete(minted));
     return minted;
   }
 
@@ -122,6 +139,10 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     rendererHtmlPath,
     rendererUrl,
     onAllClosed: () => config.quit(),
+    // A window's mode or display moved without any slice of the document
+    // moving, and both ride the snapshot a window is handed: the document is
+    // re-announced so every window is handed one again.
+    onWindowFactsChanged: () => state.touch(),
   });
   const introductionWindow = new IntroductionWindow({
     runMode,
@@ -157,7 +178,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       // in its place is an idle voice; the document says so by holding no
       // view at all.
       const { epoch } = state.snapshot().voice;
-      state.update({ voice: { level: 0, ...(epoch !== undefined ? { epoch } : undefined) } });
+      state.update({ voice: { ...(epoch !== undefined ? { epoch } : undefined) } });
       panels.setVoiceExchange(false);
     },
     onGaveUp: (reason) => {
@@ -170,17 +191,48 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     if (voiceWindowWanted && panels.standing > 0) voiceWindow.open();
   }
 
+  /** The one place a payload crosses to a window, and the one assertion that says why. */
+  function sendTo<Payload>(sender: WebContents, channel: string, payload: Payload): void {
+    // SAFETY: Main-process sends carry structured-clone snapshots produced for channels fixed by this build.
+    sender.send(channel, payload as UnparsedWireValue);
+  }
+
   function broadcast<Payload>(channel: string, payload: Payload, except?: WebContents): void {
     panels.broadcast(channel, payload, except);
     const voice = voiceWindow.current();
     if (!voice || voice.webContents === except) return;
-    // SAFETY: Main-process broadcasts carry structured-clone snapshots produced for channels fixed by this build.
-    voice.webContents.send(channel, payload as UnparsedWireValue);
+    sendTo(voice.webContents, channel, payload);
+  }
+
+  function windowFactsFor(sender: WebContents): AppWindowFacts {
+    if (voiceWindow.owns(sender)) {
+      return { role: WINDOW_ROLE.VOICE, mode: panels.initialMode };
+    }
+    const displayId = panels.displayIdFor(sender);
+    const display =
+      (displayId !== undefined ? panels.display(displayId) : undefined) ??
+      screen.getPrimaryDisplay();
+    return {
+      role: introductionWindow.owns(sender) ? WINDOW_ROLE.INTRODUCTION : WINDOW_ROLE.PANEL,
+      mode: displayId !== undefined ? panels.modeFor(displayId) : panels.initialMode,
+      display: panels.diagnostic(display),
+    };
+  }
+
+  function publishAppState(): void {
+    const held = state.snapshot();
+    const send = (sender: WebContents) => {
+      const snapshot: AppStateSnapshot = { ...held, window: windowFactsFor(sender) };
+      sendTo(sender, channels.onAppState, snapshot);
+    };
+    for (const sender of panels.senders()) send(sender);
+    const voice = voiceWindow.current();
+    if (voice && !voice.isDestroyed()) send(voice.webContents);
   }
 
   function sendToVoice<Payload>(channel: string, payload: Payload): void {
-    // SAFETY: as above; the voice window is one of the same windows.
-    voiceWindow.current()?.webContents.send(channel, payload as UnparsedWireValue);
+    const voice = voiceWindow.current();
+    if (voice) sendTo(voice.webContents, channel, payload);
   }
 
   let introductionRendererReady = false;
@@ -366,15 +418,15 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     dock,
     introductionMinter,
     broadcast,
+    publishAppState,
+    windowFactsFor,
     sendToVoice,
     reporterOf,
-    webContentsByReporter: (reporter) => windowsByReporter.get(reporter),
     trustedSender: (event) => (event.senderFrame?.url ?? event.sender.getURL()) === rendererUrl,
     sendToPrimaryPanel: (channel, payload) => {
       const panel = panels.primaryPanel();
       if (!panel) return false;
-      // SAFETY: as in `broadcast`; the payload is a structured-clone snapshot for a channel fixed by this build.
-      panel.webContents.send(channel, payload as UnparsedWireValue);
+      sendTo(panel.webContents, channel, payload);
       return true;
     },
     applyLoginItem,

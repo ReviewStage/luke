@@ -1,6 +1,6 @@
 import { WingFace as LukeFace, MicrophoneIcon } from "@sidecar/panel";
 import { introductionSessionConfig, REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
-import { SESSION_URGENCY } from "@sidecar/session";
+import { SESSION_URGENCY, type Session } from "@sidecar/session";
 import { FIXTURE_EPOCH_MS } from "@sidecar/session/fixtures";
 import { DEFAULT_VOICE_HOTKEYS, TALK_KEY_RELEASE, talkKeyRelease } from "@sidecar/settings";
 import {
@@ -13,13 +13,19 @@ import {
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
+import type { AppStateSnapshot } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
-import type { AppBootstrap, DisplayDiagnostic } from "#shared/messages/session";
+import type { DisplayDiagnostic } from "#shared/messages/session";
 import { Keycaps } from "../keycaps";
 import { NotchWings } from "../notch-wings";
 import { SessionRow, type SessionWriteHandlers } from "../panel-body";
 import { PANEL_PRESENTATION } from "../panel-state";
-import { displaySessions, type SessionView, sessionTally } from "../session-model";
+import {
+  fixtureSessions,
+  observedSessions,
+  type SessionView,
+  sessionTally,
+} from "../session-model";
 import { parseMilliseconds, useSessionReorderMotion } from "../session-motion";
 import { useSignInFaceCycle } from "../sign-in-gate";
 import { useMeasuredHeight } from "../use-measured-height";
@@ -392,9 +398,18 @@ const STANDING_DOWN_BEATS: ReadonlySet<IntroductionBeat> = new Set([
  * the developer can see.
  */
 export function IntroductionTakeover({
-  bootstrap,
+  state,
+  display,
 }: {
-  bootstrap: AppBootstrap & { display: DisplayDiagnostic };
+  /**
+   * The document as it stood when this window mounted, read once. The
+   * takeover is a scripted flight rather than a surface that follows state,
+   * so it subscribes to nothing: a roster arriving mid-beat must not re-run
+   * the beat it arrived during.
+   */
+  state: AppStateSnapshot;
+  /** The display this takeover covers, which the voice window alone lacks. */
+  display: DisplayDiagnostic;
 }): React.JSX.Element {
   const [beat, setBeat] = useState<IntroductionBeat>(INTRODUCTION_BEAT.DARK);
   const beatRef = useRef<IntroductionBeat>(beat);
@@ -475,9 +490,9 @@ export function IntroductionTakeover({
   const audio = useCallback((): IntroductionAudio => {
     // Built against the output as bootstrapped: playing a room tone into a
     // muted Mac serves nobody, and the captions are the speech there.
-    audioRef.current ??= new IntroductionAudio(!outputSilent(bootstrap.outputAudio));
+    audioRef.current ??= new IntroductionAudio(!outputSilent(state.audio.outputAudio));
     return audioRef.current;
-  }, [bootstrap]);
+  }, [state]);
 
   /**
    * Speaks one direction, retrying briefly while the call settles between
@@ -707,12 +722,12 @@ export function IntroductionTakeover({
       }
       case INTRODUCTION_BEAT.DETECT: {
         let stale = false;
-        const stage = (detected: readonly Parameters<typeof displaySessions>[1][number][]) => {
+        const stage = (detected: readonly Session[]) => {
           if (stale) return;
           const found = detected.length > 0;
           const mapped = found
-            ? displaySessions({ ...bootstrap, fixtureMode: false }, detected)
-            : displaySessions({ ...bootstrap, fixtureMode: true }, []).slice(0, PRETEND_ROW_COUNT);
+            ? observedSessions(detected)
+            : fixtureSessions(state.run.fixture).slice(0, PRETEND_ROW_COUNT);
           const staged = mapped.map(inertRow);
           setRows(staged);
           setRowsPretend(!found);
@@ -744,8 +759,8 @@ export function IntroductionTakeover({
         const root = rootRef.current;
         const target = capsuleFaceCenter({
           viewportWidth: window.innerWidth,
-          housingWidth: bootstrap.display.notch.housingWidth,
-          topInset: bootstrap.display.notch.topInset,
+          housingWidth: display.notch.housingWidth,
+          topInset: display.notch.topInset,
         });
         const faceRect = faceRef.current?.getBoundingClientRect();
         setFlightStyle(
@@ -786,11 +801,11 @@ export function IntroductionTakeover({
         return () => setTourFlipId(undefined);
       }
       case INTRODUCTION_BEAT.MICROPHONE: {
-        if (bootstrap.microphoneStatus === MICROPHONE_STATUS.GRANTED) {
+        if (state.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED) {
           dispatch(INTRODUCTION_EVENT.MICROPHONE_GRANTED);
           return;
         }
-        if (bootstrap.microphoneStatus !== MICROPHONE_STATUS.NOT_DETERMINED) {
+        if (state.audio.microphoneStatus !== MICROPHONE_STATUS.NOT_DETERMINED) {
           // Denied before Luke ever asked: no dialog will appear, so there is
           // nothing to warn about; practice is skipped the same kind way.
           dispatch(INTRODUCTION_EVENT.MICROPHONE_DENIED_SAID);
@@ -871,7 +886,7 @@ export function IntroductionTakeover({
       default:
         return;
     }
-  }, [audio, beat, bootstrap, dispatch, reducedMotion, speakLines]);
+  }, [audio, beat, state, display, dispatch, reducedMotion, speakLines]);
 
   // Once the flight lands, the desktop is the developer's again: the window
   // stops intercepting the pointer, and the landed panel and its strip are
@@ -966,7 +981,7 @@ export function IntroductionTakeover({
         ? { motion: FACE_MOTION.TALKING, repeat: true, play: "talking" }
         : { repeat: false, play: "rest" };
   const gateFace = useSignInFaceCycle(reducedMotion || !standingDown);
-  const showCaptions = captions !== undefined && outputSilent(bootstrap.outputAudio);
+  const showCaptions = captions !== undefined && outputSilent(state.audio.outputAudio);
 
   return (
     <div
@@ -977,13 +992,13 @@ export function IntroductionTakeover({
       data-fading={String(handoffFading)}
       data-settled={String(surfaceSettled)}
       data-lifted={String(rows.length > 0)}
-      data-notch={String(bootstrap.display.notch.hasNotch)}
+      data-notch={String(display.notch.hasNotch)}
       data-signature={String(!reducedMotion)}
       {...(landed ? { "data-presentation": presentation } : undefined)}
       style={{
         ...cssCustomProperties({
-          "--notch-top-inset": `${bootstrap.display.notch.topInset}px`,
-          "--notch-housing-width": `${bootstrap.display.notch.housingWidth}px`,
+          "--notch-top-inset": `${display.notch.topInset}px`,
+          "--notch-housing-width": `${display.notch.housingWidth}px`,
           "--panel-height": `${panelHeight}px`,
           ...(slotHeight !== undefined ? { "--slot-height": `${slotHeight}px` } : undefined),
           "--introduction-wordmark-left": WORDMARK_FRACTION.left,
@@ -1023,9 +1038,7 @@ export function IntroductionTakeover({
         {beat === INTRODUCTION_BEAT.PRACTICE ? (
           <div className="introduction-keycaps" data-held={String(talkHeld)} aria-hidden="true">
             <span className="introduction-keycaps-hold">Hold</span>
-            <Keycaps
-              accelerator={bootstrap.voiceHotkey ?? DEFAULT_VOICE_HOTKEYS[0] ?? "Alt+Space"}
-            />
+            <Keycaps accelerator={state.hotkeys.talk ?? DEFAULT_VOICE_HOTKEYS[0] ?? "Alt+Space"} />
           </div>
         ) : null}
       </div>
@@ -1071,7 +1084,7 @@ export function IntroductionTakeover({
           announcementsHeld={false}
           sessionsSettled={true}
           presentation={presentation}
-          housingWidth={bootstrap.display.notch.housingWidth}
+          housingWidth={display.notch.housingWidth}
           accountGated={standingDown}
         />
       ) : null}

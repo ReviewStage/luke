@@ -180,25 +180,6 @@ export function flushErrands(run: ErrandRun) {
 }
 
 /**
- * Another window changed the settings. Its push is newer than anything this
- * run is still carrying, so it takes every held snapshot with it: released
- * afterwards, one caught before the push arrived would draw the store as it
- * was rather than as it is. A held view is left alone — it is this window's own
- * choice about its own list, and no other window has said anything about it.
- */
-export function supersedeErrandSettings(run: ErrandRun): ErrandRun {
-  const superseded = (pending: PendingErrand): PendingErrand => {
-    if (pending.hold.settings === undefined) return pending;
-    const { settings: _stale, ...kept } = pending.hold;
-    return { ...pending, hold: kept };
-  };
-  return {
-    ...(run.flying === undefined ? undefined : { flying: superseded(run.flying) }),
-    waiting: run.waiting.map(superseded),
-  };
-}
-
-/**
  * Whether the panel is still the run's to put away once this act has been
  * taken up.
  *

@@ -1,0 +1,211 @@
+import type { BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
+import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
+import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
+import type { AppGuideSnapshot } from "@sidecar/guide";
+import type { SupersetSignInSnapshot } from "@sidecar/providers/superset/sign-in-stage";
+import type { ConversationEntry, ObservedWorkspaceProject } from "@sidecar/session";
+import type { FixtureSnapshot } from "@sidecar/session/fixtures";
+import type { AppSettings } from "@sidecar/settings/wire";
+import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import type { MicrophoneRoute, MicrophoneStatus, OutputAudioState } from "./audio";
+import {
+  type DisplayDiagnostic,
+  type SessionReplayBootstrap,
+  type SessionRosterPayload,
+  WINDOW_ROLE,
+  type WindowMode,
+  type WindowRole,
+} from "./session";
+import type { UpdateSnapshot } from "./update";
+import type { VoiceView } from "./voice-view";
+
+/**
+ * What this launch is, as every window is told it and no event ever changes —
+ * save the trace gate, which is the host's answer about this run rather than
+ * the launch's own argument.
+ */
+export interface AppRunFacts {
+  profile: string;
+  packaged: boolean;
+  platform: string;
+  appVersion: string;
+  captureMode: boolean;
+  fixtureMode: boolean;
+  fixture: FixtureSnapshot;
+  startPeeked: boolean;
+  startInSlot: boolean;
+  accountRequired: boolean;
+  observesProviders: boolean;
+  agentTraceEnabled: boolean;
+}
+
+export interface AppSessionsSlice {
+  roster: SessionRosterPayload;
+  /**
+   * Whether the roster reflects a reading Luke actually took. A run that
+   * observes nothing is settled from the start, so an empty list can say
+   * "nothing to watch" rather than "not looked yet".
+   */
+  settled: boolean;
+  workspaceProjects: readonly ObservedWorkspaceProject[];
+}
+
+export interface AppAudioSlice {
+  microphoneStatus: MicrophoneStatus;
+  microphoneRoute?: MicrophoneRoute;
+  outputAudio?: OutputAudioState;
+}
+
+export interface AppHotkeysSlice {
+  /**
+   * The accelerator each key was registered as, absent where the system
+   * refused one — a chord nothing can trigger must not be drawn as though it
+   * works. Raw rather than labelled, because the panel draws the keys apart
+   * and says the chord whole.
+   */
+  talk?: string;
+  /**
+   * Whether the talk key reports being let go of. Only a key that does can
+   * hold a turn open for as long as it is down; the fallback can only toggle
+   * one, and the panel says which of the two the developer actually has.
+   */
+  talkHeld: boolean;
+  ask?: string;
+  stop?: string;
+}
+
+export interface AppVoiceSlice {
+  /**
+   * The live conversation as the voice window last reported it, so a panel
+   * that opens mid-exchange draws the exchange rather than an idle voice.
+   * Absent until that window has reported once, and always in a fixture or
+   * capture run, which raises no voice window.
+   *
+   * The loudness beside it is deliberately not here. It is a reading taken
+   * twenty times a second that expires in fifty milliseconds, so nothing
+   * bootstraps from it and no version of this document could usefully carry
+   * one: it travels on `app:voice-level-changed` as the stream it is.
+   */
+  view?: VoiceView;
+  /** The receiver epoch the host minted for this attachment; the voice window alone reads it. */
+  epoch?: number;
+}
+
+export interface AppSupersetSlice {
+  installed: boolean;
+  connected: boolean;
+  signIn?: SupersetSignInSnapshot;
+}
+
+export interface AppConversationSlice {
+  /**
+   * Every line the thread holds, words whole — this launch's and, ahead of
+   * them, what the last launch left within the retention policy — the same on
+   * every display's panel.
+   */
+  entries: readonly ConversationEntry[];
+  /**
+   * Whether the last thing to move this slice was a Clear. The voice window
+   * is told of a Clear on its own command, so a delivery that says cleared
+   * leaves it nothing to do; a panel needs nothing from it but the empty
+   * thread.
+   */
+  cleared: boolean;
+}
+
+/**
+ * What this run may record, as its two halves: what the host answered, and
+ * whether an act that ended the account it files under has stood recording
+ * down for the rest of the run.
+ */
+export interface AppSessionReplaySlice {
+  permitted: boolean;
+  accountId?: string;
+  halted: boolean;
+}
+
+/**
+ * Everything main keeps of what the host tells it and what this machine
+ * answers for itself: one document, read whole and replaced a slice at a
+ * time, so the state a window is handed and the state main answers a call
+ * from cannot differ.
+ *
+ * Per-window facts — the mode, the display, the role — are deliberately not
+ * here: they belong to the window they describe, the panels own them, and
+ * they ride the snapshot a window is handed rather than the document.
+ */
+export interface AppState {
+  /** 0 before any patch; +1 per applied patch, monotone and never reset. */
+  readonly version: number;
+  run: AppRunFacts;
+  settings?: AppSettings;
+  account: AccountSnapshot;
+  sessions: AppSessionsSlice;
+  calendars: readonly ObservedAccountCalendars[];
+  superset: AppSupersetSlice;
+  update: UpdateSnapshot;
+  audio: AppAudioSlice;
+  hotkeys: AppHotkeysSlice;
+  voice: AppVoiceSlice;
+  brain: { runs: readonly BrainRequestSnapshot[] };
+  conversation: AppConversationSlice;
+  announcements: { held: boolean };
+  onboarding: { calendarOwed: boolean };
+  sessionReplay: AppSessionReplaySlice;
+  guide: AppGuideSnapshot;
+}
+
+/**
+ * What one window answers for and the document cannot: which surface it
+ * draws, how big it currently stands, and the display it stands on. Decided
+ * in the main process by which window asked, never by anything a renderer
+ * could claim about itself.
+ */
+export interface AppWindowFacts {
+  role: WindowRole;
+  mode: WindowMode;
+  /** Absent for the hidden voice window, which stands on no display. */
+  display?: DisplayDiagnostic;
+}
+
+/**
+ * The document as one window is handed it: every slice, and that window's own
+ * facts beside them. The first delivery is this window's bootstrap and every
+ * later one carries a version at least as high, so there is no "which arrived
+ * first" for a reader to answer.
+ */
+export type AppStateSnapshot = AppState & { window: AppWindowFacts };
+
+const WINDOW_ROLES: ReadonlySet<string> = new Set(Object.values(WINDOW_ROLE));
+
+/**
+ * The boundary parse for a snapshot. What it can check is what the wire
+ * cannot lie about cheaply and every reader depends on: the version that
+ * orders deliveries, and the window facts that decide which surface draws at
+ * all. The slices are read by the guards of the vocabularies they came from,
+ * where a reader actually uses them.
+ */
+export function isAppStateSnapshot(value: UnparsedWireValue): boolean {
+  if (!isRecord(value)) return false;
+  if (!isWireNumber(value.version) || !Number.isInteger(value.version) || value.version < 0) {
+    return false;
+  }
+  const window = value.window;
+  return (
+    isRecord(window) &&
+    isWireString(window.role) &&
+    WINDOW_ROLES.has(window.role) &&
+    isWireString(window.mode)
+  );
+}
+
+/** What this run may record, as the renderer is handed it. */
+export function sessionReplayBootstrap(
+  state: Pick<AppState, "run" | "sessionReplay">,
+): SessionReplayBootstrap {
+  return {
+    permitted: state.sessionReplay.permitted && !state.sessionReplay.halted,
+    appVersion: state.run.appVersion,
+    ...(state.sessionReplay.accountId ? { accountId: state.sessionReplay.accountId } : undefined),
+  };
+}

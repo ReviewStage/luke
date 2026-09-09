@@ -3,12 +3,13 @@ import type { BrainAppActRequest } from "@sidecar/brain/requests-wire";
 import { ACT_RESULT_STATUS, type LateRef, lateRef, type WireRecord } from "@sidecar/wire";
 import { systemPreferences } from "electron";
 import { channels } from "#shared/bridge";
+import type { AppAudioSlice } from "#shared/messages/app-state";
 import {
   MICROPHONE_STATUS,
   type MicrophoneStatus,
   type OutputAudioState,
 } from "#shared/messages/audio";
-import type { AppAudioSlice, AppStateStore } from "../app-state";
+import type { AppStateStore } from "../app-state";
 import { runAppleCalendarHelper } from "../native/apple-calendar-helper";
 import { MediaDuckController } from "../native/media-duck";
 import {

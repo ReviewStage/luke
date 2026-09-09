@@ -237,7 +237,6 @@ export interface PanelPresentationOptions {
 export interface PanelPresentationApi {
   presentation: PanelPresentation;
   current: () => PanelPresentation;
-  generation: () => number;
   pointerInside: () => boolean;
   heldAgainstPointer: () => boolean;
   applyPresentation: (next: PanelPresentation) => void;
@@ -448,7 +447,6 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
   }, []);
 
   const presentationOf = useCallback(() => presentationRef.current, []);
-  const modeGenerationOf = useCallback(() => modeGeneration.current, []);
   const pointerIsInside = useCallback(() => pointerInside.current, []);
 
   usePointerPassthrough(onHitRegionEnter, onHitRegionLeave, onPointerOverPanel, presentation);
@@ -458,7 +456,6 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
   return {
     presentation,
     current: presentationOf,
-    generation: modeGenerationOf,
     pointerInside: pointerIsInside,
     heldAgainstPointer,
     applyPresentation,

@@ -58,9 +58,9 @@ import {
 } from "./session-search";
 import {
   CalendarIntegrations,
+  SETTINGS_WRITES,
   SettingsPanel,
   type SettingsPanelProps,
-  settingsWrites,
 } from "./settings-panel";
 import { SettingsSearchButton } from "./settings-search";
 import { SignInGate } from "./sign-in-gate";
@@ -641,7 +641,7 @@ export function PanelBody({
           settings={settings.settings}
           calendar={settings.calendar}
           appleCalendar={settings.appleCalendar}
-          writes={settingsWrites(settings.onSettingsChange)}
+          writes={SETTINGS_WRITES}
           withQuietRow={false}
         />
       ) : undefined;

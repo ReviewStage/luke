@@ -54,5 +54,4 @@ export {
   voiceHotkeyCandidates,
   voiceHotkeyKeycaps,
   voiceHotkeyLabel,
-  voiceHotkeyToShow,
 } from "./voice-hotkey.js";

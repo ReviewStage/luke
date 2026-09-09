@@ -16,7 +16,6 @@ import {
   NOTHING_HELD,
   nextErrand,
   type PendingErrand,
-  supersedeErrandSettings,
 } from "./errand-queue";
 import { ERRAND_TARGET, ERRAND_WAIT } from "./luke-errand";
 import { APP_SETTING_ID } from "./luke-guide";
@@ -143,33 +142,6 @@ test("holds folded together keep the last snapshot and every part of the view", 
   );
   assert.deepEqual(foldErrandHolds([]), NOTHING_HELD);
   assert.deepEqual(foldErrandHolds([NOTHING_HELD, NOTHING_HELD]), NOTHING_HELD);
-});
-
-test("a settings push takes every held snapshot with it and leaves the held view", () => {
-  const flying = settingAct(APP_SETTING_ID.VOICE_CAPTIONS, SETTINGS_VIEW.VOICE, {
-    settings: CAPTIONS_ON,
-  });
-  const narrowing: PendingErrand = {
-    targets: [ERRAND_TARGET.LIST_OPTIONS, ERRAND_TARGET.SESSIONS_TAB],
-    tab: PANEL_TAB.SESSIONS,
-    opening: false,
-    borrowsPanel: false,
-    hold: { view: { filters: [SESSION_FILTER.CLOUD] } },
-  };
-  const waiting = settingAct(APP_SETTING_ID.SHOW_IN_DOCK, SETTINGS_VIEW.APPEARANCE, {
-    settings: CAPTIONS_OFF,
-  });
-
-  const superseded = supersedeErrandSettings(nextErrand(run(flying, narrowing, waiting)).run);
-
-  // Another window's push is newer than anything caught before it arrived.
-  assert.deepEqual(landErrand(superseded).hold, NOTHING_HELD);
-  // The list is this window's own choice, and no other window said anything
-  // about it.
-  assert.deepEqual(
-    superseded.waiting.map((pending) => pending.hold),
-    [{ view: { filters: [SESSION_FILTER.CLOUD] } }, NOTHING_HELD],
-  );
 });
 
 test("an act with nowhere to land leaves the run to the next one", () => {
