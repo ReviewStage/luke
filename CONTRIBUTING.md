@@ -1,8 +1,7 @@
 # Contributing to Luke
 
 Luke is a macOS-first Electron sidecar that observes coding-agent sessions.
-This page covers setup, the checks a change has to pass, and the commit and pull
-request conventions.
+This page covers setup and points at the documents that own the rest.
 
 ## Before you write code
 
@@ -15,8 +14,9 @@ request.
 
 ## Set up
 
-Requires an Apple Silicon Mac on macOS 14 or newer, Node.js 24 or newer,
-pnpm 9.15.0, and the Xcode Command Line Tools.
+Requires an Apple Silicon Mac on macOS 14 or newer, Node.js 24 or newer, the
+pnpm version `packageManager` in the root `package.json` pins, and the Xcode
+Command Line Tools.
 
 ```sh
 ./scripts/bootstrap.sh   # install pinned workspace dependencies
@@ -26,10 +26,8 @@ pnpm 9.15.0, and the Xcode Command Line Tools.
 
 ## Make the change
 
-[docs/WORKFLOW.md](docs/WORKFLOW.md) is the step-by-step. In short: start from a
-scoped issue, make the smallest change that satisfies it, use fixtures rather
-than personal data or live provider state, and put regression coverage at the
-cheapest layer that would have caught the bug.
+[docs/WORKFLOW.md](docs/WORKFLOW.md) is the step-by-step, from the scoped issue
+through the evidence in the pull request.
 
 Deployable products live in `apps/`, reusable logic lives in `packages/`. Keep
 Electron main and preload code thin, keep the renderer sandboxed, and put
@@ -37,26 +35,14 @@ platform-independent behavior in a package.
 
 ## Check your work
 
-```sh
-./scripts/check.sh    # portable repository, type, test, and build checks
-./scripts/verify.sh   # required for any macOS or UI change
-```
-
-`./scripts/verify.sh` is required for anything that touches the macOS app, an
-Electron window, a native adapter, the microphone, or the desktop UI. For a UI
-change, inspect the evidence it generates rather than trusting the exit code.
-Biome is the executable style policy; `pnpm lint:fix` applies it.
+The canonical commands and when each one is required are the command table and
+the handoff invariant in [AGENTS.md](AGENTS.md).
 
 ## Open the pull request
 
-- Commit messages follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/).
-- PR titles read `type(scope): description`, as in `fix(voice): stop the capture on a shut lid`.
-- Fill in the template's Evidence section with the commands you ran and their
-  results. UI changes need a screenshot, attached through GitHub's PR editor
-  rather than committed.
-- When your branch falls behind, `git rebase origin/main` and force-push with
-  `--force-with-lease`. Do not merge main into the branch; main squash-merges
-  through a merge queue, and a conflicting branch silently stops CI.
+The commit, PR title, and rebase conventions are the "Git workflow" section of
+[AGENTS.md](AGENTS.md); what the description has to carry is step 5 of
+[docs/WORKFLOW.md](docs/WORKFLOW.md).
 
 ## Reporting problems
 

@@ -196,9 +196,8 @@ silently missing. They are the same values the Actions secrets hold.
 
 Electron-builder writes the distribution artifacts under `artifacts/release-builder/`, and
 the publish script is what knows the asset set: it refuses to publish unless all six are
-present, refuses a tag that does not match `apps/desktop/package.json`, refuses a tag that
-does not exist, and creates a published, non-draft release. Re-running it is safe: assets
-are replaced with `--clobber`.
+present, refuses a tag that does not exist, and creates a published, non-draft
+release. Re-running it is safe: assets are replaced with `--clobber`.
 
 Then run the checks under "Verify after a release" above, and afterwards find out why
 Actions could not cut the release — a hand-cut release is a workflow bug left standing.

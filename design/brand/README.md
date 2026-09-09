@@ -102,9 +102,6 @@ supported (browsers, most macOS contexts) and survive copy/paste. Motion is alwa
 whole-head or eyes-only; the mouth never morphs (chosen deliberately, because mouth
 morphing read as unnatural).
 
-Where each one is used in the app is in the README at the repository root; the
-three the app has no moment for are noted there too.
-
 | State file | Product moment |
 |---|---|
 | `talking` | speaking / narrating (head bob) |
@@ -117,12 +114,18 @@ three the app has no moment for are noted there too.
 | `notification` | attention caught by something new (brow flash) |
 | `wink` | confirmation / easter egg |
 | `sleeping` | nothing to watch (lids down, zzz) |
+| `hushed` | voice spent for the day (awake, grayed out) |
 | `refresh` | relaunch (one pirouette) |
 | `boop` | tap feedback (puff) |
 | `monitoring` | humming along (slow sway) |
 | `appear` | attaching (peek-slide in) |
+| `wake` | first waking (introduction: eyes blink open) |
 | `attention` | attention caught (perk up) |
 | `floating` | hovering idle |
 | `hiding` | minimized (peekaboo duck) |
+| `flyoff` | hover flourish (fly off and swoop back) |
 | `tease` | playful (brow waggle) |
 | `waiting` | needs approval (fidget) |
+| `shimmy` | shaking it off (happy wiggle) |
+| `dizzy` | woozy after a flight (decaying wobble) |
+| `glance` | checking both ways (look around) |
