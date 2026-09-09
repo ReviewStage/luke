@@ -1011,7 +1011,29 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
    * on it can never open a capture device or become an act.
    */
   const ensureSpeakOnlyCall = useCallback((): SpeakOnlyCall => {
-    speakOnlyCall.current ??= new SpeakOnlyCall(callOptions());
+    const options = callOptions();
+    // A stood-down call cannot be recalled mid-handshake: a mint already out
+    // lands when it lands, and the abandon that follows tears the attempt
+    // down and reports it. Reported to the window, that teardown would clear
+    // the remote stream the developer's call had already put there — the
+    // audio element handed `null` under a live reply — and a late failure of
+    // Luke's own call would be drawn as theirs. So the speak-only call is
+    // heard only while no conversation call has taken over, which is exactly
+    // when standing it down happens.
+    const heard = (): boolean =>
+      !conversationCall.current?.isConnected && !conversationCall.current?.isConnecting;
+    speakOnlyCall.current ??= new SpeakOnlyCall({
+      ...options,
+      onStatus: (status) => {
+        if (heard()) options.onStatus(status);
+      },
+      onRemoteStream: (stream) => {
+        if (heard()) options.onRemoteStream(stream);
+      },
+      onError: (message) => {
+        if (heard()) options.onError(message);
+      },
+    });
     return speakOnlyCall.current;
   }, [callOptions]);
 
