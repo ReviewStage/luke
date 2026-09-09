@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { type CloudAgentProviderId, isCloudAgentProviderId } from "../core.js";
-import { type ActionRoster, actionRosterFor } from "./action-execute.js";
 import {
   CLOUD_OBSERVE_FAILURE,
   type CloudObserveFailure,
@@ -169,32 +168,4 @@ export async function observeAndSnapshot(
     return outcome;
   }
   return { complete: true, changed, roster, observedAt: now };
-}
-
-/**
- * The roster an action is admitted against: the stored snapshot's slice for
- * the provider, or, for a user no pass has reached yet, the pass that seeds
- * the snapshot — run once here so the next action and the next observe read
- * what it stored rather than asking the provider again.
- */
-export async function rosterForAction(input: {
-  userId: string;
-  providerId: CloudAgentProviderId;
-  secret: string;
-  store: ObservationStore;
-  readVaultKeys: (userId: string) => Promise<VaultKeyRow[]>;
-  seams: CloudObserveSeams;
-  now: number;
-}): Promise<ActionRoster> {
-  const stored = await storedRoster(input.store, input.userId);
-  if (stored?.roster) return actionRosterFor(input.providerId, { roster: stored.roster });
-  const outcome = await observeAndSnapshot({
-    userId: input.userId,
-    rows: await input.readVaultKeys(input.userId),
-    secret: input.secret,
-    store: input.store,
-    seams: input.seams,
-    now: input.now,
-  });
-  return actionRosterFor(input.providerId, outcome);
 }

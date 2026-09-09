@@ -1,32 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { OBSERVE_QUERY, observeAnswerSchema } from "@sidecar/hosted";
+import { observeAnswerSchema } from "@sidecar/hosted";
 import { SESSION_STATUS } from "@sidecar/session";
-import {
-  fakeConductorApi,
-  LUKE_PROJECT,
-  ownedWorkspace,
-  TEST_CONDUCTOR_STATUS,
-  TEST_SESSION_NAME,
-  TEST_TIME,
-  TEST_USER_ID,
-} from "../../../packages/providers/src/testing/conductor-api.js";
 import { encryptProviderKey } from "../server/hosted/encryption";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import { handleObserve, observedSessionForResponse } from "../server/hosted/observe";
-import { encodeObservedRoster } from "../server/hosted/observed-roster";
 import type { VaultKeyRow } from "../server/hosted/vault-route";
-import { memoryObservationStore } from "./support/observation-store";
 
 const SECRET = "a".repeat(64);
-const KEY_ROWS: VaultKeyRow[] = [
-  { providerId: "conductor", ciphertext: encryptProviderKey("conductor-test-key", SECRET) },
-];
 
-function observeRequest(headers: Record<string, string> = {}, fresh = false): Request {
-  const url = new URL("https://luke.test/api/observe");
-  if (fresh) url.searchParams.set(OBSERVE_QUERY.FRESH, OBSERVE_QUERY.FRESH_VALUE);
-  return new Request(url, {
+function observeRequest(headers: Record<string, string> = {}): Request {
+  return new Request("https://luke.test/api/observe", {
     method: "GET",
     headers: { authorization: "Bearer token-1", ...headers },
   });
@@ -35,33 +19,13 @@ function observeRequest(headers: Record<string, string> = {}, fresh = false): Re
 function observeOptions(
   overrides: Partial<Parameters<typeof handleObserve>[0]> = {},
 ): Parameters<typeof handleObserve>[0] {
-  const store = memoryObservationStore();
   return {
     request: observeRequest(),
     encryptionSecret: SECRET,
     resolveUserId: async () => "user-1",
     readVaultKeys: async (_userId: string): Promise<VaultKeyRow[]> => [],
-    store: () => store,
     ...overrides,
   };
-}
-
-/** Conductor's fake API with one working chat in one workspace the observed user created. */
-function conductorApi(status: string = TEST_CONDUCTOR_STATUS.WORKING) {
-  return fakeConductorApi({
-    userId: TEST_USER_ID,
-    projects: [LUKE_PROJECT],
-    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 30_000)],
-    sessions: [
-      {
-        id: "session-working",
-        workspaceId: "workspace-active",
-        name: TEST_SESSION_NAME,
-        status,
-        statusUpdatedAt: TEST_TIME - 5_000,
-      },
-    ],
-  });
 }
 
 // --- Gate checks ---
@@ -86,135 +50,34 @@ test("the observe gate order is method, secret, token", async () => {
   assert.equal((await anonymous.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);
 });
 
-// --- No keys → empty roster, and nothing read or stored ---
+// --- No keys → empty roster ---
 
-test("with no vault keys stored the response is 200 with an empty sessions array, and the store is not read", async () => {
-  const store = memoryObservationStore();
-  store.snapshots.set("user-1", {
-    body: encodeObservedRoster({ version: 1, providers: [] }),
-    observedAt: TEST_TIME,
-  });
-  const response = await handleObserve(observeOptions({ store: () => store }));
+test("with no vault keys stored the response is 200 with an empty sessions array", async () => {
+  const response = await handleObserve(observeOptions());
 
   assert.equal(response.status, 200);
   const body = await response.json();
-  assert.deepEqual(body, { sessions: [] });
+  assert.ok(Array.isArray(body.sessions));
+  assert.equal(body.sessions.length, 0);
 });
 
-// --- The stored snapshot is what the endpoint answers ---
+// --- Provider error is isolated ---
 
-test("a user with a snapshot is answered from it, dated, and the provider is not asked", async () => {
-  const api = conductorApi();
-  const store = memoryObservationStore();
-  const seeded = await handleObserve(
-    observeOptions({
-      readVaultKeys: async () => KEY_ROWS,
-      store: () => store,
-      fetch: api.fetch,
-      now: () => TEST_TIME,
-    }),
-  );
-  assert.equal(seeded.status, 200);
-  const seededBody = await seeded.json();
-  assert.equal(seededBody.sessions.length, 1);
-  assert.equal(seededBody.sessions[0].sessionId, "session-working");
-  assert.equal(seededBody.observedAt, TEST_TIME);
-  assert.equal(store.snapshots.has("user-1"), true);
-  const readsAfterSeeding = api.requests.length;
-
-  const stored = await handleObserve(
-    observeOptions({
-      readVaultKeys: async () => KEY_ROWS,
-      store: () => store,
-      fetch: async () => {
-        throw new Error("a stored roster is not re-observed");
-      },
-      now: () => TEST_TIME + 60_000,
-    }),
-  );
-  assert.equal(stored.status, 200);
-  const storedBody = await stored.json();
-  assert.deepEqual(storedBody, seededBody);
-  assert.equal(api.requests.length, readsAfterSeeding);
-  assert.equal(observeAnswerSchema.parse(storedBody)?.observedAt, TEST_TIME);
-});
-
-test("a fresh read runs the pass again, stores it, and answers the new roster", async () => {
-  const store = memoryObservationStore();
-  const working = conductorApi();
-  await handleObserve(
-    observeOptions({
-      readVaultKeys: async () => KEY_ROWS,
-      store: () => store,
-      fetch: working.fetch,
-      now: () => TEST_TIME,
-    }),
-  );
-
-  const idle = conductorApi(TEST_CONDUCTOR_STATUS.IDLE);
+test("a provider that throws during observation does not fail the whole response", async () => {
+  const ciphertext = encryptProviderKey("bad-key-triggers-auth-error", SECRET);
+  // The adapter will call out to the provider with this key; the injected fetch
+  // returns 401, which makes the adapter return an empty array (not throw).
   const response = await handleObserve(
     observeOptions({
-      request: observeRequest({}, true),
-      readVaultKeys: async () => KEY_ROWS,
-      store: () => store,
-      fetch: idle.fetch,
-      now: () => TEST_TIME + 1_000,
-    }),
-  );
-
-  assert.equal(response.status, 200);
-  const body = await response.json();
-  assert.equal(body.sessions[0].status, SESSION_STATUS.WAITING);
-  assert.equal(body.observedAt, TEST_TIME + 1_000);
-  assert.equal(store.snapshots.get("user-1")?.observedAt, TEST_TIME + 1_000);
-  assert.equal(store.diffs.get("user-1")?.length, 1);
-});
-
-// --- Provider error leaves the previous snapshot standing ---
-
-test("a pass the provider refuses answers what stood before, and stores no roster", async () => {
-  const store = memoryObservationStore();
-  const api = conductorApi();
-  await handleObserve(
-    observeOptions({
-      readVaultKeys: async () => KEY_ROWS,
-      store: () => store,
-      fetch: api.fetch,
-      now: () => TEST_TIME,
-    }),
-  );
-
-  const response = await handleObserve(
-    observeOptions({
-      request: observeRequest({}, true),
-      readVaultKeys: async () => KEY_ROWS,
-      store: () => store,
-      fetch: async () => new Response(null, { status: 401 }),
-      now: () => TEST_TIME + 1_000,
-    }),
-  );
-
-  assert.equal(response.status, 200);
-  const body = await response.json();
-  assert.equal(body.sessions.length, 1);
-  assert.equal(body.observedAt, TEST_TIME);
-  assert.equal(store.snapshots.get("user-1")?.observedAt, TEST_TIME);
-  assert.equal(store.passes.get("user-1")?.failure, "unauthorized");
-});
-
-test("a first pass the provider refuses answers an empty roster and stores none", async () => {
-  const store = memoryObservationStore();
-  const response = await handleObserve(
-    observeOptions({
-      readVaultKeys: async () => KEY_ROWS,
-      store: () => store,
+      readVaultKeys: async (): Promise<VaultKeyRow[]> => [{ providerId: "conductor", ciphertext }],
       fetch: async () => new Response(null, { status: 401 }),
     }),
   );
 
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { sessions: [] });
-  assert.equal(store.snapshots.size, 0);
+  const body = await response.json();
+  assert.ok(Array.isArray(body.sessions));
+  assert.equal(body.sessions.length, 0);
 });
 
 // --- Wire contract ---
@@ -464,40 +327,19 @@ test("readVaultKeys is called with the resolved user id", async () => {
 
 // --- Rate brake ---
 
-test("fresh reads return 429 after too many in the same window, while stored reads are not braked", async () => {
+test("the observe endpoint returns 429 after too many requests in the same window", async () => {
   // now() stays fixed so all calls land in the same window.
   const now = () => 1_000_000;
   // A userId unique to this test run avoids cross-test pollution of the module-level counter.
   const userId = `ratelimit-${Date.now()}-${process.pid}`;
-  const store = memoryObservationStore();
-  const api = conductorApi();
-  const fresh = () =>
-    observeOptions({
-      request: observeRequest({}, true),
-      resolveUserId: async () => userId,
-      readVaultKeys: async () => KEY_ROWS,
-      store: () => store,
-      fetch: api.fetch,
-      now,
-    });
 
   // MAX_REQUESTS_PER_WINDOW is 10; the 11th should be rate-limited.
   for (let i = 0; i < 10; i++) {
-    const res = await handleObserve(fresh());
+    const res = await handleObserve(observeOptions({ resolveUserId: async () => userId, now }));
     assert.equal(res.status, 200, `request ${i + 1} should succeed`);
   }
 
-  const limited = await handleObserve(fresh());
+  const limited = await handleObserve(observeOptions({ resolveUserId: async () => userId, now }));
   assert.equal(limited.status, 429);
   assert.equal((await limited.json()).error, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
-
-  const stored = await handleObserve(
-    observeOptions({
-      resolveUserId: async () => userId,
-      readVaultKeys: async () => KEY_ROWS,
-      store: () => store,
-      now,
-    }),
-  );
-  assert.equal(stored.status, 200);
 });

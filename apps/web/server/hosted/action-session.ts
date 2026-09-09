@@ -12,14 +12,12 @@ import {
 } from "../core.js";
 import {
   type ActionExecutionAnswer,
-  type ActionRoster,
   actionUnsupportedReason,
   executeSessionAction,
   type HostedSessionActionKind,
 } from "./action-execute.js";
 import { decryptProviderKey, secretOrUnavailable } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
-import { rosterForAction } from "./observation-pass.js";
 import type { HostedVaultRoute } from "./vault-route.js";
 
 /** Maximum length accepted for a provider session id in a URL segment. */
@@ -77,7 +75,7 @@ function aimed(
  * creation names a project instead. Nothing here validates a value: it is
  * renamed and handed on unparsed, because whether it is a message, a name, a
  * task, or a model any session or project actually takes is `admit()`'s
- * question, asked once, against the stored snapshot the action stands on.
+ * question, asked once, against the observation pass the action goes out on.
  */
 const HOSTED_ACTION_FIELDS = {
   [ACTION_KIND.MESSAGE]: (body: WireRecord) => aimed(body, { text: body.text }),
@@ -105,17 +103,11 @@ const HOSTED_ACTION_FIELDS = {
  * before a key is required, and the stored key decrypted only for a request
  * that passed everything else. What a route names is the action's own kind;
  * everything about whether that action may run is admission's, one layer down,
- * over the stored snapshot the user was shown.
+ * over the same observation pass the write goes out on.
  */
 export interface SessionActionOptions
   extends Pick<HostedVaultRoute, "request" | "resolveUserId" | "encryptionSecret" | "readKey"> {
   kind: HostedSessionActionKind;
-  /** The roster this action is admitted against: the stored snapshot's slice, or the pass that seeds one. */
-  roster: (
-    userId: string,
-    providerId: CloudAgentProviderId,
-    secret: string,
-  ) => Promise<ActionRoster>;
   /**
    * The reason this provider cannot take this action. Injected only in tests:
    * every action this build ships is supported by its one provider, so the
@@ -129,7 +121,6 @@ export interface SessionActionOptions
     providerId: CloudAgentProviderId;
     fields: WireRecord;
     apiKey: string;
-    roster: ActionRoster;
   }) => Promise<ActionExecutionAnswer>;
 }
 
@@ -245,47 +236,25 @@ export async function handleSessionAction(options: SessionActionOptions): Promis
   const key = await apiKeyOrAnswer(options.readKey, userId, providerId, secret);
   if (key instanceof Response) return key;
 
-  const roster = await options.roster(userId, providerId, secret);
   const execute = options.execute ?? executeSessionAction;
-  return actionAnswer(await execute({ kind, providerId, fields, apiKey: key.apiKey, roster }));
-}
-
-/**
- * The roster a deployed route admits against: the stored snapshot, or the
- * pass that seeds one for a user no scheduled pass has reached yet.
- */
-function routeRoster(route: HostedVaultRoute): SessionActionOptions["roster"] {
-  return (userId, providerId, secret) =>
-    rosterForAction({
-      userId,
-      providerId,
-      secret,
-      store: route.store(secret),
-      readVaultKeys: route.readVaultKeys,
-      seams: {},
-      now: Date.now(),
-    });
+  return actionAnswer(await execute({ kind, providerId, fields, apiKey: key.apiKey }));
 }
 
 /** The six actions, each as the one thing its route names. */
 export const handleMessageAction = (route: HostedVaultRoute): Promise<Response> =>
-  handleSessionAction({ ...route, kind: ACTION_KIND.MESSAGE, roster: routeRoster(route) });
+  handleSessionAction({ ...route, kind: ACTION_KIND.MESSAGE });
 
 export const handleControlAction = (route: HostedVaultRoute): Promise<Response> =>
-  handleSessionAction({ ...route, kind: ACTION_KIND.CONTROL, roster: routeRoster(route) });
+  handleSessionAction({ ...route, kind: ACTION_KIND.CONTROL });
 
 export const handleAgentAction = (route: HostedVaultRoute): Promise<Response> =>
-  handleSessionAction({ ...route, kind: ACTION_KIND.ADD_AGENT, roster: routeRoster(route) });
+  handleSessionAction({ ...route, kind: ACTION_KIND.ADD_AGENT });
 
 export const handleRenameSessionAction = (route: HostedVaultRoute): Promise<Response> =>
-  handleSessionAction({ ...route, kind: ACTION_KIND.RENAME_SESSION, roster: routeRoster(route) });
+  handleSessionAction({ ...route, kind: ACTION_KIND.RENAME_SESSION });
 
 export const handleRenameWorkspaceAction = (route: HostedVaultRoute): Promise<Response> =>
-  handleSessionAction({
-    ...route,
-    kind: ACTION_KIND.RENAME_WORKSPACE,
-    roster: routeRoster(route),
-  });
+  handleSessionAction({ ...route, kind: ACTION_KIND.RENAME_WORKSPACE });
 
 export const handleWorkspaceAction = (route: HostedVaultRoute): Promise<Response> =>
-  handleSessionAction({ ...route, kind: ACTION_KIND.CREATE_WORKSPACE, roster: routeRoster(route) });
+  handleSessionAction({ ...route, kind: ACTION_KIND.CREATE_WORKSPACE });

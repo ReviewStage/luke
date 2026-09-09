@@ -29,8 +29,7 @@ export const HOSTED_SERVICE_PATH = {
   /**
    * List the projects a new workspace can be created in (GET): each entry is
    * one a provider itself reported on a fresh observation pass, so a creation
-   * ask can only ever name a reported project. Stored nowhere: a projects
-   * request is its own pass.
+   * ask can only ever name a reported project. Stateless like observe.
    */
   PROJECTS: "/api/projects",
   /**
@@ -84,11 +83,9 @@ export const HOSTED_SERVICE_PATH = {
    */
   DEVICES: "/api/devices",
   /**
-   * The signed-in user's cloud sessions (GET): the bounded roster the
-   * service's own scheduled pass last stored for them, run every minute for
-   * accounts seen within the week, or a live pass where no snapshot stands
-   * yet. `OBSERVE_QUERY.FRESH` asks the provider again right now, under the
-   * endpoint's per-user rate brake.
+   * Observe cloud sessions on demand for the signed-in user. GET: decrypts the
+   * caller's vault keys, runs each provider's cloud adapter once, and returns a
+   * bounded roster. Stateless: no session state is stored between requests.
    */
   OBSERVE: "/api/observe",
   /**

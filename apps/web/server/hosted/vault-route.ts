@@ -4,8 +4,7 @@ import { getDatabase } from "../db/index.js";
 import { providerKey } from "../db/schema.js";
 import type { Route } from "../route.js";
 import { hostedUserId, oauthUserInfoFromAuthAnswer } from "./bearer.js";
-import { payloadKeyRing, VAULT_ENCRYPTION_ENVIRONMENT } from "./encryption.js";
-import { type HostedStore, hostedStore } from "./store/index.js";
+import { VAULT_ENCRYPTION_ENVIRONMENT } from "./encryption.js";
 
 /**
  * The deployment's own seams, handed to a hosted route once instead of
@@ -36,21 +35,6 @@ export interface HostedVaultRoute {
   listKeys: (userId: string) => Promise<{ providerId: string; updatedAt: Date }[]>;
   storeKey: (userId: string, providerId: string, ciphertext: string) => Promise<void>;
   deleteKey: (userId: string, providerId: string) => Promise<boolean>;
-  /** The hosted store under the deployment's payload key ring, for the routes that read or write it. */
-  store: (secret: string) => HostedStore;
-}
-
-let storeUnderSecret: { secret: string; store: HostedStore } | undefined;
-
-/** One store per process, rebuilt only if the secret it was built under changes. */
-function storeFor(secret: string): HostedStore {
-  if (storeUnderSecret?.secret !== secret) {
-    storeUnderSecret = {
-      secret,
-      store: hostedStore({ db: getDatabase(), keys: payloadKeyRing(secret) }),
-    };
-  }
-  return storeUnderSecret.store;
 }
 
 function resolveUserId(request: Request): Promise<string | undefined> {
@@ -96,7 +80,6 @@ const seams = {
       .returning({ userId: providerKey.userId });
     return result.length > 0;
   },
-  store: storeFor,
 } satisfies Omit<HostedVaultRoute, "request">;
 
 /**

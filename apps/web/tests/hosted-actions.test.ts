@@ -4,27 +4,14 @@ import type { JsonObject } from "../../../packages/wire/src/testing/json.js";
 import { ACTION_KIND, ACTION_REFUSAL, type WireRecord } from "../server/core";
 import {
   type ActionExecutionAnswer,
-  type ActionRoster,
-  actionRosterFor,
   actionUnsupportedReason,
   executeSessionAction,
   type HostedSessionActionKind,
 } from "../server/hosted/action-execute";
 import { handleSessionAction, type SessionActionOptions } from "../server/hosted/action-session";
 import { encryptProviderKey } from "../server/hosted/encryption";
-import { observeAndSnapshot, rosterForAction } from "../server/hosted/observation-pass";
-import type { VaultKeyRow } from "../server/hosted/vault-route";
-import { memoryObservationStore } from "./support/observation-store";
 
 const SECRET = "a".repeat(64);
-const NOW = Date.parse("2026-08-12T02:45:00.000Z");
-
-const EMPTY_ROSTER: ActionRoster = {
-  observations: [],
-  projects: [],
-  unauthorized: false,
-  unreachable: false,
-};
 
 function actionRequest(path: string, fields: Record<string, string>): Request {
   return new Request(`https://luke.test${path}`, {
@@ -45,7 +32,6 @@ function messageOptions(overrides: Partial<SessionActionOptions> = {}): SessionA
     encryptionSecret: SECRET,
     resolveUserId: async () => "user-1",
     readKey: async () => ({ ciphertext: encryptProviderKey("key-1", SECRET) }),
-    roster: async () => EMPTY_ROSTER,
     unsupportedReason: () => undefined,
     execute: async () => ({ result: "accepted" }),
     ...overrides,
@@ -237,27 +223,7 @@ test("the capability map matches each desktop adapter's implemented writes", () 
   }
 });
 
-test("the roster an action stands on is read once the key is, and reaches the executor", async () => {
-  const asked: string[] = [];
-  let received: ActionRoster | undefined;
-  await handleSessionAction(
-    messageOptions({
-      roster: async (userId, providerId, secret) => {
-        asked.push(userId, providerId, secret);
-        return EMPTY_ROSTER;
-      },
-      execute: async (options) => {
-        received = options.roster;
-        return { result: "accepted" };
-      },
-    }),
-  );
-
-  assert.deepEqual(asked, ["user-1", "conductor", SECRET]);
-  assert.equal(received, EMPTY_ROSTER);
-});
-
-// --- One executor admits every action, over the snapshot the user was shown ---
+// --- One executor admits every action, over the pass it observed ---
 
 const CONDUCTOR_PROJECT_ID = "project-1";
 const CONDUCTOR_WORKSPACE_ID = "workspace-1";
@@ -271,15 +237,11 @@ const CONDUCTOR_SESSION_ID = "session-1";
  */
 function conductorApi(status: string) {
   const posts: Array<{ url: string; body: string }> = [];
-  const reads: string[] = [];
   const json = (value: JsonObject) => new Response(JSON.stringify(value), { status: 200 });
   const fetch = async (url: string, init: RequestInit) => {
     const { pathname } = new URL(url);
     if (init.method === "POST") {
-      if (pathname.endsWith("/v0/sql")) {
-        reads.push(pathname);
-        return json({ rows: [], rowCount: 0, truncated: false });
-      }
+      if (pathname.endsWith("/v0/sql")) return json({ rows: [], rowCount: 0, truncated: false });
       posts.push({ url, body: String(init.body) });
       if (pathname.endsWith("/v0/workspaces")) {
         return new Response(
@@ -291,7 +253,6 @@ function conductorApi(status: string) {
         status: 201,
       });
     }
-    reads.push(pathname);
     if (pathname.endsWith("/me")) return json({ userId: "user-1" });
     if (pathname.endsWith("/v0/projects")) {
       return json({
@@ -352,69 +313,25 @@ function conductorApi(status: string) {
     }
     return new Response("{}", { status: 500 });
   };
-  return { fetch, posts, reads };
+  return { fetch, posts };
 }
 
 /** The fake API one case runs against: its fetch, and what the action posted through it. */
 type ConductorApi = ReturnType<typeof conductorApi>;
 
-const KEY_ROWS: VaultKeyRow[] = [
-  { providerId: "conductor", ciphertext: encryptProviderKey("key-1", SECRET) },
-];
-
-/**
- * The roster the action stands on: the snapshot one pass over the fake API
- * stored, read back the way the deployed route reads it — through the store
- * — so the action never sees the pass, only what it wrote down.
- */
-async function snapshotRoster(api: ConductorApi): Promise<ActionRoster> {
-  const store = memoryObservationStore();
-  const outcome = await observeAndSnapshot({
-    userId: "user-1",
-    rows: KEY_ROWS,
-    secret: SECRET,
-    store,
-    seams: { fetch: api.fetch },
-    now: NOW,
-  });
-  assert.equal(outcome.complete, true);
-  return rosterForAction({
-    userId: "user-1",
-    providerId: "conductor",
-    secret: SECRET,
-    store,
-    readVaultKeys: async () => {
-      throw new Error("a standing snapshot is read, never re-observed");
-    },
-    seams: {
-      fetch: async () => {
-        throw new Error("no pass runs for a user with a snapshot");
-      },
-    },
-    now: NOW + 1,
-  });
-}
-
-/** One action asked against the snapshot of the fake API, admitted and carried by the one executor. */
-async function ask(
+/** One action asked of the fake API, admitted and carried by the one executor. */
+function ask(
   api: ConductorApi,
   kind: HostedSessionActionKind,
   fields: Record<string, string>,
 ): Promise<ActionExecutionAnswer> {
-  const roster = await snapshotRoster(api);
-  const readsBefore = api.reads.length;
-  const answer = await executeSessionAction({
+  return executeSessionAction({
     kind,
     providerId: "conductor",
     fields: { provider_id: "conductor", ...fields },
     apiKey: "key-1",
-    roster,
     seams: { fetch: api.fetch },
   });
-  // No read runs on an action: the snapshot is the roster, and the provider
-  // sees only the write itself.
-  assert.equal(api.reads.length, readsBefore);
-  return answer;
 }
 
 test("a message to a messageable Conductor session lands on its sendMessage method", async () => {
@@ -454,7 +371,7 @@ test("a message outside its bound is refused without a write", async () => {
   assert.deepEqual(api.posts, []);
 });
 
-test("a message to a session the snapshot does not hold is rejected", async () => {
+test("a message to a session the fresh pass did not observe is rejected", async () => {
   const api = conductorApi("idle");
   const answer = await ask(api, ACTION_KIND.MESSAGE, {
     provider_session_id: "session-9",
@@ -466,26 +383,7 @@ test("a message to a session the snapshot does not hold is rejected", async () =
   assert.deepEqual(api.posts, []);
 });
 
-/**
- * A user no pass has reached yet: the action's roster is the pass that seeds
- * the snapshot, and when that pass fails the roster is empty and says why.
- */
-async function seededRoster(fetch: (url: string, init: RequestInit) => Promise<Response>) {
-  const store = memoryObservationStore();
-  const roster = await rosterForAction({
-    userId: "user-1",
-    providerId: "conductor",
-    secret: SECRET,
-    store,
-    readVaultKeys: async () => KEY_ROWS,
-    seams: { fetch },
-    now: NOW,
-  });
-  return { roster, store };
-}
-
-test("a key the provider refuses is named as the reason, not a missing session, and seeds no snapshot", async () => {
-  const { roster, store } = await seededRoster(async () => new Response("{}", { status: 401 }));
+test("a key the provider refuses is named as the reason, not a missing session", async () => {
   const answer = await executeSessionAction({
     kind: ACTION_KIND.MESSAGE,
     providerId: "conductor",
@@ -495,21 +393,14 @@ test("a key the provider refuses is named as the reason, not a missing session, 
       text: "hello",
     },
     apiKey: "key-1",
-    roster,
     seams: { fetch: async () => new Response("{}", { status: 401 }) },
   });
 
   assert.equal(answer.result, "rejected");
   assert.match(answer.reason ?? "", /rejected the stored API key/);
-  assert.equal(store.snapshots.size, 0);
-  assert.equal(store.passes.get("user-1")?.failure, "unauthorized");
 });
 
 test("a provider that cannot be reached is named as the reason", async () => {
-  const unreachable = async () => {
-    throw new Error("connection refused");
-  };
-  const { roster } = await seededRoster(unreachable);
   const answer = await executeSessionAction({
     kind: ACTION_KIND.MESSAGE,
     providerId: "conductor",
@@ -519,53 +410,15 @@ test("a provider that cannot be reached is named as the reason", async () => {
       text: "hello",
     },
     apiKey: "key-1",
-    roster,
-    seams: { fetch: unreachable },
+    seams: {
+      fetch: async () => {
+        throw new Error("connection refused");
+      },
+    },
   });
 
   assert.equal(answer.result, "rejected");
   assert.match(answer.reason ?? "", /Could not reach Conductor/);
-});
-
-test("a user with no snapshot yet is seeded by the action's own pass, once", async () => {
-  const api = conductorApi("idle");
-  const store = memoryObservationStore();
-  const first = await rosterForAction({
-    userId: "user-1",
-    providerId: "conductor",
-    secret: SECRET,
-    store,
-    readVaultKeys: async () => KEY_ROWS,
-    seams: { fetch: api.fetch },
-    now: NOW,
-  });
-  assert.equal(first.observations.length, 1);
-  assert.equal(store.snapshots.has("user-1"), true);
-  const readsAfterSeeding = api.reads.length;
-
-  const second = await rosterForAction({
-    userId: "user-1",
-    providerId: "conductor",
-    secret: SECRET,
-    store,
-    readVaultKeys: async () => KEY_ROWS,
-    seams: { fetch: api.fetch },
-    now: NOW + 1,
-  });
-  assert.deepEqual(second.observations, first.observations);
-  assert.equal(api.reads.length, readsAfterSeeding);
-});
-
-test("a snapshot with no slice for the provider is no session, not a failure", () => {
-  const roster = actionRosterFor("conductor", { roster: { version: 1, providers: [] } });
-  assert.deepEqual(roster, {
-    observations: [],
-    projects: [],
-    unauthorized: false,
-    unreachable: false,
-  });
-  assert.equal(actionRosterFor("conductor", { failure: "transient" }).unreachable, true);
-  assert.equal(actionRosterFor("conductor", { failure: "rate-limited" }).unreachable, true);
 });
 
 test("an advertised control runs through the provider's documented endpoint", async () => {
@@ -582,7 +435,7 @@ test("an advertised control runs through the provider's documented endpoint", as
   );
 });
 
-test("a control the snapshot did not advertise is rejected without a write", async () => {
+test("a control the fresh pass did not advertise is rejected without a write", async () => {
   const api = conductorApi("idle");
   const answer = await ask(api, ACTION_KIND.CONTROL, {
     provider_session_id: CONDUCTOR_SESSION_ID,

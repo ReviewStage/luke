@@ -30,12 +30,9 @@ import {
   type SessionActionKind,
   type SessionProviderPlugin,
   type WireRecord,
-  type WorkspaceProject,
   workspaceAgentModels,
 } from "../core.js";
 import { cloudSessionPluginFor } from "./cloud-adapters.js";
-import { CLOUD_OBSERVE_FAILURE, type CloudObserveFailure } from "./cloud-observe.js";
-import { type ObservedRoster, rosterProvider } from "./observed-roster.js";
 
 /**
  * The actions a remote client can ask of a cloud session: the session action kinds
@@ -107,56 +104,12 @@ export interface ActionExecuteSeams {
 }
 
 /**
- * The roster an action is admitted against: one provider's slice of the
- * stored snapshot, or what the pass that would have seeded it came to. The
- * two flags say why the roster may be empty — the provider refused the key,
- * or could not be reached — so a target admission cannot find is named for
- * what actually happened rather than as a session that moved on.
- */
-export interface ActionRoster {
-  observations: readonly ProviderSessionObservation[];
-  projects: readonly WorkspaceProject[];
-  unauthorized: boolean;
-  unreachable: boolean;
-}
-
-/**
- * One provider's slice of a roster for admission: the stored snapshot's when
- * one stands, and otherwise the empty roster a failed seeding pass left,
- * flagged with why. A snapshot that holds nothing for the provider is a
- * provider the user's keys never opened, which admission reads as no
- * session rather than as a failure.
- */
-export function actionRosterFor(
-  providerId: CloudAgentProviderId,
-  standing: { roster?: ObservedRoster; failure?: CloudObserveFailure },
-): ActionRoster {
-  const slice = standing.roster ? rosterProvider(standing.roster, providerId) : undefined;
-  if (slice) {
-    return {
-      observations: slice.observations,
-      projects: slice.projects,
-      unauthorized: false,
-      unreachable: false,
-    };
-  }
-  const unauthorized = standing.failure === CLOUD_OBSERVE_FAILURE.UNAUTHORIZED;
-  return {
-    observations: [],
-    projects: [],
-    unauthorized,
-    unreachable: !unauthorized && standing.failure !== undefined,
-  };
-}
-
-/**
- * One plugin observed once for one conversation read: the same
- * re-observe-before-read discipline the desktop keeps in its observation
- * registry, here as a fresh pass on a request-scoped instance. The pass
- * swallows credential and network failures into an empty roster, so the pass
- * watches its own fetch to tell "the provider refused the key" and "the
- * provider could not be reached" apart from "the session is gone" when the
- * read's target is missing.
+ * One plugin observed once for one action: the same re-observe-before-write
+ * discipline the desktop keeps in its observation registry, here as a fresh
+ * pass on a request-scoped instance. The pass swallows credential and
+ * network failures into an empty roster, so the pass watches its own fetch to
+ * tell "the provider refused the key" and "the provider could not be reached"
+ * apart from "the session is gone" when the action's target is missing.
  */
 interface ObservedActionPass {
   plugin: SessionProviderPlugin;
@@ -191,35 +144,10 @@ async function observeForAction(
   return { plugin, observations, ...pass };
 }
 
-/**
- * The plugin an action is dispatched through, answering for the roster the
- * action was admitted against. `dispatchAction` resolves every target from
- * the plugin's own latest roster, so the plugin built for this one write
- * reads the snapshot's observations and projects as its own latest pass, and
- * every effect's route is built out of the same roster the user was shown.
- */
-function pluginOverRoster(
-  providerId: CloudAgentProviderId,
-  apiKey: string,
-  roster: ActionRoster,
-  seams: ActionExecuteSeams,
-): SessionProviderPlugin {
-  const plugin = cloudSessionPluginFor(providerId, {
-    readApiKey: async () => apiKey,
-    ...(seams.fetch ? { fetch: seams.fetch } : undefined),
-    ...(seams.now ? { now: seams.now } : undefined),
-  });
-  return {
-    ...plugin,
-    latest: () => roster.observations,
-    projects: () => roster.projects,
-  };
-}
-
-/** Why an action's target was not in the roster, as the user should hear it. */
+/** Why an action's target was not in the fresh pass, as the user should hear it. */
 function missingTargetReason(
   providerId: CloudAgentProviderId,
-  pass: Pick<ActionRoster, "unauthorized" | "unreachable">,
+  pass: Pick<ObservedActionPass, "unauthorized" | "unreachable">,
   missing: string,
 ): string {
   const displayName = PROVIDER_IDENTITY_BY_ID[providerId].displayName;
@@ -249,22 +177,21 @@ function fromProviderResult(
 }
 
 /**
- * The roster and the projects admission reads, over the snapshot this action
- * stands on. Admission is where "the target has to be one the roster holds"
- * is answered, so what it reads is that roster and never a caller's copy of
- * it; the phone's own press is the origin, which is recorded and never a
- * permission.
+ * The roster and the projects admission reads, over the one pass this request
+ * ran. Admission is where "the target has to be one the roster holds" is
+ * answered, so what it reads is that pass and never a caller's copy of it; the
+ * phone's own press is the origin, which is recorded and never a permission.
  */
-function admissionOver(plugin: SessionProviderPlugin, roster: ActionRoster): AdmitContext {
-  const { provider } = plugin;
+function admissionOver(pass: ObservedActionPass): AdmitContext {
+  const { provider } = pass.plugin;
   return {
     origin: RUN_ORIGIN.USER,
     roster: {
-      read: async () => roster.observations.map((one) => normalizeSession(provider, one)),
+      read: async () => pass.observations.map((one) => normalizeSession(provider, one)),
     },
     projects: {
       read: async () =>
-        roster.projects.map((project) => ({
+        (pass.plugin.projects?.() ?? []).map((project) => ({
           ...project,
           providerId: provider.id,
           providerName: provider.displayName,
@@ -292,7 +219,7 @@ function missingTargetPhrase(reason: string): string | undefined {
 
 function fromRefusal(
   providerId: CloudAgentProviderId,
-  pass: Pick<ActionRoster, "unauthorized" | "unreachable">,
+  pass: ObservedActionPass,
   refusal: Refusal,
 ): ActionExecutionAnswer {
   const missing = missingTargetPhrase(refusal.reason);
@@ -304,13 +231,11 @@ function fromRefusal(
 
 /**
  * One action a remote client asked, admitted and carried. The build's own
- * capability map answers first; then `admit()` reads the roster the action
- * stands on for itself — the stored snapshot's slice for this provider, the
- * session or the project it names, the advertisement it stands on, the
- * bounds on the developer's own words — and only the validated action it
- * mints reaches the adapter, which builds each effect's route back out of
- * the same roster. No pass runs here: the snapshot is what the user was
- * shown, and the provider answers for whether the target still stands.
+ * capability map answers first, before a pass exists; then one fresh
+ * observation pass runs, `admit()` reads that pass for itself — the session or
+ * the project it names, the advertisement it stands on, the bounds on the
+ * developer's own words — and only the validated action it mints reaches the
+ * adapter, which builds each effect's route back out of the same pass.
  */
 export async function executeSessionAction(options: {
   kind: HostedSessionActionKind;
@@ -318,18 +243,18 @@ export async function executeSessionAction(options: {
   /** The ask's own fields, keyed by the names admission reads, unparsed. */
   fields: WireRecord;
   apiKey: string;
-  roster: ActionRoster;
   seams?: ActionExecuteSeams;
 }): Promise<ActionExecutionAnswer> {
-  const { kind, providerId, fields, apiKey, roster } = options;
+  const { kind, providerId, fields, apiKey } = options;
   const unsupported = actionUnsupportedReason(kind, providerId);
   if (unsupported) return { result: ACTION_RESULT_STATUS.UNSUPPORTED, reason: unsupported };
 
-  const plugin = pluginOverRoster(providerId, apiKey, roster, options.seams ?? {});
+  const pass = await observeForAction(providerId, apiKey, options.seams ?? {});
   const request: ActionRequest<HostedSessionActionKind> = { kind, fields };
-  const admitted = await admit(request, admissionOver(plugin, roster));
-  if (admitted.kind === undefined) return fromRefusal(providerId, roster, admitted);
+  const admitted = await admit(request, admissionOver(pass));
+  if (admitted.kind === undefined) return fromRefusal(providerId, pass, admitted);
 
+  const { plugin } = pass;
   return dispatchByKind(admitted, {
     [ACTION_KIND.MESSAGE]: async (action) =>
       fromProviderResult(await dispatchAction(plugin, "message", providerSessionMessage(action))),
