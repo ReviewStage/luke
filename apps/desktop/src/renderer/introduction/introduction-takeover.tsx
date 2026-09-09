@@ -14,9 +14,11 @@ import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { activeVoiceStream } from "@sidecar/voice/orchestrator";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
+import { ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import type { DisplayDiagnostic } from "#shared/messages/session";
+import { act } from "../act";
 import { Keycaps } from "../keycaps";
 import { NotchWings } from "../notch-wings";
 import { SessionRow, type SessionWriteHandlers } from "../panel-body";
@@ -541,12 +543,12 @@ export function IntroductionTakeover({
 
   const ensureSession = useCallback((): ConversationCall => {
     sessionRef.current ??= new ConversationCall({
-      requestConnection: () => window.sidecar.requestRealtimeCredential(),
+      requestConnection: () => act(ACT_KIND.VOICE_MINT_CREDENTIAL),
       sessionConfig: (model) => introductionSessionConfig({ model }),
       audioElement: () => remoteAudioRef.current,
       requestMicrophoneStream: () =>
         openPreferredMicrophone({
-          route: () => window.sidecar.getMicrophoneRoute(),
+          route: () => act(ACT_KIND.MICROPHONE_ROUTE),
           enumerate: () => navigator.mediaDevices.enumerateDevices(),
           open: (audioConstraints) =>
             navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false }),
@@ -743,7 +745,7 @@ export function IntroductionTakeover({
             () => dispatch(INTRODUCTION_EVENT.LINES_DONE),
           );
         };
-        window.sidecar.peekIntroductionSessions().then(stage, () => stage([]));
+        act(ACT_KIND.INTRODUCTION_PEEK_SESSIONS).then(stage, () => stage([]));
         return () => {
           stale = true;
         };
@@ -820,7 +822,7 @@ export function IntroductionTakeover({
         // The dialog is macOS's own window mid-screen; while it stands, the
         // panel is the waiting slot — the same pill a calendar consent
         // stands down to — and the answer is what brings it back.
-        void window.sidecar.requestMicrophone().then((status) => {
+        void act(ACT_KIND.MICROPHONE_REQUEST).then((status) => {
           if (beatRef.current !== INTRODUCTION_BEAT.MICROPHONE_DIALOG) return;
           dispatch(
             status === MICROPHONE_STATUS.GRANTED
@@ -876,7 +878,7 @@ export function IntroductionTakeover({
         // gate is drawn beneath, and only then does the fade run — so the
         // sessions dissolve into the sign-in rather than vanishing first.
         let gone = false;
-        void window.sidecar.completeIntroduction(givenRef.current).then(() => {
+        void act(ACT_KIND.INTRODUCTION_COMPLETE, { given: givenRef.current }).then(() => {
           if (!gone) setHandoffFading(true);
         });
         return () => {

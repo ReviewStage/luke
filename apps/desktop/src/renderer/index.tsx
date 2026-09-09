@@ -1,6 +1,8 @@
 import * as Sentry from "@sentry/electron/renderer";
 import { createRoot } from "react-dom/client";
+import { ACT_KIND } from "#shared/messages/acts";
 import { WINDOW_ROLE } from "#shared/messages/session";
+import { tell } from "./act";
 import { App } from "./app";
 import { IntroductionTakeover } from "./introduction/introduction-takeover";
 import { readAppState } from "./use-app-state";
@@ -29,7 +31,7 @@ void (async () => {
       // Only the hidden voice window stands on no display; a takeover handed
       // none has nothing to cover and stands down.
       if (display === undefined) {
-        window.sidecar.abandonIntroduction("The takeover's state named no display.");
+        tell(ACT_KIND.INTRODUCTION_ABANDON, { reason: "The takeover's state named no display." });
         return;
       }
       root.render(<IntroductionTakeover state={state} display={display} />);
@@ -46,7 +48,7 @@ void (async () => {
     // answers it only for the takeover it owns and refuses a panel's
     // outright, and a takeover that stands down here rather than waiting out
     // the mount deadline hands the screen back at once.
-    window.sidecar.abandonIntroduction("The window could not read its state.");
+    tell(ACT_KIND.INTRODUCTION_ABANDON, { reason: "The window could not read its state." });
     console.error("The window's state could not be read; nothing is drawn.", error);
   }
 })();

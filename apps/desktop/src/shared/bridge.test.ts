@@ -1,21 +1,47 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { maximumTypedAskLength } from "@sidecar/session";
-import { BRIDGE } from "./bridge";
+import { ONE_ACT_OF_EACH_KIND } from "../testing/acts";
+import { BRIDGE, bridgeEntries, channels } from "./bridge";
+import { ACT_KIND, type ActKind } from "./messages/acts";
 
-test("action bridge entries reject legacy and malformed outcomes", () => {
-  for (const entry of [BRIDGE.disconnectSuperset]) {
-    const guard = entry.result;
-    assert.ok(guard);
-    assert.equal(guard({ status: "accepted" }), true);
-    assert.equal(guard({ status: "rejected", reason: "Not now." }), true);
-    assert.equal(guard({ status: "unsupported", reason: "Not here." }), true);
-    assert.equal(guard({ status: "accepted", reason: "contradiction" }), false);
-    assert.equal(guard({ status: "accepted", setting: "Captions" }), false);
-    assert.equal(guard({ status: "rejected" }), false);
-    assert.equal(guard({ status: "refused" }), false);
-    assert.equal(guard({ ok: false }), false);
+const KINDS: readonly ActKind[] = Object.values(ACT_KIND);
+
+test("the bridge is one act channel, one state read, and the reports beside them", () => {
+  const entries = bridgeEntries();
+  // Three kinds and no fourth: what a window causes, what it reads, what it
+  // reports. Anything else added here is a second way in.
+  assert.deepEqual(
+    entries.filter(([, entry]) => entry.kind === "invoke").map(([method]) => method),
+    ["act", "requestAppState", "reportVoiceReady", "settleSpeech", "appendConversationLines"],
+  );
+  // Every entry parses what arrives, and a channel names exactly one entry.
+  for (const [method, entry] of entries) {
+    assert.ok(entry.args, method);
+    assert.ok(entry.channel.startsWith("app:"), method);
   }
+  const named = entries.map(([, entry]) => entry.channel);
+  assert.equal(new Set(named).size, named.length);
+  assert.equal(Object.keys(channels).length, entries.length);
+});
+
+test("the act channel takes one act of any kind and nothing else", () => {
+  const guard = BRIDGE.act.args;
+  assert.equal(BRIDGE.act.kind, "invoke");
+  for (const kind of KINDS) assert.equal(guard([ONE_ACT_OF_EACH_KIND[kind]]), true, kind);
+  // One argument, and it is one act of a kind this build knows.
+  assert.equal(guard([]), false);
+  assert.equal(guard([{ kind: ACT_KIND.WINDOW_QUIT }, { kind: ACT_KIND.WINDOW_QUIT }]), false);
+  assert.equal(guard(["window.quit"]), false);
+  assert.equal(guard([{ kind: "window.sleep" }]), false);
+  assert.equal(guard([{ kind: ACT_KIND.WINDOW_COPY_TEXT }]), false);
+  assert.equal(guard([{ kind: ACT_KIND.WINDOW_QUIT, payload: { now: true } }]), false);
+  const answer = BRIDGE.act.result;
+  assert.ok(answer);
+  assert.equal(answer({ status: "done", value: undefined }), true);
+  assert.equal(answer({ status: "refused", reason: "Not now." }), true);
+  assert.equal(answer({ status: "unknown-act" }), true);
+  assert.equal(answer({ status: "thrown", reason: "Not now." }), false);
+  assert.equal(answer(undefined), false);
 });
 
 test("a conversation report carries only well-formed conversation lines", () => {
@@ -74,75 +100,13 @@ test("app state is read on one invoke and delivered on one subscription", () => 
   }
 });
 
-test("a brain ask is one submission with an id, bounded words, and an origin", () => {
-  assert.equal(BRIDGE.submitBrainAsk.kind, "invoke");
-  const guard = BRIDGE.submitBrainAsk.args;
-  const submission = { submissionId: "sub-1", question: "what needs me?", origin: "typed" };
-  assert.equal(guard([submission]), true);
-  assert.equal(guard([{ ...submission, origin: "spoken" }]), true);
-  assert.equal(guard([{ ...submission, question: "x".repeat(maximumTypedAskLength) }]), true);
-  assert.equal(guard([{ ...submission, question: "x".repeat(maximumTypedAskLength + 1) }]), false);
-  assert.equal(guard([{ ...submission, submissionId: "" }]), false);
-  assert.equal(guard([{ ...submission, origin: "dreamt" }]), false);
-  assert.equal(guard(["what needs me?"]), false);
-  assert.equal(guard([]), false);
-  const answer = BRIDGE.submitBrainAsk.result;
-  assert.ok(answer);
-  assert.equal(answer({ outcome: "accepted", runId: "run-1", acceptedAt: 1 }), true);
-  assert.equal(answer({ outcome: "rejected", reason: "absent" }), true);
-  assert.equal(answer({ outcome: "rejected", reason: "tired" }), false);
-  assert.equal(answer({ status: "accepted", briefing: "words" }), false);
-});
-
-test("a run is waited on, cancelled, and listed by its own record shape", () => {
-  const snapshot = {
-    runId: "run-1",
-    submissionId: "sub-1",
-    origin: "typed",
-    question: "what needs me?",
-    status: "running",
-    revision: 1,
-    acceptedAt: 1,
-    startedAt: 2,
-    performedActions: 0,
-    unknownActions: 0,
-  };
-  assert.equal(BRIDGE.cancelBrainAsk.kind, "invoke");
-  assert.equal(BRIDGE.cancelBrainAsk.args(["run-1"]), true);
-  assert.equal(BRIDGE.cancelBrainAsk.args([1]), false);
-  assert.ok(BRIDGE.cancelBrainAsk.result);
-  assert.equal(BRIDGE.cancelBrainAsk.result(snapshot), true);
-  assert.equal(BRIDGE.cancelBrainAsk.result(undefined), true);
-  assert.equal(BRIDGE.cancelBrainAsk.result({ ...snapshot, status: "dreaming" }), false);
-  // A wait names the caller's receiver epoch and answers the record with the
-  // call's grant; a grant without a record, or a record of no known shape, is refused.
-  assert.equal(BRIDGE.waitBrainAsk.args(["run-1", 3]), true);
-  assert.equal(BRIDGE.waitBrainAsk.args(["run-1"]), false);
-  assert.equal(BRIDGE.waitBrainAsk.args(["run-1", -1]), false);
-  assert.ok(BRIDGE.waitBrainAsk.result);
-  assert.equal(BRIDGE.waitBrainAsk.result({ record: snapshot, speak: false }), true);
-  assert.equal(BRIDGE.waitBrainAsk.result({ record: undefined, speak: false }), true);
-  assert.equal(
-    BRIDGE.waitBrainAsk.result({ record: { ...snapshot, status: "dreaming" }, speak: true }),
-    false,
-  );
-  assert.equal(BRIDGE.waitBrainAsk.result(snapshot), false);
-  // A reply's offer, claim, and acknowledgement all carry the epoch; the grant carries the origin.
+test("a reply's offer and acknowledgement both carry the receiver epoch", () => {
   assert.ok(BRIDGE.onBrainReplyOffered.result);
   assert.equal(
     BRIDGE.onBrainReplyOffered.result({ runId: "run-1", deliveryId: "d-1", epoch: 2 }),
     true,
   );
   assert.equal(BRIDGE.onBrainReplyOffered.result({ runId: "run-1", deliveryId: "d-1" }), false);
-  assert.equal(BRIDGE.claimBrainReply.args(["run-1", "d-1", 2]), true);
-  assert.equal(BRIDGE.claimBrainReply.args(["run-1", "d-1"]), false);
-  assert.ok(BRIDGE.claimBrainReply.result);
-  assert.equal(
-    BRIDGE.claimBrainReply.result({ granted: true, words: "w", origin: "spoken" }),
-    true,
-  );
-  assert.equal(BRIDGE.claimBrainReply.result({ granted: true, words: "w" }), false);
-  assert.equal(BRIDGE.claimBrainReply.result({ granted: false }), true);
   assert.equal(BRIDGE.ackBrainReply.args(["run-1", "d-1", 2]), true);
   assert.equal(BRIDGE.ackBrainReply.args(["run-1", "d-1", "2"]), false);
   assert.ok(BRIDGE.onBrainRepliesWithdrawn.result);
@@ -182,7 +146,7 @@ test("a reported guide is refused whole when any entry is malformed", () => {
   assert.equal(guard([{ facts: [] }]), false);
 });
 
-test("an app action pushed to the renderer never carries a memory write", () => {
+test("an app act pushed to the renderer never carries a memory write", () => {
   const guard = BRIDGE.onBrainAppAction.result;
   assert.ok(guard);
   assert.equal(guard({ requestId: "r1", action: { kind: "panel", tab: "sessions" } }), true);
@@ -296,39 +260,6 @@ test("a voice level is one finite number in the unit interval", () => {
   assert.equal(BRIDGE.reportVoiceLevel.args([0.25]), true);
   assert.equal(BRIDGE.reportVoiceLevel.args([]), false);
   assert.equal(BRIDGE.reportVoiceLevel.args([0.25, 0.5]), false);
-});
-
-test("a voice command is one of the four commands and carries no words", () => {
-  assert.equal(BRIDGE.voiceCommand.kind, "invoke");
-  const guard = BRIDGE.voiceCommand.args;
-  for (const command of [
-    "discard-listening",
-    "stop-speaking",
-    "request-microphone-access",
-    "clear-conversation",
-  ]) {
-    assert.equal(guard([command]), true);
-    assert.equal(guard([command, "words"]), false);
-  }
-  // A typed ask is a brain submission now, not a command to the voice window.
-  assert.equal(guard(["ask-text"]), false);
-  assert.equal(guard(["stop-microphone"]), false);
-  assert.equal(guard([]), false);
-  const forwarded = BRIDGE.onVoiceCommand.result;
-  assert.ok(forwarded);
-  assert.equal(forwarded({ command: "stop-speaking" }), true);
-  assert.equal(forwarded({ command: "ask-text" }), false);
-  assert.equal(forwarded({ command: "dance" }), false);
-});
-
-test("a Clear is answered with its outcome, and nothing else is", () => {
-  const outcome = BRIDGE.voiceCommand.result;
-  assert.ok(outcome);
-  assert.equal(outcome("accepted"), true);
-  assert.equal(outcome("refused"), true);
-  assert.equal(outcome(undefined), true);
-  assert.equal(outcome("sent"), false);
-  assert.equal(outcome(true), false);
 });
 
 test("shortcut capture is reported as one boolean", () => {

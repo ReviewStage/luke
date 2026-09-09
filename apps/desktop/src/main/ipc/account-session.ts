@@ -1,7 +1,6 @@
-import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
-import { BRIDGE } from "#shared/bridge";
+import { ACT_KIND } from "#shared/messages/acts";
+import type { ActRows } from "../act-router";
 import type { HostOperator } from "../gateway/host-operator";
-import { registerBridge } from "../register-bridge";
 
 /**
  * The account rows, proxied to the host that owns the account: the sign-in
@@ -10,9 +9,7 @@ import { registerBridge } from "../register-bridge";
  * here is what only the client can do about them — stopping the recording
  * its renderers run before the account they file under is gone.
  */
-export interface AccountSessionIpcDependencies {
-  ipcMain: Pick<IpcMain, "handle" | "on">;
-  trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
+export interface AccountSessionDependencies {
   host: Pick<HostOperator, "beginSignIn" | "cancelSignIn" | "signOut" | "deleteAccount">;
   /**
    * Stops recording before either action runs. Neither can wait for its own
@@ -31,34 +28,38 @@ export interface AccountSessionIpcDependencies {
   resumeSessionReplay: () => void;
 }
 
-export function registerAccountSessionIpc(dependencies: AccountSessionIpcDependencies): void {
+type AccountActKind =
+  | typeof ACT_KIND.ACCOUNT_BEGIN_SIGN_IN
+  | typeof ACT_KIND.ACCOUNT_CANCEL_SIGN_IN
+  | typeof ACT_KIND.ACCOUNT_SIGN_OUT
+  | typeof ACT_KIND.ACCOUNT_DELETE;
+
+export function accountActRows(
+  dependencies: AccountSessionDependencies,
+): Pick<ActRows, AccountActKind> {
   const { host, haltSessionReplay, resumeSessionReplay } = dependencies;
-  registerBridge(
-    BRIDGE,
-    {
-      beginSignIn: (_context, provider) => host.beginSignIn(provider),
-      cancelSignIn: () => host.cancelSignIn(),
-      async signOut() {
-        haltSessionReplay();
-        try {
-          return await host.signOut();
-        } catch (error) {
-          resumeSessionReplay();
-          throw error;
-        }
-      },
-      async deleteAccount() {
-        haltSessionReplay();
-        try {
-          // A deletion that landed stands recording down for the run; the
-          // host says so on its replay event, which follows this answer.
-          return await host.deleteAccount();
-        } catch (error) {
-          resumeSessionReplay();
-          throw error;
-        }
-      },
+  return {
+    [ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]: ({ provider }) => host.beginSignIn(provider),
+    [ACT_KIND.ACCOUNT_CANCEL_SIGN_IN]: () => host.cancelSignIn(),
+    [ACT_KIND.ACCOUNT_SIGN_OUT]: async () => {
+      haltSessionReplay();
+      try {
+        return await host.signOut();
+      } catch (error) {
+        resumeSessionReplay();
+        throw error;
+      }
     },
-    { ipcMain: dependencies.ipcMain, trustedSender: dependencies.trustedSender },
-  );
+    [ACT_KIND.ACCOUNT_DELETE]: async () => {
+      haltSessionReplay();
+      try {
+        // A deletion that landed stands recording down for the run; the
+        // host says so on its replay event, which follows this answer.
+        return await host.deleteAccount();
+      } catch (error) {
+        resumeSessionReplay();
+        throw error;
+      }
+    },
+  };
 }

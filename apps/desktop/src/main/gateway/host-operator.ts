@@ -192,7 +192,8 @@ export const HOST_UNREACHABLE_REFUSAL = "Luke's runtime is not reachable right n
  * The host's answers are the same structured-clone payloads the windows
  * already receive over the bridge, carried through the protocol as JSON. The
  * readers below check the field the client itself decides on and hand the
- * rest on to the bridge, whose result guards are the renderer's own check.
+ * rest on to the act, whose own answer guard is checked in the router and
+ * again in the window that asked.
  */
 function record(result: GatewayCallResult): WireRecord | undefined {
   return result.ok && isRecord(result.result) ? result.result : undefined;
@@ -200,7 +201,7 @@ function record(result: GatewayCallResult): WireRecord | undefined {
 
 /** One answered value of the host's, as the domain type its method documents. */
 function answered<Value>(value: UnparsedWireValue): Value | undefined {
-  // SAFETY: the host is Luke's own authenticated process answering the shape the method documents; the bridge's result guard re-checks it before a renderer sees it.
+  // SAFETY: the host is Luke's own authenticated process answering the shape the method documents; the act's own answer guard re-checks it before a renderer sees it.
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The protocol carries JSON; the domain type is restored at this one boundary.
   return value === undefined ? undefined : (value as unknown as Value);
 }

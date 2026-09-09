@@ -2,6 +2,8 @@ import { PRODUCT_ASK_OUTCOME, PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import { SendIcon } from "@sidecar/panel";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useCallback, useRef, useState } from "react";
+import { ACT_KIND } from "#shared/messages/acts";
+import { tell } from "./act";
 import { FOCUS_FRAME_LIMIT } from "./credential-entry";
 import { Keycaps } from "./keycaps";
 
@@ -166,7 +168,7 @@ export function AskLuke({
           onFocus={() => {
             // The panel can be showing without its window being key, and a
             // field that cannot be typed into is worse than no field.
-            window.sidecar.focusPanel();
+            tell(ACT_KIND.WINDOW_FOCUS_PANEL);
             onEngagedChange(true);
           }}
           onBlur={() => onEngagedChange(false)}

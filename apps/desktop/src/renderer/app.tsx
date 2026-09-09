@@ -45,6 +45,7 @@ import {
   useState,
 } from "react";
 import { CONSENT_SERVICE_ID, type ConsentServiceId } from "#shared/consent-services";
+import { ACT_KIND } from "#shared/messages/acts";
 import { type AppStateSnapshot, sessionReplayBootstrap } from "#shared/messages/app-state";
 import type {
   DisplayDiagnostic,
@@ -56,6 +57,7 @@ import {
   SUPERSET_SIGN_IN_STAGE,
   SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "#shared/messages/session";
+import { act, tell, updateSetting, updateSettingEntry } from "./act";
 import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
 import type { CalendarGateControl } from "./calendar-gate";
 import { type ConsentConnectEntry, ConsentConnectSlot } from "./consent-connect-slot";
@@ -187,18 +189,18 @@ const SEARCH_QUERY_STORE_DELAY_MS = 400;
  */
 const CONSENT_ACTIONS = {
   [CONSENT_SERVICE_ID.APPLE_CALENDAR]: {
-    connect: () => window.sidecar.connectAppleCalendar(),
-    cancel: () => window.sidecar.cancelAppleCalendarConnect(),
+    connect: () => act(ACT_KIND.CALENDAR_CONNECT_APPLE),
+    cancel: () => tell(ACT_KIND.CALENDAR_CANCEL_APPLE_CONNECT),
   },
   [CONSENT_SERVICE_ID.GOOGLE_CALENDAR]: {
-    connect: () => window.sidecar.connectGoogleCalendar(),
-    cancel: () => window.sidecar.cancelGoogleCalendarSignIn(),
-    reopen: () => window.sidecar.reopenGoogleCalendarSignIn(),
+    connect: () => act(ACT_KIND.CALENDAR_CONNECT_GOOGLE),
+    cancel: () => tell(ACT_KIND.CALENDAR_CANCEL_GOOGLE_SIGN_IN),
+    reopen: () => tell(ACT_KIND.CALENDAR_REOPEN_GOOGLE_SIGN_IN),
   },
   [CONSENT_SERVICE_ID.LINEAR]: {
-    connect: () => window.sidecar.connectLinear(),
-    cancel: () => window.sidecar.cancelLinearSignIn(),
-    reopen: () => window.sidecar.reopenLinearSignIn(),
+    connect: () => act(ACT_KIND.TRACKER_CONNECT),
+    cancel: () => tell(ACT_KIND.TRACKER_CANCEL_SIGN_IN),
+    reopen: () => tell(ACT_KIND.TRACKER_REOPEN_SIGN_IN),
   },
 } as const satisfies Readonly<
   Record<
@@ -857,7 +859,7 @@ export function App(): React.JSX.Element {
     const filters = sessionView.filters;
     if (sameSessionFilters(storedSessionFilters.current, filters)) return;
     storedSessionFilters.current = filters;
-    void window.sidecar.updateSetting(
+    void updateSetting(
       APP_SETTING_SCHEMA.sessionFilters.field,
       filters.length > 0 ? filters : undefined,
     );
@@ -884,7 +886,7 @@ export function App(): React.JSX.Element {
     if (storedSessionQuery.current === query) return;
     const store = () => {
       storedSessionQuery.current = query;
-      void window.sidecar.updateSetting(
+      void updateSetting(
         APP_SETTING_SCHEMA.sessionSearchQuery.field,
         query !== "" ? query : undefined,
       );
@@ -898,25 +900,25 @@ export function App(): React.JSX.Element {
   }, [state, sessionView.query, liveSettings?.sessionSearchQuery]);
 
   const removeCalendarAccount = useCallback(
-    (accountId: string) => window.sidecar.removeCalendarAccount(accountId),
+    (accountId: string) => act(ACT_KIND.CALENDAR_REMOVE_ACCOUNT, { accountId }),
     [],
   );
 
   const toggleCalendarSelected = useCallback(
     (accountId: string, calendarId: string, selected: boolean) =>
-      window.sidecar.setCalendarSelected(accountId, calendarId, selected),
+      act(ACT_KIND.CALENDAR_SET_SELECTED, { accountId, calendarId, selected }),
     [],
   );
 
-  const disconnectAppleCalendar = useCallback(() => window.sidecar.disconnectAppleCalendar(), []);
+  const disconnectAppleCalendar = useCallback(() => act(ACT_KIND.CALENDAR_DISCONNECT_APPLE), []);
 
   const toggleAppleCalendarSelected = useCallback(
     (calendarId: string, selected: boolean) =>
-      window.sidecar.setCalendarSelected(APPLE_CALENDAR_ID, calendarId, selected),
+      act(ACT_KIND.CALENDAR_SET_SELECTED, { accountId: APPLE_CALENDAR_ID, calendarId, selected }),
     [],
   );
 
-  const disconnectLinear = useCallback(() => window.sidecar.disconnectLinear(), []);
+  const disconnectLinear = useCallback(() => act(ACT_KIND.TRACKER_DISCONNECT), []);
 
   /**
    * A consent sign-in is asking for one thing too, so the panel gets out of
@@ -980,8 +982,8 @@ export function App(): React.JSX.Element {
     setAppleCalendarBusy(true);
     let granted = false;
     try {
-      granted = (await window.sidecar.appleCalendarAccessStatus()) === APPLE_CALENDAR_ACCESS.FULL;
-      if (granted) await window.sidecar.connectAppleCalendar();
+      granted = (await act(ACT_KIND.CALENDAR_APPLE_ACCESS_STATUS)) === APPLE_CALENDAR_ACCESS.FULL;
+      if (granted) await act(ACT_KIND.CALENDAR_CONNECT_APPLE);
     } finally {
       setAppleCalendarBusy(false);
     }
@@ -1014,7 +1016,7 @@ export function App(): React.JSX.Element {
   const beginSupersetSignIn = useCallback(() => {
     if (supersetSignInHeld.current) {
       if (supersetSignIn.stage === SUPERSET_SIGN_IN_STAGE.FAILURE) {
-        void window.sidecar.beginSupersetSignIn();
+        tell(ACT_KIND.SUPERSET_BEGIN_SIGN_IN);
       }
       return;
     }
@@ -1024,17 +1026,17 @@ export function App(): React.JSX.Element {
     standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.SUPERSET });
     cancelHover();
     applyPresentation(PANEL_PRESENTATION.SLOT);
-    void window.sidecar.beginSupersetSignIn();
+    tell(ACT_KIND.SUPERSET_BEGIN_SIGN_IN);
   }, [applyPresentation, cancelHover, supersetSignIn.stage]);
 
   const cancelSupersetSignIn = useCallback(() => {
     if (!supersetSignInHeld.current) return;
-    window.sidecar.cancelSupersetSignIn();
+    tell(ACT_KIND.SUPERSET_CANCEL_SIGN_IN);
     supersetSignInHeld.current = false;
     if (presentationOf() === PANEL_PRESENTATION.SLOT) restorePanel();
   }, [presentationOf, restorePanel]);
 
-  const disconnectSuperset = useCallback(() => window.sidecar.disconnectSuperset(), []);
+  const disconnectSuperset = useCallback(() => act(ACT_KIND.SUPERSET_DISCONNECT), []);
 
   /**
    * Asking to write a key is asking for one thing, so the panel gets out of the
@@ -1048,7 +1050,10 @@ export function App(): React.JSX.Element {
     restoresPanel: (held) => held.away !== true,
     isSendable: isSubmittable,
     send: async (sending) => {
-      const result = await window.sidecar.setProviderApiKey(sending.providerId, sending.draft);
+      const result = await act(ACT_KIND.CREDENTIAL_SET_API_KEY, {
+        providerId: sending.providerId,
+        apiKey: sending.draft,
+      });
       return result.reason ? { rejection: result.reason } : {};
     },
     pointerInside: pointerIsInside,
@@ -1089,7 +1094,7 @@ export function App(): React.JSX.Element {
     (providerId: CredentialProviderId) => {
       standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.KEY, providerId });
       slotOccupant.current = PANEL_STAND_DOWN.KEY;
-      window.sidecar.openProviderApiKeys(providerId);
+      tell(ACT_KIND.CREDENTIAL_OPEN_API_KEYS, { providerId });
       credentialsEntry.begin({ providerId, draft: "", busy: false, away: true });
     },
     [credentialsEntry.begin],
@@ -1109,7 +1114,7 @@ export function App(): React.JSX.Element {
     // views disable the link while it is in flight, so this is the floor rather
     // than the answer.
     if (!panelEntryOpen(current)) return;
-    window.sidecar.openProviderApiKeys(current.providerId);
+    tell(ACT_KIND.CREDENTIAL_OPEN_API_KEYS, { providerId: current.providerId });
     credentialsEntry.apply({ ...current, away: true });
     if (presentationOf() === PANEL_PRESENTATION.SLOT) return;
     credentialsEntry.standDown();
@@ -1117,7 +1122,7 @@ export function App(): React.JSX.Element {
 
   const removeProviderApiKey = useCallback(
     async (providerId: CredentialProviderId) => {
-      const result = await window.sidecar.setProviderApiKey(providerId, undefined);
+      const result = await act(ACT_KIND.CREDENTIAL_SET_API_KEY, { providerId, apiKey: undefined });
       // Delete and the field are on the row together once the panel has been
       // brought back around an entry, and a key that has been removed cannot be
       // replaced.
@@ -1166,7 +1171,7 @@ export function App(): React.JSX.Element {
       setSignInWait(provider);
       cancelHover();
       applyPresentation(PANEL_PRESENTATION.SLOT);
-      window.sidecar.beginSignIn(provider).then(
+      act(ACT_KIND.ACCOUNT_BEGIN_SIGN_IN, { provider }).then(
         () => {
           if (signInAttempt.current !== attempt) return;
           setSignInWait(undefined);
@@ -1197,17 +1202,17 @@ export function App(): React.JSX.Element {
     if (signInWaitNow() === undefined) return;
     signInAttempt.current += 1;
     setSignInWait(undefined);
-    void window.sidecar.cancelSignIn();
+    tell(ACT_KIND.ACCOUNT_CANCEL_SIGN_IN);
     if (presentationOf() === PANEL_PRESENTATION.SLOT) expand();
   }, [expand, presentationOf, setSignInWait, signInWaitNow]);
 
   const changeSupersetAgentDefault = useCallback(
     (agent: string | undefined) =>
-      window.sidecar.updateSettingEntry(
-        APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-        SUPERSET_WORKSPACE_PROVIDER_ID,
-        agent === undefined ? undefined : { agent },
-      ),
+      act(ACT_KIND.SETTING_UPDATE_ENTRY, {
+        field: APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
+        key: SUPERSET_WORKSPACE_PROVIDER_ID,
+        value: agent === undefined ? undefined : { agent },
+      }),
     [],
   );
 
@@ -1306,12 +1311,14 @@ export function App(): React.JSX.Element {
       const name = sending.name.trim();
       const email = sending.email.trim();
       try {
-        const result = await window.sidecar.sendFeedback({
-          kind: sending.kind,
-          message: sending.message.trim(),
-          ...(name ? { name } : undefined),
-          ...(email ? { email } : undefined),
-          images: sending.images,
+        const result = await act(ACT_KIND.FEEDBACK_SEND, {
+          submission: {
+            kind: sending.kind,
+            message: sending.message.trim(),
+            ...(name ? { name } : undefined),
+            ...(email ? { email } : undefined),
+            images: sending.images,
+          },
         });
         if (!result.delivered) {
           return { rejection: result.reason ?? "Could not send that. Try again." };
@@ -1485,7 +1492,7 @@ export function App(): React.JSX.Element {
    */
   const changeVoiceHotkey = useCallback(
     (accelerator: string | undefined) =>
-      window.sidecar.updateSetting(APP_SETTING_SCHEMA.voiceHotkey.field, accelerator),
+      updateSetting(APP_SETTING_SCHEMA.voiceHotkey.field, accelerator),
     [],
   );
 
@@ -1493,14 +1500,14 @@ export function App(): React.JSX.Element {
   // process's own announcement of what actually registered.
   const changeAskHotkey = useCallback(
     (accelerator: string | undefined) =>
-      window.sidecar.updateSetting(APP_SETTING_SCHEMA.askHotkey.field, accelerator),
+      updateSetting(APP_SETTING_SCHEMA.askHotkey.field, accelerator),
     [],
   );
 
   // The stop key, under the same rule again.
   const changeStopHotkey = useCallback(
     (accelerator: string | undefined) =>
-      window.sidecar.updateSetting(APP_SETTING_SCHEMA.stopHotkey.field, accelerator),
+      updateSetting(APP_SETTING_SCHEMA.stopHotkey.field, accelerator),
     [],
   );
 
@@ -1527,9 +1534,11 @@ export function App(): React.JSX.Element {
    */
   const openSession = useCallback(
     (session: SessionView) => {
-      void window.sidecar.openSession({
-        providerId: session.providerId,
-        providerSessionId: session.id,
+      tell(ACT_KIND.SESSION_OPEN, {
+        identity: {
+          providerId: session.providerId,
+          providerSessionId: session.id,
+        },
       });
       cancelHover();
       void changeMode(false);
@@ -1544,13 +1553,13 @@ export function App(): React.JSX.Element {
    */
   const openSessionApplication = useCallback(
     (session: SessionView, applicationId: SessionApplicationId) => {
-      void window.sidecar.openSessionApplication(
-        {
+      tell(ACT_KIND.SESSION_OPEN_APPLICATION, {
+        identity: {
           providerId: session.providerId,
           providerSessionId: session.id,
         },
         applicationId,
-      );
+      });
       cancelHover();
       void changeMode(false);
     },
@@ -1711,7 +1720,7 @@ export function App(): React.JSX.Element {
           deferSettings();
           let caught: AppSettingsView | undefined;
           const outcome = await applySpokenSetting(
-            window.sidecar,
+            { updateSetting, updateSettingEntry },
             action,
             (wire) => {
               const next = appSettingsView(wire);
@@ -1783,7 +1792,7 @@ export function App(): React.JSX.Element {
           }).drafted;
           spokenFeedbackDraft.current = action.draft;
           try {
-            await window.sidecar.summonFeedback(kind);
+            await act(ACT_KIND.FEEDBACK_SUMMON, { kind });
           } catch (error) {
             // The composer is not coming, so the event that would consume the
             // draft is not coming either; a stale one must not season some
@@ -1883,11 +1892,11 @@ export function App(): React.JSX.Element {
           if (action.action === APP_UPDATE_ACTION.CHECK) {
             // Answered rather than fire-and-forget, like the row's own press,
             // so the outcome voiced is the answer the check actually returned.
-            const answered = await window.sidecar.checkForUpdates();
+            const answered = await act(ACT_KIND.UPDATE_CHECK);
             return { status: ACTION_RESULT_STATUS.ACCEPTED, outcome: updateRow(answered).detail };
           }
           if (action.action === APP_UPDATE_ACTION.DOWNLOAD) {
-            window.sidecar.openLatestRelease();
+            tell(ACT_KIND.UPDATE_OPEN_RELEASE);
             return {
               status: ACTION_RESULT_STATUS.ACCEPTED,
               note: "The latest release's page is open in the browser; the download itself is by hand from there.",
@@ -1907,7 +1916,7 @@ export function App(): React.JSX.Element {
               reason: row?.detail ?? "This run does not report where updates stand.",
             };
           }
-          window.sidecar.installUpdate();
+          tell(ACT_KIND.UPDATE_INSTALL);
           return {
             status: ACTION_RESULT_STATUS.ACCEPTED,
             note: "Luke is quitting to install the downloaded release; this conversation ends with it.",
@@ -2086,9 +2095,11 @@ export function App(): React.JSX.Element {
   const sessionWrites: SessionWriteHandlers = useMemo(
     () => ({
       openChange: (session) =>
-        window.sidecar.openSessionChange({
-          providerId: session.providerId,
-          providerSessionId: session.id,
+        act(ACT_KIND.SESSION_OPEN_CHANGE, {
+          identity: {
+            providerId: session.providerId,
+            providerSessionId: session.id,
+          },
         }),
     }),
     [],
@@ -2492,17 +2503,17 @@ export function App(): React.JSX.Element {
     status: state.audio.microphoneStatus,
     voiceAvailable: settings.voiceAvailable,
     onRequest: requestMicrophoneAccess,
-    onOpenSettings: () => window.sidecar.openMicrophoneSettings(),
+    onOpenSettings: () => tell(ACT_KIND.MICROPHONE_OPEN_SETTINGS),
   };
   const updates: UpdateControl = {
     update: state.update,
     // Answered rather than fire-and-forget so the row that asked redraws from
     // the same snapshot the broadcast carries to every other window.
     onCheck: async () => {
-      await window.sidecar.checkForUpdates();
+      await act(ACT_KIND.UPDATE_CHECK);
     },
-    onInstall: () => window.sidecar.installUpdate(),
-    onOpenLatest: () => window.sidecar.openLatestRelease(),
+    onInstall: () => tell(ACT_KIND.UPDATE_INSTALL),
+    onOpenLatest: () => tell(ACT_KIND.UPDATE_OPEN_RELEASE),
   };
   const shortcuts: ShortcutControl = {
     ...(state.hotkeys.talk ? { voiceHotkey: state.hotkeys.talk } : undefined),
@@ -2560,11 +2571,11 @@ export function App(): React.JSX.Element {
           // roster the arrival beat is about to call all set.
           onSkip: () => {
             changeTab(PANEL_TAB.SESSIONS);
-            void window.sidecar.skipCalendarOnboarding();
+            tell(ACT_KIND.ONBOARDING_SKIP_CALENDAR);
           },
           onDone: () => {
             changeTab(PANEL_TAB.SESSIONS);
-            void window.sidecar.completeCalendarOnboarding();
+            tell(ACT_KIND.ONBOARDING_COMPLETE_CALENDAR);
           },
         }
       : undefined;
@@ -2656,13 +2667,13 @@ export function App(): React.JSX.Element {
             settings={{
               account: state.account,
               onSignOut: async () => {
-                await window.sidecar.signOut();
+                await act(ACT_KIND.ACCOUNT_SIGN_OUT);
               },
               // The delete happens at the service before anything local moves,
               // so a failure resolves to why and the account is still standing.
               onDeleteAccount: async () => {
                 try {
-                  await window.sidecar.deleteAccount();
+                  await act(ACT_KIND.ACCOUNT_DELETE);
                   return { status: ACTION_RESULT_STATUS.ACCEPTED };
                 } catch {
                   return {
@@ -2688,7 +2699,7 @@ export function App(): React.JSX.Element {
                 onSignIn: () => beginConsentSignIn(CONSENT_SERVICE_ID.GOOGLE_CALENDAR),
                 onRemoveAccount: removeCalendarAccount,
                 onToggleCalendar: toggleCalendarSelected,
-                onRefresh: () => window.sidecar.refreshCalendars(),
+                onRefresh: () => act(ACT_KIND.CALENDAR_REFRESH),
               },
               appleCalendar: {
                 choices: appleCalendarObserved?.calendars ?? [],
@@ -2731,7 +2742,7 @@ export function App(): React.JSX.Element {
                 }
                 return superset;
               })(),
-              onQuit: () => window.sidecar.quit(),
+              onQuit: () => tell(ACT_KIND.WINDOW_QUIT),
               shortcuts,
               searchOpen: settingsSearchOpen,
               onSearchClose: closeSettingsSearch,
@@ -2775,18 +2786,18 @@ export function App(): React.JSX.Element {
               const acts = CONSENT_ACTIONS[waiting];
               if ("reopen" in acts) acts.reopen();
             }}
-            onOpenSystemSettings={() => window.sidecar.openCalendarSettings()}
+            onOpenSystemSettings={() => tell(ACT_KIND.CALENDAR_OPEN_SETTINGS)}
             measure={connectElement}
           />
           {supersetSignInHeld.current ? (
             <SupersetSignInSlot
               state={supersetSignIn}
               drawn={slotOpen && slotOccupant.current === PANEL_STAND_DOWN.SUPERSET}
-              onSubmit={(code) => void window.sidecar.submitSupersetSignInCode(code)}
-              onReopen={() => window.sidecar.reopenSupersetSignIn()}
+              onSubmit={(code) => tell(ACT_KIND.SUPERSET_SUBMIT_CODE, { code })}
+              onReopen={() => tell(ACT_KIND.SUPERSET_REOPEN_SIGN_IN)}
               onCancel={cancelSupersetSignIn}
               onRetry={beginSupersetSignIn}
-              onChooseOrganization={(slug) => void window.sidecar.chooseSupersetOrganization(slug)}
+              onChooseOrganization={(slug) => tell(ACT_KIND.SUPERSET_CHOOSE_ORGANIZATION, { slug })}
               measure={connectElement}
             />
           ) : null}

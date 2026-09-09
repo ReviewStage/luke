@@ -2,8 +2,10 @@ import { CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
 import { ExternalIcon, ProviderMark } from "@sidecar/panel";
 import { SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/session";
 import { useEffect, useRef, useState } from "react";
+import { ACT_KIND } from "#shared/messages/acts";
 import type { SupersetSignInSnapshot } from "#shared/messages/session";
 import { SUPERSET_SIGN_IN_STAGE } from "#shared/messages/session";
+import { tell } from "./act";
 import { CREDENTIAL_PLACEHOLDER, useStagedFocus } from "./credential-entry";
 import { DestinationNote } from "./destination-note";
 import { HIT_REGION } from "./panel-state";
@@ -91,7 +93,7 @@ export function SupersetSignInSlot({
                 onFocus={() => {
                   // The slot is shown without stealing focus, and a field that
                   // cannot be typed into is worse than no field.
-                  window.sidecar.focusPanel();
+                  tell(ACT_KIND.WINDOW_FOCUS_PANEL);
                 }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && ready) onSubmit(code);

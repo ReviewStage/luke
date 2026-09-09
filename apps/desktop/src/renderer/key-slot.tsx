@@ -6,6 +6,8 @@ import {
 } from "@sidecar/credentials/vocabulary";
 import { CloudBadge, ProviderMark } from "@sidecar/panel";
 import { useEffect, useRef } from "react";
+import { ACT_KIND } from "#shared/messages/acts";
+import { tell } from "./act";
 import {
   CREDENTIAL_PLACEHOLDER,
   type CredentialEntryControl,
@@ -125,7 +127,7 @@ export function KeySlot({
             onFocus={() => {
               // The slot is shown without stealing focus, and a field that
               // cannot be typed into is worse than no field.
-              window.sidecar.focusPanel();
+              tell(ACT_KIND.WINDOW_FOCUS_PANEL);
             }}
             onKeyDown={(event) => {
               if (event.key === "Enter" && ready) control.commit();

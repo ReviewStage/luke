@@ -1,0 +1,127 @@
+import { ACT_KIND, type Act, type ActKind } from "#shared/messages/acts";
+
+const IDENTITY = { providerId: "claude-code", providerSessionId: "session-a" };
+
+/**
+ * One admissible act per kind. Total by its type, so a kind added to the
+ * vocabulary with no example here does not build — the table below is what
+ * proves every kind is reachable at all, and a kind nothing can send is a
+ * kind nobody meant to add.
+ */
+export const ONE_ACT_OF_EACH_KIND = {
+  [ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]: {
+    kind: ACT_KIND.ACCOUNT_BEGIN_SIGN_IN,
+    payload: { provider: "google" },
+  },
+  [ACT_KIND.ACCOUNT_CANCEL_SIGN_IN]: { kind: ACT_KIND.ACCOUNT_CANCEL_SIGN_IN },
+  [ACT_KIND.ACCOUNT_SIGN_OUT]: { kind: ACT_KIND.ACCOUNT_SIGN_OUT },
+  [ACT_KIND.ACCOUNT_DELETE]: { kind: ACT_KIND.ACCOUNT_DELETE },
+  [ACT_KIND.SETTING_UPDATE]: {
+    kind: ACT_KIND.SETTING_UPDATE,
+    payload: { field: "openAtLogin", value: true },
+  },
+  [ACT_KIND.SETTING_UPDATE_ENTRY]: {
+    kind: ACT_KIND.SETTING_UPDATE_ENTRY,
+    payload: { field: "workspaceProjectDefaults", key: "conductor", value: "luke" },
+  },
+  [ACT_KIND.SETTINGS_RESET]: { kind: ACT_KIND.SETTINGS_RESET, payload: { scope: "voice" } },
+  [ACT_KIND.CREDENTIAL_SET_API_KEY]: {
+    kind: ACT_KIND.CREDENTIAL_SET_API_KEY,
+    payload: { providerId: "openai", apiKey: "sk-test" },
+  },
+  [ACT_KIND.CREDENTIAL_OPEN_API_KEYS]: {
+    kind: ACT_KIND.CREDENTIAL_OPEN_API_KEYS,
+    payload: { providerId: "openai" },
+  },
+  [ACT_KIND.CALENDAR_CONNECT_GOOGLE]: { kind: ACT_KIND.CALENDAR_CONNECT_GOOGLE },
+  [ACT_KIND.CALENDAR_CANCEL_GOOGLE_SIGN_IN]: { kind: ACT_KIND.CALENDAR_CANCEL_GOOGLE_SIGN_IN },
+  [ACT_KIND.CALENDAR_REOPEN_GOOGLE_SIGN_IN]: { kind: ACT_KIND.CALENDAR_REOPEN_GOOGLE_SIGN_IN },
+  [ACT_KIND.CALENDAR_REMOVE_ACCOUNT]: {
+    kind: ACT_KIND.CALENDAR_REMOVE_ACCOUNT,
+    payload: { accountId: "account-1" },
+  },
+  [ACT_KIND.CALENDAR_CONNECT_APPLE]: { kind: ACT_KIND.CALENDAR_CONNECT_APPLE },
+  [ACT_KIND.CALENDAR_DISCONNECT_APPLE]: { kind: ACT_KIND.CALENDAR_DISCONNECT_APPLE },
+  [ACT_KIND.CALENDAR_APPLE_ACCESS_STATUS]: { kind: ACT_KIND.CALENDAR_APPLE_ACCESS_STATUS },
+  [ACT_KIND.CALENDAR_CANCEL_APPLE_CONNECT]: { kind: ACT_KIND.CALENDAR_CANCEL_APPLE_CONNECT },
+  [ACT_KIND.CALENDAR_OPEN_SETTINGS]: { kind: ACT_KIND.CALENDAR_OPEN_SETTINGS },
+  [ACT_KIND.CALENDAR_REFRESH]: { kind: ACT_KIND.CALENDAR_REFRESH },
+  [ACT_KIND.CALENDAR_SET_SELECTED]: {
+    kind: ACT_KIND.CALENDAR_SET_SELECTED,
+    payload: { accountId: "account-1", calendarId: "calendar-1", selected: true },
+  },
+  [ACT_KIND.TRACKER_CONNECT]: { kind: ACT_KIND.TRACKER_CONNECT },
+  [ACT_KIND.TRACKER_CANCEL_SIGN_IN]: { kind: ACT_KIND.TRACKER_CANCEL_SIGN_IN },
+  [ACT_KIND.TRACKER_REOPEN_SIGN_IN]: { kind: ACT_KIND.TRACKER_REOPEN_SIGN_IN },
+  [ACT_KIND.TRACKER_DISCONNECT]: { kind: ACT_KIND.TRACKER_DISCONNECT },
+  [ACT_KIND.SUPERSET_BEGIN_SIGN_IN]: { kind: ACT_KIND.SUPERSET_BEGIN_SIGN_IN },
+  [ACT_KIND.SUPERSET_SUBMIT_CODE]: {
+    kind: ACT_KIND.SUPERSET_SUBMIT_CODE,
+    payload: { code: "123456" },
+  },
+  [ACT_KIND.SUPERSET_CHOOSE_ORGANIZATION]: {
+    kind: ACT_KIND.SUPERSET_CHOOSE_ORGANIZATION,
+    payload: { slug: "luke" },
+  },
+  [ACT_KIND.SUPERSET_REOPEN_SIGN_IN]: { kind: ACT_KIND.SUPERSET_REOPEN_SIGN_IN },
+  [ACT_KIND.SUPERSET_CANCEL_SIGN_IN]: { kind: ACT_KIND.SUPERSET_CANCEL_SIGN_IN },
+  [ACT_KIND.SUPERSET_DISCONNECT]: { kind: ACT_KIND.SUPERSET_DISCONNECT },
+  [ACT_KIND.UPDATE_CHECK]: { kind: ACT_KIND.UPDATE_CHECK },
+  [ACT_KIND.UPDATE_INSTALL]: { kind: ACT_KIND.UPDATE_INSTALL },
+  [ACT_KIND.UPDATE_OPEN_RELEASE]: { kind: ACT_KIND.UPDATE_OPEN_RELEASE },
+  [ACT_KIND.UPDATE_OPEN_CHANGELOG]: { kind: ACT_KIND.UPDATE_OPEN_CHANGELOG },
+  [ACT_KIND.SESSION_OPEN]: { kind: ACT_KIND.SESSION_OPEN, payload: { identity: IDENTITY } },
+  [ACT_KIND.SESSION_OPEN_APPLICATION]: {
+    kind: ACT_KIND.SESSION_OPEN_APPLICATION,
+    payload: { identity: IDENTITY, applicationId: "conductor" },
+  },
+  [ACT_KIND.SESSION_OPEN_CHANGE]: {
+    kind: ACT_KIND.SESSION_OPEN_CHANGE,
+    payload: { identity: IDENTITY },
+  },
+  [ACT_KIND.BRAIN_SUBMIT_ASK]: {
+    kind: ACT_KIND.BRAIN_SUBMIT_ASK,
+    payload: { submission: { submissionId: "sub-1", question: "what needs me?", origin: "typed" } },
+  },
+  [ACT_KIND.BRAIN_WAIT_ASK]: {
+    kind: ACT_KIND.BRAIN_WAIT_ASK,
+    payload: { runId: "run-1", epoch: 3 },
+  },
+  [ACT_KIND.BRAIN_CANCEL_ASK]: { kind: ACT_KIND.BRAIN_CANCEL_ASK, payload: { runId: "run-1" } },
+  [ACT_KIND.BRAIN_CLAIM_REPLY]: {
+    kind: ACT_KIND.BRAIN_CLAIM_REPLY,
+    payload: { runId: "run-1", deliveryId: "delivery-1", epoch: 2 },
+  },
+  [ACT_KIND.VOICE_COMMAND]: {
+    kind: ACT_KIND.VOICE_COMMAND,
+    payload: { command: "clear-conversation" },
+  },
+  [ACT_KIND.VOICE_MINT_CREDENTIAL]: { kind: ACT_KIND.VOICE_MINT_CREDENTIAL },
+  [ACT_KIND.VOICE_DIAGNOSTICS]: { kind: ACT_KIND.VOICE_DIAGNOSTICS },
+  [ACT_KIND.MICROPHONE_REQUEST]: { kind: ACT_KIND.MICROPHONE_REQUEST },
+  [ACT_KIND.MICROPHONE_ROUTE]: { kind: ACT_KIND.MICROPHONE_ROUTE },
+  [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: { kind: ACT_KIND.MICROPHONE_OPEN_SETTINGS },
+  [ACT_KIND.WINDOW_SET_EXPANDED]: {
+    kind: ACT_KIND.WINDOW_SET_EXPANDED,
+    payload: { expanded: true, focus: false },
+  },
+  [ACT_KIND.WINDOW_FOCUS_PANEL]: { kind: ACT_KIND.WINDOW_FOCUS_PANEL },
+  [ACT_KIND.WINDOW_COPY_TEXT]: { kind: ACT_KIND.WINDOW_COPY_TEXT, payload: { words: "checkout" } },
+  [ACT_KIND.WINDOW_QUIT]: { kind: ACT_KIND.WINDOW_QUIT },
+  [ACT_KIND.FEEDBACK_SUMMON]: { kind: ACT_KIND.FEEDBACK_SUMMON, payload: { kind: "feedback" } },
+  [ACT_KIND.FEEDBACK_SEND]: {
+    kind: ACT_KIND.FEEDBACK_SEND,
+    payload: { submission: { kind: "feedback", message: "it works", images: [] } },
+  },
+  [ACT_KIND.ONBOARDING_SKIP_CALENDAR]: { kind: ACT_KIND.ONBOARDING_SKIP_CALENDAR },
+  [ACT_KIND.ONBOARDING_COMPLETE_CALENDAR]: { kind: ACT_KIND.ONBOARDING_COMPLETE_CALENDAR },
+  [ACT_KIND.INTRODUCTION_PEEK_SESSIONS]: { kind: ACT_KIND.INTRODUCTION_PEEK_SESSIONS },
+  [ACT_KIND.INTRODUCTION_COMPLETE]: {
+    kind: ACT_KIND.INTRODUCTION_COMPLETE,
+    payload: { given: true },
+  },
+  [ACT_KIND.INTRODUCTION_ABANDON]: {
+    kind: ACT_KIND.INTRODUCTION_ABANDON,
+    payload: { reason: "the voice never connected" },
+  },
+} as const satisfies { readonly [Kind in ActKind]: Act & { kind: Kind } };

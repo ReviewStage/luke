@@ -10,36 +10,13 @@ import {
 import {
   type BrainAppActionAnswer,
   type BrainAppActionRequest,
-  type BrainAskSubmission,
-  type BrainAskSubmissionResult,
-  type BrainAskWait,
-  type BrainReplyClaimResult,
   type BrainReplyOffer,
-  type BrainRequestSnapshot,
-  isBrainAskSubmission,
-  isBrainAskSubmissionResult,
-  isBrainAskWait,
-  isBrainReplyClaimResult,
   isBrainReplyOffer,
-  isBrainRequestSnapshot,
   isReceiverEpoch,
 } from "@sidecar/brain/requests-wire";
-import type { AppleCalendarAccess } from "@sidecar/calendar/vocabulary";
-import type { AccountProvider, AccountSnapshot } from "@sidecar/credentials/snapshot";
-import { isAccountProvider } from "@sidecar/credentials/snapshot";
-import { type CredentialProviderId, isCredentialProviderId } from "@sidecar/credentials/vocabulary";
 import { type AgentWireTrace, isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
-import {
-  type FeedbackKind,
-  type FeedbackResult,
-  type FeedbackSubmission,
-  feedbackSubmission,
-  isFeedbackKind,
-} from "@sidecar/feedback";
 import { type AppGuideSnapshot, isAppGuideSnapshot } from "@sidecar/guide";
-import type { RealtimeConnection } from "@sidecar/hosted";
-import type { SupersetSignInSnapshot } from "@sidecar/providers/superset/sign-in-stage";
-import { type RealtimeDiagnostics, voiceExchangeActive } from "@sidecar/realtime";
+import { voiceExchangeActive } from "@sidecar/realtime";
 import {
   isSpeechOffer,
   isSpeechOutcome,
@@ -48,61 +25,25 @@ import {
   type SpeechOutcome,
   type SpeechWithdrawal,
 } from "@sidecar/realtime/speech";
+import { type ConversationEntry, storedConversationEntry } from "@sidecar/session";
 import {
-  type ConversationEntry,
-  isProviderId,
-  isSessionApplicationId,
-  type Session,
-  type SessionApplicationId,
-  type SessionIdentity,
-  storedConversationEntry,
-} from "@sidecar/session";
-import {
-  APP_SETTING_SCHEMA,
-  type AppSettingField,
-  type AppSettingValue,
-  isAppSettingField,
-  isKeyedAppSettingField,
-  isSettingEntryKey,
-  isSettingsResetScope,
-  type KeyedAppSettingField,
-  type SettingEntryValue,
-  type SettingsResetScope,
-  settingEntryGuard,
-} from "@sidecar/settings";
-import type { SettingsUpdateResult } from "@sidecar/settings/wire";
-import type { WindowMode } from "@sidecar/surface";
-import {
-  type ActionResult,
-  isActionResult,
-  isOptionalWireString,
   isRecord,
   isUnitLevel,
   isWireBoolean,
   isWireNumber,
   isWireString,
   type UnparsedWireValue,
-  unparsedWire,
-  type WireBoundaryInput,
 } from "@sidecar/wire";
+import { type Act, type ActOutcome, isActOutcome, parsedAct } from "./messages/acts";
 import { type AppStateSnapshot, isAppStateSnapshot } from "./messages/app-state";
-import type { MicrophoneRoute, MicrophoneStatus } from "./messages/audio";
-import type { SessionOpenResult } from "./messages/session";
-import type { UpdateSnapshot } from "./messages/update";
+import { isSessionIdentity } from "./messages/session";
 import {
   isVoiceCommand,
-  isVoiceCommandOutcome,
   isVoiceView,
   type VoiceCommand,
-  type VoiceCommandOutcome,
   type VoiceView,
 } from "./messages/voice-view";
-
-export interface WireGuard<Value> {
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A bridge guard is the parser at the IPC boundary.
-  (value: unknown): boolean;
-  readonly wireType?: Value;
-}
+import { isWireValue, wireResult as result, type WireGuard } from "./messages/wire-guard";
 
 type BridgeArguments = readonly unknown[];
 type BridgeKind = "invoke" | "send" | "subscribe";
@@ -139,55 +80,28 @@ function args<Arguments extends BridgeArguments>(
   };
 }
 
-function result<Result>(
-  guard: (value: UnparsedWireValue) => boolean = isWireValue,
-): WireGuard<Result> {
-  // SAFETY: an IPC payload is structured-clone data; unparsedWire is the boundary the guards parse.
-  return (value) => guard(unparsedWire(value as WireBoundaryInput));
-}
-
-function isWireValue(value: UnparsedWireValue): boolean {
-  if (value === undefined || value === null || isWireString(value) || isWireBoolean(value))
-    return true;
-  if (isWireNumber(value)) return Number.isFinite(value);
-  if (Array.isArray(value)) return value.every(isWireValue);
-  if (!isRecord(value)) return false;
-  return Object.values(value).every(isWireValue);
-}
-
 const noArgs = args<[]>((values) => values.length === 0);
-const oneString = args<[string]>((values) => values.length === 1 && isWireString(values[0]));
 const oneBoolean = args<[boolean]>((values) => values.length === 1 && isWireBoolean(values[0]));
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This function parses an IPC field into a domain identity.
-function isSessionIdentity(value: unknown): value is SessionIdentity {
-  // SAFETY: an IPC payload is structured-clone data; unparsedWire is the boundary the guards parse.
-  const wire = unparsedWire(value as WireBoundaryInput);
-  if (!isRecord(wire)) return false;
-  return (
-    isWireString(wire.providerId) &&
-    isProviderId(wire.providerId) &&
-    isWireString(wire.providerSessionId) &&
-    wire.providerSessionId.length > 0
-  );
-}
-
-type PlainSettingField = Exclude<AppSettingField, KeyedAppSettingField>;
-type UpdateSettingArguments = {
-  [Field in PlainSettingField]: [field: Field, value: AppSettingValue<Field>];
-}[PlainSettingField];
-type UpdateSettingEntryArguments = {
-  [Field in KeyedAppSettingField]: [
-    field: Field,
-    key: string,
-    value: SettingEntryValue<Field> | undefined,
-  ];
-}[KeyedAppSettingField];
 type SurfaceEventArguments = {
   [Name in ProductSurfaceEventName]: [name: Name, properties: ProductEventPropertiesFor<Name>];
 }[ProductSurfaceEventName];
 
 export const BRIDGE = {
+  /**
+   * Every effect a window asks for, on one channel. The argument is one
+   * `{kind, payload}` from `ACT_KIND`, parsed here by that kind's own schema
+   * before it leaves the window and again by the router that carries it, and
+   * the answer is that act's outcome — done with its kind's value, refused
+   * with a sentence, or a kind this build does not know. There is no second
+   * way to cause anything: an effect with no kind reaches nothing.
+   */
+  act: entry({
+    kind: "invoke",
+    channel: "app:act",
+    args: args<[Act]>((v) => v.length === 1 && parsedAct(v[0]) !== undefined),
+    result: result<ActOutcome>(isActOutcome),
+  }),
   /**
    * The document as this window stands: every slice, and this window's own
    * facts beside them. Read once at mount, before the subscription below has
@@ -200,302 +114,10 @@ export const BRIDGE = {
     args: noArgs,
     result: result<AppStateSnapshot>(isAppStateSnapshot),
   }),
-  beginSignIn: entry({
-    kind: "invoke",
-    channel: "app:begin-sign-in",
-    args: args<[AccountProvider]>((v) => v.length === 1 && isAccountProvider(v[0])),
-    result: result<AccountSnapshot>(),
-  }),
-  cancelSignIn: entry({
-    kind: "invoke",
-    channel: "app:cancel-sign-in",
-    args: noArgs,
-    result: result<void>(),
-  }),
-  signOut: entry({
-    kind: "invoke",
-    channel: "app:sign-out",
-    args: noArgs,
-    result: result<AccountSnapshot>(),
-  }),
-  deleteAccount: entry({
-    kind: "invoke",
-    channel: "app:delete-account",
-    args: noArgs,
-    result: result<AccountSnapshot>(),
-  }),
-  setExpanded: entry({
-    kind: "invoke",
-    channel: "app:set-expanded",
-    args: args<[boolean, boolean?]>(
-      (v) =>
-        (v.length === 1 || v.length === 2) &&
-        isWireBoolean(v[0]) &&
-        (v[1] === undefined || isWireBoolean(v[1])),
-    ),
-    result: result<WindowMode>(),
-  }),
   setPointerInterception: entry({
     kind: "send",
     channel: "app:set-pointer-interception",
     args: oneBoolean,
-  }),
-  requestMicrophone: entry({
-    kind: "invoke",
-    channel: "app:request-microphone",
-    args: noArgs,
-    result: result<MicrophoneStatus>(),
-  }),
-  getMicrophoneRoute: entry({
-    kind: "invoke",
-    channel: "app:microphone-route",
-    args: noArgs,
-    result: result<MicrophoneRoute | undefined>(),
-  }),
-  openMicrophoneSettings: entry({
-    kind: "send",
-    channel: "app:open-microphone-settings",
-    args: noArgs,
-  }),
-  setProviderApiKey: entry({
-    kind: "invoke",
-    channel: "app:set-provider-api-key",
-    args: args<[CredentialProviderId, string | undefined]>(
-      (v) => v.length === 2 && isCredentialProviderId(v[0]) && isOptionalWireString(v[1]),
-    ),
-    result: result<SettingsUpdateResult>(),
-  }),
-  updateSetting: entry({
-    kind: "invoke",
-    channel: "app:update-setting",
-    args: args<UpdateSettingArguments>((v) => {
-      if (v.length !== 2 || !isAppSettingField(v[0]) || isKeyedAppSettingField(v[0])) return false;
-      return APP_SETTING_SCHEMA[v[0]].guard(v[1]).valid;
-    }),
-    result: result<SettingsUpdateResult>(),
-  }),
-  updateSettingEntry: entry({
-    kind: "invoke",
-    channel: "app:update-setting-entry",
-    args: args<UpdateSettingEntryArguments>((v) => {
-      if (v.length !== 3 || !isKeyedAppSettingField(v[0]) || !isSettingEntryKey(v[0], v[1]))
-        return false;
-      return settingEntryGuard(v[0], v[1], v[2]).valid;
-    }),
-    result: result<SettingsUpdateResult>(),
-  }),
-  openProviderApiKeys: entry({
-    kind: "send",
-    channel: "app:open-provider-api-keys",
-    args: args<[CredentialProviderId]>((v) => v.length === 1 && isCredentialProviderId(v[0])),
-  }),
-  resetSettings: entry({
-    kind: "invoke",
-    channel: "app:reset-settings",
-    args: args<[SettingsResetScope]>((v) => v.length === 1 && isSettingsResetScope(v[0])),
-    result: result<SettingsUpdateResult>(),
-  }),
-  connectGoogleCalendar: entry({
-    kind: "invoke",
-    channel: "app:connect-google-calendar",
-    args: noArgs,
-    result: result<SettingsUpdateResult>(),
-  }),
-  cancelGoogleCalendarSignIn: entry({
-    kind: "send",
-    channel: "app:cancel-google-calendar-sign-in",
-    args: noArgs,
-  }),
-  reopenGoogleCalendarSignIn: entry({
-    kind: "send",
-    channel: "app:reopen-google-calendar-sign-in",
-    args: noArgs,
-  }),
-  removeCalendarAccount: entry({
-    kind: "invoke",
-    channel: "app:remove-calendar-account",
-    args: oneString,
-    result: result<SettingsUpdateResult>(),
-  }),
-  connectAppleCalendar: entry({
-    kind: "invoke",
-    channel: "app:connect-apple-calendar",
-    args: noArgs,
-    result: result<SettingsUpdateResult>(),
-  }),
-  disconnectAppleCalendar: entry({
-    kind: "invoke",
-    channel: "app:disconnect-apple-calendar",
-    args: noArgs,
-    result: result<SettingsUpdateResult>(),
-  }),
-  appleCalendarAccessStatus: entry({
-    kind: "invoke",
-    channel: "app:apple-calendar-access-status",
-    args: noArgs,
-    result: result<AppleCalendarAccess>(),
-  }),
-  cancelAppleCalendarConnect: entry({
-    kind: "send",
-    channel: "app:cancel-apple-calendar-connect",
-    args: noArgs,
-  }),
-  openCalendarSettings: entry({
-    kind: "send",
-    channel: "app:open-calendar-settings",
-    args: noArgs,
-  }),
-  refreshCalendars: entry({
-    kind: "invoke",
-    channel: "app:refresh-calendars",
-    args: noArgs,
-    result: result<void>(),
-  }),
-  setCalendarSelected: entry({
-    kind: "invoke",
-    channel: "app:set-calendar-selected",
-    args: args<[string, string, boolean]>(
-      (v) =>
-        v.length === 3 &&
-        isWireString(v[0]) &&
-        v[0].length > 0 &&
-        isWireString(v[1]) &&
-        v[1].length > 0 &&
-        isWireBoolean(v[2]),
-    ),
-    result: result<SettingsUpdateResult>(),
-  }),
-  connectLinear: entry({
-    kind: "invoke",
-    channel: "app:connect-linear",
-    args: noArgs,
-    result: result<SettingsUpdateResult>(),
-  }),
-  cancelLinearSignIn: entry({ kind: "send", channel: "app:cancel-linear-sign-in", args: noArgs }),
-  reopenLinearSignIn: entry({ kind: "send", channel: "app:reopen-linear-sign-in", args: noArgs }),
-  disconnectLinear: entry({
-    kind: "invoke",
-    channel: "app:disconnect-linear",
-    args: noArgs,
-    result: result<SettingsUpdateResult>(),
-  }),
-  checkForUpdates: entry({
-    kind: "invoke",
-    channel: "app:check-for-updates",
-    args: noArgs,
-    result: result<UpdateSnapshot>(),
-  }),
-  installUpdate: entry({ kind: "send", channel: "app:install-update", args: noArgs }),
-  openLatestRelease: entry({ kind: "send", channel: "app:open-latest-release", args: noArgs }),
-  openChangelog: entry({ kind: "send", channel: "app:open-changelog", args: noArgs }),
-  beginSupersetSignIn: entry({
-    kind: "invoke",
-    channel: "app:begin-superset-sign-in",
-    args: noArgs,
-    result: result<SupersetSignInSnapshot>(),
-  }),
-  submitSupersetSignInCode: entry({
-    kind: "invoke",
-    channel: "app:submit-superset-sign-in-code",
-    args: oneString,
-    result: result<SupersetSignInSnapshot>(),
-  }),
-  reopenSupersetSignIn: entry({
-    kind: "send",
-    channel: "app:reopen-superset-sign-in",
-    args: noArgs,
-  }),
-  cancelSupersetSignIn: entry({
-    kind: "send",
-    channel: "app:cancel-superset-sign-in",
-    args: noArgs,
-  }),
-  chooseSupersetOrganization: entry({
-    kind: "invoke",
-    channel: "app:choose-superset-organization",
-    args: oneString,
-    result: result<SupersetSignInSnapshot>(),
-  }),
-  disconnectSuperset: entry({
-    kind: "invoke",
-    channel: "app:disconnect-superset",
-    args: noArgs,
-    result: result<ActionResult>(isActionResult),
-  }),
-  openSession: entry({
-    kind: "invoke",
-    channel: "app:open-session",
-    args: args<[SessionIdentity]>((v) => v.length === 1 && isSessionIdentity(v[0])),
-    result: result<SessionOpenResult>(),
-  }),
-  openSessionApplication: entry({
-    kind: "invoke",
-    channel: "app:open-session-application",
-    args: args<[SessionIdentity, SessionApplicationId]>(
-      (v) =>
-        v.length === 2 &&
-        isSessionIdentity(v[0]) &&
-        isWireString(v[1]) &&
-        isSessionApplicationId(v[1]),
-    ),
-    result: result<SessionOpenResult>(),
-  }),
-  openSessionChange: entry({
-    kind: "invoke",
-    channel: "app:open-session-change",
-    args: args<[SessionIdentity]>((v) => v.length === 1 && isSessionIdentity(v[0])),
-    result: result<SessionOpenResult>(),
-  }),
-  /**
-   * One ask submitted to Luke's brain, typed or spoken, in the developer's own
-   * words. The answer is only whether the brain accepted it into a run, and
-   * which run: the reply arrives later, through the run's record. A run with
-   * no brain is refused with a fixed reason the voice can say instead.
-   */
-  submitBrainAsk: entry({
-    kind: "invoke",
-    channel: "app:submit-brain-ask",
-    args: args<[BrainAskSubmission]>((v) => v.length === 1 && isBrainAskSubmission(v[0])),
-    result: result<BrainAskSubmissionResult>(isBrainAskSubmissionResult),
-  }),
-  /**
-   * Waits on one run for as long as the brain's wait allows, answering the
-   * record as it then stands — ended, or still pending — or nothing for a run
-   * the brain does not know, and whether the asking call may say the words:
-   * granted only to the voice window, under the receiver epoch it names, for
-   * an end already in Conversation, and only once per run, so the words are never
-   * both said on the call and delivered later.
-   */
-  waitBrainAsk: entry({
-    kind: "invoke",
-    channel: "app:wait-brain-ask",
-    args: args<[string, number]>(
-      (v) => v.length === 2 && isWireString(v[0]) && isReceiverEpoch(v[1]),
-    ),
-    result: result<BrainAskWait>(isBrainAskWait),
-  }),
-  /** Cancels one run the developer no longer wants, answering its record as it then stands. */
-  cancelBrainAsk: entry({
-    kind: "invoke",
-    channel: "app:cancel-brain-ask",
-    args: oneString,
-    result: result<BrainRequestSnapshot | undefined>(
-      (v) => v === undefined || isBrainRequestSnapshot(v),
-    ),
-  }),
-  /**
-   * The voice window asking to speak one offered reply, by run and delivery.
-   * The main process grants at most once per delivery, only to the receiver
-   * epoch the offer went to, and only while the run and its generation still
-   * stand; the grant carries the words, read from the live record.
-   */
-  claimBrainReply: entry({
-    kind: "invoke",
-    channel: "app:claim-brain-reply",
-    args: args<[string, string, number]>(
-      (v) => v.length === 3 && isWireString(v[0]) && isWireString(v[1]) && isReceiverEpoch(v[2]),
-    ),
-    result: result<BrainReplyClaimResult>(isBrainReplyClaimResult),
   }),
   /**
    * The voice window reporting the claimed reply it held done with — its reply
@@ -543,20 +165,6 @@ export const BRIDGE = {
       (v) => v.length === 2 && isWireString(v[0]) && isRecord(v[1]) && isWireValue(v[1]),
     ),
   }),
-  sendFeedback: entry({
-    kind: "invoke",
-    channel: "app:send-feedback",
-    args: args<[FeedbackSubmission]>(
-      (v) => v.length === 1 && feedbackSubmission(v[0]) !== undefined,
-    ),
-    result: result<FeedbackResult>(),
-  }),
-  summonFeedback: entry({
-    kind: "invoke",
-    channel: "app:summon-feedback",
-    args: args<[FeedbackKind]>((v) => v.length === 1 && isFeedbackKind(v[0])),
-    result: result<void>(),
-  }),
   /**
    * The mouth reporting what became of one speech offer, by the id the offer
    * carried: spoken, refused, held, or stale. The arbiter offers the next turn
@@ -570,22 +178,6 @@ export const BRIDGE = {
       (v) => v.length === 2 && isWireString(v[0]) && isSpeechOutcome(v[1]),
     ),
     result: result<void>(),
-  }),
-  /**
-   * A panel's command to the voice window, carried through the main process,
-   * which validates it and forwards it on `onVoiceCommand`. A Clear is
-   * answered with whether the stored thread was deleted; the other commands
-   * resolve with nothing. A typed ask is not a command: it goes to the brain
-   * through `submitBrainAsk`, and the voice window hears of the run's end
-   * through its record.
-   */
-  voiceCommand: entry({
-    kind: "invoke",
-    channel: "app:voice-command",
-    args: args<[VoiceCommand]>((v) => v.length === 1 && isVoiceCommand(v[0])),
-    result: result<VoiceCommandOutcome | undefined>(
-      (v) => v === undefined || isVoiceCommandOutcome(v),
-    ),
   }),
   /**
    * The voice window's whole snapshot of the live conversation, reported on
@@ -651,56 +243,15 @@ export const BRIDGE = {
         Array.isArray(v[0]) &&
         v[0].every((entry) => {
           const stored = storedConversationEntry(entry);
+          if (stored === undefined) return false;
+          // The identity is read back off the wire rather than out of the
+          // parsed line, because it is the arriving value this guard admits.
           return (
-            stored !== undefined &&
-            (stored.identity === undefined || isSessionIdentity(stored.identity))
+            stored.identity === undefined || (isRecord(entry) && isSessionIdentity(entry.identity))
           );
         }),
     ),
     result: result<boolean>(isWireBoolean),
-  }),
-  /**
-   * Words the renderer already draws, placed on this machine's clipboard and
-   * nowhere else. Routed through the main process because the panel's
-   * permission handlers deny the sandboxed renderer every Chromium
-   * permission but audio capture, the async clipboard included.
-   */
-  copyText: entry({ kind: "send", channel: "app:copy-text", args: oneString }),
-  /**
-   * The calendar gate's own skip: declines the onboarding step for good and
-   * is remembered like a settle. It carries nothing and answers nothing —
-   * the standing-down travels back on the onboarding broadcast.
-   */
-  skipCalendarOnboarding: entry({
-    kind: "invoke",
-    channel: "app:skip-calendar-onboarding",
-    args: noArgs,
-    result: result<void>(),
-  }),
-  /**
-   * The gate's Done: the developer confirming the connected calendars are
-   * the ones that should count, which is what settles the onboarding step —
-   * a connect alone leaves the gate standing so the choice can still be
-   * edited and another connection added.
-   */
-  completeCalendarOnboarding: entry({
-    kind: "invoke",
-    channel: "app:complete-calendar-onboarding",
-    args: noArgs,
-    result: result<void>(),
-  }),
-  focusPanel: entry({ kind: "send", channel: "app:focus-panel", args: noArgs }),
-  requestRealtimeCredential: entry({
-    kind: "invoke",
-    channel: "app:request-realtime-credential",
-    args: noArgs,
-    result: result<RealtimeConnection | undefined>(),
-  }),
-  requestRealtimeDiagnostics: entry({
-    kind: "invoke",
-    channel: "app:request-realtime-diagnostics",
-    args: noArgs,
-    result: result<RealtimeDiagnostics>(),
   }),
   /**
    * One tapped realtime event for the development trace. Fire-and-forget on
@@ -715,46 +266,12 @@ export const BRIDGE = {
     args: args<[AgentWireTrace]>((v) => v.length === 1 && isAgentWireTrace(v[0])),
   }),
   notifyReady: entry({ kind: "send", channel: "app:renderer-ready", args: noArgs }),
-  /**
-   * The introduction's one-shot keyless read of this machine's local sessions.
-   * Answered only for the takeover window while the introduction is running;
-   * every other caller gets an empty roster.
-   */
-  peekIntroductionSessions: entry({
-    kind: "invoke",
-    channel: "app:introduction-peek",
-    args: noArgs,
-    result: result<readonly Session[]>(),
-  }),
-  /**
-   * The takeover reporting its ending: `given` says the sign-off was spoken
-   * to its end, so completion is recorded; a quiet glide past a voice that
-   * never stood up hands off the same way and records nothing, so the
-   * introduction plays for real on a later launch.
-   */
-  completeIntroduction: entry({
-    kind: "invoke",
-    channel: "app:introduction-complete",
-    args: oneBoolean,
-    result: result<void>(),
-  }),
-  /**
-   * The takeover reporting the introduction cannot be given — the voice never
-   * connected — so the ordinary signed-out launch should stand in its place.
-   * Nothing is marked completed: an introduction never given replays.
-   */
-  abandonIntroduction: entry({
-    kind: "send",
-    channel: "app:introduction-abandon",
-    args: oneString,
-  }),
   /** The takeover surface reporting it mounted, which its abandon deadline measures. */
   introductionMounted: entry({
     kind: "send",
     channel: "app:introduction-mounted",
     args: noArgs,
   }),
-  quit: entry({ kind: "send", channel: "app:quit", args: noArgs }),
   recordSurfaceEvent: entry({
     kind: "send",
     channel: "app:record-surface-event",
@@ -904,19 +421,7 @@ type DerivedAppBridge = {
       : (callback: (payload: ResultOf<Bridge[Method]>) => void) => () => void;
 };
 
-export type AppBridge = Omit<
-  DerivedAppBridge,
-  "recordSurfaceEvent" | "updateSetting" | "updateSettingEntry"
-> & {
-  updateSetting<Field extends AppSettingField>(
-    field: Field,
-    value: AppSettingValue<Field>,
-  ): Promise<SettingsUpdateResult>;
-  updateSettingEntry<Field extends KeyedAppSettingField>(
-    field: Field,
-    key: string,
-    value: SettingEntryValue<Field> | undefined,
-  ): Promise<SettingsUpdateResult>;
+export type AppBridge = Omit<DerivedAppBridge, "recordSurfaceEvent"> & {
   recordSurfaceEvent<Name extends ProductSurfaceEventName>(
     name: Name,
     properties: ProductEventPropertiesFor<Name>,

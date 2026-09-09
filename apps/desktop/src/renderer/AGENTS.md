@@ -26,6 +26,18 @@ expires before the next version of the document could carry it — which is
 what the voice level is, twenty readings a second each good for fifty
 milliseconds.
 
+It causes effects one way: `app:act`, one invoke carrying one `{kind, payload}`
+from `ACT_KIND`. The kind's own schema parses the payload here before the
+invoke leaves and again in `main/act-router.ts`, that kind's trust checks run
+there, and the answer is an `ActOutcome` — done with the kind's value, refused
+with a sentence fixed by the build, or a kind this build does not know — so
+nothing an exception happened to carry ever crosses back. `renderer/act.ts` is
+the only caller: `act` for a row that reads the answer, and `tell` for an
+effect whose answer nothing reads, which drops the refusal rather than leaving
+it to surface as an unhandled rejection. A new command is a new `ACT_KIND`
+entry with its payload schema, its answer's guard, and its one router row;
+there is no second write path to add one on.
+
 Two renderers run under the same rule, and they are two bundles rather than
 one bundle branching on a role. The panel's is `renderer/index.tsx`, which
 draws the panel or the introduction takeover; the hidden voice window's is
@@ -38,8 +50,8 @@ and it can neither mount `App` nor import `session-replay.ts` — neither is
 reachable from its entry, so the bundler is what holds the line rather than a
 grep. The panel is the one surface that records, and a recording of a blank
 hidden window would be a session nobody consented to. A panel draws the voice
-state that arrives in its `app:state` snapshot and forwards its presses back;
-it constructs no call of its own.
+state that arrives in its `app:state` snapshot and forwards its presses back as
+acts; it constructs no call of its own.
 
 The policy behind that hook is not the renderer's at all. Which of the two
 calls stands, the talk key's latch, the mouth that lets Luke speak into
@@ -209,10 +221,11 @@ Rules the guide must keep:
 - A settings change asked of Luke runs only in a turn the developer opened,
   by speaking or by typing, is validated against the guide in the main
   process and again here before any carrier runs, and goes through the same
-  bridge call the setting's own row uses, never a new write path.
+  `ACT_KIND.SETTING_UPDATE` act the setting's own row mints, never a new
+  write path.
 - Mark a setting `adjustable` only after wiring its id into
-  `applySpokenSetting`; the test suite refuses an adjustable entry the bridge
-  cannot carry. A setting only a hand may change stays in the guide with
+  `applySpokenSetting`; the test suite refuses an adjustable entry no act kind
+  can carry. A setting only a hand may change stays in the guide with
   `adjustable: false` and a `manual` path, because the refusal Luke voices is
   itself the guidance.
 - Credentials are never adjustable, never spoken, and never described beyond

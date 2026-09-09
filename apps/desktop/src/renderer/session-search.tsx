@@ -1,5 +1,7 @@
 import { CloseIcon, SearchIcon } from "@sidecar/panel";
 import { useRef } from "react";
+import { ACT_KIND } from "#shared/messages/acts";
+import { tell } from "./act";
 import { FOCUS_FRAME_LIMIT } from "./credential-entry";
 import { ERRAND_TARGET, errandTargetProps } from "./luke-errand";
 import { type ArrangedSessions, matchRanges, type SessionArrangement } from "./session-model";
@@ -129,7 +131,7 @@ export function SessionSearch({
         onFocus={() => {
           // The panel can be showing without its window being key, and a
           // field that cannot be typed into is worse than no field.
-          window.sidecar.focusPanel();
+          tell(ACT_KIND.WINDOW_FOCUS_PANEL);
           onEngagedChange(true);
         }}
         onBlur={() => onEngagedChange(false)}

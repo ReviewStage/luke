@@ -22,9 +22,10 @@ import {
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
 import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
-import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
-import { BRIDGE } from "#shared/bridge";
-import { registerBrainIpc } from "./brain";
+import type { WebContents } from "electron";
+import { ACT_KIND } from "#shared/messages/acts";
+import { type ActRows, type ActSender, createActRouter } from "../act-router";
+import { brainActRows, brainReports } from "./brain";
 
 const NOW = 1_800_000_000_000;
 
@@ -48,17 +49,14 @@ function record(overrides: Partial<BrainRequestRecord> = {}): BrainRequestRecord
 }
 
 /**
- * The grant boundary as the IPC registration actually wires it: a real
- * ledger and receiver behind the real Gateway service, reached by the real
- * `registerBrainIpc` through the operator client over the in-process
- * transport, from fake `ipcMain` invokes of two senders — so what is checked
- * is what a renderer's call can and cannot do across the whole boundary, not
- * the ledger's own arguments.
+ * The grant boundary as the act router actually wires it: a real ledger and
+ * receiver behind the real Gateway service, reached by the real brain rows
+ * through the operator client over the in-process transport, for two windows
+ * of different standing — so what is checked is what a renderer's act can and
+ * cannot do across the whole boundary, not the ledger's own arguments.
  */
 function registered(live: () => BrainRequestRecord | undefined) {
-  const invokes = new Map<string, (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown>();
-  const sends = new Map<string, (event: IpcMainEvent, ...args: unknown[]) => void>();
-  // SAFETY: the registration reads senders by identity alone; two distinct inert objects are two windows.
+  // SAFETY: the rows read senders by identity alone; two distinct inert objects are two windows.
   const voiceSender = {} as WebContents;
   // SAFETY: as above, the panel.
   const panelSender = {} as WebContents;
@@ -108,46 +106,51 @@ function registered(live: () => BrainRequestRecord | undefined) {
       createId: () => `request-${++ids}`,
     }),
   });
-  registerBrainIpc({
-    ipcMain: {
-      handle: (channel, listener) => {
-        invokes.set(channel, listener);
-      },
-      on: (channel, listener) => {
-        sends.set(channel, listener);
-        // SAFETY: this inert fixture implements only the IpcMain return identity the listener API requires.
-        return {} as Electron.IpcMain;
-      },
-    },
-    trustedSender: () => true,
-    submitters: {
-      panel: (sender) => sender === panelSender,
-      voice: (sender) => sender === voiceSender,
-    },
-    operator,
+  const dependencies = { operator, isVoice: (sender: WebContents) => sender === voiceSender };
+  // SAFETY: only the brain rows are under test; the router dispatches on the
+  // kind alone, so the kinds this fragment does not answer are never reached.
+  const router = createActRouter(brainActRows(dependencies) as ActRows);
+  const reports = brainReports(dependencies);
+  const senderOf = (sender: WebContents): ActSender => ({
+    sender,
+    panel: sender === panelSender,
+    voice: sender === voiceSender,
+    introduction: false,
   });
+  /**
+   * What a row answered, read out of the router's outcome. A refusal fails
+   * here rather than reading as a value: every trust check on this boundary
+   * is a row answering, not the router turning one away.
+   */
+  const answered = async <Value>(
+    outcome: Promise<{ status: string; value?: Value }>,
+  ): Promise<Value> => {
+    const settled = await outcome;
+    assert.equal(settled.status, "done");
+    assert.ok("value" in settled, "the act was carried");
+    // SAFETY: a done outcome carries this kind's own value, which the assertion above established is present.
+    return settled.value as Value;
+  };
   service.server.subscribe((event) => {
     if (event.kind === GATEWAY_EVENT.DELIVERY_OFFERED) offered.push(event.payload);
   });
-  // SAFETY: the bridge reads only the sender off the event, and an Electron invoke listener always answers a promise.
   const claim = (sender: WebContents, runId: string, deliveryId: string, epoch: number) =>
-    invokes.get(BRIDGE.claimBrainReply.channel)?.(
-      { sender } as IpcMainInvokeEvent,
-      runId,
-      deliveryId,
-      epoch,
-    ) as Promise<BrainReplyClaimResult>;
-  // SAFETY: as above, for the wait.
+    answered<BrainReplyClaimResult>(
+      router.performAct(
+        { kind: ACT_KIND.BRAIN_CLAIM_REPLY, payload: { runId, deliveryId, epoch } },
+        senderOf(sender),
+      ),
+    );
   const wait = (sender: WebContents, runId: string, epoch: number) =>
-    invokes.get(BRIDGE.waitBrainAsk.channel)?.(
-      { sender } as IpcMainInvokeEvent,
-      runId,
-      epoch,
-    ) as Promise<BrainAskWait>;
+    answered<BrainAskWait>(
+      router.performAct(
+        { kind: ACT_KIND.BRAIN_WAIT_ASK, payload: { runId, epoch } },
+        senderOf(sender),
+      ),
+    );
   const ack = async (sender: WebContents, runId: string, deliveryId: string, epoch: number) => {
     const before = deliveries.records().length;
-    // SAFETY: the bridge reads only the sender off the event.
-    sends.get(BRIDGE.ackBrainReply.channel)?.({ sender } as IpcMainEvent, runId, deliveryId, epoch);
+    reports.ackBrainReply({ sender }, runId, deliveryId, epoch);
     await drainMicrotasks(1);
     if (deliveries.records().length < before) acknowledged.push(runId);
   };

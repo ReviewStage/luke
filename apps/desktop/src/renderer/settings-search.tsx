@@ -39,6 +39,8 @@ import {
 import type { AppSettingsView } from "@sidecar/settings/wire";
 import { VOICE_SOURCE } from "@sidecar/settings/wire";
 import { Fragment, useRef } from "react";
+import { ACT_KIND } from "#shared/messages/acts";
+import { tell } from "./act";
 import { FOCUS_FRAME_LIMIT } from "./credential-entry";
 import { ERRAND_TARGET_ATTRIBUTE } from "./luke-errand";
 import { searchTokens } from "./session-model";
@@ -623,7 +625,7 @@ export function SettingsSearch({
           onFocus={() => {
             // The panel can be showing without its window being key, and a
             // field that cannot be typed into is worse than no field.
-            window.sidecar.focusPanel();
+            tell(ACT_KIND.WINDOW_FOCUS_PANEL);
             onEngagedChange(true);
           }}
           onBlur={() => onEngagedChange(false)}

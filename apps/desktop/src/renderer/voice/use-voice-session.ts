@@ -8,8 +8,10 @@ import {
   type VoiceSurroundings,
 } from "@sidecar/voice/orchestrator";
 import { type RefObject, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { ACT_KIND } from "#shared/messages/acts";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { VOICE_COMMAND, voiceExchangeKind } from "#shared/messages/voice-view";
+import { act } from "../act";
 import { hostedVoiceUnavailableNote } from "../microphone-access";
 import { appSettingsNow, appStateNow, useAppState } from "../use-app-state";
 import { outputSilent } from "../volume-hint";
@@ -39,7 +41,7 @@ function callTransport(
   remoteAudio: RefObject<HTMLAudioElement | null>,
 ): Pick<SpeakOnlyCallOptions, "requestConnection" | "voice" | "audioElement" | "onWireEvent"> {
   return {
-    requestConnection: () => window.sidecar.requestRealtimeCredential(),
+    requestConnection: () => act(ACT_KIND.VOICE_MINT_CREDENTIAL),
     // Read at each handshake rather than captured, so a voice or a pace
     // changed between calls is the one the next call is configured with.
     voice: () => {
@@ -71,18 +73,16 @@ const BRIDGE: VoiceBridge = {
   reportReady: (epoch) => void window.sidecar.reportVoiceReady(epoch),
   appendConversation: (entries) => window.sidecar.appendConversationLines(entries),
   settleSpeech: (id, outcome) => void window.sidecar.settleSpeech(id, outcome),
-  submitBrainAsk: (submission) => window.sidecar.submitBrainAsk(submission),
-  waitBrainAsk: (runId, epoch) => window.sidecar.waitBrainAsk(runId, epoch),
+  submitBrainAsk: (submission) => act(ACT_KIND.BRAIN_SUBMIT_ASK, { submission }),
+  waitBrainAsk: (runId, epoch) => act(ACT_KIND.BRAIN_WAIT_ASK, { runId, epoch }),
   claimBrainReply: (runId, deliveryId, epoch) =>
-    window.sidecar.claimBrainReply(runId, deliveryId, epoch),
+    act(ACT_KIND.BRAIN_CLAIM_REPLY, { runId, deliveryId, epoch }),
   ackBrainReply: (runId, deliveryId, epoch) =>
     window.sidecar.ackBrainReply(runId, deliveryId, epoch),
   requestMicrophone: async () =>
-    (await window.sidecar.requestMicrophone()) === MICROPHONE_STATUS.GRANTED,
+    (await act(ACT_KIND.MICROPHONE_REQUEST)) === MICROPHONE_STATUS.GRANTED,
   hostedUnavailableNote: async () =>
-    hostedVoiceUnavailableNote(
-      await window.sidecar.requestRealtimeDiagnostics().catch(() => undefined),
-    ),
+    hostedVoiceUnavailableNote(await act(ACT_KIND.VOICE_DIAGNOSTICS).catch(() => undefined)),
 };
 
 function createOrchestrator(
@@ -104,7 +104,7 @@ function createOrchestrator(
           openPreferredMicrophone({
             route: () =>
               (appSettingsNow()?.preferBuiltInMicrophone ?? true)
-                ? window.sidecar.getMicrophoneRoute()
+                ? act(ACT_KIND.MICROPHONE_ROUTE)
                 : Promise.resolve(undefined),
             enumerate: () => navigator.mediaDevices.enumerateDevices(),
             open: (audio) => navigator.mediaDevices.getUserMedia({ audio, video: false }),

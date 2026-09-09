@@ -1,6 +1,8 @@
 import { MOTION_DURATION_MS } from "@sidecar/surface";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ACT_KIND } from "#shared/messages/acts";
 import type { WindowMode } from "#shared/messages/session";
+import { act } from "./act";
 import {
   HIT_REGION,
   HIT_REGION_ATTRIBUTE,
@@ -342,7 +344,10 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
       if (!expanded) recededAt.current = undefined;
       try {
         // Asking for focus is what makes Escape reach the panel someone opened.
-        const confirmedMode = await window.sidecar.setExpanded(expanded, expanded);
+        const confirmedMode = await act(ACT_KIND.WINDOW_SET_EXPANDED, {
+          expanded,
+          focus: expanded,
+        });
         if (modeGeneration.current === generation) {
           applyPresentation(presentationForMode(confirmedMode));
         }
