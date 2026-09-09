@@ -1079,7 +1079,7 @@ export function startDesktopApp(): void {
       screen.on("display-removed", handleDisplayChange);
       screen.on("display-metrics-changed", handleDisplayChange);
       // Named one at a time because Electron's `on` is typed per event name.
-      const wake = (eventName: string) => () => {
+      const wake = (eventName: "resume" | "unlock-screen" | "user-did-become-active") => () => {
         handleDisplayChange();
         broadcast(channels.onLifecycle, eventName);
       };

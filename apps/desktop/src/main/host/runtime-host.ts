@@ -322,7 +322,7 @@ function wire<Value>(value: Value): WireValue {
  * nothing and leaves the host empty for the newer one to fill. Answers
  * whether this transition was the one that installed.
  */
-export interface VoiceCredentialTransitionSeams {
+interface VoiceCredentialTransitionSeams {
   retire: () => void;
   apply: () => Promise<VoiceCapabilityApplication>;
   rebuild: () => Promise<void>;

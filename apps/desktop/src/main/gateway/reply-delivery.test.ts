@@ -8,7 +8,7 @@ import {
 } from "@sidecar/brain/requests";
 import { DeliveryLedger, type DeliveryRecord } from "@sidecar/runtime";
 import { DELIVERY_STATE } from "@sidecar/runtime-contracts";
-import type { BrainReplyClaimResult } from "#shared/wire/brain";
+import type { BrainReplyClaimResult } from "#shared/messages/brain";
 import {
   type BrainReplyClaimContext,
   deliverable,

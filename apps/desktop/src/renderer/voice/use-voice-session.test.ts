@@ -414,12 +414,14 @@ test("a roster pushed empty, or a permission pushed back, is not undone by a sta
   assert.equal(unpushed.microphoneStatus, "not-determined");
 });
 
+const EVERY_PART = Object.values(VOICE_READINESS_PART);
+
 test("the readiness report names the voice bootstrap's epoch however the pushes and subscriptions raced it", () => {
   const reported: number[] = [];
   const readiness = new VoiceReadiness((epoch) => reported.push(epoch));
   // Every subscription stood before the narrow bootstrap answered, as when the
   // main process's pushes all beat it: nothing is reported until the epoch lands.
-  for (const part of Object.values(VOICE_READINESS_PART)) readiness.installed(part);
+  for (const part of EVERY_PART) readiness.installed(part);
   assert.deepEqual(reported, []);
   readiness.bootstrapped(VOICE_BOOTSTRAP.voiceEpoch);
   assert.deepEqual(reported, [3]);
@@ -430,13 +432,11 @@ test("the readiness report names the voice bootstrap's epoch however the pushes 
   const lateReadiness = new VoiceReadiness((epoch) => late.push(epoch));
   lateReadiness.bootstrapped(VOICE_BOOTSTRAP.voiceEpoch);
   assert.deepEqual(late, []);
-  for (const part of Object.values(VOICE_READINESS_PART)) lateReadiness.installed(part);
+  for (const part of EVERY_PART) lateReadiness.installed(part);
   assert.deepEqual(late, [3]);
   lateReadiness.bootstrapped(4);
   assert.deepEqual(late, [3]);
 });
-
-const EVERY_PART = Object.values(VOICE_READINESS_PART);
 
 test("readiness is reported once, only when every subscription stands and the bootstrap has named the epoch", () => {
   const reported: number[] = [];
