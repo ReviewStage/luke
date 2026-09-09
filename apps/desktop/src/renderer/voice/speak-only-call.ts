@@ -13,9 +13,9 @@ import {
   REALTIME_STATUS,
   type RealtimeStatus,
   realtimeSessionConfig,
+  voiceExchangeActive,
 } from "@sidecar/realtime";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { voiceExchangeActive } from "#shared/messages/voice-view";
 import type { BuiltRealtimeSessionConfig, SdkToolCallDetails } from "./agents-realtime-transport";
 import { CaptionStrip, REPLY_KIND, type ReplyKind } from "./captions";
 import { type InterruptedSpan, Interruption } from "./interruption";

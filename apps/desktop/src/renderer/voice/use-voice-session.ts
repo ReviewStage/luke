@@ -18,6 +18,7 @@ import {
   type RealtimeStatus,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
+  voiceExchangeActive,
 } from "@sidecar/realtime";
 import {
   adoptConversationThread,
@@ -39,12 +40,7 @@ import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppConversationSlice } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "#shared/messages/audio";
-import {
-  VOICE_COMMAND,
-  type VoiceView,
-  voiceExchangeActive,
-  voiceExchangeKind,
-} from "#shared/messages/voice-view";
+import { VOICE_COMMAND, type VoiceView, voiceExchangeKind } from "#shared/messages/voice-view";
 import { hostedVoiceUnavailableNote } from "../microphone-access";
 import { appSettingsNow, appStateNow, useAppState } from "../use-app-state";
 import { useStateWithRef } from "../use-state-with-ref";

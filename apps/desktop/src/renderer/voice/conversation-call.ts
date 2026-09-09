@@ -16,6 +16,7 @@ import {
   REALTIME_STATUS,
   type RealtimeStatus,
   realtimeSessionConfig,
+  voiceExchangeActive,
 } from "@sidecar/realtime";
 import { maximumTypedAskLength } from "@sidecar/session";
 import {
@@ -25,7 +26,6 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import { voiceExchangeActive } from "#shared/messages/voice-view";
 import type { BuiltRealtimeSessionConfig, SdkToolCallDetails } from "./agents-realtime-transport";
 import { REPLY_KIND } from "./captions";
 import { MICROPHONE_PROCESSING } from "./microphone-choice";
