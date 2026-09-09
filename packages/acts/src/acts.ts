@@ -3,1788 +3,223 @@
  * table. Family membership, the spoken tool count, and the schema list are
  * derived from it; adding a tool is adding a row.
  *
- * The session trio are the same acts the panel's rows offer — the two writes,
- * and the press that opens a session where its provider keeps it — and the
- * issue pair are the two acts a connected tracker takes. Creating a workspace
- * is the session act with no row yet to mirror. The last four are the same
- * presses turned toward the app itself: a settings
- * change, showing the panel, opening the feedback composer, and the Updates
- * row's button.
+ * The session acts are the ones the panel's rows offer — the writes, and the
+ * press that opens a session where its provider keeps it — and the issue pair
+ * are the two acts a connected tracker takes. Creating a workspace is the
+ * session act with no row yet to mirror. The last six are the same presses
+ * turned toward the app itself: a settings change, showing the panel, opening
+ * the feedback composer, the Updates row's button, and the notebook's two writes.
  *
- * All run the same gauntlet: a call is validated against the observed roster
- * (or the guide) before anything leaves the renderer, and the main process
- * validates it again against what it observed before anything happens. The
- * `validate` on each row is the renderer's half of that, never a substitute
- * for the main process's. Luke is another way to ask, never a wider one.
+ * Whether a call may run is not this file's question: `admit` answers it once,
+ * and a row declares only its name, its family, its kind, its prose, and its
+ * schema. Luke is another way to ask, never a wider one.
  */
 
-import {
-  APP_PANEL_TAB,
-  APP_SETTING_KIND,
-  APP_UPDATE_ACT,
-  APP_UPDATE_WAIT,
-  type AppGuideSetting,
-  type AppGuideSnapshot,
-  type AppGuideUpdate,
-  type AppPanelTab,
-  type AppUpdateAct,
-  appGuideSetting,
-  appToggleValue,
-  FEEDBACK_COMPOSER_KIND,
-  type FeedbackComposerKind,
-  isAppPanelTab,
-  isAppUpdateAct,
-  isFeedbackComposerKind,
-  isSessionListSort,
-  SESSION_LIST_SORT,
-  type SessionListSort,
-} from "@sidecar/guide";
 import {
   ACT_RESULT_STATUS,
-  type IssueIdentity,
-  type IssueTransition,
-  issueCommentText,
-  type TrackedIssue,
-} from "@sidecar/issues";
-import {
-  ACT_KIND,
-  type AdvertisedControl,
-  advertisedActFor,
-  advertisedControl,
-  isSessionApplicationId,
-  matchesFilterSelection,
-  maximumSessionMessageLength,
-  maximumWorkspaceNameLength,
-  type ObservedWorkspaceProject,
-  PROVIDER_ID_LIST,
-  SESSION_APPLICATION_ID,
-  SESSION_LOCATION,
-  SESSION_STATUS,
-  type Session,
-  type SessionApplicationId,
-  type SessionIdentity,
-  sessionMessageText,
-  WORKSPACE_TASK_SUPPORT,
-  type WorkspaceAgentModels,
-  type WorkspaceAgentSelection,
-  workspaceNameText,
-  workspaceProjectSelectionId,
-} from "@sidecar/session";
-import {
   isRecord,
-  isWireString,
+  type JsonSchemaNode,
+  type Schema,
   type UnparsedWireValue,
-  type WireRecord,
-  text as wireText,
 } from "@sidecar/wire";
 import {
-  holdsRememberedFact,
-  maximumRememberedFactLength,
-  maximumRememberedFacts,
-  type RememberedFact,
-  rememberedFactText,
-} from "./memory.js";
+  ACT_FAMILY,
+  ACT_KIND,
+  type ActFamily,
+  type ActKind,
+  type RealtimeFunctionCall,
+} from "./act-kinds.js";
+import {
+  ADD_AGENT_REQUEST,
+  CONTROL_REQUEST,
+  CREATE_WORKSPACE_REQUEST,
+  FEEDBACK_REQUEST,
+  FORGET_REQUEST,
+  ISSUE_COMMENT_REQUEST,
+  ISSUE_STATE_REQUEST,
+  MESSAGE_REQUEST,
+  OPEN_REQUEST,
+  PANEL_REQUEST,
+  REMEMBER_REQUEST,
+  REMOTE_OPEN_REQUEST,
+  REMOTE_PANEL_REQUEST,
+  RENAME_SESSION_REQUEST,
+  RENAME_WORKSPACE_REQUEST,
+  SETTING_REQUEST,
+  UPDATE_REQUEST,
+} from "./act-schemas.js";
+import { ACT_REFUSAL, type AdmitContext, admit, type Refusal, type ValidatedAct } from "./admit.js";
 
-/**
- * One tool call as a validator is handed it: the act's own name and its
- * arguments as the model wrote them. No call id — the id an answer travels
- * back under belongs to the transport, which extends this with one.
- */
-export interface RealtimeFunctionCall {
-  name: string;
-  argumentsJson: string;
-}
-
-/** Which process a tool call is about: a session, an issue, or Luke himself. */
-export const REALTIME_TOOL_FAMILY = {
-  SESSION: "session",
-  ISSUE: "issue",
-  APP: "app",
-} as const;
-
-export type RealtimeToolFamily = (typeof REALTIME_TOOL_FAMILY)[keyof typeof REALTIME_TOOL_FAMILY];
-
-/** What a validated session tool call asks for, as the bridge names it. */
-export const SESSION_TOOL_KIND = {
-  MESSAGE: "message",
-  CONTROL: "control",
-  OPEN: "open",
-  CREATE_WORKSPACE: "create-workspace",
-  ADD_AGENT: "add-agent",
-  RENAME_WORKSPACE: "rename-workspace",
-  RENAME_SESSION: "rename-session",
-} as const;
-
-/** What a validated issue tool call asks for, as the bridge names it. */
-export const ISSUE_TOOL_KIND = {
-  ISSUE_STATE: "issue-state",
-  ISSUE_COMMENT: "issue-comment",
-} as const;
-
-/** What a validated app tool call asks for, as the app performs it. */
-export const APP_TOOL_KIND = {
-  SETTING: "setting",
-  PANEL: "panel",
-  FEEDBACK: "feedback",
-  UPDATE: "update",
-  REMEMBER: "remember",
-  FORGET: "forget",
-} as const;
-
-/** The two whole-list scopes of a spoken panel ask beyond the locations. */
-export const SESSION_LIST_ALL = "all";
-export const SESSION_LIST_VOICE = "voice";
-
-/**
- * Every value a spoken narrowing may name, fixed by the build: the whole-list
- * scopes, every agent this build knows, and every app that associates with
- * sessions. The chips can hold no other value — a `SessionFilter` is drawn
- * from these same sets — so this enum is the whole vocabulary rather than a
- * convenience, and the model picks a token from it instead of echoing the
- * developer's words for a matcher to guess at. Which of these values narrow
- * to anything right now is the roster's question, answered by the validator.
- */
-const SESSION_LIST_FILTER_VALUES: readonly string[] = [
-  ...new Set<string>([
-    SESSION_LIST_ALL,
-    SESSION_LOCATION.LOCAL,
-    SESSION_LOCATION.CLOUD,
-    SESSION_LIST_VOICE,
-    ...PROVIDER_ID_LIST,
-    ...Object.values(SESSION_APPLICATION_ID),
-  ]),
-];
-
-const SESSION_LIST_FILTER_DESCRIPTION =
-  `The values to narrow the session list to: ${SESSION_LIST_ALL} for every session, ` +
-  `${SESSION_LOCATION.LOCAL} or ${SESSION_LOCATION.CLOUD} for where work runs, ` +
-  `${SESSION_LIST_VOICE} for voice chats, an agent's provider_id, or an associated app's id. ` +
-  `Values combine — ${SESSION_LOCATION.LOCAL} with an agent keeps that agent's local ` +
-  `sessions — and ${SESSION_LIST_ALL} stands alone.`;
-
-/**
- * The narrowing vocabulary the phone's list holds: its chips read a row's
- * provider and status and nothing else, so a spoken narrowing there picks
- * from those two axes and the whole-list scope. Which values narrow to
- * anything is the observed roster's question, answered on the phone.
- */
-const REMOTE_SESSION_LIST_FILTER_VALUES: readonly string[] = [
-  ...new Set<string>([SESSION_LIST_ALL, ...PROVIDER_ID_LIST, ...Object.values(SESSION_STATUS)]),
-];
-
-const REMOTE_SESSION_LIST_FILTER_DESCRIPTION =
-  `The values to narrow the session list to: ${SESSION_LIST_ALL} for every session, a ` +
-  `provider_id for one provider's sessions, or a status (${Object.values(SESSION_STATUS).join(
-    ", ",
-  )}). Values combine — a provider with a status keeps that provider's sessions in that ` +
-  `status — and ${SESSION_LIST_ALL} stands alone.`;
-
-/** What one validated tool call asks for, ready for the bridge that carries it. */
-type CarriedSessionActionFields =
-  | { kind: typeof SESSION_TOOL_KIND.MESSAGE; identity: SessionIdentity; text: string }
-  | {
-      kind: typeof SESSION_TOOL_KIND.CONTROL;
-      identity: SessionIdentity;
-      control: AdvertisedControl;
-    }
-  | {
-      kind: typeof SESSION_TOOL_KIND.OPEN;
-      identity: SessionIdentity;
-      /** The one app the developer named to open it in, resolved to its id. */
-      applicationId?: SessionApplicationId;
-    }
-  | {
-      kind: typeof SESSION_TOOL_KIND.CREATE_WORKSPACE;
-      providerId: string;
-      providerProjectId: string;
-      providerTargetId?: string;
-      agent?: string;
-      name?: string;
-      task?: string;
-      /** The model the developer named for this one creation, resolved to ids. */
-      agentSelection?: WorkspaceAgentSelection;
-    }
-  | {
-      kind: typeof SESSION_TOOL_KIND.ADD_AGENT;
-      identity: SessionIdentity;
-      agent: string;
-      name?: string;
-      task?: string;
-      /** The model the developer named for this one agent, as its wire id. */
-      model?: string;
-      /** The effort riding that model, when the developer named both. */
-      effort?: string;
-    }
-  | {
-      kind: typeof SESSION_TOOL_KIND.RENAME_WORKSPACE;
-      identity: SessionIdentity;
-      /** The workspace's new name, exactly as the developer chose it. */
-      name: string;
-    }
-  | {
-      kind: typeof SESSION_TOOL_KIND.RENAME_SESSION;
-      identity: SessionIdentity;
-      /** The chat's new name, exactly as the developer chose it. */
-      name: string;
-    };
-
-export type CarriedSessionAction = CarriedSessionActionFields & {
-  status?: never;
-  reason?: never;
-};
-
-type ActRejection = {
-  status: typeof ACT_RESULT_STATUS.REJECTED;
-  reason: string;
-  kind?: never;
-};
-export type SessionToolAction = CarriedSessionAction | ActRejection;
-
-/** What one validated issue tool call asks for, ready for the bridge that carries it. */
-type CarriedIssueActionFields =
-  | {
-      kind: typeof ISSUE_TOOL_KIND.ISSUE_STATE;
-      identity: IssueIdentity;
-      transition: IssueTransition;
-    }
-  | { kind: typeof ISSUE_TOOL_KIND.ISSUE_COMMENT; identity: IssueIdentity; body: string };
-
-export type CarriedIssueAction = CarriedIssueActionFields & {
-  status?: never;
-  reason?: never;
-};
-export type IssueToolAction = CarriedIssueAction | ActRejection;
-
-/**
- * What one validated app tool call asks for, ready for the app to perform.
- * The feedback action opens the composer and nothing else: `draft` is at most
- * the developer's own words, placed only into an empty note, and what the
- * composer holds leaves only by its own Send button — no action here sends.
- */
-type CarriedAppActionFields =
-  | {
-      kind: typeof APP_TOOL_KIND.SETTING;
-      setting: AppGuideSetting;
-      value: string;
-      /** The effort riding the new value, when the developer named both. */
-      effort?: string;
-    }
-  | {
-      kind: typeof APP_TOOL_KIND.PANEL;
-      tab: AppPanelTab;
-      /** The validated narrowing, combined like the chips: OR within an axis, AND across. */
-      filters?: readonly string[];
-      sort?: SessionListSort;
-      /** Words to search the list for, exactly as the developer asked them. */
-      query?: string;
-    }
-  | { kind: typeof APP_TOOL_KIND.FEEDBACK; composer: FeedbackComposerKind; draft?: string }
-  | { kind: typeof APP_TOOL_KIND.UPDATE; act: AppUpdateAct }
-  | {
-      kind: typeof APP_TOOL_KIND.REMEMBER;
-      /** One concise durable fact selected from the developer-opened turn. */
-      words: string;
-      /** The id of the fact this one stands in for, when it changes one. */
-      replaces?: string;
-    }
-  | { kind: typeof APP_TOOL_KIND.FORGET; id: string };
-
-export type CarriedAppAction = CarriedAppActionFields & {
-  status?: never;
-  reason?: never;
-};
-export type AppToolAction = CarriedAppAction | ActRejection;
-
-export type CarriedAct = CarriedSessionAction | CarriedIssueAction | CarriedAppAction;
-
-export interface SessionToolContext {
-  sessions: readonly Session[];
-  workspaceProjects: readonly ObservedWorkspaceProject[];
-  agentModels: (providerId: string) => readonly WorkspaceAgentModels[];
-  /**
-   * The developer's saved tie-breaks for a creation ask, the same ones the
-   * projects context narrates: the provider a nameless ask goes to, and each
-   * provider's chosen project. Both only ever narrow within the listed
-   * projects — a default can settle an ambiguous ask, never widen where one
-   * can land or override a provider or project the ask actually named.
-   */
-  defaultProviderId?: string;
-  defaultProjectIds?: Readonly<Partial<Record<string, string>>>;
-}
-
-export interface IssueToolContext {
-  issues: readonly TrackedIssue[];
-}
-
-export interface AppToolContext {
-  guide: AppGuideSnapshot;
-  sessions: readonly Session[];
-  /**
-   * The facts standing right now, which a replacement or a removal is
-   * validated against — the same discipline a session act keeps against the
-   * roster. An id the conversation was never shown names nothing.
-   */
-  rememberedFacts: readonly RememberedFact[];
-}
-
-type JsonSchemaStringProperty = {
-  type: "string";
-  description?: string;
-  enum?: readonly string[];
-};
-
-type JsonSchemaObjectProperty = {
-  type: "object";
-  description?: string;
-  properties?: JsonSchemaPropertyMap;
-  required?: readonly string[];
-  additionalProperties?: boolean;
-};
-
-type JsonSchemaArrayProperty = {
-  type: "array";
-  description?: string;
-  items: JsonSchemaStringProperty;
-};
-
-type JsonSchemaScalarProperty = {
-  type: "integer" | "boolean";
-  description?: string;
-};
-
-type JsonSchemaProperty =
-  | JsonSchemaStringProperty
-  | JsonSchemaObjectProperty
-  | JsonSchemaArrayProperty
-  | JsonSchemaScalarProperty;
-
-type JsonSchemaPropertyMap = {
-  readonly [key: string]: JsonSchemaProperty;
-};
-
-interface RealtimeToolParameters {
-  type: "object";
-  properties: JsonSchemaPropertyMap;
-  required: readonly string[];
-}
-
-export interface RealtimeToolWireDefinition {
-  type: "function";
-  name: string;
-  description: string;
-  parameters: RealtimeToolParameters;
-}
-
-type SessionToolValidate = (parsed: WireRecord, context: SessionToolContext) => SessionToolAction;
-
-type IssueToolValidate = (parsed: WireRecord, context: IssueToolContext) => IssueToolAction;
-
-type AppToolValidate = (parsed: WireRecord, context: AppToolContext) => AppToolAction;
-
-type ActActionKind = CarriedAct["kind"];
-type ActNarration = (action: CarriedAct, sessions: readonly Session[]) => string;
-
-interface RealtimeToolSchema {
-  description: string;
-  parameters: RealtimeToolParameters;
-}
-
-type SessionToolSpec = {
-  name: string;
-  family: typeof REALTIME_TOOL_FAMILY.SESSION;
-  actionKind: ActActionKind;
-  narration: ActNarration;
-  schema: RealtimeToolSchema;
+/** What a row declares: what it is called, what it is, what it says, and what it takes. */
+export interface ToolSpec<Family extends ActFamily, Kind extends ActKind> {
+  readonly name: string;
+  readonly family: Family;
+  readonly kind: Kind;
+  readonly description: string;
+  /** The act's own field vocabulary: what admission reads and what the model is shown. */
+  readonly request: Schema<unknown>;
   /**
    * The same act as the phone offers it, where the phone's surface gives the
    * act a different shape: an open lands on the app's own screen rather than
    * a provider's address, and the list narrows on the axes its chips hold.
-   * Absent, the phone is handed the desktop's schema unchanged.
+   * Absent, the phone is handed the desktop's.
    */
-  remoteSchema?: RealtimeToolSchema;
-  validate: SessionToolValidate;
-};
-
-type IssueToolSpec = {
-  name: string;
-  family: typeof REALTIME_TOOL_FAMILY.ISSUE;
-  actionKind: ActActionKind;
-  narration: ActNarration;
-  schema: RealtimeToolSchema;
-  remoteSchema?: RealtimeToolSchema;
-  validate: IssueToolValidate;
-};
-
-type AppToolSpec = {
-  name: string;
-  family: typeof REALTIME_TOOL_FAMILY.APP;
-  actionKind: ActActionKind;
-  narration: ActNarration;
-  schema: RealtimeToolSchema;
-  remoteSchema?: RealtimeToolSchema;
-  validate: AppToolValidate;
-};
-
-type RealtimeToolSpec = SessionToolSpec | IssueToolSpec | AppToolSpec;
-
-const SESSION_IDENTITY_PARAMETERS = {
-  provider_id: {
-    type: "string",
-    description: "The session provider ID.",
-  },
-  provider_session_id: {
-    type: "string",
-    description: "The session ID.",
-  },
-} as const;
-
-const ISSUE_IDENTITY_PARAMETERS = {
-  tracker_id: {
-    type: "string",
-    description: "The tracker ID.",
-  },
-  issue_id: {
-    type: "string",
-    description: "The issue ID.",
-  },
-} as const;
-
-function textArgument(record: WireRecord, key: string): string | undefined {
-  return wireText(record[key]);
-}
-
-function parseToolArguments(
-  call: RealtimeFunctionCall,
-): { ok: true; value: WireRecord } | { ok: false; reason: string } {
-  let parsed: UnparsedWireValue;
-  try {
-    // SAFETY: JSON.parse returns a runtime value; isRecord validates the object contract.
-    parsed = JSON.parse(call.argumentsJson) as UnparsedWireValue;
-  } catch {
-    return { ok: false, reason: "The tool call's arguments were not readable." };
-  }
-  if (!isRecord(parsed)) {
-    return { ok: false, reason: "The tool call's arguments were not readable." };
-  }
-  return { ok: true, value: parsed };
-}
-
-function sessionFromArguments(
-  parsed: WireRecord,
-  sessions: readonly Session[],
-): { session: Session; identity: SessionIdentity } | ActRejection {
-  const providerId = textArgument(parsed, "provider_id");
-  const providerSessionId = textArgument(parsed, "provider_session_id");
-  const session = sessions.find(
-    (candidate) =>
-      candidate.providerId === providerId && candidate.providerSessionId === providerSessionId,
-  );
-  if (!session) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: "No observed session matches that identity.",
-    };
-  }
-  return {
-    session,
-    identity: {
-      providerId: session.providerId,
-      providerSessionId: session.providerSessionId,
-    },
-  };
-}
-
-function issueFromArguments(
-  parsed: WireRecord,
-  issues: readonly TrackedIssue[],
-): { issue: TrackedIssue; identity: IssueIdentity } | ActRejection {
-  const trackerId = textArgument(parsed, "tracker_id");
-  const issueId = textArgument(parsed, "issue_id");
-  const issue = issues.find(
-    (candidate) => candidate.trackerId === trackerId && candidate.identifier === issueId,
-  );
-  if (!issue) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: "No tracked issue matches that identity.",
-    };
-  }
-  return {
-    issue,
-    identity: {
-      trackerId: issue.trackerId,
-      identifier: issue.identifier,
-    },
-  };
-}
-
-/**
- * Resolves a model the developer named — by the label the guide lists it
- * under, or its id — to the wire pairing an endpoint takes, held to the
- * build's documented entries for the provider. The effort, when named, must
- * be one the resolved model's own agent documents: the pairing is validated
- * as the whole it will be sent as.
- */
-function resolveWorkspaceAgentModel(
-  entries: readonly WorkspaceAgentModels[],
-  modelWord: string,
-  effortWord: string | undefined,
-): { selection: WorkspaceAgentSelection } | { refusal: string } {
-  const normalizedModel = modelWord.trim().toLowerCase();
-  const named = entries
-    .flatMap((entry) => entry.models.map((model) => ({ entry, model })))
-    .find(
-      ({ model }) =>
-        model.label.toLowerCase() === normalizedModel || model.id.toLowerCase() === normalizedModel,
-    );
-  if (!named) return { refusal: "No documented model goes by that name here." };
-  let effort: string | undefined;
-  if (effortWord !== undefined) {
-    const normalizedEffort = effortWord.trim().toLowerCase();
-    effort = named.entry.efforts.find((candidate) => candidate.toLowerCase() === normalizedEffort);
-    if (!effort) {
-      return {
-        refusal:
-          named.entry.efforts.length > 0
-            ? `That model's effort is one of ${named.entry.efforts.join(", ")}.`
-            : "That model takes no effort level.",
-      };
-    }
-  }
-  const selection: WorkspaceAgentSelection = {
-    agent: named.entry.agent,
-    model: named.model.id,
-  };
-  if (effort) selection.effort = effort;
-  return { selection };
-}
-
-function validateSendSessionMessage(
-  parsed: WireRecord,
-  context: SessionToolContext,
-): SessionToolAction {
-  const found = sessionFromArguments(parsed, context.sessions);
-  if ("status" in found) return found;
-  const { session, identity } = found;
-  if (!advertisedActFor(session, ACT_KIND.MESSAGE)) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: "That session does not take messages right now.",
-    };
-  }
-  const messageText = sessionMessageText(parsed.text);
-  if (!messageText) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: "That message is empty or too long.",
-    };
-  }
-  return { kind: SESSION_TOOL_KIND.MESSAGE, identity, text: messageText };
-}
-
-function validateRunSessionControl(
-  parsed: WireRecord,
-  context: SessionToolContext,
-): SessionToolAction {
-  const found = sessionFromArguments(parsed, context.sessions);
-  if ("status" in found) return found;
-  const { session, identity } = found;
-  const controlId = textArgument(parsed, "control_id");
-  const control = controlId ? advertisedControl(session, controlId) : undefined;
-  if (!control) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: "That session advertises no such control.",
-    };
-  }
-  return { kind: SESSION_TOOL_KIND.CONTROL, identity, control };
-}
-
-function validateOpenSession(parsed: WireRecord, context: SessionToolContext): SessionToolAction {
-  const found = sessionFromArguments(parsed, context.sessions);
-  if ("status" in found) return found;
-  const { session, identity } = found;
-  // The action carries the identity — and, when the developer named an app,
-  // that app's id — never the address: the main process reads the link back
-  // out of its own registry, the same as a pressed row or a pressed app mark.
-  const applicationWord = textArgument(parsed, "application");
-  if (applicationWord !== undefined) {
-    const normalized = applicationWord.trim().toLowerCase();
-    const application = session.applications.find(
-      (candidate) =>
-        candidate.displayName.toLowerCase() === normalized || candidate.id === normalized,
-    );
-    // An association without an exact address identifies the app but opens
-    // nothing, so it refuses like an app the roster never listed — and the
-    // refusal names the apps that can open, which the roster already carries.
-    // The id must be one the build fixed: the bridge takes no other, and the
-    // main process would refuse it again.
-    const applicationId = application?.link ? application.id : undefined;
-    if (applicationId === undefined || !isSessionApplicationId(applicationId)) {
-      const openable = session.applications.filter((candidate) => candidate.link);
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason:
-          openable.length > 0
-            ? `That session opens in ${openable
-                .map((candidate) => candidate.displayName)
-                .join(" or ")}, not there.`
-            : "No app carries an exact address for that session.",
-      };
-    }
-    return { kind: SESSION_TOOL_KIND.OPEN, identity, applicationId };
-  }
-  if (!session.detail.link) {
-    return { status: ACT_RESULT_STATUS.REJECTED, reason: "That session has no address to open." };
-  }
-  return { kind: SESSION_TOOL_KIND.OPEN, identity };
-}
-
-function validateCreateWorkspace(
-  parsed: WireRecord,
-  context: SessionToolContext,
-): SessionToolAction {
-  // A creation ask names a project rather than a session, so it is validated
-  // against the projects the conversation was shown — the same discipline,
-  // against the list that actually offered it.
-  const providerId = textArgument(parsed, "provider_id");
-  const projectId = textArgument(parsed, "project_id");
-  const targetId = textArgument(parsed, "target_id");
-  let matchingProjects = context.workspaceProjects.filter(
-    (candidate) =>
-      (!providerId || candidate.providerId === providerId) &&
-      (!projectId || candidate.providerProjectId === projectId) &&
-      (!targetId || candidate.providerTargetId === targetId),
-  );
-  // The saved defaults settle only what the ask left unnamed: no provider
-  // named sends a still-ambiguous ask to the default provider while it is
-  // offering, and no project named sends it on to that provider's chosen
-  // project. Neither step can leave the listed set, and an ask that named
-  // its own provider or project is never overridden.
-  if (!providerId && context.defaultProviderId && matchingProjects.length > 1) {
-    const offeredByDefault = matchingProjects.filter(
-      (candidate) => candidate.providerId === context.defaultProviderId,
-    );
-    if (offeredByDefault.length > 0) matchingProjects = offeredByDefault;
-  }
-  // A provider's chosen project settles which project, never which provider:
-  // while candidates still span providers, one provider's saved project must
-  // not quietly decide an ask the developer left open between them.
-  const [firstMatch] = matchingProjects;
-  const oneProviderMatches =
-    firstMatch !== undefined &&
-    matchingProjects.every((candidate) => candidate.providerId === firstMatch.providerId);
-  if (!projectId && oneProviderMatches && matchingProjects.length > 1) {
-    const chosenProjects = matchingProjects.filter(
-      (candidate) =>
-        context.defaultProjectIds?.[candidate.providerId] ===
-        workspaceProjectSelectionId(candidate),
-    );
-    if (chosenProjects.length === 1) matchingProjects = chosenProjects;
-  }
-  if (matchingProjects.length !== 1) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason:
-        matchingProjects.length === 0
-          ? "No listed project matches that identity."
-          : "More than one listed project matches; name the project and host.",
-    };
-  }
-  const project = matchingProjects[0];
-  if (!project)
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: "No listed project matches that identity.",
-    };
-  const requestedAgent = textArgument(parsed, "agent");
-  const matchingAgents = requestedAgent
-    ? project.spawnableAgents?.filter(
-        (candidate) => candidate.toLocaleLowerCase() === requestedAgent.toLocaleLowerCase(),
-      )
-    : undefined;
-  const agent =
-    (requestedAgent && project.spawnableAgents?.includes(requestedAgent)
-      ? requestedAgent
-      : matchingAgents?.length === 1
-        ? matchingAgents[0]
-        : undefined) ?? project.defaultAgent;
-  if (project.spawnableAgents && (!agent || !project.spawnableAgents.includes(agent))) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: agent
-        ? "That project lists no such agent to start."
-        : "Name one of the agents that project lists for a new workspace.",
-    };
-  }
-  let name: string | undefined;
-  if (parsed.name !== undefined) {
-    if (project.namesItself) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: "That project names its own workspaces.",
-      };
-    }
-    name = workspaceNameText(parsed.name);
-    if (!name) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: `A workspace name has to be under ${maximumWorkspaceNameLength} characters and longer than nothing.`,
-      };
-    }
-  }
-  // The task is held to the project's own word for it: a project that takes
-  // none cannot be handed one, a project that needs one cannot be created
-  // without it, and the text itself is bounded like the message it is.
-  let task: string | undefined;
-  if (parsed.task !== undefined) {
-    if (project.taskSupport === WORKSPACE_TASK_SUPPORT.NONE) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: "That project takes no opening task." };
-    }
-    task = sessionMessageText(parsed.task);
-    if (!task) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: "That task is empty or too long.",
-      };
-    }
-  } else if (project.taskSupport === WORKSPACE_TASK_SUPPORT.REQUIRED) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: "That project needs an opening task to create a workspace.",
-    };
-  }
-  // A model named for this one creation resolves against the provider's own
-  // documented table, and the effort only ever rides a model: alone it has
-  // nothing documented to attach to.
-  const spokenModel = textArgument(parsed, "model");
-  const spokenEffort = textArgument(parsed, "effort");
-  if (spokenEffort !== undefined && spokenModel === undefined) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: "An effort rides a model; name the model too.",
-    };
-  }
-  let agentSelection: WorkspaceAgentSelection | undefined;
-  if (spokenModel !== undefined) {
-    const resolved = resolveWorkspaceAgentModel(
-      context.agentModels(project.providerId),
-      spokenModel,
-      spokenEffort,
-    );
-    if ("refusal" in resolved)
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: resolved.refusal };
-    agentSelection = resolved.selection;
-  }
-  const action: CarriedSessionAction = {
-    kind: SESSION_TOOL_KIND.CREATE_WORKSPACE,
-    providerId: project.providerId,
-    providerProjectId: project.providerProjectId,
-  };
-  if (project.providerTargetId) action.providerTargetId = project.providerTargetId;
-  if (agent) action.agent = agent;
-  if (name) action.name = name;
-  if (task) action.task = task;
-  if (agentSelection) action.agentSelection = agentSelection;
-  return action;
-}
-
-function validateAddWorkspaceAgent(
-  parsed: WireRecord,
-  context: SessionToolContext,
-): SessionToolAction {
-  const found = sessionFromArguments(parsed, context.sessions);
-  if ("status" in found) return found;
-  const { session, identity } = found;
-  // The agent must be one this session's own roster entry listed: the list
-  // is the provider's word for what its endpoint takes, so an ask outside it
-  // is refused rather than forwarded to be refused.
-  const agent = textArgument(parsed, "agent");
-  if (!agent || !advertisedActFor(session, ACT_KIND.ADD_AGENT)?.agents.includes(agent)) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: "That session lists no such agent to add.",
-    };
-  }
-  let name: string | undefined;
-  if (parsed.name !== undefined) {
-    name = workspaceNameText(parsed.name);
-    if (!name) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: `A session name has to be under ${maximumWorkspaceNameLength} characters and longer than nothing.`,
-      };
-    }
-  }
-  let task: string | undefined;
-  if (parsed.task !== undefined) {
-    task = sessionMessageText(parsed.task);
-    if (!task) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: "That task is empty or too long.",
-      };
-    }
-  }
-  // A model named for this one agent resolves within the asked-for kind
-  // alone: the developer's chosen agent is never re-decided by the model
-  // they named beside it, so a mismatch is a refusal rather than a swap.
-  const spokenModel = textArgument(parsed, "model");
-  const spokenEffort = textArgument(parsed, "effort");
-  if (spokenEffort !== undefined && spokenModel === undefined) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: "An effort rides a model; name the model too.",
-    };
-  }
-  let selection: WorkspaceAgentSelection | undefined;
-  if (spokenModel !== undefined) {
-    const entries = context
-      .agentModels(session.providerId)
-      .filter((candidate) => candidate.agent === agent);
-    const resolved = resolveWorkspaceAgentModel(entries, spokenModel, spokenEffort);
-    if ("refusal" in resolved) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: resolved.refusal.startsWith("No documented model")
-          ? `A ${agent} agent runs no model by that name.`
-          : resolved.refusal,
-      };
-    }
-    selection = resolved.selection;
-  }
-  const action: CarriedSessionAction = {
-    kind: SESSION_TOOL_KIND.ADD_AGENT,
-    identity,
-    agent,
-  };
-  if (name) action.name = name;
-  if (task) action.task = task;
-  if (selection) action.model = selection.model;
-  if (selection?.effort) action.effort = selection.effort;
-  return action;
-}
-
-function validateRenameWorkspace(
-  parsed: WireRecord,
-  context: SessionToolContext,
-): SessionToolAction {
-  const found = sessionFromArguments(parsed, context.sessions);
-  if ("status" in found) return found;
-  const { session, identity } = found;
-  // Only a session whose roster entry advertised renaming has a workspace a
-  // rename can land on. The action carries the identity and the name, never
-  // the target: the main process resolves the workspace from its own
-  // registry, the same way an open never carries an address.
-  if (!advertisedActFor(session, ACT_KIND.RENAME_WORKSPACE)) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: "That session's workspace cannot be renamed.",
-    };
-  }
-  const name = workspaceNameText(parsed.name);
-  if (!name) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: `A workspace name has to be under ${maximumWorkspaceNameLength} characters and longer than nothing.`,
-    };
-  }
-  return { kind: SESSION_TOOL_KIND.RENAME_WORKSPACE, identity, name };
-}
-
-function validateRenameSession(parsed: WireRecord, context: SessionToolContext): SessionToolAction {
-  const found = sessionFromArguments(parsed, context.sessions);
-  if ("status" in found) return found;
-  const { session, identity } = found;
-  if (!advertisedActFor(session, ACT_KIND.RENAME_SESSION)) {
-    return { status: ACT_RESULT_STATUS.REJECTED, reason: "That chat cannot be renamed." };
-  }
-  const name = workspaceNameText(parsed.name);
-  if (!name) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: `A chat name has to be under ${maximumWorkspaceNameLength} characters and longer than nothing.`,
-    };
-  }
-  return { kind: SESSION_TOOL_KIND.RENAME_SESSION, identity, name };
-}
-
-function validateUpdateIssueState(parsed: WireRecord, context: IssueToolContext): IssueToolAction {
-  const found = issueFromArguments(parsed, context.issues);
-  if ("status" in found) return found;
-  const { issue, identity } = found;
-  const state = textArgument(parsed, "state");
-  // Spoken names arrive with their case retold rather than copied, so the
-  // match forgives case alone — never spelling — and only while it stays
-  // unambiguous. Two advertised states apart only in case are not a guess
-  // Luke gets to make.
-  const named = state
-    ? issue.transitions.filter((candidate) => candidate.name.toLowerCase() === state.toLowerCase())
-    : [];
-  const transition =
-    named.find((candidate) => candidate.name === state) ??
-    (named.length === 1 ? named[0] : undefined);
-  if (!transition) {
-    return { status: ACT_RESULT_STATUS.REJECTED, reason: "That issue lists no such state." };
-  }
-  return { kind: ISSUE_TOOL_KIND.ISSUE_STATE, identity, transition };
-}
-
-function validateCommentOnIssue(parsed: WireRecord, context: IssueToolContext): IssueToolAction {
-  const found = issueFromArguments(parsed, context.issues);
-  if ("status" in found) return found;
-  const { issue, identity } = found;
-  if (!issue.canComment) {
-    return { status: ACT_RESULT_STATUS.REJECTED, reason: "That issue does not take comments." };
-  }
-  const body = issueCommentText(parsed.body);
-  if (!body) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: "That comment is empty or too long.",
-    };
-  }
-  return { kind: ISSUE_TOOL_KIND.ISSUE_COMMENT, identity, body };
-}
-
-/**
- * Validates the value a spoken change carries against the setting it names.
- * A toggle takes the guide's own two words (and their unambiguous synonyms);
- * a choice takes exactly one of the values the guide listed. Anything else is
- * refused with the accepted set, so the refusal is also the correction.
- */
-function appSettingValue(setting: AppGuideSetting, value: UnparsedWireValue): string | undefined {
-  if (setting.kind === APP_SETTING_KIND.TOGGLE) return appToggleValue(value);
-  if (!isWireString(value)) return undefined;
-  const normalized = value.trim().toLowerCase();
-  return setting.choices?.find((choice) => choice.toLowerCase() === normalized);
-}
-
-/**
- * Whether one observed session answers one spoken filter value. Every
- * identity a row carries is a filter on the same terms as its provider id —
- * the agent behind a hosted chat, an app associated with it, and a workspace
- * manager's scope id — so a spoken ask reaches exactly the rows the matching
- * chip would keep.
- */
-function sessionAnswersFilter(session: Session, filter: string): boolean {
-  if (filter === SESSION_LOCATION.LOCAL || filter === SESSION_LOCATION.CLOUD) {
-    return session.location === filter;
-  }
-  if (filter === SESSION_LIST_VOICE) return session.realtimeVoice === true;
-  return (
-    session.providerId === filter ||
-    session.agent?.id === filter ||
-    session.workspace?.scopeId === filter ||
-    session.applications.some((application) => application.id === filter)
-  );
-}
-
-/**
- * Validates a spoken session-list narrowing against the sessions actually
- * being observed. A narrowing that would show nothing is refused rather than
- * applied: the panel would quietly fall back to showing everything, and Luke
- * would have reported a narrowing that never happened. Each value is checked
- * on its own first, so the refusal can name the value that is wrong rather
- * than only the combination — and then the combination is checked whole, on
- * the same axis terms the chips combine on, because two values a roster
- * answers separately can still name an intersection nothing occupies.
- */
-function panelFiltersAction(
-  filters: readonly string[],
-  sessions: readonly Session[],
-): { filters: readonly string[] } | { reason: string } {
-  // The enum on the tool's own schema already binds a compliant model to
-  // these tokens; this is the backstop for a call composed past it.
-  for (const filter of filters) {
-    if (!SESSION_LIST_FILTER_VALUES.includes(filter)) {
-      return { reason: `"${filter}" is not one of the filter values the tool lists.` };
-    }
-  }
-  const chosen = [...new Set(filters)];
-  if (chosen.includes(SESSION_LIST_ALL)) {
-    if (chosen.length > 1) {
-      return { reason: `${SESSION_LIST_ALL} is the whole list, so it combines with nothing.` };
-    }
-    return { filters: chosen };
-  }
-  for (const filter of chosen) {
-    if (sessions.some((session) => sessionAnswersFilter(session, filter))) continue;
-    if (filter === SESSION_LOCATION.LOCAL || filter === SESSION_LOCATION.CLOUD) {
-      return { reason: `No ${filter} sessions are observed right now.` };
-    }
-    if (filter === SESSION_LIST_VOICE) {
-      return { reason: "No voice sessions are observed right now." };
-    }
-    return {
-      reason: `No observed session belongs to an agent, app, or workspace manager "${filter}".`,
-    };
-  }
-  if (
-    chosen.length > 1 &&
-    !sessions.some((session) =>
-      matchesFilterSelection(chosen, (filter) => sessionAnswersFilter(session, filter)),
-    )
-  ) {
-    return { reason: "No observed session matches that combination of filters." };
-  }
-  return { filters: chosen };
-}
-
-function validateChangeAppSetting(parsed: WireRecord, context: AppToolContext): AppToolAction {
-  const setting = appGuideSetting(context.guide, textArgument(parsed, "setting_id"));
-  if (!setting) {
-    return { status: ACT_RESULT_STATUS.REJECTED, reason: "The app guide lists no such setting." };
-  }
-  if (!setting.adjustable) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: `${setting.label} can only be changed by hand: ${setting.manual}`,
-    };
-  }
-  const value = appSettingValue(setting, parsed.value);
-  if (value === undefined) {
-    const accepted =
-      setting.kind === APP_SETTING_KIND.TOGGLE ? "on or off" : (setting.choices ?? []).join(", ");
-    return { status: ACT_RESULT_STATUS.REJECTED, reason: `${setting.label} takes ${accepted}.` };
-  }
-  // An effort may ride only a value the guide lists levels for, so both
-  // halves of one stored pairing can be asked for in one change — matched
-  // like the value: case retold rather than copied, answered in the guide's
-  // own casing.
-  const effortWord = textArgument(parsed, "effort");
-  if (effortWord === undefined) return { kind: APP_TOOL_KIND.SETTING, setting, value };
-  const levels = setting.efforts?.[value] ?? [];
-  if (levels.length === 0) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason:
-        setting.efforts === undefined
-          ? `${setting.label} takes no effort level.`
-          : `${value} takes no effort level.`,
-    };
-  }
-  const normalizedEffort = effortWord.trim().toLowerCase();
-  const effort = levels.find((candidate) => candidate.toLowerCase() === normalizedEffort);
-  if (effort === undefined) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: `${value}'s effort is one of ${levels.join(", ")}.`,
-    };
-  }
-  return { kind: APP_TOOL_KIND.SETTING, setting, value, effort };
-}
-
-/**
- * Reads the narrowing a panel ask carries: several values, or a lone string
- * for a narrowing of one. Blank entries are dropped rather than validated,
- * and an emptied list is no narrowing at all.
- */
-function spokenFilterValues(
-  value: UnparsedWireValue,
-): { values: readonly string[] | undefined } | { reason: string } {
-  if (value === undefined) return { values: undefined };
-  const entries = isWireString(value) ? [value] : value;
-  if (!Array.isArray(entries) || !entries.every((entry) => isWireString(entry))) {
-    return { reason: "filters takes a list of filter values." };
-  }
-  const cleaned = entries.map((entry) => entry.trim()).filter((entry) => entry.length > 0);
-  return { values: cleaned.length > 0 ? cleaned : undefined };
-}
-
-function validateShowPanel(parsed: WireRecord, context: AppToolContext): AppToolAction {
-  const tab = parsed.tab ?? APP_PANEL_TAB.SESSIONS;
-  if (!isAppPanelTab(tab)) {
-    return { status: ACT_RESULT_STATUS.REJECTED, reason: "The panel has no such tab." };
-  }
-  const sort = textArgument(parsed, "sort");
-  if (sort !== undefined && !isSessionListSort(sort)) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: "The list orders by urgency or by recency.",
-    };
-  }
-  // A search is bounded by the hand's own control: the magnifier is only
-  // offered beside a list with more than one session, and a spoken ask
-  // reaches no further than it. The words themselves are not validated
-  // against the rows the way a filter is — a query is read against the lines
-  // as the surface words them, which only the renderer knows, and a search
-  // matching nothing is the list's own honest answer rather than a stale
-  // narrowing to refuse.
-  const query = textArgument(parsed, "query");
-  if (query !== undefined && context.sessions.length < 2) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: "The list offers a search only when more than one session is observed.",
-    };
-  }
-  const asked = spokenFilterValues(parsed.filters);
-  if ("reason" in asked) return { status: ACT_RESULT_STATUS.REJECTED, reason: asked.reason };
-  if (asked.values === undefined) {
-    const action: CarriedAppAction = { kind: APP_TOOL_KIND.PANEL, tab };
-    if (sort !== undefined) action.sort = sort;
-    if (query !== undefined) action.query = query;
-    return action;
-  }
-  const outcome = panelFiltersAction(asked.values, context.sessions);
-  if ("reason" in outcome) return { status: ACT_RESULT_STATUS.REJECTED, reason: outcome.reason };
-  const action: CarriedAppAction = {
-    kind: APP_TOOL_KIND.PANEL,
-    tab,
-    filters: outcome.filters,
-  };
-  if (sort !== undefined) action.sort = sort;
-  if (query !== undefined) action.query = query;
-  return action;
-}
-
-function validateOpenFeedbackComposer(parsed: WireRecord, _context: AppToolContext): AppToolAction {
-  const composer = parsed.kind;
-  if (!isFeedbackComposerKind(composer)) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: "The composer writes feedback or a prompt, nothing else.",
-    };
-  }
-  // The draft is the developer's ask restated in their words, not a document,
-  // so it is bounded like a typed one; a blank draft is no draft, and the
-  // composer simply opens empty.
-  const draft = textArgument(parsed, "draft")?.slice(0, maximumSessionMessageLength);
-  const action: CarriedAppAction = { kind: APP_TOOL_KIND.FEEDBACK, composer };
-  if (draft) action.draft = draft;
-  return action;
-}
-
-/**
- * What stands where the asked-for act would be, so a refusal can say why the
- * row is not offering it — the row's own detail says where the build stands,
- * and this names the one press that stands instead.
- */
-const UPDATE_BUTTON_STANDING = {
-  [APP_UPDATE_ACT.CHECK]: "Its button offers a check right now.",
-  [APP_UPDATE_ACT.DOWNLOAD]: "Its button offers the releases page in the browser right now.",
-  [APP_UPDATE_ACT.RESTART]: "Its button offers Restart to update right now.",
-  [APP_UPDATE_WAIT.CHECKING]: "Nothing is pressable while the check is out.",
-  [APP_UPDATE_WAIT.DOWNLOADING]: "Nothing is pressable while the download runs.",
-} as const satisfies Record<AppGuideUpdate["button"], string>;
-
-function validateRunUpdateAction(parsed: WireRecord, context: AppToolContext): AppToolAction {
-  // The guide's update entry is the roster here: a run that reported nothing
-  // about updates — a fixture, a pure caller — advertises no act to run.
-  const update = context.guide.update;
-  if (!update) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: "This run does not report where updates stand.",
-    };
-  }
-  const act = parsed.action;
-  if (!isAppUpdateAct(act)) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: "The Updates button checks, downloads, or restarts.",
-    };
-  }
-  // One button, one act: only the press the row is actually drawing runs, so
-  // the refusal is the row's own words plus what stands in the act's place.
-  if (act !== update.button) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: `${update.detail} ${UPDATE_BUTTON_STANDING[update.button]}`,
-    };
-  }
-  return { kind: APP_TOOL_KIND.UPDATE, act };
-}
-
-/** Validates one automatic memory update against the bounded list in context. */
-function validateRememberFact(parsed: WireRecord, context: AppToolContext): AppToolAction {
-  const words = rememberedFactText(parsed.words);
-  if (!words) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: `A memory has to be under ${maximumRememberedFactLength} characters and longer than nothing.`,
-    };
-  }
-  const replaces = textArgument(parsed, "replaces");
-  if (replaces !== undefined && !holdsRememberedFact(context.rememberedFacts, replaces)) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: "Nothing remembered goes by that id.",
-    };
-  }
-  // A replacement retires one as it lands; a new fact never evicts silently.
-  if (replaces === undefined && context.rememberedFacts.length >= maximumRememberedFacts) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: `Luke already remembers ${maximumRememberedFacts} things; replace or forget one first.`,
-    };
-  }
-  return { kind: APP_TOOL_KIND.REMEMBER, words, ...(replaces ? { replaces } : undefined) };
-}
-
-function validateForgetFact(parsed: WireRecord, context: AppToolContext): AppToolAction {
-  const id = textArgument(parsed, "id");
-  if (!id || !holdsRememberedFact(context.rememberedFacts, id)) {
-    return { status: ACT_RESULT_STATUS.REJECTED, reason: "Nothing remembered goes by that id." };
-  }
-  return { kind: APP_TOOL_KIND.FORGET, id };
-}
-
-function observedSessionName(identity: SessionIdentity, sessions: readonly Session[]): string {
-  const session = sessions.find(
-    (candidate) =>
-      candidate.providerId === identity.providerId &&
-      candidate.providerSessionId === identity.providerSessionId,
-  );
-  return session ? `"${session.title}"` : "a session";
-}
-
-function observedApplicationName(
-  identity: SessionIdentity,
-  applicationId: SessionApplicationId,
-  sessions: readonly Session[],
-): string {
-  const session = sessions.find(
-    (candidate) =>
-      candidate.providerId === identity.providerId &&
-      candidate.providerSessionId === identity.providerSessionId,
-  );
-  return (
-    session?.applications.find((application) => application.id === applicationId)?.displayName ??
-    applicationId
-  );
-}
-
-function narrate<K extends ActActionKind>(
-  kind: K,
-  render: (action: Extract<CarriedAct, { kind: K }>, sessions: readonly Session[]) => string,
-): ActNarration {
-  return (action, sessions) => {
-    if (action.kind !== kind) return "carried an act";
-    // SAFETY: the equality above narrows the discriminated union to the kind
-    // captured beside this renderer; TypeScript cannot correlate generic K.
-    return render(action as Extract<CarriedAct, { kind: K }>, sessions);
-  };
+  readonly remote?: { readonly description: string; readonly request: Schema<unknown> };
 }
 
 /**
  * The acts Luke can carry, keyed the way a value set is: adding a tool is
  * adding a key, and the family sets, the spoken count, and the schema list
- * follow. Each row's `validate` is the renderer's half of the gauntlet — the
- * main process still validates the same act against what it observed.
+ * follow.
  */
 export const ACTS = {
   SEND_SESSION_MESSAGE: {
     name: "send_session_message",
-    family: REALTIME_TOOL_FAMILY.SESSION,
-    actionKind: SESSION_TOOL_KIND.MESSAGE,
-    narration: narrate(
-      SESSION_TOOL_KIND.MESSAGE,
-      (action, sessions) =>
-        `sent a message to ${observedSessionName(action.identity, sessions)}: "${action.text}"`,
-    ),
-    schema: {
-      description: "Send a message to an observed session.",
-      parameters: {
-        type: "object",
-        properties: {
-          ...SESSION_IDENTITY_PARAMETERS,
-          text: {
-            type: "string",
-            description: "The message to send.",
-          },
-        },
-        required: ["provider_id", "provider_session_id", "text"],
-      },
-    },
-    validate: validateSendSessionMessage,
+    family: ACT_FAMILY.SESSION,
+    kind: ACT_KIND.MESSAGE,
+    description: "Send a message to an observed session.",
+    request: MESSAGE_REQUEST,
   },
   RUN_SESSION_CONTROL: {
     name: "run_session_control",
-    family: REALTIME_TOOL_FAMILY.SESSION,
-    actionKind: SESSION_TOOL_KIND.CONTROL,
-    narration: narrate(
-      SESSION_TOOL_KIND.CONTROL,
-      (action, sessions) =>
-        `ran "${action.control.label}" on ${observedSessionName(action.identity, sessions)}`,
-    ),
-    schema: {
-      description: "Run a control advertised by an observed session.",
-      parameters: {
-        type: "object",
-        properties: {
-          ...SESSION_IDENTITY_PARAMETERS,
-          control_id: {
-            type: "string",
-            description: "The control ID.",
-          },
-        },
-        required: ["provider_id", "provider_session_id", "control_id"],
-      },
-    },
-    validate: validateRunSessionControl,
+    family: ACT_FAMILY.SESSION,
+    kind: ACT_KIND.CONTROL,
+    description: "Run a control advertised by an observed session.",
+    request: CONTROL_REQUEST,
   },
   OPEN_SESSION: {
     name: "open_session",
-    family: REALTIME_TOOL_FAMILY.SESSION,
-    actionKind: SESSION_TOOL_KIND.OPEN,
-    narration: narrate(SESSION_TOOL_KIND.OPEN, (action, sessions) => {
-      const name = observedSessionName(action.identity, sessions);
-      return action.applicationId
-        ? `opened ${name} in ${observedApplicationName(action.identity, action.applicationId, sessions)}`
-        : `opened ${name}`;
-    }),
-    schema: {
-      description:
-        "Open one observed session where its provider keeps it — only when the developer asks " +
-        "to open, go to, or jump into that specific session. An ask to show, see, or list " +
-        'sessions or agents — "show me the cloud agents" — filters the panel through ' +
-        "show_panel instead, never this. An ask to open one session per provider uses this tool " +
-        "once per matching provider in the same response, without filtering the panel first.",
-      parameters: {
-        type: "object",
-        properties: {
-          ...SESSION_IDENTITY_PARAMETERS,
-          application: {
-            type: "string",
-            description:
-              "The app to open the session in, as its roster line's opens_in lists it — only " +
-              "when the developer named one. Omitted, the session opens at its own address.",
-          },
-        },
-        required: ["provider_id", "provider_session_id"],
-      },
-    },
-    remoteSchema: {
+    family: ACT_FAMILY.SESSION,
+    kind: ACT_KIND.OPEN,
+    description:
+      "Open one observed session where its provider keeps it — only when the developer asks " +
+      "to open, go to, or jump into that specific session. An ask to show, see, or list " +
+      'sessions or agents — "show me the cloud agents" — filters the panel through ' +
+      "show_panel instead, never this. An ask to open one session per provider uses this tool " +
+      "once per matching provider in the same response, without filtering the panel first.",
+    request: OPEN_REQUEST,
+    remote: {
       description:
         "Open one observed session's own screen in this app, leaving this conversation — only " +
         "when the developer asks to open, go to, or jump into that specific session. An ask to " +
         'show, see, or list sessions or agents — "show me the waiting sessions" — narrows the ' +
         "list through show_panel instead, never this. The phone shows one screen, so open one " +
         "session per response; asked for several, ask which.",
-      parameters: {
-        type: "object",
-        properties: { ...SESSION_IDENTITY_PARAMETERS },
-        required: ["provider_id", "provider_session_id"],
-      },
+      request: REMOTE_OPEN_REQUEST,
     },
-    validate: validateOpenSession,
   },
   CREATE_WORKSPACE: {
     name: "create_workspace",
-    family: REALTIME_TOOL_FAMILY.SESSION,
-    actionKind: SESSION_TOOL_KIND.CREATE_WORKSPACE,
-    narration: narrate(
-      SESSION_TOOL_KIND.CREATE_WORKSPACE,
-      (action) =>
-        `asked ${action.providerId} to create a workspace${action.name ? ` named "${action.name}"` : ""}`,
-    ),
-    schema: {
-      description: "Create a workspace for a new agent.",
-      parameters: {
-        type: "object",
-        properties: {
-          provider_id: {
-            type: "string",
-            description: "The provider ID; omit it to create in the default provider.",
-          },
-          project_id: {
-            type: "string",
-            description: "The project ID; omit it to create in that provider's default project.",
-          },
-          target_id: {
-            type: "string",
-            description: "The target ID.",
-          },
-          agent: {
-            type: "string",
-            description: "The agent kind.",
-          },
-          name: {
-            type: "string",
-            description:
-              "The workspace's name: the developer's own when they chose one, otherwise a short, " +
-              "specific name composed from what the workspace is for, in a few words with no " +
-              "punctuation. Always supply one, except in a project listed as naming its own " +
-              "workspaces, which takes none.",
-          },
-          task: {
-            type: "string",
-            description: "An optional opening task.",
-          },
-          model: {
-            type: "string",
-            description: "An optional model.",
-          },
-          effort: {
-            type: "string",
-            description: "An optional effort level.",
-          },
-        },
-        required: [],
-      },
-    },
-    validate: validateCreateWorkspace,
+    family: ACT_FAMILY.SESSION,
+    kind: ACT_KIND.CREATE_WORKSPACE,
+    description: "Create a workspace for a new agent.",
+    request: CREATE_WORKSPACE_REQUEST,
   },
   ADD_WORKSPACE_AGENT: {
     name: "add_workspace_agent",
-    family: REALTIME_TOOL_FAMILY.SESSION,
-    actionKind: SESSION_TOOL_KIND.ADD_AGENT,
-    narration: narrate(
-      SESSION_TOOL_KIND.ADD_AGENT,
-      (action, sessions) =>
-        `added a ${action.agent} agent to ${observedSessionName(action.identity, sessions)}`,
-    ),
-    schema: {
-      description: "Add an agent to an observed workspace.",
-      parameters: {
-        type: "object",
-        properties: {
-          ...SESSION_IDENTITY_PARAMETERS,
-          agent: {
-            type: "string",
-            description: "The agent kind.",
-          },
-          name: {
-            type: "string",
-            description: "An optional agent name.",
-          },
-          task: {
-            type: "string",
-            description: "An optional opening task.",
-          },
-          model: {
-            type: "string",
-            description: "An optional model.",
-          },
-          effort: {
-            type: "string",
-            description: "An optional effort level.",
-          },
-        },
-        required: ["provider_id", "provider_session_id", "agent"],
-      },
-    },
-    validate: validateAddWorkspaceAgent,
+    family: ACT_FAMILY.SESSION,
+    kind: ACT_KIND.ADD_AGENT,
+    description: "Add an agent to an observed workspace.",
+    request: ADD_AGENT_REQUEST,
   },
   RENAME_WORKSPACE: {
     name: "rename_workspace",
-    family: REALTIME_TOOL_FAMILY.SESSION,
-    actionKind: SESSION_TOOL_KIND.RENAME_WORKSPACE,
-    narration: narrate(
-      SESSION_TOOL_KIND.RENAME_WORKSPACE,
-      (action, sessions) =>
-        `renamed the workspace of ${observedSessionName(action.identity, sessions)} to "${action.name}"`,
-    ),
-    schema: {
-      description:
-        "Rename the workspace one observed session runs in, to a name the developer just " +
-        "chose — their own words, never a name composed for them. Only sessions whose roster " +
-        "entry says the workspace can be renamed take one.",
-      parameters: {
-        type: "object",
-        properties: {
-          ...SESSION_IDENTITY_PARAMETERS,
-          name: {
-            type: "string",
-            description: "The workspace's new name, exactly as the developer chose it.",
-          },
-        },
-        required: ["provider_id", "provider_session_id", "name"],
-      },
-    },
-    validate: validateRenameWorkspace,
+    family: ACT_FAMILY.SESSION,
+    kind: ACT_KIND.RENAME_WORKSPACE,
+    description:
+      "Rename the workspace one observed session runs in, to a name the developer just " +
+      "chose — their own words, never a name composed for them. Only sessions whose roster " +
+      "entry says the workspace can be renamed take one.",
+    request: RENAME_WORKSPACE_REQUEST,
   },
   RENAME_SESSION: {
     name: "rename_session",
-    family: REALTIME_TOOL_FAMILY.SESSION,
-    actionKind: SESSION_TOOL_KIND.RENAME_SESSION,
-    narration: narrate(
-      SESSION_TOOL_KIND.RENAME_SESSION,
-      (action, sessions) =>
-        `renamed ${observedSessionName(action.identity, sessions)} to "${action.name}"`,
-    ),
-    schema: {
-      description:
-        "Rename one observed chat itself — not the workspace around it — to a name the " +
-        "developer just chose, in their own words. Only chats whose roster entry says they can " +
-        "be renamed take one; an ask that names the workspace renames the workspace instead.",
-      parameters: {
-        type: "object",
-        properties: {
-          ...SESSION_IDENTITY_PARAMETERS,
-          name: {
-            type: "string",
-            description: "The chat's new name, exactly as the developer chose it.",
-          },
-        },
-        required: ["provider_id", "provider_session_id", "name"],
-      },
-    },
-    validate: validateRenameSession,
+    family: ACT_FAMILY.SESSION,
+    kind: ACT_KIND.RENAME_SESSION,
+    description:
+      "Rename one observed chat itself — not the workspace around it — to a name the " +
+      "developer just chose, in their own words. Only chats whose roster entry says they can " +
+      "be renamed take one; an ask that names the workspace renames the workspace instead.",
+    request: RENAME_SESSION_REQUEST,
   },
   UPDATE_ISSUE_STATE: {
     name: "update_issue_state",
-    family: REALTIME_TOOL_FAMILY.ISSUE,
-    actionKind: ISSUE_TOOL_KIND.ISSUE_STATE,
-    narration: narrate(
-      ISSUE_TOOL_KIND.ISSUE_STATE,
-      (action) => `moved issue ${action.identity.identifier} to "${action.transition.name}"`,
-    ),
-    schema: {
-      description: "Update a tracked issue's state.",
-      parameters: {
-        type: "object",
-        properties: {
-          ...ISSUE_IDENTITY_PARAMETERS,
-          state: {
-            type: "string",
-            description: "The target state.",
-          },
-        },
-        required: ["tracker_id", "issue_id", "state"],
-      },
-    },
-    validate: validateUpdateIssueState,
+    family: ACT_FAMILY.ISSUE,
+    kind: ACT_KIND.ISSUE_STATE,
+    description: "Update a tracked issue's state.",
+    request: ISSUE_STATE_REQUEST,
   },
   COMMENT_ON_ISSUE: {
     name: "comment_on_issue",
-    family: REALTIME_TOOL_FAMILY.ISSUE,
-    actionKind: ISSUE_TOOL_KIND.ISSUE_COMMENT,
-    narration: narrate(
-      ISSUE_TOOL_KIND.ISSUE_COMMENT,
-      (action) => `commented on issue ${action.identity.identifier}`,
-    ),
-    schema: {
-      description: "Add a comment to a tracked issue.",
-      parameters: {
-        type: "object",
-        properties: {
-          ...ISSUE_IDENTITY_PARAMETERS,
-          body: {
-            type: "string",
-            description: "The comment to add.",
-          },
-        },
-        required: ["tracker_id", "issue_id", "body"],
-      },
-    },
-    validate: validateCommentOnIssue,
+    family: ACT_FAMILY.ISSUE,
+    kind: ACT_KIND.ISSUE_COMMENT,
+    description: "Add a comment to a tracked issue.",
+    request: ISSUE_COMMENT_REQUEST,
   },
   CHANGE_APP_SETTING: {
     name: "change_app_setting",
-    family: REALTIME_TOOL_FAMILY.APP,
-    actionKind: APP_TOOL_KIND.SETTING,
-    narration: narrate(
-      APP_TOOL_KIND.SETTING,
-      (action) => `changed ${action.setting.label} to ${action.value}`,
-    ),
-    schema: {
-      description: "Change a Luke setting.",
-      parameters: {
-        type: "object",
-        properties: {
-          setting_id: {
-            type: "string",
-            description: "The setting ID.",
-          },
-          value: {
-            type: "string",
-            description: "The new value.",
-          },
-          effort: {
-            type: "string",
-            description: "An optional effort level.",
-          },
-        },
-        required: ["setting_id", "value"],
-      },
-    },
-    validate: validateChangeAppSetting,
+    family: ACT_FAMILY.APP,
+    kind: ACT_KIND.SETTING,
+    description: "Change a Luke setting.",
+    request: SETTING_REQUEST,
   },
   SHOW_PANEL: {
     name: "show_panel",
-    family: REALTIME_TOOL_FAMILY.APP,
-    actionKind: APP_TOOL_KIND.PANEL,
-    narration: narrate(APP_TOOL_KIND.PANEL, (action) => `showed the ${action.tab} panel`),
-    schema: {
-      description:
-        "Show Luke's panel on a tab — and, on the sessions tab, narrow or reorder the list. " +
-        'An ask to show, see, or list sessions or agents of some kind — "show me the Codex ' +
-        'agents", "show me my local sessions" — is this tool with a filter, not open_session.',
-      parameters: {
-        type: "object",
-        properties: {
-          tab: {
-            type: "string",
-            enum: Object.values(APP_PANEL_TAB),
-            description: "The tab to show. Defaults to sessions.",
-          },
-          filters: {
-            type: "array",
-            items: { type: "string", enum: SESSION_LIST_FILTER_VALUES },
-            description: SESSION_LIST_FILTER_DESCRIPTION,
-          },
-          sort: {
-            type: "string",
-            enum: Object.values(SESSION_LIST_SORT),
-            description:
-              `Reorders the session list: ${SESSION_LIST_SORT.URGENCY} puts what needs the ` +
-              `developer first, ${SESSION_LIST_SORT.RECENCY} puts what moved last first.`,
-          },
-          query: {
-            type: "string",
-            description:
-              "Optional words to search the session list for; only rows saying every word stay.",
-          },
-        },
-        required: [],
-      },
-    },
-    remoteSchema: {
+    family: ACT_FAMILY.APP,
+    kind: ACT_KIND.PANEL,
+    description:
+      "Show Luke's panel on a tab — and, on the sessions tab, narrow or reorder the list. " +
+      'An ask to show, see, or list sessions or agents of some kind — "show me the Codex ' +
+      'agents", "show me my local sessions" — is this tool with a filter, not open_session.',
+    request: PANEL_REQUEST,
+    remote: {
       description:
         "Show the session list — and narrow, search, or reorder it. An ask to show, see, or " +
         'list sessions of some kind — "show me the waiting sessions", "show me the Conductor ' +
         'agents" — is this tool with a filter, not open_session.',
-      parameters: {
-        type: "object",
-        properties: {
-          filters: {
-            type: "array",
-            items: { type: "string", enum: REMOTE_SESSION_LIST_FILTER_VALUES },
-            description: REMOTE_SESSION_LIST_FILTER_DESCRIPTION,
-          },
-          sort: {
-            type: "string",
-            enum: Object.values(SESSION_LIST_SORT),
-            description:
-              `Reorders the session list: ${SESSION_LIST_SORT.URGENCY} puts what needs the ` +
-              `developer first, ${SESSION_LIST_SORT.RECENCY} puts what moved last first.`,
-          },
-          query: {
-            type: "string",
-            description:
-              "Optional words to search the session list for; only rows saying every word stay.",
-          },
-        },
-        required: [],
-      },
+      request: REMOTE_PANEL_REQUEST,
     },
-    validate: validateShowPanel,
   },
   OPEN_FEEDBACK_COMPOSER: {
     name: "open_feedback_composer",
-    family: REALTIME_TOOL_FAMILY.APP,
-    actionKind: APP_TOOL_KIND.FEEDBACK,
-    narration: narrate(
-      APP_TOOL_KIND.FEEDBACK,
-      (action) => `opened the ${action.composer} composer`,
-    ),
-    schema: {
-      description: "Open the feedback composer.",
-      parameters: {
-        type: "object",
-        properties: {
-          kind: {
-            type: "string",
-            enum: Object.values(FEEDBACK_COMPOSER_KIND),
-            description: "The feedback type.",
-          },
-          draft: {
-            type: "string",
-            description: "An optional draft.",
-          },
-        },
-        required: ["kind"],
-      },
-    },
-    validate: validateOpenFeedbackComposer,
+    family: ACT_FAMILY.APP,
+    kind: ACT_KIND.FEEDBACK,
+    description: "Open the feedback composer.",
+    request: FEEDBACK_REQUEST,
   },
   RUN_UPDATE_ACTION: {
     name: "run_update_action",
-    family: REALTIME_TOOL_FAMILY.APP,
-    actionKind: APP_TOOL_KIND.UPDATE,
-    narration: narrate(APP_TOOL_KIND.UPDATE, (action) => `ran the Updates row's ${action.act}`),
-    schema: {
-      description:
-        "Press the Updates row's button for the developer: check for updates, open the latest " +
-        "release's page in the browser to download by hand, or restart into an update already " +
-        "downloaded. Only the act the button currently offers runs — the app guide's Updates " +
-        "line names it.",
-      parameters: {
-        type: "object",
-        properties: {
-          action: {
-            type: "string",
-            enum: Object.values(APP_UPDATE_ACT),
-            description: "The act to run, as the guide's Updates line offers it.",
-          },
-        },
-        required: ["action"],
-      },
-    },
-    validate: validateRunUpdateAction,
+    family: ACT_FAMILY.APP,
+    kind: ACT_KIND.UPDATE,
+    description:
+      "Press the Updates row's button for the developer: check for updates, open the latest " +
+      "release's page in the browser to download by hand, or restart into an update already " +
+      "downloaded. Only the act the button currently offers runs — the app guide's Updates " +
+      "line names it.",
+    request: UPDATE_REQUEST,
   },
   REMEMBER_FACT: {
     name: "remember_fact",
-    family: REALTIME_TOOL_FAMILY.APP,
-    actionKind: APP_TOOL_KIND.REMEMBER,
-    narration: narrate(APP_TOOL_KIND.REMEMBER, (action) =>
-      action.replaces
-        ? `remembered "${action.words}" in place of something remembered before`
-        : `remembered "${action.words}"`,
-    ),
-    schema: {
-      description:
-        "Silently save a concise stable preference, personal fact, goal, or recurring constraint " +
-        "from this developer-opened turn. Skip transient details and uncertain inferences. Never " +
-        "save credentials; save sensitive facts only when explicitly asked. Do not mention routine " +
-        "memory changes. Skip duplicates, and pass an existing id as replaces when updating a " +
-        "contradiction.",
-      parameters: {
-        type: "object",
-        properties: {
-          words: {
-            type: "string",
-            description: "A concise durable fact about the developer.",
-          },
-          replaces: {
-            type: "string",
-            description:
-              "The id of the remembered entry this one stands in for, when it changes one.",
-          },
-        },
-        required: ["words"],
-      },
-    },
-    validate: validateRememberFact,
+    family: ACT_FAMILY.APP,
+    kind: ACT_KIND.REMEMBER,
+    description:
+      "Silently save a concise stable preference, personal fact, goal, or recurring constraint " +
+      "from this developer-opened turn. Skip transient details and uncertain inferences. Never " +
+      "save credentials; save sensitive facts only when explicitly asked. Do not mention routine " +
+      "memory changes. Skip duplicates, and pass an existing id as replaces when updating a " +
+      "contradiction.",
+    request: REMEMBER_REQUEST,
   },
   FORGET_FACT: {
     name: "forget_fact",
-    family: REALTIME_TOOL_FAMILY.APP,
-    actionKind: APP_TOOL_KIND.FORGET,
-    narration: narrate(APP_TOOL_KIND.FORGET, () => "forgot something remembered before"),
-    schema: {
-      description:
-        "Silently forget an outdated or explicitly unwanted memory. Only an id from the remembered " +
-        "list can be named. Do not mention routine memory changes.",
-      parameters: {
-        type: "object",
-        properties: {
-          id: { type: "string", description: "The remembered entry's id." },
-        },
-        required: ["id"],
-      },
-    },
-    validate: validateForgetFact,
+    family: ACT_FAMILY.APP,
+    kind: ACT_KIND.FORGET,
+    description:
+      "Silently forget an outdated or explicitly unwanted memory. Only an id from the remembered " +
+      "list can be named. Do not mention routine memory changes.",
+    request: FORGET_REQUEST,
   },
-} as const satisfies Record<string, RealtimeToolSpec>;
-
-/** The history sentence declared by the same row that declared the act. */
-export function actNarration(action: CarriedAct, sessions: readonly Session[]): string {
-  const row = Object.values(ACTS).find((candidate) => candidate.actionKind === action.kind);
-  return row?.narration(action, sessions) ?? "carried an act";
-}
+} as const satisfies Record<string, ToolSpec<ActFamily, ActKind>>;
 
 function namesFromToolTable<T extends Record<string, { readonly name: string }>>(table: T) {
   // SAFETY: keys are drawn from the same table object; each entry's name field is the tool id.
@@ -1799,25 +234,38 @@ function namesFromToolTable<T extends Record<string, { readonly name: string }>>
 
 export const REALTIME_TOOL = namesFromToolTable(ACTS);
 
-const REALTIME_TOOL_LIST: readonly RealtimeToolSpec[] = Object.values(ACTS);
+const ACT_LIST: readonly ToolSpec<ActFamily, ActKind>[] = Object.values(ACTS);
 
-const ACTS_BY_NAME = new Map<string, RealtimeToolSpec>(
-  REALTIME_TOOL_LIST.map((tool) => [tool.name, tool]),
+const ACTS_BY_NAME = new Map<string, ToolSpec<ActFamily, ActKind>>(
+  ACT_LIST.map((tool) => [tool.name, tool]),
 );
 
 /** The family a named tool belongs to, or nothing when no such tool exists. */
-export function realtimeToolFamily(name: string): RealtimeToolFamily | undefined {
+export function realtimeToolFamily(name: string): ActFamily | undefined {
   return ACTS_BY_NAME.get(name)?.family;
 }
 
-/** The tool schemas a Realtime session is configured with. */
-export function realtimeToolDefinitions(): readonly RealtimeToolWireDefinition[] {
-  return REALTIME_TOOL_LIST.map((tool) => ({
+/** One function tool as a Responses or Realtime request carries it. */
+export interface ActToolDefinition {
+  type: "function";
+  name: string;
+  description: string;
+  parameters: JsonSchemaNode;
+}
+
+function definitionOf(spec: ToolSpec<ActFamily, ActKind>, remote: boolean): ActToolDefinition {
+  const shape = (remote ? spec.remote : undefined) ?? spec;
+  return {
     type: "function",
-    name: tool.name,
-    description: tool.schema.description,
-    parameters: tool.schema.parameters,
-  }));
+    name: spec.name,
+    description: shape.description,
+    parameters: shape.request.jsonSchema(),
+  };
+}
+
+/** The tool schemas a Realtime session is configured with. */
+export function realtimeToolDefinitions(): readonly ActToolDefinition[] {
+  return ACT_LIST.map((tool) => definitionOf(tool, false));
 }
 
 /**
@@ -1825,119 +273,60 @@ export function realtimeToolDefinitions(): readonly RealtimeToolWireDefinition[]
  * The session writes are the ones the hosted act endpoints serve — MESSAGE,
  * CONTROL, CREATE_WORKSPACE, ADD_AGENT, RENAME_WORKSPACE, RENAME_SESSION —
  * and the phone validates each against the roster and projects it was shown
- * before an endpoint sees it, the renderer's half of the gauntlet. OPEN lands
- * on the session's own screen in the app and PANEL on the app's own list, so
- * each is performed on the phone and reaches no endpoint at all.
+ * before an endpoint sees it. OPEN lands on the session's own screen in the
+ * app and PANEL on the app's own list, so each is performed on the phone and
+ * reaches no endpoint at all.
  *
- * The issue acts are absent because no tracker is connected on the phone; a setting
- * change, the feedback composer, and the Updates row are surfaces the phone
- * does not draw. REMEMBER and FORGET are absent because the phone keeps no
- * memory: Luke's durable facts live on the Mac alone.
+ * The issue acts are absent because no tracker is connected on the phone; a
+ * setting change, the feedback composer, and the Updates row are surfaces the
+ * phone does not draw. REMEMBER and FORGET are absent because the phone keeps
+ * no memory: Luke's durable facts live on the Mac alone.
  */
-const REMOTE_ACTION_KINDS: ReadonlySet<string> = new Set([
-  SESSION_TOOL_KIND.MESSAGE,
-  SESSION_TOOL_KIND.CONTROL,
-  SESSION_TOOL_KIND.OPEN,
-  SESSION_TOOL_KIND.CREATE_WORKSPACE,
-  SESSION_TOOL_KIND.ADD_AGENT,
-  SESSION_TOOL_KIND.RENAME_WORKSPACE,
-  SESSION_TOOL_KIND.RENAME_SESSION,
-  APP_TOOL_KIND.PANEL,
+const REMOTE_ACT_KINDS: ReadonlySet<string> = new Set<ActKind>([
+  ACT_KIND.MESSAGE,
+  ACT_KIND.CONTROL,
+  ACT_KIND.OPEN,
+  ACT_KIND.CREATE_WORKSPACE,
+  ACT_KIND.ADD_AGENT,
+  ACT_KIND.RENAME_WORKSPACE,
+  ACT_KIND.RENAME_SESSION,
+  ACT_KIND.PANEL,
 ]);
 
-export function remoteRealtimeToolDefinitions(): readonly RealtimeToolWireDefinition[] {
-  return REALTIME_TOOL_LIST.filter((tool) => REMOTE_ACTION_KINDS.has(tool.actionKind)).map(
-    (tool) => {
-      const schema = tool.remoteSchema ?? tool.schema;
-      return {
-        type: "function",
-        name: tool.name,
-        description: schema.description,
-        parameters: schema.parameters,
-      };
-    },
+export function remoteRealtimeToolDefinitions(): readonly ActToolDefinition[] {
+  return ACT_LIST.filter((tool) => REMOTE_ACT_KINDS.has(tool.kind)).map((tool) =>
+    definitionOf(tool, true),
   );
 }
 
-/**
- * Validates one tool call against the sessions actually being observed. This
- * is the renderer's half of the gauntlet — the main process re-validates
- * against its registry — and it exists so a call the model composed can only
- * name a session Luke was shown, doing something that session advertised.
- * Everything else is refused with a reason Luke can say aloud.
- */
-export function sessionToolAction(
-  call: RealtimeFunctionCall,
-  sessions: readonly Session[],
-  workspaceProjects: readonly ObservedWorkspaceProject[] = [],
-  // The models a creation ask may name, per provider — the app's own
-  // build-documented tables, handed in so this stays brand-neutral. The
-  // default offers none, so an ask that names a model is refused rather than
-  // forwarded unchecked.
-  agentModels: (providerId: string) => readonly WorkspaceAgentModels[] = () => [],
-  // The developer's saved creation tie-breaks, riding in beside the projects
-  // they narrow — see {@link SessionToolContext}.
-  defaultProviderId?: string,
-  defaultProjectIds?: Readonly<Partial<Record<string, string>>>,
-): SessionToolAction {
-  const parsed = parseToolArguments(call);
-  if (!parsed.ok) return { status: ACT_RESULT_STATUS.REJECTED, reason: parsed.reason };
-  const tool = ACTS_BY_NAME.get(call.name);
-  if (!tool || tool.family !== REALTIME_TOOL_FAMILY.SESSION) {
-    return { status: ACT_RESULT_STATUS.REJECTED, reason: "No such tool exists." };
+function refuse(reason: string): Refusal {
+  return { status: ACT_RESULT_STATUS.REJECTED, reason };
+}
+
+function parseToolArguments(call: RealtimeFunctionCall): UnparsedWireValue | undefined {
+  try {
+    // SAFETY: JSON.parse returns a runtime value; isRecord validates the object contract.
+    return JSON.parse(call.argumentsJson) as UnparsedWireValue;
+  } catch {
+    return undefined;
   }
-  return tool.validate(parsed.value, {
-    sessions,
-    workspaceProjects,
-    agentModels,
-    defaultProviderId,
-    defaultProjectIds,
-  });
 }
 
 /**
- * Validates one issue tool call against the issues actually observed. The
- * renderer's half of the same gauntlet the session tools run — the main
- * process re-validates against what it observed — so a call the model
- * composed can only name an issue Luke was shown, going somewhere its
- * tracker advertised. Everything else is refused with a reason Luke can say
- * aloud.
+ * One model-emitted tool call, admitted. The name selects the act; the
+ * arguments are read as that act's own fields and handed to `admit`, which is
+ * the whole of validation. A name no row declares, or arguments that are not a
+ * record, refuse before an admitter runs.
  */
-export function issueToolAction(
+export async function toolAction(
   call: RealtimeFunctionCall,
-  issues: readonly TrackedIssue[],
-): IssueToolAction {
+  context: AdmitContext,
+): Promise<ValidatedAct | Refusal> {
   const parsed = parseToolArguments(call);
-  if (!parsed.ok) return { status: ACT_RESULT_STATUS.REJECTED, reason: parsed.reason };
+  if (!isRecord(parsed)) return refuse(ACT_REFUSAL.UNREADABLE);
   const tool = ACTS_BY_NAME.get(call.name);
-  if (!tool || tool.family !== REALTIME_TOOL_FAMILY.ISSUE) {
-    return { status: ACT_RESULT_STATUS.REJECTED, reason: "No such tool exists." };
-  }
-  return tool.validate(parsed.value, { issues });
-}
-
-/**
- * Validates one app tool call against the guide the app actually provided and
- * the sessions actually observed. The same posture as {@link sessionToolAction}:
- * a call the model composed can only name a setting the guide lists, changing
- * it to a value the guide accepts, a panel view the roster can fill, or the
- * composer on one of its own two kinds — and a setting the guide marks as
- * by-hand-only is refused with the path to it, so the refusal Luke voices is
- * itself the guidance.
- */
-export function appToolAction(
-  call: RealtimeFunctionCall,
-  guide: AppGuideSnapshot,
-  sessions: readonly Session[],
-  rememberedFacts: readonly RememberedFact[] = [],
-): AppToolAction {
-  const parsed = parseToolArguments(call);
-  if (!parsed.ok) return { status: ACT_RESULT_STATUS.REJECTED, reason: parsed.reason };
-  const tool = ACTS_BY_NAME.get(call.name);
-  if (!tool || tool.family !== REALTIME_TOOL_FAMILY.APP) {
-    return { status: ACT_RESULT_STATUS.REJECTED, reason: "No such tool exists." };
-  }
-  return tool.validate(parsed.value, { guide, sessions, rememberedFacts });
+  if (!tool) return refuse(ACT_REFUSAL.NO_TOOL);
+  return admit({ kind: tool.kind, fields: parsed }, context);
 }
 
 /**

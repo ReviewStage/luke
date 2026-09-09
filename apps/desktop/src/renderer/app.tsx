@@ -1,4 +1,4 @@
-import { APP_TOOL_KIND, dispatchByKind } from "@sidecar/acts";
+import { ACT_KIND, dispatchByKind } from "@sidecar/acts";
 import {
   PRODUCT_PANEL_SOURCE,
   PRODUCT_SEARCH_SURFACE,
@@ -1713,7 +1713,7 @@ export function App(): React.JSX.Element {
   const carryAppAction = useCallback<AppActionCarrier>(
     async (action) =>
       dispatchByKind(action, {
-        [APP_TOOL_KIND.SETTING]: async (action): Promise<WireRecord> => {
+        [ACT_KIND.SETTING]: async (action): Promise<WireRecord> => {
           // The store's answer is caught rather than drawn: the switch is what
           // Luke is on his way to move, so it waits for him to reach it. It is
           // caught in a local and handed to this act alone, because one reply
@@ -1781,7 +1781,7 @@ export function App(): React.JSX.Element {
           }
           return outcome;
         },
-        [APP_TOOL_KIND.FEEDBACK]: async (action) => {
+        [ACT_KIND.FEEDBACK]: async (action) => {
           // The main process expands the window and sends the composer's
           // lifecycle event down the same ordered channel as the mode event,
           // so the composer's shape can never lose a race to the panel apply
@@ -1825,7 +1825,7 @@ export function App(): React.JSX.Element {
                   }),
           };
         },
-        [APP_TOOL_KIND.PANEL]: async (action) => {
+        [ACT_KIND.PANEL]: async (action) => {
           // Whether this ask is what opens the panel, read before it does: an
           // errand into a shape still growing has to trail the whole opening,
           // and one into a panel already up does not.
@@ -1894,7 +1894,7 @@ export function App(): React.JSX.Element {
             ...(notes.length > 0 ? { note: notes.join(" ") } : undefined),
           };
         },
-        [APP_TOOL_KIND.UPDATE]: async (action): Promise<WireRecord> => {
+        [ACT_KIND.UPDATE]: async (action): Promise<WireRecord> => {
           // The Updates row's own three presses, behind the same bridge calls
           // its button uses; the main process holds its own guards — a check
           // never interrupts a download, an install runs only on a build in

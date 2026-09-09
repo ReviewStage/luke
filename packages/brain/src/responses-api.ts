@@ -1,4 +1,4 @@
-import type { RealtimeToolWireDefinition } from "@sidecar/acts";
+import type { ActToolDefinition } from "@sidecar/acts";
 import {
   RESPONSES_CONTENT_PART_TYPE,
   RESPONSES_INPUT_ITEM_TYPE,
@@ -61,10 +61,16 @@ export const BRAIN_REASONING_EFFORT = {
 export type BrainReasoningEffort =
   (typeof BRAIN_REASONING_EFFORT)[keyof typeof BRAIN_REASONING_EFFORT];
 
+/** A function tool built from a contract schema, whose parameters travel as they were declared. */
+export interface ResponsesToolDefinition {
+  type: "function";
+  name: string;
+  description: string;
+  parameters: WireRecord;
+}
+
 /** A function tool as the Responses request carries it: the acts table's own row, or a contract schema wrapped. */
-export type ResponsesFunctionTool =
-  | RealtimeToolWireDefinition
-  | { type: "function"; name: string; description: string; parameters: WireRecord };
+export type ResponsesFunctionTool = ActToolDefinition | ResponsesToolDefinition;
 
 export interface BrainResponsesOptions {
   model: string;
@@ -224,7 +230,7 @@ export const BRAIN_RESPONSES_COMPACT_PATH = "/responses/compact";
 export const BRAIN_RESPONSES_INPUT_TOKENS_PATH = "/responses/input_tokens";
 
 /** A tool as the brain's contracts carry it, as the Responses API takes it: a function tool. */
-export function responsesToolDefinition(schema: ToolSchema): ResponsesFunctionTool {
+export function responsesToolDefinition(schema: ToolSchema): ResponsesToolDefinition {
   return {
     type: "function",
     name: schema.name,
@@ -234,7 +240,7 @@ export function responsesToolDefinition(schema: ToolSchema): ResponsesFunctionTo
 }
 
 /** A tool as the acts table or the brain defines it, in the brain's contract shape. */
-export function toolSchemaFromDefinition(definition: RealtimeToolWireDefinition): ToolSchema {
+export function toolSchemaFromDefinition(definition: ActToolDefinition): ToolSchema {
   // SAFETY: the parameters are a JSON-schema object built from literals; a JSON round trip is its wire form.
   const parameters = wireRecord(
     JSON.parse(JSON.stringify(definition.parameters)) as UnparsedWireValue,

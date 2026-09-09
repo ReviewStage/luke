@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import {
-  type CarriedIssueAction,
-  type CarriedSessionAction,
+  ACT_KIND,
+  type ActGuard,
+  type CarriedIssueAct,
+  type CarriedSessionAct,
   dispatchByKind,
-  ISSUE_TOOL_KIND,
-  SESSION_TOOL_KIND,
+  guardedRead,
 } from "@sidecar/acts";
 import {
   PRODUCT_EVENT,
@@ -13,7 +14,6 @@ import {
   type ProductSessionAct,
   type RecordProductEvent,
 } from "@sidecar/analytics";
-import { settledUnlessAborted } from "@sidecar/brain";
 import {
   ISSUE_ACTION_KIND,
   isIssueTrackerId,
@@ -22,7 +22,6 @@ import {
   type TrackerActionResult,
 } from "@sidecar/issues";
 import {
-  ACT_KIND,
   advertisedActFor,
   advertisedControl,
   advertisedControls,
@@ -103,36 +102,6 @@ export interface SessionActPerformerDependencies {
   recordProductEvent: RecordProductEvent;
 }
 
-/**
- * Whether the turn an act belongs to still stands, asked once more at the
- * last boundary before a provider effect. A brain-origin act arrives with
- * one; a row press, which is not a write and opens its turn and its effect
- * in the same breath, carries none. The performer asks it only after an
- * await of its own that stands between validation and the effect — the
- * stored agent defaults read before a create or a spawn — because an act
- * whose turn ended during that read must refuse rather than start the write.
- */
-/**
- * A read awaited before an effect, held only as long as the guard's standing:
- * once the signal fires the wait answers nothing, and the `isRevoked` check
- * that follows every such read refuses the act before anything is dispatched.
- * A guard with no signal — a row's own press — waits the read out.
- */
-async function guardedRead<T>(
-  read: Promise<T>,
-  guard: ActExecutionGuard | undefined,
-): Promise<T | undefined> {
-  if (!guard?.signal) return read;
-  const settled = await settledUnlessAborted(read, guard.signal);
-  return settled.aborted ? undefined : settled.value;
-}
-
-export interface ActExecutionGuard {
-  isRevoked(): boolean;
-  /** Fires on revocation, so a read awaited before the effect settles at once rather than finishing first. */
-  readonly signal?: AbortSignal;
-}
-
 export interface SessionActsIpcDependencies {
   ipcMain: Pick<IpcMain, "handle" | "on">;
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
@@ -151,10 +120,14 @@ export interface SessionActsIpcDependencies {
  * not a write and reaches them without the brain.
  */
 export interface SessionActPerformer {
-  perform(
-    action: CarriedSessionAction | CarriedIssueAction,
-    guard?: ActExecutionGuard,
-  ): Promise<WireRecord>;
+  /**
+   * The guard is asked once more at the last boundary before a provider
+   * effect. A brain-origin act arrives with one; a row press, which is not a
+   * write and opens its turn and its effect in the same breath, carries none.
+   * Only a create and a spawn ask it, because only they await a read of their
+   * own — the stored agent defaults — between admission and the write.
+   */
+  perform(action: CarriedSessionAct | CarriedIssueAct, guard?: ActGuard): Promise<WireRecord>;
   openSession(identity: SessionIdentity): Promise<SessionOpenResult>;
   openSessionApplication(
     identity: SessionIdentity,
@@ -412,7 +385,7 @@ export function createSessionActPerformer(
     name: string | undefined,
     task: string | undefined,
     namedSelection: WorkspaceAgentSelection | undefined,
-    guard: ActExecutionGuard | undefined,
+    guard: ActGuard | undefined,
   ): Promise<ProviderWorkspaceResult> => {
     if (!sendsNetwork) {
       return {
@@ -549,7 +522,7 @@ export function createSessionActPerformer(
     task: string | undefined,
     namedModel: string | undefined,
     namedEffort: string | undefined,
-    guard: ActExecutionGuard | undefined,
+    guard: ActGuard | undefined,
   ): Promise<WireRecord> => {
     const session = sessionRegistry.get(identity);
     if (!session) return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_SESSION };
@@ -688,7 +661,7 @@ export function createSessionActPerformer(
   // tracker itself listed — so what reaches a tracker client is built from
   // observed state, never from what a model composed. A fixture run observes
   // no tracker, so it refuses every act.
-  const performIssueAct = async (action: CarriedIssueAction): Promise<TrackerActionResult> => {
+  const performIssueAct = async (action: CarriedIssueAct): Promise<TrackerActionResult> => {
     const issue = trackedIssues()?.find(
       (candidate) =>
         candidate.trackerId === action.identity.trackerId &&
@@ -704,7 +677,7 @@ export function createSessionActPerformer(
     }
 
     let result: TrackerActionResult;
-    if (action.kind === ISSUE_TOOL_KIND.ISSUE_STATE) {
+    if (action.kind === ACT_KIND.ISSUE_STATE) {
       const transition = issue.transitions.find(
         (candidate) => candidate.id === action.transition.id,
       );
@@ -741,7 +714,7 @@ export function createSessionActPerformer(
         recordProductEvent(PRODUCT_EVENT.ISSUE_ACT_SEND, {
           tracker_id: issue.trackerId,
           issue_act:
-            action.kind === ISSUE_TOOL_KIND.ISSUE_STATE
+            action.kind === ACT_KIND.ISSUE_STATE
               ? PRODUCT_ISSUE_ACT.STATE_MOVE
               : PRODUCT_ISSUE_ACT.COMMENT_ADD,
         });
@@ -754,17 +727,17 @@ export function createSessionActPerformer(
   // own between validation and the provider effect, so only they take the
   // guard; the rest reach their adapter or the CLI with nothing awaited between.
   const performSessionAction = (
-    action: CarriedSessionAction,
-    guard: ActExecutionGuard | undefined,
+    action: CarriedSessionAct,
+    guard: ActGuard | undefined,
   ): Promise<WireRecord> =>
     dispatchByKind(action, {
-      [SESSION_TOOL_KIND.MESSAGE]: (act) => sendMessage(act.identity, act.text),
-      [SESSION_TOOL_KIND.CONTROL]: (act) => executeControl(act.identity, act.control.id),
-      [SESSION_TOOL_KIND.OPEN]: async (act): Promise<WireRecord> =>
+      [ACT_KIND.MESSAGE]: (act) => sendMessage(act.identity, act.text),
+      [ACT_KIND.CONTROL]: (act) => executeControl(act.identity, act.control.id),
+      [ACT_KIND.OPEN]: async (act): Promise<WireRecord> =>
         act.applicationId
           ? openSessionApplication(act.identity, act.applicationId)
           : openSession(act.identity),
-      [SESSION_TOOL_KIND.CREATE_WORKSPACE]: async (act): Promise<WireRecord> =>
+      [ACT_KIND.CREATE_WORKSPACE]: async (act): Promise<WireRecord> =>
         createWorkspace(
           act.providerId,
           act.providerProjectId,
@@ -775,7 +748,7 @@ export function createSessionActPerformer(
           act.agentSelection,
           guard,
         ),
-      [SESSION_TOOL_KIND.ADD_AGENT]: (act) =>
+      [ACT_KIND.ADD_AGENT]: (act) =>
         addWorkspaceAgent(
           act.identity,
           act.agent,
@@ -785,16 +758,13 @@ export function createSessionActPerformer(
           act.effort,
           guard,
         ),
-      [SESSION_TOOL_KIND.RENAME_WORKSPACE]: (act) => renameWorkspace(act.identity, act.name),
-      [SESSION_TOOL_KIND.RENAME_SESSION]: (act) => renameSession(act.identity, act.name),
+      [ACT_KIND.RENAME_WORKSPACE]: (act) => renameWorkspace(act.identity, act.name),
+      [ACT_KIND.RENAME_SESSION]: (act) => renameSession(act.identity, act.name),
     });
 
   return {
     async perform(action, guard) {
-      if (
-        action.kind === ISSUE_TOOL_KIND.ISSUE_STATE ||
-        action.kind === ISSUE_TOOL_KIND.ISSUE_COMMENT
-      ) {
+      if (action.kind === ACT_KIND.ISSUE_STATE || action.kind === ACT_KIND.ISSUE_COMMENT) {
         return performIssueAct(action);
       }
       return performSessionAction(action, guard);

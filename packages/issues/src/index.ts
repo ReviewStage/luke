@@ -9,6 +9,7 @@ export {
   type IssueTransition,
   isIssueTrackerId,
   issueCommentText,
+  maximumIssueCommentLength,
   maximumIssueTransitions,
   normalizeTrackedIssue,
   type TrackedIssue,

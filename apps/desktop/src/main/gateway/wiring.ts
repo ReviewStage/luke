@@ -1,4 +1,4 @@
-import { APP_TOOL_KIND } from "@sidecar/acts";
+import { ACT_KIND } from "@sidecar/acts";
 import { brainRequestRecordFromWire } from "@sidecar/brain/requests";
 import { type ConversationEntry, conversationEntryFromWire } from "@sidecar/realtime";
 import { GatewayClient, type GatewayTransport } from "@sidecar/runtime";
@@ -84,8 +84,8 @@ function isCarriedAppAction(
   return (
     isRecord(value) &&
     isWireString(value.kind) &&
-    value.kind !== APP_TOOL_KIND.REMEMBER &&
-    value.kind !== APP_TOOL_KIND.FORGET
+    value.kind !== ACT_KIND.REMEMBER &&
+    value.kind !== ACT_KIND.FORGET
   );
 }
 
