@@ -135,6 +135,7 @@ import {
   isSettingEntryKey,
   isSettingsResetScope,
   SETTING_SIDE_EFFECT,
+  type SettingEntryValue,
   settingAnalytics,
   settingEntryGuard,
   VOICE_SOURCE,
@@ -1865,7 +1866,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
       }
       const result = await settingsWrite(
         // SAFETY: settingEntryGuard validated the entry before it reaches the store.
-        () => settingsStore.setEntry(field, key, parsed.value as UnparsedWireValue),
+        () => settingsStore.setEntry(field, key, parsed.value as SettingEntryValue<typeof field>),
         async (saved) => {
           if (saved.reason) return;
           recordSettingUpdate(field, saved.settings);
