@@ -42,9 +42,6 @@ importers:
       '@sentry/esbuild-plugin':
         specifier: 5.4.0
         version: 5.4.0(rollup@4.62.4)
-      '@sidecar/account':
-        specifier: workspace:*
-        version: link:../../packages/account
       '@sidecar/acts':
         specifier: workspace:*
         version: link:../../packages/acts
@@ -114,9 +111,6 @@ importers:
       '@sidecar/surface':
         specifier: workspace:*
         version: link:../../packages/surface
-      '@sidecar/trackers':
-        specifier: workspace:*
-        version: link:../../packages/trackers
       '@sidecar/voice':
         specifier: workspace:*
         version: link:../../packages/voice
@@ -275,34 +269,6 @@ importers:
         specifier: 7.3.1
         version: 7.3.1(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0)
 
-  packages/account:
-    dependencies:
-      '@sidecar/credentials':
-        specifier: workspace:*
-        version: link:../credentials
-      '@sidecar/hosted':
-        specifier: workspace:*
-        version: link:../hosted
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../session
-      '@sidecar/settings':
-        specifier: workspace:*
-        version: link:../settings
-      '@sidecar/wire':
-        specifier: workspace:*
-        version: link:../wire
-    devDependencies:
-      '@types/node':
-        specifier: 26.2.0
-        version: 26.2.0
-      tsx:
-        specifier: 4.23.12
-        version: 4.23.12
-      typescript:
-        specifier: 7.0.2
-        version: 7.0.2
-
   packages/acts:
     dependencies:
       '@sidecar/guide':
@@ -423,6 +389,9 @@ importers:
 
   packages/credentials:
     dependencies:
+      '@sidecar/hosted':
+        specifier: workspace:*
+        version: link:../hosted
       '@sidecar/issues':
         specifier: workspace:*
         version: link:../issues
@@ -552,9 +521,6 @@ importers:
 
   packages/host:
     dependencies:
-      '@sidecar/account':
-        specifier: workspace:*
-        version: link:../account
       '@sidecar/acts':
         specifier: workspace:*
         version: link:../acts
@@ -612,9 +578,6 @@ importers:
       '@sidecar/surface':
         specifier: workspace:*
         version: link:../surface
-      '@sidecar/trackers':
-        specifier: workspace:*
-        version: link:../trackers
       '@sidecar/voice':
         specifier: workspace:*
         version: link:../voice
@@ -937,28 +900,6 @@ importers:
       '@types/react':
         specifier: 19.2.18
         version: 19.2.18
-      tsx:
-        specifier: 4.23.12
-        version: 4.23.12
-      typescript:
-        specifier: 7.0.2
-        version: 7.0.2
-
-  packages/trackers:
-    dependencies:
-      '@sidecar/credentials':
-        specifier: workspace:*
-        version: link:../credentials
-      '@sidecar/issues':
-        specifier: workspace:*
-        version: link:../issues
-      '@sidecar/wire':
-        specifier: workspace:*
-        version: link:../wire
-    devDependencies:
-      '@types/node':
-        specifier: 26.2.0
-        version: 26.2.0
       tsx:
         specifier: 4.23.12
         version: 4.23.12

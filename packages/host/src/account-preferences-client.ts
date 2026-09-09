@@ -1,3 +1,4 @@
+import type { FetchLike } from "@sidecar/credentials";
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { type AccountPreferences, accountPreferencesFromWire } from "@sidecar/settings";
 import {
@@ -9,7 +10,6 @@ import {
   unparsedWire,
   withoutTrailingSlash,
 } from "@sidecar/wire";
-import type { FetchLike } from "./client.js";
 
 const PREFERENCES_DEFAULTS = {
   REQUEST_TIMEOUT_MS: 10_000,

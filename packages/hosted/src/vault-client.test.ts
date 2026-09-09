@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CLOUD_AGENT_PROVIDER_ID } from "@sidecar/session";
-import { HostedVaultClient } from "./vault.js";
+import { HostedVaultClient } from "./vault-client.js";
 
 const LIST_ANSWER = {
   keys: [{ providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, updatedAt: 1_800_000_000_000 }],

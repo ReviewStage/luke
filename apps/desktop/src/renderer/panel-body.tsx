@@ -1,9 +1,9 @@
+import type { BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
 import {
   ACCOUNT_STATUS,
   type AccountProvider,
   type AccountSnapshot,
-} from "@sidecar/account/snapshot";
-import type { BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
+} from "@sidecar/credentials/snapshot";
 import { SessionRow as PanelSessionRow, ProviderMark } from "@sidecar/panel";
 import type { ConversationEntry } from "@sidecar/realtime";
 import {

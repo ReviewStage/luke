@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ACCOUNT_STATUS } from "@sidecar/account/snapshot";
 import { SESSION_LIST_ALL } from "@sidecar/acts";
+import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import {
   APP_PANEL_TAB,
   APP_SETTING_KIND,

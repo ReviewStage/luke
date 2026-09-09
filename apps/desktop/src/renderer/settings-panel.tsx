@@ -1,5 +1,3 @@
-import type { AccountSnapshot } from "@sidecar/account/snapshot";
-import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@sidecar/account/snapshot";
 import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import {
   APPLE_CALENDAR_ID,
@@ -7,6 +5,8 @@ import {
   GOOGLE_CALENDAR_ID,
   GOOGLE_CALENDAR_NAME,
 } from "@sidecar/calendar/vocabulary";
+import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import type { CredentialProvider, CredentialSource } from "@sidecar/credentials/vocabulary";
 import {
   CLOUD_AGENT_PROVIDER_LIST,

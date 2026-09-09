@@ -39,7 +39,6 @@
   "devDependencies": {
     "@openai/agents-realtime": "0.17.0",
     "@sentry/esbuild-plugin": "5.4.0",
-    "@sidecar/account": "workspace:*",
     "@sidecar/acts": "workspace:*",
     "@sidecar/analytics": "workspace:*",
     "@sidecar/brain": "workspace:*",
@@ -63,7 +62,6 @@
     "@sidecar/session": "workspace:*",
     "@sidecar/settings": "workspace:*",
     "@sidecar/surface": "workspace:*",
-    "@sidecar/trackers": "workspace:*",
     "@sidecar/voice": "workspace:*",
     "@sidecar/wire": "workspace:*",
     "@types/node": "26.2.0",

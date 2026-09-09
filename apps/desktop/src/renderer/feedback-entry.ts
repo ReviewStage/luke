@@ -1,4 +1,4 @@
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/account/snapshot";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
 import type { FeedbackImage, FeedbackKind } from "@sidecar/feedback";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS } from "@sidecar/feedback";
 

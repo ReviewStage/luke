@@ -1,7 +1,8 @@
 // The same collapsing the account's refresh uses, and for the same reason:
 // Linear consumes a refresh token when it is spent, so two refreshes racing
 // would have the loser spend one Linear has already rotated away.
-import { ACCESS_TOKEN_EXPIRY_SLACK_MS, singleFlight } from "@sidecar/credentials";
+import { ACCESS_TOKEN_EXPIRY_SLACK_MS } from "../expiry.js";
+import { singleFlight } from "../single-flight.js";
 import {
   LINEAR_REFRESH_STATUS,
   type LinearGrant,

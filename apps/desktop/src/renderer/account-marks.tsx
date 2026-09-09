@@ -1,4 +1,4 @@
-import { ACCOUNT_PROVIDER, type AccountProvider } from "@sidecar/account/snapshot";
+import { ACCOUNT_PROVIDER, type AccountProvider } from "@sidecar/credentials/snapshot";
 
 /**
  * The two identity providers' own marks, traced for the sign-in surface. They

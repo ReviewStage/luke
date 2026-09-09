@@ -21,8 +21,8 @@
  * the guide says whether a provider is connected, and no more.
  */
 
-import type { AccountSnapshot } from "@sidecar/account/snapshot";
-import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@sidecar/account/snapshot";
+import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import type { CredentialSource } from "@sidecar/credentials/vocabulary";
 import {
   CLOUD_AGENT_PROVIDER_LIST,

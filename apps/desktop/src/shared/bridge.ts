@@ -1,5 +1,3 @@
-import type { AccountProvider, AccountSnapshot } from "@sidecar/account/snapshot";
-import { isAccountProvider } from "@sidecar/account/snapshot";
 import { ACT_KIND } from "@sidecar/acts";
 import {
   isProductExchangeKind,
@@ -29,6 +27,8 @@ import {
 } from "@sidecar/brain/requests-wire";
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { AppleCalendarAccess } from "@sidecar/calendar/vocabulary";
+import type { AccountProvider, AccountSnapshot } from "@sidecar/credentials/snapshot";
+import { isAccountProvider } from "@sidecar/credentials/snapshot";
 import { type CredentialProviderId, isCredentialProviderId } from "@sidecar/credentials/vocabulary";
 import { type AgentWireTrace, isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import {

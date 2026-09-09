@@ -1,4 +1,3 @@
-import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "@sidecar/credentials/vocabulary";
 import {
   ACT_RESULT_STATUS,
   ISSUE_ACTION_KIND,
@@ -20,6 +19,7 @@ import {
   type WireRecord,
   wireRecord,
 } from "@sidecar/wire";
+import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "../credential-providers.js";
 
 // Shared with the credential registry so the key the user saves and the
 // tracker Luke reads with it can never name different things.

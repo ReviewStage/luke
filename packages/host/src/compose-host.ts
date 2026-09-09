@@ -1,13 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import {
-  AccountClient,
-  AccountPreferencesClient,
-  AccountSessionManager,
-  accountGateOpen,
-  HostedVaultClient,
-} from "@sidecar/account";
-import { ACCOUNT_STATUS, type AccountSnapshot, isAccountProvider } from "@sidecar/account/snapshot";
 import { rememberedFactsText } from "@sidecar/acts";
 import {
   PRODUCT_ACCOUNT_ACT,
@@ -45,11 +37,22 @@ import {
   CALENDAR_PRIVACY_PANE_URL,
 } from "@sidecar/calendar/vocabulary";
 import {
+  AccountClient,
+  AccountSessionManager,
+  accountGateOpen,
   CREDENTIAL_PROVIDER_ID,
   type CredentialProviderId,
   isCredentialProviderId,
+  LinearCredentials,
+  LinearIssueTracker,
+  LinearSignIn,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "@sidecar/credentials";
+import {
+  ACCOUNT_STATUS,
+  type AccountSnapshot,
+  isAccountProvider,
+} from "@sidecar/credentials/snapshot";
 import { AgentTraceWriter, tracedModelAdapter } from "@sidecar/devtrace";
 import { isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import {
@@ -73,6 +76,7 @@ import {
   EMPTY_APP_GUIDE,
   isAppGuideSnapshot,
 } from "@sidecar/guide";
+import { HostedVaultClient } from "@sidecar/hosted";
 import { ISSUE_TRACKER_ID, normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
 import {
   type MemorySyncReport,
@@ -171,7 +175,6 @@ import {
   VOICE_SOURCE_COUNTED_AS,
 } from "@sidecar/settings";
 import type { ObservedAccountCalendars, SettingsUpdateResult } from "@sidecar/settings/wire";
-import { LinearCredentials, LinearIssueTracker, LinearSignIn } from "@sidecar/trackers";
 import { type VoiceCapabilityApplication, VoiceCapabilityAssembler } from "@sidecar/voice";
 import {
   ACT_RESULT_STATUS,
@@ -184,6 +187,7 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
+import { AccountPreferencesClient } from "./account-preferences-client.js";
 import {
   APPLE_CALENDAR_ACCESS_REFUSAL,
   type AppleCalendarHelperRun,

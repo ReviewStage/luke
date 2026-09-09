@@ -1,5 +1,3 @@
-import type { AccountProvider, AccountSnapshot } from "@sidecar/account/snapshot";
-import { ACCOUNT_STATUS } from "@sidecar/account/snapshot";
 import { ACT_KIND, dispatchByKind } from "@sidecar/acts";
 import {
   PRODUCT_PANEL_SOURCE,
@@ -7,6 +5,8 @@ import {
   PRODUCT_SURFACE_EVENT,
 } from "@sidecar/analytics";
 import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
+import type { AccountProvider, AccountSnapshot } from "@sidecar/credentials/snapshot";
+import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import type { CredentialProviderId } from "@sidecar/credentials/vocabulary";
 import {
   CREDENTIAL_PROVIDER_LIST,

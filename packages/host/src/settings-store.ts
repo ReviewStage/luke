@@ -1,11 +1,5 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import {
-  ACCOUNT_STATUS,
-  type AccountProvider,
-  type AccountSnapshot,
-  isAccountProvider,
-} from "@sidecar/account/snapshot";
 import { APPLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
 import {
   CREDENTIAL_CONNECTION,
@@ -13,8 +7,16 @@ import {
   type CredentialFormat,
   type CredentialProvider,
   type CredentialProviderId,
+  type LinearGrant,
+  linearSignInConfig,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "@sidecar/credentials";
+import {
+  ACCOUNT_STATUS,
+  type AccountProvider,
+  type AccountSnapshot,
+  isAccountProvider,
+} from "@sidecar/credentials/snapshot";
 import {
   CREDENTIAL_SOURCE,
   type CredentialSource,
@@ -47,11 +49,11 @@ import {
 // connection into is exactly what `readAppleCalendarConnection` promises it.
 import type { AppleCalendarConnection } from "./apple-calendar.js";
 
-export type { StoredAccount } from "@sidecar/account";
+export type { StoredAccount } from "@sidecar/credentials";
 
-import type { StoredAccount } from "@sidecar/account";
 import type { CalendarAccountCredential } from "@sidecar/calendar";
 import { googleCalendarSignInConfig } from "@sidecar/calendar";
+import type { StoredAccount } from "@sidecar/credentials";
 import {
   ACCOUNT_PREFERENCE_FIELDS,
   type AccountPreferenceField,
@@ -66,7 +68,6 @@ import {
   type StoredAppSettings,
   sameSettingEntry,
 } from "@sidecar/settings";
-import { type LinearGrant, linearSignInConfig } from "@sidecar/trackers";
 import {
   environmentRealtimeSpeed,
   environmentRealtimeVoice,

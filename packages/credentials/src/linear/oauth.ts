@@ -1,16 +1,5 @@
 import { randomUUID } from "node:crypto";
 import http from "node:http";
-// The same landing page the Luke account sign-in leaves the browser on, and the
-// same RFC 7636 arithmetic every other flow here uses: no two of Luke's consent
-// trips dress their tabs differently, and none can drift into a weaker verifier
-// than the others.
-import {
-  accountLoopbackPage,
-  codeChallenge,
-  createCodeVerifier,
-  LOOPBACK_CONNECTION_SOURCE,
-  LOOPBACK_PAGE_TONE,
-} from "@sidecar/credentials";
 import {
   ACT_RESULT_STATUS,
   isRecord,
@@ -18,6 +7,16 @@ import {
   isWireString,
   type UnparsedWireValue,
 } from "@sidecar/wire";
+// The same landing page the Luke account sign-in leaves the browser on, and the
+// same RFC 7636 arithmetic every other flow here uses: no two of Luke's consent
+// trips dress their tabs differently, and none can drift into a weaker verifier
+// than the others.
+import {
+  accountLoopbackPage,
+  LOOPBACK_CONNECTION_SOURCE,
+  LOOPBACK_PAGE_TONE,
+} from "../loopback-page.js";
+import { codeChallenge, createCodeVerifier } from "../pkce.js";
 
 /**
  * The sign-in behind the Linear row: Linear's own OAuth flow for a public

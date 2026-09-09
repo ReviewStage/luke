@@ -1,14 +1,21 @@
-import { singleFlight } from "@sidecar/credentials";
-import type { AccountClient, AccountIdentity, AccountTokens, StoredAccount } from "./client.js";
-import { deleteHostedAccount } from "./deletion.js";
-import { ACCOUNT_FAILURE_ACTION, accessTokenNeedsRefresh, accountFailureAction } from "./gate.js";
+import { singleFlight } from "../single-flight.js";
+import {
+  ACCOUNT_FAILURE_ACTION,
+  type AccountClient,
+  type AccountIdentity,
+  type AccountTokens,
+  accessTokenNeedsRefresh,
+  accountFailureAction,
+  deleteHostedAccount,
+  type StoredAccount,
+  withIssuedAccountTokens,
+} from "./client.js";
 import {
   isSignInCancellation,
   SIGN_IN_CANCELLED_MESSAGE,
   startAccountLoopback,
 } from "./loopback.js";
 import { ACCOUNT_STATUS, type AccountProvider, type AccountSnapshot } from "./snapshot.js";
-import { withIssuedAccountTokens } from "./token-lifecycle.js";
 
 export interface AccountSessionStore {
   readAccount(): Promise<StoredAccount | undefined>;

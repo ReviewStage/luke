@@ -1,8 +1,8 @@
-import type { AccountProvider, AccountSnapshot } from "@sidecar/account/snapshot";
 import type { ProductEventName, ProductEventPropertiesFor } from "@sidecar/analytics";
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { AppleCalendarAccess } from "@sidecar/calendar/vocabulary";
 import type { CredentialProviderId } from "@sidecar/credentials";
+import type { AccountProvider, AccountSnapshot } from "@sidecar/credentials/snapshot";
 import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import type { GatewayCallResult, GatewayClient } from "@sidecar/gateway";
 import { carried, GATEWAY_EVENT, GATEWAY_METHOD, gatewayEventReader } from "@sidecar/gateway";
