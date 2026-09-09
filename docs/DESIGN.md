@@ -2,11 +2,11 @@
 
 This is the contract every animated element in the panel obeys, and the bar
 every word drawn on it has to clear. The "Panel motion" section of
-`apps/desktop/src/renderer/AGENTS.md` says what the window and the surface are; this file says how anything drawn on
-them is allowed to move, how much it is allowed to say, and which of the
-machine's keys Luke may take. A change that adds or alters motion or copy is
-reviewed against these rules, and the fastest way to pass that review is to
-build from them.
+`apps/desktop/src/renderer/AGENTS.md` says what the window and the surface are;
+this file says how anything drawn on them is allowed to move, how much it is
+allowed to say, and which of the machine's keys Luke may take. A change that
+adds or alters motion or copy is reviewed against these rules, and the fastest
+way to pass that review is to build from them.
 
 ## The vocabulary
 
