@@ -2,7 +2,6 @@ import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/devtrace/vocabula
 import type { RealtimeConnection } from "@sidecar/hosted";
 import {
   decodeRealtimePayload,
-  type ParsedRealtimeServerEvent,
   parseRealtimeServerEvent,
   REALTIME_STATUS,
   type RealtimeStatus,
@@ -15,6 +14,7 @@ import {
   type SdkToolCallDetails,
   type SdkTransportFactory,
 } from "./agents-realtime-transport";
+import type { RealtimeServerEventHandlers } from "./realtime-server-events";
 
 /** Bounds the SDK's WebRTC handshake and initial session acknowledgement. */
 const CONNECT_TIMEOUT_MS = 15_000;
@@ -75,6 +75,7 @@ export abstract class RealtimeCall<Options extends RealtimeCallOptions = Realtim
    * to stand for the call, so the token is what does.
    */
   #attempt = Symbol("connect-attempt");
+  #handlers: RealtimeServerEventHandlers | undefined;
 
   constructor(options: Options) {
     this.options = options;
@@ -100,8 +101,12 @@ export abstract class RealtimeCall<Options extends RealtimeCallOptions = Realtim
     details: SdkToolCallDetails | undefined,
   ): Promise<WireRecord>;
 
-  /** Acts on one parsed server event, in the terms this kind of call keeps. */
-  protected abstract handleEvent(event: ParsedRealtimeServerEvent): void;
+  /**
+   * The server events this kind of call acts on, as one handler each. Built
+   * once per call: the handlers close over `this` and never change, and a
+   * table rebuilt per event would allocate one on every frame of speech.
+   */
+  protected abstract handlers(): RealtimeServerEventHandlers;
 
   /** Runs once the channel is open and the call has reported itself ready. */
   protected onChannelOpen(): void {}
@@ -305,7 +310,11 @@ export abstract class RealtimeCall<Options extends RealtimeCallOptions = Realtim
     }
     const event = parseRealtimeServerEvent(record);
     if (!event) return;
-    this.handleEvent(event);
+    this.#handlers ??= this.handlers();
+    const handler = this.#handlers[event.type];
+    // SAFETY: the table is keyed by event type, so the handler found under
+    // this event's own type is the one narrowed to it.
+    (handler as ((narrowed: typeof event) => void) | undefined)?.(event);
   }
 
   async close(): Promise<void> {

@@ -20,6 +20,7 @@ import type { BuiltRealtimeSessionConfig, SdkToolCallDetails } from "./agents-re
 import { CaptionStrip, REPLY_KIND, type ReplyKind } from "./captions";
 import { type InterruptedSpan, Interruption } from "./interruption";
 import { RealtimeCall, type RealtimeCallOptions, type TeardownStep } from "./realtime-call";
+import type { RealtimeServerEventHandlers } from "./realtime-server-events";
 
 /**
  * How long a finished generation may go on playing before the turn is ended
@@ -452,12 +453,12 @@ export class SpeakOnlyCall<
     this.clearSettleTimer();
   }
 
-  protected handleEvent(event: ParsedRealtimeServerEvent): void {
-    switch (event.type) {
-      case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED:
+  protected handlers(): RealtimeServerEventHandlers {
+    return {
+      [REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED]: (event) => {
         if (event.itemId) this.#responseItemId = event.itemId;
-        return;
-      case REALTIME_SERVER_EVENT.RESPONSE_CREATED:
+      },
+      [REALTIME_SERVER_EVENT.RESPONSE_CREATED]: (event) => {
         // Only a reply the call is still waiting on may be adopted. A
         // confirmation arriving after the developer stopped or took the turn is
         // the cancelled reply's own, landing late — the stop raced the server's
@@ -474,8 +475,8 @@ export class SpeakOnlyCall<
           this.onResponseCreated(event.responseId);
         }
         this.unsilenceLuke();
-        return;
-      case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA:
+      },
+      [REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA]: (event) => {
         // Only the reply being spoken may write the caption. A cancelled reply's
         // transcript keeps arriving after the interrupt that cleared it — the
         // server had already produced it — and without this check a late piece
@@ -484,8 +485,8 @@ export class SpeakOnlyCall<
         if (event.itemId === this.#responseItemId && event.delta) {
           this.#captions.append(event.itemId, event.delta);
         }
-        return;
-      case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE:
+      },
+      [REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE]: (event) => {
         // The server's own rendering of the whole item, which the deltas only
         // approximate: a delta lost to the channel would otherwise leave a hole
         // in the sentence for as long as it stayed up. It lands on the segment
@@ -495,8 +496,8 @@ export class SpeakOnlyCall<
         if (event.transcript) {
           this.#captions.settle(event.itemId, event.transcript);
         }
-        return;
-      case REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STARTED:
+      },
+      [REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STARTED]: (event) => {
         // Audio flowing again says the drain the turn remembered was the
         // pause between two things the reply had to say, not its ending.
         // Left standing, the stale drain lets the `done` end the turn under
@@ -515,8 +516,8 @@ export class SpeakOnlyCall<
           this.clearSettleTimer();
           this.armSettleTimer();
         }
-        return;
-      case REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED:
+      },
+      [REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED]: (event) => {
         this.#audioEndingsReported = true;
         // The audio can run out while the server still owes the reply its
         // `done` — generation finishing and playback finishing have no fixed
@@ -542,11 +543,11 @@ export class SpeakOnlyCall<
         // sentences is quiet too, and guessing ended the turn in the middle of
         // one — the meter and the face went with it while Luke talked on.
         this.#finishResponse();
-        return;
-      case REALTIME_SERVER_EVENT.RESPONSE_DONE:
+      },
+      [REALTIME_SERVER_EVENT.RESPONSE_DONE]: (event) => {
         this.#responseDone(event);
-        return;
-      case REALTIME_SERVER_EVENT.ERROR:
+      },
+      [REALTIME_SERVER_EVENT.ERROR]: (event) => {
         // Only Luke's own trim can draw a past-the-end refusal, the service
         // clamps and truncates anyway, and it names no event this could match
         // it by — `error.event_id` is null on the wire. Recognized by its
@@ -567,7 +568,8 @@ export class SpeakOnlyCall<
           return;
         }
         this.#finishResponse();
-    }
+      },
+    };
   }
 
   #responseDone(event: ResponseDoneEvent): void {

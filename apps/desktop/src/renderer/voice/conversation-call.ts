@@ -10,7 +10,6 @@ import {
   clearInputAudioEvents,
   functionCallFollowUpEvents,
   type ParsedRealtimeFunctionCall,
-  type ParsedRealtimeServerEvent,
   pushToTalkCommitEvents,
   REALTIME_CLIENT_EVENT,
   REALTIME_SERVER_EVENT,
@@ -33,6 +32,7 @@ import { MICROPHONE_PROCESSING } from "./microphone-choice";
 import type { PressCaptureFactory } from "./press-audio-capture";
 import { type MicrophoneSender, PressTurnCapture } from "./press-turn-capture";
 import type { TeardownStep } from "./realtime-call";
+import type { RealtimeServerEventHandlers } from "./realtime-server-events";
 import {
   BRAIN_ASK_SETTLE_TIMEOUT_MS,
   type ResponseDoneEvent,
@@ -449,23 +449,26 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
     this.#tools.observe(record);
   }
 
-  protected override handleEvent(event: ParsedRealtimeServerEvent): void {
-    switch (event.type) {
-      case REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_DELTA:
+  /**
+   * The developer's own half of the exchange, over the speak-only call's
+   * table: only a call with a capture device can be told what was heard on it.
+   */
+  protected override handlers(): RealtimeServerEventHandlers {
+    return {
+      ...super.handlers(),
+      [REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_DELTA]: (event) => {
         this.options.onSpokenAskDelta?.(event.itemId, event.delta);
-        return;
-      case REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED:
+      },
+      [REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED]: (event) => {
         this.options.onSpokenAsk?.(event.transcript, event.itemId);
-        return;
-      case REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_FAILED:
+      },
+      [REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_FAILED]: (event) => {
         this.options.onSpokenAskFailed?.(event.itemId);
-        return;
-      case REALTIME_SERVER_EVENT.INPUT_AUDIO_BUFFER_COMMITTED:
+      },
+      [REALTIME_SERVER_EVENT.INPUT_AUDIO_BUFFER_COMMITTED]: (event) => {
         this.options.onSpokenAskCommitted?.(event.itemId);
-        return;
-      default:
-        super.handleEvent(event);
-    }
+      },
+    };
   }
 
   protected override onResponseStarted(events: readonly WireRecord[]): void {
