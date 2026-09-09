@@ -58,23 +58,31 @@ export function keyedCloudProviderIds(rows: readonly VaultKeyRow[]): CloudAgentP
 }
 
 /**
- * The stored snapshot as a roster, or nothing where none stands or the body
- * is one this build cannot read; an unreadable body reads as no snapshot,
- * so the next pass writes a fresh one and diffs against nothing.
+ * The snapshot standing for a user: its instant always, and its roster where
+ * this build can open and read the body. A body it cannot — sealed under a
+ * key the ring no longer holds, or in a shape another build wrote — keeps
+ * its instant here so the next pass can replace it, and offers no roster to
+ * serve or to diff against.
  */
+export interface StoredSnapshot {
+  readonly observedAt: number;
+  readonly roster?: ObservedRoster;
+}
+
 export async function storedRoster(
   store: ObservationStore,
   userId: string,
-): Promise<{ roster: ObservedRoster; observedAt: number } | undefined> {
+): Promise<StoredSnapshot | undefined> {
   let snapshot: Awaited<ReturnType<ObservationStore["roster"]["read"]>>;
   try {
     snapshot = await store.roster.read(userId);
   } catch {
-    return undefined;
+    const observedAt = await store.roster.observedAt(userId).catch(() => undefined);
+    return observedAt === undefined ? undefined : { observedAt };
   }
   if (!snapshot) return undefined;
   const roster = decodeObservedRoster(snapshot.body);
-  return roster ? { roster, observedAt: snapshot.observedAt } : undefined;
+  return roster ? { observedAt: snapshot.observedAt, roster } : { observedAt: snapshot.observedAt };
 }
 
 export async function observeAndSnapshot(
@@ -90,7 +98,11 @@ export async function observeAndSnapshot(
     failure: CLOUD_OBSERVE_FAILURE.UNFINISHED,
   });
   const previous = await storedRoster(store, userId);
-  const standing = previous ? { roster: previous.roster, observedAt: previous.observedAt } : {};
+  const standing: Pick<ObservationPassOutcome, "roster" | "observedAt"> = {};
+  if (previous?.roster) {
+    standing.roster = previous.roster;
+    standing.observedAt = previous.observedAt;
+  }
 
   const providerIds = keyedCloudProviderIds(input.rows);
   const passes = await observeCloudProviders({
@@ -112,7 +124,7 @@ export async function observeAndSnapshot(
       projects: pass.projects,
     })),
   };
-  const diff = previous ? rosterDiff(previous.roster, roster) : undefined;
+  const diff = previous?.roster ? rosterDiff(previous.roster, roster) : undefined;
   const changed = diff !== undefined && !rosterDiffIsEmpty(diff);
   let landed: boolean;
   try {
@@ -149,7 +161,12 @@ export async function observeAndSnapshot(
     // its pass record stands too: this pass's own instant is older, and
     // writing it would put the account back at the head of the schedule.
     const superseded = await storedRoster(store, userId);
-    return { complete: true, changed: false, ...(superseded ?? {}) };
+    const outcome: ObservationPassOutcome = { complete: true, changed: false };
+    if (superseded?.roster) {
+      outcome.roster = superseded.roster;
+      outcome.observedAt = superseded.observedAt;
+    }
+    return outcome;
   }
   return { complete: true, changed, roster, observedAt: now };
 }
@@ -170,7 +187,7 @@ export async function rosterForAction(input: {
   now: number;
 }): Promise<ActionRoster> {
   const stored = await storedRoster(input.store, input.userId);
-  if (stored) return actionRosterFor(input.providerId, { roster: stored.roster });
+  if (stored?.roster) return actionRosterFor(input.providerId, { roster: stored.roster });
   const outcome = await observeAndSnapshot({
     userId: input.userId,
     rows: await input.readVaultKeys(input.userId),

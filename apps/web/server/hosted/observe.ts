@@ -85,7 +85,7 @@ export async function handleObserve(options: ObserveOptions): Promise<Response> 
     new URL(request.url).searchParams.get(OBSERVE_QUERY.FRESH) === OBSERVE_QUERY.FRESH_VALUE;
   if (!fresh) {
     const stored = await storedRoster(store, userId);
-    if (stored) {
+    if (stored?.roster) {
       return jsonResponse(HOSTED_HTTP_STATUS.OK, observeAnswer(stored.roster, stored.observedAt));
     }
   }

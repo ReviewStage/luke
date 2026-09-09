@@ -74,6 +74,23 @@ export async function readRosterSnapshot(
   return { body: seal.open(row.sealedBody), observedAt: row.observedAt };
 }
 
+/**
+ * The instant of the snapshot standing, read without opening its body, so a
+ * pass can replace a body this build cannot open or read — under a key the
+ * ring no longer holds, or in a shape another build wrote — instead of
+ * losing the compare-and-set against it forever.
+ */
+export async function rosterSnapshotObservedAt(
+  db: HostedStoreDatabase,
+  userId: string,
+): Promise<number | undefined> {
+  const [row] = await db
+    .select({ observedAt: rosterSnapshot.observedAt })
+    .from(rosterSnapshot)
+    .where(eq(rosterSnapshot.userId, userId));
+  return row?.observedAt;
+}
+
 export async function writeRosterSnapshot(
   db: HostedStoreDatabase,
   seal: UserSeal,

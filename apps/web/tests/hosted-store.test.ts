@@ -641,9 +641,10 @@ test("workspace files are read and written whole per user and path, seeded once,
   assert.equal(await workspace.read(other, "AGENTS.md"), undefined);
 });
 
-test("the roster snapshot is one sealed row per user, replaced whole", async () => {
+test("the roster snapshot is one sealed row per user, replaced whole, and its instant is readable without its body", async () => {
   const { database, userId } = await conversationFor();
   assert.equal(await database.store.roster.read(userId), undefined);
+  assert.equal(await database.store.roster.observedAt(userId), undefined);
   await database.store.roster.write(userId, {
     body: JSON.stringify({ sessions: ["a"] }),
     observedAt: NOW,
@@ -662,6 +663,12 @@ test("the roster snapshot is one sealed row per user, replaced whole", async () 
     .where(eq(rosterSnapshot.userId, userId));
   assert.equal(rows.length, 1);
   assert.doesNotMatch(rows[0]?.sealedBody ?? "", /sessions/);
+  await database.db
+    .update(rosterSnapshot)
+    .set({ sealedBody: "1:not-an-envelope" })
+    .where(eq(rosterSnapshot.userId, userId));
+  await assert.rejects(database.store.roster.read(userId));
+  assert.equal(await database.store.roster.observedAt(userId), NOW + 1);
 });
 
 test("a pass advances the snapshot and its diff together, diffs wait sealed until consumed once, and the pending bound drops the oldest", async () => {

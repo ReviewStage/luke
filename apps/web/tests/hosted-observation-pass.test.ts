@@ -22,7 +22,7 @@ import {
 } from "../server/hosted/observation-pass";
 import { decodeRosterDiff } from "../server/hosted/roster-diff";
 import type { VaultKeyRow } from "../server/hosted/vault-route";
-import { memoryObservationStore } from "./support/observation-store";
+import { memoryObservationStore, UNOPENABLE_BODY } from "./support/observation-store";
 
 const SECRET = "a".repeat(64);
 const KEY_ROWS: VaultKeyRow[] = [
@@ -77,7 +77,7 @@ test("a whole pass stores the roster with its projects, dated by the pass, and t
   assert.equal(outcome.changed, false);
   assert.equal(outcome.observedAt, TEST_TIME);
   const stored = await storedRoster(store, "user-1");
-  assert.ok(stored);
+  assert.ok(stored?.roster);
   assert.equal(stored.observedAt, TEST_TIME);
   const [provider] = stored.roster.providers;
   assert.equal(provider?.providerId, "conductor");
@@ -298,6 +298,29 @@ test("two passes racing over one user record one transition once, and the later 
     attemptedAt: TEST_TIME + 2_000,
     observedAt: TEST_TIME + 2_000,
   });
+});
+
+test("a snapshot this build cannot open or read is replaced by the next whole pass, with no diff against it", async () => {
+  for (const body of [UNOPENABLE_BODY, "not json", JSON.stringify({ version: 99 })]) {
+    const store = memoryObservationStore();
+    store.snapshots.set("user-1", { body, observedAt: TEST_TIME - 60_000 });
+    assert.deepEqual(await storedRoster(store, "user-1"), { observedAt: TEST_TIME - 60_000 });
+
+    const outcome = await observeAndSnapshot({
+      userId: "user-1",
+      rows: KEY_ROWS,
+      secret: SECRET,
+      store,
+      seams: { fetch: api().fetch, now: () => TEST_TIME },
+      now: TEST_TIME,
+    });
+
+    assert.equal(outcome.complete, true, body);
+    assert.equal(outcome.changed, false, body);
+    assert.equal(store.snapshots.get("user-1")?.observedAt, TEST_TIME, body);
+    assert.equal((await storedRoster(store, "user-1"))?.roster?.providers.length, 1, body);
+    assert.deepEqual(await store.roster.pendingDiffs("user-1"), [], body);
+  }
 });
 
 test("a store that cannot take the snapshot is a failed pass, never an unrecorded roster", async () => {

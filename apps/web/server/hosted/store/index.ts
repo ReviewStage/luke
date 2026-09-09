@@ -48,6 +48,7 @@ import {
   readObservationPass,
   readRosterSnapshot,
   recordObservationPass,
+  rosterSnapshotObservedAt,
   writeRosterSnapshot,
 } from "./roster-snapshot.js";
 import { type RunAboutFields, recordRunAbout, runAbout } from "./run-about.js";
@@ -139,6 +140,8 @@ export interface HostedStore {
   };
   roster: {
     read(userId: string): Promise<RosterSnapshotRecord | undefined>;
+    /** The standing snapshot's instant without opening its body; absent where none stands. */
+    observedAt(userId: string): Promise<number | undefined>;
     write(userId: string, snapshot: RosterSnapshotRecord): Promise<void>;
     /**
      * Replaces the snapshot and records the diff against the one it replaced,
@@ -229,6 +232,7 @@ export function hostedStore({ db, keys }: HostedStoreContext): HostedStore {
     },
     roster: {
       read: (userId) => readRosterSnapshot(db, sealFor(userId), userId),
+      observedAt: (userId) => rosterSnapshotObservedAt(db, userId),
       write: (userId, snapshot) => writeRosterSnapshot(db, sealFor(userId), userId, snapshot),
       advance: (userId, snapshot, diff, previousObservedAt) =>
         advanceRosterSnapshot(db, sealFor(userId), userId, snapshot, diff, previousObservedAt),

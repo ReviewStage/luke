@@ -20,6 +20,9 @@ export interface MemoryObservationStore extends ObservationStore {
   advances: Array<{ userId: string; observedAt: number; diff: boolean }>;
 }
 
+/** A body the fake's `read` refuses to open, standing in for a seal under a key the ring no longer holds. */
+export const UNOPENABLE_BODY = "unopenable";
+
 export function memoryObservationStore(): MemoryObservationStore {
   const snapshots = new Map<string, RosterSnapshotRecord>();
   const diffs = new Map<string, RosterDiffRecord[]>();
@@ -31,7 +34,12 @@ export function memoryObservationStore(): MemoryObservationStore {
     passes,
     advances,
     roster: {
-      read: async (userId) => snapshots.get(userId),
+      read: async (userId) => {
+        const snapshot = snapshots.get(userId);
+        if (snapshot?.body === UNOPENABLE_BODY) throw new Error("the ring cannot open this body");
+        return snapshot;
+      },
+      observedAt: async (userId) => snapshots.get(userId)?.observedAt,
       write: async (userId, snapshot) => {
         snapshots.set(userId, snapshot);
       },
