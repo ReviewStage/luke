@@ -1,53 +1,42 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { collapseMarkAfter, leavesPanelForCompact, PANEL_PRESENTATION } from "./panel-state";
+import {
+  collapseMarkAfter,
+  leavesPanelForCompact,
+  PANEL_PRESENTATION,
+  type PanelPresentation,
+} from "./panel-state";
 
-test("only the panel standing down to a compact shape marks a collapse", () => {
-  assert.equal(leavesPanelForCompact(PANEL_PRESENTATION.PANEL, PANEL_PRESENTATION.CAPSULE), true);
-  assert.equal(leavesPanelForCompact(PANEL_PRESENTATION.PANEL, PANEL_PRESENTATION.PEEK), true);
-});
+const SHAPES: readonly PanelPresentation[] = Object.values(PANEL_PRESENTATION);
 
-test("standing down to the slot or the composer keeps the base surface timing", () => {
-  assert.equal(leavesPanelForCompact(PANEL_PRESENTATION.PANEL, PANEL_PRESENTATION.SLOT), false);
-  assert.equal(leavesPanelForCompact(PANEL_PRESENTATION.PANEL, PANEL_PRESENTATION.FEEDBACK), false);
-});
+/**
+ * The two decisions are one truth table over every ordered pair of shapes and
+ * both marks, so a shape added to the vocabulary is answered for here rather
+ * than falling through whichever pairs someone thought to write down.
+ */
+const COMPACT = new Set<PanelPresentation>([PANEL_PRESENTATION.CAPSULE, PANEL_PRESENTATION.PEEK]);
 
-test("moves between compact shapes are not a collapse, and neither is expanding", () => {
-  assert.equal(leavesPanelForCompact(PANEL_PRESENTATION.CAPSULE, PANEL_PRESENTATION.PEEK), false);
-  assert.equal(leavesPanelForCompact(PANEL_PRESENTATION.PEEK, PANEL_PRESENTATION.CAPSULE), false);
-  assert.equal(leavesPanelForCompact(PANEL_PRESENTATION.CAPSULE, PANEL_PRESENTATION.PANEL), false);
-  assert.equal(leavesPanelForCompact(PANEL_PRESENTATION.SLOT, PANEL_PRESENTATION.CAPSULE), false);
-});
-
-test("the mark survives a hover peeking mid-collapse", () => {
-  assert.equal(collapseMarkAfter(PANEL_PRESENTATION.CAPSULE, PANEL_PRESENTATION.PEEK, true), true);
-  assert.equal(collapseMarkAfter(PANEL_PRESENTATION.PEEK, PANEL_PRESENTATION.CAPSULE, true), true);
-});
-
-test("compact moves with no collapse under way raise no mark", () => {
-  assert.equal(
-    collapseMarkAfter(PANEL_PRESENTATION.CAPSULE, PANEL_PRESENTATION.PEEK, false),
-    false,
-  );
-  assert.equal(
-    collapseMarkAfter(PANEL_PRESENTATION.PEEK, PANEL_PRESENTATION.CAPSULE, false),
-    false,
-  );
-});
-
-test("leaving the panel raises the mark; any non-compact shape ends it", () => {
-  assert.equal(
-    collapseMarkAfter(PANEL_PRESENTATION.PANEL, PANEL_PRESENTATION.CAPSULE, false),
-    true,
-  );
-  assert.equal(collapseMarkAfter(PANEL_PRESENTATION.PANEL, PANEL_PRESENTATION.PEEK, false), true);
-  assert.equal(
-    collapseMarkAfter(PANEL_PRESENTATION.CAPSULE, PANEL_PRESENTATION.PANEL, true),
-    false,
-  );
-  assert.equal(collapseMarkAfter(PANEL_PRESENTATION.PANEL, PANEL_PRESENTATION.SLOT, true), false);
-  assert.equal(
-    collapseMarkAfter(PANEL_PRESENTATION.PANEL, PANEL_PRESENTATION.FEEDBACK, true),
-    false,
-  );
+test("the collapse mark follows the panel standing down to a compact shape, and nothing else", () => {
+  for (const previous of SHAPES) {
+    for (const next of SHAPES) {
+      const leaves = previous === PANEL_PRESENTATION.PANEL && COMPACT.has(next);
+      const where = `${previous} -> ${next}`;
+      assert.equal(
+        leavesPanelForCompact(previous, next),
+        leaves,
+        // The slot and the composer keep the expanded window, so their shrink
+        // runs on the base surface timing and is not this collapse.
+        `${where}: only the panel standing down to the capsule or the peek is the collapse`,
+      );
+      for (const marked of [false, true]) {
+        assert.equal(
+          collapseMarkAfter(previous, next, marked),
+          // A move between the compact shapes keeps the mark: a peek answering
+          // a hover mid-collapse is a width retarget on the same journey down.
+          leaves || (marked && COMPACT.has(next)),
+          `${where} (${marked ? "marked" : "unmarked"})`,
+        );
+      }
+    }
+  }
 });
