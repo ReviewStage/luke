@@ -36,8 +36,6 @@ import {
   sessionIdFromOmpFileName,
 } from "./records.js";
 
-const OMP_PROVIDER_NAME = "OMP";
-
 const OMP_OBSERVATION_DEFAULTS = {
   MAXIMUM_PROJECT_DIRECTORIES: 200,
   MAXIMUM_ACTIVITY_LENGTH: 80,
@@ -47,7 +45,7 @@ const OMP_OBSERVATION_DEFAULTS = {
 
 export const OMP_PROVIDER: SessionProvider = {
   id: PROVIDER_ID.OMP,
-  displayName: OMP_PROVIDER_NAME,
+  displayName: "OMP",
 };
 
 function timestampMsFrom(record: WireRecord): number | undefined {
@@ -202,7 +200,7 @@ function parseTail(tail: string): Omit<ParsedOmpSession, "cwd" | "title"> {
   return parsed;
 }
 
-export function parseOmpSession(head: string, tail: string): ParsedOmpSession {
+function parseOmpSession(head: string, tail: string): ParsedOmpSession {
   return { ...parseHead(head), ...parseTail(tail) };
 }
 

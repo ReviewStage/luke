@@ -6,6 +6,8 @@ import {
   type ProviderSessionObservation,
   SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
+  type SessionCompletionCause,
+  type SessionStatus,
 } from "@sidecar/session";
 import { type ParsedJsonObject, temporaryDirectory } from "@sidecar/wire/testing";
 import { ompPlugin } from "./index.js";
@@ -64,41 +66,34 @@ function sessionHeader(cwd: string, title?: string, id: string = SESSION_ID): Pa
   };
 }
 
+/** One stored message record, which is how OMP writes every turn. */
+function message(timestamp: string, words: ParsedJsonObject): ParsedJsonObject {
+  return { type: "message", id: "m1", parentId: null, timestamp, message: words };
+}
+
 function userMessage(timestamp: string): ParsedJsonObject {
-  return {
-    type: "message",
-    id: "m-user",
-    parentId: null,
-    timestamp,
-    message: {
-      role: "user",
-      content: [{ type: "text", text: SECRET_TRANSCRIPT_TEXT }],
-      timestamp: Date.parse(timestamp),
-    },
-  };
+  return message(timestamp, {
+    role: "user",
+    content: [{ type: "text", text: SECRET_TRANSCRIPT_TEXT }],
+    timestamp: Date.parse(timestamp),
+  });
 }
 
 function assistantMessage(timestamp: string, extra: ParsedJsonObject = {}): ParsedJsonObject {
   const { content, ...rest } = extra;
-  return {
-    type: "message",
-    id: "m-assistant",
-    parentId: null,
-    timestamp,
-    message: {
-      role: "assistant",
-      content: content ?? [{ type: "text", text: "Parting words." }],
-      model: "grok-4.6",
-      provider: "xai-oauth",
-      stopReason: "stop",
-      timestamp: Date.parse(timestamp),
-      ...rest,
-    },
-  };
+  return message(timestamp, {
+    role: "assistant",
+    content: content ?? [{ type: "text", text: "Parting words." }],
+    model: "grok-4.6",
+    provider: "xai-oauth",
+    stopReason: "stop",
+    timestamp: Date.parse(timestamp),
+    ...rest,
+  });
 }
 
 function custom(customType: string, timestamp: string, data: ParsedJsonObject): ParsedJsonObject {
-  return { type: "custom", customType, id: "c1", parentId: "m-assistant", timestamp, data };
+  return { type: "custom", customType, id: "c1", parentId: "m1", timestamp, data };
 }
 
 const TOOL_CALL = {
@@ -109,97 +104,59 @@ const TOOL_CALL = {
   intent: "Run the check suite",
 } as const;
 
-interface ObservationSummary {
-  status?: string;
-  completionCause?: string;
-  title?: string;
-  repository?: string;
-  model?: string;
-  activity?: string;
-  error?: string;
-  lastActivityAt?: number;
+/**
+ * What one recording's lattice branch resolves to. Title, repository and model
+ * are the session's identity rather than its state, and the recorded golden
+ * roster already pins those, so a lattice row says nothing about them and the
+ * comparison below can be a whole-object equality instead of a field walk.
+ */
+interface RowOutcome {
+  readonly status: SessionStatus;
+  readonly lastActivityAt: number;
+  readonly completionCause?: SessionCompletionCause;
+  readonly activity?: string;
+  readonly error?: string;
 }
 
-const SUMMARY_FIELD = [
-  "status",
-  "completionCause",
-  "title",
-  "repository",
-  "model",
-  "activity",
-  "error",
-  "lastActivityAt",
-] as const;
-
-function summarize(observation: ProviderSessionObservation): ObservationSummary {
+function outcomeOf(observation: ProviderSessionObservation | undefined): RowOutcome {
+  assert.ok(observation, "expected the session to be observed");
   return {
     status: observation.status,
-    completionCause: observation.completionCause,
-    title: observation.title,
-    repository: observation.detail?.repository,
-    model: observation.detail?.model,
-    activity: observation.detail?.activity,
-    error: observation.detail?.error,
     lastActivityAt: observation.lastActivityAt,
+    ...(observation.completionCause === undefined
+      ? undefined
+      : { completionCause: observation.completionCause }),
+    ...(observation.detail?.activity === undefined
+      ? undefined
+      : { activity: observation.detail.activity }),
+    ...(observation.detail?.error === undefined ? undefined : { error: observation.detail.error }),
   };
 }
 
-function assertObserved(
-  observation: ProviderSessionObservation | undefined,
-  expected: ObservationSummary,
-): void {
-  assert.ok(observation, "expected the session to be observed");
-  const actual = summarize(observation);
-  // Only the fields the case named, so a row says what that branch is for
-  // rather than restating every field of every other branch.
-  for (const field of SUMMARY_FIELD) {
-    if (!(field in expected)) continue;
-    assert.deepEqual(actual[field], expected[field], field);
-  }
-}
-
 /** No title anywhere, so a row falls back to its working directory. */
-const UNTITLED_HEAD: readonly ParsedJsonObject[] = [sessionHeader("/Users/test/luke")];
+const HEAD: readonly ParsedJsonObject[] = [sessionHeader("/Users/test/luke")];
 
 /**
- * One session file per case, and what the row it produces says. Every branch
- * of OMP's status lattice is a row here, because the lattice is the whole of
- * what a recording can be read for.
+ * One session file per case, and the lattice branch its records resolve to.
+ * Every branch is a row here, because the lattice is the whole of what a
+ * recording can be read for.
  */
 const OBSERVATION_CASE: readonly {
   readonly name: string;
-  /** The title slot and session header, when a case is about titling at all. */
-  readonly head?: readonly ParsedJsonObject[];
   readonly records: readonly ParsedJsonObject[];
   readonly mtimeMs?: number;
-  readonly expected: ObservationSummary;
+  readonly expected: RowOutcome;
 }[] = [
   {
-    name: "a settled assistant turn holds for the developer, titled by its slot",
-    head: [titleSlot("Fix the flaky check"), sessionHeader("/Users/test/luke")],
+    name: "a settled assistant turn holds for the developer",
     records: [
       userMessage("2026-08-20T11:58:10.000Z"),
       assistantMessage("2026-08-20T11:59:00.000Z"),
     ],
     expected: {
       status: SESSION_STATUS.WAITING,
-      title: "Fix the flaky check",
-      repository: "luke",
-      model: "grok-4.6",
       lastActivityAt: Date.parse("2026-08-20T11:59:00.000Z"),
-      error: undefined,
     },
-  },
-  {
-    name: "an empty title slot falls back to the header's title",
-    head: [titleSlot(""), sessionHeader("/Users/test/luke", "Rename the settings panel rows")],
-    records: [assistantMessage("2026-08-20T11:59:00.000Z")],
-    expected: { title: "Rename the settings panel rows" },
-  },
-  {
-    name: "a session named nowhere is labelled by its working directory",
-    records: [assistantMessage("2026-08-20T11:59:00.000Z")],
-    expected: { title: "luke", repository: "luke" },
   },
   {
     name: "an open tool call is working, named by what it is for",
@@ -221,13 +178,19 @@ const OBSERVATION_CASE: readonly {
   {
     name: "a prompt the model has not answered is working",
     records: [userMessage("2026-08-20T11:59:00.000Z")],
-    expected: { status: SESSION_STATUS.WORKING },
+    expected: {
+      status: SESSION_STATUS.WORKING,
+      lastActivityAt: Date.parse("2026-08-20T11:59:00.000Z"),
+    },
   },
   {
     name: "a working turn gone quiet is unknown rather than still working",
     records: [userMessage("2026-08-20T10:00:00.000Z")],
     mtimeMs: TEST_TIME - 2 * 60 * 60 * 1000,
-    expected: { status: SESSION_STATUS.UNKNOWN },
+    expected: {
+      status: SESSION_STATUS.UNKNOWN,
+      lastActivityAt: Date.parse("2026-08-20T10:00:00.000Z"),
+    },
   },
   {
     name: "a session_exit completes the row",
@@ -238,6 +201,7 @@ const OBSERVATION_CASE: readonly {
     expected: {
       status: SESSION_STATUS.COMPLETE,
       completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED,
+      lastActivityAt: Date.parse("2026-08-20T11:59:30.000Z"),
     },
   },
   {
@@ -246,7 +210,10 @@ const OBSERVATION_CASE: readonly {
       assistantMessage("2026-08-20T11:59:00.000Z"),
       custom("session_exit", "2026-08-20T11:59:30.000Z", { reason: "crash", kind: "fatal" }),
     ],
-    expected: { status: SESSION_STATUS.ERROR, completionCause: undefined },
+    expected: {
+      status: SESSION_STATUS.ERROR,
+      lastActivityAt: Date.parse("2026-08-20T11:59:30.000Z"),
+    },
   },
   {
     name: "a turn that stopped on an error reports what stopped it",
@@ -257,7 +224,11 @@ const OBSERVATION_CASE: readonly {
         errorMessage: "Provider rejected the request.",
       }),
     ],
-    expected: { status: SESSION_STATUS.ERROR, error: "Provider rejected the request." },
+    expected: {
+      status: SESSION_STATUS.ERROR,
+      error: "Provider rejected the request.",
+      lastActivityAt: Date.parse("2026-08-20T11:59:00.000Z"),
+    },
   },
   {
     name: "a new prompt supersedes the turn that failed before it",
@@ -268,7 +239,10 @@ const OBSERVATION_CASE: readonly {
       }),
       userMessage("2026-08-20T11:59:00.000Z"),
     ],
-    expected: { status: SESSION_STATUS.WORKING, error: undefined },
+    expected: {
+      status: SESSION_STATUS.WORKING,
+      lastActivityAt: Date.parse("2026-08-20T11:59:00.000Z"),
+    },
   },
   {
     name: "an interrupted turn holds for the developer past its placeholder results",
@@ -277,21 +251,18 @@ const OBSERVATION_CASE: readonly {
         content: [TOOL_CALL],
         stopReason: "aborted",
       }),
-      {
-        type: "message",
-        id: "m2",
-        parentId: "m-assistant",
-        timestamp: "2026-08-20T11:59:00.000Z",
-        message: {
-          role: "toolResult",
-          toolCallId: "call-1",
-          toolName: "bash",
-          content: [{ type: "text", text: "Aborted." }],
-          isError: true,
-        },
-      },
+      message("2026-08-20T11:59:00.000Z", {
+        role: "toolResult",
+        toolCallId: "call-1",
+        toolName: "bash",
+        content: [{ type: "text", text: "Aborted." }],
+        isError: true,
+      }),
     ],
-    expected: { status: SESSION_STATUS.WAITING },
+    expected: {
+      status: SESSION_STATUS.WAITING,
+      lastActivityAt: Date.parse("2026-08-20T11:59:00.000Z"),
+    },
   },
   {
     name: "a resumed session leaves its exit behind",
@@ -300,7 +271,10 @@ const OBSERVATION_CASE: readonly {
       custom("session_exit", "2026-08-20T11:58:30.000Z", { reason: "fatal", kind: "fatal" }),
       userMessage("2026-08-20T11:59:00.000Z"),
     ],
-    expected: { status: SESSION_STATUS.WORKING, completionCause: undefined },
+    expected: {
+      status: SESSION_STATUS.WORKING,
+      lastActivityAt: Date.parse("2026-08-20T11:59:00.000Z"),
+    },
   },
 ];
 
@@ -310,7 +284,7 @@ for (const observationCase of OBSERVATION_CASE) {
       {
         projectDirectoryName: "luke",
         sessionId: SESSION_ID,
-        records: [...(observationCase.head ?? UNTITLED_HEAD), ...observationCase.records],
+        records: [...HEAD, ...observationCase.records],
         ...(observationCase.mtimeMs === undefined
           ? undefined
           : { mtimeMs: observationCase.mtimeMs }),
@@ -318,7 +292,53 @@ for (const observationCase of OBSERVATION_CASE) {
     ]);
 
     assert.equal(observed.size, 1);
-    assertObserved(observed.get(SESSION_ID), observationCase.expected);
+    assert.deepEqual(outcomeOf(observed.get(SESSION_ID)), observationCase.expected);
+  });
+}
+
+/**
+ * A session's own name, then its header's, then the workspace it runs in —
+ * OMP writes the first into a padded slot it rewrites in place, so an empty
+ * slot is the common case rather than a broken one.
+ */
+const TITLE_CASE: readonly {
+  readonly name: string;
+  readonly head: readonly ParsedJsonObject[];
+  readonly title: string;
+}[] = [
+  {
+    name: "titles a session by its own title slot",
+    head: [titleSlot("Fix the flaky check"), sessionHeader("/Users/test/luke")],
+    title: "Fix the flaky check",
+  },
+  {
+    name: "falls back to the header's title where the slot is empty",
+    head: [titleSlot(""), sessionHeader("/Users/test/luke", "Rename the settings panel rows")],
+    title: "Rename the settings panel rows",
+  },
+  {
+    name: "labels a session named nowhere by its working directory",
+    head: [titleSlot(""), sessionHeader("/Users/test/luke")],
+    title: "luke",
+  },
+];
+
+for (const titleCase of TITLE_CASE) {
+  test(titleCase.name, async (t) => {
+    const observed = await observeSessions(t, [
+      {
+        projectDirectoryName: "encoded-cwd",
+        sessionId: SESSION_ID,
+        records: [...titleCase.head, assistantMessage("2026-08-20T11:59:00.000Z")],
+      },
+    ]);
+
+    const observation = observed.get(SESSION_ID);
+    assert.equal(observation?.title, titleCase.title);
+    // The row's repository is the working directory the recording named, not
+    // the encoded directory the file sits in.
+    assert.equal(observation?.detail?.repository, "luke");
+    assert.equal(observation?.detail?.model, "grok-4.6");
   });
 }
 
