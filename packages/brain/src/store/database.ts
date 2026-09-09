@@ -105,7 +105,10 @@ export class StoreDatabase {
         // does not know at all, raised above.
         for (let version = row.version + 1; version <= STORE_SCHEMA_VERSION; version += 1) {
           const steps = STORE_SCHEMA_MIGRATIONS.get(version) ?? [];
-          for (const step of steps) this.#db.prepare(step.sql).run(...step.params);
+          for (const step of steps) {
+            if (step.onlyIf && !this.#stands(step.onlyIf)) continue;
+            this.#db.prepare(step.sql).run(...step.params);
+          }
         }
       }
       if (!row) {
@@ -116,6 +119,19 @@ export class StoreDatabase {
         this.#db.prepare("UPDATE schema_version SET version = ?").run(STORE_SCHEMA_VERSION);
       }
     });
+  }
+
+  #stands(target: { table: string; column?: string }): boolean {
+    const table = this.#db
+      .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
+      .get(target.table);
+    if (!table) return false;
+    if (target.column === undefined) return true;
+    return (
+      this.#db
+        .prepare("SELECT 1 FROM pragma_table_info(?) WHERE name = ?")
+        .get(target.table, target.column) !== undefined
+    );
   }
 
   prepare(sql: string): StatementSync {
