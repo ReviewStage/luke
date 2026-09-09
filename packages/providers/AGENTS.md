@@ -6,7 +6,7 @@ The README platform table is generated from that identity catalog.
 
 The plugins this package ships are Claude Code (plus the Claude desktop
 app's session-application reader, which names the Code-tab chats that app
-holds and their `claude://` addresses), Codex (local and cloud), Conductor
+holds and their `claude://` addresses), Codex (local only), Conductor
 (cloud, plus the local workspace creator and the session-application reader),
 OMP, and Superset. The agents a Conductor or Superset workspace can run
 beyond those — Cursor, OpenCode, Copilot, Gemini CLI, Grok Build — are
@@ -30,10 +30,9 @@ through `jsonlTranscriptReader` for a provider whose records are JSONL.
 
 There are no base classes: a plugin is a value, and the shared mechanics are
 functions with one home each: `observationPass` for a file-backed pass,
-`cloudPass` and `cliPass` for the credential and login halves, `hostClaims`
-for a workspace manager's claims, `mergePlugins` for one provider observed in
-more than one place, and `AdapterFailure` with `clearsObservedState` for
-whether a failed read clears what was observed.
+`cloudPass` for a key-observed one, `hostClaims` for a workspace manager's
+claims, and `AdapterFailure` with `clearsObservedState` for whether a failed
+read clears what was observed.
 
 Every provider passes one contract suite. `describeProviderContract` in
 `@sidecar/providers/testing` states the trust constraints as tests over

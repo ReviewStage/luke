@@ -1,5 +1,4 @@
 export { claudeDesktopApplications } from "./claude-code/applications.js";
-export { codexCloudPlugin } from "./codex/cloud.js";
 export { conductorApplications } from "./conductor/applications.js";
 export {
   conductorLocalWorkspacePlugin,

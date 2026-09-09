@@ -12,12 +12,10 @@ import {
   type JsonObject,
   type JsonValue,
 } from "@sidecar/wire/testing";
-import { ADAPTER_FAILURE, AdapterFailure } from "../shared/adapter-failure.js";
-import type { CliRun } from "../shared/cli-pass.js";
 
 /**
  * What a recorded provider fixture is, and how one is read back: the home a
- * case is seeded from, the routes and CLI answers it stands behind, and the
+ * case is seeded from, the routes it stands behind, and the
  * golden answers it is measured against. What a provider must *do* with them
  * is `provider-contract.ts`; nothing here knows a trust constraint.
  */
@@ -206,69 +204,4 @@ export async function recordedApi(root: string): Promise<FakeCloudApi> {
     };
   }
   return fakeCloudApi(routes);
-}
-
-/** The argv a recorded CLI answer is filed under: its words before the first flag. */
-export function invocationSlug(argv: readonly string[]): string {
-  const words: string[] = [];
-  for (const token of argv) {
-    if (token.startsWith("-")) break;
-    words.push(token);
-  }
-  return words.join("-");
-}
-
-export const SHELL_METACHARACTERS = /[;&|`$><\n(){}]/;
-
-export interface RecordedCli {
-  readonly run: CliRun;
-  invocations(): readonly (readonly string[])[];
-  /** Answer the login probe with a refusal, the way a signed-out CLI does. */
-  signOut(): void;
-  /** Answer as a machine where the binary is not installed at all. */
-  uninstall(): void;
-  /** Answer every read with a failure that ran, the way a flaky command does. */
-  fail(): void;
-}
-
-export async function recordedCli(
-  root: string,
-  loginProbeSlug: string | undefined,
-): Promise<RecordedCli> {
-  const directory = path.join(root, "cli");
-  const answers = new Map<string, string>();
-  for (const name of await readDirectoryFiles(directory)) {
-    answers.set(
-      name.slice(0, -".json".length),
-      await fs.readFile(path.join(directory, name), "utf8"),
-    );
-  }
-  const invocations: (readonly string[])[] = [];
-  let signedOut = false;
-  let uninstalled = false;
-  let failing = false;
-  return {
-    run: async (_binary, argv) => {
-      invocations.push(argv);
-      if (uninstalled) throw new AdapterFailure(ADAPTER_FAILURE.UNAVAILABLE, "no binary");
-      const slug = invocationSlug(argv);
-      if (slug === loginProbeSlug) return { exitCode: signedOut ? 1 : 0, stdout: "" };
-      if (failing) return { exitCode: 1, stdout: "" };
-      const stdout = answers.get(slug);
-      if (stdout === undefined) {
-        throw new Error(`the fixture records no CLI answer for ${slug} (${argv.join(" ")})`);
-      }
-      return { exitCode: 0, stdout };
-    },
-    invocations: () => invocations,
-    signOut: () => {
-      signedOut = true;
-    },
-    uninstall: () => {
-      uninstalled = true;
-    },
-    fail: () => {
-      failing = true;
-    },
-  };
 }

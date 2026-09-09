@@ -19,12 +19,11 @@ import { CloudBadge, ProviderMark } from "@sidecar/panel";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   isProviderId,
-  PROVIDER_ID,
   workspaceAgentModels,
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA, type SettingsRowsInput } from "@sidecar/settings";
 import type { AppSettingsView, CalendarAccount } from "@sidecar/settings/wire";
-import { CLI_CONNECTION, VOICE_SOURCE } from "@sidecar/settings/wire";
+import { VOICE_SOURCE } from "@sidecar/settings/wire";
 import type { ActionResult } from "@sidecar/wire";
 import { SUPERSET_WORKSPACE_PROVIDER_ID } from "#shared/messages/session";
 import type { CredentialEntryControl } from "../credential-entry";
@@ -228,13 +227,6 @@ export interface ConnectionSpec {
   haystack: readonly string[];
 }
 
-/**
- * Codex's row anchors by a name of its own: it is a connection the CLI's login
- * makes rather than a provider whose key Luke holds, so it has no credential id
- * to be found by.
- */
-export const CODEX_CLOUD_ROW_ID = "codex-cloud";
-
 /** The words every key row can be found by, beside its provider's name. */
 const KEY_WORDS = "API key credential connect cloud agent sync synced";
 
@@ -244,24 +236,6 @@ const KEY_WORDS = "API key credential connect cloud agent sync synced";
 const CREDENTIAL_STATUS = {
   [CREDENTIAL_SOURCE.ENVIRONMENT]: "From environment",
 } as const satisfies Partial<Record<CredentialSource, string>>;
-
-/**
- * What each answer the Codex CLI can give reads as on its row. Every state has
- * words — unlike a key row, whose check needs none — because the check alone
- * could not say the connection is a CLI login rather than a key, and the
- * disconnected states are exactly where the next step must be named. The step
- * is a command, so it is drawn as one.
- */
-const CODEX_CLOUD_STATUS = {
-  [CLI_CONNECTION.CONNECTED]: "Via the Codex CLI login",
-  [CLI_CONNECTION.SIGNED_OUT]: (
-    <>
-      Run <code>codex login</code> on your Mac
-    </>
-  ),
-  [CLI_CONNECTION.CLI_MISSING]: "Codex CLI not installed",
-  [CLI_CONNECTION.UNKNOWN]: "Not checked yet",
-};
 
 /** Whether this system has been asked for encrypted storage and refused. */
 export function storageUnavailable(input: ConnectionInput): boolean {
@@ -511,46 +485,6 @@ export const CONNECTION_SCHEMA: readonly ConnectionSpec[] = [
     (input) => entryForProvider(input.credentials, VOICE_CREDENTIAL_PROVIDER.id) !== undefined,
     "voice provider",
   ),
-  // First because the list reads alphabetically, like the key rows below.
-  {
-    id: CODEX_CLOUD_ROW_ID,
-    layout: CONNECTION_LAYOUT.BLOCK,
-    page: SETTINGS_VIEW.CONNECTIONS,
-    section: CONNECTION_SECTION.PROVIDERS,
-    order: 100,
-    offered: () => true,
-    name: () => "Codex",
-    /* The same mark and cloud badge the codex session rows carry: the login
-       buys the observation of cloud tasks. */
-    mark: (
-      <>
-        <ProviderMark providerId={PROVIDER_ID.CODEX} />
-        <CloudBadge />
-      </>
-    ),
-    status: (input) => ({
-      connected: input.settings.codexCloudConnection === CLI_CONNECTION.CONNECTED,
-      words: CODEX_CLOUD_STATUS[input.settings.codexCloudConnection],
-    }),
-    /* Connecting is `codex login` in the user's own terminal, and signing that
-       CLI out is what disconnects — so the words name that step exactly when it
-       is the missing one, and no control pretends otherwise. */
-    actions: () => [],
-    children: (input) => {
-      const workspaceProvider = workspaceOption(input, PROVIDER_ID.CODEX);
-      if (input.settings.codexCloudConnection !== CLI_CONNECTION.CONNECTED || !workspaceProvider) {
-        return null;
-      }
-      return (
-        <WorkspaceProjectRow
-          provider={workspaceProvider}
-          settings={input.settings}
-          writes={input.writes}
-        />
-      );
-    },
-    haystack: ["cloud tasks CLI login connect"],
-  },
   ...CLOUD_AGENT_PROVIDER_LIST.map((provider, index) =>
     credentialConnection(provider, {
       page: SETTINGS_VIEW.CONNECTIONS,

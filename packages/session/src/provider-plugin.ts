@@ -26,7 +26,6 @@ import type {
   ProviderWorkspaceRenameRequest,
   ProviderWorkspaceRequest,
 } from "./provider-contract.js";
-import type { CliConnection } from "./provider-identity.js";
 import type { SessionProvider } from "./session-identity.js";
 import type { ProviderSessionObservation } from "./session-shape.js";
 import type { WorkspaceAgentSelection } from "./workspace-agents.js";
@@ -49,8 +48,6 @@ export interface SessionProviderPlugin {
   projects?(): readonly WorkspaceProject[];
   readonly actions?: Partial<ActionHandlers>;
   readonly reads?: Partial<ReadHandlers>;
-  /** What the latest pass learned about a CLI login, for a settings row to report. */
-  connection?(): CliConnection;
 }
 
 /**
@@ -310,65 +307,6 @@ const ACTION_DISPATCHERS: ActionDispatchers = {
 };
 
 /**
- * The ask each action's handler input was built from. `dispatchAction` resolves an
- * ask into a handler input; a caller holding the input and needing the ask
- * again — an adapter behind a plugin, or one of several observers being asked
- * in turn — reads it back through here, so the two directions cannot drift.
- */
-export type ActionRequestFrom = {
-  [Kind in PluginActionKind]: (
-    input: Parameters<ActionHandlers[Kind]>[0],
-  ) => PluginActionRequests[Kind];
-};
-
-export const ACTION_REQUEST_FROM: ActionRequestFrom = {
-  message: (input) =>
-    reshapeAdmitted(input, {
-      providerSessionId: input.observation.providerSessionId,
-      text: input.request.text,
-    }),
-  control: (input) =>
-    reshapeAdmitted(input, {
-      providerSessionId: input.observation.providerSessionId,
-      control: input.request.control,
-    }),
-  createWorkspace: (input) =>
-    reshapeAdmitted(input, {
-      providerProjectId: input.project.providerProjectId,
-      // Read back off the offered project, never the ask: a re-dispatch acts
-      // on the target the pass reported.
-      ...(input.project.providerTargetId === undefined
-        ? undefined
-        : { providerTargetId: input.project.providerTargetId }),
-      ...(input.agent === undefined ? undefined : { agent: input.agent }),
-      ...(input.name === undefined ? undefined : { name: input.name }),
-      ...(input.task === undefined ? undefined : { task: input.task }),
-      ...(input.agentSelection === undefined
-        ? undefined
-        : { agentSelection: input.agentSelection }),
-    }),
-  spawnAgent: (input) =>
-    reshapeAdmitted(input, {
-      providerSessionId: input.observation.providerSessionId,
-      agent: input.request.agent,
-      ...(input.request.name === undefined ? undefined : { name: input.request.name }),
-      ...(input.request.task === undefined ? undefined : { task: input.request.task }),
-      ...(input.request.model === undefined ? undefined : { model: input.request.model }),
-      ...(input.request.effort === undefined ? undefined : { effort: input.request.effort }),
-    }),
-  renameWorkspace: (input) =>
-    reshapeAdmitted(input, {
-      providerSessionId: input.observation.providerSessionId,
-      name: input.request.name,
-    }),
-  renameSession: (input) =>
-    reshapeAdmitted(input, {
-      providerSessionId: input.observation.providerSessionId,
-      name: input.request.name,
-    }),
-};
-
-/**
  * The only route to an action handler. It resolves every target from the
  * plugin's own latest roster — the advertised control, the `add-agent` and
  * `rename-workspace` targets, and the target's own observation — so an action
@@ -437,138 +375,4 @@ export async function dispatchConversation(
   if (!handler) return NO_CONVERSATION_READ;
   const { providerSessionId: _named, ...page } = request;
   return handler({ request: page, observation });
-}
-
-/**
- * One provider observed in more than one place — sessions on this machine and
- * the same provider's sessions in its cloud. The registry replaces a
- * provider's sessions in a single commit, so observers that share a provider
- * id have to arrive as one plugin: registered separately, each pass would
- * retire the other's sessions.
- */
-export function mergePlugins(
-  provider: SessionProvider,
-  plugins: readonly SessionProviderPlugin[],
-): SessionProviderPlugin {
-  for (const plugin of plugins) {
-    // Observing one provider's sessions under another's identity is a wiring
-    // mistake rather than something a user can correct.
-    if (plugin.provider.id !== provider.id) {
-      throw new Error(`Merged plugin for ${provider.id} cannot observe ${plugin.provider.id}`);
-    }
-  }
-
-  /**
-   * Asks each observer in turn. Unsupported means this observer has never
-   * seen the subject, so the question moves on; any firm answer is the
-   * subject's own and ends the search.
-   */
-  const firstFirmAnswer = async <Result extends { status: string }>(
-    ask: (plugin: SessionProviderPlugin) => Promise<Result>,
-    exhausted: Result,
-  ): Promise<Result> => {
-    for (const plugin of plugins) {
-      const result = await ask(plugin);
-      if (result.status !== ACTION_RESULT_STATUS.UNSUPPORTED) return result;
-    }
-    return exhausted;
-  };
-
-  const merged = (
-    collected: readonly (readonly ProviderSessionObservation[])[],
-  ): readonly ProviderSessionObservation[] => {
-    const observations = new Map<string, ProviderSessionObservation>();
-    // A session two observers both reached is still one session, and the
-    // registry rejects a snapshot that names one twice.
-    for (const observation of collected.flat()) {
-      if (!observations.has(observation.providerSessionId)) {
-        observations.set(observation.providerSessionId, observation);
-      }
-    }
-    return [...observations.values()];
-  };
-
-  const exhausted = {
-    status: ACTION_RESULT_STATUS.UNSUPPORTED,
-    reason: "No provider observer supports that action.",
-  } as const;
-
-  /**
-   * A transcript read belongs to the observer whose latest pass reported the
-   * session, and its answer — a rendering, a refusal in its own words, or no
-   * transcript at all — is the session's own: a local file reader asked
-   * about a cloud session would answer not found, when the honest answer is
-   * that the cloud keeps no transcript. A session no observer reported is
-   * asked of each in turn, the way a hook's session between passes is.
-   */
-  const readOf = <Result extends { status: string }>(
-    providerSessionId: string,
-    ask: (plugin: SessionProviderPlugin) => Promise<Result>,
-    unread: Result,
-  ): Promise<Result> => {
-    const holder = plugins.find((plugin) => observationFor(plugin, providerSessionId));
-    return holder ? ask(holder) : firstFirmAnswer(ask, unread);
-  };
-
-  /** One action, asked of each observer in turn with the ask it was built from. */
-  const askEach = <Kind extends PluginActionKind>(
-    kind: Kind,
-    input: Parameters<ActionHandlers[Kind]>[0],
-  ): Promise<PluginActionResults[Kind]> =>
-    firstFirmAnswer<PluginActionResults[Kind]>(
-      (plugin) => dispatchAction(plugin, kind, ACTION_REQUEST_FROM[kind](input)),
-      exhausted,
-    );
-
-  return {
-    provider,
-
-    /**
-     * A pass fails whole. The registry commits a provider snapshot entire, so
-     * reporting the observers that answered would retire every session
-     * belonging to the one that did not, and the panel would lose them until
-     * it recovers.
-     */
-    async observe() {
-      return merged(await Promise.all(plugins.map((plugin) => plugin.observe())));
-    },
-
-    latest: () => merged(plugins.map((plugin) => plugin.latest())),
-
-    /** Every project any observer offered, in the order the observers stand in. */
-    projects: () => plugins.flatMap((plugin) => plugin.projects?.() ?? []),
-
-    actions: {
-      message: (input) => askEach("message", input),
-      control: (input) => askEach("control", input),
-      createWorkspace: (input) => askEach("createWorkspace", input),
-      spawnAgent: (input) => askEach("spawnAgent", input),
-      renameWorkspace: (input) => askEach("renameWorkspace", input),
-      renameSession: (input) => askEach("renameSession", input),
-    },
-
-    reads: {
-      transcript: (providerSessionId) =>
-        readOf<ProviderTranscriptResult>(
-          providerSessionId,
-          (plugin) => dispatchRead(plugin, "transcript", providerSessionId),
-          exhausted,
-        ),
-      transcriptSince: (providerSessionId, cursor) =>
-        readOf<ProviderTranscriptSinceResult>(
-          providerSessionId,
-          (plugin) => dispatchRead(plugin, "transcriptSince", providerSessionId, cursor),
-          exhausted,
-        ),
-      conversation: (input) =>
-        firstFirmAnswer<ProviderConversationResult>(
-          (plugin) =>
-            dispatchConversation(plugin, {
-              providerSessionId: input.observation.providerSessionId,
-              ...input.request,
-            }),
-          exhausted,
-        ),
-    },
-  };
 }

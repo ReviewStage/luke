@@ -12,7 +12,6 @@ import {
   type AdvertisedControl,
   advertisedActionFor,
   advertisedControls,
-  CLI_CONNECTION,
   dispatchAction,
   maximumSessionMessageLength,
   normalizeSession,
@@ -34,17 +33,12 @@ import {
   recordedRoutes,
   temporaryDirectory,
 } from "@sidecar/wire/testing";
-import type { CliRun } from "../shared/cli-pass.js";
 import {
   assertGoldenJson,
   assertGoldenText,
   homeManifest,
-  invocationSlug,
   providerFixtureRoot,
-  type RecordedCli,
   recordedApi,
-  recordedCli,
-  SHELL_METACHARACTERS,
   seedHome,
 } from "./fixture-recording.js";
 
@@ -54,8 +48,6 @@ export const PROVIDER_OBSERVATION = {
   FILES: "files",
   /** A user-supplied API key over HTTP. */
   KEY: "key",
-  /** The provider's own binary, under the login it already holds. */
-  CLI: "cli",
 } as const;
 
 export type ProviderObservation = (typeof PROVIDER_OBSERVATION)[keyof typeof PROVIDER_OBSERVATION];
@@ -69,13 +61,12 @@ export interface ProviderFixtureInput {
   /** Answers `undefined` for the no-key cases, and throws for the unreadable one. */
   readonly readApiKey: () => Promise<string | undefined>;
   /**
-   * The fakes backing this fixture's recorded `api/` routes and `cli/`
-   * answers. Every provider is handed both, whatever it is observed by: each
-   * throws for a request or an invocation the fixture never recorded, so a
-   * provider that reaches somewhere new fails loudly rather than silently.
+   * The fake backing this fixture's recorded `api/` routes. Every provider is
+   * handed one, whatever it is observed by: it throws for a request the
+   * fixture never recorded, so a provider that reaches somewhere new fails
+   * loudly rather than silently.
    */
   readonly api: FakeCloudApi;
-  readonly run: CliRun;
   /** Where the observation hook's spool stands for this case, or nowhere. */
   readonly hookEventsDirectory: () => string | undefined;
   /**
@@ -122,8 +113,6 @@ export interface ProviderFixtures {
   readonly hookSpool?: { readonly events: readonly string[] };
   /** A project id no pass reported, for the creation case. */
   readonly absentProjectId: string;
-  /** Set for a CLI-observed provider: the read that answers by exit code alone. */
-  readonly cli?: { readonly loginProbeArgv: readonly string[] };
   /**
    * A control the golden roster advertises with a target of its own, for the
    * case that rewrites one. A provider whose controls all action on the session
@@ -308,7 +297,6 @@ interface ContractCase {
   readonly plugin: SessionProviderPlugin;
   readonly home: string;
   readonly api: FakeCloudApi;
-  readonly cli: RecordedCli;
   readonly setApiKey: (apiKey: string | undefined) => void;
   readonly setNow: (now: number) => void;
 }
@@ -332,7 +320,6 @@ export function describeProviderContract(
   const root = providerFixtureRoot(fixtures.providerId);
   const golden = (name: string) => path.join(root, "golden", name);
   const observedByKey = fixtures.observation === PROVIDER_OBSERVATION.KEY;
-  const observedByCli = fixtures.observation === PROVIDER_OBSERVATION.CLI;
   const named = (title: string) => `${fixtures.providerId}: ${title}`;
 
   for (const kind of ADVERTISED_ACTION_KINDS) {
@@ -351,17 +338,12 @@ export function describeProviderContract(
     let apiKey: string | undefined = CONTRACT_API_KEY;
     await seedHome(root, home, now);
     const api = await recordedApi(root);
-    const cli = await recordedCli(
-      root,
-      fixtures.cli && invocationSlug(fixtures.cli.loginProbeArgv),
-    );
     const plugin = await factory({
       home,
       now: () => now,
       minimumRefreshIntervalMs: options.minimumRefreshIntervalMs ?? 0,
       readApiKey: options.readApiKey ?? (async () => apiKey),
       api,
-      run: cli.run,
       hookEventsDirectory: options.hookEventsDirectory ?? (() => undefined),
       sql: async (name) =>
         (await fs.readFile(path.join(root, "db", `${name}.sql`), "utf8")).replaceAll(
@@ -373,7 +355,6 @@ export function describeProviderContract(
       plugin,
       home,
       api,
-      cli,
       setApiKey: (replacement) => {
         apiKey = replacement;
       },
@@ -398,28 +379,19 @@ export function describeProviderContract(
     },
   );
 
-  // "No shell stands between Luke and the binary, nothing enters an
-  // invocation's arguments beyond values the build fixed (or, for a paged
-  // read, the bounded page cursor the same read's previous page handed back,
-  // as a single token)…"
-  test(named("an observation pass runs no invocation the build did not fix"), async (t) => {
-    const { plugin, cli, api } = await contractCase(t);
+  // "Product behavior must not require provider MCP, plugins, hooks, wrappers,
+  // credentials, or live sessions." A provider observed without a key reaches
+  // no network at all; the recorded fake throws for a route the fixture never
+  // recorded, so reaching the assertion is already the fixed-set check.
+  if (!observedByKey) {
+    test(named("an observation pass reaches no network"), async (t) => {
+      const { plugin, api } = await contractCase(t);
 
-    await plugin.observe();
+      await plugin.observe();
 
-    // The recorded fakes throw for an invocation or a route the fixture never
-    // recorded, so reaching this point is already the fixed-set assertion.
-    for (const argv of cli.invocations()) {
-      for (const argument of argv) {
-        assert.ok(
-          !SHELL_METACHARACTERS.test(argument),
-          `an invocation argument carried a shell metacharacter: ${argument}`,
-        );
-      }
-    }
-    if (!observedByKey) assert.deepEqual(api.requests(), []);
-    if (!observedByCli) assert.deepEqual(cli.invocations(), []);
-  });
+      assert.deepEqual(api.requests(), []);
+    });
+  }
 
   // "Observation passes stay read-only by construction; where a provider's
   // documented read answers only a POSTed query …, observation sends a read
@@ -463,10 +435,9 @@ export function describeProviderContract(
   // action a provider never advertised has no route, so it reaches nothing even
   // when the ask arrives admitted.
   test(named("refuses every action this provider's observation does not advertise"), async (t) => {
-    const { plugin, api, cli } = await contractCase(t);
+    const { plugin, api } = await contractCase(t);
     await plugin.observe();
     const requestsAfterPass = api.requests().length;
-    const invocationsAfterPass = cli.invocations().length;
 
     for (const kind of fixtures.unadvertised) {
       const result = await askAction(plugin, kind, fixtures.sessionId);
@@ -478,15 +449,13 @@ export function describeProviderContract(
     }
 
     assert.equal(api.requests().length, requestsAfterPass);
-    assert.equal(cli.invocations().length, invocationsAfterPass);
   });
 
   // "its target has to be one the roster holds"
   test(named("admits no advertised action aimed at a session no pass reported"), async (t) => {
-    const { plugin, api, cli } = await contractCase(t);
+    const { plugin, api } = await contractCase(t);
     await plugin.observe();
     const requestsAfterPass = api.requests().length;
-    const invocationsAfterPass = cli.invocations().length;
 
     for (const kind of fixtures.advertised) {
       const admitted = await admit(
@@ -503,7 +472,6 @@ export function describeProviderContract(
     }
 
     assert.equal(api.requests().length, requestsAfterPass);
-    assert.equal(cli.invocations().length, invocationsAfterPass);
   });
 
   if (fixtures.targetedControlId) {
@@ -643,74 +611,14 @@ export function describeProviderContract(
     });
   }
 
-  // "a machine whose CLI is absent or signed out is observed as having
-  // nothing, the same answer a key-observed provider gives with no key…
-  // signing the CLI out withdraws it on the next pass."
-  if (observedByCli) {
-    test(named("observes nothing on a machine whose CLI is signed out"), async (t) => {
-      const contract = await contractCase(t);
-
-      const observed = await contract.plugin.observe();
-      contract.cli.signOut();
-      contract.setNow(fixtures.now + REFRESH_INTERVAL_MS * 2);
-      const afterSignOut = await contract.plugin.observe();
-      const invocationsAfterSignOut = contract.cli.invocations().length;
-
-      assert.ok(observed.length > 0);
-      assert.deepEqual(afterSignOut, []);
-      assert.equal(contract.plugin.connection?.(), CLI_CONNECTION.SIGNED_OUT);
-      assert.deepEqual(
-        contract.cli
-          .invocations()
-          .slice(invocationsAfterSignOut - 1)
-          .flat(),
-        [...(fixtures.cli?.loginProbeArgv ?? [])],
-        "the list read ran under a login that no longer stands",
-      );
-    });
-
-    test(named("observes nothing on a machine with no CLI at all"), async (t) => {
-      const contract = await contractCase(t);
-      contract.cli.uninstall();
-
-      assert.deepEqual(await contract.plugin.observe(), []);
-      assert.equal(contract.plugin.connection?.(), CLI_CONNECTION.CLI_MISSING);
-    });
-
-    test(named("keeps what it read through a command that ran and failed"), async (t) => {
-      const contract = await contractCase(t);
-
-      const observed = await contract.plugin.observe();
-      contract.cli.fail();
-      contract.setNow(fixtures.now + REFRESH_INTERVAL_MS * 2);
-      const duringOutage = await contract.plugin.observe();
-
-      assert.ok(observed.length > 0);
-      assert.deepEqual(duringOutage, observed);
-    });
-
-    test(named("runs nothing again inside its own refresh interval"), async (t) => {
-      const contract = await contractCase(t, { minimumRefreshIntervalMs: REFRESH_INTERVAL_MS });
-
-      const first = await contract.plugin.observe();
-      const invocationsAfterFirstPass = contract.cli.invocations().length;
-      contract.setNow(fixtures.now + REFRESH_INTERVAL_MS / 3);
-      const throttled = await contract.plugin.observe();
-
-      assert.deepEqual(throttled, first);
-      assert.equal(contract.cli.invocations().length, invocationsAfterFirstPass);
-    });
-  }
-
   // "The read performs nothing and answers only for a session whose provider's
   // transcript this build documents reading: a local provider's own file, or
   // a cloud provider's documented messages endpoint (Conductor today), which
   // the read reaches and nothing else does."
   test(named("reads a transcript only where this build documents reading one"), async (t) => {
-    const { plugin, api, cli } = await contractCase(t);
+    const { plugin, api } = await contractCase(t);
     await plugin.observe();
     const requestsAfterPass = api.requests().length;
-    const invocationsAfterPass = cli.invocations().length;
 
     const read = await plugin.reads?.transcript?.(
       fixtures.transcript?.sessionId ?? fixtures.sessionId,
@@ -735,7 +643,6 @@ export function describeProviderContract(
     } else {
       assert.equal(api.requests().length, requestsAfterPass);
     }
-    assert.equal(cli.invocations().length, invocationsAfterPass);
   });
 
   // "The read renders only what the provider actually wrote down, and a
@@ -842,10 +749,9 @@ export function describeProviderContract(
   // pass and documents a creation endpoint for; the ask names a reported
   // project, never a repository URL or path of its own."
   test(named("offers exactly the projects its latest pass reported"), async (t) => {
-    const { plugin, api, cli } = await contractCase(t);
+    const { plugin, api } = await contractCase(t);
     await plugin.observe();
     const requestsAfterPass = api.requests().length;
-    const invocationsAfterPass = cli.invocations().length;
 
     const projects: readonly WorkspaceProject[] = plugin.projects?.() ?? [];
     await assertGoldenJson(golden("projects.json"), projects);
@@ -866,6 +772,5 @@ export function describeProviderContract(
       "a creation landed in a project no pass reported",
     );
     assert.equal(api.requests().length, requestsAfterPass);
-    assert.equal(cli.invocations().length, invocationsAfterPass);
   });
 }

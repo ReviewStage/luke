@@ -4,7 +4,6 @@ import {
   SECRET_STORAGE,
 } from "@sidecar/credentials/vocabulary";
 import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
-import { CLI_CONNECTION } from "@sidecar/session";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { VOICE_SOURCE } from "./schema.js";
 import { APP_SETTING_DEFAULTS } from "./schema-access.js";
@@ -27,7 +26,6 @@ export function settingsView(overrides: Partial<AppSettingsView> = {}): AppSetti
         [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
       },
       secretStorage: SECRET_STORAGE.UNKNOWN,
-      codexCloudConnection: CLI_CONNECTION.UNKNOWN,
       showInDock: false,
       voice: REALTIME_VOICE.CEDAR,
       voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,

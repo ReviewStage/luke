@@ -110,14 +110,6 @@ test("a row whose build cannot offer the connection draws nothing at all", () =>
   assert.equal(markup, "", "a row whose one action cannot run is not a row");
 });
 
-test("a connection made somewhere else draws its words and no controls", () => {
-  const codex = row("codex-cloud");
-  assert.match(codex, /credential-name">Codex</);
-  assert.match(codex, /credential-status/);
-  assert.doesNotMatch(codex, /credential-actions/);
-  assert.doesNotMatch(codex, /credential-confirm/);
-});
-
 test("what the latest pass reported is drawn as state rather than as an answer", () => {
   const google = row("google-calendar", {
     settings: settingsView({

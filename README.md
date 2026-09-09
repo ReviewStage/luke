@@ -78,7 +78,7 @@ Connect your calendar and Luke stays quiet until your meeting is over.
 | Agent | Local | Cloud |
 | --- | :---: | :---: |
 | Claude Code | ✅ |  |
-| Codex | ✅ | ✅ |
+| Codex | ✅ |  |
 | Conductor |  | ✅ |
 | OMP | ✅ |  |
 <!-- provider-agents:end -->

@@ -60,7 +60,6 @@ import {
   VOICE_SOURCE_SECTION,
 } from "@sidecar/settings";
 import type { AppSettings, AppSettingsView, SettingsUpdateResult } from "@sidecar/settings/wire";
-import { CLI_CONNECTION } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "#shared/messages/audio";
 import type { UpdateSnapshot } from "#shared/messages/update";
@@ -175,14 +174,6 @@ function connectionWord(source: CredentialSource): string {
       : "connected";
 }
 
-/** The row's answer about the Codex CLI login, in words a fact can carry. */
-const CODEX_CLOUD_CONNECTION_WORD = {
-  [CLI_CONNECTION.CONNECTED]: "connected",
-  [CLI_CONNECTION.SIGNED_OUT]: "not connected; the CLI is signed out",
-  [CLI_CONNECTION.CLI_MISSING]: "not connected; the CLI is not installed",
-  [CLI_CONNECTION.UNKNOWN]: "not checked yet",
-};
-
 function providersFact(settings: AppSettingsView): AppGuideFact {
   const roster = CLOUD_AGENT_PROVIDER_LIST.map(
     (provider) =>
@@ -193,9 +184,7 @@ function providersFact(settings: AppSettingsView): AppGuideFact {
     detail:
       `${roster.join(", ")}. Connecting one takes the key its row names, typed by hand into ` +
       `${CONNECTIONS_PAGE}, under Providers — never spoken, and never repeated back. Local ` +
-      "providers such as Claude Code need no key and are observed on their own. Codex cloud " +
-      `tasks (${CODEX_CLOUD_CONNECTION_WORD[settings.codexCloudConnection]}) follow the ` +
-      "Codex CLI's own login: codex login connects them, and signing that CLI out stops them. " +
+      "providers such as Claude Code and Codex need no key and are observed on their own. " +
       "While the Sync provider keys switch in the Sync section is on, a key saved while signed in " +
       "is also stored encrypted with Luke's own service, which never sends one back; the " +
       "switch is changed only by hand, and its own entry says what turning it moves.",
@@ -444,8 +433,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "developer's own words where the project takes one, named as the developer chose or, " +
         "when they chose none, by a short name Luke composes for the work, so a Conductor " +
         "cloud workspace never falls back to the random city name it would otherwise get; a " +
-        "project listed as naming its own workspaces — Codex cloud, and Conductor's local " +
-        "create link — takes no name at all. Only reported " +
+        "project listed as naming its own workspaces — Conductor's local create link — " +
+        "takes no name at all. Only reported " +
         "projects can be named, a project that needs a task cannot be created without one, " +
         "and a provider that reports none takes no ask; a new Superset workspace needs a " +
         "host, an agent, and an opening task, so a task-less ask for one is refused. A bare " +

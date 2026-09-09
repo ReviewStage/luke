@@ -3,7 +3,6 @@ import type {
   CredentialSource,
   SecretStorage,
 } from "@sidecar/credentials/vocabulary";
-import type { CliConnection } from "@sidecar/session";
 
 /**
  * One connected calendar source as a renderer may know it: which account,
@@ -29,7 +28,6 @@ export interface CalendarAccount {
  */
 export interface RuntimeStatus {
   credentialSources: Readonly<Record<CredentialProviderId, CredentialSource>>;
-  codexCloudConnection: CliConnection;
   secretStorage: SecretStorage;
   voiceAvailable: boolean;
   calendarSignInAvailable: boolean;
