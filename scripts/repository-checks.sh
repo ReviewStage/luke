@@ -330,16 +330,6 @@ if [[ -n "$renderer_escapes" ]]; then
     exit 1
 fi
 
-# The hidden voice window mounts nothing drawn and must record nothing: the
-# session-replay client starts only inside the panel's App, and nothing under
-# the voice role may reach for it.
-voice_replay_imports=$(grep -rnaE 'from "[^"]*session-replay' "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer/voice" 2>/dev/null || true)
-if [[ -n "$voice_replay_imports" ]]; then
-    printf 'error: the voice window never records — nothing under renderer/voice/ may import session-replay:\n%s\n' \
-        "$voice_replay_imports" >&2
-    exit 1
-fi
-
 # A hosted quota is the service's own accounting, and the customer-facing panel
 # says only that voice is temporarily unavailable — never a number, a meter or a
 # reset time. The diagnostics the renderer receives carry the members, so the

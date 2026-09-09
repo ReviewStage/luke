@@ -52,6 +52,7 @@ export {
   REALTIME_STATUS,
   type RealtimeStatus,
   truncateResponseEvents,
+  voiceExchangeActive,
 } from "./realtime-events.js";
 export {
   ASK_BRAIN_TOOL,

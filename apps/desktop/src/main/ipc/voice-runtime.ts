@@ -2,7 +2,7 @@ import { PRODUCT_EVENT, type RecordProductEvent } from "@sidecar/analytics";
 import { CREDENTIAL_CONNECTION, CREDENTIAL_PROVIDERS } from "@sidecar/credentials";
 import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import type { RealtimeConnection } from "@sidecar/hosted";
-import type { RealtimeDiagnostics } from "@sidecar/realtime";
+import { type RealtimeDiagnostics, voiceExchangeActive } from "@sidecar/realtime";
 import type {
   BrowserWindow,
   IpcMain,
@@ -11,11 +11,7 @@ import type {
   WebContents,
 } from "electron";
 import { BRIDGE, channels } from "#shared/bridge";
-import {
-  VOICE_COMMAND,
-  VOICE_COMMAND_OUTCOME,
-  voiceExchangeActive,
-} from "#shared/messages/voice-view";
+import { VOICE_COMMAND, VOICE_COMMAND_OUTCOME } from "#shared/messages/voice-view";
 import type { AppStateStore } from "../app-state";
 import { registerBridge } from "../register-bridge";
 import type { PanelManager } from "../window/panel-manager";

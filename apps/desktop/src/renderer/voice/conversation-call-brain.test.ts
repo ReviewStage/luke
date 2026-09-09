@@ -13,6 +13,7 @@ import {
   REALTIME_SERVER_EVENT,
   REALTIME_STATUS,
 } from "@sidecar/realtime";
+import { REPLY_KIND } from "@sidecar/voice/orchestrator";
 import { ACT_RESULT_STATUS, isRecord } from "@sidecar/wire";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import {
@@ -29,7 +30,6 @@ import {
   settleReply,
   toolOutputs,
 } from "#testing/conversation-call-harness";
-import { REPLY_KIND } from "./captions";
 import { BRAIN_ASK_SETTLE_TIMEOUT_MS, REALTIME_SETTLE_TIMEOUT_MS } from "./speak-only-call";
 
 test("a typed ask's reply trims the interrupted reply to what was heard", async () => {

@@ -5,7 +5,7 @@ import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
 } from "@sidecar/session";
-import { HistoryReporter, withPendingLines } from "./history-reporter";
+import { HistoryReporter, withPendingLines } from "./history-reporter.js";
 
 const NOW = 1_800_000_000_000;
 

@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_CLIENT_EVENT, REALTIME_SERVER_EVENT, REALTIME_STATUS } from "@sidecar/realtime";
+import { SpeechMouth } from "@sidecar/voice/orchestrator";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import {
   armDeveloperTurn,
@@ -22,7 +23,6 @@ import {
   settleReply,
 } from "#testing/conversation-call-harness";
 import { quietIsLukesOwn, REALTIME_SETTLE_TIMEOUT_MS, REMOTE_QUIET_MS } from "./speak-only-call";
-import { SpeechMouth } from "./speech-mouth";
 
 test("a reply ends on the second of its two endings, in either order", async (t) => {
   // Generation finishing and playback finishing are two facts with no fixed

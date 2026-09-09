@@ -2,7 +2,7 @@ import type { RealtimeStatus } from "@sidecar/realtime";
 import { REALTIME_STATUS } from "@sidecar/realtime";
 import { SPEECH_OUTCOME, type SpeechOffer, type SpeechOutcome } from "@sidecar/realtime/speech";
 import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
-import type { SpeakOnlyCall } from "./speak-only-call";
+import type { SpeakOnlyVoiceCall } from "./voice-call.js";
 
 /**
  * How long Luke's own call lingers once what it was opened for has been said.
@@ -48,7 +48,7 @@ export const ANNOUNCER_GRACE_MS = 10_000;
  * developer's own call, but it must never close one.
  */
 export type SpeechMouthSession = Pick<
-  SpeakOnlyCall,
+  SpeakOnlyVoiceCall,
   | "isConnected"
   | "isConnecting"
   | "status"

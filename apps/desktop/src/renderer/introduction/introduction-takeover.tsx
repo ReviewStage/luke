@@ -11,6 +11,7 @@ import {
   WORDMARK_ART,
 } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
+import { activeVoiceStream } from "@sidecar/voice/orchestrator";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
@@ -32,7 +33,6 @@ import { useMeasuredHeight } from "../use-measured-height";
 import { usePrefersReducedMotion } from "../use-reduced-motion";
 import { ConversationCall } from "../voice/conversation-call";
 import { openPreferredMicrophone } from "../voice/microphone-choice";
-import { activeVoiceStream } from "../voice/use-voice-session";
 import { outputSilent } from "../volume-hint";
 import { WAVEFORM_VOICE, Waveform, type WaveformVoice } from "../waveform";
 import { IntroductionAudio } from "./introduction-audio";

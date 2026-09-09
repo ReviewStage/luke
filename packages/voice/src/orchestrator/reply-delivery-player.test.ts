@@ -4,7 +4,7 @@ import { BRAIN_REQUEST_ORIGIN, type BrainRequestOrigin } from "@sidecar/brain/re
 import type { BrainReplyClaimResult, BrainReplyOffer } from "@sidecar/brain/requests-wire";
 import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
 import { drainMicrotasks } from "@sidecar/runtime/testing";
-import { ReplyDeliveryPlayer } from "./reply-delivery-player";
+import { ReplyDeliveryPlayer } from "./reply-delivery-player.js";
 
 interface Harness {
   player: ReplyDeliveryPlayer;

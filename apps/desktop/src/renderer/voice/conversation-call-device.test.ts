@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_SERVER_EVENT, REALTIME_STATUS } from "@sidecar/realtime";
+import { REPLY_KIND } from "@sidecar/voice/orchestrator";
 import {
   armDeveloperTurn,
   askBrainDone,
@@ -17,7 +18,6 @@ import {
   reportedErrors,
   settleReply,
 } from "#testing/conversation-call-harness";
-import { REPLY_KIND } from "./captions";
 
 test("an idle call stays open until the provider closes it", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });

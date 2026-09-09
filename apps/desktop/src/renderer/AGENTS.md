@@ -26,17 +26,28 @@ expires before the next version of the document could carry it — which is
 what the voice level is, twenty readings a second each good for fifty
 milliseconds.
 
-Two renderers load this bundle under the same rule. The panel is one; the
-hidden voice window under `WINDOW_ROLE.VOICE` is the other, and everything it
-mounts lives under `renderer/voice/`: the calls, the microphone, the mouth,
-and the hook that reports the conversation back to the main process as one
-`VoiceView`. It reaches the main process through the same bridge, under
-the same sandbox, and it must never mount `App` or import `session-replay.ts`:
-the panel is the one surface that records, and a recording of a blank hidden
-window would be a session nobody consented to. `repository-checks.sh` fails the
-build on a `session-replay` import anywhere under `renderer/voice/`. A panel
-draws the voice state that arrives in its `app:state` snapshot and forwards
-its presses back; it constructs no call of its own.
+Two renderers run under the same rule, and they are two bundles rather than
+one bundle branching on a role. The panel's is `renderer/index.tsx`, which
+draws the panel or the introduction takeover; the hidden voice window's is
+`renderer/voice/index.tsx`, and everything it mounts lives under
+`renderer/voice/`: the calls, the microphone, the level meter, the element
+Luke's voice plays through, and the hook that drives `VoiceOrchestrator`
+(`@sidecar/voice/orchestrator`) and reports its view to the main process.
+It reaches the main process through the same bridge, under the same sandbox,
+and it can neither mount `App` nor import `session-replay.ts` — neither is
+reachable from its entry, so the bundler is what holds the line rather than a
+grep. The panel is the one surface that records, and a recording of a blank
+hidden window would be a session nobody consented to. A panel draws the voice
+state that arrives in its `app:state` snapshot and forwards its presses back;
+it constructs no call of its own.
+
+The policy behind that hook is not the renderer's at all. Which of the two
+calls stands, the talk key's latch, the mouth that lets Luke speak into
+silence, the receiving end of a reply delivery, the restart a changed voice
+owes, and the thread the exchange leaves behind are `VoiceOrchestrator` and
+`ConversationThread` in `@sidecar/voice`, which touch no DOM: what the hook
+supplies is the transport each call is built with, and what it takes back is
+one view to report and the two streams only a browser can play or meter.
 
 A call Luke opens for himself is a `SpeakOnlyCall`
 (`voice/speak-only-call.ts`): it is configured with

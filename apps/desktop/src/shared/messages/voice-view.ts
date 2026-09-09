@@ -103,21 +103,6 @@ export function isVoiceView(value: UnparsedWireValue): value is VoiceView & Wire
 }
 
 /**
- * The exchange is live from the press to the end of the reply — the call
- * coming up, a turn being held, Luke speaking — and the media duck follows it.
- * It is also the whole of the session's turn arbitration: the Realtime API
- * answers one turn at a time, so while this stands nothing may open another,
- * and a caller told it was refused decides what to show instead.
- */
-export function voiceExchangeActive(status: RealtimeStatus): boolean {
-  return (
-    status === REALTIME_STATUS.CONNECTING ||
-    status === REALTIME_STATUS.LISTENING ||
-    status === REALTIME_STATUS.RESPONDING
-  );
-}
-
-/**
  * Who opened the exchange the count is about. Luke's own speak-only call has
  * no microphone to offer, which is the whole of what tells his announcement
  * from a turn the developer took; between the developer's own two ways in,

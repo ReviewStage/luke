@@ -33,6 +33,21 @@ export const REALTIME_STATUS = {
 
 export type RealtimeStatus = (typeof REALTIME_STATUS)[keyof typeof REALTIME_STATUS];
 
+/**
+ * The exchange is live from the press to the end of the reply — the call
+ * coming up, a turn being held, Luke speaking — and the media duck follows it.
+ * It is also the whole of the session's turn arbitration: the Realtime API
+ * answers one turn at a time, so while this stands nothing may open another,
+ * and a caller told it was refused decides what to show instead.
+ */
+export function voiceExchangeActive(status: RealtimeStatus): boolean {
+  return (
+    status === REALTIME_STATUS.CONNECTING ||
+    status === REALTIME_STATUS.LISTENING ||
+    status === REALTIME_STATUS.RESPONDING
+  );
+}
+
 export const REALTIME_CLIENT_EVENT = {
   SESSION_UPDATE: "session.update",
   /**

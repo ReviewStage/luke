@@ -39,7 +39,7 @@ import {
 import { type AppGuideSnapshot, isAppGuideSnapshot } from "@sidecar/guide";
 import type { RealtimeConnection } from "@sidecar/hosted";
 import type { SupersetSignInSnapshot } from "@sidecar/providers/superset/sign-in-stage";
-import type { RealtimeDiagnostics } from "@sidecar/realtime";
+import { type RealtimeDiagnostics, voiceExchangeActive } from "@sidecar/realtime";
 import {
   isSpeechOffer,
   isSpeechOutcome,
@@ -96,7 +96,6 @@ import {
   type VoiceCommand,
   type VoiceCommandOutcome,
   type VoiceView,
-  voiceExchangeActive,
 } from "./messages/voice-view";
 
 export interface WireGuard<Value> {
@@ -590,12 +589,14 @@ export const BRIDGE = {
   }),
   /**
    * The voice window's whole snapshot of the live conversation, reported on
-   * every edge. The main process keeps only the latest, to hand a panel that
-   * opens later, forwards each one to every panel on `onVoiceViewChanged`,
-   * and derives the exchange level the media duck follows from it. The count
-   * of exchanges rides beside it: a kind travels only on the edge that opened
-   * an exchange, named by the one window that knows who opened it, so a turn
-   * walking from connecting to responding is counted once.
+   * every edge of its own and on none of anything else's: the main process
+   * writes it into the document that same window reads, so a report the view
+   * did not move would be answered by a delivery asking for another. From
+   * there every panel draws it, a panel that opens later bootstraps from it,
+   * and the exchange level the media duck follows is derived from it. The
+   * count of exchanges rides beside it: a kind travels only on the edge that
+   * opened an exchange, named by the one window that knows who opened it, so
+   * a turn walking from connecting to responding is counted once.
    */
   reportVoiceView: entry({
     kind: "send",
