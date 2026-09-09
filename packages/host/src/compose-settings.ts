@@ -31,7 +31,6 @@ import {
   isKeyedAppSettingField,
   isSettingEntryKey,
   isSettingsResetScope,
-  SETTING_SIDE_EFFECT,
   type SettingEntryValue,
   settingAnalytics,
   settingEntryGuard,
@@ -42,6 +41,7 @@ import { AccountPreferencesClient } from "./account-preferences-client.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
 import { ProviderKeyVaultSync, type VaultSyncAccount } from "./provider-key-vault-sync.js";
+import { hostSettingSideEffects } from "./settings-side-effects.js";
 import { SettingsStore } from "./settings-store.js";
 import { reporterOf } from "./wire-helpers.js";
 
@@ -311,35 +311,20 @@ export function composeSettings(dependencies: SettingsDependencies): SettingsCom
     });
   }
 
-  /**
-   * The side effects a setting has in the host. The client applies its own —
-   * the login item, the Dock, the displays, the form factor, the keys, the
-   * duck — from the same answered snapshot; nothing here reaches a window.
-   */
+  const sideEffects = hostSettingSideEffects({
+    setVoice: (voice) => links.get().setVoice(voice),
+    setVoiceSpeed: (speed) => links.get().setVoiceSpeed(speed),
+    applyVoiceCredential: () => links.get().applyVoiceCredential(),
+    reconcileSpeech: () => links.get().reconcileSpeech(),
+    applyVaultSync: (syncProviderKeys) => void vaultSync.apply(syncProviderKeys, { claim: true }),
+    emitSettings,
+  });
+
   async function applyHostSettingSideEffect(
     field: AppSettingField,
     settings: SettingsUpdateResult["settings"],
   ): Promise<void> {
-    switch (APP_SETTING_SCHEMA[field].mainProcessSideEffect) {
-      case SETTING_SIDE_EFFECT.VOICE:
-        links.get().setVoice(settings.stored.voice);
-        break;
-      case SETTING_SIDE_EFFECT.VOICE_SPEED:
-        links.get().setVoiceSpeed(settings.stored.voiceSpeed);
-        break;
-      case SETTING_SIDE_EFFECT.VOICE_SOURCE:
-        await links.get().applyVoiceCredential();
-        await emitSettings();
-        break;
-      case SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD:
-        links.get().reconcileSpeech();
-        break;
-      case SETTING_SIDE_EFFECT.VAULT_SYNC:
-        void vaultSync.apply(settings.stored.syncProviderKeys, { claim: true });
-        break;
-      default:
-        break;
-    }
+    await sideEffects[APP_SETTING_SCHEMA[field].sideEffect]({ settings: settings.stored });
   }
 
   async function applyAccountPreferenceSideEffects(

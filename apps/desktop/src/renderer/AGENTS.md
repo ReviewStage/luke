@@ -199,13 +199,17 @@ the guide is simultaneously what Luke can say about himself and the outer
 bound of what an ask can do to him.
 
 **When you add a feature or a setting, teach the guide about it in the same
-change.** Stored settings are declared once, in `APP_SETTING_SCHEMA`: its guard
-derives the stored and wire value type, its default feeds the store, and its
-guide entry feeds Luke's guide, settings search, and the ordinary switch or
-choice row on the page the entry names. There is no separate renderer record
-whose completeness the compiler checks. A guide entry that deliberately
-builds no row still needs a comment saying which fact or special control covers
-it. The facts half has no compile lever either, so the rule is stated here: a
+change.** A stored setting is declared once, in `APP_SETTING_SCHEMA`, through
+the builder for its kind: its guard derives the stored and wire value type, its
+default feeds the store, its `page`, `section`, and `order` place its row, its
+`visible` decides whether that row and its search result stand, its
+`sideEffect` names an entry in the host's and the client's side-effect tables —
+both `Record`s over every id, so a new effect does not build until both sides
+say what it does — and its guide entry feeds Luke's guide and the settings
+search. There is no separate renderer record, and no `switch`, whose
+completeness the compiler does not check. A setting that deliberately builds no
+row says so as `rows: SETTING_ROWS.NONE` rather than as a comment. The facts
+half has no compile lever either, so the rule is stated here: a
 capability or action the guide does not describe is one Luke will deny having,
 and a stale entry is one he will misdescribe.
 The facts deliberately cover only what Luke needs to hold a conversation and
@@ -233,3 +237,10 @@ Rules the guide must keep:
 - Credentials are never adjustable, never spoken, and never described beyond
   whether a provider is connected. The guide leaves the machine, so nothing in
   it may carry a key, a key's shape, or an environment variable's value.
+- A setting's page, the section of that page it stands in, its order there, and
+  whether its row is drawn are the schema entry's answers and nobody else's. A
+  page component that decided for itself which fields it renders is a second
+  record of the same fact, and the two will drift; `SchemaSettingRows` is the
+  only renderer of a schema row, and a setting whose control cannot be one is
+  `rows: SETTING_ROWS.BESPOKE` with the component that draws it named beside
+  the declaration.

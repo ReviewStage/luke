@@ -1,12 +1,13 @@
-import { PRODUCT_SETTING_VALUE, type ProductSettingValue } from "@sidecar/analytics";
-import { CREDENTIAL_PROVIDERS, isCredentialProviderId } from "@sidecar/credentials/vocabulary";
+import {
+  CREDENTIAL_PROVIDER_ID,
+  CREDENTIAL_PROVIDERS,
+  CREDENTIAL_SOURCE,
+  isCredentialProviderId,
+} from "@sidecar/credentials/vocabulary";
 import {
   APP_SETTING_ID,
   APP_SETTING_KIND,
-  APP_TOGGLE_VALUE,
-  type AppGuideSetting,
   type AppSettingId,
-  appToggleText,
   isAppSettingId,
 } from "@sidecar/guide";
 import {
@@ -15,6 +16,7 @@ import {
   REALTIME_DEFAULTS,
   REALTIME_VOICE_LIST,
   REALTIME_VOICE_SPEED,
+  REALTIME_VOICE_SPEED_LIST,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
 } from "@sidecar/realtime";
@@ -43,9 +45,43 @@ import {
   PANEL_FORM_FACTOR_LIST,
   type PanelFormFactor,
 } from "@sidecar/surface";
-import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
-import { parseVoiceHotkey, VOICE_HOTKEY_NONE } from "./voice-hotkey.js";
+import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import {
+  choiceAnalytics,
+  choiceSetting,
+  hotkeySetting,
+  keyedSetting,
+  optional,
+  storedSetting,
+  toggleSetting,
+} from "./schema-builders.js";
+import {
+  SETTING_ROWS,
+  SETTING_SECTION,
+  SETTING_SIDE_EFFECT,
+  SETTINGS_PAGE,
+  SETTINGS_RESET_SCOPE,
+  type SettingGuardResult,
+  type SettingsVisibility,
+} from "./schema-types.js";
 
+export {
+  SETTING_ROWS,
+  SETTING_SECTION,
+  SETTING_SIDE_EFFECT,
+  SETTINGS_PAGE,
+  SETTINGS_RESET_SCOPE,
+  type SettingControl,
+  type SettingEntryDefinition,
+  type SettingGuardResult,
+  type SettingOption,
+  type SettingRows,
+  type SettingSection,
+  type SettingSideEffectId,
+  type SettingsPage,
+  type SettingsResetScope,
+  type SettingsVisibility,
+} from "./schema-types.js";
 // The ids themselves live in core, because the product-event vocabulary names
 // the same set and may not depend on anything here.
 export { APP_SETTING_ID, type AppSettingId, isAppSettingId };
@@ -61,78 +97,6 @@ export function isVoiceSource(value: UnparsedWireValue): value is VoiceSource {
   return value === VOICE_SOURCE.ACCOUNT || value === VOICE_SOURCE.KEY;
 }
 
-export const SETTINGS_PAGE = {
-  ROOT: "root",
-  VOICE: "voice",
-  APPEARANCE: "appearance",
-  SHORTCUTS: "shortcuts",
-  CONNECTIONS: "connections",
-} as const;
-
-export type SettingsPage = (typeof SETTINGS_PAGE)[keyof typeof SETTINGS_PAGE];
-
-export const SETTINGS_RESET_SCOPE = {
-  VOICE: "voice",
-  APPEARANCE: "appearance",
-  SHORTCUTS: "shortcuts",
-  WORKSPACES: "workspaces",
-} as const;
-
-export type SettingsResetScope = (typeof SETTINGS_RESET_SCOPE)[keyof typeof SETTINGS_RESET_SCOPE];
-
-export const SETTING_SIDE_EFFECT = {
-  NONE: "none",
-  DOCK: "dock",
-  LOGIN_ITEM: "login-item",
-  DISPLAYS: "displays",
-  FORM_FACTOR: "form-factor",
-  VOICE: "voice",
-  VOICE_SPEED: "voice-speed",
-  TALK_HOTKEY: "talk-hotkey",
-  ASK_HOTKEY: "ask-hotkey",
-  STOP_HOTKEY: "stop-hotkey",
-  MEDIA_DUCK: "media-duck",
-  VOICE_SOURCE: "voice-source",
-  ANNOUNCEMENT_HOLD: "announcement-hold",
-  VAULT_SYNC: "vault-sync",
-} as const;
-
-export type SettingSideEffect = (typeof SETTING_SIDE_EFFECT)[keyof typeof SETTING_SIDE_EFFECT];
-
-/** The concrete runtime families a stored setting may use after its schema guard. */
-type StoredSettingValue =
-  | string
-  | number
-  | boolean
-  | readonly SessionFilter[]
-  | WorkspaceAgentDefaults
-  | Readonly<Partial<Record<WorkspaceProviderId, string>>>
-  | undefined;
-
-type AppSettingGuideSettings = (field: string) => StoredSettingValue;
-
-export interface SettingGuardResult<Value> {
-  valid: boolean;
-  value: Value;
-}
-
-/** What one key of a map-valued setting holds. */
-export type SettingEntryValue<Field extends AppSettingField> = NonNullable<
-  NonNullable<AppSettingValue<Field>>[keyof NonNullable<AppSettingValue<Field>>]
->;
-
-/**
- * Declares a setting whose value is a map of per-key entries, so one entry can
- * be written under the store's own lock. A caller that read the map, merged an
- * entry, and wrote the whole thing back would drop any entry saved while its
- * write was in flight — the lost update `#serialize` exists to prevent.
- */
-interface SettingEntryDefinition<Value> {
-  isKey(value: UnparsedWireValue): boolean;
-  /** Whether the stored entry already says what a write would say. */
-  same(current: Value | undefined, next: Value | undefined): boolean;
-}
-
 const SETTINGS_TAB = "the panel's Settings tab";
 const VOICE_PAGE = `${SETTINGS_TAB}, on its Voice page`;
 const VOICE_SOURCE_SECTION = `${VOICE_PAGE}, in the Provider section after Permissions`;
@@ -142,42 +106,45 @@ const CONDUCTOR_ROW_PATH = `the Conductor row under Providers, in ${CONNECTIONS_
 const CONDUCTOR_DEFAULT_CHOICE = "Conductor's default";
 const ASK_EACH_TIME_CHOICE = "ask each time";
 
+/* The default-workspace row's word for no default at all. An empty value
+   rather than a member of the provider set, so no provider id can collide
+   with it. */
+const NO_WORKSPACE_PROVIDER = "";
+
 const VOICE_SOURCE_CHOICE = {
   [VOICE_SOURCE.ACCOUNT]: "your Luke account",
   [VOICE_SOURCE.KEY]: "your OpenAI key",
-};
+} as const satisfies Record<VoiceSource, string>;
 
 const VOICE_SPEED_WORD = {
-  SLOW: "slow",
-  NORMAL: "normal",
-  QUICK: "quick",
-  FAST: "fast",
-} as const;
+  [REALTIME_VOICE_SPEED.SLOW]: "slow",
+  [REALTIME_VOICE_SPEED.NORMAL]: "normal",
+  [REALTIME_VOICE_SPEED.QUICK]: "quick",
+  [REALTIME_VOICE_SPEED.FAST]: "fast",
+} as const satisfies Record<RealtimeVoiceSpeed, string>;
 
-const VOICE_SPEED_WORDS = [
-  { word: VOICE_SPEED_WORD.SLOW, speed: REALTIME_VOICE_SPEED.SLOW },
-  { word: VOICE_SPEED_WORD.NORMAL, speed: REALTIME_VOICE_SPEED.NORMAL },
-  { word: VOICE_SPEED_WORD.QUICK, speed: REALTIME_VOICE_SPEED.QUICK },
-  { word: VOICE_SPEED_WORD.FAST, speed: REALTIME_VOICE_SPEED.FAST },
-] as const;
+const voiceSpeedMultiple = (speed: RealtimeVoiceSpeed): string => `${speed}×`;
 
-const VOICE_SPEED_BY_SPOKEN_VALUE: Readonly<Record<string, RealtimeVoiceSpeed>> =
-  Object.fromEntries(
-    VOICE_SPEED_WORDS.flatMap(({ word, speed }) => [
-      [word, speed],
-      [`${speed}×`, speed],
-    ]),
-  );
-
-function voiceSpeedMultiple(speed: RealtimeVoiceSpeed): string {
-  return `${speed}×`;
+/* The API names its voices in lowercase; on a control they read as names. The
+   default carries its status into the menu, so returning to it never needs the
+   README or a memory of what shipped. */
+function voiceOptionLabel(voice: RealtimeVoice): string {
+  const name = voice.charAt(0).toUpperCase() + voice.slice(1);
+  return voice === REALTIME_DEFAULTS.VOICE ? `${name} (default)` : name;
 }
 
-function voiceSpeedWord(speed: RealtimeVoiceSpeed | undefined): string {
-  return (
-    VOICE_SPEED_WORDS.find((candidate) => candidate.speed === speed)?.word ??
-    VOICE_SPEED_WORD.NORMAL
-  );
+/* A pace reads as a rate multiple, the way every player writes one. The
+   natural rate carries its status into the menu for the same reason the
+   default voice does. */
+function speedOptionLabel(speed: RealtimeVoiceSpeed): string {
+  return speed === REALTIME_DEFAULTS.SPEED ? `${speed}× (default)` : `${speed}×`;
+}
+
+/* The forms read as names, and the bubble carries its status into the menu the
+   way the default voice does. */
+function formFactorOptionLabel(formFactor: PanelFormFactor): string {
+  const name = formFactor.charAt(0).toUpperCase() + formFactor.slice(1);
+  return formFactor === DEFAULT_PANEL_FORM_FACTOR ? `${name} (default)` : name;
 }
 
 function workspaceProviderName(providerId: WorkspaceProviderId): string {
@@ -191,69 +158,31 @@ function workspaceProviderName(providerId: WorkspaceProviderId): string {
   return isProviderId(providerId) ? PROVIDER_IDENTITY_BY_ID[providerId].displayName : providerId;
 }
 
-function settingGuideEntry<Field extends string>(
-  _field: Field,
-  ids: readonly string[],
-  build: (
-    settings: AppSettingGuideSettings,
-    defaultValue: never,
-  ) => AppGuideSetting | readonly AppGuideSetting[] | undefined,
-) {
-  return { ids, build };
-}
+/** Voice available and the microphone granted: the whole of what a control needs. */
+const voiceControlDrawn = (view: SettingsVisibility): boolean => view.voiceControlsDrawn;
 
-function guideValue<Value extends StoredSettingValue>(
-  settings: AppSettingGuideSettings,
-  field: string,
-): Value {
-  // SAFETY: Each guide builder asks for its own schema field in the value type that field's guard returns.
-  return settings(field) as Value;
-}
+/**
+ * The quiet rides the calendar block, and appears with its first connection —
+ * a Google account, or this Mac's own Calendar.
+ */
+const calendarConnected = (view: SettingsVisibility): boolean =>
+  (view.settings.calendarSignInAvailable && view.settings.calendarAccounts.length > 0) ||
+  view.settings.appleCalendar !== undefined;
 
-const valid = <Value>(value: Value): SettingGuardResult<Value> => ({ valid: true, value });
-const invalid = <Value>(value: Value): SettingGuardResult<Value> => ({ valid: false, value });
+/**
+ * The Conductor agent rows belong to a connected provider the build documents
+ * a model table for.
+ */
+const conductorAgentRowDrawn = (view: SettingsVisibility): boolean =>
+  view.settings.credentialSources[CREDENTIAL_PROVIDER_ID.CONDUCTOR] !== CREDENTIAL_SOURCE.NONE &&
+  workspaceAgentModels(PROVIDER_ID.CONDUCTOR).length > 0;
 
-function optional<Value extends UnparsedWireValue>(
-  value: UnparsedWireValue,
-  guard: (candidate: UnparsedWireValue) => candidate is Value,
-): SettingGuardResult<Value | undefined> {
-  if (value === undefined) return valid(undefined);
-  return guard(value) ? valid(value) : invalid(undefined);
-}
-
-const toggleAnalytics = (value: StoredSettingValue): ProductSettingValue =>
-  value ? PRODUCT_SETTING_VALUE.ON : PRODUCT_SETTING_VALUE.OFF;
-
-const choiceAnalytics = (value: StoredSettingValue): ProductSettingValue =>
-  value === undefined ? PRODUCT_SETTING_VALUE.CLEARED : PRODUCT_SETTING_VALUE.SET;
-
-function boolean(defaultValue: boolean) {
-  return (value: UnparsedWireValue): SettingGuardResult<boolean> =>
-    value === true || value === false ? valid(value) : invalid(defaultValue);
-}
-
-function hotkey(value: UnparsedWireValue): SettingGuardResult<string | undefined> {
-  if (value === undefined) return valid(undefined);
-  if (!isWireString(value)) return invalid(undefined);
-  // A deletion is a choice the parser cannot spell: no chord at all, with no
-  // default standing in behind the absence.
-  if (value === VOICE_HOTKEY_NONE) return valid(VOICE_HOTKEY_NONE);
-  const parsed = parseVoiceHotkey(value);
-  return parsed ? valid(parsed) : invalid(undefined);
-}
-
-// A deleted key counts as off rather than set: a stored value stands either
-// way, and the count is the one reader of the difference. The chord itself
-// never travels, whichever shape is reported.
-const hotkeyAnalytics = (value: StoredSettingValue): ProductSettingValue =>
-  value === VOICE_HOTKEY_NONE ? PRODUCT_SETTING_VALUE.OFF : choiceAnalytics(value);
-
-function workspaceAgentDefaults(
+function workspaceAgentDefaultsGuard(
   value: UnparsedWireValue,
 ): SettingGuardResult<WorkspaceAgentDefaults | undefined> {
-  if (value === undefined) return valid(undefined);
+  if (value === undefined) return { valid: true, value: undefined };
   if (!isRecord(value)) {
-    return invalid(undefined);
+    return { valid: false, value: undefined };
   }
   const defaults: Partial<Record<ProviderId, WorkspaceAgentSelection>> &
     Partial<Record<typeof SUPERSET_WORKSPACE_PROVIDER_ID, WorkspaceAgentKindSelection>> = {};
@@ -267,7 +196,7 @@ function workspaceAgentDefaults(
     if (!isProviderId(providerId) || !parsed) continue;
     defaults[providerId] = parsed;
   }
-  return valid(Object.keys(defaults).length > 0 ? defaults : undefined);
+  return { valid: true, value: Object.keys(defaults).length > 0 ? defaults : undefined };
 }
 
 /**
@@ -277,18 +206,18 @@ function workspaceAgentDefaults(
  * repeated value narrows no further than its first, and a selection left with
  * nothing reads as unset, which is the unnarrowed list.
  */
-function sessionFilters(
+function sessionFiltersGuard(
   value: UnparsedWireValue,
 ): SettingGuardResult<readonly SessionFilter[] | undefined> {
-  if (value === undefined) return valid(undefined);
-  if (!Array.isArray(value)) return invalid(undefined);
+  if (value === undefined) return { valid: true, value: undefined };
+  if (!Array.isArray(value)) return { valid: false, value: undefined };
   const filters: SessionFilter[] = [];
   for (const candidate of value) {
     if (!isWireString(candidate) || !isSessionFilter(candidate)) continue;
     if (filters.includes(candidate)) continue;
     filters.push(candidate);
   }
-  return valid(filters.length > 0 ? filters : undefined);
+  return { valid: true, value: filters.length > 0 ? filters : undefined };
 }
 
 const MAXIMUM_SESSION_SEARCH_QUERY_LENGTH = 500;
@@ -300,23 +229,23 @@ const MAXIMUM_SESSION_SEARCH_QUERY_LENGTH = 500;
  * value past any typeable length is a corrupted file rather than a question
  * someone is still asking.
  */
-function sessionSearchQuery(value: UnparsedWireValue): SettingGuardResult<string | undefined> {
-  if (value === undefined) return valid(undefined);
-  if (!isWireString(value)) return invalid(undefined);
+function sessionSearchQueryGuard(value: UnparsedWireValue): SettingGuardResult<string | undefined> {
+  if (value === undefined) return { valid: true, value: undefined };
+  if (!isWireString(value)) return { valid: false, value: undefined };
   if (value.trim() === "" || value.length > MAXIMUM_SESSION_SEARCH_QUERY_LENGTH) {
-    return valid(undefined);
+    return { valid: true, value: undefined };
   }
-  return valid(value);
+  return { valid: true, value };
 }
 
 const MAXIMUM_WORKSPACE_PROJECT_ID_LENGTH = 500;
 
-function workspaceProjectDefaults(
+function workspaceProjectDefaultsGuard(
   value: UnparsedWireValue,
 ): SettingGuardResult<Readonly<Partial<Record<WorkspaceProviderId, string>>> | undefined> {
-  if (value === undefined) return valid(undefined);
+  if (value === undefined) return { valid: true, value: undefined };
   if (!isRecord(value)) {
-    return invalid(undefined);
+    return { valid: false, value: undefined };
   }
   const defaults: Partial<Record<WorkspaceProviderId, string>> = {};
   for (const [providerId, candidate] of Object.entries(value)) {
@@ -327,406 +256,292 @@ function workspaceProjectDefaults(
     }
     defaults[providerId] = providerProjectId;
   }
-  return valid(Object.keys(defaults).length > 0 ? defaults : undefined);
+  return { valid: true, value: Object.keys(defaults).length > 0 ? defaults : undefined };
 }
 
 export const APP_SETTING_SCHEMA = {
-  openAtLogin: {
+  openAtLogin: toggleSetting({
     field: "openAtLogin",
+    id: APP_SETTING_ID.OPEN_AT_LOGIN,
+    label: "Open Luke at login",
+    description: "Whether Luke starts on his own when this Mac signs in.",
     default: true,
-    guard: boolean(true),
-    settingsPage: SETTINGS_PAGE.APPEARANCE,
+    page: SETTINGS_PAGE.APPEARANCE,
+    order: 10,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
-    guideEntry: settingGuideEntry(
-      "openAtLogin",
-      [APP_SETTING_ID.OPEN_AT_LOGIN],
-      (settings, defaultValue) => ({
-        id: APP_SETTING_ID.OPEN_AT_LOGIN,
-        label: "Open Luke at login",
-        description: "Whether Luke starts on his own when this Mac signs in.",
-        kind: APP_SETTING_KIND.TOGGLE,
-        value: appToggleText(guideValue<boolean>(settings, "openAtLogin")),
-        defaultValue: appToggleText(defaultValue),
-        adjustable: true,
-        manual: APPEARANCE_PAGE,
-      }),
-    ),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.LOGIN_ITEM,
-    spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
-    analytics: { id: APP_SETTING_ID.OPEN_AT_LOGIN, value: toggleAnalytics },
-  },
-  showInDock: {
+    manual: APPEARANCE_PAGE,
+    sideEffect: SETTING_SIDE_EFFECT.LOGIN_ITEM,
+    adjustable: true,
+  }),
+  showInDock: toggleSetting({
     field: "showInDock",
+    id: APP_SETTING_ID.SHOW_IN_DOCK,
+    label: "Show Luke in the Dock",
+    description: "Whether Luke also stands in the Dock as an app icon.",
     default: false,
-    guard: boolean(false),
-    settingsPage: SETTINGS_PAGE.APPEARANCE,
+    page: SETTINGS_PAGE.APPEARANCE,
+    order: 20,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
-    guideEntry: settingGuideEntry(
-      "showInDock",
-      [APP_SETTING_ID.SHOW_IN_DOCK],
-      (settings, defaultValue) => ({
-        id: APP_SETTING_ID.SHOW_IN_DOCK,
-        label: "Show Luke in the Dock",
-        description: "Whether Luke also stands in the Dock as an app icon.",
-        kind: APP_SETTING_KIND.TOGGLE,
-        value: appToggleText(guideValue<boolean>(settings, "showInDock")),
-        defaultValue: appToggleText(defaultValue),
-        adjustable: true,
-        manual: APPEARANCE_PAGE,
-      }),
-    ),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.DOCK,
-    spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
-    analytics: { id: APP_SETTING_ID.SHOW_IN_DOCK, value: toggleAnalytics },
-  },
-  voice: {
+    manual: APPEARANCE_PAGE,
+    sideEffect: SETTING_SIDE_EFFECT.DOCK,
+    adjustable: true,
+  }),
+  voice: choiceSetting({
     field: "voice",
-    default: REALTIME_DEFAULTS.VOICE,
+    id: APP_SETTING_ID.VOICE,
+    label: "Voice",
+    description:
+      "Which voice Luke speaks with; a change is heard right away — a conversation under way starts afresh in the new voice.",
+    values: REALTIME_VOICE_LIST,
+    say: (voice) => voice,
+    optionLabel: voiceOptionLabel,
     guard: (value: UnparsedWireValue) => optional(value, isRealtimeVoice),
-    settingsPage: SETTINGS_PAGE.VOICE,
+    default: REALTIME_DEFAULTS.VOICE,
+    page: SETTINGS_PAGE.VOICE,
+    section: SETTING_SECTION.CONTROLS,
+    order: 30,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    guideEntry: settingGuideEntry("voice", [APP_SETTING_ID.VOICE], (settings, defaultValue) => ({
-      id: APP_SETTING_ID.VOICE,
-      label: "Voice",
-      description:
-        "Which voice Luke speaks with; a change is heard right away — a conversation under way starts afresh in the new voice.",
-      kind: APP_SETTING_KIND.CHOICE,
-      value: guideValue<RealtimeVoice>(settings, "voice"),
-      defaultValue,
-      choices: REALTIME_VOICE_LIST,
-      adjustable: true,
-      manual: VOICE_PAGE,
-    })),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.VOICE,
-    spokenValue: (value: string) => (isRealtimeVoice(value) ? value : undefined),
-    analytics: { id: APP_SETTING_ID.VOICE, value: choiceAnalytics },
-  },
-  voiceSpeed: {
+    manual: VOICE_PAGE,
+    sideEffect: SETTING_SIDE_EFFECT.VOICE,
+    adjustable: true,
+    visible: voiceControlDrawn,
+  }),
+  voiceSpeed: choiceSetting({
     field: "voiceSpeed",
-    default: REALTIME_DEFAULTS.SPEED,
+    id: APP_SETTING_ID.VOICE_SPEED,
+    label: "Speed",
+    description:
+      "How fast Luke talks: slow 0.75×, normal 1×, quick 1.25×, fast 1.5× the voice's natural rate. An ask may use the word or the multiple. A change is heard from the next reply on.",
+    values: REALTIME_VOICE_SPEED_LIST,
+    say: (speed) => VOICE_SPEED_WORD[speed],
+    optionLabel: speedOptionLabel,
+    // The multiple is a second spelling of the same pace, so an ask may name
+    // either; the guide offers both and the control wears the multiple alone.
+    alias: Object.fromEntries(
+      REALTIME_VOICE_SPEED_LIST.map((speed) => [voiceSpeedMultiple(speed), speed]),
+    ),
+    choices: REALTIME_VOICE_SPEED_LIST.flatMap((speed) => [
+      VOICE_SPEED_WORD[speed],
+      voiceSpeedMultiple(speed),
+    ]),
     guard: (value: UnparsedWireValue) => optional(value, isRealtimeVoiceSpeed),
-    settingsPage: SETTINGS_PAGE.VOICE,
+    default: REALTIME_DEFAULTS.SPEED,
+    page: SETTINGS_PAGE.VOICE,
+    section: SETTING_SECTION.CONTROLS,
+    order: 40,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    guideEntry: settingGuideEntry(
-      "voiceSpeed",
-      [APP_SETTING_ID.VOICE_SPEED],
-      (settings, defaultValue) => ({
-        id: APP_SETTING_ID.VOICE_SPEED,
-        label: "Speed",
-        description:
-          "How fast Luke talks: slow 0.75×, normal 1×, quick 1.25×, fast 1.5× the voice's natural rate. An ask may use the word or the multiple. A change is heard from the next reply on.",
-        kind: APP_SETTING_KIND.CHOICE,
-        value: voiceSpeedWord(guideValue<RealtimeVoiceSpeed>(settings, "voiceSpeed")),
-        defaultValue: voiceSpeedWord(defaultValue),
-        choices: VOICE_SPEED_WORDS.flatMap((candidate) => [
-          candidate.word,
-          voiceSpeedMultiple(candidate.speed),
-        ]),
-        adjustable: true,
-        manual: VOICE_PAGE,
-      }),
-    ),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.VOICE_SPEED,
-    spokenValue: (value: string) => {
-      return VOICE_SPEED_BY_SPOKEN_VALUE[value];
-    },
-    analytics: { id: APP_SETTING_ID.VOICE_SPEED, value: choiceAnalytics },
-  },
-  voiceCaptions: {
+    manual: VOICE_PAGE,
+    sideEffect: SETTING_SIDE_EFFECT.VOICE_SPEED,
+    adjustable: true,
+    visible: voiceControlDrawn,
+  }),
+  voiceCaptions: toggleSetting({
     field: "voiceCaptions",
+    id: APP_SETTING_ID.VOICE_CAPTIONS,
+    label: "Captions",
+    description:
+      "Luke's words on screen while he speaks; nothing is kept. They also appear on their own, " +
+      "whatever this says, for a reply answering a typed ask and while the Mac's output is " +
+      "muted or at zero.",
     default: false,
-    guard: boolean(false),
-    settingsPage: SETTINGS_PAGE.VOICE,
+    page: SETTINGS_PAGE.VOICE,
+    section: SETTING_SECTION.CONTROLS,
+    order: 50,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    guideEntry: settingGuideEntry(
-      "voiceCaptions",
-      [APP_SETTING_ID.VOICE_CAPTIONS],
-      (settings, defaultValue) => ({
-        id: APP_SETTING_ID.VOICE_CAPTIONS,
-        label: "Captions",
-        description:
-          "Luke's words on screen while he speaks; nothing is kept. They also appear on their own, " +
-          "whatever this says, for a reply answering a typed ask and while the Mac's output is " +
-          "muted or at zero.",
-        kind: APP_SETTING_KIND.TOGGLE,
-        value: appToggleText(guideValue<boolean>(settings, "voiceCaptions")),
-        defaultValue: appToggleText(defaultValue),
-        adjustable: true,
-        manual: VOICE_PAGE,
-      }),
-    ),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
-    spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
-    analytics: { id: APP_SETTING_ID.VOICE_CAPTIONS, value: toggleAnalytics },
-  },
-  voiceHotkey: {
+    manual: VOICE_PAGE,
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+    adjustable: true,
+    visible: voiceControlDrawn,
+  }),
+  voiceHotkey: hotkeySetting({
     field: "voiceHotkey",
-    default: undefined,
-    guard: hotkey,
-    settingsPage: SETTINGS_PAGE.SHORTCUTS,
-    resetScope: SETTINGS_RESET_SCOPE.SHORTCUTS,
-    // The talk-key fact reports the chord and its manual path, so the guide
-    // builds no setting; the id is listed to name the page and count a change.
-    guideEntry: settingGuideEntry("voiceHotkey", [APP_SETTING_ID.TALK_HOTKEY], () => undefined),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.TALK_HOTKEY,
-    analytics: { id: APP_SETTING_ID.TALK_HOTKEY, value: hotkeyAnalytics },
-  },
-  askHotkey: {
+    id: APP_SETTING_ID.TALK_HOTKEY,
+    order: 60,
+    sideEffect: SETTING_SIDE_EFFECT.TALK_HOTKEY,
+  }),
+  askHotkey: hotkeySetting({
     field: "askHotkey",
-    default: undefined,
-    guard: hotkey,
-    settingsPage: SETTINGS_PAGE.SHORTCUTS,
-    resetScope: SETTINGS_RESET_SCOPE.SHORTCUTS,
-    // The ask-key fact reports the chord and its manual path, so the guide
-    // builds no setting; the id is listed to name the page and count a change.
-    guideEntry: settingGuideEntry("askHotkey", [APP_SETTING_ID.ASK_HOTKEY], () => undefined),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.ASK_HOTKEY,
-    analytics: { id: APP_SETTING_ID.ASK_HOTKEY, value: hotkeyAnalytics },
-  },
-  stopHotkey: {
+    id: APP_SETTING_ID.ASK_HOTKEY,
+    order: 70,
+    sideEffect: SETTING_SIDE_EFFECT.ASK_HOTKEY,
+  }),
+  stopHotkey: hotkeySetting({
     field: "stopHotkey",
-    default: undefined,
-    guard: hotkey,
-    settingsPage: SETTINGS_PAGE.SHORTCUTS,
-    resetScope: SETTINGS_RESET_SCOPE.SHORTCUTS,
-    // The stop-key fact reports the chord and its manual path, so the guide
-    // builds no setting; the id is listed to name the page and count a change.
-    guideEntry: settingGuideEntry("stopHotkey", [APP_SETTING_ID.STOP_HOTKEY], () => undefined),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.STOP_HOTKEY,
-    analytics: { id: APP_SETTING_ID.STOP_HOTKEY, value: hotkeyAnalytics },
-  },
-  duckOtherMedia: {
+    id: APP_SETTING_ID.STOP_HOTKEY,
+    order: 80,
+    sideEffect: SETTING_SIDE_EFFECT.STOP_HOTKEY,
+  }),
+  duckOtherMedia: toggleSetting({
     field: "duckOtherMedia",
+    id: APP_SETTING_ID.DUCK_OTHER_MEDIA,
+    label: "Quiet Music and Spotify",
+    description:
+      "Whether Music and Spotify are turned down while a spoken exchange is live, and back up after.",
     default: true,
-    guard: boolean(true),
-    settingsPage: SETTINGS_PAGE.VOICE,
+    page: SETTINGS_PAGE.VOICE,
+    section: SETTING_SECTION.CONTROLS,
+    order: 90,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    guideEntry: settingGuideEntry(
-      "duckOtherMedia",
-      [APP_SETTING_ID.DUCK_OTHER_MEDIA],
-      (settings, defaultValue) => ({
-        id: APP_SETTING_ID.DUCK_OTHER_MEDIA,
-        label: "Quiet Music and Spotify",
-        description:
-          "Whether Music and Spotify are turned down while a spoken exchange is live, and back up after.",
-        kind: APP_SETTING_KIND.TOGGLE,
-        value: appToggleText(guideValue<boolean>(settings, "duckOtherMedia")),
-        defaultValue: appToggleText(defaultValue),
-        adjustable: true,
-        manual: VOICE_PAGE,
-      }),
-    ),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.MEDIA_DUCK,
-    spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
-    analytics: { id: APP_SETTING_ID.DUCK_OTHER_MEDIA, value: toggleAnalytics },
-  },
-  voiceSource: {
+    manual: VOICE_PAGE,
+    sideEffect: SETTING_SIDE_EFFECT.MEDIA_DUCK,
+    adjustable: true,
+    visible: voiceControlDrawn,
+  }),
+  voiceSource: choiceSetting({
     field: "voiceSource",
-    default: undefined,
+    id: APP_SETTING_ID.VOICE_SOURCE,
+    label: "Provider",
+    description:
+      "Which credential Luke speaks and reviews sessions on: the signed-in Luke account " +
+      "or the developer's own OpenAI key. A key stays stored either way.",
+    values: [VOICE_SOURCE.ACCOUNT, VOICE_SOURCE.KEY],
+    say: (source) => VOICE_SOURCE_CHOICE[source],
+    absent: VOICE_SOURCE_CHOICE[VOICE_SOURCE.ACCOUNT],
     guard: (value: UnparsedWireValue) => optional(value, isVoiceSource),
-    settingsPage: SETTINGS_PAGE.VOICE,
-    guideEntry: settingGuideEntry("voiceSource", [APP_SETTING_ID.VOICE_SOURCE], (settings) => ({
-      id: APP_SETTING_ID.VOICE_SOURCE,
-      label: "Provider",
-      description:
-        "Which credential Luke speaks and reviews sessions on: the signed-in Luke account " +
-        "or the developer's own OpenAI key. A key stays stored either way.",
-      kind: APP_SETTING_KIND.CHOICE,
-      value: VOICE_SOURCE_CHOICE[guideValue<VoiceSource>(settings, "voiceSource")],
-      defaultValue: VOICE_SOURCE_CHOICE[VOICE_SOURCE.ACCOUNT],
-      choices: Object.values(VOICE_SOURCE_CHOICE),
-      adjustable: false,
-      manual: VOICE_SOURCE_SECTION,
-    })),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.VOICE_SOURCE,
-    analytics: { id: APP_SETTING_ID.VOICE_SOURCE, value: choiceAnalytics },
-  },
-  preferBuiltInMicrophone: {
+    default: undefined,
+    page: SETTINGS_PAGE.VOICE,
+    section: SETTING_SECTION.PROVIDER,
+    order: 100,
+    manual: VOICE_SOURCE_SECTION,
+    sideEffect: SETTING_SIDE_EFFECT.VOICE_SOURCE,
+    // Drawn by the Provider section's own picker, which is where the way in
+    // to a key stands beside the choice of credential.
+    rows: SETTING_ROWS.BESPOKE,
+    adjustable: false,
+    visible: (view) => view.accountDrawn,
+  }),
+  preferBuiltInMicrophone: toggleSetting({
     field: "preferBuiltInMicrophone",
+    id: APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE,
+    label: "Prefer the Mac's microphone",
+    description:
+      "Whether Luke listens through the Mac's own microphone when the system input is a " +
+      "Bluetooth headset, so the headset keeps its full music quality. A shut lid keeps the " +
+      "headset's microphone either way.",
     default: true,
-    guard: boolean(true),
-    settingsPage: SETTINGS_PAGE.VOICE,
+    page: SETTINGS_PAGE.VOICE,
+    section: SETTING_SECTION.CONTROLS,
+    order: 110,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    guideEntry: settingGuideEntry(
-      "preferBuiltInMicrophone",
-      [APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE],
-      (settings, defaultValue) => ({
-        id: APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE,
-        label: "Prefer the Mac's microphone",
-        description:
-          "Whether Luke listens through the Mac's own microphone when the system input is a " +
-          "Bluetooth headset, so the headset keeps its full music quality. A shut lid keeps the " +
-          "headset's microphone either way.",
-        kind: APP_SETTING_KIND.TOGGLE,
-        value: appToggleText(guideValue<boolean>(settings, "preferBuiltInMicrophone")),
-        defaultValue: appToggleText(defaultValue),
-        adjustable: true,
-        manual: VOICE_PAGE,
-      }),
-    ),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
-    spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
-    analytics: { id: APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE, value: toggleAnalytics },
-  },
-  announceSessions: {
+    manual: VOICE_PAGE,
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+    adjustable: true,
+    visible: voiceControlDrawn,
+  }),
+  announceSessions: toggleSetting({
     field: "announceSessions",
+    id: APP_SETTING_ID.ANNOUNCE_SESSIONS,
+    label: "Announce when sessions need you",
+    description:
+      "Whether announcements — a session waiting, stopping on an error, or finishing, and Luke's other unprompted remarks — are spoken as they happen. Switched off, Luke sleeps: announcements are held, then read out together, the still-true ones only, once it is switched back on. Conversations you open still answer aloud either way. Luke's face sleeps for as long as the switch is off.",
     default: true,
-    guard: boolean(true),
-    settingsPage: SETTINGS_PAGE.VOICE,
+    page: SETTINGS_PAGE.VOICE,
+    section: SETTING_SECTION.CONTROLS,
+    order: 120,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    guideEntry: settingGuideEntry(
-      "announceSessions",
-      [APP_SETTING_ID.ANNOUNCE_SESSIONS],
-      (settings, defaultValue) => ({
-        id: APP_SETTING_ID.ANNOUNCE_SESSIONS,
-        label: "Announce when sessions need you",
-        description:
-          "Whether announcements — a session waiting, stopping on an error, or finishing, and Luke's other unprompted remarks — are spoken as they happen. Switched off, Luke sleeps: announcements are held, then read out together, the still-true ones only, once it is switched back on. Conversations you open still answer aloud either way. Luke's face sleeps for as long as the switch is off.",
-        kind: APP_SETTING_KIND.TOGGLE,
-        value: appToggleText(guideValue<boolean>(settings, "announceSessions")),
-        defaultValue: appToggleText(defaultValue),
-        adjustable: true,
-        manual: VOICE_PAGE,
-      }),
-    ),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD,
-    spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
-    analytics: { id: APP_SETTING_ID.ANNOUNCE_SESSIONS, value: toggleAnalytics },
-  },
-  quietDuringMeetings: {
+    manual: VOICE_PAGE,
+    sideEffect: SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD,
+    adjustable: true,
+    visible: voiceControlDrawn,
+  }),
+  quietDuringMeetings: toggleSetting({
     field: "quietDuringMeetings",
+    id: APP_SETTING_ID.QUIET_DURING_MEETINGS,
+    label: "Quiet during meetings",
+    description:
+      "Whether spoken announcements wait while a connected calendar shows a meeting on, then read out together once it ends. Switched on mid-meeting it takes hold at once. It changes nothing until a calendar — a Google Calendar account, or this Mac's Apple Calendar — is connected.",
     default: true,
-    guard: boolean(true),
-    settingsPage: SETTINGS_PAGE.CONNECTIONS,
-    guideEntry: settingGuideEntry(
-      "quietDuringMeetings",
-      [APP_SETTING_ID.QUIET_DURING_MEETINGS],
-      (settings, defaultValue) => ({
-        id: APP_SETTING_ID.QUIET_DURING_MEETINGS,
-        label: "Quiet during meetings",
-        description:
-          "Whether spoken announcements wait while a connected calendar shows a meeting on, then read out together once it ends. Switched on mid-meeting it takes hold at once. It changes nothing until a calendar — a Google Calendar account, or this Mac's Apple Calendar — is connected.",
-        kind: APP_SETTING_KIND.TOGGLE,
-        value: appToggleText(guideValue<boolean>(settings, "quietDuringMeetings")),
-        defaultValue: appToggleText(defaultValue),
-        adjustable: true,
-        manual: `${CONNECTIONS_PAGE} — drawn once a calendar is connected`,
-      }),
-    ),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD,
-    spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
-    analytics: { id: APP_SETTING_ID.QUIET_DURING_MEETINGS, value: toggleAnalytics },
-  },
-  syncProviderKeys: {
+    page: SETTINGS_PAGE.CONNECTIONS,
+    section: SETTING_SECTION.CALENDAR,
+    order: 130,
+    manual: `${CONNECTIONS_PAGE} — drawn once a calendar is connected`,
+    sideEffect: SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD,
+    adjustable: true,
+    visible: calendarConnected,
+  }),
+  syncProviderKeys: toggleSetting({
     field: "syncProviderKeys",
+    id: APP_SETTING_ID.SYNC_PROVIDER_KEYS,
+    label: "Sync provider keys",
+    description:
+      "Whether provider API keys are also stored, encrypted, with Luke's own service for the account's other Luke devices. While on, the keys stored here are kept synced: a key saved while signed in syncs in the same press, and Luke re-syncs the stored keys when he starts signed in, at a sign-in, and when the switch turns on — automatically only for the account they were last synced for; another account signing in syncs nothing until it saves a key or flips the switch itself. Turning it off deletes every synced copy while the keys on this Mac stay. The service never sends a key back.",
     default: true,
-    guard: boolean(true),
-    settingsPage: SETTINGS_PAGE.CONNECTIONS,
-    guideEntry: settingGuideEntry(
-      "syncProviderKeys",
-      [APP_SETTING_ID.SYNC_PROVIDER_KEYS],
-      (settings, defaultValue) => ({
-        id: APP_SETTING_ID.SYNC_PROVIDER_KEYS,
-        label: "Sync provider keys",
-        description:
-          "Whether provider API keys are also stored, encrypted, with Luke's own service for the account's other Luke devices. While on, the keys stored here are kept synced: a key saved while signed in syncs in the same press, and Luke re-syncs the stored keys when he starts signed in, at a sign-in, and when the switch turns on — automatically only for the account they were last synced for; another account signing in syncs nothing until it saves a key or flips the switch itself. Turning it off deletes every synced copy while the keys on this Mac stay. The service never sends a key back.",
-        kind: APP_SETTING_KIND.TOGGLE,
-        value: appToggleText(guideValue<boolean>(settings, "syncProviderKeys")),
-        defaultValue: appToggleText(defaultValue),
-        // Not adjustable by a spoken ask, deliberately: flipping it moves
-        // credentials to and from Luke's service, and a credential act is
-        // taken by hand alone.
-        adjustable: false,
-        manual: `${CONNECTIONS_PAGE}, in its Sync section`,
-      }),
-    ),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.VAULT_SYNC,
-    spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
-    analytics: { id: APP_SETTING_ID.SYNC_PROVIDER_KEYS, value: toggleAnalytics },
-  },
-  showOnAllDisplays: {
+    page: SETTINGS_PAGE.CONNECTIONS,
+    section: SETTING_SECTION.SYNC,
+    order: 140,
+    manual: `${CONNECTIONS_PAGE}, in its Sync section`,
+    sideEffect: SETTING_SIDE_EFFECT.VAULT_SYNC,
+    // Not adjustable by a spoken ask, deliberately: flipping it moves
+    // credentials to and from Luke's service, and a credential action is
+    // taken by hand alone.
+    adjustable: false,
+  }),
+  showOnAllDisplays: toggleSetting({
     field: "showOnAllDisplays",
+    id: APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS,
+    label: "Show Luke on all displays",
+    description:
+      "Whether Luke stands on every connected display at once; off keeps him to the main display alone.",
     default: false,
-    guard: boolean(false),
-    settingsPage: SETTINGS_PAGE.APPEARANCE,
+    page: SETTINGS_PAGE.APPEARANCE,
+    order: 150,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
-    guideEntry: settingGuideEntry(
-      "showOnAllDisplays",
-      [APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS],
-      (settings, defaultValue) => ({
-        id: APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS,
-        label: "Show Luke on all displays",
-        description:
-          "Whether Luke stands on every connected display at once; off keeps him to the main display alone.",
-        kind: APP_SETTING_KIND.TOGGLE,
-        value: appToggleText(guideValue<boolean>(settings, "showOnAllDisplays")),
-        defaultValue: appToggleText(defaultValue),
-        adjustable: true,
-        manual: APPEARANCE_PAGE,
-      }),
-    ),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.DISPLAYS,
-    spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
-    analytics: { id: APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS, value: toggleAnalytics },
-  },
-  formFactor: {
+    manual: APPEARANCE_PAGE,
+    sideEffect: SETTING_SIDE_EFFECT.DISPLAYS,
+    adjustable: true,
+  }),
+  formFactor: choiceSetting({
     field: "formFactor",
-    default: DEFAULT_PANEL_FORM_FACTOR,
+    id: APP_SETTING_ID.FORM_FACTOR,
+    label: "Form factor",
+    description:
+      "How Luke stands on a display without a camera housing — notch draws him one pressed into the top edge, bubble floats him just under it. A display with a real notch ignores this.",
+    values: PANEL_FORM_FACTOR_LIST,
+    say: (formFactor) => formFactor,
+    optionLabel: formFactorOptionLabel,
     guard: (value: UnparsedWireValue) => optional(value, isPanelFormFactor),
-    settingsPage: SETTINGS_PAGE.APPEARANCE,
+    default: DEFAULT_PANEL_FORM_FACTOR,
+    page: SETTINGS_PAGE.APPEARANCE,
+    order: 160,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
-    guideEntry: settingGuideEntry(
-      "formFactor",
-      [APP_SETTING_ID.FORM_FACTOR],
-      (settings, defaultValue) => ({
-        id: APP_SETTING_ID.FORM_FACTOR,
-        label: "Form factor",
-        description:
-          "How Luke stands on a display without a camera housing — notch draws him one pressed into the top edge, bubble floats him just under it. A display with a real notch ignores this.",
-        kind: APP_SETTING_KIND.CHOICE,
-        value: guideValue<PanelFormFactor>(settings, "formFactor"),
-        defaultValue,
-        choices: PANEL_FORM_FACTOR_LIST,
-        adjustable: true,
-        manual: APPEARANCE_PAGE,
-      }),
-    ),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.FORM_FACTOR,
-    spokenValue: (value: string) => (isPanelFormFactor(value) ? value : undefined),
-    analytics: { id: APP_SETTING_ID.FORM_FACTOR, value: choiceAnalytics },
-  },
-  sessionFilters: {
+    manual: APPEARANCE_PAGE,
+    sideEffect: SETTING_SIDE_EFFECT.FORM_FACTOR,
+    adjustable: true,
+  }),
+  sessionFilters: storedSetting({
     field: "sessionFilters",
     default: undefined,
-    guard: sessionFilters,
-    // The selection backs no settings row — it is the session list's own view
-    // state, stored so the chips survive the panel closing and the app
-    // restarting. With no guide ids the page below is inert; the root page is
-    // named only because a definition must name one.
-    settingsPage: SETTINGS_PAGE.ROOT,
+    guard: sessionFiltersGuard,
+    // The selection is the session list's own view state, stored so the chips
+    // survive the panel closing and the app restarting; the root page is named
+    // only because a definition must name one.
+    page: SETTINGS_PAGE.ROOT,
+    section: SETTING_SECTION.MAIN,
+    order: 170,
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+    rows: SETTING_ROWS.NONE,
     // The guide covers narrowing the list through the session-filter facts and
     // the spoken filter tool's own vocabulary; the stored selection is what
     // those already changed, not a setting of its own to describe.
-    guideEntry: settingGuideEntry("sessionFilters", [], () => undefined),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
-  },
-  sessionSearchQuery: {
+    ids: [],
+    guide: () => undefined,
+  }),
+  sessionSearchQuery: storedSetting({
     field: "sessionSearchQuery",
     default: undefined,
-    guard: sessionSearchQuery,
-    // The query backs no settings row, on the filter selection's own terms: it
-    // is the session list's view state, stored so a held search survives the
-    // panel closing and the app restarting. With no guide ids the page below
-    // is inert; the root page is named only because a definition must name one.
-    settingsPage: SETTINGS_PAGE.ROOT,
+    guard: sessionSearchQueryGuard,
+    page: SETTINGS_PAGE.ROOT,
+    section: SETTING_SECTION.MAIN,
+    order: 180,
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+    rows: SETTING_ROWS.NONE,
     // The guide covers searching through the session-search facts and the
-    // spoken search tool's own vocabulary; the stored words are what those
-    // already typed, not a setting of their own to describe. No analytics
-    // either: the value is the developer's own text, which never travels.
-    guideEntry: settingGuideEntry("sessionSearchQuery", [], () => undefined),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
-  },
-  defaultWorkspaceProvider: {
+    // spoken search tool's own vocabulary. No analytics either: the value is
+    // the developer's own text, which never travels.
+    ids: [],
+    guide: () => undefined,
+  }),
+  defaultWorkspaceProvider: storedSetting({
     field: "defaultWorkspaceProvider",
     default: undefined,
     guard: (value: UnparsedWireValue) =>
@@ -735,12 +550,16 @@ export const APP_SETTING_SCHEMA = {
         (candidate): candidate is WorkspaceProviderId =>
           isWireString(candidate) && isWorkspaceProviderId(candidate),
       ),
-    settingsPage: SETTINGS_PAGE.CONNECTIONS,
+    page: SETTINGS_PAGE.CONNECTIONS,
+    section: SETTING_SECTION.WORKSPACES,
+    order: 190,
     resetScope: SETTINGS_RESET_SCOPE.WORKSPACES,
-    guideEntry: settingGuideEntry(
-      "defaultWorkspaceProvider",
-      [APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER],
-      (settings) => ({
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+    rows: SETTING_ROWS.SCHEMA,
+    ids: [APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER],
+    guide: (settings) => {
+      const stored = settings("defaultWorkspaceProvider");
+      return {
         id: APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER,
         label: "Default workspace provider",
         description:
@@ -748,11 +567,8 @@ export const APP_SETTING_SCHEMA = {
           "Until one is chosen Luke asks when more than one provider could take it, and the first " +
           "workspace created saves its provider as the default.",
         kind: APP_SETTING_KIND.CHOICE,
-        value: guideValue<WorkspaceProviderId | undefined>(settings, "defaultWorkspaceProvider")
-          ? workspaceProviderName(
-              guideValue<WorkspaceProviderId>(settings, "defaultWorkspaceProvider"),
-            )
-          : ASK_EACH_TIME_CHOICE,
+        // SAFETY: The field's own guard is what put a provider id in the store.
+        value: stored ? workspaceProviderName(stored as WorkspaceProviderId) : ASK_EACH_TIME_CHOICE,
         choices: [
           ASK_EACH_TIME_CHOICE,
           workspaceProviderName(PROVIDER_ID.CODEX),
@@ -765,15 +581,117 @@ export const APP_SETTING_SCHEMA = {
         defaultValue: ASK_EACH_TIME_CHOICE,
         adjustable: false,
         manual: `${CONNECTIONS_PAGE}, under Workspaces`,
-      }),
-    ),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
-    analytics: { id: APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER, value: choiceAnalytics },
-  },
-  workspaceAgentDefaults: {
+      };
+    },
+    // The providers it chooses between are the ones the observation reported,
+    // so the row can offer nothing that was not seen — and the set is the one
+    // it offered, so anything else arriving out of the select is a broken
+    // control rather than a choice.
+    control: {
+      value: (stored) => stored ?? NO_WORKSPACE_PROVIDER,
+      options: (view) => [
+        { value: NO_WORKSPACE_PROVIDER, label: "Ask each time" },
+        ...view.workspaceProviders.map((provider) => ({
+          value: provider.id,
+          label: provider.name,
+        })),
+      ],
+      stored: (token, view) =>
+        view.workspaceProviders.find((provider) => provider.id === token)?.id,
+    },
+    analytics: { value: choiceAnalytics },
+  }),
+  workspaceAgentDefaults: keyedSetting({
     field: "workspaceAgentDefaults",
     default: undefined,
-    guard: workspaceAgentDefaults,
+    guard: workspaceAgentDefaultsGuard,
+    page: SETTINGS_PAGE.CONNECTIONS,
+    section: SETTING_SECTION.PROVIDERS,
+    order: 200,
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+    // Drawn by `WorkspaceAgentRow`, whose options are a provider's own
+    // documented model table rather than a set the build fixes here.
+    rows: SETTING_ROWS.BESPOKE,
+    ids: [
+      APP_SETTING_ID.WORKSPACE_AGENT_MODEL,
+      APP_SETTING_ID.WORKSPACE_AGENT_EFFORT,
+      APP_SETTING_ID.SUPERSET_AGENT,
+    ],
+    guide: (settings) => {
+      // SAFETY: The field's own guard is what put these defaults in the store.
+      const defaults = settings("workspaceAgentDefaults") as WorkspaceAgentDefaults | undefined;
+      const chosen = defaults?.[PROVIDER_ID.CONDUCTOR];
+      const supersetAgent = defaults?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent;
+      const chosenAgent = chosen
+        ? workspaceAgentModels(PROVIDER_ID.CONDUCTOR).find((entry) => entry.agent === chosen.agent)
+        : undefined;
+      return [
+        {
+          id: APP_SETTING_ID.WORKSPACE_AGENT_MODEL,
+          label: "New Conductor agents run",
+          description:
+            "Which model a Conductor workspace or agent created through Luke starts with. Unset, " +
+            "Conductor's own defaults decide. An effort the model's agent documents may be named " +
+            "in the same change.",
+          kind: APP_SETTING_KIND.CHOICE,
+          value: chosen
+            ? workspaceAgentModelLabel(PROVIDER_ID.CONDUCTOR, chosen)
+            : CONDUCTOR_DEFAULT_CHOICE,
+          choices: [
+            CONDUCTOR_DEFAULT_CHOICE,
+            ...workspaceAgentModels(PROVIDER_ID.CONDUCTOR).flatMap((entry) =>
+              entry.models.map((model) => model.label),
+            ),
+          ],
+          efforts: Object.fromEntries(
+            workspaceAgentModels(PROVIDER_ID.CONDUCTOR).flatMap((entry) =>
+              entry.efforts.length > 0
+                ? entry.models.map((model) => [model.label, entry.efforts] as const)
+                : [],
+            ),
+          ),
+          defaultValue: CONDUCTOR_DEFAULT_CHOICE,
+          adjustable: true,
+          manual: CONDUCTOR_ROW_PATH,
+        },
+        ...(chosen && chosenAgent && chosenAgent.efforts.length > 0
+          ? [
+              {
+                id: APP_SETTING_ID.WORKSPACE_AGENT_EFFORT,
+                label: "New Conductor agents' effort",
+                description:
+                  "How hard the chosen model thinks. Unset, Conductor's own default decides.",
+                kind: APP_SETTING_KIND.CHOICE,
+                value: chosen.effort ?? CONDUCTOR_DEFAULT_CHOICE,
+                choices: [CONDUCTOR_DEFAULT_CHOICE, ...chosenAgent.efforts],
+                defaultValue: CONDUCTOR_DEFAULT_CHOICE,
+                adjustable: true,
+                manual: CONDUCTOR_ROW_PATH,
+              },
+            ]
+          : []),
+        {
+          id: APP_SETTING_ID.SUPERSET_AGENT,
+          label: "New Superset sessions run",
+          description:
+            "Which configured Superset agent starts when a creation ask names none. Unset, Luke asks which agent to use.",
+          kind: APP_SETTING_KIND.CHOICE,
+          value: supersetAgent ?? ASK_EACH_TIME_CHOICE,
+          choices: [ASK_EACH_TIME_CHOICE, ...(supersetAgent ? [supersetAgent] : [])],
+          defaultValue: ASK_EACH_TIME_CHOICE,
+          adjustable: false,
+          manual: `${CONNECTIONS_PAGE}, under Superset`,
+        },
+      ];
+    },
+    // Three rows under three different conditions, so the field answers per
+    // id rather than as one row that is drawn or not.
+    visibleById: {
+      [APP_SETTING_ID.WORKSPACE_AGENT_MODEL]: conductorAgentRowDrawn,
+      [APP_SETTING_ID.WORKSPACE_AGENT_EFFORT]: conductorAgentRowDrawn,
+      [APP_SETTING_ID.SUPERSET_AGENT]: (view) =>
+        view.superset.connected && view.superset.agents.length > 0,
+    },
     entry: {
       // Local Conductor is deliberately not a key: its creation link
       // documents no agent choice, so no entry could ever steer one.
@@ -789,374 +707,28 @@ export const APP_SETTING_SCHEMA = {
         current?.model === next?.model &&
         current?.effort === next?.effort,
     },
-    settingsPage: SETTINGS_PAGE.CONNECTIONS,
-    guideEntry: settingGuideEntry(
-      "workspaceAgentDefaults",
-      [
-        APP_SETTING_ID.WORKSPACE_AGENT_MODEL,
-        APP_SETTING_ID.WORKSPACE_AGENT_EFFORT,
-        APP_SETTING_ID.SUPERSET_AGENT,
-      ],
-      (settings) => {
-        const defaults = guideValue<WorkspaceAgentDefaults | undefined>(
-          settings,
-          "workspaceAgentDefaults",
-        );
-        const chosen = defaults?.[PROVIDER_ID.CONDUCTOR];
-        const supersetAgent = defaults?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent;
-        const chosenAgent = chosen
-          ? workspaceAgentModels(PROVIDER_ID.CONDUCTOR).find(
-              (entry) => entry.agent === chosen.agent,
-            )
-          : undefined;
-        return [
-          {
-            id: APP_SETTING_ID.WORKSPACE_AGENT_MODEL,
-            label: "New Conductor agents run",
-            description:
-              "Which model a Conductor workspace or agent created through Luke starts with. Unset, " +
-              "Conductor's own defaults decide. An effort the model's agent documents may be named " +
-              "in the same change.",
-            kind: APP_SETTING_KIND.CHOICE,
-            value: chosen
-              ? workspaceAgentModelLabel(PROVIDER_ID.CONDUCTOR, chosen)
-              : CONDUCTOR_DEFAULT_CHOICE,
-            choices: [
-              CONDUCTOR_DEFAULT_CHOICE,
-              ...workspaceAgentModels(PROVIDER_ID.CONDUCTOR).flatMap((entry) =>
-                entry.models.map((model) => model.label),
-              ),
-            ],
-            efforts: Object.fromEntries(
-              workspaceAgentModels(PROVIDER_ID.CONDUCTOR).flatMap((entry) =>
-                entry.efforts.length > 0
-                  ? entry.models.map((model) => [model.label, entry.efforts] as const)
-                  : [],
-              ),
-            ),
-            defaultValue: CONDUCTOR_DEFAULT_CHOICE,
-            adjustable: true,
-            manual: CONDUCTOR_ROW_PATH,
-          },
-          ...(chosen && chosenAgent && chosenAgent.efforts.length > 0
-            ? [
-                {
-                  id: APP_SETTING_ID.WORKSPACE_AGENT_EFFORT,
-                  label: "New Conductor agents' effort",
-                  description:
-                    "How hard the chosen model thinks. Unset, Conductor's own default decides.",
-                  kind: APP_SETTING_KIND.CHOICE,
-                  value: chosen.effort ?? CONDUCTOR_DEFAULT_CHOICE,
-                  choices: [CONDUCTOR_DEFAULT_CHOICE, ...chosenAgent.efforts],
-                  defaultValue: CONDUCTOR_DEFAULT_CHOICE,
-                  adjustable: true,
-                  manual: CONDUCTOR_ROW_PATH,
-                },
-              ]
-            : []),
-          {
-            id: APP_SETTING_ID.SUPERSET_AGENT,
-            label: "New Superset sessions run",
-            description:
-              "Which configured Superset agent starts when a creation ask names none. Unset, Luke asks which agent to use.",
-            kind: APP_SETTING_KIND.CHOICE,
-            value: supersetAgent ?? ASK_EACH_TIME_CHOICE,
-            choices: [ASK_EACH_TIME_CHOICE, ...(supersetAgent ? [supersetAgent] : [])],
-            defaultValue: ASK_EACH_TIME_CHOICE,
-            adjustable: false,
-            manual: `${CONNECTIONS_PAGE}, under Superset`,
-          },
-        ];
-      },
-    ),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
     // Every entry rides one stored write, so one id counts them all.
-    analytics: { id: APP_SETTING_ID.WORKSPACE_AGENT_MODEL, value: choiceAnalytics },
-  },
-  workspaceProjectDefaults: {
+    analytics: { value: choiceAnalytics },
+  }),
+  workspaceProjectDefaults: keyedSetting({
     field: "workspaceProjectDefaults",
     default: undefined,
-    guard: workspaceProjectDefaults,
+    guard: workspaceProjectDefaultsGuard,
+    page: SETTINGS_PAGE.CONNECTIONS,
+    section: SETTING_SECTION.PROVIDERS,
+    order: 210,
+    resetScope: SETTINGS_RESET_SCOPE.WORKSPACES,
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+    // Drawn by `WorkspaceProjectRow`, one per provider, from the projects that
+    // provider's own observation reported.
+    rows: SETTING_ROWS.BESPOKE,
+    // Observed project names and defaults travel in the workspace-project context.
+    ids: [],
+    guide: () => undefined,
     entry: {
       isKey: (value: UnparsedWireValue): value is WorkspaceProviderId =>
         isWireString(value) && isWorkspaceProviderId(value),
       same: (current: string | undefined, next: string | undefined) => current === next,
     },
-    settingsPage: SETTINGS_PAGE.CONNECTIONS,
-    resetScope: SETTINGS_RESET_SCOPE.WORKSPACES,
-    // Observed project names and defaults travel in the workspace-project context.
-    guideEntry: settingGuideEntry("workspaceProjectDefaults", [], () => undefined),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
-  },
+  }),
 } as const;
-
-type GuardValue<Definition> = Definition extends {
-  guard(value: UnparsedWireValue): SettingGuardResult<infer Value>;
-}
-  ? Value
-  : never;
-
-export type AppSettingField = keyof typeof APP_SETTING_SCHEMA;
-export type AppSettingValue<Field extends AppSettingField> = GuardValue<
-  (typeof APP_SETTING_SCHEMA)[Field]
->;
-export type StoredAppSettings = {
-  [Field in AppSettingField as undefined extends AppSettingValue<Field>
-    ? never
-    : Field]: AppSettingValue<Field>;
-} & {
-  [Field in AppSettingField as undefined extends AppSettingValue<Field>
-    ? Field
-    : never]?: AppSettingValue<Field>;
-};
-
-export const APP_SETTING_FIELDS = Object.keys(APP_SETTING_SCHEMA).filter(
-  (field): field is AppSettingField => field in APP_SETTING_SCHEMA,
-);
-
-export function isAppSettingField(value: UnparsedWireValue): value is AppSettingField {
-  return isWireString(value) && value in APP_SETTING_SCHEMA;
-}
-
-/**
- * Account preferences are the settings shared by desktop, phone, and watch.
- * Machine-local controls — launch at login, Dock, display layout, hotkeys,
- * microphone routing, local list filters, credentials, and calendar grants —
- * stay in each device's own store.
- */
-export const ACCOUNT_PREFERENCE_FIELDS = [
-  APP_SETTING_SCHEMA.voice.field,
-  APP_SETTING_SCHEMA.voiceSpeed.field,
-  APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
-  APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-  APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-] as const satisfies readonly AppSettingField[];
-
-export type AccountPreferenceField = (typeof ACCOUNT_PREFERENCE_FIELDS)[number];
-export type AccountPreferences = Partial<Pick<StoredAppSettings, AccountPreferenceField>>;
-
-const ACCOUNT_PREFERENCE_FIELD_SET: ReadonlySet<string> = new Set(ACCOUNT_PREFERENCE_FIELDS);
-
-function isAccountPreferenceField(value: UnparsedWireValue): value is AccountPreferenceField {
-  return isWireString(value) && ACCOUNT_PREFERENCE_FIELD_SET.has(value);
-}
-
-function accountPreferenceDroppedMapEntries(
-  field: AccountPreferenceField,
-  rawValue: UnparsedWireValue,
-  parsedValue: UnparsedWireValue,
-): boolean {
-  if (
-    (field !== APP_SETTING_SCHEMA.workspaceProjectDefaults.field &&
-      field !== APP_SETTING_SCHEMA.workspaceAgentDefaults.field) ||
-    !isRecord(rawValue)
-  ) {
-    return false;
-  }
-  const rawCount = Object.keys(rawValue).length;
-  if (rawCount === 0) return false;
-  return !isRecord(parsedValue) || Object.keys(parsedValue).length !== rawCount;
-}
-
-function parseAccountPreferences(
-  value: UnparsedWireValue,
-  source: "stored" | "wire",
-): AccountPreferences | undefined {
-  if (!isRecord(value)) return undefined;
-  const preferences: Record<string, UnparsedWireValue> = {};
-  for (const [field, rawValue] of Object.entries(value)) {
-    if (!isAccountPreferenceField(field)) {
-      if (source === "wire") return undefined;
-      continue;
-    }
-    const wireValue = rawValue === null ? undefined : rawValue;
-    const parsed = APP_SETTING_SCHEMA[field].guard(wireValue);
-    if (!parsed.valid) {
-      if (source === "wire") return undefined;
-      continue;
-    }
-    // SAFETY: The account-preference guard accepted this value as that setting's stored JSON shape.
-    const parsedValue = parsed.value as UnparsedWireValue;
-    if (
-      source === "wire" &&
-      wireValue !== undefined &&
-      accountPreferenceDroppedMapEntries(field, wireValue, parsedValue)
-    ) {
-      return undefined;
-    }
-    if (parsedValue !== undefined) {
-      preferences[field] = parsedValue;
-    }
-  }
-  // SAFETY: Every key came from ACCOUNT_PREFERENCE_FIELDS and every value passed that field's guard.
-  return preferences as AccountPreferences;
-}
-
-export function accountPreferencesFromWire(
-  value: UnparsedWireValue,
-): AccountPreferences | undefined {
-  return parseAccountPreferences(value, "wire");
-}
-
-export function accountPreferencesFromStored(
-  value: UnparsedWireValue,
-): AccountPreferences | undefined {
-  return parseAccountPreferences(value, "stored");
-}
-
-/** The settings whose value is a map, and so can be written one entry at a time. */
-export type KeyedAppSettingField = {
-  [Field in AppSettingField]: "entry" extends keyof (typeof APP_SETTING_SCHEMA)[Field]
-    ? Field
-    : never;
-}[AppSettingField];
-
-export function isKeyedAppSettingField(value: UnparsedWireValue): value is KeyedAppSettingField {
-  return isAppSettingField(value) && "entry" in APP_SETTING_SCHEMA[value];
-}
-
-function settingEntry(field: KeyedAppSettingField): SettingEntryDefinition<never> {
-  // SAFETY: KeyedAppSettingField is derived only from schema members that declare `entry`.
-  return (APP_SETTING_SCHEMA[field] as { entry: SettingEntryDefinition<never> }).entry;
-}
-
-export function isSettingEntryKey(
-  field: KeyedAppSettingField,
-  key: UnparsedWireValue,
-): key is string {
-  return settingEntry(field).isKey(key);
-}
-
-export function sameSettingEntry(
-  field: KeyedAppSettingField,
-  current: UnparsedWireValue,
-  next: UnparsedWireValue,
-): boolean {
-  // SAFETY: The selected entry definition owns both values; `never` erases the keyed union.
-  return settingEntry(field).same(current as never, next as never);
-}
-
-/**
- * Validates one entry by running the field's own whole-map guard over a map
- * holding only that entry: an entry the guard drops is one the map would have
- * dropped, so the two readings of what is valid cannot drift apart. Clearing an
- * entry carries no value to check.
- */
-export function settingEntryGuard(
-  field: KeyedAppSettingField,
-  key: string,
-  value: UnparsedWireValue,
-): SettingGuardResult<unknown> {
-  if (value === undefined) return { valid: true, value: undefined };
-  const parsed = APP_SETTING_SCHEMA[field].guard({ [key]: value });
-  // SAFETY: The guard validated the map; indexing recovers the single entry under test.
-  const kept = parsed.valid ? (parsed.value as WireRecord | undefined)?.[key] : undefined;
-  return kept === undefined ? { valid: false, value: undefined } : { valid: true, value: kept };
-}
-
-export function isSettingsResetScope(value: UnparsedWireValue): value is SettingsResetScope {
-  return Object.values(SETTINGS_RESET_SCOPE).some((scope) => scope === value);
-}
-
-export function settingFieldForGuideId(id: string): AppSettingField | undefined {
-  return APP_SETTING_FIELDS.find((field) => APP_SETTING_SCHEMA[field].guideEntry.ids.includes(id));
-}
-
-function isGuideSettingList(
-  value: AppGuideSetting | readonly AppGuideSetting[],
-): value is readonly AppGuideSetting[] {
-  return Array.isArray(value);
-}
-
-export function settingGuideEntries(
-  settings: Pick<StoredAppSettings, AppSettingField>,
-): AppGuideSetting[] {
-  const guideSettings: AppSettingGuideSettings = (field) =>
-    isAppSettingField(field) ? settings[field] : undefined;
-  return APP_SETTING_FIELDS.flatMap((field) => {
-    const definition = APP_SETTING_SCHEMA[field];
-    // SAFETY: The default and builder belong to the same schema definition selected by `field`.
-    const entry = definition.guideEntry.build(guideSettings, definition.default as never);
-    if (entry === undefined) return [];
-    return isGuideSettingList(entry) ? entry : [entry];
-  });
-}
-
-export function spokenSettingValue<Field extends AppSettingField>(
-  field: Field,
-  value: string,
-): AppSettingValue<Field> | undefined {
-  const definition = APP_SETTING_SCHEMA[field];
-  // SAFETY: spokenValue exists only on fields that declare it; the branch narrows the union.
-  const convert = ("spokenValue" in definition ? definition.spokenValue : undefined) as
-    | ((candidate: string) => AppSettingValue<Field>)
-    | undefined;
-  return convert?.(value);
-}
-
-/** What a counted setting change reports: which setting, and the shape of its new value. */
-export interface SettingAnalytics {
-  id: AppSettingId;
-  value: ProductSettingValue;
-}
-
-/**
- * How a change to this field is counted, or nothing for a field the schema
- * does not count. The value itself never travels — only whether a switch went
- * on or off, or whether a choice was made or returned to nothing.
- */
-export function settingAnalytics(
-  field: AppSettingField,
-  settings: Pick<StoredAppSettings, AppSettingField>,
-): SettingAnalytics | undefined {
-  const definition = APP_SETTING_SCHEMA[field];
-  if (!("analytics" in definition)) return undefined;
-  // SAFETY: analytics exists only on fields that declare it; the branch narrows the union.
-  const analytics = definition.analytics as {
-    id: AppSettingId;
-    value: (value: StoredSettingValue) => ProductSettingValue;
-  };
-  return { id: analytics.id, value: analytics.value(settings[field]) };
-}
-
-const appSettingDefaults = Object.fromEntries(
-  APP_SETTING_FIELDS.map((field) => [field, APP_SETTING_SCHEMA[field].default]),
-);
-type AppSettingDefaults = {
-  readonly [Field in AppSettingField]: (typeof APP_SETTING_SCHEMA)[Field]["default"];
-};
-
-function typedAppSettingDefaults(): AppSettingDefaults {
-  // SAFETY: Each field is paired with the default declared by its own schema entry.
-  return appSettingDefaults as AppSettingDefaults;
-}
-
-export const APP_SETTING_DEFAULTS = typedAppSettingDefaults();
-
-export const SETTING_PAGE = {
-  // SAFETY: Each entry maps one settings id to the page its schema declares;
-  // the `satisfies` below is what checks the set ends up complete.
-  ...(Object.fromEntries(
-    Object.values(APP_SETTING_SCHEMA).flatMap((definition) =>
-      definition.guideEntry.ids.map((id) => [id, definition.settingsPage]),
-    ),
-  ) as Record<AppSettingId, SettingsPage>),
-  // Which calendars count is chosen on the rows themselves rather than
-  // through a settings field, so it is the one id whose page cannot be
-  // derived from the schema. Named here so the `Record` stays total.
-  [APP_SETTING_ID.CALENDAR_SELECTED]: SETTINGS_PAGE.CONNECTIONS,
-} satisfies Record<AppSettingId, SettingsPage>;
-
-export function settingsScopeChanged(
-  settings: Pick<StoredAppSettings, AppSettingField>,
-  scope: SettingsResetScope,
-): boolean {
-  return APP_SETTING_FIELDS.some((field) => {
-    const definition = APP_SETTING_SCHEMA[field];
-    if (!("resetScope" in definition) || definition.resetScope !== scope) return false;
-    const current = settings[field];
-    const defaultValue = definition.default;
-    if (current === undefined || defaultValue === undefined) return current !== defaultValue;
-    return current !== defaultValue;
-  });
-}

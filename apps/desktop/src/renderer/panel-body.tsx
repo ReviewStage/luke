@@ -302,7 +302,6 @@ export function PanelBody({
           calendar={settings.calendar}
           appleCalendar={settings.appleCalendar}
           writes={SETTINGS_WRITES}
-          withQuietRow={false}
         />
       ) : undefined;
     return (

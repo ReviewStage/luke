@@ -1,57 +1,21 @@
-import type {
-  CredentialProviderId,
-  CredentialSource,
-  SecretStorage,
-} from "@sidecar/credentials/vocabulary";
-import type { CliConnection } from "@sidecar/session";
 import type { ActionResult } from "@sidecar/wire";
-import { APP_SETTING_DEFAULTS, type StoredAppSettings, VOICE_SOURCE } from "./schema.js";
+import { VOICE_SOURCE } from "./schema.js";
+import { APP_SETTING_DEFAULTS, type StoredAppSettings } from "./schema-access.js";
+import type { RuntimeStatus } from "./status.js";
 
 export type { AccountCalendar, ObservedAccountCalendars } from "@sidecar/calendar/observation";
 export { CLI_CONNECTION, type CliConnection } from "@sidecar/session";
+export type { SettingsResetScope, VoiceSource } from "./schema.js";
+export { isVoiceSource, SETTINGS_RESET_SCOPE, VOICE_SOURCE } from "./schema.js";
 export type {
   AppSettingField,
   AppSettingValue,
   KeyedAppSettingField,
   SettingEntryValue,
-  SettingsResetScope,
-  VoiceSource,
-} from "./schema.js";
-export {
-  APP_SETTING_DEFAULTS,
-  isSettingsResetScope,
-  isVoiceSource,
-  SETTINGS_RESET_SCOPE,
-  VOICE_SOURCE,
-} from "./schema.js";
+} from "./schema-access.js";
+export { APP_SETTING_DEFAULTS, isSettingsResetScope } from "./schema-access.js";
 
-/**
- * One connected calendar source as a renderer may know it: which account,
- * and which of its calendars the user chose to count. For Google the grant
- * behind it stays in the main process, like every credential; for Apple
- * Calendar there is no grant to keep — it lives with macOS.
- */
-export interface CalendarAccount {
-  /**
-   * The account's primary calendar id — its address, which is its name — or
-   * the fixed Apple Calendar id for the one source this Mac itself holds.
-   */
-  id: string;
-  selectedCalendarIds: readonly string[];
-}
-
-/** Runtime facts that travel beside, but never masquerade as, stored choices. */
-export interface RuntimeStatus {
-  credentialSources: Readonly<Record<CredentialProviderId, CredentialSource>>;
-  codexCloudConnection: CliConnection;
-  secretStorage: SecretStorage;
-  voiceAvailable: boolean;
-  calendarSignInAvailable: boolean;
-  linearSignInAvailable: boolean;
-  calendarAccounts: readonly CalendarAccount[];
-  appleCalendarAvailable: boolean;
-  appleCalendar?: CalendarAccount;
-}
+export type { CalendarAccount, RuntimeStatus } from "./status.js";
 
 /** Renderer-safe settings. Credentials are never sent to a renderer. */
 export interface AppSettings {

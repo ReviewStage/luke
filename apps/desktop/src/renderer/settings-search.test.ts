@@ -27,8 +27,8 @@ function searchInput(overrides: Partial<SettingsSearchInput> = {}): SettingsSear
     settings: settings(),
     voiceControlsDrawn: true,
     accountDrawn: true,
-    superset: { installed: false, connected: false, agentsOffered: false },
-    workspaceProjects: [],
+    superset: { installed: false, connected: false, agents: [] },
+    workspaceProviders: [],
     ...overrides,
   };
 }
@@ -48,10 +48,10 @@ function everythingDrawn(): SettingsSearchInput {
       linearSignInAvailable: true,
       calendarAccounts: [{ id: "dev@example.com", selectedCalendarIds: [] }],
     }),
-    superset: { installed: true, connected: true, agentsOffered: true },
-    workspaceProjects: [
-      { id: CREDENTIAL_PROVIDER_ID.CONDUCTOR, name: "Conductor" },
-      { id: "superset", name: "Superset" },
+    superset: { installed: true, connected: true, agents: ["codex"] },
+    workspaceProviders: [
+      { id: CREDENTIAL_PROVIDER_ID.CONDUCTOR, name: "Conductor", offersProjects: true },
+      { id: "superset", name: "Superset", offersProjects: true },
     ],
   });
 }
@@ -79,14 +79,15 @@ test("every setting the guide lists is findable on the page its schema names", (
     const entry = entries.find((candidate) => candidate.id === setting.id);
     assert.ok(entry, `the corpus offers ${setting.label}`);
     assert.equal(entry.label, setting.label, setting.id);
-    assert.equal(entry.page, APP_SETTING_SCHEMA[field].settingsPage, setting.label);
+    assert.equal(entry.page, APP_SETTING_SCHEMA[field].page, setting.label);
   }
 });
 
 test("a row a page is not drawing is not offered", () => {
   // A result that leads to a page without its row is a promise the page
   // cannot keep, so each conditional row answers to the condition that
-  // draws it.
+  // draws it — a setting's own, declared on its schema entry, and the
+  // remaining rows' here.
   const bare = labels(settingsSearchEntries(searchInput({ voiceControlsDrawn: false })));
   assert.ok(!bare.includes("Captions"), "no voice controls until voice can run");
   assert.ok(

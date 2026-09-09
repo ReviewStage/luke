@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import { PROVIDER_ID, SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/session";
+import { APP_SETTING_SCHEMA } from "./schema.js";
 import {
   ACCOUNT_PREFERENCE_FIELDS,
-  APP_SETTING_SCHEMA,
   accountPreferencesFromStored,
   accountPreferencesFromWire,
-} from "./schema.js";
+} from "./schema-access.js";
 
 test("the account preference allowlist contains only cross-device preferences", () => {
   assert.deepEqual(ACCOUNT_PREFERENCE_FIELDS, [

@@ -38,8 +38,8 @@ export type SettingsSubview = (typeof SETTINGS_SUBVIEW_LIST)[number];
  * setting added later does not build until someone says where it lives.
  *
  * The guide says the same thing in prose, in the by-hand path it offers for
- * each setting. That the two agree is a test rather than a type, because one
- * is a sentence and the other is a page.
+ * each setting. Both come off the same schema entry now, and `schema.test.ts`
+ * is what checks the sentence names the page.
  */
 export { SETTING_PAGE };
 
