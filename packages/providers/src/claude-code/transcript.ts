@@ -8,12 +8,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import {
-  readDirectory,
-  readTail,
-  statDirectoryEntry,
-  tailRecords,
-} from "../shared/local-session-adapter.js";
+import { readDirectory, readTail, statDirectoryEntry, tailRecords } from "../shared/local-files.js";
 import {
   boundedTranscript,
   readRecordsSince,

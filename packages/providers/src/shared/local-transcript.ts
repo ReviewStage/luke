@@ -11,7 +11,7 @@
 
 import { OMISSION_MARKER, transcriptReadTailBytes } from "@sidecar/session";
 import { isRecord, isWireString, recordFromJsonLine, text, type WireRecord } from "@sidecar/wire";
-import { type FileWindow, fileStats, readRange, readTailWindow } from "./local-session-adapter.js";
+import { type FileWindow, fileStats, readRange, readTailWindow } from "./local-files.js";
 
 export const transcriptLine = {
   developer: (words: string) => `Developer: ${words}`,

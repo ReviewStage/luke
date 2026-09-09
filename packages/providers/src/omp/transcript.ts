@@ -1,12 +1,7 @@
 import path from "node:path";
 import type { ProviderTranscriptSinceReading } from "@sidecar/session";
 import { isRecord, oneLine, text, type WireRecord } from "@sidecar/wire";
-import {
-  readDirectory,
-  readTail,
-  statDirectoryEntry,
-  tailRecords,
-} from "../shared/local-session-adapter.js";
+import { readDirectory, readTail, statDirectoryEntry, tailRecords } from "../shared/local-files.js";
 import {
   boundedTranscript,
   readRecordsSince,

@@ -23,12 +23,13 @@ import {
   wholeNumber,
 } from "@sidecar/wire";
 import {
-  discoverSessionFiles,
   type HookStatusRefinement,
   hookRefinedStatus,
-  LOCAL_ADAPTER_DEFAULTS,
-  LocalFileSessionAdapter,
   localSessionStatus,
+} from "../shared/hook-status.js";
+import {
+  discoverSessionFiles,
+  LOCAL_ADAPTER_DEFAULTS,
   readDirectory,
   readHead,
   readTail,
@@ -37,7 +38,8 @@ import {
   statDirectoryEntry,
   tailRecords,
   workspaceLabel,
-} from "../shared/local-session-adapter.js";
+} from "../shared/local-files.js";
+import { LocalFileSessionAdapter } from "../shared/local-session-adapter.js";
 import { TranscriptPathCache } from "../shared/local-transcript.js";
 import {
   CLAUDE_HOOK_EVENT,

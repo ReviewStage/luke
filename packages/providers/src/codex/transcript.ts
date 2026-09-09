@@ -8,7 +8,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import { readTail, tailRecords } from "../shared/local-session-adapter.js";
+import { readTail, tailRecords } from "../shared/local-files.js";
 import {
   canIgnoreSqliteError,
   defaultSqliteModule,

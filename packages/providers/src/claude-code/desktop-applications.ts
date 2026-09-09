@@ -9,11 +9,7 @@ import {
   type SessionApplication,
 } from "@sidecar/session";
 import { text, unparsedWire, type WireRecord, wireRecord } from "@sidecar/wire";
-import {
-  readDirectory,
-  readTextFile,
-  statDirectoryEntry,
-} from "../shared/local-session-adapter.js";
+import { readDirectory, readTextFile, statDirectoryEntry } from "../shared/local-files.js";
 import { WorkspaceHostSnapshot } from "../shared/workspace-host-snapshot.js";
 
 const CLAUDE_DESKTOP_APPLICATION_SUPPORT_DIRECTORY = "Claude";
