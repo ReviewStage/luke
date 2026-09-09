@@ -90,9 +90,6 @@ importers:
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
-      '@sidecar/runtime-store':
-        specifier: workspace:*
-        version: link:../../packages/runtime-store
       '@sidecar/session':
         specifier: workspace:*
         version: link:../../packages/session
@@ -514,9 +511,6 @@ importers:
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@sidecar/runtime-store':
-        specifier: workspace:*
-        version: link:../runtime-store
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
@@ -694,37 +688,6 @@ importers:
       croner:
         specifier: 10.0.1
         version: 10.0.1
-    devDependencies:
-      '@types/node':
-        specifier: 26.2.0
-        version: 26.2.0
-      tsx:
-        specifier: 4.23.12
-        version: 4.23.12
-      typescript:
-        specifier: 7.0.2
-        version: 7.0.2
-
-  packages/runtime-store:
-    dependencies:
-      '@sidecar/acts':
-        specifier: workspace:*
-        version: link:../acts
-      '@sidecar/brain':
-        specifier: workspace:*
-        version: link:../brain
-      '@sidecar/memory':
-        specifier: workspace:*
-        version: link:../memory
-      '@sidecar/realtime':
-        specifier: workspace:*
-        version: link:../realtime
-      '@sidecar/runtime':
-        specifier: workspace:*
-        version: link:../runtime
-      '@sidecar/wire':
-        specifier: workspace:*
-        version: link:../wire
     devDependencies:
       '@types/node':
         specifier: 26.2.0

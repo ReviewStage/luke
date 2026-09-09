@@ -32,26 +32,20 @@ export const BRAIN_GENERATION_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
 
 /**
  * How large a generation may grow. The request count bounds what the panel
- * and the model can be shown of ended runs; the byte cap bounds the file
- * itself, and is the one bound that can refuse a write: ended runs are let go
- * first, and a write that would still leave the envelope oversized is refused
- * rather than dropping anything that is not finished.
+ * and the model can be shown of ended runs, and it is the one bound that can
+ * refuse a write: ended runs are let go first, and a write that would still
+ * leave the envelope oversized is refused rather than dropping anything that
+ * is not finished.
+ *
+ * It bounds records and nothing else. The checkpoint items are bounded by
+ * compaction, which folds the context under the model's own window, and a
+ * hosted request is bounded again by its transport's envelope; there is no
+ * bound on the envelope's bytes, because the envelope is rows in the store
+ * rather than a file to measure. A byte bound here would have to be measured
+ * where the bytes are, over the checkpoint rows, and that is a decision this
+ * build has not made.
  */
-export interface BrainStateBounds {
-  readonly MAXIMUM_TERMINAL_REQUESTS: number;
-  readonly MAXIMUM_SERIALIZED_BYTES: number;
-}
-
-export const BRAIN_STATE_BOUNDS: BrainStateBounds = {
-  MAXIMUM_TERMINAL_REQUESTS: 200,
-  MAXIMUM_SERIALIZED_BYTES: 8 * 1024 * 1024,
-};
-
-/** The same bounds with one place kept open, which is what asks whether one more record fits. */
-const ADMISSION_BOUNDS: BrainStateBounds = {
-  ...BRAIN_STATE_BOUNDS,
-  MAXIMUM_TERMINAL_REQUESTS: BRAIN_STATE_BOUNDS.MAXIMUM_TERMINAL_REQUESTS - 1,
-};
+export const MAXIMUM_TERMINAL_REQUESTS = 200;
 
 /**
  * What a Clear leaves behind in place of the generation it erased: the id of
@@ -231,22 +225,6 @@ function resetMarkerFromWire(value: UnparsedWireValue): BrainResetMarker | undef
   return { clearedAt: value.clearedAt, generationId: value.generationId };
 }
 
-/** The record the state persists as. */
-export function brainStateRecord(state: BrainPersistedState): string {
-  return `${JSON.stringify(state)}\n`;
-}
-
-/** Reads a stored record back, or nothing for a missing, unparseable, or foreign file. */
-export function brainStateFromStored(stored: string | undefined): BrainPersistedState | undefined {
-  if (stored === undefined) return undefined;
-  try {
-    // SAFETY: JSON.parse returns a wire value; the reader is the validation.
-    return brainPersistedStateFromWire(JSON.parse(stored) as UnparsedWireValue);
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * Whether an ended run may be let go of. Only an ended run whose end the host
  * has already written into its own thread: the thread is where the words
@@ -257,44 +235,29 @@ export function brainRequestPrunable(record: BrainRequestRecord): boolean {
   return isTerminalBrainRequestStatus(record.status) && record.historyRecordedAt !== undefined;
 }
 
-/** An envelope held to its bounds, and which runs were let go to get there. */
+/** An envelope held to its bound, and which runs were let go to get there. */
 export interface RetainedBrainState {
   state: BrainPersistedState;
   prunedRunIds: readonly string[];
-  /** The serialized record's size in bytes, measured once for the write that follows. */
-  record: string;
-  bytes: number;
-  /** Whether the envelope still exceeds a bound — bytes or records — after everything eligible went. */
+  /** Whether the envelope still exceeds the bound after everything eligible went. */
   oversized: boolean;
 }
 
-function recordBytes(record: string): number {
-  return new TextEncoder().encode(record).length;
-}
-
-function withoutRuns(state: BrainPersistedState, runIds: ReadonlySet<string>): BrainPersistedState {
-  return {
-    ...state,
-    requests: state.requests.filter((record) => !runIds.has(record.runId)),
-    journal: state.journal.filter((entry) => !runIds.has(entry.runId)),
-  };
-}
-
 /**
- * Applies both bounds, oldest ended runs going first and each run's journal
+ * Applies the bound, oldest ended runs going first and each run's journal
  * going with its record, so a call is never left without the run it belonged
- * to. Both bounds prune only what is eligible and then report whether that
- * was enough, because what to do about an envelope that is still too large —
+ * to. It prunes only what is eligible and then reports whether that was
+ * enough, because what to do about an envelope that is still too large —
  * refuse the write that would grow it, or refuse the file at load — is the
  * writer's decision, not the retention's: nothing here touches a run still
  * going, a run whose end the thread has not yet taken, a journal, or the
  * model's own memory items. The count bounds records of every status
- * together, so however many runs stand at once the file never carries more
- * than the bound names.
+ * together, so however many runs stand at once the envelope never carries
+ * more than the bound names.
  */
 export function retainedBrainState(
   state: BrainPersistedState,
-  bounds: BrainStateBounds = BRAIN_STATE_BOUNDS,
+  maximumRequests: number = MAXIMUM_TERMINAL_REQUESTS,
 ): RetainedBrainState {
   const eligible = state.requests
     .filter(brainRequestPrunable)
@@ -304,44 +267,25 @@ export function retainedBrainState(
         left.acceptedAt - right.acceptedAt,
     );
   const pruned = new Set<string>();
-  let excess = state.requests.length - bounds.MAXIMUM_TERMINAL_REQUESTS;
+  let excess = state.requests.length - maximumRequests;
   for (const record of eligible) {
     if (excess <= 0) break;
     pruned.add(record.runId);
     excess -= 1;
   }
-  let retained = pruned.size > 0 ? withoutRuns(state, pruned) : state;
-  let record = brainStateRecord(retained);
-  let bytes = recordBytes(record);
-  for (const candidate of eligible) {
-    if (bytes <= bounds.MAXIMUM_SERIALIZED_BYTES) break;
-    if (pruned.has(candidate.runId)) continue;
-    pruned.add(candidate.runId);
-    retained = withoutRuns(state, pruned);
-    record = brainStateRecord(retained);
-    bytes = recordBytes(record);
-  }
+  const retained: BrainPersistedState =
+    pruned.size > 0
+      ? {
+          ...state,
+          requests: state.requests.filter((record) => !pruned.has(record.runId)),
+          journal: state.journal.filter((entry) => !pruned.has(entry.runId)),
+        }
+      : state;
   return {
     state: retained,
     prunedRunIds: [...pruned],
-    record,
-    bytes,
-    oversized:
-      bytes > bounds.MAXIMUM_SERIALIZED_BYTES ||
-      retained.requests.length > bounds.MAXIMUM_TERMINAL_REQUESTS,
+    oversized: retained.requests.length > maximumRequests,
   };
-}
-
-/**
- * Where the envelope is kept, as one serialized record: the shape a test's
- * in-memory file has. Production keeps the envelope decomposed in the
- * runtime store instead, behind {@link BrainStateRepository}; this adapter
- * is how a record storage still satisfies that contract.
- */
-export interface BrainStateStorage {
-  read(): string | undefined | Promise<string | undefined>;
-  /** Answers whether the write landed; a store that throws is read as one that did not. */
-  write(contents: string): boolean | Promise<boolean>;
 }
 
 /** What a repository found: the envelope it holds, or nothing, or something it could not read. */
@@ -374,25 +318,8 @@ export interface BrainStateRepository {
   ): boolean | Promise<boolean>;
 }
 
-/** A record storage as a repository: the whole envelope in one serialized record. */
-export function brainStateRepositoryFromStorage(storage: BrainStateStorage): BrainStateRepository {
-  return {
-    async load() {
-      const stored = await storage.read();
-      if (stored === undefined) return {};
-      const state = brainStateFromStored(stored);
-      return state ? { state } : { unreadable: true };
-    },
-    save(state) {
-      return storage.write(brainStateRecord(state));
-    },
-  };
-}
-
-export type BrainStateStoreOptions = (
-  | { storage: BrainStateStorage; repository?: undefined }
-  | { repository: BrainStateRepository; storage?: undefined }
-) & {
+export type BrainStateStoreOptions = {
+  repository: BrainStateRepository;
   createGenerationId: () => string;
   now?: () => number;
   /** Enforce the stamped deadline. Off by default, as OpenClaw's session reset policy is `none`. */
@@ -462,7 +389,7 @@ export class BrainStateStore {
 
   constructor(options: BrainStateStoreOptions) {
     this.automaticReset = options.automaticReset ?? false;
-    this.#repository = options.repository ?? brainStateRepositoryFromStorage(options.storage);
+    this.#repository = options.repository;
     this.#createGenerationId = options.createGenerationId;
     this.#now = options.now ?? Date.now;
     this.#report = options.report ?? (() => undefined);
@@ -530,7 +457,7 @@ export class BrainStateStore {
         rewrite: "the expired generation",
       };
     }
-    const retained = retainedBrainState(read, BRAIN_STATE_BOUNDS);
+    const retained = retainedBrainState(read);
     if (retained.oversized) {
       // Nothing this build writes exceeds its bounds with nothing left to
       // let go, so a file that does was not written under this rule; it is
@@ -591,9 +518,10 @@ export class BrainStateStore {
   admits(generationId: string): boolean {
     const held = this.#state;
     if (!held || held.generationId !== generationId) return false;
+    // One place kept open is what asks whether one more record would fit.
     return (
-      retainedBrainState(held, ADMISSION_BOUNDS).state.requests.length <
-      BRAIN_STATE_BOUNDS.MAXIMUM_TERMINAL_REQUESTS
+      retainedBrainState(held, MAXIMUM_TERMINAL_REQUESTS - 1).state.requests.length <
+      MAXIMUM_TERMINAL_REQUESTS
     );
   }
 
@@ -654,8 +582,13 @@ export class BrainStateStore {
         expiresAt: held.expiresAt,
         ...(held.reset ? { reset: held.reset } : undefined),
       };
-      const retained = retainedBrainState(composed, BRAIN_STATE_BOUNDS);
-      if (retained.oversized && grows(retained, held)) return false;
+      const retained = retainedBrainState(composed);
+      // A write that would still leave the envelope over its bound is
+      // refused rather than dropping a run still going or its journal; one
+      // that shrinks it toward the bound is let through.
+      if (retained.oversized && retained.state.requests.length > held.requests.length) {
+        return false;
+      }
       if (!(await this.#persist(retained.state, transcript))) return false;
       if (this.#state !== held || !this.holdsLease(lease)) return false;
       this.#state = retained.state;
@@ -674,7 +607,7 @@ export class BrainStateStore {
    * newer truth carrying the file.
    */
   replace(state: BrainPersistedState): Promise<boolean> {
-    const retained = retainedBrainState(state, BRAIN_STATE_BOUNDS);
+    const retained = retainedBrainState(state);
     if (retained.oversized) return Promise.resolve(false);
     this.#state = retained.state;
     this.#announceReplaced(retained.state);
@@ -801,12 +734,4 @@ export class BrainStateStore {
 interface AdmittedBrainState {
   state: BrainPersistedState;
   rewrite?: string;
-}
-
-/** Whether a retained envelope is larger than the one it would replace, in bytes or in records. */
-function grows(retained: RetainedBrainState, held: BrainPersistedState): boolean {
-  return (
-    retained.bytes > recordBytes(brainStateRecord(held)) ||
-    retained.state.requests.length > held.requests.length
-  );
 }

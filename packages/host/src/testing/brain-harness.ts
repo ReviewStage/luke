@@ -3,7 +3,6 @@ import {
   BRAIN_REQUEST_ORIGIN,
   BrainAgent,
   type BrainAgentOptions,
-  type BrainStateStorage,
   BrainStateStore,
   DELIVERY_STATE,
   DeliveryLedger,
@@ -17,7 +16,11 @@ import type {
   BrainReplyOffer,
   BrainRequestSnapshot,
 } from "@sidecar/brain/requests-wire";
-import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testing";
+import {
+  type BareResponsesModel,
+  bareModelAdapter,
+  fakeBrainStateRepository,
+} from "@sidecar/brain/testing";
 import {
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
@@ -35,18 +38,6 @@ import { operatorOverBrain } from "./operator-over-brain.js";
 /** The instant every clock in a brain fixture reads. */
 export const BRAIN_HARNESS_NOW = 1_800_000_000_000;
 const NOW = BRAIN_HARNESS_NOW;
-
-/** The envelope on nothing but a string, so a test can read and plant the file. */
-export class MemoryBrainStorage implements BrainStateStorage {
-  file: string | undefined;
-  read() {
-    return this.file;
-  }
-  write(contents: string) {
-    this.file = contents;
-    return true;
-  }
-}
 
 /** A model that answers nothing until the test says so. */
 export function heldModel(): BareResponsesModel & { release: (answer: ModelResponse) => void } {
@@ -69,10 +60,10 @@ export function heldModel(): BareResponsesModel & { release: (answer: ModelRespo
  * model and the disk synthetic.
  */
 export function brainHarness() {
-  const storage = new MemoryBrainStorage();
+  const repository = fakeBrainStateRepository();
   let ids = 0;
   const store = new BrainStateStore({
-    storage,
+    repository,
     createGenerationId: () => `gen-${++ids}`,
     now: () => NOW,
   });
@@ -213,7 +204,7 @@ export function brainHarness() {
     });
   };
   return {
-    storage,
+    repository,
     store,
     host,
     build,

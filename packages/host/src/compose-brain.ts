@@ -58,15 +58,14 @@ import {
 } from "./notebook-memory.js";
 import type { GrantedWords } from "./service.js";
 import { agentRootPath } from "./store-path.js";
-import { wireRuntimeStore } from "./store-wiring.js";
+import { type StoreWiring, wireStore } from "./store-wiring.js";
 import { reporterOf } from "./wire-helpers.js";
 
 export type BrainWiring = ReturnType<typeof wireBrain>;
-export type RuntimeStoreWiring = ReturnType<typeof wireRuntimeStore>;
 
 export interface BrainComposer extends Composer {
   readonly wiring: BrainWiring;
-  readonly store: RuntimeStoreWiring;
+  readonly store: StoreWiring;
   readonly conversations: ReturnType<typeof conversationOperations>;
   readonly deliveries: DeliveryLedger<GrantedWords>;
   readonly cron: CronScheduler;
@@ -88,13 +87,13 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
   const { runMode, report, now, createId } = kernel;
 
   /**
-   * The runtime store and the conversation it holds: one retained thread
+   * The brain's store and the conversation it holds: one retained thread
    * shared by every panel window and persisted for the next launch. A window's
    * report is appended under an opaque reporter the client minted, so the
    * history event can skip echoing it to the window that reported it, and the
    * reporter names nothing about the window to anyone else.
    */
-  const store = wireRuntimeStore({
+  const store = wireStore({
     persistent: runMode.observesProviders,
     createWorker: kernel.options.createWorker,
     agentRoot: () => agentRootPath(kernel.stateRoot),

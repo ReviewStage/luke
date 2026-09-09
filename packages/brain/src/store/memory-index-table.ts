@@ -33,16 +33,8 @@ import {
 } from "@sidecar/memory";
 import { DAILY_NOTES_DIRECTORY, WORKSPACE_FILE } from "@sidecar/runtime";
 import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import type { RuntimeDatabase } from "./database.js";
+import type { StoreDatabase } from "./database.js";
 import type { NotebookEntry } from "./notebook-table.js";
-
-export type {
-  EmbeddingWrite,
-  MemoryApplyReport,
-  MemoryScanPlan,
-  MemorySearchOutcome,
-  MemorySearchQuery,
-} from "@sidecar/memory";
 
 /**
  * The disposable search index over the notebook's Markdown files, in the
@@ -141,7 +133,7 @@ export function scanMemoryFiles(root: string): readonly ScannedFile[] {
   return files.sort((a, b) => a.path.localeCompare(b.path));
 }
 
-export function listIndexedSources(database: RuntimeDatabase): readonly IndexedSourceRecord[] {
+export function listIndexedSources(database: StoreDatabase): readonly IndexedSourceRecord[] {
   // SAFETY: the columns selected are the ones the row type names.
   const rows = database
     .prepare("SELECT path, source, hash, mtime, size FROM memory_index_sources ORDER BY path")
@@ -165,7 +157,7 @@ export function listIndexedSources(database: RuntimeDatabase): readonly IndexedS
  * notebook first.
  */
 export function planMemorySync(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   root: string,
   identity: EmbeddingModelIdentity | undefined,
   entries: readonly Pick<NotebookEntry, "id" | "words">[],
@@ -241,7 +233,7 @@ export function planMemorySync(
 
 /** Whether any indexed chunk of the path has no vector under the model given. */
 function lacksVectors(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   filePath: string,
   identity: EmbeddingModelIdentity,
 ): boolean {
@@ -256,7 +248,7 @@ function lacksVectors(
 }
 
 export function cachedEmbeddings(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   identity: EmbeddingModelIdentity,
   hashes: readonly string[],
 ): Map<string, readonly number[]> {
@@ -276,7 +268,7 @@ export function cachedEmbeddings(
 }
 
 function putCachedEmbeddings(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   identity: EmbeddingModelIdentity,
   embeddings: readonly EmbeddingWrite[],
   now: number,
@@ -307,7 +299,7 @@ function putCachedEmbeddings(
     .run(MEMORY_SEARCH_DEFAULTS.EMBEDDING_CACHE_MAXIMUM_ENTRIES);
 }
 
-export function removeIndexedPath(database: RuntimeDatabase, filePath: string): void {
+export function removeIndexedPath(database: StoreDatabase, filePath: string): void {
   database.prepare("DELETE FROM memory_index_chunks_fts WHERE path = ?").run(filePath);
   database.prepare("DELETE FROM memory_index_chunks WHERE path = ?").run(filePath);
   database.prepare("DELETE FROM memory_index_sources WHERE path = ?").run(filePath);
@@ -320,7 +312,7 @@ export function removeIndexedPath(database: RuntimeDatabase, filePath: string): 
  * paths lose their rows. One transaction, so a search never sees half a file.
  */
 export function applyMemorySync(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   plan: { changed: readonly IndexedFileWrite[]; removed: readonly string[] },
   embeddings: readonly EmbeddingWrite[],
   identity: EmbeddingModelIdentity | undefined,
@@ -388,7 +380,7 @@ export function applyMemorySync(
 }
 
 /** Drops every derived row; the files stand, and the next sync indexes them all again. */
-export function rebuildMemoryIndex(database: RuntimeDatabase): boolean {
+export function rebuildMemoryIndex(database: StoreDatabase): boolean {
   database.transaction(() => {
     database.exec("DELETE FROM memory_index_chunks_fts");
     database.exec("DELETE FROM memory_index_chunks");
@@ -404,7 +396,7 @@ export interface MemoryIndexStatus {
   readonly cachedEmbeddings: number;
 }
 
-export function memoryIndexStatus(database: RuntimeDatabase): MemoryIndexStatus {
+export function memoryIndexStatus(database: StoreDatabase): MemoryIndexStatus {
   const count = (sql: string) =>
     // SAFETY: COUNT(*) is one integer column named `count`.
     (database.prepare(sql).get() as { count: number }).count;
@@ -453,7 +445,7 @@ const CHUNK_COLUMNS = `c.id, c.path, c.start_line, c.end_line, c.text, c.embeddi
   COALESCE(s.origin, '') AS origin`;
 
 export function keywordSearch(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   query: string,
   limit: number,
 ): readonly KeywordHit[] {
@@ -483,7 +475,7 @@ export function keywordSearch(
 
 /** Cosine similarity over every stored vector of the model given, here on the worker. */
 export function vectorSearch(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   queryVector: readonly number[],
   identity: EmbeddingModelIdentity,
   limit: number,
@@ -517,7 +509,7 @@ export function vectorSearch(
 
 /** One hybrid search: candidates from both rankings under the multiplier, merged, decayed, diversified, and windowed. */
 export function searchMemoryIndex(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   query: MemorySearchQuery,
 ): MemorySearchOutcome {
   const maxResults = query.maxResults ?? MEMORY_SEARCH_DEFAULTS.MAXIMUM_RESULTS;

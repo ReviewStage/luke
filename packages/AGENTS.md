@@ -42,6 +42,10 @@ Package boundaries should put wire vocabulary below behavior and keep behavior
 out of transport packages. The credential vocabulary and hook merge sit where
 they do because putting them elsewhere would close a loop.
 
+The store used to depend on the brain it stores; folding it into
+`brain/src/store/` is what removed that edge, and nothing under
+`brain/src/store/` may import `../index.js`.
+
 Watch for cycles that exist only in tests. A test that reaches into a package
 above its own is still an edge pnpm records, and it usually means the test
 belongs with the layer it is really exercising.
@@ -90,7 +94,8 @@ Importing a package resolves its whole export graph, not the one name asked
 for. A package that holds both a wire vocabulary and a Node flow gives the
 vocabulary a subpath of its own (`@sidecar/calendar/vocabulary`,
 `@sidecar/credentials/snapshot`,
-`@sidecar/providers/superset/sign-in-stage`, `@sidecar/runtime/vocabulary`), or
+`@sidecar/providers/superset/sign-in-stage`, `@sidecar/runtime/vocabulary`,
+`@sidecar/brain/store`, `@sidecar/brain/store-worker`), or
 the renderer bundle fails to resolve `node:http` behind a string constant it
 wanted to draw.
 
@@ -103,6 +108,11 @@ repository shares — a self-cleaning temporary directory, a stated microtask
 drain, and a clock the test drives — behind its own door because it reaches
 `node:fs` and `node:os`, and in this package because the clock stands in for
 the runtime's own `ScheduledTimer`.
+
+`@sidecar/brain` is the reason the rule exists twice in one package: the barrel
+is a door the web functions and the renderer open, and the store beneath it
+reaches `node:sqlite`, so the store and its worker entry each get a subpath and
+the barrel exports neither.
 
 `@sidecar/runtime/vocabulary` is the same rule at the bottom of the graph: the
 identities, the storage contracts, and the execution seams are Node-free, and

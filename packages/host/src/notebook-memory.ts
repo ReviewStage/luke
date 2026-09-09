@@ -1,5 +1,6 @@
 import type { BrainMemoryAccess } from "@sidecar/brain";
 import { EMBEDDING_BATCH_SIZE } from "@sidecar/brain";
+import type { StoreClient } from "@sidecar/brain/store";
 import {
   type MemorySyncReport,
   NotebookMemory,
@@ -7,7 +8,6 @@ import {
   type RetrievalMode,
 } from "@sidecar/memory";
 import type { ConversationRecord, EmbeddingAdapter, SessionKey } from "@sidecar/runtime/vocabulary";
-import type { RuntimeStoreClient } from "@sidecar/runtime-store";
 
 /** The notebook's index as the host holds it, and what a run without one still answers. */
 export interface MemoryWiring {
@@ -32,7 +32,7 @@ export const INERT_MEMORY_WIRING: MemoryWiring = {
 };
 
 export interface NotebookMemoryDependencies {
-  client: () => RuntimeStoreClient;
+  client: () => StoreClient;
   /** The embedding adapter the credential policy built, or nothing when no credential stands. */
   embeddingAdapter: () => EmbeddingAdapter | undefined;
   /** Hears every credential change that may have replaced the adapter; the index is synced again so keyword-only chunks gain their vectors. */
@@ -54,7 +54,7 @@ export interface NotebookMemoryDependencies {
  */
 export function composeNotebookMemory(dependencies: NotebookMemoryDependencies): NotebookMemory {
   const memory = new NotebookMemory({
-    store: dependencies.client,
+    store: () => dependencies.client().notebookMemoryStore(),
     embeddingAdapter: dependencies.embeddingAdapter,
     embeddingBatchSize: EMBEDDING_BATCH_SIZE,
     workspaceDirectory: dependencies.workspaceDirectory,

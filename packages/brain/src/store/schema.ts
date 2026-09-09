@@ -97,20 +97,23 @@ const MEMORY_FLUSH_STATE_TABLE = `CREATE TABLE IF NOT EXISTS memory_flush_state 
     flushed_at INTEGER NOT NULL
   )`;
 
-export const RUNTIME_SCHEMA_VERSION = 10;
+export const STORE_SCHEMA_VERSION = 10;
 
 /**
  * How a database at an earlier version is brought to this one, in order. Each
- * step runs inside the migration's transaction; a version this build does not
- * know how to reach is refused rather than guessed at.
+ * step runs inside the migration's transaction. A version the map does not
+ * name altered no table that already stood — it only added ones the current
+ * statements create where none is — so it migrates by having nothing to do;
+ * a database at a version this build does not know at all is refused rather
+ * than migrated by guess, which `StoreDatabase.open` raises before any step.
  */
 export interface SchemaMigrationStep {
   sql: string;
   params: readonly SQLInputValue[];
 }
 
-export const RUNTIME_SCHEMA_MIGRATIONS: ReadonlyMap<number, readonly SchemaMigrationStep[]> =
-  new Map([
+export const STORE_SCHEMA_MIGRATIONS: ReadonlyMap<number, readonly SchemaMigrationStep[]> = new Map(
+  [
     [
       2,
       [
@@ -152,15 +155,6 @@ export const RUNTIME_SCHEMA_MIGRATIONS: ReadonlyMap<number, readonly SchemaMigra
         },
       ],
     ],
-    // Versions 4 through 8 alter no table that already stands: each adds one
-    // the current statements create where none is. The entries are still
-    // needed, because a version with none is refused rather than assumed
-    // empty.
-    [4, []],
-    [5, []],
-    [6, []],
-    [7, []],
-    [8, []],
     [
       9,
       [
@@ -186,9 +180,10 @@ export const RUNTIME_SCHEMA_MIGRATIONS: ReadonlyMap<number, readonly SchemaMigra
         { sql: "DROP TABLE IF EXISTS memory_rewrites", params: [] },
       ],
     ],
-  ]);
+  ],
+);
 
-export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
+export const STORE_SCHEMA_STATEMENTS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER NOT NULL
   )`,

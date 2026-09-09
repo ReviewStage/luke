@@ -1,30 +1,31 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { FakeClock } from "@sidecar/runtime/testing";
+import { BrainGenerationClock } from "./generation-clock.js";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
-  BrainGenerationClock,
+  type BrainPersistedState,
   BrainStateStore,
-  brainStateRecord,
   freshBrainState,
-} from "@sidecar/brain";
-import { FakeClock } from "@sidecar/runtime/testing";
-import { MemoryBrainStorage, BRAIN_HARNESS_NOW as NOW } from "../testing/index.js";
+} from "./state-store.js";
+import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
 
 /**
- * Retention as the main process owns it: the store and its clock stand from
- * launch in a live run, whether or not any capability builds an agent. Under
- * the shipped policy of no automatic reset an old checkpoint is loaded whole,
- * past its stamped deadline, and the clock arms nothing.
+ * Retention as the shipped policy has it: the store and its clock stand from
+ * launch in a live run, whether or not any capability builds an agent, and
+ * with no automatic reset an old checkpoint is loaded whole, past its stamped
+ * deadline, while the clock arms nothing.
  */
 
+const NOW = 1_800_000_000_000;
 const EXPIRED_SECRET = "EXPIRED_SECRET_MARKER";
 
-function launch(storage: MemoryBrainStorage, clock: FakeClock) {
+function launch(repository: FakeBrainStateRepository, clock: FakeClock) {
   const reports: string[] = [];
   let generations = 0;
   const store = new BrainStateStore({
     automaticReset: false,
-    storage,
+    repository,
     createGenerationId: () => `gen-${++generations}`,
     now: () => clock.now,
     report: (message) => reports.push(message),
@@ -39,20 +40,21 @@ function launch(storage: MemoryBrainStorage, clock: FakeClock) {
 }
 
 test("a launch under the default policy keeps a checkpoint past its stamped deadline and arms no clock", async () => {
-  const storage = new MemoryBrainStorage();
-  const stale = {
+  const stale: BrainPersistedState = {
     ...freshBrainState("gen-old", NOW - BRAIN_GENERATION_LIFETIME_MS - 1),
     items: [{ type: "message", role: "user", content: EXPIRED_SECRET }],
   };
-  storage.file = brainStateRecord(stale);
-  const clock = new FakeClock();
-  const { store, generationClock, reports } = launch(storage, clock);
+  const repository = fakeBrainStateRepository(stale);
+  const clock = new FakeClock(NOW);
+  const { store, generationClock, reports } = launch(repository, clock);
   await generationClock.start();
   assert.equal(store.generationId(), "gen-old");
   assert.deepEqual(store.current()?.items, stale.items);
-  assert.ok(String(storage.file).includes(EXPIRED_SECRET));
+  assert.ok(repository.words().includes(EXPIRED_SECRET));
   assert.equal(reports.length, 0);
   assert.equal(clock.timers.size, 0);
+  // Nothing was armed, so advancing past the deadline fires nothing and the
+  // generation stands: only a store with automatic reset has a clock to keep.
   await clock.advance(NOW + BRAIN_GENERATION_LIFETIME_MS);
   assert.equal(store.generationId(), "gen-old");
   generationClock.stop();

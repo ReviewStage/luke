@@ -98,7 +98,7 @@ own. The whole record is one generation, and a generation does not reset
 on its own, on the terms OpenClaw's sessions keep: it stands, the encrypted
 compaction included, until you clear the conversation, and an old one is
 loaded whole however long ago it began. A
-generation holds at most 200 asks and stays under 8 MiB: the oldest finished
+generation holds at most 200 asks: the oldest finished
 asks go first once their endings are in the History, and when nothing can go
 Luke declines a new ask rather than growing the record.
 

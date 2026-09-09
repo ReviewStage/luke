@@ -43,18 +43,6 @@ export interface HistoryMaintenanceConfig {
   readonly maximumDiskBytes: number | null;
   /** Where cleanup stops once the budget is crossed. */
   readonly highWaterBytes: number | null;
-  /**
-   * Whether a stale conversation is reset rather than archived. OpenClaw ships
-   * it off, and this build honors the default by having no reset path at all;
-   * the field stands so the pinned defaults read whole.
-   */
-  readonly automaticReset: boolean;
-  /**
-   * How long an extracted archive file is kept by age; null keeps it until
-   * disk pressure alone. OpenClaw ships it null, and this build honors that
-   * by having no age sweep over archives; the field stands for the same reason.
-   */
-  readonly archiveExpiryMs: number | null;
 }
 
 /** Where cleanup stops once the budget is crossed, as a share of the budget, when no high-water mark is named. */
@@ -66,8 +54,6 @@ export const HISTORY_MAINTENANCE_DEFAULTS: HistoryMaintenanceConfig = {
   maximumUnarchived: 5_000,
   maximumDiskBytes: 10 * GIB,
   highWaterBytes: Math.floor(10 * GIB * DISK_BUDGET_HIGH_WATER_RATIO),
-  automaticReset: false,
-  archiveExpiryMs: null,
 };
 
 /** The trigger the pinned source uses so a busy store batches cap runs rather than capping on every write. */

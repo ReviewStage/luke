@@ -10,10 +10,10 @@ licenses, reproduced here.
 at commit `b7528507af5a4ea04b5165ac64d30f504e898f19`
 (`src/agents/tool-loop-detection.ts`, `src/agents/tool-loop-no-progress.ts`,
 `src/agents/tool-loop-argument-churn.ts`, `src/agents/tool-loop-thresholds.ts`;
-<https://github.com/openclaw/openclaw>). `packages/runtime-store/src/maintenance.ts`
+<https://github.com/openclaw/openclaw>). `packages/brain/src/store/maintenance.ts`
 and `maintenance-run.ts` port the session store maintenance policy of the
 same commit (`src/config/sessions/store-maintenance.ts`,
-`store-maintenance-plan.ts`, `disk-budget.ts`); `packages/runtime-store/src/archives.ts`
+`store-maintenance-plan.ts`, `disk-budget.ts`); `packages/brain/src/store/archives.ts`
 and `compression.ts` follow the shape of its transcript archives
 (`session-accessor.sqlite-archive.ts`, `archive-compression.ts`); and
 `packages/brain/src/compaction.ts` takes its reserve and recent-tail policy

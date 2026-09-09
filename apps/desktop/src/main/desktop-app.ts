@@ -26,9 +26,9 @@ import {
   jsonStateFile,
   onboardingStateFile,
   runModeFor,
-  runtimeStoreWorkerPath,
   sentryReportingEnabled,
   shouldRunIntroduction,
+  storeWorkerPath,
 } from "@sidecar/host";
 import { peekLocalSessions } from "@sidecar/providers";
 import type { SpeechOutcome } from "@sidecar/realtime/speech";
@@ -432,7 +432,7 @@ const host = composeHost({
     if (!runMode.observesProviders) {
       throw new Error("a fixture run keeps nothing on disk and starts no store worker");
     }
-    return new Worker(runtimeStoreWorkerPath(__dirname), { name: "runtime-store" });
+    return new Worker(storeWorkerPath(__dirname), { name: "brain-store" });
   },
   registerProviderHooks: runMode.observesProviders,
   now: Date.now,

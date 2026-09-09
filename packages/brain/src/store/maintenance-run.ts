@@ -16,7 +16,7 @@ import {
   removeArchive,
 } from "./archives.js";
 import { archiveConversation, listConversations } from "./conversations-table.js";
-import { AGENT_DATABASE_FILE, type RuntimeDatabase } from "./database.js";
+import { AGENT_DATABASE_FILE, type StoreDatabase } from "./database.js";
 import {
   capVictims,
   countUnarchived,
@@ -97,7 +97,7 @@ function resolvedConfig(
 }
 
 export function runHistoryMaintenance(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   agentRoot: string,
   options: MaintenanceRunOptions,
 ): MaintenanceReport {
@@ -181,7 +181,7 @@ interface DiskBudgetOptions {
  * victim, and pressure it leaves is reported rather than resolved.
  */
 export function enforceDiskBudget(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   agentRoot: string,
   options: DiskBudgetOptions,
 ): DiskBudgetReport {

@@ -7,7 +7,7 @@ import {
 import type { HistoryAppendOutcome } from "@sidecar/runtime/vocabulary";
 
 /**
- * The conversation as the main process holds it between the runtime store and
+ * The conversation as the main process holds it between the brain's store and
  * the windows: the thread every panel is shown, the last Clear's cutoff, and
  * an epoch that fences every append still out against a Clear that landed
  * while it waited. The store's append is asynchronous, so a report dispatched

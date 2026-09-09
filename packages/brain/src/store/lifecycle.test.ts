@@ -3,7 +3,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { BrainStateStore, freshBrainState, userMessageItem } from "@sidecar/brain";
 import { CONVERSATION_ENTRY_KIND } from "@sidecar/realtime";
 import {
   ARCHIVE_REASON,
@@ -19,6 +18,8 @@ import {
   type TranscriptEvent,
   threadSessionKey,
 } from "@sidecar/runtime/vocabulary";
+import { userMessageItem } from "../responses-api.js";
+import { BrainStateStore, freshBrainState } from "../state-store.js";
 import {
   archiveDirectory,
   deleteConversationHistory,
@@ -35,7 +36,7 @@ import {
   listConversations,
   pinConversation,
 } from "./conversations-table.js";
-import { AGENT_DATABASE_FILE, RuntimeDatabase } from "./database.js";
+import { AGENT_DATABASE_FILE, StoreDatabase } from "./database.js";
 import { EnvelopeTracker } from "./envelope.js";
 import { appendHistory, historyClearedAt, listHistory } from "./history-table.js";
 import {
@@ -64,8 +65,8 @@ function agentRoot(): string {
   return root;
 }
 
-function openAt(root: string): RuntimeDatabase {
-  const database = RuntimeDatabase.open(path.join(root, AGENT_DATABASE_FILE));
+function openAt(root: string): StoreDatabase {
+  const database = StoreDatabase.open(path.join(root, AGENT_DATABASE_FILE));
   createConversation(database, {
     agentId: DEFAULT_AGENT_ID,
     sessionKey: MAIN_SESSION_KEY,
@@ -76,7 +77,7 @@ function openAt(root: string): RuntimeDatabase {
 }
 
 /** A repository over the database in-thread, carrying transcript events the way the client does. */
-function repository(database: RuntimeDatabase, key: SessionKey = MAIN_SESSION_KEY) {
+function repository(database: StoreDatabase, key: SessionKey = MAIN_SESSION_KEY) {
   const tracker = new EnvelopeTracker();
   tracker.observe(loadBrainEnvelope(database, key));
   return {
@@ -296,7 +297,7 @@ test("a publication a crash interrupted keeps its payload in the registry and is
   database.close();
   // The next launch: the directory is a directory again, and the retry publishes.
   fs.rmSync(archiveDirectory(root));
-  const relaunched = RuntimeDatabase.open(path.join(root, AGENT_DATABASE_FILE));
+  const relaunched = StoreDatabase.open(path.join(root, AGENT_DATABASE_FILE));
   assert.deepEqual(publishPendingArchives(relaunched, root), []);
   const [archive] = listArchives(relaunched);
   assert.ok(archive?.publishedAt !== undefined);
@@ -493,10 +494,8 @@ test("the maintenance policy: protections, the idle-thread and stale rules, the 
       HISTORY_MAINTENANCE_DEFAULTS.maximumUnarchived,
       HISTORY_MAINTENANCE_DEFAULTS.maximumDiskBytes,
       HISTORY_MAINTENANCE_DEFAULTS.highWaterBytes,
-      HISTORY_MAINTENANCE_DEFAULTS.automaticReset,
-      HISTORY_MAINTENANCE_DEFAULTS.archiveExpiryMs,
     ],
-    [30 * DAY, 7 * DAY, 5_000, 10 * 1024 ** 3, 8 * 1024 ** 3, false, null],
+    [30 * DAY, 7 * DAY, 5_000, 10 * 1024 ** 3, 8 * 1024 ** 3],
   );
 });
 

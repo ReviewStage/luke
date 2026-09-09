@@ -21,7 +21,7 @@ import {
   removeConversationRows,
   removeConversationRowsAtOrBefore,
 } from "./conversations-table.js";
-import { nullable, type RuntimeDatabase } from "./database.js";
+import { nullable, type StoreDatabase } from "./database.js";
 import { listTranscript } from "./transcript-table.js";
 
 /**
@@ -137,7 +137,7 @@ function recordFromRow(row: ArchiveRow): HistoryArchiveRecord | undefined {
   });
 }
 
-export function listArchives(database: RuntimeDatabase): readonly HistoryArchiveRecord[] {
+export function listArchives(database: StoreDatabase): readonly HistoryArchiveRecord[] {
   // SAFETY: the columns selected are the ones the row type names, typed by the schema.
   const rows = database
     .prepare(`SELECT ${ARCHIVE_COLUMNS} FROM history_archives ORDER BY deleted_at DESC, archive_id`)
@@ -150,7 +150,7 @@ export function listArchives(database: RuntimeDatabase): readonly HistoryArchive
   return records;
 }
 
-function archiveRow(database: RuntimeDatabase, archiveId: string): ArchiveRow | undefined {
+function archiveRow(database: StoreDatabase, archiveId: string): ArchiveRow | undefined {
   // SAFETY: as above, for one row or none.
   return database
     .prepare(`SELECT ${ARCHIVE_COLUMNS} FROM history_archives WHERE archive_id = ?`)
@@ -217,7 +217,7 @@ export interface DeletionOutcome {
  * transaction, and its outcome is the answer.
  */
 export function deleteConversationHistory(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   agentRoot: string,
   sessionKey: SessionKey,
   now: number,
@@ -335,7 +335,7 @@ export function deleteConversationHistory(
  * attempt, because a name the disk may not hold is not a recovery copy.
  */
 export function publishArchive(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   agentRoot: string,
   archiveId: string,
   durability: PublicationDurability = FILE_SYSTEM_DURABILITY,
@@ -396,7 +396,7 @@ function syncFile(target: string): void {
 
 /** Retries every publication a crash interrupted; answers the ids still unpublished. */
 export function publishPendingArchives(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   agentRoot: string,
   durability: PublicationDurability = FILE_SYSTEM_DURABILITY,
 ): string[] {
@@ -413,7 +413,7 @@ export function publishPendingArchives(
 
 /** Forgets one archive's registry row and removes its file; the disk budget's own removal path. */
 export function removeArchive(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   agentRoot: string,
   archiveId: string,
 ): boolean {

@@ -1,16 +1,16 @@
 import type { SQLInputValue } from "node:sqlite";
-import {
-  type BrainJournalEntry,
-  type BrainObservationEntry,
-  type BrainPersistedState,
-  type BrainRequestRecord,
-  type BrainTranscriptCursors,
-  brainPersistedStateFromWire,
-} from "@sidecar/brain";
 import type { SessionKey } from "@sidecar/runtime/vocabulary";
 import { isWireNumber, isWireString, type WireRecord, type WireValue } from "@sidecar/wire";
+import type { BrainJournalEntry } from "../journal.js";
+import type { BrainObservationEntry } from "../observation-inbox.js";
+import type { BrainRequestRecord } from "../requests.js";
+import {
+  type BrainPersistedState,
+  type BrainTranscriptCursors,
+  brainPersistedStateFromWire,
+} from "../state-store.js";
 import { raiseHistoryCutoff, touchConversation } from "./conversations-table.js";
-import { column, nullable, type RuntimeDatabase } from "./database.js";
+import { column, nullable, type StoreDatabase } from "./database.js";
 import { type BrainStateSave, SAVE_KIND } from "./envelope.js";
 import { appendTranscript } from "./transcript-table.js";
 
@@ -41,7 +41,7 @@ export interface StandingGeneration {
 }
 
 export function standingGeneration(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKey: SessionKey,
 ): StandingGeneration | undefined {
   // SAFETY: the columns selected are the ones the row type names, typed by the schema.
@@ -81,7 +81,7 @@ export function standingGeneration(
  * token a writer names to replace it, so an unreadable generation can be
  * repaired by the store that loaded it and by nothing that did not.
  */
-export function loadBrainEnvelope(database: RuntimeDatabase, sessionKey: SessionKey): EnvelopeRead {
+export function loadBrainEnvelope(database: StoreDatabase, sessionKey: SessionKey): EnvelopeRead {
   const session = standingGeneration(database, sessionKey);
   if (!session) return {};
   const generation = session.sessionId;
@@ -174,7 +174,7 @@ export function loadBrainEnvelope(database: RuntimeDatabase, sessionKey: Session
  * tables.
  */
 export function saveBrainEnvelope(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKey: SessionKey,
   save: BrainStateSave,
 ): boolean {
@@ -242,7 +242,7 @@ export function saveBrainEnvelope(
 }
 
 function replaceGeneration(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionKey: SessionKey,
   state: BrainPersistedState,
 ): void {
@@ -277,7 +277,7 @@ function replaceGeneration(
 }
 
 function insertItems(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionId: string,
   items: readonly unknown[],
   from: number,
@@ -292,7 +292,7 @@ function insertItems(
 }
 
 function insertCursors(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionId: string,
   cursors: BrainPersistedState["cursors"],
 ): void {
@@ -307,7 +307,7 @@ function insertCursors(
 }
 
 function insertCaptureCursors(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionId: string,
   cursors: BrainPersistedState["captureCursors"],
 ): void {
@@ -322,7 +322,7 @@ function insertCaptureCursors(
 }
 
 function insertInbox(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionId: string,
   inbox: readonly BrainObservationEntry[],
 ): void {
@@ -348,7 +348,7 @@ function cursorsFromRows(
 }
 
 function upsertRequest(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionId: string,
   ordinal: number,
   record: BrainRequestRecord,
@@ -383,7 +383,7 @@ function upsertRequest(
 }
 
 function upsertJournal(
-  database: RuntimeDatabase,
+  database: StoreDatabase,
   sessionId: string,
   ordinal: number,
   entry: BrainJournalEntry,

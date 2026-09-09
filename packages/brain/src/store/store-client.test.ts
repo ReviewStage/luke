@@ -5,16 +5,16 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { MessageChannel, Worker } from "node:worker_threads";
-import { BrainStateStore } from "@sidecar/brain";
 import {
   DEFAULT_AGENT_ID,
   MAIN_CONVERSATION_NAME,
   MAIN_SESSION_KEY,
 } from "@sidecar/runtime/vocabulary";
-import { RuntimeStoreClient } from "./client.js";
-import type { RuntimeStorePort } from "./protocol.js";
+import { BrainStateStore } from "../state-store.js";
+import { storeClient } from "./store-client.js";
 import { line, NOW, populatedState } from "./testing.js";
-import { serveRuntimeStore } from "./worker-host.js";
+import type { StorePort } from "./wire.js";
+import { serveStore } from "./worker-host.js";
 
 function agentRoot(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "luke-store-"));
@@ -26,10 +26,10 @@ function agentRoot(): string {
 function inThread() {
   const channel = new MessageChannel();
   // SAFETY: a MessagePort posts and receives structured-clone values on the same events the port contract names.
-  const host = channel.port2 as unknown as RuntimeStorePort;
-  serveRuntimeStore(host);
+  const host = channel.port2 as unknown as StorePort;
+  serveStore(host);
   // SAFETY: as above, for the client's end of the same channel.
-  const client = new RuntimeStoreClient(channel.port1 as unknown as RuntimeStorePort);
+  const client = storeClient(channel.port1 as unknown as StorePort);
   return {
     client,
     close: () => {
@@ -67,42 +67,63 @@ test("the protocol answers every request once and serves the brain store, the th
     })),
     true,
   );
-  const appended = await client.appendHistory(
-    MAIN_SESSION_KEY,
-    [line("hello", NOW, { eventId: "h" })],
-    NOW,
-  );
+  const appended = await client.ask("history.append", {
+    sessionKey: MAIN_SESSION_KEY,
+    entries: [line("hello", NOW, { eventId: "h" })],
+    now: NOW,
+  });
   assert.equal(appended.changed, true);
-  assert.deepEqual(await client.listHistory(MAIN_SESSION_KEY, NOW), appended.entries);
-  const remembered = await client.rememberNotebookEntry({ id: "f", words: "w", now: NOW });
+  assert.deepEqual(
+    await client.ask("history.list", { sessionKey: MAIN_SESSION_KEY, now: NOW }),
+    appended.entries,
+  );
+  const remembered = await client.ask("notebook.remember", { id: "f", words: "w", now: NOW });
   assert.equal(remembered.ok, true);
   assert.deepEqual(
-    (await client.listNotebookEntries(NOW)).map((entry) => [entry.id, entry.words]),
+    (await client.ask("notebook.list", { now: NOW })).map((entry) => [entry.id, entry.words]),
     [["f", "w"]],
   );
   assert.equal(fs.existsSync(path.join(root, "workspace", "USER.md")), true);
-  const plan = await client.planMemorySync(undefined, NOW);
+  const plan = await client.ask("memory.plan-sync", { now: NOW });
   assert.deepEqual(
     plan.changed.map((file) => file.path),
     ["USER.md"],
   );
-  await client.applyMemorySync({
+  await client.ask("memory.apply-sync", {
     changed: plan.changed,
     removed: plan.removed,
     embeddings: [],
     now: NOW,
   });
-  assert.equal((await client.searchMemory({ query: "w", now: NOW })).results.length, 1);
-  assert.equal((await client.readMemory("USER.md", 1, 1))?.text, "# USER.md");
-  assert.deepEqual(await client.searchHistory([MAIN_SESSION_KEY], "hello", 5, NOW), [
-    { sessionKey: MAIN_SESSION_KEY, entry: appended.entries[0] },
-  ]);
-  const deleted = await client.deleteConversationHistory(MAIN_SESSION_KEY, NOW);
+  assert.equal((await client.ask("memory.search", { query: "w", now: NOW })).results.length, 1);
+  assert.equal(
+    (await client.ask("memory.get", { path: "USER.md", from: 1, lines: 1 }))?.text,
+    "# USER.md",
+  );
+  assert.deepEqual(
+    await client.ask("history.search", {
+      sessionKeys: [MAIN_SESSION_KEY],
+      query: "hello",
+      limit: 5,
+      now: NOW,
+    }),
+    [{ sessionKey: MAIN_SESSION_KEY, entry: appended.entries[0] }],
+  );
+  const deleted = await client.ask("conversations.delete", {
+    sessionKey: MAIN_SESSION_KEY,
+    now: NOW,
+  });
   assert.equal(deleted?.published, true);
-  assert.deepEqual(await client.listHistory(MAIN_SESSION_KEY, NOW), []);
+  assert.deepEqual(
+    await client.ask("history.list", { sessionKey: MAIN_SESSION_KEY, now: NOW }),
+    [],
+  );
   assert.equal(await client.close(), true);
   // A request against a closed database is an error answer, not a hang.
-  await assert.rejects(client.listHistory(MAIN_SESSION_KEY, NOW), /not open/);
+  await assert.rejects(
+    client.ask("history.list", { sessionKey: MAIN_SESSION_KEY, now: NOW }),
+    /not open/,
+  );
   close();
 });
 
@@ -131,7 +152,7 @@ test("two handles over the boundary: a stale checkpoint cannot replace the newer
 
 test("a worker that dies settles every pending request as rejected and refuses later ones", async () => {
   let exit: ((code: number) => void) | undefined;
-  const port: RuntimeStorePort = {
+  const port: StorePort = {
     postMessage: () => undefined,
     on: (event, listener) => {
       if (event !== "exit") return;
@@ -139,11 +160,14 @@ test("a worker that dies settles every pending request as rejected and refuses l
       exit = listener as (code: number) => void;
     },
   };
-  const client = new RuntimeStoreClient(port);
-  const pending = client.listHistory(MAIN_SESSION_KEY, NOW);
+  const client = storeClient(port);
+  const pending = client.ask("history.list", { sessionKey: MAIN_SESSION_KEY, now: NOW });
   exit?.(1);
   await assert.rejects(pending, /exited with code 1/);
-  await assert.rejects(client.listHistory(MAIN_SESSION_KEY, NOW), /exited with code 1/);
+  await assert.rejects(
+    client.ask("history.list", { sessionKey: MAIN_SESSION_KEY, now: NOW }),
+    /exited with code 1/,
+  );
 });
 
 test("the real worker entry serves the same protocol on its own thread", async () => {
@@ -151,7 +175,7 @@ test("the real worker entry serves the same protocol on its own thread", async (
     execArgv: ["--import", "tsx"],
   });
   // SAFETY: a Worker posts and receives structured-clone values on the same events the port contract names.
-  const client = new RuntimeStoreClient(worker as unknown as RuntimeStorePort);
+  const client = storeClient(worker as unknown as StorePort);
   try {
     const root = agentRoot();
     await client.open({
@@ -161,11 +185,11 @@ test("the real worker entry serves the same protocol on its own thread", async (
       conversationName: MAIN_CONVERSATION_NAME,
       now: NOW,
     });
-    const appended = await client.appendHistory(
-      MAIN_SESSION_KEY,
-      [line("hi", NOW, { eventId: "x" })],
-      NOW,
-    );
+    const appended = await client.ask("history.append", {
+      sessionKey: MAIN_SESSION_KEY,
+      entries: [line("hi", NOW, { eventId: "x" })],
+      now: NOW,
+    });
     assert.equal(appended.entries.length, 1);
     await client.close();
   } finally {

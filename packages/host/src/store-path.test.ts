@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
 import { agentId } from "@sidecar/runtime/vocabulary";
-import { agentRootPath, runtimeStoreWorkerPath } from "./store-path.js";
+import { agentRootPath, storeWorkerPath } from "./store-path.js";
 
 test("the agent's root is its own directory under the application data", () => {
   assert.equal(agentRootPath("/data"), path.join("/data", "agents", "main"));
@@ -11,11 +11,11 @@ test("the agent's root is its own directory under the application data", () => {
 
 test("the worker is found beside the bundle, and outside the archive in a packaged app", () => {
   assert.equal(
-    runtimeStoreWorkerPath(path.join("/repo", "apps", "desktop", "dist")),
-    path.join("/repo", "apps", "desktop", "dist", "runtime-store-worker.js"),
+    storeWorkerPath(path.join("/repo", "apps", "desktop", "dist")),
+    path.join("/repo", "apps", "desktop", "dist", "store-worker.js"),
   );
   assert.equal(
-    runtimeStoreWorkerPath(
+    storeWorkerPath(
       path.join("/Applications", "Luke.app", "Contents", "Resources", "app.asar", "dist"),
     ),
     path.join(
@@ -25,7 +25,7 @@ test("the worker is found beside the bundle, and outside the archive in a packag
       "Resources",
       "app.asar.unpacked",
       "dist",
-      "runtime-store-worker.js",
+      "store-worker.js",
     ),
   );
 });

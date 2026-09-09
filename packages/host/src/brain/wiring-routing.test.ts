@@ -7,11 +7,15 @@ import {
   BRAIN_TURN_TRIGGER,
   BRAIN_WAKE_KIND,
   type BrainDelivery,
-  brainStateRepositoryFromStorage,
+  type BrainStateRepository,
   type ResponsesInputItem,
   responsesModelAnswer,
 } from "@sidecar/brain";
-import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testing";
+import {
+  type BareResponsesModel,
+  bareModelAdapter,
+  fakeBrainStateRepository,
+} from "@sidecar/brain/testing";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { CREDENTIAL_REFERENCE_KIND, memoryChildStore } from "@sidecar/runtime";
 import { drainMicrotasks, temporaryDirectory } from "@sidecar/runtime/testing";
@@ -31,7 +35,6 @@ import {
   type SessionProvider,
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
-import { MemoryBrainStorage } from "../testing/index.js";
 import { type BrainWiring, wireBrain } from "./wiring.js";
 
 /**
@@ -136,7 +139,7 @@ function composed(t: TestContext, gate?: Gate): Composed {
     };
   }
   const model = bareModelAdapter(client);
-  const storages = new Map<SessionKey, MemoryBrainStorage>();
+  const held = new Map<SessionKey, BrainStateRepository>();
   const repositories = new Map<SessionKey, number>();
   const writes = new Map<SessionKey, number>();
   const ensured: Composed["ensured"] = [];
@@ -150,17 +153,17 @@ function composed(t: TestContext, gate?: Gate): Composed {
   const wiring = wireBrain({
     repositoryFor: (sessionKey) => {
       repositories.set(sessionKey, (repositories.get(sessionKey) ?? 0) + 1);
-      let storage = storages.get(sessionKey);
-      if (!storage) {
-        storage = new MemoryBrainStorage();
-        storages.set(sessionKey, storage);
+      let repository = held.get(sessionKey);
+      if (!repository) {
+        repository = fakeBrainStateRepository();
+        held.set(sessionKey, repository);
       }
-      const repository = brainStateRepositoryFromStorage(storage);
+      const durable = repository;
       return {
-        load: () => repository.load(),
+        load: () => durable.load(),
         save: (state, transcript) => {
           writes.set(sessionKey, (writes.get(sessionKey) ?? 0) + 1);
-          return repository.save(state, transcript);
+          return durable.save(state, transcript);
         },
       };
     },

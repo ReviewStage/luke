@@ -4,7 +4,6 @@ import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
   type BrainRequestRecord,
-  brainStateFromStored,
 } from "@sidecar/brain";
 import { brainReplyWords } from "@sidecar/brain/requests";
 import { CONVERSATION_ENTRY_KIND } from "@sidecar/realtime";
@@ -30,7 +29,7 @@ test("removing the capability under five outstanding runs leaves every run inter
   await c.host.replace(() => undefined);
   await drainMicrotasks();
   assert.equal(c.host.current(), undefined);
-  const stored = brainStateFromStored(c.storage.file);
+  const stored = c.repository.state;
   assert.equal(stored?.requests.length, 5);
   for (const runId of runIds) {
     const kept: BrainRequestRecord | undefined = stored?.requests.find(
@@ -58,9 +57,7 @@ test("removing the capability under five outstanding runs leaves every run inter
   await drainMicrotasks();
   assert.equal(c.thread().filter((e) => e.words === "late").length, 0);
   assert.equal(
-    brainStateFromStored(c.storage.file)?.requests.every(
-      (r) => r.status === BRAIN_REQUEST_STATUS.INTERRUPTED,
-    ),
+    c.repository.state?.requests.every((r) => r.status === BRAIN_REQUEST_STATUS.INTERRUPTED),
     true,
   );
 });
@@ -107,9 +104,7 @@ test("a successor replacing the agent under outstanding runs inherits a thread w
     }),
   );
   await drainMicrotasks();
-  const fresh = brainStateFromStored(c.storage.file)?.requests.find(
-    (r) => r.question === "new ask",
-  );
+  const fresh = c.repository.state?.requests.find((r) => r.question === "new ask");
   assert.equal(fresh?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assert.equal(c.thread().at(-1)?.words, "done");
   // The retired agent takes nothing more and writes nothing more: its store
@@ -141,7 +136,7 @@ test("a reset under outstanding runs discards them without publishing, and the s
   assert.deepEqual(agent.requests(), []);
   assert.equal(c.thread().filter((e) => e.kind === CONVERSATION_ENTRY_KIND.REPLY).length, 0);
   // The file holds the empty successor and the marker of the erasure alone.
-  const stored = brainStateFromStored(c.storage.file);
+  const stored = c.repository.state;
   assert.equal(stored?.requests.length, 0);
   assert.equal(stored?.reset?.generationId, "gen-1");
   await c.host.replace(() => undefined);
@@ -360,7 +355,9 @@ test("a launch that finds ended runs restores their words and speaks none of the
   assert.equal(c.thread().filter((e) => e.kind === CONVERSATION_ENTRY_KIND.REPLY).length, 2);
   // The next launch: a fresh delivery owner, a fresh receiver, the same file.
   const next = brainHarness();
-  next.storage.file = c.storage.file;
+  const carried = c.repository.state;
+  assert.ok(carried);
+  assert.equal(await next.repository.save(carried), true);
   next.receiver.markReady(next.receiver.begin());
   await next.host.replace(() => next.build(heldModel()));
   await drainMicrotasks();

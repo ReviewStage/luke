@@ -1,7 +1,7 @@
 import type { ScheduledJob } from "@sidecar/runtime";
 import { scheduledJobFromWire } from "@sidecar/runtime";
 import type { UnparsedWireValue } from "@sidecar/wire";
-import type { RuntimeDatabase } from "./database.js";
+import type { StoreDatabase } from "./database.js";
 
 /**
  * The scheduler's jobs, one row each. The row's payload is the job as the
@@ -13,28 +13,31 @@ import type { RuntimeDatabase } from "./database.js";
  * and a launch reads the last run from the payload through `nextRunAt`.
  */
 
-export function listScheduledJobs(database: RuntimeDatabase): readonly ScheduledJob[] {
+function parsed(payload: string): UnparsedWireValue | undefined {
+  try {
+    // SAFETY: JSON.parse returns a wire value; the reader is the validation.
+    return JSON.parse(payload) as UnparsedWireValue;
+  } catch {
+    return undefined;
+  }
+}
+
+export function listScheduledJobs(database: StoreDatabase): readonly ScheduledJob[] {
   // SAFETY: the payload column is text; the validator decides what it holds.
   const rows = database
     .prepare("SELECT payload FROM scheduled_jobs ORDER BY created_at, job_id")
     .all() as { payload: string }[];
   const jobs: ScheduledJob[] = [];
   for (const row of rows) {
-    let parsed: UnparsedWireValue;
-    try {
-      // SAFETY: JSON.parse returns a wire value; the reader is the validation.
-      parsed = JSON.parse(row.payload) as UnparsedWireValue;
-    } catch {
-      continue;
-    }
-    const job = scheduledJobFromWire(parsed);
+    const job = scheduledJobFromWire(parsed(row.payload));
     if (job) jobs.push(job);
   }
   return jobs;
 }
 
-export function putScheduledJob(database: RuntimeDatabase, job: ScheduledJob): boolean {
-  if (!scheduledJobFromWire(JSON.parse(JSON.stringify(job)))) return false;
+export function putScheduledJob(database: StoreDatabase, job: ScheduledJob): boolean {
+  const payload = JSON.stringify(job);
+  if (!scheduledJobFromWire(parsed(payload))) return false;
   database
     .prepare(
       `INSERT INTO scheduled_jobs (job_id, session_key, created_at, last_run_at, enabled, payload)
@@ -51,12 +54,12 @@ export function putScheduledJob(database: RuntimeDatabase, job: ScheduledJob): b
       job.createdAt,
       job.lastRunAt ?? null,
       job.enabled ? 1 : 0,
-      JSON.stringify(job),
+      payload,
     );
   return true;
 }
 
-export function deleteScheduledJob(database: RuntimeDatabase, id: string): boolean {
+export function deleteScheduledJob(database: StoreDatabase, id: string): boolean {
   const result = database.prepare("DELETE FROM scheduled_jobs WHERE job_id = ?").run(id);
   return Number(result.changes) > 0;
 }

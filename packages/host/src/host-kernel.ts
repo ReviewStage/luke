@@ -1,6 +1,6 @@
 import path from "node:path";
+import type { StorePort } from "@sidecar/brain/store";
 import { type GatewayEventKind, NODE_CAPABILITY_STATUS, NodeRegistry } from "@sidecar/gateway";
-import type { RuntimeStorePort } from "@sidecar/runtime-store";
 import type { WireValue } from "@sidecar/wire";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import type { RunMode } from "./run-mode.js";
@@ -20,7 +20,7 @@ export interface HostSeams {
   /** The environment the host reads its development overrides from. */
   environment: NodeJS.ProcessEnv;
   cipher: SecretCipher;
-  createWorker: () => RuntimeStorePort;
+  createWorker: () => StorePort;
   /**
    * Whether the observation hooks are registered with the providers' own
    * user-level configurations at start. A validation run on a temporary

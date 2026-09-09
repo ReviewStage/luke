@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { MessageChannel } from "node:worker_threads";
+import { type StorePort, serveStore } from "@sidecar/brain/store";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
 import { temporaryDirectory } from "@sidecar/runtime/testing";
 import {
@@ -13,8 +14,7 @@ import {
   sessionKey,
   threadSessionKey,
 } from "@sidecar/runtime/vocabulary";
-import { type RuntimeStorePort, serveRuntimeStore } from "@sidecar/runtime-store";
-import { wireRuntimeStore } from "./store-wiring.js";
+import { wireStore } from "./store-wiring.js";
 
 /**
  * The store wiring over a real database served in-thread: a conversation the
@@ -32,13 +32,13 @@ function wiring(root: string) {
   let ids = 0;
   let clock = NOW;
   const channel = new MessageChannel();
-  const wired = wireRuntimeStore({
+  const wired = wireStore({
     persistent: true,
     createWorker: () => {
       // SAFETY: a MessagePort posts and receives structured-clone values on the same events the port contract names.
-      serveRuntimeStore(channel.port2 as unknown as RuntimeStorePort);
+      serveStore(channel.port2 as unknown as StorePort);
       // SAFETY: as above, for the client's end of the same channel.
-      return channel.port1 as unknown as RuntimeStorePort;
+      return channel.port1 as unknown as StorePort;
     },
     agentRoot: () => root,
     workspaceDirectory: () => path.join(root, "workspace"),
