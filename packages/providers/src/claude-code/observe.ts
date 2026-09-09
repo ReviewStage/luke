@@ -4,8 +4,6 @@ import {
   maximumSessionTitleLength,
   PROVIDER_ID,
   type ProviderSessionObservation,
-  type ProviderTranscriptResult,
-  type ProviderTranscriptSinceResult,
   SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type SessionDetail,
@@ -25,7 +23,6 @@ import {
   hookRefinedStatus,
   localSessionStatus,
 } from "../shared/hook-status.js";
-import { type JsonlTranscriptReader, jsonlTranscriptReader } from "../shared/jsonl-transcript.js";
 import {
   discoverSessionFiles,
   LOCAL_ADAPTER_DEFAULTS,
@@ -38,64 +35,23 @@ import {
   tailRecords,
   workspaceLabel,
 } from "../shared/local-files.js";
-import { LocalFileSessionAdapter } from "../shared/local-session-adapter.js";
+import { CLAUDE_HOOK_EVENT, type ClaudeHookEvent, type ObservedClaudeHookEvent } from "./hooks.js";
 import {
-  CLAUDE_HOOK_EVENT,
-  type ClaudeHookEvent,
-  defaultClaudeHome,
-  type ObservedClaudeHookEvent,
-  readClaudeHookEvent,
-} from "./hooks.js";
-import { CLAUDE_TOOL_INPUT_KEYS } from "./records.js";
-import { claudeTranscriptFilePath, linesFromClaudeRecord } from "./transcript.js";
+  CLAUDE_CONTENT_TYPE,
+  CLAUDE_EVENT_TYPE,
+  CLAUDE_PROJECTS_DIRECTORY,
+  CLAUDE_RECORD_TYPE,
+  CLAUDE_SESSION_FILE_EXTENSION,
+  CLAUDE_STOP_REASON,
+  CLAUDE_SYSTEM_SUBTYPE,
+  CLAUDE_TOOL_INPUT_KEYS,
+  type ClaudeEventType,
+  claudeContentBlocks,
+  claudeEventType,
+  isClaudeToolResult,
+} from "./records.js";
 
-const CLAUDE_CODE_PROVIDER_ID = PROVIDER_ID.CLAUDE_CODE;
-const CLAUDE_CODE_PROVIDER_NAME = "Claude Code";
-const CLAUDE_PROJECTS_DIRECTORY = "projects";
-const CLAUDE_SESSION_FILE_EXTENSION = ".jsonl";
-
-const CLAUDE_EVENT_TYPE = {
-  ASSISTANT: "assistant",
-  RESULT: "result",
-  USER: "user",
-} as const;
-
-type ClaudeEventType = (typeof CLAUDE_EVENT_TYPE)[keyof typeof CLAUDE_EVENT_TYPE];
-
-/** Records Claude Code writes alongside the conversation itself. */
-const CLAUDE_RECORD_TYPE = {
-  AI_TITLE: "ai-title",
-  /**
-   * A name chosen for the session rather than generated from it: a rename in
-   * Claude Code's own UI, or the title the Claude desktop app gives a Code
-   * tab session. It is what the developer reads wherever that session is
-   * listed, so it outranks the generated title.
-   */
-  CUSTOM_TITLE: "custom-title",
-  PR_LINK: "pr-link",
-  SYSTEM: "system",
-} as const;
-
-const CLAUDE_SYSTEM_SUBTYPE = {
-  API_ERROR: "api_error",
-} as const;
-
-/**
- * Why the model stopped. This says what the tail alone cannot: a turn that ended
- * is holding for the developer, and a turn that stopped to call a tool is not.
- */
-const CLAUDE_STOP_REASON = {
-  END_TURN: "end_turn",
-  TOOL_USE: "tool_use",
-} as const;
-
-const CLAUDE_CONTENT_TYPE = {
-  TEXT: "text",
-  TOOL_RESULT: "tool_result",
-  TOOL_USE: "tool_use",
-} as const;
-
-const CLAUDE_ADAPTER_DEFAULTS = {
+const CLAUDE_OBSERVATION_DEFAULTS = {
   MAXIMUM_PROJECT_DIRECTORIES: 200,
   /**
    * Claude Code writes its generated title early and then only when the subject
@@ -117,24 +73,11 @@ const CLAUDE_ADAPTER_DEFAULTS = {
 } as const;
 
 export const CLAUDE_CODE_PROVIDER: SessionProvider = {
-  id: CLAUDE_CODE_PROVIDER_ID,
-  displayName: CLAUDE_CODE_PROVIDER_NAME,
+  id: PROVIDER_ID.CLAUDE_CODE,
+  displayName: "Claude Code",
 };
 
-export interface ClaudeCodeAdapterOptions {
-  claudeHome?: string;
-  now?: () => number;
-  /**
-   * Where the observation hook spools its events, when hooks are on at all.
-   * Read lazily like the cloud adapters' credentials, because the app decides
-   * the path after this adapter is declared. Absent — or answering nothing —
-   * the adapter reads the transcripts alone, exactly as it always has: the
-   * hooks only ever sharpen what the tail already showed.
-   */
-  hookEventsDirectory?: () => string | undefined;
-}
-
-interface ParsedClaudeSessionTail {
+export interface ParsedClaudeSessionTail {
   activity?: string;
   aiTitle?: string;
   customTitle?: string;
@@ -197,34 +140,19 @@ async function sessionFilesIn(projectDirectory: string): Promise<SessionFileCand
   );
 }
 
-function eventTypeFromRecord(record: WireRecord): ClaudeEventType | undefined {
-  const eventType = record.type;
-  if (!isWireString(eventType)) return undefined;
-  for (const candidate of Object.values(CLAUDE_EVENT_TYPE)) {
-    if (eventType === candidate) return candidate;
-  }
-  return undefined;
-}
-
-function contentBlocks(record: WireRecord): WireRecord[] {
-  const message = record.message;
-  const content = isRecord(message) ? message.content : record.content;
-  return Array.isArray(content) ? content.filter(isRecord) : [];
-}
-
 /**
  * Names the tool the assistant reached for, preferring whichever input says
  * what the call is for. `Bash: Run the macOS packaging check` is the line a
  * developer can act on; `Bash` alone is not.
  */
 function activityFromAssistant(record: WireRecord): string | undefined {
-  for (const block of contentBlocks(record).reverse()) {
+  for (const block of claudeContentBlocks(record).reverse()) {
     if (block.type !== CLAUDE_CONTENT_TYPE.TOOL_USE) continue;
     const name = text(block.name);
     if (!name) continue;
     const input = isRecord(block.input) ? block.input : {};
     for (const key of CLAUDE_TOOL_INPUT_KEYS) {
-      const detail = oneLine(text(input[key]), CLAUDE_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH);
+      const detail = oneLine(text(input[key]), CLAUDE_OBSERVATION_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH);
       if (detail) return `${name}: ${detail}`;
     }
     return name;
@@ -263,7 +191,7 @@ function apiErrorFromRecord(record: WireRecord): string | undefined {
   }
   return oneLine(
     text(error.formatted) ?? text(error.message),
-    CLAUDE_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH,
+    CLAUDE_OBSERVATION_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH,
   );
 }
 
@@ -287,17 +215,7 @@ function cwdFromRecord(record: WireRecord): string | undefined {
  * moved — the same distinction that keeps mtime from dating it.
  */
 function isConversationRecord(record: WireRecord): boolean {
-  return record.type === CLAUDE_RECORD_TYPE.SYSTEM || eventTypeFromRecord(record) !== undefined;
-}
-
-/**
- * Whether a user record carries a tool's output rather than a person's prompt.
- * The two look alike at the top level and mean opposite things: one continues
- * the turn under way, the other opens a new one.
- */
-function isToolResult(record: WireRecord): boolean {
-  if (record.toolUseResult !== undefined) return true;
-  return contentBlocks(record).some((block) => block.type === CLAUDE_CONTENT_TYPE.TOOL_RESULT);
+  return record.type === CLAUDE_RECORD_TYPE.SYSTEM || claudeEventType(record) !== undefined;
 }
 
 /**
@@ -339,7 +257,7 @@ function readClaudeRecord(record: WireRecord, parsed: ParsedClaudeSessionTail): 
     return;
   }
 
-  const eventType = eventTypeFromRecord(record);
+  const eventType = claudeEventType(record);
   if (!eventType) return;
   parsed.eventType = eventType;
   // Anything the session went on to do means it got past the failure it
@@ -355,13 +273,13 @@ function readClaudeRecord(record: WireRecord, parsed: ParsedClaudeSessionTail): 
     if (eventType === CLAUDE_EVENT_TYPE.RESULT) parsed.activity = undefined;
     // A new prompt opens a new turn, and the previous turn's last call is not
     // what this one is running.
-    if (eventType === CLAUDE_EVENT_TYPE.USER && !isToolResult(record)) {
+    if (eventType === CLAUDE_EVENT_TYPE.USER && !isClaudeToolResult(record)) {
       parsed.activity = undefined;
     }
     return;
   }
   parsed.stopReason = stopReasonFromRecord(record);
-  parsed.usedTool = contentBlocks(record).some(
+  parsed.usedTool = claudeContentBlocks(record).some(
     (block) => block.type === CLAUDE_CONTENT_TYPE.TOOL_USE,
   );
   parsed.model = modelFromRecord(record) ?? parsed.model;
@@ -475,13 +393,14 @@ function detailFromTail(parsed: ParsedClaudeSessionTail): SessionDetail {
   };
 }
 
-function observationFromSessionFile(
-  candidate: SessionFileCandidate,
-  parsed: ParsedClaudeSessionTail,
-  now: number,
-  activeSessionFreshnessMs: number,
-  hookEvent?: ObservedClaudeHookEvent,
-): ProviderSessionObservation {
+export function claudeObservation(input: {
+  readonly candidate: SessionFileCandidate;
+  readonly parsed: ParsedClaudeSessionTail;
+  readonly now: number;
+  readonly activeSessionFreshnessMs: number;
+  readonly hookEvent?: ObservedClaudeHookEvent;
+}): ProviderSessionObservation {
+  const { candidate, parsed, now, activeSessionFreshnessMs, hookEvent } = input;
   // The conversation's own clock, not the file's. Claude Code touches session
   // files in bulk long after their conversations ended — appending bookkeeping
   // records, stamped or not, and bumping mtimes — so mtime says when something
@@ -518,84 +437,39 @@ function observationFromSessionFile(
   };
 }
 
-export class ClaudeCodeSessionAdapter extends LocalFileSessionAdapter<
-  SessionFileCandidate,
-  ParsedClaudeSessionTail
-> {
-  readonly provider = CLAUDE_CODE_PROVIDER;
+export function discoverClaudeSessions(claudeHome: string): Promise<SessionFileCandidate[]> {
+  return discoverSessionFiles({
+    projectsDirectory: path.join(claudeHome, CLAUDE_PROJECTS_DIRECTORY),
+    maximumProjectDirectories: CLAUDE_OBSERVATION_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
+    sessionFilesIn,
+  });
+}
 
-  readonly #claudeHome: string;
-  readonly #transcripts: JsonlTranscriptReader;
-  readonly #hookEventsDirectory: (() => string | undefined) | undefined;
-
-  constructor(options: ClaudeCodeAdapterOptions = {}) {
-    super(options);
-    this.#claudeHome = options.claudeHome ?? defaultClaudeHome();
-    this.#hookEventsDirectory = options.hookEventsDirectory;
-    this.#transcripts = jsonlTranscriptReader({
-      locate: (providerSessionId) => claudeTranscriptFilePath(this.#claudeHome, providerSessionId),
-      lines: linesFromClaudeRecord,
-    });
+export async function parseClaudeSessionFile(
+  candidate: SessionFileCandidate,
+): Promise<ParsedClaudeSessionTail> {
+  const tail = await readTail(candidate.filePath, LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES);
+  let parsed = parseClaudeSessionTail(tail);
+  // A truncated tail holding no conversation clock says nothing about when
+  // the session last moved, and the file's date is exactly what a bulk
+  // touch falsifies — so one deeper read goes looking for the conversation
+  // before the fallback is trusted. A file read whole is never re-read:
+  // there is nothing further back to find.
+  if (
+    parsed.timestampMs === undefined &&
+    Buffer.byteLength(tail, "utf8") >= LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES
+  ) {
+    const rescued = parseClaudeSessionTail(
+      await readTail(candidate.filePath, CLAUDE_OBSERVATION_DEFAULTS.CLOCK_RESCUE_TAIL_BYTES),
+    );
+    if (rescued.timestampMs !== undefined) parsed = rescued;
   }
-
-  protected async parse(candidate: SessionFileCandidate): Promise<ParsedClaudeSessionTail> {
-    const tail = await readTail(candidate.filePath, LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES);
-    let parsed = parseClaudeSessionTail(tail);
-    // A truncated tail holding no conversation clock says nothing about when
-    // the session last moved, and the file's date is exactly what a bulk
-    // touch falsifies — so one deeper read goes looking for the conversation
-    // before the fallback is trusted. A file read whole is never re-read:
-    // there is nothing further back to find.
-    if (
-      parsed.timestampMs === undefined &&
-      Buffer.byteLength(tail, "utf8") >= LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES
-    ) {
-      const rescued = parseClaudeSessionTail(
-        await readTail(candidate.filePath, CLAUDE_ADAPTER_DEFAULTS.CLOCK_RESCUE_TAIL_BYTES),
-      );
-      if (rescued.timestampMs !== undefined) parsed = rescued;
-    }
-    if (!parsed.customTitle) {
-      const titles = titlesFromHead(
-        await readHead(candidate.filePath, CLAUDE_ADAPTER_DEFAULTS.READ_HEAD_BYTES),
-      );
-      parsed.customTitle = titles.customTitle;
-      parsed.aiTitle ??= titles.aiTitle;
-    }
-    return parsed;
+  if (!parsed.customTitle) {
+    const titles = titlesFromHead(
+      await readHead(candidate.filePath, CLAUDE_OBSERVATION_DEFAULTS.READ_HEAD_BYTES),
+    );
+    parsed.customTitle = titles.customTitle;
+    parsed.aiTitle ??= titles.aiTitle;
   }
-
-  protected discover(): Promise<SessionFileCandidate[]> {
-    return discoverSessionFiles({
-      projectsDirectory: path.join(this.#claudeHome, CLAUDE_PROJECTS_DIRECTORY),
-      maximumProjectDirectories: CLAUDE_ADAPTER_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
-      sessionFilesIn,
-    });
-  }
-
-  protected async observation(
-    candidate: SessionFileCandidate,
-    parsed: ParsedClaudeSessionTail,
-    now: number,
-    activeSessionFreshnessMs: number,
-  ): Promise<ProviderSessionObservation> {
-    const hookEventsDirectory = this.#hookEventsDirectory?.();
-    const hookEvent = hookEventsDirectory
-      ? await readClaudeHookEvent(hookEventsDirectory, candidate.providerSessionId).catch(
-          () => undefined,
-        )
-      : undefined;
-    return observationFromSessionFile(candidate, parsed, now, activeSessionFreshnessMs, hookEvent);
-  }
-
-  override readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult> {
-    return this.#transcripts.read(providerSessionId);
-  }
-
-  override readTranscriptSince(
-    providerSessionId: string,
-    cursor?: string,
-  ): Promise<ProviderTranscriptSinceResult> {
-    return this.#transcripts.readSince(providerSessionId, cursor);
-  }
+  return parsed;
 }

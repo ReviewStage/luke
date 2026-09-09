@@ -1,7 +1,7 @@
-import { ACT_KIND, adapterAsPlugin } from "@sidecar/session";
+import { ACT_KIND } from "@sidecar/session";
 import { describeProviderContract, PROVIDER_OBSERVATION } from "../testing/index.js";
-import { ClaudeCodeSessionAdapter } from "./adapter.js";
 import { CLAUDE_HOOK_EVENT } from "./hooks.js";
+import { claudeCodePlugin } from "./index.js";
 
 const CLAUDE_SESSION_ID = {
   WAITING: "0f3a1c22-6f10-4d5e-9a71-2b8c4d5e6f70",
@@ -10,13 +10,11 @@ const CLAUDE_SESSION_ID = {
 
 describeProviderContract(
   (input) =>
-    adapterAsPlugin(
-      new ClaudeCodeSessionAdapter({
-        claudeHome: input.home,
-        now: input.now,
-        hookEventsDirectory: input.hookEventsDirectory,
-      }),
-    ),
+    claudeCodePlugin({
+      claudeHome: input.home,
+      now: input.now,
+      hookEventsDirectory: input.hookEventsDirectory,
+    }),
   {
     providerId: "claude-code",
     observation: PROVIDER_OBSERVATION.FILES,

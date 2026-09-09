@@ -2,10 +2,7 @@ import type { ProviderSessionObservation } from "@sidecar/session";
 
 export type { WorkspaceHostEnrichment } from "./host-claims.js";
 
-import {
-  type ClaudeDesktopSessionApplicationReader,
-  ClaudeDesktopSessionApplicationSnapshot,
-} from "../claude-code/desktop-applications.js";
+import type { ClaudeDesktopApplications } from "../claude-code/applications.js";
 import {
   type ConductorSessionApplicationReader,
   ConductorSessionApplicationSnapshot,
@@ -32,7 +29,7 @@ export interface WorkspaceHostRegistrationOptions {
    */
   superset: WorkspaceHostRegistration;
   conductorApplications: ConductorSessionApplicationReader;
-  claudeDesktopApplications: ClaudeDesktopSessionApplicationReader;
+  claudeDesktopApplications: ClaudeDesktopApplications;
 }
 
 function enrichmentFrom(snapshot: {
@@ -65,7 +62,7 @@ export function workspaceHostRegistrations(
     {
       observationFailureLabel: "Claude application observation",
       read: async () => enrichmentFrom(await options.claudeDesktopApplications.read()),
-      emptyEnrichment: enrichmentFrom(new ClaudeDesktopSessionApplicationSnapshot()),
+      emptyEnrichment: enrichmentFrom(options.claudeDesktopApplications.empty),
     },
   ];
 }

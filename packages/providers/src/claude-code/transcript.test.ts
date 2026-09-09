@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { OMISSION_MARKER } from "@sidecar/session";
+import { dispatchRead, OMISSION_MARKER } from "@sidecar/session";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import {
   boundedTranscript,
@@ -11,11 +11,11 @@ import {
   TRANSCRIPT_BOUNDS,
 } from "../shared/jsonl-transcript.js";
 import { readTail, tailRecords } from "../shared/local-files.js";
-import { ClaudeCodeSessionAdapter } from "./adapter.js";
+import { claudeCodePlugin } from "./index.js";
 import { claudeTranscriptFilePath, linesFromClaudeRecord } from "./transcript.js";
 
 /**
- * The reader the adapter builds, built here too: what is under test is where
+ * The reader the plugin builds, built here too: what is under test is where
  * a session's records live and what one of them renders as, which is all a
  * provider supplies.
  */
@@ -219,7 +219,7 @@ test("reads a tool's answer from the bookkeeping shape that has no blocks", asyn
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("reads what a session's transcript gained since the cursor an earlier read minted", async (t) => {
   const claudeHome = await temporaryClaudeHome(t);
-  const adapter = new ClaudeCodeSessionAdapter({ claudeHome });
+  const plugin = claudeCodePlugin({ claudeHome });
   await writeTranscript(claudeHome, TEST_SESSION_ID, [
     { type: "user", message: { role: "user", content: "Fix the flaky test" } },
     {
@@ -228,7 +228,7 @@ test("reads what a session's transcript gained since the cursor an earlier read 
     },
   ]);
 
-  const first = await adapter.readTranscriptSince(TEST_SESSION_ID);
+  const first = await dispatchRead(plugin, "transcriptSince", TEST_SESSION_ID);
   assert.equal(first.status, "accepted");
   if (first.status !== "accepted") return;
   assert.equal(
@@ -252,13 +252,13 @@ test("reads what a session's transcript gained since the cursor an earlier read 
     })}\n`,
   );
 
-  const second = await adapter.readTranscriptSince(TEST_SESSION_ID, first.cursor);
+  const second = await dispatchRead(plugin, "transcriptSince", TEST_SESSION_ID, first.cursor);
   assert.equal(second.status, "accepted");
   if (second.status !== "accepted") return;
   assert.equal(second.text, "Claude: Fixed and green.");
   assert.notEqual(second.cursor, first.cursor);
 
-  const third = await adapter.readTranscriptSince(TEST_SESSION_ID, second.cursor);
+  const third = await dispatchRead(plugin, "transcriptSince", TEST_SESSION_ID, second.cursor);
   assert.deepEqual(third, {
     status: "accepted",
     text: "",
@@ -266,6 +266,10 @@ test("reads what a session's transcript gained since the cursor an earlier read 
     truncated: false,
   });
 
-  const unknown = await adapter.readTranscriptSince("00000000-0000-4000-8000-000000000000");
+  const unknown = await dispatchRead(
+    plugin,
+    "transcriptSince",
+    "00000000-0000-4000-8000-000000000000",
+  );
   assert.equal(unknown.status, "rejected");
 });

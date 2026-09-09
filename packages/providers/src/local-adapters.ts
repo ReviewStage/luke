@@ -1,5 +1,5 @@
 import { PROVIDER_ID } from "@sidecar/session";
-import { ClaudeCodeSessionAdapter } from "./claude-code/adapter.js";
+import { claudeCodePlugin } from "./claude-code/index.js";
 import { CodexSessionAdapter } from "./codex/adapter.js";
 import type { ObservationHookProviderId } from "./hook-registry.js";
 import { ompPlugin } from "./omp/index.js";
@@ -38,7 +38,7 @@ export function localSessionAdapters(options: LocalSessionAdapterOptions = {}) {
       ? { hookEventsDirectory: options.hookEventsDirectory(providerId) }
       : undefined;
   return {
-    claudeCode: new ClaudeCodeSessionAdapter({
+    claudeCode: claudeCodePlugin({
       claudeHome: options.claudeHome,
       ...spool(PROVIDER_ID.CLAUDE_CODE),
     }),
