@@ -1,13 +1,11 @@
 import {
-  type AgentRuntime,
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
   type ModelAdapter,
   type ModelRequestOptions,
   type ModelResponse,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
-import { RESPONSES_CONTEXT_ENGINE_DESCRIPTOR, TOOL_LOOP_RUNTIME_DESCRIPTOR } from "./builtins.js";
 import { BRAIN_MAXIMUM_OUTPUT_TOKENS, failed } from "./model-adapter-shared.js";
 import { RESPONSES_ITEM_FORMAT } from "./responses-api.js";
 import { TOOL_LOOP_RUNTIME } from "./runtime.js";
@@ -52,13 +50,4 @@ export function bareModelAdapter(bare: BareResponsesModel): ModelAdapter {
       Promise.resolve(failed(MODEL_FAILURE.COMPATIBILITY, "this transport does not compact")),
     quietUntil: () => bare.quietUntil(),
   };
-}
-
-/**
- * The runtime this build ships, composed the way a host's configuration
- * composes it — the tool loop over the Responses context engine — for a
- * host's tests, which have no configuration to resolve one from.
- */
-export function toolLoopRuntimeOver(model: ModelAdapter): AgentRuntime {
-  return TOOL_LOOP_RUNTIME_DESCRIPTOR.create(model, RESPONSES_CONTEXT_ENGINE_DESCRIPTOR);
 }

@@ -20,7 +20,7 @@ import {
   type ModelRequestOptions,
   type ModelResponse,
   RUN_ORIGIN,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import {
   normalizeSession,
   OMISSION_MARKER,

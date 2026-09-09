@@ -86,8 +86,16 @@ Importing a package resolves its whole export graph, not the one name asked
 for. A package that holds both a wire vocabulary and a Node flow gives the
 vocabulary a subpath of its own (`@sidecar/calendar/vocabulary`,
 `@sidecar/credentials/snapshot`,
-`@sidecar/providers/superset/sign-in-stage`), or the renderer bundle fails to
-resolve `node:http` behind a string constant it wanted to draw.
+`@sidecar/providers/superset/sign-in-stage`, `@sidecar/runtime/vocabulary`), or
+the renderer bundle fails to resolve `node:http` behind a string constant it
+wanted to draw.
+
+`@sidecar/runtime/vocabulary` is the same rule at the bottom of the graph: the
+identities, the storage contracts, and the execution seams are Node-free, and
+the packages below the runtime import that door so the barrel's `croner` and
+`node:fs` never reach a renderer or a web function. Nothing is behind both
+doors: the barrel re-exports no vocabulary name, so every symbol has exactly
+one way in.
 
 A barrel over modules that are all one vocabulary is written as `export *` per
 module (`@sidecar/session`), because a hand-listed re-export of a package whose

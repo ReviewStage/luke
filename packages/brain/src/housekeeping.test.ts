@@ -9,7 +9,7 @@ import {
   type ModelAdapter,
   type ModelRequestOptions,
   type ModelResponse,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { HOUSEKEEPING_REFUSAL, runMemoryHousekeeping } from "./housekeeping.js";

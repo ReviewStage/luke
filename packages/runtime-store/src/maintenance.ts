@@ -4,7 +4,7 @@ import {
   type ConversationRecord,
   DAY_MS,
   type SessionKey,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 
 /**
  * The history maintenance policy, ported from OpenClaw's

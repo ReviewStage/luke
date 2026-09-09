@@ -1,4 +1,4 @@
-import type { MaybePromise } from "@sidecar/runtime-contracts";
+import type { MaybePromise } from "@sidecar/runtime/vocabulary";
 import type { WireRecord, WireValue } from "@sidecar/wire";
 import { NODE_CAPABILITY_STATUS, type NodeCapabilityResult } from "./protocol.js";
 

@@ -16,7 +16,7 @@ import {
   MODEL_RESPONSE_OUTCOME,
   type SessionKey,
   threadSessionKey,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import {
   RuntimeStoreClient,
   type RuntimeStorePort,

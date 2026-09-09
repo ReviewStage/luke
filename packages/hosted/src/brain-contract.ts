@@ -1,4 +1,4 @@
-import { REASONING_EFFORT, type ReasoningEffort } from "@sidecar/runtime-contracts";
+import { REASONING_EFFORT, type ReasoningEffort } from "@sidecar/runtime/vocabulary";
 import {
   isWireString,
   RECORD_EXTRA_KEYS,

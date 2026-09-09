@@ -8,7 +8,7 @@ import {
   type StoredTranscriptEvent,
   TRANSCRIPT_EVENT_KIND,
   type TranscriptEvent,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { touchConversation } from "./conversations-table.js";
 import { nullable, type RuntimeDatabase } from "./database.js";

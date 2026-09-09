@@ -3,7 +3,7 @@ import {
   type ModelAdapter,
   type ModelRequestOptions,
   type ModelResponse,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { text, type WireRecord } from "@sidecar/wire";
 import type { BrainRequestTraceRecord } from "./trace-writer.js";
 

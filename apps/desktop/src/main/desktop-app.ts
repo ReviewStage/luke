@@ -33,7 +33,7 @@ import {
 } from "@sidecar/host";
 import { peekLocalSessions } from "@sidecar/providers";
 import type { SpeechOutcome } from "@sidecar/realtime/speech";
-import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
+import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { AppSettings } from "@sidecar/settings/wire";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";

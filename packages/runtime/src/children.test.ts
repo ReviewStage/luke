@@ -6,12 +6,7 @@ import {
   type ChildCompletionRecord,
   type ChildRunRecord,
   COMPLETION_DELIVERY_STATUS,
-  childSessionKey,
-  DEFAULT_AGENT_ID,
-  MAIN_SESSION_KEY,
-  type SessionKey,
-  threadSessionKey,
-} from "@sidecar/runtime-contracts";
+} from "./child-records.js";
 import {
   CHILD_DEFAULTS,
   CHILD_SPAWN_REFUSAL,
@@ -23,7 +18,14 @@ import {
   type CompletionDeliverer,
   deliveryBackoffMs,
 } from "./children.js";
-import type { ScheduledTimer } from "./timers.js";
+import {
+  childSessionKey,
+  DEFAULT_AGENT_ID,
+  MAIN_SESSION_KEY,
+  type SessionKey,
+  threadSessionKey,
+} from "./identifiers.js";
+import type { ScheduledTimer } from "./vocabulary.js";
 
 /**
  * The child service over a synthetic executor and deliverer: the limits, the

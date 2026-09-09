@@ -15,7 +15,7 @@ import {
   type ToolExecutor,
   type ToolResult,
   type ToolSchema,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { ACT_RESULT_STATUS, isWireString, type WireRecord, wireRecord } from "@sidecar/wire";
 import type { BrainWorkspaceAccess } from "./tool-executor.js";
 import { answer } from "./tool-results.js";

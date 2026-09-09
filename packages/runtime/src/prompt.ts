@@ -1,18 +1,32 @@
-import type { ToolSchema } from "@sidecar/runtime-contracts";
-import type { SkillDescriptor } from "./registry.js";
-import { type BootstrapFile, CHILD_BOOTSTRAP_FILES, WORKSPACE_FILE } from "./workspace.js";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import type { ToolSchema } from "./execution.js";
+import type { RunOrigin } from "./identifiers.js";
+import type { AgentConfiguration, ResolvedConfiguration, SkillDescriptor } from "./registry.js";
+import { discoverSkills, eligibleSkills } from "./skills.js";
+import type { ChildPolicyContext } from "./tool-policy.js";
+import {
+  BOOTSTRAP_BOUNDS,
+  BOOTSTRAP_FILE_ORDER,
+  type BootstrapFile,
+  CHILD_BOOTSTRAP_FILES,
+  readBootstrapFiles,
+  WORKSPACE_FILE,
+} from "./workspace.js";
 
 /**
- * The pure prompt builder: facts in, ordered sections out. It reads no
- * file, no clock, and no configuration; the stage before it gathered every
- * fact it is handed, and the stage before that resolved the configuration
- * those facts were gathered under. Sections come out in a fixed order, split
+ * The last two of the three stages a prompt is composed in: gathering the
+ * live facts under a configuration already resolved, and the pure builder
+ * that turns facts into ordered sections. Only the gathering reads a file or
+ * a skill root; the builder reads no file, no clock, and no configuration,
+ * so the same builder answers the live run and the diagnostics view and what
+ * a developer inspects is what the model was sent. Sections come out in a
+ * fixed order, split
  * at a cache boundary: everything above it is stable across the turns of a
  * conversation and everything below it changes per turn, so a provider's
  * prefix cache sees the same bytes until a workspace file actually changes.
- * The same builder answers the live run and the diagnostics view, so what a
- * developer inspects is what the model was sent. The order and the profiles
- * follow OpenClaw `b7528507` (`docs/concepts/system-prompt.md`).
+ * The order and the profiles follow OpenClaw `b7528507`
+ * (`docs/concepts/system-prompt.md`).
  */
 
 export const PROMPT_PROFILE = {
@@ -353,5 +367,83 @@ export function buildSystemPrompt(facts: PromptFacts): BuiltPrompt {
     text,
     diagnostics,
     chars: text.length,
+  };
+}
+
+/** Which run is being prepared, as the profile and the files depend on it. */
+export interface RunDescription {
+  readonly origin: RunOrigin;
+  /** Set for a child run; the profile drops to minimal and the bootstrap to AGENTS.md alone. */
+  readonly child?: ChildPolicyContext;
+}
+
+export interface GatherOptions {
+  readonly configuration: ResolvedConfiguration;
+  readonly run: RunDescription;
+  /** The identity line the prompt opens with: the product's words, handed in rather than known here. */
+  readonly identity: string;
+  readonly tools: readonly ToolSchema[];
+  readonly toolNotes: readonly string[];
+  readonly runtimeContextMarker: string;
+  readonly runtimeId: string;
+  readonly model?: string;
+  readonly executionDirectory?: string;
+  /** Skills already discovered under this configuration's roots, when the caller discovered them itself. */
+  readonly skills?: readonly SkillDescriptor[];
+}
+
+const EXECUTION_INSTRUCTIONS_FILE = "AGENTS.md";
+
+async function executionDirectoryFacts(
+  directory: string,
+): Promise<PromptFacts["executionDirectory"]> {
+  try {
+    const text = await fs.readFile(path.join(directory, EXECUTION_INSTRUCTIONS_FILE), "utf8");
+    return {
+      path: directory,
+      instructions: text.slice(0, BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE),
+    };
+  } catch {
+    return { path: directory };
+  }
+}
+
+/**
+ * Gathers the live facts a prompt is built from: the workspace's bootstrap
+ * files, the eligible skills under the configuration's roots, and the
+ * execution directory's notes when a run has one. A child run gets the
+ * minimal profile and reads AGENTS.md alone; every other run gets the full
+ * profile and the whole bootstrap order.
+ */
+export async function gatherPromptFacts(options: GatherOptions): Promise<PromptFacts> {
+  const configuration: AgentConfiguration = options.configuration.configuration;
+  const child = options.run.child !== undefined;
+  const profile = child ? PROMPT_PROFILE.MINIMAL : PROMPT_PROFILE.FULL;
+  const bootstrapFiles: readonly BootstrapFile[] = await readBootstrapFiles(
+    configuration.workspaceDirectory,
+    child ? CHILD_BOOTSTRAP_FILES : BOOTSTRAP_FILE_ORDER,
+  );
+  const discovered = options.skills ?? (await discoverSkills(configuration.skillRoots));
+  const skills = eligibleSkills(discovered, configuration.agentId);
+  const executionDirectory =
+    options.executionDirectory !== undefined
+      ? await executionDirectoryFacts(options.executionDirectory)
+      : undefined;
+  return {
+    profile,
+    identity: options.identity,
+    tools: options.tools,
+    toolNotes: options.toolNotes,
+    runtimeContextMarker: options.runtimeContextMarker,
+    skills,
+    workspaceDirectory: configuration.workspaceDirectory,
+    bootstrapFiles,
+    ...(executionDirectory ? { executionDirectory } : undefined),
+    runtime: {
+      agentId: configuration.agentId,
+      origin: options.run.origin,
+      runtimeId: options.runtimeId,
+      ...(options.model ? { model: options.model } : undefined),
+    },
   };
 }

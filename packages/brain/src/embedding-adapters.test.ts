@@ -5,7 +5,7 @@ import {
   HOSTED_BRAIN_OPERATION,
   HOSTED_SERVICE_PATH,
 } from "@sidecar/hosted";
-import { MODEL_FAILURE, MODEL_RESPONSE_OUTCOME } from "@sidecar/runtime-contracts";
+import { MODEL_FAILURE, MODEL_RESPONSE_OUTCOME } from "@sidecar/runtime/vocabulary";
 import {
   EMBEDDING_BATCH_SIZE,
   HostedEmbeddingAdapter,

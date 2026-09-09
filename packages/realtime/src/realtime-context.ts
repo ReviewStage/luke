@@ -1,4 +1,4 @@
-import { DAY_MS } from "@sidecar/runtime-contracts";
+import { DAY_MS } from "@sidecar/runtime/vocabulary";
 import {
   ACT_KIND,
   advertisedActFor,

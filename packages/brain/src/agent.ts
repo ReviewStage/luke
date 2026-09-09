@@ -31,7 +31,7 @@ import {
   type RuntimeEvent,
   type RuntimeRun,
   type RuntimeRunEnd,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import {
   type ProviderTranscriptResult,
   type ProviderTranscriptSinceResult,

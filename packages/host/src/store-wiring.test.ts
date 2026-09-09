@@ -12,7 +12,7 @@ import {
   type SessionKey,
   sessionKey,
   threadSessionKey,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { type RuntimeStorePort, serveRuntimeStore } from "@sidecar/runtime-store";
 import { wireRuntimeStore } from "./store-wiring.js";
 

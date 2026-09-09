@@ -7,12 +7,12 @@ import {
   freshBrainState,
 } from "@sidecar/brain";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
-import type { SessionKey } from "@sidecar/runtime-contracts";
 import {
   DEFAULT_AGENT_ID,
   MAIN_CONVERSATION_NAME,
   MAIN_SESSION_KEY,
-} from "@sidecar/runtime-contracts";
+  type SessionKey,
+} from "@sidecar/runtime/vocabulary";
 import { createConversation } from "./conversations-table.js";
 import { RuntimeDatabase } from "./database.js";
 

@@ -1,10 +1,11 @@
+import { BUILTIN_MODEL_ADAPTER } from "@sidecar/runtime";
 import {
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
   type ModelRequestOptions,
   REASONING_EFFORT,
   type ReasoningEffort,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import {
   type CloudFetch,
   HTTP_STATUS,
@@ -63,7 +64,7 @@ export const BRAIN_OPENAI_DEFAULTS = {
   MAXIMUM_OUTPUT_TOKENS: BRAIN_MAXIMUM_OUTPUT_TOKENS,
 } as const;
 
-export const OPENAI_MODEL_ADAPTER_ID = "openai-responses";
+export const OPENAI_MODEL_ADAPTER_ID = BUILTIN_MODEL_ADAPTER.OPENAI;
 
 const OPENAI_PATH = {
   [RESPONSES_OPERATION.RESPOND]: BRAIN_RESPONSES_PATH,

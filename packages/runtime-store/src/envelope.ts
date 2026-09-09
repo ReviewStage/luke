@@ -6,7 +6,7 @@ import type {
   BrainTranscriptCursors,
   ResponsesInputItem,
 } from "@sidecar/brain";
-import type { TranscriptEvent } from "@sidecar/runtime-contracts";
+import type { TranscriptEvent } from "@sidecar/runtime/vocabulary";
 import type { EnvelopeRead } from "./brain-envelope.js";
 
 /**

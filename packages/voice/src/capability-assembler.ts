@@ -7,7 +7,7 @@ import {
 import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { type RealtimeDiagnostics, realtimeMintExplanation } from "@sidecar/realtime";
-import type { EmbeddingAdapter, ModelAdapter } from "@sidecar/runtime-contracts";
+import type { EmbeddingAdapter, ModelAdapter } from "@sidecar/runtime/vocabulary";
 import {
   APP_SETTING_SCHEMA,
   type AppSettingField,

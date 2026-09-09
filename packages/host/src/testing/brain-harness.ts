@@ -9,6 +9,7 @@ import {
   DeliveryLedger,
   type DeliveryRecord,
   responsesModelAnswer,
+  toolLoopRuntimeOver,
 } from "@sidecar/brain";
 import { isTerminalBrainRequestStatus } from "@sidecar/brain/requests";
 import type {
@@ -16,18 +17,14 @@ import type {
   BrainReplyOffer,
   BrainRequestSnapshot,
 } from "@sidecar/brain/requests-wire";
-import {
-  type BareResponsesModel,
-  bareModelAdapter,
-  toolLoopRuntimeOver,
-} from "@sidecar/brain/testing";
+import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testing";
 import { drainMicrotasks } from "@sidecar/fixtures/testing";
 import {
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
 } from "@sidecar/realtime";
-import type { ModelResponse } from "@sidecar/runtime-contracts";
+import type { ModelResponse } from "@sidecar/runtime/vocabulary";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { BrainHost } from "../brain/host.js";
 import { followBrainRequests } from "../brain/publication.js";

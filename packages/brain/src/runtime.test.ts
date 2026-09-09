@@ -17,7 +17,7 @@ import {
   type ToolExecutionContext,
   type ToolExecutor,
   type ToolInvocation,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { isWireString, type WireRecord } from "@sidecar/wire";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { RESPONSES_ITEM_FORMAT } from "./responses-api.js";

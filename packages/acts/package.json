@@ -14,7 +14,7 @@
   "dependencies": {
     "@sidecar/guide": "workspace:*",
     "@sidecar/issues": "workspace:*",
-    "@sidecar/runtime-contracts": "workspace:*",
+    "@sidecar/runtime": "workspace:*",
     "@sidecar/session": "workspace:*",
     "@sidecar/wire": "workspace:*"
   },

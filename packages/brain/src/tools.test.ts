@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_TOOL, realtimeToolDefinitions } from "@sidecar/acts";
 import {
-  createRuntimeRegistries,
+  BUILTIN_MEMORY_PROVIDER,
+  BUILTINS,
+  CREDENTIAL_REFERENCE_KIND,
   GROUP_PREFIX,
   resolveToolPolicy,
   TOOL_EFFECT,
@@ -10,11 +12,8 @@ import {
   TOOL_POLICY_LAYER,
 } from "@sidecar/runtime";
 import { wireRecord } from "@sidecar/wire";
-import {
-  NOTEBOOK_MEMORY_PROVIDER_ID,
-  notebookMemoryProviderFor,
-  registerBrainBuiltIns,
-} from "./builtins.js";
+import { notebookMemoryProviderFor } from "./builtins.js";
+import { HOSTED_EMBEDDING_ADAPTER_ID, OPENAI_EMBEDDING_ADAPTER_ID } from "./embedding-adapters.js";
 import {
   BRAIN_TOOL,
   brainToolCatalog,
@@ -137,18 +136,23 @@ test("the memory tools stand in the catalog as host reads under their own group"
   assert.equal(denied.allows(BRAIN_TOOL.READ_TRANSCRIPT), true);
 });
 
-test("the built-ins register the notebook index as a memory provider per embedding adapter", () => {
-  const registries = registerBrainBuiltIns(createRuntimeRegistries());
+test("the built-ins hold the notebook index as a memory provider per embedding adapter", () => {
   assert.deepEqual(
-    registries.memoryProviders.entries().map((entry) => [entry.id, entry.embeddingAdapterId]),
+    Object.entries(BUILTINS.memoryProviders).map(([id, provider]) => [
+      id,
+      provider.embeddingAdapterId,
+    ]),
     [
-      [NOTEBOOK_MEMORY_PROVIDER_ID.OPENAI, "openai-embeddings"],
-      [NOTEBOOK_MEMORY_PROVIDER_ID.HOSTED, "hosted-embeddings"],
+      [BUILTIN_MEMORY_PROVIDER.OPENAI, OPENAI_EMBEDDING_ADAPTER_ID],
+      [BUILTIN_MEMORY_PROVIDER.HOSTED, HOSTED_EMBEDDING_ADAPTER_ID],
     ],
   );
-  assert.equal(notebookMemoryProviderFor("provider-key"), NOTEBOOK_MEMORY_PROVIDER_ID.OPENAI);
-  assert.equal(notebookMemoryProviderFor("hosted-account"), NOTEBOOK_MEMORY_PROVIDER_ID.HOSTED);
-  for (const provider of registries.memoryProviders.entries()) {
-    assert.deepEqual([...provider.capabilities], ["keyword", "vector", "notebook"]);
-  }
+  assert.equal(
+    notebookMemoryProviderFor(CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY),
+    BUILTIN_MEMORY_PROVIDER.OPENAI,
+  );
+  assert.equal(
+    notebookMemoryProviderFor(CREDENTIAL_REFERENCE_KIND.HOSTED_ACCOUNT),
+    BUILTIN_MEMORY_PROVIDER.HOSTED,
+  );
 });

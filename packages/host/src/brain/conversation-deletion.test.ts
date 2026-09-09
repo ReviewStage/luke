@@ -13,12 +13,9 @@ import {
   type BrainStateRepository,
   BrainStateStore,
   responsesModelAnswer,
-} from "@sidecar/brain";
-import {
-  type BareResponsesModel,
-  bareModelAdapter,
   toolLoopRuntimeOver,
-} from "@sidecar/brain/testing";
+} from "@sidecar/brain";
+import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testing";
 import { drainMicrotasks, temporaryDirectory } from "@sidecar/fixtures/testing";
 import {
   CONVERSATION_ENTRY_KIND,
@@ -33,7 +30,7 @@ import {
   MAIN_SESSION_KEY,
   type ModelResponse,
   type TranscriptEvent,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import {
   RuntimeStoreClient,
   type RuntimeStorePort,

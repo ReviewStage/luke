@@ -1,5 +1,5 @@
+import type { WireRecord } from "@sidecar/wire";
 import {
-  type AgentId,
   CHILD_CLEANUP,
   CHILD_CONTEXT_MODE,
   CHILD_RUN_STATUS,
@@ -11,14 +11,12 @@ import {
   type ChildRunStatus,
   type ChildSpawnReceipt,
   COMPLETION_DELIVERY_STATUS,
-  childSessionKey,
   completionIdFor,
   isTerminalChildRunStatus,
-  type SessionKey,
-} from "@sidecar/runtime-contracts";
-import type { WireRecord } from "@sidecar/wire";
-import type { ScheduledTimer } from "./timers.js";
+} from "./child-records.js";
+import { type AgentId, childSessionKey, type SessionKey } from "./identifiers.js";
 import { CHILD_DEPTH_CAP } from "./tool-policy.js";
+import type { ScheduledTimer } from "./vocabulary.js";
 
 /**
  * Delegation's own lifecycle, ported from OpenClaw `b7528507`'s sub-agent

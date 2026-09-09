@@ -223,10 +223,11 @@ Trust constraints:
   the main process: main (`agent:main:main`), the developer's private
   threads, and one conversation per observed coding session
   (`agent:main:observed:<provider>:<session>`, each provider id run through
-  the reversible component encoder in `runtime-contracts`, never
-  concatenated raw). A provider's hook and the roster look on the
-  observation pass route to the observed session's own conversation, which
-  keeps its own transcript cursor, context, and generation; main is woken by
+  the reversible component encoder in the runtime's vocabulary
+  (`@sidecar/runtime/vocabulary`), never concatenated raw). A provider's hook
+  and the roster look on the observation pass route to the observed session's
+  own conversation, which keeps its own transcript cursor, context, and
+  generation; main is woken by
   a developer's ask, by the scheduled heartbeat (every thirty minutes by
   default, on the ordinary main conversation under `HEARTBEAT.md`, normally
   briefing nothing), and by a hold's release of a briefing it decided, and
@@ -302,23 +303,23 @@ Trust constraints:
   trace records a turn's about-fields and byte counts under its own gate,
   never a transcript's text.
 - The judgment is a host over replaceable parts, and the seams are the
-  contracts in `packages/runtime-contracts`. The host (`BrainAgent`) owns the
-  conversation's standing — accepting asks into runs, queueing turns, the
+  contracts in the runtime's vocabulary (`@sidecar/runtime/vocabulary`). The
+  host (`BrainAgent`) owns the conversation's standing — accepting asks into runs, queueing turns, the
   journal that records an act before its effect and its result before the
   next inference, the transcript cursors, the checkpoint — and reaches a
   model only through an `AgentRuntime` over a `ModelAdapter`, a
   `ContextEngine`, and the `ToolExecutor` the host itself supplies. Nothing in
   the host reads inside a provider's item. Which parts stand is a
-  configuration, not a construction: `packages/runtime` holds registries for
-  agent runtimes, model adapters, context engines, memory providers, tools,
-  skills, and lifecycle services, each refusing a duplicate id and the
-  capability pairings it rules out; the build registers its own parts as
-  built-ins and loads nothing dynamically; an agent's configuration names
+  configuration, not a construction: `packages/runtime` names its built-in
+  agent runtimes, model adapters, context engines, and memory providers in
+  one `BUILTINS` table, whose ids a duplicate cannot enter and whose pairings
+  a type rules out rather than a run-time refusal; the build compiles its own
+  parts in and loads nothing dynamically; an agent's configuration names
   entries by id and its credential by reference alone (the value stays in the
-  encrypted credential store), resolves against the registries into a frozen
+  encrypted credential store), resolves against that table into a frozen
   snapshot each turn reads whole, and is republished atomically or not at all.
   One agent is configured today; two isolated agents are two stores over the
-  same registries. The runtime this build ships is
+  same built-ins. The runtime this build ships is
   the tool loop over the OpenAI Responses context engine, on the keyed
   adapter or the hosted one; it ends a run only through completion,
   cancellation, its deadline, a throttle, a provider failure, an answer that

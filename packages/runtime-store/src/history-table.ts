@@ -4,7 +4,7 @@ import {
   maximumStoredConversationEntries,
   storedConversationMaximumAgeMs,
 } from "@sidecar/realtime";
-import type { HistoryAppendOutcome, SessionKey } from "@sidecar/runtime-contracts";
+import type { HistoryAppendOutcome, SessionKey } from "@sidecar/runtime/vocabulary";
 import { standingGeneration } from "./brain-envelope.js";
 import { historyCutoff } from "./conversations-table.js";
 import { nullable, type RuntimeDatabase } from "./database.js";

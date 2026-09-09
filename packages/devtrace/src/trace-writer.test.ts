@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { BRAIN_TURN_TRIGGER, hostedBrainToolCatalog, TOOL_LOOP_RUNTIME } from "@sidecar/brain";
-import { MODEL_RESPONSE_OUTCOME, RUN_ORIGIN } from "@sidecar/runtime-contracts";
+import { MODEL_RESPONSE_OUTCOME, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { isRecord, isWireString, recordFromJsonLine } from "@sidecar/wire";
 import { AgentTraceWriter, TRACE_ENTRY_KIND } from "./trace-writer.js";
 import { TRACE_DIRECTION } from "./vocabulary.js";

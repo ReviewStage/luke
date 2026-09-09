@@ -8,7 +8,7 @@ import {
   type ModelRequestOptions,
   type ModelResponse,
   type ModelTokenCount,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { HTTP_STATUS, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import { type Failure, type Normalized, payloadOf, throttled } from "./model-adapter-shared.js";
 import { RESPONSES_ITEM_FORMAT } from "./responses-api.js";

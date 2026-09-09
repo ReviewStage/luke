@@ -11,7 +11,7 @@ import {
   checkpointFormatTag,
   type RuntimeCheckpoint,
   sameCheckpointFormat,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { isWireString, type WireRecord } from "@sidecar/wire";
 import {
   functionCallOutputItem,

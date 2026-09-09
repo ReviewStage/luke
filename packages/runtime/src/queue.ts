@@ -1,4 +1,4 @@
-import type { ScheduledTimer } from "./timers.js";
+import type { ScheduledTimer } from "./vocabulary.js";
 
 /**
  * How input that arrives while a conversation is busy is queued, ported from

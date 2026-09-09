@@ -5,7 +5,7 @@ import {
   type ToolDescriptor,
   type ToolPolicyLayers,
 } from "@sidecar/runtime";
-import { RUN_ORIGIN, type RunOrigin } from "@sidecar/runtime-contracts";
+import { RUN_ORIGIN, type RunOrigin } from "@sidecar/runtime/vocabulary";
 import type { Generation } from "./generation.js";
 import type { SteeredDeliveries } from "./steered-deliveries.js";
 import type { RecordingContextEngine } from "./transcript-recorder.js";

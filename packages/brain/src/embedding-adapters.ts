@@ -6,13 +6,14 @@ import {
   hostedBrainEmbedAnswerFromWire,
   hostedBrainEmbedRequestFromWire,
 } from "@sidecar/hosted";
+import { BUILTIN_EMBEDDING_ADAPTER } from "@sidecar/runtime";
 import {
   type EmbeddingAdapter,
   type EmbeddingBatch,
   type EmbeddingIdentity,
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { type CloudFetch, HTTP_STATUS, positiveInteger, text } from "@sidecar/wire";
 import {
   BRAIN_REQUEST_TIMEOUT_MS,
@@ -45,8 +46,8 @@ import {
  * selection degrades to keyword search and an explicit selection reports.
  */
 
-export const OPENAI_EMBEDDING_ADAPTER_ID = "openai-embeddings";
-export const HOSTED_EMBEDDING_ADAPTER_ID = "hosted-embeddings";
+export const OPENAI_EMBEDDING_ADAPTER_ID = BUILTIN_EMBEDDING_ADAPTER.OPENAI;
+export const HOSTED_EMBEDDING_ADAPTER_ID = BUILTIN_EMBEDDING_ADAPTER.HOSTED;
 
 /** Batches wider than the hosted bound are cut to it on both transports, so the two behave alike. */
 export const EMBEDDING_BATCH_SIZE = HOSTED_BRAIN_EMBED_BOUNDS.MAXIMUM_TEXTS;

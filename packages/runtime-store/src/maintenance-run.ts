@@ -5,7 +5,7 @@ import {
   type ArchiveReason,
   type ConversationRecord,
   type SessionKey,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import {
   ARCHIVE_STAGING_STALE_MS,
   archiveDirectory,

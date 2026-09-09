@@ -9,7 +9,7 @@ import {
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
   type ModelFailure,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import {
   type CloudFetch,
   HTTP_STATUS,

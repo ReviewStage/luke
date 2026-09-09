@@ -8,7 +8,7 @@ import type {
   HistoryAppendOutcome,
   SessionKey,
   TranscriptEvent,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import type { DeletionOptions, DeletionOutcome } from "./archives.js";
 import type { ConversationCreation } from "./conversations-table.js";

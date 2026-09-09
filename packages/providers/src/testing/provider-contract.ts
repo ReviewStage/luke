@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { type ActKind, type ActRequest, admit } from "@sidecar/acts";
-import { RUN_ORIGIN } from "@sidecar/runtime-contracts";
+import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import {
   ACT_KIND,
   ACT_RESULT_STATUS,

@@ -15,7 +15,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@sidecar/runtime-contracts": "workspace:*",
+    "@sidecar/runtime": "workspace:*",
     "@sidecar/wire": "workspace:*",
     "ws": "8.21.3"
   },

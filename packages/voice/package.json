@@ -21,7 +21,7 @@
     "@sidecar/credentials": "workspace:*",
     "@sidecar/hosted": "workspace:*",
     "@sidecar/realtime": "workspace:*",
-    "@sidecar/runtime-contracts": "workspace:*",
+    "@sidecar/runtime": "workspace:*",
     "@sidecar/settings": "workspace:*",
     "@sidecar/wire": "workspace:*"
   }

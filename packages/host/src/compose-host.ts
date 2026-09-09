@@ -15,7 +15,7 @@ import {
   isTerminalChildRunStatus,
   MAIN_SESSION_KEY,
   type SessionKey,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { normalizeObservedWorkspaceProjects } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { composeAccount } from "./compose-account.js";

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ISSUE_TRACKER_ID, normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
-import { RUN_ORIGIN } from "@sidecar/runtime-contracts";
+import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import type { ObservedWorkspaceProject as ListedProject, Session } from "@sidecar/session";
 import {
   ACT_KIND,

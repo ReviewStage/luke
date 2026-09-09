@@ -12,7 +12,7 @@ import {
   resetCapturePrompt,
 } from "@sidecar/memory";
 import { readWorkspaceFile, writeWorkspaceFile } from "@sidecar/runtime";
-import type { AgentRuntime, SessionKey } from "@sidecar/runtime-contracts";
+import type { AgentRuntime, SessionKey } from "@sidecar/runtime/vocabulary";
 import type { RuntimeStoreClient } from "@sidecar/runtime-store";
 import type { WireRecord } from "@sidecar/wire";
 

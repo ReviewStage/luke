@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { MODEL_FAILURE, MODEL_RESPONSE_OUTCOME } from "@sidecar/runtime-contracts";
+import { MODEL_FAILURE, MODEL_RESPONSE_OUTCOME } from "@sidecar/runtime/vocabulary";
 import {
   BRAIN_REASONING_EFFORT,
   brainResponsesOutput,

@@ -10,7 +10,7 @@ import {
   DEFAULT_AGENT_ID,
   MAIN_CONVERSATION_NAME,
   MAIN_SESSION_KEY,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { RuntimeStoreClient } from "./client.js";
 import type { RuntimeStorePort } from "./protocol.js";
 import { line, NOW, populatedState } from "./testing.js";

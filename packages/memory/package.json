@@ -15,7 +15,6 @@
     "@sidecar/acts": "workspace:*",
     "@sidecar/realtime": "workspace:*",
     "@sidecar/runtime": "workspace:*",
-    "@sidecar/runtime-contracts": "workspace:*",
     "@sidecar/wire": "workspace:*"
   },
   "devDependencies": {

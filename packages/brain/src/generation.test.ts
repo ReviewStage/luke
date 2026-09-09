@@ -4,7 +4,7 @@ import {
   type AgentRuntime,
   CONTEXT_INPUT_KIND,
   type ContextOpening,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { CONTEXT_OPENING, generationFrom } from "./generation.js";
 import { TOOL_LOOP_RUNTIME } from "./runtime.js";

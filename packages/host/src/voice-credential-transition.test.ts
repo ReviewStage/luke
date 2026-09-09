@@ -7,8 +7,8 @@ import {
   BrainAgent,
   BrainStateStore,
   hostedBrainToolCatalog,
+  toolLoopRuntimeOver,
 } from "@sidecar/brain";
-import { toolLoopRuntimeOver } from "@sidecar/brain/testing";
 import { drainMicrotasks } from "@sidecar/fixtures/testing";
 import {
   HOSTED_BRAIN_CONTRACT_VERSION,
@@ -16,7 +16,7 @@ import {
   HOSTED_SERVICE_PATH,
   hostedBrainBounds,
 } from "@sidecar/hosted";
-import { REASONING_EFFORT } from "@sidecar/runtime-contracts";
+import { REASONING_EFFORT } from "@sidecar/runtime/vocabulary";
 import { APP_SETTING_SCHEMA, VOICE_SOURCE, type VoiceSource } from "@sidecar/settings";
 import { VoiceCapabilityAssembler, type VoiceSettings } from "@sidecar/voice";
 import { BrainHost } from "./brain/host.js";

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ToolInvocation } from "@sidecar/runtime-contracts";
+import type { ToolInvocation } from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
 import {
   hashToolCall,

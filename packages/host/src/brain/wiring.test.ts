@@ -3,7 +3,7 @@ import test from "node:test";
 import { BRAIN_WAKE_KIND, type BrainStateRepository } from "@sidecar/brain";
 import { drainMicrotasks } from "@sidecar/fixtures/testing";
 import { CREDENTIAL_REFERENCE_KIND, memoryChildStore } from "@sidecar/runtime";
-import { MAIN_SESSION_KEY, threadSessionKey } from "@sidecar/runtime-contracts";
+import { MAIN_SESSION_KEY, threadSessionKey } from "@sidecar/runtime/vocabulary";
 import { normalizeSession, SESSION_STATUS, type Session } from "@sidecar/session";
 import { type BrainWiringDependencies, wakeEventsFromHooks, wireBrain } from "./wiring.js";
 

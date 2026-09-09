@@ -1,212 +1,114 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { agentId } from "@sidecar/runtime-contracts";
+import { agentId } from "./identifiers.js";
 import {
+  BUILTIN_CONTEXT_ENGINE,
+  BUILTIN_MEMORY_PROVIDER,
+  BUILTIN_MODEL_ADAPTER,
+  BUILTINS,
+  CONFIGURATION_OUTCOME,
   CONFIGURATION_REFUSAL,
+  type ConfigurationOutcome,
   ConfigurationStore,
   CREDENTIAL_REFERENCE_KIND,
   defaultAgentConfiguration,
   resolveConfiguration,
-} from "./configuration.js";
-import {
-  type ContextEngineDescriptor,
-  createRuntimeRegistries,
-  type ItemFormatIdentity,
-  MEMORY_CAPABILITY,
-  REGISTRATION_REFUSAL,
-  RegistrationError,
-  type RegistrationRefusal,
-  type RuntimeRegistries,
-  TOOL_EFFECT,
-  TOOL_EXECUTION,
-  type ToolDescriptor,
+  TOOL_LOOP_RUNTIME,
 } from "./registry.js";
-
-const RESPONSES = { format: "responses", version: 1 } as const;
-const OTHER = { format: "other", version: 1 } as const;
-
-/** The refusal a registration threw, or nothing when it was accepted or threw something else. */
-function refusalOf(register: () => void): RegistrationRefusal | undefined {
-  try {
-    register();
-    return undefined;
-  } catch (error) {
-    return error instanceof RegistrationError ? error.refusal : undefined;
-  }
-}
-
-function tool(id: string, effect: ToolDescriptor["effect"] = TOOL_EFFECT.READ): ToolDescriptor {
-  return {
-    id,
-    schema: { name: id, description: id, parameters: {} },
-    execution: TOOL_EXECUTION.HOST,
-    effect,
-    groups: [effect],
-  };
-}
-
-function engine(id: string, itemFormat: ItemFormatIdentity = RESPONSES): ContextEngineDescriptor {
-  return {
-    id,
-    itemFormat,
-    create: () => {
-      throw new Error("not built in this test");
-    },
-  };
-}
-
-function populated(): RuntimeRegistries {
-  const registries = createRuntimeRegistries();
-  registries.agentRuntimes.register({
-    id: "loop",
-    itemFormat: RESPONSES,
-    create: () => {
-      throw new Error("not built in this test");
-    },
-  });
-  registries.contextEngines.register(engine("responses-engine"));
-  registries.contextEngines.register(engine("other-engine", OTHER));
-  registries.modelAdapters.register({
-    id: "keyed",
-    itemFormat: RESPONSES,
-    credentialKind: CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY,
-  });
-  registries.modelAdapters.register({
-    id: "hosted",
-    itemFormat: RESPONSES,
-    credentialKind: CREDENTIAL_REFERENCE_KIND.HOSTED_ACCOUNT,
-  });
-  registries.tools.register(tool("read_thing"));
-  return registries;
-}
 
 function configuration(overrides: Partial<Parameters<typeof defaultAgentConfiguration>[0]> = {}) {
   return defaultAgentConfiguration({
-    agentRuntimeId: "loop",
-    modelAdapterId: "keyed",
-    contextEngineId: "responses-engine",
+    agentRuntimeId: TOOL_LOOP_RUNTIME.ID,
+    modelAdapterId: BUILTIN_MODEL_ADAPTER.OPENAI,
+    contextEngineId: BUILTIN_CONTEXT_ENGINE.RESPONSES,
     credential: { kind: CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY, providerId: "openai" },
     workspaceDirectory: "/tmp/workspace",
     ...overrides,
   });
 }
 
-test("a registry refuses a duplicate id, an empty id, and an incompatible entry, and keeps what it held", () => {
-  const registries = populated();
-  assert.equal(
-    refusalOf(() => registries.tools.register(tool("read_thing"))),
-    REGISTRATION_REFUSAL.DUPLICATE_ID,
-  );
-  assert.equal(
-    refusalOf(() => registries.tools.register(tool(""))),
-    REGISTRATION_REFUSAL.EMPTY_ID,
-  );
-  assert.equal(
-    refusalOf(() =>
-      registries.tools.register({
-        ...tool("mismatch"),
-        schema: { name: "another", description: "", parameters: {} },
-      }),
-    ),
-    REGISTRATION_REFUSAL.INCOMPATIBLE,
-  );
-  assert.equal(
-    refusalOf(() =>
-      registries.tools.register({
-        ...tool("speaking_performer", TOOL_EFFECT.SPEAK),
-        execution: TOOL_EXECUTION.PERFORMER,
-      }),
-    ),
-    REGISTRATION_REFUSAL.INCOMPATIBLE,
-  );
-  assert.equal(
-    refusalOf(() =>
-      registries.memoryProviders.register({
-        id: "vectors",
-        capabilities: [MEMORY_CAPABILITY.VECTOR],
-      }),
-    ),
-    REGISTRATION_REFUSAL.INCOMPATIBLE,
-  );
-  registries.memoryProviders.register({
-    id: "vectors",
-    capabilities: [MEMORY_CAPABILITY.VECTOR],
-    embeddingAdapterId: "embed",
-  });
-  assert.deepEqual(
-    registries.tools.entries().map((entry) => entry.id),
-    ["read_thing"],
-  );
-  assert.deepEqual(
-    registries.memoryProviders.entries().map((entry) => entry.id),
-    ["vectors"],
-  );
+test("every built-in memory provider names the embedding adapter its vectors run on", () => {
+  for (const provider of Object.values(BUILTINS.memoryProviders)) {
+    assert.deepEqual([...provider.capabilities], ["keyword", "vector", "notebook"]);
+    assert.ok(provider.embeddingAdapterId.length > 0);
+  }
 });
 
-test("resolution checks every name and pairing and answers a frozen configuration", () => {
-  const registries = populated();
-  const resolved = resolveConfiguration(configuration(), registries);
-  assert.ok(resolved.ok);
+/** The refusal an outcome carries, or nothing when it resolved. */
+function refusalOf(outcome: ConfigurationOutcome) {
+  return outcome.outcome === CONFIGURATION_OUTCOME.REFUSED ? outcome.refusal : undefined;
+}
+
+test("resolution checks every name and answers a frozen configuration", () => {
+  const resolved = resolveConfiguration(configuration());
+  assert.equal(resolved.outcome, CONFIGURATION_OUTCOME.RESOLVED);
+  assert.ok(resolved.outcome === CONFIGURATION_OUTCOME.RESOLVED);
   assert.ok(Object.isFrozen(resolved.configuration));
   assert.ok(Object.isFrozen(resolved.configuration.toolPolicy));
 
-  const mismatched = resolveConfiguration(
-    configuration({ contextEngineId: "other-engine" }),
-    registries,
+  assert.equal(
+    refusalOf(
+      resolveConfiguration(configuration({ modelAdapterId: BUILTIN_MODEL_ADAPTER.HOSTED })),
+    ),
+    CONFIGURATION_REFUSAL.CREDENTIAL_KIND_MISMATCH,
   );
-  assert.ok(!mismatched.ok);
-  assert.deepEqual(mismatched.refusals, [CONFIGURATION_REFUSAL.ITEM_FORMAT_MISMATCH]);
+  assert.equal(
+    refusalOf(resolveConfiguration(configuration({ maximumOutputTokens: 0 }))),
+    CONFIGURATION_REFUSAL.INVALID_OUTPUT_TOKENS,
+  );
+  assert.equal(
+    refusalOf(resolveConfiguration(configuration({ workspaceDirectory: "  " }))),
+    CONFIGURATION_REFUSAL.EMPTY_WORKSPACE,
+  );
+});
 
-  const wrongCredential = resolveConfiguration(
-    configuration({ modelAdapterId: "hosted" }),
-    registries,
+test("a name no built-in holds is refused, and the standing snapshot is unchanged", () => {
+  const store = new ConfigurationStore(configuration());
+  const first = store.snapshot();
+  // Only a name that arrived over the wire can be one the table does not
+  // hold; every name a build spells is checked by the derived id unions.
+  const wireShaped = { ...configuration(), contextEngineId: "someone-elses-engine" };
+  assert.equal(refusalOf(resolveConfiguration(wireShaped)), CONFIGURATION_REFUSAL.UNKNOWN_ID);
+  assert.equal(refusalOf(store.publish(wireShaped)), CONFIGURATION_REFUSAL.UNKNOWN_ID);
+  assert.strictEqual(store.snapshot(), first);
+  assert.equal(
+    refusalOf(store.publish({ ...configuration(), memoryProviderId: "someone-elses-index" })),
+    CONFIGURATION_REFUSAL.UNKNOWN_ID,
   );
-  assert.ok(!wrongCredential.ok);
-  assert.deepEqual(wrongCredential.refusals, [CONFIGURATION_REFUSAL.CREDENTIAL_KIND_MISMATCH]);
-
-  const unknown = resolveConfiguration(
-    configuration({ agentRuntimeId: "nope", modelAdapterId: "nope", contextEngineId: "nope" }),
-    registries,
-  );
-  assert.ok(!unknown.ok);
-  assert.deepEqual(unknown.refusals, [
-    CONFIGURATION_REFUSAL.UNKNOWN_RUNTIME,
-    CONFIGURATION_REFUSAL.UNKNOWN_MODEL_ADAPTER,
-    CONFIGURATION_REFUSAL.UNKNOWN_CONTEXT_ENGINE,
-  ]);
+  assert.strictEqual(store.snapshot(), first);
 });
 
 test("a store publishes atomically: a refused publish leaves the snapshot standing, an accepted one replaces it whole", () => {
-  const registries = populated();
-  const store = new ConfigurationStore(registries, configuration());
+  const store = new ConfigurationStore(configuration());
   const first = store.snapshot();
 
-  const refused = store.publish(configuration({ contextEngineId: "other-engine" }));
-  assert.ok(!refused.ok);
+  assert.equal(
+    refusalOf(store.publish(configuration({ maximumOutputTokens: -1 }))),
+    CONFIGURATION_REFUSAL.INVALID_OUTPUT_TOKENS,
+  );
   assert.strictEqual(store.snapshot(), first);
 
   const accepted = store.publish(
     configuration({
-      modelAdapterId: "hosted",
+      modelAdapterId: BUILTIN_MODEL_ADAPTER.HOSTED,
       credential: { kind: CREDENTIAL_REFERENCE_KIND.HOSTED_ACCOUNT },
+      memoryProviderId: BUILTIN_MEMORY_PROVIDER.HOSTED,
       toolPolicy: { agent: { deny: ["read_thing"] } },
     }),
   );
-  assert.ok(accepted.ok);
+  assert.equal(accepted.outcome, CONFIGURATION_OUTCOME.RESOLVED);
   const second = store.snapshot();
   assert.equal(second.revision, 2);
-  assert.equal(second.configuration.modelAdapterId, "hosted");
+  assert.equal(second.configuration.modelAdapterId, BUILTIN_MODEL_ADAPTER.HOSTED);
   assert.deepEqual(second.configuration.toolPolicy, { agent: { deny: ["read_thing"] } });
   assert.deepEqual(first.configuration.toolPolicy, {});
   // The credential travels as a reference alone: no secret has a field to live in.
   assert.deepEqual(Object.keys(second.configuration.credential), ["kind"]);
 });
 
-test("two agents are two isolated stores over one set of registries", () => {
-  const registries = populated();
-  const main = new ConfigurationStore(registries, configuration());
+test("two agents are two isolated stores", () => {
+  const main = new ConfigurationStore(configuration());
   const other = new ConfigurationStore(
-    registries,
     configuration({ agentId: agentId("other"), workspaceDirectory: "/tmp/other" }),
   );
   other.publish(

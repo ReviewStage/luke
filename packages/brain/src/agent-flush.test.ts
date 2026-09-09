@@ -12,7 +12,7 @@ import {
   type ModelAdapter,
   type ModelRequestOptions,
   type ModelResponse,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { BrainAgent, type BrainFlushInput, type BrainFlushMarkerStore } from "./agent.js";
 import { ResponsesContextEngine } from "./context-engine.js";

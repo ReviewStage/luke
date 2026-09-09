@@ -3,21 +3,23 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { RUN_ORIGIN } from "@sidecar/runtime-contracts";
-import {
-  ConfigurationStore,
-  CREDENTIAL_REFERENCE_KIND,
-  defaultAgentConfiguration,
-} from "./configuration.js";
+import { RUN_ORIGIN } from "./identifiers.js";
 import {
   buildSystemPrompt,
+  gatherPromptFacts,
   PROMPT_DIAGNOSTIC,
   PROMPT_PROFILE,
   PROMPT_SECTION,
   type PromptFacts,
 } from "./prompt.js";
-import { createRuntimeRegistries } from "./registry.js";
-import { gatherPromptFacts, promptProfileFor } from "./runtime-facts.js";
+import {
+  BUILTIN_CONTEXT_ENGINE,
+  BUILTIN_MODEL_ADAPTER,
+  ConfigurationStore,
+  CREDENTIAL_REFERENCE_KIND,
+  defaultAgentConfiguration,
+  TOOL_LOOP_RUNTIME,
+} from "./registry.js";
 import {
   BOOTSTRAP_BOUNDS,
   boundBootstrapFiles,
@@ -171,16 +173,6 @@ test("a truncated or missing file is named in the notice and the diagnostics", (
   );
 });
 
-test("profiles follow the run: ordinary and heartbeat runs are full, a child is minimal", () => {
-  assert.equal(promptProfileFor({ origin: RUN_ORIGIN.USER }), PROMPT_PROFILE.FULL);
-  assert.equal(promptProfileFor({ origin: RUN_ORIGIN.OBSERVATION }), PROMPT_PROFILE.FULL);
-  assert.equal(promptProfileFor({ origin: RUN_ORIGIN.HEARTBEAT }), PROMPT_PROFILE.FULL);
-  assert.equal(
-    promptProfileFor({ origin: RUN_ORIGIN.USER, child: { depth: 1 } }),
-    PROMPT_PROFILE.MINIMAL,
-  );
-});
-
 test("gathering reads the workspace under the configuration, lists eligible skills, and a child reads AGENTS.md alone", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "luke-prompt-"));
   const workspace = path.join(root, "workspace");
@@ -198,32 +190,11 @@ test("gathering reads the workspace under the configuration, lists eligible skil
   );
   await fs.mkdir(path.join(skills, "off"), { recursive: true });
   await fs.writeFile(path.join(skills, "off", "SKILL.md"), "---\nname: off\nenabled: false\n---\n");
-  const registries = createRuntimeRegistries();
-  registries.agentRuntimes.register({
-    id: "loop",
-    itemFormat: { format: "f", version: 1 },
-    create: () => {
-      throw new Error("unused");
-    },
-  });
-  registries.contextEngines.register({
-    id: "engine",
-    itemFormat: { format: "f", version: 1 },
-    create: () => {
-      throw new Error("unused");
-    },
-  });
-  registries.modelAdapters.register({
-    id: "adapter",
-    itemFormat: { format: "f", version: 1 },
-    credentialKind: CREDENTIAL_REFERENCE_KIND.HOSTED_ACCOUNT,
-  });
   const store = new ConfigurationStore(
-    registries,
     defaultAgentConfiguration({
-      agentRuntimeId: "loop",
-      modelAdapterId: "adapter",
-      contextEngineId: "engine",
+      agentRuntimeId: TOOL_LOOP_RUNTIME.ID,
+      modelAdapterId: BUILTIN_MODEL_ADAPTER.HOSTED,
+      contextEngineId: BUILTIN_CONTEXT_ENGINE.RESPONSES,
       credential: { kind: CREDENTIAL_REFERENCE_KIND.HOSTED_ACCOUNT },
       workspaceDirectory: workspace,
       skillRoots: [skills],
@@ -235,7 +206,7 @@ test("gathering reads the workspace under the configuration, lists eligible skil
     tools: [],
     toolNotes: [],
     runtimeContextMarker: "[context]",
-    runtimeId: "loop",
+    runtimeId: TOOL_LOOP_RUNTIME.ID,
   };
   const full = await gatherPromptFacts({ ...common, run: { origin: RUN_ORIGIN.USER } });
   assert.deepEqual(

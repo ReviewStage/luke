@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
-import { isIdentifier } from "@sidecar/runtime-contracts";
+import { isIdentifier } from "@sidecar/runtime/vocabulary";
 import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { WebSocket, WebSocketServer } from "ws";
 import {

@@ -1,6 +1,6 @@
+import { type ItemFormatIdentity, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import {
   type AgentRuntime,
-  type AgentRuntimeDescriptor,
   type CheckpointFormat,
   CONTEXT_INPUT_KIND,
   type CompactionOptions,
@@ -19,12 +19,13 @@ import {
   type RuntimeCheckpoint,
   type RuntimeCompaction,
   type RuntimeEvent,
+  type RuntimeIdentity,
   type RuntimeRun,
   type RuntimeRunEnd,
   type RuntimeRunRequest,
   type ToolInvocation,
   type ToolResult,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { compactContext } from "./compaction.js";
 import { LOOP_GUARD_LEVEL, LoopGuard, type LoopGuardConfig } from "./loop-guard.js";
@@ -49,10 +50,7 @@ import { outputStatus } from "./tool-results.js";
  * over an engine of that format.
  */
 
-export const TOOL_LOOP_RUNTIME = {
-  ID: "tool-loop",
-  VERSION: 1,
-} as const;
+export { TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 
 /** What the model is told about a call the guard refused to dispatch. */
 const LOOP_GUARD_REFUSAL_REASON = "not run: the loop guard ended this run";
@@ -72,7 +70,7 @@ const TOOL_DID_NOT_ANSWER = {
 export interface ToolLoopRuntimeOptions {
   model: ModelAdapter;
   /** The item format of the engines this runtime opens. */
-  itemFormat: { format: string; version: number };
+  itemFormat: ItemFormatIdentity;
   createContext: (format: CheckpointFormat) => ContextEngine;
   loopGuard?: LoopGuardConfig;
 }
@@ -102,7 +100,7 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
   }
 
   /** Read on each ask, because a hosted adapter learns its model only from the service's capabilities. */
-  get descriptor(): AgentRuntimeDescriptor {
+  get descriptor(): RuntimeIdentity {
     const model = this.#options.model.model;
     return {
       id: TOOL_LOOP_RUNTIME.ID,

@@ -15,7 +15,7 @@ import {
   MAIN_SESSION_KEY,
   RUN_ORIGIN,
   type ToolInvocation,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { ACT_RESULT_STATUS, isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { BrainJournal } from "./journal.js";
 import {

@@ -10,7 +10,7 @@ import {
   type ModelResponse,
   TRANSCRIPT_EVENT_KIND,
   type TranscriptEvent,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { BrainAgent } from "./agent.js";
 import {

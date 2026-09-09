@@ -6,7 +6,7 @@ import type {
 } from "@sidecar/brain/requests-wire";
 import type { GatewayOperator } from "@sidecar/host";
 import { REJECTED_SUBMISSION } from "@sidecar/host";
-import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
+import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import { BRIDGE } from "#shared/bridge";
 import { registerBridge } from "../register-bridge";

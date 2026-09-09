@@ -7,7 +7,7 @@ import {
   MODEL_RESPONSE_OUTCOME,
   type ModelRequestOptions,
   type ModelResponse,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { tracedModelAdapter } from "./brain-trace.js";
 import type { BrainRequestTraceRecord } from "./trace-writer.js";
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
-import { CONTEXT_INPUT_KIND, checkpointFormatTag } from "@sidecar/runtime-contracts";
+import { CONTEXT_INPUT_KIND, checkpointFormatTag } from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
 import { pairedDanglingCalls, ResponsesContextEngine } from "./context-engine.js";
 import { functionCallOutputItem, userMessageItem } from "./responses-api.js";

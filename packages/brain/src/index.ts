@@ -8,11 +8,7 @@ export {
   LOOK_SUBJECT,
   type LookSubjectKind,
 } from "./agent.js";
-export {
-  notebookMemoryProviderFor,
-  RESPONSES_CONTEXT_ENGINE_ID,
-  registerBrainBuiltIns,
-} from "./builtins.js";
+export { notebookMemoryProviderFor, toolLoopRuntimeOver } from "./builtins.js";
 export {
   DELIVERY_STATE,
   type DeliveryClaim,
@@ -107,6 +103,7 @@ export {
 export type { BrainChildAccess, BrainMemoryAccess } from "./tool-executor.js";
 export {
   BRAIN_TOOL,
+  brainToolCatalog,
   hostedBrainToolCatalog,
   resolveTurnToolPolicy,
 } from "./tools.js";

@@ -10,7 +10,7 @@ import {
   type ToolPolicy,
   type ToolPolicyLayers,
 } from "@sidecar/runtime";
-import type { ToolSchema } from "@sidecar/runtime-contracts";
+import type { ToolSchema } from "@sidecar/runtime/vocabulary";
 import {
   type ResponsesToolDefinition,
   responsesToolDefinition,

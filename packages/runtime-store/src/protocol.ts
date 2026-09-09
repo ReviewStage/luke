@@ -9,7 +9,7 @@ import type {
   ConversationRecord,
   HistoryAppendOutcome,
   SessionKey,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import type { DeletionOptions, DeletionOutcome } from "./archives.js";
 import type { EnvelopeRead } from "./brain-envelope.js";

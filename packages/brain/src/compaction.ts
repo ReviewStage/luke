@@ -7,7 +7,7 @@ import {
   type ModelAdapter,
   type ModelCapabilities,
   type RuntimeCompaction,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
 
 /**

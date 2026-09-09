@@ -1,7 +1,7 @@
 import type { BrainAgent, BrainChildAccess } from "@sidecar/brain";
 import type { ConversationEntry } from "@sidecar/realtime";
-import { ChildRunService, type ChildStore, type ScheduledTimer } from "@sidecar/runtime";
-import type { ModelAdapter } from "@sidecar/runtime-contracts";
+import { ChildRunService, type ChildStore } from "@sidecar/runtime";
+import type { ModelAdapter, ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import {
   CHILD_RUN_STATUS,
   type ChildRunRecord,
@@ -9,7 +9,7 @@ import {
   childIdOf,
   DEFAULT_AGENT_ID,
   type SessionKey,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
 
 /**

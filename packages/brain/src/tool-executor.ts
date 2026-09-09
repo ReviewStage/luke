@@ -26,7 +26,7 @@ import {
   type ToolExecutionContext,
   type ToolExecutor,
   type ToolInvocation,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import type { SessionIdentity } from "@sidecar/session";
 import {
   ACT_RESULT_STATUS,

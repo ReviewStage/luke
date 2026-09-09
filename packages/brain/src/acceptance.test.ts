@@ -13,10 +13,11 @@ import {
 } from "@sidecar/hosted";
 import type { ScheduledTimer } from "@sidecar/realtime";
 import {
+  BUILTIN_CONTEXT_ENGINE,
+  type BuiltinModelAdapterId,
   buildSystemPrompt,
   ConfigurationStore,
   CREDENTIAL_REFERENCE_KIND,
-  createRuntimeRegistries,
   defaultAgentConfiguration,
   gatherPromptFacts,
   recentDailyNotes,
@@ -39,7 +40,7 @@ import {
   type RuntimeRun,
   type RuntimeRunRequest,
   type ToolExecutionContext,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { normalizeSession, SESSION_STATUS, type SessionProvider } from "@sidecar/session";
 import {
   ACT_RESULT_STATUS,
@@ -49,7 +50,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { BrainAgent, type BrainAgentOptions } from "./agent.js";
-import { RESPONSES_CONTEXT_ENGINE_ID, registerBrainBuiltIns } from "./builtins.js";
+import { toolLoopRuntimeOver } from "./builtins.js";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { HOSTED_MODEL_ADAPTER_ID, HostedModelAdapter } from "./hosted-model-adapter.js";
 import { BRAIN_INPUT_MARKER } from "./input-items.js";
@@ -71,8 +72,7 @@ import {
   BrainStateStore,
   brainStateFromStored,
 } from "./state-store.js";
-import { toolLoopRuntimeOver } from "./testing.js";
-import { hostedBrainToolCatalog, resolveTurnToolPolicy } from "./tools.js";
+import { brainToolCatalog, hostedBrainToolCatalog, resolveTurnToolPolicy } from "./tools.js";
 import { BRAIN_TURN_KIND, runOriginOf } from "./turn.js";
 import { BRAIN_WAKE_KIND } from "./wake-events.js";
 import { BRAIN_IDENTITY_LINE, BRAIN_WORKSPACE_SEEDS } from "./workspace-seeds.js";
@@ -831,26 +831,24 @@ test("a model failure after a recorded act restores the context to the act's com
  * hosted turn send upstream can be compared byte for byte.
  */
 async function workspacePreparation(
-  adapterId: string,
+  adapterId: BuiltinModelAdapterId,
   credential: Parameters<typeof defaultAgentConfiguration>[0]["credential"],
 ) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "luke-acceptance-"));
   const workspace = path.join(root, "workspace");
   await seedWorkspace(workspace, BRAIN_WORKSPACE_SEEDS);
-  const registries = registerBrainBuiltIns(createRuntimeRegistries());
   const store = new ConfigurationStore(
-    registries,
     defaultAgentConfiguration({
       agentRuntimeId: TOOL_LOOP_RUNTIME.ID,
       modelAdapterId: adapterId,
-      contextEngineId: RESPONSES_CONTEXT_ENGINE_ID,
+      contextEngineId: BUILTIN_CONTEXT_ENGINE.RESPONSES,
       credential,
       workspaceDirectory: workspace,
     }),
   );
   const prepareTurn: BrainAgentOptions["prepareTurn"] = async (turn) => {
     const trigger = turn.kind === BRAIN_TURN_KIND.TURN ? turn.trigger : undefined;
-    const policy = resolveTurnToolPolicy(registries.tools.entries(), {}, trigger);
+    const policy = resolveTurnToolPolicy(brainToolCatalog(), {}, trigger);
     const facts = await gatherPromptFacts({
       configuration: store.snapshot(),
       run: { origin: trigger === undefined ? RUN_ORIGIN.MAINTENANCE : runOriginOf(trigger) },

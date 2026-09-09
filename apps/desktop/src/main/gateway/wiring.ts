@@ -17,7 +17,7 @@ import {
   HOST_NODE_CAPABILITY_LIST,
 } from "@sidecar/host";
 import { type ConversationEntry, conversationEntryFromWire } from "@sidecar/realtime";
-import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
+import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
 import {
   isRecord,
   isWireNumber,

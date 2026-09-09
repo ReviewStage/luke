@@ -18,7 +18,7 @@ import {
   TRANSCRIPT_EVENT_KIND,
   type TranscriptEvent,
   threadSessionKey,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import {
   archiveDirectory,
   deleteConversationHistory,

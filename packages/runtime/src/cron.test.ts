@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import {
   CRON_SCHEDULE_KIND,
   CronScheduler,
+  HEARTBEAT_DEFAULTS,
+  heartbeatJob,
   jobDue,
   memoryScheduledJobStore,
   nextRunAt,
@@ -12,7 +13,7 @@ import {
   scheduledJobFromWire,
   validCronExpression,
 } from "./cron.js";
-import { HEARTBEAT_DEFAULTS, heartbeatJob } from "./heartbeat.js";
+import { MAIN_SESSION_KEY } from "./identifiers.js";
 
 const T0 = Date.UTC(2026, 8, 8, 12, 0, 0);
 const MINUTE = 60_000;

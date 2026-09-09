@@ -546,7 +546,7 @@ export interface ContextOpening {
   readonly bootstrap: ContextBootstrap;
 }
 
-export interface AgentRuntimeDescriptor {
+export interface RuntimeIdentity {
   readonly id: string;
   readonly checkpoint: CheckpointFormat;
   /** The model the runtime's inferences run on, when its adapter knows it. */
@@ -571,7 +571,7 @@ export interface CompactionOptions {
 }
 
 export interface AgentRuntime {
-  readonly descriptor: AgentRuntimeDescriptor;
+  readonly descriptor: RuntimeIdentity;
   /** The moment held-back inferences may resume, for a host to ask before opening a turn. */
   quietUntil(): number | undefined;
   /** What the runtime's model can do and how large its window is, for the host's compaction policy; nothing when it cannot say. */

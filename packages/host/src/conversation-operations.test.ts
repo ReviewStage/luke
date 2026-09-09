@@ -7,7 +7,7 @@ import {
   MAIN_SESSION_KEY,
   type SessionKey,
   threadSessionKey,
-} from "@sidecar/runtime-contracts";
+} from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
 import {
   type ConversationOperationsDependencies,
