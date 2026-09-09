@@ -13,6 +13,12 @@ export const ADAPTER_FAILURE = {
   UNAVAILABLE: "unavailable",
   /** It ran and failed: the previous snapshot stands until the next attempt. */
   TRANSIENT: "transient",
+  /**
+   * The provider is rate limiting and the pass's backoff budget is spent: the
+   * previous snapshot stands, and the pass ends rather than reading the rest
+   * of the roster through the same closed door.
+   */
+  RATE_LIMITED: "rate-limited",
 } as const;
 
 export type AdapterFailureKind = (typeof ADAPTER_FAILURE)[keyof typeof ADAPTER_FAILURE];
@@ -34,13 +40,22 @@ export class AdapterFailure extends Error {
  * snapshot standing, because a network blip is not news about a session.
  */
 export function clearsObservedState(failure: AdapterFailureKind): boolean {
-  return failure !== ADAPTER_FAILURE.TRANSIENT;
+  return failure === ADAPTER_FAILURE.UNAUTHORIZED || failure === ADAPTER_FAILURE.UNAVAILABLE;
+}
+
+/**
+ * Whether this failure is the whole pass's rather than one resource's. A
+ * failure that clears observed state is never one resource's problem, and a
+ * provider rate limiting the pass answers every further read the same way,
+ * so a roster assembled past either would be partial while reading as whole.
+ */
+export function endsPass(failure: AdapterFailureKind): boolean {
+  return clearsObservedState(failure) || failure === ADAPTER_FAILURE.RATE_LIMITED;
 }
 
 /**
  * Keeps one failed resource from discarding an otherwise complete pass. A
- * failure that clears observed state is not one resource's problem, so it
- * still ends the pass.
+ * failure that is the whole pass's still ends it.
  */
 export async function tolerateItemFailure<Result>(
   operation: () => Promise<Result>,
@@ -48,7 +63,7 @@ export async function tolerateItemFailure<Result>(
   try {
     return await operation();
   } catch (error) {
-    if (error instanceof AdapterFailure && clearsObservedState(error.failure)) throw error;
+    if (error instanceof AdapterFailure && endsPass(error.failure)) throw error;
     return undefined;
   }
 }

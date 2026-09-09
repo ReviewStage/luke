@@ -11,18 +11,21 @@ import {
   type ProviderSessionObservation,
   SESSION_LOCATION,
   SESSION_STATUS,
-  type SessionProviderPlugin,
   UNSUPPORTED_BY_OBSERVATION,
 } from "@sidecar/session";
 import { type CloudFetch, isWireString } from "@sidecar/wire";
 import { admittedForTest, HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
 import { ADAPTER_DIAGNOSTIC_KIND, type AdapterDiagnosticCallback } from "./adapter-diagnostics.js";
-import { type CloudPass, cloudPass } from "./cloud-pass.js";
+import { ADAPTER_FAILURE } from "./adapter-failure.js";
+import { type CloudPass, type CloudSessionPlugin, cloudPass } from "./cloud-pass.js";
 import {
+  backoffBudget,
   CLOUD_ADAPTER_DEFAULTS,
   type CloudWriteRoute,
   isDefined,
   knownValue,
+  RATE_LIMIT_BACKOFF,
+  rateLimitDelayMs,
   requestDeadlineMs,
 } from "./cloud-wire.js";
 
@@ -69,7 +72,7 @@ const STUB_SLOW_ACTION_DEADLINE_MS = 25;
  * own: one plugin over `cloudPass`, with the two actions a provider routes and
  * the counters a test reads.
  */
-type StubCloudPlugin = SessionProviderPlugin & {
+type StubCloudPlugin = CloudSessionPlugin & {
   readonly passes: number;
   readonly forgottenIdentities: number;
   collected: readonly ProviderSessionObservation[];
@@ -91,6 +94,7 @@ interface StubOptions {
   minimumRefreshIntervalMs?: number;
   onDiagnostic?: AdapterDiagnosticCallback;
   requestHeaders?: Readonly<Record<string, string>>;
+  sleep?: (ms: number) => Promise<void>;
   /** Observes and routes nothing: a provider whose actions are all absent. */
   routesNothing?: boolean;
 }
@@ -114,6 +118,7 @@ function stubPluginFor(fetch: CloudFetch, overrides: StubOptions = {}): StubClou
     now: overrides.now ?? (() => TEST_TIME),
     minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
     ...(overrides.onDiagnostic ? { onDiagnostic: overrides.onDiagnostic } : undefined),
+    ...(overrides.sleep ? { sleep: overrides.sleep } : undefined),
     forget: () => {
       state.forgottenIdentities += 1;
     },
@@ -149,6 +154,7 @@ function stubPluginFor(fetch: CloudFetch, overrides: StubOptions = {}): StubClou
     provider: STUB_PROVIDER,
     observe: () => pass.run(),
     latest: () => pass.latest(),
+    lastObservationFailure: () => pass.lastFailure(),
     get passes() {
       return state.passes;
     },
@@ -765,4 +771,155 @@ test("runs an advertised control through its documented route, sending no body",
     reason: UNSUPPORTED_BY_OBSERVATION,
   });
   assert.equal(stub.requests.length, observationRequests + 1);
+});
+
+/** A fetch that answers 429 for the first `limited` reads and 200 after, recording every call. */
+function rateLimitedFetch(limited: number, retryAfter?: string) {
+  let answered = 0;
+  return recordingFetch(() => {
+    answered += 1;
+    if (answered <= limited) {
+      return new Response("{}", {
+        status: HTTP_STATUS.TOO_MANY_REQUESTS,
+        headers: retryAfter === undefined ? {} : { "retry-after": retryAfter },
+      });
+    }
+    return jsonResponse({});
+  });
+}
+
+test("a 429 is retried on a doubling wait and the pass completes once the provider answers", async () => {
+  const waits: number[] = [];
+  const stub = rateLimitedFetch(2);
+  const plugin = stubPluginFor(stub.fetch, {
+    sleep: async (ms) => {
+      waits.push(ms);
+    },
+  });
+  plugin.collected = [observation("session-one")];
+
+  const observations = await plugin.observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(stub.requests.length, 3);
+  assert.deepEqual(waits, [
+    RATE_LIMIT_BACKOFF.INITIAL_DELAY_MS,
+    RATE_LIMIT_BACKOFF.INITIAL_DELAY_MS * 2,
+  ]);
+  assert.equal(plugin.lastObservationFailure(), undefined);
+});
+
+test("a Retry-After in seconds is honoured in place of the doubled wait", async () => {
+  const waits: number[] = [];
+  const stub = rateLimitedFetch(1, "3");
+  const plugin = stubPluginFor(stub.fetch, {
+    sleep: async (ms) => {
+      waits.push(ms);
+    },
+  });
+  plugin.collected = [observation("session-one")];
+
+  await plugin.observe();
+
+  assert.deepEqual(waits, [3_000]);
+});
+
+test("a rate limit that outlasts the backoff ends the pass as rate limited and keeps the previous snapshot", async () => {
+  const waits: number[] = [];
+  let limited = 0;
+  const stub = recordingFetch(() =>
+    limited > 0 ? new Response("{}", { status: HTTP_STATUS.TOO_MANY_REQUESTS }) : jsonResponse({}),
+  );
+  const plugin = stubPluginFor(stub.fetch, {
+    sleep: async (ms) => {
+      waits.push(ms);
+    },
+  });
+  plugin.collected = [observation("session-one")];
+  const first = await plugin.observe();
+  assert.equal(first.length, 1);
+
+  limited = 1;
+  const requestsBefore = stub.requests.length;
+  const second = await plugin.observe();
+
+  assert.deepEqual(sessionIds(second), ["session-one"]);
+  assert.equal(plugin.lastObservationFailure(), ADAPTER_FAILURE.RATE_LIMITED);
+  assert.equal(stub.requests.length - requestsBefore, RATE_LIMIT_BACKOFF.MAXIMUM_RETRIES + 1);
+  assert.deepEqual(waits, [500, 1_000, 2_000, 4_000]);
+  assert.equal(plugin.forgottenIdentities, 1);
+});
+
+test("a Retry-After past a single wait's maximum gives the request up at once", async () => {
+  const waits: number[] = [];
+  const stub = rateLimitedFetch(1, String(RATE_LIMIT_BACKOFF.MAXIMUM_DELAY_MS / 1000 + 1));
+  const plugin = stubPluginFor(stub.fetch, {
+    sleep: async (ms) => {
+      waits.push(ms);
+    },
+  });
+  plugin.collected = [observation("session-one")];
+
+  await plugin.observe();
+
+  assert.deepEqual(waits, []);
+  assert.equal(stub.requests.length, 1);
+  assert.equal(plugin.lastObservationFailure(), ADAPTER_FAILURE.RATE_LIMITED);
+});
+
+test("the backoff budget is the pass's, spent by every request in it", () => {
+  const budget = backoffBudget();
+  const wait = (attempt: number) =>
+    rateLimitDelayMs({ attempt, retryAfter: null, budget, now: TEST_TIME });
+  let spent = 0;
+  for (const delay of [wait(0), wait(1), wait(2), wait(3)]) {
+    assert.ok(delay !== undefined);
+    budget.spentMs += delay;
+    spent += delay;
+  }
+  assert.equal(spent, 7_500);
+  // Another leg of the same pass starts its own doubling but draws on the same ceiling.
+  budget.spentMs = RATE_LIMIT_BACKOFF.PASS_CEILING_MS - 100;
+  assert.equal(wait(0), undefined);
+  assert.equal(
+    rateLimitDelayMs({
+      attempt: RATE_LIMIT_BACKOFF.MAXIMUM_RETRIES,
+      retryAfter: null,
+      budget: backoffBudget(),
+      now: TEST_TIME,
+    }),
+    undefined,
+  );
+  const dated = new Date(TEST_TIME + 2_000).toUTCString();
+  assert.equal(
+    rateLimitDelayMs({ attempt: 0, retryAfter: dated, budget: backoffBudget(), now: TEST_TIME }),
+    2_000,
+  );
+  assert.equal(
+    rateLimitDelayMs({ attempt: 0, retryAfter: "soon", budget: backoffBudget(), now: TEST_TIME }),
+    RATE_LIMIT_BACKOFF.INITIAL_DELAY_MS,
+  );
+});
+
+test("a pass with no credential reports it has nothing to observe with, and a whole pass reports no failure", async () => {
+  const stub = stubFetch();
+  const keyed = stubPluginFor(stub.fetch);
+  keyed.collected = [observation("session-one")];
+  await keyed.observe();
+  assert.equal(keyed.lastObservationFailure(), undefined);
+
+  const keyless = stubPluginFor(stub.fetch, { apiKey: undefined });
+  await keyless.observe();
+  assert.equal(keyless.lastObservationFailure(), ADAPTER_FAILURE.UNAVAILABLE);
+
+  let status: number = HTTP_STATUS.OK;
+  const failing = stubPluginFor(stubFetch(() => status).fetch);
+  failing.collected = [observation("session-one")];
+  await failing.observe();
+  status = HTTP_STATUS.SERVER_ERROR;
+  await failing.observe();
+  assert.equal(failing.lastObservationFailure(), ADAPTER_FAILURE.TRANSIENT);
+  status = HTTP_STATUS.UNAUTHORIZED;
+  await failing.observe();
+  assert.equal(failing.lastObservationFailure(), ADAPTER_FAILURE.UNAUTHORIZED);
 });

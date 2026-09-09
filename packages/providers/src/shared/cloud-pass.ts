@@ -4,6 +4,7 @@ import {
   type ProviderSessionObservation,
   SESSION_LOCATION,
   type SessionProvider,
+  type SessionProviderPlugin,
 } from "@sidecar/session";
 import {
   type CloudFetch,
@@ -20,11 +21,19 @@ import {
   type AdapterDiagnosticCallback,
   type AdapterDiagnosticKind,
 } from "./adapter-diagnostics.js";
-import { ADAPTER_FAILURE, AdapterFailure, clearsObservedState } from "./adapter-failure.js";
 import {
+  ADAPTER_FAILURE,
+  AdapterFailure,
+  type AdapterFailureKind,
+  clearsObservedState,
+} from "./adapter-failure.js";
+import {
+  type BackoffBudget,
+  backoffBudget,
   CLOUD_ADAPTER_DEFAULTS,
   type CloudRequest,
   type CloudWriteRoute,
+  rateLimitDelayMs,
   requestDeadlineMs,
 } from "./cloud-wire.js";
 
@@ -90,6 +99,8 @@ export interface CloudPassInput {
   baseUrl?: string;
   fetch?: CloudFetch;
   now?: () => number;
+  /** How a 429's wait is spent; injected in tests, a timer otherwise. */
+  sleep?: (ms: number) => Promise<void>;
   minimumRefreshIntervalMs?: number;
   /**
    * The headers every request carries besides the credential, for a provider
@@ -116,6 +127,15 @@ export interface CloudPassInput {
 }
 
 /**
+ * A cloud provider's plugin says one thing more than the plugin contract asks:
+ * how its latest pass ended. A host that keeps the roster between passes
+ * needs it, and nothing else does.
+ */
+export interface CloudSessionPlugin extends SessionProviderPlugin {
+  lastObservationFailure(): AdapterFailureKind | undefined;
+}
+
+/**
  * The shared half of every cloud provider: credential handling, its own
  * refresh cadence, the failure rules that decide whether a snapshot survives,
  * bounded read-only requests, and the one authenticated write. An adapter
@@ -125,6 +145,13 @@ export interface CloudPassInput {
 export interface CloudPass {
   run(): Promise<readonly ProviderSessionObservation[]>;
   latest(): readonly ProviderSessionObservation[];
+  /**
+   * How the latest `run` ended, or nothing for one that read the whole roster.
+   * `latest()` answers the same either way — the previous snapshot stands
+   * through a transient failure — so a caller writing the roster down has to
+   * ask this to tell a roster read whole from one merely still standing.
+   */
+  lastFailure(): AdapterFailureKind | undefined;
   /** One authenticated write; answers what became of it, never throws. */
   write(apiKey: string, route: CloudWriteRoute, subject?: WriteSubject): Promise<CloudWriteOutcome>;
   credentialBoundRead: CredentialBoundRead;
@@ -134,6 +161,9 @@ export interface CloudPass {
 }
 
 const defaultFetch: CloudFetch = (url, init) => fetch(url, init);
+
+const defaultSleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
 
 function resolveBaseUrl(input: CloudPassInput): string {
   const fromEnvironment = input.baseUrlEnvironmentVariable
@@ -166,6 +196,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
   const provider = input.provider;
   const baseUrl = resolveBaseUrl(input);
   const performFetch = input.fetch ?? defaultFetch;
+  const sleep = input.sleep ?? defaultSleep;
   const now = input.now ?? Date.now;
   const { minimumRefreshIntervalMs } = resolveOptions(
     input,
@@ -184,6 +215,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
   let credentialEpoch = 0;
   let observations: readonly ProviderSessionObservation[] = [];
   let lastAttemptAt = Number.NEGATIVE_INFINITY;
+  let lastFailure: AdapterFailureKind | undefined;
   let collectPass = 0;
 
   /**
@@ -217,21 +249,15 @@ export function cloudPass(input: CloudPassInput): CloudPass {
     return composed.href;
   };
 
-  const requestJson = async (
+  const readOnce = async (
     apiKey: string,
     segments: readonly string[],
-    query: Readonly<Record<string, string>> = {},
-    options: Readonly<{ timeoutMs?: number; document?: string }> = {},
-  ): Promise<WireRecord> => {
-    const name = provider.displayName;
-    const timeoutMs = requestDeadlineMs(options.timeoutMs);
-    // A read document rides as a POST because that is how its endpoint is
-    // documented, not because it writes: the body carries the document and
-    // nothing else, so the request can still express nothing but a read.
-    const document = options.document;
-    let response: Response;
+    query: Readonly<Record<string, string>>,
+    document: string | undefined,
+    timeoutMs: number,
+  ): Promise<Response> => {
     try {
-      response = await performFetch(url(segments, query), {
+      return await performFetch(url(segments, query), {
         method: document === undefined ? HTTP_METHOD.GET : HTTP_METHOD.POST,
         headers: {
           ...requestHeaders,
@@ -244,7 +270,41 @@ export function cloudPass(input: CloudPassInput): CloudPass {
         signal: AbortSignal.timeout(timeoutMs),
       });
     } catch {
-      throw new AdapterFailure(ADAPTER_FAILURE.TRANSIENT, `${name} request failed`);
+      throw new AdapterFailure(ADAPTER_FAILURE.TRANSIENT, `${provider.displayName} request failed`);
+    }
+  };
+
+  const requestJson = async (
+    apiKey: string,
+    budget: BackoffBudget,
+    segments: readonly string[],
+    query: Readonly<Record<string, string>> = {},
+    options: Readonly<{ timeoutMs?: number; document?: string }> = {},
+  ): Promise<WireRecord> => {
+    const name = provider.displayName;
+    const timeoutMs = requestDeadlineMs(options.timeoutMs);
+    // A read document rides as a POST because that is how its endpoint is
+    // documented, not because it writes: the body carries the document and
+    // nothing else, so the request can still express nothing but a read.
+    const document = options.document;
+    let response = await readOnce(apiKey, segments, query, document, timeoutMs);
+    // A 429 is retried on a doubling wait out of the pass's one budget. Once
+    // that is spent the pass is rate limited rather than merely failed: every
+    // further read would meet the same door, so the roster stops here whole
+    // as it was rather than continuing as a partial one.
+    for (let attempt = 0; response.status === HTTP_STATUS.TOO_MANY_REQUESTS; attempt += 1) {
+      const delay = rateLimitDelayMs({
+        attempt,
+        retryAfter: response.headers.get("retry-after"),
+        budget,
+        now: now(),
+      });
+      if (delay === undefined) {
+        throw new AdapterFailure(ADAPTER_FAILURE.RATE_LIMITED, `${name} is rate limiting`);
+      }
+      budget.spentMs += delay;
+      await sleep(delay);
+      response = await readOnce(apiKey, segments, query, document, timeoutMs);
     }
 
     if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
@@ -295,9 +355,10 @@ export function cloudPass(input: CloudPassInput): CloudPass {
    * it over state that belongs to the new credential.
    */
   const requestForPass = (pass: number, apiKey: string): CloudRequest => {
+    const budget = backoffBudget();
     return async (segments, query, options) => {
       assertPassCurrent(pass);
-      const body = await requestJson(apiKey, segments, query, options);
+      const body = await requestJson(apiKey, budget, segments, query, options);
       assertPassCurrent(pass);
       return body;
     };
@@ -309,6 +370,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
       if (!apiKey) {
         credential = undefined;
         forgetObservedState();
+        lastFailure = ADAPTER_FAILURE.UNAVAILABLE;
         return observations;
       }
 
@@ -330,15 +392,20 @@ export function cloudPass(input: CloudPassInput): CloudPass {
       const pass = ++collectPass;
       try {
         const collected = await input.collect(requestForPass(pass, apiKey), attemptedAt);
-        if (pass === collectPass) observations = cloudObservations(collected);
+        if (pass === collectPass) {
+          observations = cloudObservations(collected);
+          lastFailure = undefined;
+        }
       } catch (error) {
         // A rejected credential clears observed state; a transient network or
-        // server failure keeps the previous snapshot until the next attempt. A
-        // superseded pass reports on a credential that no longer stands, so
-        // its rejection says nothing about the current one.
+        // server failure, or a rate limit that outlasted its backoff, keeps
+        // the previous snapshot until the next attempt. A superseded pass
+        // reports on a credential that no longer stands, so its rejection
+        // says nothing about the current one.
         if (pass !== collectPass) return observations;
         if (error instanceof AdapterFailure) {
           if (clearsObservedState(error.failure)) forgetObservedState();
+          lastFailure = error.failure;
           return observations;
         }
         // Anything else is a bug in this pass — a TypeError thrown by an
@@ -354,6 +421,8 @@ export function cloudPass(input: CloudPassInput): CloudPass {
     },
 
     latest: () => observations,
+
+    lastFailure: () => lastFailure,
 
     readApiKey,
 
@@ -470,7 +539,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
           `${provider.displayName} has no credential to read with`,
         );
       }
-      const body = await requestJson(apiKey, segments, query, options);
+      const body = await requestJson(apiKey, backoffBudget(), segments, query, options);
       if (epoch !== credentialEpoch) {
         throw new AdapterFailure(
           ADAPTER_FAILURE.TRANSIENT,

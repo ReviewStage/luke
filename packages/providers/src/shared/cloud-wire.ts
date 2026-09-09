@@ -27,6 +27,58 @@ export const CLOUD_ADAPTER_DEFAULTS = {
 } as const;
 
 /**
+ * How a read answered 429 is retried. Each wait doubles from the first, a
+ * `Retry-After` the provider names is honoured in place of the doubled wait,
+ * and no single wait grows past the maximum. The ceiling is the pass's, shared
+ * by every request in it, so a fan-out rate limited on every leg spends one
+ * budget rather than one per leg and gives the pass up as rate limited.
+ */
+export const RATE_LIMIT_BACKOFF = {
+  INITIAL_DELAY_MS: 500,
+  MAXIMUM_DELAY_MS: 8 * 1000,
+  PASS_CEILING_MS: 20 * 1000,
+  MAXIMUM_RETRIES: 4,
+} as const;
+
+/** What one pass has spent waiting on 429s so far, shared by all of its requests. */
+export interface BackoffBudget {
+  spentMs: number;
+}
+
+export function backoffBudget(): BackoffBudget {
+  return { spentMs: 0 };
+}
+
+/**
+ * The wait before the next attempt, or nothing when the request should give
+ * up: past the retry count, past a single wait's maximum, or past what the
+ * pass's ceiling still allows. A `Retry-After` in seconds is taken as the
+ * provider's own word; an HTTP-date is taken against `now`; anything else is
+ * ignored in favour of the doubled wait.
+ */
+export function rateLimitDelayMs(input: {
+  attempt: number;
+  retryAfter: string | null;
+  budget: BackoffBudget;
+  now: number;
+}): number | undefined {
+  if (input.attempt >= RATE_LIMIT_BACKOFF.MAXIMUM_RETRIES) return undefined;
+  const doubled = RATE_LIMIT_BACKOFF.INITIAL_DELAY_MS * 2 ** input.attempt;
+  const delay = retryAfterMs(input.retryAfter, input.now) ?? doubled;
+  if (delay > RATE_LIMIT_BACKOFF.MAXIMUM_DELAY_MS) return undefined;
+  if (input.budget.spentMs + delay > RATE_LIMIT_BACKOFF.PASS_CEILING_MS) return undefined;
+  return delay;
+}
+
+function retryAfterMs(header: string | null, now: number): number | undefined {
+  const value = header?.trim();
+  if (!value) return undefined;
+  if (/^\d+$/.test(value)) return Number(value) * 1000;
+  const at = Date.parse(value);
+  return Number.isFinite(at) ? Math.max(0, at - now) : undefined;
+}
+
+/**
  * The only way an adapter reaches its provider while observing. It
  * authenticates, bounds, and parses the request, and it can express nothing
  * but a read, so no observation pass built on it can change provider state.
