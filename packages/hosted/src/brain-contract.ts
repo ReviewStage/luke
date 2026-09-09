@@ -391,3 +391,49 @@ export function hostedBrainCountTokensAnswerFromWire(
 ): HostedBrainCountTokensAnswer | undefined {
   return hostedBrainCountTokensAnswerSchema.parse(value);
 }
+
+/**
+ * Who opened the brain turn a request runs. It is derived by the desktop's
+ * main process from how the turn was invoked — an ask the developer typed or
+ * spoke against a wake, a roster look, or a hold release — and never from
+ * anything a model wrote or a transcript said. It fixes the toolset the turn
+ * is offered: a developer turn may act and never announces, an observation
+ * turn may only read and announce. It lives here rather than in the brain
+ * package so the hosted service can read it without a hosted → brain edge.
+ */
+export const BRAIN_TURN_AUTHORITY = {
+  DEVELOPER: "developer",
+  OBSERVATION: "observation",
+} as const;
+
+export type BrainTurnAuthority = (typeof BRAIN_TURN_AUTHORITY)[keyof typeof BRAIN_TURN_AUTHORITY];
+
+/** An absent or unknown authority is never a developer's. */
+export const brainTurnAuthoritySchema: Schema<BrainTurnAuthority> = s.enumOf(
+  Object.values(BRAIN_TURN_AUTHORITY),
+);
+
+/**
+ * What one turn of the first contract carries up: the input array as the
+ * desktop holds it, every item one of the Responses forms this build replays
+ * (see `responses-input.ts`), and the authority the turn runs under. Nothing
+ * else travels — not a model, instructions, tools, a store flag, or an output
+ * budget — because the service's build fixes every one of them from the
+ * authority, so a request cannot widen what the brain may do, only what it is
+ * shown. A request naming no authority, or carrying any field beyond these
+ * two, is refused whole rather than read as a developer's.
+ */
+export interface HostedBrainRequest {
+  authority: BrainTurnAuthority;
+  input: readonly WireRecord[];
+}
+
+/**
+ * The first contract's request. The desktop runs the same declaration over
+ * the body it is about to send, so an input the service would refuse never
+ * spends a call.
+ */
+export const hostedBrainRequestSchema: Schema<HostedBrainRequest> = s.record({
+  authority: brainTurnAuthoritySchema,
+  input: inputSchema,
+});
