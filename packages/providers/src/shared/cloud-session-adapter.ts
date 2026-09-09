@@ -43,6 +43,7 @@ import {
   type AdapterDiagnosticCallback,
   type AdapterDiagnosticKind,
 } from "./adapter-diagnostics.js";
+import { ADAPTER_FAILURE, AdapterFailure, clearsObservedState } from "./adapter-failure.js";
 
 const GIT_SUFFIX = ".git";
 
@@ -70,11 +71,6 @@ const DEFAULT_REQUEST_HEADERS = {
  */
 const READ_DOCUMENT_FIELD = "query";
 
-export const CLOUD_FAILURE = {
-  UNAUTHORIZED: "unauthorized",
-  TRANSIENT: "transient",
-} as const;
-
 /** What a write acts on, as a refusal should name it. */
 const WRITE_SUBJECT = {
   SESSION: "session",
@@ -83,8 +79,6 @@ const WRITE_SUBJECT = {
 } as const;
 
 type WriteSubject = (typeof WRITE_SUBJECT)[keyof typeof WRITE_SUBJECT];
-
-export type CloudFailure = (typeof CLOUD_FAILURE)[keyof typeof CLOUD_FAILURE];
 
 /**
  * Cloud-only request bounds. The freshness bound in `OBSERVATION_WINDOW` is
@@ -104,16 +98,6 @@ export const CLOUD_ADAPTER_DEFAULTS = {
 
 export type { CloudFetch } from "@sidecar/wire";
 
-export class CloudRequestError extends Error {
-  readonly failure: CloudFailure;
-
-  constructor(failure: CloudFailure, message: string) {
-    super(message);
-    this.name = "CloudRequestError";
-    this.failure = failure;
-  }
-}
-
 export interface CloudAdapterOptions {
   /** Resolves the credential at observation time so a settings change applies immediately. */
   readApiKey: () => Promise<string | undefined>;
@@ -125,7 +109,7 @@ export interface CloudAdapterOptions {
    * Called when an observation pass fails for a reason other than a network
    * or credential fault — a TypeError in a subclass's parsing, for example —
    * or when a subclass reports a problem of its own, named by the kind.
-   * Transient and unauthorized {@link CloudRequestError} never reach it.
+   * Transient and unauthorized {@link AdapterFailure} never reach it.
    */
   onDiagnostic?: AdapterDiagnosticCallback;
 }
@@ -339,8 +323,8 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
       if (pass !== this.#collectPass) {
         return this.#observations;
       }
-      if (error instanceof CloudRequestError) {
-        if (error.failure === CLOUD_FAILURE.UNAUTHORIZED) this.#forgetObservedState();
+      if (error instanceof AdapterFailure) {
+        if (clearsObservedState(error.failure)) this.#forgetObservedState();
         return this.#observations;
       }
       // Anything else is a bug in this pass — a TypeError thrown by a
@@ -853,7 +837,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     try {
       return await operation();
     } catch (error) {
-      if (error instanceof CloudRequestError && error.failure === CLOUD_FAILURE.UNAUTHORIZED) {
+      if (error instanceof AdapterFailure && error.failure === ADAPTER_FAILURE.UNAUTHORIZED) {
         throw error;
       }
       return undefined;
@@ -888,15 +872,15 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     const epoch = this.#credentialEpoch;
     const apiKey = this.#credential;
     if (!apiKey) {
-      throw new CloudRequestError(
-        CLOUD_FAILURE.TRANSIENT,
+      throw new AdapterFailure(
+        ADAPTER_FAILURE.TRANSIENT,
         `${this.provider.displayName} has no credential to read with`,
       );
     }
     const body = await this.#requestJson(apiKey, segments, query, options);
     if (epoch !== this.#credentialEpoch) {
-      throw new CloudRequestError(
-        CLOUD_FAILURE.TRANSIENT,
+      throw new AdapterFailure(
+        ADAPTER_FAILURE.TRANSIENT,
         `${this.provider.displayName} read outlived its credential`,
       );
     }
@@ -920,8 +904,8 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
 
   #assertPassCurrent(pass: number): void {
     if (pass !== this.#collectPass) {
-      throw new CloudRequestError(
-        CLOUD_FAILURE.TRANSIENT,
+      throw new AdapterFailure(
+        ADAPTER_FAILURE.TRANSIENT,
         `${this.provider.displayName} pass was superseded`,
       );
     }
@@ -1080,18 +1064,18 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
         signal: AbortSignal.timeout(timeoutMs),
       });
     } catch {
-      throw new CloudRequestError(CLOUD_FAILURE.TRANSIENT, `${name} request failed`);
+      throw new AdapterFailure(ADAPTER_FAILURE.TRANSIENT, `${name} request failed`);
     }
 
     if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
-      throw new CloudRequestError(
-        CLOUD_FAILURE.UNAUTHORIZED,
+      throw new AdapterFailure(
+        ADAPTER_FAILURE.UNAUTHORIZED,
         `${name} rejected the configured API key`,
       );
     }
     if (!response.ok) {
-      throw new CloudRequestError(
-        CLOUD_FAILURE.TRANSIENT,
+      throw new AdapterFailure(
+        ADAPTER_FAILURE.TRANSIENT,
         `${name} responded with status ${response.status}`,
       );
     }
@@ -1100,15 +1084,15 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     try {
       body = await response.json();
     } catch {
-      throw new CloudRequestError(
-        CLOUD_FAILURE.TRANSIENT,
+      throw new AdapterFailure(
+        ADAPTER_FAILURE.TRANSIENT,
         `${name} returned an unreadable response`,
       );
     }
     const bodyRecord = wireRecord(unparsedWire(body));
     if (!bodyRecord) {
-      throw new CloudRequestError(
-        CLOUD_FAILURE.TRANSIENT,
+      throw new AdapterFailure(
+        ADAPTER_FAILURE.TRANSIENT,
         `${name} returned an unexpected response`,
       );
     }

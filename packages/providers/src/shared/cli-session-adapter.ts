@@ -22,30 +22,7 @@ import {
   wireRecord,
 } from "@sidecar/wire";
 import { ADAPTER_DIAGNOSTIC_KIND, type AdapterDiagnosticCallback } from "./adapter-diagnostics.js";
-
-/**
- * How a CLI-observed provider fails. Unavailable means there is nothing to
- * observe with — the binary is not installed, or its login probe answered no —
- * which is the CLI analogue of a missing API key and clears observed state the
- * same way. Transient covers a command that ran and failed, which keeps the
- * last snapshot until the next attempt the way a network blip does.
- */
-export const CLI_FAILURE = {
-  UNAVAILABLE: "unavailable",
-  TRANSIENT: "transient",
-} as const;
-
-export type CliFailure = (typeof CLI_FAILURE)[keyof typeof CLI_FAILURE];
-
-export class CliCommandError extends Error {
-  readonly failure: CliFailure;
-
-  constructor(failure: CliFailure, message: string) {
-    super(message);
-    this.name = "CliCommandError";
-    this.failure = failure;
-  }
-}
+import { ADAPTER_FAILURE, AdapterFailure, clearsObservedState } from "./adapter-failure.js";
 
 export const CLI_ADAPTER_DEFAULTS = {
   MINIMUM_REFRESH_INTERVAL_MS: 15 * 1000,
@@ -94,10 +71,10 @@ export const defaultCliRun: CliRun = async (binary, argv, options) => {
     });
     return { exitCode: result.exitCode, stdout: result.stdout };
   } catch (error) {
-    throw new CliCommandError(
+    throw new AdapterFailure(
       error instanceof InvocationError && error.failure === INVOCATION_FAILURE.UNAVAILABLE
-        ? CLI_FAILURE.UNAVAILABLE
-        : CLI_FAILURE.TRANSIENT,
+        ? ADAPTER_FAILURE.UNAVAILABLE
+        : ADAPTER_FAILURE.TRANSIENT,
       `${binary} could not be run`,
     );
   }
@@ -203,10 +180,12 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
     } catch (error) {
       // A superseded pass says nothing about the login that now stands.
       if (pass !== this.#collectPass) return this.#observations;
-      if (error instanceof CliCommandError) {
+      if (error instanceof AdapterFailure) {
         // A binary gone mid-pass clears observed state; a command that ran and
-        // failed keeps the previous snapshot until the next attempt.
-        if (error.failure === CLI_FAILURE.UNAVAILABLE) {
+        // failed keeps the previous snapshot until the next attempt. Nothing
+        // here raises `unauthorized`: the credential never passes through
+        // Luke, so an absent binary is the only way a login stops standing.
+        if (clearsObservedState(error.failure)) {
           this.#connection = CLI_CONNECTION.CLI_MISSING;
           this.#forgetObservedState(pass);
         }
@@ -327,7 +306,7 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
       // A probe that cannot run at all is a machine with nothing to observe;
       // a probe that ran out of time says nothing about the login either way,
       // so the pass keeps its snapshot and asks again next time.
-      if (error instanceof CliCommandError && error.failure === CLI_FAILURE.UNAVAILABLE) {
+      if (error instanceof AdapterFailure && clearsObservedState(error.failure)) {
         return CLI_CONNECTION.CLI_MISSING;
       }
       throw error;
@@ -349,17 +328,17 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
       this.#assertPassCurrent(pass);
       const name = this.provider.displayName;
       if (result.exitCode !== 0) {
-        throw new CliCommandError(CLI_FAILURE.TRANSIENT, `${name} CLI answered with a failure`);
+        throw new AdapterFailure(ADAPTER_FAILURE.TRANSIENT, `${name} CLI answered with a failure`);
       }
       let body: WireBoundaryInput;
       try {
         body = JSON.parse(result.stdout);
       } catch {
-        throw new CliCommandError(CLI_FAILURE.TRANSIENT, `${name} CLI answered unreadably`);
+        throw new AdapterFailure(ADAPTER_FAILURE.TRANSIENT, `${name} CLI answered unreadably`);
       }
       const bodyRecord = wireRecord(unparsedWire(body));
       if (!bodyRecord) {
-        throw new CliCommandError(CLI_FAILURE.TRANSIENT, `${name} CLI answered unexpectedly`);
+        throw new AdapterFailure(ADAPTER_FAILURE.TRANSIENT, `${name} CLI answered unexpectedly`);
       }
       return bodyRecord;
     };
@@ -367,8 +346,8 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
 
   #assertPassCurrent(pass: number): void {
     if (pass !== this.#collectPass) {
-      throw new CliCommandError(
-        CLI_FAILURE.TRANSIENT,
+      throw new AdapterFailure(
+        ADAPTER_FAILURE.TRANSIENT,
         `${this.provider.displayName} pass was superseded`,
       );
     }
