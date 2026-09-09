@@ -53,6 +53,7 @@ import {
   type UnknownActionResult,
   type WireRecord,
 } from "@sidecar/wire";
+import { HOST_NODE_OPEN_KIND, type HostNodeOpenKind } from "./node-capabilities.js";
 import type { SettingsStore } from "./settings-store.js";
 
 /**
@@ -75,7 +76,13 @@ function unknownOpen(error: ExternalOpenAnswerLostError): SessionOpenResult {
  */
 export interface SessionActionPerformerDependencies {
   sessionRegistry: SessionRoster;
-  openExternal: (url: string) => Promise<void>;
+  /**
+   * Hands an address to the operating system through the native node, told
+   * what the address is: a row's press has already stood its panel down, and
+   * an open asked of Luke has no press behind it, so the client's windows
+   * owe the two different things.
+   */
+  openExternal: (url: string, kind: HostNodeOpenKind) => Promise<void>;
   pluginFor: (providerId: string) => SessionProviderPlugin | undefined;
   sendsNetwork: boolean;
   settingsStore: Pick<SettingsStore, "get">;
@@ -244,6 +251,7 @@ export function createSessionActionPerformer(
     // go are different answers, and only the second says what to try instead.
     absentAddressReason: string,
     failureReason: string,
+    kind: HostNodeOpenKind,
   ): Promise<SessionOpenResult> => {
     const observed = sessionRegistry.get(identity) !== undefined;
     const url = observed ? address(identity) : undefined;
@@ -254,7 +262,7 @@ export function createSessionActionPerformer(
       };
     }
     try {
-      await openExternal(url);
+      await openExternal(url, kind);
     } catch (error) {
       if (error instanceof ExternalOpenAnswerLostError) return unknownOpen(error);
       return { status: ACTION_RESULT_STATUS.REJECTED, reason: failureReason };
@@ -263,17 +271,19 @@ export function createSessionActionPerformer(
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };
 
-  const openSession = (identity: SessionIdentity) =>
+  const openSession = (identity: SessionIdentity, kind: HostNodeOpenKind) =>
     openAddress(
       identity,
       (target) => pressedLink(sessionRegistry.get(target)?.detail.link),
       REFUSAL.NO_ADDRESS,
       REFUSAL.OPEN_FAILED,
+      kind,
     );
 
   const openSessionApplication = async (
     identity: SessionIdentity,
     applicationId: SessionApplicationId,
+    kind: HostNodeOpenKind,
   ): Promise<SessionOpenResult> => {
     const session = sessionRegistry.get(identity);
     if (!session) return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_SESSION };
@@ -292,7 +302,7 @@ export function createSessionActionPerformer(
     const url = pressedLink(application.link);
     if (!url) return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_APP_ADDRESS };
     try {
-      await openExternal(url);
+      await openExternal(url, kind);
     } catch (error) {
       if (error instanceof ExternalOpenAnswerLostError) return unknownOpen(error);
       return { status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSAL.OPEN_APP_FAILED };
@@ -301,12 +311,15 @@ export function createSessionActionPerformer(
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };
 
+  // The change is a web page beside the chat, not the chat itself: its row
+  // press leaves the panel up, and so does the same open asked of Luke.
   const openSessionChange = (identity: SessionIdentity) =>
     openAddress(
       identity,
       (target) => sessionRegistry.get(target)?.detail.change,
       REFUSAL.NO_CHANGE,
       REFUSAL.OPEN_CHANGE_FAILED,
+      HOST_NODE_OPEN_KIND.ADDRESS,
     );
 
   // A message is handed to the session's own provider, through the adapter
@@ -581,10 +594,16 @@ export function createSessionActionPerformer(
     dispatchByKind(action, {
       [ACTION_KIND.MESSAGE]: sendMessage,
       [ACTION_KIND.CONTROL]: executeControl,
+      // An open the brain carries was asked of Luke, never pressed on a row,
+      // so the node is told a panel still stands over the chat coming forward.
       [ACTION_KIND.OPEN]: async (open): Promise<WireRecord> =>
         open.applicationId
-          ? openSessionApplication(open.identity, open.applicationId)
-          : openSession(open.identity),
+          ? openSessionApplication(
+              open.identity,
+              open.applicationId,
+              HOST_NODE_OPEN_KIND.ASKED_SESSION,
+            )
+          : openSession(open.identity, HOST_NODE_OPEN_KIND.ASKED_SESSION),
       [ACTION_KIND.CREATE_WORKSPACE]: async (creation): Promise<WireRecord> =>
         createWorkspace(creation, guard),
       [ACTION_KIND.ADD_AGENT]: (spawn) => addWorkspaceAgent(spawn, guard),
@@ -599,8 +618,11 @@ export function createSessionActionPerformer(
       }
       return performSessionAction(action, guard);
     },
-    openSession,
-    openSessionApplication,
+    // The two a row press reaches: the pressing panel has stood itself down
+    // already, so the node is handed an address and nothing more.
+    openSession: (identity) => openSession(identity, HOST_NODE_OPEN_KIND.ADDRESS),
+    openSessionApplication: (identity, applicationId) =>
+      openSessionApplication(identity, applicationId, HOST_NODE_OPEN_KIND.ADDRESS),
     openSessionChange,
   };
 }

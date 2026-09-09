@@ -13,7 +13,10 @@ export const HOST_OPERATOR_CLIENT_ID = "operator";
 export const HOST_NATIVE_NODE_ID = "native";
 
 export const HOST_NODE_CAPABILITY = {
-  /** Hands an address to the operating system, as a row press does. */
+  /**
+   * Hands an address to the operating system, as a row press does. The
+   * invocation says what the address is, in `HOST_NODE_OPEN_KIND`'s words.
+   */
   OPEN_EXTERNAL: "os.openExternal",
   /** Carries an app action only the panel can perform and answers what became of it. */
   PANEL_APP_ACTION: "panel.performAppAction",
@@ -31,3 +34,31 @@ export type HostNodeCapability = (typeof HOST_NODE_CAPABILITY)[keyof typeof HOST
 
 export const HOST_NODE_CAPABILITY_LIST: readonly HostNodeCapability[] =
   Object.values(HOST_NODE_CAPABILITY);
+
+/**
+ * What the address handed to `OPEN_EXTERNAL` is. The host says only that; the
+ * windows are the client's, so what the client does with its own behind the
+ * open is decided where the windows are.
+ */
+export const HOST_NODE_OPEN_KIND = {
+  /**
+   * An address with nothing owed behind it: a row's own press, whose panel
+   * stood itself down at the press; a consent page; a manager's link.
+   */
+  ADDRESS: "address",
+  /**
+   * A session's address, or one of its app routes, opened at an ask of Luke
+   * in conversation. No row was pressed, so no panel stood itself down, and
+   * Luke floats above the very chat he was asked to bring forward until the
+   * client stands its panels down behind the open.
+   */
+  ASKED_SESSION: "askedSession",
+} as const;
+
+export type HostNodeOpenKind = (typeof HOST_NODE_OPEN_KIND)[keyof typeof HOST_NODE_OPEN_KIND];
+
+const HOST_NODE_OPEN_KIND_SET: ReadonlySet<string> = new Set(Object.values(HOST_NODE_OPEN_KIND));
+
+export function isHostNodeOpenKind(value: string): value is HostNodeOpenKind {
+  return HOST_NODE_OPEN_KIND_SET.has(value);
+}

@@ -2,7 +2,11 @@ import path from "node:path";
 import type { StorePort } from "@sidecar/brain/store";
 import { type GatewayEventKind, NODE_CAPABILITY_STATUS, NodeRegistry } from "@sidecar/gateway";
 import type { WireValue } from "@sidecar/wire";
-import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
+import {
+  HOST_NODE_CAPABILITY,
+  HOST_NODE_OPEN_KIND,
+  type HostNodeOpenKind,
+} from "./node-capabilities.js";
 import type { RunMode } from "./run-mode.js";
 import type { GatewayService } from "./service.js";
 import { NodeAnswerLostError } from "./session-action-performer.js";
@@ -70,8 +74,10 @@ export interface HostKernel {
    * connected is a refusal the action reports as not done; a node that took the
    * ask and vanished before answering is the lost-answer error, which every
    * caller that journals an action records as unknown rather than failed.
+   * The kind is what the address is, an address unless a caller says
+   * otherwise; the node decides from it what its own windows owe the open.
    */
-  openExternalThroughNode: (url: string) => Promise<void>;
+  openExternalThroughNode: (url: string, kind?: HostNodeOpenKind) => Promise<void>;
   reportOpenFailure: (error: Error) => void;
   agentWorkspacePath: () => string;
   agentSkillsPath: () => string;
@@ -116,8 +122,8 @@ export function createHostKernel(options: HostSeams): HostKernel {
     setService: (next) => {
       service = next;
     },
-    openExternalThroughNode: async (url) => {
-      const result = await nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, { url });
+    openExternalThroughNode: async (url, kind = HOST_NODE_OPEN_KIND.ADDRESS) => {
+      const result = await nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, { url, kind });
       if (result.status === NODE_CAPABILITY_STATUS.OK) return;
       if (result.status === NODE_CAPABILITY_STATUS.UNKNOWN) {
         throw new NodeAnswerLostError(result.reason);

@@ -15,6 +15,8 @@ import {
   HOST_NATIVE_NODE_ID,
   HOST_NODE_CAPABILITY,
   HOST_NODE_CAPABILITY_LIST,
+  type HostNodeOpenKind,
+  isHostNodeOpenKind,
 } from "@sidecar/host";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
 import { type ConversationEntry, storedConversationEntry } from "@sidecar/session";
@@ -46,7 +48,7 @@ export interface GatewayWiringDependencies {
   state: AppStateStore;
   /** This machine's native capabilities, performed here at the host's ask. */
   node: {
-    openExternal: (url: string) => Promise<void>;
+    openExternal: (url: string, kind: HostNodeOpenKind) => Promise<void>;
     performAppAction: (action: BrainAppActionRequest["action"]) => Promise<WireRecord>;
     runAppleCalendarHelper: (
       helperArguments: readonly string[],
@@ -130,8 +132,9 @@ export function wireGateway(dependencies: GatewayWiringDependencies): GatewayWir
 
   /**
    * The capabilities this process performs at the host's ask. Each is
-   * validated here before anything native runs — the address a string, the
-   * act the shape the panel takes, the helper command one the build knows —
+   * validated here before anything native runs — the address a string and
+   * its kind one the build names, the act the shape the panel takes, the
+   * helper command one the build knows —
    * and each answers the host's own result vocabulary, so a refusal is typed
    * and never a throw that the wire would have to guess at.
    */
@@ -143,8 +146,12 @@ export function wireGateway(dependencies: GatewayWiringDependencies): GatewayWir
     });
     switch (invocation.capability) {
       case HOST_NODE_CAPABILITY.OPEN_EXTERNAL: {
-        if (!isWireString(invocation.params.url)) return failed("open needs a url");
-        await dependencies.node.openExternal(invocation.params.url);
+        const { url, kind } = invocation.params;
+        if (!isWireString(url)) return failed("open needs a url");
+        if (!isWireString(kind) || !isHostNodeOpenKind(kind)) {
+          return failed("open needs a kind this build names");
+        }
+        await dependencies.node.openExternal(url, kind);
         return { status: NODE_CAPABILITY_STATUS.OK, value: undefined };
       }
       case HOST_NODE_CAPABILITY.PANEL_APP_ACTION: {

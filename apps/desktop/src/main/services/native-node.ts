@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
+import type { HostNodeOpenKind } from "@sidecar/host";
 import { ACTION_RESULT_STATUS, type LateRef, lateRef, type WireRecord } from "@sidecar/wire";
 import { systemPreferences } from "electron";
 import { channels } from "#shared/bridge";
@@ -21,6 +22,7 @@ import {
   type OutputVolumeWatch,
 } from "../native/output-volume";
 import type { DesktopConfig } from "./desktop-config";
+import { createNodeOpen } from "./node-open";
 import type { DesktopService } from "./service";
 
 /**
@@ -34,11 +36,17 @@ const BRAIN_APP_ACTION_TIMEOUT_MS = 10_000;
 export interface NativeNodeLinks {
   /** The one window an app act is carried to; none open is a refusal, not a wait. */
   sendToPrimaryPanel: (channel: string, payload: BrainAppActionRequest) => boolean;
+  /**
+   * Every expanded panel back to its capsule, owed by a session opened at an
+   * ask of Luke: the press its row would have taken stood no panel down, and
+   * Luke floats above the very chat he was asked to bring forward.
+   */
+  standPanelsDown: () => void;
 }
 
 /** The capabilities this node offers the host by name; a capability no node offers is a typed refusal there. */
 export interface NativeNodeCapabilities {
-  openExternal: (url: string) => Promise<void>;
+  openExternal: (url: string, kind: HostNodeOpenKind) => Promise<void>;
   performAppAction: (action: BrainAppActionRequest["action"]) => Promise<WireRecord>;
   runAppleCalendarHelper: (
     helperArguments: readonly string[],
@@ -144,7 +152,11 @@ export function createNativeNode(dependencies: NativeNodeDependencies): NativeNo
     name: "native",
     link: (next) => links.set(next),
     capabilities: {
-      openExternal: config.openExternal,
+      openExternal: createNodeOpen({
+        openExternal: config.openExternal,
+        fixtureMode: config.launch.fixtureMode,
+        standPanelsDown: () => links.get().standPanelsDown(),
+      }),
       performAppAction,
       runAppleCalendarHelper,
     },

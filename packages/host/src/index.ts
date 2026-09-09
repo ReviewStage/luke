@@ -27,7 +27,10 @@ export {
   HOST_NATIVE_NODE_ID,
   HOST_NODE_CAPABILITY,
   HOST_NODE_CAPABILITY_LIST,
+  HOST_NODE_OPEN_KIND,
   HOST_OPERATOR_CLIENT_ID,
+  type HostNodeOpenKind,
+  isHostNodeOpenKind,
 } from "./node-capabilities.js";
 export { onboardingStateFile } from "./onboarding-state.js";
 export { createGatewayOperator, type GatewayOperator } from "./operator.js";

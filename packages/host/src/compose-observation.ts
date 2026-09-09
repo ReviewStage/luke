@@ -389,7 +389,7 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
 
   const sessionActions = createSessionActionPerformer({
     sessionRegistry,
-    openExternal: (url) => kernel.openExternalThroughNode(url),
+    openExternal: (url, kind) => kernel.openExternalThroughNode(url, kind),
     pluginFor,
     sendsNetwork: runMode.sendsNetwork,
     settingsStore,

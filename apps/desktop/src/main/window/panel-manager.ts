@@ -209,6 +209,20 @@ export class PanelManager {
   }
 
   /**
+   * Every expanded panel back to its capsule, the way a row press stands its
+   * own down: a chat is coming forward, and Luke floats above every window on
+   * every display it might land on. Through `setMode`, so a takeover keeps
+   * its display and each renderer is told the mode main decided; a panel
+   * already at its capsule is left alone, since its collapse is done or on
+   * its own clock.
+   */
+  standDown(): void {
+    for (const displayId of this.#windows.keys()) {
+      if (this.modeFor(displayId) === "expanded") this.setMode(displayId, "compact", false);
+    }
+  }
+
+  /**
    * Hands a payload to every living window, optionally skipping the one that
    * already holds the answer in its reply and must redraw from that rather
    * than race a broadcast.
