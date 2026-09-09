@@ -88,10 +88,9 @@ export async function handleObserve(options: ObserveOptions): Promise<Response> 
  * The acts an observation advertised, written onto its wire row. Each is
  * presence-only where it can be: what a control targets, or which workspace a
  * rename lands on, never travels — the act endpoints re-observe and rebuild
- * every write from their own fresh advertisement. One function, because the
- * roster a voice mint is sent carries exactly the same fields.
+ * every write from their own fresh advertisement.
  */
-export function writeAdvertisedActs(
+function writeAdvertisedActs(
   session: ObservedSession,
   observation: Pick<ProviderSessionObservation, "advertises">,
 ): void {

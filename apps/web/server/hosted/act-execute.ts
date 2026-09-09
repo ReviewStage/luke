@@ -62,6 +62,8 @@ const SUPPORTED_ACTS = {
  * {@link executeSessionAct}.
  */
 export interface SessionActPlan<Fields, Target> {
+  /** Which act this is, so a plan and the capability it is guarded by cannot be paired wrong. */
+  act: RemoteSessionAct;
   /** What a provider that documents no way to do this is said not to document. */
   absence: string;
   /**
@@ -80,6 +82,7 @@ export interface SessionActPlan<Fields, Target> {
 }
 
 export const MESSAGE_ACT: SessionActPlan<{ text: string }, true> = {
+  act: REMOTE_SESSION_ACT.MESSAGE,
   absence: "taking a message",
   advertised: (observation) => (advertisedActFor(observation, ACT_KIND.MESSAGE) ? true : undefined),
   unadvertised: "Session is not currently accepting messages.",
@@ -88,6 +91,7 @@ export const MESSAGE_ACT: SessionActPlan<{ text: string }, true> = {
 };
 
 export const CONTROL_ACT: SessionActPlan<{ controlId: string }, AdvertisedControl> = {
+  act: REMOTE_SESSION_ACT.CONTROL,
   absence: "any session controls",
   // The advertised control — never the caller's copy — is what reaches the
   // adapter, and the adapter re-finds it in its own snapshot besides.
@@ -98,6 +102,7 @@ export const CONTROL_ACT: SessionActPlan<{ controlId: string }, AdvertisedContro
 };
 
 export const AGENT_ACT: SessionActPlan<{ agent: string; name?: string; task?: string }, true> = {
+  act: REMOTE_SESSION_ACT.AGENT,
   absence: "starting another agent",
   advertised: (observation, fields) =>
     advertisedActFor(observation, ACT_KIND.ADD_AGENT)?.agents.includes(fields.agent)
@@ -114,6 +119,7 @@ export const AGENT_ACT: SessionActPlan<{ agent: string; name?: string; task?: st
 };
 
 export const RENAME_SESSION_ACT: SessionActPlan<{ name: string }, true> = {
+  act: REMOTE_SESSION_ACT.RENAME_SESSION,
   absence: "renaming a session",
   advertised: (observation) =>
     advertisedActFor(observation, ACT_KIND.RENAME_SESSION) ? true : undefined,
@@ -123,6 +129,7 @@ export const RENAME_SESSION_ACT: SessionActPlan<{ name: string }, true> = {
 };
 
 export const RENAME_WORKSPACE_ACT: SessionActPlan<{ name: string }, true> = {
+  act: REMOTE_SESSION_ACT.RENAME_WORKSPACE,
   absence: "renaming a workspace",
   advertised: (observation) =>
     advertisedActFor(observation, ACT_KIND.RENAME_WORKSPACE) ? true : undefined,
@@ -136,7 +143,10 @@ export const RENAME_WORKSPACE_ACT: SessionActPlan<{ name: string }, true> = {
  * so it has no plan to run through {@link executeSessionAct}; it stands here
  * for the one thing every act has, which is how its absence is worded.
  */
-const CREATE_WORKSPACE_ACT = { absence: "creating a workspace" };
+const CREATE_WORKSPACE_ACT = {
+  act: REMOTE_SESSION_ACT.CREATE_WORKSPACE,
+  absence: "creating a workspace",
+};
 
 /**
  * Every act by name. The `satisfies` is what makes the absence total: an act
@@ -149,7 +159,7 @@ const SESSION_ACT_BY_NAME = {
   [REMOTE_SESSION_ACT.RENAME_SESSION]: RENAME_SESSION_ACT,
   [REMOTE_SESSION_ACT.RENAME_WORKSPACE]: RENAME_WORKSPACE_ACT,
   [REMOTE_SESSION_ACT.CREATE_WORKSPACE]: CREATE_WORKSPACE_ACT,
-} as const satisfies Readonly<Record<RemoteSessionAct, { absence: string }>>;
+} as const satisfies Readonly<Record<RemoteSessionAct, { act: RemoteSessionAct; absence: string }>>;
 
 /**
  * The reason a provider cannot take this act, or undefined for one that can.
@@ -272,7 +282,6 @@ function capabilityGuard(
 export async function executeSessionAct<Fields, Target>(
   plan: SessionActPlan<Fields, Target>,
   options: {
-    act: RemoteSessionAct;
     providerId: CloudAgentProviderId;
     providerSessionId: string;
     fields: Fields;
@@ -280,8 +289,8 @@ export async function executeSessionAct<Fields, Target>(
     seams?: ActExecuteSeams;
   },
 ): Promise<ActExecutionAnswer> {
-  const { act, providerId, providerSessionId, fields, apiKey } = options;
-  const guarded = capabilityGuard(act, providerId);
+  const { providerId, providerSessionId, fields, apiKey } = options;
+  const guarded = capabilityGuard(plan.act, providerId);
   if (guarded) return guarded;
 
   const pass = await observeForAct(providerId, apiKey, options.seams ?? {});

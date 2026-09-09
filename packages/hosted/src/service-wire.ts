@@ -59,9 +59,10 @@ const HOSTED_API_ERROR_NAMES = Object.values(HOSTED_API_ERROR);
  * provider wrote, where trimming would be a display decision a wire reader
  * has no business making.
  */
-export function writtenText(): Schema<string> {
-  return s.refine(s.text({ ends: TEXT_ENDS.KEEP, allowEmpty: true }), (value) => value.length > 0);
-}
+export const writtenText: Schema<string> = s.refine(
+  s.text({ ends: TEXT_ENDS.KEEP, allowEmpty: true }),
+  (value) => value.length > 0,
+);
 
 /**
  * A count an answer reports: any finite number at or above zero, whole or
@@ -69,12 +70,10 @@ export function writtenText(): Schema<string> {
  * and a fractional one is the service miscounting rather than the wire
  * carrying something else.
  */
-export function countedNumber(): Schema<number> {
-  return s.number({ minimum: 0 });
-}
+export const countedNumber: Schema<number> = s.number({ minimum: 0 });
 
 export const hostedQuotaSchema: Schema<HostedQuota> = s.record(
-  { used: countedNumber(), limit: countedNumber(), resetsAt: countedNumber() },
+  { used: countedNumber, limit: countedNumber, resetsAt: countedNumber },
   { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
 );
 

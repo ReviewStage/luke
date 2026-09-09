@@ -33,19 +33,17 @@ export interface HostedActWorkspaceAnswer extends HostedActAnswer {
   providerSessionId?: string;
 }
 
-export const hostedActAnswerSchema: Schema<HostedActAnswer> = s.record(
-  {
-    result: s.enumOf(Object.values(ACT_RESULT_STATUS), { ends: TEXT_ENDS.TRIM }),
-    reason: s.dropRefused(writtenText()),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-);
+/** What every act answer carries: the outcome, and the sentence a rejection is worded in. */
+const ACT_FIELDS = {
+  result: s.enumOf(Object.values(ACT_RESULT_STATUS), { ends: TEXT_ENDS.TRIM }),
+  reason: s.dropRefused(writtenText),
+} as const;
+
+export const hostedActAnswerSchema: Schema<HostedActAnswer> = s.record(ACT_FIELDS, {
+  extraKeys: RECORD_EXTRA_KEYS.IGNORE,
+});
 
 export const hostedActWorkspaceAnswerSchema: Schema<HostedActWorkspaceAnswer> = s.record(
-  {
-    result: s.enumOf(Object.values(ACT_RESULT_STATUS), { ends: TEXT_ENDS.TRIM }),
-    reason: s.dropRefused(writtenText()),
-    providerSessionId: s.dropRefused(writtenText()),
-  },
+  { ...ACT_FIELDS, providerSessionId: s.dropRefused(writtenText) },
   { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
 );

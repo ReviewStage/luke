@@ -1,4 +1,4 @@
-import type { CloudFetch } from "../core.js";
+import type { CloudFetch, SessionProviderAdapter } from "../core.js";
 import { CLOUD_AGENT_PROVIDER_ID, type CloudAgentProviderId } from "../core.js";
 import { cloudSessionAdapterFor } from "./cloud-adapters.js";
 import { decryptProviderKey } from "./encryption.js";
@@ -50,7 +50,7 @@ export interface ProviderPassResult<Answer> {
 export async function observeProviders<Answer>(options: {
   providerIds?: readonly CloudAgentProviderId[];
   readApiKey: (providerId: string) => () => Promise<string | undefined>;
-  read: (adapter: ReturnType<typeof cloudSessionAdapterFor>) => Promise<Answer>;
+  read: (adapter: SessionProviderAdapter) => Promise<Answer>;
   seams: ProviderPassSeams;
 }): Promise<ProviderPassResult<Answer>[]> {
   const providerIds = options.providerIds ?? Object.values(CLOUD_AGENT_PROVIDER_ID);

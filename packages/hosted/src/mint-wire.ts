@@ -55,29 +55,36 @@ const connectionSchema: Schema<RealtimeConnection> = s.refine(
   (connection) => connection.wsUrl === `${HOSTED_WS_BASE_URL}?model=${connection.model}`,
 );
 
+/** What both mint answers carry: the credential, and the allowance it was spent against. */
+const MINT_FIELDS = {
+  connection: connectionSchema,
+  quota: s.dropRefused(hostedQuotaSchema),
+} as const;
+
 /**
  * The shape of a hosted mint answer. Whether the credential it carries has
  * already expired is not a fact about its shape, so {@link hostedMintAnswerAt}
  * is where a moment in time meets it.
  */
-export const hostedMintAnswerSchema: Schema<HostedMintAnswer> = s.record(
-  { connection: connectionSchema, quota: s.dropRefused(hostedQuotaSchema) },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-);
+export const hostedMintAnswerSchema: Schema<HostedMintAnswer> = s.record(MINT_FIELDS, {
+  extraKeys: RECORD_EXTRA_KEYS.IGNORE,
+});
 
 /**
- * A hosted mint answer read at a moment: anything without a usable,
- * canonically addressed credential is discarded rather than repaired, the
- * same posture as the OpenAI mint response reader.
+ * A mint answer read at a moment: anything without a usable, canonically
+ * addressed credential is discarded rather than repaired, the same posture as
+ * the OpenAI mint response reader.
  */
-export function hostedMintAnswerAt(
-  value: UnparsedWireValue,
-  now: number,
-): HostedMintAnswer | undefined {
-  const answer = hostedMintAnswerSchema.parse(value);
-  if (!answer || !realtimeCredentialIsUsable(answer.connection, now)) return undefined;
-  return answer;
+function mintAnswerAt<Answer extends HostedMintAnswer>(
+  schema: Schema<Answer>,
+): (value: UnparsedWireValue, now: number) => Answer | undefined {
+  return (value, now) => {
+    const answer = schema.parse(value);
+    return answer && realtimeCredentialIsUsable(answer.connection, now) ? answer : undefined;
+  };
 }
+
+export const hostedMintAnswerAt = mintAnswerAt(hostedMintAnswerSchema);
 
 /**
  * One pre-serialized context item returned by the mobile mint endpoint. The
@@ -108,8 +115,7 @@ export interface RemoteMintAnswer extends HostedMintAnswer {
  */
 export const remoteMintAnswerSchema: Schema<RemoteMintAnswer> = s.record(
   {
-    connection: connectionSchema,
-    quota: s.dropRefused(hostedQuotaSchema),
+    ...MINT_FIELDS,
     context: s.record(
       {
         sessions: s.record(
@@ -123,12 +129,4 @@ export const remoteMintAnswerSchema: Schema<RemoteMintAnswer> = s.record(
   { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
 );
 
-/** A mobile mint answer read at a moment, on the terms {@link hostedMintAnswerAt} states. */
-export function remoteMintAnswerAt(
-  value: UnparsedWireValue,
-  now: number,
-): RemoteMintAnswer | undefined {
-  const answer = remoteMintAnswerSchema.parse(value);
-  if (!answer || !realtimeCredentialIsUsable(answer.connection, now)) return undefined;
-  return answer;
-}
+export const remoteMintAnswerAt = mintAnswerAt(remoteMintAnswerSchema);

@@ -72,7 +72,7 @@ const workspaceAgentModelsSchema: Schema<HostedWorkspaceAgentModels> = s.record(
     // An effort this build cannot read is one choice missing from a row that
     // still offers its models, so the entry stands with the rest; a row that
     // named no efforts at all is one whose agent runs under none.
-    efforts: s.array(writtenText(), { skipRefused: true }),
+    efforts: s.array(writtenText, { skipRefused: true }),
   },
   { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
 );

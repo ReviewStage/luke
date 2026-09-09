@@ -131,7 +131,7 @@ const observedSessionSchema: Schema<ObservedSession> = s.map(
       controls: s.dropRefused(
         s.array(observedSessionControlSchema, { skipRefused: true, minimum: 1 }),
       ),
-      spawnableAgents: s.dropRefused(s.array(writtenText(), { skipRefused: true, minimum: 1 })),
+      spawnableAgents: s.dropRefused(s.array(writtenText, { skipRefused: true, minimum: 1 })),
       canRename: s.dropRefused(s.literal(true)),
       canRenameWorkspace: s.dropRefused(s.literal(true)),
       canReadConversation: s.dropRefused(s.literal(true)),

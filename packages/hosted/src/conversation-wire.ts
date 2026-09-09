@@ -46,8 +46,8 @@ const conversationMessageSchema: Schema<HostedConversationMessage> = s.record(
     // The words are read as written: a message is rendered as its author
     // wrote it, and trimming is a display decision this wire reader has no
     // business making. Only an empty message is no message.
-    text: writtenText(),
-    receivedAt: s.dropRefused(countedNumber()),
+    text: writtenText,
+    receivedAt: s.dropRefused(countedNumber),
   },
   { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
 );
@@ -58,7 +58,7 @@ export const hostedConversationAnswerSchema: Schema<HostedConversationAnswer> = 
     messages: s.array(conversationMessageSchema, { skipRefused: true }),
     lastMessageId: s.dropRefused(s.text()),
     hasMore: s.boolean(),
-    firstOffset: s.dropRefused(countedNumber()),
+    firstOffset: s.dropRefused(countedNumber),
     hasOlder: s.dropRefused(s.boolean()),
   },
   { extraKeys: RECORD_EXTRA_KEYS.IGNORE },

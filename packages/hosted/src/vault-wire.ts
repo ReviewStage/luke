@@ -55,7 +55,7 @@ export const vaultKeysListAnswerSchema: Schema<VaultKeysListAnswer> = s.record(
       s.record(
         {
           providerId: s.enumOf(CLOUD_AGENT_PROVIDER_NAMES, { ends: TEXT_ENDS.TRIM }),
-          updatedAt: countedNumber(),
+          updatedAt: countedNumber,
         },
         { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
       ),

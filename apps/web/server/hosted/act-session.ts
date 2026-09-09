@@ -26,7 +26,6 @@ import {
   REMOTE_SESSION_ACT,
   RENAME_SESSION_ACT,
   RENAME_WORKSPACE_ACT,
-  type RemoteSessionAct,
   type SessionActPlan,
 } from "./act-execute.js";
 import { decryptProviderKey, secretOrUnavailable } from "./encryption.js";
@@ -87,14 +86,21 @@ function askedText(maximumLength: number): Schema<string | undefined> {
 
 /**
  * Each act's own fields, bounded exactly as the desktop bounds them before a
- * network call. The body's `providerId` and `providerSessionId` are read by
- * the handler itself, so a field table names only what its act adds.
+ * network call. The envelope every act request carries — its provider id and
+ * its target — is read by the handler itself, so a field table names only
+ * what its act adds and ignores the rest of the body.
  */
-const ACT_FIELDS = { extraKeys: RECORD_EXTRA_KEYS.IGNORE } as const;
+const BESIDE_THE_ENVELOPE = { extraKeys: RECORD_EXTRA_KEYS.IGNORE } as const;
 
-const MESSAGE_FIELDS = s.record({ text: s.text({ max: maximumSessionMessageLength }) }, ACT_FIELDS);
+const MESSAGE_FIELDS = s.record(
+  { text: s.text({ max: maximumSessionMessageLength }) },
+  BESIDE_THE_ENVELOPE,
+);
 
-const CONTROL_FIELDS = s.record({ controlId: s.text({ max: SLUG_MAX_LENGTH }) }, ACT_FIELDS);
+const CONTROL_FIELDS = s.record(
+  { controlId: s.text({ max: SLUG_MAX_LENGTH }) },
+  BESIDE_THE_ENVELOPE,
+);
 
 const AGENT_FIELDS = s.record(
   {
@@ -102,10 +108,18 @@ const AGENT_FIELDS = s.record(
     name: askedText(maximumWorkspaceNameLength),
     task: askedText(maximumSessionMessageLength),
   },
-  ACT_FIELDS,
+  BESIDE_THE_ENVELOPE,
 );
 
-const NAME_FIELDS = s.record({ name: s.text({ max: maximumWorkspaceNameLength }) }, ACT_FIELDS);
+const NAME_FIELDS = s.record(
+  { name: s.text({ max: maximumWorkspaceNameLength }) },
+  BESIDE_THE_ENVELOPE,
+);
+
+const WORKSPACE_FIELDS = s.record(
+  { name: askedText(maximumWorkspaceNameLength), task: askedText(maximumSessionMessageLength) },
+  BESIDE_THE_ENVELOPE,
+);
 
 /**
  * One session-scoped act request: every act a mobile row asks of an observed
@@ -117,7 +131,6 @@ const NAME_FIELDS = s.record({ name: s.text({ max: maximumWorkspaceNameLength })
  */
 export interface SessionActOptions<Fields, Target>
   extends Pick<HostedVaultRoute, "request" | "resolveUserId" | "encryptionSecret" | "readKey"> {
-  act: RemoteSessionAct;
   plan: SessionActPlan<Fields, Target>;
   fields: Schema<Fields>;
   /**
@@ -129,7 +142,6 @@ export interface SessionActOptions<Fields, Target>
   unsupportedReason?: (providerId: CloudAgentProviderId) => string | undefined;
   /** Injected in tests; production runs the plan through `executeSessionAct`. */
   execute?: (options: {
-    act: RemoteSessionAct;
     providerId: CloudAgentProviderId;
     providerSessionId: string;
     fields: Fields;
@@ -137,61 +149,57 @@ export interface SessionActOptions<Fields, Target>
   }) => Promise<ActExecutionAnswer>;
 }
 
-/** What every act handler resolves before it looks at the act's own fields. */
-type ActAdmission =
-  | {
-      admitted: true;
-      userId: string;
-      secret: string;
-      providerId: CloudAgentProviderId;
-      body: WireRecord;
-    }
-  | { admitted: false; response: Response };
+/**
+ * What every act handler resolves before it looks at the act's own fields, or
+ * the answer the caller gets instead. The gates and their order are the same
+ * for a session act and a workspace creation: the method, the encryption
+ * secret this deployment must hold, the bearer, a body that is a record, and
+ * a provider the vault accepts a key for.
+ */
+interface ActAdmission {
+  userId: string;
+  secret: string;
+  providerId: CloudAgentProviderId;
+  body: WireRecord;
+}
 
 async function admitActRequest(
   options: Pick<HostedVaultRoute, "request" | "resolveUserId" | "encryptionSecret">,
-): Promise<ActAdmission> {
+): Promise<ActAdmission | Response> {
   const { request, resolveUserId, encryptionSecret } = options;
 
   if (request.method !== "POST") {
-    return {
-      admitted: false,
-      response: errorResponse(
-        HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-        HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-      ),
-    };
+    return errorResponse(
+      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
+    );
   }
 
   const secretResult = secretOrUnavailable(encryptionSecret);
-  if (secretResult instanceof Response) return { admitted: false, response: secretResult };
+  if (secretResult instanceof Response) return secretResult;
 
   const userId = await resolveUserId(request);
   if (!userId) {
-    return {
-      admitted: false,
-      response: errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
-    };
+    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
   }
-
-  const invalid = {
-    admitted: false,
-    response: errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
-  } as const;
 
   let body: UnparsedWireValue;
   try {
     // SAFETY: request.json() returns unknown; isRecord below validates the shape.
     body = (await request.json()) as UnparsedWireValue;
   } catch {
-    return invalid;
+    return invalidRequest();
   }
-  if (!isRecord(body)) return invalid;
+  if (!isRecord(body)) return invalidRequest();
 
   const providerId = text(body.providerId);
-  if (!isCloudAgentProviderId(providerId)) return invalid;
+  if (!isCloudAgentProviderId(providerId)) return invalidRequest();
 
-  return { admitted: true, userId, secret: secretResult.secret, providerId, body };
+  return { userId, secret: secretResult.secret, providerId, body };
+}
+
+function invalidRequest(): Response {
+  return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
 }
 
 /** The unsupported and no-key answers, which are 200s carrying a refusal rather than errors. */
@@ -239,47 +247,25 @@ export async function handleSessionAct<Fields, Target>(
   options: SessionActOptions<Fields, Target>,
 ): Promise<Response> {
   const admission = await admitActRequest(options);
-  if (!admission.admitted) return admission.response;
+  if (admission instanceof Response) return admission;
   const { userId, secret, providerId, body } = admission;
 
   const providerSessionId = parseProviderSessionId(body.providerSessionId);
-  if (!providerSessionId) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
+  if (!providerSessionId) return invalidRequest();
 
   const fields = options.fields.parse(body);
-  if (fields === undefined) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
+  if (fields === undefined) return invalidRequest();
 
   const unsupported = (
-    options.unsupportedReason ?? ((id) => actUnsupportedReason(options.act, id))
+    options.unsupportedReason ?? ((id) => actUnsupportedReason(options.plan.act, id))
   )(providerId);
   if (unsupported) return refusedAnswer(ACT_RESULT_STATUS.UNSUPPORTED, unsupported);
 
   const key = await apiKeyOrAnswer(options.readKey, userId, providerId, secret);
   if (key instanceof Response) return key;
 
-  const execute =
-    options.execute ??
-    ((request) =>
-      executeSessionAct(options.plan, {
-        act: request.act,
-        providerId: request.providerId,
-        providerSessionId: request.providerSessionId,
-        fields: request.fields,
-        apiKey: request.apiKey,
-      }));
-
-  return actAnswer(
-    await execute({
-      act: options.act,
-      providerId,
-      providerSessionId,
-      fields,
-      apiKey: key.apiKey,
-    }),
-  );
+  const execute = options.execute ?? ((request) => executeSessionAct(options.plan, request));
+  return actAnswer(await execute({ providerId, providerSessionId, fields, apiKey: key.apiKey }));
 }
 
 export interface WorkspaceActOptions
@@ -305,26 +291,14 @@ export interface WorkspaceActOptions
  */
 export async function handleWorkspaceAct(options: WorkspaceActOptions): Promise<Response> {
   const admission = await admitActRequest(options);
-  if (!admission.admitted) return admission.response;
+  if (admission instanceof Response) return admission;
   const { userId, secret, providerId, body } = admission;
 
   const providerProjectId = parseProviderProjectId(body.providerProjectId);
-  if (!providerProjectId) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
+  if (!providerProjectId) return invalidRequest();
 
-  const asked = s
-    .record(
-      {
-        name: askedText(maximumWorkspaceNameLength),
-        task: askedText(maximumSessionMessageLength),
-      },
-      ACT_FIELDS,
-    )
-    .parse(body);
-  if (asked === undefined) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
+  const asked = WORKSPACE_FIELDS.parse(body);
+  if (asked === undefined) return invalidRequest();
 
   // An agent choice must be one the build's own table lists for this
   // provider — the same gate the desktop's stores, offers, and adapters all
@@ -333,9 +307,7 @@ export async function handleWorkspaceAct(options: WorkspaceActOptions): Promise<
   let agentSelection: WorkspaceAgentSelection | undefined;
   if (body.agent !== undefined || body.model !== undefined || body.effort !== undefined) {
     agentSelection = parseWorkspaceAgentSelection(providerId, body);
-    if (!agentSelection) {
-      return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-    }
+    if (!agentSelection) return invalidRequest();
   }
 
   const unsupported = (
@@ -362,41 +334,16 @@ export async function handleWorkspaceAct(options: WorkspaceActOptions): Promise<
 
 /** The five acts aimed at an observed session, each as the one thing its route names. */
 export const handleMessageAct = (route: HostedVaultRoute): Promise<Response> =>
-  handleSessionAct({
-    ...route,
-    act: REMOTE_SESSION_ACT.MESSAGE,
-    plan: MESSAGE_ACT,
-    fields: MESSAGE_FIELDS,
-  });
+  handleSessionAct({ ...route, plan: MESSAGE_ACT, fields: MESSAGE_FIELDS });
 
 export const handleControlAct = (route: HostedVaultRoute): Promise<Response> =>
-  handleSessionAct({
-    ...route,
-    act: REMOTE_SESSION_ACT.CONTROL,
-    plan: CONTROL_ACT,
-    fields: CONTROL_FIELDS,
-  });
+  handleSessionAct({ ...route, plan: CONTROL_ACT, fields: CONTROL_FIELDS });
 
 export const handleAgentAct = (route: HostedVaultRoute): Promise<Response> =>
-  handleSessionAct({
-    ...route,
-    act: REMOTE_SESSION_ACT.AGENT,
-    plan: AGENT_ACT,
-    fields: AGENT_FIELDS,
-  });
+  handleSessionAct({ ...route, plan: AGENT_ACT, fields: AGENT_FIELDS });
 
 export const handleRenameSessionAct = (route: HostedVaultRoute): Promise<Response> =>
-  handleSessionAct({
-    ...route,
-    act: REMOTE_SESSION_ACT.RENAME_SESSION,
-    plan: RENAME_SESSION_ACT,
-    fields: NAME_FIELDS,
-  });
+  handleSessionAct({ ...route, plan: RENAME_SESSION_ACT, fields: NAME_FIELDS });
 
 export const handleRenameWorkspaceAct = (route: HostedVaultRoute): Promise<Response> =>
-  handleSessionAct({
-    ...route,
-    act: REMOTE_SESSION_ACT.RENAME_WORKSPACE,
-    plan: RENAME_WORKSPACE_ACT,
-    fields: NAME_FIELDS,
-  });
+  handleSessionAct({ ...route, plan: RENAME_WORKSPACE_ACT, fields: NAME_FIELDS });
