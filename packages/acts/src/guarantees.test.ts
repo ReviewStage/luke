@@ -479,36 +479,62 @@ test("opening a session is not a write: the act carries an identity, never an ad
   assert.deepEqual(Object.keys(admitted).sort(), ["identity", "kind", "origin"]);
 });
 
-test("admitting performs nothing: no seam beyond the roster and the projects is reached", async () => {
-  let reads = 0;
-  const counted: AdmitContext = {
-    origin: RUN_ORIGIN.USER,
-    roster: {
-      read: async () => {
-        reads += 1;
-        return [offering()];
+/**
+ * Which observed state each act is admitted against, and nothing wider. Only
+ * an act whose target the roster holds reads the roster, and only a creation
+ * reads the offered projects — an intake that observes lazily has to be held
+ * to observing for the acts that need it, since a read that quietly stops
+ * happening is an act admitted against a stale picture.
+ */
+const READS = {
+  [ACT_KIND.MESSAGE]: ["roster"],
+  [ACT_KIND.CONTROL]: ["roster"],
+  [ACT_KIND.OPEN]: ["roster"],
+  [ACT_KIND.CREATE_WORKSPACE]: ["projects", "defaults"],
+  [ACT_KIND.ADD_AGENT]: ["roster"],
+  [ACT_KIND.RENAME_WORKSPACE]: ["roster"],
+  [ACT_KIND.RENAME_SESSION]: ["roster"],
+  [ACT_KIND.ISSUE_STATE]: [],
+  [ACT_KIND.ISSUE_COMMENT]: [],
+  [ACT_KIND.SETTING]: [],
+  [ACT_KIND.PANEL]: ["roster"],
+  [ACT_KIND.FEEDBACK]: [],
+  [ACT_KIND.UPDATE]: [],
+  [ACT_KIND.REMEMBER]: [],
+  [ACT_KIND.FORGET]: [],
+} satisfies Record<ActKind, readonly ("roster" | "projects" | "defaults")[]>;
+
+test("each act is admitted against the observed state it names, and against nothing wider", async () => {
+  for (const kind of EVERY_KIND) {
+    const reached: string[] = [];
+    await admit(
+      { kind, fields: FIELDS[kind] },
+      {
+        origin: RUN_ORIGIN.USER,
+        roster: {
+          read: async () => {
+            reached.push("roster");
+            return [offering()];
+          },
+        },
+        projects: {
+          read: async () => {
+            reached.push("projects");
+            return [LISTED_PROJECT];
+          },
+          defaults: async () => {
+            reached.push("defaults");
+            return {};
+          },
+          agentModels: () => [],
+        },
+        ...(ISSUE ? { issues: [ISSUE] } : undefined),
+        guide: EMPTY_APP_GUIDE,
+        rememberedFacts: [{ id: "fact-one", words: "prefers concise answers" }],
       },
-    },
-    projects: {
-      read: async () => {
-        reads += 1;
-        return [LISTED_PROJECT];
-      },
-      defaults: async () => {
-        reads += 1;
-        return {};
-      },
-      agentModels: () => {
-        reads += 1;
-        return [];
-      },
-    },
-    issues: ISSUE ? [ISSUE] : [],
-    guide: EMPTY_APP_GUIDE,
-    rememberedFacts: [{ id: "fact-one", words: "prefers concise answers" }],
-  };
-  for (const kind of EVERY_KIND) await admit({ kind, fields: FIELDS[kind] }, counted);
-  // Nothing else exists to reach: an act's effect is the performer's, and
-  // admission holds no adapter, no CLI, and no tracker client to call.
-  assert.ok(reads > 0);
+    );
+    // Sorted, because which of a creation's two reads runs first is admission's
+    // own business; that both run, once each, is not.
+    assert.deepEqual([...reached].sort(), [...READS[kind]].sort(), kind);
+  }
 });
