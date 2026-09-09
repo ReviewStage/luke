@@ -196,6 +196,7 @@ export interface TurnRunnerOptions {
   createRunId: () => string;
   maximumOutputTokens: number;
   reasoningEffort?: ReasoningEffort;
+  promptCacheKey?: string;
   executionDeadlineMs: number;
   /** The one compaction path, owned by the maintenance that also holds the flush counters. */
   compactIfNeeded: (
@@ -852,6 +853,9 @@ export class TurnRunner {
       maximumOutputTokens: this.#options.maximumOutputTokens,
       ...(this.#options.reasoningEffort
         ? { reasoningEffort: this.#options.reasoningEffort }
+        : undefined),
+      ...(this.#options.promptCacheKey !== undefined
+        ? { promptCacheKey: this.#options.promptCacheKey }
         : undefined),
       signal: turnContext.signal,
       onEvent,

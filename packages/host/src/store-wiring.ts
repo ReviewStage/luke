@@ -9,12 +9,7 @@ import {
   type StorePort,
   storeClient,
 } from "@sidecar/brain/store";
-import {
-  type ChildStore,
-  memoryChildStore,
-  memoryScheduledJobStore,
-  type ScheduledJobStore,
-} from "@sidecar/runtime";
+import { type ChildStore, memoryChildStore } from "@sidecar/runtime";
 import {
   ARCHIVE_REASON,
   CONVERSATION_KIND,
@@ -134,8 +129,6 @@ export interface StoreWiring {
     kind: ConversationKind,
     name: string,
   ) => Promise<ConversationRecord>;
-  /** The scheduler's jobs; a run with nothing on disk keeps them in memory alone. */
-  scheduledJobStore: () => ScheduledJobStore;
   /** Closes the worker, once opened; the host's last action at a shutdown. */
   close: () => Promise<void>;
   /** The child service's records and completions; a run with nothing on disk keeps them in memory alone. */
@@ -324,8 +317,6 @@ export function wireStore(dependencies: StoreWiringDependencies): StoreWiring {
   const forgetNotebookEntry = (id: string) =>
     mutateNotebook((store, now) => store.ask("notebook.forget", { id, now }));
 
-  const memoryJobs = memoryScheduledJobStore();
-
   const childStore = memoryChildStore();
 
   return {
@@ -398,7 +389,6 @@ export function wireStore(dependencies: StoreWiringDependencies): StoreWiring {
       await refreshDirectory();
       return created;
     },
-    scheduledJobStore: () => (dependencies.persistent ? client().scheduledJobStore() : memoryJobs),
     childStore: () => (dependencies.persistent ? client().childStore() : childStore),
     archive: async (sessionKey) => {
       // Archiving preserves history, and a memory-held conversation has

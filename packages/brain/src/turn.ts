@@ -16,8 +16,6 @@ export const BRAIN_TURN_TRIGGER = {
   ROSTER: "roster",
   ASK: "ask",
   HOLD_RELEASED: "hold-released",
-  /** The scheduled review: the workspace's HEARTBEAT.md instructions, under the full prompt, normally saying nothing. */
-  HEARTBEAT: "heartbeat",
   /** A child's own run: the delegated task, whose final text is the result its requester is handed. */
   CHILD_TASK: "child-task",
   /** A requester's turn opened by a child's completion, when no run of its own was there to steer. */
@@ -31,8 +29,6 @@ export function runOriginOf(trigger: BrainTurnTrigger): RunOrigin {
   switch (trigger) {
     case BRAIN_TURN_TRIGGER.ASK:
       return RUN_ORIGIN.USER;
-    case BRAIN_TURN_TRIGGER.HEARTBEAT:
-      return RUN_ORIGIN.HEARTBEAT;
     case BRAIN_TURN_TRIGGER.CHILD_TASK:
       return RUN_ORIGIN.CHILD;
     case BRAIN_TURN_TRIGGER.CHILD_COMPLETION:

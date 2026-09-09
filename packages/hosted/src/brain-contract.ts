@@ -67,6 +67,12 @@ export const HOSTED_BRAIN_TOOL_BOUNDS = {
 /** What the service fixes for one inference, as the desktop may ask within it. */
 export const HOSTED_BRAIN_OPTION_BOUNDS = {
   MAXIMUM_OUTPUT_TOKENS: 16_000,
+  /**
+   * The prompt cache key's own bound. It carries a hash and nothing else —
+   * the desktop derives it from a conversation's key before it is sent — so
+   * the bound is a hash's length rather than a name's.
+   */
+  PROMPT_CACHE_KEY_CHARS: 64,
 } as const;
 
 /** How much one embed request may carry: a sync's batch of notebook chunks, never a transcript. */
@@ -137,6 +143,8 @@ export function hostedBrainCapabilitiesFromWire(
 export interface HostedBrainRequestOptions {
   maximumOutputTokens?: number;
   reasoningEffort?: ReasoningEffort;
+  /** The prefix cache the inference should land against, as a hash; the service forwards it and keeps none. */
+  promptCacheKey?: string;
 }
 
 export interface HostedBrainRespondRequest {
@@ -263,6 +271,9 @@ const optionsSchema = s.record({
     .wholeNumber({ minimum: 1, maximum: HOSTED_BRAIN_OPTION_BOUNDS.MAXIMUM_OUTPUT_TOKENS })
     .optional(),
   reasoningEffort: s.enumOf(REASONING_EFFORT_NAMES).optional(),
+  promptCacheKey: s
+    .text({ max: HOSTED_BRAIN_OPTION_BOUNDS.PROMPT_CACHE_KEY_CHARS, ends: TEXT_ENDS.KEEP })
+    .optional(),
 });
 
 /**

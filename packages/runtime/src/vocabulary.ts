@@ -5,7 +5,7 @@
  * scheduler handle. A re-export door and nothing else, Node-free by
  * construction, because packages below the runtime — realtime, hosted,
  * voice, devtrace, memory — import this door and not the barrel, which
- * reaches `node:fs` and croner.
+ * reaches `node:fs`.
  */
 
 export {

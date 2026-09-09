@@ -136,8 +136,8 @@ export interface ActionProjects {
 export interface AdmitContext {
   /**
    * Who opened the turn this action belongs to. Recorded on what admission mints
-   * and never consulted as a permission: a developer's ask and a heartbeat's
-   * turn run exactly the same admission.
+   * and never consulted as a permission: a developer's ask and an observed
+   * session's look run exactly the same admission.
    */
   readonly origin: RunOrigin;
   /** Absent for a row's own press, which opens its turn and its effect in the same breath. */

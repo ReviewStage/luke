@@ -156,3 +156,29 @@ test("quiet, capabilities, counting, and compaction pass through the wrapped ada
   );
   assert.deepEqual(await adapter.compact(INPUT, OPTIONS), await inner.compact(INPUT, OPTIONS));
 });
+
+test("a keyed turn records that it asked for a prefix cache, and what the provider answered from one", async () => {
+  const cached = responsesModelAnswer({
+    output: [
+      { type: "message", role: "assistant", content: [{ type: "output_text", text: "ok" }] },
+    ],
+    usage: {
+      input_tokens: 1_200,
+      output_tokens: 8,
+      input_tokens_details: { cached_tokens: 1_024 },
+    },
+  });
+  assert.ok(cached);
+  const records: BrainRequestTraceRecord[] = [];
+  const adapter = tracedModelAdapter(
+    adapterAnswering(cached),
+    (record) => records.push(record),
+    steppingClock(40),
+  );
+  await adapter.respond(INPUT, { ...OPTIONS, promptCacheKey: "9f86d0818" });
+  // The fact of a key, never the key: it is a hash of a conversation's key
+  // and belongs in no file.
+  assert.equal(records[0]?.promptCacheKeyed, true);
+  assert.equal(records[0]?.cachedInputTokens, 1_024);
+  assert.ok(!JSON.stringify(records).includes("9f86d0818"));
+});

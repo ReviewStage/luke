@@ -117,7 +117,10 @@ export function remoteSessionContextText(
   const overflow = sessions.length - included.length;
 
   return [
-    "Currently observed sessions:",
+    // The internal names are said once, in this one header line: a caveat
+    // repeated on every row costs more than it teaches, and the header stays
+    // one line so a row is a line.
+    "Currently observed sessions. The title and workspace name on a row are internal names — read them to tell the sessions apart, never to refer to the work out loud:",
     ...included.map((session) => {
       // `session.workspace` is the repository path/label from the cloud adapter
       // (obs.detail.repository). The separate workspace display name that the
@@ -132,7 +135,7 @@ export function remoteSessionContextText(
 
       return [
         `- ${providerDisplayName(session.providerId)}`,
-        `internal session name — never use to refer to the work: ${session.title}`,
+        `title: ${session.title}`,
         session.status,
         sessionAgeText(session.lastActivityAt, now),
         ...aboutParts,

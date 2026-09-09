@@ -11,6 +11,7 @@ interface AnsweredSummary {
   outputItemKinds: readonly string[];
   inputTokens?: number;
   outputTokens?: number;
+  cachedInputTokens?: number;
 }
 
 /**
@@ -29,6 +30,9 @@ function answeredSummary(answer: Extract<ModelResponse, { outcome: "answered" }>
       : undefined),
     ...(answer.usage?.outputTokens !== undefined
       ? { outputTokens: answer.usage.outputTokens }
+      : undefined),
+    ...(answer.usage?.cachedInputTokens !== undefined
+      ? { cachedInputTokens: answer.usage.cachedInputTokens }
       : undefined),
   };
 }
@@ -65,6 +69,9 @@ export function tracedModelAdapter(
         inputItems: input.length,
         inputChars: JSON.stringify(input).length,
         ...(model ? { model } : undefined),
+        // Whether the turn asked for a prefix cache, never which one: the key
+        // is a hash of a conversation's key and belongs in no file.
+        ...(options.promptCacheKey !== undefined ? { promptCacheKeyed: true } : undefined),
       };
       let answer: ModelResponse;
       try {

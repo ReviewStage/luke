@@ -339,7 +339,7 @@ export class AskLedger {
     const active = this.#options.active();
     const run = this.#runs.get(input.id);
     if (!active || !run || this.#seam.runRevoked(active.run)) return false;
-    // Only another ask's turn can take the words: a heartbeat, a wake, or a
+    // Only another ask's turn can take the words: a wake, a look, or a
     // hold's release runs under its own prompt and origin, and a reply
     // formed inside it would be that turn's, not the developer's answer. The
     // ask waits in the queue instead and opens its own turn when this one ends.

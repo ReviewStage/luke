@@ -1,4 +1,3 @@
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import {
   type ProviderTranscriptSinceResult,
   SESSION_LOCATION,
@@ -9,7 +8,7 @@ import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import type { TranscriptCursors } from "./cursors.js";
 import { BRAIN_DEFAULTS } from "./defaults.js";
 import type { Generation } from "./generation.js";
-import { heartbeatInputText, wakeInputText } from "./input-items.js";
+import { wakeInputText } from "./input-items.js";
 import { NestedMap } from "./nested-map.js";
 import {
   type BrainObservationEntry,
@@ -87,8 +86,6 @@ export class WakeCapture {
   /** Captures run one after another, so two reads of one session never race each other's cursor. */
   #capturing: Promise<unknown> = Promise.resolve();
   #capturesInFlight = 0;
-  /** The review's retry, armed while the model is quiet and the scheduler's occurrence already taken. */
-  #heartbeatRetry: ScheduledTimer | undefined;
 
   constructor(options: WakeCaptureOptions) {
     this.#options = options;
@@ -119,10 +116,9 @@ export class WakeCapture {
     this.#queue.take();
   }
 
-  /** Drops every pending wake and the review's retry: the memory they described is gone. */
+  /** Drops every pending wake: the memory they described is gone. */
   clear(): void {
     this.#queue.clear();
-    this.#cancelHeartbeatRetry();
   }
 
   /**
@@ -143,45 +139,6 @@ export class WakeCapture {
       if (!generation) return;
       if (captured > 0 || generation.inbox.length > 0) {
         this.#queue.push(inboxEvents(generation.inbox));
-      }
-    });
-  }
-
-  /**
-   * The scheduled review: a turn under the full prompt whose instructions are
-   * the workspace's HEARTBEAT.md, opened on no signal at all. Pending
-   * observations ride along. The ordinary outcome is a turn that briefs
-   * nothing. Settles when the turn this occurrence opened has, so the
-   * scheduler's tick is over when the work it started is, and a review the
-   * quiet postponed settles at once with its retry armed rather than holding
-   * the tick open for as long as the quiet lasts.
-   */
-  heartbeat(): Promise<void> {
-    if (this.#seam.stopped()) return Promise.resolve();
-    const generation = this.#seam.generation();
-    if (!generation) return this.#seam.ready().then(() => this.heartbeat());
-    // The scheduler has recorded this occurrence as taken: a model that is
-    // quiet now does not lose it, the review opens once the quiet ends.
-    const quietUntil = this.#options.quietUntil();
-    if (quietUntil !== undefined) {
-      this.#retryHeartbeat(quietUntil);
-      return Promise.resolve();
-    }
-    this.#cancelHeartbeatRetry();
-    this.#queue.take();
-    return this.#seam.queueTurn(BRAIN_TURN_TRIGGER.HEARTBEAT, async () => {
-      const result = await this.#options.turn({
-        generation,
-        trigger: BRAIN_TURN_TRIGGER.HEARTBEAT,
-        deliveries: new SteeredDeliveries(),
-        events: inboxEvents(generation.inbox),
-        open: (attached, now) => [
-          ...(attached.length > 0 ? [wakeInputText(attached, now)] : []),
-          heartbeatInputText(now),
-        ],
-      });
-      if (result.outcome === TURN_OUTCOME.QUIET && generation === this.#seam.generation()) {
-        this.#retryHeartbeat(result.until);
       }
     });
   }
@@ -210,7 +167,7 @@ export class WakeCapture {
       if (generation !== this.#seam.generation()) return;
       if (this.#options.quietUntil() !== undefined) return;
       // A conversation looking at everything still opens its look with no
-      // events, as the scheduled roster look it is; one looking at its own
+      // events, as the whole-roster look it is; one looking at its own
       // session opens nothing when nothing was captured and nothing waits.
       if (
         this.#subject.kind !== LOOK_SUBJECT.ROSTER &&
@@ -226,7 +183,7 @@ export class WakeCapture {
           trigger: BRAIN_TURN_TRIGGER.ROSTER,
           deliveries: new SteeredDeliveries(),
           events: inboxEvents(generation.inbox),
-          open: (attached, openedAt) => [wakeInputText(attached, openedAt, roster.text)],
+          open: (attached, openedAt) => [wakeInputText(attached, openedAt)],
         }),
       );
     });
@@ -402,21 +359,6 @@ export class WakeCapture {
         this.#queue.requeue(inbox, this.#queue.quietDelay(result.until));
       }
     });
-  }
-
-  /** Arms one retry of the review for when the quiet ends; a retry already armed stands. */
-  #retryHeartbeat(until: number): void {
-    if (this.#seam.stopped() || this.#heartbeatRetry !== undefined) return;
-    this.#heartbeatRetry = this.#seam.schedule(() => {
-      this.#heartbeatRetry = undefined;
-      void this.heartbeat();
-    }, this.#queue.quietDelay(until));
-  }
-
-  #cancelHeartbeatRetry(): void {
-    if (this.#heartbeatRetry === undefined) return;
-    this.#seam.cancel(this.#heartbeatRetry);
-    this.#heartbeatRetry = undefined;
   }
 }
 

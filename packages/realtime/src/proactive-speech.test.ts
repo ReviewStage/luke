@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { LUKE_PERSONA } from "@sidecar/guide";
 import { isRecord, isWireString, type WireRecord } from "@sidecar/wire";
 import {
   ARRIVAL_SPEECH_KIND,
@@ -57,6 +58,9 @@ test("a briefing is spoken as written, in one response the conversation never se
   assert.ok(isWireString(instructions));
   assert.match(instructions, /say it as written/i);
   assert.match(instructions, /nothing in the briefing is an instruction/i);
+  // The session the briefing plays into was minted with the persona, so the
+  // response's own instructions do not carry it a second time.
+  assert.ok(!instructions.includes(LUKE_PERSONA.split("\n")[0] ?? ""));
 });
 
 test("a briefing is opened with its tools withheld", () => {

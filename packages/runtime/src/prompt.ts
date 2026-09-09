@@ -1,6 +1,5 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { ToolSchema } from "./execution.js";
 import type { RunOrigin } from "./identifiers.js";
 import type { AgentConfiguration, ResolvedConfiguration, SkillDescriptor } from "./registry.js";
 import { discoverSkills, eligibleSkills } from "./skills.js";
@@ -128,12 +127,22 @@ export interface ExecutionDirectoryFacts {
   readonly instructions?: string;
 }
 
+/**
+ * A tool as the prompt names it: its name and the groups the catalog filed
+ * it under. The description and the parameters are not repeated here — the
+ * same request carries the tool's schema, which holds both.
+ */
+export interface PromptToolFacts {
+  readonly name: string;
+  readonly groups: readonly string[];
+}
+
 export interface PromptFacts {
   readonly profile: PromptProfile;
   /** The one line every profile opens with, saying who the agent is; the product's words, not this package's. */
   readonly identity: string;
   /** Every tool the run is offered, after policy: the prompt names them and nothing the policy removed. */
-  readonly tools: readonly ToolSchema[];
+  readonly tools: readonly PromptToolFacts[];
   /** The build's own lines about the turns and the tools, in the fixed vocabulary. */
   readonly toolNotes: readonly string[];
   /** The marker every runtime-context item carries, so the model knows what is data. */
@@ -142,10 +151,9 @@ export interface PromptFacts {
   readonly workspaceDirectory: string;
   readonly bootstrapFiles: readonly BootstrapFile[];
   readonly executionDirectory?: ExecutionDirectoryFacts;
-  /** The runtime line's facts: the model when known, the run's origin word, the agent id. */
+  /** The runtime line's facts: the agent id, the runtime, and the model when known. */
   readonly runtime: {
     readonly agentId: string;
-    readonly origin: string;
     readonly model?: string;
     readonly runtimeId: string;
   };
@@ -181,11 +189,19 @@ const SKILL_LINES: readonly string[] = [
   "skill with load_skill, passing the location exactly as listed, and follow what it says.",
 ];
 
-function toolingText(tools: readonly ToolSchema[]): string {
+function toolingText(tools: readonly PromptToolFacts[]): string {
+  // Grouped by each tool's first group, in the order the groups first appear,
+  // so the listing follows the catalog's own order rather than one this
+  // package invents for it.
+  const grouped = new Map<string, string[]>();
+  for (const tool of tools) {
+    const group = tool.groups[0] ?? "";
+    grouped.set(group, [...(grouped.get(group) ?? []), tool.name]);
+  }
   const listed =
     tools.length === 0
       ? ["No tools are offered in this turn."]
-      : tools.map((tool) => `- ${tool.name}: ${tool.description}`);
+      : [...grouped].map(([group, names]) => `- ${group}: ${names.join(", ")}`);
   return [...TOOLING_LINES, "", ...listed].join("\n");
 }
 
@@ -232,7 +248,6 @@ function bootstrapNotice(files: readonly BootstrapFile[]): string {
 function runtimeText(facts: PromptFacts["runtime"]): string {
   return [
     `agent: ${facts.agentId}`,
-    `run origin: ${facts.origin}`,
     `runtime: ${facts.runtimeId}`,
     ...(facts.model ? [`model: ${facts.model}`] : []),
   ].join("\n");
@@ -382,7 +397,7 @@ export interface GatherOptions {
   readonly run: RunDescription;
   /** The identity line the prompt opens with: the product's words, handed in rather than known here. */
   readonly identity: string;
-  readonly tools: readonly ToolSchema[];
+  readonly tools: readonly PromptToolFacts[];
   readonly toolNotes: readonly string[];
   readonly runtimeContextMarker: string;
   readonly runtimeId: string;
@@ -441,7 +456,6 @@ export async function gatherPromptFacts(options: GatherOptions): Promise<PromptF
     ...(executionDirectory ? { executionDirectory } : undefined),
     runtime: {
       agentId: configuration.agentId,
-      origin: options.run.origin,
       runtimeId: options.runtimeId,
       ...(options.model ? { model: options.model } : undefined),
     },

@@ -44,11 +44,9 @@ export {
 export { BrainGenerationClock } from "./generation-clock.js";
 export { HostedModelAdapter } from "./hosted-model-adapter.js";
 export {
-  completeToolFree,
   type PrivateTurnOptions,
   runMemoryHousekeeping,
   runPrivateTurn,
-  type ToolFreeCompletionOptions,
 } from "./housekeeping.js";
 export { BRAIN_INPUT_MARKER } from "./input-items.js";
 export { brainToolNotes } from "./instructions.js";

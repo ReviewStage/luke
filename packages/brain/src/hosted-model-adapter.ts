@@ -124,6 +124,9 @@ class HostedTransport implements ResponsesTransport<HostedBrainCapabilities> {
           options: {
             maximumOutputTokens: options.maximumOutputTokens,
             ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : undefined),
+            ...(options.promptCacheKey !== undefined
+              ? { promptCacheKey: options.promptCacheKey }
+              : undefined),
           },
           input: items,
         },

@@ -76,6 +76,12 @@ export interface BrainResponsesOptions {
   tools: readonly ResponsesFunctionTool[];
   maximumOutputTokens: number;
   reasoningEffort: BrainReasoningEffort;
+  /**
+   * Which prefix cache the turn's own request should land against: a routing
+   * hint, independent of `store: false`, and never an identifier of anything
+   * — the host hashes what it names before it travels.
+   */
+  promptCacheKey?: string;
 }
 
 /**
@@ -100,6 +106,9 @@ export function brainResponsesRequest(
     include: [RESPONSES_INCLUDE_ENCRYPTED_REASONING],
     reasoning: { effort: options.reasoningEffort },
     max_output_tokens: options.maximumOutputTokens,
+    ...(options.promptCacheKey !== undefined
+      ? { prompt_cache_key: options.promptCacheKey }
+      : undefined),
   };
 }
 
@@ -301,9 +310,13 @@ export function responsesModelAnswer(payload: UnparsedWireValue): ModelResponse 
   }
   const usage = isRecord(payload) && isRecord(payload.usage) ? payload.usage : undefined;
   const outputTokens = usage ? wholeNumber(usage.output_tokens) : undefined;
+  const inputDetails =
+    usage && isRecord(usage.input_tokens_details) ? usage.input_tokens_details : undefined;
+  const cachedInputTokens = inputDetails ? wholeNumber(inputDetails.cached_tokens) : undefined;
   const modelUsage: ModelUsage = {
     ...(output.inputTokens !== undefined ? { inputTokens: output.inputTokens } : undefined),
     ...(outputTokens !== undefined ? { outputTokens } : undefined),
+    ...(cachedInputTokens !== undefined ? { cachedInputTokens } : undefined),
   };
   return {
     outcome: MODEL_RESPONSE_OUTCOME.ANSWERED,

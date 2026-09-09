@@ -69,8 +69,7 @@ keeps no conversation at all.
 **Luke's workspace.** Luke keeps a small set of Markdown files of his own on
 your Mac, under his application data (`agents/main/workspace`): his operating
 instructions, his personality, his identity, stable facts about you, curated
-notes, first-run setup notes, and the instructions for his scheduled review,
-plus dated notes under `memory/`. He seeds any file that is missing and never
+notes, and first-run setup notes, plus dated notes under `memory/`. He seeds any file that is missing and never
 overwrites one that exists, so you may edit them freely. The files are read
 into the standing instructions of every call he makes (each cut to 20,000
 characters and the set to 60,000), so their contents travel to OpenAI with his
@@ -155,9 +154,9 @@ them.
 Luke's runtime runs inside the app, and can run on a server you connect to
 instead; either way it holds your settings and the encrypted credentials
 (decrypted where it runs, under the same Keychain entry), your account's
-session, your conversation and its memory, the observation of your sessions
-and calendars, and the scheduled reviews, while the part that draws listens,
-speaks, holds the keys, and asks the runtime for everything else. Nothing
+session, your conversation and its memory, and the observation of your
+sessions and calendars, while the part that draws listens, speaks, holds the
+keys, and asks the runtime for everything else. Nothing
 about you crosses that boundary that the panel did not already draw, except
 the short-lived voice credential the runtime mints for a call; no stored key,
 token, or account secret travels in any answer or event. Quitting Luke cancels
@@ -322,9 +321,7 @@ and email you signed it with, and any screenshots you attached.
   allow (titles, status, repository, and branch of your cloud sessions, as
   described under Provider API keys above). Luke's judgment is a separate call
   to OpenAI's Responses API, made when an agent's hook or his periodic look
-  wakes the conversation following that session, on his own scheduled review
-  of the main conversation (every thirty minutes by default, following the
-  review instructions in his workspace, and usually saying nothing), and when
+  wakes the conversation following that session and when
   you ask him something: it carries that conversation's working memory —
   the bounded transcript excerpts described above, the session fields, the 20
   most recent lines of your conversation, and the things he remembers about
@@ -340,7 +337,12 @@ and email you signed it with, and any screenshots you attached.
   and the names of the tools it means to offer; the service holds the
   tools' own definitions and chooses the model, and a request naming a tool
   it does not know, or carrying instructions longer than its fixed bound, is
-  refused rather than trimmed. The same allowance meters a request to count
+  refused rather than trimmed. Every such call also carries a prompt cache
+  key: a hash of the conversation's own internal name, sent so a later call
+  reuses the earlier calls' billing prefix instead of paying for it again. It
+  identifies nothing — no session id or title can be read out of a hash — and
+  our service passes it upstream and keeps it no longer than the request.
+  The same allowance meters a request to count
   a call's tokens or to fold Luke's working memory, and the folded memory
   OpenAI answers with is kept only on your Mac. Luke's working memory is
   stamped with the version of Luke that wrote it; a newer or older Luke that
@@ -417,7 +419,7 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
 - Edit or delete any of Luke's workspace files yourself; Luke never overwrites
   your edit, and clearing the Conversation tab does not touch them.
 - Luke may act on his own judgment in a turn you did not open — answering a
-  coding agent, keeping his notes, on a hook, a look, or his scheduled review
+  coding agent, keeping his notes, on a hook or a look
   — within the tool policy his configuration sets; the Conversation tab records
   such an action as his own, never as your request.
 - What you type or say to Luke goes to his main conversation; the

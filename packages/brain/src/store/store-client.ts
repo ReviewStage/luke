@@ -1,5 +1,5 @@
 import type { NotebookMemoryStore } from "@sidecar/memory";
-import type { ChildStore, ScheduledJobStore } from "@sidecar/runtime";
+import type { ChildStore } from "@sidecar/runtime";
 import type { SessionKey, TranscriptEvent } from "@sidecar/runtime/vocabulary";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import type { BrainPersistedState, BrainStateLoad, BrainStateRepository } from "../envelope.js";
@@ -51,8 +51,6 @@ export interface StoreClient {
    * its next save is refused the same way until it loads again.
    */
   brainStateRepository(sessionKey: SessionKey): BrainStateRepository;
-  /** The scheduler's jobs as a store: listed, written whole, and deleted through the worker. */
-  scheduledJobStore(): ScheduledJobStore;
   /** The notebook's index and Conversation's search under the names the memory package's host asks for. */
   notebookMemoryStore(): NotebookMemoryStore;
   /** The child service's records and completions as a store, each written whole through the worker. */
@@ -164,11 +162,6 @@ export function storeClient(port: StorePort): StoreClient {
         }),
       searchConversation: (sessionKeys, query, limit, now) =>
         ask("conversation.search", { sessionKeys, query, limit, now }),
-    }),
-    scheduledJobStore: () => ({
-      list: () => ask("jobs.list", {}),
-      put: (job) => ask("jobs.put", { job }),
-      delete: (id) => ask("jobs.delete", { id }),
     }),
     childStore: () => ({
       listChildren: () => ask("children.list", {}),

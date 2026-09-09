@@ -19,8 +19,6 @@ export const BRAIN_INPUT_MARKER = {
   STANDING_CONTEXT: "[standing context]",
   /** Words primed once into a conversation that just started fresh: the recent daily notes, as data. */
   PRIMED_NOTES: "[primed notes]",
-  /** The scheduled review's opening: nothing changed for certain, and HEARTBEAT.md says what to look at. */
-  HEARTBEAT: "[heartbeat]",
   /** What sibling conversations did since this one last ran, as the host's own counts. */
   ACTIVITY_NOTICES: "[activity notices]",
   /** A child's delegated task, appended after any forked history; the child's assignment and nothing else. */
@@ -60,22 +58,15 @@ function eventRecord(event: BrainWakeEvent): WireRecord {
 }
 
 /**
- * The words an observed-events turn opens with. A scheduled roster wake also
- * carries the whole roster as `list_sessions` would answer it, so the look is
- * at everything observed, not only the sessions whose transcripts grew.
+ * The words an observed-events turn opens with. The roster itself is not
+ * repeated here: the same request carries it in the standing context, which
+ * is rebuilt every turn and never remembered.
  */
-export function wakeInputText(
-  events: readonly BrainWakeEvent[],
-  now: number,
-  roster?: string,
-): string {
+export function wakeInputText(events: readonly BrainWakeEvent[], now: number): string {
   return marked(
     BRAIN_INPUT_MARKER.OBSERVED_EVENTS,
     now,
-    JSON.stringify({
-      ...(roster !== undefined ? { scheduled_roster_look: true, roster } : undefined),
-      events: events.map(eventRecord),
-    }),
+    JSON.stringify({ events: events.map(eventRecord) }),
   );
 }
 
@@ -142,19 +133,6 @@ export function primedNotesInputText(notes: string): string {
     "",
     notes,
   ].join("\n");
-}
-
-/**
- * The words a heartbeat turn opens with. Nothing detected a change: the turn
- * is the scheduled review the workspace's HEARTBEAT.md describes, and the
- * ordinary answer to it is silence.
- */
-export function heartbeatInputText(now: number): string {
-  return marked(
-    BRAIN_INPUT_MARKER.HEARTBEAT,
-    now,
-    JSON.stringify({ scheduled_review: true, instructions_file: "HEARTBEAT.md" }),
-  );
 }
 
 /** The words a child's own run opens with: its task, as data behind the marker, after any forked history. */

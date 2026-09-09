@@ -192,6 +192,26 @@ test("a respond request runs the prepared prompt over the schemas its names sele
   );
   assert.deepEqual(sent.tools[0], selected);
   assert.deepEqual(sent.input, INPUT);
+  // Nothing asked for a prefix cache, so nothing is forwarded upstream.
+  assert.equal("prompt_cache_key" in sent, false);
+});
+
+test("a request's prompt cache key is forwarded upstream and kept nowhere", async () => {
+  const { fetch, calls } = upstream([
+    () => Response.json({ id: "resp_1", status: "completed", output: [message("ok")] }),
+  ]);
+  const response = await handleBrainRespondV2(
+    options({
+      request: request(
+        HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2,
+        respondBody({ options: { promptCacheKey: "9f86d0818" } }),
+      ),
+      fetch,
+    }),
+  );
+  assert.equal(response.status, 200);
+  assert.equal(calls[0]?.body?.prompt_cache_key, "9f86d0818");
+  assert.equal(calls[0]?.body?.store, false);
 });
 
 test("each refusal answers its own error before anything is spent: prompt envelope, unknown tool, bounds, shape, size", async () => {

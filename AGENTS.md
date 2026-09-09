@@ -146,7 +146,7 @@ Trust constraints:
   a word: the same policy fixes the schemas the model is offered and the gate
   every emitted call meets at dispatch, so nothing the model reads can widen
   either. Who opened a turn — the developer's ask, a provider's hook, the
-  roster look, a hold's release, a heartbeat — is its origin, recorded on the
+  roster look, a hold's release — is its origin, recorded on the
   run and in Conversation, and never by itself a permission: a turn Luke opened
   himself may carry the actions the policy allows, and an action it takes is
   journaled before its effect exactly as an ask's and narrated as Luke's own
@@ -228,10 +228,10 @@ Trust constraints:
   and the roster look on the observation pass route to the observed session's
   own conversation, which keeps its own transcript cursor, context, and
   generation; main is woken by
-  a developer's ask, by the scheduled heartbeat (every thirty minutes by
-  default, on the ordinary main conversation under `HEARTBEAT.md`, normally
-  briefing nothing), and by a hold's release of a briefing it decided, and
-  is handed no transcript on any look. What main learns of the observed
+  a developer's ask and by a hold's release of a briefing it decided, and
+  is handed no transcript on any look. Nothing else wakes it: there is no
+  scheduled review, and an observed conversation announces its own session's
+  news itself. What main learns of the observed
   conversations is a compact notice in the host's own counts and Luke's own
   briefing words, consumed on its next turn and never a transcript's text.
   An observed conversation's wake or roster look reads only what its one
@@ -279,9 +279,9 @@ Trust constraints:
   are archived after an hour. Every conversation runs one execution at
   a time and all of them share the execution lanes ported from OpenClaw
   `b7528507` (`packages/runtime/src/lanes.ts`: an agent lane of
-  `min(16, max(8, availableParallelism()))`, a hook-dispatch lane sharing
-  the cron inner budget of 8 with one slot reserved, and the rest as that
-  source has them), separate budgets and never one cap over Luke. An ask
+  `min(16, max(8, availableParallelism()))`, a hook-dispatch lane of 8, and
+  the rest as that source has them), separate budgets and never one cap over
+  Luke. An ask
   that arrives while a conversation's turn is under way is taken under the
   queue mode (steer by default: the run reads it at its next model boundary
   after every emitted tool call has its result, and answers both; follow-up,
@@ -299,9 +299,15 @@ Trust constraints:
   data — directly to OpenAI on the developer's own key, or through Luke's own
   service on the hosted tier, where the service performs one model inference
   per request, asks OpenAI not to store it, and keeps and logs none of the
-  request body, the output, or the compaction inside it. The development
+  request body, the output, or the compaction inside it. One field beside
+  the input is the conversation's prompt cache key: a sha256 hash of the
+  conversation's own key, stable across launches, carried so a turn lands on
+  the earlier turns' prefix rather than rebilling it. It is a routing hint
+  and identifies nothing — a session id never travels in it, and the hosted
+  service forwards it and keeps it no longer than the request. The development
   trace records a turn's about-fields and byte counts under its own gate,
-  never a transcript's text.
+  never a transcript's text, and of the cache key it records only that one
+  was asked for.
 - The judgment is a host over replaceable parts, and the seams are the
   contracts in the runtime's vocabulary (`@sidecar/runtime/vocabulary`). The
   host (`BrainAgent`) owns the conversation's standing — accepting asks into runs, queueing turns, the
@@ -362,12 +368,12 @@ Trust constraints:
   own directory (`agents/main/workspace`): `AGENTS.md` for operating
   instructions and tool notes, `SOUL.md` for the persona, `IDENTITY.md`,
   `USER.md` for stable facts about the developer, `MEMORY.md` for curated
-  memory, `BOOTSTRAP.md` for first-time setup, and `HEARTBEAT.md` for the
-  scheduled review, following OpenClaw `b7528507`'s prompt composition. A
+  memory, and `BOOTSTRAP.md` for first-time setup, following OpenClaw
+  `b7528507`'s prompt composition. A
   missing file is seeded once at launch; an existing one, edited or not, is
   never rewritten by an upgrade. Each file is cut to 20,000 characters and
   the set to 60,000, and a cut is named in the prompt and the diagnostics
-  rather than hidden. Ordinary conversation, observation, and heartbeat runs
+  rather than hidden. Ordinary conversation and observation runs
   use the full profile; a child run gets the minimal one, `AGENTS.md` alone
   and none of the parent's persona or notebook files. Daily notes under
   `memory/` are never in an ordinary prompt: they are read on demand and
@@ -451,7 +457,7 @@ Trust constraints:
   root it is handed, Linear, the calendar readers and their holds, the
   speech arbiter, the reply deliveries and the receiver epochs, the runtime
   store worker, the notebook and its maintenance, the brain, the
-  conversation operations, history maintenance, the scheduler, the
+  conversation operations, history maintenance, the
   development trace, and the arrival and calendar-onboarding records. The
   state root is given to it explicitly and nothing of it is derived from the
   hosting process's own profile. The desktop composes that host in its own

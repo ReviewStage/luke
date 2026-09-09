@@ -16,9 +16,8 @@ import type { ToolDescriptor } from "./registry.js";
  * not the model was shown it.
  *
  * Origin is attribution, not permission: a user's run, an observation, a
- * heartbeat, a continuation, and a child all execute what the effective
- * policy allows, writes included. What a run is not offered is decided here
- * and only here.
+ * continuation, and a child all execute what the effective policy allows,
+ * writes included. What a run is not offered is decided here and only here.
  */
 
 export interface ToolPolicy {

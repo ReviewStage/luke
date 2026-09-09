@@ -127,7 +127,7 @@ test("stop opens nothing more, and a captured observation stays for the next age
   });
 });
 
-test("a roster look carries the roster and only the transcripts that grew", async () => {
+test("a roster look carries only the transcripts that grew, never the roster", async () => {
   const working = session("abc", { status: SESSION_STATUS.WORKING });
   const settled = session("def", { status: SESSION_STATUS.COMPLETE, lastActivityAt: NOW - 60_000 });
   const cloud = normalizeSession(
@@ -166,8 +166,10 @@ test("a roster look carries the roster and only the transcripts that grew", asyn
   assert.ok(opening.startsWith(`${BRAIN_INPUT_MARKER.OBSERVED_EVENTS} `));
   const body = wireRecord(unparsedWire(JSON.parse(opening.slice(opening.indexOf("\n") + 1))));
   assert.ok(body);
-  assert.equal(body.scheduled_roster_look, true);
-  assert.match(String(body.roster), /cloud-1/);
+  // The roster rides in the standing context of the same request, so the
+  // opening item repeats neither it nor a flag naming the look.
+  assert.equal(body.scheduled_roster_look, undefined);
+  assert.equal(body.roster, undefined);
   // Only the working local session's transcript is carried: the settled one
   // had no cursor and nothing live, the cloud one is not read on a look, and
   // a delta that came back empty is left out rather than reported as news.

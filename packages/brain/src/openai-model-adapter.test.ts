@@ -74,6 +74,7 @@ test("respond posts the fixed request on the developer's key and normalizes the 
   assert.deepEqual(call.body.reasoning, { effort: "medium" });
   assert.equal(call.body.max_output_tokens, 500);
   assert.equal("context_management" in call.body, false);
+  assert.equal("prompt_cache_key" in call.body, false);
   assert.ok(Array.isArray(call.body.tools));
   assert.deepEqual(
     call.body.tools.filter(isRecord).map((tool) => [tool.type, tool.name]),
@@ -175,4 +176,12 @@ test("the factory builds only from a key, and capabilities name the tool-loop Re
     formatVersion: 1,
   });
   assert.equal(capabilities.capabilities.compacts, true);
+});
+
+test("the prompt cache key a turn was given reaches the request", async () => {
+  const { fetch, calls } = fakeFetch([Response.json({ status: "completed", output: [] })]);
+  await adapter(fetch).respond(INPUT, { ...OPTIONS, promptCacheKey: "9f86d0818" });
+  const [call] = calls;
+  assert.ok(call && isRecord(call.body));
+  assert.equal(call.body.prompt_cache_key, "9f86d0818");
 });

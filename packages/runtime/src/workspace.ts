@@ -22,7 +22,6 @@ export const WORKSPACE_FILE = {
   USER: "USER.md",
   MEMORY: "MEMORY.md",
   BOOTSTRAP: "BOOTSTRAP.md",
-  HEARTBEAT: "HEARTBEAT.md",
 } as const;
 
 export type WorkspaceFile = (typeof WORKSPACE_FILE)[keyof typeof WORKSPACE_FILE];
@@ -229,7 +228,7 @@ export const WORKSPACE_FILE_REFUSAL = {
 
 /**
  * Resolves a name the agent gave to a file inside the workspace, or nothing:
- * one of the fixed bootstrap files, HEARTBEAT.md, or a daily note under
+ * one of the fixed bootstrap files, or a daily note under
  * `memory/` named by the day's pattern. A path that escapes the directory,
  * names anything else, or carries a separator the pattern does not allow
  * is refused, so the workspace tools can reach nothing but the workspace.
