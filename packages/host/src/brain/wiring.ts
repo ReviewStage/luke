@@ -84,7 +84,6 @@ import {
 import type { ConversationEntry } from "@sidecar/session";
 import {
   dispatchRead,
-  SESSION_LOCATION,
   SESSION_STATUS,
   type Session,
   type SessionIdentity,
@@ -824,7 +823,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       const live =
         session.status === SESSION_STATUS.WORKING || session.status === SESSION_STATUS.WAITING;
       const open = conversations.has(sessionKey);
-      if (session.location !== SESSION_LOCATION.LOCAL || !(live || open)) continue;
+      if (!(live || open)) continue;
       void openObserved(identity).then((agent) => agent?.rosterLook());
     }
     // A session the roster no longer holds has nothing left to observe: its

@@ -3,7 +3,7 @@ import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, isWireString, type WireRecord } from "@sidecar/wire";
-import { BrainAgent } from "./agent.js";
+import { BrainAgent, LOOK_SUBJECT } from "./agent.js";
 import { type BrainPersistedState, freshBrainState } from "./envelope.js";
 import {
   ABC,
@@ -35,6 +35,7 @@ import {
   RECORD_CAP,
   runtimeOver,
   seededRequests,
+  session,
   settle,
   submissionsIssued,
   submit,
@@ -266,6 +267,7 @@ test("stop settles only after a held acceptance, which the successor then finds 
   const successorModel = adapterOf(new FakeClient());
   const successor = new BrainAgent({
     runtime: runtimeOver(successorModel),
+    observes: { kind: LOOK_SUBJECT.NONE },
     prepareTurn: PLAIN_PREPARATION,
     actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
     roster: () => ({ text: "", identities: [] }),
@@ -547,7 +549,9 @@ test("two different markers saved concurrently both survive, in either order, on
 });
 
 test("an ordinary observation checkpoint composed behind a held mark keeps the mark", async () => {
-  const h = harness();
+  const h = harness({
+    roster: () => ({ text: "one", identities: [ABC], sessions: [session(ABC.providerSessionId)] }),
+  });
   const runId = await completedRun(h);
   const releaseWrite = h.repository.hold();
   const marking = h.agent.markConversationRecorded(runId, NOW + 1);

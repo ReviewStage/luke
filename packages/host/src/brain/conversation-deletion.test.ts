@@ -12,6 +12,7 @@ import {
   type BrainPersistedState,
   type BrainStateRepository,
   BrainStateStore,
+  LOOK_SUBJECT,
   responsesModelAnswer,
   toolLoopRuntimeOver,
 } from "@sidecar/brain";
@@ -137,6 +138,7 @@ function composed(t: TestContext) {
   const build = (client: BareResponsesModel) => {
     const agent = new BrainAgent({
       runtime: toolLoopRuntimeOver(bareModelAdapter(client)),
+      observes: { kind: LOOK_SUBJECT.NONE },
       prepareTurn: () => ({ prompt: "instructions", layers: {} }),
       actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
       roster: () => ({ text: "- abc", identities: [] }),

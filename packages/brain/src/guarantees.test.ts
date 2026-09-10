@@ -147,7 +147,9 @@ test("the effective tool policy fixes the schemas and the gate, and nothing the 
  * `turn.ts`'s `runOriginOf`, read at every turn's opening.
  */
 test("an action in a turn the developer did not open is Luke's own", async () => {
-  const h = harness();
+  const h = harness({
+    roster: () => ({ text: "one", identities: [ABC], sessions: [session(ABC.providerSessionId)] }),
+  });
   await h.agent.wake([edge(ABC)]);
   await h.clock.advance(NOW + 3_000);
   await h.agent.rosterLook();

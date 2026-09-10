@@ -12,7 +12,7 @@ import {
   TRANSCRIPT_EVENT_KIND,
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { BrainAgent } from "./agent.js";
+import { BrainAgent, LOOK_SUBJECT } from "./agent.js";
 import {
   assessCompaction,
   COMPACTION_NEED,
@@ -295,6 +295,7 @@ function agentOver(model: ModelAdapter, repository: FakeBrainStateRepository) {
   const reports: string[] = [];
   const agent = new BrainAgent({
     runtime,
+    observes: { kind: LOOK_SUBJECT.NONE },
     prepareTurn: () => ({ prompt: "instructions", layers: {} }),
     actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
     roster: () => ({ text: "none", identities: [] }),

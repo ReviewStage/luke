@@ -31,7 +31,7 @@ import {
   type SessionProvider,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
-import { BRAIN_DEFAULTS, BrainAgent, type BrainAgentOptions } from "./agent.js";
+import { BRAIN_DEFAULTS, BrainAgent, type BrainAgentOptions, LOOK_SUBJECT } from "./agent.js";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { type BrainPersistedState, MAXIMUM_TERMINAL_REQUESTS } from "./envelope.js";
 import type { BrainActionExecution, BrainActionPerformer } from "./performer.js";
@@ -330,6 +330,7 @@ export function harness(
   const agent = new BrainAgent({
     runtime,
     prepareTurn: PLAIN_PREPARATION,
+    observes: { kind: LOOK_SUBJECT.SESSION, identity: ABC },
     actions: {
       perform: async (functionCall, execution) => {
         performed.push(functionCall);
@@ -656,6 +657,7 @@ export function agentOn(runtime: ToolLoopAgentRuntime, h: Harness) {
   return new BrainAgent({
     runtime,
     prepareTurn: PLAIN_PREPARATION,
+    observes: { kind: LOOK_SUBJECT.NONE },
     actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
     roster: () => ({ text: "", identities: [] }),
     standingContext: () => "",
@@ -672,17 +674,19 @@ export function agentOn(runtime: ToolLoopAgentRuntime, h: Harness) {
 }
 
 /**
- * A conversation held busy by a roster look. A look's turn takes no steered
- * words, so asks made while it stands wait in the queue for a turn of their
- * own; releasing ends the look, which drains what waited into one turn.
- * `inner.inputs[0]` is the look; the drained turn is the one after it.
+ * A conversation held busy by an observation turn: a hold's release, which
+ * opens a turn over no inbox entry, so nothing is left owed when the turn is
+ * cut short. An observation turn takes no steered words, so asks made while
+ * it stands wait in the queue for a turn of their own; releasing ends the
+ * turn, which drains what waited into one turn. `inner.inputs[0]` is the
+ * observation turn; the drained turn is the one after it.
  */
 export async function reviewing(...replies: readonly BrainClientAnswer[]) {
   const inner = new FakeClient();
   const gated = gatedClient(inner);
   const h = harness({ client: gated.client });
   inner.answers.push(answered([message("nothing spoken")]), ...replies);
-  await h.agent.rosterLook();
+  h.agent.releaseHeld([{ briefing: "held", decidedAt: NOW }]);
   await settle();
   return {
     h,

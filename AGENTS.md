@@ -232,7 +232,13 @@ Canonical commands:
   scheduled: the observation entry and the advanced capture cursor land in
   one save into the conversation's durable inbox, and the turn that follows
   consumes the entries it opened with at its checkpoint, moving the consumed
-  cursor there and only there. The two cursors are two on purpose: a
+  cursor there and only there. Which sessions are looked at is the host's
+  decision, local or cloud alike: every session working or waiting now, and
+  every one whose conversation already stands. A session whose provider
+  answers no incremental read (a Conductor chat today) is looked at from its
+  roster fields alone — the look itself reads no message of it — and the
+  turn it opens may read that chat's tail only through the same
+  `read_transcript` tool a developer's ask is offered, under the rule above. The two cursors are two on purpose: a
   throttled or failed inference leaves every entry standing for the next
   turn, a crash between capture and run loses nothing and reads nothing
   twice, and a relaunch runs what was captured without touching a
