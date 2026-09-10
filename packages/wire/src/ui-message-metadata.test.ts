@@ -62,6 +62,37 @@ test("a user row is a typed ask, a spoken ask, or an observation, each admitted 
   );
 });
 
+test("every way the brain writes a user row for itself is a source, and a source the vocabulary does not name is refused", () => {
+  const sources = Object.values(OBSERVATION_SOURCE);
+  assert.deepEqual(
+    sources.map((source) => USER_MESSAGE_METADATA.parse({ author: MESSAGE_AUTHOR.BRAIN, source })),
+    sources.map((source) => ({ author: MESSAGE_AUTHOR.BRAIN, source })),
+  );
+  assert.deepEqual(
+    new Set(sources),
+    new Set([
+      OBSERVATION_SOURCE.HOOK,
+      OBSERVATION_SOURCE.ROSTER_LOOK,
+      OBSERVATION_SOURCE.HOLD_RELEASE,
+      OBSERVATION_SOURCE.CHILD,
+      OBSERVATION_SOURCE.CHILD_COMPLETION,
+      OBSERVATION_SOURCE.RECALLED_NOTES,
+      OBSERVATION_SOURCE.ACTIVITY_NOTICES,
+    ]),
+  );
+  const refused: UnparsedWireValue[] = [
+    { author: MESSAGE_AUTHOR.BRAIN, source: "bulletin" },
+    { author: MESSAGE_AUTHOR.BRAIN, source: MESSAGE_CHANNEL.TYPED },
+    { author: MESSAGE_AUTHOR.BRAIN, source: "" },
+    { author: MESSAGE_AUTHOR.BRAIN },
+    { author: MESSAGE_AUTHOR.CHILD, source: OBSERVATION_SOURCE.CHILD },
+    { author: MESSAGE_AUTHOR.DEVELOPER, source: OBSERVATION_SOURCE.HOLD_RELEASE },
+  ];
+  for (const value of refused) {
+    assert.equal(refusalOf(USER_MESSAGE_METADATA, value), SCHEMA_REFUSAL.MALFORMED);
+  }
+});
+
 test("the authors are bound to their shapes: a child never speaks as user, the brain never on a channel, the developer never as an observation", () => {
   const refused: UnparsedWireValue[] = [
     { author: MESSAGE_AUTHOR.CHILD, channel: MESSAGE_CHANNEL.TYPED },

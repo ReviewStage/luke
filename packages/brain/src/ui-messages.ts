@@ -50,15 +50,15 @@ export function toolPartType(name: string): ToolPart["type"] {
 }
 
 /**
- * What a user row of this turn says about itself, where the vocabulary has a
- * shape for it: a developer's ask by the channel it arrived on, an
- * observation by what opened it. A hold's release, a child's task, and the
- * host's own notes have no shape yet and carry none.
+ * What a user row of a turn's own words says about itself: a developer's ask
+ * by the channel it arrived on, and everything the brain wrote down for
+ * itself by what opened the turn. The notes the host hands a turn beside its
+ * words name their own sources, below.
  */
 export function userMetadataOf(
   trigger: BrainTurnTrigger,
   askOrigin: BrainRequestOrigin | undefined,
-): UserMessageMetadata | undefined {
+): UserMessageMetadata {
   switch (trigger) {
     case BRAIN_TURN_TRIGGER.ASK:
       return {
@@ -71,22 +71,26 @@ export function userMetadataOf(
     case BRAIN_TURN_TRIGGER.ROSTER:
       return { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.ROSTER_LOOK };
     case BRAIN_TURN_TRIGGER.HOLD_RELEASED:
+      return { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.HOLD_RELEASE };
     case BRAIN_TURN_TRIGGER.CHILD_TASK:
+      return { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.CHILD };
     case BRAIN_TURN_TRIGGER.CHILD_COMPLETION:
-      return undefined;
+      return { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.CHILD_COMPLETION };
   }
 }
 
-/** The message a text the turn was handed amounts to: the developer's ask, an observation, a steered ask. */
-export function userMessage(
-  id: string,
-  text: string,
-  metadata: UserMessageMetadata | undefined,
-): UIMessage {
+/** What the notes the host hands a turn beside its words say about themselves. */
+export const HOSTED_WORDS_METADATA = {
+  RECALLED_NOTES: { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.RECALLED_NOTES },
+  ACTIVITY_NOTICES: { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.ACTIVITY_NOTICES },
+} as const satisfies Record<string, UserMessageMetadata>;
+
+/** The message a text the turn was handed amounts to: the developer's ask, an observation, a steered ask, a note. */
+export function userMessage(id: string, text: string, metadata: UserMessageMetadata): UIMessage {
   return {
     id,
     role: MESSAGE_ROLE.USER,
-    ...(metadata ? { metadata } : undefined),
+    metadata,
     parts: [{ type: UI_PART_TYPE.TEXT, text, state: UI_PART_STATE.DONE }],
   };
 }
