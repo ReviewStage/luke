@@ -10,6 +10,7 @@ import {
   REALTIME_CLIENT_EVENT,
   REALTIME_SERVER_EVENT,
   REALTIME_STATUS,
+  type RealtimeStatus,
   realtimeSessionConfig,
 } from "@sidecar/realtime";
 import { REPLY_KIND, type ReplyKind } from "@sidecar/voice/orchestrator";
@@ -49,7 +50,10 @@ interface Harness {
   closeChannel: () => void;
 }
 
-function harness(conversationSeed?: () => readonly WireRecord[]): Harness {
+function harness(
+  conversationSeed?: () => readonly WireRecord[],
+  onStatus: (status: RealtimeStatus) => void = () => undefined,
+): Harness {
   const sent: ParsedJsonObject[] = [];
   const captions: (readonly string[] | undefined)[] = [];
   const replyEndings: { texts: readonly string[]; kind: ReplyKind | undefined }[] = [];
@@ -93,7 +97,7 @@ function harness(conversationSeed?: () => readonly WireRecord[]): Harness {
         },
       };
     },
-    onStatus: () => undefined,
+    onStatus,
     onRemoteStream: () => undefined,
     onError: () => undefined,
     onCaption: (texts) => captions.push(texts),
@@ -253,6 +257,31 @@ test("the recent conversation seeds the call as its channel opens, and again on 
   const sentBeforeReconnect = context.sent.length;
   assert.equal(await context.call.connect(), true);
   assert.deepEqual(context.sent.slice(sentBeforeReconnect), seed);
+});
+
+test("a briefing spoken the instant the call is ready still lands after the seed", async () => {
+  const seed = [seedItem("user", "what needs me?")];
+  let context: Harness | undefined;
+  // The mouth speaks on the READY edge itself, synchronously, the way
+  // SpeechMouth's flush does.
+  context = harness(
+    () => seed,
+    (status) => {
+      if (status === REALTIME_STATUS.READY) context?.call.speak(briefingAbout("session-a"));
+    },
+  );
+
+  await context.call.connect();
+
+  assert.deepEqual(
+    context.sent.map((event) => event.type),
+    [
+      REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
+      REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
+      REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
+    ],
+  );
+  assert.deepEqual(context.sent[0], seed[0]);
 });
 
 test("a call built without a seed opens on an empty conversation", async () => {

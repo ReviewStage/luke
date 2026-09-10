@@ -440,11 +440,15 @@ export class SpeakOnlyCall<
     this.send(outputSpeedUpdateEvents(speed));
   }
 
-  protected override onChannelOpen(): void {
-    // The seed lands first, once per connect: a reconnect after the session
-    // expired or the idle retire reads the thread as it then stands, which
-    // now holds what was said on the call before.
+  protected override onChannelConnected(): void {
+    // The seed lands before READY is published, because the mouth speaks a
+    // waiting briefing the moment it is; once per connect, so a reconnect
+    // after the session expired or the idle retire reads the thread as it
+    // then stands, which now holds what was said on the call before.
     this.send(this.options.conversationSeed?.() ?? []);
+  }
+
+  protected override onChannelOpen(): void {
     // A pace changed during the handshake could not be sent then, and the
     // credential this call answered may have been minted before the change.
     this.#flushPendingSpeed();
