@@ -82,6 +82,19 @@ export {
   type PushEnvironment,
 } from "./device-wire.js";
 export {
+  HOSTED_VOICE_SERVICE_ORIGIN,
+  hostedVoiceServiceOrigin,
+  isHostedVoiceServiceAddress,
+  type LiveSessionCreated,
+  liveSessionCreatedSchema,
+  SESSION_CREATE_BOUNDS,
+  type SessionCreatedFrame,
+  type SessionCreateFrame,
+  sessionCreatedFrameSchema,
+  sessionCreateFrameSchema,
+  VOICE_SERVICE_FRAME,
+} from "./live-contract.js";
+export {
   HOSTED_CALLS_URL,
   HOSTED_WS_BASE_URL,
   type HostedMintAnswer,
@@ -125,7 +138,11 @@ export {
   RESPONSES_MESSAGE_ROLE,
   serializedRequestBytes,
 } from "./responses-input.js";
-export { HOSTED_SERVICE_PATH } from "./service-paths.js";
+export {
+  HOSTED_SERVICE_PATH,
+  VOICE_SERVICE_PATH,
+  VOICE_SERVICE_SECRET_HEADER,
+} from "./service-paths.js";
 export {
   HOSTED_API_ERROR,
   type HostedApiError,
