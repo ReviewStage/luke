@@ -46,6 +46,8 @@ export interface BrainRequestLedgerOptions {
   report: (message: string) => void;
   /** Hears every change the ledger lands on a record, so the host's listeners hear it too. */
   notify: () => void;
+  /** Hears each run's end exactly once, as the record stands after it settled. */
+  runEnded?: (record: BrainRequestRecord) => void;
 }
 
 export class BrainRequestLedger {
@@ -54,6 +56,7 @@ export class BrainRequestLedger {
   readonly #now: () => number;
   readonly #report: (message: string) => void;
   readonly #notify: () => void;
+  readonly #runEnded: ((record: BrainRequestRecord) => void) | undefined;
   readonly #pendingMarks = new Map<string, Map<PendingMarkField, Promise<boolean>>>();
 
   constructor(options: BrainRequestLedgerOptions) {
@@ -62,6 +65,7 @@ export class BrainRequestLedger {
     this.#now = options.now;
     this.#report = options.report;
     this.#notify = options.notify;
+    this.#runEnded = options.runEnded;
   }
 
   /**
@@ -213,6 +217,7 @@ export class BrainRequestLedger {
     };
     if (await this.commit(generation, runId, settled)) {
       this.#notify();
+      this.#ended(generation, runId);
       return;
     }
     const fallback =
@@ -227,5 +232,11 @@ export class BrainRequestLedger {
       this.#update(generation, runId, fallback);
     }
     this.#notify();
+    this.#ended(generation, runId);
+  }
+
+  #ended(generation: Generation, runId: string): void {
+    const record = generation.requests.get(runId);
+    if (record) this.#runEnded?.({ ...record });
   }
 }

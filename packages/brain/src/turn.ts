@@ -7,6 +7,7 @@ import {
 import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import { RUN_ORIGIN, type RunOrigin } from "@sidecar/runtime/vocabulary";
 import type { Generation } from "./generation.js";
+import type { BrainRequestOrigin } from "./requests.js";
 import type { SteeredDeliveries } from "./steered-deliveries.js";
 import type { RecordingContextEngine } from "./transcript-recorder.js";
 import type { BrainWakeEvent } from "./wake-events.js";
@@ -149,6 +150,8 @@ interface TurnPlanBase {
 
 export interface TurnPlan extends TurnPlanBase {
   trigger: BrainTurnTrigger;
+  /** Where the ask that opened an ask's turn came from, for the prompt it is prepared under. */
+  askOrigin?: BrainRequestOrigin;
 }
 
 /** The generation a turn opened in, the context it runs over, and the one signal every wait of the turn settles on. */
@@ -191,7 +194,11 @@ export const BRAIN_TURN_KIND = {
   MAINTENANCE: "maintenance",
 } as const;
 
-/** What a host is asked to prepare a turn for. */
+/** What a host is asked to prepare a turn for; an ask's turn says where its ask came from. */
 export type BrainTurnDescription =
-  | { readonly kind: typeof BRAIN_TURN_KIND.TURN; readonly trigger: BrainTurnTrigger }
+  | {
+      readonly kind: typeof BRAIN_TURN_KIND.TURN;
+      readonly trigger: BrainTurnTrigger;
+      readonly askOrigin?: BrainRequestOrigin;
+    }
   | { readonly kind: typeof BRAIN_TURN_KIND.MAINTENANCE };

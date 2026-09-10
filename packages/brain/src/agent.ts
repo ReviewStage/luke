@@ -12,7 +12,7 @@ import type {
   ProviderTranscriptSinceResult,
   SessionIdentity,
 } from "@sidecar/session";
-import type { WireRecord } from "@sidecar/wire";
+import { Emitter, type Event, type WireRecord } from "@sidecar/wire";
 import { AskLedger, type BrainRequestsListener } from "./asks.js";
 import { type BrainCompletionDelivery, ChildRuns } from "./children.js";
 import { BRAIN_DEFAULTS } from "./defaults.js";
@@ -41,6 +41,7 @@ import {
   interruptedUnfinishedRequests,
   isTerminalBrainRequestStatus,
 } from "./requests.js";
+import { BRAIN_RUN_EVENT, type BrainRunEvent } from "./run-events.js";
 import type { AgentSeam } from "./seam.js";
 import type { BrainStateStore } from "./state-store.js";
 import { SteeredDeliveries } from "./steered-deliveries.js";
@@ -219,6 +220,15 @@ export class BrainAgent {
   #stopped = false;
   #unsubscribeStore: (() => void) | undefined;
   #incompatibleReported: string | undefined;
+  readonly #runEvents = new Emitter<BrainRunEvent>();
+
+  /**
+   * What each recorded run tells as it goes — its slow step, its actions
+   * settling, its reply a sentence at a time, its end — for a host relaying
+   * the run into a live conversation. Delivered in that order per run, for
+   * recorded runs alone, and a listener that throws ends no turn.
+   */
+  readonly onRunEvent: Event<BrainRunEvent> = this.#runEvents.event;
 
   constructor(options: BrainAgentOptions) {
     this.#options = options;
@@ -239,6 +249,14 @@ export class BrainAgent {
       now: this.#now,
       report: this.#report,
       notify: () => this.#asks.notify(),
+      runEnded: (record) =>
+        this.#fireRunEvent({
+          kind: BRAIN_RUN_EVENT.ENDED,
+          runId: record.runId,
+          status: record.status,
+          ...(record.text !== undefined ? { text: record.text } : undefined),
+          ...(record.failure !== undefined ? { failure: record.failure } : undefined),
+        }),
     });
     const seam: AgentSeam = {
       now: this.#now,
@@ -274,6 +292,7 @@ export class BrainAgent {
       readTranscript: options.readTranscript,
       deliver: options.deliver,
       ...(options.notice ? { notice: options.notice } : undefined),
+      onRunEvent: (event) => this.#fireRunEvent(event),
       ...(options.trace ? { trace: options.trace } : undefined),
       ...(options.openingNotes ? { openingNotes: options.openingNotes } : undefined),
       ...(options.workspace ? { workspace: options.workspace } : undefined),
@@ -407,6 +426,9 @@ export class BrainAgent {
    * the write's own outcome. A new submission id is a new run, however alike
    * the words; the same id with other words or another origin is refused as a
    * conflict rather than guessed at. Pending wakes ride in the run's turn.
+   * A spoken ask is this same submission under the spoken origin, with the
+   * submission id its relay minted: that origin is what prepares its turn
+   * under the backend preamble, and it needs no entry of its own.
    */
   async submitAsk(submission: BrainSubmission): Promise<BrainSubmissionResult> {
     await this.ready();
@@ -570,6 +592,17 @@ export class BrainAgent {
     }
     await this.#queue;
     if (this.#generation) retireOpenedContext(this.#generation);
+    this.#runEvents.dispose();
+  }
+
+  #fireRunEvent(event: BrainRunEvent): void {
+    try {
+      this.#runEvents.fire(event);
+    } catch (failure) {
+      this.#report(
+        `Brain run listener failed: ${failure instanceof Error ? failure.name : "unknown error"}`,
+      );
+    }
   }
 
   /**
