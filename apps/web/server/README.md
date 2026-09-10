@@ -319,6 +319,20 @@ repaired by the store that observed it. Clear is a hard delete of the
 conversation's lines, transcript, and boundaries at or before its instant,
 with no recovery archive and no maintenance ladder.
 
+Beside those v1 tables stand the storage rework's, under
+`server/db/storage-schema.ts`: `conversations`, `messages`, `turns`, and
+`conversation_lease`, the shape `plan/storage-plan.md` on the
+`orchestration/storage-plan` branch settles on. A conversation row names its
+kind (main, observed, child, or thread), the provider session it observes,
+the parent and spawning message a child came from, the runtime's own session
+id, its soft-delete instant, and the two counters that number its messages
+and events. A message is one AI SDK `UIMessage`, its parts and metadata as
+plain `jsonb`, unique on `(conversation_id, client_id)` as its idempotency
+key; a turn is one run's origin, status, model, prompt and tool-set hashes,
+response ids, usage, timings, and failure. Nothing in these tables is sealed,
+and nothing reads or writes them yet: the store writer lands on them in its
+own change, and the v1 tables are dropped only after every reader has moved.
+
 The store tests run the generated migrations on PGlite in process, so
 `check.sh` needs no service; the `postgres` CI job runs the same migrations
 and tests against a Postgres service container. To run them against a
