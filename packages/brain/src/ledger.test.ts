@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import {
+  type ActionOutputEnvelope,
+  acceptedActionOutput,
+  refusedActionOutput,
+} from "@sidecar/actions";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
-import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { BrainAgent, LOOK_SUBJECT } from "./agent.js";
 import { type BrainPersistedState, freshBrainState } from "./envelope.js";
 import {
@@ -94,11 +99,11 @@ test("a checkpoint that fails after an action keeps its result in memory, blocks
   let repository: FakeBrainStateRepository | undefined;
   const h = harness({
     actions: {
-      perform: async (): Promise<WireRecord> => {
+      perform: async (): Promise<ActionOutputEnvelope> => {
         acted += 1;
         // The disk goes away from the moment the first effect has happened.
         repository?.refuse();
-        return { status: ACTION_RESULT_STATUS.ACCEPTED };
+        return acceptedActionOutput();
       },
     },
   });
@@ -329,7 +334,7 @@ test("a copy taken before the second model answer already carries the actions th
         dispatched += 1;
         if (dispatched === 1) return Promise.reject(new Error("socket closed after send"));
         if (dispatched === 2) {
-          return Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: "not observed" });
+          return Promise.resolve(refusedActionOutput("not observed"));
         }
         return held.actions.perform(functionCall, execution);
       },

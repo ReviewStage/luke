@@ -1,4 +1,10 @@
 import {
+  ACTION_OUTPUT,
+  realtimeToolFamily,
+  refusedActionOutput,
+  unknownActionOutput,
+} from "@sidecar/actions";
+import {
   type ChildCancellation,
   type ChildSpawnOutcome,
   type EffectiveToolPolicy,
@@ -35,6 +41,7 @@ import {
   isWireNumber,
   isWireString,
   text,
+  UNKNOWN_ACTION_STATUS,
   type WireRecord,
 } from "@sidecar/wire";
 import {
@@ -172,6 +179,31 @@ export function journaledEffect(policy: EffectiveToolPolicy, name: string): bool
 }
 
 /**
+ * How a kind of tool spells the two answers the executor itself gives: a
+ * refusal at the door, and a result it cannot vouch for. An action tool
+ * answers in the envelope every action tool shares, whoever wrote the answer;
+ * every other tool answers the bare record it always has.
+ */
+interface ExecutorOutcomes {
+  readonly refuse: (reason: string) => WireRecord;
+  readonly unknown: (reason: string) => WireRecord;
+}
+
+const RECORD_OUTCOMES: ExecutorOutcomes = {
+  refuse: rejection,
+  unknown: (reason) => ({ status: UNKNOWN_ACTION_STATUS, reason }),
+};
+
+const ACTION_OUTCOMES: ExecutorOutcomes = {
+  refuse: refusedActionOutput,
+  unknown: unknownActionOutput,
+};
+
+function outcomesFor(name: string): ExecutorOutcomes {
+  return realtimeToolFamily(name) !== undefined ? ACTION_OUTCOMES : RECORD_OUTCOMES;
+}
+
+/**
  * Why the policy refuses a call, from the policy's own answer: a name the
  * catalog never held, the briefing channel withheld by the turn's own layer
  * because the reply is the speech, or a tool a configured layer removed.
@@ -181,12 +213,13 @@ export function refusalForPolicy(
   name: string,
 ): WireRecord | undefined {
   if (policy.allows(name)) return undefined;
+  const { refuse } = outcomesFor(name);
   const layer = policy.deniedBy(name);
-  if (layer === undefined) return rejection(REFUSAL_REASON.NOT_OFFERED);
+  if (layer === undefined) return refuse(REFUSAL_REASON.NOT_OFFERED);
   if (layer === TOOL_POLICY_LAYER.TURN && name === BRAIN_TOOL.ANNOUNCE) {
-    return rejection(REFUSAL_REASON.ANNOUNCE_IN_ASK);
+    return refuse(REFUSAL_REASON.ANNOUNCE_IN_ASK);
   }
-  return rejection(REFUSAL_REASON.NOT_ALLOWED);
+  return refuse(REFUSAL_REASON.NOT_ALLOWED);
 }
 
 export function createTurnToolExecutor(
@@ -216,19 +249,20 @@ export function createTurnToolExecutor(
     effect: () => Promise<WireRecord>,
   ): Promise<WireRecord> => {
     const { run, generation } = context;
+    const outcomes = outcomesFor(call.name);
     if (dependencies.runRevoked(run) || execution.isRevoked()) {
-      return rejection(REFUSAL_REASON.RUN_REVOKED);
+      return outcomes.refuse(REFUSAL_REASON.RUN_REVOKED);
     }
     const recorded = generation.journal.get(run.runId, call.callId);
     if (recorded) {
       if (recorded.argumentsJson !== call.argumentsJson) {
-        return rejection(REFUSAL_REASON.CALL_ID_REUSED);
+        return outcomes.refuse(REFUSAL_REASON.CALL_ID_REUSED);
       }
       return recorded.outputJson === undefined
-        ? { ...UNKNOWN_ACTION_RESULT }
+        ? outcomes.unknown(UNKNOWN_ACTION_RESULT.reason)
         : parsedRecord(recorded.outputJson);
     }
-    if (run.checkpointFailed) return rejection(REFUSAL_REASON.NOT_CHECKPOINTED);
+    if (run.checkpointFailed) return outcomes.refuse(REFUSAL_REASON.NOT_CHECKPOINTED);
     generation.journal.start({
       runId: run.runId,
       callId: call.callId,
@@ -239,16 +273,16 @@ export function createTurnToolExecutor(
     if (!(await dependencies.checkpoint(context))) {
       generation.journal.forget(run.runId, call.callId);
       run.checkpointFailed = true;
-      return rejection(REFUSAL_REASON.NOT_CHECKPOINTED);
+      return outcomes.refuse(REFUSAL_REASON.NOT_CHECKPOINTED);
     }
     let output: WireRecord;
     try {
       output = await effect();
     } catch {
-      output = { ...UNCONFIRMED_ACTION_RESULT };
+      output = outcomes.unknown(UNCONFIRMED_ACTION_RESULT.reason);
     }
     if (output.status === ACTION_RESULT_STATUS.ACCEPTED) run.performedActions += 1;
-    if (output.status === UNCONFIRMED_ACTION_RESULT.status) run.unknownActions += 1;
+    if (output.status === UNKNOWN_ACTION_STATUS) run.unknownActions += 1;
     generation.journal.settle(run.runId, call.callId, JSON.stringify(output), dependencies.now());
     return output;
   };
@@ -420,12 +454,20 @@ export function createTurnToolExecutor(
       };
       const tool = descriptors.get(call.name);
       if (tool?.execution === TOOL_EXECUTION.PERFORMER) {
+        // The performer's answer is validated before the journal keeps it. One
+        // this build cannot read is answered unknown: the action was dispatched,
+        // and what became of it is exactly what could not be read.
         return answer(
-          await performJournaled(call, execution, () =>
-            dependencies.actions.perform(
-              { name: call.name, argumentsJson: call.argumentsJson },
-              execution,
-            ),
+          await performJournaled(
+            call,
+            execution,
+            async () =>
+              ACTION_OUTPUT.parse(
+                await dependencies.actions.perform(
+                  { name: call.name, argumentsJson: call.argumentsJson },
+                  execution,
+                ),
+              ) ?? unknownActionOutput(REFUSAL_REASON.UNREADABLE_ANSWER),
           ),
         );
       }

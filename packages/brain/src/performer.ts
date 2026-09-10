@@ -1,7 +1,6 @@
-import type { RealtimeFunctionCall } from "@sidecar/actions";
+import type { ActionOutputEnvelope, RealtimeFunctionCall } from "@sidecar/actions";
 import type { RunOrigin } from "@sidecar/runtime/vocabulary";
 import type { Session, SessionIdentity } from "@sidecar/session";
-import type { WireRecord } from "@sidecar/wire";
 
 /**
  * The roster as the host renders it, with the identities every tool argument
@@ -37,7 +36,14 @@ export interface BrainActionExecution {
   readonly signal: AbortSignal;
 }
 
-/** Carries one action for the host to validate and perform; answers what happened as a record. */
+/**
+ * Carries one action for the host to validate and perform, and answers what
+ * happened in the one envelope every action tool shares: the status, the
+ * target as the roster held it at execution, and the session a creation named.
+ */
 export interface BrainActionPerformer {
-  perform(call: RealtimeFunctionCall, execution: BrainActionExecution): Promise<WireRecord>;
+  perform(
+    call: RealtimeFunctionCall,
+    execution: BrainActionExecution,
+  ): Promise<ActionOutputEnvelope>;
 }

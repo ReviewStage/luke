@@ -34,7 +34,7 @@ import {
 import { SESSION_LIST_ALL, SESSION_LIST_VOICE } from "./action-kinds.js";
 
 /** An identifier travels in a URL segment or a request field, never as prose. */
-const maximumIdentifierLength = 200;
+export const maximumIdentifierLength = 200;
 
 /**
  * Every value a spoken narrowing may name, fixed by the build: the whole-list

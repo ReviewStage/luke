@@ -3,7 +3,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { REALTIME_TOOL } from "@sidecar/actions";
+import { type ActionOutputEnvelope, acceptedActionOutput, REALTIME_TOOL } from "@sidecar/actions";
 import {
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_OPERATION,
@@ -273,7 +273,7 @@ function host(
   runtimeOver: (model: ModelAdapter) => AgentRuntime,
   model: ModelAdapter,
   repository = fakeBrainStateRepository(),
-  performer: () => Promise<WireRecord> = async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+  performer: () => Promise<ActionOutputEnvelope> = async () => acceptedActionOutput(),
   overrides: Partial<BrainAgentOptions> = {},
 ): Host {
   const clock = new FakeClock();

@@ -46,6 +46,7 @@ export const REFUSAL_REASON = {
   NOT_OFFERED: "not run: no such tool in this turn",
   EMPTY_BRIEFING: "a briefing needs words",
   ACTION_FAILED: "the action did not complete",
+  UNREADABLE_ANSWER: "the action answered in a shape this build cannot read",
   READ_FAILED: "the transcript could not be read",
   RUN_REVOKED: "not run: this ask was cancelled or its run ended",
   NOT_CHECKPOINTED: "not run: the action could not be recorded before running, so it was not run",

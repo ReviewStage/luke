@@ -1,5 +1,14 @@
 import assert from "node:assert/strict";
-import { REALTIME_TOOL, type RealtimeFunctionCall, realtimeToolFamily } from "@sidecar/actions";
+import {
+  ACTION_OUTPUT,
+  ACTION_OUTPUT_STATUS,
+  type ActionOutputEnvelope,
+  acceptedActionOutput,
+  REALTIME_TOOL,
+  type RealtimeFunctionCall,
+  realtimeToolFamily,
+  refusedActionOutput,
+} from "@sidecar/actions";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { notebookMemoryProvider } from "@sidecar/memory";
 import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
@@ -37,6 +46,7 @@ import { BRAIN_DEFAULTS, BrainAgent, type BrainAgentOptions, LOOK_SUBJECT } from
 import { ResponsesContextEngine } from "./context-engine.js";
 import { type BrainPersistedState, MAXIMUM_TERMINAL_REQUESTS } from "./envelope.js";
 import type { BrainActionExecution, BrainActionPerformer } from "./performer.js";
+import { parsedRecord } from "./records.js";
 import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
@@ -50,6 +60,7 @@ import { BrainStateStore } from "./state-store.js";
 import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
 import { BRAIN_TOOL, TOOL_GROUP } from "./tools.js";
 import type { BrainTurnTraceRecord } from "./trace.js";
+import { REFUSAL_REASON } from "./turn.js";
 import { BRAIN_WAKE_KIND, type BrainDelivery, type BrainWakeEvent } from "./wake-events.js";
 
 const TOOL_LOOP_IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOOP_RUNTIME.VERSION };
@@ -549,8 +560,9 @@ export function assertNoActionReached(h: Harness): void {
   for (const forbidden of OBSERVATION_ACTIONS) {
     const output = outputs.find((entry) => entry.callId === forbidden.call_id);
     assert.ok(output, `${String(forbidden.call_id)} was answered`);
-    assert.ok(output.output.includes("not run"), output.output);
-    assert.ok(output.output.includes(ACTION_RESULT_STATUS.REJECTED));
+    const envelope = ACTION_OUTPUT.parse(parsedRecord(output.output));
+    assert.equal(envelope?.status, ACTION_OUTPUT_STATUS.REFUSED);
+    assert.equal(envelope?.reason, REFUSAL_REASON.NOT_ALLOWED);
   }
   assert.ok(h.traces.every((trace) => trace.origin === RUN_ORIGIN.OBSERVATION));
   // Denied at the schemas as well as at dispatch: the model was never shown an action.
@@ -576,15 +588,13 @@ export function heldPerformer() {
   const performed: RealtimeFunctionCall[] = [];
   const executions: BrainActionExecution[] = [];
   const actions: BrainActionPerformer = {
-    perform: async (functionCall, execution): Promise<WireRecord> => {
+    perform: async (functionCall, execution): Promise<ActionOutputEnvelope> => {
       performed.push(functionCall);
       executions.push(execution);
       await new Promise<void>((resolve) => {
         releases.push(resolve);
       });
-      return execution.isRevoked()
-        ? { status: ACTION_RESULT_STATUS.REJECTED, reason: "turn over" }
-        : { status: ACTION_RESULT_STATUS.ACCEPTED };
+      return execution.isRevoked() ? refusedActionOutput("turn over") : acceptedActionOutput();
     },
   };
   return { actions, releases, performed, executions };
