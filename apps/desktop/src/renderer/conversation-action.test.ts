@@ -41,8 +41,9 @@ test("a row is composed from the act's record and the session's current name", (
     lisbon,
   ]);
   assert.equal(text(sent), 'Sent a message to lisbon-v2: "ship it"');
-  // The name is a chip under the mark the session's own row wears.
-  assert.deepEqual(sent?.[1], { text: "lisbon-v2", name: { markId: "codex" } });
+  // The name is a chip; it wears a mark only for a hosted agent, since the
+  // row's own marks already say the provider.
+  assert.deepEqual(sent?.[1], { text: "lisbon-v2", name: {} });
   const hosted = actionRowParts(line({ kind: ACTION_KIND.MESSAGE, runId: "r", text: "go" }), [
     { ...lisbon, agentId: "cursor", agent: "Cursor" },
   ]);
@@ -134,16 +135,44 @@ test("a row is composed from the act's record and the session's current name", (
   );
 });
 
-test("a creation names its provider as the roster's rows for that provider do", () => {
+test("a creation names the workspace it made as a chip, with no roster to consult", () => {
   const created = {
     kind: CONVERSATION_ENTRY_KIND.ACTION,
     words: "recorded",
     action: { kind: ACTION_KIND.CREATE_WORKSPACE, runId: "r", providerId: "codex", name: "Notch" },
   };
-  const parts = actionRowParts(created, [lisbon]);
-  assert.equal(text(parts), 'Created a new workspace "Notch" in Codex');
-  assert.deepEqual(parts?.[1], { text: "Codex", name: { markId: "codex" } });
-  assert.equal(actionRowParts(created, []), undefined);
+  const parts = actionRowParts(created, []);
+  assert.equal(text(parts), "Created a new workspace Notch");
+  assert.deepEqual(parts?.[1], { text: "Notch", name: {} });
+  assert.equal(
+    text(actionRowParts({ ...created, action: { ...created.action, name: undefined } }, [])),
+    "Created a new workspace",
+  );
+});
+
+test("a chat the roster has let go is still named, by the title the record kept", () => {
+  const archived = actionRowParts(
+    line({
+      kind: ACTION_KIND.CONTROL,
+      runId: "r",
+      label: "Archive",
+      controlKind: SESSION_CONTROL_KIND.ARCHIVE,
+      title: "lisbon-v2",
+    }),
+    [],
+  );
+  assert.equal(text(archived), "Archived lisbon-v2");
+  assert.deepEqual(archived?.[1], { text: "lisbon-v2", name: {} });
+  // The roster's name wins while the roster holds the chat.
+  assert.equal(
+    text(
+      actionRowParts(
+        line({ kind: ACTION_KIND.MESSAGE, runId: "r", text: "go", title: "old-name" }),
+        [lisbon],
+      ),
+    ),
+    'Sent a message to lisbon-v2: "go"',
+  );
 });
 
 test("nothing is composed for a record that cannot be read back to a row", () => {
@@ -152,7 +181,7 @@ test("nothing is composed for a record that cannot be read back to a row", () =>
     actionRowParts({ kind: CONVERSATION_ENTRY_KIND.ACTION, words: "opened a session" }, [lisbon]),
     undefined,
   );
-  // A session the roster has let go.
+  // A session the roster has let go, whose line kept no name for it.
   assert.equal(
     actionRowParts(line({ kind: ACTION_KIND.MESSAGE, runId: "r", text: "go" }), []),
     undefined,

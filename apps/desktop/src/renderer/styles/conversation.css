@@ -394,27 +394,19 @@
   padding: 3px 0;
 }
 
-/* The provider's mark, at the size the row's own marks take, trailing the
-   words the way a session row's application marks trail its title. */
-.conversation-action-provider {
+/* The marks a row leads with: the kind of thing done, then the provider it
+   reached, the way a session row leads with its provider's mark. The kind's
+   room is reserved whether or not a mark fills it, so rows with and without
+   one keep their words on one line. Luke's face in it wears the text colour
+   like the strip's does, only smaller. */
+.conversation-action-marks {
   display: inline-flex;
-  height: 16px;
   flex: 0 0 auto;
   align-items: center;
+  gap: 6px;
+  margin-top: 2px;
 }
 
-.conversation-action-provider .provider-mark {
-  width: 12px;
-  height: 12px;
-}
-
-.conversation-action-provider .provider-mark[data-mark="superset"] {
-  width: 21px;
-}
-
-/* The mark's room is reserved whether or not a mark fills it, so rows with
-   and without one keep their words on one line. Luke's face in it wears the
-   text colour like the strip's does, only smaller. */
 .conversation-action-mark {
   display: inline-flex;
   width: 12px;
@@ -422,13 +414,16 @@
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  margin-top: 2px;
   color: var(--text-tertiary);
 }
 
 .conversation-action-mark svg {
   width: 12px;
   height: 12px;
+}
+
+.conversation-action-mark .provider-mark[data-mark="superset"] {
+  width: 21px;
 }
 
 .conversation-action-mark .luke-face {
@@ -442,31 +437,38 @@
   line-height: 1.4;
 }
 
-/* The session an action reached, or the provider a creation asked, as a chip
-   under the mark its own row wears: the one thing in the sentence the eye is
-   looking for, named the way the roster names it. It is a name and not a
-   press, so it takes no hover and no ground change. */
+/* The chat an action reached, or the workspace a creation made, as a chip:
+   the one thing in the sentence the eye is looking for, named the way the
+   roster names it. It sits on the line's middle rather than its baseline, so
+   it reads as part of the sentence and not as a tag hung under it, and it is
+   drawn a hair shorter than the line so it never pushes the lines apart. It
+   wears a mark only for a hosted agent, since the row's own marks already
+   say the provider. It is a name and not a press, so it takes no hover. */
 .conversation-action-chip {
   display: inline-flex;
-  height: 18px;
+  height: 16px;
   align-items: center;
   gap: 4px;
-  padding: 0 6px 0 4px;
-  border-radius: 6px;
+  padding: 0 6px;
+  border-radius: 5px;
   background: var(--raised-strong);
   color: var(--text-primary);
   font-weight: 600;
-  vertical-align: -4px;
+  vertical-align: middle;
   white-space: nowrap;
 }
 
+.conversation-action-chip:has(.provider-mark) {
+  padding-left: 4px;
+}
+
 .conversation-action-chip .provider-mark {
-  width: 11px;
-  height: 11px;
+  width: 10px;
+  height: 10px;
 }
 
 .conversation-action-chip .provider-mark[data-mark="superset"] {
-  width: 19px;
+  width: 18px;
 }
 
 /* A line drawn from its recorded words rather than its record keeps the

@@ -267,14 +267,14 @@ function ConversationMessageRow({
  * work here as the errand has him do on a control — so whose judgment an
  * action was is read at a glance and never wears a reply's bubble. The words
  * are composed from the act's record and the roster as it stands, the session
- * the session a chip under the mark its own row wears, so a row is placed the
- * way a session row is; a line whose record cannot be read back to a row
- * draws the words recorded at the time instead, ending on the mark of the
- * provider its identity names, since those words carry no chip. A line an
- * earlier build recorded without its kind draws with the mark's room left
- * empty rather than guessing one. No copy control: the words are a record of
- * an act, not something said. A chip is a name, not a press: a session's
- * address is reached by its row or by a validated ask, never from here.
+ * the chat it reached a chip; the kind's mark is followed by the mark of the
+ * provider the action reached, so a row is placed the way a session row is.
+ * A line whose record cannot be read back to a row draws the words recorded
+ * at the time instead. A line an earlier build recorded without its kind
+ * draws with the mark's room left empty rather than guessing one. No copy
+ * control: the words are a record of an act, not something said. A chip is a
+ * name, not a press: a session's address is reached by its row or by a
+ * validated ask, never from here.
  */
 function ConversationActionRow({
   entry,
@@ -297,12 +297,15 @@ function ConversationActionRow({
       <small className="visually-hidden">{presentation.label}</small>
       <div className="conversation-message">
         <span className="conversation-action">
-          <span
-            className="conversation-action-mark"
-            aria-hidden="true"
-            data-control={entry.action?.controlKind}
-          >
-            {own ? <WingFace /> : Glyph ? <Glyph /> : null}
+          <span className="conversation-action-marks" aria-hidden="true">
+            <span className="conversation-action-mark" data-control={entry.action?.controlKind}>
+              {own ? <WingFace /> : Glyph ? <Glyph /> : null}
+            </span>
+            {providerId === undefined ? null : (
+              <span className="conversation-action-mark">
+                <ProviderMark providerId={providerId} />
+              </span>
+            )}
           </span>
           {parts ? (
             <span className="conversation-words">
@@ -310,10 +313,12 @@ function ConversationActionRow({
                 part.name ? (
                   // biome-ignore lint/suspicious/noArrayIndexKey: The parts are a fixed composition of one record, so a position names a part for as long as the row stands.
                   <span key={index} className="conversation-action-chip">
-                    <ProviderMark
-                      providerId={part.name.markId}
-                      className="conversation-chip-mark"
-                    />
+                    {part.name.markId === undefined ? null : (
+                      <ProviderMark
+                        providerId={part.name.markId}
+                        className="conversation-chip-mark"
+                      />
+                    )}
                     {part.text}
                   </span>
                 ) : (
@@ -323,14 +328,7 @@ function ConversationActionRow({
               )}
             </span>
           ) : (
-            <>
-              <MarkdownMessage words={entry.words} className="conversation-words" />
-              {providerId === undefined ? null : (
-                <span className="conversation-action-provider" aria-hidden="true">
-                  <ProviderMark providerId={providerId} />
-                </span>
-              )}
-            </>
+            <MarkdownMessage words={entry.words} className="conversation-words" />
           )}
         </span>
       </div>

@@ -78,12 +78,12 @@ test("an action draws as a row led by the mark of its kind, with no bubble and n
   // The mark leads the words inside the row, and the stamp stands outside it.
   assert.match(
     markup,
-    /<span class="conversation-action"><span class="conversation-action-mark" aria-hidden="true"><svg class="icon-button-glyph"/,
+    /<span class="conversation-action"><span class="conversation-action-marks" aria-hidden="true"><span class="conversation-action-mark"><svg class="icon-button-glyph"/,
   );
   assert.match(markup, /<\/div><time class="conversation-time"/);
   assert.doesNotMatch(markup, /conversation-bubble|conversation-copy|conversation-turn/);
-  // No identity and no provider on the action: the words end with no mark.
-  assert.doesNotMatch(markup, /conversation-action-provider/);
+  // No identity and no provider on the action: the kind's mark stands alone.
+  assert.equal(markup.match(/class="conversation-action-mark"/g)?.length, 1);
   // A line an earlier build recorded without its kind keeps the mark's room and fills it with nothing.
   const unmarked = renderToStaticMarkup(
     createElement(ConversationPanel, {
@@ -93,7 +93,7 @@ test("an action draws as a row led by the mark of its kind, with no bubble and n
       onAskEngaged: () => undefined,
     }),
   );
-  assert.match(unmarked, /<span class="conversation-action-mark" aria-hidden="true"><\/span>/);
+  assert.match(unmarked, /<span class="conversation-action-mark"><\/span>/);
 });
 
 test("an action row is worded from its record and the roster, and from its recorded words when it cannot be", () => {
@@ -131,13 +131,17 @@ test("an action row is worded from its record and the roster, and from its recor
       hasChange: false,
     },
   ]);
-  // The session by its current name, as a chip under its row's mark, in a
-  // sentence the build wrote; the chip is the mark, so the row ends on none.
+  // The kind's mark then the provider's lead the row; the session by its
+  // current name is a chip, bare, since the provider is already said.
   assert.match(
     composed,
-    /<span class="conversation-words"><span>Sent a message to <\/span><span class="conversation-action-chip"><svg class="provider-mark conversation-chip-mark" data-mark="claude-code"[^>]*>.*?<\/svg>checkout<\/span><span>: &quot;please add tests&quot;<\/span><\/span>/,
+    /<span class="conversation-action-marks" aria-hidden="true"><span class="conversation-action-mark"><svg class="icon-button-glyph".*?<\/svg><\/span><span class="conversation-action-mark"><svg class="provider-mark" data-mark="claude-code"/,
   );
-  assert.doesNotMatch(composed, /checkout-service|class="markdown|conversation-action-provider/);
+  assert.match(
+    composed,
+    /<span class="conversation-words"><span>Sent a message to <\/span><span class="conversation-action-chip">checkout<\/span><span>: &quot;please add tests&quot;<\/span><\/span>/,
+  );
+  assert.doesNotMatch(composed, /checkout-service|class="markdown|conversation-chip-mark/);
   // Without the session on the roster, the words recorded at the time stand.
   const recorded = render([]);
   assert.match(
@@ -146,7 +150,7 @@ test("an action row is worded from its record and the roster, and from its recor
   );
 });
 
-test("a row drawn from its recorded words ends on the mark of the provider it reached", () => {
+test("every row leads with its kind then the provider it reached, a creation with the one it asked", () => {
   const render = (entry: Parameters<typeof ConversationPanel>[0]["entries"][number]) =>
     renderToStaticMarkup(
       createElement(ConversationPanel, {
@@ -156,24 +160,33 @@ test("a row drawn from its recorded words ends on the mark of the provider it re
         onAskEngaged: () => undefined,
       }),
     );
-  // An action on a session wears the session's own provider.
-  const onSession = render({
+  // A row drawn from its recorded words still leads with the provider its identity names.
+  const recorded = render({
     kind: CONVERSATION_ENTRY_KIND.ACTION,
     words: 'sent a message to "checkout-service": "please add tests"',
     identity: { providerId: "claude-code", providerSessionId: "session-a" },
-    action: { kind: ACTION_KIND.MESSAGE, runId: "run-1" },
   });
   assert.match(
-    onSession,
-    /<\/div><span class="conversation-action-provider" aria-hidden="true"><svg class="provider-mark" data-mark="claude-code"/,
+    recorded,
+    /class="conversation-action-mark"><svg class="provider-mark" data-mark="claude-code"/,
   );
   // A creation has no session, so its line names the provider it asked.
   const creation = render({
     kind: CONVERSATION_ENTRY_KIND.ACTION,
-    words: 'asked conductor to create a workspace named "Notch panel clipping"',
-    action: { kind: ACTION_KIND.CREATE_WORKSPACE, runId: "run-2", providerId: "conductor" },
+    words: 'created a new workspace "Notch panel clipping" in Conductor',
+    action: {
+      kind: ACTION_KIND.CREATE_WORKSPACE,
+      runId: "run-2",
+      providerId: "conductor",
+      name: "Notch panel clipping",
+    },
   });
   assert.match(creation, /class="provider-mark" data-mark="conductor"/);
+  assert.match(
+    creation,
+    /<span>Created a new workspace <\/span><span class="conversation-action-chip">Notch panel clipping<\/span>/,
+  );
+  assert.doesNotMatch(creation, /in Conductor/);
 });
 
 test("a control's mark follows what its adapter said it does", () => {
@@ -199,12 +212,12 @@ test("a control's mark follows what its adapter said it does", () => {
     );
   assert.match(
     render("archive"),
-    /class="conversation-action-mark" aria-hidden="true" data-control="archive"><svg class="icon-button-glyph"/,
+    /class="conversation-action-mark" data-control="archive"><svg class="icon-button-glyph"/,
   );
   assert.match(render("stop"), /data-control="stop"><svg class="control-icon"/);
   assert.match(
     render(undefined),
-    /class="conversation-action-mark" aria-hidden="true"><svg class="icon-button-glyph"/,
+    /class="conversation-action-mark"><svg class="icon-button-glyph"/,
   );
 });
 
@@ -225,10 +238,7 @@ test("an action Luke took on his own is signed with his face and never wears a r
   );
   assert.match(markup, /data-speaker="event" data-origin="own"/);
   assert.match(markup, /<small class="visually-hidden">Luke, on his own judgment<\/small>/);
-  assert.match(
-    markup,
-    /class="conversation-action-mark" aria-hidden="true"><svg class="luke-face"/,
-  );
+  assert.match(markup, /class="conversation-action-mark"><svg class="luke-face"/);
   assert.doesNotMatch(markup, /data-speaker="luke"|conversation-copy/);
 });
 

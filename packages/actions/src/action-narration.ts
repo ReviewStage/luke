@@ -118,39 +118,72 @@ const ACTION_NARRATION = {
  * compile. Only what the narration names rides along — never a model or an
  * effort, which the row has no words for.
  */
+type ActionRecordDetails = Omit<ConversationEntryAction, "kind" | "runId">;
+
+/** The title the roster held for the session at the time, for the row to fall back to once it is gone. */
+function observedTitle(
+  identity: SessionIdentity,
+  sessions: readonly Session[],
+): ActionRecordDetails {
+  const session = sessions.find(
+    (candidate) =>
+      candidate.providerId === identity.providerId &&
+      candidate.providerSessionId === identity.providerSessionId,
+  );
+  return session ? { title: session.title } : {};
+}
+
 const ACTION_RECORD = {
-  [ACTION_KIND.MESSAGE]: (action) => ({ text: action.text }),
-  [ACTION_KIND.CONTROL]: (action) => ({
+  [ACTION_KIND.MESSAGE]: (action, sessions) => ({
+    text: action.text,
+    ...observedTitle(action.identity, sessions),
+  }),
+  [ACTION_KIND.CONTROL]: (action, sessions) => ({
     label: action.control.label,
     ...(action.control.controlKind !== undefined
       ? { controlKind: action.control.controlKind }
       : undefined),
+    ...observedTitle(action.identity, sessions),
   }),
-  [ACTION_KIND.OPEN]: (action) =>
-    action.applicationId !== undefined ? { applicationId: action.applicationId } : {},
+  [ACTION_KIND.OPEN]: (action, sessions) => ({
+    ...(action.applicationId !== undefined ? { applicationId: action.applicationId } : undefined),
+    ...observedTitle(action.identity, sessions),
+  }),
   [ACTION_KIND.CREATE_WORKSPACE]: (action) => ({
     providerId: action.providerId,
     ...(action.name !== undefined ? { name: action.name } : undefined),
   }),
-  [ACTION_KIND.ADD_AGENT]: (action) => ({
+  [ACTION_KIND.ADD_AGENT]: (action, sessions) => ({
     agent: action.agent,
     ...(action.name !== undefined ? { name: action.name } : undefined),
+    ...observedTitle(action.identity, sessions),
   }),
-  [ACTION_KIND.RENAME_WORKSPACE]: (action) => ({ name: action.name }),
-  [ACTION_KIND.RENAME_SESSION]: (action) => ({ name: action.name }),
+  [ACTION_KIND.RENAME_WORKSPACE]: (action, sessions) => ({
+    name: action.name,
+    ...observedTitle(action.identity, sessions),
+  }),
+  [ACTION_KIND.RENAME_SESSION]: (action, sessions) => ({
+    name: action.name,
+    ...observedTitle(action.identity, sessions),
+  }),
 } as const satisfies {
   [K in SessionActionKind]: (
     action: CarriedAction<K>,
-  ) => Omit<ConversationEntryAction, "kind" | "runId">;
+    sessions: readonly Session[],
+  ) => ActionRecordDetails;
 };
 
-function carriedActionRecord(action: CarriedSessionAction, runId: string): ConversationEntryAction {
+function carriedActionRecord(
+  action: CarriedSessionAction,
+  sessions: readonly Session[],
+  runId: string,
+): ConversationEntryAction {
   const record = ACTION_RECORD[action.kind];
   // SAFETY: the table is keyed by the same union `action.kind` ranges over, so the
   // entry selected is the one written for this action's own shape.
   const details = (
-    record as (action: CarriedSessionAction) => Omit<ConversationEntryAction, "kind" | "runId">
-  )(action);
+    record as (action: CarriedSessionAction, sessions: readonly Session[]) => ActionRecordDetails
+  )(action, sessions);
   return { kind: action.kind, runId, ...details };
 }
 
@@ -185,7 +218,11 @@ export function sessionActionConversationEntry(
   runId: string,
 ): ConversationEntry {
   const words = actionNarration(action, context);
-  const entry: ConversationEntry = { kind, words, action: carriedActionRecord(action, runId) };
+  const entry: ConversationEntry = {
+    kind,
+    words,
+    action: carriedActionRecord(action, context.sessions, runId),
+  };
   if ("identity" in action) entry.identity = action.identity;
   return entry;
 }

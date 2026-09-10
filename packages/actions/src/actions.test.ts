@@ -248,6 +248,7 @@ test("an action's line records the ask in words, with the identity it named", ()
     kind: ACTION_KIND.MESSAGE,
     runId: "run-1",
     text: "please add tests",
+    title: "checkout-service",
   });
 
   const control: AdvertisedControl = { kind: ACTION_KIND.CONTROL, id: "retry", label: "Retry" };
@@ -258,7 +259,12 @@ test("an action's line records the ask in words, with the identity it named", ()
     "run-1",
   );
   assert.equal(pressed.words, 'ran "Retry" on "checkout-service"');
-  assert.deepEqual(pressed.action, { kind: ACTION_KIND.CONTROL, runId: "run-1", label: "Retry" });
+  assert.deepEqual(pressed.action, {
+    kind: ACTION_KIND.CONTROL,
+    runId: "run-1",
+    label: "Retry",
+    title: "checkout-service",
+  });
   // A control whose adapter said what it does is narrated as that act, and records it.
   const archive: AdvertisedControl = {
     kind: ACTION_KIND.CONTROL,
@@ -278,6 +284,7 @@ test("an action's line records the ask in words, with the identity it named", ()
     runId: "run-1",
     label: "Archive",
     controlKind: SESSION_CONTROL_KIND.ARCHIVE,
+    title: "checkout-service",
   });
   const stop: AdvertisedControl = {
     kind: ACTION_KIND.CONTROL,

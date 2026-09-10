@@ -459,6 +459,7 @@ test("a stored line reads back, and retention cuts by age and by count", () => {
       applicationId: "cursor",
       agent: "claude",
       name: "release-candidate",
+      title: "checkout-service",
     },
   };
   assert.deepEqual(storedConversationEntry(conversationEntryToWire(detailed)), detailed);

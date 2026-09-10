@@ -192,6 +192,13 @@ export interface ConversationEntryAction {
   agent?: string;
   /** The name a creation, an add, or a rename gave. */
   name?: string;
+  /**
+   * The title the session the action reached had at the time. The panel names
+   * a session from the roster while the roster holds it; this is the name it
+   * falls back to once the session is archived or otherwise gone, so the row
+   * can still say which chat the act reached.
+   */
+  title?: string;
 }
 
 const CONVERSATION_ENTRY_ACTION_DETAILS = [
@@ -201,6 +208,7 @@ const CONVERSATION_ENTRY_ACTION_DETAILS = [
   "applicationId",
   "agent",
   "name",
+  "title",
 ] as const satisfies readonly (keyof ConversationEntryAction)[];
 
 /** The line as the Gateway protocol carries it; the unstrict read below takes it back whole. */
