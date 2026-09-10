@@ -439,22 +439,23 @@
 
 /* The chat an action reached, or the workspace a creation made, as a chip:
    the one thing in the sentence the eye is looking for, named the way the
-   roster names it. It sits on the line's middle rather than its baseline, so
-   it reads as part of the sentence and not as a tag hung under it, and it is
-   drawn a hair shorter than the line so it never pushes the lines apart. It
-   wears a mark only for a hosted agent, since the row's own marks already
-   say the provider. It is a name and not a press, so it takes no hover. */
+   roster names it. Its text shares the sentence's baseline — an inline flex
+   box takes its first item's baseline, and the text is that item — so the
+   name reads as a word of the sentence with a ground under it, and the box
+   is one pixel over and under the line so it never pushes the lines apart.
+   It wears the mark its roster row wears. It is a name and not a press, so
+   it takes no hover. */
 .conversation-action-chip {
   display: inline-flex;
-  height: 16px;
   align-items: center;
   gap: 4px;
-  padding: 0 6px;
+  padding: 1px 6px;
   border-radius: 5px;
   background: var(--raised-strong);
   color: var(--text-primary);
   font-weight: 600;
-  vertical-align: middle;
+  line-height: 14px;
+  vertical-align: baseline;
   white-space: nowrap;
 }
 

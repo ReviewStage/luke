@@ -8,9 +8,10 @@ import type { SessionView } from "./session-model";
 
 /**
  * One run of an action row's words. A name is the chat the action reached,
- * or the workspace a creation made, drawn as a chip. The chip wears a mark
- * only where the roster row for the chat does and the row's own provider
- * mark would not say it: the agent's, where a provider hosts agents.
+ * or the workspace a creation made, drawn as a chip. The chat's chip wears
+ * the mark its roster row wears — the agent having it where the provider
+ * hosts agents, else the provider's — so the thread names chats the way the
+ * roster does; a workspace's chip has no row yet and wears none.
  */
 export interface ActionRowPart {
   text: string;
@@ -18,21 +19,21 @@ export interface ActionRowPart {
 }
 
 /**
- * The chat by its current name while the roster holds it, and by the name
- * the record kept once the roster has let it go — archived, or gone with its
- * provider — so an act on a chat that no longer stands still says which one.
+ * The chat by its current name and mark while the roster holds it, and by
+ * those the record kept once the roster has let it go — archived, or gone
+ * with its provider — so an act on a chat that no longer stands still says
+ * which one.
  */
 function named(
   session: SessionView | undefined,
+  identity: { providerId: string } | undefined,
   action: ConversationEntryAction,
 ): ActionRowPart | undefined {
   if (session) {
-    return {
-      text: session.title,
-      name: session.agentId === undefined ? {} : { markId: session.agentId },
-    };
+    return { text: session.title, name: { markId: session.agentId ?? session.providerId } };
   }
-  return action.title === undefined ? undefined : { text: action.title, name: {} };
+  if (action.title === undefined || identity === undefined) return undefined;
+  return { text: action.title, name: { markId: action.agentId ?? identity.providerId } };
 }
 
 /**
@@ -58,7 +59,7 @@ export function actionRowParts(
           candidate.id === identity.providerSessionId,
       )
     : undefined;
-  const chat = named(session, action);
+  const chat = named(session, identity, action);
   switch (action.kind) {
     case ACTION_KIND.MESSAGE:
       if (!chat || action.text === undefined) return undefined;

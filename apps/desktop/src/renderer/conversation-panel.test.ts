@@ -131,17 +131,17 @@ test("an action row is worded from its record and the roster, and from its recor
       hasChange: false,
     },
   ]);
-  // The kind's mark then the provider's lead the row; the session by its
-  // current name is a chip, bare, since the provider is already said.
+  // The kind's mark leads the row; the session by its current name is a chip
+  // wearing its row's mark, which says the provider, so the row does not.
   assert.match(
     composed,
-    /<span class="conversation-action-marks" aria-hidden="true"><span class="conversation-action-mark"><svg class="icon-button-glyph".*?<\/svg><\/span><span class="conversation-action-mark"><svg class="provider-mark" data-mark="claude-code"/,
+    /<span class="conversation-action-marks" aria-hidden="true"><span class="conversation-action-mark"><svg class="icon-button-glyph".*?<\/svg><\/span><\/span>/,
   );
   assert.match(
     composed,
-    /<span class="conversation-words"><span>Sent a message to <\/span><span class="conversation-action-chip">checkout<\/span><span>: &quot;please add tests&quot;<\/span><\/span>/,
+    /<span class="conversation-words"><span>Sent a message to <\/span><span class="conversation-action-chip"><svg class="provider-mark conversation-chip-mark" data-mark="claude-code".*?<\/svg>checkout<\/span><span>: &quot;please add tests&quot;<\/span><\/span>/,
   );
-  assert.doesNotMatch(composed, /checkout-service|class="markdown|conversation-chip-mark/);
+  assert.doesNotMatch(composed, /checkout-service|class="markdown/);
   // Without the session on the roster, the words recorded at the time stand.
   const recorded = render([]);
   assert.match(
@@ -181,12 +181,36 @@ test("every row leads with its kind then the provider it reached, a creation wit
       name: "Notch panel clipping",
     },
   });
-  assert.match(creation, /class="provider-mark" data-mark="conductor"/);
+  assert.match(
+    creation,
+    /class="conversation-action-mark"><svg class="provider-mark" data-mark="conductor"/,
+  );
   assert.match(
     creation,
     /<span>Created a new workspace <\/span><span class="conversation-action-chip">Notch panel clipping<\/span>/,
   );
   assert.doesNotMatch(creation, /in Conductor/);
+  // A hosted chat's chip wears the agent's mark, so the row's provider mark still earns its place.
+  const hosted = render({
+    kind: CONVERSATION_ENTRY_KIND.ACTION,
+    words: 'sent a message to "cloud": "go"',
+    identity: { providerId: "conductor", providerSessionId: "c" },
+    action: {
+      kind: ACTION_KIND.MESSAGE,
+      runId: "run-3",
+      text: "go",
+      title: "cloud",
+      agentId: "cursor",
+    },
+  });
+  assert.match(
+    hosted,
+    /class="conversation-action-mark"><svg class="provider-mark" data-mark="conductor"/,
+  );
+  assert.match(
+    hosted,
+    /class="conversation-action-chip"><svg class="provider-mark conversation-chip-mark" data-mark="cursor"/,
+  );
 });
 
 test("a control's mark follows what its adapter said it does", () => {

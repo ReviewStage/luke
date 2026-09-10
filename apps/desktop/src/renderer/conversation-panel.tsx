@@ -267,8 +267,10 @@ function ConversationMessageRow({
  * work here as the errand has him do on a control — so whose judgment an
  * action was is read at a glance and never wears a reply's bubble. The words
  * are composed from the act's record and the roster as it stands, the session
- * the chat it reached a chip; the kind's mark is followed by the mark of the
- * provider the action reached, so a row is placed the way a session row is.
+ * the chat it reached a chip wearing the mark its own row wears; the kind's
+ * mark is followed by the provider's where the chip does not already say it —
+ * a hosted agent's chat, or a creation, which has no chip that could — so a
+ * row is placed the way a session row is and no mark is drawn twice.
  * A line whose record cannot be read back to a row draws the words recorded
  * at the time instead. A line an earlier build recorded without its kind
  * draws with the mark's room left empty rather than guessing one. No copy
@@ -286,8 +288,10 @@ function ConversationActionRow({
   const presentation = conversationEntryPresentation(entry.kind);
   const own = entry.kind === CONVERSATION_ENTRY_KIND.OWN_ACTION;
   const Glyph = entry.action ? actionGlyph(entry.action) : undefined;
-  const providerId = entry.identity?.providerId ?? entry.action?.providerId;
   const parts = actionRowParts(entry, sessions);
+  const chipMark = parts?.find((part) => part.name)?.name?.markId;
+  const provider = entry.identity?.providerId ?? entry.action?.providerId;
+  const providerId = provider === chipMark ? undefined : provider;
   return (
     <li
       className="conversation-entry"

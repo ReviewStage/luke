@@ -199,6 +199,12 @@ export interface ConversationEntryAction {
    * can still say which chat the act reached.
    */
   title?: string;
+  /**
+   * The agent having that chat, where its provider hosts agents rather than
+   * being one, so the chip for a chat the roster has let go still wears the
+   * mark its row wore.
+   */
+  agentId?: string;
 }
 
 const CONVERSATION_ENTRY_ACTION_DETAILS = [
@@ -209,6 +215,7 @@ const CONVERSATION_ENTRY_ACTION_DETAILS = [
   "agent",
   "name",
   "title",
+  "agentId",
 ] as const satisfies readonly (keyof ConversationEntryAction)[];
 
 /** The line as the Gateway protocol carries it; the unstrict read below takes it back whole. */

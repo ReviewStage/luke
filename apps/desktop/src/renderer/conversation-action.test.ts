@@ -41,9 +41,9 @@ test("a row is composed from the act's record and the session's current name", (
     lisbon,
   ]);
   assert.equal(text(sent), 'Sent a message to lisbon-v2: "ship it"');
-  // The name is a chip; it wears a mark only for a hosted agent, since the
-  // row's own marks already say the provider.
-  assert.deepEqual(sent?.[1], { text: "lisbon-v2", name: {} });
+  // The name is a chip wearing the mark its roster row wears: the provider's,
+  // or the agent's where the provider hosts agents.
+  assert.deepEqual(sent?.[1], { text: "lisbon-v2", name: { markId: "codex" } });
   const hosted = actionRowParts(line({ kind: ACTION_KIND.MESSAGE, runId: "r", text: "go" }), [
     { ...lisbon, agentId: "cursor", agent: "Cursor" },
   ]);
@@ -162,7 +162,13 @@ test("a chat the roster has let go is still named, by the title the record kept"
     [],
   );
   assert.equal(text(archived), "Archived lisbon-v2");
-  assert.deepEqual(archived?.[1], { text: "lisbon-v2", name: {} });
+  assert.deepEqual(archived?.[1], { text: "lisbon-v2", name: { markId: "codex" } });
+  // A hosted chat the roster let go keeps its agent's mark from the record.
+  const hostedGone = actionRowParts(
+    line({ kind: ACTION_KIND.MESSAGE, runId: "r", text: "go", title: "cloud", agentId: "cursor" }),
+    [],
+  );
+  assert.deepEqual(hostedGone?.[1], { text: "cloud", name: { markId: "cursor" } });
   // The roster's name wins while the roster holds the chat.
   assert.equal(
     text(

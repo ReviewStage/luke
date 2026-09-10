@@ -120,7 +120,11 @@ const ACTION_NARRATION = {
  */
 type ActionRecordDetails = Omit<ConversationEntryAction, "kind" | "runId">;
 
-/** The title the roster held for the session at the time, for the row to fall back to once it is gone. */
+/**
+ * How the roster named and marked the chat at the time — its title, and the
+ * agent having it where the provider hosts agents — for the row to fall back
+ * to once the roster has let the chat go.
+ */
 function observedTitle(
   identity: SessionIdentity,
   sessions: readonly Session[],
@@ -130,7 +134,8 @@ function observedTitle(
       candidate.providerId === identity.providerId &&
       candidate.providerSessionId === identity.providerSessionId,
   );
-  return session ? { title: session.title } : {};
+  if (!session) return {};
+  return { title: session.title, ...(session.agent ? { agentId: session.agent.id } : undefined) };
 }
 
 const ACTION_RECORD = {
