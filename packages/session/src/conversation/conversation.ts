@@ -142,15 +142,19 @@ export interface ConversationEntry {
   requestId?: string;
   /**
    * The action an action line records, for the panel to draw the line by:
-   * which kind of thing was done. Never rendered into model context, whose
-   * lead already says whose judgment the action was and whose words say what
-   * it did.
+   * which kind of thing was done, and the run that carried it. The run is
+   * named here rather than in `requestId` because that field says a line is a
+   * run's ask or its end, published once per run, while one run may carry
+   * several actions; it is what lets Conversation fold a turn's actions
+   * together. Never rendered into model context, whose lead already says
+   * whose judgment the action was and whose words say what it did.
    */
   action?: ConversationEntryAction;
 }
 
 export interface ConversationEntryAction {
   kind: ActionKind;
+  runId: string;
   /**
    * The provider a workspace creation asked, the one action aimed at no
    * session and so the one whose line carries no identity to read a provider
@@ -568,13 +572,15 @@ export function storedConversationEntry(
 /**
  * The action field as one line carries it, held to the same strictness as
  * the line's other optional fields: a kind this build does not know refuses
- * the line either way, and only the strict read refuses a provider left blank.
+ * the line either way, and only the strict read refuses a run left blank.
  */
 function storedConversationEntryAction(
   value: UnparsedWireValue,
   strict: boolean,
 ): ConversationEntryAction | undefined {
   if (!isRecord(value) || !isConversationEntryActionKind(value.kind)) return undefined;
+  if (!isWireString(value.runId)) return undefined;
+  if (strict && value.runId.length === 0) return undefined;
   const providerId = value.providerId;
   if (
     providerId !== undefined &&
@@ -584,6 +590,7 @@ function storedConversationEntryAction(
   }
   return {
     kind: value.kind,
+    runId: value.runId,
     ...(isWireString(providerId) ? { providerId } : undefined),
   };
 }

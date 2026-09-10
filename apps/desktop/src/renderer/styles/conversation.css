@@ -444,6 +444,68 @@
   text-transform: uppercase;
 }
 
+/* The actions one turn carried, under a line that counts them. The toggle is
+   the count, led by the disclosure chevron the settings rows use, and the
+   rows it folds are indented no further: the chevron sits on the same edge
+   the rows' marks do, so folded and unfolded read as one column. The hover
+   ground reaches past that edge rather than pushing the chevron off it. */
+.conversation-turn {
+  display: flex;
+  width: 100%;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.conversation-turn-head {
+  position: sticky;
+  left: 0;
+}
+
+.conversation-turn-toggle {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  gap: 7px;
+  margin-left: -6px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.conversation-turn-toggle:hover {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+.conversation-turn-toggle .settings-chevron {
+  width: 12px;
+  height: 12px;
+  transition: transform var(--duration-quick) var(--motion-exit);
+}
+
+.conversation-turn[data-open="true"] .conversation-turn-toggle .settings-chevron {
+  transform: rotate(90deg);
+}
+
+.conversation-turn-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.conversation-turn-actions[hidden] {
+  display: none;
+}
+
 /* The date over a line that followed a long silence, in the quiet voice the
    requested actions use, with the day set apart from the time the way iMessage
    sets it. It stands still under the pull as Luke's rows do, in the room the

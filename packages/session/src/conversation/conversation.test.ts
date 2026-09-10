@@ -408,26 +408,36 @@ test("a stored line reads back, and retention cuts by age and by count", () => {
     line,
   );
 
-  // An action line keeps the kind it was, over the wire and back from disk; a
-  // kind this build does not know refuses the line the way a malformed
-  // identity does.
+  // An action line keeps the kind it was and the run that carried it, over
+  // the wire and back from disk; a kind this build does not know, or a run
+  // left blank, refuses the line the way a malformed identity does.
   const acted = {
     kind: CONVERSATION_ENTRY_KIND.ACTION,
     words: 'sent a message to "checkout-service": "go ahead"',
     recordedAt: now,
     identity: { providerId: "claude-code", providerSessionId: "a" },
-    action: { kind: ACTION_KIND.MESSAGE },
+    action: { kind: ACTION_KIND.MESSAGE, runId: "run-1" },
   };
   assert.deepEqual(storedConversationEntry(conversationEntryToWire(acted)), acted);
   assert.deepEqual(storedConversationEntry(JSON.parse(JSON.stringify(acted))), acted);
-  assert.equal(storedConversationEntry({ ...acted, action: { kind: "invented" } }), undefined);
-  assert.equal(storedConversationEntry({ ...acted, action: {} }), undefined);
+  assert.equal(
+    storedConversationEntry({ ...acted, action: { kind: "invented", runId: "run-1" } }),
+    undefined,
+  );
+  assert.equal(
+    storedConversationEntry({ ...acted, action: { kind: ACTION_KIND.MESSAGE, runId: "" } }),
+    undefined,
+  );
+  assert.equal(
+    storedConversationEntry({ ...acted, action: { kind: ACTION_KIND.MESSAGE } }),
+    undefined,
+  );
   // A creation names the provider it asked on the action itself, having no identity to name it.
   const created = {
     kind: CONVERSATION_ENTRY_KIND.ACTION,
     words: 'asked conductor to create a workspace named "Notch panel clipping"',
     recordedAt: now,
-    action: { kind: ACTION_KIND.CREATE_WORKSPACE, providerId: "conductor" },
+    action: { kind: ACTION_KIND.CREATE_WORKSPACE, runId: "run-2", providerId: "conductor" },
   };
   assert.deepEqual(storedConversationEntry(conversationEntryToWire(created)), created);
   assert.equal(
@@ -469,15 +479,9 @@ test("the unstrict read takes what the strict one refuses, and nothing wider", (
   const blankIdentity = { ...unclocked, identity: { providerId: "", providerSessionId: "" } };
   assert.deepEqual(storedConversationEntry(blankIdentity, { strict: false }), blankIdentity);
 
-  const blankProvider = {
-    ...unclocked,
-    action: { kind: ACTION_KIND.CREATE_WORKSPACE, providerId: "" },
-  };
-  assert.deepEqual(storedConversationEntry(blankProvider, { strict: false }), blankProvider);
-  assert.equal(
-    storedConversationEntry({ ...blankProvider, recordedAt: line.recordedAt }),
-    undefined,
-  );
+  const blankRun = { ...unclocked, action: { kind: ACTION_KIND.MESSAGE, runId: "" } };
+  assert.deepEqual(storedConversationEntry(blankRun, { strict: false }), blankRun);
+  assert.equal(storedConversationEntry({ ...blankRun, recordedAt: line.recordedAt }), undefined);
   assert.equal(
     storedConversationEntry({ ...blankIdentity, recordedAt: line.recordedAt }),
     undefined,

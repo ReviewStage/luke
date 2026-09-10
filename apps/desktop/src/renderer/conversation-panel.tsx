@@ -1,6 +1,7 @@
 import { type BrainRequestSnapshot, brainRequestPending } from "@sidecar/brain/requests-wire";
 import {
   CheckIcon,
+  ChevronIcon,
   ControlIcon,
   CopyIcon,
   ExternalIcon,
@@ -19,7 +20,7 @@ import {
   conversationEntryKey,
 } from "@sidecar/session";
 import { FACE_MOTION } from "@sidecar/surface";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { tell } from "./act";
 import { type AskHandler, AskLuke } from "./ask-luke";
@@ -291,6 +292,58 @@ function ConversationEntryRow(props: {
 }
 
 /**
+ * The actions one turn carried, folded under a single line that counts them.
+ * The fold follows the run: open while the run is still going, so the
+ * developer watches the actions land as Luke takes them, and closed once it
+ * has ended, so a settled turn takes one row of the thread however much it
+ * did. Whether the run is going is read from its request record where one
+ * stands; a turn Luke opened himself is a wake, not an ask, and has none, so
+ * it stands open while it is the thread's newest line and folds once anything
+ * lands after it. A press on the toggle is the developer's own choice and
+ * holds from then on, whatever the run does next. A turn of one action never
+ * gets here: there is nothing to fold.
+ */
+function ConversationTurn({
+  entries,
+  pending,
+}: {
+  entries: readonly KeyedConversationEntry[];
+  pending: boolean;
+}): React.JSX.Element {
+  const [choice, setChoice] = useState<boolean | undefined>(undefined);
+  const open = choice ?? pending;
+  const actionsId = useId();
+  const own = entries.some(({ entry }) => entry.kind === CONVERSATION_ENTRY_KIND.OWN_ACTION);
+  return (
+    <li className="conversation-turn" data-open={open ? "true" : undefined}>
+      <div className="conversation-message conversation-turn-head">
+        <button
+          type="button"
+          className="conversation-turn-toggle"
+          aria-expanded={open}
+          aria-controls={actionsId}
+          onClick={() => setChoice(!open)}
+        >
+          <ChevronIcon />
+          {own ? (
+            <span className="conversation-action-mark" aria-hidden="true">
+              <WingFace />
+            </span>
+          ) : null}
+          <span>{entries.length} actions</span>
+          {own ? <small className="visually-hidden">on his own judgment</small> : null}
+        </button>
+      </div>
+      <ol id={actionsId} className="conversation-turn-actions" hidden={!open}>
+        {entries.map(({ entry, key }) => (
+          <ConversationActionRow key={key} entry={entry} />
+        ))}
+      </ol>
+    </li>
+  );
+}
+
+/**
  * The moment a line was said, set over it the way iMessage dates a message
  * that followed a long silence. It is the thread's line, not a message: it
  * reads in the quiet voice the requested actions use, and it stands still under
@@ -328,6 +381,36 @@ function keyedConversationEntries(
     const opensBreak = opensConversationTimeBreak(previousRecordedAt, entry.recordedAt);
     if (entry.recordedAt !== undefined) previousRecordedAt = entry.recordedAt;
     return { entry, key: `${base}:${occurrence}`, opensBreak };
+  });
+}
+
+type ConversationThreadItem =
+  | { turn?: undefined; item: KeyedConversationEntry }
+  | { turn: string; items: readonly KeyedConversationEntry[] };
+
+/**
+ * The thread as it is drawn: every line its own row, except that consecutive
+ * actions one run carried stand together as that run's turn. Only actions
+ * group — the run's ask before them and its reply after are lines of their
+ * own — and a run that carried one action is drawn as the row it is.
+ */
+export function conversationThreadItems(
+  entries: readonly ConversationEntry[],
+): readonly ConversationThreadItem[] {
+  const items: ConversationThreadItem[] = [];
+  for (const keyed of keyedConversationEntries(entries)) {
+    const runId = keyed.entry.action?.runId;
+    const last = items.at(-1);
+    if (runId !== undefined && last?.turn === runId) {
+      items[items.length - 1] = { turn: runId, items: [...last.items, keyed] };
+      continue;
+    }
+    items.push(runId === undefined ? { item: keyed } : { turn: runId, items: [keyed] });
+  }
+  return items.map((item) => {
+    if (item.turn === undefined) return item;
+    const [only, ...rest] = item.items;
+    return only !== undefined && rest.length === 0 ? { item: only } : item;
   });
 }
 
@@ -404,8 +487,9 @@ export function ConversationPanel({
   now: number;
   /**
    * The brain's runs, so a run still going draws Luke's turn at the thread's
-   * tail. Read here from the records alone; the reply's own line arrives when
-   * the run ends, and the stop is the composer's.
+   * tail and a turn still carrying actions stands unfolded. Read here from
+   * the records alone; the reply's own line arrives when the run ends, and
+   * the stop is the composer's.
    */
   requests?: readonly BrainRequestSnapshot[];
   /**
@@ -427,6 +511,10 @@ export function ConversationPanel({
   // way, and two waits for one turn would say otherwise. Its age is the
   // oldest run's.
   const pending = requests.filter(brainRequestPending);
+  const pendingRuns = new Set(pending.map((snapshot) => snapshot.runId));
+  const recordedRuns = new Set(requests.map((snapshot) => snapshot.runId));
+  const turnPending = (runId: string, tail: boolean) =>
+    recordedRuns.has(runId) ? pendingRuns.has(runId) : tail && live.length === 0;
   const thinkingSince =
     pending.length > 0 ? Math.min(...pending.map((snapshot) => snapshot.acceptedAt)) : undefined;
 
@@ -479,9 +567,24 @@ export function ConversationPanel({
               moment the fingers lift, which only the browser can see. */}
           <div className="conversation-pull">
             <ol className="conversation-list">
-              {keyedConversationEntries(entries).flatMap((keyed) =>
-                dated(keyed, <ConversationEntryRow key={keyed.key} entry={keyed.entry} />),
-              )}
+              {conversationThreadItems(entries).flatMap((item, index, items) => {
+                if (item.turn !== undefined) {
+                  const [lead] = item.items;
+                  if (lead === undefined) return [];
+                  return dated(
+                    lead,
+                    <ConversationTurn
+                      key={`turn:${lead.key}`}
+                      entries={item.items}
+                      pending={turnPending(item.turn, index === items.length - 1)}
+                    />,
+                  );
+                }
+                return dated(
+                  item.item,
+                  <ConversationEntryRow key={item.item.key} entry={item.item.entry} />,
+                );
+              })}
               {live.map((entry, index) => (
                 <ConversationEntryRow
                   // biome-ignore lint/suspicious/noArrayIndexKey: A line still being said has no durable id, and its words change on every delta — a key made of either would remount the bubble mid-sentence, while its position holds still for exactly as long as the line does.

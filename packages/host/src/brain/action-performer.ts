@@ -152,6 +152,7 @@ export function createBrainActionPerformer(
         execution.origin === RUN_ORIGIN.USER
           ? CONVERSATION_ENTRY_KIND.ACTION
           : CONVERSATION_ENTRY_KIND.OWN_ACTION,
+        execution.runId,
       ),
     );
     // The performer awaits once more of its own before a create or a spawn,

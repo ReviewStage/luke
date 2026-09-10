@@ -4,6 +4,7 @@ import {
   ACTION_KIND,
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
+  type ConversationEntry,
 } from "@sidecar/session";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -64,7 +65,7 @@ test("an action draws as a row led by the mark of its kind, with no bubble and n
           kind: CONVERSATION_ENTRY_KIND.ACTION,
           words: 'sent a message to "checkout-service": "please add tests"',
           recordedAt: NOW,
-          action: { kind: ACTION_KIND.MESSAGE },
+          action: { kind: ACTION_KIND.MESSAGE, runId: "run-1" },
         },
       ],
       now: NOW,
@@ -110,7 +111,7 @@ test("an action row ends on the mark of the provider it reached", () => {
     kind: CONVERSATION_ENTRY_KIND.ACTION,
     words: 'sent a message to "checkout-service": "please add tests"',
     identity: { providerId: "claude-code", providerSessionId: "session-a" },
-    action: { kind: ACTION_KIND.MESSAGE },
+    action: { kind: ACTION_KIND.MESSAGE, runId: "run-1" },
   });
   assert.match(
     onSession,
@@ -120,7 +121,7 @@ test("an action row ends on the mark of the provider it reached", () => {
   const creation = render({
     kind: CONVERSATION_ENTRY_KIND.ACTION,
     words: 'asked conductor to create a workspace named "Notch panel clipping"',
-    action: { kind: ACTION_KIND.CREATE_WORKSPACE, providerId: "conductor" },
+    action: { kind: ACTION_KIND.CREATE_WORKSPACE, runId: "run-2", providerId: "conductor" },
   });
   assert.match(creation, /class="provider-mark" data-mark="conductor"/);
 });
@@ -132,7 +133,7 @@ test("an action Luke took on his own is signed with his face and never wears a r
         {
           kind: CONVERSATION_ENTRY_KIND.OWN_ACTION,
           words: 'ran "Retry" on "checkout-service"',
-          action: { kind: ACTION_KIND.CONTROL },
+          action: { kind: ACTION_KIND.CONTROL, runId: "wake-1" },
         },
       ],
       now: NOW,
@@ -147,6 +148,128 @@ test("an action Luke took on his own is signed with his face and never wears a r
     /class="conversation-action-mark" aria-hidden="true"><svg class="luke-face"/,
   );
   assert.doesNotMatch(markup, /data-speaker="luke"|conversation-copy/);
+});
+
+test("the actions one run carried fold under a count once the run ends, and stand open while it runs", () => {
+  const run = {
+    runId: "run-1",
+    submissionId: "sub-1",
+    origin: "typed",
+    question: "ship it and open it",
+    revision: 1,
+    acceptedAt: 1,
+    performedActions: 0,
+    unknownActions: 0,
+  } as const;
+  const render = (status: "running" | "succeeded") =>
+    renderToStaticMarkup(
+      createElement(ConversationPanel, {
+        entries: [
+          {
+            kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
+            words: "ship it and open it",
+            requestId: "run-1",
+          },
+          {
+            kind: CONVERSATION_ENTRY_KIND.ACTION,
+            words: 'sent a message to "checkout-service": "ship it"',
+            action: { kind: ACTION_KIND.MESSAGE, runId: "run-1" },
+          },
+          {
+            kind: CONVERSATION_ENTRY_KIND.ACTION,
+            words: 'opened "checkout-service"',
+            action: { kind: ACTION_KIND.OPEN, runId: "run-1" },
+          },
+          { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Done.", requestId: "run-1" },
+        ],
+        requests: [{ ...run, status }],
+        now: NOW,
+        ask: async () => undefined,
+        onAskEngaged: () => undefined,
+      }),
+    );
+  const working = render("running");
+  assert.match(working, /<li class="conversation-turn" data-open="true">/);
+  assert.match(
+    working,
+    /class="conversation-turn-toggle" aria-expanded="true" aria-controls="([^"]+)"/,
+  );
+  assert.match(working, /<span>2 actions<\/span>/);
+  assert.equal(working.match(/class="conversation-action"/g)?.length, 2);
+  assert.doesNotMatch(working, /hidden=""/);
+
+  const settled = render("succeeded");
+  assert.match(settled, /<li class="conversation-turn">/);
+  assert.match(settled, /aria-expanded="false"/);
+  assert.match(settled, /<ol id="[^"]+" class="conversation-turn-actions" hidden="">/);
+  // The ask before the turn and the reply after it stay lines of their own.
+  assert.match(settled, /data-speaker="you"/);
+  assert.match(settled, /data-speaker="luke"/);
+  // The toggle names the list it folds.
+  const controls = settled.match(/aria-controls="([^"]+)"/)?.[1];
+  assert.ok(controls);
+  assert.match(settled, new RegExp(`<ol id="${controls.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+});
+
+test("a turn Luke opened himself stands open while it is the newest line, and folds once anything follows", () => {
+  const retried = {
+    kind: CONVERSATION_ENTRY_KIND.OWN_ACTION,
+    words: 'ran "Retry" on "amber-shoal"',
+    action: { kind: ACTION_KIND.CONTROL, runId: "wake-1" },
+  };
+  const opened = {
+    kind: CONVERSATION_ENTRY_KIND.OWN_ACTION,
+    words: 'opened "amber-shoal"',
+    action: { kind: ACTION_KIND.OPEN, runId: "wake-1" },
+  };
+  const render = (entries: readonly ConversationEntry[], live: readonly ConversationEntry[] = []) =>
+    renderToStaticMarkup(
+      createElement(ConversationPanel, {
+        entries,
+        live,
+        now: NOW,
+        ask: async () => undefined,
+        onAskEngaged: () => undefined,
+      }),
+    );
+  // No request record stands for a wake, so the tail is the only sign the turn is still going.
+  assert.match(render([retried, opened]), /<li class="conversation-turn" data-open="true">/);
+  const announced = render([
+    retried,
+    opened,
+    { kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT, words: "I retried amber-shoal." },
+  ]);
+  assert.match(announced, /<li class="conversation-turn">/);
+  // The announcement still being said counts as something after it.
+  const speaking = render(
+    [retried, opened],
+    [{ kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT, words: "I retried" }],
+  );
+  assert.match(speaking, /<li class="conversation-turn">/);
+});
+
+test("a turn of one action is the row it is, and two runs' actions never fold together", () => {
+  const markup = renderToStaticMarkup(
+    createElement(ConversationPanel, {
+      entries: [
+        {
+          kind: CONVERSATION_ENTRY_KIND.ACTION,
+          words: 'opened "checkout-service"',
+          action: { kind: ACTION_KIND.OPEN, runId: "run-1" },
+        },
+        {
+          kind: CONVERSATION_ENTRY_KIND.ACTION,
+          words: 'opened "lisbon-v2"',
+          action: { kind: ACTION_KIND.OPEN, runId: "run-2" },
+        },
+      ],
+      now: NOW,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
+    }),
+  );
+  assert.doesNotMatch(markup, /conversation-turn/);
+  assert.equal(markup.match(/class="conversation-action"/g)?.length, 2);
 });
 
 test("an announcement shows its spoken transcript", () => {

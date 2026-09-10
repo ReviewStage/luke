@@ -226,12 +226,13 @@ test("an action's line records the ask in words, with the identity it named", ()
     { kind: ACTION_KIND.MESSAGE, identity, text: "please add tests" },
     sessions,
     CONVERSATION_ENTRY_KIND.ACTION,
+    "run-1",
   );
   assert.equal(message.kind, CONVERSATION_ENTRY_KIND.ACTION);
   assert.equal(message.words, 'sent a message to "checkout-service": "please add tests"');
   assert.deepEqual(message.identity, identity);
-  // The kind rides beside the words, for the panel to draw the row by.
-  assert.deepEqual(message.action, { kind: ACTION_KIND.MESSAGE });
+  // The kind and the run ride beside the words, for the panel to draw and fold by.
+  assert.deepEqual(message.action, { kind: ACTION_KIND.MESSAGE, runId: "run-1" });
 
   const control: AdvertisedControl = { kind: ACTION_KIND.CONTROL, id: "retry", label: "Retry" };
   assert.equal(
@@ -239,6 +240,7 @@ test("an action's line records the ask in words, with the identity it named", ()
       { kind: ACTION_KIND.CONTROL, identity, control },
       sessions,
       CONVERSATION_ENTRY_KIND.ACTION,
+      "run-1",
     ).words,
     'ran "Retry" on "checkout-service"',
   );
@@ -249,6 +251,7 @@ test("an action's line records the ask in words, with the identity it named", ()
       { kind: ACTION_KIND.OPEN, identity },
       [],
       CONVERSATION_ENTRY_KIND.ACTION,
+      "run-1",
     ).words,
     "opened a session",
   );
@@ -278,11 +281,16 @@ test("an action's line records the ask in words, with the identity it named", ()
     applicationId: SESSION_APPLICATION_ID.SUPERSET,
   } as const;
   assert.equal(
-    sessionActionConversationEntry(openedInApp, [heldByApp], CONVERSATION_ENTRY_KIND.ACTION).words,
+    sessionActionConversationEntry(
+      openedInApp,
+      [heldByApp],
+      CONVERSATION_ENTRY_KIND.ACTION,
+      "run-1",
+    ).words,
     'opened "checkout-service" in Superset',
   );
   assert.equal(
-    sessionActionConversationEntry(openedInApp, [], CONVERSATION_ENTRY_KIND.ACTION).words,
+    sessionActionConversationEntry(openedInApp, [], CONVERSATION_ENTRY_KIND.ACTION, "run-1").words,
     "opened a session in superset",
   );
 
@@ -291,12 +299,14 @@ test("an action's line records the ask in words, with the identity it named", ()
     { kind: ACTION_KIND.CREATE_WORKSPACE, providerId: "conductor", providerProjectId: "p1" },
     sessions,
     CONVERSATION_ENTRY_KIND.ACTION,
+    "run-1",
   );
   assert.equal(created.words, "asked conductor to create a workspace");
   assert.equal(created.identity, undefined);
   // With no identity to name it, the creation's line names the provider it asked.
   assert.deepEqual(created.action, {
     kind: ACTION_KIND.CREATE_WORKSPACE,
+    runId: "run-1",
     providerId: "conductor",
   });
   const createdNamed = sessionActionConversationEntry(
@@ -308,6 +318,7 @@ test("an action's line records the ask in words, with the identity it named", ()
     },
     sessions,
     CONVERSATION_ENTRY_KIND.ACTION,
+    "run-1",
   );
   assert.equal(
     createdNamed.words,
