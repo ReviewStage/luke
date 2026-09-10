@@ -243,7 +243,6 @@ test("an open ask can pick the app, held to the roster's own associations", asyn
       [held],
     );
     assert.equal(refusal.status, ACTION_RESULT_STATUS.REJECTED);
-    assert.match(("reason" in refusal ? refusal.reason : "") ?? "", /opens in Superset/);
   }
 });
 
@@ -367,9 +366,6 @@ test("an added agent may carry a model, only of the asked-for kind", async () =>
     conductorAgentModels,
   );
   assert.equal(mismatched.status, ACTION_RESULT_STATUS.REJECTED);
-  if (mismatched.status === ACTION_RESULT_STATUS.REJECTED) {
-    assert.match(mismatched.reason ?? "", /cursor agent runs no model/);
-  }
 });
 
 test("a creation ask can only name a project Luke was shown", async () => {
@@ -446,8 +442,6 @@ test("an implicit project resolves only when the latest roster has one match", a
     [OFFERED_PROJECT, { ...OFFERED_PROJECT, providerProjectId: "proj-2" }],
   );
   assert.equal(ambiguous.status, ACTION_RESULT_STATUS.REJECTED);
-  // SAFETY: Refused session-tool actions carry a reason string this assertion inspects.
-  assert.match((ambiguous as { reason?: string }).reason ?? "", /More than one listed project/);
 });
 
 test("a target names a host only where the listed project carries one", async () => {

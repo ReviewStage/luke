@@ -87,14 +87,11 @@ test("the assembler builds and clears the keyed voice capabilities as one unit",
   await assembler.apply();
   assert.ok(assembler.realtimeCredentials);
   assert.ok(assembler.brainModel);
-  assert.match(reports.at(-1) ?? "", /Luke brain: enabled/);
 
   key = undefined;
   await assembler.apply();
   assert.equal(assembler.realtimeCredentials, undefined);
   assert.equal(assembler.brainModel, undefined);
-  assert.match(reports.at(-2) ?? "", /unavailable/);
-  assert.match(reports.at(-1) ?? "", /Luke brain: absent/);
 });
 
 test("a wrapped brain model stands where the built one would, and only when one was built", async () => {
@@ -171,9 +168,6 @@ test("a signed-out live run is diagnosed as missing credentials, not as a fixtur
   assert.equal(assembler.realtimeCredentials, undefined);
   assert.equal(assembler.unavailableDiagnostics.fixtureMode, false);
   assert.equal(assembler.unavailableDiagnostics.lastOutcome, REALTIME_MINT_OUTCOME.NO_API_KEY);
-  const voiceReport = reports.find((report) => report.startsWith("Luke voice"));
-  assert.doesNotMatch(voiceReport ?? "", /fixture/);
-  assert.match(voiceReport ?? "", /Signing in/);
 });
 
 test("the brain follows the voice source: hosted on an account, direct on a key, none in a fixture run", async () => {

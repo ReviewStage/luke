@@ -53,10 +53,6 @@ test("an abort and the open's resolution in the same turn leave the context disc
   await tick();
   assert.equal(firstOpened.kind, CONTEXT_OPENING.INCOMPATIBLE);
   assert.equal(abortFirst.disposed(), 1);
-  assert.match(
-    firstOpened.kind === CONTEXT_OPENING.INCOMPATIBLE ? firstOpened.reason : "",
-    /replaced while its context was opening/u,
-  );
 
   const releaseFirst = heldRuntime();
   const second = generationFrom(freshBrainState("gen-2", NOW), releaseFirst.runtime, "{}");

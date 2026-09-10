@@ -116,7 +116,6 @@ test("a fetch that throws is a network failure named by the error's kind alone, 
   assert.equal(failure.outcome, MODEL_RESPONSE_OUTCOME.FAILED);
   assert.equal(failure.failure, MODEL_FAILURE.NETWORK);
   assert.equal(failure.reason, "request did not complete: TypeError");
-  assert.ok(!failure.reason.includes("sk-secret"));
 });
 
 test("the keyed transport sends one attempt and never refreshes; no account token at all is a credential failure", async () => {

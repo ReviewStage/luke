@@ -45,7 +45,6 @@ test("the sign-in carries its registration, and the environment may replace it",
   // whole registration and it stands in source: a bare checkout offers the
   // sign-in rather than hiding a row it could not open.
   const registered = linearSignInConfig({});
-  assert.match(registered?.clientId ?? "", /^[0-9a-f]{32}$/);
 
   // The variable stands in for development against another registration.
   assert.deepEqual(linearSignInConfig(environment()), { clientId: CLIENT_ID });

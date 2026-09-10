@@ -50,7 +50,6 @@ test("a launch under the default policy keeps a checkpoint past its stamped dead
   await generationClock.start();
   assert.equal(store.generationId(), "gen-old");
   assert.deepEqual(store.current()?.items, stale.items);
-  assert.ok(repository.words().includes(EXPIRED_SECRET));
   assert.equal(reports.length, 0);
   assert.equal(clock.timers.size, 0);
   // Nothing was armed, so advancing past the deadline fires nothing and the

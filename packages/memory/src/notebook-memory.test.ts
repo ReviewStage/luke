@@ -342,7 +342,6 @@ test("an embedding outage degrades an automatic provider to keyword-only for tha
   const access = h.memory.accessFor(MAIN_SESSION_KEY);
   const searched = await access.search({ query: "frankfurt", signal: signal() });
   assert.equal(searched.mode, RETRIEVAL_MODE.KEYWORD_ONLY);
-  assert.ok(String(searched.note).includes("embeddings are down"));
   assert.equal(resultsOf(searched).length, 1);
   assert.equal(
     h.memory.mode(),
@@ -376,7 +375,6 @@ test("a later batch's failure keeps every vector the earlier batches answered, a
   });
   const report = await memory.sync();
   assert.equal(report?.mode, RETRIEVAL_MODE.KEYWORD_ONLY);
-  assert.ok(report?.note?.includes("embeddings are down"));
   assert.equal(report?.embeddedChunks, 1, "the batch that answered is kept");
   assert.equal(h.store.status().embeddedChunks, 1);
   partial.fail = false;

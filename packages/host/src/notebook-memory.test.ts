@@ -150,7 +150,6 @@ test("an embedding outage degrades an automatic provider to keyword-only, and th
   const h = await harness(t, { embeddingAdapter: () => failing });
   const report = await h.wiring.sync();
   assert.equal(report?.mode, RETRIEVAL_MODE.KEYWORD_ONLY);
-  assert.ok(report?.note?.includes("embeddings are down"));
   assert.ok(
     report && report.indexedChunks > 0 && report.embeddedChunks === 0,
     "keyword rows still land",

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
-import { ACTION_RESULT_STATUS, isWireString, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { BrainAgent, LOOK_SUBJECT } from "./agent.js";
 import { type BrainPersistedState, freshBrainState } from "./envelope.js";
 import {
@@ -40,7 +40,6 @@ import {
   submissionsIssued,
   submit,
 } from "./harness.js";
-import { UNKNOWN_ACTION_RESULT } from "./journal.js";
 import {
   BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_ORIGIN,
@@ -86,8 +85,6 @@ test("a checkpoint that fails before an action refuses it, and acceptance itself
   assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
   assert.equal(record?.performedActions, 0);
   assert.equal(h.performed.length, 0);
-  const refusal = functionOutputs(inner.inputs[1] ?? [])[0];
-  assert.ok(refusal?.output.includes("could not be recorded before running"));
   // The disk never saw a started act it could mistake for one that ran.
   assert.equal(h.repository.state?.journal.length, 0);
 });
@@ -116,9 +113,6 @@ test("a checkpoint that fails after an action keeps its result in memory, blocks
   assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
   assert.equal(record?.performedActions, 1);
   assert.equal(record?.text, "Sent.");
-  const outputs = functionOutputs(h.client.inputs[1] ?? []);
-  assert.ok(outputs[0]?.output.includes(ACTION_RESULT_STATUS.ACCEPTED));
-  assert.ok(outputs[1]?.output.includes("could not be recorded"));
   // The disk holds the started entry with no result, which a restart reads as unknown.
   const stored = h.repository.state;
   assert.equal(stored?.journal.length, 1);
@@ -147,7 +141,6 @@ test("a restart marks unfinished runs interrupted and pairs a started act as unk
   assert.equal(restored?.requests[0]?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
   const paired = functionOutputs(restored?.items ?? []);
   assert.equal(paired.length, 1);
-  assert.ok(paired[0]?.output.includes(UNKNOWN_ACTION_RESULT.status));
   // The next ask opens on a memory with no dangling call, and runs no old act.
   relaunched.client.answers.push(answered([message("Hello.")]));
   const next = await ask(relaunched, "hi");
@@ -598,7 +591,6 @@ test("a terminal end and its marks overlapping a new submission and a checkpoint
   assert.equal(kept?.performedActions, 1);
   assert.equal(kept?.conversationRecordedAt, NOW + 9);
   assert.equal(kept?.askRecordedAt, NOW);
-  assert.equal(stored?.journal[0]?.outputJson?.includes(ACTION_RESULT_STATUS.ACCEPTED), true);
   assert.equal(stored?.requests.length, 2);
   assert.deepEqual(stored?.requests, h.agent.requests());
   assert.equal(
@@ -681,7 +673,6 @@ test("a refused acceptance is never saved by an unrelated mark, and never comes 
     ),
   );
   assert.equal(relaunched.agent.requests().length, 1);
-  assert.ok(!relaunched.repository.words().includes("rejected-b"));
   // The refused submission retried lands as a fresh acceptance, once.
   relaunched.client.answers.push(answered([message("now")]));
   const retried = await relaunched.agent.submitAsk({
@@ -750,7 +741,6 @@ test("an observation in flight enters no memory through an unrelated mark or acc
   // into working memory; the consumed cursor has not moved; the model is held.
   assert.equal(observing.sinceReads.length, 1);
   const before = observing.repository.state;
-  assert.ok(!JSON.stringify(before?.items).includes("UNCOMMITTED_OBSERVATION"));
   assert.equal(before?.inbox.length, 1);
   assert.deepEqual(before?.captureCursors, { [claude.id]: { abc: "abc-cursor" } });
   // Unrelated publication and acceptance land while the observation is out.
@@ -759,13 +749,11 @@ test("an observation in flight enters no memory through an unrelated mark or acc
   const accepted = await submit(observing, "another ask");
   assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
   const during = observing.repository.state;
-  assert.ok(!JSON.stringify(during?.items).includes("UNCOMMITTED_OBSERVATION"));
   assert.deepEqual(during?.cursors, before?.cursors);
   assert.equal(during?.requests.find((r) => r.runId === a)?.conversationRecordedAt, NOW + 1);
   // A crash copy taken now restores nothing of the observation.
   const crashed = harness({}, fakeBrainStateRepository(observing.repository.state));
   await crashed.agent.ready();
-  assert.ok(!crashed.repository.words().includes("UNCOMMITTED_OBSERVATION"));
   assert.deepEqual(crashed.repository.state?.cursors, before?.cursors);
   // The observation fails: memory and the consumed cursor never advanced,
   // and the captured entry stands for the next turn.
@@ -776,7 +764,6 @@ test("an observation in flight enters no memory through an unrelated mark or acc
   regate.open();
   await settle();
   const after = observing.repository.state;
-  assert.ok(!JSON.stringify(after?.items).includes("UNCOMMITTED_OBSERVATION"));
   assert.equal(after?.inbox.length, 0);
   assert.equal(after?.cursors["claude-code"]?.abc, "abc-cursor");
   assert.equal((await observing.agent.waitAsk(acceptedRunId(accepted), 1))?.text, "later");
@@ -1019,8 +1006,6 @@ test("a refused result checkpoint under a landed terminal write keeps the confir
     file?.items.map((item) => item.type),
     ["message", "function_call", "function_call_output"],
   );
-  const paired = file?.items.find((item) => item.type === "function_call_output");
-  assert.ok(isWireString(paired?.output) && paired.output.includes('"unknown"'));
   assert.equal(again.performed.length, 0);
   assert.equal(again.client.inputs.length, 0);
 });

@@ -500,7 +500,6 @@ test("a stalled handshake times out instead of hanging on connecting", async () 
   assert.equal(context.session.status, REALTIME_STATUS.FAILED);
   // No press, no device: the stall held nothing that needs releasing.
   assert.ok(!context.calls.includes("microphone-requested"));
-  assert.ok(context.errors.some((message) => message?.includes("timed out")));
 });
 
 test("a recoverable disconnect does not end the call", async () => {

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { BrainAgent, BrainRequestRecord, BrainSubmission } from "@sidecar/brain";
 import {
-  BRAIN_ASK_REFUSAL,
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
   brainReplyWords,
@@ -108,7 +107,6 @@ test("an ask with no brain is refused in fixed words, and nothing is recorded", 
     origin: BRAIN_REQUEST_ORIGIN.TYPED,
   });
   assert.deepEqual(result, { outcome: "rejected", reason: "absent" });
-  assert.equal(BRAIN_ASK_REFUSAL.absent.includes("OpenAI key"), true);
   assert.deepEqual(written.recorded, []);
 });
 

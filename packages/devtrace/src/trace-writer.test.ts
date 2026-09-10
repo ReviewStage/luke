@@ -99,5 +99,4 @@ test("a writer that cannot write reports once and stays quiet after", async () =
   writer.recordWire({ direction: TRACE_DIRECTION.CLIENT, event: { type: "two" } });
   await writer.settled();
   assert.equal(reports.length, 1);
-  assert.match(reports[0] ?? "", /Agent trace could not be written/u);
 });

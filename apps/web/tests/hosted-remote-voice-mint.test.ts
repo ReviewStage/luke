@@ -73,7 +73,6 @@ test("a phone or watch mint keeps its own narrowed session document on the share
   assert.equal(body.connection.model, REALTIME_DEFAULTS.MODEL);
   assert.deepEqual(body.quota, OPEN_SPEND.quota);
   assert.equal(body.context.sessions.itemId, contextItemId(CONTEXT_ITEM_KIND.SESSIONS, 0));
-  assert.match(body.context.sessions.text, /^\[observed session status, sent automatically\]\n/);
 
   assert.equal(call.url, "https://api.openai.com/v1/realtime/client_secrets");
   const sent = JSON.parse(String(call.init?.body));

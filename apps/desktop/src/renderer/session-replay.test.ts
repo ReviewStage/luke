@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import type { UnparsedWireValue } from "@sidecar/wire";
 import type { SessionReplayBootstrap } from "#shared/messages/session";
 import {
   POSTHOG_ASSETS_HOST,
@@ -72,24 +71,25 @@ test("the connect policy names both recorder hosts, and only what else is reache
  * reaching everything else the library puts it in.
  */
 const LOCAL = "file:///Users/someone/Applications/Luke.app/renderer/index.html";
-
-function namesNobody(value: UnparsedWireValue): void {
-  assert.doesNotMatch(JSON.stringify(value) ?? "", /someone|file:\/\//);
-}
+/** What the scrub puts in the address's place, as the library will report it. */
+const PANEL = "app://luke/panel";
 
 test("the address goes from an event's own properties", () => {
   const scrubbed = withoutLocalAddress({ $current_url: LOCAL, $browser: "Chrome" });
-  namesNobody(scrubbed);
   // What is not the address is left exactly as the library reported it.
   assert.deepEqual(scrubbed, { $current_url: "app://luke/panel", $browser: "Chrome" });
 });
 
 test("the address goes from the frames the recorder opens with", () => {
-  namesNobody(
+  assert.deepEqual(
     withoutLocalAddress([
       { type: 4, data: { href: LOCAL, width: 640 }, timestamp: 1 },
       { type: 5, data: { tag: "$url_changed", payload: { href: LOCAL } }, timestamp: 2 },
     ]),
+    [
+      { type: 4, data: { href: PANEL, width: 640 }, timestamp: 1 },
+      { type: 5, data: { tag: "$url_changed", payload: { href: PANEL } }, timestamp: 2 },
+    ],
   );
 });
 
@@ -97,11 +97,12 @@ test("a bare path names the machine as surely as a whole address does", () => {
   // The library reports a path beside the address, and an exception names the
   // script each frame came from rather than the document — so matching the
   // document's own address exactly would have let both through.
-  namesNobody(
+  assert.deepEqual(
     withoutLocalAddress({
       $pathname: "/Users/someone/Applications/Luke.app/renderer/index.html",
       nested: { script: "/Users/someone/Applications/Luke.app/renderer/renderer.js" },
     }),
+    { $pathname: PANEL, nested: { script: PANEL } },
   );
 });
 

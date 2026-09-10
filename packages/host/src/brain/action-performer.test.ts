@@ -345,7 +345,6 @@ test("an action with no turn standing is refused in main before any validator or
     for (const call of [MESSAGE_CALL, REMEMBER_CALL, SETTING_CALL]) {
       const refused = await actions.perform(call, execution);
       assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
-      assert.ok(String(refused.reason).includes("standing of a turn"));
     }
   }
   assert.deepEqual(performed, []);

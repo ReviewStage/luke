@@ -53,14 +53,6 @@ test("a chosen stop chord goes first, with the default kept behind it", () => {
 });
 
 test("the ask key is the talk key's sibling, never its rival", () => {
-  // One modifier for both halves of the conversation — and Command-L is
-  // deliberately not here: globally registered, it would swallow the address
-  // bar of every browser on the machine.
-  for (const accelerator of DEFAULT_ASK_HOTKEYS) {
-    assert.match(accelerator, /^Alt\+/);
-    assert.ok(!accelerator.startsWith("Command"));
-    assert.ok(!accelerator.startsWith("CommandOrControl"));
-  }
   // Two Luke keys must never compete for one chord: whichever registered
   // first would silently cost the other its whole feature.
   for (const accelerator of DEFAULT_ASK_HOTKEYS) {

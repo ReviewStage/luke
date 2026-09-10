@@ -1270,6 +1270,52 @@ Biome is the executable style policy for TypeScript, JavaScript, JSON,
 Markdown, and CSS. Husky runs the same checks against staged files as a local
 convenience; `./scripts/check.sh` and CI remain authoritative.
 
+## What a test may assert
+
+A test asserts values and structure, never the text a human wrote. Searching a
+string for a phrase — `assert.match` over prose, or `includes`, `startsWith`,
+or `endsWith` over a rendered string — states nothing a reader can rely on: it
+fails when the wording is improved and passes when the words survive a real
+regression, so it constrains whoever edits the words rather than the build.
+Assert the value, the shape, the count, the order, the enum member, or the set
+membership instead. `includes` over an *array* is not this rule: membership in
+a declared set is a value assertion and belongs. What decides which one a call
+is, is the receiver's type and not the argument's spelling — a
+`startsWith(SOME_CONSTANT)` over a string is a text match however the constant
+is named.
+
+This binds hardest where the output is prose, because that is where the
+temptation is: a system prompt, the persona, a briefing's directions, a guide
+fact, an error sentence, a row's label, rendered markup. Where the prose itself
+is the product, test the decision behind it — which section was emitted, which
+file was injected, which control was offered, which branch was taken — and let
+the words move without a test to renegotiate.
+
+A test with no `assert` in it is not thereby empty, and removing a phrase from
+one does not license deleting it. A test that calls the product and returns
+passes by not throwing and not hanging, which is the whole of what several here
+claim; one whose assertion is a parameter type fails at the compiler instead;
+and one whose wait carries a predicate fails by timing out. Only a body with
+nothing left in it is empty. What survives with its statements and none of its
+assertions is a judgment for a reader, not a sweep.
+
+What the removal orphans goes with it, and this is the half worth being strict
+about. A helper whose body was the search is a no-op wearing the name of a
+check: a test calling `assertNoneOf` reads as proof that none of those words
+survived, and absent coverage a reader can see beats a call that quietly
+asserts nothing. The same goes for an `if` that only narrowed a type so the
+removed line could read `.reason`, and for a parameter nothing reads while
+call sites still pass values into the hole.
+
+The rule costs real coverage, and saying so is the point of writing it down
+rather than leaving it to taste. What a string search was the only statement of
+is now unstated, and three of those are constraints above rather than
+preferences: a secret's absence from a file, a payload, or a report; a retired
+generation's words never reaching its successor; and the bounds on the roster a
+model is shown. Restating them structurally — a type that cannot carry the
+value, a redactor with its own unit, a generated file compared as data — is
+work this rule creates and does not excuse.
+
 ## Where the rest of the guidance lives
 
 Everything safety-bearing is above: what Luke is, every trust constraint, what

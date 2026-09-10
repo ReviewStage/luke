@@ -77,7 +77,6 @@ test("a write that cannot land is reported, not thrown", () => {
     },
   );
   assert.equal(reported.length, 1);
-  assert.match(reported[0] ?? "", /onboarding\.json/);
 });
 
 test("an update merges over the record on disk, not over an older read", (t) => {

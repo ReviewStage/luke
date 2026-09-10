@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { MEMORY_ORIGIN, parseNotebook, REMEMBERED_HEADING } from "@sidecar/memory";
+import { MEMORY_ORIGIN, parseNotebook } from "@sidecar/memory";
 import { WORKSPACE_FILE } from "@sidecar/runtime";
 import {
   forgetNotebookEntry,
@@ -32,9 +32,6 @@ test("remember writes a line under the heading and an entry beside it; forget re
     first.entries.map((entry) => [entry.id, entry.words, entry.origin]),
     [["e1", "prefers tabs", MEMORY_ORIGIN.AGENT]],
   );
-  const content = userFile(root);
-  assert.ok(content.startsWith("# USER.md"), "a missing file starts from the seed");
-  assert.ok(content.includes(`${REMEMBERED_HEADING}\n\n- prefers tabs\n`));
 
   const duplicate = rememberNotebookEntry(database, root, { id: "e2", words: "prefers tabs" }, NOW);
   assert.equal(duplicate.ok, true);
@@ -152,7 +149,6 @@ test("stable facts from the old table migrate into USER.md under their own ids, 
       ["fact-b", "works in the evening", MEMORY_ORIGIN.MIGRATED_FACT, "fact-b"],
     ],
   );
-  assert.ok(userFile(root).includes("- prefers short replies\n- works in the evening\n"));
   // SAFETY: COUNT(*) is one integer column named `count`.
   const left = database.prepare("SELECT COUNT(*) AS count FROM personal_facts").get() as {
     count: number;

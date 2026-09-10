@@ -67,7 +67,6 @@ test("a plain stop has no reply words and leaves the quiet line; one that had ac
   assert.equal(stoppedAskNarration(stopped), STOPPED_ASK_NARRATION);
   // An action already carried is news the stop must not swallow, so it is a reply after all.
   const acted = { ...stopped, performedActions: 1 };
-  assert.match(brainReplyWords(acted) ?? "", /^Cancelled, though /);
   assert.equal(stoppedAskNarration(acted), undefined);
   // Any other end is worded as itself and is never the quiet line.
   assert.equal(

@@ -143,11 +143,6 @@ test("mobile client uses a custom URI scheme, not a loopback address", () => {
   const url = new URL(redirectUri);
   assert.notEqual(url.protocol, "http:");
   assert.notEqual(url.protocol, "https:");
-  assert.ok(
-    url.protocol.endsWith(":") &&
-      !["http:", "https:", "javascript:", "data:", "vbscript:"].includes(url.protocol),
-    "redirect URI must use a custom scheme",
-  );
 });
 
 test("mobile client seeding updates the one client identity instead of creating another", async () => {

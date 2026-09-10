@@ -50,7 +50,6 @@ test("an observed session's key encodes its provider ids reversibly, whatever th
   const source = { providerId: "claude-code", providerSessionId: "sess:1/2 %(x)*'!~" };
   const key = observedSessionKey(source);
   assert.equal(key.split(":").length, 5);
-  assert.match(key, /^agent:main:observed:claude-code:/);
   assert.deepEqual(observedSessionRefOf(key), source);
   assert.equal(decodeKeyComponent(encodeKeyComponent("a:b%c")), "a:b%c");
   assert.equal(decodeKeyComponent("a:b"), undefined);

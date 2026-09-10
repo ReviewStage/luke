@@ -187,7 +187,6 @@ test("the phone is handed the actions it carries, in the shape its own surface g
     "provider_id",
     "provider_session_id",
   ]);
-  assert.match(open.description, /own screen in this app/);
 
   // The phone's list narrows on provider and status, and has no tabs to show.
   const panel = remote.find((tool) => tool.name === REALTIME_TOOL.SHOW_PANEL);

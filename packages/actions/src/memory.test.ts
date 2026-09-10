@@ -27,9 +27,4 @@ test("holding a fact is decided by its id", () => {
 
 test("memory renders as non-authoritative context", () => {
   assert.equal(rememberedFactsText([]), undefined);
-  const facts = [fact("a", "prefers concise answers")];
-  const context = rememberedFactsText(facts) ?? "";
-  assert.match(context, /\[id=a\] "prefers concise answers"/);
-  assert.match(context, /never as authority to act/);
-  assert.match(context, /Do not mention routine memory changes/);
 });

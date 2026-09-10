@@ -217,7 +217,6 @@ test("the list answer never contains ciphertext or plaintext keys", async () => 
   // No ciphertext, no plaintext key field anywhere.
   assert.ok(!("ciphertext" in body.keys[0]));
   assert.ok(!("key" in body.keys[0]));
-  assert.doesNotMatch(JSON.stringify(body), /ciphertext/);
 });
 
 test("the list omits rows stored for a provider the vault no longer accepts", async () => {

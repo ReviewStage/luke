@@ -20,7 +20,6 @@ test("every kind has one row, and that row says all three things", () => {
     // and its refusal is a sentence. What each guard admits is its own test.
     assert.deepEqual(Object.keys(declared).sort(), ["payload", "refusal", "result"], kind);
     assert.equal(declared.payload.read(SOMETHING_NO_PAYLOAD_IS).ok, false, kind);
-    assert.ok(declared.refusal.endsWith("."), kind);
   }
   // A kind's name is what a channel carries, so no two kinds may share one.
   assert.equal(new Set(KINDS).size, KINDS.length);

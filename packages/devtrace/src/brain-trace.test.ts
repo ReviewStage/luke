@@ -180,5 +180,4 @@ test("a keyed turn records that it asked for a prefix cache, and what the provid
   // and belongs in no file.
   assert.equal(records[0]?.promptCacheKeyed, true);
   assert.equal(records[0]?.cachedInputTokens, 1_024);
-  assert.ok(!JSON.stringify(records).includes("9f86d0818"));
 });

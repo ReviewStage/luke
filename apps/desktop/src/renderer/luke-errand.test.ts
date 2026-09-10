@@ -23,7 +23,6 @@ import {
   tabErrandTarget,
 } from "./luke-errand";
 import { APP_SETTING_ID, buildLukeGuide, isAppSettingId, type LukeGuideInput } from "./luke-guide";
-import { SETTING_PAGE, SETTINGS_PAGE_LABEL } from "./settings-views";
 
 const guideInput: LukeGuideInput = {
   account: { status: ACCOUNT_STATUS.SIGNED_OUT },
@@ -350,10 +349,5 @@ test("every setting is signed on the page it is actually drawn on", () => {
   // answer, which a `Record` cannot enforce because one of them is a sentence.
   for (const setting of buildLukeGuide(guideInput).settings) {
     assert.ok(isAppSettingId(setting.id), `${setting.id} is one of Luke's own settings`);
-    const page = SETTING_PAGE[setting.id];
-    assert.ok(
-      setting.manual.includes(SETTINGS_PAGE_LABEL[page]),
-      `${setting.id} is opened on the ${page} page and the guide sends a hand to ${setting.manual}`,
-    );
   }
 });
