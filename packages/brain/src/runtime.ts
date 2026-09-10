@@ -346,6 +346,9 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
     lifecycle: ContextLifecycle,
   ): Promise<boolean> {
     await emit({ kind: RUNTIME_EVENT.ANSWERED, toolCalls: answer.toolCalls.length });
+    if (answer.responseId !== undefined) {
+      await emit({ kind: RUNTIME_EVENT.RESPONSE, responseId: answer.responseId });
+    }
     await ingest({ kind: CONTEXT_INPUT_KIND.MODEL_OUTPUT, items: answer.items });
     if (lifecycle.signal?.aborted) return false;
     if (answer.compacted) {

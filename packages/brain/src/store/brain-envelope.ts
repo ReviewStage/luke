@@ -358,8 +358,8 @@ function upsertRequest(
       `INSERT OR REPLACE INTO requests
          (run_id, session_id, ordinal, submission_id, origin, question, status, revision,
           accepted_at, started_at, settled_at, text, failure, performed_actions, unknown_actions,
-          ask_recorded_at, conversation_recorded_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ask_recorded_at, conversation_recorded_at, usage_json, response_ids_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       record.runId,
@@ -379,6 +379,8 @@ function upsertRequest(
       record.unknownActions,
       nullable(record.askRecordedAt),
       nullable(record.conversationRecordedAt),
+      record.usage === undefined ? null : JSON.stringify(record.usage),
+      record.responseIds === undefined ? null : JSON.stringify(record.responseIds),
     );
 }
 
@@ -424,6 +426,8 @@ function requestWire(row: Record<string, SQLInputValue>): WireRecord {
     ...optionalField("failure", column(row.failure, isWireString)),
     ...optionalField("askRecordedAt", column(row.ask_recorded_at, isWireNumber)),
     ...optionalField("conversationRecordedAt", column(row.conversation_recorded_at, isWireNumber)),
+    ...optionalField("usage", jsonColumn(row.usage_json)),
+    ...optionalField("responseIds", jsonColumn(row.response_ids_json)),
   };
 }
 
@@ -442,4 +446,20 @@ function journalWire(row: Record<string, SQLInputValue>): WireRecord {
 /** A nullable column as the envelope reader expects it: present with its value, or absent. */
 function optionalField(name: string, value: WireValue): WireRecord {
   return value === null ? {} : { [name]: value };
+}
+
+/**
+ * A TEXT column holding JSON, read back as the wire value it serialized, or
+ * absent when the column is null or does not parse; the envelope reader, not
+ * this table module, decides whether the value's shape is admitted.
+ */
+function jsonColumn(value: SQLInputValue | undefined): WireValue {
+  const json = column(value, isWireString);
+  if (json === null) return null;
+  try {
+    // SAFETY: JSON.parse answers a wire value; the envelope reader validates its shape.
+    return JSON.parse(json) as WireValue;
+  } catch {
+    return null;
+  }
 }

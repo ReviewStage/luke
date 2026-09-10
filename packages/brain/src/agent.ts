@@ -256,6 +256,8 @@ export class BrainAgent {
           status: record.status,
           ...(record.text !== undefined ? { text: record.text } : undefined),
           ...(record.failure !== undefined ? { failure: record.failure } : undefined),
+          ...(record.usage !== undefined ? { usage: record.usage } : undefined),
+          ...(record.responseIds !== undefined ? { responseIds: record.responseIds } : undefined),
         }),
     });
     const seam: AgentSeam = {

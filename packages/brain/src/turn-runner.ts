@@ -42,6 +42,7 @@ import { inboxEvents } from "./observation-inbox.js";
 import type { BrainActionExecution, BrainActionPerformer, BrainRoster } from "./performer.js";
 import { sameIdentity } from "./records.js";
 import {
+  addModelUsage,
   BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
@@ -159,6 +160,7 @@ export function newRunControl(
     checkpointFailed: false,
     performedActions: 0,
     unknownActions: 0,
+    responseIds: [],
   };
 }
 
@@ -830,6 +832,10 @@ export class TurnRunner {
           if (event.usage.inputTokens !== undefined) {
             gathering.inputTokens = event.usage.inputTokens;
           }
+          run.usage = addModelUsage(run.usage, event.usage);
+          return;
+        case RUNTIME_EVENT.RESPONSE:
+          run.responseIds.push(event.responseId);
           return;
         case RUNTIME_EVENT.COMPACTED:
           gathering.compacted = true;

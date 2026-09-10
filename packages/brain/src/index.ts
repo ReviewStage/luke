@@ -59,9 +59,11 @@ export {
   BRAIN_REQUEST_STATUS,
   BRAIN_SUBMISSION_OUTCOME,
   type BrainRequestRecord,
+  type BrainRunUsage,
   type BrainSubmission,
 } from "./requests.js";
 export {
+  BRAIN_REASONING_SUMMARY,
   BRAIN_RESPONSES_COMPACT_PATH,
   BRAIN_RESPONSES_INPUT_TOKENS_PATH,
   BRAIN_RESPONSES_PATH,

@@ -100,7 +100,7 @@ const MEMORY_FLUSH_STATE_TABLE = `CREATE TABLE IF NOT EXISTS memory_flush_state 
     flushed_at INTEGER NOT NULL
   )`;
 
-export const STORE_SCHEMA_VERSION = 11;
+export const STORE_SCHEMA_VERSION = 12;
 
 /**
  * The earliest version this build opens. Every version since the first has a
@@ -127,6 +127,12 @@ export interface SchemaMigrationStep {
    * table under the new one — and SQLite's DDL carries no condition of its own.
    */
   onlyIf?: { table: string; column?: string };
+  /**
+   * Skips the step where the named column already stands: an added column
+   * must not be added twice on a database whose table the current statements
+   * created with it, and SQLite's ADD COLUMN carries no IF NOT EXISTS.
+   */
+  unless?: { table: string; column: string };
 }
 
 const CONVERSATION_EVENTS_INDEXES: readonly string[] = [
@@ -276,6 +282,21 @@ export const STORE_SCHEMA_MIGRATIONS: ReadonlyMap<number, readonly SchemaMigrati
       ],
     ],
     [11, RENAME_TO_CONVERSATION_STEPS],
+    [
+      12,
+      [
+        {
+          sql: "ALTER TABLE requests ADD COLUMN usage_json TEXT",
+          params: [],
+          unless: { table: "requests", column: "usage_json" },
+        },
+        {
+          sql: "ALTER TABLE requests ADD COLUMN response_ids_json TEXT",
+          params: [],
+          unless: { table: "requests", column: "response_ids_json" },
+        },
+      ],
+    ],
   ],
 );
 
@@ -357,7 +378,9 @@ export const STORE_SCHEMA_STATEMENTS: readonly string[] = [
     performed_actions INTEGER NOT NULL,
     unknown_actions INTEGER NOT NULL,
     ask_recorded_at INTEGER,
-    conversation_recorded_at INTEGER
+    conversation_recorded_at INTEGER,
+    usage_json TEXT,
+    response_ids_json TEXT
   )`,
   `CREATE INDEX IF NOT EXISTS requests_by_session ON requests(session_id, ordinal)`,
   `CREATE TABLE IF NOT EXISTS action_receipts (

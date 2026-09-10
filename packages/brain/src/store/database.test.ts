@@ -874,3 +874,74 @@ test("the observation inbox and capture cursors round-trip, amend whole, and cas
     .run("gen-inbox", 0, "bad", JSON.stringify({ id: "bad" }));
   assert.equal(loadBrainEnvelope(database, MAIN_SESSION_KEY).unreadable, true);
 });
+
+test("a database from before the run accounting opens with the two columns added, and a record's usage and response ids round-trip through them", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "luke-runtime-store-"));
+  const location = path.join(directory, "agent.sqlite");
+  const seeded = StoreDatabase.open(location);
+  createConversation(seeded, {
+    agentId: DEFAULT_AGENT_ID,
+    sessionKey: MAIN_SESSION_KEY,
+    name: "main",
+    now: NOW,
+  });
+  saveBrainEnvelope(seeded, MAIN_SESSION_KEY, {
+    kind: SAVE_KIND.REPLACE,
+    state: populatedState("gen-kept"),
+  });
+  seeded.close();
+  const older = new DatabaseSync(location);
+  older.exec("ALTER TABLE requests DROP COLUMN usage_json");
+  older.exec("ALTER TABLE requests DROP COLUMN response_ids_json");
+  older.exec("UPDATE schema_version SET version = 11");
+  older.close();
+
+  const database = StoreDatabase.open(location);
+  // SAFETY: the schema_version table has one integer column.
+  const version = database.prepare("SELECT version FROM schema_version").get() as {
+    version: number;
+  };
+  assert.equal(version.version, STORE_SCHEMA_VERSION);
+  // SAFETY: PRAGMA table_info answers one text column named name per column of the table.
+  const columns = new Set(
+    (database.prepare("PRAGMA table_info(requests)").all() as { name: string }[]).map(
+      (column) => column.name,
+    ),
+  );
+  assert.equal(columns.has("usage_json"), true);
+  assert.equal(columns.has("response_ids_json"), true);
+  // A record from before the columns reads with neither field, not with empty ones.
+  const kept = loadBrainEnvelope(database, MAIN_SESSION_KEY).state;
+  assert.equal(kept?.generationId, "gen-kept");
+  assert.equal(kept?.requests[0] !== undefined && "usage" in kept.requests[0], false);
+  assert.equal(kept?.requests[0] !== undefined && "responseIds" in kept.requests[0], false);
+
+  const usage = {
+    inputTokens: 1900,
+    outputTokens: 50,
+    cachedInputTokens: 1664,
+    reasoningTokens: 30,
+  };
+  assert.equal(
+    saveBrainEnvelope(database, MAIN_SESSION_KEY, {
+      kind: SAVE_KIND.REPLACE,
+      expectGeneration: "gen-kept",
+      state: {
+        ...populatedState("gen-next"),
+        requests: [
+          request("run-1", {
+            status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+            usage,
+            responseIds: ["resp_1", "resp_2"],
+          }),
+        ],
+      },
+    }),
+    true,
+  );
+  const reloaded = loadBrainEnvelope(database, MAIN_SESSION_KEY).state?.requests[0];
+  assert.deepEqual(reloaded?.usage, usage);
+  assert.deepEqual(reloaded?.responseIds, ["resp_1", "resp_2"]);
+  database.close();
+  fs.rmSync(directory, { recursive: true, force: true });
+});

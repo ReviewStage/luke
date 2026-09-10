@@ -9,6 +9,7 @@ import {
   MODEL_RESPONSE_OUTCOME,
   type ModelResponse,
   type ModelUsage,
+  type ReasoningSummary,
   type ToolSchema,
 } from "@sidecar/runtime/vocabulary";
 import { joinReplyMessages } from "@sidecar/session";
@@ -25,15 +26,20 @@ import {
 /**
  * The one OpenAI Responses request a brain turn may be, and the one reading of
  * its answer. Built here once so the keyed client and the hosted service send
- * the same shape: instructions, tools, the refusal to store, and server-side
- * compaction are fixed by the build, and only the input array varies.
+ * the same shape: instructions, tools, the reasoning summary, and server-side
+ * compaction are fixed by the build, and only the input array varies. The
+ * request leaves OpenAI's `store` at its default, so each response stands
+ * with OpenAI under its own retention and is named back by its id, which the
+ * run keeps; the brain still replays its context itself and never reads a
+ * stored response back.
  *
  * Item shapes follow the Responses API reference as it stands today. A
  * `function_call` output carries `call_id`, `name`, and `arguments` (a JSON
  * string); its answer is a `function_call_output` carrying the same `call_id`
- * and a string `output`. A `reasoning` item carries `encrypted_content` when
- * `store` is false, and a `compaction` item carries `type: "compaction"` and
- * its own `encrypted_content`. Every output item is appended to the input
+ * and a string `output`. A `reasoning` item carries `encrypted_content`
+ * because the request asks for it, and a `summary` in words because the
+ * request asks for that too; a `compaction` item carries `type: "compaction"`
+ * and its own `encrypted_content`. Every output item is appended to the input
  * array verbatim, because a reasoning model run statelessly must see its own
  * reasoning items replayed beside the function calls they preceded.
  */
@@ -50,6 +56,9 @@ export type ResponsesInputItem = WireRecord;
 
 const RESPONSES_TOOL_CHOICE_AUTO = "auto";
 const RESPONSES_INCLUDE_ENCRYPTED_REASONING = "reasoning.encrypted_content";
+
+/** How much of its reasoning the model is asked to put into words beside each opaque reasoning item. */
+export const BRAIN_REASONING_SUMMARY = "detailed";
 
 export const BRAIN_REASONING_EFFORT = {
   LOW: "low",
@@ -78,8 +87,9 @@ export interface BrainResponsesOptions {
   reasoningEffort: BrainReasoningEffort;
   /**
    * Which prefix cache the turn's own request should land against: a routing
-   * hint, independent of `store: false`, and never an identifier of anything
-   * — the host hashes what it names before it travels.
+   * hint, separate from the response id OpenAI stores the answer under, and
+   * never an identifier of anything — the host hashes what it names before it
+   * travels.
    */
   promptCacheKey?: string;
 }
@@ -89,7 +99,8 @@ export interface BrainResponsesOptions {
  * compaction is asked of the API: the host schedules compaction itself, so
  * two policies never compete over one window, and an explicit compaction is
  * a request of its own. Reasoning items come back encrypted so the memory
- * can carry them without the API storing anything.
+ * can replay them itself, and summarized so the record can say in words what
+ * the model was reasoning about.
  */
 export function brainResponsesRequest(
   input: readonly ResponsesInputItem[],
@@ -102,9 +113,8 @@ export function brainResponsesRequest(
     tools: options.tools,
     tool_choice: RESPONSES_TOOL_CHOICE_AUTO,
     parallel_tool_calls: true,
-    store: false,
     include: [RESPONSES_INCLUDE_ENCRYPTED_REASONING],
-    reasoning: { effort: options.reasoningEffort },
+    reasoning: { effort: options.reasoningEffort, summary: BRAIN_REASONING_SUMMARY },
     max_output_tokens: options.maximumOutputTokens,
     ...(options.promptCacheKey !== undefined
       ? { prompt_cache_key: options.promptCacheKey }
@@ -153,30 +163,47 @@ interface BrainFunctionCall {
 /**
  * One Responses answer read down to what a turn acts on: every output item
  * verbatim for the memory, the function calls to dispatch, the text the model
- * wrote, whether a compaction item arrived, and the input size the API
- * counted, which is the one honest measure of how large the memory really is.
+ * wrote, the reasoning summaries in words, whether a compaction item arrived,
+ * the input size the API counted, which is the one honest measure of how
+ * large the memory really is, and the id OpenAI stored the response under.
  */
 export interface BrainResponsesOutput {
   items: readonly ResponsesInputItem[];
   functionCalls: readonly BrainFunctionCall[];
   outputText: string;
+  reasoning: readonly ReasoningSummary[];
   compacted: boolean;
   inputTokens?: number;
+  responseId?: string;
   status?: string;
   incompleteReason?: string;
 }
 
+/** The text of each part of one fixed type, in order, a part of any other shape reading as empty. */
+function partTexts(parts: UnparsedWireValue, type: string): string[] {
+  if (!Array.isArray(parts)) return [];
+  return parts.map((part) =>
+    isRecord(part) && part.type === type && isWireString(part.text) ? part.text : "",
+  );
+}
+
 function outputTextFromContent(content: UnparsedWireValue): string {
-  if (!Array.isArray(content)) return "";
-  return content
-    .map((entry) =>
-      isRecord(entry) &&
-      entry.type === RESPONSES_CONTENT_PART_TYPE.OUTPUT_TEXT &&
-      isWireString(entry.text)
-        ? entry.text
-        : "",
-    )
-    .join("");
+  return partTexts(content, RESPONSES_CONTENT_PART_TYPE.OUTPUT_TEXT).join("");
+}
+
+/**
+ * A reasoning item's summary in words, or nothing for an item that is not a
+ * reasoning item or carries no words: the parts are joined as paragraphs, and
+ * the item's `encrypted_content` is never read.
+ */
+function reasoningSummaryFromItem(item: WireRecord): ReasoningSummary | undefined {
+  if (item.type !== RESPONSES_INPUT_ITEM_TYPE.REASONING) return undefined;
+  const itemId = text(item.id);
+  if (!itemId) return undefined;
+  const summary = joinReplyMessages(
+    partTexts(item.summary, RESPONSES_CONTENT_PART_TYPE.SUMMARY_TEXT),
+  );
+  return summary.length > 0 ? { itemId, summary } : undefined;
 }
 
 function functionCallFromItem(item: WireRecord): BrainFunctionCall | undefined {
@@ -196,6 +223,7 @@ export function brainResponsesOutput(payload: UnparsedWireValue): BrainResponses
   if (!isRecord(payload) || !Array.isArray(payload.output)) return undefined;
   const items: ResponsesInputItem[] = [];
   const functionCalls: BrainFunctionCall[] = [];
+  const reasoning: ReasoningSummary[] = [];
   const texts: string[] = [];
   let compacted = false;
   for (const item of payload.output) {
@@ -204,6 +232,8 @@ export function brainResponsesOutput(payload: UnparsedWireValue): BrainResponses
     if (isCompactionItem(item)) compacted = true;
     const call = functionCallFromItem(item);
     if (call) functionCalls.push(call);
+    const summary = reasoningSummaryFromItem(item);
+    if (summary) reasoning.push(summary);
     if (
       item.type === RESPONSES_INPUT_ITEM_TYPE.MESSAGE &&
       item.role === RESPONSES_MESSAGE_ROLE.ASSISTANT
@@ -215,13 +245,16 @@ export function brainResponsesOutput(payload: UnparsedWireValue): BrainResponses
   const inputTokens = usage ? wholeNumber(usage.input_tokens) : undefined;
   const details = isRecord(payload.incomplete_details) ? payload.incomplete_details : undefined;
   const status = text(payload.status);
+  const responseId = text(payload.id);
   const incompleteReason = details ? text(details.reason) : undefined;
   return {
     items,
     functionCalls,
     outputText: joinReplyMessages(texts),
+    reasoning,
     compacted,
     ...(inputTokens !== undefined ? { inputTokens } : undefined),
+    ...(responseId ? { responseId } : undefined),
     ...(status ? { status } : undefined),
     ...(incompleteReason ? { incompleteReason } : undefined),
   };
@@ -313,10 +346,14 @@ export function responsesModelAnswer(payload: UnparsedWireValue): ModelResponse 
   const inputDetails =
     usage && isRecord(usage.input_tokens_details) ? usage.input_tokens_details : undefined;
   const cachedInputTokens = inputDetails ? wholeNumber(inputDetails.cached_tokens) : undefined;
+  const outputDetails =
+    usage && isRecord(usage.output_tokens_details) ? usage.output_tokens_details : undefined;
+  const reasoningTokens = outputDetails ? wholeNumber(outputDetails.reasoning_tokens) : undefined;
   const modelUsage: ModelUsage = {
     ...(output.inputTokens !== undefined ? { inputTokens: output.inputTokens } : undefined),
     ...(outputTokens !== undefined ? { outputTokens } : undefined),
     ...(cachedInputTokens !== undefined ? { cachedInputTokens } : undefined),
+    ...(reasoningTokens !== undefined ? { reasoningTokens } : undefined),
   };
   return {
     outcome: MODEL_RESPONSE_OUTCOME.ANSWERED,
@@ -324,6 +361,8 @@ export function responsesModelAnswer(payload: UnparsedWireValue): ModelResponse 
     text: output.outputText,
     toolCalls: output.functionCalls,
     ...(usage ? { usage: modelUsage } : undefined),
+    ...(output.responseId !== undefined ? { responseId: output.responseId } : undefined),
+    ...(output.reasoning.length > 0 ? { reasoning: output.reasoning } : undefined),
     compacted: output.compacted,
     ...(output.incompleteReason
       ? {

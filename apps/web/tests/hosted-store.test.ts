@@ -544,17 +544,27 @@ test("a run's about-fields land on its row, survive a record upsert, and answer 
   assert.deepEqual(await database.store.runs.about(userId, "run-1"), about);
   assert.equal(await database.store.runs.recordAbout(userId, "run-missing", about), false);
 
+  const usage = {
+    inputTokens: 1900,
+    outputTokens: 50,
+    cachedInputTokens: 1664,
+    reasoningTokens: 30,
+  };
   await repository.save({
     ...state,
     requests: state.requests.map((record) =>
-      record.runId === "run-1" ? { ...record, revision: 2, text: "amended" } : record,
+      record.runId === "run-1"
+        ? { ...record, revision: 2, text: "amended", usage, responseIds: ["resp_1", "resp_2"] }
+        : record,
     ),
   });
   assert.deepEqual(await database.store.runs.about(userId, "run-1"), about);
-  assert.equal(
-    (await repository.load()).state?.requests.find((record) => record.runId === "run-1")?.text,
-    "amended",
+  const amended = (await repository.load()).state?.requests.find(
+    (record) => record.runId === "run-1",
   );
+  assert.equal(amended?.text, "amended");
+  assert.deepEqual(amended?.usage, usage);
+  assert.deepEqual(amended?.responseIds, ["resp_1", "resp_2"]);
 });
 
 test("facts are listed in order and replaced whole, a kept id keeping its first instant, and sealed at rest", async () => {

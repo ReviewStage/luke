@@ -5,6 +5,7 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -203,6 +204,10 @@ export const conversationRun = pgTable(
     unknownActions: integer("unknown_actions").notNull(),
     askRecordedAt: bigint("ask_recorded_at", { mode: "number" }),
     conversationRecordedAt: bigint("conversation_recorded_at", { mode: "number" }),
+    /** The run's inference cost so far, split four ways as the record keeps it. */
+    usage: jsonb("usage"),
+    /** The id of every response OpenAI answered the run with, in order. */
+    responseIds: text("response_ids").array(),
     trigger: text("trigger"),
     runOrigin: text("run_origin"),
     ending: text("ending"),

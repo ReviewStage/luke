@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  addModelUsage,
   BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
@@ -29,6 +30,8 @@ test("a request record survives the wire whole, with every optional field presen
     failure: BRAIN_REQUEST_FAILURE.MODEL,
     performedActions: 1,
     unknownActions: 0,
+    usage: { inputTokens: 1200, outputTokens: 80, cachedInputTokens: 1024, reasoningTokens: 40 },
+    responseIds: ["resp_1", "resp_2"],
     askRecordedAt: NOW,
     conversationRecordedAt: NOW + 2,
   };
@@ -48,6 +51,37 @@ test("a request record survives the wire whole, with every optional field presen
     assert.deepEqual(brainRequestRecordFromWire(wire), record);
     assert.deepEqual(Object.keys(wire).sort(), Object.keys(record).sort());
   }
+  // A usage missing one of its four counts, or a response id that is not a
+  // non-empty string, is a record this build cannot vouch for, not a partial one.
+  const wire = brainRequestRecordToWire(full);
+  assert.equal(
+    brainRequestRecordFromWire({
+      ...wire,
+      usage: { inputTokens: 1, outputTokens: 1, cachedInputTokens: 1 },
+    }),
+    undefined,
+  );
+  assert.equal(brainRequestRecordFromWire({ ...wire, responseIds: ["resp_1", ""] }), undefined);
+  assert.equal(brainRequestRecordFromWire({ ...wire, responseIds: "resp_1" }), undefined);
+});
+
+test("a run's usage sums each answer's counts four ways, a count the provider left out adding nothing", () => {
+  const first = addModelUsage(undefined, { inputTokens: 500, outputTokens: 20 });
+  assert.deepEqual(first, {
+    inputTokens: 500,
+    outputTokens: 20,
+    cachedInputTokens: 0,
+    reasoningTokens: 0,
+  });
+  assert.deepEqual(
+    addModelUsage(first, {
+      inputTokens: 700,
+      outputTokens: 30,
+      cachedInputTokens: 512,
+      reasoningTokens: 25,
+    }),
+    { inputTokens: 1200, outputTokens: 50, cachedInputTokens: 512, reasoningTokens: 25 },
+  );
 });
 
 test("a plain stop has no reply words and leaves the quiet line; one that had acted keeps its account", () => {

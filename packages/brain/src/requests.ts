@@ -1,3 +1,4 @@
+import type { ModelUsage } from "@sidecar/runtime/vocabulary";
 import {
   isRecord,
   isWireNumber,
@@ -103,6 +104,63 @@ function isBrainRequestFailure(value: UnparsedWireValue): value is BrainRequestF
   return isWireString(value) && BRAIN_REQUEST_FAILURE_LIST.includes(value as BrainRequestFailure);
 }
 
+/**
+ * What a run's inferences cost, summed over every answer the run was given
+ * and split the four ways the provider counts: the input the model read, the
+ * output it wrote, how much of the input its prefix cache answered, and how
+ * much of the output was reasoning before the words. A count the provider
+ * did not say adds nothing, so every field is a number from the first answer.
+ */
+export interface BrainRunUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+  reasoningTokens: number;
+}
+
+/** One answer's counts added onto a run's so far (nothing, before its first answer), each missing count counting as nothing. */
+export function addModelUsage(total: BrainRunUsage | undefined, usage: ModelUsage): BrainRunUsage {
+  return {
+    inputTokens: (total?.inputTokens ?? 0) + (usage.inputTokens ?? 0),
+    outputTokens: (total?.outputTokens ?? 0) + (usage.outputTokens ?? 0),
+    cachedInputTokens: (total?.cachedInputTokens ?? 0) + (usage.cachedInputTokens ?? 0),
+    reasoningTokens: (total?.reasoningTokens ?? 0) + (usage.reasoningTokens ?? 0),
+  };
+}
+
+function brainRunUsageFromWire(value: UnparsedWireValue): BrainRunUsage | undefined {
+  if (!isRecord(value)) return undefined;
+  const { inputTokens, outputTokens, cachedInputTokens, reasoningTokens } = value;
+  if (
+    !finiteNumber(inputTokens) ||
+    !finiteNumber(outputTokens) ||
+    !finiteNumber(cachedInputTokens) ||
+    !finiteNumber(reasoningTokens)
+  ) {
+    return undefined;
+  }
+  return { inputTokens, outputTokens, cachedInputTokens, reasoningTokens };
+}
+
+function brainRunUsageToWire(usage: BrainRunUsage): WireRecord {
+  return {
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    cachedInputTokens: usage.cachedInputTokens,
+    reasoningTokens: usage.reasoningTokens,
+  };
+}
+
+function responseIdsFromWire(value: UnparsedWireValue): readonly string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const ids: string[] = [];
+  for (const id of value) {
+    if (!isWireString(id) || id.length === 0) return undefined;
+    ids.push(id);
+  }
+  return ids;
+}
+
 export interface BrainRequestRecord {
   /** The run's own id, minted by the brain at acceptance. */
   runId: string;
@@ -129,6 +187,10 @@ export interface BrainRequestRecord {
    * happened, so none is retried and the developer is told as much.
    */
   unknownActions: number;
+  /** What the run's inferences cost so far, summed; absent until its first answer. */
+  usage?: BrainRunUsage;
+  /** The id of every response OpenAI answered the run with, in order, as OpenAI stores them. */
+  responseIds?: readonly string[];
   /** When the host recorded the ask itself in the thread, for an origin whose words the host records. */
   askRecordedAt?: number;
   /** When the host recorded the run's end in the thread, so it is recorded exactly once. */
@@ -159,6 +221,11 @@ export function brainRequestRecordFromWire(
   if (value.settledAt !== undefined && !finiteNumber(value.settledAt)) return undefined;
   if (value.text !== undefined && !isWireString(value.text)) return undefined;
   if (value.failure !== undefined && !isBrainRequestFailure(value.failure)) return undefined;
+  const usage = value.usage === undefined ? undefined : brainRunUsageFromWire(value.usage);
+  if (value.usage !== undefined && !usage) return undefined;
+  const responseIds =
+    value.responseIds === undefined ? undefined : responseIdsFromWire(value.responseIds);
+  if (value.responseIds !== undefined && !responseIds) return undefined;
   const record: BrainRequestRecord = {
     runId,
     submissionId,
@@ -177,6 +244,8 @@ export function brainRequestRecordFromWire(
   if (value.settledAt !== undefined) record.settledAt = value.settledAt;
   if (value.text !== undefined) record.text = value.text;
   if (value.failure !== undefined) record.failure = value.failure;
+  if (usage !== undefined) record.usage = usage;
+  if (responseIds !== undefined) record.responseIds = responseIds;
   return record;
 }
 
@@ -196,6 +265,8 @@ export function brainRequestRecordToWire(record: BrainRequestRecord): WireRecord
     ...(record.failure !== undefined ? { failure: record.failure } : undefined),
     performedActions: record.performedActions,
     unknownActions: record.unknownActions,
+    ...(record.usage !== undefined ? { usage: brainRunUsageToWire(record.usage) } : undefined),
+    ...(record.responseIds !== undefined ? { responseIds: [...record.responseIds] } : undefined),
     ...(record.askRecordedAt !== undefined ? { askRecordedAt: record.askRecordedAt } : undefined),
     ...(record.conversationRecordedAt !== undefined
       ? { conversationRecordedAt: record.conversationRecordedAt }

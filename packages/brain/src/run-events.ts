@@ -1,5 +1,5 @@
 import { type EffectiveToolPolicy, TOOL_EXECUTION } from "@sidecar/runtime";
-import type { BrainRequestFailure, BrainRequestStatus } from "./requests.js";
+import type { BrainRequestFailure, BrainRequestStatus, BrainRunUsage } from "./requests.js";
 import { BRAIN_TOOL } from "./tools.js";
 
 /**
@@ -48,6 +48,10 @@ export type BrainRunEvent =
       readonly status: BrainRequestStatus;
       readonly text?: string;
       readonly failure?: BrainRequestFailure;
+      /** What the run's inferences cost, split four ways, when it was answered at all. */
+      readonly usage?: BrainRunUsage;
+      /** The id of every response OpenAI answered the run with, in order. */
+      readonly responseIds?: readonly string[];
     };
 
 /** Which slow step a tool call the policy offers begins, or nothing for a call that is neither slow nor offered. */

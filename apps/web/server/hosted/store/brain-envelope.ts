@@ -10,6 +10,7 @@ import {
   brainPersistedStateFromWire,
   SAVE_KIND,
   type SessionKey,
+  type UnparsedWireValue,
   type WireRecord,
   type WireValue,
 } from "../../core.js";
@@ -464,6 +465,8 @@ async function upsertRequest(
     unknownActions: record.unknownActions,
     askRecordedAt: nullable(record.askRecordedAt),
     conversationRecordedAt: nullable(record.conversationRecordedAt),
+    usage: nullable(record.usage),
+    responseIds: record.responseIds === undefined ? null : [...record.responseIds],
   };
   await db
     .insert(conversationRun)
@@ -514,6 +517,9 @@ function requestWire(seal: UserSeal, row: typeof conversationRun.$inferSelect): 
     ...optionalField("failure", row.failure),
     ...optionalField("askRecordedAt", row.askRecordedAt),
     ...optionalField("conversationRecordedAt", row.conversationRecordedAt),
+    // SAFETY: jsonb answers the JSON it stored; the envelope reader validates the usage's shape.
+    ...optionalField("usage", row.usage === null ? null : (row.usage as UnparsedWireValue)),
+    ...optionalField("responseIds", row.responseIds),
   };
 }
 
