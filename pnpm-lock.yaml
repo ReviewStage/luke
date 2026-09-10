@@ -533,6 +533,9 @@ importers:
 
   packages/hosted:
     dependencies:
+      '@sidecar/live':
+        specifier: workspace:*
+        version: link:../live
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime

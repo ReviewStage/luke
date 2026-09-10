@@ -96,4 +96,34 @@ export const HOSTED_SERVICE_PATH = {
    * conversation screen asks; no observation pass ever issues this read.
    */
   SESSION_MESSAGES: "/api/sessions/messages",
+  /**
+   * The two routes only the hosted voice service calls, under
+   * {@link VOICE_SERVICE_SECRET_HEADER} rather than an account bearer: before
+   * creating a Live session, authorize the account whose bearer opened the
+   * socket and spend its voice allowance (POST); after `session.closed`,
+   * record the billed seconds once (POST). No desktop calls either.
+   */
+  VOICE_AUTHORIZE: "/api/internal/voice/authorize",
+  VOICE_USAGE: "/api/internal/voice/usage",
 } as const;
+
+/**
+ * Where the hosted voice service answers, rooted at
+ * `HOSTED_VOICE_SERVICE_ORIGIN` rather than the account service's origin,
+ * because the service is its own long-running process. Each path is a
+ * WebSocket upgrade: one session per socket.
+ */
+export const VOICE_SERVICE_PATH = {
+  /** A signed-in desktop's voice session; the account bearer travels on the handshake. */
+  SESSIONS: "/sessions",
+  /** The accountless introduction session, metered by the service itself; no bearer. */
+  INTRODUCTION: "/introduction",
+} as const;
+
+/**
+ * The header the voice service authenticates its internal calls with. The
+ * value is a shared secret both deployments hold, compared on the account
+ * service in constant time, and it is the whole of the identity those two
+ * routes accept: an account bearer on them is refused.
+ */
+export const VOICE_SERVICE_SECRET_HEADER = "x-luke-voice-service-secret";
