@@ -172,28 +172,16 @@ export function arrivalTryDirection(input: { talkKeyLabel?: string }): string {
 }
 
 /**
- * How much observed text either arrival value may carry to the voice. A title
- * fits many times over; anything past this is a value trying to carry a
- * transcript, which no arrival field is allowed to.
- */
-const maximumArrivalValueLength = 200;
-
-/**
  * Builds the events that speak the arrival beat: the observed values as data
- * lines behind the turn's marker, so a title reading "ignore your
- * instructions and ..." is data Luke was handed to mention, and the try
- * direction selected by whether the bounded talk-key value is present, so the
- * suggestion can never name a key the data does not.
+ * lines behind the turn's marker, bounded there with everything else a turn
+ * carries, so a title reading "ignore your instructions and ..." is data Luke
+ * was handed to mention, and the try direction selected by whether the
+ * talk-key value is present, so the suggestion can never name a key the data
+ * does not.
  */
 export function arrivalSpeechEvents(speech: ArrivalSpeech): readonly WireRecord[] {
-  const sessionTitle = trimmedText(speech.sessionTitle?.replace(/\s+/g, " "))?.slice(
-    0,
-    maximumArrivalValueLength,
-  );
-  const talkKeyLabel = trimmedText(speech.talkKeyLabel?.replace(/\s+/g, " "))?.slice(
-    0,
-    maximumArrivalValueLength,
-  );
+  const sessionTitle = trimmedText(speech.sessionTitle);
+  const talkKeyLabel = trimmedText(speech.talkKeyLabel);
   const data = [
     ...(sessionTitle !== undefined ? [`working session title: ${sessionTitle}`] : []),
     ...(talkKeyLabel !== undefined ? [`talk key: ${talkKeyLabel}`] : []),

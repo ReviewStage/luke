@@ -147,15 +147,15 @@ test("observed values travel as data behind the marker, never as instruction", (
   assert.match(instructions, /hold the talk key named in the data/);
 });
 
-test("values are bounded and a blank value is an absent one", () => {
-  const long = "x".repeat(1_000);
+test("values are bounded with the turn and a blank value is an absent one", () => {
+  const long = "x".repeat(5_000);
   const { item } = eventTexts({
     kind: ARRIVAL_SPEECH_KIND,
     sessionTitle: long,
     decidedAt: DECIDED_AT,
   });
   assert.ok(!item.includes(long));
-  assert.ok(item.includes("x".repeat(200)));
+  assert.ok(item.includes("x".repeat(3_000)));
 
   // A whitespace-only title carries nothing, so the direction must not ask
   // for a session the data does not name.
