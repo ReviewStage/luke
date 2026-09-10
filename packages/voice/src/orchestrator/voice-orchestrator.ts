@@ -118,6 +118,7 @@ export interface ConversationCallHooks<Stream> extends SpeakOnlyCallHooks<Stream
   onSpokenAskFailed(itemId: string): void;
   onSpokenAskClosed(): void;
   onSpokenAskCommitted(itemId: string): void;
+  onSpokenAskDiscarded(): void;
 }
 
 /**
@@ -516,6 +517,7 @@ export class VoiceOrchestrator<Stream> {
       onSpokenAskFailed: (itemId) => this.#thread.dropPreview(itemId),
       onSpokenAskClosed: () => this.#thread.closeTurn(),
       onSpokenAskCommitted: (itemId) => this.#thread.commitTurn(itemId),
+      onSpokenAskDiscarded: () => this.#thread.discardTurn(),
     });
     return this.#conversationCall;
   }

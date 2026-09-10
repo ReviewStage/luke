@@ -99,6 +99,20 @@ export class ConversationThread {
    * recorded, or by leaving alone when nothing ever will.
    */
   #previews: ReadonlyMap<string, string> = NO_SPOKEN_ASK_PREVIEWS;
+  /**
+   * The previewed items no commit has named yet. The live transcription model
+   * streams the developer's words while they are still speaking — before the
+   * commit names the item the turn travels as, so before any mark can key
+   * them — and those words draw live like any others: refusing them would
+   * stream every spoken bubble from its tail. What an unnamed item cannot do
+   * is settle — no completed transcript ever comes for a discarded turn — so
+   * each is tracked here until its commit arrives, and a discard takes the
+   * held turn's entries out of the previews instead of leaving them streaming
+   * forever. `closed` says the turn's commit has been sent, which is what
+   * spares an item mid-flight to its `committed` from a discard that can only
+   * mean the turn still being held.
+   */
+  readonly #uncommitted = new Map<string, { closed: boolean }>();
   /** The generation of the developer-opened turn whose reply is still in flight. */
   #replyGeneration: number | undefined;
   /** The Conversation generation in which the current announcement began speaking. */
@@ -197,6 +211,7 @@ export class ConversationThread {
     // The previews go with the marks: a transcription still arriving belongs
     // to a turn the press just retired.
     this.#previews = NO_SPOKEN_ASK_PREVIEWS;
+    this.#uncommitted.clear();
     this.#replyGeneration = undefined;
     this.#announcementGeneration = undefined;
     this.#changed();
@@ -230,13 +245,40 @@ export class ConversationThread {
     const mark = this.#activeMark;
     this.#activeMark = undefined;
     if (mark) this.#pendingMarks.push(mark);
+    // Every item streaming now was spoken into a turn whose commit is out:
+    // a later discard is about a newer turn, not these.
+    for (const entry of this.#uncommitted.values()) entry.closed = true;
   }
 
   /** The server named the item one closed turn travels as. */
   commitTurn(itemId: string): void {
+    this.#uncommitted.delete(itemId);
     const mark = this.#pendingMarks.shift();
     if (mark) this.#marks.set(itemId, mark);
     this.#latestMark = mark;
+    // A commit with no turn left to claim it — one from before a Clear — has
+    // no mark to settle its preview through, so the preview leaves now rather
+    // than streaming for a transcript the recording path would refuse.
+    if (!mark) this.dropPreview(itemId);
+  }
+
+  /**
+   * The held turn was discarded — its audio abandoned before any commit — so
+   * the words already transcribed from it belong to no item a commit will
+   * ever name, and the previews they drew leave now. An item whose turn's
+   * commit is out keeps streaming: its `committed` is on its way.
+   */
+  discardTurn(): void {
+    this.#activeMark = undefined;
+    const held = [...this.#uncommitted].filter(([, entry]) => !entry.closed).map(([id]) => id);
+    if (held.length === 0) return;
+    const next = new Map(this.#previews);
+    for (const itemId of held) {
+      this.#uncommitted.delete(itemId);
+      next.delete(itemId);
+    }
+    this.#previews = next;
+    this.#options.onChanged();
   }
 
   /**
@@ -274,14 +316,24 @@ export class ConversationThread {
   }
 
   /**
-   * The same words while they are still arriving, previewed on the completed
-   * transcript's own terms: only a turn whose committed item holds a mark in
-   * the history generation still showing may draw, so a straggler after Clear
-   * previews nothing it could never record.
+   * The same words while they are still arriving, drawn live: the model
+   * transcribes the developer's speech as it is spoken, so the preview starts
+   * with the sentence's front while the talk key is still held. Words no turn
+   * could own — a straggler after Clear, with the marks and the held turn
+   * retired — preview nothing they could never record; words that merely
+   * outran their turn's commit draw now and are tracked until the commit
+   * names their item.
    */
   previewSpokenAsk(itemId: string, delta: string): void {
     const mark = this.#marks.get(itemId);
-    if (!mark || !conversationEntryBelongsToConversation(mark.generation, this.#generation)) return;
+    if (mark) {
+      if (!conversationEntryBelongsToConversation(mark.generation, this.#generation)) return;
+    } else if (this.#activeMark || this.#pendingMarks.length > 0) {
+      const entry = this.#uncommitted.get(itemId);
+      if (entry === undefined) this.#uncommitted.set(itemId, { closed: false });
+    } else {
+      return;
+    }
     const next = new Map(this.#previews);
     next.set(itemId, (next.get(itemId) ?? "") + delta);
     this.#previews = next;
@@ -289,6 +341,7 @@ export class ConversationThread {
   }
 
   dropPreview(itemId: string): void {
+    this.#uncommitted.delete(itemId);
     if (!this.#previews.has(itemId)) return;
     const next = new Map(this.#previews);
     next.delete(itemId);
@@ -298,9 +351,11 @@ export class ConversationThread {
 
   /**
    * The call gone takes its half-transcribed turns with it: no completed
-   * transcript can arrive to settle a preview, so none may keep streaming.
+   * transcript can arrive to settle a preview, so none may keep streaming —
+   * and no commit can arrive either, so nothing is left waiting for one.
    */
   clearPreviews(): void {
+    this.#uncommitted.clear();
     if (this.#previews === NO_SPOKEN_ASK_PREVIEWS) return;
     this.#previews = NO_SPOKEN_ASK_PREVIEWS;
     this.#options.onChanged();

@@ -107,6 +107,12 @@ export interface ConversationCallOptions extends SpeakOnlyCallOptions {
   onSpokenAskClosed?(): void;
   /** The server item that fixes which current-launch history a spoken turn belongs to. */
   onSpokenAskCommitted?(itemId: string): void;
+  /**
+   * The held turn's audio was abandoned before any commit: no item will ever
+   * be named for it, so the words its live transcription already previewed
+   * belong to nothing and must leave.
+   */
+  onSpokenAskDiscarded?(): void;
 }
 
 /** The developer's words as the voice handed them to the brain, or nothing worth asking. */
@@ -333,6 +339,7 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
       this.#microphone.enabled = false;
       if (!commit) {
         this.send(clearInputAudioEvents());
+        this.options.onSpokenAskDiscarded?.();
         this.setStatus(REALTIME_STATUS.READY);
         return;
       }
@@ -344,6 +351,7 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
     this.#microphone.enabled = false;
     if (!commit) {
       this.send(clearInputAudioEvents());
+      this.options.onSpokenAskDiscarded?.();
       // Settling to READY is what releases the device: nothing is coming
       // that its closing could talk over.
       this.setStatus(REALTIME_STATUS.READY);

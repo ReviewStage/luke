@@ -140,6 +140,76 @@ test("a spoken ask lands where its turn happened, not where its transcript did",
   );
 });
 
+test("the developer's words draw live from the sentence's front, hold through the commit", () => {
+  const { subject } = thread();
+  subject.seed([]);
+  subject.openTurn();
+  // The live transcription model streams the sentence's front while the talk
+  // key is still held — before the commit has named the turn's item. Refusing
+  // those deltas would stream every spoken bubble from its back.
+  subject.previewSpokenAsk("item-1", "how is");
+  assert.deepEqual([...subject.previews.values()], ["how is"]);
+  subject.closeTurn();
+  subject.previewSpokenAsk("item-1", " the checkout");
+  subject.commitTurn("item-1");
+  subject.previewSpokenAsk("item-1", " agent doing?");
+
+  assert.deepEqual([...subject.previews.values()], ["how is the checkout agent doing?"]);
+});
+
+test("words no turn could own draw nothing", () => {
+  const { subject } = thread();
+  subject.seed([]);
+  // No press opened a turn, so these words are a straggler's — an item from
+  // before a Clear, or another session's leak — and preview nothing.
+  subject.previewSpokenAsk("item-1", "how is");
+  assert.equal(subject.previews.size, 0);
+
+  subject.openTurn();
+  subject.previewSpokenAsk("item-2", "how is");
+  subject.clear();
+  // The Clear retired the held turn: its item's commit finds no mark and its
+  // preview is already gone.
+  assert.equal(subject.previews.size, 0);
+  subject.commitTurn("item-2");
+  assert.equal(subject.previews.size, 0);
+});
+
+test("a discarded turn takes its live words with it, sparing a turn already committed", () => {
+  const { subject } = thread();
+  subject.seed([]);
+  // Turn one: spoken, released, commit sent; its transcription still streams.
+  subject.openTurn();
+  subject.previewSpokenAsk("item-1", "first ask");
+  subject.closeTurn();
+  // Turn two: spoken into and abandoned before any commit.
+  subject.openTurn();
+  subject.previewSpokenAsk("item-2", "never mind");
+
+  subject.discardTurn();
+
+  // Turn one's words are mid-flight to their `committed`; only the held
+  // turn's words had no item coming.
+  assert.deepEqual([...subject.previews.values()], ["first ask"]);
+  subject.commitTurn("item-1");
+  subject.rememberSpokenAsk("first ask", "item-1");
+  assert.deepEqual(
+    subject.entries.map((entry) => entry.words),
+    ["first ask"],
+  );
+});
+
+test("a failed transcription takes its live words with it", () => {
+  const { subject } = thread();
+  subject.seed([]);
+  subject.openTurn();
+  subject.previewSpokenAsk("item-1", "how is");
+  subject.closeTurn();
+  subject.dropPreview("item-1");
+
+  assert.equal(subject.previews.size, 0);
+});
+
 test("a run accepted after the transcript is still tied to the words actually said", () => {
   const { subject } = thread();
   subject.seed([]);
