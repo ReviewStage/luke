@@ -211,6 +211,14 @@ export const CONDUCTOR_CONVERSATION_BOUNDS = {
   /** How many attributed messages an older-history page aims to carry. */
   HISTORY_TARGET_MESSAGES: 30,
   /**
+   * How many raw windows one older-history read may page backward. The end
+   * offset it pages from is the caller's, so the budget is what keeps a far
+   * offset against a short chat from becoming a long chain of requests; the
+   * tail walk needs none, since its offsets are its own and it ends where
+   * the transcript does.
+   */
+  MAXIMUM_HISTORY_WINDOWS: 6,
+  /**
    * How many sessions' transcript ends one credential's reads remember at
    * once. A re-opened chat starts its walk where the last read of it reached,
    * so the cache is what makes a re-open one request.

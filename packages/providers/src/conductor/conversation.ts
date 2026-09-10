@@ -130,7 +130,7 @@ function newestStoredId(records: readonly WireRecord[]): string | undefined {
 /**
  * One page of older history ending at `endOffset`, read the way a chat screen
  * scrolls: fixed-width windows paged backward by offset arithmetic until
- * enough attributed messages stand or the chat's start is reached, answered
+ * enough attributed messages stand or the window budget is spent, answered
  * with where the page began so the next scroll can continue. It never names a
  * poll cursor, because history must not move a poll backward.
  */
@@ -141,7 +141,13 @@ async function readConversationPage(
 ): Promise<ProviderConversationResult> {
   const messages: ProviderConversationMessage[] = [];
   let chunkEnd = endOffset;
-  while (chunkEnd > 0 && messages.length < CONDUCTOR_CONVERSATION_BOUNDS.HISTORY_TARGET_MESSAGES) {
+  for (
+    let window = 0;
+    window < CONDUCTOR_CONVERSATION_BOUNDS.MAXIMUM_HISTORY_WINDOWS &&
+    chunkEnd > 0 &&
+    messages.length < CONDUCTOR_CONVERSATION_BOUNDS.HISTORY_TARGET_MESSAGES;
+    window += 1
+  ) {
     const chunkStart = Math.max(0, chunkEnd - CONDUCTOR_CONVERSATION_BOUNDS.PAGE_SIZE);
     const body = await messagesPage(pass, providerSessionId, {
       [CONDUCTOR_QUERY.LIMIT]: String(chunkEnd - chunkStart),
