@@ -1,0 +1,76 @@
+{
+  "main": [
+    {
+      "message": {
+        "id": "2b000000-0000-4000-8000-000000000021",
+        "role": "user",
+        "metadata": {
+          "author": "developer",
+          "channel": "voice",
+          "voice_session_id": "vs_0f3a1c226f104d5e",
+          "delegation_id": "dl_2b8c4d5e6f701a2b",
+          "from_ms": 1200,
+          "to_ms": 4800
+        },
+        "parts": [
+          {
+            "type": "text",
+            "text": "What is the fixture session waiting on?"
+          }
+        ]
+      },
+      "seq": 21,
+      "turnId": "1a000000-0000-4000-8000-000000000002",
+      "createdAt": 1757505660000
+    },
+    {
+      "message": {
+        "id": "2b000000-0000-4000-8000-000000000022",
+        "role": "assistant",
+        "metadata": {
+          "author": "brain"
+        },
+        "parts": [
+          {
+            "type": "step-start"
+          },
+          {
+            "type": "tool-read_transcript",
+            "toolCallId": "call_2a0000000000000001",
+            "state": "output-available",
+            "input": {
+              "provider_id": "conductor",
+              "provider_session_id": "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50"
+            },
+            "output": {
+              "lines": [
+                "user: Please add the fixture test.",
+                "assistant: Waiting for permission to run the test suite."
+              ]
+            }
+          },
+          {
+            "type": "text",
+            "text": "It is waiting for permission to run the test suite.",
+            "state": "done"
+          }
+        ]
+      },
+      "seq": 22,
+      "turnId": "1a000000-0000-4000-8000-000000000002",
+      "createdAt": 1757505661800
+    }
+  ],
+  "observed": [],
+  "turns": [
+    {
+      "id": "1a000000-0000-4000-8000-000000000002",
+      "origin": "spoken",
+      "status": "settled",
+      "queuedAt": 1757505660000,
+      "startedAt": 1757505660200,
+      "settledAt": 1757505662400
+    }
+  ],
+  "events": []
+}

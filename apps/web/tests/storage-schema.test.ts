@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
-import { MESSAGE_AUTHOR, MESSAGE_CHANNEL, MESSAGE_ROLE } from "@sidecar/wire";
+import {
+  CONVERSATION_EVENT_KIND,
+  MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
+  MESSAGE_ROLE,
+  TURN_ORIGIN,
+  TURN_STATUS,
+} from "@sidecar/wire";
 import { and, eq, getTableName, type SQL, sql } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
 import { user } from "../server/db/auth-schema";
@@ -8,13 +15,10 @@ import {
   CONVERSATION_KIND,
   conversationLease,
   conversations,
-  EVENT_KIND,
   events,
   messages,
   prompts,
   providerCursors,
-  TURN_ORIGIN,
-  TURN_STATUS,
   toolSets,
   turns,
 } from "../server/db/storage-schema";
@@ -109,7 +113,7 @@ async function insertEvent(
       conversationId,
       messageId,
       seq: 1,
-      kind: EVENT_KIND.SPEECH_OFFERED,
+      kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
       ...row,
     })
     .returning({ id: events.id });
@@ -293,17 +297,20 @@ test("a message takes one speech.claimed event, and the claim refuses every seco
   const userId = await database.createUser();
   const conversationId = await insertConversation(userId);
   const briefing = await insertMessage(userId, conversationId, { role: MESSAGE_ROLE.ASSISTANT });
-  await insertEvent(userId, conversationId, briefing, { seq: 1, kind: EVENT_KIND.SPEECH_OFFERED });
+  await insertEvent(userId, conversationId, briefing, {
+    seq: 1,
+    kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
+  });
   await insertEvent(userId, conversationId, briefing, {
     seq: 2,
-    kind: EVENT_KIND.SPEECH_CLAIMED,
+    kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
     deviceId: "mac-1",
   });
 
   await assertUniqueViolation(
     insertEvent(userId, conversationId, briefing, {
       seq: 3,
-      kind: EVENT_KIND.SPEECH_CLAIMED,
+      kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
       deviceId: "phone-1",
     }),
   );
@@ -311,7 +318,9 @@ test("a message takes one speech.claimed event, and the claim refuses every seco
   const claims = await database.db
     .select({ deviceId: events.deviceId })
     .from(events)
-    .where(and(eq(events.messageId, briefing), eq(events.kind, EVENT_KIND.SPEECH_CLAIMED)));
+    .where(
+      and(eq(events.messageId, briefing), eq(events.kind, CONVERSATION_EVENT_KIND.SPEECH_CLAIMED)),
+    );
   assert.deepEqual(claims, [{ deviceId: "mac-1" }]);
 });
 
@@ -328,15 +337,24 @@ test("the claim binds one message alone: other kinds on it and claims on other m
     seq: 2,
     role: MESSAGE_ROLE.ASSISTANT,
   });
-  await insertEvent(userId, conversationId, first, { seq: 1, kind: EVENT_KIND.SPEECH_CLAIMED });
+  await insertEvent(userId, conversationId, first, {
+    seq: 1,
+    kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
+  });
 
-  await insertEvent(userId, conversationId, first, { seq: 2, kind: EVENT_KIND.SPEECH_SPOKEN });
+  await insertEvent(userId, conversationId, first, {
+    seq: 2,
+    kind: CONVERSATION_EVENT_KIND.SPEECH_SPOKEN,
+  });
   await insertEvent(userId, conversationId, first, {
     seq: 3,
-    kind: EVENT_KIND.RATING,
+    kind: CONVERSATION_EVENT_KIND.RATING,
     payload: { rating: "up" },
   });
-  await insertEvent(userId, conversationId, second, { seq: 4, kind: EVENT_KIND.SPEECH_CLAIMED });
+  await insertEvent(userId, conversationId, second, {
+    seq: 4,
+    kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
+  });
 
   assert.equal(await countRows(events, eq(events.messageId, first)), 3);
   assert.equal(await countRows(events, eq(events.messageId, second)), 1);
@@ -363,7 +381,10 @@ test("deleting a message takes its events and leaves its neighbour's", async () 
   const gone = await insertMessage(userId, conversationId, { clientId: "m-1", seq: 1 });
   const kept = await insertMessage(userId, conversationId, { clientId: "m-2", seq: 2 });
   await insertEvent(userId, conversationId, gone, { seq: 1 });
-  await insertEvent(userId, conversationId, gone, { seq: 2, kind: EVENT_KIND.SPEECH_CLAIMED });
+  await insertEvent(userId, conversationId, gone, {
+    seq: 2,
+    kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
+  });
   await insertEvent(userId, conversationId, kept, { seq: 3 });
 
   await database.db.delete(messages).where(eq(messages.id, gone));
@@ -377,14 +398,14 @@ test("an event keeps its kind, device, and payload as written", async () => {
   const conversationId = await insertConversation(userId);
   const messageId = await insertMessage(userId, conversationId);
   const id = await insertEvent(userId, conversationId, messageId, {
-    kind: EVENT_KIND.SPEECH_HELD,
+    kind: CONVERSATION_EVENT_KIND.SPEECH_HELD,
     deviceId: "mac-1",
     payload: { until: 1_700_000_000_000 },
   });
 
   const [row] = await database.db.select().from(events).where(eq(events.id, id));
   assert.ok(row);
-  assert.equal(row.kind, EVENT_KIND.SPEECH_HELD);
+  assert.equal(row.kind, CONVERSATION_EVENT_KIND.SPEECH_HELD);
   assert.equal(row.deviceId, "mac-1");
   assert.deepEqual(row.payload, { until: 1_700_000_000_000 });
   assert.equal(row.seq, 1);

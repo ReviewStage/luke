@@ -55,6 +55,15 @@ The store used to depend on the brain it stores; folding it into
 `brain/src/store/` is what removed that edge, and nothing under
 `brain/src/store/` may import `../index.js`.
 
+The Conversation view's selection (`@sidecar/session`'s
+`selectConversationView`) is the same rule in the other direction. Which tool
+names are announcements and which are actions is the brain catalog's
+knowledge, and the catalog sits above the session package, so the selection
+takes that classification as an input rather than importing it; a tool the
+caller did not classify is a collapsed detail of its turn, never a row, so an
+observed conversation's message crosses into the view only under a name the
+caller positively named.
+
 Watch for cycles that exist only in tests. A test that reaches into a package
 above its own is still an edge pnpm records, and it usually means the test
 belongs with the layer it is really exercising.

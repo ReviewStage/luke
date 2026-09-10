@@ -15,16 +15,14 @@ import {
   type WireBoundaryInput,
 } from "@sidecar/wire";
 import {
-  isStaticToolUIPart,
   safeValidateUIMessages,
   type ToolSet,
-  type ToolUIPart,
   type UIDataTypes,
   type UIMessage,
   type UIMessagePart,
   type UITools,
 } from "ai";
-import { isToolPartState, type ToolPartState } from "./tool-parts.js";
+import { isStoredToolPart, toolPartName } from "./tool-parts.js";
 
 /**
  * A stored message as this build reads it back: the SDK's `UIMessage`, with
@@ -46,15 +44,6 @@ type StoredMessageOf<Role extends UIMessage["role"], Metadata> = Omit<
   "role" | "metadata"
 > & { role: Role; metadata: Metadata };
 
-/** A tool part in one of the states a stored row may carry. */
-export type StoredToolPart = Extract<ToolUIPart<UITools>, { state: ToolPartState }>;
-
-export function isStoredToolPart(
-  part: UIMessagePart<UIDataTypes, UITools>,
-): part is StoredToolPart {
-  return isStaticToolUIPart(part) && isToolPartState(part.state);
-}
-
 /**
  * What the SDK hands back before the metadata is read: a row it validated
  * structurally, whose metadata it passed through as it came off the wire.
@@ -62,9 +51,6 @@ export function isStoredToolPart(
 type ValidatedMessage = UIMessage<WireBoundaryInput>;
 
 type ValidationOptions = Parameters<typeof safeValidateUIMessages<ValidatedMessage>>[0];
-
-/** How the SDK spells a static tool part's type: the tool's name behind this prefix. */
-const TOOL_PART_TYPE_PREFIX = "tool-";
 
 /**
  * The type the SDK gives a tool part that names no registered tool. The SDK
@@ -90,8 +76,9 @@ function unregisteredToolPart(
       if (!isRecord(part) || !isWireString(part.type)) continue;
       const path: SchemaPath = [messageIndex, "parts", partIndex, "type"];
       if (part.type === DYNAMIC_TOOL_PART_TYPE) return path;
-      if (!part.type.startsWith(TOOL_PART_TYPE_PREFIX)) continue;
-      if (!Object.hasOwn(tools, part.type.slice(TOOL_PART_TYPE_PREFIX.length))) return path;
+      const name = toolPartName(part.type);
+      if (name === undefined) continue;
+      if (!Object.hasOwn(tools, name)) return path;
     }
   }
   return undefined;
@@ -103,7 +90,9 @@ function refusedPart(
 ): SchemaPath | undefined {
   for (const [partIndex, part] of parts.entries()) {
     if (part.type === DYNAMIC_TOOL_PART_TYPE) return ["parts", partIndex, "input"];
-    if (isStaticToolUIPart(part) && !isStoredToolPart(part)) return ["parts", partIndex, "state"];
+    if (toolPartName(part.type) !== undefined && !isStoredToolPart(part)) {
+      return ["parts", partIndex, "state"];
+    }
   }
   return undefined;
 }
@@ -138,13 +127,15 @@ function readStoredMessage(message: ValidatedMessage): SchemaRead<StoredUIMessag
  * declarations keyed by the name a part spells. Nothing here throws at a
  * value; a refusal is the same word and path a wire schema answers with, so a
  * store can tell a malformed row from one naming a tool this build no longer
- * registers.
+ * registers. A conversation with no rows yet reads as no messages: the SDK
+ * refuses an empty array, and an empty conversation is not a malformed one.
  */
 export async function readStoredUIMessages(
   messages: UnparsedWireValue,
   tools: ToolSet,
 ): Promise<SchemaRead<StoredUIMessage[]>> {
   if (!Array.isArray(messages)) return refuse(SCHEMA_REFUSAL.MALFORMED, []);
+  if (messages.length === 0) return { ok: true, value: [] };
   const unregistered = unregisteredToolPart(messages, tools);
   if (unregistered) return refuse(SCHEMA_REFUSAL.NOT_REGISTERED, unregistered);
   const validated = await safeValidateUIMessages<ValidatedMessage>({

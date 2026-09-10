@@ -19,8 +19,8 @@ import {
 } from "@sidecar/wire";
 import { type ToolSet, tool } from "ai";
 import { z } from "zod";
-import { TOOL_PART_STATE } from "./tool-parts.js";
-import { isStoredToolPart, readStoredUIMessages, type StoredUIMessage } from "./validate.js";
+import { isStoredToolPart, TOOL_PART_STATE } from "./tool-parts.js";
+import { readStoredUIMessages, type StoredUIMessage } from "./validate.js";
 
 /** The shared fixtures beside the session vocabulary, plain JSON so another language's decoder reads the same files. */
 const FIXTURE_DIRECTORY = path.join(
@@ -89,6 +89,10 @@ function withMetadata(message: WireRecord, metadata: UnparsedWireValue): WireRec
 async function replyWithToolPart(part: WireRecord): Promise<WireRecord> {
   return { ...(await fixture(FIXTURE.REPLY_WITH_TOOL_PART)), parts: [part] };
 }
+
+test("no rows read back as no messages", async () => {
+  assert.deepEqual(await readStoredUIMessages([], TOOLS), { ok: true, value: [] });
+});
 
 test("each fixture round-trips through the wrapper unchanged", async () => {
   for (const name of Object.values(FIXTURE)) {

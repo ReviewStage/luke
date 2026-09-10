@@ -1,6 +1,13 @@
 import type { BrainRunUsage } from "@sidecar/brain";
 import type { StoredUIMessage } from "@sidecar/session/ui-messages";
-import type { MessageRole, StoredMessageMetadata } from "@sidecar/wire";
+import {
+  CONVERSATION_EVENT_KIND,
+  type ConversationEventKind,
+  type MessageRole,
+  type StoredMessageMetadata,
+  type TurnOrigin,
+  type TurnStatus,
+} from "@sidecar/wire";
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
@@ -46,45 +53,6 @@ export const CONVERSATION_KIND = {
 } as const;
 
 type ConversationKind = (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND];
-
-/** What opened a turn: the developer's typed or spoken ask, a roster diff, a hold's release, or a child's completion. */
-export const TURN_ORIGIN = {
-  TYPED: "typed",
-  SPOKEN: "spoken",
-  ROSTER_DIFF: "roster_diff",
-  HOLD_RELEASE: "hold_release",
-  CHILD: "child",
-} as const;
-
-type TurnOrigin = (typeof TURN_ORIGIN)[keyof typeof TURN_ORIGIN];
-
-/** Where a turn stands in its life, from the queue to one of its three ends. */
-export const TURN_STATUS = {
-  QUEUED: "queued",
-  RUNNING: "running",
-  SETTLED: "settled",
-  CANCELLED: "cancelled",
-  FAILED: "failed",
-} as const;
-
-type TurnStatus = (typeof TURN_STATUS)[keyof typeof TURN_STATUS];
-
-/**
- * What an event records about a message: a briefing's life from offered
- * through claimed or held to spoken, pushed, or expired, or a rating the
- * developer gave. The claim is the one kind the schema itself makes exclusive.
- */
-export const EVENT_KIND = {
-  SPEECH_OFFERED: "speech.offered",
-  SPEECH_CLAIMED: "speech.claimed",
-  SPEECH_SPOKEN: "speech.spoken",
-  SPEECH_PUSHED: "speech.pushed",
-  SPEECH_EXPIRED: "speech.expired",
-  SPEECH_HELD: "speech.held",
-  RATING: "rating",
-} as const;
-
-type EventKind = (typeof EVENT_KIND)[keyof typeof EVENT_KIND];
 
 const instant = (name: string) => timestamp(name, { withTimezone: true });
 
@@ -240,7 +208,7 @@ export const events = pgTable(
     messageId: uuid("message_id")
       .notNull()
       .references(() => messages.id, { onDelete: "cascade" }),
-    kind: text("kind").$type<EventKind>().notNull(),
+    kind: text("kind").$type<ConversationEventKind>().notNull(),
     /** The device that claimed, spoke, or rated; null for a kind no device took part in. */
     deviceId: text("device_id"),
     payload: jsonb("payload"),
@@ -251,7 +219,7 @@ export const events = pgTable(
     // The predicate is DDL, which takes no bound parameter, so the kind is inlined rather than passed.
     uniqueIndex("events_speech_claimed_message")
       .on(table.messageId)
-      .where(sql`${table.kind} = ${sql.raw(`'${EVENT_KIND.SPEECH_CLAIMED}'`)}`),
+      .where(sql`${table.kind} = ${sql.raw(`'${CONVERSATION_EVENT_KIND.SPEECH_CLAIMED}'`)}`),
   ],
 );
 

@@ -9,6 +9,12 @@ export {
   type UnknownActionResult,
 } from "./action-result.js";
 export { type Admitted, reshapeAdmitted } from "./admitted.js";
+export {
+  CONVERSATION_EVENT_KIND,
+  type ConversationEventKind,
+  isSpeechEventKind,
+  type SpeechEventKind,
+} from "./conversation-event.js";
 export { Emitter, type Event } from "./event.js";
 export {
   type CloudFetch,
@@ -74,6 +80,12 @@ export {
   type TextOptions,
   type TextOverflow,
 } from "./schema.js";
+export {
+  TURN_ORIGIN,
+  TURN_STATUS,
+  type TurnOrigin,
+  type TurnStatus,
+} from "./turn.js";
 export {
   ASSISTANT_MESSAGE_METADATA,
   type AssistantMessageMetadata,

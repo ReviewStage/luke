@@ -1,0 +1,116 @@
+{
+  "main": [],
+  "observed": [
+    {
+      "session": {
+        "providerId": "conductor",
+        "providerSessionId": "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50"
+      },
+      "messages": [
+        {
+          "message": {
+            "id": "2b000000-0000-4000-8000-000000000031",
+            "role": "user",
+            "metadata": {
+              "author": "brain",
+              "source": "roster_look"
+            },
+            "parts": [
+              {
+                "type": "text",
+                "text": "Roster: the fixture session moved from working to waiting."
+              }
+            ]
+          },
+          "seq": 31,
+          "turnId": "1a000000-0000-4000-8000-000000000003",
+          "createdAt": 1757505720000
+        },
+        {
+          "message": {
+            "id": "2b000000-0000-4000-8000-000000000032",
+            "role": "assistant",
+            "metadata": {
+              "author": "brain"
+            },
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "reasoning",
+                "text": "The session stopped to ask for permission; that is worth a word.",
+                "state": "done",
+                "providerMetadata": {
+                  "openai": {
+                    "itemId": "rs_fixture_0f3a1c22",
+                    "reasoningEncryptedContent": "Zml4dHVyZS1vcGFxdWUtcmVhc29uaW5nLWl0ZW0="
+                  }
+                }
+              },
+              {
+                "type": "tool-read_transcript",
+                "toolCallId": "call_3a0000000000000001",
+                "state": "output-available",
+                "input": {
+                  "provider_id": "conductor",
+                  "provider_session_id": "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50"
+                },
+                "output": {
+                  "lines": [
+                    "user: Please add the fixture test.",
+                    "assistant: Waiting for permission to run the test suite."
+                  ]
+                }
+              },
+              {
+                "type": "tool-announce",
+                "toolCallId": "call_3a0000000000000002",
+                "state": "output-available",
+                "input": {
+                  "briefing": "The fixture session is waiting on a permission prompt."
+                },
+                "output": {}
+              },
+              {
+                "type": "text",
+                "text": "Announced.",
+                "state": "done"
+              }
+            ]
+          },
+          "seq": 32,
+          "turnId": "1a000000-0000-4000-8000-000000000003",
+          "createdAt": 1757505722000
+        }
+      ]
+    }
+  ],
+  "turns": [
+    {
+      "id": "1a000000-0000-4000-8000-000000000003",
+      "origin": "roster_diff",
+      "status": "settled",
+      "queuedAt": 1757505720000,
+      "startedAt": 1757505720200,
+      "settledAt": 1757505722400
+    }
+  ],
+  "events": [
+    {
+      "messageId": "2b000000-0000-4000-8000-000000000032",
+      "kind": "speech.offered",
+      "seq": 1
+    },
+    {
+      "messageId": "2b000000-0000-4000-8000-000000000032",
+      "kind": "speech.claimed",
+      "seq": 2
+    },
+    {
+      "messageId": "2b000000-0000-4000-8000-000000000032",
+      "kind": "speech.spoken",
+      "seq": 3
+    }
+  ]
+}
