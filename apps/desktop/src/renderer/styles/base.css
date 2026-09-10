@@ -201,6 +201,13 @@
   /* Growing one side moves the shape's centre half the growth away from it, so
      the right edge stays exactly where it was and only the left one travels. */
   --capsule-voice-shift: calc(var(--capsule-voice-growth) / 2);
+  /* The same growth for the wait: a run of Luke's still going needs the face
+     playing the hop and the dots rippling off it, and the capsule's side holds
+     one thing. 31px to the meter's 26px because the dots' strip is 23px to the
+     meter's 18px, keeping the meter's own 9px to the shape's turning corner. */
+  --capsule-thinking-growth: 31px;
+  --capsule-thinking-width: calc(var(--capsule-width) + var(--capsule-thinking-growth));
+  --capsule-thinking-shift: calc(var(--capsule-thinking-growth) / 2);
   /* Luke's words under the housing, wrapping as they stream in and shown
      whole. `--caption-max` arrives from the shared surface tokens, the
      same number the compact window already holds below the capsule, so growing
@@ -535,6 +542,45 @@ button:disabled {
     calc(var(--duration-shape) - var(--duration-quick)) backwards;
 }
 
+/* Luke thinking, with nothing else open: the reply's growth for the wait that
+   precedes it. The wing decides whether the dots are drawn from the resting
+   priority; the shape reads the same answer off the stage's own facts — a run
+   pending and no live turn, whose face rests are what displace the wait — so
+   the two cannot grow apart. A turn under way keeps the voice rule's width
+   instead, and the dots are not drawn there at all. */
+.app-stage[data-presentation="capsule"][data-thinking="true"]:not([data-voice]) .panel-surface {
+  width: var(--capsule-thinking-width);
+  transform: translate(calc(-50% - var(--capsule-thinking-shift)), var(--shape-top, 0px));
+  /* Growing leads, exactly as the voice growth above: the base rule's delay is
+     for leaving, and the wait's dots arrive behind this edge. */
+  transition-duration: var(--duration-shape);
+  transition-delay: 0s;
+}
+
+.app-stage[data-presentation="capsule"][data-thinking="true"]:not([data-voice])
+  .compact-hover-target {
+  width: var(--capsule-thinking-width);
+  transform: translateX(calc(-50% - var(--capsule-thinking-shift)));
+}
+
+/* The dots cross over the last of the shape's travel and finish as it settles,
+   the same arrival the meter makes into the same growth. Mount animations
+   rather than the transition, because a wait beginning at rest mounts the dots
+   on the very frame the growth starts, and a mounting element has no earlier
+   style to transition from. */
+.app-stage[data-presentation="capsule"][data-thinking="true"]:not([data-voice]) .wing-thinking {
+  opacity: 1;
+  transform: none;
+  transition-duration: var(--duration-quick), var(--duration-shape);
+  transition-timing-function: var(--motion-exit), var(--spring);
+  transition-delay: calc(var(--duration-shape) - var(--duration-quick));
+  animation:
+    wing-mount-fade var(--duration-quick) var(--motion-exit)
+    calc(var(--duration-shape) - var(--duration-quick)) backwards,
+    wing-mount-travel var(--duration-shape) var(--spring)
+    calc(var(--duration-shape) - var(--duration-quick)) backwards;
+}
+
 @keyframes wing-mount-fade {
   from {
     opacity: 0;
@@ -840,12 +886,12 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 }
 
 /* The wait's dots in the wing: the same slot treatment as the meter's, on the
-   same beat, because both trail the face outward from the housing. The capsule
-   keeps them folded — its 36px side holds the face and nothing beside it, and
-   the shape must not grow for a wait — so at rest the thinking animation is
-   cropped to the face itself, the hop the dots ripple off, and the dots unfold
-   with the room the peek and the panel add. The fade on mount is the marks'
-   own, so dots arriving in a shape already open do not pop. */
+   same beat, because both trail the face outward from the housing. The
+   capsule's own 36px side holds the face and nothing beside it, so the resting
+   pose is folded; the peek and the panel unfold the dots into the room they
+   already have, and the capsule grows its own room for them below, the way it
+   grows for Luke's reply meter. The fade on mount is the marks' own, so dots
+   arriving in a shape already open do not pop. */
 .wing-thinking {
   display: flex;
   align-items: center;

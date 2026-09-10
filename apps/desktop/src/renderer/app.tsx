@@ -574,6 +574,10 @@ export function App(): React.JSX.Element {
     clearConversationLines,
   } = useVoiceView();
   const { voiceError, voiceNotice, talkOpening, liveConversationEntries } = voiceView;
+  // Whether a run of Luke's is still going, from the same records Conversation
+  // draws its wait from: the strip's face, the stage's growth for the dots
+  // beside it, and the thread's wait all read one answer.
+  const thinking = brainRequests.some(brainRequestPending);
   // The composer's stop takes every run still going: a second ask joined the
   // turn under way, so stopping the turn is stopping them all.
   const stopThinking = useCallback(() => {
@@ -990,6 +994,10 @@ export function App(): React.JSX.Element {
       // Whose turn it is, so the capsule can make room for a meter it has to
       // draw beside the face rather than in place of it.
       data-voice={voiceTurn}
+      // Whether a run of Luke's is still going, so the capsule can make room
+      // for the wait's dots the same way; a live turn's own growth wins, and
+      // the wing draws no dots there either.
+      data-thinking={String(thinking)}
       // Whether there are words to draw under the shape — a caption or a
       // failure borrowing its strip — so the surface can grow the room they
       // are drawn in.
@@ -1181,7 +1189,7 @@ export function App(): React.JSX.Element {
         fixtureSpeaking={fixtureSpeaking}
         hasAudioSignal={hasAudioSignal}
         voiceOpening={talkOpening}
-        thinking={brainRequests.some(brainRequestPending)}
+        thinking={thinking}
         announcementsHeld={announcementsHeld}
         sessionsSettled={sessionsSettled}
         presentation={presentation}

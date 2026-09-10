@@ -54,6 +54,23 @@ test("every mark past the first rests exactly on it", () => {
   assert.equal(seat(4), 0);
 });
 
+// The thinking capsule's left side, in the stylesheet's numbers: the growth,
+// the face, the gap between wing elements, the dots' strip (three 5px dots
+// with 4px gaps), and the room the grown voice capsule keeps to the shape's
+// turning corner, which the wait must keep too.
+const THINKING_GROWTH = 31;
+const FACE_WIDTH = 18;
+const WING_GAP = 8;
+const DOTS_WIDTH = 5 * 3 + 4 * 2;
+const CORNER_KEEP = 9;
+
+test("the grown capsule holds the face, the gap, and the wait's dots", () => {
+  // The invariant the capsule's thinking growth hangs on: dots drawn past the
+  // grown shape are drawn on the desktop, and no clip saves them.
+  const used = WING_INSET + FACE_WIDTH + WING_GAP + DOTS_WIDTH;
+  assert.ok(used <= CAPSULE_SIDE_WIDTH + THINKING_GROWTH - CORNER_KEEP);
+});
+
 const providers = (...ids: string[]): ProviderTally[] =>
   ids.map((providerId) => ({ providerId, provider: providerId, total: 1, attention: 0 }));
 

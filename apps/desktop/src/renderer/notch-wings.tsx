@@ -254,8 +254,9 @@ export function NotchWings({
               repeating hop. Drawn only while the thinking rest is what holds
               the face, so speech taking the face back takes them with it, and
               the meter or the gate displacing the face leaves none orphaned.
-              The capsule keeps their slot folded; the peek and the panel
-              unfold it the way they unfold the meter's. */}
+              The peek and the panel unfold their slot the way they unfold the
+              meter's; the capsule grows its own room for it, the way it grows
+              for Luke's reply meter. */}
           {thinkingDotsShown(faceContext, faceDrawn) && (
             <span className="wing-thinking">
               <ThinkingDots />
