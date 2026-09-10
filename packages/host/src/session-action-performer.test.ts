@@ -162,6 +162,14 @@ const CREATE: ValidatedAction<SessionActionKind> = admittedForTest({
   task: "add tests",
   origin: RUN_ORIGIN.USER,
 });
+const CREATE_WITH_AGENT: ValidatedAction<SessionActionKind> = admittedForTest({
+  kind: ACTION_KIND.CREATE_WORKSPACE,
+  providerId: PROVIDER_ID.CONDUCTOR,
+  providerProjectId: "project-1",
+  task: "add tests",
+  agent: "claude",
+  origin: RUN_ORIGIN.USER,
+});
 const SPAWN: ValidatedAction<SessionActionKind> = admittedForTest({
   kind: ACTION_KIND.ADD_AGENT,
   identity: { providerId: PROVIDER_ID.CONDUCTOR, providerSessionId: "workspace-1" },
@@ -273,6 +281,32 @@ test("an open the brain carries tells the node it was asked of Luke, and a row p
     [HOST_NODE_OPEN_KIND.ASKED_SESSION, HOST_NODE_OPEN_KIND.ADDRESS],
   );
   assert.ok(node.opens.every((open) => open.url === WORKSPACE_LINK));
+});
+
+test("a creation's answer names the session it made and the agent it asked for, beside what became of the ask", async () => {
+  const plugin = fakePlugin();
+  const naming = {
+    ...plugin,
+    actions: {
+      ...plugin.actions,
+      async createWorkspace(input: Parameters<ActionHandlers["createWorkspace"]>[0]) {
+        plugin.creates.push(input);
+        return { status: ACTION_RESULT_STATUS.ACCEPTED, providerSessionId: "created-1" };
+      },
+    },
+  };
+  const settings = heldSettings();
+  const performer = deeperPerformer(naming, settings.store);
+  const creating = performer.perform(CREATE_WITH_AGENT, { isRevoked: () => false });
+  await drainMicrotasks(10);
+  settings.release();
+  const answer = await creating;
+  assert.equal(answer.status, ACTION_RESULT_STATUS.ACCEPTED);
+  assert.deepEqual(answer.createdSession, {
+    providerId: plugin.provider.id,
+    providerSessionId: "created-1",
+    agentId: "claude",
+  });
 });
 
 test("a session the roster has let go still opens at the address it last reported, and one never seen does not", async () => {

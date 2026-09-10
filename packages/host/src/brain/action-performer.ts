@@ -25,11 +25,12 @@ import {
 } from "@sidecar/session";
 import {
   ACTION_RESULT_STATUS,
+  isRecord,
   isWireString,
   UNKNOWN_ACTION_STATUS,
   type WireRecord,
 } from "@sidecar/wire";
-import type { SessionActionPerformer } from "../session-action-performer.js";
+import { CREATED_SESSION_FIELD, type SessionActionPerformer } from "../session-action-performer.js";
 
 /** The developer's saved creation tie-breaks, as the projects context narrates them. */
 export interface WorkspaceCreationDefaults {
@@ -84,6 +85,24 @@ const REFUSAL = {
 
 function rejection(reason: string): WireRecord {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
+}
+
+/** The session a creation's answer named, read back under the shape the host writes it in. */
+function createdSession(
+  value: WireRecord[string] | undefined,
+): { providerId: string; providerSessionId: string; agentId?: string } | undefined {
+  if (
+    !isRecord(value) ||
+    !isWireString(value.providerId) ||
+    !isWireString(value.providerSessionId)
+  ) {
+    return undefined;
+  }
+  return {
+    providerId: value.providerId,
+    providerSessionId: value.providerSessionId,
+    ...(isWireString(value.agentId) ? { agentId: value.agentId } : undefined),
+  };
 }
 
 /**
@@ -149,28 +168,39 @@ export function createBrainActionPerformer(
   ): Promise<WireRecord> => {
     // The performer awaits once more of its own before a create or a spawn,
     // so the execution rides along to be asked again there.
-    const result = await dependencies.sessionActions.perform(action, execution);
+    const { [CREATED_SESSION_FIELD]: created, ...answer } =
+      await dependencies.sessionActions.perform(action, execution);
     // The line records the act, in the past tense, so it is written once the
     // effect has settled: a provider that accepted it, or one whose answer
     // never came back, so the act may have landed. A provider that refused it
     // leaves no line — nothing was done — and the reply voicing the refusal is
     // recorded as what Luke said.
     if (
-      result.status === ACTION_RESULT_STATUS.ACCEPTED ||
-      result.status === UNKNOWN_ACTION_STATUS
+      answer.status === ACTION_RESULT_STATUS.ACCEPTED ||
+      answer.status === UNKNOWN_ACTION_STATUS
     ) {
-      dependencies.recordConversationEntry(
-        sessionActionConversationEntry(
-          action,
-          { sessions: dependencies.sessions(), projects: dependencies.workspaceProjects() },
-          execution.origin === RUN_ORIGIN.USER
-            ? CONVERSATION_ENTRY_KIND.ACTION
-            : CONVERSATION_ENTRY_KIND.OWN_ACTION,
-          execution.runId,
-        ),
+      const entry = sessionActionConversationEntry(
+        action,
+        { sessions: dependencies.sessions(), projects: dependencies.workspaceProjects() },
+        execution.origin === RUN_ORIGIN.USER
+          ? CONVERSATION_ENTRY_KIND.ACTION
+          : CONVERSATION_ENTRY_KIND.OWN_ACTION,
+        execution.runId,
       );
+      // A creation aims at no session, so its line takes the identity the
+      // provider's answer named — for the panel to name and open the workspace
+      // — and the model's answer keeps only what became of the ask.
+      const session = createdSession(created);
+      if (session) {
+        entry.identity = {
+          providerId: session.providerId,
+          providerSessionId: session.providerSessionId,
+        };
+        if (session.agentId !== undefined && entry.action) entry.action.agentId = session.agentId;
+      }
+      dependencies.recordConversationEntry(entry);
     }
-    return result;
+    return answer;
   };
 
   return {

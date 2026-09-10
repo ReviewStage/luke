@@ -190,8 +190,24 @@ test("a chip naming a chat is the row's own press by identity, and a creation's 
       name: "Notch",
     },
   });
-  assert.match(creation, /<span class="conversation-action-chip">Notch<\/span>/);
+  assert.match(creation, /<span class="conversation-action-chip">.*?Notch<\/span>/);
   assert.doesNotMatch(creation, /<button type="button" class="conversation-action-chip"/);
+  // A creation whose line took the identity the provider named is pressable like any chat.
+  const landed = render({
+    kind: CONVERSATION_ENTRY_KIND.ACTION,
+    words: 'created a new workspace "Notch" in Conductor',
+    identity: { providerId: "conductor", providerSessionId: "created-1" },
+    action: {
+      kind: ACTION_KIND.CREATE_WORKSPACE,
+      runId: "run-2",
+      providerId: "conductor",
+      name: "Notch",
+    },
+  });
+  assert.match(
+    landed,
+    /<button type="button" class="conversation-action-chip" aria-label="Open Notch">/,
+  );
   // With no press to hand the chat to, every chip is a name.
   const unpressable = renderToStaticMarkup(
     createElement(ConversationPanel, {
@@ -236,7 +252,8 @@ test("every row leads with its kind then the provider it reached, a creation wit
     recorded,
     /class="conversation-action-mark"><svg class="provider-mark" data-mark="claude-code"/,
   );
-  // A creation has no session, so its line names the provider it asked.
+  // A creation that left the agent to the provider names the provider it asked
+  // on its chip, and the row's own mark stands down rather than repeat it.
   const creation = render({
     kind: CONVERSATION_ENTRY_KIND.ACTION,
     words: 'created a new workspace "Notch panel clipping" in Conductor',
@@ -247,15 +264,33 @@ test("every row leads with its kind then the provider it reached, a creation wit
       name: "Notch panel clipping",
     },
   });
+  assert.doesNotMatch(creation, /class="conversation-action-mark"><svg class="provider-mark"/);
   assert.match(
     creation,
+    /<span>Created a new workspace <\/span><span class="conversation-action-chip"><svg class="provider-mark conversation-chip-mark" data-mark="conductor".*?<\/svg>Notch panel clipping<\/span>/,
+  );
+  assert.doesNotMatch(creation, /in Conductor/);
+  // A creation that chose its agent wears that agent on the chip, so the
+  // provider it asked leads the row.
+  const agented = render({
+    kind: CONVERSATION_ENTRY_KIND.ACTION,
+    words: 'created a new workspace "Notch panel clipping" in Conductor',
+    action: {
+      kind: ACTION_KIND.CREATE_WORKSPACE,
+      runId: "run-2",
+      providerId: "conductor",
+      name: "Notch panel clipping",
+      agentId: "claude-code",
+    },
+  });
+  assert.match(
+    agented,
     /class="conversation-action-mark"><svg class="provider-mark" data-mark="conductor"/,
   );
   assert.match(
-    creation,
-    /<span>Created a new workspace <\/span><span class="conversation-action-chip">Notch panel clipping<\/span>/,
+    agented,
+    /class="conversation-action-chip"><svg class="provider-mark conversation-chip-mark" data-mark="claude-code"/,
   );
-  assert.doesNotMatch(creation, /in Conductor/);
   // A hosted chat's chip wears the agent's mark, so the row's provider mark still earns its place.
   const hosted = render({
     kind: CONVERSATION_ENTRY_KIND.ACTION,

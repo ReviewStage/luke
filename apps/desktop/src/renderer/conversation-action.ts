@@ -87,13 +87,19 @@ export function actionRowParts(
         ...(application === undefined ? [] : [{ text: ` in ${application}` }]),
       ];
     }
-    case ACTION_KIND.CREATE_WORKSPACE:
-      // The provider it landed in is the row's mark; the workspace is named
-      // as the developer named it, since the roster row it became is not tied
-      // back to this line.
-      return action.name === undefined
-        ? [{ text: "Created a new workspace" }]
-        : [{ text: "Created a new workspace " }, { text: action.name, name: {} }];
+    case ACTION_KIND.CREATE_WORKSPACE: {
+      // The workspace by the roster's name once observed, else as the
+      // developer named it, under the mark of the agent the creation asked
+      // for — or the provider's, where the choice was left to the provider.
+      const workspace = session
+        ? { text: session.title, name: { markId: session.agentId ?? session.providerId } }
+        : action.name === undefined
+          ? undefined
+          : { text: action.name, name: { markId: action.agentId ?? action.providerId } };
+      return workspace
+        ? [{ text: "Created a new workspace " }, workspace]
+        : [{ text: "Created a new workspace" }];
+    }
     case ACTION_KIND.ADD_AGENT:
       if (!chat || action.agent === undefined) return undefined;
       return [{ text: `Added a ${action.agent} agent to ` }, chat];

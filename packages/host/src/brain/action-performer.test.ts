@@ -200,6 +200,33 @@ test("a session action reaches the performer only for a session the roster holds
   });
 });
 
+test("a creation's line names the session the provider made, and the model's answer does not", async () => {
+  const { actions, recorded } = performer({
+    workspaceProjects: () => [LISTED_PROJECT],
+    sessionActions: {
+      perform: async () => ({
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        createdSession: {
+          providerId: "conductor",
+          providerSessionId: "created-1",
+          agentId: "claude",
+        },
+      }),
+      openSession: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+      openSessionApplication: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+      openSessionChange: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+    },
+  });
+  const answer = await actions.perform(CREATE_CALL, LIVE);
+  assert.deepEqual(answer, { status: ACTION_RESULT_STATUS.ACCEPTED });
+  assert.equal(recorded.length, 1);
+  assert.deepEqual(recorded[0]?.identity, {
+    providerId: "conductor",
+    providerSessionId: "created-1",
+  });
+  assert.equal(recorded[0]?.action?.agentId, "claude");
+});
+
 test("a session action the provider refused leaves no line, and one whose answer never came back does", async () => {
   const refusing = performer({
     sessionActions: {

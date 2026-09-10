@@ -159,6 +159,13 @@ const REFUSAL = {
   OPEN_CHANGE_FAILED: OPEN_REFUSAL.CHANGE,
 } as const;
 
+/**
+ * The field a creation's answer carries the created session under, for the
+ * brain's performer alone: it records the identity on the act's line and cuts
+ * the field before the model reads the answer.
+ */
+export const CREATED_SESSION_FIELD = "createdSession";
+
 /** How many departed sessions' addresses one provider keeps for the run; a roster is never near it. */
 const REMEMBERED_ADDRESSES_PER_PROVIDER = 200;
 
@@ -449,11 +456,8 @@ export function createSessionActionPerformer(
       : undefined;
     if (guard?.isRevoked())
       return { status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSAL.TURN_OVER };
-    const result = await dispatchAction(
-      plugin,
-      "createWorkspace",
-      providerWorkspaceRequest(action, stored),
-    );
+    const request = providerWorkspaceRequest(action, stored);
+    const result = await dispatchAction(plugin, "createWorkspace", request);
     // A workspace that landed is a session the panel should be showing, so
     // the next look must actually ask rather than serve the cache. A
     // rejection refreshes too: a workspace can stand with its opening task
@@ -494,12 +498,25 @@ export function createSessionActionPerformer(
         action.agent,
       );
       countSessionAction(plugin.provider.id, PRODUCT_SESSION_ACTION.WORKSPACE_CREATE, result);
-      // The named session was consumed above; the answer stays what became
-      // of the ask, so nothing rides out that the roster will not report on
-      // its own.
-      return result.warning
-        ? { status: ACTION_RESULT_STATUS.ACCEPTED, warning: result.warning }
-        : { status: ACTION_RESULT_STATUS.ACCEPTED };
+      // The session the creation named rides out once more, as the identity
+      // the brain's performer writes on the act's own line and cuts from the
+      // answer before the model reads it — an id the roster is about to report
+      // on its own, and never an address. The agent is the one the request
+      // asked for; a creation that left the choice to the provider names none.
+      const agent = request.agent ?? request.agentSelection?.agent;
+      return {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        ...(result.warning ? { warning: result.warning } : undefined),
+        ...(result.providerSessionId
+          ? {
+              [CREATED_SESSION_FIELD]: {
+                providerId: plugin.provider.id,
+                providerSessionId: result.providerSessionId,
+                ...(agent === undefined ? undefined : { agentId: agent }),
+              },
+            }
+          : undefined),
+      };
     }
     return result;
   };

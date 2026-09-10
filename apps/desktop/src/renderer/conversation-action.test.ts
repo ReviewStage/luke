@@ -143,7 +143,19 @@ test("a creation names the workspace it made as a chip, with no roster to consul
   };
   const parts = actionRowParts(created, []);
   assert.equal(text(parts), "Created a new workspace Notch");
-  assert.deepEqual(parts?.[1], { text: "Notch", name: {} });
+  // Unobserved yet: named as the developer named it, under the agent's mark
+  // where the creation asked for one, else the provider's.
+  assert.deepEqual(parts?.[1], { text: "Notch", name: { markId: "codex" } });
+  assert.deepEqual(
+    actionRowParts({ ...created, action: { ...created.action, agentId: "claude" } }, [])?.[1],
+    { text: "Notch", name: { markId: "claude" } },
+  );
+  // Once the roster reports the workspace the line names, its chip is the row's.
+  const observed = actionRowParts(
+    { ...created, identity: { providerId: "codex", providerSessionId: "a" } },
+    [{ ...lisbon, title: "Notch panel clipping" }],
+  );
+  assert.deepEqual(observed?.[1], { text: "Notch panel clipping", name: { markId: "codex" } });
   assert.equal(
     text(actionRowParts({ ...created, action: { ...created.action, name: undefined } }, [])),
     "Created a new workspace",

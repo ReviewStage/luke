@@ -154,10 +154,14 @@ const ACTION_RECORD = {
     ...(action.applicationId !== undefined ? { applicationId: action.applicationId } : undefined),
     ...observedTitle(action.identity, sessions),
   }),
-  [ACTION_KIND.CREATE_WORKSPACE]: (action) => ({
-    providerId: action.providerId,
-    ...(action.name !== undefined ? { name: action.name } : undefined),
-  }),
+  [ACTION_KIND.CREATE_WORKSPACE]: (action) => {
+    const agent = action.agent ?? action.agentSelection?.agent;
+    return {
+      providerId: action.providerId,
+      ...(action.name !== undefined ? { name: action.name } : undefined),
+      ...(agent !== undefined ? { agentId: agent } : undefined),
+    };
+  },
   [ACTION_KIND.ADD_AGENT]: (action, sessions) => ({
     agent: action.agent,
     ...(action.name !== undefined ? { name: action.name } : undefined),
