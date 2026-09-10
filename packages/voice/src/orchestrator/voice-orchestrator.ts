@@ -514,7 +514,7 @@ export class VoiceOrchestrator<Stream> {
         ),
       onSpokenAsk: (transcript, itemId) => this.#thread.rememberSpokenAsk(transcript, itemId),
       onSpokenAskDelta: (itemId, delta) => this.#thread.previewSpokenAsk(itemId, delta),
-      onSpokenAskFailed: (itemId) => this.#thread.dropPreview(itemId),
+      onSpokenAskFailed: (itemId) => this.#thread.failTurn(itemId),
       onSpokenAskClosed: () => this.#thread.closeTurn(),
       onSpokenAskCommitted: (itemId) => this.#thread.commitTurn(itemId),
       onSpokenAskDiscarded: () => this.#thread.discardTurn(),
@@ -890,6 +890,9 @@ export class VoiceOrchestrator<Stream> {
         captions: this.#caption.texts,
       }),
       liveConversationEntries: this.#liveEntries(),
+      // Gated by the same survival rule as the previews: a call gone can
+      // deliver no words, so nothing is awaited from it.
+      spokenAskPending: spokenAskPreviewSurvives(this.#status) && this.#thread.awaitingSpokenWords,
     };
   }
 

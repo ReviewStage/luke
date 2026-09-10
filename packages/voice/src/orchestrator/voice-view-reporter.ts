@@ -14,6 +14,12 @@ export interface VoiceViewReport {
   talkOpening: boolean;
   lukeCaptions: readonly string[] | undefined;
   liveConversationEntries: readonly ConversationEntry[];
+  /**
+   * Whether a spoken turn is still owed its first words — being listened to,
+   * or committed with its transcription not yet streaming — so Conversation
+   * can hold the developer's place in the thread before anything is written.
+   */
+  spokenAskPending: boolean;
 }
 
 /**
@@ -42,7 +48,8 @@ function sameVoiceView(left: VoiceViewReport, right: VoiceViewReport): boolean {
     left.voiceNotice === right.voiceNotice &&
     left.talkOpening === right.talkOpening &&
     left.lukeCaptions === right.lukeCaptions &&
-    left.liveConversationEntries === right.liveConversationEntries
+    left.liveConversationEntries === right.liveConversationEntries &&
+    left.spokenAskPending === right.spokenAskPending
   );
 }
 

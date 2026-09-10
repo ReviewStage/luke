@@ -222,13 +222,18 @@ const VOICE_VIEW = {
   talkOpening: false,
   lukeCaptions: ["Claude Code finished checkout."],
   liveConversationEntries: [{ kind: "reply", words: "Checkout is green.", recordedAt: 12 }],
+  spokenAskPending: false,
 };
 
-test("a voice view carries its six fields and nothing malformed", () => {
+test("a voice view carries its seven fields and nothing malformed", () => {
   assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW, undefined]), true);
   assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW]), false);
   assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW, VOICE_VIEW]), false);
   assert.equal(BRIDGE.reportVoiceView.args([{ ...VOICE_VIEW, voiceStatus: 1 }, undefined]), false);
+  assert.equal(
+    BRIDGE.reportVoiceView.args([{ ...VOICE_VIEW, spokenAskPending: "yes" }, undefined]),
+    false,
+  );
 });
 
 test("an exchange kind rides a voice view only on an edge that opened one", () => {

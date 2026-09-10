@@ -61,6 +61,9 @@ const timeBreakLabel = createConversationTimeBreakFormatter();
 /** What a reader is told of a run still going; the sighted read the face and the dots. */
 export const CONVERSATION_THINKING_LABEL = "Luke is thinking";
 
+/** What a reader is told while a spoken turn is still owed its first words. */
+export const CONVERSATION_LISTENING_LABEL = "Luke is listening";
+
 /** How long a run goes before the wait says how long it has been. */
 const THINKING_ELAPSED_AFTER_MS = 10_000;
 
@@ -120,6 +123,37 @@ function ConversationThinkingRow({
             {elapsed ? <span className="conversation-thinking-elapsed">{elapsed}</span> : null}
             <span className="visually-hidden" role="status">
               {CONVERSATION_THINKING_LABEL}
+            </span>
+          </span>
+        </span>
+      </div>
+    </li>
+  );
+}
+
+/**
+ * The developer's turn before its words arrive, in the sent bubble the
+ * transcript will fill: the press is heard the moment it lands, not seconds
+ * later when the transcription's first words come back. Three dots and no
+ * face — the face is Luke's own mark, and this turn is the developer's. It is
+ * presentation alone, drawn from the reported voice view and never entering
+ * the thread; the words that settle it arrive as a live line and then a
+ * recorded one, exactly as they always did.
+ */
+function ConversationListeningRow(): React.JSX.Element {
+  return (
+    <li
+      className="conversation-entry"
+      data-speaker={CONVERSATION_ENTRY_SPEAKER.YOU}
+      data-thinking="true"
+    >
+      <small className="visually-hidden">You</small>
+      <div className="conversation-message">
+        <span className="conversation-bubble">
+          <span className="conversation-listening">
+            <ThinkingDots />
+            <span className="visually-hidden" role="status">
+              {CONVERSATION_LISTENING_LABEL}
             </span>
           </span>
         </span>
@@ -281,6 +315,7 @@ export function ConversationPanel({
   entries,
   live = [],
   requests = [],
+  spokenAskPending = false,
   now,
   ask,
   onAskEngaged,
@@ -305,6 +340,12 @@ export function ConversationPanel({
    * bubbles they will settle into — words growing, no timestamp, no copy.
    */
   live?: readonly ConversationEntry[];
+  /**
+   * Whether a spoken turn is still owed its first words — being listened to,
+   * or committed with its transcription not yet streaming — so the thread
+   * holds the developer's place before anything is written.
+   */
+  spokenAskPending?: boolean;
   /** The same ask the sessions tab's composer carries: one conversation, reached from either tab. */
   ask: AskHandler;
   onAskEngaged: (engaged: boolean) => void;
@@ -323,12 +364,12 @@ export function ConversationPanel({
     pending.length > 0 ? Math.min(...pending.map((snapshot) => snapshot.acceptedAt)) : undefined;
 
   useEffect(() => {
-    // Reading the count binds the scroll to an append, a clear, or the wait
+    // Reading the count binds the scroll to an append, a clear, or a wait
     // arriving, not to an unrelated render of the same conversation.
-    if (entryCount === 0 && thinkingSince === undefined) return;
+    if (entryCount === 0 && thinkingSince === undefined && !spokenAskPending) return;
     const element = list.current;
     if (element) element.scrollTop = element.scrollHeight;
-  }, [entryCount, thinkingSince]);
+  }, [entryCount, thinkingSince, spokenAskPending]);
 
   useEffect(() => {
     // A streaming line only carries the reader along; unlike an append, it
@@ -340,7 +381,8 @@ export function ConversationPanel({
     if (fromTail <= STREAM_FOLLOW_SLACK_PX) element.scrollTop = element.scrollHeight;
   }, [liveLength]);
 
-  const thread = entries.length > 0 || live.length > 0 || thinkingSince !== undefined;
+  const thread =
+    entries.length > 0 || live.length > 0 || thinkingSince !== undefined || spokenAskPending;
 
   return (
     <section
@@ -380,8 +422,12 @@ export function ConversationPanel({
                   streaming
                 />
               ))}
-              {/* After the lines still being said: a spoken ask's own words
-                  stream in above the wait for their answer. */}
+              {/* After the lines still being said: the newest spoken turn's
+                  place, held while its first words are still on the service's
+                  clock. */}
+              {spokenAskPending ? <ConversationListeningRow /> : null}
+              {/* And then the wait for the answer: a spoken ask's own words
+                  stream in above it. */}
               {thinkingSince !== undefined ? (
                 <ConversationThinkingRow since={thinkingSince} now={now} />
               ) : null}

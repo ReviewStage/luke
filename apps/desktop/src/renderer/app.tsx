@@ -573,7 +573,8 @@ export function App(): React.JSX.Element {
     requestMicrophoneAccess,
     clearConversationLines,
   } = useVoiceView();
-  const { voiceError, voiceNotice, talkOpening, liveConversationEntries } = voiceView;
+  const { voiceError, voiceNotice, talkOpening, liveConversationEntries, spokenAskPending } =
+    voiceView;
   // Whether a run of Luke's is still going, from the same records Conversation
   // draws its wait from: the strip's face, the stage's growth for the dots
   // beside it, and the thread's wait all read one answer.
@@ -1059,6 +1060,7 @@ export function App(): React.JSX.Element {
             writes={sessions.writes}
             conversationLines={state.conversation.entries}
             liveConversationEntries={liveConversationEntries}
+            spokenAskPending={spokenAskPending}
             onClearConversationConversation={clearConversationLines}
             brainRequests={brainRequests}
             onStopThinking={stopThinking}

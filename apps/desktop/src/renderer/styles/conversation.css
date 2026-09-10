@@ -225,6 +225,23 @@
   height: 16px;
 }
 
+/* The developer's turn before its words arrive: a sent bubble in every
+   measure but its words, so the transcript streams in exactly where the wait
+   stood. Dots alone — the face is Luke's own mark — brightened to read
+   against the sent blue the way the words themselves do. */
+.conversation-listening {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 15px 15px 5px 15px;
+  background: var(--message-sent);
+}
+
+.conversation-listening .thinking-dots i {
+  background: rgba(255, 255, 255, 0.98);
+}
+
 /* How long the run has been going, said only once it is worth saying. Plain
    text beside the reader's status line rather than inside it, so a count that
    moves every second is never read out every second. */

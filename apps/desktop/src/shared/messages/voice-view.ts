@@ -30,6 +30,12 @@ export interface VoiceView {
    * exactly the edges that carry a caption.
    */
   liveConversationEntries: readonly ConversationEntry[];
+  /**
+   * Whether a spoken turn is still owed its first words — being listened to,
+   * or committed with its transcription not yet streaming — so Conversation
+   * can hold the developer's place in the thread before anything is written.
+   */
+  spokenAskPending: boolean;
 }
 
 /**
@@ -79,6 +85,7 @@ export const IDLE_VOICE_VIEW: VoiceView = {
   talkOpening: false,
   lukeCaptions: undefined,
   liveConversationEntries: [],
+  spokenAskPending: false,
 };
 
 const REALTIME_STATUSES: ReadonlySet<string> = new Set(Object.values(REALTIME_STATUS));
@@ -99,6 +106,7 @@ export function isVoiceView(value: UnparsedWireValue): value is VoiceView & Wire
   if (!isOptionalWireString(value.voiceError) || !isOptionalWireString(value.voiceNotice))
     return false;
   if (!isWireBoolean(value.talkOpening)) return false;
+  if (!isWireBoolean(value.spokenAskPending)) return false;
   const captions = value.lukeCaptions;
   if (captions !== undefined && !(Array.isArray(captions) && captions.every(isWireString))) {
     return false;
