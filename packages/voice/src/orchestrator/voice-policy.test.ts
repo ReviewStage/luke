@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { REALTIME_STATUS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
+import { REALTIME_STATUS, REALTIME_VOICE } from "@sidecar/realtime";
 import { CONVERSATION_ENTRY_KIND } from "@sidecar/session";
 import { REPLY_KIND } from "./voice-call.js";
 import {
   activeVoiceStream,
   liveConversationEntries,
-  liveSpeedApplies,
   lukeCaptionsToShow,
   spokenAskPreviewSurvives,
   talkKeyPress,
@@ -171,13 +170,6 @@ test("the press-wait meter rides a handshake and a pending takeover, nothing els
   assert.equal(talkOpeningHolds({ status: REALTIME_STATUS.LISTENING, turnPending: false }), false);
   assert.equal(talkOpeningHolds({ status: REALTIME_STATUS.READY, turnPending: false }), false);
   assert.equal(talkOpeningHolds({ status: REALTIME_STATUS.FAILED, turnPending: false }), false);
-});
-
-test("the first stored pace is not a change, and a later one is", () => {
-  assert.equal(liveSpeedApplies(undefined, REALTIME_VOICE_SPEED.QUICK), false);
-  assert.equal(liveSpeedApplies(REALTIME_VOICE_SPEED.NORMAL, REALTIME_VOICE_SPEED.NORMAL), false);
-  assert.equal(liveSpeedApplies(REALTIME_VOICE_SPEED.NORMAL, REALTIME_VOICE_SPEED.QUICK), true);
-  assert.equal(liveSpeedApplies(REALTIME_VOICE_SPEED.QUICK, undefined), false);
 });
 
 test("a changed voice on a live call waits for the turn to end, then restarts", () => {

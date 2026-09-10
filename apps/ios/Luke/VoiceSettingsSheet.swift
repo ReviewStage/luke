@@ -125,7 +125,6 @@ struct VoiceSettingsSheet: View {
             set: { value in
                 guard let step = RealtimeVoiceSpeed(multiplier: value), step != speed else { return }
                 speed = step
-                events.record(.settingUpdate(setting: .voiceSpeed, value: .set))
             }
         )
     }

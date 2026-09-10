@@ -35,7 +35,7 @@ const guideInput: LukeGuideInput = {
   },
   voiceAvailable: true,
   microphoneStatus: "granted",
-  hotkey: { hotkey: "⌥Space", held: true },
+  hotkey: { hotkey: "⌥Space" },
   askKey: "⌥L",
 };
 

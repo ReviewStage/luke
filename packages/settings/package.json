@@ -23,7 +23,7 @@
     "@sidecar/calendar": "workspace:*",
     "@sidecar/credentials": "workspace:*",
     "@sidecar/guide": "workspace:*",
-    "@sidecar/realtime": "workspace:*",
+    "@sidecar/live": "workspace:*",
     "@sidecar/session": "workspace:*",
     "@sidecar/surface": "workspace:*",
     "@sidecar/wire": "workspace:*"

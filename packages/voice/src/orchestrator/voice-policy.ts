@@ -1,4 +1,3 @@
-import type { RealtimeVoiceSpeed } from "@sidecar/realtime";
 import { REALTIME_STATUS, type RealtimeStatus, type RealtimeVoice } from "@sidecar/realtime";
 import {
   CONVERSATION_ENTRY_KIND,
@@ -87,18 +86,6 @@ export function talkKeyPress(input: { latched: boolean; microphoneCall: boolean 
  */
 export function talkOpeningHolds(input: { status: RealtimeStatus; turnPending: boolean }): boolean {
   return input.status === REALTIME_STATUS.CONNECTING || input.turnPending;
-}
-
-/**
- * Whether a changed pace should be carried onto the call now open. The first
- * snapshot is the stored value rather than a change, and with no next value
- * there is nothing to apply — the next call is minted at the stored pace.
- */
-export function liveSpeedApplies(
-  previous: RealtimeVoiceSpeed | undefined,
-  next: RealtimeVoiceSpeed | undefined,
-): boolean {
-  return next !== undefined && previous !== undefined && previous !== next;
 }
 
 /** Whether a changed voice is still owed a restart, and what to do about it now. */

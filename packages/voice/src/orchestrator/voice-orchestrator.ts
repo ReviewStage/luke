@@ -7,7 +7,6 @@ import {
   REALTIME_STATUS,
   type RealtimeStatus,
   type RealtimeVoice,
-  type RealtimeVoiceSpeed,
   voiceExchangeActive,
 } from "@sidecar/realtime";
 import type { SpeechOffer } from "@sidecar/realtime/speech";
@@ -37,7 +36,6 @@ import {
 import {
   activeVoiceStream,
   liveConversationEntries,
-  liveSpeedApplies,
   lukeCaptionsToShow,
   spokenAskPreviewSurvives,
   talkKeyPress,
@@ -62,7 +60,6 @@ export interface VoiceSurroundings {
   /** Undefined until the host has answered; saying "off" before then would draw a dead key. */
   voiceAvailable?: boolean;
   voice?: RealtimeVoice;
-  voiceSpeed?: RealtimeVoiceSpeed;
   captionsEnabled: boolean;
   /** Whether the Mac's output would swallow the speech, which is a reason to read it. */
   outputSilent: boolean;
@@ -224,7 +221,6 @@ export class VoiceOrchestrator<Stream> {
   #adopted: VoiceConversationSlice | undefined;
 
   #heardVoice: RealtimeVoice | undefined;
-  #heardSpeed: RealtimeVoiceSpeed | undefined;
   #restartDue = false;
 
   #state: VoiceState<Stream> = { meterStream: undefined, remoteStream: undefined };
@@ -300,11 +296,6 @@ export class VoiceOrchestrator<Stream> {
     const previous = this.#surroundings;
     this.#surroundings = next;
     if (previous.voiceAvailable !== next.voiceAvailable) this.#voiceAvailabilityChanged();
-    if (next.voiceSpeed !== undefined) {
-      const heard = this.#heardSpeed;
-      this.#heardSpeed = next.voiceSpeed;
-      if (liveSpeedApplies(heard, next.voiceSpeed)) this.#liveCall()?.applySpeed(next.voiceSpeed);
-    }
     if (previous.voice !== next.voice) this.#considerRestart();
     if (previous.announcementsHeld !== next.announcementsHeld) {
       if (next.announcementsHeld) this.#ensureMouth().setHeld(true);

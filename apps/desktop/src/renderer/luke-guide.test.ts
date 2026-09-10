@@ -50,7 +50,7 @@ function guideInput(overrides: Partial<LukeGuideInput> = {}): LukeGuideInput {
     update: idleUpdate(),
     voiceAvailable: true,
     microphoneStatus: "granted",
-    hotkey: { hotkey: "⌥Space", held: true },
+    hotkey: { hotkey: "⌥Space" },
     askKey: "⌥L",
     stopKey: "⌥S",
     ...overrides,
@@ -393,8 +393,6 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
     "showOnAllDisplays:true",
     "voice:alloy",
     "voiceCaptions:true",
-    // The first choice offered is "slow", which is the 0.75 multiple.
-    "voiceSpeed:0.75",
     // The first choice offered is "Conductor's default", which clears.
     "workspaceAgentDefaults:default",
   ]);

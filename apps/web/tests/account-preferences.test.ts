@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
+import { REALTIME_VOICE } from "@sidecar/realtime";
 import { PROVIDER_ID } from "@sidecar/session";
 import type { AccountPreferences } from "@sidecar/settings";
 import type { WireBoundaryInput } from "@sidecar/wire";
@@ -72,7 +72,7 @@ test("reading account preferences returns the stored snapshot", async () => {
       readPreferences: async () => ({
         preferences: {
           voice: REALTIME_VOICE.CORAL,
-          voiceSpeed: REALTIME_VOICE_SPEED.QUICK,
+          defaultWorkspaceProvider: PROVIDER_ID.CONDUCTOR,
         },
         updatedAt: NOW,
       }),
@@ -81,7 +81,7 @@ test("reading account preferences returns the stored snapshot", async () => {
 
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
-    preferences: { voice: REALTIME_VOICE.CORAL, voiceSpeed: REALTIME_VOICE_SPEED.QUICK },
+    preferences: { voice: REALTIME_VOICE.CORAL, defaultWorkspaceProvider: PROVIDER_ID.CONDUCTOR },
     updatedAt: NOW.getTime(),
   });
 });
@@ -128,7 +128,6 @@ test("writing account preferences validates and stores a full snapshot", async (
       request: writeRequest({
         preferences: {
           voice: REALTIME_VOICE.MARIN,
-          voiceSpeed: REALTIME_VOICE_SPEED.FAST,
           defaultWorkspaceProvider: PROVIDER_ID.CONDUCTOR,
           workspaceProjectDefaults: { conductor: "project-1" },
           workspaceAgentDefaults: {
@@ -148,7 +147,6 @@ test("writing account preferences validates and stores a full snapshot", async (
     userId: "user-1",
     preferences: {
       voice: REALTIME_VOICE.MARIN,
-      voiceSpeed: REALTIME_VOICE_SPEED.FAST,
       defaultWorkspaceProvider: PROVIDER_ID.CONDUCTOR,
       workspaceProjectDefaults: { conductor: "project-1" },
       workspaceAgentDefaults: {
@@ -207,4 +205,24 @@ test("writes reject unknown or invalid preferences instead of storing arbitrary 
     }),
   );
   assert.equal(trimmedMap.status, 400);
+});
+
+test("a phone's retired pace field is dropped at the door rather than refusing its snapshot", async () => {
+  let stored: { userId: string; preferences: AccountPreferences } | undefined;
+
+  const response = await handleAccountPreferencesWrite(
+    writeOptions({
+      request: writeRequest({
+        preferences: { voice: REALTIME_VOICE.MARIN, voiceSpeed: 1.25 },
+      }),
+      writePreferences: async (userId, preferences) => {
+        stored = { userId, preferences };
+        return NOW;
+      },
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(stored?.preferences, { voice: REALTIME_VOICE.MARIN });
+  assert.deepEqual(Object.keys((await response.json()).preferences), ["voice"]);
 });

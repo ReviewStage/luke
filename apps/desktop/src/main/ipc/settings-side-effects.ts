@@ -62,7 +62,6 @@ export function clientSettingSideEffects(dependencies: ClientSettingSideEffectDe
   return {
     [SETTING_SIDE_EFFECT.NONE]: noClientSettingSideEffect,
     [SETTING_SIDE_EFFECT.VOICE]: noClientSettingSideEffect,
-    [SETTING_SIDE_EFFECT.VOICE_SPEED]: noClientSettingSideEffect,
     [SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD]: noClientSettingSideEffect,
     [SETTING_SIDE_EFFECT.VAULT_SYNC]: noClientSettingSideEffect,
     [SETTING_SIDE_EFFECT.LOGIN_ITEM]: ({ settings }) => applyLoginItem(settings.stored.openAtLogin),

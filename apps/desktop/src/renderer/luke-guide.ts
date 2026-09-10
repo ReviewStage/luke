@@ -87,7 +87,7 @@ export interface LukeGuideInput {
    * absence that is the developer's own choice — the shortcut was deleted —
    * and the fact must say so rather than blame another app.
    */
-  hotkey: { hotkey?: string; held: boolean; removed?: boolean };
+  hotkey: { hotkey?: string; removed?: boolean };
   /** The ask key labelled on the same terms, absent when none was registered. */
   askKey?: string;
   /** Whether the ask key's absence is a deleted shortcut, on the talk key's terms. */
@@ -115,12 +115,13 @@ function talkKeyFact(hotkey: LukeGuideInput["hotkey"]): AppGuideFact {
         "None is registered right now — another app may own the shortcut. The Settings tab's Keyboard shortcuts page shows its state.",
     };
   }
-  const use = hotkey.held
-    ? "hold to talk, let go to send; tap instead to keep the turn open"
-    : "press to talk, again to send, again to interrupt";
   return {
     label: "Talk key",
-    detail: `${hotkey.hotkey}, from any app: ${use}. A different chord can be recorded, the default restored, or the shortcut removed, in ${SHORTCUTS_PAGE}.`,
+    detail:
+      `${hotkey.hotkey}, from any app: press to listen, and press the stop key, or this key ` +
+      "again, to mute. Luke keeps the conversation while it lasts, so the next press picks it " +
+      "up rather than starting over; a voice chosen in Settings is heard from the next " +
+      `conversation on. A different chord can be recorded, the default restored, or the shortcut removed, in ${SHORTCUTS_PAGE}.`,
   };
 }
 
@@ -148,8 +149,9 @@ function askKeyFact(askKey: string | undefined, removed: boolean | undefined): A
 
 const MICROPHONE_DETAIL = {
   [MICROPHONE_STATUS.GRANTED]:
-    "Granted. The microphone opens only when the talk key takes a turn, sends nothing after " +
-    "the key comes up, and closes once the exchange settles. Typing to Luke never opens it.",
+    "Granted. The microphone is heard only from a talk key press until the stop key, or a " +
+    "second press, mutes it; muted, it sends nothing, and it closes with the conversation. " +
+    "Typing to Luke never unmutes it.",
   [MICROPHONE_STATUS.DENIED]:
     "Denied, so the talk key cannot capture. Typing to Luke still works: a typed ask opens no " +
     "capture device, and the reply is spoken either way. It can only be granted back in " +
@@ -502,8 +504,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
                   : "Escape while Luke is speaking cuts the reply off and asks for nothing in " +
                     "its place. No system-wide stop key is registered right now — another app " +
                     "may own the shortcut.") +
-              " The talk key over a reply interrupts too, but takes the turn with the same " +
-              `press. A different stop chord can be recorded, the default restored, or the ` +
+              " The talk key over a reply opens the microphone instead, and Luke stops on his " +
+              `own when spoken over. A different stop chord can be recorded, the default restored, or the ` +
               `shortcut removed, in ${SHORTCUTS_PAGE}.`,
           },
           {
@@ -555,10 +557,11 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
           {
             label: "How long a conversation lasts",
             detail:
-              "A call opens on the first press of the talk key or the first typed ask and " +
-              "is put away after a few minutes of silence. The next press picks the " +
-              "conversation back up: the recent exchange is kept in memory alone, never " +
-              "written to disk, so Luke remembers what was just said.",
+              "A conversation opens on the first press of the talk key, or when Luke has " +
+              "something to say, and is put away after a few quiet minutes. The next press " +
+              "picks it back up, seeded from the recent exchange in Luke's own record, so " +
+              "Luke remembers what was just said; a voice chosen in Settings is heard from " +
+              "that next conversation on.",
           },
         ]
       : [

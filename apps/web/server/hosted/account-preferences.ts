@@ -2,6 +2,28 @@ import { type AccountPreferences, accountPreferencesFromWire } from "@sidecar/se
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 
+/**
+ * Fields a client of an earlier contract still writes and this build no
+ * longer keeps. The phone syncs its Realtime pace under this key until it
+ * moves to Live; the desktop has no pace and the row no longer carries one,
+ * so the key is dropped at the door rather than refusing the phone's whole
+ * snapshot. Removing an entry here is the phone's follow-up, not a cleanup.
+ */
+const RETIRED_ACCOUNT_PREFERENCE_FIELD = {
+  VOICE_SPEED: "voiceSpeed",
+} as const;
+
+const RETIRED_ACCOUNT_PREFERENCE_FIELDS: ReadonlySet<string> = new Set(
+  Object.values(RETIRED_ACCOUNT_PREFERENCE_FIELD),
+);
+
+function withoutRetiredFields(preferences: UnparsedWireValue): UnparsedWireValue {
+  if (!isRecord(preferences)) return preferences;
+  return Object.fromEntries(
+    Object.entries(preferences).filter(([field]) => !RETIRED_ACCOUNT_PREFERENCE_FIELDS.has(field)),
+  );
+}
+
 export interface AccountPreferencesRow {
   preferences: AccountPreferences;
   updatedAt: Date;
@@ -72,7 +94,7 @@ export async function handleAccountPreferencesWrite(
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }
 
-  const incoming = accountPreferencesFromWire(body.preferences);
+  const incoming = accountPreferencesFromWire(withoutRetiredFields(body.preferences));
   if (incoming === undefined) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }

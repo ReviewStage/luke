@@ -14,7 +14,6 @@ import { hostedVaultRoute } from "../../server/hosted/vault-route.js";
 function rowPreferences(
   preference: {
     voice: string | null;
-    voiceSpeed: number | null;
     defaultWorkspaceProvider: string | null;
   },
   workspacePreferences: readonly {
@@ -45,7 +44,6 @@ function rowPreferences(
   return (
     accountPreferencesFromStored({
       ...(preference.voice ? { voice: preference.voice } : undefined),
-      ...(preference.voiceSpeed !== null ? { voiceSpeed: preference.voiceSpeed } : undefined),
       ...(preference.defaultWorkspaceProvider
         ? { defaultWorkspaceProvider: preference.defaultWorkspaceProvider }
         : undefined),
@@ -113,7 +111,6 @@ export default hostedVaultRoute(async ({ request, resolveUserId }) => {
           const [preference] = await transaction
             .select({
               voice: accountPreference.voice,
-              voiceSpeed: accountPreference.voiceSpeed,
               defaultWorkspaceProvider: accountPreference.defaultWorkspaceProvider,
               updatedAt: accountPreference.updatedAt,
             })
@@ -155,7 +152,6 @@ export default hostedVaultRoute(async ({ request, resolveUserId }) => {
           .values({
             userId,
             voice: preferences.voice ?? null,
-            voiceSpeed: preferences.voiceSpeed ?? null,
             defaultWorkspaceProvider: preferences.defaultWorkspaceProvider ?? null,
             updatedAt,
           })
@@ -163,7 +159,6 @@ export default hostedVaultRoute(async ({ request, resolveUserId }) => {
             target: accountPreference.userId,
             set: {
               voice: preferences.voice ?? null,
-              voiceSpeed: preferences.voiceSpeed ?? null,
               defaultWorkspaceProvider: preferences.defaultWorkspaceProvider ?? null,
               updatedAt,
             },

@@ -232,10 +232,9 @@ export class VoiceCapabilityAssembler {
       readAccountKey: async () => (await this.#options.settings.readAccount())?.email,
       ...(this.#options.fetch ? { fetch: this.#options.fetch } : undefined),
     };
-    const [voice, speed] = await Promise.all([
-      this.#options.settings.get(APP_SETTING_SCHEMA.voice.field).catch(() => undefined),
-      this.#options.settings.get(APP_SETTING_SCHEMA.voiceSpeed.field).catch(() => undefined),
-    ]);
+    const voice = await this.#options.settings
+      .get(APP_SETTING_SCHEMA.voice.field)
+      .catch(() => undefined);
     if (!isCurrent()) return { latest: false, isCurrent };
 
     const builtBrainModel = policy.useKey
@@ -243,10 +242,7 @@ export class VoiceCapabilityAssembler {
       : policy.useHosted
         ? new HostedModelAdapter(seams)
         : undefined;
-    const preferences = {
-      ...(voice ? { voice } : undefined),
-      ...(speed ? { speed } : undefined),
-    };
+    const preferences = voice ? { voice } : {};
     this.#brainModel =
       builtBrainModel && this.#options.wrapBrainModel
         ? this.#options.wrapBrainModel(builtBrainModel)

@@ -22,7 +22,7 @@ export interface AppSettings {
 }
 
 /** A renderer-local view over the two disjoint halves of the settings wire. */
-type ResolvedSettingField = "voice" | "voiceSpeed" | "voiceSource" | "formFactor";
+type ResolvedSettingField = "voice" | "voiceSource" | "formFactor";
 export type AppSettingsView = Omit<StoredAppSettings, ResolvedSettingField> & {
   [Field in ResolvedSettingField]-?: NonNullable<StoredAppSettings[Field]>;
 } & RuntimeStatus;
@@ -32,7 +32,6 @@ export function appSettingsView(settings: AppSettings): AppSettingsView {
     ...settings.stored,
     ...settings.status,
     voice: settings.stored.voice ?? APP_SETTING_DEFAULTS.voice,
-    voiceSpeed: settings.stored.voiceSpeed ?? APP_SETTING_DEFAULTS.voiceSpeed,
     voiceSource: settings.stored.voiceSource ?? VOICE_SOURCE.ACCOUNT,
     formFactor: settings.stored.formFactor ?? APP_SETTING_DEFAULTS.formFactor,
   };

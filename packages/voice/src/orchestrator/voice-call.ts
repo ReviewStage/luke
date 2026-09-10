@@ -38,7 +38,6 @@ export interface SpeakOnlyVoiceCall {
   close(): Promise<void>;
   speak(turn: ProactiveSpeechTurn): boolean;
   stopSpeaking(): boolean;
-  applySpeed(speed: number): void;
   reportRemoteAudioLevel(active: boolean): void;
 }
 

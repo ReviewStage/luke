@@ -25,7 +25,6 @@ const noHostSettingSideEffect: HostSettingSideEffect = () => {};
 /** What the host's own side effects reach in the concerns around them. */
 export interface HostSettingSideEffectDependencies {
   setVoice: (voice: StoredAppSettings["voice"]) => void;
-  setVoiceSpeed: (speed: StoredAppSettings["voiceSpeed"]) => void;
   applyVoiceCredential: () => Promise<void>;
   reconcileSpeech: () => void;
   applyVaultSync: (syncProviderKeys: boolean) => void;
@@ -49,8 +48,6 @@ export function hostSettingSideEffects(dependencies: HostSettingSideEffectDepend
     [SETTING_SIDE_EFFECT.STOP_HOTKEY]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.MEDIA_DUCK]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.VOICE]: ({ settings }) => dependencies.setVoice(settings.voice),
-    [SETTING_SIDE_EFFECT.VOICE_SPEED]: ({ settings }) =>
-      dependencies.setVoiceSpeed(settings.voiceSpeed),
     [SETTING_SIDE_EFFECT.VOICE_SOURCE]: async () => {
       await dependencies.applyVoiceCredential();
       await dependencies.emitSettings();

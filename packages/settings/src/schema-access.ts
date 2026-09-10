@@ -64,7 +64,6 @@ export function isAppSettingField(value: UnparsedWireValue): value is AppSetting
  */
 export const ACCOUNT_PREFERENCE_FIELDS = [
   APP_SETTING_SCHEMA.voice.field,
-  APP_SETTING_SCHEMA.voiceSpeed.field,
   APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
   APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
   APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
