@@ -15,14 +15,14 @@
     "@sidecar/credentials": "workspace:*",
     "@sidecar/session": "workspace:*",
     "@sidecar/surface": "workspace:*",
-    "react": "19.2.8"
+    "react": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "26.2.0",
+    "@types/node": "catalog:",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
-    "react-dom": "19.2.8",
-    "tsx": "4.23.12",
-    "typescript": "7.0.2"
+    "react-dom": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
   }
 }

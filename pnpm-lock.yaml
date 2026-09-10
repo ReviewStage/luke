@@ -4,6 +4,37 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+catalogs:
+  default:
+    '@types/node':
+      specifier: 26.2.0
+      version: 26.2.0
+    ai:
+      specifier: 7.0.97
+      version: 7.0.97
+    react:
+      specifier: 19.2.8
+      version: 19.2.8
+    react-dom:
+      specifier: 19.2.8
+      version: 19.2.8
+    tsx:
+      specifier: 4.23.12
+      version: 4.23.12
+    typescript:
+      specifier: 7.0.2
+      version: 7.0.2
+    ws:
+      specifier: 8.21.3
+      version: 8.21.3
+  web:
+    '@types/node':
+      specifier: 22.20.1
+      version: 22.20.1
+    typescript:
+      specifier: 6.0.3
+      version: 6.0.3
+
 importers:
 
   .:
@@ -27,7 +58,7 @@ importers:
         specifier: 1.79.0
         version: 1.79.0
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
 
   apps/desktop:
@@ -106,7 +137,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/wire
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       '@types/react':
         specifier: 19.2.18
@@ -127,10 +158,10 @@ importers:
         specifier: 1.418.3
         version: 1.418.3
       react:
-        specifier: 19.2.8
+        specifier: 'catalog:'
         version: 19.2.8
       react-dom:
-        specifier: 19.2.8
+        specifier: 'catalog:'
         version: 19.2.8(react@19.2.8)
       react-markdown:
         specifier: 10.1.0
@@ -139,10 +170,10 @@ importers:
         specifier: 4.0.1
         version: 4.0.1
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
 
   apps/web:
@@ -193,7 +224,7 @@ importers:
         specifier: 4.3.3
         version: 4.3.3(vite@7.3.1(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0))
       ai:
-        specifier: 7.0.97
+        specifier: 'catalog:'
         version: 7.0.97(zod@4.5.4)
       better-auth:
         specifier: 1.6.29
@@ -211,10 +242,10 @@ importers:
         specifier: 1.418.3
         version: 1.418.3
       react:
-        specifier: 19.2.8
+        specifier: 'catalog:'
         version: 19.2.8
       react-dom:
-        specifier: 19.2.8
+        specifier: 'catalog:'
         version: 19.2.8(react@19.2.8)
       recharts:
         specifier: 3.8.0
@@ -223,14 +254,14 @@ importers:
         specifier: 4.3.3
         version: 4.3.3
       ws:
-        specifier: 8.21.3
+        specifier: 'catalog:'
         version: 8.21.3
     devDependencies:
       '@electric-sql/pglite':
         specifier: 0.5.8
         version: 0.5.8
       '@types/node':
-        specifier: 22.20.1
+        specifier: catalog:web
         version: 22.20.1
       '@types/pg':
         specifier: 8.21.0
@@ -251,10 +282,10 @@ importers:
         specifier: 0.31.10
         version: 0.31.10
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 6.0.3
+        specifier: catalog:web
         version: 6.0.3
       vite:
         specifier: 7.3.1
@@ -279,13 +310,13 @@ importers:
         version: link:../wire
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
 
   packages/analytics:
@@ -307,13 +338,13 @@ importers:
         version: link:../wire
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
 
   packages/brain:
@@ -340,17 +371,17 @@ importers:
         specifier: workspace:*
         version: link:../wire
       ai:
-        specifier: 7.0.97
+        specifier: 'catalog:'
         version: 7.0.97(zod@4.5.4)
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
       zod:
         specifier: 4.5.4
@@ -366,13 +397,13 @@ importers:
         version: link:../wire
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
 
   packages/credentials:
@@ -391,13 +422,13 @@ importers:
         version: link:../wire
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
 
   packages/devtrace:
@@ -416,13 +447,13 @@ importers:
         version: link:../wire
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
 
   packages/feedback:
@@ -432,13 +463,13 @@ importers:
         version: link:../wire
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
 
   packages/gateway:
@@ -450,20 +481,20 @@ importers:
         specifier: workspace:*
         version: link:../wire
       ws:
-        specifier: 8.21.3
+        specifier: 'catalog:'
         version: 8.21.3
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       '@types/ws':
         specifier: 8.18.1
         version: 8.18.1
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
 
   packages/guide:
@@ -473,13 +504,13 @@ importers:
         version: link:../wire
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
 
   packages/host:
@@ -539,20 +570,20 @@ importers:
         specifier: workspace:*
         version: link:../wire
       ws:
-        specifier: 8.21.3
+        specifier: 'catalog:'
         version: 8.21.3
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       '@types/ws':
         specifier: 8.18.1
         version: 8.18.1
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
 
   packages/hosted:
@@ -571,13 +602,13 @@ importers:
         version: link:../wire
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
 
   packages/live:
@@ -590,13 +621,13 @@ importers:
         version: link:../wire
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
 
   packages/memory:
@@ -615,13 +646,13 @@ importers:
         version: link:../wire
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
 
   packages/panel:
@@ -639,11 +670,11 @@ importers:
         specifier: workspace:*
         version: link:../surface
       react:
-        specifier: 19.2.8
+        specifier: 'catalog:'
         version: 19.2.8
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       '@types/react':
         specifier: 19.2.18
@@ -652,13 +683,13 @@ importers:
         specifier: 19.2.4
         version: 19.2.4(@types/react@19.2.18)
       react-dom:
-        specifier: 19.2.8
+        specifier: 'catalog:'
         version: 19.2.8(react@19.2.8)
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
 
   packages/providers:
@@ -680,13 +711,13 @@ importers:
         version: link:../wire
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
 
   packages/realtime:
@@ -708,13 +739,13 @@ importers:
         version: link:../wire
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
 
   packages/runtime:
@@ -724,13 +755,13 @@ importers:
         version: link:../wire
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
 
   packages/session:
@@ -739,17 +770,17 @@ importers:
         specifier: workspace:*
         version: link:../wire
       ai:
-        specifier: 7.0.97
+        specifier: 'catalog:'
         version: 7.0.97(zod@4.5.4)
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
       zod:
         specifier: 4.5.4
@@ -786,13 +817,13 @@ importers:
         version: link:../wire
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
 
   packages/surface:
@@ -805,16 +836,16 @@ importers:
         version: link:../wire
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       '@types/react':
         specifier: 19.2.18
         version: 19.2.18
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
 
   packages/voice:
@@ -851,25 +882,25 @@ importers:
         version: link:../wire
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
 
   packages/wire:
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
 
   tools/ios-parity:
@@ -897,13 +928,13 @@ importers:
         version: link:../../packages/wire
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
 
   tools/trace-export:
@@ -922,13 +953,13 @@ importers:
         version: link:../../packages/wire
     devDependencies:
       '@types/node':
-        specifier: 26.2.0
+        specifier: 'catalog:'
         version: 26.2.0
       tsx:
-        specifier: 4.23.12
+        specifier: 'catalog:'
         version: 4.23.12
       typescript:
-        specifier: 7.0.2
+        specifier: 'catalog:'
         version: 7.0.2
 
 packages:

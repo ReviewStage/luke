@@ -28,6 +28,11 @@ which both parses the untrusted value and emits the JSON Schema a model is
 shown for it. A hand-written parser beside a hand-written schema is two
 statements of the same rule that can drift.
 
+Anything that carries identity — a `Context.Tag`, a schema brand — has exactly
+one copy across the whole install, which the `pnpm-workspace.yaml` catalog
+guarantees by pinning every package to the same resolved version of the
+dependency that defines it.
+
 `@sidecar/wire` is also the base every layer's lifecycle is written in —
 `IDisposable`, `DisposableStore`, `toDisposable`, `Event`, and `Emitter` — so a
 listener's unsubscribe, a watcher's teardown, and the store that ends both are

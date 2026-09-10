@@ -12,9 +12,9 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "devDependencies": {
-    "@types/node": "26.2.0",
-    "tsx": "4.23.12",
-    "typescript": "7.0.2"
+    "@types/node": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
   },
   "dependencies": {
     "@sidecar/wire": "workspace:*"

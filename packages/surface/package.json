@@ -18,9 +18,9 @@
     "@sidecar/wire": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "26.2.0",
+    "@types/node": "catalog:",
     "@types/react": "19.2.18",
-    "tsx": "4.23.12",
-    "typescript": "7.0.2"
+    "tsx": "catalog:",
+    "typescript": "catalog:"
   }
 }
