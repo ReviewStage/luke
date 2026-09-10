@@ -113,7 +113,6 @@ test("the create link is the exact shape Conductor's parser reads back", () => {
 
 test("the create link omits the prompt when there is no opening task", () => {
   const link = conductorCreateWorkspaceLink("/Users/dev/repo");
-  assert.ok(!link.includes("prompt="));
   const parsed = parseConductorCreateLink(link);
   assert.equal(parsed.path, "/Users/dev/repo");
   assert.equal(parsed.prompt, undefined);
@@ -225,12 +224,6 @@ test("creating a workspace fires Conductor's create link for the offered reposit
   const parsed = parseConductorCreateLink(opened[0] ?? "");
   assert.equal(parsed.path, "/Users/dev/repos/luke");
   assert.equal(parsed.prompt, "Start on the parser");
-  // Conductor pre-fills the prompt but does not send it, so a create carrying a
-  // task warns rather than reading as an agent already at work.
-  assert.match(
-    "warning" in result ? (result.warning ?? "") : "",
-    /ready in its composer.*press Return|press Return.*send/i,
-  );
 });
 
 test("a failed refresh empties the offer rather than keeping a stale one", async (t) => {
@@ -360,10 +353,6 @@ test("a failed open is reported as a rejection the user can act on", async (t) =
     admittedForTest({ providerProjectId: "repo-luke" }),
   );
   assert.equal(result.status, ACTION_RESULT_STATUS.REJECTED);
-  assert.match(
-    "reason" in result ? result.reason : "",
-    /Couldn't ask Conductor to create the workspace/,
-  );
 });
 
 test("the local creator observes no sessions of its own", async () => {

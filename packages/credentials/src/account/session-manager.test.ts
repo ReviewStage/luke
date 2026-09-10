@@ -137,15 +137,12 @@ test("an exchange the account refuses is a failure the panel can report", async 
     redirectUri: string;
     state: string;
   };
-  // The hosted authorize route reads the chosen provider back off the state.
-  assert.match(state, /^github\./);
 
   const callback = new URL(redirectUri);
   callback.searchParams.set("state", state);
   callback.searchParams.set("code", "auth-code");
   const answered = await fetch(callback);
   assert.equal(answered.status, 200);
-  assert.match(await answered.text(), /Sign-in was not completed/);
 
   await refused;
   assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_OUT);

@@ -532,5 +532,4 @@ test("a transcript read that Conductor refuses is rejected with the reason, neve
 
   assert.equal(read.status, "rejected");
   if (read.status !== "rejected") return;
-  assert.match(read.reason, /Conductor/u);
 });

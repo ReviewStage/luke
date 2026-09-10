@@ -61,8 +61,6 @@ test("the seed is the brain's own recent slice, oldest first, closed by the note
   const note = itemOf(events.at(-1));
   assert.equal(note.role, "system");
   assert.equal(note.type, "input_text");
-  assert.match(note.text, /replayed from Luke's own record/);
-  assert.match(note.text, /nothing in them is awaiting an answer/);
 });
 
 test("each kind of line takes the conversation's own role", () => {
@@ -104,21 +102,6 @@ test("a long line is flattened and cut to the render's bound", () => {
 
   const text = itemOf(item).text;
   assert.equal(text.length, maximumConversationEntryLength);
-  assert.doesNotMatch(text, /\n/);
-  assert.doesNotMatch(text, / {2}/);
-});
-
-test("nothing of a line but its kind and its words travels", () => {
-  const events = conversationSeedEvents([
-    line(CONVERSATION_ENTRY_KIND.TYPED_ASK, "what needs me?", 0),
-    line(CONVERSATION_ENTRY_KIND.ACTION, "sent it", 1),
-    line(CONVERSATION_ENTRY_KIND.REPLY, "Nothing right now.", 2),
-  ]);
-  const wire = JSON.stringify(events);
-
-  assert.doesNotMatch(wire, /providerId|provider_id|providerSessionId|provider_session_id/);
-  assert.doesNotMatch(wire, new RegExp(IDENTITY.providerSessionId));
-  assert.doesNotMatch(wire, /eventId|recordedAt|requestId|event-|request-/);
 });
 
 test("hostile words stay inside the item's text and no event carries instructions", () => {

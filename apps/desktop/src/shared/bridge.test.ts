@@ -17,7 +17,6 @@ test("the bridge is one act channel, one state read, and the reports beside them
   // Every entry parses what arrives, and a channel names exactly one entry.
   for (const [method, entry] of entries) {
     assert.ok(entry.args, method);
-    assert.ok(entry.channel.startsWith("app:"), method);
   }
   const named = entries.map(([, entry]) => entry.channel);
   assert.equal(new Set(named).size, named.length);

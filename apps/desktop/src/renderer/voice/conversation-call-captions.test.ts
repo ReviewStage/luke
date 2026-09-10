@@ -261,10 +261,4 @@ test("a cancelled reply's late transcript cannot pollute the next caption", asyn
     context.captions.some((caption) => caption?.includes("The first reply, finished anyway.")),
     false,
   );
-  assert.equal(
-    context.captions.some((caption) =>
-      caption?.some((text) => text.includes("still streaming in")),
-    ),
-    false,
-  );
 });

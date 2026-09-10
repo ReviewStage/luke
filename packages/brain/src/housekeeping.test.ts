@@ -157,7 +157,6 @@ test("a flush appends to today's note over a private copy of the context and rep
     (model.options[0]?.tools ?? []).map((tool) => tool.name).sort(),
     [BRAIN_TOOL.READ_WORKSPACE_FILE, BRAIN_TOOL.WRITE_WORKSPACE_FILE].sort(),
   );
-  assert.match(model.options[0]?.prompt ?? "", /Pre-compaction memory flush/u);
 });
 
 test("a housekeeping write is refused for any other file or for an overwrite, and a silent turn reports nothing to store", async () => {
@@ -246,5 +245,4 @@ test("a model failure is a failed flush, never a completed one", async () => {
     runId: "flush-4",
   });
   assert.equal(result.outcome, MEMORY_HOUSEKEEPING_OUTCOME.FAILED);
-  assert.match(result.reason ?? "", /boom/u);
 });

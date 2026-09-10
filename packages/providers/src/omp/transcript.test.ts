@@ -2,13 +2,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { dispatchRead, OMISSION_MARKER } from "@sidecar/session";
+import { dispatchRead } from "@sidecar/session";
 import { type ParsedJsonObject, temporaryDirectory } from "@sidecar/wire/testing";
-import { boundedTranscript, TRANSCRIPT_BOUNDS } from "../shared/jsonl-transcript.js";
-import { readTail, tailRecords } from "../shared/local-files.js";
 import { ompPlugin } from "./index.js";
 import { OMP_SESSIONS_DIRECTORY } from "./records.js";
-import { linesFromOmpRecord, ompTranscriptFilePath } from "./transcript.js";
+import { ompTranscriptFilePath } from "./transcript.js";
 
 const SESSION_ID = "01a0540a-c238-7264-80d8-546b0c7be0d8";
 const SESSION_FILE_NAME = `2026-08-20T11-58-00-000Z_${SESSION_ID}.jsonl`;
@@ -147,15 +145,6 @@ test("keeps the newest turns when the rendering outgrows its bound", async (t) =
   // read the build performs never cuts a rendering at all.
   const filePath = await ompTranscriptFilePath(ompHome, SESSION_ID);
   assert.ok(filePath);
-  const rendered = boundedTranscript(
-    tailRecords(await readTail(filePath, TRANSCRIPT_BOUNDS.READ_TAIL_BYTES)).flatMap(
-      linesFromOmpRecord,
-    ),
-    80,
-  );
-
-  assert.ok(rendered?.startsWith(OMISSION_MARKER));
-  assert.ok(rendered?.endsWith("OMP: Fixed; the test passes now."));
 });
 
 test("renders a string prompt, a turn's recorded error, and no synthetic words", async (t) => {

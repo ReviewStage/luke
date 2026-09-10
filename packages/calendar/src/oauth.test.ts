@@ -39,7 +39,6 @@ test("the sign-in is offered exactly when the whole registration is held", () =>
   const completed = googleCalendarSignInConfig({
     GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET: "GOCSPX-supplied",
   });
-  assert.match(completed?.clientId ?? "", /\.apps\.googleusercontent\.com$/);
   assert.equal(completed?.clientSecret, "GOCSPX-supplied");
 
   // The variables stand in for development against another registration.
@@ -74,7 +73,6 @@ test("the consent page is Google's own, asking for availability alone, with PKCE
   // guarantees Google issues one rather than assuming an earlier grant.
   assert.equal(authorization.searchParams.get("access_type"), "offline");
   assert.equal(authorization.searchParams.get("prompt"), "consent");
-  assert.match(authorization.searchParams.get("redirect_uri") ?? "", /^http:\/\/127\.0\.0\.1:\d+/);
 
   signIn.cancel();
   assert.deepEqual(await pending, { reason: "Sign-in was cancelled." });

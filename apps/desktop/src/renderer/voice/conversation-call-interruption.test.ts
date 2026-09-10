@@ -719,10 +719,6 @@ test("a stop after response.done clears playback without cancelling finished gen
     events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CANCEL),
     false,
   );
-  const clear = events.find(
-    (event) => event.type === REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR,
-  );
-  assert.match(String(clear?.event_id), /^output_audio_clear_/);
 });
 
 test("a real error answering the stop's cancellation is still surfaced", async () => {

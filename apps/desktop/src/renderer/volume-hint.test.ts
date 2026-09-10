@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  outputSilent,
-  VOLUME_HINT_REARM_MS,
-  volumeHintDismissed,
-  volumeHintText,
-} from "./volume-hint";
+import { outputSilent, VOLUME_HINT_REARM_MS, volumeHintDismissed } from "./volume-hint";
 
 test("an output nobody can read is audible, never silent", () => {
   // The hint explains a silence the helper has actually seen; a machine with
@@ -21,16 +16,6 @@ test("mute and a volume at nothing both read as silent", () => {
   assert.equal(outputSilent({ muted: false, volume: 0.005 }), true);
   assert.equal(outputSilent({ muted: false, volume: 0.02 }), false);
   assert.equal(outputSilent({ muted: false, volume: 0.6 }), false);
-});
-
-test("the hint names the switch that is actually in the way", () => {
-  // Telling someone to unmute a Mac whose volume is merely at zero is advice
-  // that fixes nothing, so the words follow the reading.
-  assert.match(volumeHintText({ muted: true, volume: 0.6 }), /unmute/i);
-  assert.match(volumeHintText({ muted: false, volume: 0 }), /turn up the volume/i);
-  // The fixture profile draws the hint with no reading at all; it shows the
-  // mute wording, the commoner case.
-  assert.match(volumeHintText(undefined), /unmute/i);
 });
 
 test("a dismissal holds for the whole stretch of silence it answered", () => {

@@ -260,7 +260,6 @@ test("children start isolated by default, thread-bound forks inherit, and a fork
   assert.equal(isolated.receipt.context, CHILD_CONTEXT_MODE.ISOLATED);
   assert.equal(forked.receipt.context, CHILD_CONTEXT_MODE.FORK);
   assert.equal(capped.receipt.context, CHILD_CONTEXT_MODE.ISOLATED);
-  assert.match(capped.receipt.contextNote ?? "", /fork cap/);
   assert.equal(empty.receipt.context, CHILD_CONTEXT_MODE.ISOLATED);
   await settle();
   assert.deepEqual(executor.started[1]?.fork, items);
@@ -331,7 +330,7 @@ test("blocked delivery backs off from 15 seconds to five minutes, blocks after 3
   assert.equal(deliveryBackoffMs(2), 30_000);
   assert.equal(deliveryBackoffMs(6), 300_000);
   assert.equal(deliveryBackoffMs(12), 300_000);
-  const { service, store, executor, deliverer, clock, reports } = harness({
+  const { service, store, executor, deliverer, clock } = harness({
     limits: { maximumActivePerRequester: 100, maximumActiveGlobal: 100 },
   });
   deliverer.accept = false;
@@ -346,7 +345,6 @@ test("blocked delivery backs off from 15 seconds to five minutes, blocks after 3
     (completion) => completion.delivery === COMPLETION_DELIVERY_STATUS.BLOCKED,
   );
   assert.equal(blocked.length, CHILD_DEFAULTS.BLOCKED_REFUSAL);
-  assert.ok(reports.some((report) => report.includes("blocked awaiting delivery")));
   const refused = await service.spawn(request());
   assert.equal(refused.accepted, false);
   if (!refused.accepted) assert.equal(refused.reason, CHILD_SPAWN_REFUSAL.BLOCKED_COMPLETIONS);

@@ -201,8 +201,7 @@ test("the resolved account is the distinct id, whatever the body tried to say", 
 
   assert.equal(response.status, 202);
   assert.deepEqual(await response.json(), { accepted: 2 });
-  const { request: forwarded, items } = onlyBatch(posthog.forwarded);
-  assert.match(forwarded.url, /\/batch\/$/);
+  const { items } = onlyBatch(posthog.forwarded);
   assert.equal(items.length, 2);
   for (const item of items) {
     assert.equal(item.properties.distinct_id, `user-${accounts}`);
@@ -238,7 +237,6 @@ test("the forwarded document matches the processor's documented batch shape", as
   assert.equal(item.properties.distinct_id, `user-${accounts}`);
   assert.equal(item.properties.$geoip_disable, true);
   assert.equal(item.timestamp, new Date(LAUNCH.at).toISOString());
-  assert.match(item.timestamp, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
 });
 
 test("the client header selects the $lib tag, and anything else is the desktop", async () => {

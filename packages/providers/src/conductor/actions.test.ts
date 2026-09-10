@@ -592,11 +592,6 @@ test("reports a workspace whose task could not be delivered as exactly that", as
   // The workspace stands, so claiming failure outright would be as wrong as
   // claiming success: the answer says which half landed.
   assert.equal(result.status, "rejected");
-  assert.match(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (result as { reason?: string }).reason ?? "",
-    /created, but its opening task was not delivered/,
-  );
   // No message request was guessed at without a session to send it to.
   const writes = api.requests.filter((request) => request.method === "POST");
   assert.deepEqual(

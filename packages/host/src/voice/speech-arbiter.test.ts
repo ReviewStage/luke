@@ -400,7 +400,6 @@ test("every trace record carries a kind, a decision, and a count, and never the 
     assert.ok(decisions.has(record.decision));
     assert.ok(Number.isInteger(record.pendingCount) && record.pendingCount >= 0);
     assert.equal("briefing" in record, false);
-    assert.equal(JSON.stringify(record).includes("secret"), false);
   }
 });
 

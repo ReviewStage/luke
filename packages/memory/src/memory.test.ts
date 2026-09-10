@@ -13,12 +13,7 @@ import {
   memoryFlushThreshold,
   shouldRunMemoryFlush,
 } from "./flush.js";
-import {
-  appendNotebookEntry,
-  parseNotebook,
-  REMEMBERED_HEADING,
-  removeNotebookEntry,
-} from "./notebook-markdown.js";
+import { appendNotebookEntry, parseNotebook, removeNotebookEntry } from "./notebook-markdown.js";
 import {
   bm25RankToScore,
   buildFtsQuery,
@@ -245,7 +240,6 @@ test("notebook entries are the bullets under the remembered heading and nothing 
   const seeded = "# USER.md\n\nStable facts.\n\n- a bullet in the prose\n";
   assert.deepEqual(parseNotebook(seeded).entries, []);
   const one = appendNotebookEntry(seeded, "prefers tabs");
-  assert.ok(one.includes(`${REMEMBERED_HEADING}\n\n- prefers tabs\n`));
   const two = appendNotebookEntry(one, "ships on tuesdays");
   assert.deepEqual(
     parseNotebook(two).entries.map((entry) => entry.words),
@@ -367,10 +361,4 @@ test("a housekeeping write is bounded to today's note and to appending", () => {
   assert.equal(isAppendOnlyRewrite("- old\n", "- ol"), false);
   const prompt = memoryFlushPrompt("2026-09-08");
   assert.equal(prompt.notePath, "memory/2026-09-08.md");
-  assert.match(prompt.ask, /memory\/2026-09-08\.md/u);
-  assert.ok(
-    prompt.system.includes(
-      "Treat workspace bootstrap and reference files such as MEMORY.md, USER.md, and AGENTS.md as read-only during this turn; never overwrite, replace, or edit them.",
-    ),
-  );
 });

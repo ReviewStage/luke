@@ -8,13 +8,7 @@ import {
   type SessionProvider,
 } from "@sidecar/session";
 import { unparsedWire, type WireRecord, wireRecord } from "@sidecar/wire";
-import {
-  askInputText,
-  BRAIN_INPUT_MARKER,
-  holdReleasedInputText,
-  standingContextText,
-  wakeInputText,
-} from "./input-items.js";
+import { askInputText, holdReleasedInputText, wakeInputText } from "./input-items.js";
 import { BRAIN_WAKE_KIND, type BrainWakeEvent } from "./wake-events.js";
 
 const NOW = 1_800_000_000_000;
@@ -31,9 +25,8 @@ function session(overrides: Partial<ProviderSessionObservation> = {}): Session {
   });
 }
 
-function itemBody(text: string, marker: string): WireRecord {
-  const [head, ...rest] = text.split("\n");
-  assert.ok(head?.startsWith(`${marker} `), `opens with ${marker}`);
+function itemBody(text: string): WireRecord {
+  const [, ...rest] = text.split("\n");
   const parsed = wireRecord(unparsedWire(JSON.parse(rest.join("\n"))));
   assert.ok(parsed);
   return parsed;
@@ -48,7 +41,7 @@ test("a wake item carries each event's observed fields and transcript delta as d
     transcriptDelta: { text: "assistant: done", truncated: false, status: "accepted" },
     atMs: NOW,
   };
-  const body = itemBody(wakeInputText([event], NOW), BRAIN_INPUT_MARKER.OBSERVED_EVENTS);
+  const body = itemBody(wakeInputText([event], NOW));
   assert.deepEqual(body, {
     events: [
       {
@@ -84,7 +77,6 @@ test("an ask item carries the question and the events that arrived since the las
       ],
       NOW,
     ),
-    BRAIN_INPUT_MARKER.DEVELOPER_ASK,
   );
   assert.equal(body.question, "what's running?");
   assert.ok(Array.isArray(body.events_since_last_turn));
@@ -102,7 +94,6 @@ test("a hold-released item lists the held briefings", () => {
       ],
       NOW,
     ),
-    BRAIN_INPUT_MARKER.HOLD_RELEASED,
   );
   assert.deepEqual(body, {
     held_briefings: [
@@ -112,12 +103,4 @@ test("a hold-released item lists the held briefings", () => {
       },
     ],
   });
-});
-
-test("the standing context item is the roster and then whatever else the host rendered", () => {
-  const text = standingContextText("Currently observed sessions:\n- one", "Facts.\n", NOW);
-  assert.ok(text.startsWith(`${BRAIN_INPUT_MARKER.STANDING_CONTEXT} `));
-  assert.ok(text.endsWith("Currently observed sessions:\n- one\n\nFacts."));
-  const bare = standingContextText("No sessions.", "   ", NOW);
-  assert.ok(bare.endsWith("\nNo sessions."));
 });

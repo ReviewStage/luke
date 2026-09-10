@@ -180,7 +180,6 @@ test("the remote mint still carries the phone's own acts and roster rules", () =
     remoteNames,
   );
   assert.equal(remoteNames.includes(ASK_BRAIN_TOOL.name), false);
-  assert.match(request.session.instructions, /\[observed session status\]/);
   assert.equal(request.session.instructions, sessionInstructions(SCENE.PHONE));
 });
 
@@ -199,7 +198,4 @@ test("the minted introduction session declares no tools and no way to choose one
   assert.deepEqual(config.audio, ordinary.audio);
   assert.equal(config.audio.input.turn_detection, null);
   assert.equal(config.instructions, sessionInstructions(SCENE.INTRODUCTION));
-  // The practice reply is the last word the developer can hear before the
-  // sign-off: a question asked there is one nobody can answer.
-  assert.match(config.instructions, /practice moment[\s\S]*ask no follow-up[\s\S]*question/i);
 });

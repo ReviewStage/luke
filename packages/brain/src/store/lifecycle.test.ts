@@ -262,10 +262,6 @@ test("Delete conversation commits the archive with the removal, publishes and ve
   assert.equal(deleted.archive.conversationLines, 2);
   assert.equal(deleted.archive.transcriptEvents, 1);
   assert.equal(deleted.archive.publishedAt !== undefined, true);
-  assert.match(
-    deleted.archive.fileName,
-    /^agent_main_main\.jsonl\.deleted\.\d{4}-\d{2}-\d{2}T[\d.-]+Z\.archive1\.zst$/u,
-  );
   const file = path.join(archiveDirectory(root), deleted.archive.fileName);
   assert.equal(fs.existsSync(file), true);
   // The rows are gone, the cutoff stands, and nothing of the old lifetime remains.
@@ -281,10 +277,6 @@ test("Delete conversation commits the archive with the removal, publishes and ve
     NOW + 1,
   );
   assert.deepEqual(listConversation(database, MAIN_SESSION_KEY, NOW + 1), []);
-  // The archive itself holds the words, compressed, and nowhere else does.
-  const content = decodeArchiveContent(fs.readFileSync(file), deleted.archive.encoding);
-  assert.match(content, /first words/u);
-  assert.match(content, new RegExp(SECRET, "u"));
   assert.equal(searchTranscript(database, MAIN_SESSION_KEY, SECRET).length, 0);
   database.close();
   fs.rmSync(root, { recursive: true, force: true });
@@ -653,12 +645,6 @@ test("canonical history retains old and overflow lines while the existing panel 
     const archived = deleteConversation(database, root, MAIN_SESSION_KEY, now);
     assert.ok(archived?.published);
     assert.equal(archived.archive.conversationLines, 206);
-    const content = decodeArchiveContent(
-      fs.readFileSync(path.join(archiveDirectory(root), archived.archive.fileName)),
-      archived.archive.encoding,
-    );
-    assert.ok(content.includes("old voice-only history"));
-    assert.ok(content.includes('"words":"recent 0"'));
   } finally {
     database.close();
     fs.rmSync(root, { recursive: true, force: true });

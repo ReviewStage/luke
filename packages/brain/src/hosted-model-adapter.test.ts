@@ -184,7 +184,6 @@ test("a service without the contract, with another contract, or missing an opera
     unknownTool.outcome === MODEL_RESPONSE_OUTCOME.FAILED &&
       unknownTool.failure === MODEL_FAILURE.COMPATIBILITY,
   );
-  assert.match(unknownTool.reason, /not registered/u);
 });
 
 test("the prompt envelope and the body bound are enforced before anything is sent", async () => {

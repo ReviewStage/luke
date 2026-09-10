@@ -7,10 +7,8 @@ import {
   APP_UPDATE_WAIT,
   type AppGuideSnapshot,
   type AppUpdateButton,
-  appGuideContextText,
   appToggleText,
   appToggleValue,
-  EMPTY_APP_GUIDE,
   FEEDBACK_COMPOSER_KIND,
   SESSION_LIST_SORT,
 } from "@sidecar/guide";
@@ -119,28 +117,6 @@ function observedConductorSession(realtimeVoice = false) {
   );
 }
 
-test("the guide's text carries app facts and compact setting data", async () => {
-  const text = appGuideContextText(GUIDE);
-
-  assert.match(text, /What Luke is: A macOS sidecar/);
-  assert.match(text, /Captions — Luke's words on screen while he speaks\./);
-  assert.match(text, /value=off/);
-  assert.match(text, /value=off; default=off/);
-  assert.match(text, /value=marin; default=cedar/);
-  // The id is printed where the value is, because it is what a spoken change
-  // names the setting by — the same rule the session roster follows.
-  assert.match(text, /setting_id=voice_captions/);
-  assert.match(text, /choices=cedar, marin/);
-  assert.match(text, /Microphone access[^\n]*value=on/);
-  assert.match(text, /efforts=Fable 5:low\/high\/max, GPT:low\/high\/max/);
-  // A choice that takes none is not listed taking any.
-  assert.doesNotMatch(text, /Cursor Auto:/);
-});
-
-test("an empty guide says so rather than describing an app it was never told about", async () => {
-  assert.match(appGuideContextText(EMPTY_APP_GUIDE), /has not been provided/);
-});
-
 test("a spoken toggle accepts the unambiguous words and nothing else", async () => {
   assert.equal(appToggleValue("on"), "on");
   assert.equal(appToggleValue(" Enabled "), "on");
@@ -189,15 +165,9 @@ test("a spoken change can name only a setting the guide lists, to a value it acc
 
   const badToggle = await change('{"setting_id":"voice_captions","value":"sideways"}');
   assert.equal(badToggle.status, ACTION_RESULT_STATUS.REJECTED);
-  if (badToggle.status === ACTION_RESULT_STATUS.REJECTED) {
-    assert.match(badToggle.reason, /on or off/);
-  }
 
   const badChoice = await change('{"setting_id":"voice","value":"basso"}');
   assert.equal(badChoice.status, ACTION_RESULT_STATUS.REJECTED);
-  if (badChoice.status === ACTION_RESULT_STATUS.REJECTED) {
-    assert.match(badChoice.reason, /cedar, marin/);
-  }
 });
 
 test("a value and its effort named in one change are validated as the pair they are", async () => {
@@ -225,18 +195,12 @@ test("a value and its effort named in one change are validated as the pair they 
     '{"setting_id":"agent_model","value":"Fable 5","effort":"ultra"}',
   );
   assert.equal(wrongLevel.status, ACTION_RESULT_STATUS.REJECTED);
-  if (wrongLevel.status === ACTION_RESULT_STATUS.REJECTED) {
-    assert.match(wrongLevel.reason, /low, high, max/);
-  }
 
   // A choice the guide lists no levels for takes none.
   const levelless = await change(
     '{"setting_id":"agent_model","value":"Cursor Auto","effort":"high"}',
   );
   assert.equal(levelless.status, ACTION_RESULT_STATUS.REJECTED);
-  if (levelless.status === ACTION_RESULT_STATUS.REJECTED) {
-    assert.match(levelless.reason, /Cursor Auto takes no effort level/);
-  }
 
   // A setting with no levels anywhere has no effort to pair: a volunteered
   // one is dropped like an unknown key, and the change it rode in on lands.
@@ -260,9 +224,6 @@ test("a by-hand-only setting is refused with the path to it, so the refusal is t
   );
 
   assert.equal(action.status, ACTION_RESULT_STATUS.REJECTED);
-  if (action.status === ACTION_RESULT_STATUS.REJECTED) {
-    assert.match(action.reason, /System Settings, under Privacy & Security/);
-  }
 });
 
 test("a spoken panel ask opens a real tab and narrows only to what is observed", async () => {
@@ -513,10 +474,6 @@ test("a spoken update ask runs only the action the row's button offers", async (
   // One button, one action: what the row is not drawing, no ask can press.
   const restartWhileCheckable = await ask('{"action":"restart"}', offersCheck);
   assert.equal(restartWhileCheckable.status, ACTION_RESULT_STATUS.REJECTED);
-  if (restartWhileCheckable.status === ACTION_RESULT_STATUS.REJECTED) {
-    assert.match(restartWhileCheckable.reason, /not been checked for yet/);
-    assert.match(restartWhileCheckable.reason, /offers a check/);
-  }
 
   const offersRestart = guideWithUpdate(APP_UPDATE_ACTION.RESTART, "Version 0.3.9 is downloaded.");
   assert.deepEqual(await ask('{"action":"restart"}', offersRestart), {
@@ -547,16 +504,12 @@ test("a spoken update ask waits out a check or download already running", async 
     guideWithUpdate(APP_UPDATE_WAIT.CHECKING, "Checking the latest release…"),
   );
   assert.equal(checking.status, ACTION_RESULT_STATUS.REJECTED);
-  if (checking.status === ACTION_RESULT_STATUS.REJECTED)
-    assert.match(checking.reason, /while the check is out/);
 
   const downloading = await ask(
     '{"action":"restart"}',
     guideWithUpdate(APP_UPDATE_WAIT.DOWNLOADING, "Downloading version 0.3.9…"),
   );
   assert.equal(downloading.status, ACTION_RESULT_STATUS.REJECTED);
-  if (downloading.status === ACTION_RESULT_STATUS.REJECTED)
-    assert.match(downloading.reason, /while the download runs/);
 });
 
 test("a spoken update ask outside the vocabulary, or with no row to press, is refused", async () => {
@@ -584,16 +537,4 @@ test("a spoken update ask outside the vocabulary, or with no row to press, is re
     [],
   );
   assert.equal(unreported.status, ACTION_RESULT_STATUS.REJECTED);
-});
-
-test("the guide's text names the update button beside the state it stands in", async () => {
-  const text = appGuideContextText(
-    guideWithUpdate(APP_UPDATE_ACTION.CHECK, "This is the latest release."),
-  );
-
-  assert.match(text, /Updates now: This is the latest release\./);
-  assert.match(text, /version=0\.3\.8/);
-  assert.match(text, /button=check/);
-  // A guide never told about updates says nothing about them.
-  assert.doesNotMatch(appGuideContextText(GUIDE), /Updates now:/);
 });

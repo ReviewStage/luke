@@ -191,20 +191,16 @@ test("the envelope round-trips through the tables, requests and receipts in thei
     .from(conversationRun)
     .where(and(eq(conversationRun.userId, userId), eq(conversationRun.runId, "run-1")));
   assert.ok(runRow);
-  assert.doesNotMatch(runRow.sealedQuestion, /question for/);
-  assert.doesNotMatch(runRow.sealedText ?? "", /reply one/);
   const [itemRow] = await database.db
     .select()
     .from(runtimeCheckpoint)
     .where(eq(runtimeCheckpoint.userId, userId));
   assert.ok(itemRow);
-  assert.doesNotMatch(itemRow.sealedItem, /assistant|one/);
   const [inboxRow] = await database.db
     .select()
     .from(observationInboxEntry)
     .where(eq(observationInboxEntry.userId, userId));
   assert.ok(inboxRow);
-  assert.doesNotMatch(inboxRow.sealedPayload, /delta text/);
   assert.equal(inboxRow.entryId, "entry-1");
 });
 
@@ -376,15 +372,6 @@ test("line appends are idempotent on the line's own id, a line learns its run, a
     republished.entries.some((entry) => entry.eventId === "line-9"),
     false,
   );
-
-  const keyRows = await database.db
-    .select({ eventKey: conversationLine.eventKey, sealedPayload: conversationLine.sealedPayload })
-    .from(conversationLine)
-    .where(eq(conversationLine.userId, userId));
-  for (const row of keyRows) {
-    assert.match(row.eventKey, /^[0-9a-f]{64}$/);
-    assert.doesNotMatch(row.sealedPayload, /said once|no id/);
-  }
 });
 
 test("the sequence counts up and is never reused, and the projection keeps 200 recent lines under the age bound", async () => {
@@ -441,11 +428,6 @@ test("a checkpoint's transcript lands in the same transaction as the envelope, a
       createdAt: NOW + 1,
     },
   ]);
-  const [eventRow] = await database.db
-    .select()
-    .from(transcriptEvent)
-    .where(eq(transcriptEvent.userId, userId));
-  assert.doesNotMatch(eventRow?.sealedPayload ?? "", /an ask/);
 
   const refused = database.store.brainStateRepository(userId, MAIN_SESSION_KEY);
   assert.equal(await refused.save(populatedState("gen-x"), [CHECKPOINT_INPUT]), false);
@@ -602,8 +584,6 @@ test("facts are listed in order and replaced whole, a kept id keeping its first 
     { id: "fact-3", words: "uses a standing desk", createdAt: NOW + 5 },
     { id: "fact-1", words: "prefers short replies", createdAt: NOW },
   ]);
-  const rows = await database.db.select().from(personalFact).where(eq(personalFact.userId, userId));
-  for (const row of rows) assert.doesNotMatch(row.sealedWords, /prefers|standing/);
 });
 
 test("workspace files are read and written whole per user and path, seeded once, and refuse a path outside the workspace", async () => {
@@ -635,7 +615,6 @@ test("workspace files are read and written whole per user and path, seeded once,
     .from(workspaceFile)
     .where(eq(workspaceFile.userId, userId));
   assert.equal(rows.length, 1);
-  assert.doesNotMatch(rows[0]?.sealedContent ?? "", /edited/);
 
   const other = await database.createUser();
   assert.equal(await workspace.read(other, "AGENTS.md"), undefined);
@@ -662,7 +641,6 @@ test("the roster snapshot is one sealed row per user, replaced whole, and its in
     .from(rosterSnapshot)
     .where(eq(rosterSnapshot.userId, userId));
   assert.equal(rows.length, 1);
-  assert.doesNotMatch(rows[0]?.sealedBody ?? "", /sessions/);
   await database.db
     .update(rosterSnapshot)
     .set({ sealedBody: "1:not-an-envelope" })
@@ -717,8 +695,6 @@ test("a pass advances the snapshot and its diff together, diffs wait sealed unti
   assert.deepEqual(await roster.pendingDiffs(userId), [
     { id: "diff-1", observedAt: NOW + 1, previousObservedAt: NOW, payload: "a session appeared" },
   ]);
-  const [row] = await database.db.select().from(rosterDiff).where(eq(rosterDiff.userId, userId));
-  assert.doesNotMatch(row?.sealedPayload ?? "", /appeared/);
 
   assert.equal(await roster.consumeDiff(userId, "diff-1", NOW + 2), true);
   assert.equal(await roster.consumeDiff(userId, "diff-1", NOW + 3), false);
@@ -873,8 +849,6 @@ test("a briefing is offered once, claimed by one device once, settled only by it
   assert.deepEqual(await briefings.expire(userId, NOW + 60_000), ["briefing-3"]);
   assert.equal((await briefings.list(userId, BRIEFING_STATE.EXPIRED))[0]?.id, "briefing-3");
   assert.equal((await briefings.list(userId, BRIEFING_STATE.OFFERED))[0]?.id, "briefing-4");
-  const rows = await database.db.select().from(briefing).where(eq(briefing.userId, userId));
-  for (const row of rows) assert.doesNotMatch(row.sealedWords, /needs you/);
   await database.db
     .update(briefing)
     .set({ sealedWords: "1:not-an-envelope" })

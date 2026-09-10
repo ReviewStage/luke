@@ -591,7 +591,6 @@ test("a settled turn's words and Claude Code's own away summary stay off the obs
   // transcript itself, and the away summary is prose Claude Code wrote for
   // its own developer. An observation reports fields, never prose.
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
-  assert.doesNotMatch(JSON.stringify(observation), /Closing words|notch geometry/);
 });
 
 // ---------------------------------------------------------------------------

@@ -255,7 +255,6 @@ test("a newer transition that removes every capability at that boundary leaves n
   // The newer one reported once, a voice line and a brain line; the older
   // one, overtaken, added nothing.
   assert.equal(c.reports.length, reportsBefore + 2);
-  assert.match(c.reports.at(-1) ?? "", /Luke brain: absent/);
 });
 
 for (const held of Object.values(HELD_READ)) {

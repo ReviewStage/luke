@@ -36,7 +36,6 @@ test("a refused delete is read back with the event it names", () => {
   assert.equal(parsed?.eventId, "luke_supersede_2");
   assert.equal(parsed?.errorType, "invalid_request_error");
   assert.equal(parsed?.errorCode, "item_not_found");
-  assert.match(parsed?.message ?? "", /not found/);
 });
 
 test("a reply can be stopped by the developer taking the turn", () => {

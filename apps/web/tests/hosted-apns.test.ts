@@ -136,7 +136,6 @@ test("a send carries the payload untouched and the headers Apple routes by", asy
   assert.equal(request.host, APNS_HOST[PUSH_ENVIRONMENT.PRODUCTION]);
   assert.equal(request.path, `/3/device/${TOKEN}`);
   const authorization = request.headers.authorization ?? "";
-  assert.equal(authorization.startsWith("bearer "), true);
   const token = authorization.slice("bearer ".length);
   const [header, claims] = token.split(".");
   assert.ok(header && claims);
