@@ -10,4 +10,5 @@ export * from "./roster-schema.js";
 export * from "./storage-schema.js";
 export * from "./usage-schema.js";
 export * from "./vault-schema.js";
+export * from "./voice-schema.js";
 export * from "./workspace-schema.js";

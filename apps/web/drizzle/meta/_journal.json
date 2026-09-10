@@ -120,6 +120,13 @@
       "when": 1789077416884,
       "tag": "0016_b2_events_prompts_tool_sets_cursors",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1789079396109,
+      "tag": "0017_b3_voice_sessions_segments",
+      "breakpoints": true
     }
   ]
 }
