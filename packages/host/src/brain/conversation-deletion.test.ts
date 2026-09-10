@@ -133,6 +133,7 @@ function composed(t: TestContext) {
   const followers = new Map<BrainAgent, () => Promise<void>>();
   const build = (client: BareResponsesModel) => {
     const agent = new BrainAgent({
+      conversationId: MAIN_SESSION_KEY,
       runtime: toolLoopRuntimeOver(bareModelAdapter(client)),
       observes: { kind: LOOK_SUBJECT.NONE },
       prepareTurn: () => ({ prompt: "instructions", layers: {} }),

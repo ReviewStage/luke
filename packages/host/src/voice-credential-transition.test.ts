@@ -18,7 +18,7 @@ import {
   hostedBrainBounds,
 } from "@sidecar/hosted";
 import { drainMicrotasks } from "@sidecar/runtime/testing";
-import { REASONING_EFFORT } from "@sidecar/runtime/vocabulary";
+import { MAIN_SESSION_KEY, REASONING_EFFORT } from "@sidecar/runtime/vocabulary";
 import { APP_SETTING_SCHEMA, VOICE_SOURCE, type VoiceSource } from "@sidecar/settings";
 import { VoiceCapabilityAssembler, type VoiceSettings } from "@sidecar/voice";
 import { BrainHost } from "./brain/host.js";
@@ -137,6 +137,7 @@ function composition() {
       if (!model) return undefined;
       builds.push(model.model ?? "hosted");
       return new BrainAgent({
+        conversationId: MAIN_SESSION_KEY,
         runtime: toolLoopRuntimeOver(model),
         observes: { kind: LOOK_SUBJECT.NONE },
         prepareTurn: () => ({ prompt: "instructions", layers: {} }),

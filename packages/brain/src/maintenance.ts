@@ -16,6 +16,7 @@ import {
   reserveTokens,
 } from "./compaction.js";
 import { CONTEXT_OPENING } from "./generation.js";
+import { turnCompactionOf } from "./run-events.js";
 import type { AgentSeam } from "./seam.js";
 import { claimedUnlessAborted, type Settled, settledUnlessAborted } from "./settled.js";
 import {
@@ -95,7 +96,7 @@ export class Maintenance {
     countedTokens: number | undefined,
     abort: AbortController,
   ): Promise<void> {
-    const { generation, context } = turnContext;
+    const { generation, context, events } = turnContext;
     if (
       abort.signal.aborted ||
       this.#seam.stopped() ||
@@ -115,7 +116,7 @@ export class Maintenance {
       const prepared = await this.#options.prepareTurn({ kind: BRAIN_TURN_KIND.MAINTENANCE });
       if (signal.aborted || generation !== this.#seam.generation()) return;
       const compacted = await this.compactIfNeeded(
-        { generation, context, signal },
+        { generation, context, signal, events },
         prepared.prompt,
         countedTokens,
       );
@@ -162,6 +163,10 @@ export class Maintenance {
     if (!(await this.#seam.ledger.checkpoint(turnContext))) {
       return { ok: false, reason: "the compacted context could not be checkpointed" };
     }
+    // The fold is told once it is on record, and to the turn whose sequence it
+    // belongs in: the turn about to run, or the settled turn that queued this
+    // maintenance, whose events it follows.
+    turnContext.events.compacted(turnCompactionOf(outcome));
     return { ok: true };
   }
 

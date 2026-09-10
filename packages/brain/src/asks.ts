@@ -19,8 +19,8 @@ import {
 } from "./requests.js";
 import type { AgentSeam } from "./seam.js";
 import type { BrainStateStore } from "./state-store.js";
-import { BRAIN_TURN_TRIGGER, type RunControl } from "./turn.js";
-import { type ActiveExecution, type AskInput, newRunControl } from "./turn-runner.js";
+import { type AskInput, BRAIN_TURN_TRIGGER, newRunControl, type RunControl } from "./turn.js";
+import type { ActiveExecution } from "./turn-runner.js";
 
 export type BrainRequestsListener = (records: readonly BrainRequestRecord[]) => void;
 
@@ -347,6 +347,7 @@ export class AskLedger {
     const text = askInputText(input.text, [], this.#seam.now());
     if (!active.started.steer({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text })) return false;
     active.riders.push(run);
+    active.events.adopt(run.runId);
     // The one place a rider is committed running: its words are in the model's
     // hands, and the run it rides is the run it ends with.
     void this.#seam.ledger

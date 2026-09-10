@@ -563,6 +563,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     // host with none leaves the agent to refuse the tools itself.
     const memory = memoryFor(sessionKey);
     return new BrainAgent({
+      conversationId: sessionKey,
       observes: observed
         ? { kind: LOOK_SUBJECT.SESSION, identity: observed }
         : { kind: LOOK_SUBJECT.NONE },

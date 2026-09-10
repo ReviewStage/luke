@@ -5,6 +5,7 @@ import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import {
   COMPACTION_SOURCE,
   CONTEXT_INPUT_KIND,
+  MAIN_SESSION_KEY,
   MODEL_RESPONSE_OUTCOME,
   type ModelAdapter,
   type ModelCapabilities,
@@ -31,6 +32,7 @@ import {
   BRAIN_SUBMISSION_OUTCOME,
 } from "./requests.js";
 import { responsesModelAnswer, userMessageItem } from "./responses-api.js";
+import { BRAIN_RUN_EVENT, type BrainRunEvent } from "./run-events.js";
 import { ToolLoopAgentRuntime } from "./runtime.js";
 import { BrainStateStore } from "./state-store.js";
 import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
@@ -245,6 +247,7 @@ test("an explicit compaction is asked over the retained items alone, adopted who
     compacted: true,
     source: COMPACTION_SOURCE.LOCAL_SUMMARY,
     dropped: 2,
+    summary: `${LOCAL_SUMMARY_MARKER}\nfolded words`,
   });
   assert.equal(toolsOffered, 0);
   assert.deepEqual(
@@ -294,6 +297,7 @@ function agentOver(model: ModelAdapter, repository: FakeBrainStateRepository) {
   });
   const reports: string[] = [];
   const agent = new BrainAgent({
+    conversationId: MAIN_SESSION_KEY,
     runtime,
     observes: { kind: LOOK_SUBJECT.NONE },
     prepareTurn: () => ({ prompt: "instructions", layers: {} }),
@@ -350,6 +354,8 @@ test("a turn's inputs travel into the transcript with the checkpoint, and option
     },
   });
   const { agent } = agentOver(model, repository);
+  const events: BrainRunEvent[] = [];
+  agent.onRunEvent((event) => events.push(event));
   const accepted = await agent.submitAsk({
     submissionId: "s1",
     question: "hello",
@@ -360,6 +366,16 @@ test("a turn's inputs travel into the transcript with the checkpoint, and option
   const record = agent.requests()[0];
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assert.equal(compacted, 1);
+  // The maintenance fold is told to the turn that queued it, after that
+  // turn's own end and its record's, in the same numbered sequence.
+  const turnEnded = events.findIndex((event) => event.kind === BRAIN_RUN_EVENT.TURN_ENDED);
+  const folded = events.findIndex((event) => event.kind === BRAIN_RUN_EVENT.COMPACTION_COMPLETED);
+  assert.ok(turnEnded >= 0 && folded > turnEnded);
+  const fold = events[folded];
+  assert.ok(fold?.kind === BRAIN_RUN_EVENT.COMPACTION_COMPLETED);
+  assert.equal(fold.turnId, record?.runId);
+  assert.equal(fold.sequence, events.length);
+  assert.deepEqual(fold.compaction, { source: COMPACTION_SOURCE.PROVIDER_EXPLICIT, dropped: 2 });
   const kinds = repository.transcripts.flat().map((event) => event.kind);
   assert.deepEqual(kinds, [
     TRANSCRIPT_EVENT_KIND.CONTEXT_INPUT,

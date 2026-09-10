@@ -193,8 +193,9 @@ function outputTextFromContent(content: UnparsedWireValue): string {
 
 /**
  * A reasoning item's summary in words, or nothing for an item that is not a
- * reasoning item or carries no words: the parts are joined as paragraphs, and
- * the item's `encrypted_content` is never read.
+ * reasoning item or carries no words: the parts are joined as paragraphs, the
+ * item's `encrypted_content` is lifted beside them for a replay to carry and
+ * read for nothing else, and the item rides along whole.
  */
 function reasoningSummaryFromItem(item: WireRecord): ReasoningSummary | undefined {
   if (item.type !== RESPONSES_INPUT_ITEM_TYPE.REASONING) return undefined;
@@ -203,7 +204,14 @@ function reasoningSummaryFromItem(item: WireRecord): ReasoningSummary | undefine
   const summary = joinReplyMessages(
     partTexts(item.summary, RESPONSES_CONTENT_PART_TYPE.SUMMARY_TEXT),
   );
-  return summary.length > 0 ? { itemId, summary } : undefined;
+  if (summary.length === 0) return undefined;
+  const encryptedContent = text(item.encrypted_content);
+  return {
+    itemId,
+    summary,
+    ...(encryptedContent ? { encryptedContent } : undefined),
+    item,
+  };
 }
 
 function functionCallFromItem(item: WireRecord): BrainFunctionCall | undefined {

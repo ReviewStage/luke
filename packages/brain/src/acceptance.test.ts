@@ -35,6 +35,7 @@ import {
   type ContextInput,
   type ContextLifecycle,
   type ContextOpening,
+  MAIN_SESSION_KEY,
   MEMORY_SCOPE_KIND,
   type MemoryDefinition,
   type ModelAdapter,
@@ -290,6 +291,7 @@ function host(
     lastActivityAt: NOW,
   });
   const agent = new BrainAgent({
+    conversationId: MAIN_SESSION_KEY,
     runtime: runtimeOver(model),
     observes: { kind: LOOK_SUBJECT.NONE },
     prepareTurn: () => ({ prompt: "instructions", layers: {} }),

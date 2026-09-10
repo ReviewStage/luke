@@ -6,6 +6,7 @@ import type {
   MemoryDefinition,
   ReasoningEffort,
   ScheduledTimer,
+  SessionKey,
 } from "@sidecar/runtime/vocabulary";
 import type {
   ProviderTranscriptResult,
@@ -41,7 +42,7 @@ import {
   interruptedUnfinishedRequests,
   isTerminalBrainRequestStatus,
 } from "./requests.js";
-import { BRAIN_RUN_EVENT, type BrainRunEvent } from "./run-events.js";
+import type { BrainRunEvent } from "./run-events.js";
 import type { AgentSeam } from "./seam.js";
 import type { BrainStateStore } from "./state-store.js";
 import { SteeredDeliveries } from "./steered-deliveries.js";
@@ -54,6 +55,7 @@ import {
   type BrainTurnTrigger,
   type RunControl,
 } from "./turn.js";
+import { TurnEvents } from "./turn-events.js";
 import { type BrainOpeningNotes, TurnRunner } from "./turn-runner.js";
 import type { BrainDelivery, BrainTurnReport, BrainWakeEvent } from "./wake-events.js";
 import { type LookSubject, WakeCapture } from "./wakes.js";
@@ -70,6 +72,8 @@ export { LOOK_SUBJECT } from "./wakes.js";
 type BrainLane = <T>(trigger: BrainTurnTrigger, work: () => Promise<T>) => Promise<T>;
 
 export interface BrainAgentOptions {
+  /** The conversation this agent is: the key every run event names, which is the conversation's id in this build. */
+  conversationId: SessionKey;
   /** The execution the host runs turns on; it decides how a model and its tools loop, and it alone reaches the model. */
   runtime: AgentRuntime;
   actions: BrainActionPerformer;
@@ -219,10 +223,14 @@ export class BrainAgent {
   readonly #runEvents = new Emitter<BrainRunEvent>();
 
   /**
-   * What each recorded run tells as it goes — its slow step, its actions
-   * settling, its reply a sentence at a time, its end — for a host relaying
-   * the run into a live conversation. Delivered in that order per run, for
-   * recorded runs alone, and a listener that throws ends no turn.
+   * What every turn tells as it goes, whichever kind opened it. A recorded
+   * run's moments — its slow step, its actions settling, its reply a sentence
+   * at a time, its record's end — come in that order for a host relaying the
+   * run into a live conversation, and only for recorded runs. Around them,
+   * every turn tells its start, each tool call before and after it runs, each
+   * reasoning item, each message it completed, each compaction it folded, and
+   * its end, each event stamped with the conversation, the turn, and its
+   * place in the turn's sequence. A listener that throws ends no turn.
    */
   readonly onRunEvent: Event<BrainRunEvent> = this.#runEvents.event;
 
@@ -245,16 +253,21 @@ export class BrainAgent {
       now: this.#now,
       report: this.#report,
       notify: () => this.#asks.notify(),
-      runEnded: (record) =>
-        this.#fireRunEvent({
-          kind: BRAIN_RUN_EVENT.ENDED,
-          runId: record.runId,
-          status: record.status,
-          ...(record.text !== undefined ? { text: record.text } : undefined),
-          ...(record.failure !== undefined ? { failure: record.failure } : undefined),
-          ...(record.usage !== undefined ? { usage: record.usage } : undefined),
-          ...(record.responseIds !== undefined ? { responseIds: record.responseIds } : undefined),
-        }),
+      // A record's end is numbered in the turn it rode in; one that never
+      // opened a turn — cancelled while queued, refused at the door — is a
+      // turn of its own with this one event.
+      runEnded: (record) => {
+        const events =
+          this.#turns.takeEvents(record.runId) ??
+          new TurnEvents({
+            conversationId: options.conversationId,
+            turnId: record.runId,
+            fire: (event) => this.#fireRunEvent(event),
+            createMessageId: options.createRunId,
+            now: this.#now,
+          });
+        events.recordEnded(record);
+      },
     });
     const seam: AgentSeam = {
       now: this.#now,
@@ -281,6 +294,7 @@ export class BrainAgent {
     });
     this.#turns = new TurnRunner({
       seam,
+      conversationId: options.conversationId,
       runtime: options.runtime,
       actions: options.actions,
       roster: options.roster,
