@@ -263,3 +263,11 @@ export {
   type RosterDiffRecord,
   type RosterSnapshotRecord,
 } from "./roster-snapshot.js";
+
+export {
+  type ConversationTarget,
+  STORE_WRITE_EFFECT,
+  STORE_WRITE_REFUSAL,
+  type StoreWriteResult,
+  storeWriter,
+} from "./writer.js";

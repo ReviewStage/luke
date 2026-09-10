@@ -344,9 +344,47 @@ prompt written by every turn is one row a turn's hash names without a foreign
 key. A provider cursor is where the observation of one provider session last
 reached, one row per session per account, advanced in the same transaction as
 the observation message it produced and referenced by no message. Nothing in
-these tables is sealed, and nothing reads or writes them yet: the store writer
-lands on them in its own change, and the v1 tables are dropped only after
-every reader has moved.
+these tables is sealed, and nothing reads them yet: the v1 tables are dropped
+only after every reader has moved.
+
+The store writer, `server/hosted/store/writer.ts`, is the one path by which a
+`messages`, `turns`, or `events` row is written, and
+`tests/store-writer-boundary.test.ts` holds the server's import graph to that:
+the writer is the one server module that imports any of the three tables. It
+consumes the brain's run event stream (`BrainRunEvent`, every kind of turn)
+for a conversation the caller names by its row id and account. A turn row
+goes from queued (written ahead of the stream by `enqueueTurn`, or at the
+turn's start where nothing queued it) through running to settled, cancelled,
+or failed, carrying the origin it was queued under, its usage split four ways,
+its response ids where the runtime has them, and its failure word. Each user
+message the turn opened with lands as its own row by the message's id. The
+turn's answer is one assistant message keyed by the turn's id, and while the
+turn runs that row is its journal: a tool call is written in `input-available`
+before it executes and moved to `output-available` or `output-error` as its
+result lands, a reasoning summary is written as it completes, and the turn's
+completed message replaces the journal's parts whole and sets `finished_at`
+once, after which the row is immutable and a late event for it is refused. A
+turn that ends with a call still unanswered settles the call as an error,
+since nothing will answer it now, and closes the row; a writer that dies
+between the call and its result leaves the part in `input-available`, which
+is what a resume reads. A compaction is written by its owner through
+`recordCompaction`, because the stream's compaction event names neither the
+first kept message nor, under eve, the summary's text; an event about a
+message goes through `recordEvent`, numbered by the conversation's event
+sequence, and a second `speech.claimed` on one message is answered as already
+claimed rather than left to the partial unique index. Every write is
+idempotent — a message by `(conversation_id, client_id)`, a turn by its id, a
+tool part by its call id, a reasoning part by its item's id — so an event
+delivered twice writes one row and a replayed stream changes nothing, and
+every message is held to the vocabulary before it lands, through the same
+`readStoredUIMessages` a read goes through, so no row can carry a tool the
+catalog does not register, an input its schema refuses, or metadata outside
+the set; a message the reader would refuse is refused whole and reported,
+never cut down to the parts that would pass. Every write runs under a lock on
+the conversation row, which no write reaches once Clear has stamped it; the
+sequences come from the row's counters, each allocation landing on the first
+position no row holds, so the unique `(conversation_id, seq)` constraint is
+the backstop for a writer outside the lock and nothing the writer retries.
 
 Voice is stored beside them the way a call platform stores a call, under
 `server/db/voice-schema.ts`: `voice_sessions` and `voice_transcript_segments`.

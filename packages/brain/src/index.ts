@@ -120,6 +120,7 @@ export {
   type BrainTurnTrigger,
   runOriginOf,
 } from "./turn.js";
+export { settledToolPart, toolPartType, UI_PART_STATE, UI_PART_TYPE } from "./ui-messages.js";
 export {
   BRAIN_WAKE_KIND,
   type BrainDelivery,

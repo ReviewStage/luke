@@ -266,6 +266,9 @@ importers:
       '@vitejs/plugin-react':
         specifier: 5.1.2
         version: 5.1.2(vite@7.3.1(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0))
+      ai:
+        specifier: 7.0.97
+        version: 7.0.97(zod@4.5.4)
       drizzle-kit:
         specifier: 0.31.10
         version: 0.31.10
@@ -278,6 +281,9 @@ importers:
       vite:
         specifier: 7.3.1
         version: 7.3.1(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0)
+      zod:
+        specifier: 4.5.4
+        version: 4.5.4
 
   packages/actions:
     dependencies:

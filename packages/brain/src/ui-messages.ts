@@ -114,7 +114,8 @@ function reasoningPart(reasoning: ReasoningSummary): ReasoningUIPart {
   };
 }
 
-function settledToolPart(part: ToolPart, settlement: ToolCallSettlement): ToolPart {
+/** A tool part in the state its call settled in: the answer's output, or the error's own text. */
+export function settledToolPart(part: ToolPart, settlement: ToolCallSettlement): ToolPart {
   const call = { type: part.type, toolCallId: part.toolCallId };
   return settlement.state === TOOL_CALL_SETTLEMENT.OUTPUT_ERROR
     ? {

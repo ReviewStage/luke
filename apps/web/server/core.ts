@@ -46,4 +46,5 @@ export * from "../../../packages/hosted/src/index.js";
 export * from "../../../packages/realtime/src/index.js";
 export * from "../../../packages/runtime/src/vocabulary.js";
 export * from "../../../packages/session/src/index.js";
+export * from "../../../packages/session/src/ui-messages/index.js";
 export * from "../../../packages/wire/src/index.js";
