@@ -27,9 +27,9 @@ class FakeCall implements LiveVoiceCall {
 
   constructor(readonly events: LiveVoiceCallEvents) {}
 
+  /** As the real call answers it: no peer stands until the session is answered, so a connecting call is not standing. */
   get standing(): boolean {
     return (
-      this.status === LIVE_STATUS.CONNECTING ||
       this.status === LIVE_STATUS.MUTED ||
       this.status === LIVE_STATUS.LISTENING ||
       this.status === LIVE_STATUS.SPEAKING
@@ -388,10 +388,12 @@ test("a stop while a press's session is still opening leaves it muted", async ()
   const pressed = f.orchestrator.beginTalk();
   const call = f.latest();
   assert.ok(call);
-  await f.orchestrator.stopSpeaking();
+  assert.equal(call.standing, false);
+  assert.equal(await f.orchestrator.stopSpeaking(), true);
   call.started();
   await pressed;
   assert.equal(call.unmutes, 0);
+  assert.equal(call.mutes, 0);
   assert.equal(call.status, LIVE_STATUS.MUTED);
 });
 

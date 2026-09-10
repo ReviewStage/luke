@@ -169,9 +169,14 @@ export class LiveVoiceOrchestrator {
    * opening, it cancels that press's unmute, so the session opens muted.
    */
   async stopSpeaking(): Promise<boolean> {
+    // A session still being opened has no peer to mute yet; the stop is
+    // remembered for the press, which then leaves the session muted.
+    if (this.#opening) {
+      this.#pressStopped = true;
+      return true;
+    }
     const call = this.#call;
     if (!call?.standing) return false;
-    if (this.#opening) this.#pressStopped = true;
     await call.mute();
     return true;
   }
