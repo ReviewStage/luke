@@ -54,6 +54,7 @@ const route: Route = {
       forgetIneligible: async (seenAfter) => {
         await store?.roster.forgetIneligible({ providerIds: CLOUD_PROVIDER_IDS, seenAfter });
       },
+      purgeCleared: async (now) => (store ? store.retention.purgeCleared(new Date(now)) : 0),
       observe: async (userId) => {
         if (!store || !encryptionSecret) return { complete: false, changed: false };
         const rows = await database

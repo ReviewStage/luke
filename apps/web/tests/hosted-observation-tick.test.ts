@@ -26,6 +26,7 @@ function tickRequest(authorization: string | null = `Bearer ${CRON_SECRET}`): Re
 /** What one tick was asked to do, recorded for the test to read back. */
 interface Recorded {
   forgot: number[];
+  purged: number[];
   listed: Array<{ limit: number; seenAfter: number }>;
   observed: string[];
 }
@@ -38,7 +39,7 @@ function tickOptions(
     changed: false,
   }),
 ) {
-  const recorded: Recorded = { forgot: [], listed: [], observed: [] };
+  const recorded: Recorded = { forgot: [], purged: [], listed: [], observed: [] };
   const options: ObservationTickOptions = {
     request: tickRequest(),
     cronSecret: CRON_SECRET,
@@ -49,6 +50,10 @@ function tickOptions(
     },
     forgetIneligible: async (seenAfter) => {
       recorded.forgot.push(seenAfter);
+    },
+    purgeCleared: async (now) => {
+      recorded.purged.push(now);
+      return 2;
     },
     observe: async (userId) => {
       recorded.observed.push(userId);
@@ -111,9 +116,11 @@ test("a tick forgets the ineligible, lists accounts seen within the week, and ob
     failed: 1,
     changed: 1,
     exhausted: false,
+    purged: 2,
   });
   const seenAfter = TICK_TIME - OBSERVATION_TICK.ACCOUNT_SEEN_WITHIN_MS;
   assert.deepEqual(recorded.forgot, [seenAfter]);
+  assert.deepEqual(recorded.purged, [TICK_TIME]);
   assert.deepEqual(recorded.listed, [{ limit: OBSERVATION_TICK.MAX_ACCOUNTS, seenAfter }]);
   assert.deepEqual(recorded.observed, ["user-a", "user-b", "user-c"]);
 });
@@ -132,6 +139,7 @@ test("a pass that throws is counted as failed and does not end the tick", async 
     failed: 1,
     changed: 0,
     exhausted: false,
+    purged: 2,
   });
 });
 
@@ -151,6 +159,7 @@ test("a tick starts a batch only while a whole pass deadline still fits its budg
 
   const body = await response.json();
   assert.equal(body.exhausted, true);
+  assert.equal(body.purged, 2);
   assert.equal(body.accounts, OBSERVATION_TICK.CONCURRENCY);
   assert.equal(recorded.observed.length, OBSERVATION_TICK.CONCURRENCY);
 });
@@ -170,6 +179,7 @@ test("a pass that outruns its deadline is counted failed and the tick moves on",
     failed: 1,
     changed: 1,
     exhausted: false,
+    purged: 2,
   });
 });
 

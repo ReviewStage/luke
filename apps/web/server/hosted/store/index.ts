@@ -1,3 +1,4 @@
+import type { ToolSet } from "ai";
 import {
   type BrainPersistedState,
   type BrainStateLoad,
@@ -36,6 +37,16 @@ import {
 import { type HostedStoreContext, userSeal } from "./database.js";
 import { type FactWrite, listFacts, replaceFacts, type StoredFact } from "./facts.js";
 import {
+  listEvents,
+  listMessages,
+  listTurns,
+  type MessageListRead,
+  type SequenceCursor,
+  type StoredEventRecord,
+  type StoredTurnRecord,
+  type TurnCursor,
+} from "./message-reads.js";
+import {
   advanceRosterSnapshot,
   consumeRosterDiff,
   forgetObservationIneligible,
@@ -52,6 +63,11 @@ import {
   writeRosterSnapshot,
 } from "./roster-snapshot.js";
 import { type RunAboutFields, recordRunAbout, runAbout } from "./run-about.js";
+import {
+  type ClearOutcome,
+  clearMainConversation,
+  purgeClearedConversations,
+} from "./soft-delete.js";
 import {
   listCompactionBoundaries,
   listTranscript,
@@ -93,6 +109,40 @@ export interface HostedStore {
     create(userId: string, creation: ConversationCreation): Promise<ConversationRecord>;
     /** The hard delete: the conversation and every row under it, with no archive behind them. */
     delete(userId: string, sessionKey: SessionKey): Promise<boolean>;
+  };
+  /**
+   * The v2 rows: cursor reads a device polls, over the `messages`, `events`,
+   * and `turns` tables, and the Clear that stamps the main conversation
+   * rather than erasing it. Every read skips a conversation the Clear
+   * stamped, so a cleared main is gone from the call after it.
+   */
+  messages: {
+    /** Messages after `after` in sequence order, read back under the registry; a page with an unreadable row is refused whole. */
+    list(
+      userId: string,
+      conversationId: string,
+      tools: ToolSet,
+      cursor?: SequenceCursor,
+    ): Promise<MessageListRead>;
+  };
+  events: {
+    list(
+      userId: string,
+      conversationId: string,
+      cursor?: SequenceCursor,
+    ): Promise<readonly StoredEventRecord[]>;
+  };
+  turns: {
+    /** The account's turns in the order they last changed, so a settlement is answered again. */
+    list(userId: string, cursor?: TurnCursor): Promise<readonly StoredTurnRecord[]>;
+  };
+  main: {
+    /** Clear: stamps the standing main and its descendants and opens a new main, in one transaction. */
+    clear(userId: string, now: Date): Promise<ClearOutcome>;
+  };
+  retention: {
+    /** The cron's purge of every conversation, of any account, stamped past the retention window. */
+    purgeCleared(now: Date): Promise<number>;
   };
   lines: {
     append(
@@ -201,6 +251,22 @@ export function hostedStore({ db, keys }: HostedStoreContext): HostedStore {
       create: (userId, creation) => createConversation(db, userId, creation),
       delete: (userId, sessionKey) => deleteConversation(db, userId, sessionKey),
     },
+    messages: {
+      list: (userId, conversationId, tools, cursor) =>
+        listMessages(db, userId, conversationId, tools, cursor),
+    },
+    events: {
+      list: (userId, conversationId, cursor) => listEvents(db, userId, conversationId, cursor),
+    },
+    turns: {
+      list: (userId, cursor) => listTurns(db, userId, cursor),
+    },
+    main: {
+      clear: (userId, now) => clearMainConversation(db, userId, now),
+    },
+    retention: {
+      purgeCleared: (now) => purgeClearedConversations(db, now),
+    },
     lines: {
       append: (userId, sessionKey, entries, now) =>
         appendConversationLines(db, sealFor(userId), userId, sessionKey, entries, now),
@@ -254,15 +320,16 @@ export function hostedStore({ db, keys }: HostedStoreContext): HostedStore {
 }
 
 export { BRIEFING_STATE } from "./briefings.js";
-
 export type { HostedStoreContext, HostedStoreDatabase } from "./database.js";
-
+export type { StoredMessageRecord } from "./message-reads.js";
 export {
   MAXIMUM_PENDING_ROSTER_DIFFS,
   type ObservationPassRecord,
   type RosterDiffRecord,
   type RosterSnapshotRecord,
 } from "./roster-snapshot.js";
+
+export { CLEARED_CONVERSATION_RETENTION_MS } from "./soft-delete.js";
 
 export {
   type ConversationTarget,
