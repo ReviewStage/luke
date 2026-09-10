@@ -94,8 +94,8 @@ function deeperPerformer(
   plugin: FakePlugin,
   settingsStore: Pick<SettingsStore, "get">,
   openExternal: (url: string, kind: HostNodeOpenKind) => Promise<void> = async () => {},
+  registry: SessionRoster = new SessionRoster(),
 ) {
-  const registry = new SessionRoster();
   registry.replaceProvider(plugin.provider, [WORKSPACE_OBSERVATION]);
   const unreachable = async () => {
     throw new Error("the CLI is not reached in these tests");
@@ -273,6 +273,28 @@ test("an open the brain carries tells the node it was asked of Luke, and a row p
     [HOST_NODE_OPEN_KIND.ASKED_SESSION, HOST_NODE_OPEN_KIND.ADDRESS],
   );
   assert.ok(node.opens.every((open) => open.url === WORKSPACE_LINK));
+});
+
+test("a session the roster has let go still opens at the address it last reported, and one never seen does not", async () => {
+  const node = recordingOpens();
+  const plugin = fakePlugin();
+  const registry = new SessionRoster();
+  const performer = deeperPerformer(plugin, heldSettings().store, node.openExternal, registry);
+  // Archived on its own surface: the next observation no longer lists it.
+  registry.replaceProvider(plugin.provider, []);
+  assert.equal(registry.get(WORKSPACE_IDENTITY), undefined);
+  assert.equal(
+    (await performer.openSession(WORKSPACE_IDENTITY)).status,
+    ACTION_RESULT_STATUS.ACCEPTED,
+  );
+  assert.deepEqual(node.opens, [{ url: WORKSPACE_LINK, kind: HOST_NODE_OPEN_KIND.ADDRESS }]);
+  // A session this run never observed has no address to remember.
+  const stranger = await performer.openSession({
+    providerId: WORKSPACE_IDENTITY.providerId,
+    providerSessionId: "never-observed",
+  });
+  assert.equal(stranger.status, ACTION_RESULT_STATUS.UNSUPPORTED);
+  assert.equal(node.opens.length, 1);
 });
 
 test("an open refused before the node, or lost at it, is answered without the node opening anything of its own", async () => {

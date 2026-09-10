@@ -37,6 +37,7 @@ import {
   isProviderId,
   type ProviderActionResult,
   type ProviderWorkspaceResult,
+  type Session,
   type SessionApplicationId,
   type SessionIdentity,
   type SessionOpenResult,
@@ -158,6 +159,9 @@ const REFUSAL = {
   OPEN_CHANGE_FAILED: OPEN_REFUSAL.CHANGE,
 } as const;
 
+/** How many departed sessions' addresses one provider keeps for the run; a roster is never near it. */
+const REMEMBERED_ADDRESSES_PER_PROVIDER = 200;
+
 export function createSessionActionPerformer(
   dependencies: SessionActionPerformerDependencies,
 ): SessionActionPerformer {
@@ -244,6 +248,37 @@ export function createSessionActionPerformer(
     }
   };
 
+  /**
+   * The address each observed session last reported, kept for this run only,
+   * so a press on the name of a chat the roster has since let go — archived
+   * on its provider's own surface, most often — still opens the address its
+   * provider gave it, which Conductor honours for an archived chat. Only the
+   * plain open reads it: an app association or a change is opened from the
+   * roster as it stands. Bounded per provider, oldest observation out first,
+   * and never written anywhere.
+   */
+  const lastAddresses = new Map<string, Map<string, string>>();
+  const rememberAddresses = (sessions: readonly Session[]): void => {
+    for (const session of sessions) {
+      const link = session.detail.link;
+      if (link === undefined) continue;
+      const known = lastAddresses.get(session.providerId) ?? new Map<string, string>();
+      known.delete(session.providerSessionId);
+      known.set(session.providerSessionId, link);
+      while (known.size > REMEMBERED_ADDRESSES_PER_PROVIDER) {
+        const oldest = known.keys().next().value;
+        if (oldest === undefined) break;
+        known.delete(oldest);
+      }
+      lastAddresses.set(session.providerId, known);
+    }
+  };
+  // The roster as it stands when the performer is built counts as observed too.
+  rememberAddresses(sessionRegistry.list());
+  sessionRegistry.subscribe(rememberAddresses);
+  const rememberedAddress = (identity: SessionIdentity): string | undefined =>
+    lastAddresses.get(identity.providerId)?.get(identity.providerSessionId);
+
   const openAddress = async (
     identity: SessionIdentity,
     address: (identity: SessionIdentity) => string | undefined,
@@ -252,9 +287,12 @@ export function createSessionActionPerformer(
     absentAddressReason: string,
     failureReason: string,
     kind: HostNodeOpenKind,
+    // The address the session last reported, for an open of a session the
+    // roster no longer holds; absent for the opens that read the roster alone.
+    remembered?: (identity: SessionIdentity) => string | undefined,
   ): Promise<SessionOpenResult> => {
     const observed = sessionRegistry.get(identity) !== undefined;
-    const url = observed ? address(identity) : undefined;
+    const url = observed ? address(identity) : remembered?.(identity);
     if (!url) {
       return {
         status: ACTION_RESULT_STATUS.UNSUPPORTED,
@@ -278,6 +316,7 @@ export function createSessionActionPerformer(
       REFUSAL.NO_ADDRESS,
       REFUSAL.OPEN_FAILED,
       kind,
+      (target) => pressedLink(rememberedAddress(target)),
     );
 
   const openSessionApplication = async (

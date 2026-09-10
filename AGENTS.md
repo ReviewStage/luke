@@ -170,9 +170,15 @@ Canonical commands:
   operating system, and nothing reaches the provider; an open asked of Luke
   still runs only under the effective tool policy, and a session that reported
   no address is offered nowhere to open. A Conversation line records the actions Luke
-  carried and the sessions they named, but draws no press of its own: a
-  session's address is reached by its row's press or by a validated ask in a
-  developer-opened turn, and by nothing else. A workspace Luke just
+  carried and the sessions they named, and the one press it draws is the
+  chip naming that session, which is the row's press by another hand: it
+  mints the same `session.open` act a row does, for the identity the line
+  recorded, and the host answers it from the roster as it stands or, for a
+  session the roster has since let go, from the address that session last
+  reported, which the host keeps in memory for the run and nowhere else. A
+  line that names no session — a workspace creation — draws no press. Beyond
+  that, a session's address is reached by its row's press or by a validated
+  ask in a developer-opened turn, and by nothing else. A workspace Luke just
   created opens itself the same way: the creation ask, already a
   developer-opened turn, is also the ask to be taken there, so the session id
   the provider's creation response named (the one thing read out of that
@@ -1231,7 +1237,8 @@ Canonical commands:
   no notice names a session, no chip previews an issue, and no press under
   the housing opens anything, so the words are the whole of what an
   announcement puts on screen, and a session's address is still reached only
-  by its row's press or a validated ask in a developer-opened turn.
+  by its row's press, the chip on one of its Conversation action lines, or a
+  validated ask in a developer-opened turn.
 
 Before handoff, run `./scripts/check.sh` for portable-only changes. For any
 macOS or UI change, `./scripts/verify.sh` is the completion invariant. Report

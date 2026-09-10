@@ -23,6 +23,7 @@ import {
   conversationEntryKey,
   SESSION_CONTROL_KIND,
   type SessionControlKind,
+  type SessionIdentity,
 } from "@sidecar/session";
 import { FACE_MOTION } from "@sidecar/surface";
 import { useEffect, useId, useRef, useState } from "react";
@@ -274,16 +275,20 @@ function ConversationMessageRow({
  * A line whose record cannot be read back to a row draws the words recorded
  * at the time instead. A line an earlier build recorded without its kind
  * draws with the mark's room left empty rather than guessing one. No copy
- * control: the words are a record of an act, not something said. A chip is a
- * name, not a press: a session's address is reached by its row or by a
- * validated ask, never from here.
+ * control: the words are a record of an act, not something said. The chip
+ * naming the chat is the row's own press by another hand: it mints the same
+ * open act a session row does, for the chat the line's identity names, so it
+ * opens the chat even once the roster has let it go. A creation's chip names
+ * a workspace the line never held an identity for, and is a name alone.
  */
 function ConversationActionRow({
   entry,
   sessions,
+  onOpenChat,
 }: {
   entry: ConversationEntry;
   sessions: readonly SessionView[];
+  onOpenChat?: (identity: SessionIdentity) => void;
 }): React.JSX.Element {
   const presentation = conversationEntryPresentation(entry.kind);
   const own = entry.kind === CONVERSATION_ENTRY_KIND.OWN_ACTION;
@@ -313,10 +318,13 @@ function ConversationActionRow({
           </span>
           {parts ? (
             <span className="conversation-words">
-              {parts.map((part, index) =>
-                part.name ? (
+              {parts.map((part, index) => {
+                if (!part.name) {
                   // biome-ignore lint/suspicious/noArrayIndexKey: The parts are a fixed composition of one record, so a position names a part for as long as the row stands.
-                  <span key={index} className="conversation-action-chip">
+                  return <span key={index}>{part.text}</span>;
+                }
+                const chip = (
+                  <>
                     {part.name.markId === undefined ? null : (
                       <ProviderMark
                         providerId={part.name.markId}
@@ -324,12 +332,27 @@ function ConversationActionRow({
                       />
                     )}
                     {part.text}
-                  </span>
+                  </>
+                );
+                const identity = entry.identity;
+                return identity && onOpenChat ? (
+                  <button
+                    // biome-ignore lint/suspicious/noArrayIndexKey: As above.
+                    key={index}
+                    type="button"
+                    className="conversation-action-chip"
+                    aria-label={`Open ${part.text}`}
+                    onClick={() => onOpenChat(identity)}
+                  >
+                    {chip}
+                  </button>
                 ) : (
                   // biome-ignore lint/suspicious/noArrayIndexKey: As above.
-                  <span key={index}>{part.text}</span>
-                ),
-              )}
+                  <span key={index} className="conversation-action-chip">
+                    {chip}
+                  </span>
+                );
+              })}
             </span>
           ) : (
             <MarkdownMessage words={entry.words} className="conversation-words" />
@@ -343,15 +366,21 @@ function ConversationActionRow({
 
 function ConversationEntryRow({
   sessions,
+  onOpenChat,
   ...props
 }: {
   entry: ConversationEntry;
   sessions: readonly SessionView[];
+  onOpenChat?: (identity: SessionIdentity) => void;
   streaming?: boolean;
 }): React.JSX.Element {
   return conversationEntryPresentation(props.entry.kind).speaker ===
     CONVERSATION_ENTRY_SPEAKER.EVENT ? (
-    <ConversationActionRow entry={props.entry} sessions={sessions} />
+    <ConversationActionRow
+      entry={props.entry}
+      sessions={sessions}
+      {...(onOpenChat ? { onOpenChat } : undefined)}
+    />
   ) : (
     <ConversationMessageRow {...props} />
   );
@@ -372,10 +401,12 @@ function ConversationEntryRow({
 function ConversationTurn({
   entries,
   sessions,
+  onOpenChat,
   pending,
 }: {
   entries: readonly KeyedConversationEntry[];
   sessions: readonly SessionView[];
+  onOpenChat?: (identity: SessionIdentity) => void;
   pending: boolean;
 }): React.JSX.Element {
   const [choice, setChoice] = useState<boolean | undefined>(undefined);
@@ -404,7 +435,12 @@ function ConversationTurn({
       </div>
       <ol id={actionsId} className="conversation-turn-actions" hidden={!open}>
         {entries.map(({ entry, key }) => (
-          <ConversationActionRow key={key} entry={entry} sessions={sessions} />
+          <ConversationActionRow
+            key={key}
+            entry={entry}
+            sessions={sessions}
+            {...(onOpenChat ? { onOpenChat } : undefined)}
+          />
         ))}
       </ol>
     </li>
@@ -541,6 +577,7 @@ export function ConversationPanel({
   live = [],
   requests = [],
   sessions = [],
+  onOpenChat,
   now,
   ask,
   onAskEngaged,
@@ -566,6 +603,11 @@ export function ConversationPanel({
    * it is called now and a creation its provider as the provider names itself.
    */
   sessions?: readonly SessionView[];
+  /**
+   * The row's own press by identity, for the chat an action line names. Absent
+   * where nothing can open one, and the chips are names alone.
+   */
+  onOpenChat?: (identity: SessionIdentity) => void;
   /**
    * The lines still being said, drawn under the settled thread as the same
    * bubbles they will settle into — words growing, no timestamp, no copy.
@@ -651,6 +693,7 @@ export function ConversationPanel({
                       key={`turn:${lead.key}`}
                       entries={item.items}
                       sessions={sessions}
+                      {...(onOpenChat ? { onOpenChat } : undefined)}
                       pending={turnPending(item.turn, index === items.length - 1)}
                     />,
                   );
@@ -661,6 +704,7 @@ export function ConversationPanel({
                     key={item.item.key}
                     entry={item.item.entry}
                     sessions={sessions}
+                    {...(onOpenChat ? { onOpenChat } : undefined)}
                   />,
                 );
               })}

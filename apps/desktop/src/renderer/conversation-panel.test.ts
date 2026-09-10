@@ -150,6 +150,72 @@ test("an action row is worded from its record and the roster, and from its recor
   );
 });
 
+test("a chip naming a chat is the row's own press by identity, and a creation's chip is a name alone", () => {
+  const opened: { providerId: string; providerSessionId: string }[] = [];
+  const render = (entry: Parameters<typeof ConversationPanel>[0]["entries"][number]) =>
+    renderToStaticMarkup(
+      createElement(ConversationPanel, {
+        entries: [entry],
+        onOpenChat: (identity) => opened.push(identity),
+        now: NOW,
+        ask: async () => undefined,
+        onAskEngaged: () => undefined,
+      }),
+    );
+  // Named by the title the record kept: the roster has let this chat go, and
+  // the press still names it by identity for the host to answer.
+  const archived = render({
+    kind: CONVERSATION_ENTRY_KIND.ACTION,
+    words: 'archived "checkout-service"',
+    identity: { providerId: "claude-code", providerSessionId: "session-a" },
+    action: {
+      kind: ACTION_KIND.CONTROL,
+      runId: "run-1",
+      label: "Archive",
+      controlKind: "archive",
+      title: "checkout-service",
+    },
+  });
+  assert.match(
+    archived,
+    /<button type="button" class="conversation-action-chip" aria-label="Open checkout-service"><svg class="provider-mark conversation-chip-mark" data-mark="claude-code".*?<\/svg>checkout-service<\/button>/,
+  );
+  const creation = render({
+    kind: CONVERSATION_ENTRY_KIND.ACTION,
+    words: 'created a new workspace "Notch" in Conductor',
+    action: {
+      kind: ACTION_KIND.CREATE_WORKSPACE,
+      runId: "run-2",
+      providerId: "conductor",
+      name: "Notch",
+    },
+  });
+  assert.match(creation, /<span class="conversation-action-chip">Notch<\/span>/);
+  assert.doesNotMatch(creation, /<button type="button" class="conversation-action-chip"/);
+  // With no press to hand the chat to, every chip is a name.
+  const unpressable = renderToStaticMarkup(
+    createElement(ConversationPanel, {
+      entries: [
+        {
+          kind: CONVERSATION_ENTRY_KIND.ACTION,
+          words: 'archived "checkout-service"',
+          identity: { providerId: "claude-code", providerSessionId: "session-a" },
+          action: {
+            kind: ACTION_KIND.CONTROL,
+            runId: "run-1",
+            label: "Archive",
+            title: "checkout-service",
+          },
+        },
+      ],
+      now: NOW,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
+    }),
+  );
+  assert.doesNotMatch(unpressable, /<button type="button" class="conversation-action-chip"/);
+});
+
 test("every row leads with its kind then the provider it reached, a creation with the one it asked", () => {
   const render = (entry: Parameters<typeof ConversationPanel>[0]["entries"][number]) =>
     renderToStaticMarkup(

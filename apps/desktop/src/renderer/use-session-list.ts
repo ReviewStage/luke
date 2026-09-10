@@ -3,6 +3,7 @@ import { CREDENTIAL_PROVIDERS, isCredentialProviderId } from "@sidecar/credentia
 import {
   type ObservedWorkspaceProject,
   type SessionApplicationId,
+  type SessionIdentity,
   workspaceProjectSelectionId,
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
@@ -68,6 +69,12 @@ export interface SessionList {
   onViewChange: (next: SessionArrangement) => void;
   onFiltersChange: (filters: readonly SessionFilter[]) => void;
   onOpenSession: (session: SessionView) => void;
+  /**
+   * The same press by identity alone, for a chat named on one of Conversation's
+   * action lines: the roster may have let it go since, and the host still
+   * answers with the address it last reported.
+   */
+  onOpenSessionIdentity: (identity: SessionIdentity) => void;
   onOpenSessionApplication: (session: SessionView, applicationId: SessionApplicationId) => void;
   toggleOptions: () => void;
   closeOptions: () => void;
@@ -316,17 +323,17 @@ export function useSessionList(options: UseSessionListOptions): SessionList {
    * a shape that is no longer drawn, so the close is asked for here rather than
    * waited for.
    */
-  const onOpenSession = useCallback(
-    (session: SessionView) => {
-      tell(ACT_KIND.SESSION_OPEN, {
-        identity: {
-          providerId: session.providerId,
-          providerSessionId: session.id,
-        },
-      });
+  const onOpenSessionIdentity = useCallback(
+    (identity: SessionIdentity) => {
+      tell(ACT_KIND.SESSION_OPEN, { identity });
       dismissPanel();
     },
     [dismissPanel],
+  );
+  const onOpenSession = useCallback(
+    (session: SessionView) =>
+      onOpenSessionIdentity({ providerId: session.providerId, providerSessionId: session.id }),
+    [onOpenSessionIdentity],
   );
 
   /**
@@ -440,6 +447,7 @@ export function useSessionList(options: UseSessionListOptions): SessionList {
     onViewChange,
     onFiltersChange,
     onOpenSession,
+    onOpenSessionIdentity,
     onOpenSessionApplication,
     toggleOptions,
     closeOptions,

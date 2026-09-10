@@ -1052,6 +1052,7 @@ export function App(): React.JSX.Element {
             writes={sessions.writes}
             conversationLines={state.conversation.entries}
             roster={displaySessions(state)}
+            onOpenSessionIdentity={sessions.onOpenSessionIdentity}
             liveConversationEntries={liveConversationEntries}
             onClearConversationConversation={clearConversationLines}
             brainRequests={brainRequests}

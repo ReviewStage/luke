@@ -5,7 +5,7 @@ import {
   type AccountSnapshot,
 } from "@sidecar/credentials/snapshot";
 import { ProviderMark } from "@sidecar/panel";
-import type { ConversationEntry, SessionApplicationId } from "@sidecar/session";
+import type { ConversationEntry, SessionApplicationId, SessionIdentity } from "@sidecar/session";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { type AskHandler, AskLuke } from "./ask-luke";
 import { CalendarGate, type CalendarGateControl } from "./calendar-gate";
@@ -193,6 +193,8 @@ export interface PanelBodyProps {
   conversationLines: readonly ConversationEntry[];
   /** Every observed session, unnarrowed, for the thread to name the sessions its actions reached. */
   roster: readonly SessionView[];
+  /** The row's own press, by identity, for the chat a Conversation action line names. */
+  onOpenSessionIdentity: (identity: SessionIdentity) => void;
   /** The lines still being said, drawn under that thread while their words grow. */
   liveConversationEntries: readonly ConversationEntry[];
   /** Clears that same thread from the view, Luke's next context, and the stored file. */
@@ -252,6 +254,7 @@ export function PanelBody({
   writes,
   conversationLines,
   roster,
+  onOpenSessionIdentity,
   liveConversationEntries,
   onClearConversationConversation,
   brainRequests,
@@ -377,6 +380,7 @@ export function PanelBody({
         <ConversationPanel
           entries={conversationLines}
           sessions={roster}
+          onOpenChat={onOpenSessionIdentity}
           live={liveConversationEntries}
           requests={brainRequests}
           now={now}

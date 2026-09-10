@@ -443,8 +443,10 @@
    box takes its first item's baseline, and the text is that item — so the
    name reads as a word of the sentence with a ground under it, and the box
    is one pixel over and under the line so it never pushes the lines apart.
-   It wears the mark its roster row wears. It is a name and not a press, so
-   it takes no hover. */
+   It wears the mark its roster row wears. Where the line holds the chat's
+   identity the chip is the row's own press by another hand and lifts under
+   the pointer; a creation's chip, naming a workspace the line has no identity
+   for, is a name alone. */
 .conversation-action-chip {
   display: inline-flex;
   align-items: center;
@@ -457,6 +459,12 @@
   line-height: 14px;
   vertical-align: baseline;
   white-space: nowrap;
+  transition: background-color var(--duration-hover) ease;
+}
+
+button.conversation-action-chip:hover,
+button.conversation-action-chip:focus-visible {
+  background: var(--selected);
 }
 
 .conversation-action-chip:has(.provider-mark) {
