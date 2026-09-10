@@ -34,9 +34,8 @@ function itemText(event: WireRecord | undefined): string {
   return isRecord(content) && isWireString(content.text) ? content.text : "";
 }
 
-test("every scene but the calendar beat speaks in the persona, whichever way it reaches the wire", () => {
-  const { CALENDAR: _, ...spoken } = SCENE;
-  for (const rules of Object.values(spoken)) {
+test("every scene speaks in the persona, whichever way it reaches the wire", () => {
+  for (const rules of Object.values(SCENE)) {
     assert.ok(sessionInstructions(rules).startsWith(PERSONA_OPENING));
     assert.ok(instructionsOf(responseTurn(rules, "words")[1]).startsWith(PERSONA_OPENING));
   }
@@ -120,6 +119,7 @@ test("a beat with no data is opened on the bare marker", () => {
   assert.equal(events.length, 2);
   assert.equal(itemText(events[0]), NOTE_MARKER);
   const instructions = instructionsOf(events[1]);
+  assert.ok(instructions.startsWith(PERSONA_OPENING));
   assert.ok(instructions.includes("during your meetings"));
   assert.ok(instructions.includes("one short sentence"));
 });

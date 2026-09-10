@@ -8,8 +8,11 @@ import { trimmedText } from "./trimmed-text.js";
 /**
  * Every scene Luke's voice speaks in, as the rules that scene adds, and the
  * two ways a scene reaches the wire: the instructions a session is minted
- * with, and one response turn opened on a call already standing. Nothing
- * outside this file composes instructions for the voice. A briefing is the
+ * with, and one response turn opened on a call already standing. Both open
+ * with the persona, so no scene can leave it out, and a response's own
+ * instructions replace the session's for that response, so a turn spoken
+ * without it would lose Luke's voice. Nothing outside this file composes
+ * instructions for the voice. A briefing is the
  * one thing spoken that is not a scene: it joins the conversation behind its
  * own marker and is spoken under the session's standing rules, so the
  * response that speaks it carries no instructions of its own.
@@ -41,8 +44,6 @@ export const NOTE_MARKER = "[note]";
  * that speaks it, so the briefing is said against what was said before.
  */
 const DESKTOP: readonly string[] = [
-  LUKE_PERSONA,
-  "",
   "You are the voice.",
   `- For anything about the developer's agents, settings, issues, or anything to do, call ${ASK_BRAIN_TOOL.name}`,
   "  with their words, then say its answer word for word, exactly as written: do not rephrase,",
@@ -66,8 +67,6 @@ const DESKTOP: readonly string[] = [
  * given a brain.
  */
 const PHONE: readonly string[] = [
-  LUKE_PERSONA,
-  "",
   "On a call:",
   "- The roster is private context, not a report: answer out of it, never read it out.",
   "- Follow the developer's lead and preserve their exact requested scope. Never expand an agent's",
@@ -95,8 +94,6 @@ const PHONE: readonly string[] = [
  * deliberately does not carry.
  */
 const INTRODUCTION: readonly string[] = [
-  LUKE_PERSONA,
-  "",
   "This is your first-run introduction: the developer just installed you and",
   "is meeting you for the first time. There is nothing running for you to",
   "report on yet, so the register above is all you carry into it.",
@@ -125,8 +122,6 @@ const INTRODUCTION: readonly string[] = [
  * reactive loop never gives.
  */
 const ARRIVAL: readonly string[] = [
-  LUKE_PERSONA,
-  "",
   "The developer has just signed in for the first time, and the last message is your one " +
     "arrival note. Say, warmly and in two or three short sentences: they are all set, and " +
     "they should go back to their work — when one of their coding agents needs them, hits " +
@@ -174,9 +169,9 @@ const UNCLEAR_AUDIO_RULES: readonly string[] = [
  */
 const maximumTurnInputLength = 4_000;
 
-/** The instructions a session is minted with: the scene's rules, then the listening rule. */
+/** The instructions a session is minted with: the persona, the scene's rules, then the listening rule. */
 export function sessionInstructions(rules: readonly string[]): string {
-  return [...rules, ...UNCLEAR_AUDIO_RULES].join("\n");
+  return [LUKE_PERSONA, "", ...rules, ...UNCLEAR_AUDIO_RULES].join("\n");
 }
 
 /**
@@ -184,13 +179,13 @@ export function sessionInstructions(rules: readonly string[]): string {
  * input as one marker item in the conversation, and the response that
  * answers it.
  *
- * The response carries the scene's rules as its own instructions, because a
- * response's instructions replace the session's for that response, and it
- * carries no tools and no way to choose one, so a sentence is the most any
- * turn built here can become. The input travels behind the marker as data,
- * never inside the instructions. An input given but blank builds nothing
- * rather than a turn with nothing to say; no input at all is a beat whose
- * words are the rules' own, opened on the bare marker.
+ * The response carries the persona and the scene's rules as its own
+ * instructions, because a response's instructions replace the session's for
+ * that response, and it carries no tools and no way to choose one, so a
+ * sentence is the most any turn built here can become. The input travels
+ * behind the marker as data, never inside the instructions. An input given
+ * but blank builds nothing rather than a turn with nothing to say; no input
+ * at all is a beat whose words are the rules' own, opened on the bare marker.
  */
 export function responseTurn(
   rules: readonly string[],
@@ -212,7 +207,11 @@ export function responseTurn(
     },
     {
       type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
-      response: { instructions: rules.join("\n"), tools: [], tool_choice: "none" },
+      response: {
+        instructions: [LUKE_PERSONA, "", ...rules].join("\n"),
+        tools: [],
+        tool_choice: "none",
+      },
     },
   ];
 }
