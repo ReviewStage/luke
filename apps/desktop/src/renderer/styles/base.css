@@ -571,32 +571,19 @@ button:disabled {
   transform: translateX(calc(-50% - var(--capsule-thinking-shift)));
 }
 
-/* The dots cross over the last of the shape's travel and finish as it settles,
-   the same arrival the meter makes into the same growth. Mount animations
-   rather than the transition, because a wait beginning at rest mounts the dots
-   on the very frame the growth starts, and a mounting element has no earlier
-   style to transition from. */
-.app-stage[data-presentation="capsule"][data-thinking="true"][data-caption="false"]:not(
-  [data-voice]
-) .wing-thinking {
+/* Dots standing in the capsule at all mean the wait holds the face, and the
+   wait means the shape already made room for them — the growth above, or the
+   caption's peek width, which the growth yields to. So the pose needs no gate
+   of its own: the element's presence is the gate, and the base rule's delayed
+   mount pair is the arrival, crossing over the last of the shape's travel the
+   way the meter crosses into the same growth. Ungated also means a caption
+   coming or going mid-wait re-matches nothing here, so nothing replays. */
+.app-stage[data-presentation="capsule"] .wing-thinking {
   opacity: 1;
   transform: none;
   transition-duration: var(--duration-quick), var(--duration-shape);
   transition-timing-function: var(--motion-exit), var(--spring);
   transition-delay: calc(var(--duration-shape) - var(--duration-quick));
-  animation:
-    wing-mount-fade var(--duration-quick) var(--motion-exit)
-    calc(var(--duration-shape) - var(--duration-quick)) backwards,
-    wing-mount-travel var(--duration-shape) var(--spring)
-    calc(var(--duration-shape) - var(--duration-quick)) backwards;
-}
-
-/* A captioned capsule already holds the peek's width, so dots drawn there have
-   their room without any growth: they arrive at once on the base rule's mount
-   fade, the way they arrive in the peek itself. */
-.app-stage[data-presentation="capsule"][data-caption="true"] .wing-thinking {
-  opacity: 1;
-  transform: none;
 }
 
 @keyframes wing-mount-fade {
@@ -908,8 +895,13 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    capsule's own 36px side holds the face and nothing beside it, so the resting
    pose is folded; the peek and the panel unfold the dots into the room they
    already have, and the capsule grows its own room for them below, the way it
-   grows for Luke's reply meter. The fade on mount is the marks' own, so dots
-   arriving in a shape already open do not pop. */
+   grows for Luke's reply meter. The mount animation is Luke's meter's own
+   delayed pair — the dots may mount on the very frame that growth starts, and
+   an undelayed arrival would draw them ahead of an edge still most of its
+   travel away — and it is stated here, once, in every state alike: the states
+   that re-match this element's rules (a caption clearing mid-wait, the pointer
+   opening the peek) would replay any animation they changed, so none of them
+   may carry one. */
 .wing-thinking {
   display: flex;
   align-items: center;
@@ -918,7 +910,11 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transition:
     opacity var(--duration-exit) var(--motion-exit),
     transform var(--duration-shape) var(--spring);
-  animation: wing-mount-fade var(--duration-quick) var(--motion-exit) backwards;
+  animation:
+    wing-mount-fade var(--duration-quick) var(--motion-exit)
+    calc(var(--duration-shape) - var(--duration-quick)) backwards,
+    wing-mount-travel var(--duration-shape) var(--spring)
+    calc(var(--duration-shape) - var(--duration-quick)) backwards;
 }
 
 .app-stage[data-presentation="peek"] .wing-thinking,
