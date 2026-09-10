@@ -45,6 +45,8 @@ export interface LiveComposer extends Composer {
   requestOnboardingBeat: () => Promise<void>;
   /** A typed ask main's brain accepted: its run followed on the agent standing now, and its reply spoken by the session. */
   followTypedAsk: (question: string, runId: string) => void;
+  /** The arrival beat's own moment, recorded at the first sign-in ever observed. */
+  seedArrivalOnFirstSignIn: () => void;
   link: (links: LiveLinks) => void;
 }
 
@@ -220,6 +222,10 @@ export function composeLive(dependencies: LiveDependencies): LiveComposer {
     followTypedAsk: (question, runId) => {
       liveBrain.followCurrent();
       service.followTypedAsk(question, runId);
+    },
+    seedArrivalOnFirstSignIn: () => {
+      if (calendars.onboarding()?.arrivalSignedInAt !== undefined) return;
+      calendars.writeOnboarding({ arrivalSignedInAt: new Date(now()).toISOString() });
     },
     link: (next) => links.set(next),
     start: async () => undefined,

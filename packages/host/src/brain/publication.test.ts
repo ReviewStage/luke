@@ -407,8 +407,7 @@ test("a retired follower relays nothing a late report carries", async () => {
   assert.deepEqual(written.recorded, []);
 });
 
-test("an end is published downstream only once its line and its mark have both landed, then on every later report", async () => {
-  const published: string[] = [];
+test("a refused mark leaves the end for the next report, which marks it without writing the line again", async () => {
   let markRefused = true;
   let marked = false;
   const live = () =>
@@ -424,70 +423,58 @@ test("an end is published downstream only once its line and its mark have both l
     },
   } as unknown as BrainAgent;
   const written = thread();
-  const report = () =>
-    publishRuns(
-      agent,
-      [live()],
-      written.record,
-      () => true,
-      (ended) => published.push(`${ended.runId}@${ended.conversationRecordedAt}`),
-    );
-  // The line was taken but the mark refused: not published downstream, and
-  // the line is not written a second time on the retry because the thread
-  // already holds it for that run.
+  const report = () => publishRuns(agent, [live()], written.record);
+  // The line was taken but the mark refused: the line is not written a second
+  // time on the retry because the thread already holds it for that run.
   await report();
-  assert.deepEqual(published, []);
+  assert.equal(marked, false);
   assert.equal(written.entries().length, 1);
   markRefused = false;
   await report();
-  assert.deepEqual(published, ["run-1@1800000000002"]);
+  assert.equal(marked, true);
   assert.equal(written.entries().length, 1);
-  // Already marked: reported downstream again, written nowhere. The retry
-  // before it offered the line a second time and the thread, holding it,
-  // took nothing.
+  // Already marked: the retry before it offered the line a second time and
+  // the thread, holding it, took nothing; this report offers nothing.
   await report();
-  assert.deepEqual(published, ["run-1@1800000000002", "run-1@1800000000002"]);
   assert.equal(written.recorded.length, 2);
   assert.equal(written.entries().length, 1);
 });
 
-test("a refused thread write publishes nothing downstream, and a retired follower publishes nothing late", async () => {
-  const published: string[] = [];
+test("a refused thread write marks nothing, and a retired follower writes nothing late", async () => {
   let refuse = true;
+  const marks: number[] = [];
   // SAFETY: publication reads only these members off the agent.
   const agent = {
     request: () => record({ askRecordedAt: NOW, conversationRecordedAt: undefined }),
     markAskRecorded: async () => true,
-    markConversationRecorded: async () => true,
+    markConversationRecorded: async (_runId: string, at: number) => {
+      marks.push(at);
+      return true;
+    },
   } as unknown as BrainAgent;
   const written = thread(() => refuse);
-  await publishRuns(
-    agent,
-    [record()],
-    written.record,
-    () => true,
-    (ended) => published.push(ended.runId),
-  );
-  assert.equal(published.length, 0);
+  await publishRuns(agent, [record()], written.record);
+  assert.equal(marks.length, 0);
+  assert.equal(written.entries().length, 0);
   refuse = false;
   let following = true;
-  // The follower retires while the mark is out: the end is written, but not
-  // handed on, because nothing may be offered on a retired follower's behalf.
+  // The follower retires while the mark is out: the end is written and
+  // marked, and nothing further is written on the retired follower's behalf.
   // SAFETY: publication reads only `request` and the two marks off the agent; the fixture stands in for the rest.
   const retiringAgent = {
     ...agent,
-    markConversationRecorded: async () => {
+    markConversationRecorded: async (_runId: string, at: number) => {
+      marks.push(at);
       following = false;
       return true;
     },
   } as unknown as BrainAgent;
   await publishRuns(
     retiringAgent,
-    [record()],
+    [record(), record({ runId: "run-2" })],
     written.record,
     () => following,
-    (ended) => published.push(ended.runId),
   );
-  assert.equal(published.length, 0);
+  assert.deepEqual(marks, [NOW + 2]);
   assert.equal(written.entries().length, 1);
 });

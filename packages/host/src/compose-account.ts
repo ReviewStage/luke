@@ -24,7 +24,7 @@ import { VoiceCapabilityAssembler } from "@sidecar/voice";
 import { lateRef } from "@sidecar/wire";
 import type { Composer, ComposerContext } from "./composer.js";
 import { openSocketOverWs } from "./voice/live-sideband.js";
-import { transitionVoiceCredential } from "./voice-credential-transition.js";
+import { transitionVoiceSource } from "./voice-source-transition.js";
 
 const ACCOUNT_CLIENT_ID = "luke-desktop";
 
@@ -166,7 +166,7 @@ export function composeAccount(dependencies: AccountDependencies): AccountCompos
   }
 
   async function applyVoiceCredential(): Promise<void> {
-    await transitionVoiceCredential({
+    await transitionVoiceSource({
       retire: () => links.get().retireBrain(),
       apply: () => voiceCapabilities.apply(),
       rebuild: async () => {

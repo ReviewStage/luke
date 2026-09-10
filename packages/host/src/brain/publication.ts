@@ -16,7 +16,7 @@ import {
   typedAskConversationEntry,
 } from "@sidecar/session";
 
-/** What the publication owner reaches: the thread, every window, and the delivery owner. */
+/** What the publication owner reaches: the thread and every window. */
 export interface BrainPublicationDependencies {
   /**
    * Records one line in one conversation's thread at the moment given,
@@ -32,17 +32,8 @@ export interface BrainPublicationDependencies {
   /** Hands the whole list of records to every window. */
   broadcastRequests: (snapshots: readonly BrainRequestSnapshot[]) => void;
   /**
-   * A run's end stands in the thread, written and marked: the one moment a
-   * reply becomes deliverable to the ear, handed the live record as it then
-   * reads. Called again on later reports of the same ended run, so a receiver
-   * that missed it is not owed a report that never comes; the delivery owner
-   * decides what is new.
-   */
-  onEndPublished?: (record: BrainRequestRecord, sessionKey: SessionKey) => void;
-  /**
-   * Hands the standing follower's publication chain to whoever answers a
-   * wait, so a wait that finds its run ended can let the end reach Conversation
-   * before the words are granted anywhere.
+   * Hands the standing follower's publication chain to the drain, so a quit
+   * lets every end already reported reach Conversation before the store closes.
    */
   onPublication?: (settled: () => Promise<void>) => void;
 }
@@ -135,23 +126,22 @@ export async function publishRuns(
   snapshots: readonly BrainRequestSnapshot[],
   record: BrainPublicationDependencies["recordConversationEntry"],
   stillFollowing: () => boolean = () => true,
-  onEndPublished: BrainPublicationDependencies["onEndPublished"] = undefined,
   sessionKey: SessionKey = MAIN_SESSION_KEY,
 ): Promise<void> {
   for (const snapshot of snapshots) {
     if (!stillFollowing()) return;
     await publishAsk(agent, snapshot.runId, record, sessionKey);
     if (!stillFollowing()) return;
-    const published = await publishEnd(agent, snapshot.runId, record, sessionKey);
-    if (published && stillFollowing()) onEndPublished?.(published, sessionKey);
+    await publishEnd(agent, snapshot.runId, record, sessionKey);
   }
 }
 
 /**
  * Follows the brain that currently stands: each rebuilt agent is subscribed
  * as it arrives, its records relayed to every window and its runs written to
- * the thread. The subscription is the completion channel the reply delivery
- * reads; the thread write here is the one Conversation write for a run.
+ * the thread. The thread write here is the one Conversation write for a run,
+ * and the live session speaks a reply only from the run's own events, never
+ * from this record.
  * Unfollowing retires the subscription, drains the publication of the reports
  * already taken, and then relays nothing more, so a replaced agent's records
  * are all written once and its late ones reach neither the thread nor the
@@ -161,7 +151,7 @@ export function followBrainRequests(
   agent: BrainAgent,
   dependencies: Pick<
     BrainPublicationDependencies,
-    "recordConversationEntry" | "broadcastRequests" | "onEndPublished" | "onPublication"
+    "recordConversationEntry" | "broadcastRequests" | "onPublication"
   >,
   sessionKey: SessionKey = MAIN_SESSION_KEY,
 ): () => Promise<void> {
@@ -180,7 +170,6 @@ export function followBrainRequests(
         records,
         dependencies.recordConversationEntry,
         () => following,
-        dependencies.onEndPublished,
         sessionKey,
       ),
     );

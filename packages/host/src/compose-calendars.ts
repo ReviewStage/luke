@@ -20,7 +20,7 @@ import {
   invalid,
   NODE_CAPABILITY_STATUS,
 } from "@sidecar/gateway";
-import { ARRIVAL_SPEECH_KIND, CALENDAR_ONBOARDING_SPEECH_KIND } from "@sidecar/realtime";
+import { PROACTIVE_SPEECH_KIND } from "@sidecar/live";
 import { ObservationLoop } from "@sidecar/runtime";
 import { APP_SETTING_ID, APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { ObservedAccountCalendars } from "@sidecar/settings/wire";
@@ -34,7 +34,7 @@ import { calendarOnboardingOwed } from "./calendar-onboarding-flow.js";
 import type { Composer, ComposerContext } from "./composer.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { type OnboardingState, onboardingStateFile } from "./onboarding-state.js";
-import type { OnboardingBeatKind } from "./voice/speech-arbiter.js";
+import type { BeatKind } from "./voice/proactive-queue.js";
 import { reporterOf } from "./wire-helpers.js";
 
 /** A diary changes at the pace of hands too; five minutes is current. */
@@ -59,8 +59,8 @@ const APPLE_ACCESS_POLL_INTERVAL_MS = 10_000;
 /** What the calendars reach in the speech the meetings hold. */
 interface CalendarsLinks {
   reconcileSpeech: () => void;
-  withdrawBeat: (kind: OnboardingBeatKind) => void;
-  /** The arbiter's held briefings go with the meetings that were holding them. */
+  withdrawBeat: (kind: BeatKind) => void;
+  /** The live service's held briefings go with the meetings that were holding them. */
   dropBriefings: () => void;
   /** The gate settling is where the beat that was waiting for it may speak. */
   requestOnboardingBeat: () => void;
@@ -150,9 +150,10 @@ export function composeCalendars(dependencies: CalendarsDependencies): Calendars
    */
   function writeOnboardingState(moment: OnboardingState): void {
     onboardingState = onboarding.update((current) => ({ ...current, ...moment }));
-    if (moment.arrivalSpokenAt !== undefined) links.get().withdrawBeat(ARRIVAL_SPEECH_KIND);
+    if (moment.arrivalSpokenAt !== undefined)
+      links.get().withdrawBeat(PROACTIVE_SPEECH_KIND.ARRIVAL);
     const owed = calendarOnboardingGateOwed();
-    if (!owed) links.get().withdrawBeat(CALENDAR_ONBOARDING_SPEECH_KIND);
+    if (!owed) links.get().withdrawBeat(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING);
     if (owed === announcedCalendarGateOwed) return;
     announcedCalendarGateOwed = owed;
     kernel.emit(GATEWAY_EVENT.CALENDAR_ONBOARDING_CHANGED, { owed });

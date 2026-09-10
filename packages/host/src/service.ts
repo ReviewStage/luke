@@ -1,26 +1,14 @@
-import type { BrainAgent, BrainRequestRecord } from "@sidecar/brain";
-import {
-  BRAIN_DEFAULTS,
-  type DeliveryClaimContext,
-  type DeliveryLedger,
-  deliveryRecordToWire,
-} from "@sidecar/brain";
-import type { BrainRequestOrigin } from "@sidecar/brain/requests";
+import type { BrainAgent } from "@sidecar/brain";
+import { BRAIN_DEFAULTS } from "@sidecar/brain";
 import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_SUBMISSION_OUTCOME,
   BRAIN_SUBMISSION_REJECTION,
   type BrainSubmissionResult,
-  brainReplyWords,
   brainRequestRecordToWire,
   isBrainRequestOrigin,
-  isTerminalBrainRequestStatus,
 } from "@sidecar/brain/requests";
-import type {
-  BrainAskWait,
-  BrainReplyClaimResult,
-  BrainRequestSnapshot,
-} from "@sidecar/brain/requests-wire";
+import type { BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
 import {
   GATEWAY_ERROR,
   GATEWAY_EVENT,
@@ -52,13 +40,7 @@ import {
   conversationEntryToWire,
   maximumTypedAskLength,
 } from "@sidecar/session";
-import {
-  isRecord,
-  isWireNumber,
-  isWireString,
-  type WireRecord,
-  type WireValue,
-} from "@sidecar/wire";
+import { isRecord, isWireNumber, isWireString, type WireRecord } from "@sidecar/wire";
 import { publishAsk } from "./brain/publication.js";
 import type { SettableConfigurationPatch } from "./brain/wiring.js";
 import type { ConversationOperations } from "./conversation-operations.js";
@@ -82,13 +64,9 @@ interface GatewayBrainAccess {
   /** The brain of one conversation as it stands now; nothing between transitions or for an unopened key. */
   current: (sessionKey?: SessionKey) => BrainAgent | undefined;
   agentForRun: (runId: string) => BrainAgent | undefined;
-  conversationForRun: (runId: string) => SessionKey | undefined;
   allRequests: () => readonly BrainRequestSnapshot[];
   /** The generation standing for a conversation, or nothing while none does. */
   generationId: (sessionKey: SessionKey) => string | undefined;
-  holdsGeneration: (generationId: string) => boolean;
-  /** Settles once every standing follower has published every report taken so far. */
-  publicationSettled: () => Promise<void>;
   children: Pick<ChildRunService, "children" | "child" | "childrenOf">;
   configuration: () => ResolvedConfiguration;
   /** Republishes the configuration with the settable fields patched; answers the refusals, none on success. */
@@ -99,20 +77,12 @@ interface GatewayMemoryAccess {
   status: () => WireRecord;
 }
 
-/** The one current voice receiver, as the client owning it reports: ready, and under which epoch. */
-interface GatewayReceiverState {
-  isReady: () => boolean;
-  epoch: () => number;
-}
-
 export interface GatewayServiceDependencies {
   brain: GatewayBrainAccess;
   conversations: ConversationOperations;
   memory: GatewayMemoryAccess;
   /** How many sessions the roster holds now; the observation event's whole payload. */
   observedSessionCount: () => number;
-  deliveries: DeliveryLedger<GrantedWords>;
-  receiver: GatewayReceiverState;
   nodes?: NodeRegistry;
   recordConversationEntry: (
     entry: ConversationEntry,
@@ -128,8 +98,6 @@ export interface GatewayServiceDependencies {
    * runtime host owns. A method both name is the host's.
    */
   methods?: GatewayMethodTable;
-  /** Hears the operator's connection close, when the transport can tell: the client's receiver and node are gone with it. */
-  onOperatorDisconnected?: () => void;
   /** A typed ask main's brain accepted, in the developer's words and under its run, so the voice can be told what was asked and speak the reply. */
   onTypedAsk?: (question: string, runId: string) => void;
 }
@@ -137,14 +105,8 @@ export interface GatewayServiceDependencies {
 export interface GatewayService {
   readonly server: GatewayServer;
   readonly nodes: NodeRegistry;
-  /** The brain's whole list of records, as the followers report it: the ledger watches it and every client hears it. */
+  /** The brain's whole list of records, as the followers report it, for every client to hear. */
   runsReported: (snapshots: readonly BrainRequestSnapshot[]) => void;
-  /** A run's end stands in Conversation, written and marked: the moment its reply may be owed to the ear. */
-  endPublished: (record: BrainRequestRecord, sessionKey: SessionKey) => void;
-  /** A conversation's generation ended; every reply owed of it is withdrawn and the receiver told. */
-  generationReplaced: (sessionKey: SessionKey) => void;
-  /** The receiver reported ready under a new epoch: whatever is owed is offered to it now. */
-  receiverReady: () => void;
   /** One conversation's thread as every window should draw it, less the opaque reporter whose report produced it. */
   conversationChanged: (
     sessionKey: SessionKey,
@@ -310,113 +272,17 @@ function submissionResultToWire(result: BrainSubmissionResult): WireRecord {
     : { outcome: result.outcome, reason: result.reason };
 }
 
-/** The words one granted reply is spoken as, read from the live record at the moment of the grant. */
-export interface GrantedWords {
-  words: string;
-  origin: BrainRequestOrigin;
-}
-
-/** What a grant is checked against at the moment it lands: the receiver, the store, and the live record. */
-export interface BrainReplyClaimContext {
-  /** Whether the receiver is ready and the epoch given is its current one. */
-  receiverCurrent: (epoch: number) => boolean;
-  /** Whether the generation named still stands in the store. */
-  generationStands: (generationId: string) => boolean;
-  /** The run's record as the standing brain holds it now, or nothing. */
-  liveRecord: (runId: string) => BrainRequestRecord | undefined;
-}
-
-/**
- * Whether a run's end may be spoken at all: ended, written and marked in
- * Conversation, and wordable in Conversation's own wording. The ledger keeps the
- * states, the epochs, and the one grant per run; this is the only thing read
- * out of a brain record on the way there.
- */
-export function deliverable(record: BrainRequestRecord): boolean {
-  return (
-    isTerminalBrainRequestStatus(record.status) &&
-    record.conversationRecordedAt !== undefined &&
-    brainReplyWords(record) !== undefined
-  );
-}
-
-/** The claim context as the ledger asks for it: the words come from the live record, never the offer's. */
-export function ledgerContext(context: BrainReplyClaimContext): DeliveryClaimContext<GrantedWords> {
-  return {
-    receiverCurrent: context.receiverCurrent,
-    generationStands: context.generationStands,
-    runHeld: (runId: string) => context.liveRecord(runId) !== undefined,
-    liveWords: (runId: string): GrantedWords | undefined => {
-      const live = context.liveRecord(runId);
-      if (!live || !deliverable(live)) return undefined;
-      const words = brainReplyWords(live);
-      return words === undefined ? undefined : { words, origin: live.origin };
-    },
-  };
-}
-
 export function createGatewayService(dependencies: GatewayServiceDependencies): GatewayService {
-  const { brain, conversations, deliveries, receiver } = dependencies;
+  const { brain, conversations } = dependencies;
   const nodes = dependencies.nodes ?? new NodeRegistry();
   const askWaitMs = dependencies.askWaitMs ?? BRAIN_DEFAULTS.ASK_WAIT_MS;
 
-  /** What a grant is checked against at the moment it lands: the receiver, the store, and the live record. */
-  const claimContext = () => ({
-    receiverCurrent: (epoch: number) => receiver.isReady() && receiver.epoch() === epoch,
-    generationStands: (generationId: string) => brain.holdsGeneration(generationId),
-    liveRecord: (runId: string) => brain.agentForRun(runId)?.request(runId),
-  });
-
-  const snapshot = (): WireValue => ({
+  const snapshot = (): WireRecord => ({
     runs: brain.allRequests().map(brainRequestRecordToWire),
     conversations: conversations.directory().map(conversationRecordToWire),
-    deliveries: deliveries.records().map(deliveryRecordToWire),
     configurationRevision: brain.configuration().revision,
     nodes: nodes.list().map(nodeSnapshotToWire),
-    receiverEpoch: receiver.epoch(),
   });
-
-  /**
-   * Hands the ready receiver the one delivery it may hold now, under the
-   * epoch it is sent to; the next follows its acknowledgement. Nothing is
-   * offered while no receiver has reported, and nothing here is held by the
-   * announcement quiet: a reply to the developer's own ask is conversation,
-   * not news.
-   */
-  const offerReplies = (): void => {
-    if (!receiver.isReady()) return;
-    const offer = deliveries.nextOffer(receiver.epoch());
-    if (!offer) return;
-    server.emit(
-      GATEWAY_EVENT.DELIVERY_OFFERED,
-      { runId: offer.runId, deliveryId: offer.deliveryId, epoch: offer.epoch },
-      { runId: offer.runId },
-    );
-  };
-
-  /** The generation the run's conversation stands in now, or nothing for a run of no conversation the host holds. */
-  const runGeneration = (runId: string): string | undefined => {
-    const sessionKey = brain.conversationForRun(runId);
-    return sessionKey === undefined ? undefined : brain.generationId(sessionKey);
-  };
-
-  /**
-   * Grants the asking call the words of one ended run, under the receiver
-   * epoch it named. The grant takes the run's offer out of the receiver's
-   * hand, and no acknowledgement will come for a reply said on the call, so
-   * the next owed reply is offered at once.
-   */
-  const grantReplyOnCall = (
-    live: BrainRequestRecord,
-    generationId: string,
-    epoch: number,
-  ): boolean => {
-    const granted =
-      deliverable(live) &&
-      deliveries.grantOnCall(live.runId, generationId, epoch, ledgerContext(claimContext()));
-    if (granted) offerReplies();
-    return granted;
-  };
 
   const submit = async (read: ParamReader): Promise<GatewayMethodOutcome> => {
     const sessionKey = read.sessionKeyOrMain("sessionKey");
@@ -468,32 +334,15 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
       const cancelled = await agent.cancelAsk(runId);
       return gatewayOk(cancelled ? { record: brainRequestRecordToWire(cancelled) } : {});
     }),
-    // A wait that finds its run ended does not hand the words over on the
-    // strength of the record alone: the followers' publication is let finish,
-    // the live record is re-read for its Conversation mark, and the grant to say
-    // the words on the call is asked of the ledger — only when the caller
-    // names the receiver epoch it holds, which only the voice window does.
+    // A wait answers the record and never the words: the live session speaks
+    // a reply from the run's own events, so no caller is granted them here.
     [GATEWAY_METHOD.RUN_WAIT]: reading(async (read) => {
       const runId = read.identifier("runId");
-      const speakerEpoch = read.optionalNumber("speakerEpoch");
       const waited = await brain.agentForRun(runId)?.waitAsk(runId, askWaitMs);
-      const answer = (wait: BrainAskWait): GatewayMethodOutcome =>
-        gatewayOk({
-          ...(wait.record ? { record: brainRequestRecordToWire(wait.record) } : undefined),
-          speak: wait.speak,
-        });
-      if (!waited || !isTerminalBrainRequestStatus(waited.status)) {
-        return answer({ record: waited, speak: false });
-      }
-      await brain.publicationSettled();
-      const live = brain.agentForRun(runId)?.request(runId) ?? waited;
-      if (speakerEpoch === undefined || live.conversationRecordedAt === undefined) {
-        return answer({ record: live, speak: false });
-      }
-      const generationId = runGeneration(runId);
-      const granted =
-        generationId !== undefined && grantReplyOnCall(live, generationId, speakerEpoch);
-      return answer({ record: live, speak: granted });
+      return gatewayOk({
+        ...(waited ? { record: brainRequestRecordToWire(waited) } : undefined),
+        speak: false,
+      });
     }),
     [GATEWAY_METHOD.RUN_LIST]: () =>
       gatewayOk({ runs: brain.allRequests().map(brainRequestRecordToWire) }),
@@ -553,7 +402,6 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
       connection.onClosed(() => {
         if (nodeOwners.get(nodeId) !== connection.connectionId) return;
         nodes.setConnected(nodeId, false);
-        dependencies.onOperatorDisconnected?.();
       });
       return gatewayOk({ nodeId, connected: true, clientId: context.client.clientId });
     }),
@@ -575,27 +423,6 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
         reason: result.reason,
       });
     }),
-    [GATEWAY_METHOD.DELIVERY_CLAIM]: reading((read) => {
-      const granted = deliveries.claim(
-        read.identifier("runId"),
-        read.identifier("deliveryId"),
-        read.number("epoch"),
-        ledgerContext(claimContext()),
-      );
-      const claim: BrainReplyClaimResult = granted.granted
-        ? { granted: true, words: granted.words.words, origin: granted.words.origin }
-        : { granted: false };
-      return gatewayOk({ ...claim });
-    }),
-    [GATEWAY_METHOD.DELIVERY_ACKNOWLEDGE]: reading((read) => {
-      const emptied = deliveries.acknowledge(
-        read.identifier("runId"),
-        read.identifier("deliveryId"),
-        read.number("epoch"),
-      );
-      if (emptied) offerReplies();
-      return gatewayOk({ acknowledged: emptied });
-    }),
   };
 
   const server = new GatewayServer({
@@ -616,25 +443,8 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
     server,
     nodes,
     runsReported: (snapshots) => {
-      deliveries.observe(
-        snapshots.map((record) => ({
-          runId: record.runId,
-          ended: isTerminalBrainRequestStatus(record.status),
-        })),
-      );
       server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: snapshots.map(brainRequestRecordToWire) });
     },
-    endPublished: (record, sessionKey) => {
-      const generationId = brain.generationId(sessionKey);
-      if (generationId === undefined) return;
-      if (deliverable(record)) deliveries.published(record.runId, generationId);
-      offerReplies();
-    },
-    generationReplaced: () => {
-      deliveries.reset();
-      server.emit(GATEWAY_EVENT.DELIVERIES_WITHDRAWN, { epoch: receiver.epoch() });
-    },
-    receiverReady: offerReplies,
     conversationChanged: (sessionKey, entries, reporter) => {
       server.emit(
         GATEWAY_EVENT.CONVERSATION_CHANGED,

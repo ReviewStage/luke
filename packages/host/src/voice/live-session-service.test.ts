@@ -968,3 +968,90 @@ test("stop closes the session gracefully and takes nothing else with it", async 
   await stopping;
   assert.equal(f.service.sessionStands(), false);
 });
+
+test("a run's reply is appended once per sentence, in order, and nothing of the run is appended after its end", async () => {
+  const f = fixture();
+  const sideband = await f.open();
+  sideband.input("What changed?", 0, 800);
+  sideband.delegation("item_1", 900);
+  await drainMicrotasks();
+  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+  const sentences = ["One.", "Two.", "Three."];
+  for (const sentence of sentences) {
+    f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: "run-1", sentence });
+  }
+  for (let index = 0; index < sentences.length; index += 1) {
+    await drainMicrotasks();
+    sideband.acknowledge(index, 1000 + index * 100, 1050 + index * 100);
+  }
+  await drainMicrotasks();
+  assert.deepEqual(
+    appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).map((event) =>
+      "content" in event ? event.content : undefined,
+    ),
+    sentences,
+  );
+  f.brain.fire({
+    kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+    runId: "run-1",
+    end: LIVE_BRAIN_RUN_END.COMPLETED,
+  });
+  await f.clock.advance(f.clock.now + 1000);
+  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: "run-1", sentence: "Late." });
+  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, sentences.length);
+});
+
+test("a briefing taken from the queue is appended once: a hold beginning and ending around it re-sends nothing, and a held one is handed back once and appended never", async () => {
+  const f = fixture();
+  const sideband = await f.open();
+  f.service.deliverBriefing({ briefing: "Already said.", decidedAt: f.clock.now });
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
+  f.quiet = true;
+  await f.service.reconcile();
+  f.quiet = false;
+  await f.service.reconcile();
+  await drainMicrotasks();
+  assert.deepEqual(f.released, []);
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
+  f.quiet = true;
+  await f.service.reconcile();
+  const held = { briefing: "Held.", decidedAt: f.clock.now };
+  f.service.deliverBriefing(held);
+  f.quiet = false;
+  await f.service.reconcile();
+  await f.service.reconcile();
+  await drainMicrotasks();
+  assert.deepEqual(f.released, [[held]]);
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
+});
+
+test("an append pending when the session dies is dropped with it and never re-sent into the session opened after", async () => {
+  const f = fixture();
+  const sideband = await f.open();
+  f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.ARRIVAL, decidedAt: f.clock.now });
+  sideband.input("Summarize.", 0, 800);
+  sideband.delegation("item_1", 900);
+  await drainMicrotasks();
+  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: "run-1", sentence: "Done." });
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
+  sideband.dropConnection();
+  await drainMicrotasks();
+  assert.equal(f.traces.filter((t) => t.decision === LIVE_TRACE_DECISION.APPEND_REFUSED).length, 1);
+  assert.equal(phases(f.changes).at(-1), LIVE_SESSION_PHASE.CLOSED);
+  const second = await f.open();
+  await drainMicrotasks();
+  assert.equal(appends(second, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
+  assert.deepEqual(f.spoken, []);
+  f.brain.fire({
+    kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+    runId: "run-1",
+    end: LIVE_BRAIN_RUN_END.COMPLETED,
+  });
+  await f.clock.advance(f.clock.now + 1000);
+  assert.equal(appends(second, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
+});

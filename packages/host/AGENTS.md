@@ -20,11 +20,11 @@ that line: the ipcMain registrations stayed in `apps/desktop/src/main/ipc/`,
 and resolving this Mac's EventKit helper bundle stayed in
 `apps/desktop/src/main/native/`.
 
-## One composition, nine concerns
+## One composition, eight concerns
 
 `composeHost` constructs, links, merges, and starts; it holds no state of a
 concern's own. Each concern is a composer — settings, account, devices,
-issues, observation, calendars, speech, brain, live — that owns its own mutable
+issues, observation, calendars, brain, live — that owns its own mutable
 state, its own timers, and the Gateway methods of its domain, and answers
 `start()` and `stop()` for exactly what it began. The devices composer answers
 no method at all: it is this installation's device row on the service,
@@ -87,11 +87,15 @@ so `@sidecar/voice` stays free of it, beside the graceful close the
 conversations guide prescribes. The live service is the one sink for
 everything Luke says unprompted: `compose-live.ts` takes every briefing from
 the brain, every typed ask's run to speak its reply, and the two onboarding
-beats, and the retired speech path — the arbiter, the reply ledger, the
-receiver epochs — is still composed and still answers its methods but is
-routed nothing and reached by no client of this build. A briefing or reply
-with no session standing makes the service say it wants one, and the voice
-window opens it muted.
+beats. A briefing or reply with no session standing makes the service say it
+wants one, and the voice window opens it muted. Nothing else in the host
+speaks: the Realtime path's speech arbiter, reply ledger, and receiver epochs
+are gone, and the guarantee they carried — at most one spoken reply per run —
+now holds by construction, since a run's sentences reach the voice only as
+the run's own events arriving at this one service, each appended once in
+order and none after the run's end. The `speech` and `receiver` methods the
+protocol still names have no handler here, so the server answers them
+unknown until the protocol retires them.
 
 ## The account preference client is here for the graph's sake
 

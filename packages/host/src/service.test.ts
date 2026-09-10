@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { BrainAgent, BrainRequestRecord, BrainSubmission } from "@sidecar/brain";
-import { DELIVERY_STATE, DeliveryLedger, type DeliveryState } from "@sidecar/brain";
 import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
 import {
   GATEWAY_CLIENT_ROLE,
-  GATEWAY_EVENT,
   GATEWAY_METHOD,
   GatewayClient,
   InProcessTransport,
@@ -20,8 +18,7 @@ import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
 import type { ConversationOperations } from "./conversation-operations.js";
 import { HOST_NATIVE_NODE_ID } from "./node-capabilities.js";
 import { createGatewayOperator } from "./operator.js";
-import { createGatewayService, type GrantedWords } from "./service.js";
-import { VoiceReceiver } from "./voice-receiver.js";
+import { createGatewayService } from "./service.js";
 
 const NOW = 1_800_000_000_000;
 
@@ -29,14 +26,6 @@ const NOW = 1_800_000_000_000;
 function recordOf(value: WireValue | undefined): WireRecord {
   assert.ok(isRecord(value));
   return value;
-}
-
-/** The state the ledger holds for one run, or nothing once the run's delivery is gone. */
-function deliveryState(
-  deliveries: DeliveryLedger<GrantedWords>,
-  runId: string,
-): DeliveryState | undefined {
-  return deliveries.records().find((delivery) => delivery.runId === runId)?.state;
 }
 
 function record(overrides: Partial<BrainRequestRecord> = {}): BrainRequestRecord {
@@ -53,17 +42,6 @@ function record(overrides: Partial<BrainRequestRecord> = {}): BrainRequestRecord
     askRecordedAt: NOW,
     ...overrides,
   };
-}
-
-function ended(overrides: Partial<BrainRequestRecord> = {}): BrainRequestRecord {
-  return record({
-    status: BRAIN_REQUEST_STATUS.SUCCEEDED,
-    settledAt: NOW + 2,
-    text: "Two agents are waiting.",
-    conversationRecordedAt: NOW + 2,
-    revision: 3,
-    ...overrides,
-  });
 }
 
 /**
@@ -107,19 +85,12 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
     markAskRecorded: async () => true,
   } as unknown as BrainAgent;
   let brainStands = true;
-  const deliveries = new DeliveryLedger<GrantedWords>({
-    nextDeliveryId: () => `delivery-${++ids}`,
-  });
-  const receiver = new VoiceReceiver();
   const service = createGatewayService({
     brain: {
       current: () => (brainStands ? agent : undefined),
       agentForRun: (runId) => (brainStands && records.has(runId) ? agent : undefined),
-      conversationForRun: (runId) => (records.has(runId) ? MAIN_SESSION_KEY : undefined),
       allRequests: () => [...records.values()],
       generationId: () => generation.id,
-      holdsGeneration: (generationId) => generationId === generation.id,
-      publicationSettled: () => Promise.resolve(),
       // SAFETY: no test here reaches a child; the fixture stands in for the service.
       children: {} as ChildRunService,
       // SAFETY: only the revision is read; the fixture stands in for the snapshot.
@@ -138,8 +109,6 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
     } as unknown as ConversationOperations,
     memory: { status: () => ({}) },
     observedSessionCount: () => 0,
-    deliveries,
-    receiver,
     recordConversationEntry: (entry) => {
       recorded.push(entry);
       return true;
@@ -161,8 +130,6 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
     service,
     operator,
     transport,
-    deliveries,
-    receiver,
     records,
     asked,
     recorded,
@@ -174,14 +141,6 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
     },
     /** The followers' report of every record, as the wiring's broadcast hands it on. */
     report: () => service.runsReported([...records.values()]),
-    end: (runId: string) => {
-      const done = ended({ runId, submissionId: records.get(runId)?.submissionId ?? "sub" });
-      records.set(runId, done);
-      service.runsReported([...records.values()]);
-      service.endPublished(done, MAIN_SESSION_KEY);
-      return done;
-    },
-    offers: () => events.filter((event) => event.kind === GATEWAY_EVENT.DELIVERY_OFFERED),
   };
 }
 
@@ -208,118 +167,6 @@ for (const kind of ["in-process", "loopback"] as const) {
     const f = fixture(kind);
     assert.equal(await f.operator.deleteConversation(MAIN_SESSION_KEY), true);
     assert.deepEqual(f.deleted, [MAIN_SESSION_KEY]);
-  });
-
-  test(`[${kind}] a renderer reload re-offers the unclaimed reply to the new epoch and refuses the old one's claim`, async () => {
-    const f = fixture(kind);
-    await f.operator.submit({
-      submissionId: "s",
-      question: "q",
-      origin: BRAIN_REQUEST_ORIGIN.TYPED,
-    });
-    f.report();
-    const first = f.receiver.begin();
-    f.receiver.markReady(first);
-    f.service.receiverReady();
-    f.end("run-1");
-    assert.equal(f.offers().length, 1);
-    assert.equal(deliveryState(f.deliveries, "run-1"), DELIVERY_STATE.OFFERED);
-    // The renderer reloads before claiming: a new epoch, the offer re-issued to it.
-    f.receiver.reset();
-    const second = f.receiver.begin();
-    f.receiver.markReady(second);
-    f.service.receiverReady();
-    assert.equal(f.offers().length, 2);
-    const offer = recordOf(f.offers()[1]?.payload);
-    assert.equal(offer.epoch, second);
-    // The vanished renderer's claim, naming the old epoch, is refused; the current one is granted once.
-    assert.deepEqual(await f.operator.claim("run-1", String(offer.deliveryId), first), {
-      granted: false,
-    });
-    const granted = await f.operator.claim("run-1", String(offer.deliveryId), second);
-    assert.equal(granted.granted, true);
-    assert.deepEqual(await f.operator.claim("run-1", String(offer.deliveryId), second), {
-      granted: false,
-    });
-    assert.equal(deliveryState(f.deliveries, "run-1"), DELIVERY_STATE.CLAIMED);
-  });
-
-  test(`[${kind}] a claimed reply is never re-offered to a competing receiver, and a delayed acknowledgement under the old epoch changes nothing`, async () => {
-    const f = fixture(kind);
-    await f.operator.submit({
-      submissionId: "a",
-      question: "q",
-      origin: BRAIN_REQUEST_ORIGIN.TYPED,
-    });
-    await f.operator.submit({
-      submissionId: "b",
-      question: "q",
-      origin: BRAIN_REQUEST_ORIGIN.TYPED,
-    });
-    f.report();
-    const first = f.receiver.begin();
-    f.receiver.markReady(first);
-    f.end("run-1");
-    f.end("run-2");
-    const offer = recordOf(f.offers()[0]?.payload);
-    assert.equal(offer.runId, "run-1");
-    assert.equal((await f.operator.claim("run-1", String(offer.deliveryId), first)).granted, true);
-    // A second receiver takes over while the first still holds the claimed words.
-    f.receiver.reset();
-    const second = f.receiver.begin();
-    f.receiver.markReady(second);
-    f.service.receiverReady();
-    const next = recordOf(f.offers()[1]?.payload);
-    // run-1 may already have been heard: only run-2 is offered to the newcomer.
-    assert.equal(next.runId, "run-2");
-    assert.equal(deliveryState(f.deliveries, "run-1"), DELIVERY_STATE.CLAIMED);
-    // The first receiver's acknowledgement lands late, under the epoch its
-    // grant went to: it closes run-1 — the words were its to finish — and
-    // re-offers nothing, since the newcomer already holds run-2. A stranger's
-    // acknowledgement under the wrong epoch or delivery changes nothing.
-    assert.equal(await f.operator.acknowledge("run-2", String(next.deliveryId), first), false);
-    assert.equal(await f.operator.acknowledge("run-1", "delivery-none", first), false);
-    assert.equal(deliveryState(f.deliveries, "run-1"), DELIVERY_STATE.CLAIMED);
-    assert.equal(await f.operator.acknowledge("run-1", String(offer.deliveryId), first), true);
-    assert.equal(deliveryState(f.deliveries, "run-1"), undefined);
-    assert.equal(f.offers().length, 2);
-    // The second receiver claims and acknowledges run-2, which ends it.
-    assert.equal((await f.operator.claim("run-2", String(next.deliveryId), second)).granted, true);
-    assert.equal(await f.operator.acknowledge("run-2", String(next.deliveryId), second), true);
-    assert.equal(deliveryState(f.deliveries, "run-2"), undefined);
-  });
-
-  test(`[${kind}] an account change withdraws every owed reply and the receiver is told under its epoch`, async () => {
-    const f = fixture(kind);
-    const withdrawn: number[] = [];
-    f.operator.onDeliveriesWithdrawn((epoch) => withdrawn.push(epoch));
-    await f.operator.submit({
-      submissionId: "s",
-      question: "q",
-      origin: BRAIN_REQUEST_ORIGIN.TYPED,
-    });
-    f.report();
-    const epoch = f.receiver.begin();
-    f.receiver.markReady(epoch);
-    f.end("run-1");
-    assert.equal(deliveryState(f.deliveries, "run-1"), DELIVERY_STATE.OFFERED);
-    // The credential changes: the generation is replaced and the brain retired.
-    f.generation.id = "gen-2";
-    f.retireBrain();
-    f.service.generationReplaced(MAIN_SESSION_KEY);
-    assert.deepEqual(withdrawn, [epoch]);
-    assert.equal(deliveryState(f.deliveries, "run-1"), undefined);
-    const offer = recordOf(f.offers()[0]?.payload);
-    assert.deepEqual(await f.operator.claim("run-1", String(offer.deliveryId), epoch), {
-      granted: false,
-    });
-    // With no brain standing, a new ask is refused in the fixed absent reason.
-    const refused = await f.operator.submit({
-      submissionId: "t",
-      question: "q",
-      origin: BRAIN_REQUEST_ORIGIN.TYPED,
-    });
-    assert.deepEqual(refused, { outcome: "rejected", reason: "absent" });
   });
 
   test(`[${kind}] the run list and conversation changes reach the client as numbered events it can reconcile against`, async () => {
