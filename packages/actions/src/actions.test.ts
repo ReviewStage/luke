@@ -17,11 +17,11 @@ import {
   REALTIME_TOOL,
   realtimeToolDefinitions,
   remoteRealtimeToolDefinitions,
-  toolAction,
 } from "./actions.js";
 import { maximumRememberedFacts, type RememberedFact } from "./memory.js";
 import { withoutAdmission } from "./testing/admitted.js";
 import { itemEnum, objectProperties } from "./testing/json-schema.js";
+import { admitToolCall } from "./testing/tool-call.js";
 
 /** One app action, admitted the way the brain's own intake admits it. */
 const appToolAction = (
@@ -30,7 +30,7 @@ const appToolAction = (
   sessions: readonly never[],
   rememberedFacts: readonly RememberedFact[],
 ) =>
-  toolAction(call, {
+  admitToolCall(call, {
     origin: RUN_ORIGIN.USER,
     roster: { read: async () => sessions },
     guide,

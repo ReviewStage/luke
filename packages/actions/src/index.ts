@@ -1,6 +1,7 @@
 export * from "./action-kinds.js";
 export * from "./action-narration.js";
 export * from "./action-output.js";
+export { SESSION_IDENTITY_FIELDS } from "./action-schemas.js";
 export * from "./actions.js";
 export * from "./adapter-requests.js";
 export * from "./admit.js";

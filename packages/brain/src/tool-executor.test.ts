@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { REALTIME_TOOL } from "@sidecar/actions";
+import { ACTION_KIND, REALTIME_TOOL } from "@sidecar/actions";
 import { NOTEBOOK_MEMORY_TOOL } from "@sidecar/memory";
 import { CHILD_SPAWN_REFUSAL, TOOL_EFFECT, TOOL_POLICY_LAYER } from "@sidecar/runtime";
 import {
@@ -20,7 +20,14 @@ import {
   RUN_ORIGIN,
   type ToolInvocation,
 } from "@sidecar/runtime/vocabulary";
-import { ACTION_RESULT_STATUS, isRecord, type UnparsedWireValue } from "@sidecar/wire";
+import {
+  ACTION_RESULT_STATUS,
+  isRecord,
+  RECORD_EXTRA_KEYS,
+  s,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "@sidecar/wire";
 import { BrainJournal } from "./journal.js";
 import { fakeActionPerformer } from "./testing.js";
 import {
@@ -31,13 +38,9 @@ import {
   type ToolExecutorDependencies,
   type ToolExecutorTurn,
 } from "./tool-executor.js";
+import { REFUSAL_REASON } from "./tools/refusals.js";
 import { BRAIN_TOOL, brainToolCatalog, resolveTurnToolPolicy } from "./tools.js";
-import {
-  BRAIN_TURN_TRIGGER,
-  type BrainTurnTrigger,
-  REFUSAL_REASON,
-  type TurnContext,
-} from "./turn.js";
+import { BRAIN_TURN_TRIGGER, type BrainTurnTrigger, type TurnContext } from "./turn.js";
 
 /**
  * The executor alone, over a policy and a journal and nothing else: the
@@ -87,9 +90,10 @@ function executor(
     run,
     signal: run.abort.signal,
   } as unknown as TurnContext;
+  const performer = fakeActionPerformer();
   const dependencies: ToolExecutorDependencies = {
     roster: () => ({ text: "roster", identities: [] }),
-    actions: fakeActionPerformer().actions,
+    actions: performer.actions,
     children,
     memory,
     workspace: {
@@ -127,6 +131,7 @@ function executor(
     journal,
     written,
     checkpoints,
+    performed: performer.performed,
     execute: async (invocation: ToolInvocation) =>
       parsed(
         (
@@ -378,54 +383,58 @@ test("the session tools render the host's typed answers in the records the model
   assert.deepEqual(cancelled, ["child-1"]);
 });
 
-/** A memory provider whose four tools record the standing they were handed and answer accepted. */
+/** A memory provider whose two reads record the input and standing they were handed and answer accepted. */
 function memoryDefinition() {
   const contexts: MemoryToolContext[] = [];
+  const inputs: WireRecord[] = [];
   const definition: MemoryDefinition = {
     scope: { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: "main" },
     provider: {
       recall: async () => ({ messages: [] }),
       tools: Object.values(NOTEBOOK_MEMORY_TOOL).map((name) => ({
-        schema: { name, description: name, parameters: {} },
-        effect:
-          name === NOTEBOOK_MEMORY_TOOL.SEARCH || name === NOTEBOOK_MEMORY_TOOL.GET
-            ? TOOL_EFFECT.READ
-            : TOOL_EFFECT.WRITE,
-        execute: async (_invocation, context) => {
+        name,
+        description: name,
+        inputSchema: s.record({}, { extraKeys: RECORD_EXTRA_KEYS.IGNORE }),
+        effect: TOOL_EFFECT.READ,
+        execute: async (input, context) => {
+          inputs.push(input);
           contexts.push(context);
           return { status: ACTION_RESULT_STATUS.ACCEPTED };
         },
       })),
     },
   };
-  return { definition, contexts };
+  return { definition, contexts, inputs };
 }
 
-test("a memory tool is dispatched to the provider under the turn's standing and scope: a write through the journal, a read directly, and none without a provider", async () => {
+test("a memory read is dispatched to the provider's module under the turn's standing and scope, directly and unjournaled, and none without a provider; a notebook write is an action through the journal", async () => {
   const memory = memoryDefinition();
   const h = executor(BRAIN_TURN_TRIGGER.WAKE, undefined, memory.definition);
   const read = await h.execute(call(NOTEBOOK_MEMORY_TOOL.SEARCH, { query: "deploys" }));
   assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED);
   assert.deepEqual(h.journal.entries(), [], "a read is not an effect");
-  const written = await h.execute(call(NOTEBOOK_MEMORY_TOOL.REMEMBER, { words: "likes tea" }));
+  assert.deepEqual(memory.inputs, [{ query: "deploys" }]);
+  assert.deepEqual(
+    memory.contexts.map((context) => [context.runId, context.origin, context.scope]),
+    [["run-1", RUN_ORIGIN.OBSERVATION, memory.definition.scope]],
+  );
+  const written = await h.execute(call(REALTIME_TOOL.REMEMBER_FACT, { words: "likes tea" }));
   assert.equal(written.status, ACTION_RESULT_STATUS.ACCEPTED);
   assert.deepEqual(
     h.journal.entries().map((entry) => entry.name),
-    [NOTEBOOK_MEMORY_TOOL.REMEMBER],
+    [REALTIME_TOOL.REMEMBER_FACT],
     "the write went through the journal",
   );
   assert.deepEqual(h.checkpoints, [1], "checkpointed before the effect ran");
   assert.deepEqual(
-    memory.contexts.map((context) => [context.runId, context.origin, context.scope]),
-    [
-      ["run-1", RUN_ORIGIN.OBSERVATION, memory.definition.scope],
-      ["run-1", RUN_ORIGIN.OBSERVATION, memory.definition.scope],
-    ],
+    h.performed.map((action) => action.kind),
+    [ACTION_KIND.REMEMBER],
+    "the write reached the carrier as an admitted action, never as a call",
   );
   // The same call id again is answered from the journal, not performed twice.
-  const again = await h.execute(call(NOTEBOOK_MEMORY_TOOL.REMEMBER, { words: "likes tea" }));
+  const again = await h.execute(call(REALTIME_TOOL.REMEMBER_FACT, { words: "likes tea" }));
   assert.equal(again.status, ACTION_RESULT_STATUS.ACCEPTED);
-  assert.equal(memory.contexts.length, 2);
+  assert.equal(h.performed.length, 1);
 
   const without = executor();
   for (const name of Object.values(NOTEBOOK_MEMORY_TOOL)) {

@@ -170,6 +170,48 @@ node --input-type=module -e '
   }
 ' "$SIDECAR_REPO_ROOT"
 
+# Admission has one home in the brain: a tool module's own `execute`, under
+# `packages/brain/src/tools/`. Nothing else of the brain, and nothing in the
+# host's brain wiring or the memory package, may call `admit()` or reach for
+# it, so no path can hand the host a raw call to admit and carry in one
+# breath — the notebook's two writes included, which arrive at the host as
+# admitted actions like every other. The check reads import lists rather than
+# call sites, because a file that never imports `admit` cannot call it.
+node --input-type=module -e '
+  import { readdir, readFile } from "node:fs/promises";
+  import path from "node:path";
+  const root = process.argv[1];
+  const scopes = [
+    { directory: "packages/brain/src", allowed: "packages/brain/src/tools" },
+    { directory: "packages/host/src/brain", allowed: undefined },
+    { directory: "packages/host/src", allowed: undefined, only: ["memory-definition.ts"] },
+    { directory: "packages/memory/src", allowed: undefined },
+  ];
+  const reaching = [];
+  for (const scope of scopes) {
+    const directory = path.join(root, scope.directory);
+    const entries = await readdir(directory, { withFileTypes: true, recursive: true });
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith(".ts") || entry.name.endsWith(".test.ts")) continue;
+      if (scope.only && !scope.only.includes(entry.name)) continue;
+      const file = path.join(entry.parentPath, entry.name);
+      const relative = path.relative(root, file);
+      if (scope.allowed && relative.startsWith(scope.allowed)) continue;
+      const text = await readFile(file, "utf8");
+      for (const match of text.matchAll(/import\s*(?:type\s+)?\{([^}]*)\}\s*from\s+"@sidecar\/actions"/g)) {
+        const names = match[1].split(",").map((name) => name.trim().replace(/^type\s+/, "").split(/\s+as\s+/)[0]);
+        if (names.includes("admit")) reaching.push(relative);
+      }
+    }
+  }
+  if (reaching.length > 0) {
+    process.stderr.write(
+      `error: admit() is reached outside the brain tool modules: ${reaching.join(", ")}\n`,
+    );
+    process.exit(1);
+  }
+' "$SIDECAR_REPO_ROOT"
+
 # The brand artwork has one source and three sets of committed outputs cut from
 # it: the SVGs, the face the renderer draws, and the motions it plays. If the
 # copies no longer match the source, one of them is telling a story the artwork

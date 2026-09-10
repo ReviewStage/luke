@@ -34,23 +34,33 @@ listener's unsubscribe, a watcher's teardown, and the store that ends both are
 one shape wherever they are held, and adopting it adds no edge: every package
 but `packages/panel` already depends on wire.
 
-The brain's tools are modules under `packages/brain/src/tools/`, each
-declaring its `description`, its `inputSchema` (the wire `Schema` its fields
-are declared in once, which parses a call and emits what the model is shown;
-the AI SDK's `tool()` takes it through `jsonSchema()`), and one
-`execute(input, ctx)`, where `ctx` carries the conversation, the turn, the
-run, who opened it, and the abort signal — the shape eve's `defineTool` and
-the AI SDK's `tool()` both take. An action tool's `execute` is the whole
-gauntlet: `admit()` first, over the readers the host hands it in `ctx`
-(admission reads the roster for itself through them and is never handed a
-copy), then `ctx.carry`, which takes only the `ValidatedAction` admission
-minted, so nothing reaches a carrier without admission having run. A module
-imports the packages below the brain and its own directory and nothing else
-of the brain; `repository-checks.sh` refuses a relative import that leaves
-the directory, so a tool stays readable, testable, and movable without the
-agent that runs it. The catalog and the effective tool policy are unchanged
-by this: the policy still fixes both the schemas a turn is offered and the
-gate every emitted call meets at dispatch.
+Every tool the brain's catalog lists is a module under
+`packages/brain/src/tools/` (the memory provider's two reads are declared in
+`@sidecar/memory` in the same shape), each declaring its `description`, its
+`inputSchema` (the wire `Schema` its fields are declared in once, which
+parses a call and emits what the model is shown; the AI SDK's `tool()` takes
+it through `jsonSchema()`), and one `execute(input, ctx)`, where `ctx`
+carries the conversation, the turn, the run, who opened it, the abort signal,
+and the seams that kind of tool needs and no others — the shape eve's
+`defineTool` and the AI SDK's `tool()` both take. An action tool's `execute`
+is the whole gauntlet: `admit()` first, over the readers the host hands it in
+`ctx` (admission reads the roster for itself through them and is never handed
+a copy), then `ctx.carry`, which takes only the `ValidatedAction` admission
+minted, so nothing reaches a carrier without admission having run; the
+notebook's two writes are action tools like the rest, so the host has no
+seam that takes a raw call. The briefing's module is handed a way to hand its
+words on and neither admission nor a carrier, so what it says can become
+speech and nothing else; a workspace or session module is handed the journal
+so its one write is recorded before it runs, after the module has refused
+arguments that are not the strings it takes. A module imports the packages
+below the brain and its own directory and nothing else of the brain, and
+`admit` is imported in the brain only under that directory and nowhere in the
+host's brain wiring or the memory package; `repository-checks.sh` refuses
+both, so a tool stays readable, testable, and movable without the agent that
+runs it, and admission cannot quietly regain a second home. The catalog and
+the effective tool policy are unchanged by this: the policy still fixes both
+the schemas a turn is offered and the gate every emitted call meets at
+dispatch.
 
 ## The graph is acyclic, and stays that way
 

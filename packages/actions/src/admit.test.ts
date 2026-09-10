@@ -29,10 +29,10 @@ import {
   realtimeToolFamily,
   SESSION_LIST_ALL,
   SESSION_LIST_VOICE,
-  toolAction,
 } from "./index.js";
 import { withoutAdmission } from "./testing/admitted.js";
 import { itemEnum, objectProperties } from "./testing/json-schema.js";
+import { admitToolCall } from "./testing/tool-call.js";
 
 /**
  * One tool call admitted, as the payload alone: the brand and the origin are
@@ -48,7 +48,7 @@ async function sessionToolAction(
   defaultProjectIds?: Readonly<Partial<Record<string, string>>>,
 ) {
   return withoutAdmission(
-    await toolAction(call, {
+    await admitToolCall(call, {
       origin: RUN_ORIGIN.USER,
       roster: { read: async () => sessions },
       projects: {
@@ -62,7 +62,7 @@ async function sessionToolAction(
 
 async function issueToolAction(call: RealtimeFunctionCall, issues: readonly TrackedIssue[]) {
   return withoutAdmission(
-    await toolAction(call, {
+    await admitToolCall(call, {
       origin: RUN_ORIGIN.USER,
       roster: { read: async () => [] },
       issues,

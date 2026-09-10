@@ -10,8 +10,10 @@ import {
   TOOL_POLICY_LAYER,
 } from "@sidecar/runtime";
 import { wireRecord } from "@sidecar/wire";
+import { ACTION_TOOLS } from "./tools/action-tools.js";
 import {
   BRAIN_TOOL,
+  BRAIN_TOOLS,
   brainToolCatalog,
   brainToolSchemas,
   hostedBrainToolCatalog,
@@ -30,11 +32,8 @@ test("the catalog holds every action, every brain tool, and every memory tool on
   for (const tool of realtimeToolDefinitions()) {
     const entry = catalog.find((candidate) => candidate.schema.name === tool.name);
     assert.ok(entry, `${tool.name} is in the catalog`);
-    // The two notebook writes are the memory provider's to carry; every other action is the performer's.
-    assert.equal(
-      entry.execution,
-      memoryTools.includes(tool.name) ? TOOL_EXECUTION.MEMORY : TOOL_EXECUTION.PERFORMER,
-    );
+    // Every action is the performer's to carry, the notebook's two writes included.
+    assert.equal(entry.execution, TOOL_EXECUTION.PERFORMER);
     assert.ok(entry.groups.includes(TOOL_GROUP.ACTIONS));
   }
   for (const own of Object.values(BRAIN_TOOL)) {
@@ -49,12 +48,9 @@ test("the catalog holds every action, every brain tool, and every memory tool on
     assert.ok(entry, `${own} is in the catalog`);
     assert.equal(entry.execution, TOOL_EXECUTION.MEMORY);
   }
-  const memoryReads = memoryTools.filter(
-    (name) => !realtimeToolDefinitions().some((tool) => tool.name === name),
-  ).length;
   assert.equal(
     names.length,
-    realtimeToolDefinitions().length + Object.values(BRAIN_TOOL).length + memoryReads,
+    realtimeToolDefinitions().length + Object.values(BRAIN_TOOL).length + memoryTools.length,
   );
 });
 
@@ -131,7 +127,7 @@ test("a child's task turn loses announce like an ask, and the session tools stan
   assert.equal(below.allows(BRAIN_TOOL.SUBAGENTS), true);
 });
 
-test("the memory provider's tools stand in the catalog under their own group: the reads as reads, the two writes still actions", () => {
+test("the notebook stands in the catalog under the memory group: the provider's reads as reads, its two writes as actions the performer carries", () => {
   const catalog = brainToolCatalog();
   const entryOf = (name: string) => {
     const entry = catalog.find((tool) => tool.schema.name === name);
@@ -144,25 +140,47 @@ test("the memory provider's tools stand in the catalog under their own group: th
     assert.equal(entry.effect, TOOL_EFFECT.READ);
     assert.deepEqual([...entry.groups], [TOOL_GROUP.MEMORY, TOOL_GROUP.READ]);
   }
-  for (const name of [NOTEBOOK_MEMORY_TOOL.REMEMBER, NOTEBOOK_MEMORY_TOOL.FORGET]) {
+  const notebookWrites = [REALTIME_TOOL.REMEMBER_FACT, REALTIME_TOOL.FORGET_FACT];
+  for (const name of notebookWrites) {
     const entry = entryOf(name);
-    assert.equal(entry.execution, TOOL_EXECUTION.MEMORY);
+    assert.equal(entry.execution, TOOL_EXECUTION.PERFORMER);
     assert.equal(entry.effect, TOOL_EFFECT.WRITE);
     assert.deepEqual([...entry.groups], [TOOL_GROUP.MEMORY, TOOL_GROUP.ACTIONS, ACTION_FAMILY.APP]);
   }
   assert.equal(
-    catalog.filter((tool) => tool.schema.name === NOTEBOOK_MEMORY_TOOL.REMEMBER).length,
+    catalog.filter((tool) => tool.schema.name === REALTIME_TOOL.REMEMBER_FACT).length,
     1,
-    "an action the provider owns is listed once",
+    "a notebook write is listed once, as an action",
   );
   const denied = resolveToolPolicy(catalog, {
     agent: { deny: [`${GROUP_PREFIX}${TOOL_GROUP.MEMORY}`] },
   });
-  for (const name of Object.values(NOTEBOOK_MEMORY_TOOL)) assert.equal(denied.allows(name), false);
+  for (const name of [...Object.values(NOTEBOOK_MEMORY_TOOL), ...notebookWrites]) {
+    assert.equal(denied.allows(name), false);
+  }
   assert.equal(denied.allows(BRAIN_TOOL.READ_TRANSCRIPT), true);
   const deniedActions = resolveToolPolicy(catalog, {
     agent: { deny: [`${GROUP_PREFIX}${TOOL_GROUP.ACTIONS}`] },
   });
-  assert.equal(deniedActions.allows(NOTEBOOK_MEMORY_TOOL.REMEMBER), false);
+  assert.equal(deniedActions.allows(REALTIME_TOOL.REMEMBER_FACT), false);
   assert.equal(deniedActions.allows(NOTEBOOK_MEMORY_TOOL.SEARCH), true);
+});
+
+test("every tool the catalog lists is a module of one shape: a name, words, a wire schema, and one execute", () => {
+  const modules = [...ACTION_TOOLS, ...BRAIN_TOOLS];
+  const catalog = brainToolCatalog();
+  const memoryTools: readonly string[] = Object.values(NOTEBOOK_MEMORY_TOOL);
+  for (const entry of catalog) {
+    if (memoryTools.includes(entry.schema.name)) continue;
+    const module = modules.find((candidate) => candidate.name === entry.schema.name);
+    assert.ok(module, `${entry.schema.name} is a module`);
+    // The registry's schema is the module's own wire schema, emitted once.
+    assert.deepEqual(
+      entry.schema.parameters,
+      JSON.parse(JSON.stringify(module.inputSchema.jsonSchema())),
+    );
+    assert.equal(entry.schema.description, module.description);
+  }
+  assert.equal(new Set(modules.map((module) => module.name)).size, modules.length);
+  assert.equal(modules.length + memoryTools.length, catalog.length);
 });

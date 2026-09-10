@@ -1,5 +1,5 @@
-import type { WireRecord } from "@sidecar/wire";
-import type { ToolExecutionContext, ToolInvocation, ToolSchema } from "./execution.js";
+import type { Schema, WireRecord } from "@sidecar/wire";
+import type { ToolExecutionContext } from "./execution.js";
 import type { RunOrigin } from "./identifiers.js";
 import type { TOOL_EFFECT } from "./registry.js";
 
@@ -106,14 +106,19 @@ export interface MemoryToolContext extends ToolExecutionContext {
 }
 
 /**
- * One tool a provider owns: the schema a model is offered, whether the call
- * reads or writes, and the execution. A write runs through the host's
- * journal like every other effect; a memory tool never speaks.
+ * One tool a provider owns, in the module shape every tool of the brain is
+ * declared in: its name, what it does in the model's words, the wire schema
+ * of what it takes (declared once; it parses a call and emits what the model
+ * is shown), whether the call reads or writes, and the one `execute` that
+ * carries a call whose arguments parsed as a record. A write runs through the
+ * host's journal like every other effect; a memory tool never speaks.
  */
 export interface MemoryTool {
-  readonly schema: ToolSchema;
+  readonly name: string;
+  readonly description: string;
+  readonly inputSchema: Schema<unknown>;
   readonly effect: typeof TOOL_EFFECT.READ | typeof TOOL_EFFECT.WRITE;
-  execute(invocation: ToolInvocation, context: MemoryToolContext): Promise<WireRecord>;
+  execute(input: WireRecord, context: MemoryToolContext): Promise<WireRecord>;
 }
 
 export interface MemoryProvider {
@@ -130,5 +135,5 @@ export interface MemoryDefinition {
 }
 
 export function memoryToolNamed(provider: MemoryProvider, name: string): MemoryTool | undefined {
-  return provider.tools.find((tool) => tool.schema.name === name);
+  return provider.tools.find((tool) => tool.name === name);
 }
