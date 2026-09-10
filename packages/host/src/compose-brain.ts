@@ -74,7 +74,8 @@ export interface BrainDependencies extends ComposerContext {
   account: AccountComposer;
   issues: IssuesComposer;
   observation: ObservationComposer;
-  speech: SpeechComposer;
+  /** Where a briefing goes, and the withdrawals a generation's end owes; a narrowed view so the merge can route the delivery. */
+  speech: Pick<SpeechComposer, "deliverBriefing" | "withdrawBriefings" | "dropBriefings">;
 }
 
 export function composeBrain(dependencies: BrainDependencies): BrainComposer {

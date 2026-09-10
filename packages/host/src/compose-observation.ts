@@ -99,6 +99,8 @@ function isSessionIdentity(value: UnparsedWireValue): value is SessionIdentity &
 interface ObservationLinks {
   wake: (events: readonly BrainWakeEvent[]) => void;
   rosterLook: () => void;
+  /** The roster the clients draw moved; the live session is told the same view once it settles. */
+  rosterChanged: () => void;
 }
 
 export interface ObservationComposer extends Composer {
@@ -576,6 +578,7 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     if (!runMode.observesProviders || !account.capabilitiesActive() || unsubscribeSessions) return;
     unsubscribeSessions = sessionRegistry.subscribe((sessions) => {
       broadcastSessions(sessions);
+      links.get().rosterChanged();
       openCreatedWorkspaces(sessions);
       void broadcastWorkspaceProjects();
       countObservedSessions(sessions);
