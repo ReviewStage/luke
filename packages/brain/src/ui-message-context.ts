@@ -9,13 +9,14 @@ import {
   type RuntimeCheckpoint,
   sameCheckpointFormat,
 } from "@sidecar/runtime/vocabulary";
-import { type CompactionMetadata, MESSAGE_ROLE, TOOL_PART_STATE } from "@sidecar/session";
 import {
+  type CompactionMetadata,
   isStoredToolPart,
-  readStoredUIMessages,
+  MESSAGE_ROLE,
   type StoredToolPart,
-  type StoredUIMessage,
-} from "@sidecar/session/ui-messages";
+  TOOL_PART_STATE,
+} from "@sidecar/session";
+import { readStoredUIMessages, type StoredUIMessage } from "@sidecar/session/ui-messages";
 import {
   isWireString,
   SCHEMA_REFUSAL,

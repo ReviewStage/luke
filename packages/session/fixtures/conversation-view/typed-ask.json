@@ -1,0 +1,57 @@
+{
+  "main": [
+    {
+      "message": {
+        "id": "2b000000-0000-4000-8000-000000000011",
+        "role": "user",
+        "metadata": {
+          "author": "developer",
+          "channel": "typed"
+        },
+        "parts": [
+          {
+            "type": "text",
+            "text": "Is the fixture session still waiting on anything?"
+          }
+        ]
+      },
+      "seq": 11,
+      "turnId": "1a000000-0000-4000-8000-000000000001",
+      "createdAt": 1757505600000
+    },
+    {
+      "message": {
+        "id": "2b000000-0000-4000-8000-000000000012",
+        "role": "assistant",
+        "metadata": {
+          "author": "brain"
+        },
+        "parts": [
+          {
+            "type": "step-start"
+          },
+          {
+            "type": "text",
+            "text": "It is still holding on a permission prompt.",
+            "state": "done"
+          }
+        ]
+      },
+      "seq": 12,
+      "turnId": "1a000000-0000-4000-8000-000000000001",
+      "createdAt": 1757505601500
+    }
+  ],
+  "observed": [],
+  "turns": [
+    {
+      "id": "1a000000-0000-4000-8000-000000000001",
+      "origin": "typed",
+      "status": "settled",
+      "queuedAt": 1757505600000,
+      "startedAt": 1757505600200,
+      "settledAt": 1757505602400
+    }
+  ],
+  "events": []
+}

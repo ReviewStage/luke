@@ -25,6 +25,7 @@ export * from "./advertised-actions.js";
 export * from "./agent-identities.js";
 export * from "./bounds.js";
 export * from "./conversation/conversation.js";
+export * from "./conversation-view.js";
 export * from "./issues/issues.js";
 export * from "./normalize.js";
 export * from "./provider-contract.js";
