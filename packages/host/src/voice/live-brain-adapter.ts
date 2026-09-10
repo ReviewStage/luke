@@ -64,14 +64,24 @@ function liveRunEventOf(event: BrainRunEvent): LiveBrainRunEvent | undefined {
   }
 }
 
+/** The live brain over main's agent, with the one thing the agent adds: following a run the brain accepted from a window. */
+export interface BrainAgentLiveBrain extends LiveBrain {
+  /**
+   * Subscribes to the agent standing now, so a run it accepted from a typed
+   * ask — which never crosses `submitAsk` here — still reaches the service's
+   * listeners. Following the same agent twice is one subscription.
+   */
+  followCurrent: () => void;
+}
+
 /**
  * Today's one implementation of the live brain: main's in-process agent. The
  * agent is rebuilt on every credential transition, so the adapter subscribes
- * to whichever agent stands when an ask is submitted and forwards its events
- * for as long as it stands; a retired agent revokes its runs, and their ends
- * arrive through the subscription it had.
+ * to whichever agent stands when an ask is submitted or followed, and forwards
+ * its events for as long as it stands; a retired agent revokes its runs, and
+ * their ends arrive through the subscription it had.
  */
-export function brainAgentLiveBrain(options: BrainAgentLiveBrainOptions): LiveBrain {
+export function brainAgentLiveBrain(options: BrainAgentLiveBrainOptions): BrainAgentLiveBrain {
   const listeners = new Set<(event: LiveBrainRunEvent) => void>();
   const subscribed = new WeakSet<LiveBrainAgent>();
 
@@ -86,6 +96,10 @@ export function brainAgentLiveBrain(options: BrainAgentLiveBrainOptions): LiveBr
   }
 
   return {
+    followCurrent: () => {
+      const agent = options.agent();
+      if (agent) follow(agent);
+    },
     submitAsk: async (ask) => {
       const agent = options.agent();
       if (!agent) return { outcome: LIVE_BRAIN_SUBMISSION.REFUSED, refusal: NO_BRAIN_REFUSAL };

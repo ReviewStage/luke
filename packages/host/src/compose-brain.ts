@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { DeliveryLedger, workspaceProjectContextText } from "@sidecar/brain";
+import { type BrainDelivery, DeliveryLedger, workspaceProjectContextText } from "@sidecar/brain";
 import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
 import {
@@ -44,7 +44,6 @@ import { wireBrain } from "./brain/wiring.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { IssuesComposer } from "./compose-issues.js";
 import type { ObservationComposer } from "./compose-observation.js";
-import type { SpeechComposer } from "./compose-speech.js";
 import type { Composer, ComposerContext } from "./composer.js";
 import { conversationOperations, startConversationMaintenance } from "./conversation-operations.js";
 import { seedWorkspaceThenStartMemory } from "./lifecycle.js";
@@ -76,12 +75,15 @@ export interface BrainDependencies extends ComposerContext {
   account: AccountComposer;
   issues: IssuesComposer;
   observation: ObservationComposer;
-  /** Where a briefing goes, and the withdrawals a generation's end owes; a narrowed view so the merge can route the delivery. */
-  speech: Pick<SpeechComposer, "deliverBriefing" | "withdrawBriefings" | "dropBriefings">;
+  /** Where a briefing goes, and where a generation's end drops the ones not yet said; the merge routes both to the live session. */
+  announcements: {
+    deliverBriefing: (delivery: BrainDelivery) => void | Promise<void>;
+    dropBriefings: () => void;
+  };
 }
 
 export function composeBrain(dependencies: BrainDependencies): BrainComposer {
-  const { kernel, account, issues, observation, speech } = dependencies;
+  const { kernel, account, issues, observation, announcements } = dependencies;
   const { runMode, report, now, createId } = kernel;
 
   /**
@@ -228,7 +230,7 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
     broadcastRequests: (snapshots) => kernel.service().runsReported(snapshots),
     onEndPublished: (record, sessionKey) => kernel.service().endPublished(record, sessionKey),
     onGenerationReplaced: (sessionKey) => {
-      if (sessionKey === MAIN_SESSION_KEY) speech.withdrawBriefings();
+      if (sessionKey === MAIN_SESSION_KEY) announcements.dropBriefings();
       kernel.service().generationReplaced(sessionKey);
     },
     actions: {
@@ -251,7 +253,7 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
     standingContext,
     pluginFor: observation.pluginFor,
     session: observation.session,
-    deliver: speech.deliverBriefing,
+    deliver: announcements.deliverBriefing,
     model: () => account.voiceCapabilities.brainModel,
     credential: () =>
       account.voiceCapabilities.voiceSource === VOICE_SOURCE.KEY
@@ -264,7 +266,7 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
     skillRoots: () => [kernel.agentSkillsPath()],
     runnable: () =>
       runMode.observesProviders && runMode.sendsNetwork && account.capabilitiesActive(),
-    dropBriefings: speech.dropBriefings,
+    dropBriefings: announcements.dropBriefings,
     memory: memoryDefinitions,
     flushMarker: (sessionKey) => memoryMaintenance.flushMarkerFor(sessionKey),
   });

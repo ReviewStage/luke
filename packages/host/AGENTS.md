@@ -84,10 +84,14 @@ record keeps the brain's reply and Luke's spoken words apart — and the
 desktop's Conversation writer is its only implementation. The trusted
 sideband's socket seam is implemented over `ws` in `voice/live-sideband.ts`,
 so `@sidecar/voice` stays free of it, beside the graceful close the
-conversations guide prescribes. The old speech path — the arbiter, the reply
-ledger, the receiver epochs — stands beside this one and is still what the
-renderer uses; a briefing reaches the live service only while a session
-stands.
+conversations guide prescribes. The live service is the one sink for
+everything Luke says unprompted: `compose-live.ts` takes every briefing from
+the brain, every typed ask's run to speak its reply, and the two onboarding
+beats, and the retired speech path — the arbiter, the reply ledger, the
+receiver epochs — is still composed and still answers its methods but is
+routed nothing and reached by no client of this build. A briefing or reply
+with no session standing makes the service say it wants one, and the voice
+window opens it muted.
 
 ## The account preference client is here for the graph's sake
 

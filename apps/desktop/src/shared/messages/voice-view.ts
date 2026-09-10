@@ -1,5 +1,5 @@
 import { PRODUCT_EXCHANGE_KIND, type ProductExchangeKind } from "@sidecar/analytics";
-import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
+import { LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import { type ConversationEntry, storedConversationEntry } from "@sidecar/session";
 import {
   isOptionalWireString,
@@ -17,7 +17,7 @@ import {
  * same voice state at the same instant and holds nothing it cannot lose.
  */
 export interface VoiceView {
-  voiceStatus: RealtimeStatus;
+  voiceStatus: LiveStatus;
   voiceError: string | undefined;
   voiceNotice: string | undefined;
   talkOpening: boolean;
@@ -31,9 +31,9 @@ export interface VoiceView {
    */
   liveConversationEntries: readonly ConversationEntry[];
   /**
-   * Whether a spoken turn is still owed its first words — being listened to,
-   * or committed with its transcription not yet streaming — so Conversation
-   * can hold the developer's place in the thread before anything is written.
+   * Whether the developer is being heard and none of their words have been
+   * transcribed yet, so Conversation can hold their place in the thread
+   * before anything is written.
    */
   spokenAskPending: boolean;
 }
@@ -79,7 +79,7 @@ export function isVoiceCommandOutcome(value: UnparsedWireValue): value is VoiceC
  * renderer dies, so no display keeps drawing an exchange that is gone.
  */
 export const IDLE_VOICE_VIEW: VoiceView = {
-  voiceStatus: REALTIME_STATUS.IDLE,
+  voiceStatus: LIVE_STATUS.IDLE,
   voiceError: undefined,
   voiceNotice: undefined,
   talkOpening: false,
@@ -88,10 +88,10 @@ export const IDLE_VOICE_VIEW: VoiceView = {
   spokenAskPending: false,
 };
 
-const REALTIME_STATUSES: ReadonlySet<string> = new Set(Object.values(REALTIME_STATUS));
+const LIVE_STATUSES: ReadonlySet<string> = new Set(Object.values(LIVE_STATUS));
 
-export function isRealtimeStatus(value: UnparsedWireValue): value is RealtimeStatus {
-  return isWireString(value) && REALTIME_STATUSES.has(value);
+export function isLiveStatus(value: UnparsedWireValue): value is LiveStatus {
+  return isWireString(value) && LIVE_STATUSES.has(value);
 }
 
 const VOICE_COMMANDS: ReadonlySet<string> = new Set(Object.values(VOICE_COMMAND));
@@ -102,7 +102,7 @@ export function isVoiceCommand(value: UnparsedWireValue): value is VoiceCommand 
 
 export function isVoiceView(value: UnparsedWireValue): value is VoiceView & WireRecord {
   if (!isRecord(value)) return false;
-  if (!isRealtimeStatus(value.voiceStatus)) return false;
+  if (!isLiveStatus(value.voiceStatus)) return false;
   if (!isOptionalWireString(value.voiceError) || !isOptionalWireString(value.voiceNotice))
     return false;
   if (!isWireBoolean(value.talkOpening)) return false;
@@ -122,15 +122,11 @@ export function isVoiceView(value: UnparsedWireValue): value is VoiceView & Wire
 }
 
 /**
- * Who opened the exchange the count is about. Luke's own speak-only call has
- * no microphone to offer, which is the whole of what tells his announcement
- * from a turn the developer took; between the developer's own two ways in,
- * only the composer says so in advance, so the talk key is what is left.
+ * Who opened the exchange the count is about. A session opened for Luke's own
+ * speech was opened by no press, which is the whole of what tells his
+ * announcement from a turn the developer took; a typed ask opens no session
+ * of its own any more, so its reply counts under the session it is said into.
  */
-export function voiceExchangeKind(input: {
-  microphoneCall: boolean;
-  typedAsk: boolean;
-}): ProductExchangeKind {
-  if (!input.microphoneCall) return PRODUCT_EXCHANGE_KIND.ANNOUNCEMENT;
-  return input.typedAsk ? PRODUCT_EXCHANGE_KIND.TYPED : PRODUCT_EXCHANGE_KIND.SPOKEN;
+export function voiceExchangeKind(input: { microphoneCall: boolean }): ProductExchangeKind {
+  return input.microphoneCall ? PRODUCT_EXCHANGE_KIND.SPOKEN : PRODUCT_EXCHANGE_KIND.ANNOUNCEMENT;
 }

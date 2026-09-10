@@ -9,7 +9,7 @@ import {
   gatewayOk,
   shutdownGateway,
 } from "@sidecar/gateway";
-import { ARRIVAL_SPEECH_KIND, CALENDAR_ONBOARDING_SPEECH_KIND } from "@sidecar/realtime";
+import { PROACTIVE_SPEECH_KIND } from "@sidecar/live";
 import { ObservationSupervisor } from "@sidecar/runtime";
 import {
   isTerminalChildRunStatus,
@@ -68,27 +68,19 @@ export function composeHost(options: HostSeams): Host {
   const issues = composeIssues({ kernel, settings, observationGate });
   const observation = composeObservation({ kernel, settings, account, issues, observationGate });
   const calendars = composeCalendars({ kernel, settings, observationGate });
+  // The speech arbiter still answers its methods and still owns the receiver
+  // epochs the bootstrap names, but nothing is routed to it any more: every
+  // briefing, beat, and reply is the live session's to say.
   const speech = composeSpeech({ kernel, settings, account, calendars, observation });
-  // A briefing is spoken into the live session while one stands, and through
-  // the speech arbiter otherwise: the renderer's voice still runs on the old
-  // path, so no session can stand until it opens one, and the route flips
-  // with it rather than speaking twice.
   const brain = composeBrain({
     kernel,
     settings,
     account,
     issues,
     observation,
-    speech: {
-      deliverBriefing: async (delivery) => {
-        if (live.service.sessionStands()) {
-          live.service.deliverBriefing(delivery);
-          return;
-        }
-        await speech.deliverBriefing(delivery);
-      },
-      withdrawBriefings: speech.withdrawBriefings,
-      dropBriefings: speech.dropBriefings,
+    announcements: {
+      deliverBriefing: (delivery) => live.service.deliverBriefing(delivery),
+      dropBriefings: () => live.service.dropBriefings(),
     },
   });
   const live = composeLive({ kernel, settings, account, calendars, observation, brain });
@@ -107,7 +99,6 @@ export function composeHost(options: HostSeams): Host {
     },
     setVoiceSpeed: (speed) => account.voiceCapabilities.realtimeCredentials?.setSpeed(speed),
     reconcileSpeech: () => {
-      void speech.reconcileSpeech();
       void live.service.reconcile();
     },
     refreshSupersetWorkspaceHost: async () => {
@@ -135,12 +126,11 @@ export function composeHost(options: HostSeams): Host {
   });
   calendars.link({
     reconcileSpeech: () => {
-      void speech.reconcileSpeech();
       void live.service.reconcile();
     },
-    withdrawBeat: speech.withdrawBeat,
-    dropBriefings: speech.dropBriefings,
-    requestOnboardingBeat: () => void speech.requestOnboardingBeat(),
+    withdrawBeat: (kind) => live.service.withdrawBeat(kind),
+    dropBriefings: () => live.service.dropBriefings(),
+    requestOnboardingBeat: () => void live.requestOnboardingBeat(),
   });
   speech.link({
     brainCurrent: () => brain.wiring.current() !== undefined,
@@ -171,7 +161,7 @@ export function composeHost(options: HostSeams): Host {
     observation.startObservation();
     calendars.startObservation();
     supervisor.setEnabled(true);
-    void speech.requestOnboardingBeat();
+    void live.requestOnboardingBeat();
     settings.reconcileProviderKeyVault();
   }
 
@@ -181,8 +171,8 @@ export function composeHost(options: HostSeams): Host {
     observation.stopObservation();
     issues.stopObservation();
     calendars.stopObservation();
-    speech.withdrawBeat(ARRIVAL_SPEECH_KIND);
-    speech.withdrawBeat(CALENDAR_ONBOARDING_SPEECH_KIND);
+    live.service.withdrawBeat(PROACTIVE_SPEECH_KIND.ARRIVAL);
+    live.service.withdrawBeat(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING);
     await account.applyVoiceCredential();
     await settings.emitSettings();
   }
@@ -228,7 +218,7 @@ export function composeHost(options: HostSeams): Host {
         supersetConnected,
         sessionReplay: carried(replay),
         receiverEpoch: speech.receiver.epoch(),
-        voiceAvailable: account.voiceCapabilities.realtimeCredentials !== undefined,
+        voiceAvailable: account.voiceCapabilities.liveSessions !== undefined,
         agentTraceEnabled: account.agentTrace !== undefined,
       });
     },
@@ -267,7 +257,7 @@ export function composeHost(options: HostSeams): Host {
     // epoch ends here as its window going away would, so replies and
     // briefings wait for the next epoch rather than being offered into a gap.
     onOperatorDisconnected: () => speech.receiver.reset(),
-    onTypedAsk: (question) => live.service.mirrorTypedAsk(question),
+    onTypedAsk: (question, runId) => live.followTypedAsk(question, runId),
   });
   kernel.setService(service);
 
@@ -296,7 +286,7 @@ export function composeHost(options: HostSeams): Host {
     calendars.startObservation();
     supervisor.setEnabled(true);
     if (account.signedIn()) settings.reconcileProviderKeyVault();
-    void speech.requestOnboardingBeat();
+    void live.requestOnboardingBeat();
     void account.session.refreshOnce();
   };
 

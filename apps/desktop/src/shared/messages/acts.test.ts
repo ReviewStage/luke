@@ -123,18 +123,28 @@ test("a brain ask is one submission with an id, bounded words, and an origin", (
   assert.equal(submit("what needs me?"), undefined);
 });
 
-test("a receiver epoch is a whole count, never a fraction or a negative", () => {
-  const wait = (epoch: WireValue) =>
-    parsedAct({ kind: ACT_KIND.BRAIN_WAIT_ASK, payload: { runId: "run-1", epoch } });
-  assert.ok(wait(0));
-  assert.ok(wait(3));
-  assert.equal(wait(-1), undefined);
-  assert.equal(wait(1.5), undefined);
-  assert.equal(wait("3"), undefined);
+test("the live session acts carry the peer's offer verbatim, a transport state the peer connection names, and one boolean", () => {
+  const offer = "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\n";
+  const create = parsedAct({ kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION, payload: { sdp: offer } });
+  assert.deepEqual(create, { kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION, payload: { sdp: offer } });
   assert.equal(
-    parsedAct({ kind: ACT_KIND.BRAIN_WAIT_ASK, payload: { runId: "run-1" } }),
+    parsedAct({ kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION, payload: { sdp: "" } }),
     undefined,
   );
+  assert.equal(parsedAct({ kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION }), undefined);
+  const transport = (state: WireValue) =>
+    parsedAct({ kind: ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT, payload: { state } });
+  for (const state of ["connecting", "connected", "disconnected", "failed", "closed"]) {
+    assert.ok(transport(state), state);
+  }
+  assert.equal(transport("new"), undefined);
+  assert.equal(transport(1), undefined);
+  const activity = (idle: WireValue) =>
+    parsedAct({ kind: ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY, payload: { idle } });
+  assert.ok(activity(true));
+  assert.ok(activity(false));
+  assert.equal(activity("yes"), undefined);
+  assert.equal(parsedAct({ kind: ACT_KIND.VOICE_END_LIVE_SESSION, payload: {} }), undefined);
 });
 
 test("a voice command is one of the four commands and carries nothing else", () => {
@@ -213,8 +223,12 @@ test("an answer's guard is the kind's own, so a shape another kind would take is
     ACT[ACT_KIND.BRAIN_SUBMIT_ASK].result({ outcome: "rejected", reason: "tired" }),
     false,
   );
-  assert.equal(ACT[ACT_KIND.BRAIN_CLAIM_REPLY].result({ granted: false }), true);
-  assert.equal(ACT[ACT_KIND.BRAIN_CLAIM_REPLY].result({ granted: true, words: "w" }), false);
+  assert.equal(
+    ACT[ACT_KIND.VOICE_CREATE_LIVE_SESSION].result({ sessionId: "sess_1", sdpAnswer: "v=0\r\n" }),
+    true,
+  );
+  assert.equal(ACT[ACT_KIND.VOICE_CREATE_LIVE_SESSION].result(undefined), true);
+  assert.equal(ACT[ACT_KIND.VOICE_CREATE_LIVE_SESSION].result({ sessionId: "sess_1" }), false);
   assert.equal(ACT[ACT_KIND.BRAIN_CANCEL_ASK].result(undefined), true);
   assert.equal(ACT[ACT_KIND.BRAIN_CANCEL_ASK].result({ runId: "run-1" }), false);
   assert.equal(ACT[ACT_KIND.VOICE_COMMAND].result("accepted"), true);

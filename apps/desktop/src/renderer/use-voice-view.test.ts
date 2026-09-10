@@ -7,7 +7,7 @@ import {
   type BrainSubmissionRejection,
 } from "@sidecar/brain/requests";
 import type { BrainAskSubmissionResult } from "@sidecar/brain/requests-wire";
-import { REALTIME_STATUS } from "@sidecar/realtime";
+import { LIVE_STATUS } from "@sidecar/live";
 import { NoticeStrip, VOICE_ERROR_NOTICE_MS } from "@sidecar/voice/orchestrator";
 import { IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
 import {
@@ -25,21 +25,22 @@ import { VOICE_ACTIVITY_HANGOVER_MS } from "./voice/voice-level-meter";
 import { WAVEFORM_VOICE } from "./waveform";
 
 test("the meter follows whoever is actually talking", () => {
-  assert.equal(waveformVoice(REALTIME_STATUS.RESPONDING), WAVEFORM_VOICE.LUKE);
-  assert.equal(waveformVoice(REALTIME_STATUS.LISTENING), WAVEFORM_VOICE.DEVELOPER);
+  assert.equal(waveformVoice(LIVE_STATUS.SPEAKING), WAVEFORM_VOICE.LUKE);
+  assert.equal(waveformVoice(LIVE_STATUS.LISTENING), WAVEFORM_VOICE.DEVELOPER);
   for (const status of [
-    REALTIME_STATUS.IDLE,
-    REALTIME_STATUS.CONNECTING,
-    REALTIME_STATUS.READY,
-    REALTIME_STATUS.FAILED,
-    REALTIME_STATUS.UNAVAILABLE,
+    LIVE_STATUS.IDLE,
+    LIVE_STATUS.CONNECTING,
+    LIVE_STATUS.MUTED,
+    LIVE_STATUS.CLOSING,
+    LIVE_STATUS.FAILED,
+    LIVE_STATUS.UNAVAILABLE,
   ] as const) {
     assert.equal(waveformVoice(status), undefined);
   }
 });
 
 test("a panel that has heard nothing draws an idle voice", () => {
-  assert.equal(IDLE_VOICE_VIEW.voiceStatus, REALTIME_STATUS.IDLE);
+  assert.equal(IDLE_VOICE_VIEW.voiceStatus, LIVE_STATUS.IDLE);
   assert.equal(IDLE_VOICE_VIEW.talkOpening, false);
   assert.equal(IDLE_VOICE_VIEW.lukeCaptions, undefined);
   assert.deepEqual(IDLE_VOICE_VIEW.liveConversationEntries, []);

@@ -21,6 +21,16 @@ import { LIVE_DEFAULTS, type LiveVoice } from "./voices.js";
 export const LIVE_SESSIONS_PATH = "/live/sessions";
 
 /**
+ * The quiet after which a session is considered idle: five minutes with no
+ * speech energy on the microphone, or the microphone muted. The peer decides
+ * it from its own local signals and never from a missing transcript event,
+ * which the guide forbids reading as silence, and reports it once; the host
+ * closes only when it too has appended nothing in the same window. Ours to
+ * tune against recorded conversations, as the guide says.
+ */
+export const LIVE_IDLE_WINDOW_MS = 5 * 60_000;
+
+/**
  * Where a trusted server attaches its sideband to a running session, under
  * the API's `wss` base. The id is the one the creation response named, kept
  * unchanged, prefix included.

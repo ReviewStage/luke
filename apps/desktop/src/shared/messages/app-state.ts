@@ -1,6 +1,7 @@
 import type { BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
+import type { LiveSessionPhase } from "@sidecar/gateway";
 import type { AppGuideSnapshot } from "@sidecar/guide";
 import type { SupersetSignInSnapshot } from "@sidecar/providers/superset/sign-in-stage";
 import type { ConversationEntry, ObservedWorkspaceProject } from "@sidecar/session";
@@ -89,6 +90,13 @@ interface AppVoiceSlice {
   view?: VoiceView;
   /** The receiver epoch the host minted for this attachment; the voice window alone reads it. */
   epoch?: number;
+  /**
+   * Where the host's one live session stands, as its last change event said:
+   * the phase, and the id once the provider named one. The voice window acts
+   * on the change events themselves, since a repeated phase is an event a
+   * version could not carry; this is what a panel may draw of it.
+   */
+  liveSession?: { sessionId?: string; phase: LiveSessionPhase };
 }
 
 interface AppSupersetSlice {

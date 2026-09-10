@@ -36,6 +36,7 @@ const RUN = {
 
 function fixture(clearConversation: () => Promise<boolean>) {
   const sentToVoice: { channel: string; payload: WireRecord }[] = [];
+  const liveCalls: string[] = [];
   // SAFETY: the row reads senders by identity alone; two distinct inert objects are two windows.
   const panelSender = {} as WebContents;
   // SAFETY: a second inert object, so the row reads two distinct windows.
@@ -64,11 +65,24 @@ function fixture(clearConversation: () => Promise<boolean>) {
     receiver: { markReady: (epoch: number) => receiver.markReady(epoch) },
     state: new AppStateStore(initialAppState(RUN, false)),
     openExternal: async () => undefined,
-    mintRealtimeCredential: async () => undefined,
-    // SAFETY: the Clear path never reads diagnostics; an inert record stands in for a minter's.
-    realtimeDiagnostics: async () => ({}) as never,
+    liveSession: {
+      createLiveSession: async (sdp: string) => {
+        liveCalls.push(`create:${sdp}`);
+        return { sessionId: "sess_1", sdpAnswer: "v=0\r\nanswer\r\n" };
+      },
+      endLiveSession: async () => {
+        liveCalls.push("end");
+      },
+      reportLiveTransport: async (state: string) => {
+        liveCalls.push(`transport:${state}`);
+      },
+      reportLiveActivity: async (idle: boolean) => {
+        liveCalls.push(`activity:${idle}`);
+      },
+    },
+    mintIntroductionCredential: async () => undefined,
+    liveDiagnostics: async () => undefined,
     recordProductEvent: () => undefined,
-    recordAgentTrace: () => undefined,
     clearConversation,
     setShortcutCapturing: () => undefined,
   };
@@ -88,8 +102,46 @@ function fixture(clearConversation: () => Promise<boolean>) {
       senderOf(sender),
     );
   const ready = (sender: WebContents, epoch: number) => reports.reportVoiceReady({ sender }, epoch);
-  return { command, ready, receiver, sentToVoice, panelSender, voiceSender };
+  const perform = (sender: WebContents, act: Parameters<typeof router.performAct>[0]) =>
+    router.performAct(act, senderOf(sender));
+  return { command, ready, perform, liveCalls, receiver, sentToVoice, panelSender, voiceSender };
 }
+
+test("the four live session acts reach the host from the voice window alone", async () => {
+  const f = fixture(async () => true);
+  const offer = "v=0\r\noffer\r\n";
+  assert.deepEqual(
+    await f.perform(f.voiceSender, {
+      kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION,
+      payload: { sdp: offer },
+    }),
+    { status: "done", value: { sessionId: "sess_1", sdpAnswer: "v=0\r\nanswer\r\n" } },
+  );
+  await f.perform(f.voiceSender, {
+    kind: ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT,
+    payload: { state: "connected" },
+  });
+  await f.perform(f.voiceSender, {
+    kind: ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY,
+    payload: { idle: true },
+  });
+  await f.perform(f.voiceSender, { kind: ACT_KIND.VOICE_END_LIVE_SESSION });
+  assert.deepEqual(f.liveCalls, [`create:${offer}`, "transport:connected", "activity:true", "end"]);
+  // A panel offering an SDP or reporting a transport it does not hold reaches nothing.
+  assert.deepEqual(
+    await f.perform(f.panelSender, {
+      kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION,
+      payload: { sdp: offer },
+    }),
+    { status: "done", value: undefined },
+  );
+  await f.perform(f.panelSender, {
+    kind: ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY,
+    payload: { idle: false },
+  });
+  await f.perform(f.panelSender, { kind: ACT_KIND.VOICE_END_LIVE_SESSION });
+  assert.equal(f.liveCalls.length, 4);
+});
 
 test("the voice window is told to clear at the fence, before the disk answers, and the panel hears the disk's answer", async () => {
   for (const erased of [true, false]) {

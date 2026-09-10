@@ -3,7 +3,6 @@ import { maximumTypedAskLength } from "@sidecar/session";
 import {
   type ACTION_RESULT_STATUS,
   isRecord,
-  isWireBoolean,
   isWireNumber,
   isWireString,
   type UnparsedWireValue,
@@ -134,14 +133,6 @@ export interface BrainAskWait {
   speak: boolean;
 }
 
-export function isBrainAskWait(value: UnparsedWireValue): boolean {
-  return (
-    isRecord(value) &&
-    (value.record === undefined || isBrainRequestSnapshot(value.record)) &&
-    isWireBoolean(value.speak)
-  );
-}
-
 /**
  * The main process's answer to a claim: the words to say, once, with the
  * origin of the ask they answer — a typed ask's reply holds the composer's
@@ -150,13 +141,6 @@ export function isBrainAskWait(value: UnparsedWireValue): boolean {
 export type BrainReplyClaimResult =
   | { granted: true; words: string; origin: BrainRequestOrigin }
   | { granted: false };
-
-export function isBrainReplyClaimResult(value: UnparsedWireValue): boolean {
-  if (!isRecord(value)) return false;
-  if (value.granted === true)
-    return isWireString(value.words) && isBrainRequestOrigin(value.origin);
-  return value.granted === false;
-}
 
 /**
  * An app act the brain decided that only the renderer can perform — a settings

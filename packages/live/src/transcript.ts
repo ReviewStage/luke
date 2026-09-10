@@ -30,6 +30,14 @@ export const TRANSCRIPT_ROLE_LABEL = {
  */
 export const UTTERANCE_GAP_MS = 1_200;
 
+/**
+ * After the gap that ends an utterance, the margin a late fragment is still
+ * waited for before the utterance is written to the record, and before a
+ * caption row stops being drawn as still spoken. One constant, so the host's
+ * lines and the renderer's captions settle on the same clock.
+ */
+export const UTTERANCE_SETTLE_MARGIN_MS = 800;
+
 export interface TranscriptFragment {
   speaker: TranscriptSpeaker;
   /** The delta exactly as received, untrimmed and unpadded. */

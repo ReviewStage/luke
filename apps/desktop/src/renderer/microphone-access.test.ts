@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  REALTIME_DEFAULTS,
-  REALTIME_MINT_OUTCOME,
-  type RealtimeDiagnostics,
-} from "@sidecar/realtime";
+import { LIVE_DEFAULTS, LIVE_SESSION_OUTCOME, type LiveDiagnostics } from "@sidecar/live";
 import { VOICE_SOURCE } from "@sidecar/settings/wire";
 import {
   HOSTED_VOICE_UNAVAILABLE_NOTE,
@@ -17,16 +13,15 @@ import {
 } from "./microphone-access";
 
 /** A hosted diagnostics report with only what a test wants to vary. */
-function diagnostics(overrides: Partial<RealtimeDiagnostics>): RealtimeDiagnostics {
+function diagnostics(overrides: Partial<LiveDiagnostics>): LiveDiagnostics {
   return {
     apiKeyConfigured: false,
     hosted: true,
     fixtureMode: false,
-    model: REALTIME_DEFAULTS.MODEL,
-    voice: REALTIME_DEFAULTS.VOICE,
-    speed: REALTIME_DEFAULTS.SPEED,
-    endpoint: "https://tryluke.dev/api/voice/mint",
-    lastOutcome: REALTIME_MINT_OUTCOME.NOT_ATTEMPTED,
+    model: LIVE_DEFAULTS.MODEL,
+    voice: LIVE_DEFAULTS.VOICE,
+    sidebandAttached: false,
+    lastOutcome: LIVE_SESSION_OUTCOME.NOT_ATTEMPTED,
     ...overrides,
   };
 }
@@ -156,7 +151,7 @@ test("the emergency ceiling is surfaced only as temporary unavailability", () =>
   assert.equal(
     hostedVoiceUnavailableNote(
       diagnostics({
-        lastOutcome: REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED,
+        lastOutcome: LIVE_SESSION_OUTCOME.QUOTA_EXHAUSTED,
         quota: { used: 5_001, limit: 5_000, resetsAt: 1_800_003_600_000 },
       }),
     ),
@@ -164,7 +159,7 @@ test("the emergency ceiling is surfaced only as temporary unavailability", () =>
   );
   assert.equal(hostedVoiceUnavailableNote(undefined), undefined);
   assert.equal(
-    hostedVoiceUnavailableNote(diagnostics({ lastOutcome: REALTIME_MINT_OUTCOME.NO_API_KEY })),
+    hostedVoiceUnavailableNote(diagnostics({ lastOutcome: LIVE_SESSION_OUTCOME.NO_API_KEY })),
     undefined,
   );
 });

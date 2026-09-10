@@ -10,8 +10,10 @@ import {
   commentaryAppend,
   conversationSeedItems,
   type InitialItem,
+  instructionsAppend,
   LIVE_CLOSE_REASON,
   LIVE_DELEGATION_TARGET,
+  LIVE_IDLE_WINDOW_MS,
   LIVE_SERVER_EVENT,
   type LiveDelegationId,
   type LiveServerEvent,
@@ -25,6 +27,7 @@ import {
   type TranscriptUtterance,
   thinkingAppend,
   UTTERANCE_GAP_MS,
+  UTTERANCE_SETTLE_MARGIN_MS,
 } from "@sidecar/live";
 import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
@@ -69,18 +72,6 @@ import { rosterAppendContent, rosterSeedItem, seedBudgetBesideRoster } from "./r
  * through `LiveBrain`, and the record only through `LiveRecord`.
  */
 
-/**
- * The quiet the renderer reports before the host considers closing: five
- * minutes of no speech energy or a muted microphone, decided from the
- * peer's own local signals and never from a missing transcript event, which
- * the guide forbids reading as silence. The host closes only when it has
- * appended nothing in the same window either.
- */
-export const LIVE_IDLE_WINDOW_MS = 5 * 60_000;
-
-/** After the gap that ends an utterance, the margin a late fragment is still waited for before the line is written. */
-export const UTTERANCE_SETTLE_MARGIN_MS = 800;
-
 /** Rapid roster changes are combined into one append of the latest state. */
 const ROSTER_COALESCE_MS = 1_500;
 
@@ -101,6 +92,22 @@ const SLOW_STEP_NOTE: ReadonlyMap<string, string> = new Map([
 const SLOW_STEP_GENERAL_NOTE = "Luke is still working on it; this takes a moment.";
 
 const TYPED_ASK_MIRROR_NOTE = "The developer typed this ask into Luke's composer:";
+
+/**
+ * What the stop key says to the model. Muting the microphone never stops the
+ * output, as the live guide notes, so a microphone muted while Luke is
+ * speaking also carries the guide's corrective instruction: stop means stop.
+ */
+export const STOP_SPEAKING_INSTRUCTION =
+  "Stop speaking now and wait quietly until the developer speaks again.";
+
+/**
+ * How recently an output transcript fragment must have arrived for a mute to
+ * count as cutting Luke off. The talk key mutes at the end of every turn of
+ * the developer's; only a mute that lands over Luke's own words is the stop
+ * key's meaning, and only that one carries the instruction.
+ */
+export const STOP_SPEAKING_OUTPUT_RECENCY_MS = 2_000;
 
 /** A briefing as the brain delivered it; the rest of the delivery rides along for a held re-decision. */
 export interface BriefingDelivery {
@@ -157,11 +164,15 @@ interface StandingSession {
   /** The graceful close under way, so a second ask to end the session waits on the first. */
   closing: Promise<void> | undefined;
   micLive: boolean;
+  /** When Luke's output transcript last moved, on this host's clock; what tells a stop from a turn's end. */
+  lastOutputAt: number | undefined;
   usageSeconds: number | undefined;
   lastDelegationOffsetMs: number;
   readonly claimedDelegations: Set<string>;
   retained: RetainedDelegation[];
   readonly writtenRows: Set<number>;
+  /** When each utterance's first fragment arrived, on this host's clock: the instant its line is recorded at, so a Clear's cutoff refuses what was begun before it. */
+  readonly rowBeganAt: Map<number, number>;
   readonly settleTimers: Map<TranscriptSpeaker, ScheduledTimer>;
   idleReported: boolean;
   idleTimer: ScheduledTimer | undefined;
@@ -196,6 +207,25 @@ interface UtteranceWrite {
   delegationId: LiveDelegationId;
   askContext?: { sinceMs: number; untilMs: number };
   runId?: string;
+}
+
+function newExchange(
+  runId: string,
+  delegationIds: string[],
+  sessionId: string | undefined,
+): Exchange {
+  return {
+    runIds: new Set([runId]),
+    delegationIds,
+    sessionId,
+    settled: false,
+    buffered: [],
+    late: [],
+    spokenChunks: 0,
+    slowStepTold: false,
+    finalize: undefined,
+    end: undefined,
+  };
 }
 
 function isClientDelegation(
@@ -369,8 +399,15 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     this.#drain();
   }
 
-  /** A typed ask goes to the brain as today and is mirrored into the session so the voice knows what was asked. */
-  mirrorTypedAsk(words: string): void {
+  /**
+   * A typed ask goes to the brain as today; here its run is followed so the
+   * reply is spoken like a delegation's, with no delegation id since no
+   * delegation asked it, into the standing session or the one opened for it,
+   * and the ask itself is mirrored into a standing session so the voice knows
+   * what was asked before it speaks the answer.
+   */
+  followTypedAsk(words: string, runId: string): void {
+    if (!this.#exchanges.has(runId)) this.#exchanges.set(runId, newExchange(runId, [], undefined));
     const session = this.#speakable();
     if (!session) return;
     const [summary] = chunkForAppend(`${TYPED_ASK_MIRROR_NOTE} ${words}`);
@@ -430,9 +467,11 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     );
   }
 
+  /** Whether a reply is still coming that this session would speak: a delegation's under it, or a typed ask's, which any standing session says. */
   #exchangeInFlight(session: StandingSession): boolean {
     for (const exchange of this.#exchanges.values()) {
-      if (exchange.sessionId === session.sessionId && exchange.end === undefined) return true;
+      if (exchange.end !== undefined) continue;
+      if (exchange.sessionId === undefined || exchange.sessionId === session.sessionId) return true;
     }
     return false;
   }
@@ -470,11 +509,13 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       ended: false,
       closing: undefined,
       micLive: false,
+      lastOutputAt: undefined,
       usageSeconds: undefined,
       lastDelegationOffsetMs: 0,
       claimedDelegations: new Set(),
       retained: [],
       writtenRows: new Set(),
+      rowBeganAt: new Map(),
       settleTimers: new Map(),
       idleReported: false,
       idleTimer: undefined,
@@ -505,6 +546,20 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         this.#onClosed(session, event);
         return;
       case LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED:
+        // A microphone muted over Luke's own words is the stop key's meaning;
+        // one muted at the end of the developer's turn, or a session that
+        // opened muted for a briefing, has nothing to stop.
+        if (
+          session.micLive &&
+          session.lastOutputAt !== undefined &&
+          this.#options.now() - session.lastOutputAt < STOP_SPEAKING_OUTPUT_RECENCY_MS
+        ) {
+          session.channel.enqueue(async () => {
+            await session.channel.send(
+              instructionsAppend(this.#input(null, STOP_SPEAKING_INSTRUCTION)),
+            );
+          });
+        }
         session.micLive = false;
         return;
       case LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED:
@@ -529,6 +584,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
           event.start_ms,
           event.end_ms,
         );
+        session.lastOutputAt = this.#options.now();
         session.channel.outputReached(event.end_ms);
         return;
       case LIVE_SERVER_EVENT.DELEGATION_CREATED:
@@ -559,7 +615,11 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     startMs: number,
     endMs: number,
   ): void {
-    if (!session.ledger.append({ speaker, text: delta, startMs, endMs })) return;
+    const utterance = session.ledger.append({ speaker, text: delta, startMs, endMs });
+    if (!utterance) return;
+    if (!session.rowBeganAt.has(utterance.rowId)) {
+      session.rowBeganAt.set(utterance.rowId, this.#options.now());
+    }
     const armed = session.settleTimers.get(speaker);
     if (armed !== undefined) this.#options.cancel(armed);
     session.settleTimers.set(
@@ -582,7 +642,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
 
   async #write(write: UtteranceWrite): Promise<void> {
     const { session, utterance } = write;
-    const recordedAt = this.#options.now();
+    const recordedAt = session.rowBeganAt.get(utterance.rowId) ?? this.#options.now();
     const written =
       utterance.speaker === TRANSCRIPT_SPEAKER.USER
         ? await this.#options.record.writeDeveloperUtterance({
@@ -672,18 +732,10 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       this.#exchanges.set(submission.runId, open);
       return;
     }
-    this.#exchanges.set(submission.runId, {
-      runIds: new Set([submission.runId]),
-      delegationIds: [delegationId],
-      sessionId: session.sessionId,
-      settled: false,
-      buffered: [],
-      late: [],
-      spokenChunks: 0,
-      slowStepTold: false,
-      finalize: undefined,
-      end: undefined,
-    });
+    this.#exchanges.set(
+      submission.runId,
+      newExchange(submission.runId, [delegationId], session.sessionId),
+    );
   }
 
   #onRunEvent(event: LiveBrainRunEvent): void {

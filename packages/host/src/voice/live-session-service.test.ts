@@ -10,6 +10,7 @@ import {
   LIVE_CLIENT_EVENT,
   LIVE_CLOSE_REASON,
   LIVE_DELEGATION_TARGET,
+  LIVE_IDLE_WINDOW_MS,
   LIVE_SERVER_EVENT,
   type LiveClientEvent,
   type LiveServerEvent,
@@ -18,6 +19,7 @@ import {
   parseLiveServerEvent,
   SEED_ROLE,
   UTTERANCE_GAP_MS,
+  UTTERANCE_SETTLE_MARGIN_MS,
 } from "@sidecar/live";
 import { drainMicrotasks, FakeClock } from "@sidecar/runtime/testing";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
@@ -39,10 +41,10 @@ import {
 } from "./live-brain.js";
 import type { DeveloperUtteranceRecord, LiveRecord, LukeUtteranceRecord } from "./live-record.js";
 import {
-  LIVE_IDLE_WINDOW_MS,
   LiveSessionService,
   RUN_END_NOTE,
-  UTTERANCE_SETTLE_MARGIN_MS,
+  STOP_SPEAKING_INSTRUCTION,
+  STOP_SPEAKING_OUTPUT_RECENCY_MS,
 } from "./live-session-service.js";
 import { SIDEBAND_CLOSE_TIMEOUT_MS } from "./live-sideband.js";
 import { LIVE_TRACE_DECISION, type LiveTraceRecord } from "./live-trace.js";
@@ -814,12 +816,108 @@ test("a roster change while a session stands becomes one coalesced thinking appe
 
 test("a typed ask is mirrored into the session as one thinking append, and only while a session stands", async () => {
   const f = fixture();
-  f.service.mirrorTypedAsk("open the failing session");
+  f.service.followTypedAsk("open the failing session", "typed-1");
   const sideband = await f.open();
   assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
-  f.service.mirrorTypedAsk("open the failing session");
+  f.service.followTypedAsk("open the failing session", "typed-2");
   await drainMicrotasks();
   assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 1);
+});
+
+test("a typed ask's reply is spoken into the standing session with no delegation, after its actions settle", async () => {
+  const f = fixture();
+  const sideband = await f.open();
+  f.service.followTypedAsk("what needs me?", "typed-1");
+  await drainMicrotasks();
+  sideband.acknowledge(0, 0, 0);
+  f.brain.fire({
+    kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+    runId: "typed-1",
+    sentence: "Nothing needs you yet.",
+  });
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
+  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "typed-1" });
+  await drainMicrotasks();
+  const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+  assert.equal(commentary.length, 1);
+  assert.equal(
+    commentary[0] && "delegation_id" in commentary[0] && commentary[0].delegation_id,
+    null,
+  );
+});
+
+test("a line is recorded at the instant its utterance began, so a Clear's cutoff refuses what was begun before it", async () => {
+  const f = fixture();
+  const sideband = await f.open();
+  const began = f.clock.now;
+  sideband.output("Two ", 0, 400);
+  await f.clock.advance(f.clock.now + 500);
+  sideband.output("sessions.", 400, 900);
+  await f.clock.advance(f.clock.now + UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
+  assert.equal(f.record.luke.length, 1);
+  assert.equal(f.record.luke[0]?.recordedAt, began);
+});
+
+test("a typed ask still being answered keeps an idle session open", async () => {
+  const f = fixture();
+  await f.open();
+  f.service.followTypedAsk("what needs me?", "typed-1");
+  f.service.reportActivity(true);
+  await f.clock.advance(f.clock.now + LIVE_IDLE_WINDOW_MS);
+  assert.equal(f.service.sessionStands(), true);
+  f.brain.fire({
+    kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+    runId: "typed-1",
+    end: LIVE_BRAIN_RUN_END.COMPLETED,
+  });
+  await f.clock.advance(f.clock.now + LIVE_IDLE_WINDOW_MS + 1_000);
+  assert.equal(f.service.sessionStands(), false);
+});
+
+test("a typed ask's reply with no session standing asks for one and is spoken once it opens", async () => {
+  const f = fixture();
+  f.service.followTypedAsk("what needs me?", "typed-1");
+  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "typed-1" });
+  f.brain.fire({
+    kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+    runId: "typed-1",
+    sentence: "Two sessions finished.",
+  });
+  await drainMicrotasks();
+  assert.equal(phases(f.changes).at(-1), LIVE_SESSION_PHASE.WANTED);
+  const sideband = await f.open();
+  const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+  assert.equal(commentary.length, 1);
+  assert.equal(
+    commentary[0] && "delegation_id" in commentary[0] && commentary[0].delegation_id,
+    null,
+  );
+});
+
+test("a microphone muted over Luke's own words carries the stop instruction; one muted at a turn's end, or a session opened muted, carries none", async () => {
+  const f = fixture();
+  const sideband = await f.open();
+  sideband.receive({ type: LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED, event_id: "muted-0" });
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 0);
+  // The developer's turn ends with Luke silent: the talk key's mute stops nothing.
+  sideband.receive({ type: LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED, event_id: "unmuted-1" });
+  sideband.receive({ type: LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED, event_id: "muted-1" });
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 0);
+  // Luke is speaking when the microphone is muted: stop means stop.
+  sideband.receive({ type: LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED, event_id: "unmuted-2" });
+  sideband.output("Two sessions", 0, 800);
+  await f.clock.advance(f.clock.now + STOP_SPEAKING_OUTPUT_RECENCY_MS - 1);
+  sideband.receive({ type: LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED, event_id: "muted-2" });
+  await drainMicrotasks();
+  const instructions = appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND);
+  assert.equal(instructions.length, 1);
+  assert.equal(
+    instructions[0] && "content" in instructions[0] && instructions[0].content,
+    STOP_SPEAKING_INSTRUCTION,
+  );
 });
 
 test("both speakers' utterances reach the record after the gap and the settle margin, grouped, once", async () => {

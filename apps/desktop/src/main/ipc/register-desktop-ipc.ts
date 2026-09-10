@@ -48,11 +48,10 @@ export function registerDesktopIpc(services: DesktopServices): void {
     clearConversation: () => operator.operator.deleteConversation(MAIN_SESSION_KEY),
     setShortcutCapturing: (capturing: boolean) => hotkeys.setShortcutCapturing(capturing),
     openExternal: config.openExternal,
-    // While the takeover stands and no voice stands on the host yet, the
-    // introduction's bounded mint answers; the moment the account lands, the
-    // host's own credential wins the moment it stands.
-    mintRealtimeCredential: async () => {
-      if (operator.voiceAvailable()) return operator.host.mintRealtimeCredential();
+    // The introduction's bounded mint is the one Realtime credential left,
+    // answered only while the takeover holds the panel; the voice window's own
+    // sessions are the host's and carry no credential.
+    mintIntroductionCredential: async () => {
       if (!windows.introductionPlaying()) return undefined;
       const credential = await introductionMinter.mint();
       if (credential) {
@@ -62,12 +61,8 @@ export function registerDesktopIpc(services: DesktopServices): void {
       }
       return credential;
     },
-    realtimeDiagnostics: async () => {
-      if (!operator.voiceAvailable() && windows.introductionPlaying()) {
-        return introductionMinter.diagnostics();
-      }
-      return (await operator.host.realtimeDiagnostics()) ?? introductionMinter.diagnostics();
-    },
+    liveDiagnostics: () => operator.host.liveDiagnostics(),
+    liveSession: operator.host,
     recordProductEvent,
     recordAgentTrace: (trace: Parameters<typeof operator.host.recordAgentTrace>[0]) =>
       operator.host.recordAgentTrace(trace),

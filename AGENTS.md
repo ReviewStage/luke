@@ -117,9 +117,9 @@ Canonical commands:
   build, and nothing enters that document's text but identifiers the same
   pass reported, each validated against the shape its provider documents.
   Nothing deterministic that decides on the user's behalf may reach a write
-  path: the attention evaluator above all, and the speak-only calls that voice
-  a briefing or a reply, which carry no tools at the API and again at a
-  runtime gate, so a session summary or a tool output that reads like an
+  path: the attention evaluator above all, and the voice session that says a
+  briefing or a reply, whose model has no tools at all and can only delegate
+  back to the brain, so a session summary or a tool output that reads like an
   instruction can never become an action there. What the brain itself may call
   in any of its turns is decided by the effective tool policy, resolved from
   the configuration's layers (global, agent, provider, session, and the
@@ -448,18 +448,25 @@ Canonical commands:
   `tracker`, `superset`, `session`, `workspace`, `speech`, `receiver`,
   `voice`, `guide`, `analytics`, `conversation.append`, and `onboarding`
   methods, and the change events beside them; `voice.recordTrace` carries
-  the renderer's tapped realtime events to the development trace writer the
+  the renderer's tapped live events to the development trace writer the
   host owns, under the same gate, so an untraced run drops them at the
   host; and the live voice session's `voice.createLiveSession`,
   `voice.endLiveSession`, `voice.reportLiveTransport`, and
   `voice.reportLiveActivity`, with the `voiceLiveSession.changed` event
   beside them, each mutating and idempotency-keyed so a retried SDP offer
   cannot create and bill a second session, their shapes declared once as
-  `@sidecar/wire` schemas in `protocol.ts`, and answered by no host handler
-  yet, so the server's typed `unknown_method` is what they meet until the
-  host's live session service lands). No credential or account secret
-  travels in any answer or event, and the one secret that reaches the voice
-  client is the ephemeral realtime credential the host minted. Widening the method vocabulary, the event set,
+  `@sidecar/wire` schemas in `protocol.ts`, and answered by the host's live
+  composer, which owns the one session; the `speech` and `receiver` methods
+  and the `speech.offered` and `speech.withdrawn` events are the retired
+  Realtime path's, still named and still answered but reached by no client
+  of this build). No credential or account secret travels in any answer or
+  event, and no credential of any kind reaches the voice window: the host
+  creates the session with the key it holds and answers the peer's SDP offer
+  with the provider's SDP answer, the one thing the window is handed. The
+  spoken introduction, which runs before any account and still on the
+  Realtime API until its own change lands, is the one exception, and its
+  credential is the desktop's own bounded introduction mint, never the
+  host's. Widening the method vocabulary, the event set,
   or what a node may be asked is a product decision, not an implementation
   detail.
 - The host is what composes and owns the runtime, and it draws nothing. It is
@@ -474,8 +481,10 @@ Canonical commands:
   session and its refresh, the provider-key vault sync, the counted events,
   every provider registration and the roster and observation loops, Superset
   and Conductor, the hook registration and spool watchers under the state
-  root it is handed, Linear, the calendar readers and their holds, the
-  speech arbiter, the reply deliveries and the receiver epochs, the runtime
+  root it is handed, Linear, the calendar readers and their holds, the live
+  voice session and the retired speech arbiter beside it (the reply
+  deliveries and the receiver epochs, still composed and reached by no
+  client of this build), the runtime
   store worker, the notebook and its maintenance, the brain, the
   conversation operations, history maintenance, the
   development trace, and the arrival and calendar-onboarding records. The
@@ -516,15 +525,21 @@ Canonical commands:
 
 ### Replies, the drain, and the hosted tier
 
-- Replies to the ear keep the reply-grant ledger's guarantee with its states
-  named (queued, offered, claimed, acknowledged, granted on call,
-  withdrawn): the Conversation write precedes any offer, the generation and the
-  one current receiver epoch are checked at the grant, an offer a vanished
-  renderer never claimed is offered again to the next epoch, a claimed one
-  never is, and what is guaranteed is at most one authorization to speak per
-  run, never that the words were heard. Meeting and pause holds stay in the
-  host's speech arbiter, and a held observation briefing is re-decided in
-  the conversation that decided it, never through main.
+- Everything Luke says unprompted has one sink, the host's live session
+  service: an observed conversation's briefing, a typed ask's reply, and the
+  two onboarding beats are each appended into the standing session as
+  commentary with no delegation id, or into the one session the voice window
+  opens muted when the service says it wants one, and the retired reply-grant
+  ledger, receiver epochs, and speech offers receive nothing. Every append
+  awaits its acknowledgment or the error naming it, "spoken" is settled by
+  the first output transcript past the append's end and unsettled by a
+  moderation cut, and what is guaranteed is that the words reached the
+  session, never that they were heard. Meeting and pause holds are the
+  service's own queue, and a held observation briefing is re-decided in the
+  conversation that decided it, never through main. The window's own idle
+  report, from its microphone's level or its mute and never from a missing
+  transcript event, is what lets the host close a quiet session, and the
+  host closes it only once it too has appended nothing in the same window.
 - The runtime is drained at the explicit Quit and at the updater's restart
   into a downloaded build, each of which asks for the drain and waits,
   bounded even under work that stops answering: admissions closed, every run
@@ -598,8 +613,8 @@ Canonical commands:
   retention, not the generation's: each line is stamped with the generation
   that stood when it was written, for attribution alone, and a generation's
   end erases no line. A generation's end revokes its runs and, through
-  the host's own listener, withdraws every briefing it had queued or offered
-  but not yet spoken; a version-1 file, of unknown age, reads as nothing
+  the host's own listener, drops every briefing it had queued and not yet
+  appended; a version-1 file, of unknown age, reads as nothing
   rather than as a fresh lifetime; a generation found unreadable or past its
   bounds at load (or expired, under the opt-in policy) is replaced on disk
   in the same load rather than left for a later write; and the empty
@@ -919,14 +934,15 @@ Canonical commands:
   development launch is traced unless `--no-trace` says otherwise — the
   launcher supplies the directory, and the app's own gate still decides
   whether anything is recorded. What it records is the
-  desktop's own view of its own conversation — the realtime events already
-  crossing the data channel, with an audio append reduced to its byte count
-  before it leaves the renderer; each brain turn and request as its
+  desktop's own view of its own conversation — the live events already
+  crossing the voice window's data channel, which carries no audio, the
+  media track does, so nothing of the developer's voice can enter it; each
+  brain turn and request as its
   about-fields and counts (trigger, authority, input item kinds, transcript
   bytes, tool names, token and briefing character counts, model, timing)
-  and never a transcript's text; and each speech decision the arbiter took,
-  as the turn's kind, the decision, and how many requests still stood, never
-  the briefing's words — appended as
+  and never a transcript's text; and each decision the live session service
+  took, as the decision's kind and how many requests still stood, never the
+  briefing's words — appended as
   JSONL under the developer's chosen directory and
   sent nowhere; `pnpm trace:export` turns one file into a document a local
   viewer opens. The tap only observes: nothing reads its result, and the
@@ -1045,12 +1061,16 @@ Canonical commands:
   transport, whether the machine has a built-in microphone and what it is
   named, and whether the lid over it is open. Nothing else, and it can write
   nothing. No audio is ever read. What it learns decides exactly one action:
-  which device the renderer asks the browser to open when a press takes a
-  turn, so a Bluetooth headset is not pulled onto its call codec while the
+  which device the renderer asks the browser to open when a voice session
+  opens, so a Bluetooth headset is not pulled onto its call codec while the
   Mac's own microphone can listen, and is listened to itself when a shut lid
-  would muffle the Mac's. The capture device itself stays bound to the turn
-  the press opened, opened by the press and closed when the exchange settles,
-  and never outlives it; typed asks never open one at all. An unreadable
+  would muffle the Mac's. The capture device is bound to the session: its
+  track rides the session's offer disabled, under the microphone permission
+  onboarding already granted, is enabled only on the session's own
+  acknowledgment of the talk key's unmute and disabled again on the stop
+  key's or a second press's mute, and is stopped when the session ends; a
+  session Luke opened for his own speech acquires it muted and hears nothing
+  until the talk key, and typed asks open none. An unreadable
   route means the browser's default device, never a refusal to listen.
 
 ### Updating
@@ -1192,11 +1212,13 @@ Canonical commands:
   the brain last looked, bounded and behind a marker, on the developer's own
   key or through Luke's own service. The second is a briefing the brain
   decided to give — its own words about what changed, under the briefing
-  bound — which reaches the voice service so it can be said aloud, travelling
-  as one conversation item behind a marker into the voice session's own
-  conversation, spoken by a response that declares no tools, under a standing
-  rule that it is said as written and answers nothing said before it; what it
-  can become is bounded by the withheld tools, not by isolation. Nothing
+  bound — which reaches the voice session so it can be said aloud, travelling
+  as commentary appends with no delegation id over the host's own trusted
+  sideband, each under the append bound and each awaiting its acknowledgment,
+  spoken by a voice model that has no tools and can only delegate back to the
+  brain, which admits what it hears through the same gauntlet as every ask;
+  what it can become is bounded by the model's want of tools, not by
+  isolation. Nothing
   decides an announcement deterministically any
   more: no status edge speaks on its own, and no evaluator sentence stands
   between the transcript and the voice. Two onboarding beats are the members
@@ -1213,46 +1235,60 @@ Canonical commands:
   gate's own deterministic standing, once per run, carrying no observed value
   at all, and gone with the gate, whose Done or skip is what lets the waiting
   arrival speak. A moment
-  that cannot speak the arrival — no credential, a meeting's quiet, a beat
-  dropped before its reply began — leaves it owed for the next signed-in
-  launch rather than improvising a substitute; only the voice window
-  reporting the reply actually begun settles it. When no conversation is
-  open, Luke opens a call of
-  his own to say a briefing, and that call is speak-only by construction: it
-  offers no microphone track, carries no tools, and is sent the briefing and
-  the same 20 recent Conversation lines the brain's standing context carries,
-  each cut to its length bound, never the roster, the guide, a transcript, or
-  a session identity, which reach only the brain, and the voice only as the
-  words the brain chose to say. The desktop's voice knows no roster, guide, or conversation
-  of its own: a developer-opened conversation hands their words to the brain
-  through the voice's one tool and says the brain's reply whole. It is the
-  brain whose standing context carries the recent exchange — the 20 most
-  recent Conversation lines, each cut to its own length bound (the developer's
-  asks, typed or spoken and handed back as text by the service that heard
-  them, the words Luke spoke or announced, and the actions he carried at their
-  ask), beside the brain's own working memory of its turns — so the one
-  conversation survives the calls that transport it: a briefing read out on
-  Luke's own call, or a call retired idle, is still remembered on the next
-  ask. A reply that quoted or summarized a transcript read is Conversation like
-  any other reply, and enters that context under the same bounds. Each
-  Conversation line's session identity is the roster-validated one its action
-  traveled with, and the conversation is stored only where the constraint above
-  puts it, on this machine and under its retention policy, and rides into
-  every voice call as it opens, bounded the same way, so a call is a window
-  onto the record rather than a memory of its own. The phone's call keeps the
-  older shape: it
-  carries the roster it was shown as context and the session actions as its own
-  tools, and no Conversation. A
+  that cannot speak the arrival — no voice to run on, a meeting's quiet, a
+  beat dropped before it was appended — leaves it owed for the next
+  signed-in launch rather than improvising a substitute; only the append
+  settled spoken by the session's own output transcript settles it. When no
+  session stands, a briefing or a beat asks the voice window for one, and the
+  window opens it muted: the microphone track rides the offer disabled under
+  the permission onboarding already granted, so nothing is heard until the
+  talk key, and the same session is the one the developer joins by pressing
+  it. There is no speak-only call and no second kind of session. What the
+  session is seeded with at creation is bounded: Luke's own Conversation
+  record (the 20 most recent lines, in their roles, each cut to its length
+  bound) and the same redacted roster view the brain's standing context
+  carries, as one developer message, the whole held under the documented
+  message and token bounds by dropping the oldest lines first; while a
+  session stands, a roster that moved reaches it as one coalesced thinking
+  append, unchanged views skipped. This replaces the older rule that the voice
+  never saw the roster: that rule guarded a voice that could act, and this one
+  can only delegate, so "that one" and "the Nukualofa session" resolve without
+  a round trip. The voice still knows no guide, no transcript, and no session
+  address; those reach only the brain. A developer's spoken words reach the
+  brain as a delegation the host composes from both speakers' transcript
+  since the previous one, submitted under the host's own submission id as a
+  spoken ask through the same admission every ask uses; the reply streams
+  back sentence by sentence as commentary under that delegation, only after
+  every action in the run has settled, so nothing is announced before it is
+  done. It is the brain whose standing context carries the recent exchange —
+  the 20 most recent Conversation lines, each cut to its own length bound
+  (the developer's asks, typed or spoken as the session transcribed them,
+  the words Luke spoke or announced as the same transcript carried them,
+  and the actions he carried at their ask), beside the brain's own working
+  memory of its turns — so the one conversation survives the sessions that
+  transport it: a briefing said into a session opened for it, or a session
+  closed idle, is still remembered on the next ask. Both speakers' lines
+  are written by the host from the session transcript once each utterance
+  has settled; the window writes no line. A reply that quoted or summarized
+  a transcript read is Conversation like any other reply, and enters that
+  context under the same bounds. Each Conversation line's session identity is
+  the roster-validated one its action traveled with, and the conversation is
+  stored only where the constraint above puts it, on this machine and under
+  its retention policy, and rides into every session as it opens, bounded the
+  same way, so a session is a window onto the record rather than a memory of
+  its own. The phone's call keeps the older Realtime shape: it carries the
+  roster it was shown as context and the session actions as its own tools,
+  and no Conversation. A
   briefing's trigger is an observation turn of the brain — a provider's hook,
   the brain's own look at the roster on the observation pass, or a hold's
   release — and the brain's `announce` call inside it, offered in no other
   kind of turn; an onboarding beat's trigger is its own deterministic one
   (the recorded sign-in edge, or the calendar gate standing). A briefing
-  speaks whenever voice can, through the speech arbiter, which holds it while
-  a meeting or the pause stands and lets a held briefing be decided again
-  against the roster as it then is rather than spoken stale. Widening either
-  set is a product decision, not an implementation detail; make it
-  deliberately. While a briefing is being spoken, its words are captioned on
+  speaks whenever voice can, through the live session service's own hold,
+  which keeps it while a meeting or the pause stands and lets a held briefing
+  be decided again against the roster as it then is rather than spoken stale.
+  Widening either set is a product decision, not an implementation detail;
+  make it deliberately. While a briefing is being spoken, its words are captioned on
   Luke's own surface under the housing, and nothing else is drawn about it:
   no notice names a session, no chip previews an issue, and no press under
   the housing opens anything, so the words are the whole of what an

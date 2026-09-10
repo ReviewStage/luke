@@ -1,23 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { REALTIME_STATUS } from "@sidecar/realtime";
+import { LIVE_STATUS } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, streamingConversationEntry } from "@sidecar/session";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import {
   IDLE_VOICE_VIEW,
-  isRealtimeStatus,
+  isLiveStatus,
   isVoiceCommand,
   isVoiceView,
   VOICE_COMMAND,
   type VoiceView,
 } from "./voice-view";
 
-test("every realtime status is recognized and nothing else is", () => {
-  for (const status of Object.values(REALTIME_STATUS)) {
-    assert.equal(isRealtimeStatus(status), true);
+test("every live status is recognized and nothing else is", () => {
+  for (const status of Object.values(LIVE_STATUS)) {
+    assert.equal(isLiveStatus(status), true);
   }
-  assert.equal(isRealtimeStatus("speaking"), false);
-  assert.equal(isRealtimeStatus(1), false);
+  assert.equal(isLiveStatus("responding"), false);
+  assert.equal(isLiveStatus(1), false);
 });
 
 test("the four voice commands are the whole set; a typed ask is a brain submission, not one", () => {
@@ -41,7 +41,7 @@ test("a view carrying a caption and its streaming line is a voice view", () => {
     isVoiceView(
       overWire({
         ...IDLE_VOICE_VIEW,
-        voiceStatus: REALTIME_STATUS.RESPONDING,
+        voiceStatus: LIVE_STATUS.SPEAKING,
         lukeCaptions: ["On my way."],
         liveConversationEntries: [line],
       }),

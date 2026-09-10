@@ -11,7 +11,6 @@ import {
   isAccountProvider,
 } from "@sidecar/credentials/snapshot";
 import { AgentTraceWriter, tracedModelAdapter } from "@sidecar/devtrace";
-import { isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import {
   carried,
   GATEWAY_EVENT,
@@ -21,7 +20,6 @@ import {
   invalid,
 } from "@sidecar/gateway";
 import { hostedVoiceServiceOrigin } from "@sidecar/hosted";
-import { VOICE_SOURCE_COUNTED_AS } from "@sidecar/settings";
 import { VoiceCapabilityAssembler } from "@sidecar/voice";
 import { lateRef } from "@sidecar/wire";
 import type { Composer, ComposerContext } from "./composer.js";
@@ -216,36 +214,6 @@ export function composeAccount(dependencies: AccountDependencies): AccountCompos
       sessionReplayEndedByDeletion = true;
       void emitSessionReplay();
       return gatewayOk({ account: carried(snapshot) });
-    },
-    // The one credential that crosses to the voice client: the short-lived
-    // realtime secret the account minter issues, never the key or the token
-    // behind it. Counted here, under the source it actually came from.
-    [GATEWAY_METHOD.VOICE_MINT_REALTIME_CREDENTIAL]: async () => {
-      const minter = voiceCapabilities.realtimeCredentials;
-      if (!minter) return gatewayOk({});
-      const credential = await minter.mint();
-      if (credential) {
-        settings.recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {
-          credential_source: VOICE_SOURCE_COUNTED_AS[voiceCapabilities.voiceSource],
-        });
-      }
-      return gatewayOk(credential ? { credential: carried(credential) } : {});
-    },
-    [GATEWAY_METHOD.VOICE_DIAGNOSTICS]: () =>
-      gatewayOk({
-        diagnostics: carried(
-          voiceCapabilities.realtimeCredentials?.diagnostics() ??
-            voiceCapabilities.unavailableDiagnostics,
-        ),
-      }),
-    // One realtime event the renderer's tap saw cross the data channel, into
-    // the development trace. Read again here for the shape the tap sends; on
-    // a run without a writer — packaged, fixture, or simply untraced — it
-    // lands here and stops.
-    [GATEWAY_METHOD.VOICE_RECORD_TRACE]: (params) => {
-      if (!isAgentWireTrace(params.trace)) return invalid("trace is not one tapped wire event");
-      agentTrace?.recordWire(params.trace);
-      return gatewayOk({});
     },
   };
 

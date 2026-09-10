@@ -78,6 +78,9 @@ importers:
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../../packages/hosted
+      '@sidecar/live':
+        specifier: workspace:*
+        version: link:../../packages/live
       '@sidecar/panel':
         specifier: workspace:*
         version: link:../../packages/panel
@@ -841,6 +844,9 @@ importers:
       '@sidecar/credentials':
         specifier: workspace:*
         version: link:../credentials
+      '@sidecar/gateway':
+        specifier: workspace:*
+        version: link:../gateway
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../hosted
