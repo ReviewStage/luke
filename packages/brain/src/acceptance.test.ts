@@ -44,7 +44,12 @@ import {
   type RuntimeRunRequest,
   type ToolExecutionContext,
 } from "@sidecar/runtime/vocabulary";
-import { normalizeSession, SESSION_STATUS, type SessionProvider } from "@sidecar/session";
+import {
+  normalizeSession,
+  SESSION_LOCATION,
+  SESSION_STATUS,
+  type SessionProvider,
+} from "@sidecar/session";
 import {
   ACTION_RESULT_STATUS,
   isRecord,
@@ -547,8 +552,15 @@ class ScriptedRuntime implements AgentRuntime {
     return undefined;
   }
   readonly contexts: ToolExecutionContext[] = [];
-  /** The tool each run calls before answering; the host's executor decides what it means. */
-  constructor(private readonly script: readonly string[]) {}
+  /**
+   * The tools each run calls before answering, every call naming `ABC` and
+   * carrying the extra arguments given; the host's executor decides what each
+   * means.
+   */
+  constructor(
+    private readonly script: readonly string[],
+    private readonly extraArguments: Record<string, string> = {},
+  ) {}
   async openContext(checkpoint: RuntimeCheckpoint | undefined): Promise<ContextOpening> {
     const context = new ScriptedContext();
     return { context, bootstrap: context.bootstrap(checkpoint) };
@@ -570,6 +582,7 @@ class ScriptedRuntime implements AgentRuntime {
             provider_id: ABC.providerId,
             provider_session_id: ABC.providerSessionId,
             text: "scripted",
+            ...this.extraArguments,
           }),
         };
         await request.onEvent({ kind: RUNTIME_EVENT.TOOL_CALL, invocation });
@@ -638,6 +651,68 @@ test("a runtime that is not Responses drives the same host: actions journaled th
   assert.equal(repository.state?.cursors[claude.id]?.abc, "c1");
   assert.equal(repository.state?.journal.length, 1, "the ask's journal alone stays");
   await o.agent.stop();
+});
+
+test("a cloud waiting edge with an unsupported delta opens a look that reads the chat's tail and announces the ask", async () => {
+  const conductor: SessionProvider = { id: "conductor", displayName: "Conductor" };
+  const waiting = normalizeSession(conductor, {
+    providerSessionId: ABC.providerSessionId,
+    title: "Conductor: abc",
+    status: SESSION_STATUS.WAITING,
+    location: SESSION_LOCATION.CLOUD,
+    lastActivityAt: NOW,
+  });
+  const identity = { providerId: conductor.id, providerSessionId: ABC.providerSessionId };
+  const deltaReads: string[] = [];
+  const tailReads: string[] = [];
+  const briefings: string[] = [];
+  const runtime = new ScriptedRuntime(["read_transcript", "announce"], {
+    provider_id: conductor.id,
+    briefing: "The Conductor agent on abc is asking which migration to keep.",
+  });
+  const h = host(
+    () => runtime,
+    KEYED.model(fakeUpstream([])),
+    fakeBrainStateRepository(),
+    undefined,
+    {
+      roster: () => ({ text: "- abc", identities: [identity], sessions: [waiting] }),
+      readTranscriptSince: async (read) => {
+        deltaReads.push(read.providerId);
+        return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: "Conductor keeps no cursor" };
+      },
+      readTranscript: async (read) => {
+        tailReads.push(read.providerSessionId);
+        return {
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          transcript: "assistant: Which migration should I keep, the squashed one or the split?",
+        };
+      },
+      deliver: (delivery) => {
+        briefings.push(delivery.briefing);
+      },
+    },
+  );
+  await h.agent.ready();
+  await h.agent.wake([{ kind: BRAIN_WAKE_KIND.ROSTER, identity, session: waiting, atMs: NOW }]);
+  await settle();
+  h.clock.now += 3_000;
+  for (const timer of [...h.clock.timers.values()]) timer.callback();
+  await settle();
+  assert.deepEqual(
+    deltaReads,
+    [conductor.id],
+    "the look asked for a delta and was told none exists",
+  );
+  assert.deepEqual(tailReads, [ABC.providerSessionId], "the turn read the chat's tail once");
+  assert.deepEqual(briefings, ["The Conductor agent on abc is asking which migration to keep."]);
+  assert.equal(
+    h.repository.state?.cursors[conductor.id]?.abc,
+    undefined,
+    "no cursor for a cloud chat",
+  );
+  assert.deepEqual(h.performed, [], "reading and announcing perform no provider action");
+  await h.agent.stop();
 });
 
 test("the Responses runtime refuses a valid checkpoint of the scripted runtime: turns are refused as incompatible, and the checkpoint, requests, and journal stay whole", async () => {
