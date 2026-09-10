@@ -1,14 +1,13 @@
 /**
  * The per-agent database, one file under the agent's own directory in Luke's
  * application data. Every kind of thing the brain kept in one JSON envelope
- * has a table of its own here, so a request, an action's receipt, a transcript
- * cursor, and the model's opaque checkpoint items can be written and let go
- * of separately, and the conversation the panel draws is kept apart from the
+ * has a table of its own here, so a request, an action's receipt, and the
+ * model's opaque checkpoint items can be written and let go of separately, and the conversation the panel draws is kept apart from the
  * payloads it is projected from.
  *
  * Two lifetimes are deliberately kept apart. A conversation session — the
  * brain's generation — dies at a fixed age or at a Clear, and its checkpoints,
- * cursors, requests, and receipts cascade away with it. The conversation the panel
+ * requests, and receipts cascade away with it. The conversation the panel
  * draws answers to its own rolling retention instead: a conversation event names
  * the session that stood when it was written, for attribution, but the column
  * is not a foreign key, so a generation's expiry erases no visible line. Only
@@ -35,10 +34,12 @@
  * transaction that removed the rows and cleared only once the file it names
  * is published and verified.
  *
- * The durable observation inbox holds the observations captured for a
- * conversation and not yet consumed by a turn, and the capture cursors that
- * say how far each transcript has been written down — kept apart from the
- * consumed cursors, which say how far a model has read.
+ * The observation inbox and the two transcript cursor tables an earlier
+ * build kept per observed session are gone: version 12 drops them, since the
+ * inbox rows carried transcript excerpts and nothing reads any of the three
+ * now that the brain looks at the roster from one conversation. The same
+ * step archives the per-session observed conversations that build made, so
+ * maintenance classifies them and the panel never lists them as live.
  *
  * Delegation is one row per child run and one per completion, each its
  * record as the child service wrote it. A completion is written before its
@@ -76,6 +77,7 @@
  */
 
 import type { SQLInputValue } from "node:sqlite";
+import { ARCHIVE_REASON, CONVERSATION_KIND } from "@sidecar/runtime/vocabulary";
 
 /**
  * The stamp version 2 writes onto a checkpoint stored before stamps existed:
@@ -100,7 +102,7 @@ const MEMORY_FLUSH_STATE_TABLE = `CREATE TABLE IF NOT EXISTS memory_flush_state 
     flushed_at INTEGER NOT NULL
   )`;
 
-export const STORE_SCHEMA_VERSION = 11;
+export const STORE_SCHEMA_VERSION = 12;
 
 /**
  * The earliest version this build opens. Every version since the first has a
@@ -276,6 +278,20 @@ export const STORE_SCHEMA_MIGRATIONS: ReadonlyMap<number, readonly SchemaMigrati
       ],
     ],
     [11, RENAME_TO_CONVERSATION_STEPS],
+    [
+      12,
+      [
+        { sql: "DROP TABLE IF EXISTS observation_inbox", params: [] },
+        { sql: "DROP TABLE IF EXISTS observation_capture_cursors", params: [] },
+        { sql: "DROP TABLE IF EXISTS observation_cursors", params: [] },
+        {
+          sql: `UPDATE conversations
+       SET archived_at = CAST(strftime('%s', 'now') AS INTEGER) * 1000, archive_reason = ?
+       WHERE kind = ? AND archived_at IS NULL`,
+          params: [ARCHIVE_REASON.RETIRED_KIND, CONVERSATION_KIND.OBSERVED],
+        },
+      ],
+    ],
   ],
 );
 
@@ -318,27 +334,6 @@ export const STORE_SCHEMA_STATEMENTS: readonly string[] = [
     sequence INTEGER NOT NULL,
     item TEXT NOT NULL,
     PRIMARY KEY (session_id, sequence)
-  )`,
-  `CREATE TABLE IF NOT EXISTS observation_cursors (
-    session_id TEXT NOT NULL REFERENCES conversation_sessions(session_id) ON DELETE CASCADE,
-    provider_id TEXT NOT NULL,
-    provider_session_id TEXT NOT NULL,
-    cursor TEXT NOT NULL,
-    PRIMARY KEY (session_id, provider_id, provider_session_id)
-  )`,
-  `CREATE TABLE IF NOT EXISTS observation_capture_cursors (
-    session_id TEXT NOT NULL REFERENCES conversation_sessions(session_id) ON DELETE CASCADE,
-    provider_id TEXT NOT NULL,
-    provider_session_id TEXT NOT NULL,
-    cursor TEXT NOT NULL,
-    PRIMARY KEY (session_id, provider_id, provider_session_id)
-  )`,
-  `CREATE TABLE IF NOT EXISTS observation_inbox (
-    session_id TEXT NOT NULL REFERENCES conversation_sessions(session_id) ON DELETE CASCADE,
-    ordinal INTEGER NOT NULL,
-    entry_id TEXT NOT NULL,
-    payload TEXT NOT NULL,
-    PRIMARY KEY (session_id, ordinal)
   )`,
   `CREATE TABLE IF NOT EXISTS requests (
     run_id TEXT PRIMARY KEY,

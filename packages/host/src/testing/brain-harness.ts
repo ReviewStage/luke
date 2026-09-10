@@ -7,7 +7,6 @@ import {
   DELIVERY_STATE,
   DeliveryLedger,
   type DeliveryRecord,
-  LOOK_SUBJECT,
   responsesModelAnswer,
   toolLoopRuntimeOver,
 } from "@sidecar/brain";
@@ -180,14 +179,12 @@ export function brainHarness() {
   const build = (client: BareResponsesModel, options: Partial<BrainAgentOptions> = {}) => {
     const model = bareModelAdapter(client);
     return new BrainAgent({
-      observes: { kind: LOOK_SUBJECT.NONE },
       ...options,
       runtime: toolLoopRuntimeOver(model),
       prepareTurn: () => ({ prompt: "instructions", layers: {} }),
       actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
       roster: () => ({ text: "", identities: [] }),
       standingContext: () => "",
-      readTranscriptSince: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
       readTranscript: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
       deliver: () => undefined,
       store,

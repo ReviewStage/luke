@@ -4,8 +4,6 @@ import type { RealtimeConnection } from "@sidecar/hosted";
 import {
   ARRIVAL_SPEECH_KIND,
   ASK_BRAIN_TOOL,
-  BRIEFING_SPEECH_KIND,
-  type BriefingSpeech,
   CALENDAR_ONBOARDING_SPEECH_KIND,
   mouthToolDefinitions,
   REALTIME_CLIENT_EVENT,
@@ -14,6 +12,8 @@ import {
   type RealtimeStatus,
   realtimeSessionConfig,
   SCENE,
+  UTTERANCE_SPEECH_KIND,
+  type UtteranceSpeech,
 } from "@sidecar/realtime";
 import { REPLY_KIND, type ReplyKind } from "@sidecar/voice/orchestrator";
 import { ACTION_RESULT_STATUS, isRecord, type WireRecord } from "@sidecar/wire";
@@ -138,8 +138,8 @@ function settleReply(context: Harness): void {
 }
 
 /** One briefing the brain decided, worded about one session, decided a moment ago. */
-function briefingAbout(id: string, briefing = `Claude Code finished ${id}.`): BriefingSpeech {
-  return { kind: BRIEFING_SPEECH_KIND, briefing, decidedAt: Date.now() };
+function briefingAbout(id: string, briefing = `Claude Code finished ${id}.`): UtteranceSpeech {
+  return { kind: UTTERANCE_SPEECH_KIND, text: briefing, decidedAt: Date.now() };
 }
 
 test("a speak-only call declares no tools", async () => {
@@ -313,7 +313,7 @@ test("a briefing's reply hands its kind back with the words", async () => {
   assert.deepEqual(context.replyEndings, [
     {
       texts: ["Claude Code finished checkout-service."],
-      kind: REPLY_KIND.BRIEFING,
+      kind: REPLY_KIND.ANNOUNCEMENT,
     },
   ]);
 });

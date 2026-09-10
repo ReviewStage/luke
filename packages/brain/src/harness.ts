@@ -24,14 +24,13 @@ import {
   normalizeSession,
   type ProviderSessionObservation,
   type ProviderTranscriptResult,
-  type ProviderTranscriptSinceResult,
   SESSION_STATUS,
   type Session,
   type SessionIdentity,
   type SessionProvider,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
-import { BRAIN_DEFAULTS, BrainAgent, type BrainAgentOptions, LOOK_SUBJECT } from "./agent.js";
+import { BRAIN_DEFAULTS, BrainAgent, type BrainAgentOptions } from "./agent.js";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { type BrainPersistedState, MAXIMUM_TERMINAL_REQUESTS } from "./envelope.js";
 import type { BrainActionExecution, BrainActionPerformer } from "./performer.js";
@@ -46,14 +45,15 @@ import { type ResponsesInputItem, responsesModelAnswer } from "./responses-api.j
 import { ToolLoopAgentRuntime } from "./runtime.js";
 import { BrainStateStore } from "./state-store.js";
 import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
+import { type BrainTick, TICK_CHANGE_KIND } from "./tick.js";
 import { BRAIN_TOOL, isBrainOnlyTool, TOOL_GROUP } from "./tools.js";
 import type { BrainTurnTraceRecord } from "./trace.js";
-import { BRAIN_WAKE_KIND, type BrainDelivery, type BrainWakeEvent } from "./wake-events.js";
+import type { BrainUtterance } from "./utterance.js";
 
 const TOOL_LOOP_IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOOP_RUNTIME.VERSION };
 
 export const NOW = 1_800_000_000_000;
-export const { DELTA_PER_SESSION_CHARS, FULL_TRANSCRIPT_CHARS } = BRAIN_DEFAULTS;
+export const { FULL_TRANSCRIPT_CHARS } = BRAIN_DEFAULTS;
 export const RECORD_CAP = MAXIMUM_TERMINAL_REQUESTS;
 
 /** Settled runs a generation is seeded with, oldest first, their ends taken by the thread or not. */
@@ -75,7 +75,7 @@ export function seededRequests(count: number, published: boolean): BrainPersiste
   }));
 }
 
-export const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
+const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
 export const ABC: SessionIdentity = { providerId: claude.id, providerSessionId: "abc" };
 export const DEF: SessionIdentity = { providerId: claude.id, providerSessionId: "def" };
 export const UNKNOWN: SessionIdentity = { providerId: "codex", providerSessionId: "nope" };
@@ -91,13 +91,16 @@ export function session(id: string, overrides: Partial<ProviderSessionObservatio
   });
 }
 
-export function edge(identity: SessionIdentity, atMs = NOW): BrainWakeEvent {
+/** A tick in which the named sessions each stopped, as the host would compose it. */
+export function tick(...identities: readonly SessionIdentity[]): BrainTick {
   return {
-    kind: BRAIN_WAKE_KIND.HOOK,
-    hookEvent: "Stop",
-    identity,
-    session: session(identity.providerSessionId),
-    atMs,
+    changes: identities.map((identity) => ({
+      kind: TICK_CHANGE_KIND.CHANGED,
+      identity,
+      title: `Claude Code: ${identity.providerSessionId}`,
+      fields: { status: SESSION_STATUS.WAITING },
+      transcriptCharsGained: 120,
+    })),
   };
 }
 
@@ -272,12 +275,11 @@ export interface Harness {
   clock: FakeClock;
   repository: FakeBrainStateRepository;
   store: BrainStateStore;
-  deliveries: BrainDelivery[];
+  deliveries: BrainUtterance[];
   persisted: BrainPersistedState[];
   performed: RealtimeFunctionCall[];
   executions: BrainActionExecution[];
   traces: BrainTurnTraceRecord[];
-  sinceReads: { identity: SessionIdentity; cursor: string | undefined }[];
   wholeReads: SessionIdentity[];
 }
 
@@ -307,7 +309,7 @@ export function harness(
   const model = adapterOf(clientOverride ?? client);
   const runtime = runtimeOver(model);
   const clock = new FakeClock();
-  const deliveries: BrainDelivery[] = [];
+  const deliveries: BrainUtterance[] = [];
   const persisted: BrainPersistedState[] = [];
   const store = new BrainStateStore({
     automaticReset: true,
@@ -325,12 +327,10 @@ export function harness(
   const performed: RealtimeFunctionCall[] = [];
   const executions: BrainActionExecution[] = [];
   const traces: BrainTurnTraceRecord[] = [];
-  const sinceReads: Harness["sinceReads"] = [];
   const wholeReads: SessionIdentity[] = [];
   const agent = new BrainAgent({
     runtime,
     prepareTurn: PLAIN_PREPARATION,
-    observes: { kind: LOOK_SUBJECT.SESSION, identity: ABC },
     actions: {
       perform: async (functionCall, execution) => {
         performed.push(functionCall);
@@ -340,19 +340,12 @@ export function harness(
     },
     roster: () => ({ text: "Currently observed sessions:\n- abc\n- def", identities: [ABC, DEF] }),
     standingContext: () => "Durable facts: none.",
-    readTranscriptSince: async (identity, cursor): Promise<ProviderTranscriptSinceResult> => {
-      sinceReads.push({ identity, cursor });
-      // The transcript grows once: a read from its cursor finds nothing new.
-      return {
-        status: ACTION_RESULT_STATUS.ACCEPTED,
-        text: cursor === undefined ? `${TRANSCRIPT_SECRET} for ${identity.providerSessionId}` : "",
-        cursor: `${identity.providerSessionId}-cursor`,
-        truncated: false,
-      };
-    },
     readTranscript: async (identity): Promise<ProviderTranscriptResult> => {
       wholeReads.push(identity);
-      return { status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "whole transcript" };
+      return {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        transcript: `${TRANSCRIPT_SECRET} for ${identity.providerSessionId}`,
+      };
     },
     deliver: (delivery) => {
       deliveries.push(delivery);
@@ -380,7 +373,6 @@ export function harness(
     performed,
     executions,
     traces,
-    sinceReads,
     wholeReads,
   };
 }
@@ -500,7 +492,7 @@ export function functionOutputs(input: readonly ResponsesInputItem[]) {
   }));
 }
 
-/** A host whose configured policy denies every action: the reads, the briefing, and the workspace stay. */
+/** A host whose configured policy denies every action: the reads, announce, and the workspace stay. */
 export const NO_ACTS_POLICY: BrainAgentOptions["prepareTurn"] = () => ({
   prompt: "no actions",
   layers: { agent: { deny: [`group:${TOOL_GROUP.ACTIONS}`] } },
@@ -647,11 +639,9 @@ export function agentOn(runtime: ToolLoopAgentRuntime, h: Harness) {
   return new BrainAgent({
     runtime,
     prepareTurn: PLAIN_PREPARATION,
-    observes: { kind: LOOK_SUBJECT.NONE },
     actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
     roster: () => ({ text: "", identities: [] }),
     standingContext: () => "",
-    readTranscriptSince: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
     readTranscript: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
     deliver: () => undefined,
     store: h.store,
@@ -664,19 +654,17 @@ export function agentOn(runtime: ToolLoopAgentRuntime, h: Harness) {
 }
 
 /**
- * A conversation held busy by an observation turn: a hold's release, which
- * opens a turn over no inbox entry, so nothing is left owed when the turn is
- * cut short. An observation turn takes no steered words, so asks made while
- * it stands wait in the queue for a turn of their own; releasing ends the
- * turn, which drains what waited into one turn. `inner.inputs[0]` is the
- * observation turn; the drained turn is the one after it.
+ * A conversation held busy by a tick. A tick takes no steered words, so asks
+ * made while it stands wait in the queue for a turn of their own; releasing
+ * ends the tick, which drains what waited into one turn. `inner.inputs[0]`
+ * is the tick; the drained turn is the one after it.
  */
 export async function reviewing(...replies: readonly BrainClientAnswer[]) {
   const inner = new FakeClient();
   const gated = gatedClient(inner);
   const h = harness({ client: gated.client });
   inner.answers.push(answered([message("nothing spoken")]), ...replies);
-  h.agent.releaseHeld([{ briefing: "held", decidedAt: NOW }]);
+  void h.agent.tick(tick(ABC));
   await settle();
   return {
     h,

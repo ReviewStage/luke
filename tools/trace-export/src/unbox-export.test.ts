@@ -153,14 +153,13 @@ test("a brain turn becomes its own generation, and junk lines cost only themselv
   const turn = JSON.stringify({
     at: "2026-08-25T10:05:00.000Z",
     kind: TRACE_ENTRY_KIND.BRAIN,
-    trigger: BRAIN_TURN_TRIGGER.WAKE,
+    trigger: BRAIN_TURN_TRIGGER.TICK,
     tools: [...hostedBrainToolCatalog().keys()],
     inputItemKinds: ["message", "function_call_output"],
     inputTokens: 1_500,
-    transcriptBytes: 4_096,
     toolCalls: [{ name: BRAIN_TOOL.ANNOUNCE, argumentsChars: 120, outcomeStatus: "accepted" }],
     outputText: "Checkout is waiting on you.",
-    deliveries: [{ briefingChars: 96 }],
+    utterances: [{ chars: 96 }],
     elapsedMs: 321,
     iterations: 1,
     compacted: false,
@@ -187,16 +186,12 @@ test("a brain turn becomes its own generation, and junk lines cost only themselv
   assert.equal(input?.role, "user");
   assert.equal(
     input?.content,
-    ["trigger: wake", "input items: message, function_call_output", "transcript bytes: 4096"].join(
-      "\n",
-    ),
+    ["trigger: tick", "input items: message, function_call_output"].join("\n"),
   );
   assert.equal(output?.role, "assistant");
   assert.equal(
     output?.content,
-    ["Checkout is waiting on you.", "tool call: announce -> accepted", "delivery: 96 chars"].join(
-      "\n",
-    ),
+    ["Checkout is waiting on you.", "tool call: announce -> accepted", "said: 96 chars"].join("\n"),
   );
 });
 
@@ -206,9 +201,8 @@ test("a failed brain turn shows its error, and a keyed turn its model", () => {
     kind: TRACE_ENTRY_KIND.BRAIN,
     trigger: BRAIN_TURN_TRIGGER.ASK,
     inputItemKinds: [],
-    transcriptBytes: 0,
     toolCalls: [],
-    deliveries: [],
+    utterances: [],
     elapsedMs: 100,
     iterations: 0,
     compacted: false,
@@ -218,10 +212,7 @@ test("a failed brain turn shows its error, and a keyed turn its model", () => {
   const [generation] = generations(unboxTraceFromLines([turn]));
   assert.equal(generation?.model, "gpt-5.6-luna");
   const [input, output] = messagesOf(generation);
-  assert.equal(
-    input?.content,
-    ["trigger: ask", "input items: none", "transcript bytes: 0"].join("\n"),
-  );
+  assert.equal(input?.content, ["trigger: ask", "input items: none"].join("\n"));
   assert.equal(output?.content, "error: request failed with status 500");
 });
 

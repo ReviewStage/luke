@@ -45,7 +45,7 @@ test("the output reading keeps every item verbatim and picks out calls, text, co
     id: "fc_1",
     call_id: "call_1",
     name: "announce",
-    arguments: '{"briefing":"hi"}',
+    arguments: '{"text":"hi"}',
     status: "completed",
   };
   const compaction = { type: "compaction", id: "cmp_1", encrypted_content: "folded" };
@@ -67,7 +67,7 @@ test("the output reading keeps every item verbatim and picks out calls, text, co
   assert.ok(output);
   assert.deepEqual(output.items, [compaction, reasoning, call, message]);
   assert.deepEqual(output.functionCalls, [
-    { callId: "call_1", name: "announce", argumentsJson: '{"briefing":"hi"}' },
+    { callId: "call_1", name: "announce", argumentsJson: '{"text":"hi"}' },
   ]);
   assert.equal(output.outputText, "Sent. Nothing else.");
   assert.equal(output.compacted, true);

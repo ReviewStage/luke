@@ -157,7 +157,7 @@ test("an app act pushed to the renderer never carries a memory write", () => {
 test("a speech offer carries an id, a deadline, and one well-formed turn", () => {
   const guard = BRIDGE.onSpeechOffered.result;
   assert.ok(guard);
-  const briefing = { kind: "briefing", briefing: "Claude Code finished checkout.", decidedAt: 1 };
+  const briefing = { kind: "utterance", text: "Claude Code finished checkout.", decidedAt: 1 };
   assert.equal(guard({ id: "one", speakBy: 120_001, turn: briefing }), true);
   assert.equal(guard({ id: "two", speakBy: 5, turn: { kind: "arrival", decidedAt: 2 } }), true);
   assert.equal(
@@ -178,11 +178,11 @@ test("a speech offer carries an id, a deadline, and one well-formed turn", () =>
   assert.equal(guard({ id: "five", speakBy: "soon", turn: briefing }), false);
   assert.equal(guard({ id: "six", speakBy: 5, turn: { kind: "edge", decidedAt: 1 } }), false);
   assert.equal(
-    guard({ id: "seven", speakBy: 5, turn: { kind: "briefing", briefing: 3, decidedAt: 1 } }),
+    guard({ id: "seven", speakBy: 5, turn: { kind: "utterance", text: 3, decidedAt: 1 } }),
     false,
   );
   assert.equal(
-    guard({ id: "eight", speakBy: 5, turn: { kind: "briefing", briefing: "x", decidedAt: "1" } }),
+    guard({ id: "eight", speakBy: 5, turn: { kind: "utterance", text: "x", decidedAt: "1" } }),
     false,
   );
   assert.equal(

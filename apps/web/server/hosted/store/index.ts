@@ -12,17 +12,6 @@ import {
 } from "../../core.js";
 import { loadBrainEnvelope, saveBrainEnvelope } from "./brain-envelope.js";
 import {
-  type BriefingInsert,
-  type BriefingRecord,
-  type BriefingState,
-  claimBriefing,
-  expireBriefings,
-  insertBriefing,
-  listBriefings,
-  markBriefingPushed,
-  markBriefingSpoken,
-} from "./briefings.js";
-import {
   appendConversationLines,
   conversationClearedAt,
   listConversationLines,
@@ -161,14 +150,6 @@ export interface HostedStore {
     /** Drops the snapshot, diffs, and pass record of every user the schedule no longer runs for. */
     forgetIneligible(eligibility: ObservationEligibility): Promise<void>;
   };
-  briefings: {
-    insert(userId: string, insert: BriefingInsert): Promise<boolean>;
-    claim(userId: string, id: string, deviceId: string, now: number): Promise<boolean>;
-    markSpoken(userId: string, id: string, deviceId: string, now: number): Promise<boolean>;
-    markPushed(userId: string, id: string, now: number): Promise<boolean>;
-    expire(userId: string, now: number): Promise<readonly string[]>;
-    list(userId: string, state?: BriefingState): Promise<readonly BriefingRecord[]>;
-  };
 }
 
 export function hostedStore({ db, keys }: HostedStoreContext): HostedStore {
@@ -242,18 +223,8 @@ export function hostedStore({ db, keys }: HostedStoreContext): HostedStore {
       recordPass: (userId, attempt) => recordObservationPass(db, userId, attempt),
       forgetIneligible: (eligibility) => forgetObservationIneligible(db, eligibility),
     },
-    briefings: {
-      insert: (userId, insert) => insertBriefing(db, sealFor(userId), userId, insert),
-      claim: (userId, id, deviceId, now) => claimBriefing(db, userId, id, deviceId, now),
-      markSpoken: (userId, id, deviceId, now) => markBriefingSpoken(db, userId, id, deviceId, now),
-      markPushed: (userId, id, now) => markBriefingPushed(db, userId, id, now),
-      expire: (userId, now) => expireBriefings(db, userId, now),
-      list: (userId, state) => listBriefings(db, sealFor(userId), userId, state),
-    },
   };
 }
-
-export { BRIEFING_STATE } from "./briefings.js";
 
 export type { HostedStoreContext, HostedStoreDatabase } from "./database.js";
 

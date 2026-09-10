@@ -1,7 +1,6 @@
 import {
   ARRIVAL_SPEECH_KIND,
   arrivalSpeechEvents,
-  briefingSpeechEvents,
   CALENDAR_ONBOARDING_SPEECH_KIND,
   mouthToolDefinitions,
   outputSpeedUpdateEvents,
@@ -13,6 +12,7 @@ import {
   realtimeSessionConfig,
   responseTurn,
   SCENE,
+  utteranceSpeechEvents,
   voiceExchangeActive,
 } from "@sidecar/realtime";
 import { REPLY_KIND, type ReplyKind } from "@sidecar/voice/orchestrator";
@@ -113,7 +113,7 @@ export interface SpeakOnlyCallOptions extends RealtimeCallOptions {
    * running two sentences together. The call owns the whole lifecycle —
    * the captions clear when the reply ends, is cut off, or the call closes —
    * so the caller only ever draws what it is handed. `kind` says whether the
-   * words are a briefing or a reply to the brain's answer, living exactly as
+   * words are an announcement or a reply to the brain's answer, living exactly as
    * long as that reply; a reply the brain was not asked for carries none.
    * `runId` names the brain run whose end the words are voicing, when they
    * are one, for exactly as long as the words are up.
@@ -126,7 +126,7 @@ export interface SpeakOnlyCallOptions extends RealtimeCallOptions {
   /**
    * The words a reply leaves behind at the moment it ends — finished, talked
    * over, or the call closing under it, whichever came. `kind` says whether
-   * the words were a briefing or a reply, so Conversation records each as itself.
+   * the words were an announcement or a reply, so Conversation records each as itself.
    * The words were already spoken toward the room (the caption runs a little
    * ahead of the audio, so a cut reply hands over slightly more than was
    * heard); the caller records them so the thread survives the call. A reply
@@ -152,13 +152,13 @@ export interface SpeakOnlyCallOptions extends RealtimeCallOptions {
  * what became of it.
  *
  * This is the call Luke opens for himself to read a notice out. The guarantee
- * `CLAUDE.md` states for a briefing — no microphone track, no tools — is this
+ * `CLAUDE.md` states for an announcement — no microphone track, no tools — is this
  * type rather than a flag on a wider one: there is no field here to hold a
  * device, no member that could open one, and the session document is the
  * ordinary one overlaid with {@link SPEAK_ONLY_SESSION_CONFIG}, so nothing
  * said, heard, or read out on such a call can become an action. What the
  * call does carry is the recent conversation, seeded from the record as its
- * channel opens, so a briefing is spoken against what was said before rather
+ * channel opens, so an announcement is spoken against what was said before rather
  * than read cold.
  *
  * Everything about turn-taking that needs no microphone lives here too:
@@ -307,10 +307,10 @@ export class SpeakOnlyCall<
   }
 
   /**
-   * Voices one turn the main process decided — a briefing the brain handed
+   * Voices one turn the main process decided — words the brain handed
    * the voice, or a scripted onboarding beat — reporting whether it could. A
    * refusal is not a loss: the queue keeps the turn and tries again on its
-   * own clock, and a briefing that waits too long ages out rather than being
+   * own clock, and words that wait too long age out rather than being
    * read out as though it just happened.
    */
   speak(speech: ProactiveSpeechTurn): boolean {
@@ -320,15 +320,15 @@ export class SpeakOnlyCall<
       ? arrivalSpeechEvents(speech)
       : onboarding
         ? responseTurn(SCENE.CALENDAR, undefined)
-        : briefingSpeechEvents(speech);
+        : utteranceSpeechEvents(speech);
     if (events.length === 0 || !this.isConnected || voiceExchangeActive(this.status)) return false;
     this.startResponse(events);
-    // Only a briefing's words are the brain's, and the kind is set after the
-    // start, which clears the last reply's: the briefing's reply is the one
+    // Only an utterance's words are the brain's, and the kind is set after the
+    // start, which clears the last reply's: the announcement is the one
     // under way until it ends. An onboarding beat takes no kind and no
     // caption subject — it speaks about no observed session, so no notice may
     // stand under the housing claiming it does.
-    if (!arrival && !onboarding) this.setCaptionKind(REPLY_KIND.BRIEFING);
+    if (!arrival && !onboarding) this.setCaptionKind(REPLY_KIND.ANNOUNCEMENT);
     return true;
   }
 
@@ -450,7 +450,7 @@ export class SpeakOnlyCall<
 
   protected override onChannelConnected(): void {
     // The seed lands before READY is published, because the mouth speaks a
-    // waiting briefing the moment it is; once per connect, so a reconnect
+    // waiting announcement the moment it is; once per connect, so a reconnect
     // after the session expired or the idle retire reads the thread as it
     // then stands, which now holds what was said on the call before.
     this.send(this.options.conversationSeed?.() ?? []);

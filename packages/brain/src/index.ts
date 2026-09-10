@@ -5,13 +5,15 @@ export {
   type BrainFlushInput,
   type BrainFlushMarkerStore,
   type BrainWorkspaceAccess,
-  LOOK_SUBJECT,
 } from "./agent.js";
 export { toolLoopRuntimeOver } from "./builtins.js";
 export {
   DELIVERY_STATE,
+  type DeliveryClaim,
   type DeliveryClaimContext,
   DeliveryLedger,
+  type DeliveryLedgerOptions,
+  type DeliveryOffer,
   type DeliveryRecord,
   type DeliveryState,
   deliveryRecordToWire,
@@ -27,10 +29,10 @@ export {
   OpenAiEmbeddingAdapter,
 } from "./embedding-adapters.js";
 export {
+  BRAIN_GENERATION_LIFETIME_MS,
   type BrainPersistedState,
   type BrainStateLoad,
   type BrainStateRepository,
-  type BrainTranscriptCursors,
   brainPersistedStateFromWire,
   freshBrainState,
 } from "./envelope.js";
@@ -47,7 +49,6 @@ export {
   RETRY_AFTER_HEADER,
   rateLimitWaitMs,
 } from "./model-adapter-shared.js";
-export type { BrainObservationEntry } from "./observation-inbox.js";
 export {
   BRAIN_OPENAI_DEFAULTS,
   openAiModelAdapter,
@@ -73,18 +74,27 @@ export {
   brainResponsesRequest,
   type ResponsesFunctionTool,
   type ResponsesInputItem,
+  type ResponsesToolDefinition,
   responsesCompactedWindow,
   responsesInputTokens,
   responsesModelAnswer,
   userMessageItem,
 } from "./responses-api.js";
+export { settledUnlessAborted } from "./settled.js";
 export {
   CONTEXT_ITEM_KIND,
+  type ContextItemKind,
   contextItemId,
   sessionContextText,
   workspaceProjectContextText,
 } from "./standing-context.js";
 export { BrainStateStore } from "./state-store.js";
+export {
+  type BrainTick,
+  type BrainTickChange,
+  TICK_CHANGE_KIND,
+  type TickChangeKind,
+} from "./tick.js";
 export type { BrainChildAccess, BrainMemoryAccess } from "./tool-executor.js";
 export {
   BRAIN_TOOL,
@@ -99,13 +109,8 @@ export {
   type BrainTurnDescription,
   type BrainTurnPreparation,
   type BrainTurnTrigger,
+  REFUSAL_REASON,
   runOriginOf,
 } from "./turn.js";
-export {
-  BRAIN_WAKE_KIND,
-  type BrainDelivery,
-  type BrainTurnNotice,
-  type BrainTurnReport,
-  type BrainWakeEvent,
-} from "./wake-events.js";
+export type { BrainUtterance } from "./utterance.js";
 export { BRAIN_IDENTITY_LINE, BRAIN_PERSONA, BRAIN_WORKSPACE_SEEDS } from "./workspace-seeds.js";

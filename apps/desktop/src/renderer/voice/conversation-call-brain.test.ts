@@ -169,7 +169,7 @@ test("a spoken ask goes to the brain and its answer is voiced", async () => {
   // brain's reply is the tool's output, for the follow-up to say.
   assert.deepEqual(context.asked, ["ask claude code to add tests"]);
   assert.deepEqual(toolOutputs(context, sentBefore), [
-    { briefing: "Claude Code is on the tests now." },
+    { reply: "Claude Code is on the tests now." },
   ]);
   // The follow-up that says it carries no tools: it was opened to say what the
   // brain answered, not to ask it again.
@@ -436,7 +436,7 @@ test("the brain's answer is not spoken over a turn the developer has taken", asy
 
   // The answer was still delivered as an item, so the model is not left
   // waiting — but no reply was opened to voice it over the microphone now open.
-  assert.deepEqual(toolOutputs(context, sentBefore), [{ briefing: "Sent." }]);
+  assert.deepEqual(toolOutputs(context, sentBefore), [{ reply: "Sent." }]);
   assert.deepEqual(responseCreates(context, sentBefore), []);
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
 });
@@ -562,7 +562,7 @@ test("an answer that outlives the backstop cannot speak out of the spent turn", 
 
   // The answer is still delivered as an item, so the model is not left
   // waiting — but no reply opens out of a silence already declared.
-  assert.deepEqual(toolOutputs(context, sentBefore), [{ briefing: "Sent." }]);
+  assert.deepEqual(toolOutputs(context, sentBefore), [{ reply: "Sent." }]);
   assert.deepEqual(responseCreates(context, sentBefore), []);
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 });

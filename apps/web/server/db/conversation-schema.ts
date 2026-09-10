@@ -20,7 +20,7 @@ import { user } from "./auth-schema.js";
  *
  * Two lifetimes are kept apart here as they are there. A conversation
  * session — the brain's generation — is replaced by Start fresh or Clear, and
- * its checkpoints, cursors, inbox, runs, and receipts cascade with it. The
+ * its checkpoints, runs, and receipts cascade with it. The
  * conversation's lines and its retained transcript answer to the
  * conversation instead: each names the session that stood when it was
  * written, for attribution alone, and the column is not a foreign key, so
@@ -29,8 +29,8 @@ import { user } from "./auth-schema.js";
  * transcript, and the boundaries go, with no recovery archive behind them.
  *
  * Indexable columns — ids, keys, sequences, instants, states, fixed
- * vocabulary words — stand clear. Everything user-derived (checkpoint items,
- * inbox entries, a run's question and reply, an action's arguments and
+ * vocabulary words — stand clear. Everything user-derived (checkpoint items, a
+ * run's question and reply, an action's arguments and
  * output, a line's payload, a transcript event's payload) is a `sealed_*`
  * column holding the payload envelope of `server/hosted/encryption.ts`, and
  * nothing reads it back but the store that sealed it.
@@ -104,70 +104,6 @@ export const runtimeCheckpoint = pgTable(
       columns: [table.userId, table.sessionId],
       foreignColumns: [conversationSession.userId, conversationSession.sessionId],
       name: "runtime_checkpoint_session_fk",
-    }).onDelete("cascade"),
-  ],
-);
-
-/** Where a model has read each observed transcript to, keyed by provider and provider session. */
-export const observationCursor = pgTable(
-  "observation_cursor",
-  {
-    userId: text("user_id").notNull(),
-    sessionId: text("session_id").notNull(),
-    providerId: text("provider_id").notNull(),
-    providerSessionId: text("provider_session_id").notNull(),
-    cursor: text("cursor").notNull(),
-  },
-  (table) => [
-    primaryKey({
-      columns: [table.userId, table.sessionId, table.providerId, table.providerSessionId],
-    }),
-    foreignKey({
-      columns: [table.userId, table.sessionId],
-      foreignColumns: [conversationSession.userId, conversationSession.sessionId],
-      name: "observation_cursor_session_fk",
-    }).onDelete("cascade"),
-  ],
-);
-
-/** Where the inbox has captured each transcript to; ahead of the consumed cursor while entries wait. */
-export const observationCaptureCursor = pgTable(
-  "observation_capture_cursor",
-  {
-    userId: text("user_id").notNull(),
-    sessionId: text("session_id").notNull(),
-    providerId: text("provider_id").notNull(),
-    providerSessionId: text("provider_session_id").notNull(),
-    cursor: text("cursor").notNull(),
-  },
-  (table) => [
-    primaryKey({
-      columns: [table.userId, table.sessionId, table.providerId, table.providerSessionId],
-    }),
-    foreignKey({
-      columns: [table.userId, table.sessionId],
-      foreignColumns: [conversationSession.userId, conversationSession.sessionId],
-      name: "observation_capture_cursor_session_fk",
-    }).onDelete("cascade"),
-  ],
-);
-
-export const observationInboxEntry = pgTable(
-  "observation_inbox_entry",
-  {
-    userId: text("user_id").notNull(),
-    sessionId: text("session_id").notNull(),
-    ordinal: integer("ordinal").notNull(),
-    entryId: text("entry_id").notNull(),
-    /** The observation entry whole, transcript delta included. Sealed. */
-    sealedPayload: text("sealed_payload").notNull(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.userId, table.sessionId, table.ordinal] }),
-    foreignKey({
-      columns: [table.userId, table.sessionId],
-      foreignColumns: [conversationSession.userId, conversationSession.sessionId],
-      name: "observation_inbox_entry_session_fk",
     }).onDelete("cascade"),
   ],
 );

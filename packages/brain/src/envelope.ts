@@ -7,7 +7,6 @@ import {
   type UnparsedWireValue,
 } from "@sidecar/wire";
 import { type BrainJournalEntry, brainJournalEntryFromWire } from "./journal.js";
-import { type BrainObservationEntry, brainObservationEntryFromWire } from "./observation-inbox.js";
 import {
   type BrainRequestRecord,
   brainRequestRecordFromWire,
@@ -19,8 +18,8 @@ import type { ResponsesInputItem } from "./responses-api.js";
  * Everything the brain keeps across launches, in one envelope with one
  * writer. The envelope is a generation: it is born at a moment, it dies at a
  * fixed age or at the developer's Clear, and everything inside it — the
- * Responses input array from the latest compaction onward, the transcript
- * cursors, the request records, and the action journal — lives and dies
+ * Responses input array from the latest compaction onward, the request
+ * records, and the action journal — lives and dies
  * with it. A state file from another build or another shape reads as no
  * state, never as a fresh lifetime for old data.
  */
@@ -60,8 +59,6 @@ export interface BrainResetMarker {
   generationId?: string;
 }
 
-export type BrainTranscriptCursors = Readonly<Record<string, Readonly<Record<string, string>>>>;
-
 export interface BrainPersistedState {
   version: typeof BRAIN_STATE_VERSION;
   generationId: string;
@@ -81,12 +78,6 @@ export interface BrainPersistedState {
    * flush's cycle is this count, and a fresh generation starts at zero.
    */
   compactionCount: number;
-  /** Where a model has read each transcript to, keyed by provider id, then by provider session id. */
-  cursors: BrainTranscriptCursors;
-  /** Where the inbox has captured each transcript to; ahead of `cursors` while entries wait. */
-  captureCursors: BrainTranscriptCursors;
-  /** Observations captured and not yet consumed by a turn, oldest first. */
-  inbox: readonly BrainObservationEntry[];
   requests: readonly BrainRequestRecord[];
   journal: readonly BrainJournalEntry[];
   reset?: BrainResetMarker;
@@ -109,9 +100,6 @@ export function freshBrainState(generationId: string, now: number): BrainPersist
     expiresAt: now + BRAIN_GENERATION_LIFETIME_MS,
     items: [],
     compactionCount: 0,
-    cursors: {},
-    captureCursors: {},
-    inbox: [],
     requests: [],
     journal: [],
   };
@@ -127,7 +115,7 @@ export function brainPersistedStateFromWire(
   // The lifetime is the build's, not the file's: an envelope claiming any
   // other span was not written by this rule and is not given one now.
   if (value.expiresAt - value.createdAt !== BRAIN_GENERATION_LIFETIME_MS) return undefined;
-  if (!Array.isArray(value.items) || !isRecord(value.cursors)) return undefined;
+  if (!Array.isArray(value.items)) return undefined;
   if (!Array.isArray(value.requests) || !Array.isArray(value.journal)) return undefined;
   const checkpointFormat = checkpointFormatTagFromWire(value.checkpointFormat);
   if (checkpointFormat === null) return undefined;
@@ -143,22 +131,6 @@ export function brainPersistedStateFromWire(
   for (const item of value.items) {
     if (!isRecord(item)) return undefined;
     items.push(item);
-  }
-  const cursors = cursorsFromWire(value.cursors);
-  if (!cursors) return undefined;
-  // An envelope written before the inbox existed has captured nothing and
-  // holds nothing waiting; both read as empty rather than as unreadable.
-  const captureCursors =
-    value.captureCursors === undefined ? {} : cursorsFromWire(value.captureCursors);
-  if (!captureCursors) return undefined;
-  const inbox: BrainObservationEntry[] = [];
-  if (value.inbox !== undefined) {
-    if (!Array.isArray(value.inbox)) return undefined;
-    for (const entry of value.inbox) {
-      const parsed = brainObservationEntryFromWire(entry);
-      if (!parsed) return undefined;
-      inbox.push(parsed);
-    }
   }
   const requests: BrainRequestRecord[] = [];
   for (const request of value.requests) {
@@ -180,30 +152,10 @@ export function brainPersistedStateFromWire(
     ...(checkpointFormat !== undefined ? { checkpointFormat } : undefined),
     items,
     compactionCount,
-    cursors,
-    captureCursors,
-    inbox,
     requests,
     journal,
     ...(reset ? { reset } : undefined),
   };
-}
-
-function cursorsFromWire(
-  value: UnparsedWireValue,
-): Record<string, Record<string, string>> | undefined {
-  if (!isRecord(value)) return undefined;
-  const cursors: Record<string, Record<string, string>> = {};
-  for (const [providerId, sessions] of Object.entries(value)) {
-    if (!isRecord(sessions)) return undefined;
-    const provider: Record<string, string> = {};
-    for (const [providerSessionId, cursor] of Object.entries(sessions)) {
-      if (!isWireString(cursor)) return undefined;
-      provider[providerSessionId] = cursor;
-    }
-    cursors[providerId] = provider;
-  }
-  return cursors;
 }
 
 /**

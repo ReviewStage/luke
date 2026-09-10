@@ -4,10 +4,8 @@ import {
   BRAIN_INPUT_MARKER,
   BRAIN_REQUEST_ORIGIN,
   BRAIN_SUBMISSION_OUTCOME,
-  BRAIN_TURN_TRIGGER,
-  BRAIN_WAKE_KIND,
-  type BrainDelivery,
   type BrainStateRepository,
+  type BrainUtterance,
   type ResponsesInputItem,
   responsesModelAnswer,
 } from "@sidecar/brain";
@@ -20,10 +18,9 @@ import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { CREDENTIAL_REFERENCE_KIND, memoryChildStore } from "@sidecar/runtime";
 import { drainMicrotasks, temporaryDirectory } from "@sidecar/runtime/testing";
 import {
-  CONVERSATION_KIND,
-  conversationKindOf,
-  observedSessionKey,
-  observedSessionRefOf,
+  MAIN_SESSION_KEY,
+  MODEL_FAILURE,
+  MODEL_RESPONSE_OUTCOME,
   type SessionKey,
   threadSessionKey,
 } from "@sidecar/runtime/vocabulary";
@@ -34,15 +31,16 @@ import {
   type Session,
   type SessionIdentity,
   type SessionProvider,
+  type SessionStatus,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
 import { type BrainWiring, wireBrain } from "./wiring.js";
 
 /**
  * The wiring as the main process composes it, with the model, the disk, and
- * the providers synthetic: every observed session gets a conversation of its
- * own, main reads notices and never a transcript, and a session that leaves
- * the roster has its conversation stood down.
+ * the providers synthetic: the host's clock ticks main over the roster's
+ * difference since the last tick, one turn at a time, carrying no transcript
+ * text; nothing opens a conversation per observed session any more.
  */
 
 const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
@@ -52,11 +50,11 @@ const DEF: SessionIdentity = { providerId: claude.id, providerSessionId: "def" }
 const CLOUD: SessionIdentity = { providerId: conductor.id, providerSessionId: "cloud-1" };
 const SECRET = (id: string) => `TRANSCRIPT_OF_${id}`;
 
-function session(id: string): Session {
+function session(id: string, status: SessionStatus = SESSION_STATUS.WORKING): Session {
   return normalizeSession(claude, {
     providerSessionId: id,
     title: `Claude Code: ${id}`,
-    status: SESSION_STATUS.WORKING,
+    status,
     lastActivityAt: 1_800_000_000_000,
   });
 }
@@ -104,16 +102,10 @@ async function until(condition: () => boolean, timeoutMs = 10_000): Promise<void
   }
 }
 
-/** A real-time pause, for asserting that nothing more happens. */
-function pause(ms: number): Promise<void> {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms));
-}
-
 interface Composed {
   wiring: BrainWiring;
   inputs: ResponsesInputItem[][];
-  ensured: { sessionKey: SessionKey; name: string }[];
-  deliveries: BrainDelivery[];
+  deliveries: BrainUtterance[];
   reads: SessionIdentity[];
   roster: Session[];
   recorded: { sessionKey: SessionKey; kind: string }[];
@@ -123,6 +115,12 @@ interface Composed {
   writes: Map<SessionKey, number>;
   /** How many times the credential was resolved: once at construction, then once per brain built. */
   builds: () => number;
+  /** What the host's own quiet answers a tick; the switch and the meeting hold are this one seam. */
+  quiet: { value: boolean };
+  /** While set, every inference fails upstream. */
+  failing: { value: boolean };
+  /** The newest tick item of every request the model was shown, in order: the history behind it carries the earlier ones. */
+  ticks: () => string[];
 }
 
 interface Gate {
@@ -134,6 +132,7 @@ interface Gate {
 function composed(t: TestContext, gate?: Gate): Composed {
   const inputs: ResponsesInputItem[][] = [];
   const waiting: (() => void)[] = [];
+  const failing = { value: false };
   const client: BareResponsesModel = {
     respond: async (input) => {
       inputs.push([...input]);
@@ -141,6 +140,13 @@ function composed(t: TestContext, gate?: Gate): Composed {
         await new Promise<void>((resolve) => {
           waiting.push(resolve);
         });
+      }
+      if (failing.value) {
+        return {
+          outcome: MODEL_RESPONSE_OUTCOME.FAILED,
+          failure: MODEL_FAILURE.UPSTREAM,
+          reason: "the model is down",
+        };
       }
       return answer("");
     },
@@ -155,11 +161,11 @@ function composed(t: TestContext, gate?: Gate): Composed {
   const held = new Map<SessionKey, BrainStateRepository>();
   const repositories = new Map<SessionKey, number>();
   const writes = new Map<SessionKey, number>();
-  const ensured: Composed["ensured"] = [];
-  const deliveries: BrainDelivery[] = [];
+  const deliveries: BrainUtterance[] = [];
   const reads: SessionIdentity[] = [];
   const recorded: Composed["recorded"] = [];
   const roster: Session[] = [session("abc"), session("def")];
+  const quiet = { value: false };
   let ids = 0;
   let builds = 0;
   const workspace = temporaryDirectory(t, "luke-wiring-");
@@ -180,12 +186,7 @@ function composed(t: TestContext, gate?: Gate): Composed {
         },
       };
     },
-    ensureObservedConversation: async (sessionKey, name) => {
-      ensured.push({ sessionKey, name });
-    },
-    ensureChildConversation: async (sessionKey, name) => {
-      ensured.push({ sessionKey, name });
-    },
+    ensureChildConversation: async () => undefined,
     archiveConversation: async () => true,
     conversationDirectory: () => [],
     conversationLines: () => [],
@@ -237,7 +238,7 @@ function composed(t: TestContext, gate?: Gate): Composed {
       reads: {
         transcriptSince: async (providerSessionId: string, cursor?: string) => {
           reads.push({ providerId, providerSessionId });
-          // A cloud provider answers no incremental read; the look still opens.
+          // A cloud provider answers no incremental read; the tick still counts it.
           if (providerId === conductor.id) {
             return {
               status: ACTION_RESULT_STATUS.UNSUPPORTED,
@@ -258,9 +259,10 @@ function composed(t: TestContext, gate?: Gate): Composed {
     }),
     session: (identity) =>
       roster.find((held) => held.providerSessionId === identity.providerSessionId),
-    deliver: async (delivery) => {
-      deliveries.push(delivery);
+    deliver: async (utterance) => {
+      deliveries.push(utterance);
     },
+    announcementsQuiet: async () => quiet.value,
     model: () => model,
     credential: () => {
       builds += 1;
@@ -269,12 +271,11 @@ function composed(t: TestContext, gate?: Gate): Composed {
     workspaceDirectory: () => workspace,
     skillRoots: () => [],
     runnable: () => true,
-    dropBriefings: () => undefined,
+    withdrawUtterances: () => undefined,
   });
   return {
     wiring,
     inputs,
-    ensured,
     deliveries,
     reads,
     roster,
@@ -282,238 +283,179 @@ function composed(t: TestContext, gate?: Gate): Composed {
     repositories,
     writes,
     builds: () => builds,
+    quiet,
+    failing,
+    ticks: () =>
+      inputs.flatMap((input) => {
+        const newest = itemTexts(input)
+          .filter((text) => text.startsWith(BRAIN_INPUT_MARKER.TICK))
+          .at(-1);
+        return newest === undefined ? [] : [newest];
+      }),
   };
 }
 
-test("each conversation's standing context is built for its own key", async (t) => {
+/** One tick, awaited past the turn it opened: main is busy until its end is published. */
+async function ticked(c: Composed): Promise<void> {
+  await c.wiring.tick();
+  await until(() => !(c.wiring.current()?.busy() ?? false));
+}
+
+function replaceSession(roster: Session[], next: Session): void {
+  const index = roster.findIndex((held) => held.providerSessionId === next.providerSessionId);
+  roster.splice(index, 1, next);
+}
+
+test("the first tick reports every live session as appeared, in main alone, with no transcript text; an identical roster opens no turn", async (t) => {
   const c = composed(t);
+  c.roster.push(cloudSession());
   await c.wiring.rebuild();
-  c.wiring.rosterLook();
-  await until(() => c.inputs.length >= 2 && c.wiring.pendingNotices().length === 2);
+  await ticked(c);
+  assert.equal(c.inputs.length, 1);
+  const [text] = c.ticks();
+  assert.ok(text);
+  assert.ok(
+    itemTexts(c.inputs[0] ?? [])
+      .join("\n")
+      .includes(`standing context for ${MAIN_SESSION_KEY}`),
+  );
+  assert.ok(text.includes('"kind":"appeared"'));
+  assert.ok(text.includes('"provider_session_id":"abc"'));
+  assert.ok(text.includes('"provider_session_id":"def"'));
+  assert.ok(text.includes('"provider_session_id":"cloud-1"'));
+  // What a transcript gained travels as a count; the words never do,
+  // and a cloud session that answers no incremental read carries no count.
+  assert.ok(text.includes('"transcript_chars_gained":'));
+  assert.ok(!text.includes("TRANSCRIPT_OF"));
+  assert.deepEqual(c.reads, [ABC, DEF, CLOUD]);
+  // No conversation stands for any session: only main.
+  assert.deepEqual([...c.repositories.keys()], [MAIN_SESSION_KEY]);
+  // Unchanged, the next tick opens nothing.
+  await ticked(c);
+  await ticked(c);
+  assert.equal(c.inputs.length, 1);
   c.wiring.retire();
   await c.wiring.rebuild();
 });
 
-test("a roster look opens one conversation per observed session, each reading only its own transcript, and main reads notices instead", async (t) => {
+test("a status change opens one tick turn naming the moved field, and nothing else", async (t) => {
   const c = composed(t);
   await c.wiring.rebuild();
-  c.wiring.rosterLook();
-  await until(() => c.inputs.length >= 2 && c.wiring.pendingNotices().length === 2);
-  const abcKey = observedSessionKey(ABC);
-  const defKey = observedSessionKey(DEF);
-  assert.deepEqual(c.ensured.map((entry) => entry.sessionKey).sort(), [abcKey, defKey].sort());
-  assert.equal(conversationKindOf(abcKey), CONVERSATION_KIND.OBSERVED);
-  assert.deepEqual(observedSessionRefOf(abcKey), ABC);
-  assert.ok(c.wiring.current(abcKey));
-  assert.ok(c.wiring.current(defKey));
+  await ticked(c);
+  assert.equal(c.inputs.length, 1);
+  replaceSession(c.roster, session("abc", SESSION_STATUS.COMPLETE));
+  await ticked(c);
   assert.equal(c.inputs.length, 2);
-  for (const input of c.inputs) {
-    const texts = itemTexts(input).join("\n");
-    const readsAbc = texts.includes(SECRET("abc"));
-    const readsDef = texts.includes(SECRET("def"));
-    // Exactly one session's transcript per conversation: never both.
-    assert.notEqual(readsAbc, readsDef);
-  }
-  assert.deepEqual(c.reads, [ABC, DEF]);
-  // Main was handed nothing to read and opened no turn of its own.
-  const notices = c.wiring.pendingNotices();
-  assert.equal(notices.length, 2);
-  // Each notice names its source session by the label the host resolved and
-  // carries the trigger as the typed vocabulary, never a transcript's words.
-  assert.deepEqual(notices.map((notice) => notice.label).sort(), [
-    "Claude Code: abc",
-    "Claude Code: def",
-  ]);
-  assert.ok(notices.every((notice) => notice.trigger === BRAIN_TURN_TRIGGER.ROSTER));
+  const text = c.ticks()[1];
+  assert.ok(text);
+  assert.ok(text.includes('"kind":"changed"'));
+  assert.ok(text.includes('"provider_session_id":"abc"'));
+  assert.ok(text.includes(`"status":"${SESSION_STATUS.COMPLETE}"`));
+  assert.ok(!text.includes('"provider_session_id":"def"'));
+  assert.ok(!text.includes("TRANSCRIPT_OF"));
+  assert.deepEqual(c.deliveries, []);
+  c.wiring.retire();
+  await c.wiring.rebuild();
+});
+
+test("a vanished session is reported once, and the picture it left is forgotten", async (t) => {
+  const c = composed(t);
+  await c.wiring.rebuild();
+  await ticked(c);
+  c.roster.splice(
+    c.roster.findIndex((held) => held.providerSessionId === "def"),
+    1,
+  );
+  await ticked(c);
+  assert.equal(c.inputs.length, 2);
+  const text = c.ticks()[1];
+  assert.ok(text);
+  assert.ok(text.includes('"kind":"vanished"'));
+  assert.ok(text.includes('"provider_session_id":"def"'));
+  assert.ok(!text.includes('"provider_session_id":"abc"'));
+  await ticked(c);
+  assert.equal(c.inputs.length, 2);
+  c.wiring.retire();
+  await c.wiring.rebuild();
+});
+
+test("no tick is taken while main is busy; the change stands for the tick after", async (t) => {
+  const gate: Gate = {
+    holds: (texts) => texts.includes("are you there?"),
+    release: () => undefined,
+  };
+  const c = composed(t, gate);
+  await c.wiring.rebuild();
+  await ticked(c);
+  assert.equal(c.inputs.length, 1);
   const main = c.wiring.current();
   assert.ok(main);
   const accepted = await main.submitAsk({
     submissionId: "s-1",
-    question: "what happened?",
+    question: "are you there?",
     origin: BRAIN_REQUEST_ORIGIN.TYPED,
   });
   assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
-  await until(() => c.inputs.length >= 3);
-  await drainMicrotasks(60);
-  assert.deepEqual(c.wiring.pendingNotices(), []);
-  // A second look at unchanged sessions opens no inference in either conversation.
-  await c.wiring.rosterLook();
-  await pause(200);
-  assert.equal(c.inputs.length, 3);
-  // A session gone from the roster has its idle conversation stood down; the other stands.
-  c.roster.splice(1, 1);
-  c.wiring.rosterLook();
-  await until(() => c.wiring.current(defKey) === undefined);
-  assert.equal(c.wiring.current(defKey), undefined);
-  assert.ok(c.wiring.current(abcKey));
-  c.wiring.retire();
-  await c.wiring.rebuild();
-});
-
-test("a roster look opens a cloud session's conversation like a local one, reads no message, and stands it down when the session leaves", async (t) => {
-  const c = composed(t);
-  c.roster.push(cloudSession());
-  await c.wiring.rebuild();
-  c.wiring.rosterLook();
-  await until(() => c.inputs.length >= 3 && c.wiring.pendingNotices().length === 3);
-  const cloudKey = observedSessionKey(CLOUD);
-  assert.ok(c.ensured.some((entry) => entry.sessionKey === cloudKey));
-  assert.ok(c.wiring.current(cloudKey));
-  // The cloud session's read went through its own provider and answered no
-  // transcript; its turn opened on the roster fields alone, and no other
-  // session's transcript reached its conversation.
-  assert.deepEqual(
-    c.reads.filter((identity) => identity.providerId === conductor.id),
-    [CLOUD],
-  );
-  const cloudInput = c.inputs.find((input) => itemTexts(input).join("\n").includes("cloud-1"));
-  assert.ok(cloudInput);
-  const cloudNotice = c.wiring
-    .pendingNotices()
-    .find((notice) => notice.label === "Conductor: cloud");
-  assert.ok(cloudNotice);
-  assert.equal(cloudNotice.trigger, BRAIN_TURN_TRIGGER.ROSTER);
-  // A second look at the unchanged cloud session opens no inference.
-  await c.wiring.rosterLook();
-  await pause(200);
-  assert.equal(c.inputs.length, 3);
-  // Gone from the roster, its idle conversation stands down like a local one's.
-  c.roster.splice(
-    c.roster.findIndex((held) => held.providerId === conductor.id),
-    1,
-  );
-  c.wiring.rosterLook();
-  await until(() => c.wiring.current(cloudKey) === undefined);
-  assert.ok(c.wiring.current(observedSessionKey(ABC)));
-  c.wiring.retire();
-  await c.wiring.rebuild();
-});
-
-test("hooks route to the session's own conversation, main is never woken by one, and a held briefing returns to its source", async (t) => {
-  const c = composed(t);
-  await c.wiring.rebuild();
-  const abcKey = observedSessionKey(ABC);
-  c.wiring.wake([
-    {
-      kind: BRAIN_WAKE_KIND.HOOK,
-      hookEvent: "Stop",
-      identity: ABC,
-      session: session("abc"),
-      atMs: 1_800_000_000_000,
-    },
-  ]);
-  await until(() => c.wiring.current(abcKey)?.pendingWakes() === 1);
-  const observed = c.wiring.current(abcKey);
-  assert.ok(observed);
-  assert.equal(observed.pendingWakes(), 1);
-  assert.equal(c.wiring.current()?.pendingWakes(), 0);
-  assert.equal(c.wiring.current(observedSessionKey(DEF)), undefined);
-  // A briefing decided by that conversation carries its source, and a held one is re-decided there.
-  c.wiring.releaseHeld([
-    { briefing: "abc finished", decidedAt: 1, sessionKey: abcKey },
-    { briefing: "old news", decidedAt: 1 },
-  ]);
-  const releasesSoFar = () =>
-    c.inputs
-      .map((input) => itemTexts(input).join("\n"))
-      .filter((text) => text.includes(BRAIN_INPUT_MARKER.HOLD_RELEASED));
-  await until(() => releasesSoFar().length >= 2);
-  await drainMicrotasks(60);
-  const releases = releasesSoFar();
-  assert.equal(releases.length, 2);
-  // The wake rode into the source conversation's hold-release turn, and main's carried none.
-  assert.equal(observed.pendingWakes(), 0);
-  c.wiring.retire();
-  await c.wiring.rebuild();
-});
-
-test("a held briefing whose source conversation has stood down goes back to that conversation, reopened for it, never to main", async (t) => {
-  const c = composed(t);
-  await c.wiring.rebuild();
-  const goneKey = observedSessionKey({ providerId: claude.id, providerSessionId: "gone" });
-  c.wiring.releaseHeld([
-    { briefing: "a session that has stood down", decidedAt: 1, sessionKey: goneKey },
-  ]);
-  const releases = () =>
-    c.inputs
-      .map((input) => itemTexts(input).join("\n"))
-      .filter((text) => text.includes(BRAIN_INPUT_MARKER.HOLD_RELEASED));
-  await until(() => releases().length >= 1);
-  // The release's turn ends and leaves its notice before anything is judged.
-  await until(() => !(c.wiring.current(goneKey)?.busy() ?? true));
-  await until(() => c.wiring.pendingNotices().length >= 1);
-  await drainMicrotasks(60);
-  // The source conversation is opened again for the briefing it decided:
-  // it, not main, re-decides it, and the briefing is neither dropped nor
-  // sent to another session's conversation.
-  assert.ok(c.wiring.current(goneKey));
-  assert.ok(c.ensured.some((entry) => entry.sessionKey === goneKey));
-  assert.equal(releases().length, 1);
-  // Main read nothing of it: the one notice is the source's own turn.
-  assert.equal(c.wiring.pendingNotices().length, 1);
-  c.wiring.retire();
-  await c.wiring.rebuild();
-});
-
-test("a session that leaves the roster while its analysis is held keeps its conversation until the analysis ends", async (t) => {
-  const gate: Gate = { holds: (texts) => texts.includes(SECRET("abc")), release: () => undefined };
-  const c = composed(t, gate);
-  await c.wiring.rebuild();
-  const abcKey = observedSessionKey(ABC);
-  c.wiring.rosterLook();
-  await until(() => c.inputs.some((input) => itemTexts(input).join("\n").includes(SECRET("abc"))));
-  // The analysis is out at the model, an unrecorded observation turn.
-  assert.ok(c.wiring.current(abcKey)?.busy());
-  // The session disappears from the roster and the look runs again.
-  c.roster.splice(
-    c.roster.findIndex((held) => held.providerSessionId === "abc"),
-    1,
-  );
-  c.wiring.rosterLook();
-  await drainMicrotasks(60);
-  await pause(20);
-  // Still standing: an analysis in flight is never cut mid-thought.
-  assert.ok(c.wiring.current(abcKey));
+  await until(() => c.inputs.length === 2);
+  replaceSession(c.roster, session("abc", SESSION_STATUS.COMPLETE));
+  await c.wiring.tick();
+  assert.equal(c.inputs.length, 2, "nothing piles onto a turn still thinking");
+  gate.holds = () => false;
   gate.release();
-  await until(() => !(c.wiring.current(abcKey)?.busy() ?? false));
-  await until(() => c.wiring.pendingNotices().some((notice) => notice.label.includes("abc")));
-  // The next look, with the analysis over and nothing owed, stands it down.
-  c.wiring.rosterLook();
-  await until(() => c.wiring.current(abcKey) === undefined);
+  const runId = accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
+  await main.waitAsk(runId, 10_000);
+  await until(() => !main.busy());
+  await ticked(c);
+  assert.equal(c.inputs.length, 3);
+  assert.ok(c.ticks().at(-1)?.includes(`"status":"${SESSION_STATUS.COMPLETE}"`));
   c.wiring.retire();
   await c.wiring.rebuild();
 });
 
-test("a hook for a session whose conversation is standing down waits for the close and builds one store, never a second on the same envelope", async (t) => {
+test("no tick is taken while announcements are quiet; the first tick after surfaces everything that moved", async (t) => {
   const c = composed(t);
   await c.wiring.rebuild();
-  const abcKey = observedSessionKey(ABC);
-  c.wiring.rosterLook();
-  await until(() => c.wiring.pendingNotices().length === 2);
-  await until(() => !(c.wiring.current(abcKey)?.busy() ?? true));
-  assert.equal(c.repositories.get(abcKey), 1);
-  // abc leaves the roster: the look stands its conversation down, and a hook
-  // for it lands in the same tick, while the close is still draining.
-  c.roster.splice(
-    c.roster.findIndex((held) => held.providerSessionId === "abc"),
-    1,
-  );
-  c.wiring.rosterLook();
-  c.wiring.wake([
-    {
-      kind: BRAIN_WAKE_KIND.HOOK,
-      hookEvent: "Stop",
-      identity: ABC,
-      session: session("abc"),
-      atMs: 2,
-    },
-  ]);
-  await until(() => c.wiring.pendingNotices().length === 3);
-  await drainMicrotasks(60);
-  // One conversation stands for abc, on the second store built for it; the
-  // first was let go of before the second was opened.
-  assert.ok(c.wiring.current(abcKey));
-  assert.equal(c.repositories.get(abcKey), 2);
+  await ticked(c);
+  assert.equal(c.inputs.length, 1);
+  c.quiet.value = true;
+  replaceSession(c.roster, session("abc", SESSION_STATUS.COMPLETE));
+  await ticked(c);
+  replaceSession(c.roster, session("def", SESSION_STATUS.ERROR));
+  await ticked(c);
+  assert.equal(c.inputs.length, 1);
+  assert.equal(c.reads.length, 2, "a quiet tick reads no transcript");
+  c.quiet.value = false;
+  await ticked(c);
+  assert.equal(c.inputs.length, 2);
+  const text = c.ticks()[1];
+  assert.ok(text);
+  assert.ok(text.includes('"provider_session_id":"abc"'));
+  assert.ok(text.includes(`"status":"${SESSION_STATUS.COMPLETE}"`));
+  assert.ok(text.includes('"provider_session_id":"def"'));
+  assert.ok(text.includes(`"status":"${SESSION_STATUS.ERROR}"`));
+  c.wiring.retire();
+  await c.wiring.rebuild();
+});
+
+test("a tick whose turn failed leaves the change to surface again on the next", async (t) => {
+  const c = composed(t);
+  await c.wiring.rebuild();
+  await ticked(c);
+  assert.equal(c.inputs.length, 1);
+  c.failing.value = true;
+  replaceSession(c.roster, session("abc", SESSION_STATUS.COMPLETE));
+  await ticked(c);
+  assert.equal(c.inputs.length, 2);
+  c.failing.value = false;
+  await ticked(c);
+  assert.equal(c.inputs.length, 3);
+  const text = c.ticks()[2];
+  assert.ok(text);
+  assert.ok(text.includes('"provider_session_id":"abc"'));
+  assert.ok(text.includes(`"status":"${SESSION_STATUS.COMPLETE}"`));
+  // Seen to the end now, it is not shown a third time.
+  await ticked(c);
+  assert.equal(c.inputs.length, 3);
   c.wiring.retire();
   await c.wiring.rebuild();
 });
@@ -521,39 +463,26 @@ test("a hook for a session whose conversation is standing down waits for the clo
 test("a rebuild landing while a conversation stands down leaves the closing host to its close, and the reopen owns the sole store", async (t) => {
   const c = composed(t);
   await c.wiring.rebuild();
-  const abcKey = observedSessionKey(ABC);
-  c.wiring.rosterLook();
-  await until(() => c.wiring.pendingNotices().length === 2);
-  await until(() => !(c.wiring.current(abcKey)?.busy() ?? true));
-  assert.equal(c.repositories.get(abcKey), 1);
-  const writesBefore = c.writes.get(abcKey) ?? 0;
+  const threadKey = threadSessionKey("t-1");
+  await c.wiring.openConversation(threadKey);
+  assert.equal(c.repositories.get(threadKey), 1);
+  const writesBefore = c.writes.get(threadKey) ?? 0;
   const buildsBefore = c.builds();
   // The close has begun and is awaiting its drain when the rebuild lands in
   // the same tick: the interleave is fixed by construction, not by timing.
-  const closing = c.wiring.closeConversation(abcKey);
+  const closing = c.wiring.closeConversation(threadKey);
   await c.wiring.rebuild();
   await closing;
-  assert.equal(c.wiring.current(abcKey), undefined);
-  // The rebuild built main's brain and def's, and nothing onto the host the
-  // close was about to discard, where no retire could ever reach it; the
-  // first envelope took no write after its conversation stood down.
+  assert.equal(c.wiring.current(threadKey), undefined);
+  // The rebuild built main's brain and nothing onto the host the close was
+  // about to discard, where no retire could ever reach it; the first
+  // envelope took no write after its conversation stood down.
   await drainMicrotasks(60);
-  assert.equal(c.builds() - buildsBefore, 2);
-  assert.equal(c.writes.get(abcKey) ?? 0, writesBefore);
-  // Reopened for a hook, the session's conversation stands on a second store
-  // built after the first was let go, and it is the only one.
-  c.wiring.wake([
-    {
-      kind: BRAIN_WAKE_KIND.HOOK,
-      hookEvent: "Stop",
-      identity: ABC,
-      session: session("abc"),
-      atMs: 2,
-    },
-  ]);
-  await until(() => c.wiring.pendingNotices().length === 3);
-  assert.ok(c.wiring.current(abcKey));
-  assert.equal(c.repositories.get(abcKey), 2);
+  assert.equal(c.builds() - buildsBefore, 1);
+  assert.equal(c.writes.get(threadKey) ?? 0, writesBefore);
+  await c.wiring.openConversation(threadKey);
+  assert.ok(c.wiring.current(threadKey));
+  assert.equal(c.repositories.get(threadKey), 2);
   c.wiring.retire();
   await c.wiring.rebuild();
 });
@@ -573,70 +502,6 @@ test("a conversation reopened while it stands down waits for the close and stand
   // directory, on the second store, and the first is gone.
   assert.ok(c.wiring.current(threadKey));
   assert.equal(c.repositories.get(threadKey), 2);
-  c.wiring.retire();
-  await c.wiring.rebuild();
-});
-
-test("two opens of one key landing in the same tick, a hook and a held briefing, build one store and list the conversation once", async (t) => {
-  const c = composed(t);
-  await c.wiring.rebuild();
-  const abcKey = observedSessionKey(ABC);
-  assert.equal(c.repositories.get(abcKey), undefined);
-  // Nothing stands for abc yet; both paths reach the same opening.
-  c.wiring.wake([
-    {
-      kind: BRAIN_WAKE_KIND.HOOK,
-      hookEvent: "Stop",
-      identity: ABC,
-      session: session("abc"),
-      atMs: 1,
-    },
-  ]);
-  c.wiring.releaseHeld([{ briefing: "decided earlier", decidedAt: 1, sessionKey: abcKey }]);
-  await until(() => c.wiring.pendingNotices().length === 2);
-  await until(() => !(c.wiring.current(abcKey)?.busy() ?? true));
-  assert.ok(c.wiring.current(abcKey));
-  assert.equal(c.repositories.get(abcKey), 1);
-  assert.equal(c.ensured.filter((entry) => entry.sessionKey === abcKey).length, 1);
-  // Both turns ran, one after the other, in that one conversation: the
-  // later call's context carries the hook's wake and the release together.
-  assert.equal(c.inputs.length, 2);
-  c.wiring.retire();
-  await c.wiring.rebuild();
-});
-
-test("one observed conversation waiting on its model neither blocks another nor main", async (t) => {
-  const gate: Gate = { holds: (texts) => texts.includes(SECRET("def")), release: () => undefined };
-  const c = composed(t, gate);
-  await c.wiring.rebuild();
-  c.wiring.rosterLook();
-  await until(() => c.inputs.length >= 2 && c.wiring.pendingNotices().length === 1);
-  // def's inference is held; abc's has finished and left its notice.
-  assert.equal(c.inputs.length, 2);
-  assert.equal(c.wiring.pendingNotices().length, 1);
-  assert.equal(c.wiring.pendingNotices()[0]?.label, "Claude Code: abc");
-  const main = c.wiring.current();
-  assert.ok(main);
-  const accepted = await main.submitAsk({
-    submissionId: "s-2",
-    question: "are you there?",
-    origin: BRAIN_REQUEST_ORIGIN.TYPED,
-  });
-  assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
-  const runId = accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
-  // Main answered while def's analysis was still held.
-  const record = await main.waitAsk(runId, 10_000);
-  await until(() => c.inputs.length >= 3 && c.wiring.lanes.snapshot("agent").active === 1);
-  assert.equal(record?.status, "succeeded");
-  assert.equal(c.inputs.length, 3);
-  assert.equal(c.wiring.lanes.snapshot("agent").active, 1);
-  gate.release();
-  await until(
-    () => c.wiring.lanes.snapshot("agent").active === 0 && c.wiring.pendingNotices().length === 1,
-  );
-  assert.equal(c.wiring.lanes.snapshot("agent").active, 0);
-  assert.equal(c.wiring.pendingNotices().length, 1);
-  assert.equal(c.wiring.pendingNotices()[0]?.label, "Claude Code: def");
   c.wiring.retire();
   await c.wiring.rebuild();
 });

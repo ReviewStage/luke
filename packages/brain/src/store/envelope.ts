@@ -1,7 +1,6 @@
 import type { TranscriptEvent } from "@sidecar/runtime/vocabulary";
-import type { BrainPersistedState, BrainTranscriptCursors } from "../envelope.js";
+import type { BrainPersistedState } from "../envelope.js";
 import type { BrainJournalEntry } from "../journal.js";
-import type { BrainObservationEntry } from "../observation-inbox.js";
 import type { BrainRequestRecord } from "../requests.js";
 import type { ResponsesInputItem } from "../responses-api.js";
 import type { EnvelopeRead } from "./brain-envelope.js";
@@ -38,10 +37,6 @@ interface BrainStateDelta {
   items?: BrainItemsDelta;
   /** The generation's compaction count, when this save moved it. */
   compactionCount?: number;
-  cursors?: BrainTranscriptCursors;
-  captureCursors?: BrainTranscriptCursors;
-  /** The inbox whole, when it changed; it is small by construction and replaced rather than diffed. */
-  inbox?: readonly BrainObservationEntry[];
   requests?: BrainRequestsDelta;
   journal?: BrainJournalDelta;
 }
@@ -166,11 +161,6 @@ export function brainStateSave(
   if (previous.compactionCount !== next.compactionCount) {
     delta.compactionCount = next.compactionCount;
   }
-  if (!sameJson(previous.cursors, next.cursors)) delta.cursors = next.cursors;
-  if (!sameJson(previous.captureCursors, next.captureCursors)) {
-    delta.captureCursors = next.captureCursors;
-  }
-  if (!sameJson(previous.inbox, next.inbox)) delta.inbox = next.inbox;
   const requests = requestsDelta(previous.requests, next.requests);
   if (requests) delta.requests = requests;
   const journal = journalDelta(previous.journal, next.journal);

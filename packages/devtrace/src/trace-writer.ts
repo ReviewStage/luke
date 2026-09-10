@@ -31,7 +31,7 @@ export interface BrainRequestTraceRecord {
 /**
  * One decision the speech arbiter took about a proactive turn: which kind of
  * turn, what was decided of it, and how many requests stood pending after.
- * Nothing worded travels — a briefing's text is transcript-derived, and the
+ * Nothing worded travels — an announcement's text is transcript-derived, and the
  * trace widening to it is a product decision.
  */
 export interface SpeechTraceRecord {

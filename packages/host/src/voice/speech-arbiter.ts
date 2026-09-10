@@ -1,10 +1,10 @@
-import type { BrainDelivery } from "@sidecar/brain";
+import type { BrainUtterance } from "@sidecar/brain";
 import type { SpeechTraceRecord } from "@sidecar/devtrace";
 import {
   ARRIVAL_SPEECH_KIND,
-  BRIEFING_SPEECH_KIND,
   CALENDAR_ONBOARDING_SPEECH_KIND,
   type ProactiveSpeechTurn,
+  UTTERANCE_SPEECH_KIND,
 } from "@sidecar/realtime";
 import { SPEECH_OUTCOME, type SpeechOffer, type SpeechOutcome } from "@sidecar/realtime/speech";
 
@@ -20,17 +20,16 @@ import { SPEECH_OUTCOME, type SpeechOffer, type SpeechOutcome } from "@sidecar/r
 export const SPOKEN_NOTICE_MAX_AGE_MS = 2 * 60_000;
 
 /**
- * How many briefings wait, whether through a meeting's quiet or behind a long
- * reply. A backlog that outlives the news is a backlog that would replay the
- * morning: the brain re-decides a held backlog in one turn at the release and
- * the mouth reads a live one in order, and either wants the recent few.
+ * How many utterances wait behind a long reply. A backlog that outlives the
+ * news is a backlog that would replay the morning: the mouth reads them in
+ * order, and wants the recent few.
  */
-export const MAXIMUM_PENDING_BRIEFINGS = 8;
+export const MAXIMUM_PENDING_UTTERANCES = 8;
 
-type SpeechKind = ProactiveSpeechTurn["kind"];
+export type SpeechKind = ProactiveSpeechTurn["kind"];
 
 /** The scripted beats, each spoken at most once to the end per run. */
-export type OnboardingBeatKind = Exclude<SpeechKind, typeof BRIEFING_SPEECH_KIND>;
+export type OnboardingBeatKind = Exclude<SpeechKind, typeof UTTERANCE_SPEECH_KIND>;
 
 /**
  * What the arbiter decided about a request, as the development trace records
@@ -45,43 +44,42 @@ export const SPEECH_DECISION = {
   ...SPEECH_OUTCOME,
 } as const;
 
-type SpeechDecision = (typeof SPEECH_DECISION)[keyof typeof SPEECH_DECISION];
+export type SpeechDecision = (typeof SPEECH_DECISION)[keyof typeof SPEECH_DECISION];
 
 /**
- * One proactive turn waiting to be offered. A briefing keeps the whole
- * delivery so the brain's hold release receives exactly what it decided; a
- * beat is its kind alone, worded by the mouth at speak time from what the
- * renderer already draws.
+ * One proactive turn waiting to be offered. An utterance keeps the words the
+ * brain decided; a beat is its kind alone, worded by the mouth at speak time
+ * from what the renderer already draws.
  */
-type SpeechRequest = {
+export type SpeechRequest = {
   id: string;
   requestedAt: number;
-  /** Whether the request waits out the announcement hold rather than the clock. */
+  /** Whether the request waits out the announcement hold rather than the clock; only a beat ever does. */
   held: boolean;
 } & (
-  | { kind: typeof BRIEFING_SPEECH_KIND; delivery: BrainDelivery }
+  | { kind: typeof UTTERANCE_SPEECH_KIND; utterance: BrainUtterance }
   | { kind: typeof ARRIVAL_SPEECH_KIND }
   | { kind: typeof CALENDAR_ONBOARDING_SPEECH_KIND }
 );
 
-type SpeechRequestInput =
-  | { kind: typeof BRIEFING_SPEECH_KIND; delivery: BrainDelivery }
+export type SpeechRequestInput =
+  | { kind: typeof UTTERANCE_SPEECH_KIND; utterance: BrainUtterance }
   | { kind: OnboardingBeatKind };
 
-interface SpeechSettlement {
+export interface SpeechSettlement {
   kind: SpeechKind;
   outcome: SpeechOutcome;
   request: SpeechRequest;
 }
 
-interface SpeechArbiterOptions {
+export interface SpeechArbiterOptions {
   now: () => number;
   nextId: () => string;
   trace?: (record: SpeechTraceRecord) => void;
 }
 
 function isBeat(request: SpeechRequest): request is SpeechRequest & { kind: OnboardingBeatKind } {
-  return request.kind !== BRIEFING_SPEECH_KIND;
+  return request.kind !== UTTERANCE_SPEECH_KIND;
 }
 
 /**
@@ -89,15 +87,17 @@ function isBeat(request: SpeechRequest): request is SpeechRequest & { kind: Onbo
  * in what order, whether now, and what became of each. The mouth in the
  * renderer holds at most one offer at a time and reports its outcome by id;
  * only then is the next offered. A renderer therefore holds nothing a reload
- * or a hold can destroy, and a request that reached the mouth and came back
- * held rejoins the head rather than dying in a queue the hold emptied.
+ * or a hold can destroy.
  *
  * Quiet — the developer's pause or a meeting's — is applied here and only
- * here: a request arriving under it, or standing when it begins, is marked
- * held. A held beat is released with a fresh clock when the quiet ends. A
- * held briefing is not spoken as it stood: it is handed back to the brain for
- * one re-decision, because the sessions may have moved on while the meeting
- * ran, and what the brain decides afresh arrives as a new request.
+ * here, and it is a wall, not a waiting room. A beat arriving under it, or
+ * standing when it begins, is marked held and released with a fresh clock
+ * when the quiet ends. An utterance is not held at all: one arriving under
+ * quiet, standing when it begins, or coming back from the mouth held is
+ * dropped, because the sessions move on while a meeting runs and the words
+ * were decided against a roster that no longer stands. The brain is not
+ * ticked while quiet stands, and the first tick after it sees everything
+ * that changed across the quiet and decides afresh.
  *
  * A beat is spent for the run only by a terminal outcome — spoken, refused,
  * or stale — never by being sent, held, or withdrawn, so a beat a meeting
@@ -119,25 +119,22 @@ export class SpeechArbiter {
     return this.#pending.length;
   }
 
-  get heldBriefingCount(): number {
-    return this.#heldBriefings().length;
-  }
-
   get offeredId(): string | undefined {
     return this.#offered?.id;
   }
 
   /**
    * Takes one turn something decided to voice. A beat already pending,
-   * offered, or spent this run is dropped: each is one line, said once. A
-   * briefing joins the backlog, and the backlog sheds its oldest whole past
-   * the bound — a briefing is one sentence the brain already worded, with no
-   * half to keep — except the one the mouth already holds, which is settled
-   * by the mouth and never taken out from under it.
+   * offered, or spent this run is dropped: each is one line, said once. An
+   * utterance under quiet is dropped; otherwise it joins the backlog, and the
+   * backlog sheds its oldest whole past the bound — an utterance is one
+   * sentence the brain already worded, with no half to keep — except the one
+   * the mouth already holds, which is settled by the mouth and never taken
+   * out from under it.
    */
   request(input: SpeechRequestInput): void {
     const now = this.#options.now();
-    if (input.kind !== BRIEFING_SPEECH_KIND) {
+    if (input.kind !== UTTERANCE_SPEECH_KIND) {
       const duplicate =
         this.#spentThisRun.has(input.kind) ||
         this.#pending.some((request) => request.kind === input.kind);
@@ -154,38 +151,50 @@ export class SpeechArbiter {
       this.#trace(input.kind, SPEECH_DECISION.REQUESTED);
       return;
     }
+    if (this.#quiet) {
+      this.#trace(UTTERANCE_SPEECH_KIND, SPEECH_DECISION.DROPPED);
+      return;
+    }
     this.#pending.push({
       id: this.#options.nextId(),
       requestedAt: now,
-      held: this.#quiet,
-      kind: BRIEFING_SPEECH_KIND,
-      delivery: input.delivery,
+      held: false,
+      kind: UTTERANCE_SPEECH_KIND,
+      utterance: input.utterance,
     });
-    this.#trace(BRIEFING_SPEECH_KIND, SPEECH_DECISION.REQUESTED);
-    let excess = this.#briefingCount() - MAXIMUM_PENDING_BRIEFINGS;
+    this.#trace(UTTERANCE_SPEECH_KIND, SPEECH_DECISION.REQUESTED);
+    let excess = this.#utteranceCount() - MAXIMUM_PENDING_UTTERANCES;
     while (excess > 0) {
       const oldest = this.#pending.find(
-        (request) => request.kind === BRIEFING_SPEECH_KIND && request.id !== this.#offered?.id,
+        (request) => request.kind === UTTERANCE_SPEECH_KIND && request.id !== this.#offered?.id,
       );
       if (!oldest) return;
       this.#remove(oldest.id);
-      this.#trace(BRIEFING_SPEECH_KIND, SPEECH_DECISION.DROPPED);
+      this.#trace(UTTERANCE_SPEECH_KIND, SPEECH_DECISION.DROPPED);
       excess -= 1;
     }
   }
 
   /**
-   * Follows the announcement hold. Quiet beginning marks every pending
-   * request held; the one the mouth holds comes back through its HELD
-   * settle. Quiet ending releases the beats with a fresh clock, so a beat
-   * that waited out a meeting is not stale the moment it may speak; the
-   * briefings stay held until the brain takes them for its re-decision.
+   * Follows the announcement hold. Quiet beginning marks every pending beat
+   * held and drops every pending utterance that has not reached the mouth;
+   * the one the mouth holds comes back through its HELD settle and is dropped
+   * there. Quiet ending releases the beats with a fresh clock, so a beat that
+   * waited out a meeting is not stale the moment it may speak.
    */
   setQuiet(quiet: boolean): void {
     if (quiet === this.#quiet) return;
     this.#quiet = quiet;
     if (quiet) {
-      for (const request of this.#pending) request.held = true;
+      for (const request of [...this.#pending]) {
+        if (isBeat(request)) {
+          request.held = true;
+          continue;
+        }
+        if (request.id === this.#offered?.id) continue;
+        this.#remove(request.id);
+        this.#trace(UTTERANCE_SPEECH_KIND, SPEECH_DECISION.DROPPED);
+      }
       return;
     }
     const now = this.#options.now();
@@ -197,48 +206,24 @@ export class SpeechArbiter {
   }
 
   /**
-   * Removes and returns the held briefings in the order they were decided,
-   * for the brain to re-decide as one backlog. One the mouth still holds is
-   * left for its settle, and is taken on the pass after it comes back.
-   */
-  takeHeldBriefings(): readonly BrainDelivery[] {
-    const taken = this.#heldBriefings();
-    for (const request of taken) this.#remove(request.id);
-    return taken.map((request) => request.delivery);
-  }
-
-  /**
-   * Discards every briefing that has not reached the mouth: no brain can
-   * stand to re-decide them, or the quiet that held them has lost its
-   * reason. One the mouth holds is settled by the mouth.
-   */
-  dropBriefings(): void {
-    for (const request of [...this.#pending]) {
-      if (request.kind !== BRIEFING_SPEECH_KIND || request.id === this.#offered?.id) continue;
-      this.#remove(request.id);
-      this.#trace(BRIEFING_SPEECH_KIND, SPEECH_DECISION.DROPPED);
-    }
-  }
-
-  /**
-   * Withdraws every briefing, the one the mouth holds included: the
-   * generation that decided them has been cleared or has died, and a
-   * briefing not yet spoken is that generation's words. An offer is not
-   * proof the words were said, so the offered one goes too, and its id is
-   * answered so the caller can take it back from the mouth; a settle that
-   * still arrives for it is a late report and is ignored. Speech already
+   * Withdraws every utterance, the one the mouth holds included: the
+   * generation that decided them has been cleared or has died, or no brain
+   * stands any more, and words not yet spoken are that generation's. An offer
+   * is not proof the words were said, so the offered one goes too, and its
+   * id is answered so the caller can take it back from the mouth; a settle
+   * that still arrives for it is a late report and is ignored. Speech already
    * begun is the mouth's to finish.
    */
-  withdrawBriefings(): string | undefined {
+  withdrawUtterances(): string | undefined {
     let offered: string | undefined;
     for (const request of [...this.#pending]) {
-      if (request.kind !== BRIEFING_SPEECH_KIND) continue;
+      if (request.kind !== UTTERANCE_SPEECH_KIND) continue;
       if (request.id === this.#offered?.id) {
         offered = request.id;
         this.#offered = undefined;
       }
       this.#remove(request.id);
-      this.#trace(BRIEFING_SPEECH_KIND, SPEECH_DECISION.DROPPED);
+      this.#trace(UTTERANCE_SPEECH_KIND, SPEECH_DECISION.DROPPED);
     }
     return offered;
   }
@@ -285,9 +270,8 @@ export class SpeechArbiter {
    * has passed unsettled is settled stale here first: this is the whole
    * recovery from a renderer that reloaded, crashed, or lost the settle.
    * Nothing is offered under quiet or while an offer stands. Unheld requests
-   * past their age are settled stale on the way; a held one waits out the
-   * hold, not the clock, and is never offered: a held beat is released by the
-   * quiet ending, and a held briefing belongs to the brain's re-decision.
+   * past their age are settled stale on the way; a held beat waits out the
+   * hold, not the clock, and is never offered until the quiet ends.
    */
   next(): SpeechOffer | undefined {
     const now = this.#options.now();
@@ -317,13 +301,14 @@ export class SpeechArbiter {
    * Takes the mouth's report on the offer it holds. An id no longer known —
    * withdrawn, or reclaimed at its deadline — is a late report and is
    * ignored. SPOKEN and STALE end the request and spend a beat's kind. HELD
-   * keeps it at the head for the release — or, reported while no quiet
-   * stands here, unheld, so the next reconcile offers it again: the mouth
-   * read a hold the panel still drew after it had ended, and a request
-   * marked held against a quiet already gone would wait for a release that
-   * can never come. REFUSED is a call that could not
-   * be opened within its attempts, which ends every pending request: each is
-   * still standing in the panel, and a fresh request starts a fresh backlog.
+   * drops an utterance, whose words were decided against a roster the quiet
+   * lets move on; a beat it keeps at the head for the release — or, reported
+   * while no quiet stands here, unheld, so the next reconcile offers it
+   * again: the mouth read a hold the panel still drew after it had ended, and
+   * a beat marked held against a quiet already gone would wait for a release
+   * that can never come. REFUSED is a call that could not be opened within
+   * its attempts, which ends every pending request: each is still standing in
+   * the panel, and a fresh request starts a fresh backlog.
    */
   settle(id: string, outcome: SpeechOutcome): SpeechSettlement | undefined {
     if (this.#offered?.id !== id) return undefined;
@@ -332,8 +317,13 @@ export class SpeechArbiter {
     if (!request) return undefined;
     switch (outcome) {
       case SPEECH_OUTCOME.HELD:
-        request.held = this.#quiet;
-        this.#trace(request.kind, SPEECH_OUTCOME.HELD);
+        if (isBeat(request)) {
+          request.held = this.#quiet;
+          this.#trace(request.kind, SPEECH_OUTCOME.HELD);
+          break;
+        }
+        this.#remove(id);
+        this.#trace(request.kind, SPEECH_DECISION.DROPPED);
         break;
       case SPEECH_OUTCOME.SPOKEN:
       case SPEECH_OUTCOME.STALE:
@@ -360,32 +350,24 @@ export class SpeechArbiter {
     this.#pending = this.#pending.filter((request) => request.id !== id);
   }
 
-  #briefingCount(): number {
-    return this.#pending.filter((request) => request.kind === BRIEFING_SPEECH_KIND).length;
+  #utteranceCount(): number {
+    return this.#pending.filter((request) => request.kind === UTTERANCE_SPEECH_KIND).length;
   }
 
-  #heldBriefings(): Array<SpeechRequest & { kind: typeof BRIEFING_SPEECH_KIND }> {
-    const held: Array<SpeechRequest & { kind: typeof BRIEFING_SPEECH_KIND }> = [];
-    for (const request of this.#pending) {
-      if (request.kind !== BRIEFING_SPEECH_KIND || !request.held) continue;
-      if (request.id === this.#offered?.id) continue;
-      held.push(request);
-    }
-    return held;
-  }
-
-  /** When the request became news: a briefing's decision, a beat's request. */
+  /** When the request became news: an utterance's decision, a beat's request. */
   #decidedAt(request: SpeechRequest): number {
-    return request.kind === BRIEFING_SPEECH_KIND ? request.delivery.decidedAt : request.requestedAt;
+    return request.kind === UTTERANCE_SPEECH_KIND
+      ? request.utterance.decidedAt
+      : request.requestedAt;
   }
 
   #turn(request: SpeechRequest): ProactiveSpeechTurn {
     switch (request.kind) {
-      case BRIEFING_SPEECH_KIND:
+      case UTTERANCE_SPEECH_KIND:
         return {
-          kind: BRIEFING_SPEECH_KIND,
-          briefing: request.delivery.briefing,
-          decidedAt: request.delivery.decidedAt,
+          kind: UTTERANCE_SPEECH_KIND,
+          text: request.utterance.text,
+          decidedAt: request.utterance.decidedAt,
         };
       case ARRIVAL_SPEECH_KIND:
         return { kind: ARRIVAL_SPEECH_KIND, decidedAt: request.requestedAt };

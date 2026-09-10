@@ -96,6 +96,8 @@ export const ARCHIVE_REASON = {
   AGE_RETENTION: "age-retention",
   IDLE_THREAD: "idle-thread",
   ACTIVE_SESSION_CAP: "active-session-cap",
+  /** A conversation of a kind this build no longer runs, archived at the store's migration so nothing lists it as live. */
+  RETIRED_KIND: "retired-kind",
 } as const;
 
 export type ArchiveReason = (typeof ARCHIVE_REASON)[keyof typeof ARCHIVE_REASON];

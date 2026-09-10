@@ -32,16 +32,12 @@ import {
 } from "../server/core";
 import {
   actionReceipt,
-  briefing,
   compactionBoundary,
   conversation,
   conversationLine,
   conversationRun,
   conversationSession,
   devices,
-  observationCaptureCursor,
-  observationCursor,
-  observationInboxEntry,
   observationPass,
   personalFact,
   providerKey,
@@ -53,7 +49,7 @@ import {
   workspaceFile,
 } from "../server/db/schema";
 import { payloadKeyRing } from "../server/hosted/encryption";
-import { BRIEFING_STATE, MAXIMUM_PENDING_ROSTER_DIFFS } from "../server/hosted/store";
+import { MAXIMUM_PENDING_ROSTER_DIFFS } from "../server/hosted/store";
 import { loadBrainEnvelope, saveBrainEnvelope } from "../server/hosted/store/brain-envelope";
 import { userSeal } from "../server/hosted/store/database";
 import {
@@ -124,20 +120,6 @@ function populatedState(generationId: string): BrainPersistedState {
       { type: "message", role: "assistant", content: "two" },
     ],
     compactionCount: 1,
-    cursors: { conductor: { "session-a": "cursor-a" } },
-    captureCursors: { conductor: { "session-a": "cursor-b" } },
-    inbox: [
-      {
-        id: "entry-1",
-        kind: "hook",
-        providerId: "conductor",
-        providerSessionId: "session-a",
-        atMs: NOW,
-        capturedAt: NOW,
-        delta: { text: "delta text", truncated: false, status: "accepted" },
-        cursor: "cursor-b",
-      },
-    ],
     requests: [
       request("run-1", {
         status: BRAIN_REQUEST_STATUS.SUCCEEDED,
@@ -191,17 +173,14 @@ test("the envelope round-trips through the tables, requests and receipts in thei
     .from(conversationRun)
     .where(and(eq(conversationRun.userId, userId), eq(conversationRun.runId, "run-1")));
   assert.ok(runRow);
+  assert.doesNotMatch(runRow.sealedQuestion, /question for/);
+  assert.doesNotMatch(runRow.sealedText ?? "", /reply one/);
   const [itemRow] = await database.db
     .select()
     .from(runtimeCheckpoint)
     .where(eq(runtimeCheckpoint.userId, userId));
   assert.ok(itemRow);
-  const [inboxRow] = await database.db
-    .select()
-    .from(observationInboxEntry)
-    .where(eq(observationInboxEntry.userId, userId));
-  assert.ok(inboxRow);
-  assert.equal(inboxRow.entryId, "entry-1");
+  assert.doesNotMatch(itemRow.sealedItem, /assistant|one/);
 });
 
 test("deltas leave the tables holding exactly the envelope given, checkpoint by checkpoint", async () => {
@@ -215,8 +194,6 @@ test("deltas leave the tables holding exactly the envelope given, checkpoint by 
     ...first,
     items: [first.items[0] ?? {}, { type: "message", role: "assistant", content: "changed" }],
     compactionCount: 2,
-    cursors: { conductor: { "session-a": "cursor-c", "session-b": "cursor-d" } },
-    inbox: [],
     requests: [
       {
         ...request("run-1", { status: BRAIN_REQUEST_STATUS.SUCCEEDED, text: "reply one" }),
@@ -372,6 +349,15 @@ test("line appends are idempotent on the line's own id, a line learns its run, a
     republished.entries.some((entry) => entry.eventId === "line-9"),
     false,
   );
+
+  const keyRows = await database.db
+    .select({ eventKey: conversationLine.eventKey, sealedPayload: conversationLine.sealedPayload })
+    .from(conversationLine)
+    .where(eq(conversationLine.userId, userId));
+  for (const row of keyRows) {
+    assert.match(row.eventKey, /^[0-9a-f]{64}$/);
+    assert.doesNotMatch(row.sealedPayload, /said once|no id/);
+  }
 });
 
 test("the sequence counts up and is never reused, and the projection keeps 200 recent lines under the age bound", async () => {
@@ -428,6 +414,11 @@ test("a checkpoint's transcript lands in the same transaction as the envelope, a
       createdAt: NOW + 1,
     },
   ]);
+  const [eventRow] = await database.db
+    .select()
+    .from(transcriptEvent)
+    .where(eq(transcriptEvent.userId, userId));
+  assert.doesNotMatch(eventRow?.sealedPayload ?? "", /an ask/);
 
   const refused = database.store.brainStateRepository(userId, MAIN_SESSION_KEY);
   assert.equal(await refused.save(populatedState("gen-x"), [CHECKPOINT_INPUT]), false);
@@ -487,21 +478,8 @@ test("the conversation directory lists what the user holds, creation is idempote
     NOW,
   );
   assert.equal((await database.store.conversations.list(userId))[1]?.sessionId, "gen-thread");
-  for (const sessionKey of [THREAD_KEY, MAIN_SESSION_KEY]) {
-    await database.store.briefings.insert(userId, {
-      id: `briefing-${sessionKey}`,
-      sessionKey,
-      words: "words",
-      decidedAt: NOW,
-      expiresAt: NOW + 1,
-    });
-  }
 
   assert.equal(await database.store.conversations.delete(userId, THREAD_KEY), true);
-  assert.deepEqual(
-    (await database.store.briefings.list(userId)).map((record) => record.sessionKey),
-    [MAIN_SESSION_KEY],
-  );
   assert.equal(await database.store.conversations.delete(userId, THREAD_KEY), false);
   assert.equal((await database.store.conversations.list(userId)).length, 1);
   for (const table of [conversationLine, transcriptEvent, compactionBoundary]) {
@@ -584,6 +562,8 @@ test("facts are listed in order and replaced whole, a kept id keeping its first 
     { id: "fact-3", words: "uses a standing desk", createdAt: NOW + 5 },
     { id: "fact-1", words: "prefers short replies", createdAt: NOW },
   ]);
+  const rows = await database.db.select().from(personalFact).where(eq(personalFact.userId, userId));
+  for (const row of rows) assert.doesNotMatch(row.sealedWords, /prefers|standing/);
 });
 
 test("workspace files are read and written whole per user and path, seeded once, and refuse a path outside the workspace", async () => {
@@ -615,6 +595,7 @@ test("workspace files are read and written whole per user and path, seeded once,
     .from(workspaceFile)
     .where(eq(workspaceFile.userId, userId));
   assert.equal(rows.length, 1);
+  assert.doesNotMatch(rows[0]?.sealedContent ?? "", /edited/);
 
   const other = await database.createUser();
   assert.equal(await workspace.read(other, "AGENTS.md"), undefined);
@@ -641,6 +622,7 @@ test("the roster snapshot is one sealed row per user, replaced whole, and its in
     .from(rosterSnapshot)
     .where(eq(rosterSnapshot.userId, userId));
   assert.equal(rows.length, 1);
+  assert.doesNotMatch(rows[0]?.sealedBody ?? "", /sessions/);
   await database.db
     .update(rosterSnapshot)
     .set({ sealedBody: "1:not-an-envelope" })
@@ -695,6 +677,8 @@ test("a pass advances the snapshot and its diff together, diffs wait sealed unti
   assert.deepEqual(await roster.pendingDiffs(userId), [
     { id: "diff-1", observedAt: NOW + 1, previousObservedAt: NOW, payload: "a session appeared" },
   ]);
+  const [row] = await database.db.select().from(rosterDiff).where(eq(rosterDiff.userId, userId));
+  assert.doesNotMatch(row?.sealedPayload ?? "", /appeared/);
 
   assert.equal(await roster.consumeDiff(userId, "diff-1", NOW + 2), true);
   assert.equal(await roster.consumeDiff(userId, "diff-1", NOW + 3), false);
@@ -791,74 +775,6 @@ test("a pass record moves the attempt every time, the whole read only on success
   assert.equal((await roster.pass(keyed))?.attemptedAt, NOW);
 });
 
-test("a briefing is offered once, claimed by one device once, settled only by its claimer or the push, and expired when its time comes", async () => {
-  const { database, userId } = await conversationFor();
-  const briefings = database.store.briefings;
-  const offered = {
-    id: "briefing-1",
-    sessionKey: MAIN_SESSION_KEY,
-    runId: "run-1",
-    words: "a session needs you",
-    decidedAt: NOW,
-    expiresAt: NOW + 60_000,
-  };
-  assert.equal(await briefings.insert(userId, offered), true);
-  assert.equal(await briefings.insert(userId, offered), false);
-  assert.equal(
-    await briefings.insert(userId, { ...offered, id: "briefing-orphan", sessionKey: THREAD_KEY }),
-    false,
-  );
-  const other = await database.createUser();
-  await database.store.conversations.create(other, {
-    sessionKey: MAIN_SESSION_KEY,
-    name: MAIN_CONVERSATION_NAME,
-    now: NOW,
-  });
-  assert.equal(await briefings.insert(other, offered), true);
-  assert.equal((await briefings.list(other)).length, 1);
-  assert.deepEqual(await briefings.list(userId, BRIEFING_STATE.OFFERED), [
-    { ...offered, state: BRIEFING_STATE.OFFERED },
-  ]);
-
-  assert.equal(await briefings.markSpoken(userId, "briefing-1", "mac", NOW + 1), false);
-  assert.equal(await briefings.claim(userId, "briefing-1", "mac", NOW + 1), true);
-  assert.equal(await briefings.claim(userId, "briefing-1", "phone", NOW + 2), false);
-  assert.equal(await briefings.markSpoken(userId, "briefing-1", "phone", NOW + 3), false);
-  assert.equal(await briefings.markSpoken(userId, "briefing-1", "mac", NOW + 3), true);
-  assert.equal(await briefings.markPushed(userId, "briefing-1", NOW + 4), false);
-  assert.deepEqual(await briefings.list(userId), [
-    {
-      ...offered,
-      state: BRIEFING_STATE.SPOKEN,
-      claimedByDeviceId: "mac",
-      claimedAt: NOW + 1,
-      settledAt: NOW + 3,
-    },
-  ]);
-
-  await briefings.insert(userId, { ...offered, id: "briefing-2", decidedAt: NOW + 10 });
-  assert.equal(await briefings.markPushed(userId, "briefing-2", NOW + 11), true);
-  await briefings.insert(userId, { ...offered, id: "briefing-3", decidedAt: NOW + 20 });
-  await briefings.insert(userId, {
-    ...offered,
-    id: "briefing-4",
-    decidedAt: NOW + 30,
-    expiresAt: NOW + 99_000,
-  });
-  assert.equal(await briefings.claim(userId, "briefing-3", "mac", NOW + 60_000), false);
-  assert.deepEqual(await briefings.expire(userId, NOW + 60_000), ["briefing-3"]);
-  assert.equal((await briefings.list(userId, BRIEFING_STATE.EXPIRED))[0]?.id, "briefing-3");
-  assert.equal((await briefings.list(userId, BRIEFING_STATE.OFFERED))[0]?.id, "briefing-4");
-  await database.db
-    .update(briefing)
-    .set({ sealedWords: "1:not-an-envelope" })
-    .where(and(eq(briefing.userId, userId), eq(briefing.id, "briefing-2")));
-  assert.deepEqual(
-    (await briefings.list(userId)).map((record) => record.id),
-    ["briefing-1", "briefing-3", "briefing-4"],
-  );
-});
-
 test("deleting the user row cascades through every conversation table and leaves another user's rows standing", async () => {
   const { database, userId } = await conversationFor();
   const { userId: other } = await conversationFor();
@@ -881,13 +797,6 @@ test("deleting the user row cascades through every conversation table and leaves
       undefined,
     );
     await database.store.roster.recordPass(id, { attemptedAt: NOW });
-    await database.store.briefings.insert(id, {
-      id: "briefing-shared-id",
-      sessionKey: MAIN_SESSION_KEY,
-      words: "words",
-      decidedAt: NOW,
-      expiresAt: NOW + 1,
-    });
   }
 
   await database.db.delete(user).where(eq(user.id, userId));
@@ -896,9 +805,6 @@ test("deleting the user row cascades through every conversation table and leaves
     conversation,
     conversationSession,
     runtimeCheckpoint,
-    observationCursor,
-    observationCaptureCursor,
-    observationInboxEntry,
     conversationRun,
     actionReceipt,
     conversationLine,
@@ -909,7 +815,6 @@ test("deleting the user row cascades through every conversation table and leaves
     rosterSnapshot,
     rosterDiff,
     observationPass,
-    briefing,
   ];
   for (const table of tables) {
     const gone = await database.db

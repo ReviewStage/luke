@@ -15,35 +15,27 @@ of its own; what it does keep is the working memory described below. For a
 session running on your Mac whose agent keeps a transcript this build can read
 (Claude Code, Codex, and OMP today), Luke also reads that session's own
 transcript file — the file its agent already writes, which Luke never writes
-to — so he can notice what changed and tell you about it. He reads it at three
-moments: when an agent's hook says a turn just ended, on his own periodic look
-at the sessions that are working or waiting, and when you ask him about a
-session. On the first two he reads what each transcript gained since he last
-looked, up to the last 20,000 characters of new text per session per look,
-and may also read one session's recent tail, up to its last 60,000
-characters, while deciding whether there is anything to tell you; when you
-ask, he reads the same bounded tail. Each observed session is followed by a
-conversation of Luke's own, kept inside his application data: that
-conversation is the one that reads the session's transcript and briefs you
-about it, and no other conversation of his — the main one included — is
-handed those excerpts. What the main conversation
-learns of them is a short notice in Luke's own words and counts (which
-session a turn looked at, what he briefed, how many actions he took), never
-the transcript's text. What he reads is written down first — the new text, with the
-session's title and status and the position it was read to — in that
-conversation's own inbox on your Mac, so that a turn interrupted by a
-throttle, a failure, or a quit picks it up rather than rereading or losing
-it; an entry leaves the inbox when a turn has consumed it, and the inbox
-holds at most 20 entries. What he reads is sent to a model as described under
-"Who we send it to", and what he keeps of it lives under his working memory's
-own lifetime, described below, one memory per conversation. For a Conductor
-session, which keeps no transcript on your Mac, the same "read the recent
-tail" ask reads the newest page of that chat's conversation from Conductor
-instead — your own messages and the agent's replies, not its tool activity —
-using the Conductor key you gave the Mac app, only for a session Luke was just
-shown, and only inside a turn: one you opened, or one a status change on that
-chat woke; the periodic look itself reads no message of any chat. What he
-reads is held in that turn's working memory and stored nowhere else. Nothing
+to — so he can notice what changed and tell you about it. He reads it at two
+moments: while deciding whether there is anything to tell you, and when you
+ask him about a session. The deciding is paced by a clock, not a model: about
+once a minute, and sooner when an agent's hook says a turn just ended, Luke
+compares the sessions to what he last saw of them — each one's status, whether
+it is waiting on you, its error line, its workspace, and how many characters
+its transcript grew, a count he takes by reading the new text and keeping
+only its length — and only when something moved does he open a turn, handing
+that turn the list of what moved and nothing of any transcript. Inside that
+turn, or when you ask, he may read one session's recent tail, up to its last
+60,000 characters. What he reads is sent to a model as described under "Who
+we send it to", and what he keeps of it lives under his working memory's own
+lifetime, described below. What he compared against is held in memory alone
+and written nowhere. For a Conductor session, which keeps no transcript on
+your Mac, the same "read the recent tail" ask reads the newest page of that
+chat's conversation from Conductor instead — your own messages and the
+agent's replies, not its tool activity — using the Conductor key you gave the
+Mac app, only for a session Luke was just shown, and only inside a turn: one
+you opened, or one the clock opened because that chat changed; the clock's
+own comparison reads no message of any chat. What he reads is held in that
+turn's working memory and stored nowhere else. Nothing
 else reads message history, file contents, or command output. If you run
 agents inside the Herdr terminal manager, Luke also asks Herdr's own
 command-line tool which of those sessions it holds, so their rows can say so;
@@ -89,12 +81,13 @@ coding agent's transcript or session state is never written, and a write whose
 arguments are malformed is refused rather than filled in.
 
 **Luke's working memory.** For each conversation Luke keeps a working memory
-of his own turns in the same database, in its own tables — main's, each
-private thread's, and each observed session's: the model's record
-of what he read, said, and did — the transcript excerpts described above, the
-position he last read each transcript to and the position he last wrote one
-down to, the inbox of excerpts written down and not yet read, a record of each ask you made and
-how it ended, and a receipt for each action he took at your ask. When that
+of his own turns in the same database, in its own tables — main's and each
+private thread's: the model's record of what he read, said, and did — the
+transcript tails described above, a record of each ask you made and how it
+ended, and a receipt for each action he took at your ask. (An earlier build
+kept a conversation per observed session, with the excerpts it read and an
+inbox of ones not yet read; this build's first launch drops those tables and
+archives those conversations, and nothing writes or reads them again.) When that
 record grows long, Luke folds its older part: he asks OpenAI to compact it,
 which answers an opaque, encrypted compaction item he stores in place of the
 older part, or, on a connection that cannot compact, he asks the model for a

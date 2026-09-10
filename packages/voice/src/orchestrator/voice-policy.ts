@@ -152,7 +152,7 @@ export function spokenAskPreviewSurvives(status: RealtimeStatus): boolean {
  * the developer's spoken turns as the service transcribes them, then the
  * reply or announcement as its words are generated — the ask precedes its
  * answer. Presentation only, so each line mirrors exactly what its own
- * recording path will keep: a briefing settles as an announcement, any
+ * recording path will keep: an unprompted utterance settles as an announcement, any
  * other caption settles as a reply, and a reply of several messages keeps
  * each as a paragraph of the one line. A reply voicing a brain run's end draws
  * no line: the main process wrote that reply into the thread from the record
@@ -171,10 +171,10 @@ export function liveConversationEntries(input: {
     const ask = streamingConversationEntry(CONVERSATION_ENTRY_KIND.SPOKEN_ASK, words);
     if (ask) lines.push(ask);
   }
-  const briefing = input.kind === REPLY_KIND.BRIEFING;
+  const announcement = input.kind === REPLY_KIND.ANNOUNCEMENT;
   if (input.captions && input.runId === undefined) {
     const speech = streamingConversationEntry(
-      briefing ? CONVERSATION_ENTRY_KIND.ANNOUNCEMENT : CONVERSATION_ENTRY_KIND.REPLY,
+      announcement ? CONVERSATION_ENTRY_KIND.ANNOUNCEMENT : CONVERSATION_ENTRY_KIND.REPLY,
       joinReplyMessages(input.captions),
     );
     if (speech) lines.push(speech);

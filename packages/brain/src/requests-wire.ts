@@ -25,8 +25,8 @@ import {
  * What crosses the bridge between the brain in the main process and the
  * windows. The brain decides and actions on its own side; what reaches a
  * renderer is the record of a run it submitted or is drawing, and the few app
- * actions only a renderer can perform. A briefing travels as a speech offer
- * instead, from the speech arbiter that decides when it may be said.
+ * actions only a renderer can perform. An announcement travels as a speech
+ * offer instead, from the speech arbiter that decides when it may be said.
  */
 
 /** One deliberate ask, as a renderer submits it: minted once per submission, so a retry finds the same run. */
@@ -89,7 +89,7 @@ export const BRAIN_ASK_PENDING_STATUS = "pending";
  * the voice can say instead.
  */
 export type BrainAskResult =
-  | { status: typeof ACTION_RESULT_STATUS.ACCEPTED; briefing: string; runId: string }
+  | { status: typeof ACTION_RESULT_STATUS.ACCEPTED; reply: string; runId: string }
   | { status: typeof BRAIN_ASK_PENDING_STATUS; note: string }
   | { status: typeof ACTION_RESULT_STATUS.REJECTED; reason: string };
 

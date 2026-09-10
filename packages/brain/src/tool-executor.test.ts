@@ -57,7 +57,7 @@ function parsed(outputJson: string) {
 }
 
 function executor(
-  trigger: BrainTurnTrigger = BRAIN_TURN_TRIGGER.WAKE,
+  trigger: BrainTurnTrigger = BRAIN_TURN_TRIGGER.TICK,
   children: BrainChildAccess | undefined = undefined,
 ) {
   const policy = resolveTurnToolPolicy(CATALOG, {}, trigger);
@@ -111,7 +111,7 @@ function executor(
       isRevoked: () => false,
       signal: run.abort.signal,
     },
-    onBriefing: () => undefined,
+    onUtterance: () => undefined,
   };
   const tools = createTurnToolExecutor(dependencies, turn);
   return {
@@ -189,19 +189,19 @@ test("the refusal names the policy's own answer: the turn layer for announce in 
   );
 
   const h = executor(BRAIN_TURN_TRIGGER.ASK);
-  const refused = await h.execute(call(BRAIN_TOOL.ANNOUNCE, { briefing: "words" }));
+  const refused = await h.execute(call(BRAIN_TOOL.ANNOUNCE, { text: "words" }));
   assert.equal(refused.reason, REFUSAL_REASON.ANNOUNCE_IN_ASK);
   assert.deepEqual(h.journal.entries(), []);
 });
 
 test("an effect is journaled by what the catalog says the tool is: every action and the workspace write, never a read or the briefing", () => {
-  const wake = resolveTurnToolPolicy(CATALOG, {}, BRAIN_TURN_TRIGGER.WAKE);
-  assert.ok(journaledEffect(wake, REALTIME_TOOL.SEND_SESSION_MESSAGE));
-  assert.ok(journaledEffect(wake, BRAIN_TOOL.WRITE_WORKSPACE_FILE));
-  assert.ok(!journaledEffect(wake, BRAIN_TOOL.READ_WORKSPACE_FILE));
-  assert.ok(!journaledEffect(wake, BRAIN_TOOL.READ_TRANSCRIPT));
-  assert.ok(!journaledEffect(wake, BRAIN_TOOL.ANNOUNCE));
-  assert.ok(!journaledEffect(wake, "not_a_tool"));
+  const tick = resolveTurnToolPolicy(CATALOG, {}, BRAIN_TURN_TRIGGER.TICK);
+  assert.ok(journaledEffect(tick, REALTIME_TOOL.SEND_SESSION_MESSAGE));
+  assert.ok(journaledEffect(tick, BRAIN_TOOL.WRITE_WORKSPACE_FILE));
+  assert.ok(!journaledEffect(tick, BRAIN_TOOL.READ_WORKSPACE_FILE));
+  assert.ok(!journaledEffect(tick, BRAIN_TOOL.READ_TRANSCRIPT));
+  assert.ok(!journaledEffect(tick, BRAIN_TOOL.ANNOUNCE));
+  assert.ok(!journaledEffect(tick, "not_a_tool"));
   // A tool the policy removed is refused, not journaled.
   const noActions = resolveTurnToolPolicy(CATALOG, { agent: { deny: ["group:actions"] } });
   assert.ok(!journaledEffect(noActions, REALTIME_TOOL.SEND_SESSION_MESSAGE));

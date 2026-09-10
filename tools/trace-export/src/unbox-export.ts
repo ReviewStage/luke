@@ -236,9 +236,8 @@ function brainAvailableTools(entry: WireRecord): readonly WireRecord[] {
 }
 
 /**
- * The turn's input as the trace kept it: what woke it, the kinds of items it
- * carried, and how many transcript bytes it read. The items' text was never
- * recorded, so none is shown.
+ * The turn's input as the trace kept it: what opened it and the kinds of
+ * items it carried. The items' text was never recorded, so none is shown.
  */
 function brainInputText(entry: WireRecord): string {
   const itemKinds = Array.isArray(entry.inputItemKinds)
@@ -247,13 +246,12 @@ function brainInputText(entry: WireRecord): string {
   return [
     `trigger: ${text(entry.trigger) ?? "unknown"}`,
     `input items: ${itemKinds.length > 0 ? itemKinds.join(", ") : "none"}`,
-    `transcript bytes: ${wholeNumber(entry.transcriptBytes) ?? 0}`,
   ].join("\n");
 }
 
 /**
  * The turn's produce: the text it ended on, one line per tool call with how
- * the action came out, and one line per briefing it handed the mouth, as counts.
+ * the action came out, and one line per utterance it handed the mouth, as counts.
  * A turn that ended in an error shows the error where its text would be.
  */
 function brainOutputText(entry: WireRecord): string {
@@ -261,15 +259,15 @@ function brainOutputText(entry: WireRecord): string {
     (call) =>
       `tool call: ${text(call.name) ?? "unknown"} -> ${text(call.outcomeStatus) ?? "unknown"}`,
   );
-  const deliveries = recordItems(entry.deliveries).map(
-    (delivery) => `delivery: ${wholeNumber(delivery.briefingChars) ?? 0} chars`,
+  const utterances = recordItems(entry.utterances).map(
+    (utterance) => `said: ${wholeNumber(utterance.chars) ?? 0} chars`,
   );
   const outputText = text(entry.outputText);
   const error = text(entry.error);
   const lines = [
     ...(outputText ? [outputText] : []),
     ...toolCalls,
-    ...deliveries,
+    ...utterances,
     ...(error ? [`error: ${error}`] : []),
   ];
   return lines.length > 0 ? lines.join("\n") : "no output";

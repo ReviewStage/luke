@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { BriefingSpeech, ProactiveSpeechTurn, RealtimeStatus } from "@sidecar/realtime";
+import type { ProactiveSpeechTurn, RealtimeStatus, UtteranceSpeech } from "@sidecar/realtime";
 import {
-  BRIEFING_SPEECH_KIND,
   CALENDAR_ONBOARDING_SPEECH_KIND,
   REALTIME_STATUS,
+  UTTERANCE_SPEECH_KIND,
 } from "@sidecar/realtime";
 import { SPEECH_OUTCOME, type SpeechOffer, type SpeechOutcome } from "@sidecar/realtime/speech";
 import { FakeClock } from "@sidecar/runtime/testing";
@@ -19,10 +19,10 @@ import {
 
 const FAR_DEADLINE = Number.MAX_SAFE_INTEGER;
 
-function speech(id: string, decidedAt = 1_000): BriefingSpeech {
+function speech(id: string, decidedAt = 1_000): UtteranceSpeech {
   return {
-    kind: BRIEFING_SPEECH_KIND,
-    briefing: `Claude Code finished ${id}.`,
+    kind: UTTERANCE_SPEECH_KIND,
+    text: `Claude Code finished ${id}.`,
     decidedAt,
   };
 }
@@ -33,11 +33,11 @@ function offer(id: string, turn: ProactiveSpeechTurn = speech(id), speakBy = FAR
 
 /** The ids the spoken briefings were worded about, in the order they were said. */
 function spokenIds(session: FakeSession): string[] {
-  return session.spoken.map((item) => /finished (.+)\.$/.exec(item.briefing)?.[1] ?? "");
+  return session.spoken.map((item) => /finished (.+)\.$/.exec(item.text)?.[1] ?? "");
 }
 
 interface FakeSession extends SpeechMouthSession {
-  spoken: BriefingSpeech[];
+  spoken: UtteranceSpeech[];
   connects: number;
   closes: number;
   stops: number;
@@ -76,7 +76,7 @@ function fakeSession(): FakeSession {
     },
     speak(item: ProactiveSpeechTurn) {
       if (!this.isConnected || this.status === REALTIME_STATUS.RESPONDING) return false;
-      if (item.kind === BRIEFING_SPEECH_KIND) this.spoken.push(item);
+      if (item.kind === UTTERANCE_SPEECH_KIND) this.spoken.push(item);
       this.setStatus(REALTIME_STATUS.RESPONDING);
       return true;
     },

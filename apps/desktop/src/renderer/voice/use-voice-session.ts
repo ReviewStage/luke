@@ -240,7 +240,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     }),
   );
 
-  // One proactive turn the main process decided to voice now — a briefing the
+  // One proactive turn the main process decided to voice now — words the
   // brain decided, or an onboarding beat whose observed values are read at
   // the moment it is spoken — and the arbiter taking one back before it is
   // said.

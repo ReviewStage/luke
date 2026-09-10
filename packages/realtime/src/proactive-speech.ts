@@ -8,43 +8,43 @@ import {
 } from "@sidecar/wire";
 import { REALTIME_CLIENT_EVENT } from "./realtime-events.js";
 import { trimmedText } from "./trimmed-text.js";
-import { BRIEFING_INPUT_MARKER, responseTurn, SCENE } from "./voice-scene.js";
+import { responseTurn, SCENE, UTTERANCE_INPUT_MARKER } from "./voice-scene.js";
 
 /**
- * What Luke says first: the briefing the brain decided to give, and the two
+ * What Luke says first: words the brain already decided to say, and the two
  * onboarding beats whose trigger is deterministic and whose words are a
  * script fixed by the build. This is the wire contract between the main
- * process that decides a turn and the renderer that speaks it. A briefing
+ * process that decides a turn and the renderer that speaks it. An utterance
  * joins the call's own conversation, so the voice speaks it against what was
  * said before; the standing instructions of the session, not a document
- * built here, say what a briefing is and that it is said as written. The
+ * built here, say what an utterance is and that it is said as written. The
  * arrival beat alone builds its own events here, because it composes data
  * lines and chooses a direction by what they hold.
  */
 
 /**
- * The marker a briefing item discriminates on. A briefing is what the brain
+ * The marker an utterance item discriminates on. An utterance is what the brain
  * decided to say, already worded; the voice's part is to say it.
  */
-export const BRIEFING_SPEECH_KIND = "briefing";
+export const UTTERANCE_SPEECH_KIND = "utterance";
 
 /**
- * One briefing the brain handed the mouth: the words, and when it was
+ * One utterance the brain handed the mouth: the words, and when it was
  * decided, so a stale one is dropped rather than read out as though it just
  * happened.
  */
-export interface BriefingSpeech {
-  kind: typeof BRIEFING_SPEECH_KIND;
-  briefing: string;
+export interface UtteranceSpeech {
+  kind: typeof UTTERANCE_SPEECH_KIND;
+  text: string;
   decidedAt: number;
 }
 
 /**
- * Builds the events that speak one briefing.
+ * Builds the events that speak one utterance.
  *
- * The briefing joins the conversation: it is created as one user item behind
+ * The utterance joins the conversation: it is created as one user item behind
  * the marker and spoken by a response over the conversation as it stands,
- * so the spoken words are appended to it and the next briefing or reply is
+ * so the spoken words are appended to it and the next utterance or reply is
  * inflected against them rather than read cold. What still bounds it is the
  * withheld tools — the response declares none and may choose none — and the
  * standing rule that the words are said as written and answer nothing said
@@ -52,22 +52,22 @@ export interface BriefingSpeech {
  * a response input would open a context apart from the conversation, and
  * response instructions would replace the session's for that turn.
  */
-export function briefingSpeechEvents(speech: BriefingSpeech): readonly WireRecord[] {
-  const briefing = trimmedText(speech.briefing);
-  if (!briefing) return [];
+export function utteranceSpeechEvents(speech: UtteranceSpeech): readonly WireRecord[] {
+  const words = trimmedText(speech.text);
+  if (!words) return [];
   return [
     {
       type: REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
       item: {
         type: "message",
         role: "user",
-        content: [{ type: "input_text", text: `${BRIEFING_INPUT_MARKER}\n${briefing}` }],
+        content: [{ type: "input_text", text: `${UTTERANCE_INPUT_MARKER}\n${words}` }],
       },
     },
     {
       type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
       response: {
-        // No tool may answer a briefing. The words are what the brain decided
+        // No tool may answer an utterance. The words are what the brain decided
         // to say, never a developer-opened turn entitled to act.
         tools: [],
         tool_choice: "none",
@@ -77,7 +77,7 @@ export function briefingSpeechEvents(speech: BriefingSpeech): readonly WireRecor
 }
 
 /**
- * The marker an arrival item discriminates on, distinct from a briefing
+ * The marker an arrival item discriminates on, distinct from an utterance
  * because no brain decided it: the arrival's trigger is the
  * deterministic edge of the account's first sign-in, and its words are a
  * script fixed by the build rather than anything observed or evaluated.
@@ -126,8 +126,8 @@ export interface CalendarOnboardingSpeech {
   decidedAt: number;
 }
 
-/** One Realtime response: an onboarding beat, or one briefing the brain decided to give. */
-export type ProactiveSpeechTurn = ArrivalSpeech | CalendarOnboardingSpeech | BriefingSpeech;
+/** One Realtime response: an onboarding beat, or words the brain decided to say. */
+export type ProactiveSpeechTurn = ArrivalSpeech | CalendarOnboardingSpeech | UtteranceSpeech;
 
 /**
  * Parses one turn as it arrives from outside this process. The kind decides
@@ -142,8 +142,8 @@ export function isProactiveSpeechTurn(
     return false;
   }
   switch (value.kind) {
-    case BRIEFING_SPEECH_KIND:
-      return isWireString(value.briefing);
+    case UTTERANCE_SPEECH_KIND:
+      return isWireString(value.text);
     case ARRIVAL_SPEECH_KIND:
       return isOptionalWireString(value.sessionTitle) && isOptionalWireString(value.talkKeyLabel);
     case CALENDAR_ONBOARDING_SPEECH_KIND:
