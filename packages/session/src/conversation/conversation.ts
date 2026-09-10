@@ -22,7 +22,12 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import { ACTION_KIND, type ActionKind } from "../advertised-actions.js";
+import {
+  ACTION_KIND,
+  type ActionKind,
+  SESSION_CONTROL_KIND,
+  type SessionControlKind,
+} from "../advertised-actions.js";
 import type { SessionIdentity } from "../session-identity.js";
 import type { Session } from "../session-shape.js";
 
@@ -57,6 +62,13 @@ export type ConversationEntryKind =
 
 const CONVERSATION_ENTRY_KIND_LIST = Object.values(CONVERSATION_ENTRY_KIND);
 const ACTION_KIND_LIST = Object.values(ACTION_KIND);
+const SESSION_CONTROL_KIND_LIST = Object.values(SESSION_CONTROL_KIND);
+
+function isConversationEntryControlKind(value: UnparsedWireValue): value is SessionControlKind {
+  if (!isWireString(value)) return false;
+  // SAFETY: value is a string; list membership is the control vocabulary contract check.
+  return SESSION_CONTROL_KIND_LIST.includes(value as SessionControlKind);
+}
 
 function isConversationEntryActionKind(value: UnparsedWireValue): value is ActionKind {
   if (!isWireString(value)) return false;
@@ -172,6 +184,8 @@ export interface ConversationEntryAction {
   text?: string;
   /** The label of the control a press ran, as the provider advertised it. */
   label?: string;
+  /** What that control does, when its adapter said: an archive or a stop rather than a plain action. */
+  controlKind?: SessionControlKind;
   /** The application an open was aimed at, when the developer named one. */
   applicationId?: string;
   /** The kind of agent an add started, as the provider's endpoint takes it. */
@@ -613,6 +627,10 @@ function storedConversationEntryAction(
     if (held === undefined) continue;
     if (!isWireString(held) || (strict && held.length === 0)) return undefined;
     action[detail] = held;
+  }
+  if (value.controlKind !== undefined) {
+    if (!isConversationEntryControlKind(value.controlKind)) return undefined;
+    action.controlKind = value.controlKind;
   }
   return action;
 }

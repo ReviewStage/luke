@@ -8,6 +8,7 @@ import {
   normalizeSession,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
+  SESSION_CONTROL_KIND,
   SESSION_STATUS,
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
@@ -258,6 +259,41 @@ test("an action's line records the ask in words, with the identity it named", ()
   );
   assert.equal(pressed.words, 'ran "Retry" on "checkout-service"');
   assert.deepEqual(pressed.action, { kind: ACTION_KIND.CONTROL, runId: "run-1", label: "Retry" });
+  // A control whose adapter said what it does is narrated as that act, and records it.
+  const archive: AdvertisedControl = {
+    kind: ACTION_KIND.CONTROL,
+    id: "archive",
+    label: "Archive",
+    controlKind: SESSION_CONTROL_KIND.ARCHIVE,
+  };
+  const archived = sessionActionConversationEntry(
+    { kind: ACTION_KIND.CONTROL, identity, control: archive },
+    { sessions, projects },
+    CONVERSATION_ENTRY_KIND.ACTION,
+    "run-1",
+  );
+  assert.equal(archived.words, 'archived "checkout-service"');
+  assert.deepEqual(archived.action, {
+    kind: ACTION_KIND.CONTROL,
+    runId: "run-1",
+    label: "Archive",
+    controlKind: SESSION_CONTROL_KIND.ARCHIVE,
+  });
+  const stop: AdvertisedControl = {
+    kind: ACTION_KIND.CONTROL,
+    id: "stop",
+    label: "Stop",
+    controlKind: SESSION_CONTROL_KIND.STOP,
+  };
+  assert.equal(
+    sessionActionConversationEntry(
+      { kind: ACTION_KIND.CONTROL, identity, control: stop },
+      { sessions, projects },
+      CONVERSATION_ENTRY_KIND.ACTION,
+      "run-1",
+    ).words,
+    'stopped "checkout-service"',
+  );
 
   // A session the roster no longer shows is still named honestly.
   assert.equal(

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ACTION_KIND } from "../advertised-actions.js";
+import { ACTION_KIND, SESSION_CONTROL_KIND } from "../advertised-actions.js";
 import { normalizeSession } from "../normalize.js";
 import { SESSION_STATUS } from "../session-status.js";
 import {
@@ -468,6 +468,24 @@ test("a stored line reads back, and retention cuts by age and by count", () => {
   );
   assert.equal(
     storedConversationEntry({ ...detailed, action: { ...detailed.action, name: ["x"] } }),
+    undefined,
+  );
+  // What a control does is one of the kinds an adapter may say, or the line is refused.
+  const archived = {
+    ...acted,
+    action: {
+      kind: ACTION_KIND.CONTROL,
+      runId: "run-1",
+      label: "Archive",
+      controlKind: SESSION_CONTROL_KIND.ARCHIVE,
+    },
+  };
+  assert.deepEqual(storedConversationEntry(conversationEntryToWire(archived)), archived);
+  assert.equal(
+    storedConversationEntry({
+      ...archived,
+      action: { ...archived.action, controlKind: "delete" },
+    }),
     undefined,
   );
 

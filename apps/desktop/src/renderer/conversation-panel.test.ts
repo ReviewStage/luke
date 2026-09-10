@@ -175,6 +175,38 @@ test("an action row ends on the mark of the provider it reached", () => {
   assert.match(creation, /class="provider-mark" data-mark="conductor"/);
 });
 
+test("a control's mark follows what its adapter said it does", () => {
+  const render = (controlKind: "archive" | "stop" | undefined) =>
+    renderToStaticMarkup(
+      createElement(ConversationPanel, {
+        entries: [
+          {
+            kind: CONVERSATION_ENTRY_KIND.ACTION,
+            words: 'archived "checkout-service"',
+            action: {
+              kind: ACTION_KIND.CONTROL,
+              runId: "run-1",
+              label: "Archive",
+              ...(controlKind ? { controlKind } : undefined),
+            },
+          },
+        ],
+        now: NOW,
+        ask: async () => undefined,
+        onAskEngaged: () => undefined,
+      }),
+    );
+  assert.match(
+    render("archive"),
+    /class="conversation-action-mark" aria-hidden="true" data-control="archive"><svg class="icon-button-glyph"/,
+  );
+  assert.match(render("stop"), /data-control="stop"><svg class="control-icon"/);
+  assert.match(
+    render(undefined),
+    /class="conversation-action-mark" aria-hidden="true"><svg class="icon-button-glyph"/,
+  );
+});
+
 test("an action Luke took on his own is signed with his face and never wears a reply's bubble", () => {
   const markup = renderToStaticMarkup(
     createElement(ConversationPanel, {

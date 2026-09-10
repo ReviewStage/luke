@@ -4,14 +4,15 @@
  * written and no action can be recorded as "an action" with nothing said about it.
  */
 
-import type {
-  CONVERSATION_ENTRY_KIND,
-  ConversationEntry,
-  ConversationEntryAction,
-  ObservedWorkspaceProject,
-  Session,
-  SessionApplicationId,
-  SessionIdentity,
+import {
+  type CONVERSATION_ENTRY_KIND,
+  type ConversationEntry,
+  type ConversationEntryAction,
+  type ObservedWorkspaceProject,
+  SESSION_CONTROL_KIND,
+  type Session,
+  type SessionApplicationId,
+  type SessionIdentity,
 } from "@sidecar/session";
 import {
   ACTION_KIND,
@@ -66,8 +67,19 @@ function observedApplicationName(
 const ACTION_NARRATION = {
   [ACTION_KIND.MESSAGE]: (action, { sessions }) =>
     `sent a message to ${observedSessionName(action.identity, sessions)}: "${action.text}"`,
-  [ACTION_KIND.CONTROL]: (action, { sessions }) =>
-    `ran "${action.control.label}" on ${observedSessionName(action.identity, sessions)}`,
+  // A control whose adapter said what it does is narrated as that act; one it
+  // did not is narrated by its label, the provider's own word for it.
+  [ACTION_KIND.CONTROL]: (action, { sessions }) => {
+    const name = observedSessionName(action.identity, sessions);
+    switch (action.control.controlKind) {
+      case SESSION_CONTROL_KIND.ARCHIVE:
+        return `archived ${name}`;
+      case SESSION_CONTROL_KIND.STOP:
+        return `stopped ${name}`;
+      default:
+        return `ran "${action.control.label}" on ${name}`;
+    }
+  },
   [ACTION_KIND.OPEN]: (action, { sessions }) => {
     const name = observedSessionName(action.identity, sessions);
     return action.applicationId
@@ -108,7 +120,12 @@ const ACTION_NARRATION = {
  */
 const ACTION_RECORD = {
   [ACTION_KIND.MESSAGE]: (action) => ({ text: action.text }),
-  [ACTION_KIND.CONTROL]: (action) => ({ label: action.control.label }),
+  [ACTION_KIND.CONTROL]: (action) => ({
+    label: action.control.label,
+    ...(action.control.controlKind !== undefined
+      ? { controlKind: action.control.controlKind }
+      : undefined),
+  }),
   [ACTION_KIND.OPEN]: (action) =>
     action.applicationId !== undefined ? { applicationId: action.applicationId } : {},
   [ACTION_KIND.CREATE_WORKSPACE]: (action) => ({

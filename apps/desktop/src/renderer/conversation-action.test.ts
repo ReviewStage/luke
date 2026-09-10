@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ACTION_KIND, CONVERSATION_ENTRY_KIND, SESSION_APPLICATION_SCOPE } from "@sidecar/session";
+import {
+  ACTION_KIND,
+  CONVERSATION_ENTRY_KIND,
+  SESSION_APPLICATION_SCOPE,
+  SESSION_CONTROL_KIND,
+} from "@sidecar/session";
 import { actionRowParts } from "./conversation-action";
 import type { SessionView } from "./session-model";
 
@@ -40,6 +45,35 @@ test("a row is composed from the act's record and the session's current name", (
   assert.equal(
     text(actionRowParts(line({ kind: ACTION_KIND.CONTROL, runId: "r", label: "Retry" }), [lisbon])),
     'Ran "Retry" on lisbon-v2',
+  );
+  // A control whose adapter said what it does is worded as that act.
+  assert.equal(
+    text(
+      actionRowParts(
+        line({
+          kind: ACTION_KIND.CONTROL,
+          runId: "r",
+          label: "Archive",
+          controlKind: SESSION_CONTROL_KIND.ARCHIVE,
+        }),
+        [lisbon],
+      ),
+    ),
+    "Archived lisbon-v2",
+  );
+  assert.equal(
+    text(
+      actionRowParts(
+        line({
+          kind: ACTION_KIND.CONTROL,
+          runId: "r",
+          label: "Stop",
+          controlKind: SESSION_CONTROL_KIND.STOP,
+        }),
+        [lisbon],
+      ),
+    ),
+    "Stopped lisbon-v2",
   );
   assert.equal(
     text(actionRowParts(line({ kind: ACTION_KIND.OPEN, runId: "r" }), [lisbon])),

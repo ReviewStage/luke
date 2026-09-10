@@ -1,4 +1,4 @@
-import { ACTION_KIND, type ConversationEntry } from "@sidecar/session";
+import { ACTION_KIND, type ConversationEntry, SESSION_CONTROL_KIND } from "@sidecar/session";
 import type { SessionView } from "./session-model";
 
 /** One run of an action row's words; a name is a session's title, set apart from the rest. */
@@ -40,7 +40,14 @@ export function actionRowParts(
       return [{ text: "Sent a message to " }, named(session.title), { text: `: "${action.text}"` }];
     case ACTION_KIND.CONTROL:
       if (!session || action.label === undefined) return undefined;
-      return [{ text: `Ran "${action.label}" on ` }, named(session.title)];
+      switch (action.controlKind) {
+        case SESSION_CONTROL_KIND.ARCHIVE:
+          return [{ text: "Archived " }, named(session.title)];
+        case SESSION_CONTROL_KIND.STOP:
+          return [{ text: "Stopped " }, named(session.title)];
+        default:
+          return [{ text: `Ran "${action.label}" on ` }, named(session.title)];
+      }
     case ACTION_KIND.OPEN: {
       if (!session) return undefined;
       const application =

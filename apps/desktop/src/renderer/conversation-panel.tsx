@@ -1,5 +1,6 @@
 import { type BrainRequestSnapshot, brainRequestPending } from "@sidecar/brain/requests-wire";
 import {
+  ArchiveIcon,
   CheckIcon,
   ChevronIcon,
   ControlIcon,
@@ -9,6 +10,7 @@ import {
   PencilIcon,
   PlusIcon,
   ProviderMark,
+  StopIcon,
   WingFace,
 } from "@sidecar/panel";
 import {
@@ -16,8 +18,11 @@ import {
   type ActionKind,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
+  type ConversationEntryAction,
   type ConversationEntryKind,
   conversationEntryKey,
+  SESSION_CONTROL_KIND,
+  type SessionControlKind,
 } from "@sidecar/session";
 import { FACE_MOTION } from "@sidecar/surface";
 import { useEffect, useId, useRef, useState } from "react";
@@ -89,6 +94,23 @@ const ACTION_GLYPH = {
   [ACTION_KIND.RENAME_WORKSPACE]: PencilIcon,
   [ACTION_KIND.RENAME_SESSION]: PencilIcon,
 } as const satisfies Record<ActionKind, () => React.JSX.Element>;
+
+/**
+ * A control's mark follows what its adapter said it does: an archive files
+ * away, a stop is the square every chat surface stops with, and a plain
+ * action keeps the bolt.
+ */
+const CONTROL_GLYPH = {
+  [SESSION_CONTROL_KIND.ACTION]: ControlIcon,
+  [SESSION_CONTROL_KIND.ARCHIVE]: ArchiveIcon,
+  [SESSION_CONTROL_KIND.STOP]: StopIcon,
+} as const satisfies Record<SessionControlKind, () => React.JSX.Element>;
+
+function actionGlyph(action: ConversationEntryAction): () => React.JSX.Element {
+  return action.kind === ACTION_KIND.CONTROL && action.controlKind !== undefined
+    ? CONTROL_GLYPH[action.controlKind]
+    : ACTION_GLYPH[action.kind];
+}
 
 const COPY_CONFIRMATION_MS = 1500;
 
@@ -262,7 +284,7 @@ function ConversationActionRow({
 }): React.JSX.Element {
   const presentation = conversationEntryPresentation(entry.kind);
   const own = entry.kind === CONVERSATION_ENTRY_KIND.OWN_ACTION;
-  const Glyph = entry.action ? ACTION_GLYPH[entry.action.kind] : undefined;
+  const Glyph = entry.action ? actionGlyph(entry.action) : undefined;
   const providerId = entry.identity?.providerId ?? entry.action?.providerId;
   const parts = actionRowParts(entry, sessions);
   return (
@@ -274,7 +296,11 @@ function ConversationActionRow({
       <small className="visually-hidden">{presentation.label}</small>
       <div className="conversation-message">
         <span className="conversation-action">
-          <span className="conversation-action-mark" aria-hidden="true">
+          <span
+            className="conversation-action-mark"
+            aria-hidden="true"
+            data-control={entry.action?.controlKind}
+          >
             {own ? <WingFace /> : Glyph ? <Glyph /> : null}
           </span>
           {parts ? (

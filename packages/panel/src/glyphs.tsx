@@ -76,6 +76,17 @@ export function MessageIcon(): React.JSX.Element {
   );
 }
 
+/** A box with its lid on: the settled thing filed away. */
+export function ArchiveIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M4 4.6h16v4H4z" />
+      <path d="M5.4 8.6v9.2a1.6 1.6 0 0 0 1.6 1.6h10a1.6 1.6 0 0 0 1.6-1.6V8.6" />
+      <path d="M10 12.4h4" />
+    </Glyph>
+  );
+}
+
 /** A bolt: a control a session advertised, pressed. */
 export function ControlIcon(): React.JSX.Element {
   return (
