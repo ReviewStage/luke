@@ -1,5 +1,5 @@
 import type { ChildCompletionRecord, ChildRunRecord } from "@sidecar/runtime/vocabulary";
-import type { WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, type ActionResultStatus, type WireRecord } from "@sidecar/wire";
 import { sessionSummary } from "./observation-inbox.js";
 import type { BrainDelivery, BrainTurnNotice, BrainWakeEvent } from "./wake-events.js";
 
@@ -33,6 +33,31 @@ function marked(marker: BrainInputMarker, now: number, body: string): string {
   return `${marker} ${new Date(now).toISOString()}\n${body}`;
 }
 
+/**
+ * What a delta that carried no text means, said where the model reads it
+ * rather than taught in the prompt, so a provider with no incremental
+ * transcript and a read that failed are told apart by the event itself and
+ * the rule for either holds for every provider of that shape.
+ */
+const DELTA_NOTE_BY_STATUS = {
+  [ACTION_RESULT_STATUS.UNSUPPORTED]:
+    "This provider keeps no incremental transcript, so the session's status change is the " +
+    "whole of this event; read_transcript is the only way to see what the agent said.",
+  [ACTION_RESULT_STATUS.REJECTED]:
+    "The transcript could not be read this time; the session's status is what this event knows.",
+} satisfies Record<Exclude<ActionResultStatus, typeof ACTION_RESULT_STATUS.ACCEPTED>, string>;
+
+function deltaRecord(delta: NonNullable<BrainWakeEvent["transcriptDelta"]>): WireRecord {
+  return {
+    status: delta.status,
+    truncated: delta.truncated,
+    text: delta.text,
+    ...(delta.status === ACTION_RESULT_STATUS.ACCEPTED
+      ? undefined
+      : { note: DELTA_NOTE_BY_STATUS[delta.status] }),
+  };
+}
+
 function eventRecord(event: BrainWakeEvent): WireRecord {
   return {
     kind: event.kind,
@@ -46,13 +71,7 @@ function eventRecord(event: BrainWakeEvent): WireRecord {
         ? { session: event.sessionSummary }
         : undefined),
     ...(event.transcriptDelta
-      ? {
-          transcript_delta: {
-            status: event.transcriptDelta.status,
-            truncated: event.transcriptDelta.truncated,
-            text: event.transcriptDelta.text,
-          },
-        }
+      ? { transcript_delta: deltaRecord(event.transcriptDelta) }
       : undefined),
   };
 }

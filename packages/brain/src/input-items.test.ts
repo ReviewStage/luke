@@ -71,6 +71,43 @@ test("a wake item carries each event's observed fields and transcript delta as d
   });
 });
 
+test("a delta that carried no text says what its status means, so the event explains itself", () => {
+  const event: BrainWakeEvent = {
+    kind: BRAIN_WAKE_KIND.ROSTER,
+    identity: { providerId: "conductor", providerSessionId: "abc" },
+    session: session(),
+    transcriptDelta: { text: "", truncated: false, status: "unsupported" },
+    atMs: NOW,
+  };
+  const body = itemBody(wakeInputText([event], NOW), BRAIN_INPUT_MARKER.OBSERVED_EVENTS);
+  assert.deepEqual(body, {
+    events: [
+      {
+        kind: "roster",
+        at: new Date(NOW).toISOString(),
+        provider_id: "conductor",
+        provider_session_id: "abc",
+        session: {
+          provider_name: "Claude Code",
+          title: "Fix the checkout tests",
+          status: "waiting",
+          error: "exit 1",
+          activity: "Running tests",
+          updated_at: new Date(NOW - 1_000).toISOString(),
+        },
+        transcript_delta: {
+          status: "unsupported",
+          truncated: false,
+          text: "",
+          note:
+            "This provider keeps no incremental transcript, so the session's status change is the " +
+            "whole of this event; read_transcript is the only way to see what the agent said.",
+        },
+      },
+    ],
+  });
+});
+
 test("an ask item carries the question and the events that arrived since the last turn", () => {
   const body = itemBody(
     askInputText(
