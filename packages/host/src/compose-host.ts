@@ -23,12 +23,13 @@ import { composeBrain } from "./compose-brain.js";
 import { composeCalendars } from "./compose-calendars.js";
 import { composeDevices } from "./compose-devices.js";
 import { composeIssues } from "./compose-issues.js";
+import { composeLive } from "./compose-live.js";
 import { composeObservation } from "./compose-observation.js";
 import { composeSettings } from "./compose-settings.js";
 import { composeSpeech } from "./compose-speech.js";
 import { type Composer, mergeMethods } from "./composer.js";
 import { createHostKernel, type HostSeams } from "./host-kernel.js";
-import { shutdownStepsFlushingEvents } from "./lifecycle.js";
+import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { createGatewayService } from "./service.js";
 
 /**
@@ -68,7 +69,29 @@ export function composeHost(options: HostSeams): Host {
   const observation = composeObservation({ kernel, settings, account, issues, observationGate });
   const calendars = composeCalendars({ kernel, settings, observationGate });
   const speech = composeSpeech({ kernel, settings, account, calendars, observation });
-  const brain = composeBrain({ kernel, settings, account, issues, observation, speech });
+  // A briefing is spoken into the live session while one stands, and through
+  // the speech arbiter otherwise: the renderer's voice still runs on the old
+  // path, so no session can stand until it opens one, and the route flips
+  // with it rather than speaking twice.
+  const brain = composeBrain({
+    kernel,
+    settings,
+    account,
+    issues,
+    observation,
+    speech: {
+      deliverBriefing: async (delivery) => {
+        if (live.service.sessionStands()) {
+          live.service.deliverBriefing(delivery);
+          return;
+        }
+        await speech.deliverBriefing(delivery);
+      },
+      withdrawBriefings: speech.withdrawBriefings,
+      dropBriefings: speech.dropBriefings,
+    },
+  });
+  const live = composeLive({ kernel, settings, account, calendars, observation, brain });
 
   // Every edge a composer could not take as a constructor argument, in one
   // list: each is a cycle the concerns genuinely have, and reading one before
@@ -78,9 +101,15 @@ export function composeHost(options: HostSeams): Host {
       await account.session.refreshOnce();
     },
     applyVoiceCredential: account.applyVoiceCredential,
-    setVoice: (voice) => account.voiceCapabilities.realtimeCredentials?.setVoice(voice),
+    setVoice: (voice) => {
+      account.voiceCapabilities.realtimeCredentials?.setVoice(voice);
+      account.voiceCapabilities.liveSessions?.setVoice(voice);
+    },
     setVoiceSpeed: (speed) => account.voiceCapabilities.realtimeCredentials?.setSpeed(speed),
-    reconcileSpeech: () => void speech.reconcileSpeech(),
+    reconcileSpeech: () => {
+      void speech.reconcileSpeech();
+      void live.service.reconcile();
+    },
     refreshSupersetWorkspaceHost: async () => {
       await observation.readSupersetWorkspaceHost();
     },
@@ -102,9 +131,13 @@ export function composeHost(options: HostSeams): Host {
   observation.link({
     wake: (events) => brain.wiring.wake(events),
     rosterLook: () => brain.wiring.rosterLook(),
+    rosterChanged: () => live.service.rosterChanged(),
   });
   calendars.link({
-    reconcileSpeech: () => void speech.reconcileSpeech(),
+    reconcileSpeech: () => {
+      void speech.reconcileSpeech();
+      void live.service.reconcile();
+    },
     withdrawBeat: speech.withdrawBeat,
     dropBriefings: speech.dropBriefings,
     requestOnboardingBeat: () => void speech.requestOnboardingBeat(),
@@ -113,6 +146,7 @@ export function composeHost(options: HostSeams): Host {
     brainCurrent: () => brain.wiring.current() !== undefined,
     releaseHeld: (briefings) => brain.wiring.releaseHeld(briefings),
   });
+  live.link({ releaseHeld: (briefings) => brain.wiring.releaseHeld(briefings) });
 
   const composers: readonly Composer[] = [
     settings,
@@ -123,6 +157,7 @@ export function composeHost(options: HostSeams): Host {
     calendars,
     speech,
     brain,
+    live,
   ];
   const supervisor = new ObservationSupervisor([observation.loop, issues.loop, calendars.loop]);
 
@@ -232,6 +267,7 @@ export function composeHost(options: HostSeams): Host {
     // epoch ends here as its window going away would, so replies and
     // briefings wait for the next epoch rather than being offered into a gap.
     onOperatorDisconnected: () => speech.receiver.reset(),
+    onTypedAsk: (question) => live.service.mirrorTypedAsk(question),
   });
   kernel.setService(service);
 
@@ -248,6 +284,7 @@ export function composeHost(options: HostSeams): Host {
     observation,
     speech,
     issues,
+    live,
   ];
 
   const start = async (): Promise<void> => {
@@ -270,7 +307,7 @@ export function composeHost(options: HostSeams): Host {
    * counted rather than finished: the store's load at the next start marks
    * an unsettled run interrupted and replays nothing.
    */
-  const shutdownSteps: GatewayShutdownSteps = shutdownStepsFlushingEvents(
+  const drainSteps: GatewayShutdownSteps = shutdownStepsFlushingEvents(
     {
       closeAdmissions: () => service.server.closeAdmissions(),
       cancelActive: async () => {
@@ -323,6 +360,9 @@ export function composeHost(options: HostSeams): Host {
     },
     () => settings.flushProductEvents(),
   );
+  // The live session's graceful close rides inside the same drain, so a quit
+  // mid-call ends the session within the deadline and never after it.
+  const shutdownSteps = shutdownStepsClosingLiveSession(drainSteps, () => live.service.stop());
 
   const close = async (): Promise<void> => {
     supervisor.setEnabled(false);

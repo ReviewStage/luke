@@ -7,6 +7,7 @@ import {
 } from "@sidecar/brain";
 import type { BrainRequestOrigin } from "@sidecar/brain/requests";
 import {
+  BRAIN_REQUEST_ORIGIN,
   BRAIN_SUBMISSION_OUTCOME,
   BRAIN_SUBMISSION_REJECTION,
   type BrainSubmissionResult,
@@ -129,6 +130,8 @@ export interface GatewayServiceDependencies {
   methods?: GatewayMethodTable;
   /** Hears the operator's connection close, when the transport can tell: the client's receiver and node are gone with it. */
   onOperatorDisconnected?: () => void;
+  /** A typed ask main's brain accepted, in the developer's words, for the voice to be told what was asked. */
+  onTypedAsk?: (question: string) => void;
 }
 
 export interface GatewayService {
@@ -433,6 +436,9 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
     const result = await agent.submitAsk({ submissionId, origin, question });
     if (result.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED) {
       await publishAsk(agent, result.runId, dependencies.recordConversationEntry, sessionKey);
+      if (origin === BRAIN_REQUEST_ORIGIN.TYPED && sessionKey === MAIN_SESSION_KEY) {
+        dependencies.onTypedAsk?.(question);
+      }
     }
     return gatewayOk(submissionResultToWire(result));
   };

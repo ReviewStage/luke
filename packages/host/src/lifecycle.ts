@@ -59,3 +59,30 @@ export function shutdownStepsFlushingEvents(
     persistUnresolved: steps.persistUnresolved,
   };
 }
+
+/**
+ * The explicit quit's steps with the live voice session's graceful close
+ * folded in. The close begins with the cancellations, so the session stops
+ * taking appends the moment the runs stop, and is waited for only inside the
+ * coordinator's one deadline beside them: a session whose final event never
+ * comes delays the quit by nothing more than the drain already allows, and
+ * its usage stands unconfirmed exactly as a lost connection's would. Nothing
+ * of the session continues after an intentional quit.
+ */
+export function shutdownStepsClosingLiveSession(
+  steps: GatewayShutdownSteps,
+  closeSession: () => Promise<void>,
+): GatewayShutdownSteps {
+  let closing: Promise<void> | undefined;
+  return {
+    closeAdmissions: steps.closeAdmissions,
+    cancelActive: async () => {
+      closing ??= closeSession().catch(() => undefined);
+      return steps.cancelActive();
+    },
+    awaitSettled: async (signal) => {
+      await Promise.all([steps.awaitSettled(signal), closing ?? Promise.resolve()]);
+    },
+    persistUnresolved: steps.persistUnresolved,
+  };
+}

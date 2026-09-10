@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { GATEWAY_SHUTDOWN_DEFAULTS, shutdownGateway } from "@sidecar/gateway";
 import { drainMicrotasks } from "@sidecar/runtime/testing";
-import { seedWorkspaceThenStartMemory, shutdownStepsFlushingEvents } from "./lifecycle.js";
+import {
+  seedWorkspaceThenStartMemory,
+  shutdownStepsClosingLiveSession,
+  shutdownStepsFlushingEvents,
+} from "./lifecycle.js";
 
 test("a workspace seed that fails is reported and the memory index still starts, after the seed and not before", async () => {
   const order: string[] = [];
@@ -113,4 +117,42 @@ test("closing admissions twice flushes once", () => {
   steps.closeAdmissions();
   steps.closeAdmissions();
   assert.equal(flushes, 1);
+});
+
+test("the live session's close begins with the cancellations and is waited for beside the runs, inside the one deadline", async () => {
+  const order: string[] = [];
+  let settleClose: (() => void) | undefined;
+  const steps = shutdownStepsClosingLiveSession(baseSteps(order), () => {
+    order.push("live:close");
+    return new Promise<void>((resolve) => {
+      settleClose = () => {
+        order.push("live:closed");
+        resolve();
+      };
+    });
+  });
+  const report = shutdownGateway(steps, { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS });
+  await drainMicrotasks(1);
+  assert.deepEqual(order, ["close", "live:close", "cancel", "settled"]);
+  settleClose?.();
+  const outcome = await report;
+  assert.deepEqual(order, ["close", "live:close", "cancel", "settled", "live:closed", "persist"]);
+  assert.equal(outcome.settled, true);
+});
+
+test("a session whose final event never comes ends the shutdown at the deadline, and a close that throws ends nothing", async () => {
+  const order: string[] = [];
+  const hanging = shutdownStepsClosingLiveSession(
+    baseSteps(order),
+    () => new Promise<void>(() => undefined),
+  );
+  const outcome = await shutdownGateway(hanging, { deadlineMs: 20 });
+  assert.equal(outcome.settled, false);
+  assert.deepEqual(outcome.cancelled, ["run-1"]);
+
+  const throwing = shutdownStepsClosingLiveSession(baseSteps([]), async () => {
+    throw new Error("socket gone");
+  });
+  const settled = await shutdownGateway(throwing, { deadlineMs: 20 });
+  assert.equal(settled.settled, true);
 });

@@ -23,6 +23,7 @@
     "@sidecar/gateway": "workspace:*",
     "@sidecar/guide": "workspace:*",
     "@sidecar/hosted": "workspace:*",
+    "@sidecar/live": "workspace:*",
     "@sidecar/memory": "workspace:*",
     "@sidecar/providers": "workspace:*",
     "@sidecar/realtime": "workspace:*",
@@ -31,10 +32,12 @@
     "@sidecar/settings": "workspace:*",
     "@sidecar/surface": "workspace:*",
     "@sidecar/voice": "workspace:*",
-    "@sidecar/wire": "workspace:*"
+    "@sidecar/wire": "workspace:*",
+    "ws": "8.21.3"
   },
   "devDependencies": {
     "@types/node": "26.2.0",
+    "@types/ws": "8.18.1",
     "tsx": "4.23.12",
     "typescript": "7.0.2"
   }

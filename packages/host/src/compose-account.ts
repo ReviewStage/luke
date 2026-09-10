@@ -20,10 +20,12 @@ import {
   gatewayOk,
   invalid,
 } from "@sidecar/gateway";
+import { hostedVoiceServiceOrigin } from "@sidecar/hosted";
 import { VOICE_SOURCE_COUNTED_AS } from "@sidecar/settings";
 import { VoiceCapabilityAssembler } from "@sidecar/voice";
 import { lateRef } from "@sidecar/wire";
 import type { Composer, ComposerContext } from "./composer.js";
+import { openSocketOverWs } from "./voice/live-sideband.js";
 import { transitionVoiceCredential } from "./voice-credential-transition.js";
 
 const ACCOUNT_CLIENT_ID = "luke-desktop";
@@ -122,6 +124,13 @@ export function composeAccount(dependencies: AccountDependencies): AccountCompos
     fixtureRun: () => !runMode.sendsNetwork,
     accountSignedIn: () => account.status === ACCOUNT_STATUS.SIGNED_IN,
     hostedServiceBaseUrl: kernel.hostedServiceBaseUrl,
+    // The voice service origin is pinned by the build; a development build may
+    // point it elsewhere the way the account service is, and a packaged one may not.
+    hostedVoiceServiceOrigin: hostedVoiceServiceOrigin({
+      packaged: options.packaged,
+      override: options.environment.LUKE_VOICE_SERVICE_ORIGIN,
+    }),
+    openSocket: openSocketOverWs,
     refreshAccount: session.refreshOnce,
     ...(agentTrace
       ? {
