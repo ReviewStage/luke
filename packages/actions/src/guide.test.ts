@@ -238,12 +238,18 @@ test("a value and its effort named in one change are validated as the pair they 
     assert.match(levelless.reason, /Cursor Auto takes no effort level/);
   }
 
-  // And a setting with no levels anywhere refuses by its own name.
-  const toggled = await change('{"setting_id":"voice_captions","value":"on","effort":"high"}');
-  assert.equal(toggled.status, ACTION_RESULT_STATUS.REJECTED);
-  if (toggled.status === ACTION_RESULT_STATUS.REJECTED) {
-    assert.match(toggled.reason, /Captions takes no effort level/);
-  }
+  // A setting with no levels anywhere has no effort to pair: a volunteered
+  // one is dropped like an unknown key, and the change it rode in on lands.
+  assert.deepEqual(await change('{"setting_id":"voice_captions","value":"on","effort":"high"}'), {
+    kind: "setting",
+    setting: GUIDE.settings[0],
+    value: "on",
+  });
+  assert.deepEqual(await change('{"setting_id":"voice","value":"Marin","effort":"low"}'), {
+    kind: "setting",
+    setting: GUIDE.settings[1],
+    value: "marin",
+  });
 });
 
 test("a by-hand-only setting is refused with the path to it, so the refusal is the guidance", async () => {

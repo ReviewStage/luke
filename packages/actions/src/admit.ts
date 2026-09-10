@@ -840,16 +840,16 @@ const admitSetting: Admitter<typeof ACTION_KIND.SETTING> = (fields, context) => 
   // An effort may ride only a value the guide lists levels for, so both halves
   // of one stored pairing can be asked for in one change — matched like the
   // value: case retold rather than copied, answered in the guide's own casing.
+  // A setting with no levels anywhere has no effort to pair: one volunteered
+  // beside it is a field admission does not read, dropped like an unknown key
+  // rather than allowed to block the change it rode in on. Only an
+  // effort-aware setting refuses, because there half the ask would be lost.
   const effortWord = textArgument(fields, "effort");
-  if (effortWord === undefined) return { kind: ACTION_KIND.SETTING, setting, value };
-  const levels = setting.efforts?.[value] ?? [];
-  if (levels.length === 0) {
-    return refuse(
-      setting.efforts === undefined
-        ? `${setting.label} takes no effort level.`
-        : `${value} takes no effort level.`,
-    );
+  if (effortWord === undefined || setting.efforts === undefined) {
+    return { kind: ACTION_KIND.SETTING, setting, value };
   }
+  const levels = setting.efforts[value] ?? [];
+  if (levels.length === 0) return refuse(`${value} takes no effort level.`);
   const normalizedEffort = effortWord.trim().toLowerCase();
   const effort = levels.find((candidate) => candidate.toLowerCase() === normalizedEffort);
   if (effort === undefined) return refuse(`${value}'s effort is one of ${levels.join(", ")}.`);
