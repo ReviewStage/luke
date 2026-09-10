@@ -355,6 +355,9 @@ importers:
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
+      ai:
+        specifier: 7.0.97
+        version: 7.0.97(zod@4.5.4)
     devDependencies:
       '@types/node':
         specifier: 26.2.0
@@ -365,6 +368,9 @@ importers:
       typescript:
         specifier: 7.0.2
         version: 7.0.2
+      zod:
+        specifier: 4.5.4
+        version: 4.5.4
 
   packages/calendar:
     dependencies:

@@ -135,6 +135,11 @@ in the other direction: the stored shapes and their readings (the envelope
 delta a save carries, the transcript payload a row keeps), Node-free, so the
 hosted tier's Postgres store under `apps/web/server/hosted/store/` writes and
 reads the same rows the SQLite store does without resolving `node:sqlite`.
+`@sidecar/brain/ui-message-context` is the fifth, for the same reason
+`@sidecar/session/ui-messages` has a door: the context engine over stored
+`UIMessage` rows calls the AI SDK's `convertToModelMessages` at run time, and
+a bundle that only names the engine's id from the runtime's `BUILTINS` table
+must not resolve the SDK behind it.
 
 `@sidecar/runtime/vocabulary` is the same rule at the bottom of the graph: the
 identities, the storage contracts, the execution seams, and the memory
