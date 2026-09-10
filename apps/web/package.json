@@ -17,7 +17,7 @@
     "dev": "vite",
     "preview": "vite preview",
     "test": "tsx --test 'tests/**/*.test.ts'",
-    "test:store": "tsx --test tests/hosted-store.test.ts tests/hosted-payload-envelope.test.ts",
+    "test:store": "tsx --test tests/hosted-store.test.ts tests/hosted-payload-envelope.test.ts tests/storage-schema.test.ts",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {

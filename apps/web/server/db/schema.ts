@@ -7,6 +7,7 @@ export * from "./devices-schema.js";
 export * from "./favorite-schema.js";
 export * from "./preferences-schema.js";
 export * from "./roster-schema.js";
+export * from "./storage-schema.js";
 export * from "./usage-schema.js";
 export * from "./vault-schema.js";
 export * from "./workspace-schema.js";
