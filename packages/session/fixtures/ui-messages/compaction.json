@@ -1,0 +1,18 @@
+{
+  "id": "7c3e9d4f-1a5b-4c2d-9e34-5f6a7b8c9d92",
+  "role": "assistant",
+  "metadata": {
+    "author": "brain",
+    "compaction": {
+      "first_kept_message_id": "5a2d7b3c-8e4f-4a9b-8c12-3d4e5f6a7b81",
+      "tokens_before": 48210
+    }
+  },
+  "parts": [
+    {
+      "type": "text",
+      "text": "Earlier in this conversation the developer asked about the fixture session twice; it was working on a fixture test and then held on a permission prompt. Nothing was sent to it.",
+      "state": "done"
+    }
+  ]
+}

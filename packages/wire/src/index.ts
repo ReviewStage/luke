@@ -74,3 +74,23 @@ export {
   type TextOptions,
   type TextOverflow,
 } from "./schema.js";
+export {
+  ASSISTANT_MESSAGE_METADATA,
+  type AssistantMessageMetadata,
+  COMPACTION_METADATA,
+  type CompactionMetadata,
+  MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
+  MESSAGE_ROLE,
+  type MessageAuthor,
+  type MessageChannel,
+  type MessageRole,
+  OBSERVATION_SOURCE,
+  type ObservationMetadata,
+  type ObservationSource,
+  type SpokenAskMetadata,
+  type StoredMessageMetadata,
+  type TypedAskMetadata,
+  USER_MESSAGE_METADATA,
+  type UserMessageMetadata,
+} from "./ui-message-metadata.js";

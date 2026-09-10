@@ -1,0 +1,18 @@
+{
+  "id": "3f1c9a2e-7b4d-4e8f-9a01-2b3c4d5e6f70",
+  "role": "user",
+  "metadata": {
+    "author": "developer",
+    "channel": "voice",
+    "voice_session_id": "vs_0f3a1c226f104d5e",
+    "delegation_id": "dl_2b8c4d5e6f701a2b",
+    "from_ms": 1200,
+    "to_ms": 4800
+  },
+  "parts": [
+    {
+      "type": "text",
+      "text": "What is the fixture session waiting on?"
+    }
+  ]
+}
