@@ -581,3 +581,48 @@ button.conversation-action-chip:focus-visible {
 .conversation-detail-state {
   color: var(--text-tertiary);
 }
+
+/* The actions one turn carried, folded under a line that counts them, at the
+   place the first of them stood. The line reads in the quiet voice, and under
+   Luke's own judgment it leads with his face as each row inside it does. */
+.conversation-actions-fold {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.conversation-actions-fold > .conversation-turn-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.conversation-entry[data-actions-fold] .conversation-message {
+  justify-content: flex-start;
+  padding: 2px 12px;
+  text-align: left;
+}
+
+/* Luke's face in the mark's room wears the text colour like the strip's does,
+   only smaller: it signs the row as his own judgment rather than decorating it. */
+.conversation-action-mark .luke-face {
+  width: 12px;
+  height: 12px;
+  color: var(--text-secondary);
+}
+
+/* Words Luke wrote on his own judgment are a quiet row under his face, never
+   a reply's bubble: nothing here answers the developer. */
+.conversation-entry[data-own-words] .conversation-message {
+  justify-content: flex-start;
+  padding: 2px 12px;
+  text-align: left;
+}
+
+.conversation-entry[data-own-words] .conversation-words {
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  line-height: 1.4;
+}

@@ -8,14 +8,23 @@ import {
   type SessionIdentity,
   selectConversationView,
 } from "@sidecar/session";
-import { CONVERSATION_EVENT_KIND } from "@sidecar/wire";
+import { CONVERSATION_EVENT_KIND, TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { TOOL_ROW_STATUS, toolRow } from "./conversation-tool-row";
-import { announcedWords, ConversationTurns, detailToolLabel } from "./conversation-turns";
+import {
+  announcedWords,
+  ConversationTurns,
+  detailToolLabel,
+  foldOpen,
+  judgmentOf,
+  turnPending,
+} from "./conversation-turns";
 import {
   FIXTURE_INPUT,
+  FIXTURE_NOW,
   FIXTURE_ROSTER,
+  FIXTURE_TURN,
   fixtureConversationTurns,
 } from "./conversation-turns.fixtures";
 
@@ -29,6 +38,7 @@ function render(
     createElement(ConversationTurns, {
       groups,
       roster: FIXTURE_ROSTER,
+      now: FIXTURE_NOW,
       ...(onOpenChat ? { onOpenChat } : undefined),
     }),
   );
@@ -60,7 +70,8 @@ test("the fixture scenarios draw every session action kind as a row", () => {
   assert.ok(count(markup, "data-tool-status", TOOL_ROW_STATUS.ACCEPTED) >= 7);
   assert.equal(count(markup, "data-tool-status", TOOL_ROW_STATUS.REFUSED), 1);
   assert.equal(count(markup, "data-tool-status", TOOL_ROW_STATUS.UNKNOWN), 1);
-  assert.equal(count(markup, "data-tool-status", TOOL_ROW_STATUS.PENDING), 1);
+  // One pending call in the refused turn, and one in the turn still running.
+  assert.equal(count(markup, "data-tool-status", TOOL_ROW_STATUS.PENDING), 2);
 });
 
 test("a chip is a press exactly where the composition says the session opens, and a name everywhere else", () => {
@@ -130,6 +141,109 @@ test("a refused action and the turn's details draw only inside the turn's fold",
   const unfolded = groups.filter((group) => !folded.includes(group));
   assert.ok(unfolded.length > 0);
   assert.equal(count(render(unfolded, OPEN), "data-folded", "true"), 0);
+});
+
+function groupOf(turnId: string): ConversationViewTurnGroup {
+  const group = fixtureConversationTurns().find((candidate) => candidate.turnId === turnId);
+  assert.ok(group);
+  return group;
+}
+
+/** The action rows a rendering draws, top level or inside a fold alike. */
+function actionRows(markup: string): number {
+  return (markup.match(/data-action-kind="/g) ?? []).length;
+}
+
+test("a turn's actions fold under a count once there are two: open while it runs, closed once settled", () => {
+  const running = render([groupOf(FIXTURE_TURN.RUNNING)], OPEN);
+  assert.equal(count(running, "data-actions-fold", "running"), 1);
+  assert.equal(count(running, "data-actions-fold", "settled"), 0);
+  assert.equal((running.match(/<details class="conversation-actions-fold" open/g) ?? []).length, 1);
+  assert.equal(actionRows(running), 3);
+
+  // Inside the fold the rows carry no stamp of their own; the fold's line carries the turn's.
+  const [, insideRunning] = running.split('<details class="conversation-actions-fold"');
+  assert.ok(insideRunning !== undefined);
+  const [foldBody] = insideRunning.split("</details>");
+  assert.ok(foldBody !== undefined);
+  assert.equal(count(foldBody, "class", "conversation-time"), 0);
+  assert.equal(count(running, "class", "conversation-time"), 2);
+
+  const settled = render([groupOf(FIXTURE_TURN.EVERY_KIND)], OPEN);
+  assert.equal(count(settled, "data-actions-fold", "settled"), 1);
+  assert.equal((settled.match(/<details class="conversation-actions-fold" open/g) ?? []).length, 0);
+  assert.equal((settled.match(/<details class="conversation-actions-fold"/g) ?? []).length, 1);
+  assert.equal(actionRows(settled), 9);
+  // The fold stands where the first action stood: after the ask and before the reply.
+  const [beforeFold, afterFold] = settled.split('<details class="conversation-actions-fold"');
+  assert.ok(beforeFold !== undefined && afterFold !== undefined);
+  assert.equal(count(beforeFold, "data-speaker", "you"), 1);
+  assert.equal(actionRows(beforeFold), 0);
+  assert.equal(count(afterFold, "data-speaker", "luke"), 1);
+});
+
+test("a fold follows the turn's state, and a press holds only until that state next changes", () => {
+  assert.equal(foldOpen(undefined, true), true);
+  assert.equal(foldOpen(undefined, false), false);
+  // Pressed closed while running: held closed while it still runs.
+  assert.equal(foldOpen({ pending: true, open: false }, true), false);
+  // Pressed open once settled: held open while it stays settled.
+  assert.equal(foldOpen({ pending: false, open: true }, false), true);
+  // The turn settled after the press: the turn's own word is the later one, and the fold closes.
+  assert.equal(foldOpen({ pending: true, open: true }, false), false);
+  assert.equal(foldOpen({ pending: true, open: false }, false), false);
+  // And a press made while settled does not reopen a fold for a turn that started running again.
+  assert.equal(foldOpen({ pending: false, open: false }, true), true);
+});
+
+test("a turn of one action draws the row itself, with no fold and no wait", () => {
+  const markup = render([groupOf(FIXTURE_TURN.SINGLE)], OPEN);
+  assert.equal((markup.match(/data-actions-fold=/g) ?? []).length, 0);
+  assert.equal(actionRows(markup), 1);
+  assert.equal(count(markup, "data-thinking", "true"), 0);
+  assert.equal(count(markup, "data-judgment", "ask"), 1);
+});
+
+test("a running turn ends in Luke's wait, driven by the turn row's status alone", () => {
+  assert.equal(count(render([groupOf(FIXTURE_TURN.RUNNING)], OPEN), "data-thinking", "true"), 1);
+  for (const turnId of [FIXTURE_TURN.SINGLE, FIXTURE_TURN.EVERY_KIND, FIXTURE_TURN.OWN]) {
+    assert.equal(count(render([groupOf(turnId)], OPEN), "data-thinking", "true"), 0);
+  }
+  const turn = groupOf(FIXTURE_TURN.RUNNING).turn;
+  assert.ok(turn);
+  assert.equal(turnPending(turn), true);
+  assert.equal(turnPending({ ...turn, status: TURN_STATUS.QUEUED }), true);
+  for (const status of [TURN_STATUS.SETTLED, TURN_STATUS.CANCELLED, TURN_STATUS.FAILED]) {
+    assert.equal(turnPending({ ...turn, status }), false);
+  }
+  assert.equal(turnPending(undefined), false);
+});
+
+test("a turn nobody opened is Luke's own judgment: his face leads every row, and his words are never a reply bubble", () => {
+  const own = render([groupOf(FIXTURE_TURN.OWN)], OPEN);
+  assert.equal(count(own, "data-judgment", "own"), 2);
+  assert.equal(count(own, "data-judgment", "ask"), 0);
+  assert.equal(count(own, "data-own-words", "true"), 1);
+  assert.equal(count(own, "data-speaker", "luke"), 0);
+  assert.equal((own.match(/class="luke-face"/g) ?? []).length, 2);
+
+  const asked = render([groupOf(FIXTURE_TURN.SINGLE)], OPEN);
+  assert.equal(count(asked, "data-judgment", "own"), 0);
+  assert.equal((asked.match(/class="luke-face"/g) ?? []).length, 0);
+
+  // The observed session's own turn: its announcement stays his bubble, its action his judgment.
+  const announced = render([groupOf(FIXTURE_TURN.ANNOUNCED)], OPEN);
+  assert.equal(count(announced, "data-speaker", "luke"), 1);
+
+  const turn = groupOf(FIXTURE_TURN.OWN).turn;
+  assert.ok(turn);
+  for (const origin of [TURN_ORIGIN.ROSTER_DIFF, TURN_ORIGIN.HOLD_RELEASE, TURN_ORIGIN.CHILD]) {
+    assert.equal(judgmentOf({ ...turn, origin }), "own");
+  }
+  for (const origin of [TURN_ORIGIN.TYPED, TURN_ORIGIN.SPOKEN]) {
+    assert.equal(judgmentOf({ ...turn, origin }), "ask");
+  }
+  assert.equal(judgmentOf(undefined), "ask");
 });
 
 test("a reasoning part folds to a line on Luke's side, and an announcement is his bubble marked when unheard", () => {

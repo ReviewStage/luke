@@ -88,7 +88,7 @@ export function thinkingElapsedLabel(since: number, now: number): string | undef
  * which both tabs share. The reader's line is the live region, and the age
  * beside it is not, so a ticking count is never read out second by second.
  */
-function ConversationThinkingRow({
+export function ConversationThinkingRow({
   since,
   now,
 }: {

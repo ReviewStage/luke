@@ -8,11 +8,13 @@ import {
   PlusIcon,
   ProviderMark,
   StopIcon,
+  WingFace,
 } from "@sidecar/panel";
 import {
   CONVERSATION_VIEW_TOOL_KIND,
   type ConversationViewMessage,
   type ConversationViewToolPart,
+  type ConversationViewTurn,
   type ConversationViewTurnGroup,
   isStoredToolPart,
   MESSAGE_AUTHOR,
@@ -25,9 +27,23 @@ import {
   TOOL_PART_STATE,
 } from "@sidecar/session";
 import type { StoredUIMessage } from "@sidecar/session/ui-messages";
-import { isRecord, isWireString, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
+import {
+  isRecord,
+  isWireString,
+  TURN_ORIGIN,
+  TURN_STATUS,
+  type TurnOrigin,
+  type TurnStatus,
+  unparsedWire,
+  type WireBoundaryInput,
+} from "@sidecar/wire";
+import { useState } from "react";
 import { ConversationCopyButton } from "./conversation-copy";
-import { CONVERSATION_ENTRY_SPEAKER, type ConversationEntrySpeaker } from "./conversation-panel";
+import {
+  CONVERSATION_ENTRY_SPEAKER,
+  type ConversationEntrySpeaker,
+  ConversationThinkingRow,
+} from "./conversation-panel";
 import { TOOL_ROW_STATUS, type ToolRow, type ToolRowChip, toolRow } from "./conversation-tool-row";
 import { MarkdownMessage } from "./markdown-message";
 import type { SessionView } from "./session-model";
@@ -44,7 +60,14 @@ import { ThinkingDots } from "./thinking-dots";
  * classed as a detail — a read, a workspace write, a delegation — and an
  * action whose tool failed outright draw only inside the turn, folded under
  * a count, so the thread reads as what was said and done and the turn's
- * working stays a level down.
+ * working stays a level down. A turn that carried more than one action folds
+ * them under a line that counts them, open while the turn still runs and
+ * closed once it has settled, a press holding whichever the reader chose;
+ * a turn of one action draws the row itself. A turn the developer did not
+ * open — a roster look, a hold's release, a child's end — is Luke's own
+ * judgment, and everything it did leads with his face under that name and
+ * never wears a reply's bubble, so what he decided for himself is never read
+ * as something the developer asked.
  *
  * Everything here is drawn inside the Conversation subtree, which the session
  * recording blocks whole: a session's title on a chip, a briefing's words, a
@@ -63,7 +86,35 @@ const VOICE = {
   /** A note the brain wrote itself into the conversation, never the developer's words. */
   NOTE: { speaker: CONVERSATION_ENTRY_SPEAKER.EVENT, label: "Note" },
   ACTION: { speaker: CONVERSATION_ENTRY_SPEAKER.EVENT, label: "Action" },
+  /** A turn nobody opened: what Luke did and said in it is his own judgment, and the label says so. */
+  OWN: { speaker: CONVERSATION_ENTRY_SPEAKER.EVENT, label: "Luke, on his own judgment" },
 } as const satisfies Record<string, RowVoice>;
+
+/** Whose judgment a turn's rows record, stamped on each so the two never look alike. */
+const JUDGMENT = { ASK: "ask", OWN: "own" } as const;
+
+type Judgment = (typeof JUDGMENT)[keyof typeof JUDGMENT];
+
+/** The origins the developer opened a turn by; every other origin is a wake, and the turn Luke's own. */
+const DEVELOPER_ORIGINS: ReadonlySet<TurnOrigin> = new Set<TurnOrigin>([
+  TURN_ORIGIN.TYPED,
+  TURN_ORIGIN.SPOKEN,
+]);
+
+/** A turn with no row to say who opened it is drawn as an ask rather than claimed as Luke's own. */
+export function judgmentOf(turn: ConversationViewTurn | undefined): Judgment {
+  return turn !== undefined && !DEVELOPER_ORIGINS.has(turn.origin) ? JUDGMENT.OWN : JUDGMENT.ASK;
+}
+
+/** The statuses under which a turn is still going: queued for its run, or running it. */
+const PENDING_STATUSES: ReadonlySet<TurnStatus> = new Set<TurnStatus>([
+  TURN_STATUS.QUEUED,
+  TURN_STATUS.RUNNING,
+]);
+
+export function turnPending(turn: ConversationViewTurn | undefined): boolean {
+  return turn !== undefined && PENDING_STATUSES.has(turn.status);
+}
 
 /**
  * The mark an action row leads with, one per kind of thing that can be done
@@ -161,6 +212,33 @@ function ReasoningRow({ text }: { text: string }): React.JSX.Element {
 }
 
 /**
+ * Words Luke wrote in a turn nobody opened: his own judgment, drawn in the
+ * quiet voice under his face and never as a reply's bubble, because a bubble
+ * would read as an answer to something the developer said.
+ */
+function OwnWordsRow({ words, at }: { words: string; at: number }): React.JSX.Element {
+  return (
+    <li
+      className="conversation-entry"
+      data-speaker={VOICE.OWN.speaker}
+      data-judgment={JUDGMENT.OWN}
+      data-own-words="true"
+    >
+      <small className="visually-hidden">{VOICE.OWN.label}</small>
+      <div className="conversation-message">
+        <span className="conversation-action">
+          <span className="conversation-action-mark" aria-hidden="true">
+            <WingFace />
+          </span>
+          <MarkdownMessage words={words} className="conversation-words" />
+        </span>
+      </div>
+      <RowStamp at={at} />
+    </li>
+  );
+}
+
+/**
  * The chip naming the session an action reached. Where the session has an
  * identity to open by and its row would open, the chip is that row's own press
  * by another hand: it mints the same open act, for the identity the record
@@ -215,10 +293,12 @@ function chipOf(row: ToolRow): ToolRowChip | undefined {
  */
 function ActionRow({
   row,
+  judgment,
   at,
   onOpenChat,
 }: {
   row: ToolRow;
+  judgment: Judgment;
   at?: number;
   onOpenChat?: (identity: SessionIdentity) => void;
 }): React.JSX.Element {
@@ -226,22 +306,25 @@ function ActionRow({
   const chip = chipOf(row);
   const trailingProvider =
     row.providerId !== undefined && chip?.markId !== row.providerId ? row.providerId : undefined;
+  const own = judgment === JUDGMENT.OWN;
+  const voice = own ? VOICE.OWN : VOICE.ACTION;
   return (
     <li
       className="conversation-entry"
-      data-speaker={VOICE.ACTION.speaker}
+      data-speaker={voice.speaker}
+      data-judgment={judgment}
       data-action-kind={row.kind}
       data-tool-status={row.status}
     >
-      <small className="visually-hidden">{VOICE.ACTION.label}</small>
+      <small className="visually-hidden">{voice.label}</small>
       <div className="conversation-message">
         <span className="conversation-action">
           <span
             className="conversation-action-mark"
             aria-hidden="true"
-            data-control={row.controlKind}
+            data-control={own ? undefined : row.controlKind}
           >
-            <Glyph />
+            {own ? <WingFace /> : <Glyph />}
           </span>
           <span className="conversation-action-body">
             <span className="conversation-words">
@@ -335,9 +418,11 @@ function foldedLabel(count: number): string {
  */
 function FoldedRows({
   rows,
+  judgment,
   onOpenChat,
 }: {
   rows: readonly FoldedRow[];
+  judgment: Judgment;
   onOpenChat?: (identity: SessionIdentity) => void;
 }): React.JSX.Element {
   return (
@@ -357,6 +442,7 @@ function FoldedRows({
                 <ActionRow
                   key={folded.part.toolCallId}
                   row={folded.row}
+                  judgment={judgment}
                   {...(onOpenChat ? { onOpenChat } : undefined)}
                 />
               ),
@@ -364,6 +450,86 @@ function FoldedRows({
           </ol>
         </details>
       </div>
+    </li>
+  );
+}
+
+/** The reader's press on a fold, remembered with the turn state it was made under. */
+export interface FoldChoice {
+  readonly pending: boolean;
+  readonly open: boolean;
+}
+
+/**
+ * Whether a fold stands open: as the turn's state has it — open while the
+ * turn still runs, closed once settled — unless the reader pressed it under
+ * that same state, in which case their press holds. A press made while the
+ * turn ran does not outlive the turn's settling: the turn's own change is the
+ * later word, and the fold follows it.
+ */
+export function foldOpen(choice: FoldChoice | undefined, pending: boolean): boolean {
+  return choice !== undefined && choice.pending === pending ? choice.open : pending;
+}
+
+/**
+ * The actions one turn carried, folded under a line that counts them. The
+ * fold follows the turn: open while the turn still runs, so what it is doing
+ * is watched as it happens, and closed once it has settled, so a finished
+ * turn reads as one line; a press holds whichever the reader chose until the
+ * turn's own state next changes. The element's toggle fires for the state the
+ * turn sets as well as for a press, so a toggle is read as the reader's only
+ * when it leaves the element in a state the turn did not ask for; a fold that
+ * mistook the turn's word for the reader's would never close. Under Luke's
+ * own judgment the line leads with his face, as each row inside it does.
+ */
+function ActionsFold({
+  rows,
+  pending,
+  judgment,
+  at,
+}: {
+  rows: readonly React.JSX.Element[];
+  pending: boolean;
+  judgment: Judgment;
+  /** When the first of the folded actions ran: the line's stamp, since the rows inside carry none. */
+  at: number;
+}): React.JSX.Element {
+  const [choice, setChoice] = useState<FoldChoice | undefined>(undefined);
+  const open = foldOpen(choice, pending);
+  const own = judgment === JUDGMENT.OWN;
+  const voice = own ? VOICE.OWN : VOICE.ACTION;
+  return (
+    <li
+      className="conversation-entry"
+      data-speaker={voice.speaker}
+      data-judgment={judgment}
+      data-actions-fold={pending ? "running" : "settled"}
+    >
+      <small className="visually-hidden">{voice.label}</small>
+      <div className="conversation-message">
+        <details
+          className="conversation-actions-fold"
+          open={open}
+          onToggle={(event) => {
+            // The browser fires this for the state the turn set as well as for a
+            // press; only a state the prop does not already hold is the reader's.
+            if (event.currentTarget.open !== open) {
+              setChoice({ pending, open: event.currentTarget.open });
+            }
+          }}
+        >
+          <summary className="conversation-turn-summary">
+            {own ? (
+              <span className="conversation-action-mark" aria-hidden="true">
+                <WingFace />
+              </span>
+            ) : null}
+            {`${rows.length} actions`}
+          </summary>
+          <ol className="conversation-turn-rows">{rows}</ol>
+        </details>
+      </div>
+      <RowStamp at={at} />
     </li>
   );
 }
@@ -420,28 +586,47 @@ function userVoice(
  * view's decision, read back by call id; a call the view did not describe is
  * a detail.
  */
+/**
+ * One row as a message hands it to its turn: drawn already, or an action the
+ * turn decides the place of — a stamped row of its own, or a row inside the
+ * fold, whose line carries the stamp for all of them.
+ */
+type DrawnRow =
+  | { readonly element: React.JSX.Element; readonly action?: undefined }
+  | { readonly element?: undefined; readonly action: DrawnAction };
+
+interface DrawnAction {
+  readonly key: string;
+  readonly row: ToolRow;
+  readonly at: number;
+}
+
 interface MessageRows {
-  readonly rows: readonly React.JSX.Element[];
+  readonly rows: readonly DrawnRow[];
   readonly folded: readonly FoldedRow[];
 }
 
 function messageRows(
   view: ConversationViewMessage,
+  judgment: Judgment,
   roster: readonly SessionView[],
-  onOpenChat: ((identity: SessionIdentity) => void) | undefined,
 ): MessageRows {
   const { message } = view;
   if (message.role === MESSAGE_ROLE.USER) {
     const voice = userVoice(message);
     return {
       rows: [
-        <BubbleRow
-          key={message.id}
-          voice={voice}
-          words={userWords(message)}
-          at={view.createdAt}
-          copy={voice === VOICE.YOU}
-        />,
+        {
+          element: (
+            <BubbleRow
+              key={message.id}
+              voice={voice}
+              words={userWords(message)}
+              at={view.createdAt}
+              copy={voice === VOICE.YOU}
+            />
+          ),
+        },
       ],
       folded: [],
     };
@@ -451,16 +636,22 @@ function messageRows(
   const described = new Map<string, ConversationViewToolPart>(
     view.tools.map((tool) => [tool.toolCallId, tool]),
   );
-  const rows: React.JSX.Element[] = [];
-  const open = onOpenChat ? { onOpenChat } : undefined;
+  const rows: DrawnRow[] = [];
+  const draw = (element: React.JSX.Element) => rows.push({ element });
   message.parts.forEach((part: StoredPart, index) => {
     const key = `${message.id}:${index}`;
     if (isTextPart(part)) {
-      rows.push(<BubbleRow key={key} voice={VOICE.LUKE} words={part.text} at={view.createdAt} />);
+      draw(
+        judgment === JUDGMENT.OWN ? (
+          <OwnWordsRow key={key} words={part.text} at={view.createdAt} />
+        ) : (
+          <BubbleRow key={key} voice={VOICE.LUKE} words={part.text} at={view.createdAt} />
+        ),
+      );
       return;
     }
     if (isReasoningPart(part)) {
-      rows.push(<ReasoningRow key={key} text={part.text} />);
+      draw(<ReasoningRow key={key} text={part.text} />);
       return;
     }
     if (!isStoredToolPart(part)) return;
@@ -469,7 +660,7 @@ function messageRows(
       case CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE: {
         const words = announcedWords(part);
         if (words !== undefined) {
-          rows.push(
+          draw(
             <BubbleRow
               key={key}
               voice={VOICE.LUKE}
@@ -488,7 +679,7 @@ function messageRows(
         } else if (tool.refused) {
           folded.push({ kind: CONVERSATION_VIEW_TOOL_KIND.ACTION, row, part });
         } else {
-          rows.push(<ActionRow key={key} row={row} at={view.createdAt} {...open} />);
+          rows.push({ action: { key, row, at: view.createdAt } });
         }
         return;
       }
@@ -499,16 +690,69 @@ function messageRows(
   return { rows, folded };
 }
 
+/** How many actions a turn carries before they fold under a count rather than standing as rows. */
+const FOLD_FROM_ACTIONS = 2;
+
 /**
- * The thread as turns. Each group's messages draw in sequence, and the
- * group's working — its details and its failed actions — closes the group
- * under one fold, so a refusal is read inside the turn that tried it and
- * never as a row of its own.
+ * One turn's rows in order, its actions placed: each a stamped row of its own
+ * while there are too few to fold, or all of them inside one fold standing
+ * where the first stood, unstamped, under the fold's own stamp. The rows
+ * between actions keep their places around it.
+ */
+function turnRows(
+  drawn: readonly DrawnRow[],
+  pending: boolean,
+  judgment: Judgment,
+  turnId: string,
+  onOpenChat: ((identity: SessionIdentity) => void) | undefined,
+): readonly React.JSX.Element[] {
+  const open = onOpenChat ? { onOpenChat } : undefined;
+  const actions = drawn.flatMap((row) => (row.action ? [row.action] : []));
+  const first = actions[0];
+  if (first === undefined || actions.length < FOLD_FROM_ACTIONS) {
+    return drawn.map((row) =>
+      row.action ? (
+        <ActionRow
+          key={row.action.key}
+          row={row.action.row}
+          judgment={judgment}
+          at={row.action.at}
+          {...open}
+        />
+      ) : (
+        row.element
+      ),
+    );
+  }
+  const fold = (
+    <ActionsFold
+      key={`${turnId}:actions`}
+      rows={actions.map((action) => (
+        <ActionRow key={action.key} row={action.row} judgment={judgment} {...open} />
+      ))}
+      pending={pending}
+      judgment={judgment}
+      at={first.at}
+    />
+  );
+  return drawn.flatMap((row) =>
+    row.action ? (row.action === first ? [fold] : []) : [row.element],
+  );
+}
+
+/**
+ * The thread as turns. Each group's messages draw in sequence, its actions
+ * fold under a count once there are two, and the group's working — its
+ * details and its failed actions — closes the group under one fold, so a
+ * refusal is read inside the turn that tried it and never as a row of its
+ * own. A turn still running ends in Luke's wait, driven by the turn row's
+ * own status and nothing else.
  */
 export function ConversationTurns({
   groups,
   roster = [],
   onOpenChat,
+  now,
 }: {
   groups: readonly ConversationViewTurnGroup[];
   /**
@@ -520,23 +764,45 @@ export function ConversationTurns({
   roster?: readonly SessionView[];
   /** The row's own press by identity; absent where nothing can open a session, and every chip is a name. */
   onOpenChat?: (identity: SessionIdentity) => void;
+  /** The instant a running turn's wait is read against; passed down because only the app knows which clock is honest. */
+  now: number;
 }): React.JSX.Element {
   return (
     <ol className="conversation-list">
       {groups.flatMap((group) => {
-        const drawn = group.messages.map((message) => messageRows(message, roster, onOpenChat));
-        const rows = drawn.flatMap((message) => message.rows);
+        const judgment = judgmentOf(group.turn);
+        const pending = turnPending(group.turn);
+        const drawn = group.messages.map((message) => messageRows(message, judgment, roster));
+        const rows = turnRows(
+          drawn.flatMap((message) => message.rows),
+          pending,
+          judgment,
+          group.turnId,
+          onOpenChat,
+        );
         const folded = drawn.flatMap((message) => message.folded);
-        return folded.length === 0
-          ? rows
-          : [
-              ...rows,
-              <FoldedRows
-                key={`${group.turnId}:folded`}
-                rows={folded}
-                {...(onOpenChat ? { onOpenChat } : undefined)}
-              />,
-            ];
+        return [
+          ...rows,
+          ...(folded.length === 0
+            ? []
+            : [
+                <FoldedRows
+                  key={`${group.turnId}:folded`}
+                  rows={folded}
+                  judgment={judgment}
+                  {...(onOpenChat ? { onOpenChat } : undefined)}
+                />,
+              ]),
+          ...(pending && group.turn !== undefined
+            ? [
+                <ConversationThinkingRow
+                  key={`${group.turnId}:thinking`}
+                  since={group.turn.startedAt ?? group.turn.queuedAt}
+                  now={now}
+                />,
+              ]
+            : []),
+        ];
       })}
     </ol>
   );

@@ -159,19 +159,38 @@ const reply = (id: string, parts: StoredUIMessage["parts"]): StoredUIMessage => 
   parts,
 });
 
-const TURN = {
+/** The fixture turns by what each stands for; exported so a test can name the turn it reads. */
+export const FIXTURE_TURN = {
+  /** A typed ask answered with one reply and one read: no action at all. */
   ASK: "1a000000-0000-4000-8000-000000000101",
+  /** Every session action kind in one settled turn: folded closed under its count. */
   EVERY_KIND: "1a000000-0000-4000-8000-000000000102",
+  /** A refused, an unknown, a pending, and an errored action. */
   REFUSED: "1a000000-0000-4000-8000-000000000103",
+  /** An observed session's own turn, opened by the roster: Luke's own judgment. */
   ANNOUNCED: "1a000000-0000-4000-8000-000000000104",
+  /** A turn still running two actions in: folded open, with Luke's wait at its foot. */
+  RUNNING: "1a000000-0000-4000-8000-000000000105",
+  /** One action and nothing else: the row itself, no fold. */
+  SINGLE: "1a000000-0000-4000-8000-000000000106",
+  /** A hold's release in main: Luke's own judgment, with words and an action of his own. */
+  OWN: "1a000000-0000-4000-8000-000000000107",
 } as const;
+
+const TURN = FIXTURE_TURN;
 
 const AT = {
   ASK: 1757505600000,
   EVERY_KIND: 1757505700000,
   REFUSED: 1757505800000,
   ANNOUNCED: 1757505900000,
+  RUNNING: 1757506000000,
+  SINGLE: 1757506100000,
+  OWN: 1757506200000,
 } as const;
+
+/** The instant the fixtures are read against: the running turn has been going for a while. */
+export const FIXTURE_NOW = 1757506300000;
 
 /** One conversation covering every row the renderer draws. */
 export const FIXTURE_INPUT: ConversationViewInput = {
@@ -342,6 +361,79 @@ export const FIXTURE_INPUT: ConversationViewInput = {
       turnId: TURN.REFUSED,
       createdAt: AT.REFUSED + 2000,
     },
+    {
+      message: ask("2b000000-0000-4000-8000-000000000207", "Nudge both fixtures along."),
+      seq: 7,
+      turnId: TURN.RUNNING,
+      createdAt: AT.RUNNING,
+    },
+    {
+      message: reply("2b000000-0000-4000-8000-000000000208", [
+        { type: "step-start" },
+        call(
+          "send_session_message",
+          { ...identity(FIXTURE_SESSION.HELD), text: "Carry on." },
+          accepted({ target: target(FIXTURE_SESSION.HELD, FIXTURE_TITLE.HELD) }),
+        ),
+        call(
+          "send_session_message",
+          { ...identity(FIXTURE_SESSION.CREATED), text: "Carry on." },
+          accepted({ target: target(FIXTURE_SESSION.CREATED, FIXTURE_TITLE.CREATED) }),
+        ),
+        pendingCall("send_session_message", {
+          ...identity(FIXTURE_SESSION.UNOPENABLE),
+          text: "You too.",
+        }),
+      ]),
+      seq: 8,
+      turnId: TURN.RUNNING,
+      createdAt: AT.RUNNING + 900,
+    },
+    {
+      message: ask("2b000000-0000-4000-8000-000000000209", "Stop the fixture session."),
+      seq: 9,
+      turnId: TURN.SINGLE,
+      createdAt: AT.SINGLE,
+    },
+    {
+      message: reply("2b000000-0000-4000-8000-000000000210", [
+        { type: "step-start" },
+        call(
+          "run_session_control",
+          { ...identity(FIXTURE_SESSION.HELD), control_id: "stop" },
+          accepted({
+            target: {
+              ...target(FIXTURE_SESSION.HELD, FIXTURE_TITLE.HELD),
+              controlKind: SESSION_CONTROL_KIND.STOP,
+              controlLabel: "Stop",
+            },
+          }),
+        ),
+        { type: "step-start" },
+        { type: "text", text: "Stopped it.", state: "done" },
+      ]),
+      seq: 10,
+      turnId: TURN.SINGLE,
+      createdAt: AT.SINGLE + 800,
+    },
+    {
+      message: reply("2b000000-0000-4000-8000-000000000211", [
+        { type: "step-start" },
+        {
+          type: "text",
+          text: "The meeting ended, so I answered the fixture session's question myself.",
+          state: "done",
+        },
+        call(
+          "send_session_message",
+          { ...identity(FIXTURE_SESSION.HELD), text: "Yes, go ahead." },
+          accepted({ target: target(FIXTURE_SESSION.HELD, FIXTURE_TITLE.HELD) }),
+        ),
+      ]),
+      seq: 11,
+      turnId: TURN.OWN,
+      createdAt: AT.OWN,
+    },
   ],
   observed: [
     {
@@ -388,6 +480,25 @@ export const FIXTURE_INPUT: ConversationViewInput = {
       origin: TURN_ORIGIN.ROSTER_DIFF,
       status: TURN_STATUS.SETTLED,
       queuedAt: AT.ANNOUNCED,
+    },
+    {
+      id: TURN.RUNNING,
+      origin: TURN_ORIGIN.TYPED,
+      status: TURN_STATUS.RUNNING,
+      queuedAt: AT.RUNNING,
+      startedAt: AT.RUNNING + 200,
+    },
+    {
+      id: TURN.SINGLE,
+      origin: TURN_ORIGIN.TYPED,
+      status: TURN_STATUS.SETTLED,
+      queuedAt: AT.SINGLE,
+    },
+    {
+      id: TURN.OWN,
+      origin: TURN_ORIGIN.HOLD_RELEASE,
+      status: TURN_STATUS.SETTLED,
+      queuedAt: AT.OWN,
     },
   ],
   events: [],
