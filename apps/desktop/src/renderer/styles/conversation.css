@@ -89,6 +89,10 @@
   /* Room for the widest stamp a twelve-hour clock draws, with its own inset
      from the thread's edge. */
   --conversation-time-column: 56px;
+  /* The room a folded turn's toggle overhangs the thread's left edge by, so
+     its hover ground rounds on that side too: the pull is a scroll box and
+     clips whatever crosses its edge, so the room has to be inside it. */
+  --conversation-toggle-overhang: 6px;
 
   position: relative;
   display: flex;
@@ -96,7 +100,7 @@
   flex-direction: column;
   gap: 4px;
   margin: 0;
-  padding: 0;
+  padding: 0 0 0 var(--conversation-toggle-overhang);
   list-style: none;
 }
 
@@ -467,8 +471,8 @@
   min-height: 24px;
   align-items: center;
   gap: 7px;
-  margin-left: -6px;
-  padding: 0 6px;
+  margin-left: calc(-1 * var(--conversation-toggle-overhang));
+  padding: 0 var(--conversation-toggle-overhang);
   border-radius: 8px;
   background: transparent;
   color: var(--text-secondary);
