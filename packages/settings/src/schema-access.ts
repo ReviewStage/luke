@@ -70,7 +70,23 @@ export const ACCOUNT_PREFERENCE_FIELDS = [
 ] as const satisfies readonly AppSettingField[];
 
 export type AccountPreferenceField = (typeof ACCOUNT_PREFERENCE_FIELDS)[number];
+
 export type AccountPreferences = Partial<Pick<StoredAppSettings, AccountPreferenceField>>;
+
+/**
+ * Fields a client of an earlier contract still carries on the wire and this
+ * build's settings no longer hold. The phone syncs its Realtime pace under
+ * this key until it moves to Live, and the hosted snapshot keeps the pace
+ * for the phone alone, so a reader here drops the key rather than refusing
+ * the snapshot the two share. Removing an entry is the phone's follow-up.
+ */
+export const RETIRED_ACCOUNT_PREFERENCE_FIELD = {
+  VOICE_SPEED: "voiceSpeed",
+} as const;
+
+const RETIRED_ACCOUNT_PREFERENCE_FIELD_SET: ReadonlySet<string> = new Set(
+  Object.values(RETIRED_ACCOUNT_PREFERENCE_FIELD),
+);
 
 const ACCOUNT_PREFERENCE_FIELD_SET: ReadonlySet<string> = new Set(ACCOUNT_PREFERENCE_FIELDS);
 
@@ -103,7 +119,7 @@ function parseAccountPreferences(
   const preferences: Record<string, UnparsedWireValue> = {};
   for (const [field, rawValue] of Object.entries(value)) {
     if (!isAccountPreferenceField(field)) {
-      if (source === "wire") return undefined;
+      if (source === "wire" && !RETIRED_ACCOUNT_PREFERENCE_FIELD_SET.has(field)) return undefined;
       continue;
     }
     const wireValue = rawValue === null ? undefined : rawValue;

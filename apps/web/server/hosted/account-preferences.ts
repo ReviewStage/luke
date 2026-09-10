@@ -1,31 +1,34 @@
-import { type AccountPreferences, accountPreferencesFromWire } from "@sidecar/settings";
+import { isRealtimeVoiceSpeed, type RealtimeVoiceSpeed } from "@sidecar/realtime";
+import {
+  type AccountPreferences,
+  accountPreferencesFromWire,
+  RETIRED_ACCOUNT_PREFERENCE_FIELD,
+} from "@sidecar/settings";
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 
 /**
- * Fields a client of an earlier contract still writes and this build no
- * longer keeps. The phone syncs its Realtime pace under this key until it
- * moves to Live; the desktop has no pace and the row no longer carries one,
- * so the key is dropped at the door rather than refusing the phone's whole
- * snapshot. Removing an entry here is the phone's follow-up, not a cleanup.
+ * The hosted snapshot: the preferences every device shares, and the phone's
+ * Realtime pace, which the desktop no longer has and its reader drops. The
+ * pace is kept here for the phone alone until it moves to Live, so a phone
+ * that syncs its pace today keeps it across its own devices meanwhile.
  */
-const RETIRED_ACCOUNT_PREFERENCE_FIELD = {
-  VOICE_SPEED: "voiceSpeed",
-} as const;
+export type HostedAccountPreferences = AccountPreferences & {
+  [RETIRED_ACCOUNT_PREFERENCE_FIELD.VOICE_SPEED]?: RealtimeVoiceSpeed;
+};
 
-const RETIRED_ACCOUNT_PREFERENCE_FIELDS: ReadonlySet<string> = new Set(
-  Object.values(RETIRED_ACCOUNT_PREFERENCE_FIELD),
-);
+type PhoneVoiceSpeed = { valid: true; value: RealtimeVoiceSpeed | undefined } | { valid: false };
 
-function withoutRetiredFields(preferences: UnparsedWireValue): UnparsedWireValue {
-  if (!isRecord(preferences)) return preferences;
-  return Object.fromEntries(
-    Object.entries(preferences).filter(([field]) => !RETIRED_ACCOUNT_PREFERENCE_FIELDS.has(field)),
-  );
+/** The phone's pace out of the raw snapshot: absent or null is none, and anything but a pace the Realtime contract offers refuses the write. */
+function phoneVoiceSpeed(preferences: UnparsedWireValue): PhoneVoiceSpeed {
+  if (!isRecord(preferences)) return { valid: true, value: undefined };
+  const raw = preferences[RETIRED_ACCOUNT_PREFERENCE_FIELD.VOICE_SPEED];
+  if (raw === undefined || raw === null) return { valid: true, value: undefined };
+  return isRealtimeVoiceSpeed(raw) ? { valid: true, value: raw } : { valid: false };
 }
 
 export interface AccountPreferencesRow {
-  preferences: AccountPreferences;
+  preferences: HostedAccountPreferences;
   updatedAt: Date;
 }
 
@@ -38,7 +41,7 @@ export interface AccountPreferencesReadOptions {
 export interface AccountPreferencesWriteOptions {
   request: Request;
   resolveUserId: (request: Request) => Promise<string | undefined>;
-  writePreferences: (userId: string, preferences: AccountPreferences) => Promise<Date>;
+  writePreferences: (userId: string, preferences: HostedAccountPreferences) => Promise<Date>;
 }
 
 export async function handleAccountPreferencesRead(
@@ -94,10 +97,17 @@ export async function handleAccountPreferencesWrite(
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }
 
-  const incoming = accountPreferencesFromWire(withoutRetiredFields(body.preferences));
-  if (incoming === undefined) {
+  const shared = accountPreferencesFromWire(body.preferences);
+  const pace = phoneVoiceSpeed(body.preferences);
+  if (shared === undefined || !pace.valid) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }
+  const incoming: HostedAccountPreferences = {
+    ...shared,
+    ...(pace.value !== undefined
+      ? { [RETIRED_ACCOUNT_PREFERENCE_FIELD.VOICE_SPEED]: pace.value }
+      : undefined),
+  };
 
   const updatedAt = await writePreferences(userId, incoming);
 

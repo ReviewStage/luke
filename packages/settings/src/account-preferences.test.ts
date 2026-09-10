@@ -48,7 +48,11 @@ test("account preferences validate the shared fields and reject local-only paylo
 
   assert.equal(accountPreferencesFromWire({ voiceHotkey: "Command+Space" }), undefined);
   assert.equal(accountPreferencesFromWire({ voice: "baritone" }), undefined);
-  assert.equal(accountPreferencesFromWire({ voiceSpeed: 1.5 }), undefined);
+  // The phone's Realtime pace still travels in the shared snapshot; here it
+  // is dropped rather than refused, so a phone's write stays readable.
+  assert.deepEqual(accountPreferencesFromWire({ voice: LIVE_VOICE.MARIN, voiceSpeed: 1.5 }), {
+    voice: LIVE_VOICE.MARIN,
+  });
 });
 
 test("null clears an account preference field in write payloads", () => {

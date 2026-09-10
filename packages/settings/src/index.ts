@@ -35,6 +35,7 @@ export {
   isSettingEntryKey,
   isSettingsResetScope,
   type KeyedAppSettingField,
+  RETIRED_ACCOUNT_PREFERENCE_FIELD,
   SETTING_PAGE,
   type SettingEntryValue,
   type SettingsRowsInput,
