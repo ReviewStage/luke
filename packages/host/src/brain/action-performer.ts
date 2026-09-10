@@ -3,7 +3,6 @@ import {
   ACTION_KIND,
   ACTION_REFUSAL,
   type ActionOutputEnvelope,
-  type AdmitContext,
   acceptedActionOutput,
   actionOutputFromResult,
   actionTargetSnapshot,
@@ -17,7 +16,13 @@ import {
   toolAction,
   type ValidatedAction,
 } from "@sidecar/actions";
-import type { BrainActionExecution, BrainActionPerformer } from "@sidecar/brain";
+import {
+  type ActionAdmissionReads,
+  actionToolNamed,
+  type BrainActionExecution,
+  type BrainActionPerformer,
+  toolArguments,
+} from "@sidecar/brain";
 import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
 import type { AppGuideSnapshot } from "@sidecar/guide";
 import { isRunOrigin, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
@@ -49,6 +54,19 @@ export interface WorkspaceCreationDefaults {
 interface BrainNotebookWriter {
   remember(ask: { id: string; words: string; replaces?: string }): Promise<boolean>;
   forget(id: string): Promise<boolean>;
+}
+
+/**
+ * The host's performer: the brain's two halves — the readers admission
+ * consults and the carrier of what it minted — and one whole run of a raw
+ * call for the notebook's two writes, which the memory provider still hands
+ * over as calls until they are modules of their own.
+ */
+export interface HostActionPerformer extends BrainActionPerformer {
+  perform(
+    call: RealtimeFunctionCall,
+    execution: BrainActionExecution,
+  ): Promise<ActionOutputEnvelope>;
 }
 
 export interface BrainActionPerformerDependencies {
@@ -122,29 +140,31 @@ function panelResult(answered: WireRecord): CarriedActionResult | undefined {
 }
 
 /**
- * The gauntlet every action the brain asks for runs, in the main process: the
- * call is admitted by `admit`, against the roster it reads for itself, the
- * issue board, the offered projects, the guide, or the remembered facts, and
- * only the validated action it mints reaches the performer that carries it. The
- * brain is another way to ask, never a wider one: a call that names a session
- * Luke was not shown, a project no adapter offers, or a setting the guide does
- * not list is refused with a reason the brain can read.
+ * The host's side of the gauntlet every action the brain asks for runs. The
+ * action tool's own `execute` admits the call by `admit`, against the roster
+ * it reads for itself through the readers handed out here — the issue board,
+ * the offered projects, the guide, and the remembered facts beside it — and
+ * only the validated action it mints reaches the carrier below. The brain is
+ * another way to ask, never a wider one: a call that names a session Luke was
+ * not shown, a project no adapter offers, or a setting the guide does not list
+ * is refused with a reason the brain can read.
  *
- * Before any of that, the action has to arrive with a turn's standing: an
- * execution context the brain built for the turn that emitted the call, naming
- * the run and who opened it. Whether the action may run at all was the tool
+ * Every half is handed a turn's standing: an execution context the brain built
+ * for the turn that emitted the call, naming the conversation, the turn, the
+ * run, and who opened it. Whether the action may run at all was the tool
  * policy's decision before the call left the brain; here the context is what
  * says the turn still stands, and admission asks it again after every read of
  * its own, so an action whose turn ended while the roster was refreshing is
- * refused rather than dispatched. A call with no context or a malformed one is
- * refused before admission runs. The origin decides only how Conversation records
- * the action: at the developer's ask, or as Luke's own judgment in a turn nobody
- * asked him anything in.
+ * refused rather than dispatched. The carrier is the last gate before an
+ * effect and reads its context as untrusted: a missing or malformed one
+ * refuses. The origin decides only how Conversation records the action: at the
+ * developer's ask, or as Luke's own judgment in a turn nobody asked him
+ * anything in.
  */
 export function createBrainActionPerformer(
   dependencies: BrainActionPerformerDependencies,
-): BrainActionPerformer {
-  const admissionContext = (execution: BrainActionExecution): AdmitContext => {
+): HostActionPerformer {
+  const admission = (): ActionAdmissionReads => {
     const issues = dependencies.trackedIssues();
     // The roster and the projects an action is admitted against are two readings
     // of one observation pass, so the pass runs once per action however many of
@@ -153,8 +173,6 @@ export function createBrainActionPerformer(
     let pass: Promise<void> | undefined;
     const observed = () => (pass ??= dependencies.refreshSessions());
     return {
-      origin: execution.origin,
-      guard: execution,
       // The reads before an effect wait only as long as the standing does: a
       // cancel landing mid-refresh settles the action inside admission, and the
       // refresh's late answer dispatches nothing.
@@ -217,46 +235,74 @@ export function createBrainActionPerformer(
       : actionOutputFromResult(result);
   };
 
+  const carry = async (
+    action: ValidatedAction,
+    execution: BrainActionExecution,
+  ): Promise<ActionOutputEnvelope> => {
+    if (!isExecution(execution)) return refusedActionOutput(REFUSAL.NO_EXECUTION);
+    if (execution.isRevoked()) return refusedActionOutput(REFUSAL.TURN_OVER);
+    // Where each admitted action goes, named kind by kind: the two notebook
+    // writes are carried here, an app action is the renderer's to perform, an
+    // issue action reaches its tracker without a Conversation line, and a session
+    // action is recorded as it is carried. Every answer is the one envelope.
+    return dispatchByKind(action, {
+      [ACTION_KIND.REMEMBER]: async (action) =>
+        (await dependencies.notebook.remember({
+          id: randomUUID(),
+          words: action.words,
+          ...(action.replaces !== undefined ? { replaces: action.replaces } : undefined),
+        }))
+          ? acceptedActionOutput()
+          : refusedActionOutput(REFUSAL.MEMORY_NOT_SAVED),
+      [ACTION_KIND.FORGET]: async (action) =>
+        (await dependencies.notebook.forget(action.id))
+          ? acceptedActionOutput()
+          : refusedActionOutput(REFUSAL.MEMORY_NOT_REMOVED),
+      [ACTION_KIND.SETTING]: carryAppAction,
+      [ACTION_KIND.PANEL]: carryAppAction,
+      [ACTION_KIND.FEEDBACK]: carryAppAction,
+      [ACTION_KIND.UPDATE]: carryAppAction,
+      [ACTION_KIND.ISSUE_STATE]: async (action) =>
+        actionOutputFromResult(await dependencies.sessionActions.perform(action, execution)),
+      [ACTION_KIND.ISSUE_COMMENT]: async (action) =>
+        actionOutputFromResult(await dependencies.sessionActions.perform(action, execution)),
+      [ACTION_KIND.MESSAGE]: (action) => carrySessionAction(action, execution),
+      [ACTION_KIND.CONTROL]: (action) => carrySessionAction(action, execution),
+      [ACTION_KIND.OPEN]: (action) => carrySessionAction(action, execution),
+      [ACTION_KIND.CREATE_WORKSPACE]: (action) => carrySessionAction(action, execution),
+      [ACTION_KIND.ADD_AGENT]: (action) => carrySessionAction(action, execution),
+      [ACTION_KIND.RENAME_WORKSPACE]: (action) => carrySessionAction(action, execution),
+      [ACTION_KIND.RENAME_SESSION]: (action) => carrySessionAction(action, execution),
+    });
+  };
+
   return {
+    admission,
+    carry,
     async perform(call: RealtimeFunctionCall, execution: BrainActionExecution) {
       if (!isExecution(execution)) return refusedActionOutput(REFUSAL.NO_EXECUTION);
       if (execution.isRevoked()) return refusedActionOutput(REFUSAL.TURN_OVER);
-      const admitted = await toolAction(call, admissionContext(execution));
-      if (admitted.kind === undefined) return refusedActionOutput(admitted.reason);
-      if (execution.isRevoked()) return refusedActionOutput(REFUSAL.TURN_OVER);
-      // Where each admitted action goes, named kind by kind: the two notebook
-      // writes are carried here, an app action is the renderer's to perform, an
-      // issue action reaches its tracker without a Conversation line, and a session
-      // action is recorded as it is carried. Every answer is the one envelope.
-      return dispatchByKind(admitted, {
-        [ACTION_KIND.REMEMBER]: async (action) =>
-          (await dependencies.notebook.remember({
-            id: randomUUID(),
-            words: action.words,
-            ...(action.replaces !== undefined ? { replaces: action.replaces } : undefined),
-          }))
-            ? acceptedActionOutput()
-            : refusedActionOutput(REFUSAL.MEMORY_NOT_SAVED),
-        [ACTION_KIND.FORGET]: async (action) =>
-          (await dependencies.notebook.forget(action.id))
-            ? acceptedActionOutput()
-            : refusedActionOutput(REFUSAL.MEMORY_NOT_REMOVED),
-        [ACTION_KIND.SETTING]: carryAppAction,
-        [ACTION_KIND.PANEL]: carryAppAction,
-        [ACTION_KIND.FEEDBACK]: carryAppAction,
-        [ACTION_KIND.UPDATE]: carryAppAction,
-        [ACTION_KIND.ISSUE_STATE]: async (action) =>
-          actionOutputFromResult(await dependencies.sessionActions.perform(action, execution)),
-        [ACTION_KIND.ISSUE_COMMENT]: async (action) =>
-          actionOutputFromResult(await dependencies.sessionActions.perform(action, execution)),
-        [ACTION_KIND.MESSAGE]: (action) => carrySessionAction(action, execution),
-        [ACTION_KIND.CONTROL]: (action) => carrySessionAction(action, execution),
-        [ACTION_KIND.OPEN]: (action) => carrySessionAction(action, execution),
-        [ACTION_KIND.CREATE_WORKSPACE]: (action) => carrySessionAction(action, execution),
-        [ACTION_KIND.ADD_AGENT]: (action) => carrySessionAction(action, execution),
-        [ACTION_KIND.RENAME_WORKSPACE]: (action) => carrySessionAction(action, execution),
-        [ACTION_KIND.RENAME_SESSION]: (action) => carrySessionAction(action, execution),
+      const reads = admission();
+      // An action tool's call runs its own module, admission inside; the
+      // notebook's two writes are admitted here, the same way, until they are
+      // modules of their own.
+      const tool = actionToolNamed(call.name);
+      if (tool) {
+        const input = toolArguments(call.argumentsJson);
+        if (input === undefined) return refusedActionOutput(ACTION_REFUSAL.UNREADABLE);
+        return tool.execute(input, {
+          ...execution,
+          admission: reads,
+          carry: (action) => carry(action, execution),
+        });
+      }
+      const admitted = await toolAction(call, {
+        ...reads,
+        origin: execution.origin,
+        guard: execution,
       });
+      if (admitted.kind === undefined) return refusedActionOutput(admitted.reason);
+      return carry(admitted, execution);
     },
   };
 }
@@ -272,6 +318,10 @@ function isExecution(
   return (
     execution !== undefined &&
     execution !== null &&
+    isWireString(execution.conversationId) &&
+    execution.conversationId.length > 0 &&
+    isWireString(execution.turnId) &&
+    execution.turnId.length > 0 &&
     isWireString(execution.runId) &&
     execution.runId.length > 0 &&
     isRunOrigin(execution.origin) &&

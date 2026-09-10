@@ -10,7 +10,7 @@ import {
   LOOK_SUBJECT,
   toolLoopRuntimeOver,
 } from "@sidecar/brain";
-import { fakeBrainStateRepository } from "@sidecar/brain/testing";
+import { fakeActionPerformer, fakeBrainStateRepository } from "@sidecar/brain/testing";
 import {
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_OPERATION,
@@ -141,7 +141,7 @@ function composition() {
         runtime: toolLoopRuntimeOver(model),
         observes: { kind: LOOK_SUBJECT.NONE },
         prepareTurn: () => ({ prompt: "instructions", layers: {} }),
-        actions: { perform: async () => ({ status: "accepted" }) },
+        actions: fakeActionPerformer().actions,
         roster: () => ({ text: "none", identities: [] }),
         standingContext: () => "",
         readTranscriptSince: async () => ({ status: "unsupported", reason: "no" }),

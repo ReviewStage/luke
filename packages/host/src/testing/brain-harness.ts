@@ -20,6 +20,7 @@ import type {
 import {
   type BareResponsesModel,
   bareModelAdapter,
+  fakeActionPerformer,
   fakeBrainStateRepository,
 } from "@sidecar/brain/testing";
 import { drainMicrotasks } from "@sidecar/runtime/testing";
@@ -185,7 +186,7 @@ export function brainHarness() {
       ...options,
       runtime: toolLoopRuntimeOver(model),
       prepareTurn: () => ({ prompt: "instructions", layers: {} }),
-      actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
+      actions: fakeActionPerformer().actions,
       roster: () => ({ text: "", identities: [] }),
       standingContext: () => "",
       readTranscriptSince: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),

@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import {
+  ACTION_KIND,
   ACTION_OUTPUT,
   ACTION_OUTPUT_STATUS,
-  type ActionOutputEnvelope,
   acceptedActionOutput,
   REALTIME_TOOL,
-  type RealtimeFunctionCall,
   realtimeToolFamily,
   refusedActionOutput,
+  type ValidatedAction,
 } from "@sidecar/actions";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { notebookMemoryProvider } from "@sidecar/memory";
@@ -57,7 +57,14 @@ import {
 import { type ResponsesInputItem, responsesModelAnswer } from "./responses-api.js";
 import { ToolLoopAgentRuntime } from "./runtime.js";
 import { BrainStateStore } from "./state-store.js";
-import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
+import {
+  CAPTIONS_GUIDE,
+  type FakeActionPerformerOptions,
+  type FakeBrainStateRepository,
+  fakeActionPerformer,
+  fakeBrainStateRepository,
+  performCall,
+} from "./testing.js";
 import { BRAIN_TOOL, TOOL_GROUP } from "./tools.js";
 import type { BrainTurnTraceRecord } from "./trace.js";
 import { REFUSAL_REASON } from "./turn.js";
@@ -100,8 +107,21 @@ export function session(id: string, overrides: Partial<ProviderSessionObservatio
     title: `Claude Code: ${id}`,
     status: SESSION_STATUS.WAITING,
     lastActivityAt: NOW,
+    advertises: [{ kind: ACTION_KIND.MESSAGE }],
+    detail: { link: `https://sessions.example.test/${id}` },
     ...overrides,
   });
+}
+
+/** The two sessions the harness roster holds, as admission reads them. */
+const HARNESS_SESSIONS: readonly Session[] = [
+  session(ABC.providerSessionId),
+  session(DEF.providerSessionId),
+];
+
+/** A performer over the harness roster and guide whose carrier the test chooses. */
+export function performerWith(carry: FakeActionPerformerOptions["carry"]) {
+  return fakeActionPerformer({ sessions: HARNESS_SESSIONS, guide: CAPTIONS_GUIDE, carry });
 }
 
 export function edge(identity: SessionIdentity, atMs = NOW): BrainWakeEvent {
@@ -297,7 +317,7 @@ export interface Harness {
   store: BrainStateStore;
   deliveries: BrainDelivery[];
   persisted: BrainPersistedState[];
-  performed: RealtimeFunctionCall[];
+  performed: ValidatedAction[];
   executions: BrainActionExecution[];
   traces: BrainTurnTraceRecord[];
   sinceReads: { identity: SessionIdentity; cursor: string | undefined }[];
@@ -345,18 +365,12 @@ export function harness(
     createGenerationId: () => `gen-${nextRunId()}`,
     now: () => clock.now,
   });
-  const performed: RealtimeFunctionCall[] = [];
-  const executions: BrainActionExecution[] = [];
   const traces: BrainTurnTraceRecord[] = [];
   const sinceReads: Harness["sinceReads"] = [];
   const wholeReads: SessionIdentity[] = [];
-  const actions: BrainActionPerformer = agentOverrides.actions ?? {
-    perform: async (functionCall, execution) => {
-      performed.push(functionCall);
-      executions.push(execution);
-      return { status: ACTION_RESULT_STATUS.ACCEPTED };
-    },
-  };
+  const fake = performerWith(undefined);
+  const { performed, executions } = fake;
+  const actions: BrainActionPerformer = agentOverrides.actions ?? fake.actions;
   // The notebook as the host wires it, over no index and an empty notebook,
   // so the two writes reach the performer under test like every other action.
   const scope = { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: DEFAULT_AGENT_ID };
@@ -373,7 +387,12 @@ export function harness(
         access: undefined,
         facts: () => [],
         recentNotes: async () => [],
-        perform: (functionCall, execution) => actions.perform(functionCall, execution),
+        perform: (call, context) =>
+          performCall(actions, call, {
+            ...context,
+            conversationId: MAIN_SESSION_KEY,
+            turnId: context.runId,
+          }),
       }),
     },
     roster: () => ({ text: "Currently observed sessions:\n- abc\n- def", identities: [ABC, DEF] }),
@@ -576,18 +595,12 @@ export function messageAction(callId: string, words = "run the tests"): WireReco
 /** A performer whose actions hold until the test releases each one, in order. */
 export function heldPerformer() {
   const releases: (() => void)[] = [];
-  const performed: RealtimeFunctionCall[] = [];
-  const executions: BrainActionExecution[] = [];
-  const actions: BrainActionPerformer = {
-    perform: async (functionCall, execution): Promise<ActionOutputEnvelope> => {
-      performed.push(functionCall);
-      executions.push(execution);
-      await new Promise<void>((resolve) => {
-        releases.push(resolve);
-      });
-      return execution.isRevoked() ? refusedActionOutput("turn over") : acceptedActionOutput();
-    },
-  };
+  const { actions, performed, executions } = performerWith(async (_action, execution) => {
+    await new Promise<void>((resolve) => {
+      releases.push(resolve);
+    });
+    return execution.isRevoked() ? refusedActionOutput("turn over") : acceptedActionOutput();
+  });
   return { actions, releases, performed, executions };
 }
 
@@ -686,7 +699,7 @@ export function agentOn(runtime: ToolLoopAgentRuntime, h: Harness) {
     runtime,
     prepareTurn: PLAIN_PREPARATION,
     observes: { kind: LOOK_SUBJECT.NONE },
-    actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
+    actions: fakeActionPerformer().actions,
     roster: () => ({ text: "", identities: [] }),
     standingContext: () => "",
     readTranscriptSince: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),

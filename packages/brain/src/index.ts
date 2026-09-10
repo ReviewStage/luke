@@ -98,6 +98,14 @@ export {
 export { BrainStateStore } from "./state-store.js";
 export type { BrainChildAccess } from "./tool-executor.js";
 export {
+  ACTION_TOOLS,
+  type ActionAdmissionReads,
+  type ActionToolContext,
+  type ActionToolModule,
+  actionToolNamed,
+} from "./tools/action-tools.js";
+export { type ToolContext, type ToolModule, toolArguments } from "./tools/tool-module.js";
+export {
   BRAIN_TOOL,
   brainToolCatalog,
   hostedBrainToolCatalog,

@@ -1,6 +1,7 @@
-import type { ActionOutputEnvelope, RealtimeFunctionCall } from "@sidecar/actions";
-import type { RunOrigin } from "@sidecar/runtime/vocabulary";
+import type { ActionOutputEnvelope, ValidatedAction } from "@sidecar/actions";
 import type { Session, SessionIdentity } from "@sidecar/session";
+import type { ActionAdmissionReads } from "./tools/action-tools.js";
+import type { ToolContext } from "./tools/tool-module.js";
 
 /**
  * The roster as the host renders it, with the identities every tool argument
@@ -14,36 +15,29 @@ export interface BrainRoster {
 }
 
 /**
- * The standing a turn hands the performer with each action: which run it
- * belongs to and who opened it — attribution, so Conversation can say whether the
- * developer asked for the action or Luke took it on his own judgment — and
- * whether the turn still stands. The performer asks `isRevoked()` after each
- * step it awaited and once more just before the effect, so an action prepared
- * inside a turn that has since ended is refused rather than dispatched.
- * Whether the action may run at all was decided by the tool policy before the
- * call reached the performer; the performer validates what it is aimed at.
+ * The standing a turn hands an action with each call: which conversation,
+ * turn, and run it belongs to and who opened it — attribution, so
+ * Conversation can say whether the developer asked for the action or Luke
+ * took it on his own judgment — and whether the turn still stands. Admission
+ * and the performer each ask `isRevoked()` after every step they awaited and
+ * once more just before the effect, so an action prepared inside a turn that
+ * has since ended is refused rather than dispatched; the signal fires the
+ * moment the standing is revoked, so a read awaited before the effect
+ * settles at once, while an effect already dispatched is awaited for its
+ * result whatever the signal says. Whether the action may run at all was
+ * decided by the tool policy before the call reached its module.
  */
-export interface BrainActionExecution {
-  readonly runId: string;
-  readonly origin: RunOrigin;
-  isRevoked(): boolean;
-  /**
-   * Fires the moment the standing is revoked, so a performer can settle a
-   * read it is waiting on — a roster refresh, a settings read — rather than
-   * finishing it first. It reaches no provider write: an effect already
-   * dispatched is awaited for its result whatever the signal says.
-   */
-  readonly signal: AbortSignal;
-}
+export type BrainActionExecution = ToolContext;
 
 /**
- * Carries one action for the host to validate and perform, and answers what
- * happened in the one envelope every action tool shares: the status, the
- * target as the roster held it at execution, and the session a creation named.
+ * The host's two halves of carrying an action, which the action tool's own
+ * `execute` joins with `admit()` between them: the readers admission
+ * consults for an execution, and the carrier, which takes only what
+ * admission minted and answers in the one envelope every action tool shares —
+ * the status, the target as the roster held it at execution, and the session
+ * a creation named. The host never sees a call before admission has read it.
  */
 export interface BrainActionPerformer {
-  perform(
-    call: RealtimeFunctionCall,
-    execution: BrainActionExecution,
-  ): Promise<ActionOutputEnvelope>;
+  admission(execution: BrainActionExecution): ActionAdmissionReads;
+  carry(action: ValidatedAction, execution: BrainActionExecution): Promise<ActionOutputEnvelope>;
 }

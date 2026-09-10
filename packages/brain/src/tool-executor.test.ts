@@ -22,6 +22,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { BrainJournal } from "./journal.js";
+import { fakeActionPerformer } from "./testing.js";
 import {
   type BrainChildAccess,
   createTurnToolExecutor,
@@ -88,7 +89,7 @@ function executor(
   } as unknown as TurnContext;
   const dependencies: ToolExecutorDependencies = {
     roster: () => ({ text: "roster", identities: [] }),
-    actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
+    actions: fakeActionPerformer().actions,
     children,
     memory,
     workspace: {
@@ -111,6 +112,8 @@ function executor(
     policy,
     context,
     execution: {
+      conversationId: MAIN_SESSION_KEY,
+      turnId: run.runId,
       runId: run.runId,
       origin: RUN_ORIGIN.OBSERVATION,
       isRevoked: () => false,

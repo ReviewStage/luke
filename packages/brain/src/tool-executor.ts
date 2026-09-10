@@ -1,5 +1,6 @@
 import {
   ACTION_OUTPUT,
+  ACTION_REFUSAL,
   realtimeToolFamily,
   refusedActionOutput,
   unknownActionOutput,
@@ -54,6 +55,8 @@ import { UNCONFIRMED_ACTION_RESULT, UNKNOWN_ACTION_RESULT } from "./journal.js";
 import type { BrainActionExecution, BrainActionPerformer, BrainRoster } from "./performer.js";
 import { identityFromRecord, parsedRecord, rejection, sameIdentity } from "./records.js";
 import { answer } from "./tool-results.js";
+import { actionToolNamed } from "./tools/action-tools.js";
+import { toolArguments } from "./tools/tool-module.js";
 import {
   BRAIN_TOOL,
   isBrainOnlyTool,
@@ -67,8 +70,8 @@ import type { BrainDelivery } from "./wake-events.js";
 /**
  * The tool executor one turn hands its runtime. Every call the model emits
  * lands here, is refused when the effective policy does not offer it, and is
- * otherwise dispatched by what the catalog says the tool is: an action carried
- * through the journal to the performer, a workspace file's read or write, a
+ * otherwise dispatched by what the catalog says the tool is: an action tool's
+ * module run through the journal, a workspace file's read or write, a
  * memory provider's read or write — the write through the same journal — or
  * one of the brain's own — the roster in full, a whole transcript, the
  * briefing it decided to give. The policy is enforced again at this door,
@@ -447,28 +450,29 @@ export function createTurnToolExecutor(
       const roster = dependencies.roster();
       const args = parsedRecord(call.argumentsJson);
       const execution: BrainActionExecution = {
-        runId: turn.execution.runId,
-        origin: turn.execution.origin,
+        ...turn.execution,
         isRevoked: () => turn.execution.isRevoked() || runtimeContext.isRevoked(),
-        signal: turn.execution.signal,
       };
       const tool = descriptors.get(call.name);
       if (tool?.execution === TOOL_EXECUTION.PERFORMER) {
-        // The performer's answer is validated before the journal keeps it. One
-        // this build cannot read is answered unknown: the action was dispatched,
+        const actionTool = actionToolNamed(call.name);
+        if (!actionTool) return answer(refusedActionOutput(REFUSAL_REASON.NOT_OFFERED));
+        // The module runs inside the journal: admission, then the carrier,
+        // whose answer is validated before the journal keeps it. One this
+        // build cannot read is answered unknown: the action was dispatched,
         // and what became of it is exactly what could not be read.
         return answer(
-          await performJournaled(
-            call,
-            execution,
-            async () =>
-              ACTION_OUTPUT.parse(
-                await dependencies.actions.perform(
-                  { name: call.name, argumentsJson: call.argumentsJson },
-                  execution,
-                ),
-              ) ?? unknownActionOutput(REFUSAL_REASON.UNREADABLE_ANSWER),
-          ),
+          await performJournaled(call, execution, async () => {
+            const input = toolArguments(call.argumentsJson);
+            if (input === undefined) return refusedActionOutput(ACTION_REFUSAL.UNREADABLE);
+            return actionTool.execute(input, {
+              ...execution,
+              admission: dependencies.actions.admission(execution),
+              carry: async (action) =>
+                ACTION_OUTPUT.parse(await dependencies.actions.carry(action, execution)) ??
+                unknownActionOutput(REFUSAL_REASON.UNREADABLE_ANSWER),
+            });
+          }),
         );
       }
       if (tool?.execution === TOOL_EXECUTION.WORKSPACE) {

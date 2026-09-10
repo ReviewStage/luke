@@ -37,6 +37,7 @@ import {
   NOW,
   nextRunId,
   PLAIN_PREPARATION,
+  performerWith,
   RECORD_CAP,
   runtimeOver,
   seededRequests,
@@ -55,7 +56,11 @@ import {
   isTerminalBrainRequestStatus,
 } from "./requests.js";
 import { BrainStateStore } from "./state-store.js";
-import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
+import {
+  type FakeBrainStateRepository,
+  fakeActionPerformer,
+  fakeBrainStateRepository,
+} from "./testing.js";
 
 /**
  * The ledger's own guarantees: an acceptance nobody hears of until its record
@@ -98,14 +103,12 @@ test("a checkpoint that fails after an action keeps its result in memory, blocks
   let acted = 0;
   let repository: FakeBrainStateRepository | undefined;
   const h = harness({
-    actions: {
-      perform: async (): Promise<ActionOutputEnvelope> => {
-        acted += 1;
-        // The disk goes away from the moment the first effect has happened.
-        repository?.refuse();
-        return acceptedActionOutput();
-      },
-    },
+    actions: performerWith(async (): Promise<ActionOutputEnvelope> => {
+      acted += 1;
+      // The disk goes away from the moment the first effect has happened.
+      repository?.refuse();
+      return acceptedActionOutput();
+    }).actions,
   });
   repository = h.repository;
   h.client.answers.push(
@@ -268,7 +271,7 @@ test("stop settles only after a held acceptance, which the successor then finds 
     runtime: runtimeOver(successorModel),
     observes: { kind: LOOK_SUBJECT.NONE },
     prepareTurn: PLAIN_PREPARATION,
-    actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
+    actions: fakeActionPerformer().actions,
     roster: () => ({ text: "", identities: [] }),
     standingContext: () => "",
     readTranscriptSince: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
@@ -330,16 +333,14 @@ test("a copy taken before the second model answer already carries the actions th
   const held = heldPerformer();
   let dispatched = 0;
   const mixed = harness({
-    actions: {
-      perform: (functionCall, execution) => {
-        dispatched += 1;
-        if (dispatched === 1) return Promise.reject(new Error("socket closed after send"));
-        if (dispatched === 2) {
-          return Promise.resolve(refusedActionOutput("not observed"));
-        }
-        return held.actions.perform(functionCall, execution);
-      },
-    },
+    actions: performerWith((action, execution) => {
+      dispatched += 1;
+      if (dispatched === 1) return Promise.reject(new Error("socket closed after send"));
+      if (dispatched === 2) {
+        return Promise.resolve(refusedActionOutput("not observed"));
+      }
+      return held.actions.carry(action, execution);
+    }).actions,
   });
   mixed.client.answers.push(
     answered([
@@ -782,7 +783,7 @@ test("an observation in flight enters no memory through an unrelated mark or acc
 
 test("a run whose start the store refuses opens no work and ends as a persistence failure", async () => {
   const h = harness({
-    actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
+    actions: fakeActionPerformer().actions,
   });
   await h.agent.ready();
   h.client.answers.push(answered([messageAction("call_1")]), answered([message("Sent.")]));

@@ -142,6 +142,34 @@ node --input-type=module -e '
   }
 ' "$SIDECAR_REPO_ROOT"
 
+# A tool module under `packages/brain/src/tools/` reaches the brain only
+# through the context its `execute` is handed: it imports the packages below
+# the brain and its own directory, never the agent, the turn runner, the
+# ledger, or anything else of the brain by relative path. That is what lets a
+# tool be read, tested, and moved to another runtime without the agent that
+# runs it, and what keeps `admit()` inside `execute` rather than beside it.
+node --input-type=module -e '
+  import { readdir, readFile } from "node:fs/promises";
+  import path from "node:path";
+  const directory = path.join(process.argv[1], "packages/brain/src/tools");
+  const reaching = [];
+  for (const file of (await readdir(directory)).filter((name) => name.endsWith(".ts")).sort()) {
+    const text = await readFile(path.join(directory, file), "utf8");
+    for (const match of text.matchAll(/from\s+"([^"]+)"/g)) {
+      const specifier = match[1];
+      if (specifier.startsWith("../") || specifier.startsWith("@sidecar/brain")) {
+        reaching.push(`${file}: ${specifier}`);
+      }
+    }
+  }
+  if (reaching.length > 0) {
+    process.stderr.write(
+      `error: a tool module reaches into the brain outside its directory: ${reaching.join(", ")}\n`,
+    );
+    process.exit(1);
+  }
+' "$SIDECAR_REPO_ROOT"
+
 # The brand artwork has one source and three sets of committed outputs cut from
 # it: the SVGs, the face the renderer draws, and the motions it plays. If the
 # copies no longer match the source, one of them is telling a story the artwork
