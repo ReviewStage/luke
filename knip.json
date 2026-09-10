@@ -39,6 +39,10 @@
       ],
       "project": ["src/**", "scripts/**"]
     },
+    "apps/voice-service": {
+      "entry": ["src/main.ts", "src/**/*.test.ts"],
+      "project": ["src/**"]
+    },
     "apps/web": {
       "entry": [
         "api/**/*.ts",

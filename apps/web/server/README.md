@@ -216,9 +216,10 @@ and only a report that created its row adds to the day's `voice_seconds` on
 count rather than replacing it: a session still spends one call when it
 opens, and the mint routes and their meter stay as they are for installed
 desktops until the seconds are what the allowance is measured in. Both
-tables cascade with the user row. Nothing else calls these routes yet, and the
-desktop never does; the voice service's own origin is pinned by the desktop's
-build in `@sidecar/hosted` rather than answered by this deployment.
+tables cascade with the user row. The caller is `apps/voice-service`, and the
+desktop never calls either route; the voice service's own origin is pinned by
+the desktop's build in `@sidecar/hosted` rather than answered by this
+deployment.
 
 ## Hosted brain inference
 

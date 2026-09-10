@@ -145,6 +145,34 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
+  apps/voice-service:
+    dependencies:
+      '@sidecar/hosted':
+        specifier: workspace:*
+        version: link:../../packages/hosted
+      '@sidecar/live':
+        specifier: workspace:*
+        version: link:../../packages/live
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../../packages/wire
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      ws:
+        specifier: 8.21.3
+        version: 8.21.3
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      '@types/ws':
+        specifier: 8.18.1
+        version: 8.18.1
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
   apps/web:
     dependencies:
       '@better-auth/drizzle-adapter':

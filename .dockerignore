@@ -1,0 +1,22 @@
+# The one Dockerfile in this repository builds apps/voice-service from the
+# repository root. Every workspace manifest stays in the context so pnpm can
+# read the lockfile against the whole workspace; only the packages' sources and
+# the service itself are copied beyond that.
+*
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!apps
+apps/*/**
+!apps/*/package.json
+!apps/voice-service/**
+!packages
+packages/*/**
+!packages/*/package.json
+!packages/*/src/**
+!packages/*/tsconfig.json
+!tools
+tools/*/**
+!tools/*/package.json
+**/node_modules
+**/*.test.ts
