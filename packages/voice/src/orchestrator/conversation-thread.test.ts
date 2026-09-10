@@ -240,6 +240,91 @@ test("a discarded turn's stragglers cannot outlive the turns in flight", () => {
   assert.deepEqual([...subject.previews.values()], ["second ask"]);
 });
 
+test("a spoken turn is awaited from the press until its first words", () => {
+  const { subject } = thread();
+  subject.seed([]);
+  assert.equal(subject.awaitingSpokenWords, false);
+  subject.openTurn();
+  assert.equal(subject.awaitingSpokenWords, true);
+  // The first words settle the wait; the bubble now speaks for the turn.
+  subject.previewSpokenAsk("item-1", "how is");
+  assert.equal(subject.awaitingSpokenWords, false);
+  subject.closeTurn();
+  subject.commitTurn("item-1");
+  assert.equal(subject.awaitingSpokenWords, false);
+  subject.rememberSpokenAsk("how is the checkout agent", "item-1");
+  assert.equal(subject.awaitingSpokenWords, false);
+});
+
+test("a silent turn is awaited through its commit and settles with its transcript", () => {
+  const { subject } = thread();
+  subject.seed([]);
+  subject.openTurn();
+  subject.closeTurn();
+  subject.commitTurn("item-1");
+  // No delta has arrived: the turn is committed and still owed its words.
+  assert.equal(subject.awaitingSpokenWords, true);
+  // Even an empty transcript ends the wait: nothing more is coming.
+  subject.rememberSpokenAsk("  ", "item-1");
+  assert.equal(subject.awaitingSpokenWords, false);
+});
+
+test("one turn streaming words does not hide a newer silent one", () => {
+  const { subject } = thread();
+  subject.seed([]);
+  subject.openTurn();
+  subject.closeTurn();
+  subject.commitTurn("item-1");
+  subject.previewSpokenAsk("item-1", "first ask");
+  assert.equal(subject.awaitingSpokenWords, false);
+  subject.openTurn();
+  assert.equal(subject.awaitingSpokenWords, true);
+});
+
+test("a discarded turn and a failed transcription each end their wait", () => {
+  const { subject } = thread();
+  subject.seed([]);
+  subject.openTurn();
+  assert.equal(subject.awaitingSpokenWords, true);
+  subject.discardTurn();
+  assert.equal(subject.awaitingSpokenWords, false);
+
+  subject.openTurn();
+  subject.closeTurn();
+  subject.commitTurn("item-1");
+  assert.equal(subject.awaitingSpokenWords, true);
+  // The service gave up: no words and no transcript are coming, so the mark
+  // retires with the preview rather than standing as a turn still owed.
+  subject.failTurn("item-1");
+  assert.equal(subject.awaitingSpokenWords, false);
+});
+
+test("a call gone retires the turns it can never settle", () => {
+  const { subject } = thread();
+  subject.seed([]);
+  // Two turns the dead call still owed: one committed and awaiting words, one
+  // released with its commit in flight.
+  subject.openTurn();
+  subject.closeTurn();
+  subject.commitTurn("item-1");
+  subject.openTurn();
+  subject.closeTurn();
+  assert.equal(subject.awaitingSpokenWords, true);
+
+  subject.callGone();
+
+  // Nothing is owed by a channel nothing more arrives over — so a later
+  // call going live cannot hold the wait up again on these leftovers.
+  assert.equal(subject.awaitingSpokenWords, false);
+  assert.equal(subject.previews.size, 0);
+  // Its stragglers preview nothing, and its stale pending turn does not hand
+  // its place to the next call's first commit.
+  subject.previewSpokenAsk("item-1", "how is");
+  assert.equal(subject.previews.size, 0);
+  subject.commitTurn("item-2");
+  assert.equal(subject.latestTurn, undefined);
+});
+
 test("a failed transcription takes its live words with it", () => {
   const { subject } = thread();
   subject.seed([]);

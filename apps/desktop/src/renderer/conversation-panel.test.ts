@@ -5,6 +5,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   CONVERSATION_ENTRY_SPEAKER,
+  CONVERSATION_LISTENING_LABEL,
   CONVERSATION_THINKING_LABEL,
   ConversationClearButton,
   ConversationPanel,
@@ -70,6 +71,36 @@ test("an announcement shows its spoken transcript", () => {
   assert.match(markup, /data-speaker="luke"/);
   assert.match(markup, />Checkout is ready\.<\/p>/);
   assert.doesNotMatch(markup, /provider:|running:/);
+});
+
+test("a spoken turn still owed its words holds a sent bubble in the thread", () => {
+  const markup = renderToStaticMarkup(
+    createElement(ConversationPanel, {
+      entries: [],
+      spokenAskPending: true,
+      now: NOW,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
+    }),
+  );
+
+  // The wait alone is a thread: a press into an empty conversation must be
+  // answered on screen, not by the empty state.
+  assert.match(markup, /data-speaker="you"/);
+  assert.match(markup, /conversation-listening/);
+  assert.match(markup, new RegExp(CONVERSATION_LISTENING_LABEL));
+  assert.doesNotMatch(markup, /No messages yet/);
+
+  const idle = renderToStaticMarkup(
+    createElement(ConversationPanel, {
+      entries: [],
+      spokenAskPending: false,
+      now: NOW,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
+    }),
+  );
+  assert.doesNotMatch(idle, /conversation-listening/);
 });
 
 test("a reply keeps its lines through the thread and draws as the Markdown it was written in", () => {

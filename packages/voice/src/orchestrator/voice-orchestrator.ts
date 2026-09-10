@@ -514,7 +514,7 @@ export class VoiceOrchestrator<Stream> {
         ),
       onSpokenAsk: (transcript, itemId) => this.#thread.rememberSpokenAsk(transcript, itemId),
       onSpokenAskDelta: (itemId, delta) => this.#thread.previewSpokenAsk(itemId, delta),
-      onSpokenAskFailed: (itemId) => this.#thread.dropPreview(itemId),
+      onSpokenAskFailed: (itemId) => this.#thread.failTurn(itemId),
       onSpokenAskClosed: () => this.#thread.closeTurn(),
       onSpokenAskCommitted: (itemId) => this.#thread.commitTurn(itemId),
       onSpokenAskDiscarded: () => this.#thread.discardTurn(),
@@ -753,8 +753,9 @@ export class VoiceOrchestrator<Stream> {
     this.#replyPlayer?.onStatus(status);
     this.#considerRestart();
     // The call gone takes its half-transcribed turns with it: no completed
-    // transcript can arrive to settle a preview, so none may keep streaming.
-    if (!spokenAskPreviewSurvives(status)) this.#thread.clearPreviews();
+    // transcript can arrive to settle a preview or end a wait, so none may
+    // keep streaming and none may keep standing as owed.
+    if (!spokenAskPreviewSurvives(status)) this.#thread.callGone();
     // Any settled status ends the wait the press started, however it ended,
     // unless the press is still owed a turn — a takeover passes through
     // Luke's own call settling on its way to the developer's.
@@ -890,6 +891,9 @@ export class VoiceOrchestrator<Stream> {
         captions: this.#caption.texts,
       }),
       liveConversationEntries: this.#liveEntries(),
+      // Gated by the same survival rule as the previews: a call gone can
+      // deliver no words, so nothing is awaited from it.
+      spokenAskPending: spokenAskPreviewSurvives(this.#status) && this.#thread.awaitingSpokenWords,
     };
   }
 

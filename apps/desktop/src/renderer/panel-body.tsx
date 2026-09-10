@@ -193,6 +193,8 @@ export interface PanelBodyProps {
   conversationLines: readonly ConversationEntry[];
   /** The lines still being said, drawn under that thread while their words grow. */
   liveConversationEntries: readonly ConversationEntry[];
+  /** Whether a spoken turn is still owed its first words, so the thread holds its place. */
+  spokenAskPending: boolean;
   /** Clears that same thread from the view, Luke's next context, and the stored file. */
   onClearConversationConversation: () => void;
   /** The brain's runs, so Conversation draws Luke's turn while one is going and the composer offers its stop. */
@@ -250,6 +252,7 @@ export function PanelBody({
   writes,
   conversationLines,
   liveConversationEntries,
+  spokenAskPending,
   onClearConversationConversation,
   brainRequests,
   onStopThinking,
@@ -374,6 +377,7 @@ export function PanelBody({
         <ConversationPanel
           entries={conversationLines}
           live={liveConversationEntries}
+          spokenAskPending={spokenAskPending}
           requests={brainRequests}
           now={now}
           ask={ask}

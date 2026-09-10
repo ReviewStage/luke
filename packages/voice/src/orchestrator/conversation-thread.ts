@@ -230,6 +230,18 @@ export class ConversationThread {
     this.#publish();
   }
 
+  /**
+   * Whether a spoken turn is still owed its first words: more turns are in
+   * flight — held, commit out, or committed and awaiting transcription — than
+   * previews have words to show for them. It is a count rather than a flag so
+   * one turn streaming words does not hide that a newer, still-silent one is
+   * being listened to.
+   */
+  get awaitingSpokenWords(): boolean {
+    const turns = (this.#activeMark ? 1 : 0) + this.#pendingMarks.length + this.#marks.size;
+    return turns > this.#previews.size;
+  }
+
   /** The press opened a turn: where it belongs is where the thread stands now. */
   openTurn(): void {
     this.#activeMark = {
@@ -238,6 +250,7 @@ export class ConversationThread {
       recordedAt: this.#now(),
     };
     this.#replyGeneration = this.#activeMark.generation;
+    this.#options.onChanged();
   }
 
   /** The turn closed locally, before the server has named the item that carries it. */
@@ -277,13 +290,27 @@ export class ConversationThread {
   discardTurn(): void {
     this.#activeMark = undefined;
     const held = [...this.#uncommitted].filter(([, entry]) => !entry.closed).map(([id]) => id);
-    if (held.length === 0) return;
-    const next = new Map(this.#previews);
-    for (const itemId of held) {
-      this.#uncommitted.delete(itemId);
-      next.delete(itemId);
+    if (held.length > 0) {
+      const next = new Map(this.#previews);
+      for (const itemId of held) {
+        this.#uncommitted.delete(itemId);
+        next.delete(itemId);
+      }
+      this.#previews = next;
     }
-    this.#previews = next;
+    // Told even when nothing drew: the discarded turn was being listened to,
+    // and whoever draws that must hear it ended.
+    this.#options.onChanged();
+  }
+
+  /**
+   * The service gave up on the turn's transcription: no words and no completed
+   * transcript are coming, so the preview leaves and the turn's mark retires
+   * with it rather than standing as a turn still owed its words.
+   */
+  failTurn(itemId: string): void {
+    this.#marks.delete(itemId);
+    this.dropPreview(itemId);
     this.#options.onChanged();
   }
 
@@ -301,6 +328,10 @@ export class ConversationThread {
     this.dropPreview(itemId);
     const mark = this.#marks.get(itemId);
     this.#marks.delete(itemId);
+    // The retired mark ends a turn that may have been the last one awaiting
+    // its words, which is a change whoever draws the wait has to hear even
+    // when no line lands below.
+    if (mark) this.#options.onChanged();
     if (!mark || !conversationEntryBelongsToConversation(mark.generation, this.#generation)) return;
     const placed = insertSpokenAskThreadEntry(
       this.#entries,
@@ -359,15 +390,25 @@ export class ConversationThread {
   }
 
   /**
-   * The call gone takes its half-transcribed turns with it: no completed
-   * transcript can arrive to settle a preview, so none may keep streaming —
-   * and no commit can arrive either, so nothing is left waiting for one.
+   * The call gone takes its half-transcribed turns with it. Nothing more
+   * arrives over a dead channel — no delta, no commit, no completed
+   * transcript — so no preview may keep streaming, and no turn may keep
+   * standing as one still owed its words: a mark left behind would hold the
+   * wait up again the moment a later call went live, and a pending one would
+   * hand its old place in the thread to the next call's first turn.
    */
-  clearPreviews(): void {
+  callGone(): void {
+    const stood =
+      this.#previews !== NO_SPOKEN_ASK_PREVIEWS ||
+      this.#marks.size > 0 ||
+      this.#pendingMarks.length > 0 ||
+      this.#activeMark !== undefined;
     this.#uncommitted.clear();
-    if (this.#previews === NO_SPOKEN_ASK_PREVIEWS) return;
     this.#previews = NO_SPOKEN_ASK_PREVIEWS;
-    this.#options.onChanged();
+    this.#marks.clear();
+    this.#pendingMarks = [];
+    this.#activeMark = undefined;
+    if (stood) this.#options.onChanged();
   }
 
   /**
