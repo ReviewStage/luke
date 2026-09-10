@@ -537,7 +537,7 @@ test("an introduction seed beyond one bounded developer message is refused befor
 test("the introduction meter refuses a caller's ninth upgrade of the day with 429 and admits another caller", async (t) => {
   const context = await stand();
   t.after(() => context.stop());
-  const caller = { "x-forwarded-for": "203.0.113.7, 10.0.0.1" };
+  const caller = { "x-forwarded-for": "10.0.0.1, 203.0.113.7" };
 
   for (let attempt = 0; attempt < INTRODUCTION_METER_LIMITS.PER_CALLER; attempt += 1) {
     const opened = await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION), caller);
@@ -553,6 +553,44 @@ test("the introduction meter refuses a caller's ninth upgrade of the day with 42
   });
   assert.ok("reader" in other);
   other.reader.socket.close();
+});
+
+test("a caller cannot become another by writing an earlier X-Forwarded-For hop", async (t) => {
+  const context = await stand();
+  t.after(() => context.stop());
+
+  for (let attempt = 0; attempt < INTRODUCTION_METER_LIMITS.PER_CALLER; attempt += 1) {
+    const opened = await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION), {
+      "x-forwarded-for": `198.51.100.${attempt}, 203.0.113.7`,
+    });
+    assert.ok("reader" in opened);
+    opened.reader.socket.close();
+    await opened.reader.closed;
+  }
+  assert.deepEqual(
+    await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION), {
+      "x-forwarded-for": "198.51.100.99, 203.0.113.7",
+    }),
+    { status: UPGRADE_STATUS.TOO_MANY_REQUESTS },
+  );
+});
+
+test("an upgrade carrying a browser Origin is refused with 403 on both routes", async (t) => {
+  const context = await stand();
+  t.after(() => context.stop());
+
+  assert.deepEqual(
+    await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION), { origin: "https://evil.test" }),
+    { status: UPGRADE_STATUS.FORBIDDEN },
+  );
+  assert.deepEqual(
+    await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+      authorization: BEARER,
+      origin: "https://evil.test",
+    }),
+    { status: UPGRADE_STATUS.FORBIDDEN },
+  );
+  assert.equal(context.accounts.authorizeCalls.length, 0);
 });
 
 test("closing the service closes every desktop socket and refuses new upgrades with 503", async (t) => {

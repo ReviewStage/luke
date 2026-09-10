@@ -20,7 +20,7 @@ Both are WebSocket upgrades; one session per socket.
 | Path | Who | Authorization |
 | --- | --- | --- |
 | `/sessions` | A signed-in desktop | `Authorization: Bearer <account token>` on the handshake, forwarded whole to the account service's `VOICE_AUTHORIZE` route, which resolves the account and spends its allowance before any session exists |
-| `/introduction` | A fresh install with no account | None; the service's own meter, per hashed caller address and shared, both per UTC day |
+| `/introduction` | A fresh install with no account | None; the service's own meter, per hashed caller address and shared, both per UTC day. The caller is the last `X-Forwarded-For` hop, the one the platform's proxy appended, so a client cannot name itself; the counts live in this process, so run one machine or accept a per-replica ceiling |
 | `GET /healthz` | The platform's health probe | None |
 
 The socket's first frame is the desktop's `session.create` (the SDP offer, a
@@ -74,8 +74,11 @@ same way and the process waits for each session to finalize before exiting.
 Two shapes, and the desktop reads both:
 
 - Before any socket stands, an HTTP status on the upgrade: `401` for
-  `/sessions` without a bearer, `429` for an introduction past the meter,
-  `503` while the service is stopping, `404` for any other path.
+  `/sessions` without a bearer, `403` for a handshake carrying a browser
+  `Origin` header (the desktop connects from its main process and never sends
+  one, so a page in a browser is not a caller this service has), `429` for an
+  introduction past the meter, `503` while the service is stopping, `404` for
+  any other path.
 - Once a socket stands, one frame `{ "error": <reason> }` in
   `@sidecar/hosted`'s `hostedErrorSchema` vocabulary, then a close with code
   1008 and the same reason: `invalid-request` for a first frame that is not a

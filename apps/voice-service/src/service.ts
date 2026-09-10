@@ -62,6 +62,8 @@ const SERVICE_DEFAULTS = {
 /** The statuses an upgrade is refused with, before any socket stands. */
 export const UPGRADE_STATUS = {
   UNAUTHORIZED: HTTP_STATUS.UNAUTHORIZED,
+  /** The handshake carried a browser `Origin`; the desktop connects from its main process and never does. */
+  FORBIDDEN: HTTP_STATUS.FORBIDDEN,
   NOT_FOUND: HTTP_STATUS.NOT_FOUND,
   TOO_MANY_REQUESTS: HTTP_STATUS.TOO_MANY_REQUESTS,
   SERVICE_UNAVAILABLE: 503,
@@ -120,9 +122,15 @@ function presentedBearer(request: IncomingMessage): string | undefined {
   return authorization.slice(BEARER_SCHEME.length).trim().length > 0 ? authorization : undefined;
 }
 
-/** The caller as the platform's proxy names it, or as the socket does when nothing stands in front. */
+/**
+ * The caller as the platform's proxy names it: the last `X-Forwarded-For`
+ * hop, which is the one the proxy in front of this process appended and the
+ * only one a client cannot write for itself, or the socket's own peer when
+ * nothing stands in front.
+ */
 function callerAddress(request: IncomingMessage): string {
-  const forwarded = headerValue(request.headers[FORWARDED_FOR_HEADER])?.split(",")[0]?.trim();
+  const hops = headerValue(request.headers[FORWARDED_FOR_HEADER])?.split(",") ?? [];
+  const forwarded = hops[hops.length - 1]?.trim();
   return forwarded || (request.socket.remoteAddress ?? "");
 }
 
@@ -221,8 +229,7 @@ export class VoiceService {
     const decision = this.#admit(request, routeForPath(path));
     if ("status" in decision) {
       this.#log({ event: LOG_EVENT.UPGRADE_REFUSED, route: path, status: decision.status });
-      socket.write(`HTTP/1.1 ${decision.status} Refused\r\nConnection: close\r\n\r\n`);
-      socket.destroy();
+      socket.end(`HTTP/1.1 ${decision.status} Refused\r\nConnection: close\r\n\r\n`);
       return;
     }
     this.#sockets.handleUpgrade(request, socket, head, (webSocket) => {
@@ -237,6 +244,7 @@ export class VoiceService {
   #admit(request: IncomingMessage, route: VoiceRoute | undefined): UpgradeDecision {
     if (!this.#admitting) return { status: UPGRADE_STATUS.SERVICE_UNAVAILABLE };
     if (route === undefined) return { status: UPGRADE_STATUS.NOT_FOUND };
+    if (request.headers.origin !== undefined) return { status: UPGRADE_STATUS.FORBIDDEN };
     if (route === VOICE_ROUTE.SESSIONS) {
       const bearer = presentedBearer(request);
       return bearer === undefined ? { status: UPGRADE_STATUS.UNAUTHORIZED } : { route, bearer };
