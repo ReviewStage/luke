@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { LIVE_SESSION_OUTCOME } from "@sidecar/live";
 import { REALTIME_MINT_OUTCOME } from "@sidecar/realtime";
 import { APP_SETTING_SCHEMA, VOICE_SOURCE } from "@sidecar/settings";
 import {
@@ -7,6 +8,7 @@ import {
   VoiceCapabilityAssembler,
   type VoiceSettings,
 } from "./capability-assembler.js";
+import { scriptedOpenSocket } from "./testing.js";
 
 test("fixture runs never expose or select a credential", () => {
   assert.deepEqual(
@@ -213,4 +215,67 @@ test("the brain follows the voice source: hosted on an account, direct on a key,
   });
   await fixture.apply();
   assert.equal(fixture.brainModel, undefined);
+});
+
+test("live sessions follow the voice source, and stand only where a socket seam was handed", async () => {
+  const { openSocket } = scriptedOpenSocket([]);
+  const seams = {
+    credentialsUsable: () => true,
+    fixtureRun: () => false,
+    accountSignedIn: () => true,
+    hostedServiceBaseUrl: "https://example.test",
+    refreshAccount: async () => undefined,
+    report: () => undefined,
+    fetch: async () => new Response(null, { status: 204 }),
+  };
+
+  const keyed = new VoiceCapabilityAssembler({
+    ...seams,
+    openSocket,
+    settings: settingsFor({ source: VOICE_SOURCE.KEY, key: "test-key" }),
+  });
+  await keyed.apply();
+  assert.equal(keyed.liveSessions?.diagnostics().apiKeyConfigured, true);
+  assert.equal(keyed.liveSessions?.diagnostics().hosted, undefined);
+
+  const hosted = new VoiceCapabilityAssembler({
+    ...seams,
+    openSocket,
+    settings: settingsFor({ source: VOICE_SOURCE.ACCOUNT, key: "stored-but-unchosen" }),
+  });
+  await hosted.apply();
+  assert.equal(hosted.liveSessions?.diagnostics().hosted, true);
+  assert.equal(hosted.liveSessions?.diagnostics().apiKeyConfigured, false);
+
+  const signedOut = new VoiceCapabilityAssembler({
+    ...seams,
+    openSocket,
+    accountSignedIn: () => false,
+    settings: settingsFor({ source: VOICE_SOURCE.ACCOUNT }),
+  });
+  await signedOut.apply();
+  assert.equal(signedOut.liveSessions, undefined);
+  assert.equal(signedOut.unavailableLiveDiagnostics.lastOutcome, LIVE_SESSION_OUTCOME.NO_API_KEY);
+
+  const fixture = new VoiceCapabilityAssembler({
+    ...seams,
+    openSocket,
+    credentialsUsable: () => false,
+    fixtureRun: () => true,
+    settings: settingsFor({ source: VOICE_SOURCE.KEY, key: "must-not-be-used" }),
+  });
+  await fixture.apply();
+  assert.equal(fixture.liveSessions, undefined);
+  assert.equal(
+    fixture.unavailableLiveDiagnostics.lastOutcome,
+    LIVE_SESSION_OUTCOME.DISABLED_BY_FIXTURE,
+  );
+
+  const withoutSeam = new VoiceCapabilityAssembler({
+    ...seams,
+    settings: settingsFor({ source: VOICE_SOURCE.KEY, key: "test-key" }),
+  });
+  await withoutSeam.apply();
+  assert.ok(withoutSeam.realtimeCredentials);
+  assert.equal(withoutSeam.liveSessions, undefined);
 });

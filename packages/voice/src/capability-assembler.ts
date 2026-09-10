@@ -5,7 +5,8 @@ import {
   openAiModelAdapter,
 } from "@sidecar/brain";
 import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
-import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
+import { HOSTED_SERVICE_PATH, HOSTED_VOICE_SERVICE_ORIGIN } from "@sidecar/hosted";
+import type { LiveDiagnostics } from "@sidecar/live";
 import { type RealtimeDiagnostics, realtimeMintExplanation } from "@sidecar/realtime";
 import type { EmbeddingAdapter, ModelAdapter } from "@sidecar/runtime/vocabulary";
 import {
@@ -15,6 +16,13 @@ import {
   VOICE_SOURCE,
   type VoiceSource,
 } from "@sidecar/settings";
+import {
+  HostedLiveSessionSource,
+  keyedLiveSessions,
+  type LiveSessionSource,
+  unavailableLiveDiagnostics,
+} from "./live-session-source.js";
+import type { OpenSocket } from "./live-socket.js";
 import { openAiRealtimeCredentials, unavailableRealtimeDiagnostics } from "./openai-credentials.js";
 import { hostedRealtimeCredentialMinter, type RealtimeCredentialMinter } from "./service-mint.js";
 
@@ -72,6 +80,17 @@ export interface VoiceCapabilityAssemblerOptions {
   fixtureRun: () => boolean;
   accountSignedIn: () => boolean;
   hostedServiceBaseUrl: string;
+  /**
+   * The voice service origin a hosted live session's socket opens to;
+   * `HOSTED_VOICE_SERVICE_ORIGIN` when absent.
+   */
+  hostedVoiceServiceOrigin?: string;
+  /**
+   * The socket seam live sessions attach their sideband through. A host that
+   * hands none offers no live sessions, since a session with no trusted side
+   * would have nowhere to speak from.
+   */
+  openSocket?: OpenSocket;
   refreshAccount: () => Promise<void>;
   fetch?: typeof fetch;
   report?: (message: string) => void;
@@ -102,7 +121,9 @@ export class VoiceCapabilityAssembler {
   #brainModel: ModelAdapter | undefined;
   #embeddingAdapter: EmbeddingAdapter | undefined;
   #realtimeCredentials: RealtimeCredentialMinter | undefined;
+  #liveSessions: LiveSessionSource | undefined;
   #unavailableDiagnostics: RealtimeDiagnostics;
+  #unavailableLiveDiagnostics: LiveDiagnostics;
   #voiceSource: VoiceSource = VOICE_SOURCE.ACCOUNT;
   #applications = 0;
   readonly #applied = new Set<() => void>();
@@ -110,6 +131,10 @@ export class VoiceCapabilityAssembler {
   constructor(options: VoiceCapabilityAssemblerOptions) {
     this.#options = options;
     this.#unavailableDiagnostics = unavailableRealtimeDiagnostics({
+      fixtureMode: options.fixtureRun(),
+      apiKeyConfigured: false,
+    });
+    this.#unavailableLiveDiagnostics = unavailableLiveDiagnostics({
       fixtureMode: options.fixtureRun(),
       apiKeyConfigured: false,
     });
@@ -156,6 +181,20 @@ export class VoiceCapabilityAssembler {
 
   get unavailableDiagnostics(): RealtimeDiagnostics {
     return this.#unavailableDiagnostics;
+  }
+
+  /**
+   * Where a GPT Live session comes from under the same policy the Realtime
+   * mint follows: the developer's key straight to OpenAI, or the signed-in
+   * account through Luke's voice service. Nothing when neither stands, or
+   * when the host handed no socket seam.
+   */
+  get liveSessions(): LiveSessionSource | undefined {
+    return this.#liveSessions;
+  }
+
+  get unavailableLiveDiagnostics(): LiveDiagnostics {
+    return this.#unavailableLiveDiagnostics;
   }
 
   /** Which credential the last applied policy settled on, for a count to name. */
@@ -227,6 +266,29 @@ export class VoiceCapabilityAssembler {
         ? hostedRealtimeCredentialMinter({ ...seams, ...preferences })
         : undefined;
     this.#unavailableDiagnostics = unavailableRealtimeDiagnostics({
+      fixtureMode: this.#options.fixtureRun(),
+      apiKeyConfigured: apiKey !== undefined,
+    });
+    const openSocket = this.#options.openSocket;
+    this.#liveSessions = !openSocket
+      ? undefined
+      : apiKey
+        ? keyedLiveSessions(apiKey, {
+            openSocket,
+            ...(voice ? { voice } : undefined),
+            ...(this.#options.fetch ? { fetch: this.#options.fetch } : undefined),
+          })
+        : policy.useHosted
+          ? new HostedLiveSessionSource({
+              serviceOrigin: this.#options.hostedVoiceServiceOrigin ?? HOSTED_VOICE_SERVICE_ORIGIN,
+              openSocket,
+              readAccessToken: seams.readAccessToken,
+              refreshAccount: seams.refreshAccount,
+              readAccountKey: seams.readAccountKey,
+              ...(voice ? { voice } : undefined),
+            })
+          : undefined;
+    this.#unavailableLiveDiagnostics = unavailableLiveDiagnostics({
       fixtureMode: this.#options.fixtureRun(),
       apiKeyConfigured: apiKey !== undefined,
     });
