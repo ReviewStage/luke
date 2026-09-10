@@ -9,10 +9,11 @@ import type { ReportHandlers } from "../bridge-host";
 
 /**
  * Who a window is, as the client alone can tell: the composer's panel types,
- * the hidden voice window speaks and is the one receiver of replies, and
- * neither may claim the other's standing. The host never sees a sender; it
- * sees the origin the client vouched for and, for the voice window alone,
- * the receiver epoch it holds.
+ * the hidden voice window speaks, and neither may claim the other's standing.
+ * The host never sees a sender; it sees the origin the client vouched for.
+ * A spoken ask no longer crosses here at all — the host composes it from the
+ * live session's own transcript — so the voice origin is left to the host's
+ * own submission and refused from any window.
  */
 export interface BrainActDependencies {
   /** The operator client every window's ask crosses to reach the host. */
@@ -21,23 +22,13 @@ export interface BrainActDependencies {
   isVoice: (sender: Electron.WebContents) => boolean;
 }
 
-type BrainActKind =
-  | typeof ACT_KIND.BRAIN_SUBMIT_ASK
-  | typeof ACT_KIND.BRAIN_WAIT_ASK
-  | typeof ACT_KIND.BRAIN_CANCEL_ASK
-  | typeof ACT_KIND.BRAIN_CLAIM_REPLY;
+type BrainActKind = typeof ACT_KIND.BRAIN_SUBMIT_ASK | typeof ACT_KIND.BRAIN_CANCEL_ASK;
 
-// A child's origin is the runtime's own and never a window's: a submission
-// claiming it is refused whichever window sent it.
+// A typed ask is the panel's. Every other origin — a spoken ask, which the
+// host composes from the live transcript itself, and a child's, which is the
+// runtime's own — is refused whichever window claims it.
 function originAllowed(sender: ActSender, submission: BrainAskSubmission): boolean {
-  switch (submission.origin) {
-    case BRAIN_REQUEST_ORIGIN.TYPED:
-      return sender.panel;
-    case BRAIN_REQUEST_ORIGIN.SPOKEN:
-      return sender.voice;
-    default:
-      return false;
-  }
+  return submission.origin === BRAIN_REQUEST_ORIGIN.TYPED && sender.panel;
 }
 
 export function brainActRows(dependencies: BrainActDependencies): Pick<ActRows, BrainActKind> {
@@ -49,16 +40,7 @@ export function brainActRows(dependencies: BrainActDependencies): Pick<ActRows, 
       // speak into the one conversation the panel draws.
       return operator.submit(submission, MAIN_SESSION_KEY);
     },
-    // The asking call may be granted the words only when it is the voice
-    // window's, under the receiver epoch it names; a panel's wait carries no
-    // epoch, so the host answers it the record and no grant.
-    [ACT_KIND.BRAIN_WAIT_ASK]: ({ runId, epoch }, sender) =>
-      operator.wait(runId, sender.voice ? epoch : undefined),
     [ACT_KIND.BRAIN_CANCEL_ASK]: ({ runId }) => operator.cancel(runId),
-    [ACT_KIND.BRAIN_CLAIM_REPLY]: ({ runId, deliveryId, epoch }, sender) => {
-      if (!sender.voice) return { granted: false };
-      return operator.claim(runId, deliveryId, epoch);
-    },
   };
 }
 

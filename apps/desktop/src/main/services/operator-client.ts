@@ -95,8 +95,8 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
     state.update(bootstrapPatch(state.snapshot(), boot));
   }
 
-  // The two offers a receiver alone may take are not state and reach the voice
-  // window directly; everything else is written to the document.
+  // Everything the host says is written to the document; the live session's
+  // change also reaches the voice window directly, as the event it is.
   unsubscribers.push(
     gateway.host.onSettingsChanged((change) => {
       const stoodVoice = voiceAvailable;
@@ -140,12 +140,21 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
     gateway.host.onCalendarOnboardingChanged((calendarOwed) => {
       state.update({ onboarding: { calendarOwed } });
     }),
-    gateway.host.onSpeechOffered((offer) =>
-      links.get().sendToVoice(channels.onSpeechOffered, offer),
-    ),
-    gateway.host.onSpeechWithdrawn((id) =>
-      links.get().sendToVoice(channels.onSpeechWithdrawn, { id }),
-    ),
+    // The live session's phase is written down for the panels and handed to
+    // the voice window as the event it is: a repeated wanted is a new ask,
+    // which a version of the document could not carry.
+    gateway.host.onVoiceLiveSessionChanged((change) => {
+      state.update({
+        voice: {
+          ...state.snapshot().voice,
+          liveSession: {
+            phase: change.phase,
+            ...(change.sessionId !== undefined ? { sessionId: change.sessionId } : undefined),
+          },
+        },
+      });
+      links.get().sendToVoice(channels.onVoiceLiveSessionChanged, change);
+    }),
     // The host's own answer about recording stands the halt down: it is the
     // account transition the halt was waiting on.
     gateway.host.onSessionReplayChanged((replay) => {

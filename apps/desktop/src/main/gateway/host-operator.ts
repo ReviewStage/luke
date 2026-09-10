@@ -18,9 +18,8 @@ import {
   voiceLiveSessionChangedSchema,
 } from "@sidecar/gateway";
 import type { AppGuideSnapshot } from "@sidecar/guide";
-import type { RealtimeConnection } from "@sidecar/hosted";
+import type { LiveDiagnostics } from "@sidecar/live";
 import type { SupersetSignInSnapshot } from "@sidecar/providers/superset/sign-in-stage";
-import type { RealtimeDiagnostics } from "@sidecar/realtime";
 import type { SpeechOffer, SpeechOutcome } from "@sidecar/realtime/speech";
 import { isSpeechOffer } from "@sidecar/realtime/speech";
 import {
@@ -157,8 +156,8 @@ export interface HostOperator {
   beginReceiver(): Promise<number | undefined>;
   readyReceiver(epoch: number): Promise<boolean>;
   resetReceiver(): Promise<void>;
-  mintRealtimeCredential(): Promise<RealtimeConnection | undefined>;
-  realtimeDiagnostics(): Promise<RealtimeDiagnostics | undefined>;
+  /** Why voice is or is not available, carrying no credential; a host that cannot be reached answers nothing. */
+  liveDiagnostics(): Promise<LiveDiagnostics | undefined>;
   /** The peer's SDP offer, answered with the session the host created; a host that creates none answers nothing. */
   createLiveSession(sdp: string): Promise<VoiceCreateLiveSessionResult | undefined>;
   endLiveSession(): Promise<void>;
@@ -424,12 +423,8 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     },
     resetReceiver: () =>
       fire(client.call(GATEWAY_METHOD.RECEIVER_REPORT, { kind: RECEIVER_REPORT_KIND.RESET })),
-    mintRealtimeCredential: async () =>
-      answered<RealtimeConnection>(
-        record(await client.call(GATEWAY_METHOD.VOICE_MINT_REALTIME_CREDENTIAL))?.credential,
-      ),
-    realtimeDiagnostics: async () =>
-      answered<RealtimeDiagnostics>(
+    liveDiagnostics: async () =>
+      answered<LiveDiagnostics>(
         record(await client.call(GATEWAY_METHOD.VOICE_DIAGNOSTICS))?.diagnostics,
       ),
     createLiveSession: async (sdp) => {

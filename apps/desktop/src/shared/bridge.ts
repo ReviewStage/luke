@@ -15,8 +15,9 @@ import {
   isReceiverEpoch,
 } from "@sidecar/brain/requests-wire";
 import { type AgentWireTrace, isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
+import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@sidecar/gateway";
 import { type AppGuideSnapshot, isAppGuideSnapshot } from "@sidecar/guide";
-import { voiceExchangeActive } from "@sidecar/realtime";
+import { liveExchangeActive } from "@sidecar/live";
 import {
   isSpeechOffer,
   isSpeechOutcome,
@@ -197,8 +198,7 @@ export const BRIDGE = {
       (v) =>
         v.length === 2 &&
         isVoiceView(v[0]) &&
-        (v[1] === undefined ||
-          (voiceExchangeActive(v[0].voiceStatus) && isProductExchangeKind(v[1]))),
+        (v[1] === undefined || (liveExchangeActive(v[0]) && isProductExchangeKind(v[1]))),
     ),
   }),
   /**
@@ -332,6 +332,20 @@ export const BRIDGE = {
     channel: "app:speech-withdrawn",
     args: noArgs,
     result: result<SpeechWithdrawal>(isSpeechWithdrawal),
+  }),
+  /**
+   * The host's word on its one live session, relayed to the voice window as
+   * the event it is: wanted asks the window to open a session muted for what
+   * Luke has to say, closing asks it to hang up, and a repeated wanted is a
+   * new ask a version of the document could not carry.
+   */
+  onVoiceLiveSessionChanged: entry({
+    kind: "subscribe",
+    channel: "app:voice-live-session-changed",
+    args: noArgs,
+    result: result<VoiceLiveSessionChanged>(
+      (value) => voiceLiveSessionChangedSchema.read(value).ok,
+    ),
   }),
   /**
    * How loud whoever is talking is, relayed to every panel as the stream it

@@ -10,6 +10,8 @@ import {
   LIVE_CLOSE_REASON,
   LIVE_DELEGATION_TARGET,
   LIVE_SERVER_EVENT,
+  LIVE_STATUS,
+  liveExchangeActive,
   muteEvent,
   parseLiveServerEvent,
   RENDERER_CLIENT_EVENTS,
@@ -227,4 +229,12 @@ test("the renderer's channel is shown captions and lifecycle, never delegations 
   assert.ok(shown.includes(LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA));
   assert.ok(shown.includes(LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA));
   assert.ok(shown.includes(LIVE_SERVER_EVENT.ERROR));
+});
+
+test("an exchange is live while the session comes up, the developer is heard, or Luke speaks, and while a press waits on its session", () => {
+  const active = Object.values(LIVE_STATUS).filter((voiceStatus) =>
+    liveExchangeActive({ voiceStatus, talkOpening: false }),
+  );
+  assert.deepEqual(active, [LIVE_STATUS.CONNECTING, LIVE_STATUS.LISTENING, LIVE_STATUS.SPEAKING]);
+  assert.equal(liveExchangeActive({ voiceStatus: LIVE_STATUS.MUTED, talkOpening: true }), true);
 });

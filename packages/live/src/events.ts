@@ -34,6 +34,26 @@ export const LIVE_STATUS = {
 export type LiveStatus = (typeof LIVE_STATUS)[keyof typeof LIVE_STATUS];
 
 /**
+ * Whether a spoken exchange is live: the session coming up for a press, the
+ * developer being listened to, or Luke speaking. A press still waiting on its
+ * session counts, since the session passes through muted between starting and
+ * hearing the developer; a standing session with the microphone muted and
+ * Luke silent does not, so the media duck that follows this lets the music
+ * back up between exchanges rather than for as long as the session stands.
+ */
+export function liveExchangeActive(view: {
+  voiceStatus: LiveStatus;
+  talkOpening: boolean;
+}): boolean {
+  return (
+    view.talkOpening ||
+    view.voiceStatus === LIVE_STATUS.CONNECTING ||
+    view.voiceStatus === LIVE_STATUS.LISTENING ||
+    view.voiceStatus === LIVE_STATUS.SPEAKING
+  );
+}
+
+/**
  * The client events this build sends. Nothing here starts a session: a WebRTC
  * session is started by the HTTP request that created it and must not receive
  * `session.start` on its data channel, and nothing here appends audio, which

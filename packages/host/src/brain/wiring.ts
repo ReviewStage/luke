@@ -128,7 +128,7 @@ export interface BrainWiringDependencies extends ChildWiringDependencies {
   standingContext: (sessionKey: SessionKey) => string;
   pluginFor: (providerId: string) => SessionProviderPlugin | undefined;
   session: (identity: SessionIdentity) => Session | undefined;
-  deliver: (delivery: BrainDelivery) => Promise<void>;
+  deliver: (delivery: BrainDelivery) => void | Promise<void>;
   /** Which credential the policy would build an adapter under, by reference; the value never enters a configuration. */
   credential: () => CredentialReference;
   /** The agent's identity workspace: seeded once, edited by the developer or by the agent's own tools. */

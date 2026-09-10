@@ -1,5 +1,6 @@
-import { PRODUCT_EVENT } from "@sidecar/analytics";
+import { PRODUCT_EVENT, productSignInAge } from "@sidecar/analytics";
 import type { BrainDelivery } from "@sidecar/brain";
+import { isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import {
   carried,
   GATEWAY_ERROR,
@@ -14,9 +15,16 @@ import {
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
 import { PROACTIVE_SPEECH_KIND } from "@sidecar/live";
-import { VOICE_SOURCE_COUNTED_AS } from "@sidecar/settings";
+import { SESSION_STATUS } from "@sidecar/session";
+import {
+  APP_SETTING_SCHEMA,
+  VOICE_SOURCE_COUNTED_AS,
+  voiceHotkeyCandidates,
+  voiceHotkeyLabel,
+} from "@sidecar/settings";
+import { unavailableLiveDiagnostics } from "@sidecar/voice";
 import { lateRef } from "@sidecar/wire";
-import { arrivalBeatOwed } from "./arrival-flow.js";
+import { arrivalBeatOwed, countsFirstAnnouncement } from "./arrival-flow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { BrainComposer } from "./compose-brain.js";
 import type { CalendarsComposer } from "./compose-calendars.js";
@@ -33,6 +41,10 @@ interface LiveLinks {
 
 export interface LiveComposer extends Composer {
   readonly service: LiveSessionService<BrainDelivery>;
+  /** The two onboarding beats, asked for when their deterministic reason stands. */
+  requestOnboardingBeat: () => Promise<void>;
+  /** A typed ask main's brain accepted: its run followed on the agent standing now, and its reply spoken by the session. */
+  followTypedAsk: (question: string, runId: string) => void;
   link: (links: LiveLinks) => void;
 }
 
@@ -44,25 +56,42 @@ export interface LiveDependencies extends ComposerContext {
 }
 
 /**
- * The GPT Live session as one concern of the host: the four `voice.*`
- * methods the peer asks with, the `voiceLiveSession.changed` phases it is
- * told, and the service that owns the session between them. The brain is
- * reached only through the live brain interface, adapted onto main's agent
- * here; the record only through the Conversation writer. The old speech
- * path stands beside this one and is still what the renderer uses; a
- * briefing reaches this composer only while a session stands.
+ * The GPT Live session as one concern of the host: the `voice.*` methods the
+ * peer asks with, the `voiceLiveSession.changed` phases it is told, and the
+ * service that owns the session between them. It is the one sink for
+ * everything Luke says unprompted — a briefing the brain decided, a typed
+ * ask's reply, the two onboarding beats — each spoken into the standing
+ * session or into the one the peer opens muted when the service says it
+ * wants one. The brain is reached only through the live brain interface,
+ * adapted onto main's agent here; the record only through the Conversation
+ * writer.
  */
 export function composeLive(dependencies: LiveDependencies): LiveComposer {
   const { kernel, settings, account, calendars, observation, brain } = dependencies;
-  const { now } = kernel;
+  const { now, runMode } = kernel;
   const links = lateRef<LiveLinks>("the live composer's links");
 
+  function markFirstAnnouncementSpoken(): void {
+    const onboardingState = calendars.onboarding();
+    if (!countsFirstAnnouncement(onboardingState)) return;
+    const signedInAt = onboardingState?.arrivalSignedInAt;
+    const at = now();
+    const signedInAtMs = signedInAt !== undefined ? Date.parse(signedInAt) : Number.NaN;
+    if (Number.isFinite(signedInAtMs)) {
+      settings.recordProductEvent(PRODUCT_EVENT.VOICE_FIRST_ANNOUNCEMENT, {
+        sign_in_age: productSignInAge(at - signedInAtMs),
+      });
+    }
+    calendars.writeOnboarding({ arrivalFirstAnnouncementAt: new Date(at).toISOString() });
+  }
+
+  const liveBrain = brainAgentLiveBrain({
+    agent: () => brain.wiring.current(),
+    rosterView: () => observation.roster().text,
+  });
   const service = new LiveSessionService<BrainDelivery>({
     source: () => account.voiceCapabilities.liveSessions,
-    brain: brainAgentLiveBrain({
-      agent: () => brain.wiring.current(),
-      rosterView: () => observation.roster().text,
-    }),
+    brain: liveBrain,
     record: conversationLiveRecord({
       recordConversationEntry: (entry, recordedAt, sessionKey) =>
         brain.store.recordConversationEntry(entry, recordedAt, sessionKey),
@@ -91,12 +120,47 @@ export function composeLive(dependencies: LiveDependencies): LiveComposer {
     onProactiveSpoken: (kind) => {
       if (kind === PROACTIVE_SPEECH_KIND.BRIEFING) {
         settings.recordProductEvent(PRODUCT_EVENT.VOICE_ANNOUNCEMENT_SPEAK, {});
+        markFirstAnnouncementSpoken();
       }
       if (kind === PROACTIVE_SPEECH_KIND.ARRIVAL && arrivalBeatOwed(calendars.onboarding())) {
         calendars.writeOnboarding({ arrivalSpokenAt: new Date(now()).toISOString() });
       }
     },
   });
+
+  /**
+   * The arrival beat's observed values: one working session's title, read
+   * from the same roster the rows draw, and the talk key worded for a
+   * sentence, read from the stored choice the desktop registers first. The
+   * key is suggested only while voice could actually take it.
+   */
+  async function arrivalBeat() {
+    const working = observation
+      .rosterForClients()
+      .find((session) => session.status === SESSION_STATUS.WORKING);
+    const talkKey = voiceHotkeyCandidates(
+      await settings.store.get(APP_SETTING_SCHEMA.voiceHotkey.field),
+    )[0];
+    return {
+      kind: PROACTIVE_SPEECH_KIND.ARRIVAL,
+      decidedAt: now(),
+      ...(working ? { sessionTitle: working.title } : undefined),
+      ...(talkKey === undefined ? undefined : { talkKeyLabel: voiceHotkeyLabel(talkKey) }),
+    } as const;
+  }
+
+  async function requestOnboardingBeat(): Promise<void> {
+    if (!runMode.requiresAccount || !account.signedIn()) return;
+    if (!account.voiceCapabilities.liveSessions) return;
+    if (await calendars.gateOfferable()) {
+      service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING, decidedAt: now() });
+      return;
+    }
+    if (!arrivalBeatOwed(calendars.onboarding())) return;
+    await observation.loop.refresh().catch(() => undefined);
+    if (!account.signedIn() || !arrivalBeatOwed(calendars.onboarding())) return;
+    service.speakBeat(await arrivalBeat());
+  }
 
   const methods: GatewayMethodTable = {
     // The peer's offer becomes the one session, seeded and attached before
@@ -125,11 +189,38 @@ export function composeLive(dependencies: LiveDependencies): LiveComposer {
       service.reportActivity(report.idle);
       return gatewayOk({});
     },
+    // What the host knows about why voice is or is not available, carrying no
+    // credential and no session's SDP: the source's own reading while one
+    // stands, and the reason there is none otherwise.
+    [GATEWAY_METHOD.VOICE_DIAGNOSTICS]: () =>
+      gatewayOk({
+        diagnostics: carried(
+          account.voiceCapabilities.liveSessions?.diagnostics() ??
+            unavailableLiveDiagnostics({
+              fixtureMode: !runMode.sendsNetwork,
+              apiKeyConfigured: false,
+            }),
+        ),
+      }),
+    // One live event the renderer's tap saw cross the data channel, into the
+    // development trace. Read again here for the shape the tap sends; on a
+    // run without a writer — packaged, fixture, or simply untraced — it lands
+    // here and stops.
+    [GATEWAY_METHOD.VOICE_RECORD_TRACE]: (params) => {
+      if (!isAgentWireTrace(params.trace)) return invalid("trace is not one tapped wire event");
+      account.agentTrace?.recordWire(params.trace);
+      return gatewayOk({});
+    },
   };
 
   return {
     methods,
     service,
+    requestOnboardingBeat,
+    followTypedAsk: (question, runId) => {
+      liveBrain.followCurrent();
+      service.followTypedAsk(question, runId);
+    },
     link: (next) => links.set(next),
     start: async () => undefined,
     // The session itself is closed by the drain, inside the quit's deadline,

@@ -1,13 +1,9 @@
 import {
   type BrainAskSubmission,
   type BrainAskSubmissionResult,
-  type BrainAskWait,
-  type BrainReplyClaimResult,
   type BrainRequestSnapshot,
   isBrainAskSubmission,
   isBrainAskSubmissionResult,
-  isBrainAskWait,
-  isBrainReplyClaimResult,
   isBrainRequestSnapshot,
 } from "@sidecar/brain/requests-wire";
 import type { AppleCalendarAccess } from "@sidecar/calendar/vocabulary";
@@ -20,9 +16,16 @@ import {
   type FeedbackSubmission,
   feedbackSubmission,
 } from "@sidecar/feedback";
+import {
+  type VoiceCreateLiveSessionResult,
+  voiceCreateLiveSessionParamsSchema,
+  voiceCreateLiveSessionResultSchema,
+  voiceReportLiveActivityParamsSchema,
+  voiceReportLiveTransportParamsSchema,
+} from "@sidecar/gateway";
 import type { RealtimeConnection } from "@sidecar/hosted";
+import type { LiveDiagnostics } from "@sidecar/live";
 import type { SupersetSignInSnapshot } from "@sidecar/providers/superset/sign-in-stage";
-import type { RealtimeDiagnostics } from "@sidecar/realtime";
 import {
   isSessionApplicationId,
   isSessionWriteResult,
@@ -125,10 +128,23 @@ export const ACT_KIND = {
   SESSION_SEND_MESSAGE: "session.sendMessage",
   SESSION_EXECUTE_CONTROL: "session.executeControl",
   BRAIN_SUBMIT_ASK: "brain.submitAsk",
-  BRAIN_WAIT_ASK: "brain.waitAsk",
   BRAIN_CANCEL_ASK: "brain.cancelAsk",
-  BRAIN_CLAIM_REPLY: "brain.claimReply",
   VOICE_COMMAND: "voice.command",
+  /**
+   * The voice window as a GPT Live peer: its SDP offer handed to the host,
+   * which creates the one session and answers the SDP; the hang-up it asks
+   * the host to decide; and the two reports the host reads its transport and
+   * its idle from. No credential travels in any of them.
+   */
+  VOICE_CREATE_LIVE_SESSION: "voice.createLiveSession",
+  VOICE_END_LIVE_SESSION: "voice.endLiveSession",
+  VOICE_REPORT_LIVE_TRANSPORT: "voice.reportLiveTransport",
+  VOICE_REPORT_LIVE_ACTIVITY: "voice.reportLiveActivity",
+  /**
+   * The spoken introduction's bounded Realtime credential, answered only
+   * while the takeover holds the panel; the voice window's own sessions carry
+   * no credential at all.
+   */
   VOICE_MINT_CREDENTIAL: "voice.mintCredential",
   VOICE_DIAGNOSTICS: "voice.diagnostics",
   MICROPHONE_REQUEST: "microphone.request",
@@ -496,29 +512,12 @@ export const ACT = {
     result: wireResult<BrainAskSubmissionResult>(isBrainAskSubmissionResult),
     refusal: "Could not reach Luke's runtime to ask that.",
   },
-  [ACT_KIND.BRAIN_WAIT_ASK]: {
-    payload: s.record({
-      runId: exactId,
-      epoch: s.wholeNumber({ minimum: 0 }),
-    }),
-    result: wireResult<BrainAskWait>(isBrainAskWait),
-    refusal: "Could not reach Luke's runtime to wait on that.",
-  },
   [ACT_KIND.BRAIN_CANCEL_ASK]: {
     payload: s.record({ runId: exactId }),
     result: wireResult<BrainRequestSnapshot | undefined>(
       (value) => value === undefined || isBrainRequestSnapshot(value),
     ),
     refusal: "Could not reach Luke's runtime to cancel that.",
-  },
-  [ACT_KIND.BRAIN_CLAIM_REPLY]: {
-    payload: s.record({
-      runId: exactId,
-      deliveryId: exactId,
-      epoch: s.wholeNumber({ minimum: 0 }),
-    }),
-    result: wireResult<BrainReplyClaimResult>(isBrainReplyClaimResult),
-    refusal: "Could not reach Luke's runtime to claim that reply.",
   },
   [ACT_KIND.VOICE_COMMAND]: {
     payload: s.record({
@@ -529,6 +528,24 @@ export const ACT = {
     ),
     refusal: "Could not carry that command on this system.",
   },
+  [ACT_KIND.VOICE_CREATE_LIVE_SESSION]: {
+    payload: voiceCreateLiveSessionParamsSchema,
+    result: wireResult<VoiceCreateLiveSessionResult | undefined>(
+      (value) => value === undefined || voiceCreateLiveSessionResultSchema.read(value).ok,
+    ),
+    refusal: "Could not open a voice session on this system.",
+  },
+  [ACT_KIND.VOICE_END_LIVE_SESSION]: press("Could not end the voice session on this system."),
+  [ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT]: {
+    payload: voiceReportLiveTransportParamsSchema,
+    result: wireResult<undefined>((value) => value === undefined),
+    refusal: "Could not report the voice transport on this system.",
+  },
+  [ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY]: {
+    payload: voiceReportLiveActivityParamsSchema,
+    result: wireResult<undefined>((value) => value === undefined),
+    refusal: "Could not report the voice activity on this system.",
+  },
   [ACT_KIND.VOICE_MINT_CREDENTIAL]: {
     payload: noPayload,
     result: wireResult<RealtimeConnection | undefined>(),
@@ -536,7 +553,7 @@ export const ACT = {
   },
   [ACT_KIND.VOICE_DIAGNOSTICS]: {
     payload: noPayload,
-    result: wireResult<RealtimeDiagnostics>(),
+    result: wireResult<LiveDiagnostics | undefined>(),
     refusal: "Could not read the voice diagnostics on this system.",
   },
   [ACT_KIND.MICROPHONE_REQUEST]: {

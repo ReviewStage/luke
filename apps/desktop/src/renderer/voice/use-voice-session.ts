@@ -1,24 +1,20 @@
 import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
 import { appSettingsView } from "@sidecar/settings/wire";
 import {
-  VOICE_READINESS_PART,
-  type VoiceBridge,
-  VoiceOrchestrator,
-  type VoiceReadinessPart,
-  type VoiceSurroundings,
+  type LiveVoiceBridge,
+  LiveVoiceOrchestrator,
+  type LiveVoiceSurroundings,
 } from "@sidecar/voice/orchestrator";
-import { type RefObject, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { VOICE_COMMAND, voiceExchangeKind } from "#shared/messages/voice-view";
-import { act } from "../act";
+import { act, tell } from "../act";
 import { hostedVoiceUnavailableNote } from "../microphone-access";
 import { appSettingsNow, appStateNow, useAppState } from "../use-app-state";
 import { outputSilent } from "../volume-hint";
-import { ConversationCall } from "./conversation-call";
+import { LiveCall } from "./live-call";
 import { openPreferredMicrophone } from "./microphone-choice";
-import { SpeakOnlyCall, type SpeakOnlyCallOptions } from "./speak-only-call";
-import { useVoiceThread } from "./use-voice-thread";
 import { startVoiceLevelMeter } from "./voice-level-meter";
 
 /**
@@ -29,78 +25,56 @@ import { startVoiceLevelMeter } from "./voice-level-meter";
  */
 const REMOTE_AUDIO_RETRY_MS = 1_000;
 
-/**
- * The callbacks and seams every call of either kind is built with beyond the
- * ones the orchestrator supplies: the credential, the voice and pace read at
- * each handshake, the element Luke plays through, and the development trace's
- * tap. What a call may do with them is the call's own type: a speak-only one
- * has no microphone member to open and declares no tools, so nothing here can
- * widen it.
- */
-function callTransport(
-  remoteAudio: RefObject<HTMLAudioElement | null>,
-): Pick<SpeakOnlyCallOptions, "requestConnection" | "voice" | "audioElement" | "onWireEvent"> {
-  return {
-    requestConnection: () => act(ACT_KIND.VOICE_MINT_CREDENTIAL),
-    // Read at each handshake rather than captured, so a voice or a pace
-    // changed between calls is the one the next call is configured with.
-    voice: () => {
-      const settings = appSettingsNow();
-      return {
-        ...(settings?.voice ? { voice: settings.voice } : undefined),
-        ...(settings?.voiceSpeed ? { speed: settings.voiceSpeed } : undefined),
-      };
-    },
-    audioElement: () => remoteAudio.current,
-    // The development trace's tap, checked at each event rather than at
-    // construction because a call outlives any one version of the document
-    // that says whether a writer stands behind the bridge. The audio is
-    // stripped here, before the event ever crosses the sandbox.
-    onWireEvent: (direction, event) => {
-      if (appStateNow()?.run.agentTraceEnabled !== true) return;
-      window.sidecar.recordAgentTrace({ direction, event: sanitizedTraceEvent(event) });
-    },
-  };
-}
-
 /** Everything the policy asks of the main process, over the one bridge this window has. */
-const BRIDGE: VoiceBridge = {
+const BRIDGE: LiveVoiceBridge = {
   reportView: (view, exchange) =>
     window.sidecar.reportVoiceView(
       view,
       exchange === undefined ? undefined : voiceExchangeKind(exchange),
     ),
-  reportReady: (epoch) => void window.sidecar.reportVoiceReady(epoch),
-  appendConversation: (entries) => window.sidecar.appendConversationLines(entries),
-  settleSpeech: (id, outcome) => void window.sidecar.settleSpeech(id, outcome),
-  submitBrainAsk: (submission) => act(ACT_KIND.BRAIN_SUBMIT_ASK, { submission }),
-  waitBrainAsk: (runId, epoch) => act(ACT_KIND.BRAIN_WAIT_ASK, { runId, epoch }),
-  claimBrainReply: (runId, deliveryId, epoch) =>
-    act(ACT_KIND.BRAIN_CLAIM_REPLY, { runId, deliveryId, epoch }),
-  ackBrainReply: (runId, deliveryId, epoch) =>
-    window.sidecar.ackBrainReply(runId, deliveryId, epoch),
   requestMicrophone: async () =>
     (await act(ACT_KIND.MICROPHONE_REQUEST)) === MICROPHONE_STATUS.GRANTED,
   hostedUnavailableNote: async () =>
     hostedVoiceUnavailableNote(await act(ACT_KIND.VOICE_DIAGNOSTICS).catch(() => undefined)),
 };
 
-function createOrchestrator(
-  remoteAudio: RefObject<HTMLAudioElement | null>,
-): VoiceOrchestrator<MediaStream> {
-  return new VoiceOrchestrator<MediaStream>({
+/** The two streams the meters listen to and the element plays, as the call hands them over. */
+interface Streams {
+  local: MediaStream | undefined;
+  remote: MediaStream | undefined;
+}
+
+/**
+ * The spoken conversation, held in the hidden voice window so no panel does.
+ * Everything it decides is {@link LiveVoiceOrchestrator}'s, in `@sidecar/voice`,
+ * which touches no DOM: what is left here is the wiring only a browser can
+ * do — the peer connection, the capture device, the level meters'
+ * `AudioContext`, the element Luke's voice plays through — and the
+ * subscriptions the main process reaches this window on. Nothing is drawn
+ * here, and nothing here appends to the model: every append is the host's.
+ */
+export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>): void {
+  const [streams, setStreams] = useState<Streams>({ local: undefined, remote: undefined });
+  const callRef = useRef<LiveCall | undefined>(undefined);
+  const orchestratorRef = useRef<LiveVoiceOrchestrator | undefined>(undefined);
+  orchestratorRef.current ??= new LiveVoiceOrchestrator({
     bridge: BRIDGE,
-    createSpeakOnlyCall: (hooks) => new SpeakOnlyCall({ ...callTransport(remoteAudio), ...hooks }),
-    createConversationCall: (hooks) =>
-      new ConversationCall({
-        ...callTransport(remoteAudio),
-        ...hooks,
+    createCall: (events) => {
+      const call = new LiveCall({
+        events,
+        acts: {
+          createSession: (sdp) => act(ACT_KIND.VOICE_CREATE_LIVE_SESSION, { sdp }),
+          endSession: () => tell(ACT_KIND.VOICE_END_LIVE_SESSION),
+          reportTransport: (state) => tell(ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT, { state }),
+          reportActivity: (idle) => tell(ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY, { idle }),
+        },
+        createPeerConnection: () => new RTCPeerConnection(),
         // The press's device, chosen by facts read natively: the Mac's own
         // microphone where a Bluetooth headset would otherwise pay for the
         // capture with its music codec, the browser's default everywhere
-        // else. The switch reads at the press, so flipping it needs no
+        // else. The switch reads at each open, so flipping it needs no
         // reconnect.
-        requestMicrophoneStream: () =>
+        openMicrophone: () =>
           openPreferredMicrophone({
             route: () =>
               (appSettingsNow()?.preferBuiltInMicrophone ?? true)
@@ -109,110 +83,87 @@ function createOrchestrator(
             enumerate: () => navigator.mediaDevices.enumerateDevices(),
             open: (audio) => navigator.mediaDevices.getUserMedia({ audio, video: false }),
           }),
-      }),
+        onRemoteStream: (remote) => setStreams((held) => ({ ...held, remote })),
+        onLocalStream: (local) => setStreams((held) => ({ ...held, local })),
+        now: () => Date.now(),
+        schedule: (callback, delayMs) => window.setTimeout(callback, delayMs),
+        // SAFETY: every timer the call cancels is one the scheduler above made, a window timeout handle.
+        cancel: (timer) => window.clearTimeout(timer as number),
+        // The development trace's tap, checked at each event rather than at
+        // construction because a session outlives any one version of the
+        // document that says whether a writer stands behind the bridge.
+        onWireEvent: (direction, event) => {
+          if (appStateNow()?.run.agentTraceEnabled !== true) return;
+          window.sidecar.recordAgentTrace({ direction, event: sanitizedTraceEvent(event) });
+        },
+      });
+      callRef.current = call;
+      return call;
+    },
   });
-}
-
-/**
- * One subscription, standing for as long as the window does and marked in the
- * readiness ledger while it stands: the main process sends this window
- * nothing until every named part has reported.
- */
-function useReportingSubscription(
-  orchestrator: VoiceOrchestrator<MediaStream>,
-  part: VoiceReadinessPart,
-  subscribe: () => () => void,
-): void {
-  // Held in a ref because the closure is rebuilt on every render while what
-  // it names — the orchestrator — is not: listing it as a dependency would
-  // tear the subscription down and stand it back up for every render.
-  const subscribeRef = useRef(subscribe);
-  subscribeRef.current = subscribe;
-  useEffect(() => {
-    const unsubscribe = subscribeRef.current();
-    orchestrator.installed(part);
-    return () => {
-      orchestrator.uninstalled(part);
-      unsubscribe();
-    };
-  }, [orchestrator, part]);
-}
-
-/**
- * The spoken conversation, held in the hidden voice window so no panel does.
- * Everything it decides is {@link VoiceOrchestrator}'s, in `@sidecar/voice`,
- * which touches no DOM: what is left here is the wiring only a browser can
- * do — the two calls' transports, the level meter's `AudioContext`, the
- * element Luke's voice plays through — and the subscriptions the main process
- * reaches this window on. Nothing is drawn here.
- */
-export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>): void {
-  const orchestratorRef = useRef<VoiceOrchestrator<MediaStream> | undefined>(undefined);
-  orchestratorRef.current ??= createOrchestrator(remoteAudio);
   const orchestrator = orchestratorRef.current;
   const audioContext = useRef<AudioContext | undefined>(undefined);
 
-  const { meterStream, remoteStream } = useSyncExternalStore(
-    useMemo(() => orchestrator.subscribe.bind(orchestrator), [orchestrator]),
-    useMemo(() => orchestrator.snapshot.bind(orchestrator), [orchestrator]),
-  );
-
-  useVoiceThread(orchestrator);
-
   /**
-   * Everything this window reads rather than owns — the settings that shape a
-   * call, the roster the arrival beat is worded from, the talk key its
-   * suggestion names, the output the captions answer, and the holds — on the
-   * one channel main holds it on, handed over whole whenever it moves.
+   * Everything this window reads rather than owns — whether a voice stands,
+   * whether captions are wanted, the output the captions answer, and the
+   * microphone's grant — on the one channel main holds it on, handed over
+   * whole whenever it moves.
    */
   const state = useAppState();
-  const settings = useMemo(
-    () => (state?.settings ? appSettingsView(state.settings) : undefined),
-    [state?.settings],
-  );
   useEffect(() => {
-    const surroundings: VoiceSurroundings = {
+    const settings = state?.settings ? appSettingsView(state.settings) : undefined;
+    const surroundings: LiveVoiceSurroundings = {
       voiceAvailable: settings?.voiceAvailable,
-      voice: settings?.voice,
-      voiceSpeed: settings?.voiceSpeed,
       captionsEnabled: settings?.voiceCaptions === true,
       outputSilent: outputSilent(state?.audio.outputAudio),
       microphoneGranted: state?.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED,
-      announcementsHeld: state?.announcements.held === true,
-      sessions: state?.sessions.roster.sessions ?? [],
-      talkKey: state?.hotkeys.talk,
     };
     orchestrator.surround(surroundings);
-  }, [orchestrator, settings, state]);
+  }, [orchestrator, state]);
 
-  // The meter listens to whoever holds the turn, and it is also what ends
-  // Luke's turn: his reply is over when it stops being audible, not when the
-  // model stops producing it, and the call decides that a pause between two
-  // sentences is not an ending. The loudness itself goes to the main process
-  // for the panels to draw, at a bounded rate, and only while a stream is
-  // active — which is exactly while a turn is listening or responding.
+  // Two meters over one context: Luke's track decides the speaking status,
+  // since the guide forbids reading it off transcript events, and the
+  // microphone's track decides idle, since the guide forbids reading silence
+  // off a missing one. The loudness the panels draw is whoever is talking.
   useEffect(() => {
-    if (!meterStream) return;
+    if (!streams.remote) return;
     const context = audioContext.current ?? new AudioContext({ latencyHint: "interactive" });
     audioContext.current = context;
     return startVoiceLevelMeter({
-      stream: meterStream,
+      stream: streams.remote,
       audioContext: context,
-      onActivity: (active) => orchestrator.reportRemoteAudioLevel(active),
-      onLevel: (level) => window.sidecar.reportVoiceLevel(level),
+      onActivity: (active) => callRef.current?.reportRemoteAudioLevel(active),
+      onLevel: (level) => {
+        if (!callRef.current?.listening) window.sidecar.reportVoiceLevel(level);
+      },
     });
-  }, [meterStream, orchestrator]);
+  }, [streams.remote]);
+
+  useEffect(() => {
+    if (!streams.local) return;
+    const context = audioContext.current ?? new AudioContext({ latencyHint: "interactive" });
+    audioContext.current = context;
+    return startVoiceLevelMeter({
+      stream: streams.local,
+      audioContext: context,
+      onActivity: (active) => callRef.current?.reportMicrophoneActivity(active),
+      onLevel: (level) => {
+        if (callRef.current?.listening) window.sidecar.reportVoiceLevel(level);
+      },
+    });
+  }, [streams.local]);
 
   useEffect(() => {
     const element = remoteAudio.current;
     if (!element) return;
-    element.srcObject = remoteStream ?? null;
-    if (!remoteStream) return;
-    // A refused play is the one failure the call cannot see: the reply runs
-    // and the captions draw while nothing is heard. The launch's first
-    // speak-only call is exactly the call with no user gesture behind it to
-    // satisfy a playback gate, so the refusal is retried for as long as the
-    // stream stands rather than swallowed once.
+    element.srcObject = streams.remote ?? null;
+    if (!streams.remote) return;
+    // A refused play is the one failure the call cannot see: Luke speaks and
+    // the captions draw while nothing is heard. A session opened for a
+    // briefing is exactly the one with no user gesture behind it to satisfy a
+    // playback gate, so the refusal is retried for as long as the stream
+    // stands rather than swallowed once.
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
     let detached = false;
     const play = () => {
@@ -225,60 +176,45 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       detached = true;
       if (retryTimer !== undefined) clearTimeout(retryTimer);
     };
-  }, [remoteAudio, remoteStream]);
+  }, [remoteAudio, streams.remote]);
 
   // A panel's ask, validated and forwarded by the main process. Each command
   // is the same action the panel used to perform on its own session; none opens
-  // a turn the developer did not.
-  useReportingSubscription(orchestrator, VOICE_READINESS_PART.COMMANDS, () =>
-    window.sidecar.onVoiceCommand(({ command }) => {
-      if (command === VOICE_COMMAND.DISCARD_LISTENING) orchestrator.discardListening();
-      else if (command === VOICE_COMMAND.STOP_SPEAKING) orchestrator.stopSpeaking();
-      else if (command === VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS) {
-        void orchestrator.requestMicrophoneAccess();
-      } else if (command === VOICE_COMMAND.CLEAR_CONVERSATION) orchestrator.clearConversation();
-    }),
+  // a turn the developer did not, and a Clear reaches the record on main alone.
+  useEffect(
+    () =>
+      window.sidecar.onVoiceCommand(({ command }) => {
+        if (command === VOICE_COMMAND.DISCARD_LISTENING) void orchestrator.stopSpeaking();
+        else if (command === VOICE_COMMAND.STOP_SPEAKING) void orchestrator.stopSpeaking();
+        else if (command === VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS) {
+          void orchestrator.requestMicrophoneAccess();
+        }
+      }),
+    [orchestrator],
   );
 
-  // One proactive turn the main process decided to voice now — a briefing the
-  // brain decided, or an onboarding beat whose observed values are read at
-  // the moment it is spoken — and the arbiter taking one back before it is
-  // said.
-  useReportingSubscription(orchestrator, VOICE_READINESS_PART.SPEECH_OFFERS, () =>
-    window.sidecar.onSpeechOffered((offer) => orchestrator.offerSpeech(offer)),
-  );
-  useReportingSubscription(orchestrator, VOICE_READINESS_PART.SPEECH_WITHDRAWALS, () =>
-    window.sidecar.onSpeechWithdrawn(({ id }) => orchestrator.withdrawSpeech(id)),
-  );
-
-  // The main process offering an ended run's reply, and the brain's
-  // generation ending under this window, which voids whatever it offered.
-  useReportingSubscription(orchestrator, VOICE_READINESS_PART.REPLY_OFFERS, () =>
-    window.sidecar.onBrainReplyOffered((offer) => orchestrator.offerReply(offer)),
-  );
-  useReportingSubscription(orchestrator, VOICE_READINESS_PART.REPLY_WITHDRAWALS, () =>
-    window.sidecar.onBrainRepliesWithdrawn(() => orchestrator.withdrawReplies()),
+  // The host's word on its one session: wanted opens one muted for whatever
+  // Luke has to say, closing hangs up.
+  useEffect(
+    () =>
+      window.sidecar.onVoiceLiveSessionChanged((change) => orchestrator.obeySessionChange(change)),
+    [orchestrator],
   );
 
   // The talk key is registered by the main process so it answers from any app,
-  // which is the whole point: no window to find, nothing to focus first. Both
-  // edges arrive, because a turn you hold ends when the key does. A press
-  // during a chord being recorded is held back in the main process, where the
-  // recording is known; the release always lands, so a hold opened before the
-  // recording began still ends when the key comes up.
+  // which is the whole point: no window to find, nothing to focus first. Only
+  // the press decides anything: the microphone is a switch on the session, so
+  // a release ends nothing. A press during a chord being recorded is held
+  // back in the main process, where the recording is known.
   useEffect(
     () => window.sidecar.onVoiceHotkeyPress(() => void orchestrator.beginTalk()),
     [orchestrator],
   );
-  useEffect(
-    () => window.sidecar.onVoiceHotkeyRelease(() => orchestrator.endTalk()),
-    [orchestrator],
-  );
   // The stop key asks for quiet from any app, exactly as Escape asks for it
-  // from the panel: the orchestrator answers whether there is a reply to stop,
-  // so a press over silence simply does nothing.
+  // from the panel: the microphone closes, and the host tells the model to
+  // stop speaking; a press over no session simply does nothing.
   useEffect(
-    () => window.sidecar.onStopHotkeyPress(() => orchestrator.stopSpeaking()),
+    () => window.sidecar.onStopHotkeyPress(() => void orchestrator.stopSpeaking()),
     [orchestrator],
   );
 

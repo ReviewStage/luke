@@ -1,4 +1,4 @@
-import { REALTIME_MINT_OUTCOME, type RealtimeDiagnostics } from "@sidecar/realtime";
+import { LIVE_SESSION_OUTCOME, type LiveDiagnostics } from "@sidecar/live";
 import { VOICE_SOURCE, type VoiceSource } from "@sidecar/settings/wire";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "#shared/messages/audio";
 
@@ -14,11 +14,11 @@ export const VOICE_KEYLESS_NOTE = "Voice is off: sign in, or connect an OpenAI k
 
 export const HOSTED_VOICE_UNAVAILABLE_NOTE = "Voice is temporarily unavailable. Try again later.";
 
-/** A neutral customer-facing answer when the hosted emergency brake refuses a call. */
+/** A neutral customer-facing answer when the hosted emergency brake refuses a session. */
 export function hostedVoiceUnavailableNote(
-  diagnostics: RealtimeDiagnostics | undefined,
+  diagnostics: LiveDiagnostics | undefined,
 ): string | undefined {
-  return diagnostics?.lastOutcome === REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED
+  return diagnostics?.lastOutcome === LIVE_SESSION_OUTCOME.QUOTA_EXHAUSTED
     ? HOSTED_VOICE_UNAVAILABLE_NOTE
     : undefined;
 }

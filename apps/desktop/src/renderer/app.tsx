@@ -7,8 +7,8 @@ import { brainRequestPending } from "@sidecar/brain/requests-wire";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { CREDENTIAL_PROVIDER_LIST, CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
 import { feedbackKindForLifecycleEvent } from "@sidecar/feedback";
+import { LIVE_STATUS } from "@sidecar/live";
 import { WingFace as LukeFace } from "@sidecar/panel";
-import { REALTIME_STATUS } from "@sidecar/realtime";
 import type { ObservedWorkspaceProject } from "@sidecar/session";
 import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTIONS } from "@sidecar/session/fixtures";
 import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE, voiceHotkeyLabel } from "@sidecar/settings";
@@ -791,7 +791,7 @@ export function App(): React.JSX.Element {
       if (event.key !== "Escape") return;
       // Discarding an open turn comes before any of it. Closing the panel
       // or a sheet mid-sentence would strand the microphone open.
-      if (voiceView.voiceStatus === REALTIME_STATUS.LISTENING) {
+      if (voiceView.voiceStatus === LIVE_STATUS.LISTENING) {
         // The key may still be down. Forgetting the press as well as the latch
         // means its release lands on a turn that is already gone rather than
         // sending the one Escape just discarded.

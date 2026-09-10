@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
+import { LIVE_SESSION_PHASE } from "@sidecar/gateway";
 import { runModeFor } from "@sidecar/host";
 import { type AppState, sessionReplayBootstrap } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
@@ -150,6 +151,26 @@ test("the version climbs once per applied patch, and a listener's own patch is n
   echo.update({ announcements: { held: true } });
   assert.deepEqual(seen, [1, 2]);
   assert.equal(echo.snapshot().calendars.length, 1);
+});
+
+test("the live session's phase is a slice of the voice document beside the view, and a window going away keeps it", () => {
+  const app = new AppStateStore(initialAppState(RUN, false));
+  app.update({ voice: { view: IDLE_VOICE_VIEW } });
+  app.update({
+    voice: { ...app.snapshot().voice, liveSession: { phase: LIVE_SESSION_PHASE.WANTED } },
+  });
+  assert.deepEqual(app.snapshot().voice.liveSession, { phase: LIVE_SESSION_PHASE.WANTED });
+  assert.equal(app.snapshot().voice.view, IDLE_VOICE_VIEW);
+  app.update({
+    voice: {
+      ...app.snapshot().voice,
+      liveSession: { sessionId: "sess_1", phase: LIVE_SESSION_PHASE.STARTED },
+    },
+  });
+  assert.deepEqual(app.snapshot().voice.liveSession, {
+    sessionId: "sess_1",
+    phase: LIVE_SESSION_PHASE.STARTED,
+  });
 });
 
 test("a voice window that went away leaves the document holding no view", () => {

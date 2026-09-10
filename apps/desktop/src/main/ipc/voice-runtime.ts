@@ -1,8 +1,7 @@
 import { PRODUCT_EVENT, type RecordProductEvent } from "@sidecar/analytics";
 import { CREDENTIAL_CONNECTION, CREDENTIAL_PROVIDERS } from "@sidecar/credentials";
-import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import type { RealtimeConnection } from "@sidecar/hosted";
-import { type RealtimeDiagnostics, voiceExchangeActive } from "@sidecar/realtime";
+import { type LiveDiagnostics, liveExchangeActive } from "@sidecar/live";
 import type { BrowserWindow, WebContents } from "electron";
 import { channels } from "#shared/bridge";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -10,6 +9,7 @@ import { VOICE_COMMAND, VOICE_COMMAND_OUTCOME } from "#shared/messages/voice-vie
 import type { ActRows } from "../act-router";
 import type { AppStateStore } from "../app-state";
 import type { ReportHandlers } from "../bridge-host";
+import type { HostOperator } from "../gateway/host-operator";
 import type { PanelManager } from "../window/panel-manager";
 
 /** The hidden window the conversation lives in, as much of it as this file needs. */
@@ -17,6 +17,12 @@ export interface VoiceWindowSurface {
   current(): BrowserWindow | undefined;
   owns(webContents: WebContents): boolean;
 }
+
+/** The host's one live session, as the voice window's four acts reach it through the operator client. */
+type LiveSessionActs = Pick<
+  HostOperator,
+  "createLiveSession" | "endLiveSession" | "reportLiveTransport" | "reportLiveActivity"
+>;
 
 export interface VoiceRuntimeDependencies {
   panels: PanelManager;
@@ -26,20 +32,15 @@ export interface VoiceRuntimeDependencies {
   /** Where the voice window's own reports are written; every panel is told from it. */
   state: AppStateStore;
   openExternal: (url: string) => Promise<void>;
+  liveSession: LiveSessionActs;
   /**
-   * The one credential a call runs on: the short-lived realtime secret the
-   * host's account minter issued, or the introduction's bounded mint while the
-   * takeover stands. Counted by whoever minted, under the source it came from.
+   * The one Realtime credential left: the introduction's bounded mint,
+   * answered only while the takeover holds the panel. The voice window's own
+   * sessions are the host's and carry no credential.
    */
-  mintRealtimeCredential: () => Promise<RealtimeConnection | undefined>;
-  realtimeDiagnostics: () => Promise<RealtimeDiagnostics>;
+  mintIntroductionCredential: () => Promise<RealtimeConnection | undefined>;
+  liveDiagnostics: () => Promise<LiveDiagnostics | undefined>;
   recordProductEvent: RecordProductEvent;
-  /**
-   * Takes one tapped wire event into the development trace. On a run without
-   * a writer — packaged, fixture, or simply untraced — the renderer's
-   * fire-and-forget send lands here and stops.
-   */
-  recordAgentTrace: (trace: AgentWireTrace) => void;
   /**
    * The Conversation Clear, carried out here before the voice window is told, and
    * answering whether the erasure completed on disk: the view and every
@@ -53,6 +54,10 @@ export interface VoiceRuntimeDependencies {
 
 type VoiceRuntimeActKind =
   | typeof ACT_KIND.VOICE_COMMAND
+  | typeof ACT_KIND.VOICE_CREATE_LIVE_SESSION
+  | typeof ACT_KIND.VOICE_END_LIVE_SESSION
+  | typeof ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT
+  | typeof ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY
   | typeof ACT_KIND.VOICE_MINT_CREDENTIAL
   | typeof ACT_KIND.VOICE_DIAGNOSTICS
   | typeof ACT_KIND.MICROPHONE_OPEN_SETTINGS
@@ -61,7 +66,7 @@ type VoiceRuntimeActKind =
 export function voiceRuntimeActRows(
   dependencies: VoiceRuntimeDependencies,
 ): Pick<ActRows, VoiceRuntimeActKind> {
-  const { voiceWindow } = dependencies;
+  const { voiceWindow, liveSession } = dependencies;
   return {
     // A panel's command to the voice window. The act's schema has already
     // bounded it; here it is checked to come from a panel — the voice window
@@ -82,8 +87,22 @@ export function voiceRuntimeActRows(
       if (erasing === undefined) return undefined;
       return (await erasing) ? VOICE_COMMAND_OUTCOME.ACCEPTED : VOICE_COMMAND_OUTCOME.REFUSED;
     },
-    [ACT_KIND.VOICE_MINT_CREDENTIAL]: () => dependencies.mintRealtimeCredential(),
-    [ACT_KIND.VOICE_DIAGNOSTICS]: () => dependencies.realtimeDiagnostics(),
+    // The peer is the voice window and nothing else: a panel offering an SDP,
+    // or reporting a transport it does not hold, is answered nothing.
+    [ACT_KIND.VOICE_CREATE_LIVE_SESSION]: ({ sdp }, { voice }) =>
+      voice ? liveSession.createLiveSession(sdp) : Promise.resolve(undefined),
+    [ACT_KIND.VOICE_END_LIVE_SESSION]: (_payload, { voice }) => {
+      if (voice) void liveSession.endLiveSession();
+    },
+    [ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT]: ({ state }, { voice }) => {
+      if (voice) void liveSession.reportLiveTransport(state);
+    },
+    [ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY]: ({ idle }, { voice }) => {
+      if (voice) void liveSession.reportLiveActivity(idle);
+    },
+    [ACT_KIND.VOICE_MINT_CREDENTIAL]: (_payload, { introduction }) =>
+      introduction ? dependencies.mintIntroductionCredential() : Promise.resolve(undefined),
+    [ACT_KIND.VOICE_DIAGNOSTICS]: () => dependencies.liveDiagnostics(),
     [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: () =>
       dependencies.openExternal(
         "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
@@ -114,7 +133,7 @@ export function voiceRuntimeReports(
       if (!voiceWindow.owns(context.sender)) return;
       const { state } = dependencies;
       state.update({ voice: { ...state.snapshot().voice, view } });
-      panels.setVoiceExchange(voiceExchangeActive(view.voiceStatus));
+      panels.setVoiceExchange(liveExchangeActive(view));
       if (countedKind !== undefined) {
         dependencies.recordProductEvent(PRODUCT_EVENT.VOICE_EXCHANGE, {
           exchange_kind: countedKind,

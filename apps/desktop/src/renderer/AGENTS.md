@@ -44,8 +44,8 @@ draws the panel — or the spoken introduction, a fullscreen mode of the panel
 drawn instead of `App` while `state.introduction.playing`, not a window of its
 own; the hidden voice window's is
 `renderer/voice/index.tsx`, and everything it mounts lives under
-`renderer/voice/`: the calls, the microphone, the level meter, the element
-Luke's voice plays through, and the hook that drives `VoiceOrchestrator`
+`renderer/voice/`: the live peer, the microphone, the level meters, the element
+Luke's voice plays through, and the hook that drives `LiveVoiceOrchestrator`
 (`@sidecar/voice/orchestrator`) and reports its view to the main process.
 It reaches the main process through the same bridge, under the same sandbox,
 and it can neither mount `App` nor import `session-replay.ts` — neither is
@@ -55,31 +55,43 @@ hidden window would be a session nobody consented to. A panel draws the voice
 state that arrives in its `app:state` snapshot and forwards its presses back as
 acts; it constructs no call of its own.
 
-The policy behind that hook is not the renderer's at all. Which of the two
-calls stands, the talk key's latch, the mouth that lets Luke speak into
-silence, the receiving end of a reply delivery, the restart a changed voice
-owes, and the thread the exchange leaves behind are `VoiceOrchestrator` and
-`ConversationThread` in `@sidecar/voice`, which touch no DOM: what the hook
-supplies is the transport each call is built with, and what it takes back is
-one view to report and the two streams only a browser can play or meter.
+The policy behind that hook is not the renderer's at all. Whether a session
+stands, what the talk key and the stop key do to its microphone, how the
+host's `voiceLiveSession.changed` is obeyed — wanted opens a session muted,
+closing hangs up, a session lost with the microphone live listens again on
+the next — and what view the panels draw are `LiveVoiceOrchestrator` in
+`@sidecar/voice`, which touches no DOM: what the hook supplies is the call
+it drives, and what it takes back is one view to report and the two streams
+only a browser can play or meter.
 
-A call Luke opens for himself is a `SpeakOnlyCall`
-(`voice/speak-only-call.ts`): it is configured with
-`SPEAK_ONLY_SESSION_CONFIG`, whose `tools` is the empty array, and it has no
-microphone member to open — the guarantee `CLAUDE.md` states for a briefing is
-the type rather than a flag, and `ConversationCall` is the subclass that adds
-the device and the one tool, over the transport both share in
-`voice/realtime-call.ts`. Both calls are seeded at channel open from the
-orchestrator's thread, through the `conversationSeed` hook it supplies, so a
-call is a window onto the record rather than a memory of its own. Neither
-class keeps a concern it can hand to an
-object that owns its own fields and its own reset: the words of the reply
-under way are `voice/captions.ts`, cutting one off is
-`voice/interruption.ts`, the audio a press speaks into a handshake is
-`voice/press-turn-capture.ts`, and the calls an armed reply asked for are
-`voice/tool-follow-up.ts`. What each call acts on is a table of named
-handlers rather than a switch, so what a subclass adds is the keys it spreads
-over its parent's.
+The voice window is a GPT Live peer and nothing more. `voice/live-peer.ts`
+builds the `RTCPeerConnection` in the WebRTC guide's order — the preferred
+microphone track added with `enabled` false, the `oai-events` data channel
+created before the offer, ICE gathered under a bound, the offer handed to
+the host through `ACT_KIND.VOICE_CREATE_LIVE_SESSION`, the host's SDP answer
+set — and never sends `session.start`, because the host's request is what
+started the session. `voice/live-call.ts` is a table of handlers keyed by
+`LIVE_SERVER_EVENT` over `parseLiveServerEvent`: it waits for
+`session.started`, sends only the mute, the unmute, and the close the data
+channel permissions allow it, flips the track only on the `muted` or
+`unmuted` acknowledgment, hangs up the way the conversations guide says
+(`session.closed` registered, `session.close` sent, everything held open
+under the bound), reports its transport and its one idle decision to the
+host, and reads Luke as speaking from the remote track's level, never from
+a transcript event. `voice/live-captions.ts` draws both speakers from the
+transcript deltas over the same `TranscriptLedger` the host groups its record
+with, so the captions and the lines agree on what an utterance is. No
+credential reaches this window, nothing here appends to the model, and the
+window writes no Conversation line: every append and both speakers' lines
+are the host's, from the transcript its trusted sideband receives. The
+`index.html` CSP's `connect-src` is `'none'`, since the SDP exchange crosses
+main and WebRTC media needs no fetch.
+
+The Realtime call classes still under `voice/` — `ConversationCall`,
+`SpeakOnlyCall`, `realtime-call.ts`, and the pieces they own — are the spoken
+introduction's alone until its own change lands: the takeover in
+`renderer/introduction/` constructs one against the introduction's bounded
+mint, and nothing the voice window mounts reaches them.
 
 The same trap arrives through a package barrel, where nothing greps for it.
 Importing `@sidecar/calendar` for one string constant resolves that package's

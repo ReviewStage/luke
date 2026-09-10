@@ -215,7 +215,7 @@ test("settling speech takes an id and one of the four outcomes", () => {
 });
 
 const VOICE_VIEW = {
-  voiceStatus: "responding",
+  voiceStatus: "speaking",
   voiceError: undefined,
   voiceNotice: "Listening on the built-in microphone.",
   talkOpening: false,
@@ -240,13 +240,21 @@ test("an exchange kind rides a voice view only on an edge that opened one", () =
   assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW, "typed"]), true);
   assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW, "announcement"]), true);
   assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW, "shouted"]), false);
-  // A settled call opened nothing, so nothing may be counted against it.
+  // A muted standing session is no exchange, so nothing may be counted against it.
   assert.equal(
-    BRIDGE.reportVoiceView.args([{ ...VOICE_VIEW, voiceStatus: "ready" }, "spoken"]),
+    BRIDGE.reportVoiceView.args([{ ...VOICE_VIEW, voiceStatus: "muted" }, "spoken"]),
     false,
   );
   assert.equal(
-    BRIDGE.reportVoiceView.args([{ ...VOICE_VIEW, voiceStatus: "ready" }, undefined]),
+    BRIDGE.reportVoiceView.args([{ ...VOICE_VIEW, voiceStatus: "muted" }, undefined]),
+    true,
+  );
+  // A press still waiting on its session is the exchange opening.
+  assert.equal(
+    BRIDGE.reportVoiceView.args([
+      { ...VOICE_VIEW, voiceStatus: "muted", talkOpening: true },
+      "spoken",
+    ]),
     true,
   );
 });

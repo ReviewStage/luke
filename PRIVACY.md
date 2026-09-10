@@ -68,9 +68,11 @@ shown and every point at which his working context was folded. The transcript
 is a record, not a limit: folding the context changes what the model sees
 next and erases nothing here. The 20 most recent Conversation lines, each cut to
 400 characters, ride into a conversation as context, beside the working
-memory. The same 20 lines, without the actions he took or any session
-identifier, are also placed into each voice call when it opens, so the voice
-can follow what was just said. A thread you open as temporary is held in memory alone and is gone
+memory. The same 20 lines, in their roles, are also placed into each voice
+session when it opens, beside a summary of the coding agent sessions on your
+screen (their titles, status, and branch, as the rows draw them), so the voice
+can follow what was just said and what is on your desk; while a session
+stands, that summary is sent again as quiet context whenever it changes. A thread you open as temporary is held in memory alone and is gone
 when Luke next opens; nothing said in it is remembered automatically. Nothing
 about a conversation is written on our servers, and a fixture or evidence run
 keeps no conversation at all.
@@ -166,9 +168,11 @@ instead; either way it holds your settings and the encrypted credentials
 session, your conversation and its memory, and the observation of your
 sessions and calendars, while the part that draws listens, speaks, holds the
 keys, and asks the runtime for everything else. Nothing
-about you crosses that boundary that the panel did not already draw, except
-the short-lived voice credential the runtime mints for a call; no stored key,
-token, or account secret travels in any answer or event. Quitting Luke cancels
+about you crosses that boundary that the panel did not already draw; no
+stored key, token, or account secret travels in any answer or event, and the
+voice window is handed no credential at all — the runtime opens each voice
+session itself and hands the window only the connection answer it needs to
+hear and be heard. Quitting Luke cancels
 what was running and writes down what did not finish rather than finishing it
 on paper. The three things the app still does on this machine at the runtime's
 ask are opening an address you or Luke asked to open, carrying an action to the
@@ -351,14 +355,23 @@ and email you signed it with, and any screenshots you attached.
 
 ## Who we send it to
 
-- OpenAI, for voice and for Luke's own judgment. A spoken turn sends its
-  audio, a typed turn sends your words, on the Mac each voice call also
-  carries the recent Conversation lines described above as it opens, and both
-  kinds of turn send the session fields
+- OpenAI, for voice and for Luke's own judgment. On the Mac, a voice session
+  is one continuous conversation: while the microphone is unmuted everything
+  it hears streams to OpenAI, and while it is muted nothing does; Luke can
+  still speak into a muted session. A typed turn sends your words, each voice
+  session carries the recent Conversation lines and the session summary
+  described above as it opens, and both kinds of turn send the session fields
   listed above — on the Mac app, read locally from your machine; on iOS and
   Apple Watch, drawn from the same cloud observation your vault keys already
   allow (titles, status, repository, and branch of your cloud sessions, as
-  described under Provider API keys above). Luke's judgment is a separate call
+  described under Provider API keys above). When you use voice through your
+  Luke account, the Mac reaches OpenAI through our own voice service, which
+  creates the session on our key, relays the control and transcript events
+  between your Mac and OpenAI without reading them, drops the audio OpenAI
+  reflects back so your voice never transits our service, keeps no
+  conversation, logs only status codes and byte counts, and records the
+  billed seconds of each session once. With your own OpenAI key the Mac
+  reaches OpenAI directly and our service sees nothing of the session. Luke's judgment is a separate call
   to OpenAI's Responses API, made when an agent's hook or his periodic look
   wakes the conversation following that session and when
   you ask him something: it carries that conversation's working memory —
@@ -470,7 +483,9 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
 - What you type or say to Luke goes to his main conversation; the
   conversation an ask is for is fixed at the moment you send it and never
   moved afterwards.
-- Luke does not use your microphone until you start a turn.
+- Luke does not listen through your microphone until you press the talk
+  key: a voice session Luke opens to speak to you keeps the microphone muted,
+  and the stop key or a second press of the talk key mutes it again.
 - Delete your account from the Account section in Settings. This erases your
   account, your sign-in records, your usage counts, and any provider API keys
   you synced to the hosted service, and asks PostHog to erase your usage data

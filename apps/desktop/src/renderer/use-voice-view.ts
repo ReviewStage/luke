@@ -4,7 +4,7 @@ import {
   BRAIN_SUBMISSION_OUTCOME,
 } from "@sidecar/brain/requests";
 import type { BrainAskSubmissionResult, BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
-import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
+import { LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import { NoticeStrip } from "@sidecar/voice/orchestrator";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -109,12 +109,12 @@ export function voiceActiveFor(input: {
 
 /**
  * Whose voice the meter is drawing. The waveform follows whoever is actually
- * talking: the developer while push-to-talk is held, Luke while it answers,
+ * talking: the developer while the microphone is heard, Luke while he speaks,
  * nobody otherwise.
  */
-export function waveformVoice(status: RealtimeStatus): WaveformVoice | undefined {
-  if (status === REALTIME_STATUS.RESPONDING) return WAVEFORM_VOICE.LUKE;
-  if (status === REALTIME_STATUS.LISTENING) return WAVEFORM_VOICE.DEVELOPER;
+export function waveformVoice(status: LiveStatus): WaveformVoice | undefined {
+  if (status === LIVE_STATUS.SPEAKING) return WAVEFORM_VOICE.LUKE;
+  if (status === LIVE_STATUS.LISTENING) return WAVEFORM_VOICE.DEVELOPER;
   return undefined;
 }
 
@@ -290,7 +290,7 @@ export function useVoiceView(): VoiceViewState {
 
   return {
     view: panelVoiceView(view, stripLines),
-    speaking: view.voiceStatus === REALTIME_STATUS.RESPONDING,
+    speaking: view.voiceStatus === LIVE_STATUS.SPEAKING,
     voiceTurn: waveformVoice(view.voiceStatus),
     level,
     voiceActive: turnLive && voiceActive,

@@ -91,18 +91,23 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.BRAIN_SUBMIT_ASK,
     payload: { submission: { submissionId: "sub-1", question: "what needs me?", origin: "typed" } },
   },
-  [ACT_KIND.BRAIN_WAIT_ASK]: {
-    kind: ACT_KIND.BRAIN_WAIT_ASK,
-    payload: { runId: "run-1", epoch: 3 },
-  },
   [ACT_KIND.BRAIN_CANCEL_ASK]: { kind: ACT_KIND.BRAIN_CANCEL_ASK, payload: { runId: "run-1" } },
-  [ACT_KIND.BRAIN_CLAIM_REPLY]: {
-    kind: ACT_KIND.BRAIN_CLAIM_REPLY,
-    payload: { runId: "run-1", deliveryId: "delivery-1", epoch: 2 },
-  },
   [ACT_KIND.VOICE_COMMAND]: {
     kind: ACT_KIND.VOICE_COMMAND,
     payload: { command: "clear-conversation" },
+  },
+  [ACT_KIND.VOICE_CREATE_LIVE_SESSION]: {
+    kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION,
+    payload: { sdp: "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\n" },
+  },
+  [ACT_KIND.VOICE_END_LIVE_SESSION]: { kind: ACT_KIND.VOICE_END_LIVE_SESSION },
+  [ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT]: {
+    kind: ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT,
+    payload: { state: "connected" },
+  },
+  [ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY]: {
+    kind: ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY,
+    payload: { idle: true },
   },
   [ACT_KIND.VOICE_MINT_CREDENTIAL]: { kind: ACT_KIND.VOICE_MINT_CREDENTIAL },
   [ACT_KIND.VOICE_DIAGNOSTICS]: { kind: ACT_KIND.VOICE_DIAGNOSTICS },
