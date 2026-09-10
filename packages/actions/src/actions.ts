@@ -251,6 +251,11 @@ export function realtimeToolFamily(name: string): ActionFamily | undefined {
   return ACTS_BY_NAME.get(name)?.family;
 }
 
+/** The kind of action a named tool carries, or nothing when no such tool exists. */
+export function realtimeToolKind(name: string): ActionKind | undefined {
+  return ACTS_BY_NAME.get(name)?.kind;
+}
+
 /** One function tool as a Responses or Realtime request carries it. */
 export interface ActionToolDefinition {
   type: "function";

@@ -375,3 +375,203 @@
   color: var(--text-primary);
   font-size: 12px;
 }
+
+/* An action Luke carried is a row, not a bubble: what was done, in the quiet
+   voice the dates use, led by a mark for the kind of thing it was and ended
+   on the mark of the provider it reached. It reads from Luke's side of the
+   thread, because it is his doing — its leading mark sits on the edge his
+   bubbles start from — and it stands still under the pull as his words do. */
+.conversation-action {
+  display: flex;
+  min-width: 0;
+  max-width: min(88%, 64ch);
+  align-items: flex-start;
+  gap: 7px;
+  padding: 3px 0;
+}
+
+.conversation-action-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* The mark's room is reserved whether or not a mark fills it, so rows with
+   and without one keep their words on one line. */
+.conversation-action-mark {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  justify-content: center;
+  margin-top: 2px;
+  color: var(--text-tertiary);
+}
+
+.conversation-action-mark svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* The provider's mark, at the size the row's own marks take, trailing the
+   words the way a session row's application marks trail its title. */
+.conversation-action-provider {
+  display: inline-flex;
+  height: 16px;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.conversation-action-provider .provider-mark {
+  width: 12px;
+  height: 12px;
+}
+
+.conversation-entry[data-speaker="event"] .conversation-action .conversation-words {
+  text-align: left;
+}
+
+/* The session an action reached, named inline as a chip: a rounded box with
+   the mark its roster row wears, sized to sit in the sentence as one of its
+   words. Where the session has an identity to open by the chip is the row's
+   own press by another hand and lifts under the pointer; a name alone takes
+   no hover. */
+.conversation-action-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: -1px 0;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--text-primary);
+  font-size: 10.5px;
+  font-weight: 620;
+  line-height: 14px;
+  vertical-align: baseline;
+  white-space: nowrap;
+  transition: background-color var(--duration-hover) ease;
+}
+
+button.conversation-action-chip:hover,
+button.conversation-action-chip:focus-visible {
+  background: var(--selected);
+}
+
+.conversation-chip-mark {
+  width: 10px;
+  height: 10px;
+}
+
+/* Why an action ended as it did, or what its carrier said of it, under the
+   words in the same quiet voice; a refusal reads in the danger colour so a
+   thing that did not happen is never mistaken for one that did. */
+.conversation-action-reason,
+.conversation-action-note {
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.conversation-entry[data-tool-status="refused"] .conversation-action-reason,
+.conversation-entry[data-tool-status="failed"] .conversation-action-reason,
+.conversation-detail[data-tool-state="output-error"] .conversation-action-reason {
+  color: var(--danger);
+}
+
+/* An action still under way: the same dots the wait draws, beside the words. */
+.conversation-action-pending {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* An announcement nobody heard says so beside its words, so a briefing that
+   lapsed unclaimed is never read as one that was spoken. */
+.conversation-unspoken {
+  align-self: flex-start;
+  padding: 0 10px 6px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 620;
+}
+
+/* Luke's thought, folded to one line on his side of the thread that opens on
+   its words. A native disclosure rather than a control of Luke's own, and no
+   bubble: a thought is not something he said. */
+.conversation-reasoning {
+  min-width: 0;
+  max-width: min(82%, 58ch);
+  padding: 2px 10px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.conversation-reasoning-summary {
+  cursor: default;
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+  font-weight: 620;
+}
+
+.conversation-reasoning-words {
+  display: block;
+  padding-top: 3px;
+  overflow-wrap: anywhere;
+}
+
+/* The turn's working, folded under a count at the turn's foot in the quiet
+   voice: the details it read and wrote, and the actions whose tools failed.
+   Closed by default; opening it moves nothing else. */
+.conversation-turn-details {
+  min-width: 0;
+  padding: 2px 12px;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.conversation-turn-summary {
+  cursor: default;
+  color: var(--text-tertiary);
+  font-weight: 620;
+}
+
+.conversation-turn-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.conversation-turn-rows .conversation-entry {
+  width: auto;
+}
+
+.conversation-turn-rows .conversation-message {
+  position: static;
+  width: 100%;
+}
+
+/* One call the turn made and nothing of what it read or wrote: its tool's
+   name and its state, in a line. */
+.conversation-detail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.conversation-detail-name {
+  color: var(--text-primary);
+  font-weight: 620;
+}
+
+.conversation-detail-state {
+  color: var(--text-tertiary);
+}

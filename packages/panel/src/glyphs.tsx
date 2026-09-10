@@ -407,6 +407,45 @@ export function SendIcon(): React.JSX.Element {
   );
 }
 
+/** A speech bubble: words sent to a session. */
+export function MessageIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M20.4 6.2a1.8 1.8 0 0 0-1.8-1.8H5.4a1.8 1.8 0 0 0-1.8 1.8v7.4a1.8 1.8 0 0 0 1.8 1.8h3.4v3.8l4.4-3.8h5.4a1.8 1.8 0 0 0 1.8-1.8z" />
+    </Glyph>
+  );
+}
+
+/** A bolt: a control a session advertised, pressed. */
+export function ControlIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M13.2 2.8 5.6 13.6h5.6l-1 7.6 7.6-10.8h-5.6z" />
+    </Glyph>
+  );
+}
+
+/** A box with its lid on: the settled thing filed away. */
+export function ArchiveIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M4 4.6h16v4H4z" />
+      <path d="M5.4 8.6v9.2a1.6 1.6 0 0 0 1.6 1.6h10a1.6 1.6 0 0 0 1.6-1.6V8.6" />
+      <path d="M10 12.4h4" />
+    </Glyph>
+  );
+}
+
+/** A plus: a workspace or an agent that did not exist before the action. */
+export function PlusIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M12 5.4v13.2" />
+      <path d="M5.4 12h13.2" />
+    </Glyph>
+  );
+}
+
 /** Stops the reply under way, drawn the way every chat surface draws it: a square. */
 export function StopIcon(): React.JSX.Element {
   return (

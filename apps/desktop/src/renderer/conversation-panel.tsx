@@ -1,5 +1,5 @@
 import { type BrainRequestSnapshot, brainRequestPending } from "@sidecar/brain/requests-wire";
-import { CheckIcon, CopyIcon, WingFace } from "@sidecar/panel";
+import { WingFace } from "@sidecar/panel";
 import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
@@ -8,9 +8,8 @@ import {
 } from "@sidecar/session";
 import { FACE_MOTION } from "@sidecar/surface";
 import { useEffect, useRef, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
-import { tell } from "./act";
 import { type AskHandler, AskLuke } from "./ask-luke";
+import { ConversationCopyButton } from "./conversation-copy";
 import {
   createConversationTimeBreakFormatter,
   opensConversationTimeBreak,
@@ -25,7 +24,7 @@ export const CONVERSATION_ENTRY_SPEAKER = {
   EVENT: "event",
 } as const;
 
-type ConversationEntrySpeaker =
+export type ConversationEntrySpeaker =
   (typeof CONVERSATION_ENTRY_SPEAKER)[keyof typeof CONVERSATION_ENTRY_SPEAKER];
 
 export interface ConversationEntryPresentation {
@@ -51,8 +50,6 @@ export function conversationEntryPresentation(
       return { speaker: CONVERSATION_ENTRY_SPEAKER.EVENT, label: "At your request" };
   }
 }
-
-const COPY_CONFIRMATION_MS = 1500;
 
 const ENTRY_TIME = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
 
@@ -171,14 +168,6 @@ function ConversationEntryRow({
 }): React.JSX.Element {
   const presentation = conversationEntryPresentation(entry.kind);
   const words = entry.words;
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), COPY_CONFIRMATION_MS);
-    return () => clearTimeout(timer);
-  }, [copied]);
-
   const recordedAt = entry.recordedAt === undefined ? undefined : new Date(entry.recordedAt);
 
   return (
@@ -194,21 +183,7 @@ function ConversationEntryRow({
           {/* Copying words still arriving would copy half a sentence; the control
             appears with the settled line the same words become. */}
           {presentation.speaker === CONVERSATION_ENTRY_SPEAKER.EVENT || streaming ? null : (
-            <button
-              type="button"
-              className="conversation-copy"
-              data-copied={copied ? "true" : undefined}
-              aria-label={copied ? "Copied" : "Copy message"}
-              onClick={() => {
-                // The line's own words as written, Markdown marks included, so
-                // a paste carries the structure the bubble drew — and never the
-                // structured model context behind an announcement.
-                tell(ACT_KIND.WINDOW_COPY_TEXT, { words });
-                setCopied(true);
-              }}
-            >
-              {copied ? <CheckIcon /> : <CopyIcon />}
-            </button>
+            <ConversationCopyButton words={words} />
           )}
         </span>
       </div>

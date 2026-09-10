@@ -1,0 +1,196 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  CONVERSATION_VIEW_TOOL_KIND,
+  type ConversationViewTurnGroup,
+  isStoredToolPart,
+  MESSAGE_ROLE,
+  type SessionIdentity,
+  selectConversationView,
+} from "@sidecar/session";
+import { CONVERSATION_EVENT_KIND } from "@sidecar/wire";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { TOOL_ROW_STATUS, toolRow } from "./conversation-tool-row";
+import { announcedWords, ConversationTurns, detailToolLabel } from "./conversation-turns";
+import {
+  FIXTURE_INPUT,
+  FIXTURE_ROSTER,
+  fixtureConversationTurns,
+} from "./conversation-turns.fixtures";
+
+const OPEN = (identity: SessionIdentity) => void identity;
+
+function render(
+  groups: readonly ConversationViewTurnGroup[],
+  onOpenChat?: (identity: SessionIdentity) => void,
+) {
+  return renderToStaticMarkup(
+    createElement(ConversationTurns, {
+      groups,
+      roster: FIXTURE_ROSTER,
+      ...(onOpenChat ? { onOpenChat } : undefined),
+    }),
+  );
+}
+
+/** How many times one fixed attribute the renderer stamps appears; a structural count, never a phrase. */
+function count(markup: string, attribute: string, value: string): number {
+  return markup.split(`${attribute}="${value}"`).length - 1;
+}
+
+const FOLD_OPENING = '<details class="conversation-turn-details"';
+
+test("the fixture scenarios draw every session action kind as a row", () => {
+  const markup = render(fixtureConversationTurns(), OPEN);
+  const kinds = new Set<string>();
+  for (const match of markup.matchAll(/data-action-kind="([^"]+)"/g)) {
+    if (match[1] !== undefined) kinds.add(match[1]);
+  }
+  assert.deepEqual([...kinds].sort(), [
+    "add-agent",
+    "control",
+    "create-workspace",
+    "message",
+    "open",
+    "rename-session",
+    "rename-workspace",
+  ]);
+  // Both the accepted actions and the three other outcomes stand in the thread.
+  assert.ok(count(markup, "data-tool-status", TOOL_ROW_STATUS.ACCEPTED) >= 7);
+  assert.equal(count(markup, "data-tool-status", TOOL_ROW_STATUS.REFUSED), 1);
+  assert.equal(count(markup, "data-tool-status", TOOL_ROW_STATUS.UNKNOWN), 1);
+  assert.equal(count(markup, "data-tool-status", TOOL_ROW_STATUS.PENDING), 1);
+});
+
+test("a chip is a press exactly where the composition says the session opens, and a name everywhere else", () => {
+  const groups = fixtureConversationTurns();
+  const chips = groups
+    .flatMap((group) => group.messages)
+    .flatMap((view) =>
+      view.message.role === MESSAGE_ROLE.ASSISTANT
+        ? view.message.parts.filter(isStoredToolPart).flatMap((part) => {
+            const row = toolRow(part, FIXTURE_ROSTER);
+            return row ? row.runs.flatMap((run) => ("chip" in run ? [run.chip] : [])) : [];
+          })
+        : [],
+    );
+  const pressable = chips.filter((chip) => chip.identity !== undefined && chip.openable).length;
+  assert.ok(pressable > 0 && pressable < chips.length);
+
+  const withPress = render(groups, OPEN);
+  assert.equal(
+    count(withPress, "class", "conversation-action-chip") -
+      withPress.split('<button type="button" class="conversation-action-chip"').length +
+      1,
+    chips.length - pressable,
+  );
+  assert.equal(
+    withPress.split('<button type="button" class="conversation-action-chip"').length - 1,
+    pressable,
+  );
+
+  // With nothing to hand a press to, every chip is a name.
+  const withoutPress = render(groups);
+  assert.equal(
+    withoutPress.split('<button type="button" class="conversation-action-chip"').length - 1,
+    0,
+  );
+  assert.equal(count(withoutPress, "class", "conversation-action-chip"), chips.length);
+});
+
+test("a refused action and the turn's details draw only inside the turn's fold", () => {
+  const groups = fixtureConversationTurns();
+  const folded = groups.filter((group) =>
+    group.messages.some((view) =>
+      view.tools.some(
+        (tool) =>
+          tool.kind === CONVERSATION_VIEW_TOOL_KIND.DETAIL ||
+          (tool.kind === CONVERSATION_VIEW_TOOL_KIND.ACTION && tool.refused),
+      ),
+    ),
+  );
+  assert.equal(folded.length, 2);
+  for (const group of folded) {
+    const markup = render([group], OPEN);
+    assert.equal(count(markup, "data-folded", "true"), 1);
+    const [aboveFold, insideFold] = markup.split(FOLD_OPENING);
+    assert.ok(aboveFold !== undefined && insideFold !== undefined);
+    assert.equal(count(aboveFold, "data-tool-status", TOOL_ROW_STATUS.FAILED), 0);
+    assert.equal(count(aboveFold, "class", "conversation-detail"), 0);
+    const failedActions = group.messages
+      .flatMap((view) => view.tools)
+      .filter((tool) => tool.kind === CONVERSATION_VIEW_TOOL_KIND.ACTION && tool.refused).length;
+    const details = group.messages
+      .flatMap((view) => view.tools)
+      .filter((tool) => tool.kind === CONVERSATION_VIEW_TOOL_KIND.DETAIL).length;
+    assert.equal(count(insideFold, "data-tool-status", TOOL_ROW_STATUS.FAILED), failedActions);
+    assert.equal(count(insideFold, "class", "conversation-detail"), details);
+  }
+  const unfolded = groups.filter((group) => !folded.includes(group));
+  assert.ok(unfolded.length > 0);
+  assert.equal(count(render(unfolded, OPEN), "data-folded", "true"), 0);
+});
+
+test("a reasoning part folds to a line on Luke's side, and an announcement is his bubble marked when unheard", () => {
+  const groups = fixtureConversationTurns();
+  const markup = render(groups, OPEN);
+  // Main's turn carries its thought; the observed turn's crosses cut to its announcement.
+  assert.equal(count(markup, "data-reasoning", "true"), 1);
+  assert.equal(count(markup, "data-unspoken", "true"), 0);
+
+  const announced = FIXTURE_INPUT.observed[0]?.messages[0];
+  assert.ok(announced);
+  const expired = selectConversationView({
+    ...FIXTURE_INPUT,
+    main: [],
+    events: [
+      { messageId: announced.message.id, kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED, seq: 1 },
+      { messageId: announced.message.id, kind: CONVERSATION_EVENT_KIND.SPEECH_EXPIRED, seq: 2 },
+    ],
+  });
+  const unheard = render(expired, OPEN);
+  assert.equal(count(unheard, "data-unspoken", "true"), 1);
+  assert.equal(count(unheard, "data-speaker", "luke"), 1);
+  assert.equal(count(unheard, "data-reasoning", "true"), 0);
+});
+
+test("the words an announce call carries are its briefing, and a detail's label is its tool's name", () => {
+  const announced = FIXTURE_INPUT.observed[0]?.messages[0]?.message;
+  assert.ok(announced && announced.role === MESSAGE_ROLE.ASSISTANT);
+  const announce = announced.parts
+    .filter(isStoredToolPart)
+    .find((part) => part.type === "tool-announce");
+  assert.ok(announce);
+  assert.equal(announcedWords(announce), "The fixture session is waiting on a permission prompt.");
+  assert.equal(announcedWords({ ...announce, input: { text: "not a briefing" } }), undefined);
+  assert.equal(detailToolLabel("read_transcript"), "read transcript");
+});
+
+test("a developer's row is a sent bubble with a copy control, and a note the brain wrote is a quiet row", () => {
+  const groups = fixtureConversationTurns();
+  const markup = render(groups, OPEN);
+  const asks = FIXTURE_INPUT.main.filter((row) => row.message.role === MESSAGE_ROLE.USER).length;
+  assert.equal(count(markup, "data-speaker", "you"), asks);
+  const noted = selectConversationView({
+    ...FIXTURE_INPUT,
+    observed: [],
+    main: [
+      {
+        message: {
+          id: "2b000000-0000-4000-8000-000000000901",
+          role: MESSAGE_ROLE.USER,
+          metadata: { author: "brain", source: "roster_look" },
+          parts: [{ type: "text", text: "Roster: a session finished." }],
+        },
+        seq: 1,
+        turnId: "1a000000-0000-4000-8000-000000000901",
+        createdAt: 1757505600000,
+      },
+    ],
+  });
+  const note = render(noted);
+  assert.equal(count(note, "data-speaker", "you"), 0);
+  assert.equal(count(note, "data-speaker", "event"), 1);
+  assert.equal(count(note, "class", "conversation-copy"), 0);
+});
