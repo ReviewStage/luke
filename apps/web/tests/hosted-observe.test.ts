@@ -150,7 +150,7 @@ test("a snapshot observed under a replaced key is not served: the read runs a pa
     }),
   );
   const replaced: VaultKeyRow[] = [
-    { providerId: "conductor", ciphertext: encryptProviderKey("conductor-test-key", SECRET) },
+    { providerId: "conductor", ciphertext: encryptProviderKey("another-key", SECRET) },
   ];
   const api = conductorApi(TEST_CONDUCTOR_STATUS.IDLE);
 

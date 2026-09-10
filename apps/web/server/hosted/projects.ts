@@ -83,7 +83,7 @@ export async function handleProjects(options: ProjectsOptions): Promise<Response
     return jsonResponse(HOSTED_HTTP_STATUS.OK, projectsAnswer(undefined, creating));
 
   const store = options.store(secret);
-  let roster = (await storedRoster(store, userId, rows))?.roster;
+  let roster = (await storedRoster(store, userId, rows, secret))?.roster;
   if (!roster) {
     const now = (options.now ?? Date.now)();
     if (projectsRateLimited(userId, now)) {

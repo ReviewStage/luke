@@ -32,9 +32,9 @@ export const OBSERVED_ROSTER_VERSION = 1;
 interface ObservedRosterProvider {
   readonly providerId: CloudAgentProviderId;
   /**
-   * A fingerprint of the stored key row the pass observed under, so a
-   * snapshot read under a key since replaced or removed is not served or
-   * admitted against as if it were this key's roster.
+   * A fingerprint of the key the pass observed under, so a snapshot read
+   * under a key since replaced or removed is not served or admitted against
+   * as if it were this key's roster.
    */
   readonly keyFingerprint: string;
   readonly observations: readonly ProviderSessionObservation[];

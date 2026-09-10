@@ -565,7 +565,7 @@ test("an action under a replaced key is admitted against a fresh pass, not the o
   });
   const readsAfterSeeding = api.reads.length;
   const replaced: VaultKeyRow[] = [
-    { providerId: "conductor", ciphertext: encryptProviderKey("key-1", SECRET) },
+    { providerId: "conductor", ciphertext: encryptProviderKey("key-2", SECRET) },
   ];
 
   const roster = await rosterForAction({

@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { type CloudAgentProviderId, isCloudAgentProviderId } from "../core.js";
 import { type ActionRoster, actionRosterFor } from "./action-execute.js";
 import {
@@ -7,6 +7,7 @@ import {
   type CloudObserveSeams,
   observeCloudProviders,
 } from "./cloud-observe.js";
+import { decryptProviderKey } from "./encryption.js";
 import {
   decodeObservedRoster,
   encodeObservedRoster,
@@ -71,33 +72,48 @@ export interface StoredSnapshot {
 }
 
 /**
- * What identifies the key row a provider was observed under: a hash of its
- * ciphertext, which every store of a key rewrites under a fresh nonce, so a
- * replaced key — even the same key saved again — reads as another row. The
- * hash says nothing about the key itself.
+ * What identifies the key a provider was observed under: an HMAC of the key
+ * itself under the deployment's secret. The same key saved again — which the
+ * Mac does on every launch, rewriting the stored ciphertext under a fresh
+ * nonce — keeps its fingerprint, and a different key has another; the
+ * fingerprint itself reveals nothing about the key.
  */
-export function keyFingerprint(row: VaultKeyRow): string {
-  return createHash("sha256").update(row.ciphertext).digest("hex");
+export function keyFingerprint(apiKey: string, secret: string): string {
+  return createHmac("sha256", secret).update(apiKey).digest("hex");
 }
 
-function keyFingerprints(rows: readonly VaultKeyRow[]): Map<CloudAgentProviderId, string> {
+/** The fingerprint of each cloud provider's standing key, by provider; a row this secret cannot open names none. */
+function keyFingerprints(
+  rows: readonly VaultKeyRow[],
+  secret: string,
+): Map<CloudAgentProviderId, string> {
   const fingerprints = new Map<CloudAgentProviderId, string>();
   for (const row of rows) {
-    if (isCloudAgentProviderId(row.providerId) && !fingerprints.has(row.providerId)) {
-      fingerprints.set(row.providerId, keyFingerprint(row));
+    if (!isCloudAgentProviderId(row.providerId) || fingerprints.has(row.providerId)) continue;
+    try {
+      fingerprints.set(
+        row.providerId,
+        keyFingerprint(decryptProviderKey(row.ciphertext, secret), secret),
+      );
+    } catch {
+      // A key this deployment cannot open observed nothing; the pass reports it as unreadable.
     }
   }
   return fingerprints;
 }
 
 /**
- * Whether a snapshot was observed under exactly the key rows standing now:
- * the same providers, each under the same row. A snapshot that was not is
+ * Whether a snapshot was observed under exactly the keys standing now: the
+ * same providers, each under the same key. A snapshot that was not is
  * another key's roster, however recent, and is neither served nor admitted
  * against nor diffed from.
  */
-export function rosterObservedUnder(roster: ObservedRoster, rows: readonly VaultKeyRow[]): boolean {
-  const standing = keyFingerprints(rows);
+export function rosterObservedUnder(
+  roster: ObservedRoster,
+  rows: readonly VaultKeyRow[],
+  secret: string,
+): boolean {
+  const standing = keyFingerprints(rows, secret);
   if (roster.providers.length !== standing.size) return false;
   return roster.providers.every(
     (provider) => standing.get(provider.providerId) === provider.keyFingerprint,
@@ -108,6 +124,7 @@ export async function storedRoster(
   store: ObservationStore,
   userId: string,
   rows: readonly VaultKeyRow[],
+  secret: string,
 ): Promise<StoredSnapshot | undefined> {
   let snapshot: Awaited<ReturnType<ObservationStore["roster"]["read"]>>;
   try {
@@ -118,7 +135,7 @@ export async function storedRoster(
   }
   if (!snapshot) return undefined;
   const roster = decodeObservedRoster(snapshot.body);
-  return roster && rosterObservedUnder(roster, rows)
+  return roster && rosterObservedUnder(roster, rows, secret)
     ? { observedAt: snapshot.observedAt, roster }
     : { observedAt: snapshot.observedAt };
 }
@@ -135,7 +152,7 @@ export async function observeAndSnapshot(
     attemptedAt: now,
     failure: CLOUD_OBSERVE_FAILURE.UNFINISHED,
   });
-  const previous = await storedRoster(store, userId, input.rows);
+  const previous = await storedRoster(store, userId, input.rows, input.secret);
   const standing: Pick<ObservationPassOutcome, "roster" | "observedAt"> = {};
   if (previous?.roster) {
     standing.roster = previous.roster;
@@ -154,7 +171,7 @@ export async function observeAndSnapshot(
     return { complete: false, failure: failed.failure, changed: false, ...standing };
   }
 
-  const fingerprints = keyFingerprints(input.rows);
+  const fingerprints = keyFingerprints(input.rows, input.secret);
   const roster: ObservedRoster = {
     version: OBSERVED_ROSTER_VERSION,
     providers: passes.map((pass) => ({
@@ -203,7 +220,7 @@ export async function observeAndSnapshot(
     // moves forward, so an older instant here changes nothing, and a newer
     // one closes the unfinished attempt it opened above.
     await store.roster.recordPass(userId, { attemptedAt: now });
-    const superseded = await storedRoster(store, userId, input.rows);
+    const superseded = await storedRoster(store, userId, input.rows, input.secret);
     const outcome: ObservationPassOutcome = { complete: true, changed: false };
     if (superseded?.roster) {
       outcome.roster = superseded.roster;
@@ -231,7 +248,7 @@ export async function rosterForAction(input: {
   now: number;
 }): Promise<ActionRoster> {
   const rows = await input.readVaultKeys(input.userId);
-  const stored = await storedRoster(input.store, input.userId, rows);
+  const stored = await storedRoster(input.store, input.userId, rows, input.secret);
   if (stored?.roster) return actionRosterFor(input.providerId, { roster: stored.roster });
   const outcome = await observeAndSnapshot({
     userId: input.userId,
