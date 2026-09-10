@@ -51,12 +51,13 @@ export function webSocketOrigin(address: string): string | undefined {
 
 /**
  * The one origin a hosted desktop opens a voice socket to: Luke's own
- * service, in its socket form. Pinned by the build and compared as an origin
- * — scheme, host, and port — so a path or query can never make another host
+ * service, in its socket form (the test holds it to `webSocketOrigin` of
+ * `HOSTED_SERVICE_ORIGIN`). Pinned by the build and compared as an origin —
+ * scheme, host, and port — so a path or query can never make another host
  * read as Luke's service. A development build may be pointed elsewhere
  * through {@link hostedVoiceServiceOrigin}; a packaged one may not.
  */
-export const HOSTED_VOICE_SERVICE_ORIGIN = webSocketOrigin(HOSTED_SERVICE_ORIGIN) ?? "";
+export const HOSTED_VOICE_SERVICE_ORIGIN = "wss://tryluke.dev";
 
 /** Whether an address is on the hosted voice service's origin, by `URL.origin` alone. */
 export function isHostedVoiceServiceAddress(address: string, origin = HOSTED_VOICE_SERVICE_ORIGIN) {

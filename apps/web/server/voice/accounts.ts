@@ -1,4 +1,3 @@
-import type { HostedQuota } from "../core.js";
 import type { HostedSpend, VoiceSecondsOutcome } from "../hosted/quota.js";
 
 /**
@@ -9,20 +8,6 @@ import type { HostedSpend, VoiceSecondsOutcome } from "../hosted/quota.js";
  * bearer is resolved exactly as every hosted route resolves the one on its own
  * request, and is held no longer than the handshake it arrived on.
  */
-
-export const AUTHORIZE_OUTCOME = {
-  AUTHORIZED: "authorized",
-  /** No account stands behind the bearer. */
-  NOT_SIGNED_IN: "not-signed-in",
-  /** The account's daily allowance is spent. */
-  QUOTA_EXHAUSTED: "quota-exhausted",
-} as const;
-
-export type AuthorizeResult =
-  | { outcome: typeof AUTHORIZE_OUTCOME.AUTHORIZED; userId: string; quota: HostedQuota }
-  | { outcome: typeof AUTHORIZE_OUTCOME.NOT_SIGNED_IN }
-  | { outcome: typeof AUTHORIZE_OUTCOME.QUOTA_EXHAUSTED; quota: HostedQuota };
-
 export interface VoiceAccounts {
   /** The account behind an `Authorization` value, or nothing. */
   resolveUserId(authorization: string): Promise<string | undefined>;
@@ -38,16 +23,4 @@ export interface VoiceAccounts {
     sessionId: string;
     seconds: number;
   }): Promise<VoiceSecondsOutcome>;
-}
-
-/** Resolves the bearer and spends the allowance, in that order, so a refused account costs no session. */
-export async function authorizeSession(
-  accounts: VoiceAccounts,
-  authorization: string,
-): Promise<AuthorizeResult> {
-  const userId = await accounts.resolveUserId(authorization);
-  if (userId === undefined) return { outcome: AUTHORIZE_OUTCOME.NOT_SIGNED_IN };
-  const spend = await accounts.spend(userId);
-  if (!spend.allowed) return { outcome: AUTHORIZE_OUTCOME.QUOTA_EXHAUSTED, quota: spend.quota };
-  return { outcome: AUTHORIZE_OUTCOME.AUTHORIZED, userId, quota: spend.quota };
 }

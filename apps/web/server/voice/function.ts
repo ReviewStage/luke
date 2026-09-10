@@ -9,7 +9,7 @@ import {
   voiceSessionOwner,
 } from "../hosted/quota.js";
 import type { VoiceAccounts } from "./accounts.js";
-import { VoiceService, type VoiceServiceOptions } from "./service.js";
+import { VoiceService } from "./service.js";
 
 /**
  * The deployment's real seams handed to the voice service, once per function
@@ -36,18 +36,14 @@ const deploymentAccounts: VoiceAccounts = {
   recordSeconds: (input) => recordVoiceSeconds(getDatabase(), { ...input, now: Date.now() }),
 };
 
-function voiceServiceOptions(environment: NodeJS.ProcessEnv): VoiceServiceOptions {
-  return {
-    apiKey: environment[VOICE_FUNCTION_ENVIRONMENT.API_KEY],
-    model: environment[VOICE_FUNCTION_ENVIRONMENT.LIVE_MODEL],
-    accounts: deploymentAccounts,
-  };
-}
-
 let service: VoiceService | undefined;
 
 /** The one service of this function instance, built on first use. */
 export function voiceFunctionServer() {
-  service ??= new VoiceService(voiceServiceOptions(process.env));
+  service ??= new VoiceService({
+    apiKey: process.env[VOICE_FUNCTION_ENVIRONMENT.API_KEY],
+    model: process.env[VOICE_FUNCTION_ENVIRONMENT.LIVE_MODEL],
+    accounts: deploymentAccounts,
+  });
   return service.server;
 }

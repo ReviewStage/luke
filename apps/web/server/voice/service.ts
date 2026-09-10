@@ -27,7 +27,7 @@ import {
   RENDERER_SERVER_EVENTS,
   SEED_ROLE,
 } from "../live.js";
-import { AUTHORIZE_OUTCOME, authorizeSession, type VoiceAccounts } from "./accounts.js";
+import type { VoiceAccounts } from "./accounts.js";
 import { frameText, routeForPath, VOICE_ROUTE, type VoiceRoute } from "./frames.js";
 import { IntroductionMeter } from "./introduction-meter.js";
 import { LOG_EVENT, type Log, standardOutputLog } from "./log.js";
@@ -119,6 +119,18 @@ type Admission =
   | { route: typeof VOICE_ROUTE.INTRODUCTION };
 
 type UpgradeDecision = Admission | { status: number };
+
+/** A session standing behind a socket, with the frame that says so, or the reason it is not. */
+type Opened =
+  | {
+      sessionId: string;
+      /** The account the session is billed to; none for the introduction. */
+      accountId: string | undefined;
+      sideband: WebSocket;
+      answer: SessionCreatedFrame | SessionAttachedFrame;
+      logEvent: typeof LOG_EVENT.SESSION_CREATED | typeof LOG_EVENT.SESSION_ATTACHED;
+    }
+  | { refusal: HostedApiError };
 
 function headerValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -268,7 +280,7 @@ export class VoiceService {
       : { status: UPGRADE_STATUS.TOO_MANY_REQUESTS };
   }
 
-  /** One socket, one session: the opening frame, the authorization, the creation or attachment, the pipe. */
+  /** One socket, one session: the opening frame, the creation or attachment, the pipe. */
   async #serve(desktop: WebSocket, admission: Admission): Promise<void> {
     const upstream = this.#upstream;
     if (upstream === undefined) return;
@@ -286,100 +298,22 @@ export class VoiceService {
       refuse(HOSTED_API_ERROR.INVALID_REQUEST);
       return;
     }
-
-    let sessionId: string;
-    let accountId: string | undefined;
-    let sideband: WebSocket;
-    if (frame.type === VOICE_SERVICE_FRAME.SESSION_ATTACH) {
-      if (admission.route !== VOICE_ROUTE.SESSIONS) {
-        refuse(HOSTED_API_ERROR.INVALID_REQUEST);
-        return;
-      }
-      const owner = await this.#attachingAccount(admission.bearer, frame);
-      if (owner === undefined) {
-        refuse(HOSTED_API_ERROR.INVALID_TOKEN);
-        return;
-      }
-      if (!isOpen(desktop)) return;
-      const attached = await this.#attach(upstream, frame.sessionId);
-      if (attached === undefined) {
-        refuse(HOSTED_API_ERROR.UPSTREAM_ERROR);
-        return;
-      }
-      sessionId = frame.sessionId;
-      accountId = owner;
-      sideband = attached;
-      if (isOpen(desktop)) {
-        const answer: SessionAttachedFrame = {
-          type: VOICE_SERVICE_FRAME.SESSION_ATTACHED,
-          sessionId,
-        };
-        desktop.send(JSON.stringify(answer));
-        this.#log({ event: LOG_EVENT.SESSION_ATTACHED, route });
-      }
-    } else {
-      if (route === VOICE_ROUTE.INTRODUCTION && !introductionInputAdmitted(frame)) {
-        refuse(HOSTED_API_ERROR.INVALID_REQUEST);
-        return;
-      }
-      let quota: SessionCreatedFrame["quota"];
-      if (admission.route === VOICE_ROUTE.SESSIONS) {
-        const authorized = await authorizeSession(this.#accounts, admission.bearer);
-        if (authorized.outcome !== AUTHORIZE_OUTCOME.AUTHORIZED) {
-          refuse(
-            authorized.outcome === AUTHORIZE_OUTCOME.NOT_SIGNED_IN
-              ? HOSTED_API_ERROR.INVALID_TOKEN
-              : HOSTED_API_ERROR.QUOTA_EXHAUSTED,
-          );
-          return;
-        }
-        accountId = authorized.userId;
-        quota = authorized.quota;
-      }
-      if (!isOpen(desktop)) return;
-
-      const config = liveSessionConfig({
-        scene: route === VOICE_ROUTE.SESSIONS ? LIVE_SCENE.DESKTOP : LIVE_SCENE.INTRODUCTION,
-        model: this.#options.model,
-        voice: frame.voice,
-        input: frame.input,
-        clientEvents: RENDERER_CLIENT_EVENTS,
-        serverEvents: RENDERER_SERVER_EVENTS,
-      });
-      const created = await upstream.create(config, frame.sdp);
-      if (created.outcome !== LIVE_SESSION_OUTCOME.SUCCEEDED) {
-        refuse(
-          created.outcome === LIVE_SESSION_OUTCOME.HTTP_ERROR &&
-            created.status === HTTP_STATUS.TOO_MANY_REQUESTS
-            ? HOSTED_API_ERROR.UPSTREAM_THROTTLED
-            : HOSTED_API_ERROR.UPSTREAM_ERROR,
-        );
-        return;
-      }
-      sessionId = created.answer.session.id;
-      if (accountId !== undefined) {
-        await this.#accounts.registerSession({ userId: accountId, sessionId });
-      }
-
-      const attached = await this.#attach(upstream, sessionId);
-      if (attached === undefined) {
-        refuse(HOSTED_API_ERROR.UPSTREAM_ERROR);
-        return;
-      }
-      sideband = attached;
-      if (isOpen(desktop)) {
-        const answer: SessionCreatedFrame = {
-          type: VOICE_SERVICE_FRAME.SESSION_CREATED,
-          sessionId,
-          sdpAnswer: created.answer.transport.sdp,
-        };
-        if (quota !== undefined) answer.quota = quota;
-        desktop.send(JSON.stringify(answer));
-        this.#log({ event: LOG_EVENT.SESSION_CREATED, route });
-      }
+    const opened =
+      frame.type === VOICE_SERVICE_FRAME.SESSION_ATTACH
+        ? await this.#openAttached(upstream, admission, frame)
+        : await this.#openCreated(upstream, admission, frame);
+    if (!isOpen(desktop)) {
+      if ("sideband" in opened) opened.sideband.close(SOCKET_CLOSE_CODE.GOING_AWAY);
+      return;
     }
+    if ("refusal" in opened) {
+      refuse(opened.refusal);
+      return;
+    }
+    desktop.send(JSON.stringify(opened.answer));
+    this.#log({ event: opened.logEvent, route });
 
-    const owner = accountId;
+    const { sessionId, accountId, sideband } = opened;
     const summary = await relaySession({
       route,
       desktop,
@@ -397,22 +331,106 @@ export class VoiceService {
             }
           : undefined,
       onSessionClosed:
-        owner === undefined ? undefined : (seconds) => this.#recordUsage(owner, sessionId, seconds),
+        accountId === undefined
+          ? undefined
+          : (seconds) => this.#recordUsage(accountId, sessionId, seconds),
     });
     this.#log({ event: LOG_EVENT.SESSION_ENDED, route, ...summary });
   }
 
+  /** A new session: authorized and spent, created at OpenAI, registered to its account, and attached. */
+  async #openCreated(
+    upstream: LiveUpstream,
+    admission: Admission,
+    frame: SessionCreateFrame,
+  ): Promise<Opened> {
+    const { route } = admission;
+    if (route === VOICE_ROUTE.INTRODUCTION && !introductionInputAdmitted(frame)) {
+      return { refusal: HOSTED_API_ERROR.INVALID_REQUEST };
+    }
+    const answer: SessionCreatedFrame = {
+      type: VOICE_SERVICE_FRAME.SESSION_CREATED,
+      sessionId: "",
+      sdpAnswer: "",
+    };
+    let accountId: string | undefined;
+    if (admission.route === VOICE_ROUTE.SESSIONS) {
+      accountId = await this.#accounts.resolveUserId(admission.bearer);
+      if (accountId === undefined) return { refusal: HOSTED_API_ERROR.INVALID_TOKEN };
+      const spend = await this.#accounts.spend(accountId);
+      if (!spend.allowed) return { refusal: HOSTED_API_ERROR.QUOTA_EXHAUSTED };
+      answer.quota = spend.quota;
+    }
+
+    const config = liveSessionConfig({
+      scene: route === VOICE_ROUTE.SESSIONS ? LIVE_SCENE.DESKTOP : LIVE_SCENE.INTRODUCTION,
+      model: this.#options.model,
+      voice: frame.voice,
+      input: frame.input,
+      clientEvents: RENDERER_CLIENT_EVENTS,
+      serverEvents: RENDERER_SERVER_EVENTS,
+    });
+    const created = await upstream.create(config, frame.sdp);
+    if (created.outcome !== LIVE_SESSION_OUTCOME.SUCCEEDED) {
+      return {
+        refusal:
+          created.outcome === LIVE_SESSION_OUTCOME.HTTP_ERROR &&
+          created.status === HTTP_STATUS.TOO_MANY_REQUESTS
+            ? HOSTED_API_ERROR.UPSTREAM_THROTTLED
+            : HOSTED_API_ERROR.UPSTREAM_ERROR,
+      };
+    }
+    answer.sessionId = created.answer.session.id;
+    answer.sdpAnswer = created.answer.transport.sdp;
+    if (accountId !== undefined) {
+      await this.#accounts.registerSession({ userId: accountId, sessionId: answer.sessionId });
+    }
+    const sideband = await this.#attach(upstream, answer.sessionId);
+    if (sideband === undefined) return { refusal: HOSTED_API_ERROR.UPSTREAM_ERROR };
+    return {
+      sessionId: answer.sessionId,
+      accountId,
+      sideband,
+      answer,
+      logEvent: LOG_EVENT.SESSION_CREATED,
+    };
+  }
+
   /**
-   * The account a `session.attach` may proceed under: the bearer's account,
-   * and only when the session named was created for that very account. A
-   * session this deployment never created, or another account's, is refused
-   * as the bearer's own failure rather than as a hint that the id exists.
+   * A fresh connection to a session that stands: the bearer's account, and
+   * only when the session named was created for that very account. A session
+   * this deployment never created, or another account's, is refused as the
+   * bearer's own failure rather than as a hint that the id exists. The
+   * introduction never re-attaches.
    */
-  async #attachingAccount(bearer: string, frame: SessionAttachFrame): Promise<string | undefined> {
-    const userId = await this.#accounts.resolveUserId(bearer);
-    if (userId === undefined) return undefined;
-    const owner = await this.#accounts.sessionOwner(frame.sessionId);
-    return owner === userId ? userId : undefined;
+  async #openAttached(
+    upstream: LiveUpstream,
+    admission: Admission,
+    frame: SessionAttachFrame,
+  ): Promise<Opened> {
+    if (admission.route !== VOICE_ROUTE.SESSIONS) {
+      return { refusal: HOSTED_API_ERROR.INVALID_REQUEST };
+    }
+    const accountId = await this.#accounts.resolveUserId(admission.bearer);
+    if (
+      accountId === undefined ||
+      (await this.#accounts.sessionOwner(frame.sessionId)) !== accountId
+    ) {
+      return { refusal: HOSTED_API_ERROR.INVALID_TOKEN };
+    }
+    const sideband = await this.#attach(upstream, frame.sessionId);
+    if (sideband === undefined) return { refusal: HOSTED_API_ERROR.UPSTREAM_ERROR };
+    const answer: SessionAttachedFrame = {
+      type: VOICE_SERVICE_FRAME.SESSION_ATTACHED,
+      sessionId: frame.sessionId,
+    };
+    return {
+      sessionId: frame.sessionId,
+      accountId,
+      sideband,
+      answer,
+      logEvent: LOG_EVENT.SESSION_ATTACHED,
+    };
   }
 
   async #attach(upstream: LiveUpstream, sessionId: string): Promise<WebSocket | undefined> {
