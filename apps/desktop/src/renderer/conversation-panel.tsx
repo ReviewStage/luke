@@ -1,6 +1,18 @@
 import { type BrainRequestSnapshot, brainRequestPending } from "@sidecar/brain/requests-wire";
-import { CheckIcon, CopyIcon, WingFace } from "@sidecar/panel";
 import {
+  CheckIcon,
+  ControlIcon,
+  CopyIcon,
+  ExternalIcon,
+  MessageIcon,
+  PencilIcon,
+  PlusIcon,
+  ProviderMark,
+  WingFace,
+} from "@sidecar/panel";
+import {
+  ACTION_KIND,
+  type ActionKind,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
   type ConversationEntryKind,
@@ -27,6 +39,12 @@ export const CONVERSATION_ENTRY_SPEAKER = {
 type ConversationEntrySpeaker =
   (typeof CONVERSATION_ENTRY_SPEAKER)[keyof typeof CONVERSATION_ENTRY_SPEAKER];
 
+/** Whose judgment an action row records: the developer's ask, or Luke's own. */
+export const CONVERSATION_ACTION_ORIGIN = {
+  ASK: "ask",
+  OWN: "own",
+} as const;
+
 export interface ConversationEntryPresentation {
   speaker: ConversationEntrySpeaker;
   label: string;
@@ -42,14 +60,32 @@ export function conversationEntryPresentation(
       return { speaker: CONVERSATION_ENTRY_SPEAKER.YOU, label: "You" };
     case CONVERSATION_ENTRY_KIND.REPLY:
     case CONVERSATION_ENTRY_KIND.ANNOUNCEMENT:
-    // An action Luke took on his own judgment is drawn as his own line, never as
-    // the developer's request; the attribution lives in the stored kind.
-    case CONVERSATION_ENTRY_KIND.OWN_ACTION:
       return { speaker: CONVERSATION_ENTRY_SPEAKER.LUKE, label: "Luke" };
     case CONVERSATION_ENTRY_KIND.ACTION:
       return { speaker: CONVERSATION_ENTRY_SPEAKER.EVENT, label: "At your request" };
+    // An action Luke took on his own judgment is the same quiet row, never a
+    // reply bubble and never the developer's request; the label names whose
+    // judgment it was, and the row signs it with his face.
+    case CONVERSATION_ENTRY_KIND.OWN_ACTION:
+      return { speaker: CONVERSATION_ENTRY_SPEAKER.EVENT, label: "Luke, on his own judgment" };
   }
 }
+
+/**
+ * The mark an action row leads with, one per kind of thing that can be done to
+ * a session, total over the vocabulary so a new kind does not compile until it
+ * has one. Two renames share the pencil and two creations the plus: the mark
+ * says what sort of thing happened, and the words say to what.
+ */
+const ACTION_GLYPH = {
+  [ACTION_KIND.MESSAGE]: MessageIcon,
+  [ACTION_KIND.CONTROL]: ControlIcon,
+  [ACTION_KIND.OPEN]: ExternalIcon,
+  [ACTION_KIND.CREATE_WORKSPACE]: PlusIcon,
+  [ACTION_KIND.ADD_AGENT]: PlusIcon,
+  [ACTION_KIND.RENAME_WORKSPACE]: PencilIcon,
+  [ACTION_KIND.RENAME_SESSION]: PencilIcon,
+} as const satisfies Record<ActionKind, () => React.JSX.Element>;
 
 const COPY_CONFIRMATION_MS = 1500;
 
@@ -131,7 +167,22 @@ function ConversationThinkingRow({
   );
 }
 
-function ConversationEntryRow({
+/**
+ * The stamp is the row's, not the bubble's: it stands in one column past the
+ * thread's visible edge, sent, received, and acted alike, which the thread's
+ * own sideways scroll brings into view.
+ */
+function ConversationStamp({ recordedAt }: { recordedAt: number | undefined }) {
+  if (recordedAt === undefined) return null;
+  const at = new Date(recordedAt);
+  return (
+    <time className="conversation-time" dateTime={at.toISOString()}>
+      {ENTRY_TIME.format(at)}
+    </time>
+  );
+}
+
+function ConversationMessageRow({
   entry,
   streaming,
 }: {
@@ -148,8 +199,6 @@ function ConversationEntryRow({
     return () => clearTimeout(timer);
   }, [copied]);
 
-  const recordedAt = entry.recordedAt === undefined ? undefined : new Date(entry.recordedAt);
-
   return (
     <li
       className="conversation-entry"
@@ -162,7 +211,7 @@ function ConversationEntryRow({
           <MarkdownMessage words={words} className="conversation-words" />
           {/* Copying words still arriving would copy half a sentence; the control
             appears with the settled line the same words become. */}
-          {presentation.speaker === CONVERSATION_ENTRY_SPEAKER.EVENT || streaming ? null : (
+          {streaming ? null : (
             <button
               type="button"
               className="conversation-copy"
@@ -181,15 +230,63 @@ function ConversationEntryRow({
           )}
         </span>
       </div>
-      {/* The stamp is the row's, not the bubble's: it stands in one column
-          past the thread's visible edge, sent and received alike, which the
-          thread's own sideways scroll brings into view. */}
-      {recordedAt ? (
-        <time className="conversation-time" dateTime={recordedAt.toISOString()}>
-          {ENTRY_TIME.format(recordedAt)}
-        </time>
-      ) : null}
+      <ConversationStamp recordedAt={entry.recordedAt} />
     </li>
+  );
+}
+
+/**
+ * An action Luke carried is a row rather than a bubble: what was done, in the
+ * quiet voice the dates use, led by a mark for the kind of thing it was. A row
+ * from a turn nobody opened leads with Luke's face instead — he signs his own
+ * work here as the errand has him do on a control — so whose judgment an
+ * action was is read at a glance and never wears a reply's bubble. The words
+ * end on the mark of the provider the action reached — the session's own for
+ * an action on a session, the one a creation asked for a new workspace — so
+ * a row is placed the way a session row is, by its mark. A line an earlier
+ * build recorded without its kind draws with the mark's room left empty
+ * rather than guessing one. No copy control: the words are a record of an
+ * act, not something said.
+ */
+function ConversationActionRow({ entry }: { entry: ConversationEntry }): React.JSX.Element {
+  const presentation = conversationEntryPresentation(entry.kind);
+  const own = entry.kind === CONVERSATION_ENTRY_KIND.OWN_ACTION;
+  const Glyph = entry.action ? ACTION_GLYPH[entry.action.kind] : undefined;
+  const providerId = entry.identity?.providerId ?? entry.action?.providerId;
+  return (
+    <li
+      className="conversation-entry"
+      data-speaker={presentation.speaker}
+      data-origin={own ? CONVERSATION_ACTION_ORIGIN.OWN : CONVERSATION_ACTION_ORIGIN.ASK}
+    >
+      <small className="visually-hidden">{presentation.label}</small>
+      <div className="conversation-message">
+        <span className="conversation-action">
+          <span className="conversation-action-mark" aria-hidden="true">
+            {own ? <WingFace /> : Glyph ? <Glyph /> : null}
+          </span>
+          <MarkdownMessage words={entry.words} className="conversation-words" />
+          {providerId === undefined ? null : (
+            <span className="conversation-action-provider" aria-hidden="true">
+              <ProviderMark providerId={providerId} />
+            </span>
+          )}
+        </span>
+      </div>
+      <ConversationStamp recordedAt={entry.recordedAt} />
+    </li>
+  );
+}
+
+function ConversationEntryRow(props: {
+  entry: ConversationEntry;
+  streaming?: boolean;
+}): React.JSX.Element {
+  return conversationEntryPresentation(props.entry.kind).speaker ===
+    CONVERSATION_ENTRY_SPEAKER.EVENT ? (
+    <ConversationActionRow entry={props.entry} />
+  ) : (
+    <ConversationMessageRow {...props} />
   );
 }
 
@@ -212,8 +309,16 @@ function ConversationTimeBreak({ recordedAt, now }: { recordedAt: number; now: n
   );
 }
 
+interface KeyedConversationEntry {
+  entry: ConversationEntry;
+  key: string;
+  opensBreak: boolean;
+}
+
 /** Stable enough for repeated identical lines without pretending the record has durable ids. */
-function keyedConversationEntries(entries: readonly ConversationEntry[]) {
+function keyedConversationEntries(
+  entries: readonly ConversationEntry[],
+): readonly KeyedConversationEntry[] {
   const occurrences = new Map<string, number>();
   let previousRecordedAt: number | undefined;
   return entries.map((entry) => {
@@ -345,6 +450,18 @@ export function ConversationPanel({
 
   const thread = entries.length > 0 || live.length > 0 || thinkingSince !== undefined;
 
+  const dated = (lead: KeyedConversationEntry, row: React.JSX.Element) =>
+    lead.opensBreak && lead.entry.recordedAt !== undefined
+      ? [
+          <ConversationTimeBreak
+            key={`${lead.key}:break`}
+            recordedAt={lead.entry.recordedAt}
+            now={now}
+          />,
+          row,
+        ]
+      : [row];
+
   return (
     <section
       // PostHog blocks this fixed class and its whole subtree. Conversation
@@ -362,19 +479,9 @@ export function ConversationPanel({
               moment the fingers lift, which only the browser can see. */}
           <div className="conversation-pull">
             <ol className="conversation-list">
-              {keyedConversationEntries(entries).flatMap(({ entry, key, opensBreak }) => {
-                const row = <ConversationEntryRow key={key} entry={entry} />;
-                return opensBreak && entry.recordedAt !== undefined
-                  ? [
-                      <ConversationTimeBreak
-                        key={`${key}:break`}
-                        recordedAt={entry.recordedAt}
-                        now={now}
-                      />,
-                      row,
-                    ]
-                  : [row];
-              })}
+              {keyedConversationEntries(entries).flatMap((keyed) =>
+                dated(keyed, <ConversationEntryRow key={keyed.key} entry={keyed.entry} />),
+              )}
               {live.map((entry, index) => (
                 <ConversationEntryRow
                   // biome-ignore lint/suspicious/noArrayIndexKey: A line still being said has no durable id, and its words change on every delta — a key made of either would remount the bubble mid-sentence, while its position holds still for exactly as long as the line does.

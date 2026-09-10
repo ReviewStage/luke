@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ACTION_KIND } from "../advertised-actions.js";
 import { normalizeSession } from "../normalize.js";
 import { SESSION_STATUS } from "../session-status.js";
 import {
@@ -407,6 +408,37 @@ test("a stored line reads back, and retention cuts by age and by count", () => {
     line,
   );
 
+  // An action line keeps the kind it was, over the wire and back from disk; a
+  // kind this build does not know refuses the line the way a malformed
+  // identity does.
+  const acted = {
+    kind: CONVERSATION_ENTRY_KIND.ACTION,
+    words: 'sent a message to "checkout-service": "go ahead"',
+    recordedAt: now,
+    identity: { providerId: "claude-code", providerSessionId: "a" },
+    action: { kind: ACTION_KIND.MESSAGE },
+  };
+  assert.deepEqual(storedConversationEntry(conversationEntryToWire(acted)), acted);
+  assert.deepEqual(storedConversationEntry(JSON.parse(JSON.stringify(acted))), acted);
+  assert.equal(storedConversationEntry({ ...acted, action: { kind: "invented" } }), undefined);
+  assert.equal(storedConversationEntry({ ...acted, action: {} }), undefined);
+  // A creation names the provider it asked on the action itself, having no identity to name it.
+  const created = {
+    kind: CONVERSATION_ENTRY_KIND.ACTION,
+    words: 'asked conductor to create a workspace named "Notch panel clipping"',
+    recordedAt: now,
+    action: { kind: ACTION_KIND.CREATE_WORKSPACE, providerId: "conductor" },
+  };
+  assert.deepEqual(storedConversationEntry(conversationEntryToWire(created)), created);
+  assert.equal(
+    storedConversationEntry({ ...created, action: { ...created.action, providerId: "" } }),
+    undefined,
+  );
+  assert.equal(
+    storedConversationEntry({ ...created, action: { ...created.action, providerId: 7 } }),
+    undefined,
+  );
+
   const stale = { ...line, recordedAt: now - storedConversationMaximumAgeMs - 1 };
   assert.deepEqual(retainedConversationEntries([stale, line], now), [line]);
 
@@ -436,6 +468,16 @@ test("the unstrict read takes what the strict one refuses, and nothing wider", (
 
   const blankIdentity = { ...unclocked, identity: { providerId: "", providerSessionId: "" } };
   assert.deepEqual(storedConversationEntry(blankIdentity, { strict: false }), blankIdentity);
+
+  const blankProvider = {
+    ...unclocked,
+    action: { kind: ACTION_KIND.CREATE_WORKSPACE, providerId: "" },
+  };
+  assert.deepEqual(storedConversationEntry(blankProvider, { strict: false }), blankProvider);
+  assert.equal(
+    storedConversationEntry({ ...blankProvider, recordedAt: line.recordedAt }),
+    undefined,
+  );
   assert.equal(
     storedConversationEntry({ ...blankIdentity, recordedAt: line.recordedAt }),
     undefined,

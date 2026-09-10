@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { appendConversationThreadEntry, CONVERSATION_ENTRY_KIND } from "@sidecar/session";
+import {
+  ACTION_KIND,
+  appendConversationThreadEntry,
+  CONVERSATION_ENTRY_KIND,
+} from "@sidecar/session";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
@@ -39,17 +43,110 @@ test("Luke replies and announcements use the received-message side", () => {
 });
 
 test("session actions remain quiet events between messages", () => {
-  assert.equal(
-    conversationEntryPresentation(CONVERSATION_ENTRY_KIND.ACTION).speaker,
-    CONVERSATION_ENTRY_SPEAKER.EVENT,
-  );
+  assert.deepEqual(conversationEntryPresentation(CONVERSATION_ENTRY_KIND.ACTION), {
+    speaker: CONVERSATION_ENTRY_SPEAKER.EVENT,
+    label: "At your request",
+  });
 });
 
-test("an action Luke took on his own judgment is drawn as his own line, never as the developer's request", () => {
+test("an action Luke took on his own judgment is the same quiet row under his own name, never the developer's request", () => {
   assert.deepEqual(conversationEntryPresentation(CONVERSATION_ENTRY_KIND.OWN_ACTION), {
-    speaker: CONVERSATION_ENTRY_SPEAKER.LUKE,
-    label: "Luke",
+    speaker: CONVERSATION_ENTRY_SPEAKER.EVENT,
+    label: "Luke, on his own judgment",
   });
+});
+
+test("an action draws as a row led by the mark of its kind, with no bubble and no copy", () => {
+  const markup = renderToStaticMarkup(
+    createElement(ConversationPanel, {
+      entries: [
+        {
+          kind: CONVERSATION_ENTRY_KIND.ACTION,
+          words: 'sent a message to "checkout-service": "please add tests"',
+          recordedAt: NOW,
+          action: { kind: ACTION_KIND.MESSAGE },
+        },
+      ],
+      now: NOW,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
+    }),
+  );
+  assert.match(markup, /class="conversation-entry" data-speaker="event" data-origin="ask"/);
+  assert.match(markup, /<small class="visually-hidden">At your request<\/small>/);
+  // The mark leads the words inside the row, and the stamp stands outside it.
+  assert.match(
+    markup,
+    /<span class="conversation-action"><span class="conversation-action-mark" aria-hidden="true"><svg class="icon-button-glyph"/,
+  );
+  assert.match(markup, /<\/div><time class="conversation-time"/);
+  assert.doesNotMatch(markup, /conversation-bubble|conversation-copy|conversation-turn/);
+  // No identity and no provider on the action: the words end with no mark.
+  assert.doesNotMatch(markup, /conversation-action-provider/);
+  // A line an earlier build recorded without its kind keeps the mark's room and fills it with nothing.
+  const unmarked = renderToStaticMarkup(
+    createElement(ConversationPanel, {
+      entries: [{ kind: CONVERSATION_ENTRY_KIND.ACTION, words: 'opened "checkout-service"' }],
+      now: NOW,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
+    }),
+  );
+  assert.match(unmarked, /<span class="conversation-action-mark" aria-hidden="true"><\/span>/);
+});
+
+test("an action row ends on the mark of the provider it reached", () => {
+  const render = (entry: Parameters<typeof ConversationPanel>[0]["entries"][number]) =>
+    renderToStaticMarkup(
+      createElement(ConversationPanel, {
+        entries: [entry],
+        now: NOW,
+        ask: async () => undefined,
+        onAskEngaged: () => undefined,
+      }),
+    );
+  // An action on a session wears the session's own provider.
+  const onSession = render({
+    kind: CONVERSATION_ENTRY_KIND.ACTION,
+    words: 'sent a message to "checkout-service": "please add tests"',
+    identity: { providerId: "claude-code", providerSessionId: "session-a" },
+    action: { kind: ACTION_KIND.MESSAGE },
+  });
+  assert.match(
+    onSession,
+    /<\/div><span class="conversation-action-provider" aria-hidden="true"><svg class="provider-mark" data-mark="claude-code"/,
+  );
+  // A creation has no session, so its line names the provider it asked.
+  const creation = render({
+    kind: CONVERSATION_ENTRY_KIND.ACTION,
+    words: 'asked conductor to create a workspace named "Notch panel clipping"',
+    action: { kind: ACTION_KIND.CREATE_WORKSPACE, providerId: "conductor" },
+  });
+  assert.match(creation, /class="provider-mark" data-mark="conductor"/);
+});
+
+test("an action Luke took on his own is signed with his face and never wears a reply's bubble", () => {
+  const markup = renderToStaticMarkup(
+    createElement(ConversationPanel, {
+      entries: [
+        {
+          kind: CONVERSATION_ENTRY_KIND.OWN_ACTION,
+          words: 'ran "Retry" on "checkout-service"',
+          action: { kind: ACTION_KIND.CONTROL },
+        },
+      ],
+      now: NOW,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
+    }),
+  );
+  assert.match(markup, /data-speaker="event" data-origin="own"/);
+  assert.match(markup, /<small class="visually-hidden">Luke, on his own judgment<\/small>/);
+  assert.match(
+    markup,
+    /class="conversation-action-mark" aria-hidden="true"><svg class="luke-face"/,
+  );
+  assert.doesNotMatch(markup, /data-speaker="luke"|conversation-copy/);
 });
 
 test("an announcement shows its spoken transcript", () => {

@@ -230,6 +230,8 @@ test("an action's line records the ask in words, with the identity it named", ()
   assert.equal(message.kind, CONVERSATION_ENTRY_KIND.ACTION);
   assert.equal(message.words, 'sent a message to "checkout-service": "please add tests"');
   assert.deepEqual(message.identity, identity);
+  // The kind rides beside the words, for the panel to draw the row by.
+  assert.deepEqual(message.action, { kind: ACTION_KIND.MESSAGE });
 
   const control: AdvertisedControl = { kind: ACTION_KIND.CONTROL, id: "retry", label: "Retry" };
   assert.equal(
@@ -292,6 +294,11 @@ test("an action's line records the ask in words, with the identity it named", ()
   );
   assert.equal(created.words, "asked conductor to create a workspace");
   assert.equal(created.identity, undefined);
+  // With no identity to name it, the creation's line names the provider it asked.
+  assert.deepEqual(created.action, {
+    kind: ACTION_KIND.CREATE_WORKSPACE,
+    providerId: "conductor",
+  });
   const createdNamed = sessionActionConversationEntry(
     {
       kind: ACTION_KIND.CREATE_WORKSPACE,

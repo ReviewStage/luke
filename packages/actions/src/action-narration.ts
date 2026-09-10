@@ -7,6 +7,7 @@
 import type {
   CONVERSATION_ENTRY_KIND,
   ConversationEntry,
+  ConversationEntryAction,
   Session,
   SessionApplicationId,
   SessionIdentity,
@@ -92,9 +93,10 @@ export function actionNarration(action: CarriedAction, sessions: readonly Sessio
 /**
  * The history line one carried action leaves behind: the ask, in the words of
  * what was asked — never the outcome, which the reply voicing it records as
- * its own line. A transcript reading is deliberately only the fact that one
- * was read: the rendering travels in the turn that asked for it and nowhere
- * else, so the record keeps the action and not a word of what it rendered.
+ * its own line — beside the kind it was, which is what the panel draws the
+ * line by. A transcript reading is deliberately only the fact that one was read: the
+ * rendering travels in the turn that asked for it and nowhere else, so the
+ * record keeps the action and not a word of what it rendered.
  *
  * It is here rather than beside the rest of the conversation model because it
  * is the one line whose words are an action's narration, and the action vocabulary
@@ -106,7 +108,9 @@ export function sessionActionConversationEntry(
   kind: typeof CONVERSATION_ENTRY_KIND.ACTION | typeof CONVERSATION_ENTRY_KIND.OWN_ACTION,
 ): ConversationEntry {
   const words = actionNarration(action, sessions);
-  const entry: ConversationEntry = { kind, words };
+  const carried: ConversationEntryAction = { kind: action.kind };
+  if (action.kind === ACTION_KIND.CREATE_WORKSPACE) carried.providerId = action.providerId;
+  const entry: ConversationEntry = { kind, words, action: carried };
   if ("identity" in action) entry.identity = action.identity;
   return entry;
 }

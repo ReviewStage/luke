@@ -22,6 +22,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { ACTION_KIND, type ActionKind } from "../advertised-actions.js";
 import type { SessionIdentity } from "../session-identity.js";
 import type { Session } from "../session-shape.js";
 
@@ -55,6 +56,13 @@ export type ConversationEntryKind =
   (typeof CONVERSATION_ENTRY_KIND)[keyof typeof CONVERSATION_ENTRY_KIND];
 
 const CONVERSATION_ENTRY_KIND_LIST = Object.values(CONVERSATION_ENTRY_KIND);
+const ACTION_KIND_LIST = Object.values(ACTION_KIND);
+
+function isConversationEntryActionKind(value: UnparsedWireValue): value is ActionKind {
+  if (!isWireString(value)) return false;
+  // SAFETY: value is a string; list membership is the action vocabulary contract check.
+  return ACTION_KIND_LIST.includes(value as ActionKind);
+}
 
 export function isConversationEntryKind(value: UnparsedWireValue): value is ConversationEntryKind {
   if (!isWireString(value)) return false;
@@ -132,6 +140,23 @@ export interface ConversationEntry {
    * into model context.
    */
   requestId?: string;
+  /**
+   * The action an action line records, for the panel to draw the line by:
+   * which kind of thing was done. Never rendered into model context, whose
+   * lead already says whose judgment the action was and whose words say what
+   * it did.
+   */
+  action?: ConversationEntryAction;
+}
+
+export interface ConversationEntryAction {
+  kind: ActionKind;
+  /**
+   * The provider a workspace creation asked, the one action aimed at no
+   * session and so the one whose line carries no identity to read a provider
+   * from. Every other action's provider is its identity's.
+   */
+  providerId?: string;
 }
 
 /** The line as the Gateway protocol carries it; the unstrict read below takes it back whole. */
@@ -150,6 +175,7 @@ export function conversationEntryToWire(entry: ConversationEntry): WireRecord {
       : undefined),
     ...(entry.recordedAt !== undefined ? { recordedAt: entry.recordedAt } : undefined),
     ...(entry.requestId !== undefined ? { requestId: entry.requestId } : undefined),
+    ...(entry.action ? { action: { ...entry.action } } : undefined),
   };
 }
 
@@ -179,6 +205,7 @@ export function appendConversationThreadEntry(
   if (entry.eventId !== undefined) appended.eventId = entry.eventId;
   if (entry.identity) appended.identity = entry.identity;
   if (entry.requestId !== undefined) appended.requestId = entry.requestId;
+  if (entry.action) appended.action = entry.action;
   // A line stamped earlier than the tail goes where it happened: after the
   // last line that happened no later than it.
   let at = entries.length;
@@ -522,6 +549,9 @@ export function storedConversationEntry(
   ) {
     return undefined;
   }
+  const action =
+    value.action === undefined ? undefined : storedConversationEntryAction(value.action, strict);
+  if (value.action !== undefined && action === undefined) return undefined;
   return {
     kind: value.kind,
     words: value.words,
@@ -531,6 +561,30 @@ export function storedConversationEntry(
       : undefined),
     ...(isWireString(value.requestId) ? { requestId: value.requestId } : undefined),
     ...(isWireString(value.eventId) ? { eventId: value.eventId } : undefined),
+    ...(action ? { action } : undefined),
+  };
+}
+
+/**
+ * The action field as one line carries it, held to the same strictness as
+ * the line's other optional fields: a kind this build does not know refuses
+ * the line either way, and only the strict read refuses a provider left blank.
+ */
+function storedConversationEntryAction(
+  value: UnparsedWireValue,
+  strict: boolean,
+): ConversationEntryAction | undefined {
+  if (!isRecord(value) || !isConversationEntryActionKind(value.kind)) return undefined;
+  const providerId = value.providerId;
+  if (
+    providerId !== undefined &&
+    !(isWireString(providerId) && (!strict || providerId.length > 0))
+  ) {
+    return undefined;
+  }
+  return {
+    kind: value.kind,
+    ...(isWireString(providerId) ? { providerId } : undefined),
   };
 }
 

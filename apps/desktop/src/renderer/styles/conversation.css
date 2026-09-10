@@ -1,5 +1,5 @@
 /* A compact chat thread: sent and received messages use the familiar two-sided
-   bubble grammar, while the developer's requested actions sit between them. */
+   bubble grammar, while the actions Luke carried sit between them as rows. */
 .conversation-view {
   display: flex;
   min-height: 0;
@@ -376,22 +376,72 @@
   background: var(--raised-strong);
 }
 
-.conversation-entry[data-speaker="event"] .conversation-message {
-  justify-content: center;
-  padding: 8px 12px;
-  text-align: center;
+/* An action Luke carried is a row, not a bubble: what was done, in the quiet
+   voice the dates use, led by a mark for the kind of thing it was and ended
+   on the mark of the provider it reached. It reads from Luke's side of the
+   thread, because it is his doing — its leading mark sits on the edge his
+   bubbles start from — and it stands still under the pull as his words do. */
+.conversation-action {
+  display: flex;
+  min-width: 0;
+  max-width: min(88%, 64ch);
+  align-items: flex-start;
+  gap: 7px;
+  padding: 3px 0;
 }
 
-.conversation-entry[data-speaker="event"] .conversation-bubble {
-  max-width: 84%;
+/* The provider's mark, at the size the row's own marks take, trailing the
+   words the way a session row's application marks trail its title. */
+.conversation-action-provider {
+  display: inline-flex;
+  height: 16px;
+  flex: 0 0 auto;
   align-items: center;
+}
+
+.conversation-action-provider .provider-mark {
+  width: 12px;
+  height: 12px;
+}
+
+.conversation-action-provider .provider-mark[data-mark="superset"] {
+  width: 21px;
+}
+
+/* The mark's room is reserved whether or not a mark fills it, so rows with
+   and without one keep their words on one line. Luke's face in it wears the
+   text colour like the strip's does, only smaller. */
+.conversation-action-mark {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+  color: var(--text-tertiary);
+}
+
+.conversation-action-mark svg {
+  width: 12px;
+  height: 12px;
+}
+
+.conversation-action-mark .luke-face {
+  color: var(--text-secondary);
 }
 
 .conversation-entry[data-speaker="event"] .conversation-words {
   padding: 0;
   color: var(--text-secondary);
-  font-size: 10.5px;
+  font-size: 11.5px;
   line-height: 1.4;
+}
+
+/* The narration is written in the model's lower case; the row reads as a
+   sentence of its own. */
+.conversation-entry[data-speaker="event"] .conversation-words > p:first-child::first-letter {
+  text-transform: uppercase;
 }
 
 /* The date over a line that followed a long silence, in the quiet voice the
