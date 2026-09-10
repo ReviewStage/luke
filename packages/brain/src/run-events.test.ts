@@ -30,6 +30,7 @@ import {
   message,
   NOW,
   PLAIN_PREPARATION,
+  performerWith,
   settle,
   submit,
 } from "./harness.js";
@@ -588,7 +589,7 @@ test("a reasoning item is told with its summary and the opaque item, and the mes
 });
 
 test("a refused call settles as an error carrying the refusal's own reason, and the message's tool part says so", async () => {
-  const h = harness({ actions: { perform: async () => refusedActionOutput("not now") } });
+  const h = harness({ actions: performerWith(async () => refusedActionOutput("not now")).actions });
   const events = listen(h);
   h.client.answers.push(answered([messageAbc("send_x")]), answered([message("It refused.")]));
   const record = await ask(h, "tell abc to run the tests");

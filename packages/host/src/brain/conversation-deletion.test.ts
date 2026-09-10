@@ -15,7 +15,11 @@ import {
   toolLoopRuntimeOver,
 } from "@sidecar/brain";
 import { type StoreClient, type StorePort, serveStore, storeClient } from "@sidecar/brain/store";
-import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testing";
+import {
+  type BareResponsesModel,
+  bareModelAdapter,
+  fakeActionPerformer,
+} from "@sidecar/brain/testing";
 import { drainMicrotasks, temporaryDirectory } from "@sidecar/runtime/testing";
 import {
   DEFAULT_AGENT_ID,
@@ -137,7 +141,7 @@ function composed(t: TestContext) {
       runtime: toolLoopRuntimeOver(bareModelAdapter(client)),
       observes: { kind: LOOK_SUBJECT.NONE },
       prepareTurn: () => ({ prompt: "instructions", layers: {} }),
-      actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
+      actions: fakeActionPerformer().actions,
       roster: () => ({ text: "- abc", identities: [] }),
       // The standing context as the main process renders it: the recent
       // thread, so a line the Clear left anywhere would reach the model.

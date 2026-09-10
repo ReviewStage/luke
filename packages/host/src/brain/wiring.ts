@@ -6,7 +6,6 @@ import {
   BRAIN_TURN_TRIGGER,
   BRAIN_WAKE_KIND,
   BRAIN_WORKSPACE_SEEDS,
-  type BrainActionPerformer,
   BrainAgent,
   type BrainDelivery,
   type BrainFlushMarkerStore,
@@ -90,6 +89,7 @@ import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import {
   type BrainActionPerformerDependencies,
   createBrainActionPerformer,
+  type HostActionPerformer,
 } from "./action-performer.js";
 import { BrainHost } from "./host.js";
 import { type BrainPublicationDependencies, followBrainRequests } from "./publication.js";
@@ -147,7 +147,7 @@ export interface BrainWiringDependencies extends ChildWiringDependencies {
    * writes run the same gauntlet as every other action. Absent, nothing is
    * recalled and the memory tools refuse.
    */
-  memory?: (sessionKey: SessionKey, actions: BrainActionPerformer) => MemoryDefinition | undefined;
+  memory?: (sessionKey: SessionKey, actions: HostActionPerformer) => MemoryDefinition | undefined;
   /** Where one conversation's flush marker outlives the process; nothing for one that never flushes. */
   flushMarker?: (sessionKey: SessionKey) => BrainFlushMarkerStore | undefined;
 }

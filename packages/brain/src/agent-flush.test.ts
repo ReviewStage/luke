@@ -30,7 +30,11 @@ import {
 import { type ResponsesInputItem, responsesModelAnswer } from "./responses-api.js";
 import { ToolLoopAgentRuntime } from "./runtime.js";
 import { BrainStateStore } from "./state-store.js";
-import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
+import {
+  type FakeBrainStateRepository,
+  fakeActionPerformer,
+  fakeBrainStateRepository,
+} from "./testing.js";
 
 /**
  * The flush before compaction, at the host: a small window makes the soft
@@ -156,7 +160,7 @@ function agentWith(
     runtime,
     observes: { kind: LOOK_SUBJECT.NONE },
     prepareTurn: () => ({ prompt: "flush test", layers: {} }),
-    actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
+    actions: fakeActionPerformer().actions,
     roster: () => ({ text: "", identities: [] }),
     standingContext: () => "",
     readTranscriptSince: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),

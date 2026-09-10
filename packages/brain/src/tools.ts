@@ -1,13 +1,5 @@
-import {
-  type ActionToolDefinition,
-  realtimeToolDefinitions,
-  realtimeToolFamily,
-} from "@sidecar/actions";
-import {
-  NOTEBOOK_MEMORY_TOOL,
-  type NotebookMemoryToolShape,
-  notebookMemoryToolShapes,
-} from "@sidecar/memory";
+import { type ActionToolDefinition, realtimeToolFamily } from "@sidecar/actions";
+import { type NotebookMemoryToolShape, notebookMemoryToolShapes } from "@sidecar/memory";
 import {
   type ChildPolicyContext,
   type EffectiveToolPolicy,
@@ -25,14 +17,16 @@ import {
   responsesToolDefinition,
   toolSchemaFromDefinition,
 } from "./responses-api.js";
+import { ACTION_TOOLS, type ActionToolModule } from "./tools/action-tools.js";
 import { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
 
 /**
  * The brain's tool catalog: every tool a turn could be offered, as the
- * registry describes it. The action rows come from the same table the Realtime
- * session was configured from, so the brain can ask for nothing the actions
- * package does not validate; the brain's own tools — the roster in full, a
- * whole transcript, the briefing, the workspace files, a skill's
+ * registry describes it. The action rows are the action tool modules, each
+ * declared from the same table the Realtime session was configured from, so
+ * the brain can ask for nothing the actions package does not validate; the
+ * brain's own tools — the roster in full, a whole transcript, the briefing,
+ * the workspace files, a skill's
  * instructions — are dispatched inside the agent and reach no action path;
  * the memory tools are the configured memory provider's own, the notebook's
  * search and read and its two writes, and the provider's shapes are what the
@@ -339,14 +333,17 @@ const BRAIN_ONLY_DESCRIPTORS = {
   },
 } as const satisfies Record<BrainToolName, ToolPlacement & { groups: readonly string[] }>;
 
-function actionDescriptor(definition: ActionToolDefinition): ToolDescriptor {
-  const family = realtimeToolFamily(definition.name);
-  if (family === undefined) throw new TypeError(`${definition.name} is not an action`);
+function actionDescriptor(tool: ActionToolModule): ToolDescriptor {
   return {
-    schema: toolSchemaFromDefinition(definition),
+    schema: toolSchemaFromDefinition({
+      type: BRAIN_TOOL_TYPE,
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.inputSchema.jsonSchema(),
+    }),
     execution: TOOL_EXECUTION.PERFORMER,
     effect: TOOL_EFFECT.WRITE,
-    groups: [TOOL_GROUP.ACTIONS, family],
+    groups: [TOOL_GROUP.ACTIONS, tool.family],
   };
 }
 
@@ -358,8 +355,6 @@ function brainOnlyDescriptor(definition: ActionToolDefinition): ToolDescriptor {
     ...BRAIN_ONLY_DESCRIPTORS[name],
   };
 }
-
-const MEMORY_TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(NOTEBOOK_MEMORY_TOOL));
 
 /**
  * The memory provider's tools as the catalog places them: a read is a read
@@ -384,9 +379,7 @@ function memoryDescriptor(shape: NotebookMemoryToolShape): ToolDescriptor {
 /** The whole catalog as descriptors: every action, then the brain's own tools, then the memory provider's, in a fixed order. */
 export function brainToolCatalog(): readonly ToolDescriptor[] {
   return [
-    ...realtimeToolDefinitions()
-      .filter((definition) => !MEMORY_TOOL_NAMES.has(definition.name))
-      .map(actionDescriptor),
+    ...ACTION_TOOLS.map(actionDescriptor),
     ...BRAIN_ONLY_TOOLS.map(brainOnlyDescriptor),
     ...notebookMemoryToolShapes().map(memoryDescriptor),
   ];

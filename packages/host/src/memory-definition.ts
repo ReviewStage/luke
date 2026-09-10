@@ -1,8 +1,8 @@
 import type { RememberedFact } from "@sidecar/actions";
-import type { BrainActionPerformer } from "@sidecar/brain";
 import { notebookMemoryProvider } from "@sidecar/memory";
 import { recentDailyNotes } from "@sidecar/runtime";
 import type { MemoryDefinition, MemoryScope, SessionKey } from "@sidecar/runtime/vocabulary";
+import type { HostActionPerformer } from "./brain/action-performer.js";
 import type { MemoryMaintenance } from "./memory-maintenance.js";
 import type { MemoryWiring } from "./notebook-memory.js";
 
@@ -28,7 +28,7 @@ export interface MemoryDefinitionDependencies {
  * says keep their memory.
  */
 export function wireMemoryDefinitions(dependencies: MemoryDefinitionDependencies) {
-  return (sessionKey: SessionKey, actions: BrainActionPerformer): MemoryDefinition => {
+  return (sessionKey: SessionKey, actions: HostActionPerformer): MemoryDefinition => {
     const capture = dependencies.maintenance.captureFor(sessionKey);
     return {
       scope: dependencies.scope,
@@ -37,7 +37,9 @@ export function wireMemoryDefinitions(dependencies: MemoryDefinitionDependencies
         access: dependencies.index.accessFor(sessionKey),
         facts: dependencies.facts,
         recentNotes: () => recentDailyNotes(dependencies.workspaceDirectory(), dependencies.now()),
-        perform: (call, context) => actions.perform(call, context),
+        // A notebook write's turn is the run it was called in, in the conversation whose memory this is.
+        perform: (call, context) =>
+          actions.perform(call, { ...context, conversationId: sessionKey, turnId: context.runId }),
         ...(capture ? { capture } : undefined),
       }),
     };

@@ -15,6 +15,7 @@ import {
   messageAction,
   NOW,
   OBSERVATION_ACTIONS,
+  performerWith,
   settle,
   submit,
 } from "./harness.js";
@@ -71,9 +72,7 @@ test("an observation turn's run id never repeats across a rebuild, and a journal
 
 test("a performer that throws after dispatch leaves an unknown action, kept through a later model failure and a restart", async () => {
   const h = harness({
-    actions: {
-      perform: () => Promise.reject(new Error("socket closed after send")),
-    },
+    actions: performerWith(() => Promise.reject(new Error("socket closed after send"))).actions,
   });
   h.client.answers.push(answered([messageAction("call_1")]), failedAnswer("network"));
   const record = await ask(h, "send it");
@@ -88,9 +87,7 @@ test("a performer that throws after dispatch leaves an unknown action, kept thro
 
   // A confirmed refusal, by contrast, is a refusal: nothing unknown about it.
   const refusing = harness({
-    actions: {
-      perform: async () => refusedActionOutput("not observed"),
-    },
+    actions: performerWith(async () => refusedActionOutput("not observed")).actions,
   });
   refusing.client.answers.push(
     answered([messageAction("call_1")]),

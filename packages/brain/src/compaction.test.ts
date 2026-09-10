@@ -41,7 +41,11 @@ import {
 import { BRAIN_RUN_EVENT, type BrainRunEvent } from "./run-events.js";
 import { ToolLoopAgentRuntime } from "./runtime.js";
 import { BrainStateStore } from "./state-store.js";
-import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
+import {
+  type FakeBrainStateRepository,
+  fakeActionPerformer,
+  fakeBrainStateRepository,
+} from "./testing.js";
 import { RecordingContextEngine } from "./transcript-recorder.js";
 
 /**
@@ -333,7 +337,7 @@ function agentOver(model: ModelAdapter, repository: FakeBrainStateRepository) {
     runtime,
     observes: { kind: LOOK_SUBJECT.NONE },
     prepareTurn: () => ({ prompt: "instructions", layers: {} }),
-    actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
+    actions: fakeActionPerformer().actions,
     roster: () => ({ text: "none", identities: [] }),
     standingContext: () => "",
     readTranscriptSince: async () => ({ status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: "n" }),

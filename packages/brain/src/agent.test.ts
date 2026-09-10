@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ACTION_KIND,
   type ActionOutputEnvelope,
   acceptedActionOutput,
   REALTIME_TOOL,
-  type RealtimeFunctionCall,
   refusedActionOutput,
+  type ValidatedAction,
 } from "@sidecar/actions";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
@@ -51,6 +52,7 @@ import {
   NOW,
   OBSERVATION_ACTIONS,
   OLD_SECRET,
+  performerWith,
   quietAnswer,
   reasoning,
   reviewing,
@@ -58,7 +60,7 @@ import {
   settle,
   submit,
 } from "./harness.js";
-import type { BrainActionExecution, BrainActionPerformer } from "./performer.js";
+import type { BrainActionExecution } from "./performer.js";
 import {
   BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_ORIGIN,
@@ -134,14 +136,7 @@ test("an ask returns the final text, carries pending wakes, and refuses announce
   assert.equal(answer?.performedActions, 1);
   assert.deepEqual(h.deliveries, []);
   assert.deepEqual(h.performed, [
-    {
-      name: "send_session_message",
-      argumentsJson: JSON.stringify({
-        provider_id: ABC.providerId,
-        provider_session_id: ABC.providerSessionId,
-        text: "run the tests",
-      }),
-    },
+    { kind: ACTION_KIND.MESSAGE, identity: ABC, text: "run the tests", origin: RUN_ORIGIN.USER },
   ]);
   assert.equal(h.agent.pendingWakes(), 0);
   assert.equal(h.clock.timers.size, 0);
@@ -426,15 +421,13 @@ test("a developer ask carries every action with a live execution, revoked once t
     release = resolve;
   });
   const h = harness({
-    actions: {
-      perform: async (functionCall, execution): Promise<ActionOutputEnvelope> => {
-        performedLate.push({ call: functionCall, execution });
-        await held;
-        return execution.isRevoked() ? refusedActionOutput("turn over") : acceptedActionOutput();
-      },
-    },
+    actions: performerWith(async (action, execution): Promise<ActionOutputEnvelope> => {
+      performedLate.push({ action, execution });
+      await held;
+      return execution.isRevoked() ? refusedActionOutput("turn over") : acceptedActionOutput();
+    }).actions,
   });
-  const performedLate: { call: RealtimeFunctionCall; execution: BrainActionExecution }[] = [];
+  const performedLate: { action: ValidatedAction; execution: BrainActionExecution }[] = [];
   const [messageAction] = OBSERVATION_ACTIONS;
   assert.ok(messageAction);
   h.client.answers.push(answered([messageAction]), answered([message("Done.")]));
@@ -581,7 +574,7 @@ test("a repeated call id answers the recorded result once; the same id with othe
   const record = await ask(h, "send");
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assert.deepEqual(
-    h.performed.map((functionCall) => JSON.parse(functionCall.argumentsJson).text),
+    h.performed.map((action) => (action.kind === ACTION_KIND.MESSAGE ? action.text : action.kind)),
     ["one", "two"],
   );
   const outputs = functionOutputs(h.client.inputs[2] ?? []);
@@ -594,14 +587,13 @@ test("actions run one at a time in the order the model emitted them", async () =
   const held = heldPerformer();
   const order: string[] = [];
   const h = harness({
-    actions: {
-      perform: async (functionCall, execution) => {
-        order.push(`start ${JSON.parse(functionCall.argumentsJson).text}`);
-        const output = await held.actions.perform(functionCall, execution);
-        order.push(`end ${JSON.parse(functionCall.argumentsJson).text}`);
-        return output;
-      },
-    },
+    actions: performerWith(async (action, execution) => {
+      const words = action.kind === ACTION_KIND.MESSAGE ? action.text : action.kind;
+      order.push(`start ${words}`);
+      const output = await held.actions.carry(action, execution);
+      order.push(`end ${words}`);
+      return output;
+    }).actions,
   });
   h.client.answers.push(
     answered([messageAction("c1", "a"), messageAction("c2", "b"), messageAction("c3", "c")]),
@@ -1048,16 +1040,14 @@ test("a Clear or expiry asked for while a write is out on disk revokes a held ac
   for (const ending of ["clear", "expiry"] as const) {
     let releasePreparation: (() => void) | undefined;
     let effects = 0;
-    const actions: BrainActionPerformer = {
-      perform: async (_call, execution): Promise<ActionOutputEnvelope> => {
-        await new Promise<void>((resolve) => {
-          releasePreparation = resolve;
-        });
-        if (execution.isRevoked()) return refusedActionOutput("revoked before the effect");
-        effects += 1;
-        return acceptedActionOutput();
-      },
-    };
+    const { actions } = performerWith(async (_action, execution): Promise<ActionOutputEnvelope> => {
+      await new Promise<void>((resolve) => {
+        releasePreparation = resolve;
+      });
+      if (execution.isRevoked()) return refusedActionOutput("revoked before the effect");
+      effects += 1;
+      return acceptedActionOutput();
+    });
     const h = harness({ actions });
     const generationClock = new BrainGenerationClock({
       store: h.store,

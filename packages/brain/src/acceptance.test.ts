@@ -3,7 +3,12 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { type ActionOutputEnvelope, acceptedActionOutput, REALTIME_TOOL } from "@sidecar/actions";
+import {
+  ACTION_KIND,
+  type ActionOutputEnvelope,
+  acceptedActionOutput,
+  REALTIME_TOOL,
+} from "@sidecar/actions";
 import {
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_OPERATION,
@@ -73,7 +78,11 @@ import {
 } from "./requests.js";
 import { ToolLoopAgentRuntime } from "./runtime.js";
 import { BrainStateStore } from "./state-store.js";
-import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
+import {
+  type FakeBrainStateRepository,
+  fakeActionPerformer,
+  fakeBrainStateRepository,
+} from "./testing.js";
 import { brainToolCatalog, hostedBrainToolCatalog, resolveTurnToolPolicy } from "./tools.js";
 import { BRAIN_TURN_KIND, runOriginOf } from "./turn.js";
 import { BRAIN_WAKE_KIND } from "./wake-events.js";
@@ -289,18 +298,20 @@ function host(
     title: "Claude Code: abc",
     status: SESSION_STATUS.WAITING,
     lastActivityAt: NOW,
+    advertises: [{ kind: ACTION_KIND.MESSAGE }],
   });
   const agent = new BrainAgent({
     conversationId: MAIN_SESSION_KEY,
     runtime: runtimeOver(model),
     observes: { kind: LOOK_SUBJECT.NONE },
     prepareTurn: () => ({ prompt: "instructions", layers: {} }),
-    actions: {
-      perform: async (call) => {
-        performed.push(call.name);
+    actions: fakeActionPerformer({
+      sessions: [session],
+      carry: async (action) => {
+        performed.push(action.kind);
         return performer();
       },
-    },
+    }).actions,
     roster: () => ({ text: "- abc", identities: [ABC], sessions: session ? [session] : [] }),
     standingContext: () => "Durable facts: none.",
     readTranscriptSince: async () => ({
@@ -354,10 +365,7 @@ for (const transport of [KEYED, HOSTED]) {
     assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
     assert.equal(record?.text, "Sent twice.");
     assert.equal(record?.performedActions, 2);
-    assert.deepEqual(h.performed, [
-      REALTIME_TOOL.SEND_SESSION_MESSAGE,
-      REALTIME_TOOL.SEND_SESSION_MESSAGE,
-    ]);
+    assert.deepEqual(h.performed, [ACTION_KIND.MESSAGE, ACTION_KIND.MESSAGE]);
     // The third inference replayed every encrypted reasoning item and every
     // call with its output, in order.
     const third = upstream.calls[2]?.body.input;
@@ -623,7 +631,7 @@ test("a runtime that is not Responses drives the same host: actions journaled th
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assert.equal(record?.text, "scripted reply after 3 tools");
   assert.equal(record?.performedActions, 1);
-  assert.deepEqual(h.performed, [REALTIME_TOOL.SEND_SESSION_MESSAGE]);
+  assert.deepEqual(h.performed, [ACTION_KIND.MESSAGE]);
   const stored = repository.state;
   assert.equal(stored?.checkpointFormat, "scripted@3:scripted-turns/1");
   assert.ok(stored?.items.every((item) => "scripted" in item));
@@ -647,7 +655,7 @@ test("a runtime that is not Responses drives the same host: actions journaled th
   o.clock.now += 3_000;
   for (const timer of [...o.clock.timers.values()]) timer.callback();
   await settle();
-  assert.deepEqual(o.performed, [REALTIME_TOOL.SEND_SESSION_MESSAGE]);
+  assert.deepEqual(o.performed, [ACTION_KIND.MESSAGE]);
   assert.equal(repository.state?.cursors[claude.id]?.abc, "c1");
   assert.equal(repository.state?.journal.length, 1, "the ask's journal alone stays");
   await o.agent.stop();

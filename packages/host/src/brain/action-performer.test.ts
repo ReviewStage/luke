@@ -12,9 +12,10 @@ import {
 } from "@sidecar/actions";
 import type { BrainActionExecution } from "@sidecar/brain";
 import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
+import { CAPTIONS_GUIDE } from "@sidecar/brain/testing";
 import { APP_SETTING_KIND, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { drainMicrotasks } from "@sidecar/runtime/testing";
-import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
+import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import type { ConversationEntry } from "@sidecar/session";
 import {
   ACTION_KIND,
@@ -36,6 +37,8 @@ const NOW = 1_800_000_000_000;
 /** A developer-opened turn still standing, or one revoked from the moment `revoked()` first says so. */
 function developerTurn(revoked: () => boolean = () => false): BrainActionExecution {
   return {
+    conversationId: MAIN_SESSION_KEY,
+    turnId: "run-1",
     runId: "run-1",
     origin: RUN_ORIGIN.USER,
     isRevoked: revoked,
@@ -46,6 +49,8 @@ function developerTurn(revoked: () => boolean = () => false): BrainActionExecuti
 /** An observation turn's standing: the same shape, attributed to Luke's own judgment. */
 function observationTurn(): BrainActionExecution {
   return {
+    conversationId: MAIN_SESSION_KEY,
+    turnId: "wake-1",
     runId: "wake-1",
     origin: RUN_ORIGIN.OBSERVATION,
     isRevoked: () => false,
@@ -62,21 +67,6 @@ const MESSAGE_CALL = {
 const REMEMBER_CALL = {
   name: REALTIME_TOOL.REMEMBER_FACT,
   argumentsJson: '{"words":"prefers concise answers"}',
-};
-const CAPTIONS_GUIDE = {
-  facts: [],
-  settings: [
-    {
-      id: "voice_captions",
-      label: "Captions",
-      description: "Luke's words on screen.",
-      kind: APP_SETTING_KIND.TOGGLE,
-      value: "off",
-      defaultValue: "off",
-      adjustable: true,
-      manual: "the Voice page",
-    },
-  ],
 };
 const SETTING_CALL = {
   name: REALTIME_TOOL.CHANGE_APP_SETTING,
@@ -593,6 +583,8 @@ test("a cancel during the roster refresh or the defaults read settles the action
     });
     const controller = new AbortController();
     const execution: BrainActionExecution = {
+      conversationId: MAIN_SESSION_KEY,
+      turnId: "run-1",
       runId: "run-1",
       origin: RUN_ORIGIN.USER,
       isRevoked: () => controller.signal.aborted,

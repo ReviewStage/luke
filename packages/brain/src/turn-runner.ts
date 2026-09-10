@@ -453,6 +453,8 @@ export class TurnRunner {
     this.#turnInFlight = true;
     let ended = false;
     const execution: BrainActionExecution = {
+      conversationId: this.#options.conversationId,
+      turnId: run.runId,
       runId: run.runId,
       origin: runOriginOf(plan.trigger),
       isRevoked: () => ended || this.#revoked(turnContext),

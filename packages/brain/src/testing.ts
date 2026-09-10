@@ -1,3 +1,12 @@
+import {
+  type ActionOutputEnvelope,
+  acceptedActionOutput,
+  type RealtimeFunctionCall,
+  refusedActionOutput,
+  toolAction,
+  type ValidatedAction,
+} from "@sidecar/actions";
+import { APP_SETTING_KIND, type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import {
   MODEL_FAILURE,
@@ -7,9 +16,12 @@ import {
   type ModelResponse,
   type TranscriptEvent,
 } from "@sidecar/runtime/vocabulary";
+import type { Session } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
 import type { BrainPersistedState, BrainStateLoad, BrainStateRepository } from "./envelope.js";
 import { BRAIN_MAXIMUM_OUTPUT_TOKENS, failed } from "./model-adapter-shared.js";
+import type { BrainActionExecution, BrainActionPerformer } from "./performer.js";
+import { actionToolNamed } from "./tools/action-tools.js";
 
 /** The two things a bare transport answers: an inference, and when it is quiet. */
 export interface BareResponsesModel {
@@ -165,4 +177,94 @@ export function fakeBrainStateRepository(
       });
     },
   };
+}
+
+/** A guide with one adjustable toggle, so a test's setting change has something to be admitted against. */
+export const CAPTIONS_GUIDE: AppGuideSnapshot = {
+  ...EMPTY_APP_GUIDE,
+  settings: [
+    {
+      id: "voice_captions",
+      label: "Captions",
+      description: "Luke's words on screen.",
+      kind: APP_SETTING_KIND.TOGGLE,
+      value: "off",
+      defaultValue: "off",
+      adjustable: true,
+      manual: "the Voice page",
+    },
+  ],
+};
+
+export interface FakeActionPerformerOptions {
+  /** The roster admission reads, as the latest pass would report it; empty admits no session action. */
+  readonly sessions?: readonly Session[];
+  readonly guide?: AppGuideSnapshot;
+  /** What carrying an admitted action answers; accepted by default. */
+  readonly carry?: (
+    action: ValidatedAction,
+    execution: BrainActionExecution,
+  ) => Promise<ActionOutputEnvelope>;
+}
+
+export interface FakeActionPerformer {
+  readonly actions: BrainActionPerformer;
+  /** Every action carried, admitted, in order. */
+  readonly performed: ValidatedAction[];
+  readonly executions: BrainActionExecution[];
+}
+
+/**
+ * The host's two halves as a test stands them in: readers over the sessions
+ * and guide the test chose, and a carrier that records what admission minted
+ * and answers what the test chose. Admission itself is the real one, run by
+ * the tool's own `execute`, so a test's action is admitted exactly as a
+ * developer's would be.
+ */
+export function fakeActionPerformer(options: FakeActionPerformerOptions = {}): FakeActionPerformer {
+  const performed: ValidatedAction[] = [];
+  const executions: BrainActionExecution[] = [];
+  const actions: BrainActionPerformer = {
+    admission: () => ({
+      roster: { read: async () => options.sessions ?? [] },
+      guide: options.guide ?? EMPTY_APP_GUIDE,
+      rememberedFacts: [],
+    }),
+    carry: async (action, execution) => {
+      performed.push(action);
+      executions.push(execution);
+      return options.carry ? options.carry(action, execution) : acceptedActionOutput();
+    },
+  };
+  return { actions, performed, executions };
+}
+
+/**
+ * A raw call run through the performer the way the host's notebook path still
+ * runs one: an action tool's module where the name is an action's, admission
+ * in the host's own hands for the notebook's two writes.
+ */
+export async function performCall(
+  actions: BrainActionPerformer,
+  call: RealtimeFunctionCall,
+  execution: BrainActionExecution,
+): Promise<ActionOutputEnvelope> {
+  const admission = actions.admission(execution);
+  const tool = actionToolNamed(call.name);
+  if (tool) {
+    // SAFETY: JSON.parse answers a wire value; the tool reads it as the record it is or refuses.
+    const input = JSON.parse(call.argumentsJson) as WireRecord;
+    return tool.execute(input, {
+      ...execution,
+      admission,
+      carry: (action) => actions.carry(action, execution),
+    });
+  }
+  const admitted = await toolAction(call, {
+    ...admission,
+    origin: execution.origin,
+    guard: execution,
+  });
+  if (admitted.kind === undefined) return refusedActionOutput(admitted.reason);
+  return actions.carry(admitted, execution);
 }
