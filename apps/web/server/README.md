@@ -185,6 +185,41 @@ one atomic upsert before each upstream call, checked against the ceilings in
 long they run; a spend limit on the OpenAI project behind the key is the
 backstop and should be configured with it.
 
+## Hosted voice service routes
+
+`api/internal/voice/authorize.ts` and `api/internal/voice/usage.ts` are the
+two routes only the hosted voice service calls, the long-running process on
+its own origin that holds the GPT Live project key and owns each hosted voice
+session (`live-contract.ts` in `@sidecar/hosted` is the desktop's contract
+with it). Neither route takes an account bearer as its identity: both accept
+one header, `x-luke-voice-service-secret`, compared in constant time against
+`VOICE_SERVICE_SECRET`, and answer 503 while that variable is absent or
+blank, the same kill switch as every other hosted secret. Their paths are
+`HOSTED_SERVICE_PATH.VOICE_AUTHORIZE` and `VOICE_USAGE`, exact-path files
+under `api/internal/`, so Vercel's zero-config detection routes them without
+a `routes` entry.
+
+Authorize is asked before the service spends a session: the body carries the
+`Authorization` value the desktop opened its socket with, resolved to a user
+through the same in-process `/oauth2/userinfo` seam the mint uses, and the
+account's daily allowance is spent by the same `hosted_usage` meter every
+hosted operation shares, before any session exists, so a refused account costs
+no session. The answer is the user id and the quota; a bearer that resolves to
+nobody is a 401, a spent allowance a 429 carrying the quota.
+
+Usage is reported after `session.closed`: the user id authorize answered, the
+session id OpenAI minted, and the seconds it billed. `voice_session_usage`
+keeps one row per session id and is the idempotency ledger; a report the
+service repeats after a lost answer is answered `repeated` and moves nothing,
+and only a report that created its row adds to the day's `voice_seconds` on
+`hosted_usage`, in one transaction. The seconds column stands beside the call
+count rather than replacing it: a session still spends one call when it
+opens, and the mint routes and their meter stay as they are for installed
+desktops until the seconds are what the allowance is measured in. Both
+tables cascade with the user row. Nothing else calls these routes yet, and the
+desktop never does; the voice service's own origin is pinned by the desktop's
+build in `@sidecar/hosted` rather than answered by this deployment.
+
 ## Hosted brain inference
 
 `api/brain/capabilities.ts` and the four routes under `api/brain/v2/` run

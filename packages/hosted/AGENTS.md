@@ -72,6 +72,14 @@ internal routes on the account service that only the voice service calls,
 Realtime mint paths and `realtime-contract.ts` stand beside it untouched for
 the installed desktops and the phone that still speak them.
 
+`voice-internal-wire.ts` is what travels on those two internal routes:
+authorize takes the forwarded `Authorization` value and answers the user id
+and quota; usage takes one session's id, account, and billed seconds and
+answers one of `VOICE_USAGE_RECORD`'s two members, `recorded` or `repeated`,
+so a report sent twice is one record and the service can tell the two apart.
+The seconds are bounded under a day and the ids under a short length, because
+a value past either is a document standing in for an id, not a long call.
+
 A renamed wire field keeps its old name on the wire for one iOS release. The
 desktop and the service ship together, but an installed phone reads whatever
 the service sends until its owner updates it, so the service writes both names
