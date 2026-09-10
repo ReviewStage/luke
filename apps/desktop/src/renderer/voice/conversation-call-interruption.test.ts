@@ -64,6 +64,9 @@ test("a developer turn is identified before its transcript returns", async () =>
   });
 
   assert.deepEqual(context.spokenAskItems, ["item-1"]);
+  // A committed turn's words are on their way to a transcript; nothing about
+  // this path is a discard.
+  assert.equal(context.spokenAskDiscards(), 0);
 });
 
 test("the developer's spoken words preview as they are transcribed", async () => {

@@ -467,6 +467,10 @@ test("an abandoned captured turn clears the buffer and settles the seam", async 
     2,
   );
   assert.equal(types.includes(REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_COMMIT), false);
+  // The abandon is the one discard: the clear that opened the turn cleared an
+  // empty buffer, and words already mid-flight to a commit are not this
+  // press's to take down.
+  assert.equal(context.spokenAskDiscards(), 1);
 
   // A chunk from the capture the session already let go of goes nowhere.
   const sentBefore = context.sent.length;

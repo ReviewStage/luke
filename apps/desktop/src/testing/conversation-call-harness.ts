@@ -81,6 +81,8 @@ export interface Harness {
   spokenAskItems: string[];
   /** Number of local audio turns closed before the server acknowledged them. */
   spokenAskClosures: () => number;
+  /** Number of held turns abandoned before any commit could name their item. */
+  spokenAskDiscards: () => number;
   microphoneEnabled: () => boolean;
   microphoneStopped: () => boolean;
   emit: (event: JsonValue) => void;
@@ -166,6 +168,7 @@ export function harness(
   const spokenAskFailures: string[] = [];
   const spokenAskItems: string[] = [];
   let spokenAskClosures = 0;
+  let spokenAskDiscards = 0;
   const requests: { apiKey: string; model: string; url: string }[] = [];
   const calls: string[] = [];
   let enabled = false;
@@ -372,6 +375,9 @@ export function harness(
       spokenAskClosures += 1;
     },
     onSpokenAskCommitted: (itemId) => spokenAskItems.push(itemId),
+    onSpokenAskDiscarded: () => {
+      spokenAskDiscards += 1;
+    },
   };
   if (options.connectTimeoutMs !== undefined) {
     sessionOptions.connectTimeoutMs = options.connectTimeoutMs;
@@ -406,6 +412,7 @@ export function harness(
     spokenAskFailures,
     spokenAskItems,
     spokenAskClosures: () => spokenAskClosures,
+    spokenAskDiscards: () => spokenAskDiscards,
     microphoneEnabled: () => enabled,
     microphoneStopped: () => stopped,
     lukeAudible: () => remoteTrack.enabled,
