@@ -13,6 +13,17 @@ detail. What a method's own parameters may say belongs here too, beside the
 entry that names it: `RECEIVER_REPORT_KIND` is the vocabulary of
 `receiver.report`, so the host that answers it and the client that sends it
 read the same three words from the contract rather than from each other.
+The live voice session's vocabulary is declared the same way, as `@sidecar/wire`
+schemas beside the four methods and the one event that speak it:
+`voice.createLiveSession` takes the peer's SDP offer verbatim (SDP is
+line-oriented, so nothing trims, collapses, or cuts it) and answers the
+session id and the SDP answer; `voice.reportLiveTransport` names one of
+`LIVE_TRANSPORT_STATE`; `voice.reportLiveActivity` carries the peer's one idle
+boolean; `voice.endLiveSession` carries nothing; and `voiceLiveSession.changed`
+names a `LIVE_SESSION_PHASE`, the session id once a provider has named one,
+and the reason of a close. Every one of the four mutates, so a retried offer
+finds the first session rather than creating and billing a second, and no
+credential has a field to travel in.
 
 ## Three doors, because one of them reaches `ws`
 

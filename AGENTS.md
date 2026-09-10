@@ -445,9 +445,16 @@ Canonical commands:
   methods, and the change events beside them; `voice.recordTrace` carries
   the renderer's tapped realtime events to the development trace writer the
   host owns, under the same gate, so an untraced run drops them at the
-  host). No credential or account secret travels in any answer or event, and
-  the one secret that reaches the voice client is the ephemeral realtime
-  credential the host minted. Widening the method vocabulary, the event set,
+  host; and the live voice session's `voice.createLiveSession`,
+  `voice.endLiveSession`, `voice.reportLiveTransport`, and
+  `voice.reportLiveActivity`, with the `voiceLiveSession.changed` event
+  beside them, each mutating and idempotency-keyed so a retried SDP offer
+  cannot create and bill a second session, their shapes declared once as
+  `@sidecar/wire` schemas in `protocol.ts`, and answered by no host handler
+  yet, so the server's typed `unknown_method` is what they meet until the
+  host's live session service lands). No credential or account secret
+  travels in any answer or event, and the one secret that reaches the voice
+  client is the ephemeral realtime credential the host minted. Widening the method vocabulary, the event set,
   or what a node may be asked is a product decision, not an implementation
   detail.
 - The host is what composes and owns the runtime, and it draws nothing. It is
