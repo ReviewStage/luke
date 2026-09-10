@@ -113,7 +113,7 @@ export async function handleBrainAsk(route: HostedBrainRoute): Promise<Response>
   if (!lease) return busyResponse();
   const session = await openBrainSession(route, admission, openAiKey, lease);
   const { agent } = session.brain;
-  await agent.ready();
+  await session.ready();
   const result = await agent.submitAsk({
     submissionId: ask.submissionId ?? randomUUID(),
     question: ask.question,
@@ -182,7 +182,7 @@ export async function handleBrainAskWait(route: HostedBrainRoute): Promise<Respo
       const lease = await leaseNow(route, admission.store, admission.userId);
       if (lease) {
         const session = await openBrainSession(route, admission, openAiKey, lease);
-        await session.brain.agent.ready();
+        await session.ready();
         const waited = await session.brain.agent.waitAsk(runId, Math.max(0, deadline - now()));
         // A run that ended inside the hold reaches the Conversation before
         // its reply is answered, so a device never hears a reply the thread
@@ -230,7 +230,7 @@ export async function handleBrainAskCancel(route: HostedBrainRoute): Promise<Res
       : await leaseNow(route, admission.store, admission.userId);
   if (lease && !(openAiKey instanceof Response)) {
     const session = await openBrainSession(route, admission, openAiKey, lease);
-    await session.brain.agent.ready();
+    await session.ready();
     const cancelled = await session.brain.agent.cancelAsk(runId);
     if (cancelled) await session.brain.publish();
     route.continueAfterResponse(session.finish());

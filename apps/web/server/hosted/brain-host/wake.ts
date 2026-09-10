@@ -76,7 +76,7 @@ async function wakeConversation(
   const session = await openBrainSession(options, { userId, secret, store }, openAiKey, lease);
   const now = options.now ?? Date.now;
   try {
-    await session.brain.agent.ready();
+    await session.ready();
     const pending = await store.roster.pendingDiffs(userId);
     const diffs = pending.flatMap((record) => {
       const diff = decodeRosterDiff(record.payload);

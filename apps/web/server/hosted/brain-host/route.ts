@@ -227,6 +227,13 @@ export function busyResponse(): Response {
 export interface BrainSession {
   readonly brain: HostedBrain;
   readonly lease: HeldLease;
+  /**
+   * The agent restored — a run the last holder left is resuming — with the
+   * cancels the developer noted meanwhile already applied, so a resumed run
+   * the developer cancelled is revoked before it acts rather than at the
+   * first heartbeat.
+   */
+  ready(): Promise<void>;
   finish(): Promise<void>;
 }
 
@@ -317,6 +324,10 @@ export async function openBrainSession(
   return {
     brain,
     lease,
+    ready: async () => {
+      await brain.agent.ready();
+      await brain.applyCancels();
+    },
     finish: async () => {
       try {
         const idle = await Promise.race([

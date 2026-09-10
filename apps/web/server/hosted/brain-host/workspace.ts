@@ -61,11 +61,14 @@ export async function seedHostedWorkspace(
   return seeded;
 }
 
-/** The workspace tools' reach: the rows, bounded like the files, with no skills to load. */
+const WRITE_REFUSED = "not written: this conversation is now run by another request";
+
+/** The workspace tools' reach: the rows, bounded like the files, with no skills to load; a write needs the lease still held. */
 export function hostedWorkspaceAccess(
   store: WorkspaceStore,
   userId: string,
   now: () => number,
+  writable: () => boolean = () => true,
 ): BrainWorkspaceAccess {
   return {
     read: async (name) => {
@@ -81,6 +84,7 @@ export function hostedWorkspaceAccess(
       if (content.length > BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE) {
         return { ok: false, reason: WORKSPACE_FILE_REFUSAL.TOO_LARGE };
       }
+      if (!writable()) return { ok: false, reason: WRITE_REFUSED };
       await store.workspace.write(userId, path, content, now());
       return { ok: true, chars: content.length };
     },

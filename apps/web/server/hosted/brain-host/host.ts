@@ -102,9 +102,11 @@ export interface HostedBrainSeams {
   ) => SessionProviderPlugin;
   readonly trace?: (record: BrainTurnTraceRecord) => void;
   /**
-   * Whether this host may still write the conversation: true while it holds
-   * the lease. A save asked for after the lease passed to another holder is
-   * refused rather than landed over the successor's run.
+   * Whether this host may still write for the account: true while it holds
+   * the lease. Every write asked for after the lease passed to another holder
+   * — the envelope, a line, a briefing, a fact, a workspace file, an action
+   * carried to a provider — is refused rather than landed over the
+   * successor's, and the refusal is what the model reads.
    */
   readonly writable?: () => boolean;
 }
@@ -138,6 +140,9 @@ const NOT_CLOUD: ProviderTranscriptSinceResult & ProviderTranscriptResult = {
   reason: "That session's provider is not one the service reads.",
 };
 
+/** What every write answers once the lease has passed to another holder. */
+const LEASE_LOST = "not run: this conversation is now run by another request";
+
 const NOT_LIVE: ProviderTranscriptSinceResult = {
   status: ACTION_RESULT_STATUS.UNSUPPORTED,
   reason: "not read: the session is neither working nor waiting",
@@ -157,6 +162,7 @@ export async function openHostedBrain(seams: HostedBrainSeams): Promise<HostedBr
   let lines: readonly ConversationEntry[] = await store.lines.list(userId, sessionKey, now());
   const defaults = await seams.workspaceDefaults();
 
+  const writable = seams.writable ?? (() => true);
   const refreshRoster = async () => {
     roster = await readHostedRoster(store, userId);
     return roster;
@@ -167,6 +173,7 @@ export async function openHostedBrain(seams: HostedBrainSeams): Promise<HostedBr
 
   /** Appends one line the brain's own work produced, minted here, and answers whether the thread took it. */
   const recordLine: ConversationLineRecorder = async (entry, recordedAt) => {
+    if (!writable()) return false;
     const appended = await store.lines.append(
       userId,
       sessionKey,
@@ -203,7 +210,6 @@ export async function openHostedBrain(seams: HostedBrainSeams): Promise<HostedBr
     );
 
   const repository = store.brainStateRepository(userId, sessionKey);
-  const writable = seams.writable ?? (() => true);
   const stateStore = new BrainStateStore({
     repository: {
       load: () => repository.load(),
@@ -220,7 +226,7 @@ export async function openHostedBrain(seams: HostedBrainSeams): Promise<HostedBr
       list: async () => facts,
       remember: async (ask) => {
         const words = rememberedFactText(ask.words);
-        if (!words) return false;
+        if (!words || !writable()) return false;
         const kept = facts.filter((fact) => fact.id !== ask.replaces);
         if (kept.some((fact) => fact.words === words)) return true;
         if (kept.length >= maximumRememberedFacts) return false;
@@ -228,7 +234,7 @@ export async function openHostedBrain(seams: HostedBrainSeams): Promise<HostedBr
         return true;
       },
       forget: async (id) => {
-        if (!facts.some((fact) => fact.id === id)) return false;
+        if (!writable() || !facts.some((fact) => fact.id === id)) return false;
         facts = await store.facts.replace(
           userId,
           facts.filter((fact) => fact.id !== id),
@@ -238,7 +244,10 @@ export async function openHostedBrain(seams: HostedBrainSeams): Promise<HostedBr
       },
     },
     apiKey: seams.apiKey,
-    execute: seams.executeAction,
+    execute: (input) =>
+      writable()
+        ? seams.executeAction(input)
+        : Promise.resolve({ result: ACTION_RESULT_STATUS.REJECTED, reason: LEASE_LOST }),
     recordLine: async (entry) => {
       await recordLine({ ...entry, eventId: createId() }, now(), sessionKey);
     },
@@ -262,7 +271,7 @@ export async function openHostedBrain(seams: HostedBrainSeams): Promise<HostedBr
       });
       return { prompt: built.text, layers: HOSTED_TOOL_POLICY, catalog };
     },
-    workspace: hostedWorkspaceAccess(store, userId, now),
+    workspace: hostedWorkspaceAccess(store, userId, now, writable),
     primeFreshContext: () => recentHostedDailyNotes(store, userId, now()),
     observes: { kind: LOOK_SUBJECT.NONE },
     readTranscriptSince: async (identity, cursor) => {
@@ -283,6 +292,7 @@ export async function openHostedBrain(seams: HostedBrainSeams): Promise<HostedBr
       return dispatchRead(pluginFor(identity.providerId), "transcript", identity.providerSessionId);
     },
     deliver: async (delivery) => {
+      if (!writable()) throw new Error(LEASE_LOST);
       const id = createId();
       await store.briefings.insert(userId, {
         id,

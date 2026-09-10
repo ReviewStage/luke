@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { BRAIN_REQUEST_STATUS, BRAIN_SUBMISSION_OUTCOME, freshBrainState } from "@sidecar/brain";
+import { bareModelAdapter } from "@sidecar/brain/testing";
 import {
   BRAIN_REQUEST_ORIGIN,
   brainAskCancelPath,
@@ -18,6 +19,8 @@ import { CONVERSATION_ENTRY_KIND } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
 import { and, eq } from "drizzle-orm";
 import {
+  ACTION_RESULT_STATUS,
+  BRAIN_TOOL,
   BRAIN_TURN_TRIGGER,
   checkpointFormatTag,
   MAIN_SESSION_KEY,
@@ -50,6 +53,7 @@ import {
   handleLineRating,
 } from "../server/hosted/brain-host/conversation";
 import { handleFacts } from "../server/hosted/brain-host/facts";
+import { openHostedBrain } from "../server/hosted/brain-host/host";
 import {
   answered,
   type BrainRouteHarness,
@@ -58,6 +62,7 @@ import {
   jsonRequest,
   message,
   REMEMBER_CALL,
+  ScriptedModel,
 } from "./support/brain-route";
 import {
   type HostedStoreTestDatabase,
@@ -636,4 +641,121 @@ test("the ask routes refuse a missing bearer, a missing key, a malformed ask, an
     harness.route(jsonRequest(`${ORIGIN}${brainAskRunPath("nope")}`, "GET")),
   );
   assert.equal(missing.status, 404);
+});
+
+test("a cancel noted while a run was orphaned revokes the run the moment the next holder resumes it", async () => {
+  const { database, userId, harness } = await developer();
+  await database.store.conversations.create(userId, {
+    sessionKey: MAIN_SESSION_KEY,
+    name: "main",
+    now: Date.now(),
+  });
+  const running = {
+    ...freshBrainState("gen-cancel-orphan", Date.now() - 60_000),
+    requests: [
+      {
+        runId: "run-orphan-cancelled",
+        submissionId: "submission-orphan-cancelled",
+        origin: BRAIN_REQUEST_ORIGIN.TYPED,
+        question: "remember something I no longer want remembered",
+        status: BRAIN_REQUEST_STATUS.RUNNING,
+        revision: 1,
+        acceptedAt: Date.now() - 50_000,
+        startedAt: Date.now() - 49_000,
+        performedActions: 0,
+        unknownActions: 0,
+      },
+    ],
+  };
+  assert.ok(await database.store.brainStateRepository(userId, MAIN_SESSION_KEY).save(running));
+  assert.ok(await database.store.runs.requestCancel(userId, "run-orphan-cancelled", Date.now()));
+  harness.model.answers.push(
+    answered([REMEMBER_CALL("call-late", "A fact the developer cancelled")]),
+    answered([message("Remembered.")]),
+  );
+
+  const run = await waitFor(harness, "run-orphan-cancelled");
+  await harness.drain();
+
+  assert.equal(run.status, BRAIN_REQUEST_STATUS.CANCELLED);
+  assert.equal(run.performedActions, 0);
+  const facts = await database.db
+    .select()
+    .from(personalFact)
+    .where(eq(personalFact.userId, userId));
+  assert.deepEqual(facts, []);
+});
+
+test("a holder whose lease passed to another writes nothing more: no fact, no file, no line, no briefing, no action", async () => {
+  const { database, userId } = await developer();
+  const model = new ScriptedModel();
+  let writable = true;
+  const executed: string[] = [];
+  const brain = await openHostedBrain({
+    store: database.store,
+    userId,
+    sessionKey: MAIN_SESSION_KEY,
+    model: bareModelAdapter(model),
+    now: Date.now,
+    createId: () => `id-${executed.length}-${Math.random().toString(36).slice(2)}`,
+    report: () => {},
+    apiKey: async () => "conductor-key",
+    executeAction: async (input) => {
+      executed.push(input.kind);
+      return { result: ACTION_RESULT_STATUS.ACCEPTED };
+    },
+    workspaceDefaults: async () => ({}),
+    writable: () => writable,
+  });
+  const before = await database.store.workspace.read(userId, "MEMORY.md");
+  // The lease passes to another holder while the model is thinking: every
+  // call the answer then makes is refused, and the run's own end lands nowhere.
+  model.answers.push(
+    answered([
+      REMEMBER_CALL("call-fact", "A fact from a holder that lost its lease"),
+      functionCall("call-file", BRAIN_TOOL.WRITE_WORKSPACE_FILE, {
+        name: "MEMORY.md",
+        content: "# MEMORY.md\n\nwritten late",
+      }),
+    ]),
+    answered([message("Done, supposedly.")]),
+  );
+  const original = model.respond.bind(model);
+  model.respond = (items, options) => {
+    writable = false;
+    return original(items, options);
+  };
+  await brain.agent.ready();
+  const accepted = await brain.agent.submitAsk({
+    submissionId: "submission-late",
+    question: "remember this and write it down",
+    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+  });
+  assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
+  await brain.agent.idle();
+  await brain.publish();
+  await brain.stop();
+
+  const facts = await database.db
+    .select()
+    .from(personalFact)
+    .where(eq(personalFact.userId, userId));
+  assert.deepEqual(facts, []);
+  assert.equal(
+    (await database.store.workspace.read(userId, "MEMORY.md"))?.content,
+    before?.content,
+  );
+  const lines = await database.db
+    .select()
+    .from(conversationLine)
+    .where(eq(conversationLine.userId, userId));
+  // Not even the ask's own line: the route writes it while it holds the
+  // lease, and this holder's publication came after the lease had passed.
+  assert.deepEqual(lines, []);
+  assert.deepEqual(executed, []);
+  const [row] = await database.db
+    .select({ status: conversationRun.status })
+    .from(conversationRun)
+    .where(eq(conversationRun.userId, userId));
+  assert.equal(row?.status, BRAIN_REQUEST_STATUS.RUNNING);
 });
