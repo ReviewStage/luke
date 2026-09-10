@@ -68,7 +68,9 @@ shown and every point at which his working context was folded. The transcript
 is a record, not a limit: folding the context changes what the model sees
 next and erases nothing here. The 20 most recent Conversation lines, each cut to
 400 characters, ride into a conversation as context, beside the working
-memory. A thread you open as temporary is held in memory alone and is gone
+memory. The same 20 lines, without the actions he took or any session
+identifier, are also placed into each voice call when it opens, so the voice
+can follow what was just said. A thread you open as temporary is held in memory alone and is gone
 when Luke next opens; nothing said in it is remembered automatically. Nothing
 about a conversation is written on our servers, and a fixture or evidence run
 keeps no conversation at all.
@@ -350,7 +352,9 @@ and email you signed it with, and any screenshots you attached.
 ## Who we send it to
 
 - OpenAI, for voice and for Luke's own judgment. A spoken turn sends its
-  audio, a typed turn sends your words, and both send the session fields
+  audio, a typed turn sends your words, on the Mac each voice call also
+  carries the recent Conversation lines described above as it opens, and both
+  kinds of turn send the session fields
   listed above — on the Mac app, read locally from your machine; on iOS and
   Apple Watch, drawn from the same cloud observation your vault keys already
   allow (titles, status, repository, and branch of your cloud sessions, as

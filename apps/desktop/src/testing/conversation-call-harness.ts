@@ -155,6 +155,8 @@ export function harness(
     onWireEvent?: (direction: TraceDirection, event: WireRecord) => void;
     /** Lets a test see what the element would be handed to play. */
     onRemoteStream?: (stream: MediaStream | undefined) => void;
+    /** The items that seed the call's conversation at channel open, as the orchestrator supplies them. */
+    conversationSeed?: () => readonly WireRecord[];
   } = {},
 ): Harness {
   const sent: ParsedJsonObject[] = [];
@@ -387,6 +389,9 @@ export function harness(
   }
   if (options.now) {
     sessionOptions.now = options.now;
+  }
+  if (options.conversationSeed) {
+    sessionOptions.conversationSeed = options.conversationSeed;
   }
   const askBrain = options.askBrain;
   if (askBrain) {

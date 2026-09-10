@@ -62,6 +62,7 @@ test("a typed ask's reply trims the interrupted reply to what was heard", async 
       REALTIME_CLIENT_EVENT.RESPONSE_CANCEL,
       REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR,
       REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_TRUNCATE,
+      REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
       REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
     ],
   );
@@ -357,12 +358,17 @@ test("the brain's reply to a typed ask is spoken on the briefing's own terms", a
 
   assert.equal(context.session.speakReply("Two sessions need you."), true);
 
-  // The reply travels on the briefing's own out-of-band terms — no tools, no
-  // conversation.
+  // The reply travels on the briefing's own terms: one marked item joining
+  // the conversation, spoken by a response with its tools withheld.
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  assert.deepEqual(
+    context.sent.slice(sentBefore).map((event) => event.type),
+    [REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE, REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
+  );
   const [request] = responseCreates(context, sentBefore);
   assert.ok(isRecord(request?.response));
-  assert.equal(request.response.conversation, "none");
+  assert.equal(request.response.conversation, undefined);
+  assert.equal(request.response.instructions, undefined);
   assert.deepEqual(request.response.tools, []);
 
   context.emit({
@@ -395,6 +401,7 @@ test("the brain's reply interrupts the reply it arrives over, never the develope
     [
       REALTIME_CLIENT_EVENT.RESPONSE_CANCEL,
       REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR,
+      REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
       REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
     ],
   );

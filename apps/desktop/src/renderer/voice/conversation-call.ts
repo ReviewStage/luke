@@ -371,8 +371,9 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
    * Speaks the brain's reply to a typed ask, reporting whether it could. The
    * ask itself went to the brain over the bridge — the voice never saw it —
    * so what the call is handed is the finished reply, on the briefing's own
-   * out-of-band terms. A reply arriving over another interrupts it: the
-   * developer's turn always wins, however it is taken.
+   * terms: one marked item joining the conversation, spoken by a response
+   * with its tools withheld. A reply arriving over another interrupts it:
+   * the developer's turn always wins, however it is taken.
    */
   speakReply(briefing: string, runId?: string): boolean {
     if (!this.isConnected) return false;
@@ -406,9 +407,9 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
       }
     } else if (this.#press.commitPending) {
       // The press was released mid-handshake. Its words go as the turn it
-      // held — one tick later, because the caller re-feeds the roster and
-      // the guide right after this connect resolves, and the reply to those
-      // words must be answered from that context rather than from none.
+      // held — one tick later, so the conversation seed the channel open
+      // just sent has settled ahead of them, and the reply to those words is
+      // answered from the recent conversation rather than from none.
       setTimeout(() => this.#deliverHeldTurn(), 0);
     }
   }
@@ -816,7 +817,7 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
    * Delivers the turn a press held and released while the call was still
    * connecting: the captured words flush as appends and commit as the turn
    * the release already closed. It runs a tick after the channel opened so
-   * the caller's context re-feed lands first, and it yields to anything that
+   * the conversation seed lands first, and it yields to anything that
    * moved in that tick — a new turn is the developer talking again, and words
    * that yielded are discarded rather than queued behind it.
    */

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
+import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import type { VoiceBridge } from "./voice-bridge.js";
 import type { ConversationCallHooks, SpeakOnlyCallHooks } from "./voice-orchestrator.js";
 import { VoiceOrchestrator } from "./voice-orchestrator.js";
@@ -67,7 +68,7 @@ interface FakeCalls {
   speakOnly?: FakeCall;
 }
 
-function orchestrator() {
+function orchestrator(entries: readonly ConversationEntry[] = []) {
   const reports: { view: VoiceViewReport; exchange: VoiceExchangeOpening | undefined }[] = [];
   const calls: FakeCalls = {};
   let granted = true;
@@ -96,7 +97,7 @@ function orchestrator() {
     schedule: () => 0,
     cancel: () => undefined,
   });
-  subject.applyBootstrap({ conversation: { entries: [], cleared: false }, epoch: 1 });
+  subject.applyBootstrap({ conversation: { entries, cleared: false }, epoch: 1 });
   return {
     subject,
     reports,
@@ -199,4 +200,32 @@ test("a Clear retires the latch, so the next press opens a turn rather than endi
 
   await subject.beginTalk();
   assert.equal(conversation.turns, 2);
+});
+
+test("every call is seeded from the thread as it stands, without the actions or their identities", async () => {
+  const { subject, calls } = orchestrator([
+    { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "what needs me?", eventId: "e1" },
+    { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Nothing right now.", eventId: "e2" },
+    {
+      kind: CONVERSATION_ENTRY_KIND.ACTION,
+      words: "sent a message to Claude Code",
+      eventId: "e3",
+      identity: { providerId: "claude-code", providerSessionId: "session-7f3a" },
+    },
+  ]);
+  await subject.beginTalk();
+  const conversation = calls.conversation;
+  assert.ok(conversation);
+
+  const seed = conversation.hooks.conversationSeed();
+  assert.equal(seed.length, 3);
+  const wire = JSON.stringify(seed);
+  assert.match(wire, /what needs me\?/);
+  assert.match(wire, /Nothing right now\./);
+  assert.doesNotMatch(wire, /session-7f3a|claude-code|sent a message/);
+  assert.equal(JSON.parse(wire).at(-1).item.role, "system");
+
+  // A Clear empties the thread, so the next open seeds nothing.
+  subject.clearConversation();
+  assert.deepEqual(conversation.hooks.conversationSeed(), []);
 });

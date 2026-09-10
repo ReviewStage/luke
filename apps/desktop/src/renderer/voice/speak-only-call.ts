@@ -98,6 +98,13 @@ export interface SpeakOnlyCallOptions extends RealtimeCallOptions {
   /** The voice and the pace the call is configured at, read at each handshake. */
   voice?: () => { voice?: string; speed?: number };
   /**
+   * The items that seed the call's conversation with the recent record as
+   * its channel opens, read once per connect. Absent, the call opens on an
+   * empty conversation, which is what the introduction's call and a bare
+   * harness want.
+   */
+  conversationSeed?: () => readonly WireRecord[];
+  /**
    * The words Luke is currently speaking, growing as they are generated, or
    * undefined once there is nothing being spoken. Each entry is one response's
    * words: a turn that speaks twice — a sentence before a tool call and the
@@ -149,7 +156,10 @@ export interface SpeakOnlyCallOptions extends RealtimeCallOptions {
  * type rather than a flag on a wider one: there is no field here to hold a
  * device, no member that could open one, and the session document is the
  * ordinary one overlaid with {@link SPEAK_ONLY_SESSION_CONFIG}, so nothing
- * said, heard, or read out on such a call can become an action.
+ * said, heard, or read out on such a call can become an action. What the
+ * call does carry is the recent conversation, seeded from the record as its
+ * channel opens, so a briefing is spoken against what was said before rather
+ * than read cold.
  *
  * Everything about turn-taking that needs no microphone lives here too:
  * starting a reply, ending it, cutting it off, the caption it draws, and the
@@ -431,6 +441,10 @@ export class SpeakOnlyCall<
   }
 
   protected override onChannelOpen(): void {
+    // The seed lands first, once per connect: a reconnect after the session
+    // expired or the idle retire reads the thread as it then stands, which
+    // now holds what was said on the call before.
+    this.send(this.options.conversationSeed?.() ?? []);
     // A pace changed during the handshake could not be sent then, and the
     // credential this call answered may have been minted before the change.
     this.#flushPendingSpeed();

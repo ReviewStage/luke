@@ -1,3 +1,4 @@
+export { conversationSeedEvents } from "./conversation-seed.js";
 export {
   type IntroductionLine,
   introductionSessionConfig,
@@ -12,6 +13,7 @@ export {
   ARRIVAL_SPEECH_KIND,
   type ArrivalSpeech,
   arrivalSpeechEvents,
+  BRIEFING_INPUT_MARKER,
   BRIEFING_SPEECH_KIND,
   type BriefingSpeech,
   briefingSpeechEvents,

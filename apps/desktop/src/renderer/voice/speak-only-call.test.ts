@@ -49,7 +49,7 @@ interface Harness {
   closeChannel: () => void;
 }
 
-function harness(): Harness {
+function harness(conversationSeed?: () => readonly WireRecord[]): Harness {
   const sent: ParsedJsonObject[] = [];
   const captions: (readonly string[] | undefined)[] = [];
   const replyEndings: { texts: readonly string[]; kind: ReplyKind | undefined }[] = [];
@@ -98,6 +98,7 @@ function harness(): Harness {
     onError: () => undefined,
     onCaption: (texts) => captions.push(texts),
     onReplyEnded: (texts, kind) => replyEndings.push({ texts, kind }),
+    ...(conversationSeed ? { conversationSeed } : undefined),
   });
 
   return {
@@ -211,12 +212,53 @@ test("a briefing is read out once the call is open", async () => {
 
   assert.equal(context.call.speak(briefingAbout("session-a")), true);
 
+  // The briefing joins the conversation as one marked item, spoken by a
+  // response with its tools withheld.
   assert.deepEqual(
     context.sent.slice(sentAfterConnect).map((event) => event.type),
-    [REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
+    [REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE, REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
   );
+  const response = context.sent.at(-1)?.response;
+  assert.ok(isRecord(response));
+  assert.deepEqual(response.tools, []);
+  assert.equal(response.tool_choice, "none");
+  assert.equal(response.instructions, undefined);
   settleReply(context);
   assert.equal(context.call.status, REALTIME_STATUS.READY);
+});
+
+/** One seed item, as the orchestrator would build it from a line of the thread. */
+function seedItem(role: string, text: string): WireRecord {
+  return {
+    type: REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
+    item: { type: "message", role, content: [{ type: "input_text", text }] },
+  };
+}
+
+test("the recent conversation seeds the call as its channel opens, and again on every reconnect", async () => {
+  let seed: readonly WireRecord[] = [seedItem("user", "what needs me?")];
+  const context = harness(() => seed);
+
+  await context.call.connect();
+  assert.deepEqual(context.sent, seed);
+
+  // A briefing spoken on the call is a line of the thread by the time the
+  // call expires, so the reconnect seeds the thread as it then stands.
+  seed = [...seed, seedItem("assistant", "Nothing right now.")];
+  context.emit({
+    type: REALTIME_SERVER_EVENT.ERROR,
+    error: { type: "invalid_request_error", code: "session_expired", message: "Maximum duration." },
+  });
+  assert.equal(context.call.isConnected, false);
+  const sentBeforeReconnect = context.sent.length;
+  assert.equal(await context.call.connect(), true);
+  assert.deepEqual(context.sent.slice(sentBeforeReconnect), seed);
+});
+
+test("a call built without a seed opens on an empty conversation", async () => {
+  const context = harness();
+  await context.call.connect();
+  assert.deepEqual(context.sent, []);
 });
 
 test("a briefing's reply hands its kind back with the words", async () => {

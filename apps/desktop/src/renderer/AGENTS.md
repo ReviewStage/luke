@@ -69,7 +69,10 @@ A call Luke opens for himself is a `SpeakOnlyCall`
 microphone member to open — the guarantee `CLAUDE.md` states for a briefing is
 the type rather than a flag, and `ConversationCall` is the subclass that adds
 the device and the one tool, over the transport both share in
-`voice/realtime-call.ts`. Neither class keeps a concern it can hand to an
+`voice/realtime-call.ts`. Both calls are seeded at channel open from the
+orchestrator's thread, through the `conversationSeed` hook it supplies, so a
+call is a window onto the record rather than a memory of its own. Neither
+class keeps a concern it can hand to an
 object that owns its own fields and its own reset: the words of the reply
 under way are `voice/captions.ts`, cutting one off is
 `voice/interruption.ts`, the audio a press speaks into a handshake is
