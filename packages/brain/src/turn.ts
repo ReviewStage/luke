@@ -7,7 +7,7 @@ import {
 import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import { RUN_ORIGIN, type RunOrigin } from "@sidecar/runtime/vocabulary";
 import type { Generation } from "./generation.js";
-import type { BrainRequestOrigin } from "./requests.js";
+import type { BrainRequestOrigin, BrainRunUsage } from "./requests.js";
 import type { SteeredDeliveries } from "./steered-deliveries.js";
 import type { RecordingContextEngine } from "./transcript-recorder.js";
 import type { BrainWakeEvent } from "./wake-events.js";
@@ -126,6 +126,10 @@ export interface RunControl {
   compactionFailed?: boolean;
   performedActions: number;
   unknownActions: number;
+  /** What the run's inferences have cost so far, summed over every answer; nothing before the first. */
+  usage?: BrainRunUsage;
+  /** The id of every response the run was answered with, in order. */
+  responseIds: string[];
 }
 
 interface TurnPlanBase {

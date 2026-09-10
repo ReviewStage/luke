@@ -21,7 +21,7 @@ import {
  * The hosted brain contract. The desktop prepares the prompt and names the
  * tools, because the prompt is composed on the desktop and the toolset is
  * chosen by a policy there. What the service fixes is everything a caller
- * could abuse: the model, the upstream, the credential, the refusal to store,
+ * could abuse: the model, the upstream, the credential, the reasoning summary,
  * the catalog of tool schemas a name may select, and every bound below. A
  * tool travels as its registered name and nothing more, so a caller can never
  * upload a schema; the prompt travels as bounded text with an explicit

@@ -3,6 +3,7 @@ import test from "node:test";
 import { MODEL_FAILURE, MODEL_RESPONSE_OUTCOME } from "@sidecar/runtime/vocabulary";
 import {
   BRAIN_REASONING_EFFORT,
+  BRAIN_REASONING_SUMMARY,
   brainResponsesOutput,
   brainResponsesRequest,
   functionCallOutputItem,
@@ -12,7 +13,7 @@ import {
 } from "./responses-api.js";
 import { BRAIN_TOOL, hostedBrainToolCatalog } from "./tools.js";
 
-test("the request asks the API for no compaction of its own, stores nothing, and replays reasoning", () => {
+test("the request asks the API for no compaction of its own, leaves storage at the API's default, and asks for reasoning it can replay and summarize", () => {
   const request = brainResponsesRequest([userMessageItem("hello")], {
     model: "gpt-test",
     instructions: "be Luke",
@@ -22,13 +23,14 @@ test("the request asks the API for no compaction of its own, stores nothing, and
   });
   assert.equal(request.model, "gpt-test");
   assert.equal(request.instructions, "be Luke");
-  assert.equal(request.store, false);
+  // Storage is the API's default: the response stands with OpenAI under its retention, named by its id.
+  assert.equal("store" in request, false);
   // The host schedules compaction itself; a provider policy beside it would compete over one window.
   assert.equal("context_management" in request, false);
   // No key asked for, none sent: an absent field is not an empty one.
   assert.equal("prompt_cache_key" in request, false);
   assert.deepEqual(request.include, ["reasoning.encrypted_content"]);
-  assert.deepEqual(request.reasoning, { effort: "medium" });
+  assert.deepEqual(request.reasoning, { effort: "medium", summary: BRAIN_REASONING_SUMMARY });
   assert.equal(request.tool_choice, "auto");
   assert.equal(request.parallel_tool_calls, true);
   assert.equal(request.max_output_tokens, 1234);
@@ -162,8 +164,60 @@ test("a prompt cache key rides on the request as the routing hint it is", () => 
     promptCacheKey: "9f86d0818",
   });
   assert.equal(request.prompt_cache_key, "9f86d0818");
-  // The key routes a prefix cache; it does not ask the API to keep anything.
-  assert.equal(request.store, false);
+  // The key routes a prefix cache; it decides nothing about storage, which stays the API's default.
+  assert.equal("store" in request, false);
+});
+
+test("the response id, each reasoning item's summary, and the four-way usage are read beside the items, which stay verbatim", () => {
+  const summarized = {
+    type: "reasoning",
+    id: "rs_1",
+    summary: [
+      { type: "summary_text", text: "Checking which session is waiting." },
+      { type: "summary_text", text: "Only one needs a reply." },
+    ],
+    encrypted_content: "opaque",
+  };
+  const wordless = { type: "reasoning", id: "rs_2", summary: [], encrypted_content: "opaque" };
+  const answer = responsesModelAnswer({
+    id: "resp_1",
+    status: "completed",
+    output: [
+      summarized,
+      wordless,
+      { type: "message", role: "assistant", content: [{ type: "output_text", text: "ok" }] },
+    ],
+    usage: {
+      input_tokens: 900,
+      output_tokens: 120,
+      input_tokens_details: { cached_tokens: 768 },
+      output_tokens_details: { reasoning_tokens: 100 },
+    },
+  });
+  assert.ok(answer?.outcome === MODEL_RESPONSE_OUTCOME.ANSWERED);
+  assert.equal(answer.responseId, "resp_1");
+  assert.deepEqual(answer.usage, {
+    inputTokens: 900,
+    outputTokens: 120,
+    cachedInputTokens: 768,
+    reasoningTokens: 100,
+  });
+  // One summary per item that has words, joined as paragraphs; an item with none is not a summary.
+  assert.deepEqual(answer.reasoning, [
+    { itemId: "rs_1", summary: "Checking which session is waiting.\n\nOnly one needs a reply." },
+  ]);
+  // The items themselves are untouched: the opaque content rides with the summary for replay.
+  assert.deepEqual(answer.items[0], summarized);
+  assert.deepEqual(answer.items[1], wordless);
+  // An answer that names no id and carries no summary says neither, rather than an empty one.
+  const bare = responsesModelAnswer({
+    status: "completed",
+    output: [{ type: "message", role: "assistant", content: [] }],
+    usage: { input_tokens: 1, output_tokens: 0 },
+  });
+  assert.ok(bare?.outcome === MODEL_RESPONSE_OUTCOME.ANSWERED);
+  assert.equal("responseId" in bare, false);
+  assert.equal("reasoning" in bare, false);
 });
 
 test("the cached input tokens the API reports are read for the trace", () => {

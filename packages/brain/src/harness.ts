@@ -154,6 +154,26 @@ export function answered(output: readonly WireRecord[], inputTokens = 100): Brai
   return answer;
 }
 
+/** An answer as OpenAI stores it: under a response id, with every count the provider reports. */
+export function answeredUnder(
+  responseId: string,
+  output: readonly WireRecord[],
+  usage: { input: number; output: number; cached: number; reasoning: number },
+): BrainClientAnswer {
+  const answer = responsesModelAnswer({
+    id: responseId,
+    output,
+    usage: {
+      input_tokens: usage.input,
+      output_tokens: usage.output,
+      input_tokens_details: { cached_tokens: usage.cached },
+      output_tokens_details: { reasoning_tokens: usage.reasoning },
+    },
+  });
+  assert.ok(answer);
+  return answer;
+}
+
 export function quietAnswer(until: number): BrainClientAnswer {
   return { outcome: MODEL_RESPONSE_OUTCOME.THROTTLED, until };
 }

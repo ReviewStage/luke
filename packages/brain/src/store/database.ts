@@ -107,6 +107,7 @@ export class StoreDatabase {
           const steps = STORE_SCHEMA_MIGRATIONS.get(version) ?? [];
           for (const step of steps) {
             if (step.onlyIf && !this.#stands(step.onlyIf)) continue;
+            if (step.unless && this.#stands(step.unless)) continue;
             this.#db.prepare(step.sql).run(...step.params);
           }
         }

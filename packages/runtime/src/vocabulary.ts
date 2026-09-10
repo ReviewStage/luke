@@ -60,6 +60,7 @@ export {
   type ModelUsage,
   REASONING_EFFORT,
   type ReasoningEffort,
+  type ReasoningSummary,
   RUN_END_REASON,
   RUNTIME_EVENT,
   type RunEndReason,

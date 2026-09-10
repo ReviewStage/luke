@@ -55,7 +55,7 @@ import type { HostedSpend } from "./quota.js";
  * envelope, and names the tools it means to offer, each a name this service
  * registers a schema for — a caller can never upload a schema, and a name the
  * catalog does not hold refuses the request. The service fixes the model, the
- * upstream, its credential, the refusal to store, and the bounds, answers its
+ * upstream, its credential, the reasoning summary, and the bounds, answers its
  * capabilities so a desktop can decide before sending anything, and posts each
  * operation once: an inference, a token count, or an explicit compaction whose
  * answered window the desktop adopts whole. It runs no tool, keeps no

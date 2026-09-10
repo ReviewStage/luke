@@ -4,6 +4,7 @@ import {
   BRAIN_OPENAI_DEFAULTS,
   BRAIN_RATE_LIMIT_COOLDOWN_MS,
   BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS,
+  BRAIN_REASONING_SUMMARY,
   BRAIN_TOOL,
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_OPERATION,
@@ -179,9 +180,9 @@ test("a respond request runs the prepared prompt over the schemas its names sele
   assert.equal(calls[0]?.url, `${BRAIN_OPENAI_DEFAULTS.BASE_URL}/responses`);
   assert.equal(sent.model, HOSTED_BRAIN_DEFAULTS.MODEL);
   assert.equal(sent.instructions, "You are Luke.");
-  assert.equal(sent.store, false);
+  assert.equal("store" in sent, false);
   assert.equal(sent.max_output_tokens, 900);
-  assert.deepEqual(sent.reasoning, { effort: "low" });
+  assert.deepEqual(sent.reasoning, { effort: "low", summary: BRAIN_REASONING_SUMMARY });
   assert.ok(Array.isArray(sent.tools));
   assert.deepEqual(
     sent.tools.map((tool) => (isRecord(tool) ? tool.name : undefined)),
@@ -211,7 +212,7 @@ test("a request's prompt cache key is forwarded upstream and kept nowhere", asyn
   );
   assert.equal(response.status, 200);
   assert.equal(calls[0]?.body?.prompt_cache_key, "9f86d0818");
-  assert.equal(calls[0]?.body?.store, false);
+  assert.equal(calls[0]?.body !== undefined && "store" in calls[0].body, false);
 });
 
 test("each refusal answers its own error before anything is spent: prompt envelope, unknown tool, bounds, shape, size", async () => {

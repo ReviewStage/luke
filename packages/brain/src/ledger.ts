@@ -25,6 +25,14 @@ import type { RunControl, TurnContext } from "./turn.js";
  * work is deciding which save a caller means and what its answer says.
  */
 
+/** What a run's inferences have cost and been answered under so far, as its record keeps them; nothing before the first answer. */
+function runAccounting(run: RunControl): Pick<RecordChanges, "usage" | "responseIds"> {
+  return {
+    ...(run.usage !== undefined ? { usage: run.usage } : undefined),
+    ...(run.responseIds.length > 0 ? { responseIds: [...run.responseIds] } : undefined),
+  };
+}
+
 /** The two markers the host's thread writes onto a run, each once. */
 export const PENDING_MARK_FIELD = {
   ASK_RECORDED_AT: "askRecordedAt",
@@ -145,6 +153,7 @@ export class BrainRequestLedger {
                 changes: {
                   performedActions: run.performedActions,
                   unknownActions: run.unknownActions,
+                  ...runAccounting(run),
                 },
               },
             }
@@ -212,7 +221,11 @@ export class BrainRequestLedger {
       ...(end.text !== undefined ? { text: end.text } : undefined),
       ...(end.failure !== undefined ? { failure: end.failure } : undefined),
       ...(run
-        ? { performedActions: run.performedActions, unknownActions: run.unknownActions }
+        ? {
+            performedActions: run.performedActions,
+            unknownActions: run.unknownActions,
+            ...runAccounting(run),
+          }
         : undefined),
     };
     if (await this.commit(generation, runId, settled)) {

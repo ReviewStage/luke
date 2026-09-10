@@ -5,6 +5,7 @@ import {
   ABC,
   acceptedRunId,
   answered,
+  answeredUnder,
   ask,
   type BrainClientAnswer,
   call,
@@ -66,8 +67,48 @@ test("a run that reads a transcript tells its slow step once, then its actions s
       runId,
       status: BRAIN_REQUEST_STATUS.SUCCEEDED,
       text: "The tests pass. Nothing needs you!",
+      usage: { inputTokens: 200, outputTokens: 0, cachedInputTokens: 0, reasoningTokens: 0 },
     },
   ]);
+  await h.agent.stop();
+});
+
+test("a run keeps every response id and the four counts summed over its answers, on its record and on its end", async () => {
+  const h = harness();
+  const events = listen(h);
+  h.client.answers.push(
+    answeredUnder("resp_1", [messageAbc("send_1")], {
+      input: 900,
+      output: 40,
+      cached: 768,
+      reasoning: 30,
+    }),
+    answeredUnder("resp_2", [message("Sent.")], {
+      input: 1000,
+      output: 10,
+      cached: 896,
+      reasoning: 0,
+    }),
+  );
+  const record = await ask(h, "tell abc to run the tests");
+  assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  const usage = {
+    inputTokens: 1900,
+    outputTokens: 50,
+    cachedInputTokens: 1664,
+    reasoningTokens: 30,
+  };
+  assert.deepEqual(record?.responseIds, ["resp_1", "resp_2"]);
+  assert.deepEqual(record?.usage, usage);
+  // The record on disk says the same, so a relaunch reads what the run cost.
+  const stored = h.repository.state?.requests.find((entry) => entry.runId === record?.runId);
+  assert.deepEqual(stored?.responseIds, ["resp_1", "resp_2"]);
+  assert.deepEqual(stored?.usage, usage);
+  const ended = events.find((event) => event.kind === BRAIN_RUN_EVENT.ENDED);
+  assert.ok(ended?.kind === BRAIN_RUN_EVENT.ENDED);
+  assert.deepEqual(ended.responseIds, ["resp_1", "resp_2"]);
+  assert.deepEqual(ended.usage, usage);
+  assert.equal(events.filter((event) => event.kind === BRAIN_RUN_EVENT.ENDED).length, 1);
   await h.agent.stop();
 });
 

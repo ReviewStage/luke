@@ -4,7 +4,7 @@ import { MODEL_FAILURE, MODEL_RESPONSE_OUTCOME } from "@sidecar/runtime/vocabula
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { BRAIN_RATE_LIMIT_COOLDOWN_MS } from "./model-adapter-shared.js";
 import { OpenAiModelAdapter, openAiModelAdapter } from "./openai-model-adapter.js";
-import { userMessageItem } from "./responses-api.js";
+import { BRAIN_REASONING_SUMMARY, userMessageItem } from "./responses-api.js";
 import { brainToolCatalog, brainToolSchemas, resolveTurnToolPolicy } from "./tools.js";
 import { BRAIN_TURN_TRIGGER } from "./turn.js";
 
@@ -70,8 +70,8 @@ test("respond posts the fixed request on the developer's key and normalizes the 
   assert.equal(new Headers(call.init.headers).get("authorization"), "Bearer sk-test");
   assert.equal(call.body.model, "gpt-test");
   assert.equal(call.body.instructions, "instructions");
-  assert.equal(call.body.store, false);
-  assert.deepEqual(call.body.reasoning, { effort: "medium" });
+  assert.equal("store" in call.body, false);
+  assert.deepEqual(call.body.reasoning, { effort: "medium", summary: BRAIN_REASONING_SUMMARY });
   assert.equal(call.body.max_output_tokens, 500);
   assert.equal("context_management" in call.body, false);
   assert.equal("prompt_cache_key" in call.body, false);

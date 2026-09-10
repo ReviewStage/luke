@@ -244,7 +244,9 @@ cut, the input array is capped at 2,000 items each of which must take one of
 the forms the brain replays, and every tool name must be one this service
 registers a schema for, so a caller can never upload a schema. The service
 then fixes the model, the upstream, its credential, the output budget's
-ceiling, and `store: false` from its own build and posts once. An inference's
+ceiling, and the reasoning summary from its own build and posts once, leaving
+OpenAI's `store` at its default so the response stands with OpenAI under its
+own retention, named back by the id the desktop keeps on the run. An inference's
 answer is handed down as it came, once it is known to be a Responses payload
 every item of which the same admission would replay next turn; an answer this
 route could not replay is a 502, because the client would keep it verbatim and

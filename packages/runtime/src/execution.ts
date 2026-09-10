@@ -163,6 +163,21 @@ export interface ModelUsage {
   readonly outputTokens?: number;
   /** How much of the input the provider answered from its prefix cache, when it says; the trace reads it. */
   readonly cachedInputTokens?: number;
+  /** How much of the output the provider spent reasoning before it wrote, when it says. */
+  readonly reasoningTokens?: number;
+}
+
+/**
+ * What one reasoning item says about itself in words: the provider's summary
+ * of the reasoning behind the calls and words that followed it, read beside
+ * the opaque item it belongs to. The item itself stays in the context for
+ * replay and is never read inside; the summary is what a record keeps and a
+ * client is shown.
+ */
+export interface ReasoningSummary {
+  /** The provider's id for the reasoning item the summary describes. */
+  readonly itemId: string;
+  readonly summary: string;
 }
 
 export const MODEL_RESPONSE_OUTCOME = {
@@ -212,6 +227,10 @@ export interface ModelAnswer {
   readonly usage?: ModelUsage;
   readonly compacted: boolean;
   readonly incomplete?: ModelIncomplete;
+  /** The provider's id for this response, when it named one; a run keeps every one it was answered with. */
+  readonly responseId?: string;
+  /** The summaries of the reasoning items this answer carried, in the order the items stand. */
+  readonly reasoning?: readonly ReasoningSummary[];
 }
 
 export type ModelResponse =
@@ -440,6 +459,8 @@ export const RUNTIME_EVENT = {
   TOOL_CALL: "tool_call",
   TOOL_RESULT: "tool_result",
   USAGE: "usage",
+  /** One inference was answered under a provider response id. */
+  RESPONSE: "response",
   COMPACTED: "compacted",
   INCOMPLETE: "incomplete",
   THROTTLED: "throttled",
@@ -493,6 +514,7 @@ export type RuntimeEvent =
       readonly result: ToolResult;
     }
   | { readonly kind: typeof RUNTIME_EVENT.USAGE; readonly usage: ModelUsage }
+  | { readonly kind: typeof RUNTIME_EVENT.RESPONSE; readonly responseId: string }
   | { readonly kind: typeof RUNTIME_EVENT.COMPACTED; readonly dropped: number }
   | { readonly kind: typeof RUNTIME_EVENT.INCOMPLETE; readonly incomplete: ModelIncomplete }
   | { readonly kind: typeof RUNTIME_EVENT.THROTTLED; readonly until: number }

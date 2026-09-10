@@ -366,10 +366,11 @@ and email you signed it with, and any screenshots you attached.
   most recent lines of your conversation, and the things he remembers about
   you — directly to OpenAI on your own key if you entered one, or through our
   own service on our key when you use Luke through your account. Either way
-  the request asks OpenAI not to store it, and our service performs one model
-  call per request and stores and logs none of the request, the reply, or the
-  encrypted compaction that travels in it; the compaction OpenAI hands back is
-  kept only on your Mac, under the lifetime above. Each call counts against
+  OpenAI stores the request and its reply under its own retention policy, and
+  our service performs one model call per request and stores and logs none of
+  the request, the reply, or the encrypted compaction that travels in it; the
+  compaction OpenAI hands back is kept only on your Mac, under the lifetime
+  above. Each call counts against
   your daily review allowance. When Luke runs through your account, the Mac
   app also sends our service the standing instructions it prepared for the
   call — composed on your Mac from Luke's workspace files described above —
