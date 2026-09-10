@@ -33,7 +33,10 @@ identity at all), so who may renew a credential and who may say which account
 it answers for stay their owners' to know. What a caller keeps is its own
 vocabulary and its own reading of a status: `ask` for a caller that wants a
 validated body or nothing, `send` for one that reads the status itself.
-`device-client.ts` still carries its own copy of that dance.
+Every caller in this package now makes that call, `device-client.ts`
+included, and so do the two hosted endpoints that reach a third party on a
+key the deployment fixed: a `fixedBearer` for OpenAI, and `NO_CREDENTIAL` for
+the analytics batch, whose project token travels in the document itself.
 
 A renamed wire field keeps its old name on the wire for one iOS release. The
 desktop and the service ship together, but an installed phone reads whatever

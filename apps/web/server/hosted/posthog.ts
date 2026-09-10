@@ -13,7 +13,8 @@
  * retry, which this pipeline does not want — the desktop never retries either.
  */
 
-import { type CloudFetch, withoutTrailingSlash } from "@sidecar/wire";
+import { type CloudFetch, HTTP_METHOD, withoutTrailingSlash } from "@sidecar/wire";
+import { callAnswered, createAccountCall, NO_CREDENTIAL } from "../core.js";
 
 export const POSTHOG_ENVIRONMENT = {
   PROJECT_API_KEY: "POSTHOG_PROJECT_API_KEY",
@@ -92,18 +93,20 @@ export async function postPosthogBatch(
   body: PosthogBatch,
   options: PosthogUpstreamOptions = {},
 ): Promise<Response | undefined> {
-  const send = options.fetch ?? ((input: string, init: RequestInit) => fetch(input, init));
-  const host = withoutTrailingSlash(options.host?.trim() || POSTHOG_DEFAULTS.HOST);
-  try {
-    return await send(`${host}${POSTHOG_DEFAULTS.BATCH_PATH}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(options.timeoutMs ?? POSTHOG_DEFAULTS.REQUEST_TIMEOUT_MS),
-    });
-  } catch {
-    return undefined;
-  }
+  // The project token travels in the batch document itself, so ingestion takes
+  // no identity of its own.
+  const call = createAccountCall({
+    baseUrl: options.host?.trim() || POSTHOG_DEFAULTS.HOST,
+    credential: NO_CREDENTIAL,
+    fetch: options.fetch,
+    requestTimeoutMs: options.timeoutMs ?? POSTHOG_DEFAULTS.REQUEST_TIMEOUT_MS,
+  });
+  const answer = await call.send({
+    method: HTTP_METHOD.POST,
+    path: POSTHOG_DEFAULTS.BATCH_PATH,
+    body: JSON.stringify(body),
+  });
+  return callAnswered(answer) ? answer.response : undefined;
 }
 
 export interface PosthogForgetOptions extends PosthogUpstreamOptions {
