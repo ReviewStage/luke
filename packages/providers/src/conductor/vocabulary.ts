@@ -88,12 +88,14 @@ export type ConductorSessionStatus =
 
 /**
  * An idle Conductor session has finished its turn and is holding for the user,
- * which is what Luke reports as waiting on the row. That is not itself an
- * ask: Conductor does not say whether the turn ended on a question, so the
- * row shows the wait and no notice speaks it, because a settled turn that
- * merely leaves the next prompt to them is silence. A session the provider
- * reports as errored stopped on something the user has to deal with, and it
- * carries the message that says what.
+ * which is what Luke reports as waiting on the row. Whether that wait is an
+ * ask is not something Conductor says: idle covers a turn that ended on a
+ * question as much as one that merely left the next prompt to the user. So
+ * the row shows the wait, and the brain settles which it is by reading the
+ * chat's tail through its own read tool in the turn the status edge opened,
+ * announcing only the ask and leaving a plain hand-off in silence. A session
+ * the provider reports as errored stopped on something the user has to deal
+ * with, and it carries the message that says what.
  */
 export const SESSION_STATUS_BY_CONDUCTOR_STATUS = {
   [CONDUCTOR_SESSION_STATUS.IDLE]: SESSION_STATUS.WAITING,

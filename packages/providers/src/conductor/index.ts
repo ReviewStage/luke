@@ -42,7 +42,10 @@ export interface ConductorPluginOptions {
  * in a turn, and between them they keep nothing but where in each transcript
  * the last read got to. Neither takes a cursor from a pass: the incremental
  * `transcriptSince` read stays unanswered, so an observation pass judges a
- * cloud chat from what Conductor reports about it.
+ * cloud chat from what Conductor reports about it. The turn a look opens on
+ * a chat whose status moved is the brain's own turn, and it may read that one
+ * chat's newest page through the `transcript` handler, as a tool call like
+ * any other, to settle whether the wait it was woken for is an ask.
  */
 export function conductorPlugin(options: ConductorPluginOptions): CloudSessionPlugin {
   /**

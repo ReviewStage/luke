@@ -194,7 +194,11 @@ Canonical commands:
   the same documented messages endpoint the iOS screen reads
   (`GET /v0/sessions/{id}/messages`), under the developer's own Conductor
   key on this Mac, only for a session the plugin's latest pass reported, only
-  as the product of the tool call itself and never of an observation pass,
+  as the product of the tool call itself and never of an observation pass —
+  the pass reads no message; a turn the look opened on a Conductor chat whose
+  status moved is the brain's own turn, and its `read_transcript` there is a
+  tool call like any other, once per turn, with the fingerprint of the look
+  bounding the turns to one per status edge rather than one per poll —
   answering the newest page of the developer's own sends and the agent's own
   words — a tool call, tool output, or unattributed record is dropped whole —
   rendered in the same line vocabulary the local readers use and held only in
@@ -1127,7 +1131,11 @@ Canonical commands:
 - A cloud session's conversation itself is read in exactly two places, and
   both are deliberate: in the open, at the developer's own press, and through
   the brain's `read_transcript` tool under the rule above, never behind an
-  observation pass, which reads no message of any chat. When the developer opens a
+  observation pass, which reads no message of any chat. The pass may still
+  wake the brain about a Conductor chat whose status moved, and the turn that
+  look opened is the brain's own turn, its `read_transcript` a tool call like
+  any other, reading that one chat's newest page to settle whether the wait
+  is an ask and keeping nothing of it beyond the turn. When the developer opens a
   Conductor session's own screen in the iOS app, that screen asks Luke's
   service for the conversation, and the service reads it through Conductor's
   documented transcript endpoint (`GET /v0/sessions/{id}/messages`) under the

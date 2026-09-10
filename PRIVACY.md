@@ -41,8 +41,13 @@ session, which keeps no transcript on your Mac, the same "read the recent
 tail" ask reads the newest page of that chat's conversation from Conductor
 instead — your own messages and the agent's replies, not its tool activity —
 using the Conductor key you gave the Mac app, only for a session Luke was just
-shown, and never on his periodic look; what he reads is held in that turn's
-working memory and stored nowhere else. Nothing else reads message history, file
+shown. His periodic look itself reads no message of any chat; when that look
+wakes him about a Conductor chat whose status moved (an agent that stopped
+working and is now waiting on you, say), he may read that one chat's newest
+page through the same endpoint, once in that turn, only for a chat the latest
+look reported, to settle whether the agent is asking you something or simply
+handed its work back; what he reads is held in that turn's working memory and
+stored nowhere else. Nothing else reads message history, file
 contents, or command output. If you run
 agents inside the Herdr terminal manager, Luke also asks Herdr's own
 command-line tool which of those sessions it holds, so their rows can say so;
@@ -406,7 +411,8 @@ and email you signed it with, and any screenshots you attached.
   servers after the response is sent. The Mac app reads the same conversation
   directly from Conductor, with your own key and through no server of ours,
   when Luke reads a Conductor session's recent tail as described under "What
-  we collect".
+  we collect" — at your ask, or once in a turn his periodic look opened
+  because that chat's status moved; the look itself reads no message.
 - Google, if you connect Google Calendar. We request your calendar list and your
   availability. Google returns busy times only, so event titles and attendees
   are never available to Luke.
