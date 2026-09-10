@@ -32,7 +32,6 @@ import {
 import { UNKNOWN_ACTION_RESULT } from "./journal.js";
 import { inboxEvents } from "./observation-inbox.js";
 import type { BrainActionExecution, BrainActionPerformer, BrainRoster } from "./performer.js";
-import { sameIdentity } from "./records.js";
 import {
   addModelUsage,
   BRAIN_REQUEST_FAILURE,
@@ -50,6 +49,7 @@ import {
   createTurnToolExecutor,
   journaledEffect,
 } from "./tool-executor.js";
+import { sameIdentity } from "./tools/records.js";
 import { brainToolCatalog, brainToolSchemas, resolveTurnToolPolicy } from "./tools.js";
 import type { BrainToolCallTrace, BrainTurnTraceRecord } from "./trace.js";
 import { attachTranscriptDeltas, readWholeTranscript } from "./transcript-reads.js";

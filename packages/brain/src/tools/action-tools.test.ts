@@ -54,10 +54,8 @@ function context(revoked: () => boolean = () => false) {
   return { ctx, carried, rosterReads };
 }
 
-test("every performer-carried row of the actions table is a module, in the table's order, and the notebook's two writes are not", () => {
-  const rows = Object.values(ACTIONS).filter(
-    (spec) => spec.kind !== ACTION_KIND.REMEMBER && spec.kind !== ACTION_KIND.FORGET,
-  );
+test("every row of the actions table is a module, in the table's order, the notebook's two writes among them", () => {
+  const rows = Object.values(ACTIONS);
   assert.deepEqual(
     ACTION_TOOLS.map((tool) => [tool.name, tool.kind, tool.family]),
     rows.map((spec) => [spec.name, spec.kind, spec.family]),
@@ -66,7 +64,8 @@ test("every performer-carried row of the actions table is a module, in the table
     assert.equal(tool.inputSchema, rows[index]?.request);
     assert.equal(actionToolNamed(tool.name), tool);
   }
-  assert.equal(actionToolNamed("remember_fact"), undefined);
+  assert.equal(actionToolNamed("remember_fact")?.kind, ACTION_KIND.REMEMBER);
+  assert.equal(actionToolNamed("forget_fact")?.kind, ACTION_KIND.FORGET);
   assert.equal(actionToolNamed("delete_everything"), undefined);
 });
 

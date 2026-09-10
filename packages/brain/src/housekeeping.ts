@@ -19,8 +19,8 @@ import {
 import { ACTION_RESULT_STATUS, isWireString, type WireRecord, wireRecord } from "@sidecar/wire";
 import type { BrainWorkspaceAccess } from "./tool-executor.js";
 import { answer } from "./tool-results.js";
+import { REFUSAL_REASON } from "./tools/refusals.js";
 import { BRAIN_TOOL, brainToolCatalog } from "./tools.js";
-import { REFUSAL_REASON } from "./turn.js";
 
 /**
  * The memory housekeeping turn: the pre-compaction flush and the reset

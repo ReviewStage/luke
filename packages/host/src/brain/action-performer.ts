@@ -8,20 +8,16 @@ import {
   actionTargetSnapshot,
   type CarriedActionResult,
   dispatchByKind,
-  type RealtimeFunctionCall,
   type RememberedFact,
   refusedActionOutput,
   type SessionActionKind,
   sessionActionConversationEntry,
-  toolAction,
   type ValidatedAction,
 } from "@sidecar/actions";
-import {
-  type ActionAdmissionReads,
-  actionToolNamed,
-  type BrainActionExecution,
-  type BrainActionPerformer,
-  toolArguments,
+import type {
+  ActionAdmissionReads,
+  BrainActionExecution,
+  BrainActionPerformer,
 } from "@sidecar/brain";
 import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
 import type { AppGuideSnapshot } from "@sidecar/guide";
@@ -54,19 +50,6 @@ export interface WorkspaceCreationDefaults {
 interface BrainNotebookWriter {
   remember(ask: { id: string; words: string; replaces?: string }): Promise<boolean>;
   forget(id: string): Promise<boolean>;
-}
-
-/**
- * The host's performer: the brain's two halves — the readers admission
- * consults and the carrier of what it minted — and one whole run of a raw
- * call for the notebook's two writes, which the memory provider still hands
- * over as calls until they are modules of their own.
- */
-export interface HostActionPerformer extends BrainActionPerformer {
-  perform(
-    call: RealtimeFunctionCall,
-    execution: BrainActionExecution,
-  ): Promise<ActionOutputEnvelope>;
 }
 
 export interface BrainActionPerformerDependencies {
@@ -144,10 +127,13 @@ function panelResult(answered: WireRecord): CarriedActionResult | undefined {
  * action tool's own `execute` admits the call by `admit`, against the roster
  * it reads for itself through the readers handed out here — the issue board,
  * the offered projects, the guide, and the remembered facts beside it — and
- * only the validated action it mints reaches the carrier below. The brain is
- * another way to ask, never a wider one: a call that names a session Luke was
- * not shown, a project no adapter offers, or a setting the guide does not list
- * is refused with a reason the brain can read.
+ * only the validated action it mints reaches the carrier below. The host
+ * never sees a call before admission has read it: the notebook's two writes
+ * arrive here as admitted actions like every other, and no raw call has a
+ * seam to arrive through. The brain is another way to ask, never a wider one:
+ * a call that names a session Luke was not shown, a project no adapter
+ * offers, or a setting the guide does not list is refused with a reason the
+ * brain can read.
  *
  * Every half is handed a turn's standing: an execution context the brain built
  * for the turn that emitted the call, naming the conversation, the turn, the
@@ -163,7 +149,7 @@ function panelResult(answered: WireRecord): CarriedActionResult | undefined {
  */
 export function createBrainActionPerformer(
   dependencies: BrainActionPerformerDependencies,
-): HostActionPerformer {
+): BrainActionPerformer {
   const admission = (): ActionAdmissionReads => {
     const issues = dependencies.trackedIssues();
     // The roster and the projects an action is admitted against are two readings
@@ -276,35 +262,7 @@ export function createBrainActionPerformer(
     });
   };
 
-  return {
-    admission,
-    carry,
-    async perform(call: RealtimeFunctionCall, execution: BrainActionExecution) {
-      if (!isExecution(execution)) return refusedActionOutput(REFUSAL.NO_EXECUTION);
-      if (execution.isRevoked()) return refusedActionOutput(REFUSAL.TURN_OVER);
-      const reads = admission();
-      // An action tool's call runs its own module, admission inside; the
-      // notebook's two writes are admitted here, the same way, until they are
-      // modules of their own.
-      const tool = actionToolNamed(call.name);
-      if (tool) {
-        const input = toolArguments(call.argumentsJson);
-        if (input === undefined) return refusedActionOutput(ACTION_REFUSAL.UNREADABLE);
-        return tool.execute(input, {
-          ...execution,
-          admission: reads,
-          carry: (action) => carry(action, execution),
-        });
-      }
-      const admitted = await toolAction(call, {
-        ...reads,
-        origin: execution.origin,
-        guard: execution,
-      });
-      if (admitted.kind === undefined) return refusedActionOutput(admitted.reason);
-      return carry(admitted, execution);
-    },
-  };
+  return { admission, carry };
 }
 
 /**

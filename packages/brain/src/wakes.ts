@@ -12,9 +12,9 @@ import {
   sameObservation,
 } from "./observation-inbox.js";
 import type { BrainRoster } from "./performer.js";
-import { sameIdentity } from "./records.js";
 import type { AgentSeam } from "./seam.js";
 import { SteeredDeliveries } from "./steered-deliveries.js";
+import { sameIdentity } from "./tools/records.js";
 import { readTranscriptDelta } from "./transcript-reads.js";
 import { BRAIN_TURN_TRIGGER, TURN_OUTCOME, type TurnPlan, type TurnResult } from "./turn.js";
 import { BRAIN_WAKE_KIND, type BrainTranscriptDelta, type BrainWakeEvent } from "./wake-events.js";

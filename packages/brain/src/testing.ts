@@ -1,9 +1,9 @@
 import {
+  ACTION_REFUSAL,
   type ActionOutputEnvelope,
   acceptedActionOutput,
   type RealtimeFunctionCall,
   refusedActionOutput,
-  toolAction,
   type ValidatedAction,
 } from "@sidecar/actions";
 import { APP_SETTING_KIND, type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
@@ -22,6 +22,7 @@ import type { BrainPersistedState, BrainStateLoad, BrainStateRepository } from "
 import { BRAIN_MAXIMUM_OUTPUT_TOKENS, failed } from "./model-adapter-shared.js";
 import type { BrainActionExecution, BrainActionPerformer } from "./performer.js";
 import { actionToolNamed } from "./tools/action-tools.js";
+import { toolArguments } from "./tools/tool-module.js";
 
 /** The two things a bare transport answers: an inference, and when it is quiet. */
 export interface BareResponsesModel {
@@ -240,31 +241,23 @@ export function fakeActionPerformer(options: FakeActionPerformerOptions = {}): F
 }
 
 /**
- * A raw call run through the performer the way the host's notebook path still
- * runs one: an action tool's module where the name is an action's, admission
- * in the host's own hands for the notebook's two writes.
+ * A raw call run the way the executor runs one, for a test that speaks in
+ * calls: the action tool's module the name selects, its admission inside,
+ * over the performer's two halves. A name no module answers, or arguments
+ * that are not a record, refuse before anything is admitted.
  */
 export async function performCall(
   actions: BrainActionPerformer,
   call: RealtimeFunctionCall,
   execution: BrainActionExecution,
 ): Promise<ActionOutputEnvelope> {
-  const admission = actions.admission(execution);
   const tool = actionToolNamed(call.name);
-  if (tool) {
-    // SAFETY: JSON.parse answers a wire value; the tool reads it as the record it is or refuses.
-    const input = JSON.parse(call.argumentsJson) as WireRecord;
-    return tool.execute(input, {
-      ...execution,
-      admission,
-      carry: (action) => actions.carry(action, execution),
-    });
-  }
-  const admitted = await toolAction(call, {
-    ...admission,
-    origin: execution.origin,
-    guard: execution,
+  if (!tool) return refusedActionOutput(ACTION_REFUSAL.NO_TOOL);
+  const input = toolArguments(call.argumentsJson);
+  if (input === undefined) return refusedActionOutput(ACTION_REFUSAL.UNREADABLE);
+  return tool.execute(input, {
+    ...execution,
+    admission: actions.admission(execution),
+    carry: (action) => actions.carry(action, execution),
   });
-  if (admitted.kind === undefined) return refusedActionOutput(admitted.reason);
-  return actions.carry(admitted, execution);
 }

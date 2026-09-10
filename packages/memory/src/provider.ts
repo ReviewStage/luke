@@ -1,10 +1,4 @@
-import {
-  type ActionToolDefinition,
-  REALTIME_TOOL,
-  type RememberedFact,
-  realtimeToolDefinitions,
-  rememberedFactsText,
-} from "@sidecar/actions";
+import { type RememberedFact, rememberedFactsText } from "@sidecar/actions";
 import { type DailyNote, TOOL_EFFECT } from "@sidecar/runtime";
 import {
   MEMORY_CAPTURE_OUTCOME,
@@ -18,16 +12,15 @@ import {
   type MemoryTool,
   type MemoryToolContext,
   sameMemoryScope,
-  type ToolInvocation,
-  type ToolSchema,
 } from "@sidecar/runtime/vocabulary";
 import {
   ACTION_RESULT_STATUS,
   isWireNumber,
+  RECORD_EXTRA_KEYS,
+  type Schema,
+  s,
   text,
-  type UnparsedWireValue,
   type WireRecord,
-  wireRecord,
 } from "@sidecar/wire";
 import { MEMORY_QUERY_MAXIMUM_CHARS } from "./defaults.js";
 import type { NotebookMemoryAccess } from "./notebook-memory.js";
@@ -38,19 +31,19 @@ import type { NotebookMemoryAccess } from "./notebook-memory.js";
  * names. Recall renders the remembered facts into every turn and, into a
  * conversation opening fresh, the recent daily notes once. Capture is the
  * housekeeping turn the host runs: the pre-compaction flush, or the reset
- * capture. The tools are the four the notebook has always offered — its
- * search and read, which the index answers, and `remember_fact` and
- * `forget_fact`, which stay actions: each is carried through the same
- * `admit()` gauntlet and the store's worker as before, the provider only
- * naming them as its own. The provider is built over one scope and answers
- * for no other.
+ * capture. The tools are the notebook's two reads, its search and its read,
+ * which the index answers, each a module of the shape every tool of the
+ * brain is declared in. The notebook's two writes, `remember_fact` and
+ * `forget_fact`, are rows of the actions table and action tools of the
+ * brain's own: admitted inside their module by the same `admit()` as every
+ * other action and carried by the host's performer to the store's worker, so
+ * no call of theirs reaches the host raw, and nothing here carries one. The
+ * provider is built over one scope and answers for no other.
  */
 
 export const NOTEBOOK_MEMORY_TOOL = {
   SEARCH: "memory_search",
   GET: "memory_get",
-  REMEMBER: REALTIME_TOOL.REMEMBER_FACT,
-  FORGET: REALTIME_TOOL.FORGET_FACT,
 } as const;
 
 export type NotebookMemoryToolName =
@@ -70,13 +63,40 @@ export const NOTEBOOK_MEMORY_REFUSAL = {
   FOREIGN_SCOPE: "not run: this notebook is another scope's",
 } as const;
 
-/** A tool as the catalog and the provider both read it: the schema a model is offered, and whether the call reads or writes. */
+/** A tool as the catalog and the provider both read it: the module's declaration, less the execution the provider binds. */
 export interface NotebookMemoryToolShape {
-  readonly schema: ToolSchema;
+  readonly name: NotebookMemoryToolName;
+  readonly description: string;
+  readonly inputSchema: Schema<unknown>;
   readonly effect: typeof TOOL_EFFECT.READ | typeof TOOL_EFFECT.WRITE;
 }
 
-const SEARCH_SCHEMA: ToolSchema = {
+const MEMORY_SEARCH_INPUT = s.record(
+  {
+    query: s.text({
+      description: `What to look for, under ${maximumMemoryQueryLength} characters.`,
+    }),
+    max_results: s
+      .wholeNumber({
+        description: `How many results at most; ${maximumMemorySearchResults} is the ceiling.`,
+      })
+      .optional(),
+  },
+  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+);
+
+const MEMORY_GET_INPUT = s.record(
+  {
+    path: s.text({
+      description: "The file's path relative to the notebook, as a result named it.",
+    }),
+    from: s.wholeNumber({ description: "The first line to read, counting from 1." }).optional(),
+    lines: s.wholeNumber({ description: "How many lines to read." }).optional(),
+  },
+  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+);
+
+const SEARCH_SHAPE: NotebookMemoryToolShape = {
   name: NOTEBOOK_MEMORY_TOOL.SEARCH,
   description:
     "Mandatory recall step: search your notebook — MEMORY.md, USER.md, and the notes under " +
@@ -84,71 +104,23 @@ const SEARCH_SCHEMA: ToolSchema = {
     "preferences, or todos. Each result names its file, line range, score, and provenance; " +
     "the answer names the retrieval mode it actually ran in (hybrid or keyword-only) and a " +
     "note when it was not hybrid. Say you checked when confidence is low.",
-  parameters: {
-    type: "object",
-    properties: {
-      query: {
-        type: "string",
-        description: `What to look for, under ${maximumMemoryQueryLength} characters.`,
-      },
-      max_results: {
-        type: "integer",
-        description: `How many results at most; ${maximumMemorySearchResults} is the ceiling.`,
-      },
-    },
-    required: ["query"],
-    additionalProperties: false,
-  },
+  inputSchema: MEMORY_SEARCH_INPUT,
+  effect: TOOL_EFFECT.READ,
 };
 
-const GET_SCHEMA: ToolSchema = {
+const GET_SHAPE: NotebookMemoryToolShape = {
   name: NOTEBOOK_MEMORY_TOOL.GET,
   description:
     "Read an exact excerpt of one notebook file by the path a memory_search result named: " +
     "MEMORY.md, USER.md, or memory/<note>.md. Defaults to a bounded excerpt when lines are " +
     "omitted and says when more content follows. Nothing outside the notebook can be named.",
-  parameters: {
-    type: "object",
-    properties: {
-      path: {
-        type: "string",
-        description: "The file's path relative to the notebook, as a result named it.",
-      },
-      from: { type: "integer", description: "The first line to read, counting from 1." },
-      lines: { type: "integer", description: "How many lines to read." },
-    },
-    required: ["path"],
-    additionalProperties: false,
-  },
+  inputSchema: MEMORY_GET_INPUT,
+  effect: TOOL_EFFECT.READ,
 };
 
-function schemaOf(definition: ActionToolDefinition): ToolSchema {
-  // SAFETY: the parameters are a JSON-schema object built from literals; a JSON round trip is its wire form.
-  const parameters = wireRecord(
-    JSON.parse(JSON.stringify(definition.parameters)) as UnparsedWireValue,
-  );
-  return {
-    name: definition.name,
-    description: definition.description,
-    parameters: parameters ?? {},
-  };
-}
-
-/** The two notebook writes as the actions table declares them; the table is the one declaration of their shape. */
-function actionSchema(name: string): ToolSchema {
-  const definition = realtimeToolDefinitions().find((tool) => tool.name === name);
-  if (!definition) throw new TypeError(`${name} is not an action`);
-  return schemaOf(definition);
-}
-
-/** The four tools in the order a catalog lists them: the reads, then the writes. */
+/** The two tools in the order a catalog lists them. */
 export function notebookMemoryToolShapes(): readonly NotebookMemoryToolShape[] {
-  return [
-    { schema: SEARCH_SCHEMA, effect: TOOL_EFFECT.READ },
-    { schema: GET_SCHEMA, effect: TOOL_EFFECT.READ },
-    { schema: actionSchema(NOTEBOOK_MEMORY_TOOL.REMEMBER), effect: TOOL_EFFECT.WRITE },
-    { schema: actionSchema(NOTEBOOK_MEMORY_TOOL.FORGET), effect: TOOL_EFFECT.WRITE },
-  ];
+  return [SEARCH_SHAPE, GET_SHAPE];
 }
 
 /** Renders the recent daily notes as the one message a fresh conversation is primed with. */
@@ -169,27 +141,12 @@ export interface NotebookMemoryProviderSeams {
   readonly facts: () => readonly RememberedFact[];
   /** Today's and yesterday's notes, read only for a conversation opening fresh. */
   readonly recentNotes: () => Promise<readonly DailyNote[]>;
-  /**
-   * Carries a notebook write through the action gauntlet: `admit()` against
-   * the facts standing now and the turn's origin, then the store's worker,
-   * which reads the file again before writing it.
-   */
-  readonly perform: (call: ToolInvocation, context: MemoryToolContext) => Promise<WireRecord>;
   /** One housekeeping turn over a copy of the context; absent for a conversation whose memory is never captured. */
   readonly capture?: (turn: MemoryCaptureTurn) => Promise<MemoryCaptureResult>;
 }
 
 function rejection(reason: string): WireRecord {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
-}
-
-function parsedArguments(argumentsJson: string): WireRecord {
-  try {
-    // SAFETY: the record check is the validation; anything else reads as no arguments.
-    return wireRecord(JSON.parse(argumentsJson) as UnparsedWireValue) ?? {};
-  } catch {
-    return {};
-  }
 }
 
 async function search(
@@ -233,24 +190,20 @@ export function notebookMemoryProvider(seams: NotebookMemoryProviderSeams): Memo
 
   const guarded =
     (run: MemoryTool["execute"]): MemoryTool["execute"] =>
-    (invocation, context) =>
+    (input, context) =>
       owned(context.scope)
-        ? run(invocation, context)
+        ? run(input, context)
         : Promise.resolve(rejection(NOTEBOOK_MEMORY_REFUSAL.FOREIGN_SCOPE));
-  const argumentsOf = (invocation: ToolInvocation) => parsedArguments(invocation.argumentsJson);
   const executions = {
-    [NOTEBOOK_MEMORY_TOOL.SEARCH]: guarded((invocation, context) =>
-      search(seams.access, argumentsOf(invocation), context),
+    [NOTEBOOK_MEMORY_TOOL.SEARCH]: guarded((input, context) =>
+      search(seams.access, input, context),
     ),
-    [NOTEBOOK_MEMORY_TOOL.GET]: guarded((invocation) => get(seams.access, argumentsOf(invocation))),
-    [NOTEBOOK_MEMORY_TOOL.REMEMBER]: guarded(seams.perform),
-    [NOTEBOOK_MEMORY_TOOL.FORGET]: guarded(seams.perform),
+    [NOTEBOOK_MEMORY_TOOL.GET]: guarded((input) => get(seams.access, input)),
   } satisfies Record<NotebookMemoryToolName, MemoryTool["execute"]>;
-  const tools: readonly MemoryTool[] = notebookMemoryToolShapes().map((shape) => {
-    // SAFETY: the shapes are the four names the executions table is keyed by.
-    const execute = executions[shape.schema.name as NotebookMemoryToolName];
-    return { ...shape, execute };
-  });
+  const tools: readonly MemoryTool[] = notebookMemoryToolShapes().map((shape) => ({
+    ...shape,
+    execute: executions[shape.name],
+  }));
 
   const recall = async (
     scope: MemoryScope,

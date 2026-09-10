@@ -89,7 +89,6 @@ import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import {
   type BrainActionPerformerDependencies,
   createBrainActionPerformer,
-  type HostActionPerformer,
 } from "./action-performer.js";
 import { BrainHost } from "./host.js";
 import { type BrainPublicationDependencies, followBrainRequests } from "./publication.js";
@@ -140,14 +139,14 @@ export interface BrainWiringDependencies extends ChildWiringDependencies {
   dropBriefings: () => void;
   /**
    * The memory provider one conversation's brain is handed, bound to the
-   * account's scope: the notebook's recall into every turn, its four tools,
+   * account's scope: the notebook's recall into every turn, its two reads,
    * and, for main and the developer's durable private threads alone, the
-   * capture run before a compaction and before a reset. The performer this
-   * wiring carries actions through is handed back, so the notebook's two
-   * writes run the same gauntlet as every other action. Absent, nothing is
-   * recalled and the memory tools refuse.
+   * capture run before a compaction and before a reset. The notebook's two
+   * writes are action tools and run the performer's gauntlet like every
+   * other action, so the provider carries none. Absent, nothing is recalled
+   * and the memory tools refuse.
    */
-  memory?: (sessionKey: SessionKey, actions: HostActionPerformer) => MemoryDefinition | undefined;
+  memory?: (sessionKey: SessionKey) => MemoryDefinition | undefined;
   /** Where one conversation's flush marker outlives the process; nothing for one that never flushes. */
   flushMarker?: (sessionKey: SessionKey) => BrainFlushMarkerStore | undefined;
 }
@@ -476,7 +475,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     return configurationStore.snapshot();
   };
 
-  const memoryFor = (sessionKey: SessionKey) => dependencies.memory?.(sessionKey, actions);
+  const memoryFor = (sessionKey: SessionKey) => dependencies.memory?.(sessionKey);
   const flushMarkerFor = (sessionKey: SessionKey) => dependencies.flushMarker?.(sessionKey);
 
   /** The skills the latest preparation listed to the model: the only ones `load_skill` may load. */

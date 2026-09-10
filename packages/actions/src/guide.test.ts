@@ -27,9 +27,9 @@ import {
   type RealtimeFunctionCall,
   realtimeToolFamily,
   SESSION_LIST_VOICE,
-  toolAction,
 } from "./index.js";
 import { withoutAdmission } from "./testing/admitted.js";
+import { admitToolCall } from "./testing/tool-call.js";
 
 /** One app action admitted, as the payload alone: the brand and the origin are dropped. */
 async function appToolAction(
@@ -38,7 +38,7 @@ async function appToolAction(
   sessions: readonly Session[],
 ) {
   return withoutAdmission(
-    await toolAction(functionCall, {
+    await admitToolCall(functionCall, {
       origin: RUN_ORIGIN.USER,
       roster: { read: async () => sessions },
       guide,

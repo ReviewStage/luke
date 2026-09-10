@@ -46,7 +46,6 @@ import { BRAIN_DEFAULTS, BrainAgent, type BrainAgentOptions, LOOK_SUBJECT } from
 import { ResponsesContextEngine } from "./context-engine.js";
 import { type BrainPersistedState, MAXIMUM_TERMINAL_REQUESTS } from "./envelope.js";
 import type { BrainActionExecution, BrainActionPerformer } from "./performer.js";
-import { parsedRecord } from "./records.js";
 import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
@@ -63,11 +62,11 @@ import {
   type FakeBrainStateRepository,
   fakeActionPerformer,
   fakeBrainStateRepository,
-  performCall,
 } from "./testing.js";
+import { parsedRecord } from "./tools/records.js";
+import { REFUSAL_REASON } from "./tools/refusals.js";
 import { BRAIN_TOOL, TOOL_GROUP } from "./tools.js";
 import type { BrainTurnTraceRecord } from "./trace.js";
-import { REFUSAL_REASON } from "./turn.js";
 import { BRAIN_WAKE_KIND, type BrainDelivery, type BrainWakeEvent } from "./wake-events.js";
 
 const TOOL_LOOP_IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOOP_RUNTIME.VERSION };
@@ -371,8 +370,9 @@ export function harness(
   const fake = performerWith(undefined);
   const { performed, executions } = fake;
   const actions: BrainActionPerformer = agentOverrides.actions ?? fake.actions;
-  // The notebook as the host wires it, over no index and an empty notebook,
-  // so the two writes reach the performer under test like every other action.
+  // The notebook as the host wires it, over no index and an empty notebook;
+  // its two writes are action tools and reach the performer under test like
+  // every other action, through no seam of the provider's.
   const scope = { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: DEFAULT_AGENT_ID };
   const agent = new BrainAgent({
     conversationId: MAIN_SESSION_KEY,
@@ -387,12 +387,6 @@ export function harness(
         access: undefined,
         facts: () => [],
         recentNotes: async () => [],
-        perform: (call, context) =>
-          performCall(actions, call, {
-            ...context,
-            conversationId: MAIN_SESSION_KEY,
-            turnId: context.runId,
-          }),
       }),
     },
     roster: () => ({ text: "Currently observed sessions:\n- abc\n- def", identities: [ABC, DEF] }),

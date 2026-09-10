@@ -1,5 +1,4 @@
 import {
-  ACTION_KIND,
   ACTION_REFUSAL,
   ACTIONS,
   type ActionFamily,
@@ -15,8 +14,8 @@ import type { WireRecord } from "@sidecar/wire";
 import type { ToolContext, ToolModule } from "./tool-module.js";
 
 /**
- * The action tools as modules: one per row of the actions table that a
- * performer carries. Each one's `execute` is the whole gauntlet an action
+ * The action tools as modules: one per row of the actions table, the
+ * notebook's two writes included. Each one's `execute` is the whole gauntlet an action
  * runs — `admit()` first, against the roster admission reads for itself
  * through the readers the host supplies, then the carrier, which takes only
  * what admission minted. Nothing in a module knows the agent: the standing it
@@ -67,16 +66,9 @@ function defineActionTool(spec: ToolSpec<ActionFamily, ActionKind>): ActionToolM
   };
 }
 
-/** The notebook's two writes are the memory provider's tools, carried through its own path, and are no action tool here. */
-const MEMORY_ACTION_KINDS: ReadonlySet<ActionKind> = new Set([
-  ACTION_KIND.REMEMBER,
-  ACTION_KIND.FORGET,
-]);
-
 /** Every action tool, in the actions table's own order, which is the order the catalog lists them. */
-export const ACTION_TOOLS: readonly ActionToolModule[] = Object.values(ACTIONS)
-  .filter((spec) => !MEMORY_ACTION_KINDS.has(spec.kind))
-  .map(defineActionTool);
+export const ACTION_TOOLS: readonly ActionToolModule[] =
+  Object.values(ACTIONS).map(defineActionTool);
 
 const ACTION_TOOLS_BY_NAME = new Map(ACTION_TOOLS.map((tool) => [tool.name, tool]));
 

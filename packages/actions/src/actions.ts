@@ -15,20 +15,8 @@
  * schema. Luke is another way to ask, never a wider one.
  */
 
-import {
-  ACTION_RESULT_STATUS,
-  isRecord,
-  type JsonSchemaNode,
-  type Schema,
-  type UnparsedWireValue,
-} from "@sidecar/wire";
-import {
-  ACTION_FAMILY,
-  ACTION_KIND,
-  type ActionFamily,
-  type ActionKind,
-  type RealtimeFunctionCall,
-} from "./action-kinds.js";
+import type { JsonSchemaNode, Schema } from "@sidecar/wire";
+import { ACTION_FAMILY, ACTION_KIND, type ActionFamily, type ActionKind } from "./action-kinds.js";
 import {
   ADD_AGENT_REQUEST,
   CONTROL_REQUEST,
@@ -48,13 +36,6 @@ import {
   SETTING_REQUEST,
   UPDATE_REQUEST,
 } from "./action-schemas.js";
-import {
-  ACTION_REFUSAL,
-  type AdmitContext,
-  admit,
-  type Refusal,
-  type ValidatedAction,
-} from "./admit.js";
 
 /** What a row declares: what it is called, what it is, what it says, and what it takes. */
 export interface ToolSpec<Family extends ActionFamily, Kind extends ActionKind> {
@@ -311,36 +292,6 @@ export function remoteRealtimeToolDefinitions(): readonly ActionToolDefinition[]
   return ACTION_LIST.filter((tool) => REMOTE_ACTION_KINDS.has(tool.kind)).map((tool) =>
     definitionOf(tool, true),
   );
-}
-
-function refuse(reason: string): Refusal {
-  return { status: ACTION_RESULT_STATUS.REJECTED, reason };
-}
-
-function parseToolArguments(call: RealtimeFunctionCall): UnparsedWireValue | undefined {
-  try {
-    // SAFETY: JSON.parse returns a runtime value; isRecord validates the object contract.
-    return JSON.parse(call.argumentsJson) as UnparsedWireValue;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * One model-emitted tool call, admitted. The name selects the action; the
- * arguments are read as that action's own fields and handed to `admit`, which is
- * the whole of validation. A name no row declares, or arguments that are not a
- * record, refuse before an admitter runs.
- */
-export async function toolAction(
-  call: RealtimeFunctionCall,
-  context: AdmitContext,
-): Promise<ValidatedAction | Refusal> {
-  const parsed = parseToolArguments(call);
-  if (!isRecord(parsed)) return refuse(ACTION_REFUSAL.UNREADABLE);
-  const tool = ACTS_BY_NAME.get(call.name);
-  if (!tool) return refuse(ACTION_REFUSAL.NO_TOOL);
-  return admit({ kind: tool.kind, fields: parsed }, context);
 }
 
 /**
