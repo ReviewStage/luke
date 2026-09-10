@@ -59,6 +59,8 @@ export interface LivePeerSeams {
 }
 
 export interface LivePeer {
+  /** The session the host created for this peer's offer, so the host's word about a session can be matched to it. */
+  sessionId: string;
   connection: LivePeerConnection;
   channel: LiveDataChannel;
   /** The developer's track, disabled until the session is unmuted; absent when the microphone was refused. */
@@ -139,6 +141,7 @@ export async function openLivePeer(seams: LivePeerSeams): Promise<LivePeerOpenin
     return {
       outcome: LIVE_PEER_OUTCOME.OPENED,
       peer: {
+        sessionId: created.sessionId,
         connection,
         channel,
         microphone,

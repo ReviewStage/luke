@@ -13,8 +13,11 @@ import {
 } from "./live-voice-orchestrator.js";
 
 /** A call that records the verbs it was asked and answers for its status. */
+let sessions = 0;
+
 class FakeCall implements LiveVoiceCall {
   status: LiveStatus = LIVE_STATUS.IDLE;
+  sessionId: string | undefined;
   opens = 0;
   unmutes = 0;
   mutes = 0;
@@ -49,8 +52,9 @@ class FakeCall implements LiveVoiceCall {
     });
   }
 
-  /** The session started, or refused to. */
+  /** The session started, or refused to; a started one is named in the order it opened. */
   started(): void {
+    if (this.opensSucceed) this.sessionId = `s${++sessions}`;
     this.#release?.();
     this.#release = undefined;
   }
@@ -196,15 +200,19 @@ test("wanted opens a session muted, closing hangs it up, and a lost session with
   assert.equal(first.unmutes, 0);
   assert.equal(first.status, LIVE_STATUS.MUTED);
   // A second wanted while it stands opens nothing more.
-  f.orchestrator.obeySessionChange({ phase: LIVE_SESSION_PHASE.WANTED, sessionId: "s" });
+  f.orchestrator.obeySessionChange({
+    phase: LIVE_SESSION_PHASE.WANTED,
+    sessionId: first.sessionId,
+  });
   assert.equal(f.calls.length, 1);
   // The developer joins, then the connection is lost under them: the peer's
   // own end may land before the host's word, and the wanted right after it.
   await first.unmute();
+  const lost = first.sessionId;
   first.settle(LIVE_STATUS.IDLE);
   f.orchestrator.obeySessionChange({
     phase: LIVE_SESSION_PHASE.CLOSED,
-    sessionId: "s",
+    sessionId: lost,
     reason: LIVE_CLOSE_REASON.CONNECTION_LOST,
   });
   f.orchestrator.obeySessionChange({ phase: LIVE_SESSION_PHASE.WANTED });
@@ -214,7 +222,14 @@ test("wanted opens a session muted, closing hangs it up, and a lost session with
   second.started();
   await drainMicrotasks();
   assert.equal(second.unmutes, 1);
-  f.orchestrator.obeySessionChange({ phase: LIVE_SESSION_PHASE.CLOSING, sessionId: "t" });
+  // A closing that names another session is not this call's.
+  f.orchestrator.obeySessionChange({ phase: LIVE_SESSION_PHASE.CLOSING, sessionId: lost });
+  await drainMicrotasks();
+  assert.equal(second.closes, 0);
+  f.orchestrator.obeySessionChange({
+    phase: LIVE_SESSION_PHASE.CLOSING,
+    sessionId: second.sessionId,
+  });
   await drainMicrotasks();
   assert.equal(second.closes, 1);
 });
@@ -230,7 +245,7 @@ test("a session closed by the host's own decision does not listen again on the n
   // let go of and hangs up behind, and the next wanted opens a new one.
   f.orchestrator.obeySessionChange({
     phase: LIVE_SESSION_PHASE.CLOSED,
-    sessionId: "s",
+    sessionId: first.sessionId,
     reason: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
   });
   await drainMicrotasks();
@@ -344,4 +359,62 @@ test("voice turning off closes the standing session, and stop closes it and repo
   await drainMicrotasks();
   assert.equal(g.latest()?.closes, 1);
   assert.equal(g.views.length, reports);
+});
+
+test("the host closing an older session leaves a call still waiting for its own answer standing", async () => {
+  const f = fixture();
+  const pressed = f.orchestrator.beginTalk();
+  const call = f.latest();
+  assert.ok(call);
+  // The host hung up the session it still held before creating this one.
+  f.orchestrator.obeySessionChange({ phase: LIVE_SESSION_PHASE.CLOSING, sessionId: "old" });
+  f.orchestrator.obeySessionChange({
+    phase: LIVE_SESSION_PHASE.CLOSED,
+    sessionId: "old",
+    reason: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
+  });
+  await drainMicrotasks();
+  assert.equal(call.closes, 0);
+  call.started();
+  await pressed;
+  assert.equal(call.unmutes, 1);
+  // Still driven: the stop key reaches it.
+  assert.equal(await f.orchestrator.stopSpeaking(), true);
+  assert.equal(call.mutes, 1);
+});
+
+test("a stop while a press's session is still opening leaves it muted", async () => {
+  const f = fixture();
+  const pressed = f.orchestrator.beginTalk();
+  const call = f.latest();
+  assert.ok(call);
+  await f.orchestrator.stopSpeaking();
+  call.started();
+  await pressed;
+  assert.equal(call.unmutes, 0);
+  assert.equal(call.status, LIVE_STATUS.MUTED);
+});
+
+test("a wanted the document held at adoption opens a session; any other standing phase opens none", async () => {
+  const f = fixture();
+  f.orchestrator.adoptStanding(LIVE_SESSION_PHASE.CLOSED);
+  f.orchestrator.adoptStanding(undefined);
+  assert.equal(f.calls.length, 0);
+  f.orchestrator.adoptStanding(LIVE_SESSION_PHASE.WANTED);
+  assert.equal(f.calls.length, 1);
+});
+
+test("a session pausing between Luke's sentences is one exchange, counted once", async () => {
+  const f = fixture();
+  f.orchestrator.obeySessionChange({ phase: LIVE_SESSION_PHASE.WANTED });
+  const call = f.latest();
+  assert.ok(call);
+  call.started();
+  call.settle(LIVE_STATUS.SPEAKING);
+  await drainMicrotasks();
+  call.settle(LIVE_STATUS.MUTED);
+  await drainMicrotasks();
+  call.settle(LIVE_STATUS.SPEAKING);
+  await drainMicrotasks();
+  assert.deepEqual(f.openings.filter(Boolean), [{ microphoneCall: false }]);
 });

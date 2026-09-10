@@ -12,6 +12,8 @@ import type { ConversationEntry } from "@sidecar/session";
  */
 export interface LiveVoiceCall {
   readonly status: LiveStatus;
+  /** The session the host created for this call, once its offer was answered; what the host's word about a session is matched against. */
+  readonly sessionId: string | undefined;
   /** Whether a session stands or is coming up, so a second press unmutes rather than opening again. */
   readonly standing: boolean;
   /** Whether the developer's microphone is being heard. */

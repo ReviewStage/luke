@@ -171,6 +171,8 @@ interface StandingSession {
   readonly claimedDelegations: Set<string>;
   retained: RetainedDelegation[];
   readonly writtenRows: Set<number>;
+  /** When each utterance's first fragment arrived, on this host's clock: the instant its line is recorded at, so a Clear's cutoff refuses what was begun before it. */
+  readonly rowBeganAt: Map<number, number>;
   readonly settleTimers: Map<TranscriptSpeaker, ScheduledTimer>;
   idleReported: boolean;
   idleTimer: ScheduledTimer | undefined;
@@ -465,9 +467,11 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     );
   }
 
+  /** Whether a reply is still coming that this session would speak: a delegation's under it, or a typed ask's, which any standing session says. */
   #exchangeInFlight(session: StandingSession): boolean {
     for (const exchange of this.#exchanges.values()) {
-      if (exchange.sessionId === session.sessionId && exchange.end === undefined) return true;
+      if (exchange.end !== undefined) continue;
+      if (exchange.sessionId === undefined || exchange.sessionId === session.sessionId) return true;
     }
     return false;
   }
@@ -511,6 +515,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       claimedDelegations: new Set(),
       retained: [],
       writtenRows: new Set(),
+      rowBeganAt: new Map(),
       settleTimers: new Map(),
       idleReported: false,
       idleTimer: undefined,
@@ -610,7 +615,11 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     startMs: number,
     endMs: number,
   ): void {
-    if (!session.ledger.append({ speaker, text: delta, startMs, endMs })) return;
+    const utterance = session.ledger.append({ speaker, text: delta, startMs, endMs });
+    if (!utterance) return;
+    if (!session.rowBeganAt.has(utterance.rowId)) {
+      session.rowBeganAt.set(utterance.rowId, this.#options.now());
+    }
     const armed = session.settleTimers.get(speaker);
     if (armed !== undefined) this.#options.cancel(armed);
     session.settleTimers.set(
@@ -633,7 +642,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
 
   async #write(write: UtteranceWrite): Promise<void> {
     const { session, utterance } = write;
-    const recordedAt = this.#options.now();
+    const recordedAt = session.rowBeganAt.get(utterance.rowId) ?? this.#options.now();
     const written =
       utterance.speaker === TRANSCRIPT_SPEAKER.USER
         ? await this.#options.record.writeDeveloperUtterance({

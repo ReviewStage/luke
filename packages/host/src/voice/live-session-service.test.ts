@@ -847,6 +847,34 @@ test("a typed ask's reply is spoken into the standing session with no delegation
   );
 });
 
+test("a line is recorded at the instant its utterance began, so a Clear's cutoff refuses what was begun before it", async () => {
+  const f = fixture();
+  const sideband = await f.open();
+  const began = f.clock.now;
+  sideband.output("Two ", 0, 400);
+  await f.clock.advance(f.clock.now + 500);
+  sideband.output("sessions.", 400, 900);
+  await f.clock.advance(f.clock.now + UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
+  assert.equal(f.record.luke.length, 1);
+  assert.equal(f.record.luke[0]?.recordedAt, began);
+});
+
+test("a typed ask still being answered keeps an idle session open", async () => {
+  const f = fixture();
+  await f.open();
+  f.service.followTypedAsk("what needs me?", "typed-1");
+  f.service.reportActivity(true);
+  await f.clock.advance(f.clock.now + LIVE_IDLE_WINDOW_MS);
+  assert.equal(f.service.sessionStands(), true);
+  f.brain.fire({
+    kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+    runId: "typed-1",
+    end: LIVE_BRAIN_RUN_END.COMPLETED,
+  });
+  await f.clock.advance(f.clock.now + LIVE_IDLE_WINDOW_MS + 1_000);
+  assert.equal(f.service.sessionStands(), false);
+});
+
 test("a typed ask's reply with no session standing asks for one and is spoken once it opens", async () => {
   const f = fixture();
   f.service.followTypedAsk("what needs me?", "typed-1");

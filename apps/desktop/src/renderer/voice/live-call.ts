@@ -43,6 +43,14 @@ export const SESSION_CLOSE_TIMEOUT_MS = 15_000;
 /** How long an acknowledgment of the microphone switch is waited for before the ask is given up. */
 export const MICROPHONE_ACK_TIMEOUT_MS = 5_000;
 
+/**
+ * How long after Luke's track goes quiet he still counts as speaking, so a
+ * pause between two of his sentences is not an exchange ending: the media
+ * duck would let the music up and the exchange would be counted again on the
+ * next word.
+ */
+export const SPEAKING_HANGOVER_MS = 1_500;
+
 /** How often the caption rows are re-read for ones that have settled since their last fragment. */
 const CAPTION_SETTLE_TICK_MS = 500;
 
@@ -106,6 +114,7 @@ export class LiveCall implements LiveVoiceCall {
   #pendingSwitch: PendingSwitch | undefined;
   #idleTimer: ScheduledTimer | undefined;
   #idleReported = false;
+  #speakingHangover: ScheduledTimer | undefined;
   #captionTick: ScheduledTimer | undefined;
   #ids = 0;
 
@@ -119,6 +128,10 @@ export class LiveCall implements LiveVoiceCall {
 
   get status(): LiveStatus {
     return this.#status;
+  }
+
+  get sessionId(): string | undefined {
+    return this.#peer?.sessionId;
   }
 
   get standing(): boolean {
@@ -189,10 +202,16 @@ export class LiveCall implements LiveVoiceCall {
     return true;
   }
 
+  /**
+   * The stop: an unmute still waiting on its acknowledgment is given up
+   * first, and the mute goes whatever the track shows, since the server may
+   * still be about to honour the unmute it was asked for.
+   */
   async mute(): Promise<boolean> {
     const peer = this.#peer;
     if (!peer || !this.#started || this.#ended) return false;
-    if (!this.#micLive) return true;
+    const unmuting = this.#pendingSwitch !== undefined;
+    if (!this.#micLive && !unmuting) return true;
     const acknowledged = await this.#switchMicrophone(muteEvent);
     if (!acknowledged) return false;
     if (peer.microphone) peer.microphone.enabled = false;
@@ -231,11 +250,24 @@ export class LiveCall implements LiveVoiceCall {
     if (!this.#ended) this.#tearDown(LIVE_STATUS.IDLE);
   }
 
-  /** Luke audible on the remote track, from the level meter: the one source of the speaking status. */
+  /** Luke audible on the remote track, from the level meter: the one source of the speaking status, held through his pauses. */
   reportRemoteAudioLevel(active: boolean): void {
-    if (this.#lukeSpeaking === active) return;
-    this.#lukeSpeaking = active;
-    this.#refreshStatus();
+    if (this.#speakingHangover !== undefined) {
+      this.#cancel(this.#speakingHangover);
+      this.#speakingHangover = undefined;
+    }
+    if (active) {
+      if (this.#lukeSpeaking) return;
+      this.#lukeSpeaking = true;
+      this.#refreshStatus();
+      return;
+    }
+    if (!this.#lukeSpeaking) return;
+    this.#speakingHangover = this.#schedule(() => {
+      this.#speakingHangover = undefined;
+      this.#lukeSpeaking = false;
+      this.#refreshStatus();
+    }, SPEAKING_HANGOVER_MS);
   }
 
   /** Speech energy on the microphone, from the level meter: what resets the idle window. */
@@ -417,6 +449,8 @@ export class LiveCall implements LiveVoiceCall {
     this.#idleTimer = undefined;
     if (this.#captionTick !== undefined) this.#cancel(this.#captionTick);
     this.#captionTick = undefined;
+    if (this.#speakingHangover !== undefined) this.#cancel(this.#speakingHangover);
+    this.#speakingHangover = undefined;
     this.#settleSwitch(false);
     this.#startWaiter?.(false);
     if (peer) {

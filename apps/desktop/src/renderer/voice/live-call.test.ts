@@ -17,6 +17,7 @@ import {
   MICROPHONE_ACK_TIMEOUT_MS,
   SESSION_CLOSE_TIMEOUT_MS,
   SESSION_START_TIMEOUT_MS,
+  SPEAKING_HANGOVER_MS,
 } from "./live-call";
 import {
   LIVE_EVENTS_CHANNEL_LABEL,
@@ -338,6 +339,29 @@ test("unmute and mute send the switch and flip the track only on the acknowledgm
   assert.equal(await again, false);
 });
 
+test("a stop during an unmute still awaiting its acknowledgment gives the unmute up and mutes anyway", async () => {
+  const f = fixture();
+  const opening = f.call.open();
+  await drainMicrotasks();
+  f.peer.gathered();
+  await drainMicrotasks();
+  f.started();
+  await opening;
+  const unmuting = f.call.unmute();
+  await drainMicrotasks();
+  const muting = f.call.mute();
+  assert.equal(await unmuting, false);
+  await drainMicrotasks();
+  assert.deepEqual(f.sentTypes(), [
+    LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE,
+    LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE,
+  ]);
+  f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED);
+  assert.equal(await muting, true);
+  assert.equal(f.track.enabled, false);
+  assert.equal(f.call.listening, false);
+});
+
 test("a microphone the system refused rides as a trackless line and is filled by the first unmute", async () => {
   const f = fixture({ microphone: false });
   const opening = f.call.open();
@@ -403,7 +427,15 @@ test("the speaking status comes from the remote track's level and never from tra
     f.captions.at(-1)?.map((row) => row.rowId),
     [1, 2],
   );
+  // A pause in Luke's playback is held through; the status drops only after the hangover.
   f.call.reportRemoteAudioLevel(false);
+  assert.equal(f.statuses.at(-1), LIVE_STATUS.SPEAKING);
+  await f.clock.advance(f.clock.now + SPEAKING_HANGOVER_MS - 1);
+  f.call.reportRemoteAudioLevel(true);
+  await f.clock.advance(f.clock.now + SPEAKING_HANGOVER_MS);
+  assert.equal(f.statuses.at(-1), LIVE_STATUS.SPEAKING);
+  f.call.reportRemoteAudioLevel(false);
+  await f.clock.advance(f.clock.now + SPEAKING_HANGOVER_MS);
   assert.equal(f.statuses.at(-1), LIVE_STATUS.MUTED);
   assert.deepEqual(
     f.wire.slice(0, 3),

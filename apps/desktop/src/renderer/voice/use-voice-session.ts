@@ -194,7 +194,16 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   );
 
   // The host's word on its one session: wanted opens one muted for whatever
-  // Luke has to say, closing hangs up.
+  // Luke has to say, closing hangs up. The phase the document held when this
+  // window came up is obeyed once, since a wanted announced before the
+  // subscription stood would otherwise reach nobody.
+  const standingPhase = state?.voice.liveSession?.phase;
+  const adopted = useRef(false);
+  useEffect(() => {
+    if (adopted.current || state === undefined) return;
+    adopted.current = true;
+    orchestrator.adoptStanding(standingPhase);
+  }, [orchestrator, standingPhase, state]);
   useEffect(
     () =>
       window.sidecar.onVoiceLiveSessionChanged((change) => orchestrator.obeySessionChange(change)),

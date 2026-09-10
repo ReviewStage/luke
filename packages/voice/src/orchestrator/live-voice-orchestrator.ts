@@ -1,4 +1,8 @@
-import { LIVE_SESSION_PHASE, type VoiceLiveSessionChanged } from "@sidecar/gateway";
+import {
+  LIVE_SESSION_PHASE,
+  type LiveSessionPhase,
+  type VoiceLiveSessionChanged,
+} from "@sidecar/gateway";
 import { LIVE_CLOSE_REASON, LIVE_STATUS, type LiveStatus, liveExchangeActive } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import type { LiveCaptionRow, LiveVoiceCall, LiveVoiceCallEvents } from "./live-voice-call.js";
@@ -102,7 +106,11 @@ export class LiveVoiceOrchestrator {
   /** Whether the session standing was opened by a press rather than for Luke's own speech. */
   #openedByPress = false;
   #opening: Promise<boolean> | undefined;
+  /** A stop pressed while a press's session was still opening: the press ends muted rather than unmuting a session nobody wants heard. */
+  #pressStopped = false;
   #reported: LiveVoiceView | undefined;
+  /** The call whose exchange has been counted, so a session pausing between Luke's sentences is not a second exchange. */
+  #countedCall: LiveVoiceCall | undefined;
   #counted = false;
   #queued = false;
   #stopped = false;
@@ -145,8 +153,9 @@ export class LiveVoiceOrchestrator {
         return;
       }
     }
+    this.#pressStopped = false;
     const call = await this.#ensureSession({ byPress: true });
-    if (call) await call.unmute();
+    if (call && !this.#pressStopped) await call.unmute();
     // The press is answered once the session hears the developer; between the
     // offer and the unmute the session passes through muted, which is not the
     // exchange ending.
@@ -154,12 +163,27 @@ export class LiveVoiceOrchestrator {
     this.#touch();
   }
 
-  /** The stop key, and the panel's Escape: the microphone closes and the host tells the model to stop. */
+  /**
+   * The stop key, and the panel's Escape: the microphone closes and the host
+   * tells the model to stop. Pressed while a press's session is still
+   * opening, it cancels that press's unmute, so the session opens muted.
+   */
   async stopSpeaking(): Promise<boolean> {
     const call = this.#call;
     if (!call?.standing) return false;
+    if (this.#opening) this.#pressStopped = true;
     await call.mute();
     return true;
+  }
+
+  /**
+   * What the document held when this window came up. A wanted the host
+   * announced before the window subscribed would otherwise be a briefing left
+   * queued until the next drain, so the standing phase is obeyed once at
+   * adoption; every later phase arrives as its own event.
+   */
+  adoptStanding(phase: LiveSessionPhase | undefined): void {
+    if (phase === LIVE_SESSION_PHASE.WANTED) this.obeySessionChange({ phase });
   }
 
   /** The panel asking for the microphone from its own row. */
@@ -185,9 +209,13 @@ export class LiveVoiceOrchestrator {
         });
         return;
       case LIVE_SESSION_PHASE.CLOSING:
-        void this.#call?.close();
+        if (this.#aboutThisCall(change)) void this.#call?.close();
         return;
       case LIVE_SESSION_PHASE.CLOSED: {
+        // A call still standing that the word is not about is left alone; no
+        // call at all is the peer having ended first, and the word still says
+        // whether the developer was being heard when the session was lost.
+        if (this.#call && !this.#aboutThisCall(change)) return;
         // The host's word ends the session whatever the peer still shows: the
         // call is let go of here so the wanted that may follow opens a new
         // one, and it finishes its own hang-up behind. Whether the developer
@@ -213,6 +241,18 @@ export class LiveVoiceOrchestrator {
       default:
         return;
     }
+  }
+
+  /**
+   * Whether the host's word names the session this call holds. The host
+   * closes a session it still held before creating the next, and that close
+   * names the old session: a call still waiting for its offer to be answered
+   * holds no session yet, and one answered holds another, so neither is the
+   * one the host means.
+   */
+  #aboutThisCall(change: VoiceLiveSessionChanged): boolean {
+    const held = this.#call?.sessionId;
+    return held !== undefined && (change.sessionId === undefined || change.sessionId === held);
   }
 
   async stop(): Promise<void> {
@@ -330,8 +370,9 @@ export class LiveVoiceOrchestrator {
       if (this.#reported !== undefined && sameView(this.#reported, view)) return;
       this.#reported = view;
       const active = liveExchangeActive(view);
-      const rising = active && !this.#counted;
+      const rising = active && !this.#counted && this.#call !== this.#countedCall;
       this.#counted = active;
+      if (rising) this.#countedCall = this.#call;
       this.#bridge.reportView(view, rising ? { microphoneCall: this.#openedByPress } : undefined);
     });
   }
