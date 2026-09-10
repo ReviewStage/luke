@@ -348,6 +348,20 @@ these tables is sealed, and nothing reads or writes them yet: the store writer
 lands on them in its own change, and the v1 tables are dropped only after
 every reader has moved.
 
+Voice is stored beside them the way a call platform stores a call, under
+`server/db/voice-schema.ts`: `voice_sessions` and `voice_transcript_segments`.
+A session row is one live session — the Live API's own session id, unique so
+a re-attach on a fresh function instance finds the row it had rather than
+forking it, and indexed with the user so an ownership check is one lookup —
+with the device that opened it, its delegation mode, when it started and
+closed, the API's own close reason, and a `usage` payload of billed seconds
+with a flag saying whether the API confirmed them or a lost connection left
+them estimated. A segment is one span of what was actually said, by whom, in
+milliseconds on the session's clock. Nothing spoken is ever a message: the
+brain's reply is the assistant message, and what the voice said of it lives
+here as segments alone. No audio is ever stored, and nothing reads or writes
+these tables yet.
+
 The store tests run the generated migrations on PGlite in process, so
 `check.sh` needs no service; the `postgres` CI job runs the same migrations
 and tests against a Postgres service container. To run them against a
