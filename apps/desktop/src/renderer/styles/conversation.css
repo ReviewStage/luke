@@ -442,8 +442,15 @@
   line-height: 1.4;
 }
 
-/* The narration is written in the model's lower case; the row reads as a
-   sentence of its own. */
+/* The session an action reached, set apart by name the way the row for it is:
+   the one thing in the sentence the eye is looking for. */
+.conversation-action-name {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* A line drawn from its recorded words rather than its record keeps the
+   model's lower case; the row reads as a sentence of its own. */
 .conversation-entry[data-speaker="event"] .conversation-words > p:first-child::first-letter {
   text-transform: uppercase;
 }
