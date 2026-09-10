@@ -108,8 +108,14 @@ export interface SpeakOnlyCallOptions extends RealtimeCallOptions {
    * so the caller only ever draws what it is handed. `kind` says whether the
    * words are a briefing or a reply to the brain's answer, living exactly as
    * long as that reply; a reply the brain was not asked for carries none.
+   * `runId` names the brain run whose end the words are voicing, when they
+   * are one, for exactly as long as the words are up.
    */
-  onCaption(texts: readonly string[] | undefined, kind: ReplyKind | undefined): void;
+  onCaption(
+    texts: readonly string[] | undefined,
+    kind: ReplyKind | undefined,
+    runId?: string,
+  ): void;
   /**
    * The words a reply leaves behind at the moment it ends — finished, talked
    * over, or the call closing under it, whichever came. `kind` says whether
@@ -235,7 +241,7 @@ export class SpeakOnlyCall<
   #audibleSince: number | undefined;
   /** The words of the reply under way, and whose they are. */
   #captions = new CaptionStrip({
-    onCaption: (texts, kind) => this.options.onCaption(texts, kind),
+    onCaption: (texts, kind, runId) => this.options.onCaption(texts, kind, runId),
     onReplyEnded: (texts, kind, runId) => this.options.onReplyEnded?.(texts, kind, runId),
   });
   /**

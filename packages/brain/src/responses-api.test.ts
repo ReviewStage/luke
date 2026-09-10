@@ -77,6 +77,25 @@ test("the output reading keeps every item verbatim and picks out calls, text, co
   assert.ok(!isCompactionItem(reasoning));
 });
 
+test("two message items in one answer are two paragraphs of its text, and an empty one adds none", () => {
+  const first = {
+    type: "message",
+    role: "assistant",
+    status: "completed",
+    content: [{ type: "output_text", text: "Looking now." }],
+  };
+  const silent = { type: "message", role: "assistant", status: "completed", content: [] };
+  const second = {
+    type: "message",
+    role: "assistant",
+    status: "completed",
+    content: [{ type: "output_text", text: "Two agents are waiting." }],
+  };
+  const output = brainResponsesOutput({ output: [first, silent, second], status: "completed" });
+  assert.ok(output);
+  assert.equal(output.outputText, "Looking now.\n\nTwo agents are waiting.");
+});
+
 test("a payload with no output array reads as nothing, and an incomplete one names why", () => {
   assert.equal(brainResponsesOutput({ error: "nope" }), undefined);
   assert.equal(brainResponsesOutput(undefined), undefined);

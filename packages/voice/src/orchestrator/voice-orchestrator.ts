@@ -14,6 +14,7 @@ import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import {
   announcementConversationEntry,
   type ConversationEntry,
+  joinReplyMessages,
   replyConversationEntry,
   SESSION_STATUS,
   type Session,
@@ -100,7 +101,11 @@ export interface SpeakOnlyCallHooks<Stream> {
   onStatus(status: RealtimeStatus): void;
   onRemoteStream(stream: Stream | undefined): void;
   onError(message: string | undefined): void;
-  onCaption(texts: readonly string[] | undefined, kind: ReplyKind | undefined): void;
+  onCaption(
+    texts: readonly string[] | undefined,
+    kind: ReplyKind | undefined,
+    runId?: string,
+  ): void;
   onReplyEnded(texts: readonly string[], kind: ReplyKind | undefined, runId?: string): void;
 }
 
@@ -118,10 +123,13 @@ export interface ConversationCallHooks<Stream> extends SpeakOnlyCallHooks<Stream
 /**
  * The words of the reply under way and whose they are, held as one value so
  * a live Conversation line can never file a caption under a different reply.
+ * The run named is the brain run whose end the words voice, when they are
+ * one — the reply the main process has already written into the thread.
  */
 interface VoiceCaption {
   texts: readonly string[] | undefined;
   kind: ReplyKind | undefined;
+  runId: string | undefined;
 }
 
 export interface VoiceOrchestratorDeps<Stream> {
@@ -185,7 +193,7 @@ export class VoiceOrchestrator<Stream> {
   #talkOpening = false;
   #localStream: Stream | undefined;
   #remoteStream: Stream | undefined;
-  #caption: VoiceCaption = { texts: undefined, kind: undefined };
+  #caption: VoiceCaption = { texts: undefined, kind: undefined, runId: undefined };
 
   /** When the talk key went down, which is what tells a hold from a tap. */
   #talkPressedAt: number | undefined;
@@ -490,7 +498,7 @@ export class VoiceOrchestrator<Stream> {
       onRemoteStream: (stream) => this.#setRemoteStream(stream),
       onLocalStream: (stream) => this.#setLocalStream(stream),
       onError: (message) => this.#strip.showError(message),
-      onCaption: (texts, kind) => this.#setCaption(texts, kind),
+      onCaption: (texts, kind, runId) => this.#setCaption(texts, kind, runId),
       onReplyEnded: (texts, kind, runId) => this.#replyEnded(texts, kind, runId),
       askBrain: (question, submissionId) =>
         askBrain(
@@ -535,7 +543,7 @@ export class VoiceOrchestrator<Stream> {
       onError: (message) => {
         if (heard()) this.#strip.showError(message);
       },
-      onCaption: (texts, kind) => this.#setCaption(texts, kind),
+      onCaption: (texts, kind, runId) => this.#setCaption(texts, kind, runId),
       onReplyEnded: (texts, kind, runId) => this.#replyEnded(texts, kind, runId),
     });
     return this.#speakOnlyCall;
@@ -717,7 +725,7 @@ export class VoiceOrchestrator<Stream> {
   ): void {
     if (kind === REPLY_KIND.BRIEFING) {
       const generation = this.#thread.takeAnnouncementGeneration();
-      this.#thread.remember(announcementConversationEntry(texts.join(" ")), generation);
+      this.#thread.remember(announcementConversationEntry(joinReplyMessages(texts)), generation);
       return;
     }
     const generation = this.#thread.takeReplyGeneration();
@@ -730,7 +738,7 @@ export class VoiceOrchestrator<Stream> {
       this.#replyPlayer?.onReplyEnded(runId);
       return;
     }
-    this.#thread.remember(replyConversationEntry(texts.join(" ")), generation);
+    this.#thread.remember(replyConversationEntry(joinReplyMessages(texts)), generation);
   }
 
   // — the edges —
@@ -810,8 +818,12 @@ export class VoiceOrchestrator<Stream> {
     })();
   }
 
-  #setCaption(texts: readonly string[] | undefined, kind: ReplyKind | undefined): void {
-    this.#caption = { texts, kind };
+  #setCaption(
+    texts: readonly string[] | undefined,
+    kind: ReplyKind | undefined,
+    runId: string | undefined,
+  ): void {
+    this.#caption = { texts, kind, runId };
     this.#report();
   }
 
@@ -902,6 +914,7 @@ export class VoiceOrchestrator<Stream> {
         spokenAskPreviews: previews,
         captions: this.#caption.texts,
         kind: this.#caption.kind,
+        runId: this.#caption.runId,
       });
       this.#liveFrom = { previews, caption: this.#caption };
     }

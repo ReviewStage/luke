@@ -15,10 +15,11 @@ import {
   type RuntimeRun,
   type RuntimeRunEnd,
 } from "@sidecar/runtime/vocabulary";
-import type {
-  ProviderTranscriptResult,
-  ProviderTranscriptSinceResult,
-  SessionIdentity,
+import {
+  joinReplyMessages,
+  type ProviderTranscriptResult,
+  type ProviderTranscriptSinceResult,
+  type SessionIdentity,
 } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
 import { BRAIN_DEFAULTS } from "./defaults.js";
@@ -121,6 +122,8 @@ interface TurnGathering {
   iterations: number;
   compacted: boolean;
   inputTokens?: number;
+  /** Each answer's words in order, the empty ones included, so the reply is composed from all of them. */
+  said: string[];
   outputText: string;
   /** The final answer's shortfall, when it stopped short with words still delivered. */
   incomplete?: string;
@@ -494,6 +497,7 @@ export class TurnRunner {
       deliveries: [],
       iterations: 0,
       compacted: false,
+      said: [],
       outputText: "",
     };
     let preparation: BrainTurnPreparation | undefined;
@@ -803,7 +807,8 @@ export class TurnRunner {
           if (event.toolCalls > 0) gathering.iterations += 1;
           return;
         case RUNTIME_EVENT.TEXT:
-          gathering.outputText = event.text;
+          gathering.said.push(event.text);
+          gathering.outputText = joinReplyMessages(gathering.said);
           return;
         case RUNTIME_EVENT.USAGE:
           if (event.usage.inputTokens !== undefined) {
@@ -878,9 +883,13 @@ export class TurnRunner {
     }
     switch (end.reason) {
       case RUN_END_REASON.COMPLETED:
-        // The end's text is the reply: an earlier answer's words that preceded
-        // a tool call are not the answer when the final answer said nothing.
-        gathering.outputText = end.text;
+        // The reply is everything the model said across the run, in order:
+        // the words before a tool call are as much its answer as the words
+        // after, and a final answer that said nothing drops none of them. The
+        // end's own text is the final answer's, already reported as the last
+        // words unless the runtime reported none.
+        if (gathering.said.at(-1) !== end.text) gathering.said.push(end.text);
+        gathering.outputText = joinReplyMessages(gathering.said);
         if (end.incomplete) gathering.incomplete = incompleteDetail(end.incomplete);
         return undefined;
       case RUN_END_REASON.THROTTLED:

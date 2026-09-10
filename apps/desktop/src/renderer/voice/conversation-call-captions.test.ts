@@ -93,7 +93,8 @@ test("back-to-back responses stack as two captions instead of running together",
     "Second response, finished.",
   ]);
 
-  // A third response retires the oldest: only two ever stack.
+  // A third response is kept with the rest: the call reports the whole reply,
+  // and how many of its segments the housing draws is the surface's own limit.
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
     item: { id: "item-three" },
@@ -103,7 +104,11 @@ test("back-to-back responses stack as two captions instead of running together",
     item_id: "item-three",
     delta: "Third.",
   });
-  assert.deepEqual(context.captions.at(-1), ["Second response, finished.", "Third."]);
+  assert.deepEqual(context.captions.at(-1), [
+    "First response, corrected.",
+    "Second response, finished.",
+    "Third.",
+  ]);
 });
 
 test("a brain follow-up keeps the words said before the ask and stacks the answer", async () => {

@@ -301,6 +301,21 @@ function normalizedEntryWords(words: string): string {
 }
 
 /**
+ * The words of one reply said as several messages — a model answer carrying
+ * more than one message item, its words before a tool call and after it, or
+ * a call's back-to-back output items — kept whole and in order, each apart
+ * from the next as its own paragraph. A message that said nothing adds no
+ * paragraph, so a reply whose last message was empty still carries everything
+ * said before it, and nothing said is ever dropped or run onto its neighbor.
+ */
+export function joinReplyMessages(messages: readonly string[]): string {
+  return messages
+    .map((message) => message.trim())
+    .filter((message) => message.length > 0)
+    .join("\n\n");
+}
+
+/**
  * One line still being said, for the panel to draw under the settled thread
  * while its words grow. It is normalized exactly as its settled form will be,
  * so the streaming bubble and the recorded line can never disagree, and it

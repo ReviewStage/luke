@@ -1,20 +1,18 @@
 import type { ReplyKind } from "@sidecar/voice/orchestrator";
 
-/**
- * How many back-to-back responses the caption keeps on screen at once. Two is
- * the shape the surface stacks — the words just settled and the words now
- * arriving — and a third response starting simply retires the oldest, the way
- * a long reply's oldest lines already roll up under the shape.
- */
-export const CAPTION_SEGMENT_LIMIT = 2;
-
 export interface CaptionStripOptions {
   /**
    * The words Luke is currently speaking, growing as they are generated, or
    * undefined once there is nothing being spoken. Each entry is one response's
-   * words.
+   * words. `runId` names the brain run whose end the words are voicing, when
+   * they are one, so a caller drawing the words can tell a reply the thread
+   * already holds from one it is still owed.
    */
-  onCaption(texts: readonly string[] | undefined, kind: ReplyKind | undefined): void;
+  onCaption(
+    texts: readonly string[] | undefined,
+    kind: ReplyKind | undefined,
+    runId?: string,
+  ): void;
   /**
    * The words a reply leaves behind at the moment it ends — finished, talked
    * over, or the call closing under it, whichever came.
@@ -38,7 +36,10 @@ export class CaptionStrip {
    * spoke it. A turn that speaks twice back-to-back — a second message item,
    * or the follow-up after a tool call — starts a new segment rather than
    * running its words onto the last one's, and an item's own final transcript
-   * can still land on its own segment after the turn has moved on.
+   * can still land on its own segment after the turn has moved on. Every
+   * segment stays until the reply ends, because the handover to Conversation
+   * is owed the whole reply; how many the housing draws is the surface's own
+   * limit, applied where the caption is drawn.
    */
   #segments: { itemId: string | undefined; text: string }[] = [];
   /**
@@ -74,8 +75,7 @@ export class CaptionStrip {
    * Grows the caption with the words just generated. The current item's words
    * grow its own segment; an item taking over from another — the reply's
    * second message, or the follow-up after a tool call — starts a segment of
-   * its own, so two responses stack instead of running together. Only the
-   * newest {@link CAPTION_SEGMENT_LIMIT} stay up.
+   * its own, so two responses stack instead of running together.
    */
   append(itemId: string | undefined, delta: string): void {
     const last = this.#segments.at(-1);
@@ -83,7 +83,6 @@ export class CaptionStrip {
       last.text += delta;
     } else {
       this.#segments.push({ itemId, text: delta });
-      this.#segments = this.#segments.slice(-CAPTION_SEGMENT_LIMIT);
     }
     this.#emit();
   }
@@ -138,6 +137,6 @@ export class CaptionStrip {
   }
 
   #emit(): void {
-    this.#options.onCaption(this.#texts(), this.#kind);
+    this.#options.onCaption(this.#texts(), this.#kind, this.#runId);
   }
 }
