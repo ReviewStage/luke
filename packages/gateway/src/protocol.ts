@@ -4,6 +4,10 @@ import {
   isWireBoolean,
   isWireNumber,
   isWireString,
+  RECORD_EXTRA_KEYS,
+  type RecordOf,
+  s,
+  TEXT_ENDS,
   type UnparsedWireValue,
   type WireRecord,
   type WireValue,
@@ -94,6 +98,10 @@ const GATEWAY_METHODS = {
   RECEIVER_REPORT: { name: "receiver.report", mutates: true },
   VOICE_MINT_REALTIME_CREDENTIAL: { name: "voice.mintRealtimeCredential", mutates: true },
   VOICE_DIAGNOSTICS: { name: "voice.diagnostics", mutates: false },
+  VOICE_CREATE_LIVE_SESSION: { name: "voice.createLiveSession", mutates: true },
+  VOICE_END_LIVE_SESSION: { name: "voice.endLiveSession", mutates: true },
+  VOICE_REPORT_LIVE_TRANSPORT: { name: "voice.reportLiveTransport", mutates: true },
+  VOICE_REPORT_LIVE_ACTIVITY: { name: "voice.reportLiveActivity", mutates: true },
   /** One tapped realtime event for the host's development trace; a no-op where no writer stands. */
   VOICE_RECORD_TRACE: { name: "voice.recordTrace", mutates: true },
   GUIDE_REPORT: { name: "guide.report", mutates: true },
@@ -120,6 +128,88 @@ export const RECEIVER_REPORT_KIND = {
 } as const;
 
 export type ReceiverReportKind = (typeof RECEIVER_REPORT_KIND)[keyof typeof RECEIVER_REPORT_KIND];
+
+/**
+ * The live voice session's vocabulary, declared beside the four methods and
+ * the one event that speak it, so the host that answers them and the client
+ * that sends them read one shape. The session itself belongs to the host; the
+ * renderer is a WebRTC peer that hands over an SDP offer, reports what its
+ * transport and microphone are doing, and asks for the end, and no credential
+ * of any kind travels in these shapes.
+ */
+
+/** Where the one live session stands, as `voiceLiveSession.changed` reports it. */
+export const LIVE_SESSION_PHASE = {
+  /** The host wants a session and no peer has offered one yet. */
+  WANTED: "wanted",
+  /** The provider created the session; its answer is on its way to the peer. */
+  CREATED: "created",
+  /** The provider announced the session live. */
+  STARTED: "started",
+  /** The host asked for a graceful close and is waiting for it to be confirmed. */
+  CLOSING: "closing",
+  CLOSED: "closed",
+} as const;
+
+export type LiveSessionPhase = (typeof LIVE_SESSION_PHASE)[keyof typeof LIVE_SESSION_PHASE];
+
+const LIVE_SESSION_PHASES: readonly LiveSessionPhase[] = Object.values(LIVE_SESSION_PHASE);
+
+/** What a peer's transport reports of itself, after the peer connection's own states. */
+export const LIVE_TRANSPORT_STATE = {
+  CONNECTING: "connecting",
+  CONNECTED: "connected",
+  DISCONNECTED: "disconnected",
+  FAILED: "failed",
+  CLOSED: "closed",
+} as const;
+
+export type LiveTransportState = (typeof LIVE_TRANSPORT_STATE)[keyof typeof LIVE_TRANSPORT_STATE];
+
+const LIVE_TRANSPORT_STATES: readonly LiveTransportState[] = Object.values(LIVE_TRANSPORT_STATE);
+
+/**
+ * The most characters an SDP document may carry. A WebRTC offer for one audio
+ * track and one data channel is a few kilobytes; the bound refuses an offer
+ * no peer of this build composes rather than carrying it to a provider.
+ */
+export const LIVE_SDP_MAX_CHARACTERS = 65_536;
+
+/** SDP is line-oriented and ends its lines with CRLF, so it travels verbatim: nothing is trimmed, collapsed, or cut. */
+const sdpSchema = s.text({ max: LIVE_SDP_MAX_CHARACTERS, ends: TEXT_ENDS.KEEP });
+
+/** `voice.createLiveSession`: the peer's SDP offer, and nothing else. */
+export const voiceCreateLiveSessionParamsSchema = s.record({ sdp: sdpSchema });
+
+const VOICE_CREATE_LIVE_SESSION_RESULT = { sessionId: s.text(), sdpAnswer: sdpSchema } as const;
+
+/** What `voice.createLiveSession` answers: the session the provider named, and the SDP answer the peer sets. */
+export const voiceCreateLiveSessionResultSchema = s.record(VOICE_CREATE_LIVE_SESSION_RESULT, {
+  extraKeys: RECORD_EXTRA_KEYS.IGNORE,
+});
+
+export type VoiceCreateLiveSessionResult = RecordOf<typeof VOICE_CREATE_LIVE_SESSION_RESULT>;
+
+/** `voice.reportLiveTransport`: the peer connection's state as the peer saw it change. */
+export const voiceReportLiveTransportParamsSchema = s.record({
+  state: s.enumOf(LIVE_TRANSPORT_STATES),
+});
+
+/** `voice.reportLiveActivity`: whether the peer has decided, from its own local signals, that the exchange is idle. */
+export const voiceReportLiveActivityParamsSchema = s.record({ idle: s.boolean() });
+
+const VOICE_LIVE_SESSION_CHANGED = {
+  sessionId: s.text().optional(),
+  phase: s.enumOf(LIVE_SESSION_PHASES),
+  reason: s.text().optional(),
+} as const;
+
+/** `voiceLiveSession.changed`: the phase the host's one session moved to, the id once the provider named one, and the reason of a close. */
+export const voiceLiveSessionChangedSchema = s.record(VOICE_LIVE_SESSION_CHANGED, {
+  extraKeys: RECORD_EXTRA_KEYS.IGNORE,
+});
+
+export type VoiceLiveSessionChanged = RecordOf<typeof VOICE_LIVE_SESSION_CHANGED>;
 
 const GATEWAY_METHODS_BY_NAME: ReadonlyMap<string, GatewayMethodEntry> = new Map(
   Object.values(GATEWAY_METHODS).map((entry) => [entry.name, entry]),
@@ -212,6 +302,7 @@ export const GATEWAY_EVENT = {
   CALENDAR_ONBOARDING_CHANGED: "calendarOnboarding.changed",
   SPEECH_OFFERED: "speech.offered",
   SPEECH_WITHDRAWN: "speech.withdrawn",
+  VOICE_LIVE_SESSION_CHANGED: "voiceLiveSession.changed",
   SESSION_REPLAY_CHANGED: "sessionReplay.changed",
 } as const;
 

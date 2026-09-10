@@ -10,7 +10,12 @@ import {
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   gatewayEventReader,
+  type LiveTransportState,
   RECEIVER_REPORT_KIND,
+  type VoiceCreateLiveSessionResult,
+  type VoiceLiveSessionChanged,
+  voiceCreateLiveSessionResultSchema,
+  voiceLiveSessionChangedSchema,
 } from "@sidecar/gateway";
 import type { AppGuideSnapshot } from "@sidecar/guide";
 import type { RealtimeConnection } from "@sidecar/hosted";
@@ -154,6 +159,12 @@ export interface HostOperator {
   resetReceiver(): Promise<void>;
   mintRealtimeCredential(): Promise<RealtimeConnection | undefined>;
   realtimeDiagnostics(): Promise<RealtimeDiagnostics | undefined>;
+  /** The peer's SDP offer, answered with the session the host created; a host that creates none answers nothing. */
+  createLiveSession(sdp: string): Promise<VoiceCreateLiveSessionResult | undefined>;
+  endLiveSession(): Promise<void>;
+  reportLiveTransport(state: LiveTransportState): Promise<void>;
+  /** The peer's own idle decision, from its local signals alone; the host decides the close. */
+  reportLiveActivity(idle: boolean): Promise<void>;
   /** One tapped wire event for the host's development trace; the host drops it where no writer stands. */
   recordAgentTrace(trace: AgentWireTrace): void;
   reportGuide(guide: AppGuideSnapshot): Promise<void>;
@@ -181,6 +192,7 @@ export interface HostOperator {
   onCalendarOnboardingChanged(listener: (owed: boolean) => void): () => void;
   onSpeechOffered(listener: (offer: SpeechOffer) => void): () => void;
   onSpeechWithdrawn(listener: (id: string) => void): () => void;
+  onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
   onSessionReplayChanged(listener: (replay: HostSessionReplay) => void): () => void;
 }
 
@@ -420,6 +432,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       answered<RealtimeDiagnostics>(
         record(await client.call(GATEWAY_METHOD.VOICE_DIAGNOSTICS))?.diagnostics,
       ),
+    createLiveSession: async (sdp) => {
+      const answer = await client.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, { sdp });
+      return answer.ok ? voiceCreateLiveSessionResultSchema.parse(answer.result) : undefined;
+    },
+    endLiveSession: () => fire(client.call(GATEWAY_METHOD.VOICE_END_LIVE_SESSION)),
+    reportLiveTransport: (state) =>
+      fire(client.call(GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT, { state })),
+    reportLiveActivity: (idle) =>
+      fire(client.call(GATEWAY_METHOD.VOICE_REPORT_LIVE_ACTIVITY, { idle })),
     recordAgentTrace: (trace) => {
       void client.call(GATEWAY_METHOD.VOICE_RECORD_TRACE, { trace: carried(trace) });
     },
@@ -523,6 +544,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       on(
         GATEWAY_EVENT.SPEECH_WITHDRAWN,
         (payload) => (isRecord(payload) && isWireString(payload.id) ? payload.id : undefined),
+        listener,
+      ),
+    onVoiceLiveSessionChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED,
+        (payload) => voiceLiveSessionChangedSchema.parse(payload),
         listener,
       ),
     onSessionReplayChanged: (listener) =>
