@@ -1,4 +1,25 @@
-export { ACTION_RESULT_STATUS, UNSUPPORTED_BY_OBSERVATION } from "@sidecar/wire";
+export {
+  ACTION_RESULT_STATUS,
+  ASSISTANT_MESSAGE_METADATA,
+  type AssistantMessageMetadata,
+  COMPACTION_METADATA,
+  type CompactionMetadata,
+  MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
+  MESSAGE_ROLE,
+  type MessageAuthor,
+  type MessageChannel,
+  type MessageRole,
+  OBSERVATION_SOURCE,
+  type ObservationMetadata,
+  type ObservationSource,
+  type SpokenAskMetadata,
+  type StoredMessageMetadata,
+  type TypedAskMetadata,
+  UNSUPPORTED_BY_OBSERVATION,
+  USER_MESSAGE_METADATA,
+  type UserMessageMetadata,
+} from "@sidecar/wire";
 export * from "./action-results.js";
 export * from "./advertised-actions.js";
 export * from "./agent-identities.js";
@@ -15,6 +36,7 @@ export * from "./session-identity.js";
 export * from "./session-registry.js";
 export * from "./session-shape.js";
 export * from "./session-status.js";
+export * from "./ui-messages/tool-parts.js";
 export * from "./urgency.js";
 export * from "./workspace-agents.js";
 export * from "./workspace-opens.js";

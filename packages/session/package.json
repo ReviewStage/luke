@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
-    "./fixtures": "./src/fixtures.js"
+    "./fixtures": "./src/fixtures.js",
+    "./ui-messages": "./src/ui-messages/validate.js"
   },
   "types": "./src/index.ts",
   "scripts": {
@@ -13,11 +14,13 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@sidecar/wire": "workspace:*"
+    "@sidecar/wire": "workspace:*",
+    "ai": "7.0.97"
   },
   "devDependencies": {
     "@types/node": "26.2.0",
     "tsx": "4.23.12",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "zod": "4.5.4"
   }
 }

@@ -1,0 +1,28 @@
+/**
+ * The tool part of a stored assistant message is the journal: a call is
+ * written in `input-available` before it executes and moved to
+ * `output-available` or `output-error` after, so a row a writer died inside
+ * still says which call was under way. The SDK names more states than these —
+ * the approval exchange among them — and a stored row carries none of those,
+ * so a part outside this set is refused at the door rather than read as one
+ * of them.
+ */
+export const TOOL_PART_STATE = {
+  INPUT_STREAMING: "input-streaming",
+  INPUT_AVAILABLE: "input-available",
+  OUTPUT_AVAILABLE: "output-available",
+  OUTPUT_ERROR: "output-error",
+} as const;
+
+export type ToolPartState = (typeof TOOL_PART_STATE)[keyof typeof TOOL_PART_STATE];
+
+const TOOL_PART_STATE_LIST: readonly string[] = Object.values(TOOL_PART_STATE);
+
+export function isToolPartState(value: string): value is ToolPartState {
+  return TOOL_PART_STATE_LIST.includes(value);
+}
+
+/** The states a resume has nothing left to do for: the call answered or failed. */
+export function isSettledToolPartState(state: ToolPartState): boolean {
+  return state === TOOL_PART_STATE.OUTPUT_AVAILABLE || state === TOOL_PART_STATE.OUTPUT_ERROR;
+}

@@ -112,11 +112,16 @@ A subpath is also how a package keeps something out of a bundle that has no
 use for it. `@sidecar/session/fixtures` is the synthetic snapshot the fixture
 runs and the marketing mock draw, and it stays off the barrel because three
 hundred lines of test data must not ride into a production bundle behind a
-session type. `@sidecar/runtime/testing` is the scaffolding every test in this
-repository shares — a self-cleaning temporary directory, a stated microtask
-drain, and a clock the test drives — behind its own door because it reaches
-`node:fs` and `node:os`, and in this package because the clock stands in for
-the runtime's own `ScheduledTimer`.
+session type. `@sidecar/session/ui-messages` is the reader that holds stored
+`UIMessage` rows to the vocabulary, behind its own door because it calls the
+AI SDK's `validateUIMessages` at run time, where the vocabulary itself — the
+message metadata schemas in `@sidecar/wire` and the tool-part states on the
+session barrel — reaches the SDK for its types alone, so a renderer that only
+names a state pulls none of it. `@sidecar/runtime/testing` is the scaffolding
+every test in this repository shares — a self-cleaning temporary directory, a
+stated microtask drain, and a clock the test drives — behind its own door
+because it reaches `node:fs` and `node:os`, and in this package because the
+clock stands in for the runtime's own `ScheduledTimer`.
 
 `@sidecar/brain` is the reason the rule exists twice in one package: the barrel
 is a door the web functions and the renderer open, and the store beneath it
