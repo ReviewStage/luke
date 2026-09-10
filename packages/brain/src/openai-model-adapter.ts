@@ -15,16 +15,12 @@ import {
   failed,
 } from "./model-adapter-shared.js";
 import {
-  BRAIN_RESPONSES_COMPACT_PATH,
   BRAIN_RESPONSES_INPUT_TOKENS_PATH,
   BRAIN_RESPONSES_PATH,
-  type BrainCompactRequest,
   type BrainInputTokensRequest,
   type BrainResponsesRequest,
-  brainCompactRequest,
   brainInputTokensRequest,
   brainResponsesRequest,
-  responsesCompactedWindow,
   responsesInputTokens,
   responsesModelAnswer,
   responsesToolDefinition,
@@ -57,7 +53,6 @@ export const BRAIN_OPENAI_DEFAULTS = {
 const OPENAI_PATH = {
   [RESPONSES_OPERATION.RESPOND]: BRAIN_RESPONSES_PATH,
   [RESPONSES_OPERATION.COUNT_TOKENS]: BRAIN_RESPONSES_INPUT_TOKENS_PATH,
-  [RESPONSES_OPERATION.COMPACT]: BRAIN_RESPONSES_COMPACT_PATH,
 } as const satisfies Record<ResponsesOperation, string>;
 
 export interface OpenAiModelAdapterOptions {
@@ -107,7 +102,6 @@ class OpenAiTransport implements ResponsesTransport<undefined> {
     return {
       model: this.#model,
       countsInputTokens: true,
-      compacts: true,
       maximumOutputTokens: BRAIN_OPENAI_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
       contextWindowTokens: COMPACTION_POLICY.DEFAULT_CONTEXT_WINDOW_TOKENS,
     };
@@ -151,22 +145,6 @@ class OpenAiTransport implements ResponsesTransport<undefined> {
     );
   }
 
-  compact(
-    _: undefined,
-    items: readonly WireRecord[],
-    options: Pick<ModelRequestOptions, "prompt">,
-  ) {
-    return prepared(
-      brainCompactRequest(items, { model: this.#model, instructions: options.prompt }),
-      (payload) => {
-        const window = responsesCompactedWindow(payload);
-        return window
-          ? { outcome: MODEL_RESPONSE_OUTCOME.ANSWERED, items: window }
-          : failed(MODEL_FAILURE.MALFORMED, "compaction carried no output");
-      },
-    );
-  }
-
   request(operation: ResponsesOperation, body: string, signal: AbortSignal | undefined) {
     return this.#client.send(OPENAI_PATH[operation], HTTP_METHOD.POST, body, signal);
   }
@@ -188,7 +166,7 @@ class OpenAiTransport implements ResponsesTransport<undefined> {
 }
 
 function prepared<Result>(
-  request: BrainResponsesRequest | BrainInputTokensRequest | BrainCompactRequest,
+  request: BrainResponsesRequest | BrainInputTokensRequest,
   read: PreparedOperation<Result>["read"],
 ): PreparedOperation<Result> {
   return { body: JSON.stringify(request), read };

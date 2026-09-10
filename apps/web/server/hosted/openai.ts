@@ -7,7 +7,6 @@
 
 import { type CloudFetch, HTTP_METHOD } from "@sidecar/wire";
 import type {
-  BrainCompactRequest,
   BrainEmbeddingsRequest,
   BrainInputTokensRequest,
   BrainResponsesRequest,
@@ -37,7 +36,6 @@ export type OpenAiPostBody =
   | ReturnType<typeof remoteRealtimeClientSecretRequest>
   | ReturnType<typeof introductionClientSecretRequest>
   | BrainResponsesRequest
-  | BrainCompactRequest
   | BrainInputTokensRequest
   | BrainEmbeddingsRequest;
 

@@ -8,13 +8,9 @@ import {
   type AgentRuntime,
   MEMORY_CAPTURE_PHASE,
   type MemoryDefinition,
-} from "@sidecar/runtime/vocabulary";
-import {
-  assessCompaction,
-  COMPACTION_NEED,
-  type CompactionAssessment,
   reserveTokens,
-} from "./compaction.js";
+} from "@sidecar/runtime/vocabulary";
+import { assessCompaction, COMPACTION_NEED, type CompactionAssessment } from "./compaction.js";
 import { CONTEXT_OPENING } from "./generation.js";
 import { turnCompactionOf } from "./run-events.js";
 import type { AgentSeam } from "./seam.js";

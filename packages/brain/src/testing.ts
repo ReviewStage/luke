@@ -20,9 +20,8 @@ export interface BareResponsesModel {
 
 /**
  * A full model adapter over a transport that only infers, in the Responses
- * item format: it counts and compacts nothing, and says so. For a host's
- * tests, which is why it ships behind the `testing` subpath and not the
- * package's barrel.
+ * item format: it counts nothing, and says so. For a host's tests, which is
+ * why it ships behind the `testing` subpath and not the package's barrel.
  */
 export function bareModelAdapter(bare: BareResponsesModel): ModelAdapter {
   return {
@@ -40,15 +39,12 @@ export function bareModelAdapter(bare: BareResponsesModel): ModelAdapter {
             formatVersion: RESPONSES_ITEM_FORMAT.version,
           },
           countsInputTokens: false,
-          compacts: false,
           maximumOutputTokens: BRAIN_MAXIMUM_OUTPUT_TOKENS,
         },
       }),
     respond: (items, options) => bare.respond(items, options),
     countInputTokens: () =>
       Promise.resolve(failed(MODEL_FAILURE.COMPATIBILITY, "this transport does not count tokens")),
-    compact: () =>
-      Promise.resolve(failed(MODEL_FAILURE.COMPATIBILITY, "this transport does not compact")),
     quietUntil: () => bare.quietUntil(),
   };
 }

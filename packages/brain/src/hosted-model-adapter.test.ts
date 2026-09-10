@@ -128,7 +128,6 @@ test("the adapter reads the capabilities once, then posts the prepared prompt, t
     known.capabilities.tools,
     TOOLS.map((tool) => tool.name),
   );
-  assert.equal(known.capabilities.compacts, true);
 });
 
 test("a service without the contract, with another contract, or missing an operation or a tool is a compatibility failure, never a fall back", async () => {
@@ -162,14 +161,15 @@ test("a service without the contract, with another contract, or missing an opera
       ],
     }).fetch,
   );
-  const noCompaction = await narrow.compact(INPUT, OPTIONS);
+  const noCount = await narrow.countInputTokens(INPUT, OPTIONS);
   assert.ok(
-    noCompaction.outcome === MODEL_RESPONSE_OUTCOME.FAILED &&
-      noCompaction.failure === MODEL_FAILURE.COMPATIBILITY,
+    noCount.outcome === MODEL_RESPONSE_OUTCOME.FAILED &&
+      noCount.failure === MODEL_FAILURE.COMPATIBILITY,
   );
   const known = await narrow.capabilities();
   assert.ok(
-    known.outcome === MODEL_RESPONSE_OUTCOME.ANSWERED && known.capabilities.compacts === false,
+    known.outcome === MODEL_RESPONSE_OUTCOME.ANSWERED &&
+      known.capabilities.countsInputTokens === false,
   );
 
   const unregistered = adapter(
@@ -242,23 +242,19 @@ test("a spent allowance stands the adapter down until the day's reset, a token r
   );
 });
 
-test("count and compact travel on their own endpoints and adopt exactly what the service answered", async () => {
-  const window = [{ type: "compaction", id: "c", encrypted_content: "x" }];
+test("the count travels on its own endpoint and adopts exactly what the service answered", async () => {
   const { fetch, calls } = service({
     [HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES]: [() => Response.json(capabilities())],
     [HOSTED_SERVICE_PATH.BRAIN_COUNT_TOKENS]: [() => Response.json({ inputTokens: 12 })],
-    [HOSTED_SERVICE_PATH.BRAIN_COMPACT]: [() => Response.json({ output: window })],
   });
   const model = adapter(fetch);
   assert.deepEqual(await model.countInputTokens(INPUT, OPTIONS), {
     outcome: MODEL_RESPONSE_OUTCOME.ANSWERED,
     inputTokens: 12,
   });
-  const compacted = await model.compact(INPUT, OPTIONS);
-  assert.deepEqual(compacted, { outcome: MODEL_RESPONSE_OUTCOME.ANSWERED, items: window });
-  const compactCall = calls.find((call) => call.url.endsWith(HOSTED_SERVICE_PATH.BRAIN_COMPACT));
-  assert.ok(compactCall && isRecord(compactCall.body));
-  assert.deepEqual(Object.keys(compactCall.body).sort(), ["contract", "input", "prompt"]);
+  const countCall = calls.find((call) => call.url.endsWith(HOSTED_SERVICE_PATH.BRAIN_COUNT_TOKENS));
+  assert.ok(countCall && isRecord(countCall.body));
+  assert.deepEqual(Object.keys(countCall.body).sort(), ["contract", "input", "prompt", "tools"]);
 });
 
 test("a 429 that names the day's quota waits for the reset; a 429 that names the provider's throttle waits the bounded Retry-After or the fixed cooldown", async () => {

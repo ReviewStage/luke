@@ -172,7 +172,7 @@ const CHECKPOINT_INPUT: TranscriptEvent = {
 const COMPACTION: TranscriptEvent = {
   kind: TRANSCRIPT_EVENT_KIND.COMPACTION,
   recordedAt: NOW + 1,
-  boundary: { source: COMPACTION_SOURCE.PROVIDER_EXPLICIT, dropped: 3 },
+  boundary: { source: COMPACTION_SOURCE.LOCAL_SUMMARY, dropped: 3 },
 };
 
 test("the envelope round-trips through the tables, requests and receipts in their order, every user-derived column sealed", async () => {
@@ -423,7 +423,7 @@ test("a checkpoint's transcript lands in the same transaction as the envelope, a
     {
       transcriptSequence: 2,
       sessionId: "gen-1",
-      source: COMPACTION_SOURCE.PROVIDER_EXPLICIT,
+      source: COMPACTION_SOURCE.LOCAL_SUMMARY,
       dropped: 3,
       createdAt: NOW + 1,
     },

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ACTION_OUTPUT_STATUS, REALTIME_TOOL, refusedActionOutput } from "@sidecar/actions";
-import { COMPACTION_SOURCE, MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
+import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
 import { TOOL_PART_STATE } from "@sidecar/session";
 import { readStoredUIMessages } from "@sidecar/session/ui-messages";
 import {
@@ -23,7 +23,6 @@ import {
   ask,
   type BrainClientAnswer,
   call,
-  compaction,
   edge,
   FakeClient,
   gatedClient,
@@ -613,29 +612,6 @@ test("a refused call settles as an error carrying the refusal's own reason, and 
     },
     errorText: "not now",
   });
-  await h.agent.stop();
-});
-
-test("a compaction the provider folded inside the run is told between the call and the answer", async () => {
-  const h = harness();
-  const events = listen(h);
-  h.client.answers.push(answered([compaction("c_1"), message("Folded.")]));
-  const record = await ask(h, "hello");
-  assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  assert.deepEqual(kinds(events), [
-    BRAIN_RUN_EVENT.TURN_STARTED,
-    BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
-    BRAIN_RUN_EVENT.COMPACTION_COMPLETED,
-    BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
-    BRAIN_RUN_EVENT.ACTIONS_SETTLED,
-    BRAIN_RUN_EVENT.REPLY_SENTENCE,
-    BRAIN_RUN_EVENT.ENDED,
-    BRAIN_RUN_EVENT.TURN_ENDED,
-  ]);
-  const [compacted] = ofKind(events, BRAIN_RUN_EVENT.COMPACTION_COMPLETED);
-  assert.equal(compacted?.compaction.source, COMPACTION_SOURCE.PROVIDER_INLINE);
-  assert.ok(Number.isInteger(compacted?.compaction.dropped));
-  assert.equal("summary" in (compacted?.compaction ?? {}), false);
   await h.agent.stop();
 });
 

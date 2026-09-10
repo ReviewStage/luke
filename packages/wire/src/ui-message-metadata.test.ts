@@ -176,7 +176,7 @@ test("an assistant row's author is the brain, the voice model, or a child, and n
   assert.equal(refusalOf(ASSISTANT_MESSAGE_METADATA, undefined), SCHEMA_REFUSAL.MALFORMED);
 });
 
-test("a compaction row names the first kept message and the tokens it folded", () => {
+test("a compaction row names the first kept message, and the tokens it folded where the runtime counted them", () => {
   const compaction = {
     first_kept_message_id: "8a1d2e3f-4b5c-4d6e-8f90-1a2b3c4d5e6f",
     tokens_before: 48210,
@@ -185,6 +185,11 @@ test("a compaction row names the first kept message and the tokens it folded", (
     author: MESSAGE_AUTHOR.BRAIN,
     compaction,
   });
+  const uncounted = { first_kept_message_id: compaction.first_kept_message_id };
+  assert.deepEqual(COMPACTION_METADATA.parse(uncounted), uncounted);
+  assert.deepEqual(pathOf(COMPACTION_METADATA, { ...uncounted, tokens_before: null }), [
+    "tokens_before",
+  ]);
   assert.deepEqual(pathOf(COMPACTION_METADATA, { first_kept_message_id: "m", tokens_before: -1 }), [
     "tokens_before",
   ]);

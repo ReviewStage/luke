@@ -25,7 +25,6 @@ import {
   type BrainV2Options,
   HOSTED_BRAIN_DEFAULTS,
   handleBrainCapabilities,
-  handleBrainCompact,
   handleBrainCountTokens,
   handleBrainRespondV2,
 } from "../server/hosted/brain-v2";
@@ -353,46 +352,6 @@ test("count-tokens posts the prepared request without an output budget and answe
     }),
   );
   assert.equal(bad.status, 502);
-});
-
-test("compact posts the window and the prompt, and answers the whole compacted window as it came", async () => {
-  const window = [
-    { type: "compaction", id: "cmp_1", encrypted_content: "folded" },
-    message("So far: nothing."),
-  ];
-  const { fetch, calls } = upstream([
-    () => Response.json({ object: "response.compaction", output: window }),
-  ]);
-  const response = await handleBrainCompact(
-    options({
-      request: request(HOSTED_SERVICE_PATH.BRAIN_COMPACT, {
-        contract: HOSTED_BRAIN_CONTRACT_VERSION,
-        prompt: "You are Luke.",
-        input: INPUT,
-      }),
-      fetch,
-    }),
-  );
-  assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { output: window });
-  assert.equal(calls[0]?.url, `${BRAIN_OPENAI_DEFAULTS.BASE_URL}/responses/compact`);
-  assert.equal(calls[0]?.body.instructions, "You are Luke.");
-  assert.deepEqual(calls[0]?.body.input, INPUT);
-  // A compaction whose window carries an item the desktop could not replay is refused whole.
-  const poisoned = upstream([
-    () => Response.json({ output: [...window, { type: "web_search_call", id: "ws" }] }),
-  ]);
-  const refused = await handleBrainCompact(
-    options({
-      request: request(HOSTED_SERVICE_PATH.BRAIN_COMPACT, {
-        contract: HOSTED_BRAIN_CONTRACT_VERSION,
-        prompt: "p",
-        input: INPUT,
-      }),
-      fetch: poisoned.fetch,
-    }),
-  );
-  assert.equal(refused.status, 502);
 });
 
 test("a provider rate limit behind the service answers 429 as the provider's throttle with a bounded Retry-After, apart from a spent allowance", async () => {

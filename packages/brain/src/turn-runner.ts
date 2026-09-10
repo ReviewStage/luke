@@ -1,7 +1,6 @@
 import type { ChildPolicyContext, EffectiveToolPolicy } from "@sidecar/runtime";
 import {
   type AgentRuntime,
-  COMPACTION_SOURCE,
   CONTEXT_INPUT_KIND,
   type ContextMark,
   type MemoryDefinition,
@@ -105,7 +104,6 @@ interface TurnGathering {
   toolCalls: BrainToolCallTrace[];
   deliveries: BrainDelivery[];
   iterations: number;
-  compacted: boolean;
   inputTokens?: number;
   /** Each answer's words in order, the empty ones included, so the reply is composed from all of them. */
   said: string[];
@@ -492,7 +490,6 @@ export class TurnRunner {
       toolCalls: [],
       deliveries: [],
       iterations: 0,
-      compacted: false,
       said: [],
       outputText: "",
       slowStepTold: false,
@@ -679,7 +676,6 @@ export class TurnRunner {
       ...(model ? { model } : undefined),
       elapsedMs: this.#seam.now() - startedAt,
       iterations: gathering.iterations,
-      compacted: gathering.compacted,
       ...(gathering.error ? { error: gathering.error } : undefined),
     });
 
@@ -860,11 +856,6 @@ export class TurnRunner {
             gathering.inputTokens = event.usage.inputTokens;
           }
           run.usage = addModelUsage(run.usage, event.usage);
-          return;
-        case RUNTIME_EVENT.COMPACTED:
-          gathering.compacted = true;
-          turnContext.generation.compactionCount += 1;
-          events.compacted({ source: COMPACTION_SOURCE.PROVIDER_INLINE, dropped: event.dropped });
           return;
         case RUNTIME_EVENT.STEERED:
           turn.plan.deliveries.ingested();

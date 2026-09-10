@@ -82,12 +82,10 @@ test("respond posts the fixed request on the developer's key and normalizes the 
   );
 });
 
-test("count and compact post to their own paths and read only what each answers", async () => {
+test("the count posts to its own path and reads only what it answers", async () => {
   const { fetch, calls } = fakeFetch([
     Response.json({ object: "response.input_tokens", input_tokens: 77 }),
-    Response.json({ output: [{ type: "compaction", id: "c", encrypted_content: "x" }] }),
     Response.json({ input_tokens: -4 }),
-    Response.json({ nothing: true }),
   ]);
   const model = adapter(fetch);
   assert.deepEqual(await model.countInputTokens(INPUT, OPTIONS), {
@@ -96,15 +94,10 @@ test("count and compact post to their own paths and read only what each answers"
   });
   assert.equal(calls[0]?.url, "https://example.test/v1/responses/input_tokens");
   assert.ok(isRecord(calls[0]?.body) && !("max_output_tokens" in calls[0].body));
-  const compacted = await model.compact(INPUT, OPTIONS);
-  assert.ok(compacted.outcome === MODEL_RESPONSE_OUTCOME.ANSWERED);
-  assert.equal(compacted.items.length, 1);
-  assert.equal(calls[1]?.url, "https://example.test/v1/responses/compact");
   assert.equal(
     (await model.countInputTokens(INPUT, OPTIONS)).outcome,
     MODEL_RESPONSE_OUTCOME.FAILED,
   );
-  assert.equal((await model.compact(INPUT, OPTIONS)).outcome, MODEL_RESPONSE_OUTCOME.FAILED);
 });
 
 test("a rate limit stands the adapter down for the header's wait or the fixed cooldown, and nothing is sent meanwhile", async () => {
@@ -173,7 +166,6 @@ test("the factory builds only from a key, and capabilities name the tool-loop Re
     format: "openai-responses-input",
     formatVersion: 1,
   });
-  assert.equal(capabilities.capabilities.compacts, true);
 });
 
 test("the prompt cache key a turn was given reaches the request", async () => {

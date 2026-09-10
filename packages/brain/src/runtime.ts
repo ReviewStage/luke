@@ -121,7 +121,7 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
     return this.#capabilities;
   }
 
-  /** The runtime's own compaction: the model's explicit one where it compacts, the engine's fold behind a summary otherwise. */
+  /** The runtime's own compaction: the engine's fold behind a summary the model writes, kept to the model's window. */
   async compact(context: ContextEngine, options: CompactionOptions): Promise<RuntimeCompaction> {
     return compactContext(context, this.#options.model, {
       ...options,
@@ -353,14 +353,6 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
     if (lifecycle.signal?.aborted) return false;
     for (const reasoning of answer.reasoning ?? []) {
       await emit({ kind: RUNTIME_EVENT.REASONING, reasoning });
-    }
-    if (answer.compacted) {
-      const settled = await settledUnlessAborted(
-        Promise.resolve(request.context.compact(lifecycle)),
-        lifecycle.signal ?? new AbortController().signal,
-      );
-      if (settled.aborted) return false;
-      await emit({ kind: RUNTIME_EVENT.COMPACTED, dropped: settled.value });
     }
     if (answer.usage) await emit({ kind: RUNTIME_EVENT.USAGE, usage: answer.usage });
     // Every answer's text is reported, the empty one included, so a listener

@@ -42,7 +42,7 @@ import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testi
 const IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOOP_RUNTIME.VERSION };
 const NOW = 1_800_000_000_000;
 const SCOPE: MemoryScope = { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: "main" };
-/** Reserve is a quarter of this, 500; compaction at 1,500 tokens; the flush at 750. */
+/** Reserve is a quarter of this, 500; compaction at 1,500 tokens; the flush at 750; a fold keeps the reserve's worth of tail. */
 const WINDOW_TOKENS = 2_000;
 
 function message(text: string): WireRecord {
@@ -74,8 +74,8 @@ class FakeModel {
   }
 }
 
-/** The adapter over the fake model; one that compacts answers a one-message window in place of whatever it was asked over. */
-function adapterOf(model: FakeModel, compacts = false): ModelAdapter {
+/** The adapter over the fake model, whose one answer also serves as every fold's summary. */
+function adapterOf(model: FakeModel): ModelAdapter {
   return {
     capabilities: async () => ({
       outcome: MODEL_RESPONSE_OUTCOME.ANSWERED,
@@ -89,7 +89,6 @@ function adapterOf(model: FakeModel, compacts = false): ModelAdapter {
         },
         contextWindowTokens: WINDOW_TOKENS,
         countsInputTokens: false,
-        compacts,
         maximumOutputTokens: 16_000,
       },
     }),
@@ -99,14 +98,6 @@ function adapterOf(model: FakeModel, compacts = false): ModelAdapter {
       failure: MODEL_FAILURE.UPSTREAM,
       reason: "not counted",
     }),
-    compact: async () =>
-      compacts
-        ? { outcome: MODEL_RESPONSE_OUTCOME.ANSWERED, items: [message("folded")] }
-        : {
-            outcome: MODEL_RESPONSE_OUTCOME.FAILED,
-            failure: MODEL_FAILURE.UPSTREAM,
-            reason: "not compacted",
-          },
     quietUntil: () => undefined,
   };
 }
@@ -134,8 +125,6 @@ class FakeMarkerStore implements BrainFlushMarkerStore {
 interface Launch {
   repository?: FakeBrainStateRepository;
   marker?: FakeMarkerStore;
-  /** Whether the adapter compacts, so a context over the reserve folds in maintenance and the cycle moves. */
-  compacts?: boolean;
 }
 
 /**
@@ -150,7 +139,7 @@ function agentWith(
 ) {
   const model = new FakeModel();
   const runtime = new ToolLoopAgentRuntime({
-    model: adapterOf(model, launch.compacts ?? false),
+    model: adapterOf(model),
     itemFormat: RESPONSES_ITEM_FORMAT,
     createContext: () => new ResponsesContextEngine(IDENTITY),
   });
@@ -267,8 +256,8 @@ test("an interrupted or failed flush is reported and runs again at the next asse
 
 /** Around 3,400 characters of items: past the 750-token flush threshold, under the 1,500-token compaction threshold. */
 const OVER_FLUSH_THRESHOLD = "x".repeat(3_000);
-/** Past the 1,500-token compaction threshold, so the maintenance after the turn folds the context. */
-const OVER_COMPACTION_THRESHOLD = "z".repeat(7_000);
+/** With the asks before it, past the 1,500-token compaction threshold; on its own, within the tail a fold keeps. */
+const OVER_COMPACTION_THRESHOLD = "z".repeat(3_000);
 
 test("restart: a flushed cycle is not flushed again after a relaunch, and a compaction then a relaunch flushes once in the new cycle", async () => {
   const marker = new FakeMarkerStore();
@@ -277,7 +266,7 @@ test("restart: a flushed cycle is not flushed again after a relaunch, and a comp
     calls += 1;
     return { outcome: MEMORY_HOUSEKEEPING_OUTCOME.COMPLETED, writes: 1 };
   };
-  const first = agentWith(hook, { marker, compacts: true });
+  const first = agentWith(hook, { marker });
   await ask(first.agent, OVER_FLUSH_THRESHOLD);
   assert.equal(calls, 1);
   const generation = first.store.generationId();
@@ -286,19 +275,25 @@ test("restart: a flushed cycle is not flushed again after a relaunch, and a comp
   await first.agent.stop();
 
   // The relaunch: a new store over the same file, a new agent, the same marker table.
-  const second = agentWith(hook, { repository: first.repository, marker, compacts: true });
+  const second = agentWith(hook, { repository: first.repository, marker });
   await ask(second.agent, "still over the threshold");
   assert.equal(calls, 1, "cycle zero was flushed before the relaunch");
   assert.equal(marker.markers.get(generation), 0, "the relaunch read the standing marker");
-  // A turn that leaves the context over the reserve compacts it in maintenance; cycle one begins.
+  // A turn that leaves the context over the reserve folds it in maintenance,
+  // behind a summary the model writes; cycle one begins, and the folded
+  // context stands over the flush threshold still.
   await ask(second.agent, OVER_COMPACTION_THRESHOLD);
   assert.equal(second.store.current()?.compactionCount, 1, "the compaction was counted");
   assert.equal(calls, 1, "cycle zero flushed once; the fold itself is not a flush");
+  const folded = await second.agent.contextSnapshot();
+  assert.ok(folded);
+  assert.equal(folded[0]?.role, "assistant", "the summary stands first, in Luke's own voice");
+  assert.equal(folded.length, 3, "the summary and the most recent exchange");
   await second.agent.stop();
 
-  const third = agentWith(hook, { repository: first.repository, marker, compacts: true });
+  const third = agentWith(hook, { repository: first.repository, marker });
   assert.equal((await third.store.load()).compactionCount, 1, "the count rode on the envelope");
-  await ask(third.agent, OVER_FLUSH_THRESHOLD);
+  await ask(third.agent, "a little more");
   assert.equal(calls, 2, "cycle one is flushed once, after the relaunch");
   assert.equal(marker.markers.get(generation), 1);
   await ask(third.agent, "again");

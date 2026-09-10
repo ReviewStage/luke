@@ -310,8 +310,8 @@ function rowToWire(row: ContextRow): WireRecord {
 export const UI_MESSAGE_ENGINE_REFUSAL = {
   INGEST:
     "the UIMessage engine reads stored rows and writes none: a turn's inputs reach it as rows through bootstrap, never through ingest",
-  ADOPT_COMPACTION:
-    "the UIMessage engine takes no provider compaction window: a compaction is a message the store writes, and the derivation reads it",
+  ADOPT:
+    "the UIMessage engine adopts no items: a fork's inherited history and a housekeeping copy are rows the store writes, and the derivation reads them",
   FOREIGN_MARK: "the UIMessage engine rolls back only to a mark it took itself",
 } as const;
 
@@ -417,8 +417,8 @@ export class UIMessageContextEngine implements ContextEngine {
     return dropped;
   }
 
-  adoptCompaction(): void {
-    throw new Error(UI_MESSAGE_ENGINE_REFUSAL.ADOPT_COMPACTION);
+  adopt(): void {
+    throw new Error(UI_MESSAGE_ENGINE_REFUSAL.ADOPT);
   }
 
   afterTurn(): void {}

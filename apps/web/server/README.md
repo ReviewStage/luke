@@ -223,14 +223,13 @@ deployment.
 
 ## Hosted brain inference
 
-`api/brain/capabilities.ts` and the four routes under `api/brain/v2/` run
+`api/brain/capabilities.ts` and the three routes under `api/brain/v2/` run
 Luke's brain on the deployment's own OpenAI key for a signed-in client that
 carries none of its own. They are exact-path files like the voice route,
-resolved to a user through the same bearer seam, and the four POST routes are
+resolved to a user through the same bearer seam, and the three POST routes are
 the only hosted routes with a raised function duration: `vercel.json` gives
-the inference, the compaction, and the token count 120 seconds so the
-90-second upstream ceiling the brain shares with its keyed client can pass,
-and the embedding 60.
+the inference and the token count 120 seconds so the 90-second upstream
+ceiling the brain shares with its keyed client can pass, and the embedding 60.
 
 One HTTP request is one model call and nothing more. A client GETs the
 capabilities first — the model, the operations, the registered tool names, the
@@ -250,10 +249,11 @@ own retention, named back by the id the desktop keeps on the run. An inference's
 answer is handed down as it came, once it is known to be a Responses payload
 every item of which the same admission would replay next turn; an answer this
 route could not replay is a 502, because the client would keep it verbatim and
-every later turn of that memory would fail here. An explicit compaction's
-whole window is answered for the client to adopt as it came. The service runs
-no tool, holds no memory, reaches no provider, and stores and logs nothing of
-the request, the reply, or the encrypted compaction that travels in them.
+every later turn of that memory would fail here. The service compacts
+nothing: a client folds its own context behind a summary it asks for as an
+ordinary inference. The service runs no tool, holds no memory, reaches no
+provider, and stores and logs nothing of the request, the reply, or the
+encrypted items that travel in them.
 
 Each request spends the attention review meter before the upstream call, so a
 refused upstream still counts; an upstream that rate limits answers a bounded

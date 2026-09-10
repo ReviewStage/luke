@@ -7,7 +7,6 @@ import {
   brainResponsesOutput,
   brainResponsesRequest,
   functionCallOutputItem,
-  isCompactionItem,
   responsesModelAnswer,
   userMessageItem,
 } from "./responses-api.js";
@@ -40,7 +39,7 @@ test("the request asks the API for no compaction of its own, leaves storage at t
   assert.ok(request.tools.some((tool) => tool.name === BRAIN_TOOL.ANNOUNCE));
 });
 
-test("the output reading keeps every item verbatim and picks out calls, text, compaction, and usage", () => {
+test("the output reading keeps every item verbatim, an item it does not read included, and picks out calls, text, and usage", () => {
   const reasoning = { type: "reasoning", id: "rs_1", summary: [], encrypted_content: "opaque" };
   const call = {
     type: "function_call",
@@ -72,11 +71,8 @@ test("the output reading keeps every item verbatim and picks out calls, text, co
     { callId: "call_1", name: "announce", argumentsJson: '{"briefing":"hi"}' },
   ]);
   assert.equal(output.outputText, "Sent. Nothing else.");
-  assert.equal(output.compacted, true);
   assert.equal(output.inputTokens, 4321);
   assert.equal(output.status, "completed");
-  assert.ok(isCompactionItem(compaction));
-  assert.ok(!isCompactionItem(reasoning));
 });
 
 test("two message items in one answer are two paragraphs of its text, and an empty one adds none", () => {

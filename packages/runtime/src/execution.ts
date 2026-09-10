@@ -9,9 +9,9 @@ import type { CompactionSource } from "./storage.js";
  * that carries one inference, a context engine that owns the provider's item
  * shapes, and a tool executor the host supplies. Nothing here names a
  * provider. A provider's own vocabulary (an OpenAI Responses item, an
- * encrypted compaction) travels as opaque records inside a checkpoint whose
- * format tag says whose shape it is, and a runtime loads only the formats it
- * can read.
+ * encrypted reasoning item) travels as opaque records inside a checkpoint
+ * whose format tag says whose shape it is, and a runtime loads only the
+ * formats it can read.
  */
 
 /**
@@ -219,9 +219,8 @@ export interface ModelIncomplete {
 /**
  * One inference, normalized: the provider items the context engine ingests
  * verbatim, the text the model wrote, the tool calls to dispatch, the usage
- * counted, whether the provider folded the context, and whether it stopped
- * short. The items stay opaque here; only an engine of the same format reads
- * inside them.
+ * counted, and whether it stopped short. The items stay opaque here; only an
+ * engine of the same format reads inside them.
  */
 export interface ModelAnswer {
   readonly outcome: typeof MODEL_RESPONSE_OUTCOME.ANSWERED;
@@ -229,7 +228,6 @@ export interface ModelAnswer {
   readonly text: string;
   readonly toolCalls: readonly ToolInvocation[];
   readonly usage?: ModelUsage;
-  readonly compacted: boolean;
   readonly incomplete?: ModelIncomplete;
   /** The provider's id for this response, when it named one; a run keeps every one it was answered with. */
   readonly responseId?: string;
@@ -255,20 +253,6 @@ export type ModelTokenCount =
       readonly reason: string;
     };
 
-/** A compaction the provider performed: the items that replace the context from its start. */
-export type ModelCompaction =
-  | {
-      readonly outcome: typeof MODEL_RESPONSE_OUTCOME.ANSWERED;
-      readonly items: readonly WireRecord[];
-      readonly usage?: ModelUsage;
-    }
-  | { readonly outcome: typeof MODEL_RESPONSE_OUTCOME.THROTTLED; readonly until: number }
-  | {
-      readonly outcome: typeof MODEL_RESPONSE_OUTCOME.FAILED;
-      readonly failure: ModelFailure;
-      readonly reason: string;
-    };
-
 /** What a model adapter can do, and in whose checkpoint format it speaks. */
 export interface ModelCapabilities {
   /** The adapter's own id, for the trace and the diagnostics line. */
@@ -277,7 +261,6 @@ export interface ModelCapabilities {
   readonly model?: string;
   readonly checkpoint: CheckpointFormat;
   readonly countsInputTokens: boolean;
-  readonly compacts: boolean;
   /** The most output tokens one inference may be asked for. */
   readonly maximumOutputTokens: number;
   /** The tool names the adapter's transport will carry; absent means any schema travels whole. */
@@ -318,10 +301,6 @@ export interface ModelAdapter {
     items: readonly WireRecord[],
     options: Pick<ModelRequestOptions, "prompt" | "tools" | "signal">,
   ): Promise<ModelTokenCount>;
-  compact(
-    items: readonly WireRecord[],
-    options: Pick<ModelRequestOptions, "prompt" | "signal">,
-  ): Promise<ModelCompaction>;
   /** The moment held-back inferences may resume, for a host to ask before spending a turn. */
   quietUntil(): number | undefined;
 }
@@ -429,17 +408,19 @@ export interface ContextEngine {
     assembly: ContextAssembly,
     lifecycle?: ContextLifecycle,
   ): MaybePromise<readonly WireRecord[]>;
-  /** Folds the retained items behind the latest compaction the provider produced inline; answers how many went. */
-  compact(lifecycle?: ContextLifecycle): MaybePromise<number>;
-  /** Adopts the window an explicit compaction answered, whole: it is the canonical next context. */
-  adoptCompaction(items: readonly WireRecord[], lifecycle?: ContextLifecycle): MaybePromise<void>;
+  /**
+   * Replaces the retained items whole: a forked child's inherited history,
+   * or the private copy a housekeeping turn runs over. What the items mean
+   * is the caller's to know; the engine keeps them as the context from here.
+   */
+  adopt(items: readonly WireRecord[], lifecycle?: ContextLifecycle): MaybePromise<void>;
   /**
    * Folds the older retained items behind a summary the host writes for
    * them, keeping roughly `keepRecentTokens` of the most recent items and
-   * never parting a tool call from its result; answers how many items went,
-   * or zero when nothing was folded — too little to fold, or a summary the
-   * host could not produce. An engine whose items cannot be folded this way
-   * leaves it undefined.
+   * never parting a tool call from its result or a reasoning item from the
+   * call it preceded; answers how many items went, or zero when nothing was
+   * folded — too little to fold, or a summary the host could not produce. An
+   * engine whose items cannot be folded this way leaves it undefined.
    */
   foldBehindSummary?(
     summarize: (older: readonly WireRecord[]) => Promise<string | undefined>,
@@ -467,7 +448,6 @@ export const RUNTIME_EVENT = {
   RESPONSE: "response",
   /** One reasoning item of an answer, after the answer's items are in the context. */
   REASONING: "reasoning",
-  COMPACTED: "compacted",
   INCOMPLETE: "incomplete",
   THROTTLED: "throttled",
   PROVIDER_FAILURE: "provider_failure",
@@ -522,7 +502,6 @@ export type RuntimeEvent =
   | { readonly kind: typeof RUNTIME_EVENT.USAGE; readonly usage: ModelUsage }
   | { readonly kind: typeof RUNTIME_EVENT.RESPONSE; readonly responseId: string }
   | { readonly kind: typeof RUNTIME_EVENT.REASONING; readonly reasoning: ReasoningSummary }
-  | { readonly kind: typeof RUNTIME_EVENT.COMPACTED; readonly dropped: number }
   | { readonly kind: typeof RUNTIME_EVENT.INCOMPLETE; readonly incomplete: ModelIncomplete }
   | { readonly kind: typeof RUNTIME_EVENT.THROTTLED; readonly until: number }
   | {
@@ -615,9 +594,9 @@ export interface AgentRuntime {
   /** What the runtime's model can do and how large its window is, for the host's compaction policy; nothing when it cannot say. */
   capabilities(): Promise<ModelCapabilities | undefined>;
   /**
-   * Folds the context, by whatever way the runtime's model and engine offer,
-   * so the next request fits. A failure changes nothing about the context;
-   * the host decides what a failure means for the turn that needed it.
+   * Folds the context behind a summary so the next request fits. A failure
+   * changes nothing about the context; the host decides what a failure means
+   * for the turn that needed it.
    */
   compact(context: ContextEngine, options: CompactionOptions): Promise<RuntimeCompaction>;
   /** A context engine of this runtime's format, bootstrapped from the checkpoint when one is compatible. */

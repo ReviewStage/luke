@@ -532,10 +532,7 @@ class ScriptedContext implements ContextEngine {
   assemble() {
     return this.#turns;
   }
-  compact() {
-    return 0;
-  }
-  adoptCompaction(items: readonly WireRecord[]) {
+  adopt(items: readonly WireRecord[]) {
     this.#turns = [...items];
   }
   afterTurn() {}

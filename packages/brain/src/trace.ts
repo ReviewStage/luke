@@ -34,6 +34,5 @@ export interface BrainTurnTraceRecord {
   elapsedMs: number;
   /** How many inferences answered with tool calls; the loop has no cap on them. */
   iterations: number;
-  compacted: boolean;
   error?: string;
 }

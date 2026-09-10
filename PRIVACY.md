@@ -95,17 +95,17 @@ of what he read, said, and did — the transcript excerpts described above, the
 position he last read each transcript to and the position he last wrote one
 down to, the inbox of excerpts written down and not yet read, a record of each ask you made and
 how it ended, and a receipt for each action he took at your ask. When that
-record grows long, Luke folds its older part: he asks OpenAI to compact it,
-which answers an opaque, encrypted compaction item he stores in place of the
-older part, or, on a connection that cannot compact, he asks the model for a
-written summary and keeps that instead. Either is still derived from your
-sessions and your conversation and lives under the same rule as the rest. The
-folding is Luke's own decision, made when the record nears the model's
-window or the size a request may be; OpenAI is not asked to compact on its
-own. The whole record is one generation, and a generation does not reset
-on its own, on the terms OpenClaw's sessions keep: it stands, the encrypted
-compaction included, until you clear the conversation, and an old one is
-loaded whole however long ago it began. A
+record grows long, Luke folds its older part: he asks the model for a written
+summary of it, with no tools offered on that call, and keeps the summary in
+place of the older part, as words of his own. The summary is still derived
+from your sessions and your conversation and lives under the same rule as the
+rest. The folding is Luke's own decision, made when the record nears the
+model's window or the size a request may be; OpenAI is not asked to compact
+the record itself, and an encrypted compaction item an earlier version of Luke
+stored is kept and replayed as it was but never asked for again. The whole
+record is one generation, and a generation does not reset on its own, on the
+terms OpenClaw's sessions keep: it stands, summaries included, until you clear
+the conversation, and an old one is loaded whole however long ago it began. A
 generation holds at most 200 asks: the oldest finished
 asks go first once their endings are in the Conversation, and when nothing can go
 Luke declines a new ask rather than growing the record.
@@ -368,9 +368,9 @@ and email you signed it with, and any screenshots you attached.
   own service on our key when you use Luke through your account. Either way
   OpenAI stores the request and its reply under its own retention policy, and
   our service performs one model call per request and stores and logs none of
-  the request, the reply, or the encrypted compaction that travels in it; the
-  compaction OpenAI hands back is kept only on your Mac, under the lifetime
-  above. Each call counts against
+  the request, the reply, or the encrypted reasoning that travels in it; the
+  record the reply joins is kept only on your Mac, under the lifetime above.
+  Each call counts against
   your daily review allowance. When Luke runs through your account, the Mac
   app also sends our service the standing instructions it prepared for the
   call — composed on your Mac from Luke's workspace files described above —

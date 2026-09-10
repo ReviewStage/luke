@@ -6,7 +6,7 @@
   "exports": {
     ".": "./src/index.js",
     "./fixtures": "./src/fixtures.js",
-    "./ui-messages": "./src/ui-messages/validate.js"
+    "./ui-messages": "./src/ui-messages/index.js"
   },
   "types": "./src/index.ts",
   "scripts": {

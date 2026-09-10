@@ -39,6 +39,7 @@ const FIXTURE = {
   CHILD_COMPLETION: "child-completion.json",
   RECALLED_NOTES: "recalled-notes.json",
   ACTIVITY_NOTICES: "activity-notices.json",
+  COMPACTION_UNCOUNTED: "compaction-uncounted.json",
 } as const;
 
 /** The fixture that carries each source the brain writes a user row under, one per member of the set. */
