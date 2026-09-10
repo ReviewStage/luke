@@ -839,6 +839,33 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transform: none;
 }
 
+/* The wait's dots in the wing: the same slot treatment as the meter's, on the
+   same beat, because both trail the face outward from the housing. The capsule
+   keeps them folded — its 36px side holds the face and nothing beside it, and
+   the shape must not grow for a wait — so at rest the thinking animation is
+   cropped to the face itself, the hop the dots ripple off, and the dots unfold
+   with the room the peek and the panel add. The fade on mount is the marks'
+   own, so dots arriving in a shape already open do not pop. */
+.wing-thinking {
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  transform: translateX(8px);
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-shape) var(--spring);
+  animation: wing-mount-fade var(--duration-quick) var(--motion-exit) backwards;
+}
+
+.app-stage[data-presentation="peek"] .wing-thinking,
+.app-stage[data-presentation="panel"] .wing-thinking {
+  opacity: 1;
+  transform: none;
+  transition-duration: var(--duration-quick), var(--duration-shape);
+  transition-timing-function: var(--motion-exit), var(--spring);
+  transition-delay: var(--peek-delay);
+}
+
 .provider-mark {
   width: 14px;
   height: 14px;
@@ -1065,6 +1092,104 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .luke-face-eye {
   transform-box: fill-box;
   transform-origin: center;
+}
+
+/* The wait's three dots, one drawing wherever a run of Luke's is still going:
+   the Conversation bubble and the notch strip both ride them beside the face
+   playing the success hop on repeat. */
+.thinking-dots {
+  display: inline-flex;
+  height: 12px;
+  align-items: center;
+  gap: 4px;
+}
+
+/* The dots follow the generated `success` cycle the face beside them is
+   playing on repeat — luke-success-2, 2s, the head off the ground from 25% to
+   65% and highest at 45% — each rising as the head comes down, one after
+   another, a ripple off the hop. The stagger is cut into the keyframes rather
+   than carried as a delay, so a paused loop holds every dot at rest, the pose
+   the face itself holds paused; and being timed to a face gesture, they answer
+   --face-motion rather than --loop-motion, so the two can never stop apart. */
+.thinking-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  opacity: 0.35;
+  animation-duration: 2s;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  animation-iteration-count: infinite;
+  animation-play-state: var(--face-motion);
+}
+
+.thinking-dots i:nth-child(1) {
+  animation-name: thinking-dot-1;
+}
+
+.thinking-dots i:nth-child(2) {
+  animation-name: thinking-dot-2;
+}
+
+.thinking-dots i:nth-child(3) {
+  animation-name: thinking-dot-3;
+}
+
+@keyframes thinking-dot-1 {
+  0%,
+  45% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+
+  55% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+
+  65%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+}
+
+@keyframes thinking-dot-2 {
+  0%,
+  53% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+
+  63% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+
+  73%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+}
+
+@keyframes thinking-dot-3 {
+  0%,
+  61% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+
+  71% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+
+  81%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
 }
 
 /* Luke's errand ---------------------------------------------------------- */
@@ -2568,6 +2693,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   .key-slot-confirm,
   .wing-mark,
   .wing-meter,
+  .wing-thinking,
   .sign-in-label,
   .session-row {
     transition-duration: 1ms;

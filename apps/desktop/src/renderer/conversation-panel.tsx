@@ -17,6 +17,7 @@ import {
 } from "./conversation-time-break";
 import { MarkdownMessage } from "./markdown-message";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
+import { ThinkingDots } from "./thinking-dots";
 
 export const CONVERSATION_ENTRY_SPEAKER = {
   YOU: "you",
@@ -115,11 +116,7 @@ function ConversationThinkingRow({
         <span className="conversation-bubble">
           <span className="conversation-thinking">
             <WingFace motion={FACE_MOTION.SUCCESS} repeat />
-            <span className="conversation-thinking-dots" aria-hidden="true">
-              <i />
-              <i />
-              <i />
-            </span>
+            <ThinkingDots />
             {elapsed ? <span className="conversation-thinking-elapsed">{elapsed}</span> : null}
             <span className="visually-hidden" role="status">
               {CONVERSATION_THINKING_LABEL}

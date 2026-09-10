@@ -1181,6 +1181,7 @@ export function App(): React.JSX.Element {
         fixtureSpeaking={fixtureSpeaking}
         hasAudioSignal={hasAudioSignal}
         voiceOpening={talkOpening}
+        thinking={brainRequests.some(brainRequestPending)}
         announcementsHeld={announcementsHeld}
         sessionsSettled={sessionsSettled}
         presentation={presentation}

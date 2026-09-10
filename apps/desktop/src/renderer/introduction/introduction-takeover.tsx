@@ -1099,6 +1099,9 @@ function IntroductionFlight({
           fixtureSpeaking={false}
           hasAudioSignal={meterAnalyser !== undefined}
           voiceOpening={false}
+          // The introduction runs before any account, so no run of Luke's can
+          // be under way behind its strip.
+          thinking={false}
           announcementsHeld={false}
           sessionsSettled={true}
           presentation={presentation}
