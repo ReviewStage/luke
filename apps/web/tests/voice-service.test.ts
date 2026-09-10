@@ -475,6 +475,7 @@ test("the introduction is created without an account, greeted exactly once after
   assert.ok(created);
   assert.equal(created.quota, undefined);
   assert.equal(context.accounts.resolved.length, 0);
+  assert.equal(context.accounts.introductions, 1);
   assert.equal(context.record.registered.length, 0);
 
   const create = context.openAi.creates[0];
@@ -582,21 +583,30 @@ test("an introduction seed beyond one bounded developer message is refused befor
   assert.equal(context.openAi.creates.length, 0);
 });
 
-test("an introduction spends the shared ceiling before its socket stands and is refused with 429 past it", async (t) => {
+test("an introduction spends the shared ceiling only for an admitted frame, and is refused past it before any session is spent", async (t) => {
   const context = await stand();
   t.after(() => context.stop());
 
-  const admitted = await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION));
-  assert.ok("reader" in admitted);
-  admitted.reader.socket.close();
-  await admitted.reader.closed;
-  assert.equal(context.accounts.introductions, 1);
+  const empty = await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION));
+  assert.ok("reader" in empty);
+  empty.reader.socket.close();
+  await empty.reader.closed;
+  const malformed = await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION));
+  assert.ok("reader" in malformed);
+  await send(malformed.reader.socket, createFrame([developerMessage("a"), developerMessage("b")]));
+  await malformed.reader.closed;
+  assert.equal(context.accounts.introductions, 0);
 
   context.accounts.introductionAnswer = { allowed: false };
-  assert.deepEqual(await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION)), {
-    status: UPGRADE_STATUS.TOO_MANY_REQUESTS,
-  });
-  assert.equal(context.accounts.introductions, 2);
+  const refused = await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION));
+  assert.ok("reader" in refused);
+  await send(refused.reader.socket, createFrame([developerMessage("Running: api on main.")]));
+  assert.equal(
+    hostedErrorSchema.parse(record(await refused.reader.next())),
+    HOSTED_API_ERROR.QUOTA_EXHAUSTED,
+  );
+  assert.equal((await refused.reader.closed).code, SOCKET_CLOSE_CODE.POLICY_VIOLATION);
+  assert.equal(context.accounts.introductions, 1);
   assert.equal(context.openAi.creates.length, 0);
 });
 
@@ -616,7 +626,6 @@ test("an upgrade carrying a browser Origin is refused with 403 on both routes", 
     { status: UPGRADE_STATUS.FORBIDDEN },
   );
   assert.equal(context.accounts.resolved.length, 0);
-  assert.equal(context.accounts.introductions, 0);
 });
 
 test("closing the service closes every desktop socket and refuses new upgrades with 503", async (t) => {

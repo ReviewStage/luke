@@ -48,7 +48,8 @@ import type { VoiceSessionRecord } from "./session-record.js";
  * hosted route uses, before any session exists. `/api/voice/introduction`
  * takes a fresh install with no account under the same durable daily meter
  * the introduction mint spends, so the ceiling is the deployment's and not one
- * function instance's, and on that route the sideband is the service's alone: it sends the greeting
+ * function instance's, spent only for an admitted opening frame, and on that
+ * route the sideband is the service's alone: it sends the greeting
  * once the session starts and shows the caller only captions and status.
  *
  * A connection is one function invocation, and the platform closes it at the
@@ -59,7 +60,7 @@ import type { VoiceSessionRecord } from "./session-record.js";
  * said between the two connections is not replayed.
  *
  * A refusal has one of two shapes the desktop reads: an HTTP status on the
- * upgrade (401, 429, 503) before any socket stands, or, once one does, a
+ * upgrade (401, 403, 503) before any socket stands, or, once one does, a
  * first frame carrying `{ error }` in the hosted vocabulary before the close.
  */
 
@@ -76,7 +77,6 @@ export const UPGRADE_STATUS = {
   /** The handshake carried a browser `Origin`; the desktop connects from its main process and never does. */
   FORBIDDEN: HTTP_STATUS.FORBIDDEN,
   NOT_FOUND: HTTP_STATUS.NOT_FOUND,
-  TOO_MANY_REQUESTS: HTTP_STATUS.TOO_MANY_REQUESTS,
   SERVICE_UNAVAILABLE: 503,
 } as const;
 
@@ -193,7 +193,7 @@ export class VoiceService {
       maxPayload: SERVICE_DEFAULTS.MAXIMUM_FRAME_BYTES,
     });
     this.#http.on("upgrade", (request, socket, head) => {
-      void this.#upgrade(request, socket, head);
+      this.#upgrade(request, socket, head);
     });
   }
 
@@ -236,16 +236,15 @@ export class VoiceService {
     });
   }
 
-  async #upgrade(request: IncomingMessage, socket: Duplex, head: Buffer): Promise<void> {
+  #upgrade(request: IncomingMessage, socket: Duplex, head: Buffer): void {
     socket.on("error", () => socket.destroy());
     const path = new URL(request.url ?? "/", "http://voice-service").pathname;
-    const decision = await this.#admit(request, routeForPath(path));
+    const decision = this.#admit(request, routeForPath(path));
     if ("status" in decision) {
       this.#log({ event: LOG_EVENT.UPGRADE_REFUSED, route: path, status: decision.status });
       socket.end(`HTTP/1.1 ${decision.status} Refused\r\nConnection: close\r\n\r\n`);
       return;
     }
-    if (socket.destroyed) return;
     this.#sockets.handleUpgrade(request, socket, head, (webSocket) => {
       const session = this.#serve(webSocket, decision).finally(() => {
         this.#active.delete(session);
@@ -254,13 +253,8 @@ export class VoiceService {
     });
   }
 
-  /**
-   * Who an upgrade admits before any socket stands, or the status it is
-   * refused with. An introduction spends the deployment's shared daily
-   * ceiling here, before the socket stands, so a refused caller costs nothing
-   * but the count itself.
-   */
-  async #admit(request: IncomingMessage, route: VoiceRoute | undefined): Promise<UpgradeDecision> {
+  /** Who an upgrade admits before any socket stands, or the status it is refused with. */
+  #admit(request: IncomingMessage, route: VoiceRoute | undefined): UpgradeDecision {
     if (!this.#admitting || this.#upstream === undefined) {
       return { status: UPGRADE_STATUS.SERVICE_UNAVAILABLE };
     }
@@ -270,9 +264,7 @@ export class VoiceService {
       const bearer = presentedBearer(request);
       return bearer === undefined ? { status: UPGRADE_STATUS.UNAUTHORIZED } : { route, bearer };
     }
-    return (await this.#accounts.spendIntroduction()).allowed
-      ? { route }
-      : { status: UPGRADE_STATUS.TOO_MANY_REQUESTS };
+    return { route };
   }
 
   /** One socket, one session: the opening frame, the creation or attachment, the pipe. */
@@ -346,15 +338,24 @@ export class VoiceService {
     this.#log({ event: LOG_EVENT.SESSION_ENDED, route, ...summary });
   }
 
-  /** A new session: authorized and spent, created at OpenAI, registered to its account, and attached. */
+  /**
+   * A new session: authorized and spent, created at OpenAI, registered to its
+   * account, and attached. The introduction spends the deployment's shared
+   * daily ceiling only once its frame has been admitted, as the mint spends
+   * only after reading a valid body, so an empty or malformed handshake costs
+   * the ceiling nothing.
+   */
   async #openCreated(
     upstream: LiveUpstream,
     admission: Admission,
     frame: SessionCreateFrame,
   ): Promise<Opened> {
     const { route } = admission;
-    if (route === VOICE_ROUTE.INTRODUCTION && !introductionInputAdmitted(frame)) {
-      return { refusal: HOSTED_API_ERROR.INVALID_REQUEST };
+    if (route === VOICE_ROUTE.INTRODUCTION) {
+      if (!introductionInputAdmitted(frame)) return { refusal: HOSTED_API_ERROR.INVALID_REQUEST };
+      if (!(await this.#accounts.spendIntroduction()).allowed) {
+        return { refusal: HOSTED_API_ERROR.QUOTA_EXHAUSTED };
+      }
     }
     const answer: SessionCreatedFrame = {
       type: VOICE_SERVICE_FRAME.SESSION_CREATED,

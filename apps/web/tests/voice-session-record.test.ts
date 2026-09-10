@@ -40,7 +40,7 @@ test("a registered session names its account, keeps its first owner, and answers
   }
 });
 
-test("usage snapshots overwrite one another unconfirmed, and the close confirms the seconds with when and why", async () => {
+test("usage snapshots overwrite one another unconfirmed, the close confirms the seconds with when and why, and a late snapshot leaves the close standing", async () => {
   const opened = await openHostedStoreTestDatabase();
   try {
     const owner = await opened.createUser();
@@ -74,6 +74,11 @@ test("usage snapshots overwrite one another unconfirmed, and the close confirms 
         usage: { seconds: 26.5, confirmed: true },
       },
     ]);
+    await record.noteUsage({ sessionId: "live_u", seconds: 30 });
+    assert.deepEqual(
+      (await read()).map((row) => row.usage),
+      [{ seconds: 26.5, confirmed: true }],
+    );
     await record.noteUsage({ sessionId: "live_unknown", seconds: 1 });
     assert.equal((await opened.db.select().from(voiceSessions)).length, 1);
   } finally {

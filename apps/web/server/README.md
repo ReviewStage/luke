@@ -214,9 +214,10 @@ past its `type`, and logs status codes, outcome names, and counts.
 
 `/api/voice/introduction` takes a fresh install with no account, under the
 same durable shared daily ceiling the introduction mint spends
-(`spendIntroductionMeter`, the `introduction_usage` row), taken before the
-socket stands so the ceiling is the deployment's and not one function
-instance's. There the sideband is
+(`spendIntroductionMeter`, the `introduction_usage` row), taken only once a
+valid `session.create` has arrived, as the mint spends only after a valid
+body, so the ceiling is the deployment's and an empty handshake costs it
+nothing. There the sideband is
 the function's alone: the caller may send only what a renderer's data channel
 may, is shown only what one is shown, and `greetingInstruction()` goes up once
 on `session.started`. The seed is bounded to one developer message of at most
@@ -268,13 +269,13 @@ the seconds are what the allowance is measured in.
 Before any socket stands, an HTTP status on the upgrade: `401` for
 `/api/voice/sessions` without a bearer, `403` for a handshake carrying a
 browser `Origin` header (the desktop connects from its main process and never
-sends one), `429` for an introduction past the meter, `503` while
-`OPENAI_API_KEY` is absent. Once a socket stands, one frame `{ "error": <reason> }`
+sends one), `503` while `OPENAI_API_KEY` is absent. Once a socket stands, one frame `{ "error": <reason> }`
 in `hostedErrorSchema`'s vocabulary, then a close with code 1008 and the same
 reason: `invalid-request` for a first frame that is not a valid `session.create`
 or `session.attach`, or an attach on the introduction; `invalid-token` for a
 bearer no account stands behind, and for an attach to a session this account
-did not create; `quota-exhausted`; `upstream-error` when OpenAI refused the
+did not create; `quota-exhausted` for a spent allowance, or an introduction
+past the shared ceiling; `upstream-error` when OpenAI refused the
 creation or the sideband could not attach; `upstream-throttled` when OpenAI
 answered 429.
 

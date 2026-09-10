@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import {
   VOICE_DELEGATION_MODE,
   type VoiceCloseReason,
@@ -12,8 +12,9 @@ import type { HostedStoreDatabase } from "../hosted/store/database.js";
  * Creation writes the row, so a later function connection can prove the
  * account asking to re-attach is the one that opened the session; every
  * `session.usage.updated` overwrites the usage with an unconfirmed snapshot,
- * never a sum; and `session.closed` writes the confirmed seconds beside when
- * and why the session ended. A connection that ends without `session.closed`
+ * never a sum, and only while the row is still open, so a snapshot arriving
+ * late on an earlier connection cannot unconfirm a close; and `session.closed`
+ * writes the confirmed seconds beside when and why the session ended. A connection that ends without `session.closed`
  * writes nothing more: the last snapshot standing with `closed_at` null is
  * the honest record, and a later connection's `session.closed` confirms it.
  * The seconds the quota meters are a separate ledger, `recordVoiceSeconds`.
@@ -64,7 +65,9 @@ export function voiceSessionRecord(
       await database
         .update(voiceSessions)
         .set({ usage: usage(input.seconds, false) })
-        .where(eq(voiceSessions.liveSessionId, input.sessionId));
+        .where(
+          and(eq(voiceSessions.liveSessionId, input.sessionId), isNull(voiceSessions.closedAt)),
+        );
     },
     async close(input) {
       await database
