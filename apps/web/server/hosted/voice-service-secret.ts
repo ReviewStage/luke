@@ -1,6 +1,12 @@
 import { timingSafeEqual } from "node:crypto";
-import { VOICE_SERVICE_SECRET_HEADER } from "../core.js";
-import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
+import { type Schema, type UnparsedWireValue, VOICE_SERVICE_SECRET_HEADER } from "../core.js";
+import {
+  BODY_READ,
+  errorResponse,
+  HOSTED_API_ERROR,
+  HOSTED_HTTP_STATUS,
+  readBoundedBody,
+} from "./http.js";
 
 /**
  * The one identity the two internal voice routes accept: the shared secret
@@ -15,8 +21,8 @@ export const VOICE_SERVICE_ENVIRONMENT = {
   SECRET: "VOICE_SERVICE_SECRET",
 } as const;
 
-/** The smallest body either internal route reads; a bearer and two ids never approach it. */
-export const VOICE_INTERNAL_BODY_BYTES = 16_384;
+/** The most either internal route reads of a body; a bearer and two ids never approach it. */
+const VOICE_INTERNAL_BODY_BYTES = 16_384;
 
 function secretMatches(request: Request, secret: string): boolean {
   const offered = Buffer.from(request.headers.get(VOICE_SERVICE_SECRET_HEADER)?.trim() ?? "");
@@ -25,15 +31,17 @@ function secretMatches(request: Request, secret: string): boolean {
 }
 
 /**
- * The gate every internal voice route opens with: POST only, a configured
- * secret, and a header that matches it. Answers the refusal to send, or
- * nothing when the request may proceed. A blank configured secret is the kill
- * switch, not a secret, so it reads as absent.
+ * The door every internal voice route opens with, answering the admitted
+ * request or the refusal to send: POST only; a configured secret, a blank one
+ * being the kill switch rather than a secret; a header that matches it; and a
+ * bounded JSON body the route's own wire schema admits. Nothing of the body is
+ * read before the secret has matched.
  */
-export function refuseUnlessVoiceService(
+export async function admitVoiceServiceRequest<Admitted>(
   request: Request,
   configuredSecret: string | undefined,
-): Response | undefined {
+  schema: Schema<Admitted>,
+): Promise<Admitted | Response> {
   if (request.method !== "POST") {
     return errorResponse(
       HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
@@ -47,5 +55,23 @@ export function refuseUnlessVoiceService(
   if (!secretMatches(request, secret)) {
     return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
   }
-  return undefined;
+
+  const body = await readBoundedBody(request, VOICE_INTERNAL_BODY_BYTES);
+  if (body.outcome === BODY_READ.TOO_LARGE) {
+    return errorResponse(HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE, HOSTED_API_ERROR.REQUEST_TOO_LARGE);
+  }
+  if (body.outcome !== BODY_READ.READ) {
+    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+  }
+  let payload: unknown;
+  try {
+    payload = JSON.parse(body.text);
+  } catch {
+    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+  }
+  // SAFETY: JSON.parse returns a runtime value; the route's wire schema validates it.
+  const admitted = schema.parse(payload as UnparsedWireValue);
+  return (
+    admitted ?? errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST)
+  );
 }

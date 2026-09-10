@@ -1,18 +1,7 @@
-import {
-  type UnparsedWireValue,
-  type VoiceAuthorizeAnswer,
-  voiceAuthorizeRequestSchema,
-} from "../core.js";
-import {
-  BODY_READ,
-  errorResponse,
-  HOSTED_API_ERROR,
-  HOSTED_HTTP_STATUS,
-  jsonResponse,
-  readBoundedBody,
-} from "./http.js";
+import { type VoiceAuthorizeAnswer, voiceAuthorizeRequestSchema } from "../core.js";
+import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import type { HostedSpend } from "./quota.js";
-import { refuseUnlessVoiceService, VOICE_INTERNAL_BODY_BYTES } from "./voice-service-secret.js";
+import { admitVoiceServiceRequest } from "./voice-service-secret.js";
 
 /**
  * Answers the hosted voice service's question before it creates a GPT Live
@@ -33,28 +22,12 @@ export interface VoiceAuthorizeOptions {
 }
 
 export async function handleVoiceAuthorize(options: VoiceAuthorizeOptions): Promise<Response> {
-  const { request } = options;
-  const refused = refuseUnlessVoiceService(request, options.serviceSecret);
-  if (refused) return refused;
-
-  const body = await readBoundedBody(request, VOICE_INTERNAL_BODY_BYTES);
-  if (body.outcome === BODY_READ.TOO_LARGE) {
-    return errorResponse(HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE, HOSTED_API_ERROR.REQUEST_TOO_LARGE);
-  }
-  if (body.outcome !== BODY_READ.READ) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
-  let payload: unknown;
-  try {
-    payload = JSON.parse(body.text);
-  } catch {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
-  // SAFETY: JSON.parse returns a runtime value; the wire schema validates it.
-  const ask = voiceAuthorizeRequestSchema.parse(payload as UnparsedWireValue);
-  if (!ask) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
+  const ask = await admitVoiceServiceRequest(
+    options.request,
+    options.serviceSecret,
+    voiceAuthorizeRequestSchema,
+  );
+  if (ask instanceof Response) return ask;
 
   const userId = await options.resolveUserId(ask.bearer);
   if (!userId) {
