@@ -29,7 +29,6 @@ import {
 } from "../live.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { frameText, routeForPath, VOICE_ROUTE, type VoiceRoute } from "./frames.js";
-import { IntroductionMeter } from "./introduction-meter.js";
 import { LOG_EVENT, type Log, standardOutputLog } from "./log.js";
 import { createLiveUpstream, type LiveUpstream } from "./openai.js";
 import { RELAY_DEFAULTS, relaySession, SOCKET_CLOSE_CODE } from "./relay.js";
@@ -47,8 +46,9 @@ import type { VoiceSessionRecord } from "./session-record.js";
  * Two upgrades stand. `/api/voice/sessions` takes a signed-in desktop under
  * its account bearer, resolved and spent by the same account code every
  * hosted route uses, before any session exists. `/api/voice/introduction`
- * takes a fresh install with no account under the function's own meter, and
- * on that route the sideband is the service's alone: it sends the greeting
+ * takes a fresh install with no account under the same durable daily meter
+ * the introduction mint spends, so the ceiling is the deployment's and not one
+ * function instance's, and on that route the sideband is the service's alone: it sends the greeting
  * once the session starts and shows the caller only captions and status.
  *
  * A connection is one function invocation, and the platform closes it at the
@@ -96,7 +96,6 @@ export const INTRODUCTION_INPUT_BOUNDS = {
 } as const;
 
 const BEARER_SCHEME = "Bearer ";
-const FORWARDED_FOR_HEADER = "x-forwarded-for";
 
 export interface VoiceServiceOptions {
   /** The GPT Live project key; absent, every upgrade is refused with 503. */
@@ -113,7 +112,6 @@ export interface VoiceServiceOptions {
   attachTimeoutMs?: number;
   createTimeoutMs?: number;
   firstFrameTimeoutMs?: number;
-  now?: () => number;
 }
 
 /** Who an upgrade admitted: a desktop with the `Authorization` value it presented, or an introduction with nothing. */
@@ -145,18 +143,6 @@ function presentedBearer(request: IncomingMessage): string | undefined {
   return authorization.slice(BEARER_SCHEME.length).trim().length > 0 ? authorization : undefined;
 }
 
-/**
- * The caller as the platform names it: the last `X-Forwarded-For` hop, which
- * is the one the proxy in front of this function appended and the only one a
- * client cannot write for itself, or the socket's own peer when nothing
- * stands in front.
- */
-function callerAddress(request: IncomingMessage): string {
-  const hops = headerValue(request.headers[FORWARDED_FOR_HEADER])?.split(",") ?? [];
-  const forwarded = hops[hops.length - 1]?.trim();
-  return forwarded || (request.socket.remoteAddress ?? "");
-}
-
 function introductionInputAdmitted(frame: SessionCreateFrame): boolean {
   return (
     frame.input.length <= INTRODUCTION_INPUT_BOUNDS.MESSAGES &&
@@ -178,7 +164,6 @@ export class VoiceService {
   readonly #accounts: VoiceAccounts;
   readonly #record: VoiceSessionRecord;
   readonly #upstream: LiveUpstream | undefined;
-  readonly #meter: IntroductionMeter;
   readonly #sockets: WebSocketServer;
   readonly #http = http.createServer((request, response) => {
     const path = new URL(request.url ?? "/", "http://voice-service").pathname;
@@ -203,13 +188,12 @@ export class VoiceService {
           attachTimeoutMs: options.attachTimeoutMs,
         })
       : undefined;
-    this.#meter = new IntroductionMeter({ now: options.now });
     this.#sockets = new WebSocketServer({
       noServer: true,
       maxPayload: SERVICE_DEFAULTS.MAXIMUM_FRAME_BYTES,
     });
     this.#http.on("upgrade", (request, socket, head) => {
-      this.#upgrade(request, socket, head);
+      void this.#upgrade(request, socket, head);
     });
   }
 
@@ -252,15 +236,16 @@ export class VoiceService {
     });
   }
 
-  #upgrade(request: IncomingMessage, socket: Duplex, head: Buffer): void {
+  async #upgrade(request: IncomingMessage, socket: Duplex, head: Buffer): Promise<void> {
     socket.on("error", () => socket.destroy());
     const path = new URL(request.url ?? "/", "http://voice-service").pathname;
-    const decision = this.#admit(request, routeForPath(path));
+    const decision = await this.#admit(request, routeForPath(path));
     if ("status" in decision) {
       this.#log({ event: LOG_EVENT.UPGRADE_REFUSED, route: path, status: decision.status });
       socket.end(`HTTP/1.1 ${decision.status} Refused\r\nConnection: close\r\n\r\n`);
       return;
     }
+    if (socket.destroyed) return;
     this.#sockets.handleUpgrade(request, socket, head, (webSocket) => {
       const session = this.#serve(webSocket, decision).finally(() => {
         this.#active.delete(session);
@@ -269,8 +254,13 @@ export class VoiceService {
     });
   }
 
-  /** Who an upgrade admits before any socket stands, or the status it is refused with. */
-  #admit(request: IncomingMessage, route: VoiceRoute | undefined): UpgradeDecision {
+  /**
+   * Who an upgrade admits before any socket stands, or the status it is
+   * refused with. An introduction spends the deployment's shared daily
+   * ceiling here, before the socket stands, so a refused caller costs nothing
+   * but the count itself.
+   */
+  async #admit(request: IncomingMessage, route: VoiceRoute | undefined): Promise<UpgradeDecision> {
     if (!this.#admitting || this.#upstream === undefined) {
       return { status: UPGRADE_STATUS.SERVICE_UNAVAILABLE };
     }
@@ -280,7 +270,7 @@ export class VoiceService {
       const bearer = presentedBearer(request);
       return bearer === undefined ? { status: UPGRADE_STATUS.UNAUTHORIZED } : { route, bearer };
     }
-    return this.#meter.spend(callerAddress(request)).allowed
+    return (await this.#accounts.spendIntroduction()).allowed
       ? { route }
       : { status: UPGRADE_STATUS.TOO_MANY_REQUESTS };
   }

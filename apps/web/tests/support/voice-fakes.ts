@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
 import type { VoiceCloseReason } from "../../server/db/voice-schema";
-import type { HostedSpend } from "../../server/hosted/quota";
+import type { HostedSpend, IntroductionSpend } from "../../server/hosted/quota";
 import { VOICE_SECONDS_OUTCOME } from "../../server/hosted/quota";
 import { LIVE_SESSIONS_PATH, LIVE_TRANSPORT_TYPE } from "../../server/live";
 import type { VoiceAccounts } from "../../server/voice/accounts";
@@ -163,6 +163,10 @@ export interface FakeAccounts extends VoiceAccounts {
   reports: RecordedSeconds[];
   /** What the next spend answers; open by default. */
   spendAnswer: HostedSpend;
+  /** What the next introduction spend answers; open by default. */
+  introductionAnswer: IntroductionSpend;
+  /** How many introductions were spent, refused ones included. */
+  introductions: number;
   /** The one bearer that resolves to `FAKE_USER_ID`; every other resolves to nobody. */
   knownBearer: string;
 }
@@ -175,6 +179,8 @@ export function fakeAccounts(): FakeAccounts {
     spent: [],
     reports: [],
     spendAnswer: { allowed: true, quota: FAKE_QUOTA },
+    introductionAnswer: { allowed: true },
+    introductions: 0,
     knownBearer: FAKE_BEARER,
     async resolveUserId(authorization) {
       fake.resolved.push(authorization);
@@ -183,6 +189,10 @@ export function fakeAccounts(): FakeAccounts {
     async spend(userId) {
       fake.spent.push(userId);
       return fake.spendAnswer;
+    },
+    async spendIntroduction() {
+      fake.introductions += 1;
+      return fake.introductionAnswer;
     },
     async recordSeconds(input) {
       fake.reports.push(input);

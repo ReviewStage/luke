@@ -2,7 +2,7 @@ import { auth } from "../auth.js";
 import { getDatabase } from "../db/index.js";
 import { oauthUserInfoFromAuthAnswer, userIdForAuthorization } from "../hosted/bearer.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "../hosted/openai.js";
-import { recordVoiceSeconds, spendHostedMeter } from "../hosted/quota.js";
+import { recordVoiceSeconds, spendHostedMeter, spendIntroductionMeter } from "../hosted/quota.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { VoiceService } from "./service.js";
 import { voiceSessionRecord } from "./session-record.js";
@@ -27,6 +27,7 @@ const deploymentAccounts: VoiceAccounts = {
       oauthUserInfoFromAuthAnswer(await auth.api.oauth2UserInfo(input)),
     ),
   spend: (userId) => spendHostedMeter(getDatabase(), { userId, now: Date.now() }),
+  spendIntroduction: () => spendIntroductionMeter(getDatabase(), { now: Date.now() }),
   recordSeconds: (input) => recordVoiceSeconds(getDatabase(), { ...input, now: Date.now() }),
 };
 

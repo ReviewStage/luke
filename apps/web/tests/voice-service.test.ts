@@ -26,7 +26,6 @@ import {
   SEED_ROLE,
   sessionInstructions,
 } from "../server/live";
-import { INTRODUCTION_METER_LIMITS } from "../server/voice/introduction-meter";
 import { LOG_EVENT, type LogEntry } from "../server/voice/log";
 import { SOCKET_CLOSE_CODE, UPSTREAM_CLOSED_REASON } from "../server/voice/relay";
 import {
@@ -583,45 +582,22 @@ test("an introduction seed beyond one bounded developer message is refused befor
   assert.equal(context.openAi.creates.length, 0);
 });
 
-test("the introduction meter refuses a caller's ninth upgrade of the day with 429 and admits another caller", async (t) => {
+test("an introduction spends the shared ceiling before its socket stands and is refused with 429 past it", async (t) => {
   const context = await stand();
   t.after(() => context.stop());
-  const caller = { "x-forwarded-for": "10.0.0.1, 203.0.113.7" };
 
-  for (let attempt = 0; attempt < INTRODUCTION_METER_LIMITS.PER_CALLER; attempt += 1) {
-    const opened = await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION), caller);
-    assert.ok("reader" in opened);
-    opened.reader.socket.close();
-    await opened.reader.closed;
-  }
-  assert.deepEqual(await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION), caller), {
+  const admitted = await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION));
+  assert.ok("reader" in admitted);
+  admitted.reader.socket.close();
+  await admitted.reader.closed;
+  assert.equal(context.accounts.introductions, 1);
+
+  context.accounts.introductionAnswer = { allowed: false };
+  assert.deepEqual(await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION)), {
     status: UPGRADE_STATUS.TOO_MANY_REQUESTS,
   });
-  const other = await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION), {
-    "x-forwarded-for": "198.51.100.2",
-  });
-  assert.ok("reader" in other);
-  other.reader.socket.close();
-});
-
-test("a caller cannot become another by writing an earlier X-Forwarded-For hop", async (t) => {
-  const context = await stand();
-  t.after(() => context.stop());
-
-  for (let attempt = 0; attempt < INTRODUCTION_METER_LIMITS.PER_CALLER; attempt += 1) {
-    const opened = await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION), {
-      "x-forwarded-for": `198.51.100.${attempt}, 203.0.113.7`,
-    });
-    assert.ok("reader" in opened);
-    opened.reader.socket.close();
-    await opened.reader.closed;
-  }
-  assert.deepEqual(
-    await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION), {
-      "x-forwarded-for": "198.51.100.99, 203.0.113.7",
-    }),
-    { status: UPGRADE_STATUS.TOO_MANY_REQUESTS },
-  );
+  assert.equal(context.accounts.introductions, 2);
+  assert.equal(context.openAi.creates.length, 0);
 });
 
 test("an upgrade carrying a browser Origin is refused with 403 on both routes", async (t) => {
@@ -640,6 +616,7 @@ test("an upgrade carrying a browser Origin is refused with 403 on both routes", 
     { status: UPGRADE_STATUS.FORBIDDEN },
   );
   assert.equal(context.accounts.resolved.length, 0);
+  assert.equal(context.accounts.introductions, 0);
 });
 
 test("closing the service closes every desktop socket and refuses new upgrades with 503", async (t) => {

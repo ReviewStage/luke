@@ -213,8 +213,10 @@ Luke's never transit the service. It keeps no conversation, reads no frame
 past its `type`, and logs status codes, outcome names, and counts.
 
 `/api/voice/introduction` takes a fresh install with no account, under the
-function's own meter (per hashed caller address and shared, per UTC day, in
-the instance's memory, so the ceiling is per instance). There the sideband is
+same durable shared daily ceiling the introduction mint spends
+(`spendIntroductionMeter`, the `introduction_usage` row), taken before the
+socket stands so the ceiling is the deployment's and not one function
+instance's. There the sideband is
 the function's alone: the caller may send only what a renderer's data channel
 may, is shown only what one is shown, and `greetingInstruction()` goes up once
 on `session.started`. The seed is bounded to one developer message of at most
