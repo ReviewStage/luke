@@ -260,6 +260,12 @@ export class ConversationThread {
     // no mark to settle its preview through, so the preview leaves now rather
     // than streaming for a transcript the recording path would refuse.
     if (!mark) this.dropPreview(itemId);
+    // With no turn held and no commit in flight, an item still unnamed can
+    // never be named: a discarded turn's stragglers, misread as a turn that
+    // has now settled. Their previews leave rather than streaming forever.
+    if (!this.#activeMark && this.#pendingMarks.length === 0) {
+      for (const orphan of [...this.#uncommitted.keys()]) this.dropPreview(orphan);
+    }
   }
 
   /**
@@ -328,11 +334,14 @@ export class ConversationThread {
     const mark = this.#marks.get(itemId);
     if (mark) {
       if (!conversationEntryBelongsToConversation(mark.generation, this.#generation)) return;
-    } else if (this.#activeMark || this.#pendingMarks.length > 0) {
-      const entry = this.#uncommitted.get(itemId);
-      if (entry === undefined) this.#uncommitted.set(itemId, { closed: false });
-    } else {
-      return;
+    } else if (!this.#uncommitted.has(itemId)) {
+      // Whose turn a first unnamed delta belongs to is read off the lifecycle
+      // at its arrival: words while a turn is held are that turn's, and words
+      // with only a commit in flight can only be that commit's — born closed,
+      // so a discard of the next held turn cannot take them down.
+      if (this.#activeMark) this.#uncommitted.set(itemId, { closed: false });
+      else if (this.#pendingMarks.length > 0) this.#uncommitted.set(itemId, { closed: true });
+      else return;
     }
     const next = new Map(this.#previews);
     next.set(itemId, (next.get(itemId) ?? "") + delta);

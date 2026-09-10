@@ -199,6 +199,47 @@ test("a discarded turn takes its live words with it, sparing a turn already comm
   );
 });
 
+test("words whose first delta lands after the release survive the next press's discard", () => {
+  const { subject } = thread();
+  subject.seed([]);
+  // Turn one is released before its transcription says a word: the first
+  // delta arrives with only the commit in flight, so it can only be that
+  // commit's — never the next held turn's to discard.
+  subject.openTurn();
+  subject.closeTurn();
+  subject.previewSpokenAsk("item-1", "first ask");
+  subject.openTurn();
+
+  subject.discardTurn();
+
+  assert.deepEqual([...subject.previews.values()], ["first ask"]);
+  subject.commitTurn("item-1");
+  subject.rememberSpokenAsk("first ask", "item-1");
+  assert.deepEqual(
+    subject.entries.map((entry) => entry.words),
+    ["first ask"],
+  );
+});
+
+test("a discarded turn's stragglers cannot outlive the turns in flight", () => {
+  const { subject } = thread();
+  subject.seed([]);
+  // A discarded turn's cleared audio can still flush a delta while the next
+  // turn's commit is out. No commit will ever name its item, so once every
+  // turn in flight has settled, the words it drew must leave rather than
+  // stream forever.
+  subject.openTurn();
+  subject.discardTurn();
+  subject.openTurn();
+  subject.closeTurn();
+  subject.previewSpokenAsk("item-stray", "never mind");
+  subject.previewSpokenAsk("item-2", "second ask");
+
+  subject.commitTurn("item-2");
+
+  assert.deepEqual([...subject.previews.values()], ["second ask"]);
+});
+
 test("a failed transcription takes its live words with it", () => {
   const { subject } = thread();
   subject.seed([]);
