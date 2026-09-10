@@ -66,7 +66,9 @@ export interface AppGuideSetting {
    * the choice exactly as `choices` lists it. A choice absent here takes no
    * level. This is what lets one spoken change name both halves of a stored
    * pairing at once: `change_app_setting` accepts an effort only for a value
-   * this field lists levels for, and refuses it everywhere else.
+   * this field lists levels for, refuses one on any other choice here, and on
+   * a setting with no levels at all ignores it, so a volunteered effort never
+   * blocks a change it could not have meant anything to.
    */
   efforts?: Readonly<Partial<Record<string, readonly string[]>>>;
   /** Whether a spoken ask may change it; false means describe, never act. */

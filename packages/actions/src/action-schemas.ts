@@ -247,7 +247,10 @@ export const ISSUE_COMMENT_REQUEST = record({ ...ISSUE_IDENTITY_FIELDS, body: CO
 export const SETTING_REQUEST = record({
   setting_id: s.text({ description: "The setting ID." }),
   value: s.text({ description: "The new value." }),
-  effort: OPTIONAL_EFFORT,
+  effort: OPTIONAL_EFFORT.describe(
+    "An effort level, only when the developer named one and the setting's guide line lists " +
+      "efforts for the value; omit it everywhere else.",
+  ),
 });
 
 /** The narrowing as it arrives on each surface; absent is no narrowing at all. */
