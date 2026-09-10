@@ -368,10 +368,13 @@ Canonical commands:
   facts into ordered sections, a stable prefix, a dynamic suffix, and
   diagnostics. The facts come from the agent's identity workspace under its
   own directory (`agents/main/workspace`): `AGENTS.md` for operating
-  instructions and tool notes, `SOUL.md` for the persona, `IDENTITY.md`,
+  instructions and tool notes, `IDENTITY.md`,
   `USER.md` for stable facts about the developer, `MEMORY.md` for curated
   memory, and `BOOTSTRAP.md` for first-time setup, following OpenClaw
-  `b7528507`'s prompt composition. A
+  `b7528507`'s prompt composition. The persona itself is the build's
+  (`@sidecar/guide`'s `LUKE_PERSONA`), handed to the prompt as its own section
+  right after the identity line and never a workspace file, so every surface
+  that gives Luke a voice moves together when it changes. A
   missing file is seeded once at launch; an existing one, edited or not, is
   never rewritten by an upgrade. Each file is cut to 20,000 characters and
   the set to 60,000, and a cut is named in the prompt and the diagnostics

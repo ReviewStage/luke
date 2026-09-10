@@ -370,7 +370,7 @@ test("a housekeeping write is bounded to today's note and to appending", () => {
   assert.match(prompt.ask, /memory\/2026-09-08\.md/u);
   assert.ok(
     prompt.system.includes(
-      "Treat workspace bootstrap and reference files such as MEMORY.md, SOUL.md, USER.md, and AGENTS.md as read-only during this turn; never overwrite, replace, or edit them.",
+      "Treat workspace bootstrap and reference files such as MEMORY.md, USER.md, and AGENTS.md as read-only during this turn; never overwrite, replace, or edit them.",
     ),
   );
 });

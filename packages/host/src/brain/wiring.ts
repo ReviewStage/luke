@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   BRAIN_IDENTITY_LINE,
   BRAIN_INPUT_MARKER,
+  BRAIN_PERSONA,
   BRAIN_TURN_KIND,
   BRAIN_TURN_TRIGGER,
   BRAIN_WAKE_KIND,
@@ -540,6 +541,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
         ...(child ? { child } : undefined),
       },
       identity: BRAIN_IDENTITY_LINE,
+      persona: BRAIN_PERSONA,
       tools: policy.allowed.map((tool) => ({ name: tool.schema.name, groups: tool.groups })),
       toolNotes: brainToolNotes(),
       runtimeContextMarker: BRAIN_INPUT_MARKER.STANDING_CONTEXT,

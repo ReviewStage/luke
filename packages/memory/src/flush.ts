@@ -165,7 +165,6 @@ const APPEND_ONLY_HINT = (dateStamp: string) =>
   `If ${dailyNotePathFor(dateStamp)} already exists, APPEND new content only and do not overwrite existing entries.`;
 const READ_ONLY_FILES: readonly string[] = [
   WORKSPACE_FILE.MEMORY,
-  WORKSPACE_FILE.SOUL,
   WORKSPACE_FILE.USER,
   WORKSPACE_FILE.AGENTS,
 ];

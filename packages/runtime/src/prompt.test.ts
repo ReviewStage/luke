@@ -33,7 +33,6 @@ import {
 const testSeed = (name: WorkspaceFile) => `# ${name}\n\nseeded for the test\n`;
 const TEST_SEEDS: WorkspaceSeeds = {
   [WORKSPACE_FILE.AGENTS]: testSeed(WORKSPACE_FILE.AGENTS),
-  [WORKSPACE_FILE.SOUL]: testSeed(WORKSPACE_FILE.SOUL),
   [WORKSPACE_FILE.IDENTITY]: testSeed(WORKSPACE_FILE.IDENTITY),
   [WORKSPACE_FILE.USER]: testSeed(WORKSPACE_FILE.USER),
   [WORKSPACE_FILE.MEMORY]: testSeed(WORKSPACE_FILE.MEMORY),
@@ -42,7 +41,6 @@ const TEST_SEEDS: WorkspaceSeeds = {
 
 const FILES = boundBootstrapFiles([
   { name: WORKSPACE_FILE.AGENTS, path: "/w/AGENTS.md", content: "# AGENTS.md\n\nBe brief." },
-  { name: WORKSPACE_FILE.SOUL, path: "/w/SOUL.md", content: "# SOUL.md\n\nDry wit." },
   { name: WORKSPACE_FILE.IDENTITY, path: "/w/IDENTITY.md", content: "Name: Luke" },
   { name: WORKSPACE_FILE.USER, path: "/w/USER.md", content: "Prefers tests." },
   { name: WORKSPACE_FILE.BOOTSTRAP, path: "/w/BOOTSTRAP.md", content: undefined },
@@ -53,6 +51,7 @@ function facts(overrides: Partial<PromptFacts> = {}): PromptFacts {
   return {
     profile: PROMPT_PROFILE.FULL,
     identity: "You are the agent under test.",
+    persona: "Witty and warm.",
     tools: [
       { name: "list_sessions", groups: ["read"] },
       { name: "read_transcript", groups: ["read"] },
@@ -85,6 +84,7 @@ test("the full profile emits every section in order, files injected, skills list
     built.sections.map((section) => section.id),
     [
       PROMPT_SECTION.IDENTITY,
+      PROMPT_SECTION.PERSONA,
       PROMPT_SECTION.TOOLING,
       PROMPT_SECTION.TOOL_NOTES,
       PROMPT_SECTION.SAFETY,
@@ -97,7 +97,7 @@ test("the full profile emits every section in order, files injected, skills list
       PROMPT_SECTION.RUNTIME,
     ],
   );
-  assert.ok(built.stablePrefix.includes("## SOUL.md\n\n# SOUL.md\n\nDry wit."));
+  assert.ok(built.stablePrefix.includes("# Persona\n\nWitty and warm."));
   assert.ok(built.stablePrefix.includes("<location>/skills/deploy/SKILL.md</location>"));
   // Configured instructions and loaded skills instruct; observed text never does, and the
   // listed skill is reached through load_skill, not a workspace read.
@@ -140,10 +140,23 @@ test("the stable prefix is byte-identical across turns whose dynamic facts diffe
 test("the minimal profile carries AGENTS.md alone and no persona, identity, user, or memory file", () => {
   const built = buildSystemPrompt(facts({ profile: PROMPT_PROFILE.MINIMAL }));
   assert.ok(built.text.includes("Be brief."));
-  for (const absent of ["Dry wit.", "Name: Luke", "Prefers tests.", "Remember the deploy."]) {
+  for (const absent of [
+    "Witty and warm.",
+    "Name: Luke",
+    "Prefers tests.",
+    "Remember the deploy.",
+  ]) {
     assert.ok(!built.text.includes(absent), absent);
   }
   assert.ok(!built.sections.some((section) => section.id === PROMPT_SECTION.MEMORY));
+  assert.ok(!built.sections.some((section) => section.id === PROMPT_SECTION.PERSONA));
+  assert.ok(
+    built.diagnostics.some(
+      (diagnostic) =>
+        diagnostic.kind === PROMPT_DIAGNOSTIC.SECTION_OMITTED &&
+        diagnostic.subject === PROMPT_SECTION.PERSONA,
+    ),
+  );
   assert.ok(built.sections.some((section) => section.id === PROMPT_SECTION.SAFETY));
   assert.ok(built.sections.some((section) => section.id === PROMPT_SECTION.SKILLS));
   assert.ok(
@@ -159,7 +172,7 @@ test("a truncated or missing file is named in the notice and the diagnostics", (
   const perFile = BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE;
   const bounded = boundBootstrapFiles([
     { name: WORKSPACE_FILE.AGENTS, path: "/w/AGENTS.md", content: "a".repeat(perFile + 50) },
-    { name: WORKSPACE_FILE.SOUL, path: "/w/SOUL.md", content: undefined },
+    { name: WORKSPACE_FILE.IDENTITY, path: "/w/IDENTITY.md", content: undefined },
   ]);
   const built = buildSystemPrompt(facts({ bootstrapFiles: bounded, skills: [] }));
   const notice = built.sections.find((section) => section.id === PROMPT_SECTION.BOOTSTRAP_NOTICE);
@@ -169,7 +182,7 @@ test("a truncated or missing file is named in the notice and the diagnostics", (
     built.diagnostics.map((diagnostic) => [diagnostic.kind, diagnostic.subject]),
     [
       [PROMPT_DIAGNOSTIC.FILE_TRUNCATED, WORKSPACE_FILE.AGENTS],
-      [PROMPT_DIAGNOSTIC.FILE_MISSING, WORKSPACE_FILE.SOUL],
+      [PROMPT_DIAGNOSTIC.FILE_MISSING, WORKSPACE_FILE.IDENTITY],
     ],
   );
 });
@@ -204,6 +217,7 @@ test("gathering reads the workspace under the configuration, lists eligible skil
   const common = {
     configuration: store.snapshot(),
     identity: "You are the agent under test.",
+    persona: "Witty and warm.",
     tools: [],
     toolNotes: [],
     runtimeContextMarker: "[context]",
@@ -214,7 +228,7 @@ test("gathering reads the workspace under the configuration, lists eligible skil
     full.skills.map((skill) => skill.name),
     ["deploy"],
   );
-  assert.equal(full.bootstrapFiles.length, 6);
+  assert.equal(full.bootstrapFiles.length, 5);
   assert.ok(full.bootstrapFiles.every((file) => !file.missing));
   const child = await gatherPromptFacts({
     ...common,

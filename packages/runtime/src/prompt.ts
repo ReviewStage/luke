@@ -24,6 +24,8 @@ import {
  * at a cache boundary: everything above it is stable across the turns of a
  * conversation and everything below it changes per turn, so a provider's
  * prefix cache sees the same bytes until a workspace file actually changes.
+ * The persona is a section handed in like the identity line: the product owns
+ * its words, this package owns where they sit.
  * The order and the profiles follow OpenClaw `b7528507`
  * (`docs/concepts/system-prompt.md`).
  */
@@ -37,6 +39,7 @@ export type PromptProfile = (typeof PROMPT_PROFILE)[keyof typeof PROMPT_PROFILE]
 
 export const PROMPT_SECTION = {
   IDENTITY: "identity",
+  PERSONA: "persona",
   TOOLING: "tooling",
   TOOL_NOTES: "tool_notes",
   SAFETY: "safety",
@@ -55,6 +58,7 @@ export type PromptSectionId = (typeof PROMPT_SECTION)[keyof typeof PROMPT_SECTIO
 /** The sections in the order they are emitted; the boundary sits after the last stable one. */
 export const PROMPT_SECTION_ORDER: readonly PromptSectionId[] = [
   PROMPT_SECTION.IDENTITY,
+  PROMPT_SECTION.PERSONA,
   PROMPT_SECTION.TOOLING,
   PROMPT_SECTION.TOOL_NOTES,
   PROMPT_SECTION.SAFETY,
@@ -141,6 +145,8 @@ export interface PromptFacts {
   readonly profile: PromptProfile;
   /** The one line every profile opens with, saying who the agent is; the product's words, not this package's. */
   readonly identity: string;
+  /** Who the agent is, in the product's words; absent in a profile that carries none. */
+  readonly persona?: string;
   /** Every tool the run is offered, after policy: the prompt names them and nothing the policy removed. */
   readonly tools: readonly PromptToolFacts[];
   /** The build's own lines about the turns and the tools, in the fixed vocabulary. */
@@ -255,6 +261,7 @@ function runtimeText(facts: PromptFacts["runtime"]): string {
 
 const HEADINGS = {
   [PROMPT_SECTION.IDENTITY]: "Identity",
+  [PROMPT_SECTION.PERSONA]: "Persona",
   [PROMPT_SECTION.TOOLING]: "Tooling",
   [PROMPT_SECTION.TOOL_NOTES]: "Tool Notes",
   [PROMPT_SECTION.SAFETY]: "Safety",
@@ -285,6 +292,8 @@ function sectionText(id: PromptSectionId, facts: PromptFacts, files: readonly Bo
   switch (id) {
     case PROMPT_SECTION.IDENTITY:
       return facts.identity;
+    case PROMPT_SECTION.PERSONA:
+      return facts.persona ?? "";
     case PROMPT_SECTION.TOOLING:
       return toolingText(facts.tools);
     case PROMPT_SECTION.TOOL_NOTES:
@@ -397,6 +406,8 @@ export interface GatherOptions {
   readonly run: RunDescription;
   /** The identity line the prompt opens with: the product's words, handed in rather than known here. */
   readonly identity: string;
+  /** The persona section, handed in like the identity line; a profile that carries none omits it. */
+  readonly persona?: string;
   readonly tools: readonly PromptToolFacts[];
   readonly toolNotes: readonly string[];
   readonly runtimeContextMarker: string;
@@ -447,6 +458,7 @@ export async function gatherPromptFacts(options: GatherOptions): Promise<PromptF
   return {
     profile,
     identity: options.identity,
+    ...(options.persona !== undefined ? { persona: options.persona } : undefined),
     tools: options.tools,
     toolNotes: options.toolNotes,
     runtimeContextMarker: options.runtimeContextMarker,
