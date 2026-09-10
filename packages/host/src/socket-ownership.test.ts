@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { BrainAgent, BrainRequestRecord, BrainSubmission } from "@sidecar/brain";
-import { DeliveryLedger } from "@sidecar/brain";
 import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
 import {
   GATEWAY_CLIENT_ROLE,
@@ -20,18 +19,16 @@ import {
   WebSocketTransport,
 } from "@sidecar/gateway/websocket";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
-import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import { isRecord, type WireValue } from "@sidecar/wire";
 import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
 import type { ConversationOperations } from "./conversation-operations.js";
 import { HOST_NATIVE_NODE_ID, HOST_NODE_CAPABILITY } from "./node-capabilities.js";
-import { createGatewayService, type GrantedWords } from "./service.js";
-import { VoiceReceiver } from "./voice-receiver.js";
+import { createGatewayService } from "./service.js";
 
 /**
  * The ownership the client and host boundary claims, exercised over a real
- * socket: the host holds the asks, the Conversation, and the receiver; a client
+ * socket: the host holds the asks and the Conversation; a client
  * that dies takes none of it with it; the next client finds it all; the
  * host's native asks answer typed unavailable while no client stands; and
  * the explicit shutdown counts what the durable records still hold.
@@ -91,19 +88,12 @@ function fakeHost(options: { persistCancellations?: boolean } = {}) {
     },
     markAskRecorded: async () => true,
   } as unknown as BrainAgent;
-  const deliveries = new DeliveryLedger<GrantedWords>({
-    nextDeliveryId: () => `delivery-${++ids}`,
-  });
-  const receiver = new VoiceReceiver();
   const service = createGatewayService({
     brain: {
       current: () => agent,
       agentForRun: (runId) => (live.has(runId) ? agent : undefined),
-      conversationForRun: (runId) => (live.has(runId) ? MAIN_SESSION_KEY : undefined),
       allRequests: () => [...live.values()],
       generationId: () => "gen-1",
-      holdsGeneration: (generationId) => generationId === "gen-1",
-      publicationSettled: () => Promise.resolve(),
       // SAFETY: no test here reaches a child; the fixture stands in for the service.
       children: {} as ChildRunService,
       // SAFETY: only the revision is read; the fixture stands in for the snapshot.
@@ -119,17 +109,14 @@ function fakeHost(options: { persistCancellations?: boolean } = {}) {
     } as unknown as ConversationOperations,
     memory: { status: () => ({}) },
     observedSessionCount: () => 0,
-    deliveries,
-    receiver,
     recordConversationEntry: (entry) => {
       lines.push(entry);
       return true;
     },
     now: () => NOW,
     createId: () => `id-${++ids}`,
-    onOperatorDisconnected: () => receiver.reset(),
   });
-  return { service, live, persisted, lines, receiver, agent };
+  return { service, live, persisted, lines, agent };
 }
 
 async function listen(service: ReturnType<typeof fakeHost>["service"]) {
@@ -195,7 +182,7 @@ test("an ask and its Conversation line survive the client that submitted them dy
   }
 });
 
-test("while no client stands, a native capability the host needs answers unavailable and the receiver epoch has ended", async () => {
+test("while no client stands, a native capability the host needs answers unavailable", async () => {
   const f = fakeHost();
   const { host, port } = await listen(f.service);
   try {
@@ -212,8 +199,6 @@ test("while no client stands, a native capability the host needs answers unavail
         })
       ).ok,
     );
-    const epoch = f.receiver.begin();
-    assert.equal(f.receiver.markReady(epoch), true);
     const served = await f.service.nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, {
       url: "https://a",
     });
@@ -224,8 +209,6 @@ test("while no client stands, a native capability the host needs answers unavail
       url: "https://b",
     });
     assert.equal(absent.status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
-    assert.equal(f.receiver.isReady(), false);
-    assert.notEqual(f.receiver.epoch(), epoch);
   } finally {
     await host.close();
   }

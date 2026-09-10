@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { type BrainDelivery, DeliveryLedger, workspaceProjectContextText } from "@sidecar/brain";
+import { type BrainDelivery, workspaceProjectContextText } from "@sidecar/brain";
 import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
 import {
@@ -55,7 +55,6 @@ import {
   INERT_MEMORY_WIRING,
   type MemoryWiring,
 } from "./notebook-memory.js";
-import type { GrantedWords } from "./service.js";
 import { agentRootPath } from "./store-path.js";
 import { type StoreWiring, wireStore } from "./store-wiring.js";
 import { reporterOf } from "./wire-helpers.js";
@@ -66,7 +65,6 @@ export interface BrainComposer extends Composer {
   readonly wiring: BrainWiring;
   readonly store: StoreWiring;
   readonly conversations: ReturnType<typeof conversationOperations>;
-  readonly deliveries: DeliveryLedger<GrantedWords>;
   memoryMode: () => ReturnType<MemoryWiring["mode"]>;
   syncMemory: () => void;
 }
@@ -106,7 +104,6 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
     onDirectoryChanged: () => undefined,
     report,
   });
-  const deliveries = new DeliveryLedger<GrantedWords>({ nextDeliveryId: createId });
   let appGuide: AppGuideSnapshot = EMPTY_APP_GUIDE;
   let stopConversationMaintenance: (() => void) | undefined;
 
@@ -228,10 +225,8 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
     recordConversationEntry: (entry, recordedAt, sessionKey) =>
       store.recordConversationEntry(entry, recordedAt, sessionKey),
     broadcastRequests: (snapshots) => kernel.service().runsReported(snapshots),
-    onEndPublished: (record, sessionKey) => kernel.service().endPublished(record, sessionKey),
     onGenerationReplaced: (sessionKey) => {
       if (sessionKey === MAIN_SESSION_KEY) announcements.dropBriefings();
-      kernel.service().generationReplaced(sessionKey);
     },
     actions: {
       sessionActions: observation.sessionActions,
@@ -310,7 +305,6 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
     wiring,
     store,
     conversations,
-    deliveries,
     memoryMode: () => memory.mode(),
     syncMemory: () => {
       void memory.sync();

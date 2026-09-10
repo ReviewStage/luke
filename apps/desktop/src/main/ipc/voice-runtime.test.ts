@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { runModeFor, VoiceReceiver } from "@sidecar/host";
+import { runModeFor } from "@sidecar/host";
 import type { WireRecord } from "@sidecar/wire";
 import type { WebContents } from "electron";
 import { channels } from "#shared/bridge";
@@ -34,6 +34,32 @@ const RUN = {
   platform: "darwin",
 } as const;
 
+/**
+ * The retired receiver as this runtime's seam sees it: one epoch at a time,
+ * ready only on the current epoch's first report, unready again on the next
+ * begin.
+ */
+class EpochReceiver {
+  #epoch = 0;
+  #ready = false;
+
+  begin(): number {
+    this.#epoch += 1;
+    this.#ready = false;
+    return this.#epoch;
+  }
+
+  isReady(): boolean {
+    return this.#ready;
+  }
+
+  markReady(epoch: number): boolean {
+    if (epoch !== this.#epoch || this.#ready) return false;
+    this.#ready = true;
+    return true;
+  }
+}
+
 function fixture(clearConversation: () => Promise<boolean>) {
   const sentToVoice: { channel: string; payload: WireRecord }[] = [];
   const liveCalls: string[] = [];
@@ -58,7 +84,7 @@ function fixture(clearConversation: () => Promise<boolean>) {
     setVoiceExchange: () => undefined,
     broadcast: () => undefined,
   } as unknown as PanelManager;
-  const receiver = new VoiceReceiver();
+  const receiver = new EpochReceiver();
   const dependencies = {
     panels,
     voiceWindow,

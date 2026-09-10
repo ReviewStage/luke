@@ -21,8 +21,9 @@ import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { MAIN_SESSION_KEY, REASONING_EFFORT } from "@sidecar/runtime/vocabulary";
 import { APP_SETTING_SCHEMA, VOICE_SOURCE, type VoiceSource } from "@sidecar/settings";
 import { VoiceCapabilityAssembler, type VoiceSettings } from "@sidecar/voice";
+import { scriptedOpenSocket } from "@sidecar/voice/testing";
 import { BrainHost } from "./brain/host.js";
-import { transitionVoiceCredential } from "./voice-credential-transition.js";
+import { transitionVoiceSource } from "./voice-source-transition.js";
 
 const HELD_READ = {
   SOURCE: "source",
@@ -94,6 +95,9 @@ function composition() {
     fixtureRun: () => false,
     accountSignedIn: () => gate.accountSignedIn,
     hostedServiceBaseUrl: "https://luke.test",
+    // A transition builds the live source and opens nothing on it; the seam
+    // is scripted to answer no opening at all.
+    openSocket: scriptedOpenSocket([]).openSocket,
     refreshAccount: async () => undefined,
     fetch: async (input) => {
       const url = String(input);
@@ -153,7 +157,7 @@ function composition() {
       });
     });
   const transition = () =>
-    transitionVoiceCredential({
+    transitionVoiceSource({
       retire: () => host.retire(),
       apply: () => assembler.apply(),
       rebuild,
@@ -190,12 +194,12 @@ function assertHostedSet(c: ReturnType<typeof composition>) {
   // The hosted adapter knows no model until the service names one on its
   // first turn; the developer's own key is never what it runs on.
   assert.ok([undefined, "gpt-hosted"].includes(c.assembler.brainModel.model));
-  assert.ok(c.assembler.realtimeCredentials);
+  assert.ok(c.assembler.liveSessions);
 }
 
 function assertAbsentSet(c: ReturnType<typeof composition>) {
   assert.equal(c.assembler.brainModel, undefined);
-  assert.equal(c.assembler.realtimeCredentials, undefined);
+  assert.equal(c.assembler.liveSessions, undefined);
   assert.equal(c.host.current(), undefined);
 }
 
@@ -271,7 +275,7 @@ for (const held of Object.values(HELD_READ)) {
     assert.ok(hostedAgent);
     const reportsAfterNewer = c.reports.length;
     const warmsAfterNewer = c.warms.length;
-    const realtime = c.assembler.realtimeCredentials;
+    const live = c.assembler.liveSessions;
 
     // A run stands on the correct successor, its model turn outstanding.
     const accepted = await hostedAgent.submitAsk({
@@ -291,7 +295,7 @@ for (const held of Object.values(HELD_READ)) {
     await c.host.settled();
     // Nothing of the older set was published, not even in part.
     assertHostedSet(c);
-    assert.equal(c.assembler.realtimeCredentials, realtime);
+    assert.equal(c.assembler.liveSessions, live);
     assert.equal(c.host.current(), hostedAgent);
     assert.equal(c.reports.length, reportsAfterNewer);
     assert.equal(c.warms.length, warmsAfterNewer);

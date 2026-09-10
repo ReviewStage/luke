@@ -5,9 +5,7 @@
  * only the model and the disk synthetic.
  */
 export {
-  answered,
   answerOf,
-  BRAIN_HARNESS_NOW,
   brainHarness,
   heldModel,
 } from "./brain-harness.js";

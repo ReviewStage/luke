@@ -1,7 +1,7 @@
 import type { VoiceCapabilityApplication } from "@sidecar/voice";
 
 /**
- * One credential transition, from the seams the host owns: the brain
+ * One voice source transition, from the seams the host owns: the brain
  * wiring's synchronous retire, the assembler's application, and the rebuild
  * that installs what the applied capability allows. The retire is immediate,
  * so no run keeps the old source's authority past the transition's first
@@ -14,15 +14,13 @@ import type { VoiceCapabilityApplication } from "@sidecar/voice";
  * nothing and leaves the host empty for the newer one to fill. Answers
  * whether this transition was the one that installed.
  */
-export interface VoiceCredentialTransitionSeams {
+export interface VoiceSourceTransitionSeams {
   retire: () => void;
   apply: () => Promise<VoiceCapabilityApplication>;
   rebuild: () => Promise<void>;
 }
 
-export async function transitionVoiceCredential(
-  seams: VoiceCredentialTransitionSeams,
-): Promise<boolean> {
+export async function transitionVoiceSource(seams: VoiceSourceTransitionSeams): Promise<boolean> {
   seams.retire();
   const applied = await seams.apply();
   if (!applied.latest || !applied.isCurrent()) return false;

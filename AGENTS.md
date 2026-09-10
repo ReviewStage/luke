@@ -458,8 +458,9 @@ Canonical commands:
   `@sidecar/wire` schemas in `protocol.ts`, and answered by the host's live
   composer, which owns the one session; the `speech` and `receiver` methods
   and the `speech.offered` and `speech.withdrawn` events are the retired
-  Realtime path's, still named and still answered but reached by no client
-  of this build). No credential or account secret travels in any answer or
+  Realtime path's, still named but answered by no handler — the server's
+  typed unknown-method refusal stands — and reached by no client of this
+  build). No credential or account secret travels in any answer or
   event, and no credential of any kind reaches the voice window: the host
   creates the session with the key it holds and answers the peer's SDP offer
   with the provider's SDP answer, the one thing the window is handed. The
@@ -482,9 +483,7 @@ Canonical commands:
   every provider registration and the roster and observation loops, Superset
   and Conductor, the hook registration and spool watchers under the state
   root it is handed, Linear, the calendar readers and their holds, the live
-  voice session and the retired speech arbiter beside it (the reply
-  deliveries and the receiver epochs, still composed and reached by no
-  client of this build), the runtime
+  voice session, the runtime
   store worker, the notebook and its maintenance, the brain, the
   conversation operations, history maintenance, the
   development trace, and the arrival and calendar-onboarding records. The
@@ -529,14 +528,26 @@ Canonical commands:
   service: an observed conversation's briefing, a typed ask's reply, and the
   two onboarding beats are each appended into the standing session as
   commentary with no delegation id, or into the one session the voice window
-  opens muted when the service says it wants one, and the retired reply-grant
-  ledger, receiver epochs, and speech offers receive nothing. Every append
-  awaits its acknowledgment or the error naming it, "spoken" is settled by
-  the first output transcript past the append's end and unsettled by a
-  moderation cut, and what is guaranteed is that the words reached the
-  session, never that they were heard. Meeting and pause holds are the
-  service's own queue, and a held observation briefing is re-decided in the
-  conversation that decided it, never through main. The window's own idle
+  opens muted when the service says it wants one. There is no other speech
+  path: the Realtime reply-grant ledger, receiver epochs, and speech offers
+  are gone, and the guarantee they carried is now the service's own, held by
+  construction rather than by a ledger. A run's reply is spoken at most once:
+  its sentences reach the voice only as the run's own events arriving at this
+  one service, each appended exactly once in order, and nothing of the run is
+  appended after its end. The record precedes the speech: the developer's
+  ask stands on their own Conversation record before any reply to it is
+  appended, what Luke actually said is written from the session's own
+  transcript as each utterance settles, and a run's end reaches Conversation
+  through publication whether or not it was spoken. Every append awaits its acknowledgment
+  or the error naming it, "spoken" is settled by the first output transcript
+  past the append's end and unsettled by a moderation cut, and what is
+  guaranteed is that the words reached the session, never that they were
+  heard. An append still pending when its session dies is dropped with the
+  session and never re-sent into the one opened after it: a briefing is
+  spoken from the queue once, a beat may be asked for again, and a run's late
+  sentences open a session only for the sentences not yet sent. Meeting and
+  pause holds are the service's own queue, and a held observation briefing is
+  re-decided in the conversation that decided it, never through main. The window's own idle
   report, from its microphone's level or its mute and never from a missing
   transcript event, is what lets the host close a quiet session, and the
   host closes it only once it too has appended nothing in the same window.

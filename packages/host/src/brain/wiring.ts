@@ -92,7 +92,7 @@ import {
   type HostActionPerformer,
 } from "./action-performer.js";
 import { BrainHost } from "./host.js";
-import { type BrainPublicationDependencies, followBrainRequests } from "./publication.js";
+import { followBrainRequests } from "./publication.js";
 import {
   type ChildWiringDependencies,
   childName,
@@ -114,9 +114,7 @@ export interface BrainWiringDependencies extends ChildWiringDependencies {
     sessionKey: SessionKey,
   ) => boolean | Promise<boolean>;
   broadcastRequests: (snapshots: readonly BrainRequestSnapshot[]) => void;
-  /** A run's end stands in Conversation, written and marked: the moment its reply may be owed to the ear. */
-  onEndPublished?: BrainPublicationDependencies["onEndPublished"];
-  /** A conversation's generation ended — reset, expired, or replaced — and its unspoken briefings and replies go with it. */
+  /** A conversation's generation ended — reset, expired, or replaced — and its unspoken briefings go with it. */
   onGenerationReplaced: (sessionKey: SessionKey) => void;
   actions: BrainActionPerformerDependencies;
   roster: () => BrainRoster;
@@ -352,9 +350,6 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
               latestRecords.set(sessionKey, records);
               broadcast();
             },
-            ...(dependencies.onEndPublished
-              ? { onEndPublished: dependencies.onEndPublished }
-              : undefined),
             onPublication: (settled) => {
               publications.set(sessionKey, settled);
             },
@@ -372,10 +367,8 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       report: dependencies.report,
     });
     // A generation that ends — reset, expired, or replaced — takes its
-    // unspoken briefings and replies with it, the one in the mouth's hand
-    // included: they are that generation's words, and an offer is not proof
-    // they were said. The agent hears the same announcement and stands its
-    // runs down itself.
+    // unspoken briefings with it: they are that generation's words. The
+    // agent hears the same announcement and stands its runs down itself.
     const unsubscribe = store.onReplaced(() => dependencies.onGenerationReplaced(sessionKey));
     // The generation's clock stands with the store, not with an agent, so a
     // store whose automatic reset is enabled sees the generation die on time

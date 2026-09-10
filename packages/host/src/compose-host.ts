@@ -26,7 +26,6 @@ import { composeIssues } from "./compose-issues.js";
 import { composeLive } from "./compose-live.js";
 import { composeObservation } from "./compose-observation.js";
 import { composeSettings } from "./compose-settings.js";
-import { composeSpeech } from "./compose-speech.js";
 import { type Composer, mergeMethods } from "./composer.js";
 import { createHostKernel, type HostSeams } from "./host-kernel.js";
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
@@ -39,6 +38,9 @@ import { createGatewayService } from "./service.js";
  * interrupted, which is the same answer an unsettled drain leaves.
  */
 const HOST_CLOSE_WAIT_MS = 5_000;
+
+/** The epoch the bootstrap still names for the retired Realtime receiver, which no longer exists to mint one. */
+const RETIRED_RECEIVER_EPOCH = 0;
 
 export interface Host {
   /** The one boundary a client reaches this host through. */
@@ -68,10 +70,6 @@ export function composeHost(options: HostSeams): Host {
   const issues = composeIssues({ kernel, settings, observationGate });
   const observation = composeObservation({ kernel, settings, account, issues, observationGate });
   const calendars = composeCalendars({ kernel, settings, observationGate });
-  // The speech arbiter still answers its methods and still owns the receiver
-  // epochs the bootstrap names, but nothing is routed to it any more: every
-  // briefing, beat, and reply is the live session's to say.
-  const speech = composeSpeech({ kernel, settings, account, calendars, observation });
   const brain = composeBrain({
     kernel,
     settings,
@@ -93,10 +91,7 @@ export function composeHost(options: HostSeams): Host {
       await account.session.refreshOnce();
     },
     applyVoiceCredential: account.applyVoiceCredential,
-    setVoice: (voice) => {
-      account.voiceCapabilities.realtimeCredentials?.setVoice(voice);
-      account.voiceCapabilities.liveSessions?.setVoice(voice);
-    },
+    setVoice: (voice) => account.voiceCapabilities.liveSessions?.setVoice(voice),
     setVoiceSpeed: (speed) => account.voiceCapabilities.realtimeCredentials?.setSpeed(speed),
     reconcileSpeech: () => {
       void live.service.reconcile();
@@ -113,7 +108,7 @@ export function composeHost(options: HostSeams): Host {
     startCapabilities: startAccountCapabilities,
     stopCapabilities: stopAccountCapabilities,
     onFirstSignIn: calendars.recordFirstSignIn,
-    onFirstSignInArrival: speech.seedArrivalOnFirstSignIn,
+    onFirstSignInArrival: live.seedArrivalOnFirstSignIn,
     retireBrain: () => brain.wiring.retire(),
     rebuildBrain: () => brain.wiring.rebuild(),
     syncMemory: brain.syncMemory,
@@ -132,10 +127,6 @@ export function composeHost(options: HostSeams): Host {
     dropBriefings: () => live.service.dropBriefings(),
     requestOnboardingBeat: () => void live.requestOnboardingBeat(),
   });
-  speech.link({
-    brainCurrent: () => brain.wiring.current() !== undefined,
-    releaseHeld: (briefings) => brain.wiring.releaseHeld(briefings),
-  });
   live.link({ releaseHeld: (briefings) => brain.wiring.releaseHeld(briefings) });
 
   const composers: readonly Composer[] = [
@@ -145,7 +136,6 @@ export function composeHost(options: HostSeams): Host {
     issues,
     observation,
     calendars,
-    speech,
     brain,
     live,
   ];
@@ -217,7 +207,10 @@ export function composeHost(options: HostSeams): Host {
         supersetInstalled,
         supersetConnected,
         sessionReplay: carried(replay),
-        receiverEpoch: speech.receiver.epoch(),
+        // The retired Realtime path's receiver epoch, still a field of the
+        // bootstrap the desktop reads until the protocol retires it; no
+        // receiver stands, so the epoch never moves.
+        receiverEpoch: RETIRED_RECEIVER_EPOCH,
         voiceAvailable: account.voiceCapabilities.liveSessions !== undefined,
         agentTraceEnabled: account.agentTrace !== undefined,
       });
@@ -228,11 +221,8 @@ export function composeHost(options: HostSeams): Host {
     brain: {
       current: (sessionKey) => brain.wiring.current(sessionKey),
       agentForRun: (runId) => brain.wiring.agentForRun(runId),
-      conversationForRun: (runId) => brain.wiring.conversationForRun(runId),
       allRequests: () => brain.wiring.allRequests(),
       generationId: (sessionKey) => brain.wiring.store(sessionKey).generationId(),
-      holdsGeneration: (generationId) => brain.wiring.holdsGeneration(generationId),
-      publicationSettled: () => brain.wiring.publicationSettled(),
       children: brain.wiring.children,
       configuration: () => brain.wiring.configuration(),
       updateConfiguration: (patch) => brain.wiring.updateConfiguration(patch),
@@ -245,18 +235,12 @@ export function composeHost(options: HostSeams): Host {
       }),
     },
     observedSessionCount: observation.observedSessionCount,
-    deliveries: brain.deliveries,
-    receiver: speech.receiver,
     nodes: kernel.nodes,
     recordConversationEntry: (entry, recordedAt, sessionKey) =>
       brain.store.recordConversationEntry(entry, recordedAt, sessionKey),
     now,
     createId: kernel.createId,
     methods: { ...mergeMethods(composers), ...bootstrapMethods },
-    // A client whose connection closed can reach no renderer: its receiver
-    // epoch ends here as its window going away would, so replies and
-    // briefings wait for the next epoch rather than being offered into a gap.
-    onOperatorDisconnected: () => speech.receiver.reset(),
     onTypedAsk: (question, runId) => live.followTypedAsk(question, runId),
   });
   kernel.setService(service);
@@ -272,7 +256,6 @@ export function composeHost(options: HostSeams): Host {
     brain,
     calendars,
     observation,
-    speech,
     issues,
     live,
   ];
