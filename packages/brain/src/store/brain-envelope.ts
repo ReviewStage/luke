@@ -1,13 +1,8 @@
 import type { SQLInputValue } from "node:sqlite";
 import type { SessionKey } from "@sidecar/runtime/vocabulary";
 import { isWireNumber, isWireString, type WireRecord, type WireValue } from "@sidecar/wire";
-import {
-  type BrainPersistedState,
-  type BrainTranscriptCursors,
-  brainPersistedStateFromWire,
-} from "../envelope.js";
+import { type BrainPersistedState, brainPersistedStateFromWire } from "../envelope.js";
 import type { BrainJournalEntry } from "../journal.js";
-import type { BrainObservationEntry } from "../observation-inbox.js";
 import type { BrainRequestRecord } from "../requests.js";
 import { raiseConversationCutoff, touchConversation } from "./conversations-table.js";
 import { column, nullable, type StoreDatabase } from "./database.js";
@@ -16,8 +11,7 @@ import { appendTranscript } from "./transcript-table.js";
 
 /**
  * The brain's envelope across its tables: the standing generation and, under
- * it, the model's checkpoint items, the transcript cursors, the requests, and
- * the action receipts. One generation stands per conversation, and replacing
+ * it, the model's checkpoint items, the requests, and the action receipts. One generation stands per conversation, and replacing
  * it cascades every row it owned away.
  */
 
@@ -89,16 +83,6 @@ export function loadBrainEnvelope(database: StoreDatabase, sessionKey: SessionKe
   const items = database
     .prepare("SELECT item FROM runtime_checkpoints WHERE session_id = ? ORDER BY sequence")
     .all(session.sessionId) as { item: string }[];
-  // SAFETY: the three text columns selected are the ones the row type names.
-  const cursorRows = database
-    .prepare(
-      "SELECT provider_id, provider_session_id, cursor FROM observation_cursors WHERE session_id = ?",
-    )
-    .all(session.sessionId) as {
-    provider_id: string;
-    provider_session_id: string;
-    cursor: string;
-  }[];
   // SAFETY: every column of a row is a SQL value; the envelope reader admits each field or refuses the whole.
   const requestRows = database
     .prepare("SELECT * FROM requests WHERE session_id = ? ORDER BY ordinal")
@@ -107,29 +91,10 @@ export function loadBrainEnvelope(database: StoreDatabase, sessionKey: SessionKe
   const journalRows = database
     .prepare("SELECT * FROM action_receipts WHERE session_id = ? ORDER BY ordinal")
     .all(session.sessionId) as Record<string, SQLInputValue>[];
-  // SAFETY: the same three text columns, from the capture cursors' table.
-  const captureRows = database
-    .prepare(
-      "SELECT provider_id, provider_session_id, cursor FROM observation_capture_cursors WHERE session_id = ?",
-    )
-    .all(session.sessionId) as {
-    provider_id: string;
-    provider_session_id: string;
-    cursor: string;
-  }[];
-  // SAFETY: the payload column is text; the envelope reader admits each entry or refuses the whole.
-  const inboxRows = database
-    .prepare("SELECT payload FROM observation_inbox WHERE session_id = ? ORDER BY ordinal")
-    .all(session.sessionId) as { payload: string }[];
-  const cursors = cursorsFromRows(cursorRows);
-  const captureCursors = cursorsFromRows(captureRows);
   let parsedItems: WireValue[];
-  let inbox: WireValue[];
   try {
     // SAFETY: JSON.parse returns a wire value; the envelope reader below is the validation.
     parsedItems = items.map((row) => JSON.parse(row.item) as WireValue);
-    // SAFETY: as above, for the inbox entries.
-    inbox = inboxRows.map((row) => JSON.parse(row.payload) as WireValue);
   } catch {
     return { unreadable: true, generation };
   }
@@ -145,9 +110,6 @@ export function loadBrainEnvelope(database: StoreDatabase, sessionKey: SessionKe
       : undefined),
     items: parsedItems,
     compactionCount: session.compactionCount,
-    cursors,
-    captureCursors,
-    inbox,
     requests: requestRows.map(requestWire),
     journal: journalRows.map(journalWire),
     ...(session.resetClearedAt !== undefined
@@ -207,20 +169,6 @@ export function saveBrainEnvelope(
         .run(sessionId, delta.items.keepPrefix);
       insertItems(database, sessionId, delta.items.append, delta.items.keepPrefix);
     }
-    if (delta.cursors) {
-      database.prepare("DELETE FROM observation_cursors WHERE session_id = ?").run(sessionId);
-      insertCursors(database, sessionId, delta.cursors);
-    }
-    if (delta.captureCursors) {
-      database
-        .prepare("DELETE FROM observation_capture_cursors WHERE session_id = ?")
-        .run(sessionId);
-      insertCaptureCursors(database, sessionId, delta.captureCursors);
-    }
-    if (delta.inbox) {
-      database.prepare("DELETE FROM observation_inbox WHERE session_id = ?").run(sessionId);
-      insertInbox(database, sessionId, delta.inbox);
-    }
     if (delta.requests) {
       const remove = database.prepare("DELETE FROM requests WHERE run_id = ?");
       for (const runId of delta.requests.remove) remove.run(runId);
@@ -265,9 +213,6 @@ function replaceGeneration(
     );
   if (state.reset) raiseConversationCutoff(database, sessionKey, state.reset.clearedAt);
   insertItems(database, state.generationId, state.items, 0);
-  insertCursors(database, state.generationId, state.cursors);
-  insertCaptureCursors(database, state.generationId, state.captureCursors);
-  insertInbox(database, state.generationId, state.inbox);
   state.requests.forEach((record, ordinal) => {
     upsertRequest(database, state.generationId, ordinal, record);
   });
@@ -289,62 +234,6 @@ function insertItems(
   items.forEach((item, offset) => {
     insert.run(sessionId, from + offset, JSON.stringify(item));
   });
-}
-
-function insertCursors(
-  database: StoreDatabase,
-  sessionId: string,
-  cursors: BrainPersistedState["cursors"],
-): void {
-  const insert = database.prepare(
-    "INSERT INTO observation_cursors (session_id, provider_id, provider_session_id, cursor) VALUES (?, ?, ?, ?)",
-  );
-  for (const [providerId, sessions] of Object.entries(cursors)) {
-    for (const [providerSessionId, cursor] of Object.entries(sessions)) {
-      insert.run(sessionId, providerId, providerSessionId, cursor);
-    }
-  }
-}
-
-function insertCaptureCursors(
-  database: StoreDatabase,
-  sessionId: string,
-  cursors: BrainPersistedState["captureCursors"],
-): void {
-  const insert = database.prepare(
-    "INSERT INTO observation_capture_cursors (session_id, provider_id, provider_session_id, cursor) VALUES (?, ?, ?, ?)",
-  );
-  for (const [providerId, sessions] of Object.entries(cursors)) {
-    for (const [providerSessionId, cursor] of Object.entries(sessions)) {
-      insert.run(sessionId, providerId, providerSessionId, cursor);
-    }
-  }
-}
-
-function insertInbox(
-  database: StoreDatabase,
-  sessionId: string,
-  inbox: readonly BrainObservationEntry[],
-): void {
-  if (inbox.length === 0) return;
-  const insert = database.prepare(
-    "INSERT INTO observation_inbox (session_id, ordinal, entry_id, payload) VALUES (?, ?, ?, ?)",
-  );
-  inbox.forEach((entry, ordinal) => {
-    insert.run(sessionId, ordinal, entry.id, JSON.stringify(entry));
-  });
-}
-
-function cursorsFromRows(
-  rows: readonly { provider_id: string; provider_session_id: string; cursor: string }[],
-): BrainTranscriptCursors {
-  const cursors: Record<string, Record<string, string>> = {};
-  for (const row of rows) {
-    cursors[row.provider_id] ??= {};
-    const provider = cursors[row.provider_id];
-    if (provider) provider[row.provider_session_id] = row.cursor;
-  }
-  return cursors;
 }
 
 function upsertRequest(

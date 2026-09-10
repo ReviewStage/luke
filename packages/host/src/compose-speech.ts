@@ -1,5 +1,5 @@
 import { PRODUCT_EVENT, productSignInAge } from "@sidecar/analytics";
-import type { BrainDelivery } from "@sidecar/brain";
+import type { BrainUtterance } from "@sidecar/brain";
 import {
   carried,
   GATEWAY_EVENT,
@@ -11,12 +11,12 @@ import {
 } from "@sidecar/gateway";
 import {
   ARRIVAL_SPEECH_KIND,
-  BRIEFING_SPEECH_KIND,
   CALENDAR_ONBOARDING_SPEECH_KIND,
+  UTTERANCE_SPEECH_KIND,
 } from "@sidecar/realtime";
 import { isSpeechOutcome, SPEECH_OUTCOME, type SpeechOutcome } from "@sidecar/realtime/speech";
 import { isIdentifier } from "@sidecar/runtime/vocabulary";
-import { isWireNumber, lateRef } from "@sidecar/wire";
+import { isWireNumber } from "@sidecar/wire";
 import { arrivalBeatOwed, countsFirstAnnouncement } from "./arrival-flow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { CalendarsComposer } from "./compose-calendars.js";
@@ -25,24 +25,16 @@ import type { Composer, ComposerContext } from "./composer.js";
 import { type OnboardingBeatKind, SpeechArbiter } from "./voice/speech-arbiter.js";
 import { VoiceReceiver } from "./voice-receiver.js";
 
-/** What speech reaches in the brain whose words it says. */
-interface SpeechLinks {
-  /** Whether a conversation stands that a held briefing can be given back to. */
-  brainCurrent: () => boolean;
-  releaseHeld: (briefings: ReturnType<SpeechArbiter["takeHeldBriefings"]>) => void;
-}
-
 export interface SpeechComposer extends Composer {
   readonly receiver: VoiceReceiver;
   reconcileSpeech: () => Promise<void>;
   withdrawBeat: (kind: OnboardingBeatKind) => void;
-  withdrawBriefings: () => void;
-  dropBriefings: () => void;
-  deliverBriefing: (delivery: BrainDelivery) => Promise<void>;
+  /** Withdraws every utterance not yet spoken: the words belonged to a generation or a brain that no longer stands. */
+  withdrawUtterances: () => void;
+  deliverUtterance: (utterance: BrainUtterance) => Promise<void>;
   requestOnboardingBeat: () => Promise<void>;
   /** The arrival beat's own moment, recorded at the first sign-in ever observed. */
   seedArrivalOnFirstSignIn: () => void;
-  link: (links: SpeechLinks) => void;
 }
 
 export interface SpeechDependencies extends ComposerContext {
@@ -54,7 +46,6 @@ export interface SpeechDependencies extends ComposerContext {
 export function composeSpeech(dependencies: SpeechDependencies): SpeechComposer {
   const { kernel, settings, account, calendars, observation } = dependencies;
   const { runMode, now } = kernel;
-  const links = lateRef<SpeechLinks>("the speech composer's links");
 
   /**
    * The one voice receiver, as the client that owns the voice window reports
@@ -76,8 +67,8 @@ export function composeSpeech(dependencies: SpeechDependencies): SpeechComposer 
     if (id) kernel.emit(GATEWAY_EVENT.SPEECH_WITHDRAWN, { id });
   }
 
-  function withdrawBriefings(): void {
-    const offered = arbiter.withdrawBriefings();
+  function withdrawUtterances(): void {
+    const offered = arbiter.withdrawUtterances();
     if (offered) kernel.emit(GATEWAY_EVENT.SPEECH_WITHDRAWN, { id: offered });
     offerNextSpeech();
   }
@@ -94,15 +85,7 @@ export function composeSpeech(dependencies: SpeechDependencies): SpeechComposer 
   }
 
   async function reconcileSpeech(): Promise<void> {
-    const quiet = await calendars.announcementsQuietNow(now());
-    arbiter.setQuiet(quiet);
-    if (!quiet && arbiter.heldBriefingCount > 0) {
-      if (links.get().brainCurrent() && account.voiceCapabilities.realtimeCredentials) {
-        links.get().releaseHeld(arbiter.takeHeldBriefings());
-      } else if (!account.voiceCapabilities.realtimeCredentials) {
-        arbiter.dropBriefings();
-      }
-    }
+    arbiter.setQuiet(await calendars.announcementsQuietNow(now()));
     offerNextSpeech();
   }
 
@@ -124,7 +107,7 @@ export function composeSpeech(dependencies: SpeechDependencies): SpeechComposer 
     const settled = arbiter.settle(id, outcome);
     if (!settled) return;
     if (settled.outcome === SPEECH_OUTCOME.SPOKEN) {
-      if (settled.kind === BRIEFING_SPEECH_KIND) {
+      if (settled.kind === UTTERANCE_SPEECH_KIND) {
         settings.recordProductEvent(PRODUCT_EVENT.VOICE_ANNOUNCEMENT_SPEAK, {});
         markFirstAnnouncementSpoken();
       }
@@ -150,9 +133,9 @@ export function composeSpeech(dependencies: SpeechDependencies): SpeechComposer 
     void reconcileSpeech();
   }
 
-  async function deliverBriefing(delivery: BrainDelivery): Promise<void> {
+  async function deliverUtterance(utterance: BrainUtterance): Promise<void> {
     if (!account.voiceCapabilities.realtimeCredentials) return;
-    arbiter.request({ kind: BRIEFING_SPEECH_KIND, delivery });
+    arbiter.request({ kind: UTTERANCE_SPEECH_KIND, utterance });
     await reconcileSpeech();
   }
 
@@ -195,18 +178,14 @@ export function composeSpeech(dependencies: SpeechDependencies): SpeechComposer 
     receiver,
     reconcileSpeech,
     withdrawBeat,
-    withdrawBriefings,
-    dropBriefings: () => arbiter.dropBriefings(),
-    deliverBriefing,
+    withdrawUtterances,
+    deliverUtterance,
     requestOnboardingBeat,
     seedArrivalOnFirstSignIn: () => {
       if (calendars.onboarding()?.arrivalSignedInAt !== undefined) return;
       calendars.writeOnboarding({ arrivalSignedInAt: new Date(now()).toISOString() });
     },
-    link: (next) => links.set(next),
     start: async () => undefined,
-    // The arbiter's briefings are dropped where the meetings holding them are:
-    // the calendars composer's own stop, which is where they were held.
     stop: async () => undefined,
   };
 }

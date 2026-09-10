@@ -92,6 +92,13 @@
       "when": 1788985706850,
       "tag": "0012_pale_molly_hayes",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1789012605492,
+      "tag": "0013_wandering_agent_brand",
+      "breakpoints": true
     }
   ]
 }

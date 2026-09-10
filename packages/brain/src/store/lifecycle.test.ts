@@ -179,10 +179,7 @@ test("a compaction changes the projection and keeps the transcript searchable, w
   const stale = repository(database);
   stale.load();
   assert.equal(repo.save(freshBrainState("gen-2", NOW + 2)), true);
-  assert.equal(
-    stale.save({ ...state, cursors: { codex: { s: "late" } } }, [userText("late")]),
-    false,
-  );
+  assert.equal(stale.save({ ...state, compactionCount: 9 }, [userText("late")]), false);
   assert.equal(searchTranscript(database, MAIN_SESSION_KEY, "late").length, 0);
   database.close();
 });

@@ -195,9 +195,6 @@ function composed(
       }
       return repository;
     },
-    ensureObservedConversation: async (sessionKey, name) => {
-      ensured.push({ sessionKey, name });
-    },
     ensureChildConversation: async (sessionKey, name) => {
       ensured.push({ sessionKey, name });
     },
@@ -257,7 +254,8 @@ function composed(
     workspaceDirectory: () => workspace,
     skillRoots: () => [],
     runnable: () => true,
-    dropBriefings: () => undefined,
+    announcementsQuiet: async () => false,
+    withdrawUtterances: () => undefined,
     ...overrides,
   });
   return {
@@ -314,6 +312,11 @@ test("a spawn from main runs the child in its own conversation at depth one and 
   assert.ok(main);
   const record = await main.waitAsk(runId, 1);
   assert.equal(record?.status, "succeeded");
+  // The receipt reached the model as a tool output: accepted, not completed.
+  const receipt = c.seen.find((seen) => seen.outputs.length > 0)?.outputs[0] ?? "{}";
+  assert.match(receipt, /"accepted":true/);
+  assert.match(receipt, /"completed":false/);
+  assert.match(receipt, /"context":"isolated"/);
   const child = [...c.children.values()][0];
   assert.ok(child);
   assert.equal(child.requesterSessionKey, MAIN_SESSION_KEY);
@@ -327,6 +330,7 @@ test("a spawn from main runs the child in its own conversation at depth one and 
   // tools beyond what its depth allows, and the minimal profile's prompt.
   const childTurn = c.seen.find((seen) => seen.texts.includes(BRAIN_INPUT_MARKER.SUBAGENT_TASK));
   assert.ok(childTurn);
+  assert.ok(childTurn.texts.includes(SPAWN_ARGS.task));
   assert.ok(!childTurn.tools.includes(BRAIN_TOOL.ANNOUNCE));
   assert.ok(childTurn.tools.includes(BRAIN_TOOL.SESSIONS_SPAWN));
   // The completion was persisted, then delivered to main as a turn of its own.
@@ -338,7 +342,9 @@ test("a spawn from main runs the child in its own conversation at depth one and 
     seen.texts.includes(BRAIN_INPUT_MARKER.CHILD_COMPLETION),
   );
   assert.ok(completionTurn);
-  assert.ok(completionTurn.tools.includes(BRAIN_TOOL.ANNOUNCE));
+  assert.ok(completionTurn.texts.includes("the change renamed one module"));
+  // A completion turn is not a tick: announce is offered in a tick alone.
+  assert.ok(!completionTurn.tools.includes(BRAIN_TOOL.ANNOUNCE));
   // Only main was handed the completion; the child's conversation was not.
   const completionTurns = c.seen.filter((seen) =>
     seen.texts.includes(BRAIN_INPUT_MARKER.CHILD_COMPLETION),
@@ -486,7 +492,7 @@ test("Start fresh cancels a conversation's descendants first, and their cancella
 });
 
 test("a reset capture that was skipped reports nothing, while one that failed is said so; the reset proceeds either way", async (t) => {
-  for (const [outcome] of [
+  for (const [outcome, reported] of [
     [MEMORY_HOUSEKEEPING_OUTCOME.SKIPPED, false],
     [MEMORY_HOUSEKEEPING_OUTCOME.FAILED, true],
   ] as const) {
@@ -508,6 +514,11 @@ test("a reset capture that was skipped reports nothing, while one that failed is
     await main.waitAsk(runId, 60_000);
     assert.equal(await c.wiring.resetConversation(MAIN_SESSION_KEY), true);
     assert.equal(captures, 1, "the capture ran over the context the reset let go of");
+    assert.equal(
+      reports.some((line) => line.startsWith("Reset capture did not complete")),
+      reported,
+      outcome,
+    );
     c.wiring.retire();
   }
 });

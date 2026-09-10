@@ -1,106 +1,69 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  normalizeSession,
-  type ProviderSessionObservation,
-  SESSION_STATUS,
-  type Session,
-  type SessionProvider,
-} from "@sidecar/session";
+import { SESSION_STATUS } from "@sidecar/session";
 import { unparsedWire, type WireRecord, wireRecord } from "@sidecar/wire";
-import { askInputText, holdReleasedInputText, wakeInputText } from "./input-items.js";
-import { BRAIN_WAKE_KIND, type BrainWakeEvent } from "./wake-events.js";
+import {
+  askInputText,
+  BRAIN_INPUT_MARKER,
+  standingContextText,
+  tickInputText,
+} from "./input-items.js";
+import { type BrainTick, TICK_CHANGE_KIND } from "./tick.js";
 
 const NOW = 1_800_000_000_000;
-const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
+const TRANSCRIPT_TEXT = "assistant: done";
 
-function session(overrides: Partial<ProviderSessionObservation> = {}): Session {
-  return normalizeSession(claude, {
-    providerSessionId: "abc",
-    title: "Fix the checkout tests",
-    status: SESSION_STATUS.WAITING,
-    lastActivityAt: NOW - 1_000,
-    detail: { activity: "Running tests", error: "exit 1" },
-    ...overrides,
-  });
-}
-
-function itemBody(text: string): WireRecord {
-  const [, ...rest] = text.split("\n");
+function itemBody(text: string, marker: string): WireRecord {
+  const [head, ...rest] = text.split("\n");
+  assert.ok(head?.startsWith(`${marker} `), `opens with ${marker}`);
   const parsed = wireRecord(unparsedWire(JSON.parse(rest.join("\n"))));
   assert.ok(parsed);
   return parsed;
 }
 
-test("a wake item carries each event's observed fields and transcript delta as data", () => {
-  const event: BrainWakeEvent = {
-    kind: BRAIN_WAKE_KIND.HOOK,
-    hookEvent: "Stop",
-    identity: { providerId: claude.id, providerSessionId: "abc" },
-    session: session(),
-    transcriptDelta: { text: "assistant: done", truncated: false, status: "accepted" },
-    atMs: NOW,
-  };
-  const body = itemBody(wakeInputText([event], NOW));
-  assert.deepEqual(body, {
-    events: [
+test("a tick item carries each change as data behind the marker, and never a transcript", () => {
+  const tick: BrainTick = {
+    changes: [
       {
-        kind: "hook",
-        at: new Date(NOW).toISOString(),
-        hook: "Stop",
+        kind: TICK_CHANGE_KIND.CHANGED,
+        identity: { providerId: "claude-code", providerSessionId: "abc" },
+        title: "Fix the checkout tests",
+        fields: { status: SESSION_STATUS.WAITING },
+        transcriptCharsGained: TRANSCRIPT_TEXT.length,
+      },
+      {
+        kind: TICK_CHANGE_KIND.VANISHED,
+        identity: { providerId: "codex", providerSessionId: "def" },
+      },
+    ],
+  };
+  const text = tickInputText(tick, NOW);
+  assert.ok(text.startsWith(`${BRAIN_INPUT_MARKER.TICK} ${new Date(NOW).toISOString()}\n`));
+  assert.ok(!text.includes(TRANSCRIPT_TEXT));
+  assert.deepEqual(itemBody(text, BRAIN_INPUT_MARKER.TICK), {
+    changes: [
+      {
+        kind: "changed",
         provider_id: "claude-code",
         provider_session_id: "abc",
-        session: {
-          provider_name: "Claude Code",
-          title: "Fix the checkout tests",
-          status: "waiting",
-          error: "exit 1",
-          activity: "Running tests",
-          updated_at: new Date(NOW - 1_000).toISOString(),
-        },
-        transcript_delta: { status: "accepted", truncated: false, text: "assistant: done" },
+        title: "Fix the checkout tests",
+        fields: { status: "waiting" },
+        transcript_chars_gained: TRANSCRIPT_TEXT.length,
       },
+      { kind: "vanished", provider_id: "codex", provider_session_id: "def" },
     ],
   });
 });
 
-test("an ask item carries the question and the events that arrived since the last turn", () => {
-  const body = itemBody(
-    askInputText(
-      "what's running?",
-      [
-        {
-          kind: BRAIN_WAKE_KIND.HOOK,
-          identity: { providerId: claude.id, providerSessionId: "abc" },
-          atMs: NOW,
-        },
-      ],
-      NOW,
-    ),
-  );
-  assert.equal(body.question, "what's running?");
-  assert.ok(Array.isArray(body.events_since_last_turn));
-  assert.equal(body.events_since_last_turn.length, 1);
+test("an ask item carries the question alone", () => {
+  const body = itemBody(askInputText("what's running?", NOW), BRAIN_INPUT_MARKER.DEVELOPER_ASK);
+  assert.deepEqual(body, { question: "what's running?" });
 });
 
-test("a hold-released item lists the held briefings", () => {
-  const body = itemBody(
-    holdReleasedInputText(
-      [
-        {
-          briefing: "Checkout agent wants a decision.",
-          decidedAt: NOW - 60_000,
-        },
-      ],
-      NOW,
-    ),
-  );
-  assert.deepEqual(body, {
-    held_briefings: [
-      {
-        briefing: "Checkout agent wants a decision.",
-        decided_at: new Date(NOW - 60_000).toISOString(),
-      },
-    ],
-  });
+test("the standing context item is the roster and then whatever else the host rendered", () => {
+  const text = standingContextText("Currently observed sessions:\n- one", "Facts.\n", NOW);
+  assert.ok(text.startsWith(`${BRAIN_INPUT_MARKER.STANDING_CONTEXT} `));
+  assert.ok(text.endsWith("Currently observed sessions:\n- one\n\nFacts."));
+  const bare = standingContextText("No sessions.", "   ", NOW);
+  assert.ok(bare.endsWith("\nNo sessions."));
 });

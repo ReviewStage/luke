@@ -32,7 +32,6 @@ function complete(): BrainPersistedState {
     // A well-formed stamp, as `checkpointFormatTag` writes this build's own.
     checkpointFormat: "tool-loop@1:openai-responses-input/1",
     items: [{ type: "message", role: "user", content: [] }],
-    cursors: { "claude-code": { abc: "7" } },
     requests: [
       {
         runId: "run-1",
@@ -107,7 +106,6 @@ test("the envelope round-trips, and anything from another shape reads as nothing
   assert.equal(read({ ...raw(state), generationId: "" }), undefined);
   assert.equal(read({ ...raw(state), expiresAt: "soon" }), undefined);
   assert.equal(read({ ...raw(state), items: ["text"] }), undefined);
-  assert.equal(read({ ...raw(state), cursors: { a: { b: 1 } } }), undefined);
   assert.equal(read({ ...raw(state), requests: [{ runId: "x" }] }), undefined);
   assert.equal(
     read({ ...raw(state), requests: [{ ...raw(state.requests[0]), status: "sleeping" }] }),

@@ -2,11 +2,9 @@ import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import {
   type BrainJournalEntry,
-  type BrainObservationEntry,
   type BrainPersistedState,
   type BrainRequestRecord,
   type BrainStateSave,
-  type BrainTranscriptCursors,
   brainPersistedStateFromWire,
   SAVE_KIND,
   type SessionKey,
@@ -17,9 +15,6 @@ import {
   actionReceipt,
   conversationRun,
   conversationSession,
-  observationCaptureCursor,
-  observationCursor,
-  observationInboxEntry,
   runtimeCheckpoint,
 } from "../../db/schema.js";
 import { clearConversationRows, lockConversation, touchConversation } from "./conversations.js";
@@ -28,8 +23,8 @@ import { appendTranscript } from "./transcript.js";
 
 /**
  * The brain's envelope across the hosted tables: the standing generation
- * and, under it, the model's checkpoint items, the transcript cursors, the
- * inbox, the runs, and the action receipts. One generation stands per
+ * and, under it, the model's checkpoint items, the runs, and the action
+ * receipts. One generation stands per
  * conversation per user, and replacing it cascades every row it owned away.
  * The rows and the saves are the SQLite store's, keyed by user; what differs
  * is that every user-derived column passes through the payload envelope on
@@ -118,16 +113,6 @@ async function readBrainEnvelope(
     .from(runtimeCheckpoint)
     .where(bySession(runtimeCheckpoint))
     .orderBy(asc(runtimeCheckpoint.sequence));
-  const cursorRows = await db.select().from(observationCursor).where(bySession(observationCursor));
-  const captureRows = await db
-    .select()
-    .from(observationCaptureCursor)
-    .where(bySession(observationCaptureCursor));
-  const inboxRows = await db
-    .select({ sealedPayload: observationInboxEntry.sealedPayload })
-    .from(observationInboxEntry)
-    .where(bySession(observationInboxEntry))
-    .orderBy(asc(observationInboxEntry.ordinal));
   const requestRows = await db
     .select()
     .from(conversationRun)
@@ -139,14 +124,11 @@ async function readBrainEnvelope(
     .where(bySession(actionReceipt))
     .orderBy(asc(actionReceipt.ordinal));
   let parsedItems: WireValue[];
-  let inbox: WireValue[];
   let requests: WireRecord[];
   let journal: WireRecord[];
   try {
     // SAFETY: JSON.parse returns a wire value; the envelope reader below is the validation.
     parsedItems = items.map((row) => JSON.parse(seal.open(row.sealedItem)) as WireValue);
-    // SAFETY: as above, for the inbox entries.
-    inbox = inboxRows.map((row) => JSON.parse(seal.open(row.sealedPayload)) as WireValue);
     requests = requestRows.map((row) => requestWire(seal, row));
     journal = journalRows.map((row) => journalWire(seal, row));
   } catch {
@@ -162,9 +144,6 @@ async function readBrainEnvelope(
       : undefined),
     items: parsedItems,
     compactionCount: session.compactionCount,
-    cursors: cursorsFromRows(cursorRows),
-    captureCursors: cursorsFromRows(captureRows),
-    inbox,
     requests,
     journal,
     ...(session.resetClearedAt !== undefined
@@ -253,36 +232,6 @@ export function saveBrainEnvelope(
         );
       await insertItems(tx, seal, userId, sessionId, delta.items.append, delta.items.keepPrefix);
     }
-    if (delta.cursors) {
-      await tx
-        .delete(observationCursor)
-        .where(
-          and(eq(observationCursor.userId, userId), eq(observationCursor.sessionId, sessionId)),
-        );
-      await insertCursors(tx, observationCursor, userId, sessionId, delta.cursors);
-    }
-    if (delta.captureCursors) {
-      await tx
-        .delete(observationCaptureCursor)
-        .where(
-          and(
-            eq(observationCaptureCursor.userId, userId),
-            eq(observationCaptureCursor.sessionId, sessionId),
-          ),
-        );
-      await insertCursors(tx, observationCaptureCursor, userId, sessionId, delta.captureCursors);
-    }
-    if (delta.inbox) {
-      await tx
-        .delete(observationInboxEntry)
-        .where(
-          and(
-            eq(observationInboxEntry.userId, userId),
-            eq(observationInboxEntry.sessionId, sessionId),
-          ),
-        );
-      await insertInbox(tx, seal, userId, sessionId, delta.inbox);
-    }
     if (delta.requests) {
       if (delta.requests.remove.length > 0) {
         await tx
@@ -347,15 +296,6 @@ async function replaceGeneration(
   });
   if (state.reset) await clearConversationRows(db, userId, sessionKey, state.reset.clearedAt);
   await insertItems(db, seal, userId, state.generationId, state.items, 0);
-  await insertCursors(db, observationCursor, userId, state.generationId, state.cursors);
-  await insertCursors(
-    db,
-    observationCaptureCursor,
-    userId,
-    state.generationId,
-    state.captureCursors,
-  );
-  await insertInbox(db, seal, userId, state.generationId, state.inbox);
   for (const [ordinal, record] of state.requests.entries()) {
     await upsertRequest(db, seal, userId, state.generationId, ordinal, record);
   }
@@ -381,57 +321,6 @@ async function insertItems(
       sealedItem: seal.seal(JSON.stringify(item)),
     })),
   );
-}
-
-async function insertCursors(
-  db: HostedStoreDatabase,
-  table: typeof observationCursor | typeof observationCaptureCursor,
-  userId: string,
-  sessionId: string,
-  cursors: BrainTranscriptCursors,
-): Promise<void> {
-  const rows = Object.entries(cursors).flatMap(([providerId, sessions]) =>
-    Object.entries(sessions).map(([providerSessionId, cursor]) => ({
-      userId,
-      sessionId,
-      providerId,
-      providerSessionId,
-      cursor,
-    })),
-  );
-  if (rows.length === 0) return;
-  await db.insert(table).values(rows);
-}
-
-async function insertInbox(
-  db: HostedStoreDatabase,
-  seal: UserSeal,
-  userId: string,
-  sessionId: string,
-  inbox: readonly BrainObservationEntry[],
-): Promise<void> {
-  if (inbox.length === 0) return;
-  await db.insert(observationInboxEntry).values(
-    inbox.map((entry, ordinal) => ({
-      userId,
-      sessionId,
-      ordinal,
-      entryId: entry.id,
-      sealedPayload: seal.seal(JSON.stringify(entry)),
-    })),
-  );
-}
-
-function cursorsFromRows(
-  rows: readonly { providerId: string; providerSessionId: string; cursor: string }[],
-): BrainTranscriptCursors {
-  const cursors: Record<string, Record<string, string>> = {};
-  for (const row of rows) {
-    cursors[row.providerId] ??= {};
-    const provider = cursors[row.providerId];
-    if (provider) provider[row.providerSessionId] = row.cursor;
-  }
-  return cursors;
 }
 
 /**

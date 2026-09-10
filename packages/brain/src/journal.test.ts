@@ -7,8 +7,8 @@ import {
   ABC,
   answered,
   ask,
-  edge,
   failedAnswer,
+  functionOutputs,
   harness,
   heldPerformer,
   message,
@@ -17,7 +17,9 @@ import {
   OBSERVATION_ACTIONS,
   settle,
   submit,
+  tick,
 } from "./harness.js";
+import { UNKNOWN_ACTION_RESULT } from "./journal.js";
 import { BRAIN_REQUEST_FAILURE, BRAIN_REQUEST_STATUS } from "./requests.js";
 import { fakeBrainStateRepository } from "./testing.js";
 
@@ -29,7 +31,7 @@ import { fakeBrainStateRepository } from "./testing.js";
  */
 
 test("an observation turn's run id never repeats across a rebuild, and a journal row a crashed observation left behind is dropped rather than answered as this turn's act", async () => {
-  // The last launch died mid-action in its first wake turn: the journal holds a
+  // The last launch died mid-action in its first tick turn: the journal holds a
   // settled row under the id a counter would mint again, with no record.
   const [messageAction] = OBSERVATION_ACTIONS;
   assert.ok(
@@ -52,18 +54,17 @@ test("an observation turn's run id never repeats across a rebuild, and a journal
   const h = harness({}, repository);
   await h.agent.ready();
   assert.deepEqual(h.repository.state?.journal, [], "the orphaned row went with the restore");
-  await h.agent.wake([edge(ABC)]);
   h.client.answers.push(answered([messageAction]), answered([message("")]));
-  await h.clock.advance(NOW + 3_000);
+  await h.agent.tick(tick(ABC));
   // The action ran: the stale row was not mistaken for this turn's own result.
   assert.equal(h.performed.length, 1);
   const first = h.executions[0]?.runId;
-  // A second agent over the same store mints a different id for its first wake.
+  assert.ok(first && !first.startsWith("wake-1"));
+  // A second agent over the same store mints a different id for its first tick.
   await h.agent.stop();
   const successor = harness({}, repository);
-  await successor.agent.wake([edge(ABC)]);
   successor.client.answers.push(answered([messageAction]), answered([message("")]));
-  await successor.clock.advance(NOW + 3_000);
+  await successor.agent.tick(tick(ABC));
   assert.equal(successor.performed.length, 1);
   assert.notEqual(successor.executions[0]?.runId, first);
   await successor.agent.stop();
@@ -81,6 +82,13 @@ test("a performer that throws after dispatch leaves an unknown action, kept thro
   assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.MODEL);
   assert.equal(record?.performedActions, 0);
   assert.equal(record?.unknownActions, 1);
+  const journaled = h.repository.state?.journal[0];
+  assert.ok(journaled?.outputJson?.includes(UNKNOWN_ACTION_RESULT.status));
+  assert.ok(!journaled?.outputJson?.includes(ACTION_RESULT_STATUS.REJECTED));
+  // The model reads the unknown, not a refusal, and the journal answers the
+  // same call id with it rather than dispatching again.
+  const outputs = functionOutputs(h.repository.state?.items ?? []);
+  assert.ok(outputs[0]?.output.includes("may have happened"));
 
   const relaunched = harness({}, fakeBrainStateRepository(h.repository.state));
   await relaunched.agent.ready();

@@ -66,7 +66,7 @@ one view to report and the two streams only a browser can play or meter.
 A call Luke opens for himself is a `SpeakOnlyCall`
 (`voice/speak-only-call.ts`): it is configured with
 `SPEAK_ONLY_SESSION_CONFIG`, whose `tools` is the empty array, and it has no
-microphone member to open — the guarantee `CLAUDE.md` states for a briefing is
+microphone member to open — the guarantee `CLAUDE.md` states for an announcement is
 the type rather than a flag, and `ConversationCall` is the subclass that adds
 the device and the one tool, over the transport both share in
 `voice/realtime-call.ts`. Both calls are seeded at channel open from the

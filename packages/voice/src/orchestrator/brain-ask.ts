@@ -73,7 +73,7 @@ export async function askBrain(
   }
   return {
     status: ACTION_RESULT_STATUS.ACCEPTED,
-    briefing: brainReplyWords(waited.record) ?? "",
+    reply: brainReplyWords(waited.record) ?? "",
     runId: waited.record.runId,
   };
 }

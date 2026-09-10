@@ -1,15 +1,16 @@
 import {
-  BRIEFING_SPEECH_KIND,
   type ProactiveSpeechTurn,
   type RealtimeStatus,
+  UTTERANCE_SPEECH_KIND,
 } from "@sidecar/realtime";
 
 /**
- * Whose words the caption is showing: a briefing the brain decided to give,
- * or a reply to the developer. Conversation records the two differently.
+ * Whose words the caption is showing: an announcement the brain decided to
+ * make unprompted, or a reply to the developer. Conversation records the two
+ * differently.
  */
 export const REPLY_KIND = {
-  BRIEFING: BRIEFING_SPEECH_KIND,
+  ANNOUNCEMENT: UTTERANCE_SPEECH_KIND,
   REPLY: "reply",
 } as const;
 

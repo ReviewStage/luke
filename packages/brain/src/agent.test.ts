@@ -4,12 +4,8 @@ import { REALTIME_TOOL, type RealtimeFunctionCall } from "@sidecar/actions";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import { checkpointFormatTag, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
-import {
-  type ProviderTranscriptResult,
-  type ProviderTranscriptSinceResult,
-  SESSION_STATUS,
-} from "@sidecar/session";
-import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import type { ProviderTranscriptResult } from "@sidecar/session";
+import { ACTION_RESULT_STATUS, isWireString, type WireRecord } from "@sidecar/wire";
 import { type BrainPersistedState, freshBrainState } from "./envelope.js";
 import { BrainGenerationClock } from "./generation-clock.js";
 import {
@@ -20,15 +16,12 @@ import {
   agentOn,
   answered,
   ask,
-  assertNoActionReached,
   type BrainClient,
   type BrainClientAnswer,
   CHECKPOINT,
   call,
-  claude,
   compaction,
   DEF,
-  edge,
   FakeClient,
   failedAnswer,
   functionOutputs,
@@ -49,10 +42,12 @@ import {
   quietAnswer,
   reasoning,
   reviewing,
-  session,
   settle,
   submit,
+  TRANSCRIPT_SECRET,
+  tick,
 } from "./harness.js";
+import { BRAIN_INPUT_MARKER } from "./input-items.js";
 import type { BrainActionExecution, BrainActionPerformer } from "./performer.js";
 import {
   BRAIN_REQUEST_FAILURE,
@@ -73,20 +68,25 @@ test("an announce is delivered trimmed, and every output item is remembered", as
   h.client.answers.push(
     answered([
       reasoning("rs_1"),
-      call("call_1", BRAIN_TOOL.ANNOUNCE, { briefing: "  Checkout agent wants a decision. " }),
+      call("call_1", BRAIN_TOOL.ANNOUNCE, { text: "  Checkout agent wants a decision. " }),
     ]),
     answered([reasoning("rs_2"), message("said it")]),
   );
-  await h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 3_000);
+  await h.agent.tick(tick(ABC));
 
   assert.equal(h.client.inputs.length, 2);
   assert.deepEqual(h.deliveries, [
     {
-      briefing: "Checkout agent wants a decision.",
-      decidedAt: NOW + 3_000,
+      text: "Checkout agent wants a decision.",
+      decidedAt: NOW,
     },
   ]);
+  const opening = itemText(h.client.inputs[0]?.[0]);
+  assert.ok(opening.startsWith(`${BRAIN_INPUT_MARKER.TICK} `));
+  assert.ok(opening.includes('"provider_session_id":"abc"'));
+  assert.ok(opening.includes('"transcript_chars_gained":120'));
+  assert.ok(!JSON.stringify(h.client.inputs).includes(TRANSCRIPT_SECRET));
+  assert.deepEqual(h.wholeReads, []);
   const second = h.client.inputs[1] ?? [];
   const outputs = itemsOfType(second, RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT);
   assert.equal(outputs.length, 1);
@@ -101,19 +101,18 @@ test("an announce is delivered trimmed, and every output item is remembered", as
   assert.deepEqual(h.traces[0]?.toolCalls, [
     {
       name: BRAIN_TOOL.ANNOUNCE,
-      argumentsChars: JSON.stringify({ briefing: "  Checkout agent wants a decision. " }).length,
+      argumentsChars: JSON.stringify({ text: "  Checkout agent wants a decision. " }).length,
       outcomeStatus: "accepted",
     },
   ]);
-  assert.deepEqual(h.traces[0]?.deliveries, [{ briefingChars: 32 }]);
+  assert.deepEqual(h.traces[0]?.utterances, [{ chars: 32 }]);
 });
 
-test("an ask returns the final text, carries pending wakes, and refuses announce", async () => {
+test("an ask returns the final text and refuses announce", async () => {
   const h = harness();
-  await h.agent.wake([edge(DEF)]);
   h.client.answers.push(
     answered([
-      call("call_a", BRAIN_TOOL.ANNOUNCE, { briefing: "nope" }),
+      call("call_a", BRAIN_TOOL.ANNOUNCE, { text: "nope" }),
       call("call_b", "send_session_message", {
         provider_id: ABC.providerId,
         provider_session_id: ABC.providerSessionId,
@@ -138,8 +137,18 @@ test("an ask returns the final text, carries pending wakes, and refuses announce
       }),
     },
   ]);
-  assert.equal(h.agent.pendingWakes(), 0);
+  const first = h.client.inputs[0] ?? [];
+  const opening = itemText(first[0]);
+  assert.ok(opening.startsWith(`${BRAIN_INPUT_MARKER.DEVELOPER_ASK} `));
+  assert.ok(opening.includes("tell the checkout agent to run the tests"));
+  assert.ok(!JSON.stringify(h.client.inputs).includes(TRANSCRIPT_SECRET));
   assert.equal(h.clock.timers.size, 0);
+  const outputs = itemsOfType(
+    h.client.inputs[1] ?? [],
+    RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
+  );
+  const refusal = outputs.find((item) => item.call_id === "call_a");
+  assert.ok(refusal && isWireString(refusal.output) && refusal.output.includes("reply in text"));
   assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.ASK);
   assert.equal(h.traces[0]?.origin, RUN_ORIGIN.USER);
   assert.equal(h.traces[0]?.outputText, "Sent.");
@@ -207,8 +216,7 @@ test("the tool loop has no iteration cap: it runs until the model answers withou
     h.client.answers.push(answered([call(`loop-${index}`, BRAIN_TOOL.LIST_SESSIONS, {})]));
   }
   h.client.answers.push(answered([message("")]));
-  await h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 3_000);
+  await h.agent.tick(tick(ABC));
 
   assert.equal(h.client.inputs.length, rounds + 1);
   const remembered = h.persisted.at(-1)?.items ?? [];
@@ -224,13 +232,11 @@ test("the tool loop has no iteration cap: it runs until the model answers withou
 test("a compaction item drops everything before it from the remembered array", async () => {
   const h = harness();
   h.client.answers.push(answered([message("first turn")]));
-  await h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 3_000);
+  await h.agent.tick(tick(ABC));
   assert.equal(h.persisted.at(-1)?.items.length, 2);
 
   h.client.answers.push(answered([compaction("cmp_1"), reasoning("rs"), message("folded")]));
-  await h.agent.wake([edge(DEF)]);
-  await h.clock.advance(NOW + 6_000);
+  await h.agent.tick(tick(DEF));
   const remembered = h.persisted.at(-1)?.items ?? [];
   assert.deepEqual(
     remembered.map((item) => item.type),
@@ -240,29 +246,17 @@ test("a compaction item drops everything before it from the remembered array", a
   assert.equal(h.client.inputs[1]?.length, 4);
 });
 
-test("a failed turn rolls the memory and cursors back and persists nothing", async () => {
+test("a failed turn rolls the memory back and persists nothing", async () => {
   const h = harness();
   h.client.answers.push(failedAnswer("boom"));
-  await h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 3_000);
-  // The capture stands on disk; the failed inference left it unconsumed.
-  assert.equal(h.persisted.length, 1);
-  assert.equal(h.repository.state?.inbox.length, 1);
-  assert.deepEqual(h.repository.state?.cursors, {});
+  await h.agent.tick(tick(ABC));
+  assert.equal(h.persisted.length, 0);
   assert.equal(h.traces[0]?.error, "boom");
 
-  // The same hook again is one observation, read once: the standing entry is
-  // tried again rather than the transcript read twice.
-  await h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 6_000);
+  // The next tick opens over memory the failed turn never entered.
+  await h.agent.tick(tick(ABC));
   assert.equal(h.client.inputs[1]?.length, 2);
-  assert.deepEqual(
-    h.sinceReads.map((read) => read.cursor),
-    [undefined],
-  );
-  assert.equal(h.persisted.length, 2);
-  assert.equal(h.repository.state?.inbox.length, 0);
-  assert.deepEqual(h.repository.state?.cursors, { [claude.id]: { abc: "abc-cursor" } });
+  assert.equal(h.repository.state?.items.length, 2);
 });
 
 test("a call that fails mid-loop rolls back the whole turn, calls and all", async () => {
@@ -271,63 +265,59 @@ test("a call that fails mid-loop rolls back the whole turn, calls and all", asyn
     answered([call("call_1", BRAIN_TOOL.LIST_SESSIONS, {})]),
     failedAnswer("network"),
   );
-  await h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 3_000);
-  assert.equal(h.persisted.length, 1);
-  await h.agent.wake([edge(DEF)]);
-  await h.clock.advance(NOW + 6_000);
+  await h.agent.tick(tick(ABC));
+  assert.equal(
+    itemsOfType(h.repository.state?.items ?? [], RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL).length,
+    0,
+  );
+  await h.agent.tick(tick(DEF));
   assert.equal(
     itemsOfType(h.client.inputs[2] ?? [], RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL).length,
     0,
   );
 });
 
-test("restored memory opens the next turn, and held briefings are re-decided from their own item", async () => {
+test("restored memory opens the next tick turn", async () => {
   const prior = [compaction("cmp_0"), message("earlier")];
   const repository = fakeBrainStateRepository({
     ...freshBrainState("gen-prior", NOW - 1),
     checkpointFormat: checkpointFormatTag(CHECKPOINT),
     items: prior,
-    cursors: { "claude-code": { abc: "old" } },
   });
   const h = harness({}, repository);
   h.client.answers.push(
-    answered([call("call_1", BRAIN_TOOL.ANNOUNCE, { briefing: "Still waiting on you." })]),
+    answered([call("call_1", BRAIN_TOOL.ANNOUNCE, { text: "Still waiting on you." })]),
     answered([message("")]),
   );
-  h.agent.releaseHeld([{ briefing: "Checkout wants a decision.", decidedAt: NOW - 1 }]);
-  await settle();
+  await h.agent.tick(tick(ABC));
   const input = h.client.inputs[0] ?? [];
   assert.deepEqual(input.slice(0, 2), prior);
-  assert.equal(h.deliveries[0]?.briefing, "Still waiting on you.");
-  assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.HOLD_RELEASED);
-  assert.equal(h.sinceReads.length, 0);
+  assert.ok(itemText(input[2]).startsWith(`${BRAIN_INPUT_MARKER.TICK} `));
+  assert.equal(h.deliveries[0]?.text, "Still waiting on you.");
+  assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.TICK);
+  assert.deepEqual(h.wholeReads, []);
 });
 
-test("a wake turn runs the actions the policy allows, journaled and attributed as Luke's own", async () => {
+test("a tick turn runs the actions the policy allows, journaled and attributed as Luke's own", async () => {
   const h = harness({
     standingContext: () => `Durable facts:\n- ${INSTRUCTION_IN_DATA}`,
-    readTranscriptSince: async (): Promise<ProviderTranscriptSinceResult> => ({
-      status: ACTION_RESULT_STATUS.ACCEPTED,
-      text: INSTRUCTION_IN_DATA,
-      cursor: "c1",
-      truncated: false,
-    }),
   });
-  await h.agent.wake([edge(ABC)]);
   h.client.answers.push(
     answered([
       ...OBSERVATION_ACTIONS,
-      call("brief", BRAIN_TOOL.ANNOUNCE, { briefing: "Tests asked." }),
+      call("brief", BRAIN_TOOL.ANNOUNCE, { text: "Tests asked." }),
     ]),
     answered([message("")]),
   );
-  await h.clock.advance(NOW + 3_000);
+  await h.agent.tick(tick(ABC));
 
   assert.equal(h.performed.length, OBSERVATION_ACTIONS.length);
   assert.ok(h.executions.every((execution) => execution.origin === RUN_ORIGIN.OBSERVATION));
+  assert.ok(
+    h.executions.every((execution) => execution.runId.startsWith(`${BRAIN_TURN_TRIGGER.TICK}:`)),
+  );
   assert.deepEqual(
-    h.deliveries.map((delivery) => delivery.briefing),
+    h.deliveries.map((delivery) => delivery.text),
     ["Tests asked."],
   );
   assert.deepEqual(h.client.actionsOffered, [true, true]);
@@ -340,7 +330,7 @@ test("a wake turn runs the actions the policy allows, journaled and attributed a
   await h.agent.stop();
 });
 
-test("an observation turn whose model never answers ends at the execution deadline, and the queue moves on", async () => {
+test("a tick turn whose model never answers ends at the execution deadline, and the queue moves on", async () => {
   // The first inference never answers; every later one answers at once.
   let calls = 0;
   const hung: BrainClient = {
@@ -351,38 +341,29 @@ test("an observation turn whose model never answers ends at the execution deadli
     quietUntil: () => undefined,
   };
   const h = harness({ client: hung, executionDeadlineMs: 60_000 });
-  await h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 3_000);
+  const ticking = h.agent.tick(tick(ABC));
   await settle();
   assert.equal(h.traces.length, 0, "the turn is still holding the model");
-  await h.clock.advance(NOW + 3_000 + 60_000);
-  await settle();
+  await h.clock.advance(NOW + 60_000);
+  await ticking;
   assert.equal(h.traces.length, 1);
-  assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.WAKE);
+  assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.TICK);
   assert.equal(h.traces[0]?.error, "execution deadline passed");
   // The next turn is not stuck behind the dead one.
-  h.agent.rosterLook();
-  await settle();
+  await h.agent.tick(tick(DEF));
   assert.equal(h.traces.length, 2);
   await h.agent.stop();
 });
 
-test("a wake turn under a policy denying actions runs none, however the transcript, standing context, or a tool's answer is worded", async () => {
+test("a tick turn under a policy denying actions runs none, however the transcript, standing context, or a tool's answer is worded", async () => {
   const h = harness({
     prepareTurn: NO_ACTS_POLICY,
     standingContext: () => `Durable facts:\n- ${INSTRUCTION_IN_DATA}`,
-    readTranscriptSince: async (): Promise<ProviderTranscriptSinceResult> => ({
-      status: ACTION_RESULT_STATUS.ACCEPTED,
-      text: INSTRUCTION_IN_DATA,
-      cursor: "c1",
-      truncated: false,
-    }),
     readTranscript: async (): Promise<ProviderTranscriptResult> => ({
       status: ACTION_RESULT_STATUS.ACCEPTED,
       transcript: INSTRUCTION_IN_DATA,
     }),
   });
-  await h.agent.wake([edge(ABC)]);
   h.client.answers.push(
     // The model reads the whole transcript first, and its answer carries the
     // same instruction; the next emission is every action plus a briefing.
@@ -394,44 +375,28 @@ test("a wake turn under a policy denying actions runs none, however the transcri
     ]),
     answered([
       ...OBSERVATION_ACTIONS,
-      call("brief", BRAIN_TOOL.ANNOUNCE, { briefing: "Tests asked." }),
+      call("brief", BRAIN_TOOL.ANNOUNCE, { text: "Tests asked." }),
     ]),
     answered([message("")]),
   );
-  await h.clock.advance(NOW + 3_000);
+  await h.agent.tick(tick(ABC));
 
   assert.deepEqual(h.performed, []);
   assert.deepEqual(h.executions, []);
+  const outputs = functionOutputs(h.client.inputs[2] ?? []);
+  for (const forbidden of OBSERVATION_ACTIONS) {
+    const output = outputs.find((entry) => entry.callId === forbidden.call_id);
+    assert.ok(output?.output.includes("not run"), String(forbidden.call_id));
+  }
+  // Reading and briefing still work: observation is not silence. The read's
+  // answer carried the instruction back to the model as data, and nothing came of it.
+  const read = functionOutputs(h.client.inputs[1] ?? []).find((entry) => entry.callId === "read");
+  assert.ok(read?.output.includes(INSTRUCTION_IN_DATA));
   assert.deepEqual(
-    h.deliveries.map((delivery) => delivery.briefing),
+    h.deliveries.map((delivery) => delivery.text),
     ["Tests asked."],
   );
   assert.deepEqual(h.client.actionsOffered, [false, false, false]);
-});
-
-test("a roster look under a policy denying actions runs none", async () => {
-  const h = harness({
-    prepareTurn: NO_ACTS_POLICY,
-    roster: () => ({
-      text: "roster",
-      identities: [ABC],
-      sessions: [session("abc", { status: SESSION_STATUS.WORKING })],
-    }),
-  });
-  h.client.answers.push(answered(OBSERVATION_ACTIONS), answered([message("")]));
-  h.agent.rosterLook();
-  await settle();
-  assertNoActionReached(h);
-  assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.ROSTER);
-});
-
-test("a hold release under a policy denying actions runs none", async () => {
-  const h = harness({ prepareTurn: NO_ACTS_POLICY });
-  h.client.answers.push(answered(OBSERVATION_ACTIONS), answered([message("")]));
-  h.agent.releaseHeld([{ briefing: INSTRUCTION_IN_DATA, decidedAt: NOW - 1 }]);
-  await settle();
-  assertNoActionReached(h);
-  assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.HOLD_RELEASED);
 });
 
 test("a developer ask carries every action with a live execution, revoked once the agent stops", async () => {
@@ -472,6 +437,9 @@ test("a developer ask carries every action with a live execution, revoked once t
   // refused action's output is paired in memory rather than a second call made.
   assert.equal(answer?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
   assert.equal(h.client.inputs.length, 1);
+  const stored = h.repository.state;
+  const outputs = functionOutputs(stored?.items ?? []);
+  assert.ok(outputs[0]?.output.includes("turn over"));
 });
 
 test("a queued ask cancelled before its turn never starts, and its record says cancelled", async () => {
@@ -549,6 +517,7 @@ test("a cancel between two actions keeps the first's result and refuses the seco
   // The first action's result is journaled and checkpointed before the second starts.
   const journaled = h.repository.state?.journal ?? [];
   assert.equal(journaled.length, 2);
+  assert.ok(journaled[0]?.outputJson?.includes(ACTION_RESULT_STATUS.ACCEPTED));
   assert.equal(journaled[1]?.outputJson, undefined);
   await h.agent.cancelAsk(runId);
   held.releases[1]?.();
@@ -558,6 +527,8 @@ test("a cancel between two actions keeps the first's result and refuses the seco
   assert.equal(record?.performedActions, 1);
   const outputs = functionOutputs(h.repository.state?.items ?? []);
   assert.equal(outputs.length, 2);
+  assert.ok(outputs[0]?.output.includes(ACTION_RESULT_STATUS.ACCEPTED));
+  assert.ok(outputs[1]?.output.includes("turn over"));
   // No follow-up inference ran for a cancelled run.
   assert.equal(h.client.inputs.length, 1);
 });
@@ -603,6 +574,8 @@ test("a repeated call id answers the recorded result once; the same id with othe
   const outputs = functionOutputs(h.client.inputs[2] ?? []);
   const repeated = outputs.filter((output) => output.callId === "call_1");
   assert.equal(repeated.length, 3);
+  assert.ok(repeated[1]?.output.includes(ACTION_RESULT_STATUS.ACCEPTED));
+  assert.ok(repeated[2]?.output.includes("already used with different arguments"));
   assert.equal(record?.performedActions, 2);
 });
 
@@ -712,6 +685,7 @@ test("a reset while the model is thinking cannot roll old memory into the new ge
   inner.answers.push(answered([message(`noted: ${OLD_SECRET}`)]));
   const h = harness({ client: inner });
   assert.equal((await ask(h, `remember ${OLD_SECRET}`))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  assert.ok(JSON.stringify(h.repository.state?.items).includes(OLD_SECRET));
 
   // A second ask holds its model answer open across the reset.
   let release: ((answer: BrainClientAnswer) => void) | undefined;
@@ -738,33 +712,34 @@ test("a reset while the model is thinking cannot roll old memory into the new ge
 });
 
 test("a reset during a transcript read or an action's result cannot write into the new generation", async () => {
-  // Held delta read on an observation turn.
-  let releaseRead: ((result: ProviderTranscriptSinceResult) => void) | undefined;
+  // Held transcript read on a tick turn.
+  let releaseRead: ((result: ProviderTranscriptResult) => void) | undefined;
   const h = harness({
-    readTranscriptSince: () =>
+    readTranscript: () =>
       new Promise((resolve) => {
         releaseRead = resolve;
       }),
   });
-  h.client.answers.push(answered([message("seen")]));
-  const capture = h.agent.wake([edge(ABC)]);
+  h.client.answers.push(
+    answered([
+      call("read_1", BRAIN_TOOL.READ_TRANSCRIPT, {
+        provider_id: ABC.providerId,
+        provider_session_id: ABC.providerSessionId,
+      }),
+    ]),
+    answered([call("brief", BRAIN_TOOL.ANNOUNCE, { text: `heard ${OLD_SECRET}` })]),
+    answered([message("")]),
+  );
+  const ticking = h.agent.tick(tick(ABC));
   await settle();
   assert.ok(releaseRead);
   assert.equal(await h.store.clear(), true);
-  releaseRead({
-    status: ACTION_RESULT_STATUS.ACCEPTED,
-    text: OLD_SECRET,
-    cursor: "old-cursor",
-    truncated: false,
-  });
-  await capture;
-  await h.clock.advance(NOW + 3_000);
-  // The late read captures nothing into the new generation: no entry, no
-  // cursor of either kind, no inference, no briefing.
-  assert.equal(h.client.inputs.length, 0);
-  assert.deepEqual(h.store.current()?.cursors, {});
-  assert.deepEqual(h.store.current()?.captureCursors, {});
-  assert.deepEqual(h.store.current()?.inbox, []);
+  releaseRead({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: OLD_SECRET });
+  await ticking;
+  // The late read lands nowhere in the new generation: no further inference,
+  // no remembered item, no briefing.
+  assert.equal(h.client.inputs.length, 1);
+  assert.deepEqual(h.store.current()?.items, []);
   assert.deepEqual(h.deliveries, []);
 
   // Held act result on a developer run, then a new ask in the new generation.
@@ -785,16 +760,11 @@ test("a reset during a transcript read or an action's result cannot write into t
 
 test("a cancel, a deadline, or a stop settles a held read at once, and the next ask proceeds", async () => {
   const reads: ((result: ProviderTranscriptResult) => void)[] = [];
-  const deltas: ((result: ProviderTranscriptSinceResult) => void)[] = [];
   const h = harness({
     executionDeadlineMs: 60_000,
     readTranscript: () =>
       new Promise((resolve) => {
         reads.push(resolve);
-      }),
-    readTranscriptSince: () =>
-      new Promise((resolve) => {
-        deltas.push(resolve);
       }),
   });
   // Cancel while a full read is out: the run settles without waiting on it.
@@ -814,41 +784,33 @@ test("a cancel, a deadline, or a stop settles a held read at once, and the next 
   assert.equal(h.agent.request(first)?.status, BRAIN_REQUEST_STATUS.CANCELLED);
   assert.equal(h.client.inputs.length, 1);
 
-  // A capture whose delta read is held blocks no ask: the capture is not the
-  // run's, so the ask opens on the inbox as it stands and answers.
-  const capture = h.agent.wake([edge(DEF)]);
+  // The next ask proceeds; the read the cancelled run left out lands nowhere.
   h.client.answers.push(answered([message("proceeding")]));
   const second = acceptedRunId(await submit(h, "and this?"));
-  assert.equal(deltas.length, 1);
   await settle();
   assert.equal((await h.agent.waitAsk(second, 1))?.text, "proceeding");
   assert.equal(h.client.inputs.length, 2);
-  // The late read lands as a capture — an inbox entry and a capture cursor,
-  // never a consumed cursor — and the turn it arms reads it from there.
-  deltas[0]?.({
-    status: ACTION_RESULT_STATUS.ACCEPTED,
-    text: "late",
-    cursor: "c",
-    truncated: false,
-  });
   reads[0]?.({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "late" });
-  await capture;
-  assert.deepEqual(h.repository.state?.captureCursors, { [claude.id]: { def: "c" } });
-  assert.equal(h.repository.state?.inbox.length, 1);
-  assert.deepEqual(h.repository.state?.cursors, {});
-  h.client.answers.push(answered([message("")]));
-  await h.clock.advance(NOW + 3_000);
-  assert.equal(h.client.inputs.length, 3);
-  assert.deepEqual(h.repository.state?.cursors, { [claude.id]: { def: "c" } });
-  assert.equal(h.repository.state?.inbox.length, 0);
-
-  // A stop settles a held capture read too: nothing is captured, and the queue drains behind it.
-  const held = h.agent.wake([edge(ABC)]);
   await settle();
-  assert.equal(deltas.length, 2);
+  assert.equal(h.client.inputs.length, 2);
+  assert.ok(!JSON.stringify(h.repository.state?.items).includes("late"));
+
+  // A stop settles a held read on a tick too, and nothing of it is kept.
+  h.client.answers.push(
+    answered([
+      call("read_2", BRAIN_TOOL.READ_TRANSCRIPT, {
+        provider_id: ABC.providerId,
+        provider_session_id: ABC.providerSessionId,
+      }),
+    ]),
+  );
+  const held = h.agent.tick(tick(ABC));
+  await settle();
+  assert.equal(reads.length, 2);
   await h.agent.stop();
   await held;
-  assert.equal(h.repository.state?.inbox.length, 0);
+  assert.equal(h.client.inputs.length, 3);
+  assert.ok(!JSON.stringify(h.repository.state?.items).includes("read_2"));
 });
 
 test("an incomplete reply and a failed final checkpoint are not reported as success", async () => {
@@ -886,20 +848,16 @@ test("work queued behind a held act opens nothing once the generation it was que
   h.client.answers.push(answered([messageAction("call_1")]));
   await submit(h, "send");
   await settle();
-  // Every observation kind queues behind the held act: a hold release with an
-  // old briefing, a roster look, a coalesced wake, and a quiet retry's wakes.
-  h.agent.releaseHeld([{ briefing: "OLD_SECRET_QUEUED_BRIEFING", decidedAt: NOW }]);
-  await h.agent.wake([edge(DEF)]);
-  h.agent.rosterLook();
-  await h.clock.advance(NOW + 3_000);
-  assert.equal(await h.store.clear(), true);
-  assert.equal(h.agent.pendingWakes(), 0);
-  held.releases[0]?.();
+  // A tick queues behind the held act.
+  h.client.answers.push(answered([call("brief", BRAIN_TOOL.ANNOUNCE, { text: OLD_SECRET })]));
+  const ticking = h.agent.tick(tick(DEF));
   await settle();
-  await h.clock.advance(NOW + 10_000);
+  assert.equal(await h.store.clear(), true);
+  held.releases[0]?.();
+  await ticking;
+  await settle();
   // The only inference was the held ask's own, in the old generation.
   assert.equal(h.client.inputs.length, 1);
-  assert.deepEqual(h.store.current()?.cursors, {});
   assert.deepEqual(h.deliveries, []);
   // The new generation still takes fresh work.
   h.client.answers.push(answered([message("fresh")]));
@@ -911,19 +869,18 @@ test("a briefing is not delivered after a stop or reset that lands during the tu
   await h.agent.ready();
   h.client.answers.push(
     answered([
-      call("a1", BRAIN_TOOL.ANNOUNCE, { briefing: "OLD_STALE_ANNOUNCEMENT" }),
-      call("a2", BRAIN_TOOL.ANNOUNCE, { briefing: "SECOND_STALE_ANNOUNCEMENT" }),
+      call("a1", BRAIN_TOOL.ANNOUNCE, { text: "OLD_STALE_ANNOUNCEMENT" }),
+      call("a2", BRAIN_TOOL.ANNOUNCE, { text: "SECOND_STALE_ANNOUNCEMENT" }),
     ]),
     answered([message("")]),
   );
-  // The capture lands first; it is the turn's final write that is held.
-  await h.agent.wake([edge(ABC)]);
   const releasing = h.repository.hold();
-  await h.clock.advance(NOW + 3_000);
+  const ticking = h.agent.tick(tick(ABC));
+  await settle();
   assert.ok(h.repository.holding, "the turn is in its final write");
   const stopping = h.agent.stop();
   releasing(true);
-  await stopping;
+  await Promise.all([ticking, stopping]);
   await settle();
   assert.deepEqual(h.deliveries, []);
 
@@ -936,15 +893,14 @@ test("a briefing is not delivered after a stop or reset that lands during the tu
   });
   later.client.answers.push(
     answered([
-      call("b1", BRAIN_TOOL.ANNOUNCE, { briefing: "first" }),
-      call("b2", BRAIN_TOOL.ANNOUNCE, { briefing: "second" }),
+      call("b1", BRAIN_TOOL.ANNOUNCE, { text: "first" }),
+      call("b2", BRAIN_TOOL.ANNOUNCE, { text: "second" }),
     ]),
     answered([message("")]),
   );
-  await later.agent.wake([edge(ABC)]);
-  await later.clock.advance(NOW + 3_000);
+  await later.agent.tick(tick(ABC));
   assert.deepEqual(
-    later.deliveries.map((delivery) => delivery.briefing),
+    later.deliveries.map((delivery) => delivery.text),
     ["first"],
   );
 });
@@ -1005,18 +961,12 @@ test("an expiry is enforced at the door of a turn and a submission even when no 
       { type: RESPONSES_INPUT_ITEM_TYPE.COMPACTION, id: "cmp", encrypted_content: OLD_SECRET },
       message(`after compaction ${OLD_SECRET}`),
     ],
-    cursors: { [claude.id]: { abc: "old-cursor" } },
   };
   const h = harness({}, fakeBrainStateRepository(stale));
   h.client.answers.push(answered([message("fresh")]));
   const answer = await ask(h, "NEW_ASK");
   assert.equal(answer?.text, "fresh");
   assert.notEqual(h.store.generationId(), "gen-stale");
-  // The cursor died with the generation: the next look reads from the start.
-  h.client.answers.push(answered([message("")]));
-  await h.agent.wake([edge(ABC)]);
-  await h.clock.advance(h.clock.now + 3_000);
-  assert.equal(h.sinceReads.at(-1)?.cursor, undefined);
 
   // A generation that reaches its end while the app sits idle, with the
   // clock advanced but the timer lost, still dies at the next turn's door.
@@ -1028,8 +978,7 @@ test("an expiry is enforced at the door of a turn and a submission even when no 
   for (const timer of idle.clock.timers.keys()) idle.clock.timers.delete(timer);
   idle.clock.now = born.expiresAt;
   idle.client.answers.push(answered([message("")]));
-  await idle.agent.wake([edge(ABC)]);
-  await idle.clock.advance(idle.clock.now + 3_000);
+  await idle.agent.tick(tick(ABC));
   assert.notEqual(idle.store.generationId(), born.generationId);
   assert.equal(idle.store.current()?.requests.length, 0);
 });
@@ -1235,12 +1184,15 @@ test("a stop during a held initial bootstrap settles at once; the open finishing
     await stopping;
     await ready;
     assert.equal((await pending).outcome, BRAIN_SUBMISSION_OUTCOME.REJECTED);
+    assert.match((await agent.incompatibility()) ?? "", /replaced while its context was opening/u);
     assert.equal(held.disposed(), 0);
     // The open finishes after everything settled: the context is let go of,
     // once, and never installed.
     held.release();
     await settle();
     assert.equal(held.disposed(), 1);
+    // Still not installed: the generation stays as the stop left it.
+    assert.match((await agent.incompatibility()) ?? "", /replaced while its context was opening/u);
     await settle();
     assert.equal(held.disposed(), 1);
   }
@@ -1266,6 +1218,7 @@ test("a reopen the runtime refuses re-admits nothing: the generation refuses tur
   });
   const failed = await ask(h, "two");
   assert.equal(failed?.status, BRAIN_REQUEST_STATUS.FAILED);
+  assert.match((await h.agent.incompatibility()) ?? "", /refused reopen/u);
   const refused = await submit(h, "three");
   assert.deepEqual(refused, {
     outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
@@ -1429,40 +1382,11 @@ test("asks that arrive while a review runs open one turn together, each settled 
   assert.equal(inner.inputs.length, 0);
   await release();
   assert.equal(inner.inputs.length, 2);
+  const opening = (inner.inputs[1] ?? []).map(itemText).join("\n");
+  assert.ok(opening.includes("first?"));
+  assert.ok(opening.includes("second?"));
   assert.equal((await h.agent.waitAsk(first, 1))?.text, "One reply for both.");
   assert.equal((await h.agent.waitAsk(second, 1))?.text, "One reply for both.");
-});
-
-test("opening notes are read once by the next turn and handed back when that turn fails", async () => {
-  const note: import("./wake-events.js").BrainTurnNotice = {
-    trigger: BRAIN_TURN_TRIGGER.WAKE,
-    identities: [ABC],
-    briefings: ["abc is done."],
-    performedActions: 0,
-    at: NOW,
-    label: "Claude Code: abc",
-  };
-  let held = [note];
-  const h = harness({
-    openingNotes: {
-      take: () => {
-        const taken = held;
-        held = [];
-        return taken;
-      },
-      restore: (notes) => {
-        held = [...notes, ...held];
-      },
-    },
-  });
-  h.client.answers.push(failedAnswer("down"));
-  await ask(h, "what happened?");
-  assert.deepEqual(held, [note]);
-  h.client.answers.push(answered([message("abc finished.")]));
-  await ask(h, "and now?");
-  assert.deepEqual(held, []);
-  h.client.answers.push(answered([message("ok")]));
-  await ask(h, "again?");
 });
 
 test("a steered companion shares the run's persistence failure: a final write that failed is no success for it", async () => {
@@ -1497,11 +1421,12 @@ test("a rider settles when the shared turn dies to a thrown hook after its check
   let rosterReads = 0;
   const h = harness({
     client: gated.client,
-    // The roster is read after the final checkpoint, outside the model loop's
-    // own guard: a throw there is the kind of failure a hook can raise.
+    // The roster is read for the standing context before each inference,
+    // outside the model's own answer: a throw there is the kind of failure a
+    // hook can raise. The first run's read passes; the shared turn's throws.
     roster: () => {
       rosterReads += 1;
-      if (rosterReads >= 3) throw new Error("hook failed after the checkpoint");
+      if (rosterReads >= 2) throw new Error("hook failed before the shared inference");
       return { text: "roster", identities: [ABC, DEF] };
     },
   });
@@ -1585,6 +1510,10 @@ test("past the queue's capacity the oldest ask is folded into the drained turn's
   // One turn for them all, opening with what the overflow folded and then
   // the asks the queue still held.
   assert.equal(inner.inputs.length, 2);
+  const opening = (inner.inputs[1] ?? []).map(itemText).join("\n");
+  assert.ok(opening.includes("1 earlier input was summarized because the queue was full"));
+  assert.ok(opening.includes("ask 0?"));
+  assert.ok(opening.includes(`ask ${QUEUE_DEFAULTS.CAPACITY}?`));
   // The summarized ask settles with the turn that carried its summary, like
   // every other ask in the batch.
   for (const runId of runIdsInOrder) {
@@ -1634,6 +1563,10 @@ test("a queued ask cancelled before its turn opens leaves no trace of its words 
   assert.equal((await h.agent.cancelAsk(second))?.status, BRAIN_REQUEST_STATUS.CANCELLED);
   await release();
   assert.equal(inner.inputs.length, 2);
+  const opening = (inner.inputs[1] ?? []).map(itemText).join("\n");
+  assert.ok(opening.includes("first, kept"));
+  assert.ok(opening.includes("third, kept"));
+  assert.ok(!opening.includes("withdrawn-marker-7f3a"));
   assert.equal((await h.agent.waitAsk(first, 1))?.text, "answered for the rest");
   assert.equal((await h.agent.waitAsk(third, 1))?.text, "answered for the rest");
   // The cancellation withdrew unsent model input and nothing else: the ask
@@ -1652,6 +1585,8 @@ test("a queued ask cancelled before its turn opens leaves no trace of its words 
   await alone.agent.cancelAsk(gone);
   await solo.release();
   assert.equal(solo.inner.inputs.length, 2);
+  const only = (solo.inner.inputs[1] ?? []).map(itemText).join("\n");
+  assert.ok(only.includes("kept alone") && !only.includes("gone-marker-9c1d"));
   assert.equal((await alone.agent.waitAsk(kept, 1))?.text, "just the one");
 });
 
@@ -1667,6 +1602,10 @@ test("an overflow-summarized ask cancelled before the drain leaves the summary w
   assert.equal((await h.agent.cancelAsk(folded))?.status, BRAIN_REQUEST_STATUS.CANCELLED);
   await release();
   assert.equal(inner.inputs.length, 2);
+  const opening = (inner.inputs[1] ?? []).map(itemText).join("\n");
+  assert.ok(!opening.includes("folded-marker-2b8e"));
+  assert.ok(!opening.includes("summarized because the queue was full"));
+  assert.ok(opening.includes("ask 1?") && opening.includes(`ask ${QUEUE_DEFAULTS.CAPACITY}?`));
   for (const runId of kept) {
     assert.equal((await h.agent.waitAsk(runId, 1))?.text, "one reply for the rest");
   }
@@ -1684,6 +1623,10 @@ test("an overflow-summarized ask cancelled before the drain leaves the summary w
   }
   await two.agent.cancelAsk(withdrawn);
   await pair.release();
+  const summary = (pair.inner.inputs[1] ?? []).map(itemText).join("\n");
+  assert.ok(summary.includes("1 earlier input was summarized because the queue was full"));
+  assert.ok(summary.includes("standing-fold-4d0f"));
+  assert.ok(!summary.includes("withdrawn-fold-6a2c"));
   assert.equal((await two.agent.waitAsk(standing, 1))?.text, "reply");
   assert.equal(two.agent.request(withdrawn)?.status, BRAIN_REQUEST_STATUS.CANCELLED);
 });
@@ -1701,6 +1644,9 @@ test("an ask already drained but waiting behind another turn takes its words wit
   await release();
   assert.equal((await h.agent.waitAsk(keptRun, 1))?.text, "for the kept one");
   assert.equal(inner.inputs.length, 2);
+  const secondTurn = (inner.inputs[1] ?? []).map((item) => JSON.stringify(item)).join("\n");
+  assert.ok(secondTurn.includes("kept-behind-1e9b"));
+  assert.ok(!secondTurn.includes("cancelled-behind-5c7d"));
   assert.equal(h.agent.request(cancelledRun)?.question, "cancelled-behind-5c7d");
 });
 
@@ -1723,6 +1669,10 @@ test("folded asks left alone by cancelling every ordinary one still open their t
   // The folded ask is not left queued forever: the summary alone opens its turn.
   assert.equal((await h.agent.waitAsk(folded, 1))?.text, "for the folded one");
   assert.equal(inner.inputs.length, 2);
+  const secondTurn = (inner.inputs[1] ?? []).map((item) => JSON.stringify(item)).join("\n");
+  assert.ok(secondTurn.includes("1 earlier input was summarized because the queue was full"));
+  assert.ok(secondTurn.includes("folded-survivor-3e1a"));
+  assert.ok(!secondTurn.includes("marker-0d4c"));
   assert.equal(h.agent.busy(), false);
 });
 
@@ -1746,6 +1696,8 @@ test("cancelling every waiting ask, folded ones included, leaves nothing queued,
   const next = acceptedRunId(await submit(h, "after all of them"));
   await settle();
   assert.equal((await h.agent.waitAsk(next, 1))?.text, "fresh");
+  const opening = (inner.inputs[1] ?? []).map(itemText).join("\n");
+  assert.ok(!opening.includes("summarized because the queue was full"));
 });
 
 test("a refused final checkpoint fails a drained batch's primary and its riders alike", async () => {

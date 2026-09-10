@@ -30,7 +30,7 @@ test("within a generation a save carries only what changed, keyed the way the ta
   const after = {
     ...before,
     items: [...before.items, { type: "message", role: "assistant", content: "reply" }],
-    cursors: { ...before.cursors, codex: { "session-b": "cursor-3" } },
+    compactionCount: before.compactionCount + 1,
     requests: [
       before.requests[0],
       request("run-2", { status: BRAIN_REQUEST_STATUS.SUCCEEDED, revision: 3, settledAt: NOW + 9 }),
@@ -42,7 +42,7 @@ test("within a generation a save carries only what changed, keyed the way the ta
   assert.ok(save.kind === SAVE_KIND.AMEND);
   assert.equal(save.generationId, "gen-1");
   assert.deepEqual(save.delta.items, { keepPrefix: 3, append: [after.items[3]] });
-  assert.deepEqual(save.delta.cursors, after.cursors);
+  assert.equal(save.delta.compactionCount, after.compactionCount);
   assert.deepEqual(save.delta.requests, {
     upsert: [{ ordinal: 1, record: after.requests[1] }],
     remove: [],

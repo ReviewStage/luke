@@ -49,14 +49,14 @@ import { answer } from "./tool-results.js";
 import {
   BRAIN_TOOL,
   isBrainOnlyTool,
-  maximumBriefingLength,
+  MAXIMUM_UTTERANCE_CHARS,
   maximumChildTaskLength,
   maximumMemoryQueryLength,
   maximumMemorySearchResults,
   maximumSessionsConversationLines,
 } from "./tools.js";
 import { REFUSAL_REASON, type RunControl, SPAWN_REFUSAL_REASON, type TurnContext } from "./turn.js";
-import type { BrainDelivery } from "./wake-events.js";
+import type { BrainUtterance } from "./utterance.js";
 
 /**
  * The tool executor one turn hands its runtime. Every call the model emits
@@ -64,7 +64,7 @@ import type { BrainDelivery } from "./wake-events.js";
  * otherwise dispatched by what the catalog says the tool is: an action carried
  * through the journal to the performer, a workspace file's read or write, or
  * one of the brain's own — the roster in full, a whole transcript, the
- * briefing it decided to give. The policy is enforced again at this door,
+ * words it decided to say aloud. The policy is enforced again at this door,
  * whatever the model was shown, and the runtime's own standing joins the
  * turn's: an action prepared inside a run the runtime has ended is refused.
  */
@@ -161,8 +161,8 @@ export interface ToolExecutorTurn {
   readonly policy: EffectiveToolPolicy;
   readonly context: TurnContext;
   readonly execution: BrainActionExecution;
-  /** A briefing the model decided to give, handed to the turn to deliver once its context is kept. */
-  readonly onBriefing: (delivery: BrainDelivery) => void;
+  /** Words the model decided to say aloud, handed to the turn to deliver once its context is kept. */
+  readonly onUtterance: (utterance: BrainUtterance) => void;
 }
 
 /** Whether a tool's call goes through the journal as an effect: every write, and every action the performer carries. */
@@ -176,7 +176,7 @@ export function journaledEffect(policy: EffectiveToolPolicy, name: string): bool
 
 /**
  * Why the policy refuses a call, from the policy's own answer: a name the
- * catalog never held, the briefing channel withheld by the turn's own layer
+ * catalog never held, the voice's channel withheld by the turn's own layer
  * because the reply is the speech, or a tool a configured layer removed.
  */
 export function refusalForPolicy(
@@ -469,9 +469,9 @@ export function createTurnToolExecutor(
           return answer(await dependencies.readWhole(named, context));
         }
         case BRAIN_TOOL.ANNOUNCE: {
-          const briefing = text(args.briefing)?.slice(0, maximumBriefingLength);
-          if (!briefing) return answer(rejection(REFUSAL_REASON.EMPTY_BRIEFING));
-          turn.onBriefing({ briefing, decidedAt: dependencies.now() });
+          const words = text(args.text)?.slice(0, MAXIMUM_UTTERANCE_CHARS);
+          if (!words) return answer(rejection(REFUSAL_REASON.EMPTY_UTTERANCE));
+          turn.onUtterance({ text: words, decidedAt: dependencies.now() });
           return answer({ status: ACTION_RESULT_STATUS.ACCEPTED });
         }
         case BRAIN_TOOL.SESSIONS_SPAWN:

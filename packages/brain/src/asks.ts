@@ -39,8 +39,6 @@ export interface AskLedgerOptions {
   runAsk: (inputs: readonly AskInput[]) => Promise<void>;
   /** The execution under way, for steering and interrupt. */
   active: () => ActiveExecution | undefined;
-  /** Disarms the wake window before an ask's turn opens with the inbox as it stands. */
-  disarmWakes: () => void;
   /** A developer's ask outranks housekeeping still waiting its turn. */
   cancelMaintenance: () => void;
 }
@@ -339,12 +337,12 @@ export class AskLedger {
     const active = this.#options.active();
     const run = this.#runs.get(input.id);
     if (!active || !run || this.#seam.runRevoked(active.run)) return false;
-    // Only another ask's turn can take the words: a wake, a look, or a
-    // hold's release runs under its own prompt and origin, and a reply
-    // formed inside it would be that turn's, not the developer's answer. The
-    // ask waits in the queue instead and opens its own turn when this one ends.
+    // Only another ask's turn can take the words: a tick or a child's turn
+    // runs under its own prompt and origin, and a reply formed inside it
+    // would be that turn's, not the developer's answer. The ask waits in the
+    // queue instead and opens its own turn when this one ends.
     if (active.plan.trigger !== BRAIN_TURN_TRIGGER.ASK) return false;
-    const text = askInputText(input.text, [], this.#seam.now());
+    const text = askInputText(input.text, this.#seam.now());
     if (!active.started.steer({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text })) return false;
     active.riders.push(run);
     // The one place a rider is committed running: its words are in the model's
@@ -389,9 +387,6 @@ export class AskLedger {
   /** Queues one turn for the asks given, the first that can open it standing as its run. */
   #open(inputs: readonly AskInput[]): void {
     if (inputs.length === 0) return;
-    // The ask's turn opens with the inbox as it stands, so the window a wake
-    // armed has nothing left to open and is disarmed.
-    this.#options.disarmWakes();
     void this.#options.runAsk(inputs);
   }
 

@@ -11,11 +11,11 @@ import type { TraceDirection } from "@sidecar/devtrace/vocabulary";
 import type { RealtimeConnection } from "@sidecar/hosted";
 import {
   ASK_BRAIN_TOOL,
-  BRIEFING_SPEECH_KIND,
-  type BriefingSpeech,
   REALTIME_CLIENT_EVENT,
   REALTIME_SERVER_EVENT,
   type RealtimeStatus,
+  UTTERANCE_SPEECH_KIND,
+  type UtteranceSpeech,
 } from "@sidecar/realtime";
 import type { ReplyKind } from "@sidecar/voice/orchestrator";
 import { ACTION_RESULT_STATUS, isRecord, text, type WireRecord } from "@sidecar/wire";
@@ -114,8 +114,8 @@ export interface Harness {
 }
 
 /** An answer the brain accepted: words to say. */
-export function brainAnswer(briefing: string, runId = "run-1"): BrainAskResult {
-  return { status: ACTION_RESULT_STATUS.ACCEPTED, briefing, runId };
+export function brainAnswer(reply: string, runId = "run-1"): BrainAskResult {
+  return { status: ACTION_RESULT_STATUS.ACCEPTED, reply, runId };
 }
 
 export function brainPending(): BrainAskResult {
@@ -534,11 +534,8 @@ export function meterWentQuiet(context: Harness): void {
 }
 
 /** One briefing the brain decided, worded about one session, decided a moment ago. */
-export function briefingAbout(
-  id: string,
-  briefing = `Claude Code finished ${id}.`,
-): BriefingSpeech {
-  return { kind: BRIEFING_SPEECH_KIND, briefing, decidedAt: Date.now() };
+export function briefingAbout(id: string, text = `Claude Code finished ${id}.`): UtteranceSpeech {
+  return { kind: UTTERANCE_SPEECH_KIND, text, decidedAt: Date.now() };
 }
 
 /** One `ask_brain` call as it sits inside a finished response's output. */

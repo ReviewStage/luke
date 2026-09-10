@@ -12,7 +12,7 @@ import {
   TRANSCRIPT_EVENT_KIND,
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { BrainAgent, LOOK_SUBJECT } from "./agent.js";
+import { BrainAgent } from "./agent.js";
 import {
   assessCompaction,
   COMPACTION_NEED,
@@ -295,12 +295,10 @@ function agentOver(model: ModelAdapter, repository: FakeBrainStateRepository) {
   const reports: string[] = [];
   const agent = new BrainAgent({
     runtime,
-    observes: { kind: LOOK_SUBJECT.NONE },
     prepareTurn: () => ({ prompt: "instructions", layers: {} }),
     actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
     roster: () => ({ text: "none", identities: [] }),
     standingContext: () => "",
-    readTranscriptSince: async () => ({ status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: "n" }),
     readTranscript: async () => ({ status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: "n" }),
     deliver: () => undefined,
     store,
@@ -404,9 +402,6 @@ test("a required compaction that fails ends the run recoverably and leaves the c
     checkpointFormat: "tool-loop@1:openai-responses-input/1",
     items: [userMessageItem("x".repeat(500))],
     compactionCount: 0,
-    cursors: {},
-    captureCursors: {},
-    inbox: [],
     requests: [],
     journal: [],
   };

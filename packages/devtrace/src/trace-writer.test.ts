@@ -35,20 +35,19 @@ test("lines land in the named file, stamped, in the order they were recorded", a
     outputTokens: 60,
   });
   writer.recordBrainTurn({
-    trigger: BRAIN_TURN_TRIGGER.WAKE,
+    trigger: BRAIN_TURN_TRIGGER.TICK,
     origin: RUN_ORIGIN.OBSERVATION,
     runtime: TOOL_LOOP_RUNTIME.ID,
     tools: [...hostedBrainToolCatalog().keys()],
     promptChars: 12_000,
     inputTokens: 1_500,
-    transcriptBytes: 4_096,
     toolCalls: [{ name: "announce", argumentsChars: 120, outcomeStatus: "accepted" }],
-    deliveries: [{ briefingChars: 96 }],
+    utterances: [{ chars: 96 }],
     elapsedMs: 1_250,
     iterations: 1,
     compacted: false,
   });
-  writer.recordSpeechDecision({ kind: "briefing", decision: "offered", pendingCount: 2 });
+  writer.recordSpeechDecision({ kind: "utterance", decision: "offered", pendingCount: 2 });
   await writer.settled();
   const lines = (await readFile(writer.file, "utf8")).split("\n").filter((line) => line.length > 0);
   const entries = lines.map(recordFromJsonLine);
@@ -60,12 +59,12 @@ test("lines land in the named file, stamped, in the order they were recorded", a
   assert.equal(entries[1]?.inputChars, 2_048);
   assert.ok(entries[1] && !("model" in entries[1]));
   assert.equal(entries[2]?.kind, TRACE_ENTRY_KIND.BRAIN);
-  assert.equal(entries[2]?.trigger, BRAIN_TURN_TRIGGER.WAKE);
+  assert.equal(entries[2]?.trigger, BRAIN_TURN_TRIGGER.TICK);
   assert.equal(entries[2]?.elapsedMs, 1_250);
   const toolCalls = entries[2]?.toolCalls;
   assert.ok(Array.isArray(toolCalls) && isRecord(toolCalls[0]));
   assert.equal(entries[3]?.kind, TRACE_ENTRY_KIND.SPEECH);
-  assert.deepEqual(entries[3]?.speech, { kind: "briefing", decision: "offered", pendingCount: 2 });
+  assert.deepEqual(entries[3]?.speech, { kind: "utterance", decision: "offered", pendingCount: 2 });
   for (const entry of entries) {
     assert.ok(isWireString(entry?.at));
   }

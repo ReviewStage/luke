@@ -1,23 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { BrainDelivery } from "@sidecar/brain";
+import type { BrainUtterance } from "@sidecar/brain";
 import type { SpeechTraceRecord } from "@sidecar/devtrace";
 import {
   ARRIVAL_SPEECH_KIND,
-  BRIEFING_SPEECH_KIND,
   CALENDAR_ONBOARDING_SPEECH_KIND,
+  UTTERANCE_SPEECH_KIND,
 } from "@sidecar/realtime";
 import { SPEECH_OUTCOME } from "@sidecar/realtime/speech";
 import { FakeClock } from "@sidecar/runtime/testing";
 import {
-  MAXIMUM_PENDING_BRIEFINGS,
+  MAXIMUM_PENDING_UTTERANCES,
   SPEECH_DECISION,
   SPOKEN_NOTICE_MAX_AGE_MS,
   SpeechArbiter,
 } from "./speech-arbiter.js";
 
-function delivery(briefing: string, decidedAt = 1_000): BrainDelivery {
-  return { briefing, decidedAt };
+function utterance(text: string, decidedAt = 1_000): BrainUtterance {
+  return { text, decidedAt };
 }
 
 interface Harness {
@@ -41,15 +41,19 @@ function harness(now = 1_000): Harness {
   return { arbiter, traces, clock };
 }
 
-function requestBriefing(arbiter: SpeechArbiter, text: string, decidedAt = 1_000): void {
-  arbiter.request({ kind: BRIEFING_SPEECH_KIND, delivery: delivery(text, decidedAt) });
+function requestUtterance(arbiter: SpeechArbiter, text: string, decidedAt = 1_000): void {
+  arbiter.request({ kind: UTTERANCE_SPEECH_KIND, utterance: utterance(text, decidedAt) });
 }
 
-/** The briefing an offer carries, or the beat kind it names. */
+/** The words an offer carries, or the beat kind it names. */
 function offeredWords(arbiter: SpeechArbiter): string | undefined {
   const offer = arbiter.next();
   if (!offer) return undefined;
-  return offer.turn.kind === BRIEFING_SPEECH_KIND ? offer.turn.briefing : offer.turn.kind;
+  return offer.turn.kind === UTTERANCE_SPEECH_KIND ? offer.turn.text : offer.turn.kind;
+}
+
+function dropped(traces: readonly SpeechTraceRecord[]): number {
+  return traces.filter((record) => record.decision === SPEECH_DECISION.DROPPED).length;
 }
 
 test("a beat is requested once: pending, offered, or spent, the repeat is dropped", () => {
@@ -72,64 +76,62 @@ test("a beat is requested once: pending, offered, or spent, the repeat is droppe
   assert.equal(arbiter.pendingCount, 1);
 });
 
-test("the briefing backlog sheds its oldest whole past the bound", () => {
-  const { arbiter } = harness();
-  for (let index = 0; index < MAXIMUM_PENDING_BRIEFINGS + 2; index += 1) {
-    requestBriefing(arbiter, `briefing ${index}`);
+test("the utterance backlog sheds its oldest whole past the bound", () => {
+  const { arbiter, traces } = harness();
+  for (let index = 0; index < MAXIMUM_PENDING_UTTERANCES + 2; index += 1) {
+    requestUtterance(arbiter, `utterance ${index}`);
   }
-  assert.equal(arbiter.pendingCount, MAXIMUM_PENDING_BRIEFINGS);
-
-  arbiter.setQuiet(true);
-  const held = arbiter.takeHeldBriefings();
-  assert.equal(held.length, MAXIMUM_PENDING_BRIEFINGS);
-  // The oldest went first: a backlog re-decided in one turn wants the recent few.
-  assert.equal(held[0]?.briefing, "briefing 2");
-  assert.equal(held.at(-1)?.briefing, `briefing ${MAXIMUM_PENDING_BRIEFINGS + 1}`);
-  assert.equal(arbiter.pendingCount, 0);
-  assert.deepEqual(arbiter.takeHeldBriefings(), []);
+  assert.equal(arbiter.pendingCount, MAXIMUM_PENDING_UTTERANCES);
+  assert.equal(dropped(traces), 2);
+  // The oldest went first: the mouth reads the recent few.
+  assert.equal(offeredWords(arbiter), "utterance 2");
 });
 
-test("the bound never sheds the briefing the mouth already holds", () => {
+test("the bound never sheds the utterance the mouth already holds", () => {
   const { arbiter } = harness();
-  requestBriefing(arbiter, "offered");
+  requestUtterance(arbiter, "offered");
   const offer = arbiter.next();
   assert.ok(offer);
-  for (let index = 0; index < MAXIMUM_PENDING_BRIEFINGS + 1; index += 1) {
-    requestBriefing(arbiter, `later ${index}`);
+  for (let index = 0; index < MAXIMUM_PENDING_UTTERANCES + 1; index += 1) {
+    requestUtterance(arbiter, `later ${index}`);
   }
-  assert.equal(arbiter.pendingCount, MAXIMUM_PENDING_BRIEFINGS);
+  assert.equal(arbiter.pendingCount, MAXIMUM_PENDING_UTTERANCES);
   assert.equal(arbiter.offeredId, offer.id);
   // Settling the held one still lands: it was never taken out from under the mouth.
-  assert.equal(arbiter.settle(offer.id, SPEECH_OUTCOME.SPOKEN)?.kind, BRIEFING_SPEECH_KIND);
+  assert.equal(arbiter.settle(offer.id, SPEECH_OUTCOME.SPOKEN)?.kind, UTTERANCE_SPEECH_KIND);
   assert.equal(offeredWords(arbiter), "later 2");
 });
 
-test("a request arriving under quiet enters held, and nothing is offered", () => {
-  const { arbiter } = harness();
+test("an utterance requested under quiet is dropped; a beat enters held and nothing is offered", () => {
+  const { arbiter, traces } = harness();
   arbiter.setQuiet(true);
-  requestBriefing(arbiter, "quiet news");
+  requestUtterance(arbiter, "quiet news");
+  assert.equal(arbiter.pendingCount, 0);
+  assert.equal(traces.at(-1)?.decision, SPEECH_DECISION.DROPPED);
+  assert.equal(traces.at(-1)?.kind, UTTERANCE_SPEECH_KIND);
   arbiter.request({ kind: ARRIVAL_SPEECH_KIND });
-  assert.equal(arbiter.heldBriefingCount, 1);
+  assert.equal(arbiter.pendingCount, 1);
   assert.equal(arbiter.next(), undefined);
-  assert.equal(arbiter.pendingCount, 2);
+  // The quiet over, the beat is offered and the utterance is gone for good.
+  arbiter.setQuiet(false);
+  assert.equal(offeredWords(arbiter), ARRIVAL_SPEECH_KIND);
 });
 
-test("quiet beginning holds every pending request; quiet ending releases the beats alone", () => {
-  const { arbiter, clock } = harness();
-  requestBriefing(arbiter, "before");
+test("quiet beginning drops every pending utterance but holds the beats; quiet ending releases the beats on a fresh clock", () => {
+  const { arbiter, clock, traces } = harness();
+  requestUtterance(arbiter, "before");
+  requestUtterance(arbiter, "also before");
   arbiter.request({ kind: CALENDAR_ONBOARDING_SPEECH_KIND });
-  assert.equal(arbiter.heldBriefingCount, 0);
+  assert.equal(arbiter.pendingCount, 3);
 
   arbiter.setQuiet(true);
-  assert.equal(arbiter.heldBriefingCount, 1);
+  assert.equal(arbiter.pendingCount, 1, "only the beat stands");
+  assert.equal(dropped(traces), 2);
   assert.equal(arbiter.next(), undefined);
 
-  // The meeting runs long past the news window; a held request does not age.
+  // The meeting runs long past the news window; a held beat does not age.
   clock.now += SPOKEN_NOTICE_MAX_AGE_MS * 3;
   arbiter.setQuiet(false);
-  assert.equal(arbiter.heldBriefingCount, 1, "briefings wait for the brain, not the mouth");
-  // The beat is released on a fresh clock: it is offered, not aged out, and
-  // its deadline runs from the release.
   const offer = arbiter.next();
   assert.ok(offer);
   assert.equal(offer.turn.kind, CALENDAR_ONBOARDING_SPEECH_KIND);
@@ -137,38 +139,24 @@ test("quiet beginning holds every pending request; quiet ending releases the bea
   assert.equal(offer.speakBy, clock.now + SPOKEN_NOTICE_MAX_AGE_MS);
 });
 
-test("held briefings are taken in order with briefing and timestamp intact, once", () => {
-  const { arbiter } = harness();
-  arbiter.setQuiet(true);
-  requestBriefing(arbiter, "first", 1_000);
-  requestBriefing(arbiter, "second", 2_000);
-  arbiter.request({ kind: ARRIVAL_SPEECH_KIND });
-  arbiter.setQuiet(false);
-
-  assert.deepEqual(arbiter.takeHeldBriefings(), [
-    { briefing: "first", decidedAt: 1_000 },
-    { briefing: "second", decidedAt: 2_000 },
-  ]);
-  assert.equal(arbiter.heldBriefingCount, 0);
-  assert.equal(arbiter.pendingCount, 1, "the beat is not a briefing and stays");
-  assert.deepEqual(arbiter.takeHeldBriefings(), []);
-});
-
-test("dropBriefings discards every waiting briefing and nothing else", () => {
+test("quiet beginning leaves the offered utterance to the mouth's own settle", () => {
   const { arbiter, traces } = harness();
-  requestBriefing(arbiter, "a");
-  requestBriefing(arbiter, "b");
-  arbiter.request({ kind: ARRIVAL_SPEECH_KIND });
-  arbiter.dropBriefings();
+  requestUtterance(arbiter, "in the mouth");
+  requestUtterance(arbiter, "waiting");
+  const offer = arbiter.next();
+  assert.ok(offer);
+  arbiter.setQuiet(true);
   assert.equal(arbiter.pendingCount, 1);
-  assert.equal(offeredWords(arbiter), ARRIVAL_SPEECH_KIND);
-  assert.equal(traces.filter((record) => record.decision === SPEECH_DECISION.DROPPED).length, 2);
+  assert.equal(arbiter.offeredId, offer.id);
+  assert.equal(dropped(traces), 1);
+  assert.equal(arbiter.settle(offer.id, SPEECH_OUTCOME.SPOKEN)?.outcome, SPEECH_OUTCOME.SPOKEN);
+  assert.equal(arbiter.pendingCount, 0);
 });
 
 test("nothing is offered while quiet or while an offer is outstanding", () => {
   const { arbiter } = harness();
-  requestBriefing(arbiter, "a");
-  requestBriefing(arbiter, "b");
+  requestUtterance(arbiter, "a");
+  requestUtterance(arbiter, "b");
   const first = arbiter.next();
   assert.ok(first);
   assert.equal(arbiter.next(), undefined, "one offer at a time");
@@ -178,21 +166,21 @@ test("nothing is offered while quiet or while an offer is outstanding", () => {
   arbiter.setQuiet(true);
   assert.equal(arbiter.next(), undefined, "nothing under quiet");
   arbiter.setQuiet(false);
-  // The briefing that stood when the quiet began is held for the brain.
+  // The utterance that stood when the quiet began was dropped with it.
   assert.equal(arbiter.next(), undefined);
-  assert.equal(arbiter.heldBriefingCount, 1);
+  assert.equal(arbiter.pendingCount, 0);
 });
 
 test("offers go out FIFO across kinds, each with its deadline from its own decision", () => {
   const { arbiter, clock } = harness(5_000);
-  requestBriefing(arbiter, "news", 4_000);
+  requestUtterance(arbiter, "news", 4_000);
   arbiter.request({ kind: ARRIVAL_SPEECH_KIND });
   clock.now = 6_000;
   arbiter.request({ kind: CALENDAR_ONBOARDING_SPEECH_KIND });
 
   const first = arbiter.next();
-  assert.ok(first && first.turn.kind === BRIEFING_SPEECH_KIND);
-  assert.equal(first.turn.briefing, "news");
+  assert.ok(first && first.turn.kind === UTTERANCE_SPEECH_KIND);
+  assert.equal(first.turn.text, "news");
   assert.equal(first.turn.decidedAt, 4_000);
   assert.equal(first.speakBy, 4_000 + SPOKEN_NOTICE_MAX_AGE_MS);
   arbiter.settle(first.id, SPEECH_OUTCOME.SPOKEN);
@@ -216,36 +204,41 @@ test("offers go out FIFO across kinds, each with its deadline from its own decis
 test("next ages out unheld requests, spends a stale beat, and never ages a held one", () => {
   const { arbiter, clock, traces } = harness(10_000);
   arbiter.setQuiet(true);
-  requestBriefing(arbiter, "held", 10_000);
-  arbiter.setQuiet(false);
-  requestBriefing(arbiter, "old", 5_000);
+  arbiter.request({ kind: CALENDAR_ONBOARDING_SPEECH_KIND });
+  requestUtterance(arbiter, "old", 5_000);
   arbiter.request({ kind: ARRIVAL_SPEECH_KIND });
   clock.now = 5_000 + SPOKEN_NOTICE_MAX_AGE_MS + 1;
 
-  // Nothing arrives at the mouth stale: the aged briefing is settled here,
-  // the beat requested later still stands, and the held briefing waits out
-  // the hold rather than the clock.
+  // Held beats wait out the hold rather than the clock: nothing is offered
+  // and nothing ages while the quiet stands.
+  assert.equal(arbiter.next(), undefined);
+  assert.equal(arbiter.pendingCount, 2);
+  arbiter.setQuiet(false);
   const offer = arbiter.next();
   assert.ok(offer);
-  assert.equal(offer.turn.kind, ARRIVAL_SPEECH_KIND);
-  assert.equal(arbiter.heldBriefingCount, 1);
+  assert.equal(offer.turn.kind, CALENDAR_ONBOARDING_SPEECH_KIND);
+  arbiter.settle(offer.id, SPEECH_OUTCOME.SPOKEN);
+
+  // An unheld utterance past the window is settled stale here, and the beat
+  // requested later still stands.
+  requestUtterance(arbiter, "old", 5_000);
+  const next = arbiter.next();
+  assert.ok(next);
+  assert.equal(next.turn.kind, ARRIVAL_SPEECH_KIND);
   assert.equal(traces.filter((record) => record.decision === SPEECH_OUTCOME.STALE).length, 1);
 
   // A beat that ages out is spent for the run.
-  arbiter.settle(offer.id, SPEECH_OUTCOME.HELD);
-  arbiter.setQuiet(true);
-  arbiter.setQuiet(false);
+  arbiter.settle(next.id, SPEECH_OUTCOME.HELD);
   clock.now += SPOKEN_NOTICE_MAX_AGE_MS + 1;
   assert.equal(arbiter.next(), undefined);
   arbiter.request({ kind: ARRIVAL_SPEECH_KIND });
-  assert.equal(arbiter.pendingCount, 1, "only the held briefing stands; the beat is spent");
-  assert.equal(arbiter.heldBriefingCount, 1);
+  assert.equal(arbiter.pendingCount, 0, "the beat is spent");
 });
 
 test("settle SPOKEN ends the request and spends a beat; the next is then offered", () => {
   const { arbiter } = harness();
   arbiter.request({ kind: ARRIVAL_SPEECH_KIND });
-  requestBriefing(arbiter, "after");
+  requestUtterance(arbiter, "after");
   const offer = arbiter.next();
   assert.ok(offer);
   const settled = arbiter.settle(offer.id, SPEECH_OUTCOME.SPOKEN);
@@ -256,19 +249,18 @@ test("settle SPOKEN ends the request and spends a beat; the next is then offered
   assert.equal(offeredWords(arbiter), "after");
 });
 
-test("settle HELD returns the request to the head, held, unspent", () => {
+test("settle HELD returns a beat to the head, held, unspent", () => {
   const { arbiter } = harness();
   arbiter.request({ kind: ARRIVAL_SPEECH_KIND });
-  requestBriefing(arbiter, "later");
   const offer = arbiter.next();
   assert.ok(offer);
   arbiter.setQuiet(true);
   assert.equal(arbiter.settle(offer.id, SPEECH_OUTCOME.HELD)?.outcome, SPEECH_OUTCOME.HELD);
-  assert.equal(arbiter.pendingCount, 2);
+  assert.equal(arbiter.pendingCount, 1);
   assert.equal(arbiter.offeredId, undefined);
 
   arbiter.setQuiet(false);
-  // The beat is offered again, ahead of the briefing behind it, with a new deadline.
+  // The beat is offered again with a new deadline.
   const again = arbiter.next();
   assert.ok(again);
   assert.equal(again.id, offer.id);
@@ -276,7 +268,26 @@ test("settle HELD returns the request to the head, held, unspent", () => {
   // A held beat was not spent: had it been, the repeat request would be dropped
   // — instead it is deduped against the pending one, and the count holds.
   arbiter.request({ kind: ARRIVAL_SPEECH_KIND });
-  assert.equal(arbiter.pendingCount, 2);
+  assert.equal(arbiter.pendingCount, 1);
+});
+
+test("settle HELD drops an utterance", () => {
+  const { arbiter, traces } = harness();
+  requestUtterance(arbiter, "decided against a roster that moved on");
+  arbiter.request({ kind: ARRIVAL_SPEECH_KIND });
+  const offer = arbiter.next();
+  assert.ok(offer && offer.turn.kind === UTTERANCE_SPEECH_KIND);
+  arbiter.setQuiet(true);
+  const settled = arbiter.settle(offer.id, SPEECH_OUTCOME.HELD);
+  assert.equal(settled?.kind, UTTERANCE_SPEECH_KIND);
+  assert.equal(settled?.outcome, SPEECH_OUTCOME.HELD);
+  assert.equal(traces.at(-1)?.decision, SPEECH_DECISION.DROPPED);
+  assert.equal(arbiter.offeredId, undefined);
+  assert.equal(arbiter.pendingCount, 1, "the beat behind it stands, held");
+  arbiter.setQuiet(false);
+  assert.equal(offeredWords(arbiter), ARRIVAL_SPEECH_KIND);
+  // A late settle for the dropped utterance names nothing.
+  assert.equal(arbiter.settle(offer.id, SPEECH_OUTCOME.SPOKEN), undefined);
 });
 
 test("settle HELD while no quiet stands returns the request to the head unheld", () => {
@@ -308,8 +319,8 @@ test("settle STALE ends the request and spends a beat", () => {
 
 test("settle REFUSED ends every pending request and spends the pending beats", () => {
   const { arbiter, traces } = harness();
-  requestBriefing(arbiter, "a");
-  requestBriefing(arbiter, "b");
+  requestUtterance(arbiter, "a");
+  requestUtterance(arbiter, "b");
   arbiter.request({ kind: ARRIVAL_SPEECH_KIND });
   const offer = arbiter.next();
   assert.ok(offer);
@@ -320,13 +331,13 @@ test("settle REFUSED ends every pending request and spends the pending beats", (
   arbiter.request({ kind: ARRIVAL_SPEECH_KIND });
   assert.equal(arbiter.pendingCount, 0, "a refused beat is spent for the run");
   // Fresh news starts a fresh backlog.
-  requestBriefing(arbiter, "c");
+  requestUtterance(arbiter, "c");
   assert.equal(offeredWords(arbiter), "c");
 });
 
 test("an unknown id is ignored, whether never offered, withdrawn, or already settled", () => {
   const { arbiter } = harness();
-  requestBriefing(arbiter, "a");
+  requestUtterance(arbiter, "a");
   assert.equal(arbiter.settle("nobody", SPEECH_OUTCOME.SPOKEN), undefined);
   const offer = arbiter.next();
   assert.ok(offer);
@@ -356,9 +367,9 @@ test("retract removes a pending beat silently and names an offered one for withd
 
 test("an offer past its deadline with no settle is reclaimed stale and the head re-offered", () => {
   const { arbiter, clock, traces } = harness(1_000);
-  requestBriefing(arbiter, "lost", 1_000);
+  requestUtterance(arbiter, "lost", 1_000);
   clock.now = 1_500;
-  requestBriefing(arbiter, "next", 1_500);
+  requestUtterance(arbiter, "next", 1_500);
   const lost = arbiter.next();
   assert.ok(lost);
   // The renderer reloaded: no settle ever comes. Before the deadline, the
@@ -368,8 +379,8 @@ test("an offer past its deadline with no settle is reclaimed stale and the head 
 
   clock.now = lost.speakBy + 1;
   const reoffered = arbiter.next();
-  assert.ok(reoffered && reoffered.turn.kind === BRIEFING_SPEECH_KIND);
-  assert.equal(reoffered.turn.briefing, "next");
+  assert.ok(reoffered && reoffered.turn.kind === UTTERANCE_SPEECH_KIND);
+  assert.equal(reoffered.turn.text, "next");
   assert.notEqual(reoffered.id, lost.id);
   assert.equal(traces.filter((record) => record.decision === SPEECH_OUTCOME.STALE).length, 1);
   assert.equal(
@@ -381,17 +392,18 @@ test("an offer past its deadline with no settle is reclaimed stale and the head 
 
 test("every trace record carries a kind, a decision, and a count, and never the words", () => {
   const { arbiter, clock, traces } = harness();
-  requestBriefing(arbiter, "the secret sentence");
+  requestUtterance(arbiter, "the secret sentence");
   arbiter.request({ kind: ARRIVAL_SPEECH_KIND });
   arbiter.request({ kind: ARRIVAL_SPEECH_KIND });
   const offer = arbiter.next();
   assert.ok(offer);
   arbiter.settle(offer.id, SPEECH_OUTCOME.SPOKEN);
   arbiter.setQuiet(true);
+  requestUtterance(arbiter, "the secret sentence again");
   arbiter.setQuiet(false);
   clock.now += SPOKEN_NOTICE_MAX_AGE_MS + 1;
   arbiter.next();
-  arbiter.dropBriefings();
+  arbiter.withdrawUtterances();
 
   assert.ok(traces.length >= 5);
   const decisions = new Set<string>(Object.values(SPEECH_DECISION));
@@ -399,45 +411,40 @@ test("every trace record carries a kind, a decision, and a count, and never the 
     assert.deepEqual(Object.keys(record).sort(), ["decision", "kind", "pendingCount"]);
     assert.ok(decisions.has(record.decision));
     assert.ok(Number.isInteger(record.pendingCount) && record.pendingCount >= 0);
-    assert.equal("briefing" in record, false);
+    assert.equal("text" in record, false);
+    assert.equal(JSON.stringify(record).includes("secret"), false);
   }
 });
 
-test("withdrawing briefings takes the queued, the held, and the offered alike, answers the offered id, and leaves beats standing", () => {
-  const { arbiter, clock } = harness();
-  requestBriefing(arbiter, "OFFERED_OLD");
-  requestBriefing(arbiter, "QUEUED_OLD");
+test("withdrawing utterances takes the queued and the offered alike, answers the offered id, and leaves beats standing", () => {
+  const { arbiter, clock, traces } = harness();
+  requestUtterance(arbiter, "OFFERED_OLD");
+  requestUtterance(arbiter, "QUEUED_OLD");
   arbiter.request({ kind: ARRIVAL_SPEECH_KIND });
   const offer = arbiter.next();
   assert.ok(
-    offer && offer.turn.kind === BRIEFING_SPEECH_KIND && offer.turn.briefing === "OFFERED_OLD",
+    offer && offer.turn.kind === UTTERANCE_SPEECH_KIND && offer.turn.text === "OFFERED_OLD",
   );
-  arbiter.setQuiet(true);
-  requestBriefing(arbiter, "HELD_OLD");
-  // The quiet held the queued one too; the offered one is the mouth's.
-  assert.equal(arbiter.heldBriefingCount, 2);
 
-  assert.equal(arbiter.withdrawBriefings(), offer.id);
+  assert.equal(arbiter.withdrawUtterances(), offer.id);
   assert.equal(arbiter.offeredId, undefined);
-  assert.equal(arbiter.heldBriefingCount, 0);
   assert.equal(arbiter.pendingCount, 1);
-  assert.deepEqual(arbiter.takeHeldBriefings(), []);
+  assert.equal(dropped(traces), 2);
   // The mouth's late report on the withdrawn offer is nobody's.
   assert.equal(arbiter.settle(offer.id, SPEECH_OUTCOME.SPOKEN), undefined);
-  arbiter.setQuiet(false);
   clock.now += 1;
   assert.equal(offeredWords(arbiter), ARRIVAL_SPEECH_KIND);
-  // Nothing to withdraw answers nothing, and a beat is never a briefing.
-  assert.equal(arbiter.withdrawBriefings(), undefined);
+  // Nothing to withdraw answers nothing, and a beat is never an utterance.
+  assert.equal(arbiter.withdrawUtterances(), undefined);
 });
 
 test("reclaiming takes the outstanding offer back to the head unspoken, so the next receiver is offered it at once", () => {
   const { arbiter, traces, clock } = harness();
-  requestBriefing(arbiter, "first");
-  requestBriefing(arbiter, "second");
+  requestUtterance(arbiter, "first");
+  requestUtterance(arbiter, "second");
   const offered = arbiter.next();
   assert.equal(
-    offered && offered.turn.kind === BRIEFING_SPEECH_KIND ? offered.turn.briefing : undefined,
+    offered && offered.turn.kind === UTTERANCE_SPEECH_KIND ? offered.turn.text : undefined,
     "first",
   );
   // While the offer stands, nothing else is offered.
@@ -448,7 +455,7 @@ test("reclaiming takes the outstanding offer back to the head unspoken, so the n
   assert.equal(arbiter.pendingCount, 2);
   const again = arbiter.next();
   assert.equal(
-    again && again.turn.kind === BRIEFING_SPEECH_KIND ? again.turn.briefing : undefined,
+    again && again.turn.kind === UTTERANCE_SPEECH_KIND ? again.turn.text : undefined,
     "first",
   );
   // The reoffer carries a fresh id, so a late settle from the vanished renderer

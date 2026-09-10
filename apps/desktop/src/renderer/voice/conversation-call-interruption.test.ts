@@ -822,7 +822,7 @@ test("a stopped reply's brain follow-up stands down instead of speaking over the
 
   // The answer is still delivered as an item, so the model is not left
   // waiting — but no reply opens to voice it: the quiet just asked for holds.
-  assert.deepEqual(toolOutputs(context, before), [{ briefing: "Sent." }]);
+  assert.deepEqual(toolOutputs(context, before), [{ reply: "Sent." }]);
   assert.deepEqual(responseCreates(context, before), []);
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 });

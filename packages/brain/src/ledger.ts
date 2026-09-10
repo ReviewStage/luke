@@ -1,6 +1,5 @@
 import type { BrainStoreLease } from "./envelope.js";
 import type { Generation } from "./generation.js";
-import type { BrainObservationEntry } from "./observation-inbox.js";
 import {
   BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_STATUS,
@@ -16,10 +15,10 @@ import type { RunControl, TurnContext } from "./turn.js";
 /**
  * The host's ledger: the one way a generation reaches the store, and the one
  * place the kind of a save is named. What a save may own: the working
- * context, cursors, and journal, when it is the checkpoint of the turn
- * holding them; one record's fields, when it is that record's acceptance,
- * transition, accounting, end, or mark; the whole generation, when it is the
- * restore that just loaded it; or the inbox, when it is a capture. Each is a
+ * context and journal, when it is the checkpoint of the turn holding them;
+ * one record's fields, when it is that record's acceptance, transition,
+ * accounting, end, or mark; or the whole generation, when it is the restore
+ * that just loaded it. Each is a
  * method of the store, which composes the envelope inside its own queue and
  * applies what the save owns to live state in the same step; the ledger's own
  * work is deciding which save a caller means and what its answer says.
@@ -122,18 +121,17 @@ export class BrainRequestLedger {
   }
 
   /**
-   * A turn's or an action's checkpoint: the working context, cursors, and journal
-   * this turn owns become the committed ones, together with the run's own
+   * A turn's or an action's checkpoint: the working context and journal this
+   * turn owns become the committed ones, together with the run's own
    * accounting when a run owns the turn. Nothing else changes: every other
    * record stays as committed, so a request accepted or marked meanwhile is
    * untouched and a request still provisional is not published.
    */
   checkpoint(turnContext: Omit<TurnContext, "run"> & { run?: RunControl }): Promise<boolean> {
-    const { generation, context, run, consumes } = turnContext;
+    const { generation, context, run } = turnContext;
     return this.#landed(
       this.#store.saveWorking(this.#lease, generation, {
         context,
-        ...(consumes && consumes.length > 0 ? { consumes } : undefined),
         ...(run?.recorded
           ? {
               record: {
@@ -155,11 +153,6 @@ export class BrainRequestLedger {
    */
   restored(generation: Generation, context: RecordingContextEngine | undefined): Promise<boolean> {
     return this.#landed(this.#store.saveWhole(this.#lease, generation, context));
-  }
-
-  /** Observations captured into the inbox, with the capture cursors they advanced. */
-  captured(generation: Generation, entries: readonly BrainObservationEntry[]): Promise<boolean> {
-    return this.#landed(this.#store.saveCapture(this.#lease, generation, entries));
   }
 
   /**

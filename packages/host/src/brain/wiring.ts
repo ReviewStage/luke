@@ -5,10 +5,8 @@ import {
   BRAIN_PERSONA,
   BRAIN_TURN_KIND,
   BRAIN_TURN_TRIGGER,
-  BRAIN_WAKE_KIND,
   BRAIN_WORKSPACE_SEEDS,
   BrainAgent,
-  type BrainDelivery,
   type BrainFlushInput,
   type BrainFlushMarkerStore,
   BrainGenerationClock,
@@ -16,19 +14,19 @@ import {
   type BrainRoster,
   type BrainStateRepository,
   BrainStateStore,
+  type BrainTick,
+  type BrainTickChange,
   type BrainTurnDescription,
-  type BrainTurnNotice,
   type BrainTurnPreparation,
-  type BrainTurnReport,
   type BrainTurnTraceRecord,
   type BrainTurnTrigger,
-  type BrainWakeEvent,
+  type BrainUtterance,
   type BrainWorkspaceAccess,
   brainToolCatalog,
   brainToolNotes,
-  LOOK_SUBJECT,
   resolveTurnToolPolicy,
   runOriginOf,
+  TICK_CHANGE_KIND,
   toolLoopRuntimeOver,
 } from "@sidecar/brain";
 import { type BrainRequestSnapshot, brainRequestPending } from "@sidecar/brain/requests-wire";
@@ -37,7 +35,6 @@ import {
   housekeepingFellShort,
   type MemoryHousekeepingResult,
 } from "@sidecar/memory";
-import type { ObservedSpoolEvent } from "@sidecar/providers";
 import {
   BUILTIN_CONTEXT_ENGINE,
   BUILTIN_MODEL_ADAPTER,
@@ -76,8 +73,6 @@ import {
   isReasoningEffort,
   MAIN_SESSION_KEY,
   type ModelAdapter,
-  observedSessionKey,
-  observedSessionRefOf,
   type ReasoningEffort,
   RUN_ORIGIN,
   type SessionKey,
@@ -85,12 +80,11 @@ import {
 import type { ConversationEntry } from "@sidecar/session";
 import {
   dispatchRead,
-  SESSION_STATUS,
   type Session,
   type SessionIdentity,
   type SessionProviderPlugin,
 } from "@sidecar/session";
-import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, type WireRecord, type WireValue } from "@sidecar/wire";
 import {
   type BrainActionPerformerDependencies,
   createBrainActionPerformer,
@@ -107,8 +101,6 @@ import {
 export interface BrainWiringDependencies extends ChildWiringDependencies {
   /** A conversation's envelope, read and written only through the store built here; a temporary thread's lives in memory alone. */
   repositoryFor: (sessionKey: SessionKey) => BrainStateRepository;
-  /** Lists an observed session's conversation in the store, creating its row when none stands; absent, the row is not kept. */
-  ensureObservedConversation?: (sessionKey: SessionKey, name: string) => Promise<void>;
   /** The machine's parallelism, for the agent lane's width; absent means the host asks the OS. */
   parallelism?: () => number;
   traceTurn?: (record: BrainTurnTraceRecord) => void;
@@ -120,7 +112,7 @@ export interface BrainWiringDependencies extends ChildWiringDependencies {
   broadcastRequests: (snapshots: readonly BrainRequestSnapshot[]) => void;
   /** A run's end stands in Conversation, written and marked: the moment its reply may be owed to the ear. */
   onEndPublished?: BrainPublicationDependencies["onEndPublished"];
-  /** A conversation's generation ended — reset, expired, or replaced — and its unspoken briefings and replies go with it. */
+  /** A conversation's generation ended — reset, expired, or replaced — and its unspoken announcements and replies go with it. */
   onGenerationReplaced: (sessionKey: SessionKey) => void;
   actions: BrainActionPerformerDependencies;
   roster: () => BrainRoster;
@@ -132,7 +124,14 @@ export interface BrainWiringDependencies extends ChildWiringDependencies {
   standingContext: (sessionKey: SessionKey) => string;
   pluginFor: (providerId: string) => SessionProviderPlugin | undefined;
   session: (identity: SessionIdentity) => Session | undefined;
-  deliver: (delivery: BrainDelivery) => Promise<void>;
+  /** Hands words the brain decided to say to the speech arbiter. */
+  deliver: (utterance: BrainUtterance) => Promise<void>;
+  /**
+   * Whether announcements are quiet right now — a meeting, or the developer's
+   * own switch. A tick under quiet is not taken at all, so the first tick
+   * after it diffs across the whole quiet and the brain decides afresh.
+   */
+  announcementsQuiet: () => Promise<boolean>;
   /** Which credential the policy would build an adapter under, by reference; the value never enters a configuration. */
   credential: () => CredentialReference;
   /** The agent's identity workspace: seeded once, edited by the developer or by the agent's own tools. */
@@ -141,7 +140,8 @@ export interface BrainWiringDependencies extends ChildWiringDependencies {
   skillRoots: () => readonly string[];
   /** Whether a brain may stand at all: observing, on the network, and past the account gate. */
   runnable: () => boolean;
-  dropBriefings: () => void;
+  /** Withdraws every announcement not yet spoken: no brain stands to have meant it. */
+  withdrawUtterances: () => void;
   /**
    * The notebook's search and read for one conversation's memory tools: a
    * search may reach past private conversations, never the asking one, whose
@@ -188,22 +188,12 @@ export interface BrainWiring {
   /** The lanes every conversation's turns run under. */
   readonly lanes: LaneScheduler;
   /**
-   * Routes provider hooks to the conversations of the sessions they name:
-   * each observed session has a conversation of its own, opened here on its
-   * first wake, and main is handed none of them.
+   * One tick of the host's clock, after every observation pass and behind
+   * every provider hook: a cheap deterministic diff of the roster against the
+   * last tick, and one turn on main over it when anything moved and main is
+   * free. Settles once the turn has ended, or at once when none opened.
    */
-  wake: (events: readonly BrainWakeEvent[]) => void;
-  /**
-   * The roster look after an observation pass: each live local session's
-   * conversation looks at its own session alone, a session gone from the
-   * roster has its conversation stood down once idle, and main looks at no
-   * transcript at all.
-   */
-  rosterLook: () => void;
-  /** Hands held briefings back to the conversations that decided them, main's for one with no source. */
-  releaseHeld: (held: readonly BrainDelivery[]) => void;
-  /** The compact notices main has not yet read, for inspection. */
-  pendingNotices: () => readonly BrainTurnNotice[];
+  tick: () => Promise<void>;
   /** The brain of one conversation as it stands now, main's by default; nothing between transitions and on a run with no key. */
   current: (sessionKey?: SessionKey) => BrainAgent | undefined;
   /** The brain holding the run named, whichever conversation it is in. */
@@ -287,52 +277,73 @@ interface OpenConversation {
   unsubscribe: () => void;
 }
 
-/** How many notices main keeps unread before the oldest go; each is one line about one turn. */
-const MAXIMUM_PENDING_NOTICES = 50;
-
 /**
  * The prefix cache one conversation's turns ask for: a hash of its key, so
  * every turn of that conversation lands on the turns before it, across
- * launches, and no conversation on another's. The key itself never travels —
- * an observed conversation's carries a provider's session id — so what is
- * sent is the digest and nothing that could be read back into a session.
+ * launches, and no conversation on another's. The key itself never travels;
+ * what is sent is the digest and nothing that could be read back into it.
  */
 function promptCacheKeyFor(sessionKey: SessionKey): string {
   return createHash("sha256").update(sessionKey).digest("hex");
 }
 
-/** What a conversation that is not main is handed: main alone reads the notices its siblings leave. */
-const NO_OPENING_NOTES = {
-  take: () => [],
-  restore: () => {},
-};
-
-/** The lane a turn runs under, by what opened it: hooks on their own lane, children on theirs, the rest the agent's. */
+/** The lane a turn runs under, by what opened it: children on theirs, the rest the agent's. */
 function laneFor(trigger: BrainTurnTrigger): Lane {
-  switch (trigger) {
-    case BRAIN_TURN_TRIGGER.WAKE:
-      return LANE.HOOK_DISPATCH;
-    case BRAIN_TURN_TRIGGER.CHILD_TASK:
-      return LANE.CHILD;
-    default:
-      return LANE.AGENT;
-  }
-}
-
-function observedName(session: Session | undefined, identity: SessionIdentity): string {
-  return session?.title ?? `${identity.providerId} ${identity.providerSessionId}`;
+  return trigger === BRAIN_TURN_TRIGGER.CHILD_TASK ? LANE.CHILD : LANE.AGENT;
 }
 
 /**
- * The brains: one long-lived agent per open conversation. Each observed
- * coding session has a conversation of its own, opened on its first hook or
- * roster look, which reads that session's transcript, briefs the developer
- * about it directly, and leaves main a compact notice of what it did; main
- * is asked things by the developer and never reads a provider's transcript
- * on a look. Every conversation's turns
- * run under the shared lanes, one execution per conversation at a time. Nothing here detects a change for a brain — no
- * status edge, no notice — because the brain notices changes itself,
- * against its own memory. Built by `rebuild` whenever the credential policy
+ * What one tick remembers of a session, to tell the next tick what moved:
+ * the roster fields worth waking a brain for, and where its transcript was
+ * last measured to. In memory only, so the first tick after a launch finds
+ * every live session new and says so once; nothing of it reaches disk.
+ */
+interface SessionFingerprint {
+  fields: WireRecord;
+  transcriptCursor?: string;
+}
+
+/**
+ * The roster fields a tick compares. A title edit or a fresher timestamp is
+ * the same session still standing; a status, a hold for the developer, a
+ * completion's cause, an error line, or a workspace's lifecycle words moving
+ * is news the brain should hear about.
+ */
+function fingerprintFields(session: Session): WireRecord {
+  return {
+    status: session.status,
+    ...(session.holdingForDeveloper !== undefined
+      ? { holding_for_developer: session.holdingForDeveloper }
+      : undefined),
+    ...(session.completionCause !== undefined
+      ? { completion_cause: session.completionCause }
+      : undefined),
+    ...(session.detail.activity !== undefined ? { activity: session.detail.activity } : undefined),
+    ...(session.detail.error !== undefined ? { error: session.detail.error } : undefined),
+    ...(session.workspace?.name !== undefined ? { workspace: session.workspace.name } : undefined),
+  };
+}
+
+/** The fields whose value moved, each with its new value; nothing when none did. */
+function movedFields(previous: WireRecord, next: WireRecord): WireRecord | undefined {
+  const moved: Record<string, WireValue> = {};
+  for (const name of new Set([...Object.keys(previous), ...Object.keys(next)])) {
+    if (JSON.stringify(previous[name]) === JSON.stringify(next[name])) continue;
+    moved[name] = next[name] ?? null;
+  }
+  return Object.keys(moved).length > 0 ? moved : undefined;
+}
+
+/**
+ * The brains: one long-lived agent per open conversation. Main is the one
+ * the host's clock ticks: after every observation pass, and behind every
+ * provider hook, the roster is diffed against what the last tick showed, and
+ * one turn opens over the difference when there is one and main is free.
+ * The diff is deterministic and carries no transcript text — which sessions
+ * moved, which fields, how much each transcript gained — so what it
+ * amounts to, and whether to say anything, is the brain's to decide by
+ * reading what it chooses. Every conversation's turns run under the shared
+ * lanes, one execution per conversation at a time. Built by `rebuild` whenever the credential policy
  * is applied, on whichever model adapter the policy chose: the developer's
  * own OpenAI key directly, or Luke's hosted service on the signed-in
  * account. With neither there is no brain, nothing is announced, and an ask
@@ -387,7 +398,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       report: dependencies.report,
     });
     // A generation that ends — reset, expired, or replaced — takes its
-    // unspoken briefings and replies with it, the one in the mouth's hand
+    // unspoken announcements and replies with it, the one in the mouth's hand
     // included: they are that generation's words, and an offer is not proof
     // they were said. The agent hears the same announcement and stands its
     // runs down itself.
@@ -431,35 +442,6 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
   // The lanes are one scheduler over every conversation, each lane its own
   // budget and never one cap over Luke as a whole.
   const lanes = new LaneScheduler(laneConfiguration(dependencies.parallelism?.()));
-
-  // What the observed conversations did, for main's next turn: taken when
-  // that turn opens, handed back if it fails, bounded so a quiet main never
-  // accumulates a day of notices.
-  let notices: readonly BrainTurnNotice[] = [];
-  /** The one place the bound is applied, so a record and a hand-back cannot each trim differently. */
-  const holdNotices = (held: readonly BrainTurnNotice[]) => {
-    notices = held.slice(-MAXIMUM_PENDING_NOTICES);
-  };
-  const openingNotes = {
-    take: () => {
-      const taken = notices;
-      notices = [];
-      return taken;
-    },
-    restore: (returned: readonly BrainTurnNotice[]) => holdNotices([...returned, ...notices]),
-  };
-  /**
-   * What one of main's siblings did, as main will read it: the conversation's
-   * own counts, and the name this host resolved for the session the turn
-   * looked at — its own session when the turn named none.
-   */
-  const recordNotice = (report: BrainTurnReport, observed: SessionIdentity) => {
-    const identity = report.identities[0] ?? observed;
-    holdNotices([
-      ...notices,
-      { ...report, label: observedName(dependencies.session(identity), identity) },
-    ]);
-  };
 
   // The configuration names built-ins by id and is republished, atomically,
   // whenever the credential policy chooses a source. Every turn takes the
@@ -564,12 +546,6 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
   ): BrainAgent => {
     const listed: ListedSkills = { skills: [] };
     const { reasoningEffort, maximumOutputTokens } = snapshot.configuration;
-    // An observed conversation looks at its one session and reports each
-    // turn as a notice; every other conversation looks at no transcript on
-    // a roster look, and main is the one that reads the notices. Which
-    // conversation this is is the host's own routing, so the agent is handed
-    // the same fields whichever it is.
-    const observed = observedSessionRefOf(sessionKey);
     // A child's conversation is prepared as a child's: the minimal profile,
     // the child restriction at its depth, the fork it inherited if any, and
     // its own deadline when the spawn set one.
@@ -579,12 +555,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     // itself.
     const memory = dependencies.memory?.(sessionKey);
     return new BrainAgent({
-      observes: observed
-        ? { kind: LOOK_SUBJECT.SESSION, identity: observed }
-        : { kind: LOOK_SUBJECT.NONE },
       lane: (trigger, work) => lanes.run(laneFor(trigger), work),
-      notice: observed ? (report) => recordNotice(report, observed) : () => {},
-      openingNotes: sessionKey === MAIN_SESSION_KEY ? openingNotes : NO_OPENING_NOTES,
       ...(childRecord ? { child: { depth: childRecord.depth } } : undefined),
       ...(fork ? { inheritedContext: fork } : undefined),
       ...(childRecord && childRecord.timeoutMs > 0
@@ -617,16 +588,6 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
         if (notes.length === 0) return undefined;
         return notes.map((note) => `## ${note.name}\n\n${note.content}`).join("\n\n");
       },
-      readTranscriptSince: (identity, cursor) => {
-        const plugin = dependencies.pluginFor(identity.providerId);
-        if (!plugin) {
-          return Promise.resolve({
-            status: ACTION_RESULT_STATUS.UNSUPPORTED,
-            reason: "That session's provider is not connected.",
-          });
-        }
-        return dispatchRead(plugin, "transcriptSince", identity.providerSessionId, cursor);
-      },
       readTranscript: (identity) => {
         const session = dependencies.session(identity);
         const plugin = dependencies.pluginFor(identity.providerId);
@@ -641,7 +602,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
         // messages endpoint, and a provider naming no handler refuses.
         return dispatchRead(plugin, "transcript", identity.providerSessionId);
       },
-      deliver: (delivery) => dependencies.deliver({ ...delivery, sessionKey }),
+      deliver: dependencies.deliver,
       store,
       createRunId: dependencies.createId,
       ...(dependencies.traceTurn ? { trace: dependencies.traceTurn } : undefined),
@@ -672,7 +633,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
   ): Promise<void> =>
     opened.host.replace(() => {
       if (!model) {
-        if (sessionKey === MAIN_SESSION_KEY) dependencies.dropBriefings();
+        if (sessionKey === MAIN_SESSION_KEY) dependencies.withdrawUtterances();
         return undefined;
       }
       return build(
@@ -713,40 +674,24 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
 
   /**
    * The directory row a conversation is listed under before its brain is
-   * built, by the kind its key says it is: an observed session's, named for
-   * the session; a child's, named for its label; main and a thread are
-   * listed by whoever created them and need nothing here.
+   * built, by the kind its key says it is: a child's, named for its label;
+   * main and a thread are listed by whoever created them and need nothing here.
    */
   const ensureListed = async (sessionKey: SessionKey): Promise<void> => {
-    switch (conversationKindOf(sessionKey)) {
-      case CONVERSATION_KIND.OBSERVED: {
-        const identity = observedSessionRefOf(sessionKey);
-        if (!identity) return;
-        await dependencies.ensureObservedConversation?.(
-          sessionKey,
-          observedName(dependencies.session(identity), identity),
-        );
-        return;
-      }
-      case CONVERSATION_KIND.CHILD: {
-        const record = childRecordOf(children.service, sessionKey);
-        await dependencies.ensureChildConversation(
-          sessionKey,
-          record ? childName(record) : `Child ${childIdOf(sessionKey)}`,
-        );
-        return;
-      }
-      default:
-        return;
-    }
+    if (conversationKindOf(sessionKey) !== CONVERSATION_KIND.CHILD) return;
+    const record = childRecordOf(children.service, sessionKey);
+    await dependencies.ensureChildConversation(
+      sessionKey,
+      record ? childName(record) : `Child ${childIdOf(sessionKey)}`,
+    );
   };
 
   /**
    * The one way a conversation of any kind is opened for a brain: its row in
    * the directory, its store, and — when a model stands — its brain, with a
    * child's inherited fork as its opening history. Openings of one key are
-   * serialized so two hooks, two completions, or a hook and a completion
-   * landing together build one conversation, not two; a conversation still
+   * serialized so two completions landing together build one conversation,
+   * not two; a conversation still
    * standing down finishes first, so its store is let go of before another is
    * built on the same envelope and two writers never hold one repository.
    * With no model nothing is opened: there is no brain to hand back, and a
@@ -782,89 +727,119 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     openings.set(sessionKey, opening);
     return opening;
   };
-  const openObserved = (identity: SessionIdentity): Promise<BrainAgent | undefined> =>
-    openAny(observedSessionKey(identity));
-
-  const wake = (events: readonly BrainWakeEvent[]): void => {
-    if (!liveModel()) return;
-    const bySession = new Map<
-      SessionKey,
-      { identity: SessionIdentity; events: BrainWakeEvent[] }
-    >();
-    for (const event of events) {
-      const key = observedSessionKey(event.identity);
-      const held = bySession.get(key) ?? { identity: event.identity, events: [] };
-      held.events.push(event);
-      bySession.set(key, held);
-    }
-    for (const { identity, events: own } of bySession.values()) {
-      void openObserved(identity).then((agent) => agent?.wake(own));
-    }
-  };
-
-  // A conversation is busy while any run of it is pending in Conversation's view,
-  // or while its brain has anything under way or owed: a turn running or
-  // queued, a capture landing, an observation captured and not yet read, an
-  // ask waiting. An unrecorded analysis is work too, and is never cut because
-  // its session left the roster.
+  // A conversation is busy while any run of it is pending in Conversation's
+  // view, or while its brain has anything under way or owed: a turn running
+  // or queued, an ask waiting. An unrecorded tick is work too.
   const busy = (sessionKey: SessionKey) =>
     (latestRecords.get(sessionKey) ?? []).some(brainRequestPending) ||
     (conversations.get(sessionKey)?.host.current()?.busy() ?? false);
 
-  const rosterLook = (): void => {
-    if (!liveModel()) return;
-    const roster = dependencies.roster();
-    const present = new Set<SessionKey>();
-    for (const session of roster.sessions ?? []) {
-      const identity: SessionIdentity = {
-        providerId: session.providerId,
-        providerSessionId: session.providerSessionId,
-      };
-      const sessionKey = observedSessionKey(identity);
-      present.add(sessionKey);
-      const live =
-        session.status === SESSION_STATUS.WORKING || session.status === SESSION_STATUS.WAITING;
-      const open = conversations.has(sessionKey);
-      if (!(live || open)) continue;
-      void openObserved(identity).then((agent) => agent?.rosterLook());
-    }
-    // A session the roster no longer holds has nothing left to observe: its
-    // conversation stands down once no run is under way in it, and its
-    // history stays in the store for the selector and for maintenance.
-    for (const sessionKey of [...conversations.keys()]) {
-      if (!observedSessionRefOf(sessionKey) || present.has(sessionKey) || busy(sessionKey))
-        continue;
-      void closeConversation(sessionKey);
+  // What the last tick that opened a turn showed of each session, by
+  // provider and then by the provider's own session id. Nothing here is
+  // committed until the turn it opened has ended well, so a tick whose turn
+  // failed diffs against the same picture again and the change surfaces once
+  // more rather than being lost with the failure.
+  let fingerprints = new Map<string, Map<string, SessionFingerprint>>();
+  let tickInFlight = false;
+
+  /**
+   * How many bytes a session's transcript gained since the last committed
+   * tick, read through the provider's own incremental reader and discarded
+   * but for its length and the cursor it moved to. A provider that reads no
+   * increments, or a read that failed, answers nothing and keeps the cursor.
+   */
+  const transcriptGained = async (
+    identity: SessionIdentity,
+    cursor: string | undefined,
+  ): Promise<{ gained?: number; cursor?: string }> => {
+    const plugin = dependencies.pluginFor(identity.providerId);
+    if (!plugin?.reads?.transcriptSince)
+      return { ...(cursor !== undefined ? { cursor } : undefined) };
+    try {
+      const read = await dispatchRead(
+        plugin,
+        "transcriptSince",
+        identity.providerSessionId,
+        cursor,
+      );
+      if (read.status !== ACTION_RESULT_STATUS.ACCEPTED) {
+        return { ...(cursor !== undefined ? { cursor } : undefined) };
+      }
+      const next = read.cursor ?? cursor;
+      return { gained: read.text.length, ...(next !== undefined ? { cursor: next } : undefined) };
+    } catch {
+      return { ...(cursor !== undefined ? { cursor } : undefined) };
     }
   };
 
-  // A held briefing goes back to the conversation that decided it, because
-  // that conversation is the one that knows the session it was about. An
-  // observed conversation that has stood down meanwhile is reopened for it
-  // rather than the briefing being re-decided in main, which never read that
-  // session; only a source that cannot be reopened at all falls to main, and
-  // says so.
-  const releaseHeld = (held: readonly BrainDelivery[]): void => {
-    const bySource = new Map<SessionKey, BrainDelivery[]>();
-    for (const delivery of held) {
-      const source = delivery.sessionKey ?? MAIN_SESSION_KEY;
-      bySource.set(source, [...(bySource.get(source) ?? []), delivery]);
-    }
-    for (const [sessionKey, own] of bySource) {
-      const observed = observedSessionRefOf(sessionKey);
-      const opening = observed
-        ? openObserved(observed)
-        : Promise.resolve(current(sessionKey) ?? current(MAIN_SESSION_KEY));
-      void opening.then((agent) => {
-        if (agent) {
-          agent.releaseHeld(own);
-          return;
+  const tick = async (): Promise<void> => {
+    if (tickInFlight || !liveModel()) return;
+    const agent = current(MAIN_SESSION_KEY);
+    if (!agent || busy(MAIN_SESSION_KEY)) return;
+    tickInFlight = true;
+    try {
+      if (await dependencies.announcementsQuiet()) return;
+      const next = new Map<string, Map<string, SessionFingerprint>>();
+      const changes: BrainTickChange[] = [];
+      for (const session of dependencies.roster().sessions ?? []) {
+        if (session.realtimeVoiceLive) continue;
+        const identity: SessionIdentity = {
+          providerId: session.providerId,
+          providerSessionId: session.providerSessionId,
+        };
+        const previous = fingerprints.get(identity.providerId)?.get(identity.providerSessionId);
+        const fields = fingerprintFields(session);
+        const transcript = await transcriptGained(identity, previous?.transcriptCursor);
+        const provider = next.get(identity.providerId) ?? new Map<string, SessionFingerprint>();
+        provider.set(identity.providerSessionId, {
+          fields,
+          ...(transcript.cursor !== undefined
+            ? { transcriptCursor: transcript.cursor }
+            : undefined),
+        });
+        next.set(identity.providerId, provider);
+        const gained =
+          transcript.gained !== undefined && transcript.gained > 0
+            ? { transcriptCharsGained: transcript.gained }
+            : undefined;
+        if (!previous) {
+          changes.push({
+            kind: TICK_CHANGE_KIND.APPEARED,
+            identity,
+            title: session.title,
+            fields,
+            ...gained,
+          });
+          continue;
         }
-        dependencies.report(
-          `Held briefings of ${sessionKey} could not return to their conversation and are re-decided in main`,
-        );
-        current(MAIN_SESSION_KEY)?.releaseHeld(own);
-      });
+        const moved = movedFields(previous.fields, fields);
+        if (!moved && !gained) continue;
+        changes.push({
+          kind: TICK_CHANGE_KIND.CHANGED,
+          identity,
+          title: session.title,
+          ...(moved ? { fields: moved } : undefined),
+          ...gained,
+        });
+      }
+      for (const [providerId, sessions] of fingerprints) {
+        for (const providerSessionId of sessions.keys()) {
+          if (next.get(providerId)?.has(providerSessionId)) continue;
+          changes.push({
+            kind: TICK_CHANGE_KIND.VANISHED,
+            identity: { providerId, providerSessionId },
+          });
+        }
+      }
+      if (changes.length === 0) return;
+      const found: BrainTick = { changes };
+      // The picture is committed only behind a turn that ran to its end: a
+      // turn the model failed, or one the generation's replacement revoked,
+      // leaves the last committed picture standing, so the same change is
+      // found again at the next tick rather than lost.
+      if (await agent.tick(found)) fingerprints = next;
+    } finally {
+      tickInFlight = false;
     }
   };
 
@@ -944,10 +919,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     },
     closeConversation,
     lanes,
-    wake,
-    rosterLook,
-    releaseHeld,
-    pendingNotices: () => notices,
+    tick,
     resetConversation: async (sessionKey) => {
       const cancelled = await children.service.cancelDescendantsOf(sessionKey);
       if (!cancelled.ok) {
@@ -993,33 +965,4 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       return toolLoopRuntimeOver(model);
     },
   };
-}
-
-/**
- * Turns one provider's batch of spool events into wakes. Every hook event
- * wakes the brain — the brain decides what matters, so nothing is filtered
- * here — and each wake carries the session as the registry holds it at that
- * moment, when it holds it at all: a hook can land for a session the poll has
- * not yet seen, and the brain still hears that it moved.
- */
-export function wakeEventsFromHooks(
-  providerId: string,
-  hookEvents: readonly ObservedSpoolEvent<string>[],
-  registry: { get(identity: SessionIdentity): Session | undefined },
-  now: number,
-): readonly BrainWakeEvent[] {
-  return hookEvents.map((hookEvent) => {
-    const identity: SessionIdentity = {
-      providerId,
-      providerSessionId: hookEvent.providerSessionId,
-    };
-    const session = registry.get(identity);
-    return {
-      kind: BRAIN_WAKE_KIND.HOOK,
-      identity,
-      hookEvent: hookEvent.event,
-      ...(session ? { session } : undefined),
-      atMs: Number.isFinite(hookEvent.atMs) ? hookEvent.atMs : now,
-    };
-  });
 }

@@ -9,10 +9,10 @@ import { brainToolCatalog, brainToolSchemas, resolveTurnToolPolicy } from "./too
 import { BRAIN_TURN_TRIGGER } from "./turn.js";
 
 const NOW = 1_800_000_000_000;
-const INPUT = [userMessageItem("[observed events] ...")];
+const INPUT = [userMessageItem("[tick] ...")];
 const OPTIONS = {
   prompt: "instructions",
-  tools: brainToolSchemas(resolveTurnToolPolicy(brainToolCatalog(), {}, BRAIN_TURN_TRIGGER.WAKE)),
+  tools: brainToolSchemas(resolveTurnToolPolicy(brainToolCatalog(), {}, BRAIN_TURN_TRIGGER.TICK)),
   maximumOutputTokens: 500,
 };
 

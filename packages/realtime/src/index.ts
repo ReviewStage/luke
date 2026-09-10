@@ -8,13 +8,13 @@ export {
   ARRIVAL_SPEECH_KIND,
   type ArrivalSpeech,
   arrivalSpeechEvents,
-  BRIEFING_SPEECH_KIND,
-  type BriefingSpeech,
-  briefingSpeechEvents,
   CALENDAR_ONBOARDING_SPEECH_KIND,
   type CalendarOnboardingSpeech,
   isProactiveSpeechTurn,
   type ProactiveSpeechTurn,
+  UTTERANCE_SPEECH_KIND,
+  type UtteranceSpeech,
+  utteranceSpeechEvents,
 } from "./proactive-speech.js";
 export {
   introductionSessionConfig,
@@ -67,9 +67,9 @@ export {
   type RealtimeVoiceSpeed,
 } from "./realtime-voice-settings.js";
 export {
-  BRIEFING_INPUT_MARKER,
   NOTE_MARKER,
   responseTurn,
   SCENE,
   sessionInstructions,
+  UTTERANCE_INPUT_MARKER,
 } from "./voice-scene.js";

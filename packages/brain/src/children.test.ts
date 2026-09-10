@@ -23,6 +23,7 @@ import {
 import { BRAIN_INPUT_MARKER } from "./input-items.js";
 import { BRAIN_REQUEST_STATUS } from "./requests.js";
 import { BRAIN_TOOL } from "./tools.js";
+import { REFUSAL_REASON } from "./turn.js";
 
 /**
  * The child runs a conversation holds: a delegated task's end as its
@@ -63,10 +64,9 @@ test("a child's completion steers into the requester's run under way, is taken o
   );
   assert.equal(steeredItems.length, 1);
   assert.equal(h.performed.length, 1);
-  // With nothing under way, a new completion opens a turn of its own, offered announce.
-  inner.answers.push(
-    answered([call("c-announce", BRAIN_TOOL.ANNOUNCE, { briefing: "child done" })]),
-  );
+  // With nothing under way, a new completion opens a turn of its own; announce
+  // is a tick's channel alone, so the child-completion turn's call is refused.
+  inner.answers.push(answered([call("c-announce", BRAIN_TOOL.ANNOUNCE, { text: "child done" })]));
   inner.answers.push(answered([message("")]));
   const opened = await h.agent.deliverChildCompletion(
     ...childCompletion({
@@ -77,10 +77,11 @@ test("a child's completion steers into the requester's run under way, is taken o
   );
   assert.deepEqual(opened, { delivered: true });
   assert.equal(inner.inputs.length, 4);
-  assert.deepEqual(
-    h.deliveries.map((delivery) => delivery.briefing),
-    ["child done"],
+  assert.deepEqual(h.deliveries, []);
+  const refusal = functionOutputs(inner.inputs[3] ?? []).find(
+    (output) => output.callId === "c-announce",
   );
+  assert.ok(refusal?.output.includes(REFUSAL_REASON.ANNOUNCE_IN_ASK));
   assert.equal(h.agent.requests().length, 1);
 });
 

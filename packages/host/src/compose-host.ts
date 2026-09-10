@@ -68,7 +68,15 @@ export function composeHost(options: HostSeams): Host {
   const observation = composeObservation({ kernel, settings, account, issues, observationGate });
   const calendars = composeCalendars({ kernel, settings, observationGate });
   const speech = composeSpeech({ kernel, settings, account, calendars, observation });
-  const brain = composeBrain({ kernel, settings, account, issues, observation, speech });
+  const brain = composeBrain({
+    kernel,
+    settings,
+    account,
+    issues,
+    observation,
+    calendars,
+    speech,
+  });
 
   // Every edge a composer could not take as a constructor argument, in one
   // list: each is a cycle the concerns genuinely have, and reading one before
@@ -100,18 +108,12 @@ export function composeHost(options: HostSeams): Host {
     releaseDevice: (stored) => devices.release(stored),
   });
   observation.link({
-    wake: (events) => brain.wiring.wake(events),
-    rosterLook: () => brain.wiring.rosterLook(),
+    tick: () => void brain.wiring.tick(),
   });
   calendars.link({
     reconcileSpeech: () => void speech.reconcileSpeech(),
     withdrawBeat: speech.withdrawBeat,
-    dropBriefings: speech.dropBriefings,
     requestOnboardingBeat: () => void speech.requestOnboardingBeat(),
-  });
-  speech.link({
-    brainCurrent: () => brain.wiring.current() !== undefined,
-    releaseHeld: (briefings) => brain.wiring.releaseHeld(briefings),
   });
 
   const composers: readonly Composer[] = [
@@ -230,7 +232,7 @@ export function composeHost(options: HostSeams): Host {
     methods: { ...mergeMethods(composers), ...bootstrapMethods },
     // A client whose connection closed can reach no renderer: its receiver
     // epoch ends here as its window going away would, so replies and
-    // briefings wait for the next epoch rather than being offered into a gap.
+    // announcements wait for the next epoch rather than being offered into a gap.
     onOperatorDisconnected: () => speech.receiver.reset(),
   });
   kernel.setService(service);

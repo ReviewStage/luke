@@ -7,8 +7,7 @@ import {
 import { childRunEnd, RUN_FORGOTTEN } from "./child-records.js";
 import { BRAIN_DEFAULTS } from "./defaults.js";
 import { CONTEXT_OPENING } from "./generation.js";
-import { childCompletionInputText, wakeInputText } from "./input-items.js";
-import { inboxEvents } from "./observation-inbox.js";
+import { childCompletionInputText } from "./input-items.js";
 import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_SUBMISSION_OUTCOME,
@@ -197,11 +196,7 @@ export class ChildRuns {
       this.#options.turn({
         generation,
         trigger: BRAIN_TURN_TRIGGER.CHILD_COMPLETION,
-        events: inboxEvents(generation.inbox),
-        open: (attached, now) => [
-          ...(attached.length > 0 ? [wakeInputText(attached, now)] : []),
-          text,
-        ],
+        open: () => [text],
         deliveries,
       }),
     );

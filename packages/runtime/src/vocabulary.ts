@@ -92,7 +92,6 @@ export {
   MAIN_CONVERSATION_NAME,
   MAIN_SESSION_KEY,
   observedSessionKey,
-  observedSessionRefOf,
   RUN_ORIGIN,
   type RunOrigin,
   type SessionKey,

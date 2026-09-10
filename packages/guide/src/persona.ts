@@ -1,7 +1,8 @@
 /**
  * Who Luke is, in one module, for every surface that gives him a voice: the
- * brain that judges and replies, the voice that says its words, the briefing
- * and the onboarding beats, the introduction, and the phone's own call.
+ * brain that judges and replies, the voice that says its words, the
+ * announcements and the onboarding beats, the introduction, and the phone's
+ * own call.
  *
  * One module because six prompts describing the same person separately are
  * six people. What each surface may do and may see differs — the brain is

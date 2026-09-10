@@ -197,7 +197,7 @@ export function pinConversation(
 /**
  * Removes everything a conversation holds beneath its row: its history
  * lines, its transcript and the boundaries folded into it, and the standing
- * lifetime with the checkpoints, cursors, requests, and receipts that cascade
+ * lifetime with the checkpoints, requests, and receipts that cascade
  * from it. The row itself stays unless the caller removes it too; the
  * recoverable deletion and maintenance are the two callers, and each has
  * committed or needs no archive by the time it gets here.

@@ -63,7 +63,7 @@ test("the protocol answers every request once and serves the brain store, the th
   assert.equal(
     await store.write(lease, "gen-1", (state) => ({
       ...state,
-      cursors: { codex: { s: "c" } },
+      compactionCount: 7,
     })),
     true,
   );
@@ -144,7 +144,7 @@ test("two handles over the boundary: a stale checkpoint cannot replace the newer
   await second.load();
   const gen2 = populatedState("gen-2", NOW + 1);
   assert.equal(await second.save(gen2), true);
-  assert.equal(await first.save({ ...gen1, cursors: {} }), false);
+  assert.equal(await first.save({ ...gen1, compactionCount: 9 }), false);
   assert.equal(await first.save(populatedState("gen-3", NOW + 2)), false);
   assert.deepEqual((await second.load()).state, gen2);
   close();
@@ -226,12 +226,12 @@ test("over the worker boundary an unreadable generation keeps its compare token,
   assert.equal(
     await store.write(store.lease(), "repaired-1", (state) => ({
       ...state,
-      cursors: { codex: { s: "c" } },
+      compactionCount: 7,
     })),
     true,
   );
-  assert.equal(await stale.save({ ...populatedState("gen-old"), cursors: {} }), false);
+  assert.equal(await stale.save({ ...populatedState("gen-old"), compactionCount: 9 }), false);
   const reader = client.brainStateRepository(MAIN_SESSION_KEY);
-  assert.deepEqual((await reader.load()).state?.cursors, { codex: { s: "c" } });
+  assert.equal((await reader.load()).state?.compactionCount, 7);
   close();
 });

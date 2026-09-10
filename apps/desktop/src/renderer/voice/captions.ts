@@ -44,7 +44,7 @@ export class CaptionStrip {
    */
   #segments: { itemId: string | undefined; text: string }[] = [];
   /**
-   * Whether the words under way are a briefing or a reply, for Conversation to
+   * Whether the words under way are an announcement or a reply, for Conversation to
    * record as such. Set only when the words were decided by the brain and
    * cleared wherever the words are, so it can never outlive the reply.
    */
@@ -123,7 +123,7 @@ export class CaptionStrip {
     this.#options.onCaption(undefined, undefined);
   }
 
-  /** Clears an undelivered briefing without admitting it to Conversation. */
+  /** Clears an undelivered announcement without admitting it to Conversation. */
   discard(): void {
     this.#segments = [];
     this.#kind = undefined;

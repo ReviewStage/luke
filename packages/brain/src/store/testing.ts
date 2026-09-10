@@ -73,7 +73,6 @@ export function populatedState(generationId: string, createdAt = NOW): BrainPers
       { type: "function_call", call_id: "call-1", name: "send_message", arguments: "{}" },
       { type: "function_call_output", call_id: "call-1", output: '{"status":"accepted"}' },
     ],
-    cursors: { "claude-code": { "session-a": "cursor-1" }, codex: { "session-b": "cursor-2" } },
     requests: [
       request("run-1", {
         status: BRAIN_REQUEST_STATUS.SUCCEEDED,

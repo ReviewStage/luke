@@ -9,7 +9,6 @@ import {
   unparsedWire,
   wireRecord,
 } from "@sidecar/wire";
-import { LOOK_SUBJECT } from "./agent.js";
 import { hostedBrainTransport, keyedBrainTransport } from "./client.js";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
@@ -25,12 +24,10 @@ import {
   ask,
   assertNoActionReached,
   call,
-  DELTA_PER_SESSION_CHARS,
-  edge,
   FakeClient,
   FULL_TRANSCRIPT_CHARS,
-  failedAnswer,
   functionOutputs,
+  gatedClient,
   harness,
   heldPerformer,
   INSTRUCTION_IN_DATA,
@@ -45,9 +42,9 @@ import {
   settle,
   submit,
   TRANSCRIPT_SECRET,
+  tick,
   UNKNOWN,
 } from "./harness.js";
-import { INBOX_CAPACITY } from "./observation-inbox.js";
 import {
   BRAIN_REQUEST_STATUS,
   BRAIN_SUBMISSION_OUTCOME,
@@ -56,7 +53,7 @@ import {
 import { BrainStateStore } from "./state-store.js";
 import { fakeBrainStateRepository } from "./testing.js";
 import { BRAIN_TOOL } from "./tools.js";
-import { BRAIN_TURN_TRIGGER } from "./turn.js";
+import { BRAIN_TURN_TRIGGER, REFUSAL_REASON } from "./turn.js";
 
 /**
  * One test per sentence of `AGENTS.md` the brain is the enforcer of, each
@@ -92,8 +89,8 @@ test("the journal records an action before its effect and its result before the 
     },
   });
   inner.answers.push(answered([messageAction("act_1")]), answered([message("done")]));
-  await h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 3_000);
+  const ticking = h.agent.tick(tick(ABC));
+  await settle();
   assert.equal(held.performed.length, 1, "the action is out at the performer");
 
   // The action is dispatched and its result is not back: its journal row already
@@ -107,7 +104,7 @@ test("the journal records an action before its effect and its result before the 
   assert.equal(inner.inputs.length, 1, "the model has not been asked again");
 
   held.releases[0]?.();
-  await settle();
+  await ticking;
   assert.deepEqual(
     journalsAtRequest,
     [[], [{ callId: "act_1", answered: true }]],
@@ -128,15 +125,23 @@ test("the journal records an action before its effect and its result before the 
 test("the effective tool policy fixes the schemas and the gate, and nothing the model reads can widen either", async () => {
   const h = harness({
     prepareTurn: NO_ACTS_POLICY,
-    readTranscriptSince: async () => ({
+    readTranscript: async () => ({
       status: ACTION_RESULT_STATUS.ACCEPTED,
-      text: INSTRUCTION_IN_DATA,
-      truncated: false,
+      transcript: INSTRUCTION_IN_DATA,
     }),
   });
-  h.client.answers.push(answered(OBSERVATION_ACTIONS), answered([message("")]));
-  await h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 3_000);
+  h.client.answers.push(
+    answered([
+      call("call_read", BRAIN_TOOL.READ_TRANSCRIPT, {
+        provider_id: ABC.providerId,
+        provider_session_id: ABC.providerSessionId,
+      }),
+      ...OBSERVATION_ACTIONS,
+    ]),
+    answered([message("")]),
+  );
+  await h.agent.tick(tick(ABC));
+  assert.ok(JSON.stringify(h.client.inputs[1]).includes(INSTRUCTION_IN_DATA));
   assertNoActionReached(h);
 });
 
@@ -149,111 +154,16 @@ test("an action in a turn the developer did not open is Luke's own", async () =>
   const h = harness({
     roster: () => ({ text: "one", identities: [ABC], sessions: [session(ABC.providerSessionId)] }),
   });
-  await h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 3_000);
-  await h.agent.rosterLook();
-  await settle();
-  h.agent.releaseHeld([{ briefing: "held", decidedAt: NOW }]);
-  await settle();
-  const observation = h.traces.filter((trace) => trace.trigger !== BRAIN_TURN_TRIGGER.ASK);
-  assert.ok(observation.length >= 3);
-  assert.ok(observation.every((trace) => trace.origin === RUN_ORIGIN.OBSERVATION));
+  await h.agent.tick(tick(ABC));
+  const ticked = h.traces.filter((trace) => trace.trigger === BRAIN_TURN_TRIGGER.TICK);
+  assert.equal(ticked.length, 1);
+  assert.ok(ticked.every((trace) => trace.origin === RUN_ORIGIN.OBSERVATION));
 
   h.client.answers.push(answered([message("hi")]));
   await ask(h, "hello");
   const asked = h.traces.filter((trace) => trace.trigger === BRAIN_TURN_TRIGGER.ASK);
   assert.equal(asked.length, 1);
   assert.equal(asked[0]?.origin, RUN_ORIGIN.USER);
-});
-
-/**
- * "reads only what its one session's transcript gained since the capture
- * cursor it last kept, cut from the front to 20,000 characters, and writes it
- * down before any turn is scheduled: the observation entry and the advanced
- * capture cursor land in one save" — `wakes.ts` and `state-store.ts`'s
- * `saveCapture`.
- */
-test("a wake's delta is cut from the front to 20,000 characters and written down before any turn is scheduled", async () => {
-  assert.equal(DELTA_PER_SESSION_CHARS, 20_000);
-  const h = harness({
-    readTranscriptSince: async () => ({
-      status: ACTION_RESULT_STATUS.ACCEPTED,
-      text: `${"y".repeat(DELTA_PER_SESSION_CHARS * 2)}TAIL`,
-      cursor: "far",
-      truncated: false,
-    }),
-  });
-  await h.agent.wake([edge(ABC)]);
-  assert.equal(h.client.inputs.length, 0, "nothing was sent before the capture landed");
-  const captured = h.persisted.at(-1);
-  assert.equal(h.persisted.length, 1, "the capture is its own save");
-  const [entry] = captured?.inbox ?? [];
-  assert.ok(entry?.delta);
-  assert.equal(entry.delta.truncated, true);
-  assert.ok(entry.delta.text.length <= DELTA_PER_SESSION_CHARS);
-  assert.deepEqual(
-    captured?.captureCursors,
-    { [ABC.providerId]: { [ABC.providerSessionId]: "far" } },
-    "the cursor moved in the same save",
-  );
-  assert.deepEqual(captured?.cursors, {}, "and the consumed cursor did not");
-});
-
-/**
- * "the turn that follows consumes the entries it opened with at its
- * checkpoint, moving the consumed cursor there and only there" —
- * `turn-runner.ts` over `state-store.ts`'s `saveWorking`.
- */
-test("the turn consumes its entries at its checkpoint, moving the consumed cursor there and only there", async () => {
-  const h = harness();
-  h.client.answers.push(failedAnswer("upstream down"));
-  await h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 3_000);
-  const after = h.persisted.at(-1);
-  assert.equal(after?.inbox.length, 1, "a failed turn consumed nothing");
-  assert.deepEqual(after?.cursors, {}, "and moved no consumed cursor");
-  assert.deepEqual(after?.captureCursors, {
-    [ABC.providerId]: { [ABC.providerSessionId]: "abc-cursor" },
-  });
-
-  h.client.answers.push(answered([message("read")]));
-  await h.agent.wake([edge(ABC, NOW + 10_000)]);
-  await h.clock.advance(NOW + 20_000);
-  const settled = h.persisted.at(-1);
-  assert.deepEqual(settled?.inbox, [], "the turn that ran consumed them");
-  assert.deepEqual(settled?.cursors, {
-    [ABC.providerId]: { [ABC.providerSessionId]: "abc-cursor" },
-  });
-});
-
-/**
- * "A repeated look that finds nothing gained and the session unchanged
- * captures nothing and opens no inference, a hook delivered twice is one
- * entry, and the inbox holds at most 20 entries." — `wakes.ts`'s look
- * fingerprint and `observation-inbox.ts`.
- */
-test("a repeated unchanged look captures nothing, a hook delivered twice is one entry, and the inbox holds at most 20", async () => {
-  assert.equal(INBOX_CAPACITY, 20);
-  const h = harness({
-    observes: { kind: LOOK_SUBJECT.SESSION, identity: ABC },
-    roster: () => ({ text: "one", identities: [ABC], sessions: [session(ABC.providerSessionId)] }),
-  });
-  await h.agent.rosterLook();
-  await settle();
-  const captures = h.persisted.length;
-  await h.agent.rosterLook();
-  await settle();
-  assert.equal(h.persisted.length, captures, "a look over an unchanged session captures nothing");
-
-  const twice = edge(ABC, NOW + 100);
-  await h.agent.wake([twice, { ...twice }]);
-  const entries = h.persisted.at(-1)?.inbox ?? [];
-  assert.equal(
-    entries.filter((entry) => entry.atMs === NOW + 100).length,
-    1,
-    "one hook, delivered twice",
-  );
-  await h.agent.stop();
 });
 
 /**
@@ -278,8 +188,7 @@ test("a whole-transcript read is cut from the front to 60,000 characters", async
     ]),
     answered([message("")]),
   );
-  await h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 3_000);
+  await h.agent.tick(tick(ABC));
   const [read] = itemsOfType(
     h.client.inputs[1] ?? [],
     RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
@@ -289,6 +198,7 @@ test("a whole-transcript read is cut from the front to 60,000 characters", async
   assert.ok(record && isWireString(record.transcript));
   assert.equal(record.truncated, true);
   assert.ok(record.transcript.length <= FULL_TRANSCRIPT_CHARS);
+  assert.ok(record.transcript.endsWith("END"));
 });
 
 /**
@@ -306,9 +216,11 @@ test("read_transcript is refused for any identity the roster does not hold", asy
     ]),
     answered([message("")]),
   );
-  await h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 3_000);
+  await h.agent.tick(tick(ABC));
+  const [refused] = functionOutputs(h.client.inputs[1] ?? []);
+  assert.ok(refused?.output.includes(REFUSAL_REASON.UNOBSERVED_SESSION));
   assert.deepEqual(h.wholeReads, [], "no provider file was opened for it");
+  assert.ok(!JSON.stringify(h.client.inputs).includes(`${TRANSCRIPT_SECRET} for nope`));
 });
 
 /**
@@ -425,25 +337,27 @@ test("only an ended run whose end Conversation has taken may be let go", () => {
 test("a briefing leaves only from a turn that still stands", async () => {
   const h = harness();
   h.client.answers.push(
-    answered([call("call_brief", BRAIN_TOOL.ANNOUNCE, { briefing: "abc needs you" })]),
+    answered([call("call_brief", BRAIN_TOOL.ANNOUNCE, { text: "abc needs you" })]),
     answered([message("")]),
   );
-  await h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 3_000);
+  await h.agent.tick(tick(ABC));
   assert.deepEqual(
-    h.deliveries.map((delivery) => delivery.briefing),
+    h.deliveries.map((delivery) => delivery.text),
     ["abc needs you"],
   );
 
-  const other = harness();
-  other.client.answers.push(
-    answered([call("call_brief", BRAIN_TOOL.ANNOUNCE, { briefing: "never spoken" })]),
+  const inner = new FakeClient();
+  const gated = gatedClient(inner);
+  const other = harness({ client: gated.client });
+  inner.answers.push(
+    answered([call("call_brief", BRAIN_TOOL.ANNOUNCE, { text: "never spoken" })]),
     answered([message("")]),
   );
-  await other.agent.wake([edge(ABC)]);
-  const turning = other.clock.advance(NOW + 3_000);
-  await other.agent.stop();
-  await turning;
+  const turning = other.agent.tick(tick(ABC));
+  await settle();
+  const stopping = other.agent.stop();
+  gated.open();
+  await Promise.all([turning, stopping]);
   await settle();
   assert.deepEqual(
     other.deliveries,
@@ -460,13 +374,15 @@ test("a briefing leaves only from a turn that still stands", async () => {
 test("an ask's reply is its final text, and announce is refused inside one", async () => {
   const h = harness();
   h.client.answers.push(
-    answered([call("call_brief", BRAIN_TOOL.ANNOUNCE, { briefing: "spoken instead" })]),
+    answered([call("call_brief", BRAIN_TOOL.ANNOUNCE, { text: "spoken instead" })]),
     answered([message("the reply")]),
   );
   const record = await ask(h, "what is up?");
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assert.equal(record.text, "the reply");
   assert.deepEqual(h.deliveries, [], "nothing was announced");
+  const [refused] = functionOutputs(h.client.inputs[1] ?? []);
+  assert.ok(refused?.output.includes(REFUSAL_REASON.ANNOUNCE_IN_ASK));
   assert.ok(
     h.traces.every((trace) => !trace.tools.includes(BRAIN_TOOL.ANNOUNCE)),
     "and it was never offered",
@@ -504,4 +420,14 @@ test("a brain call is addressed to the developer's own key or to Luke's own serv
     "https://api.openai.test/v1/responses",
     "https://luke.test/api/brain/v2/respond",
   ]);
+
+  const throttle = new Response("", { status: 429 });
+  for (const reported of [
+    keyed.quietUntil(throttle).message,
+    service.quietUntil(throttle).message,
+  ]) {
+    assert.ok(!reported.includes("sk-secret"));
+    assert.ok(!reported.includes("account-secret"));
+    assert.ok(!reported.includes(TRANSCRIPT_SECRET));
+  }
 });

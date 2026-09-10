@@ -462,7 +462,7 @@ export class VoiceOrchestrator<Stream> {
     this.#replyPlayer?.withdraw();
   }
 
-  /** One proactive turn the arbiter has offered: a briefing, or an onboarding beat. */
+  /** One proactive turn the arbiter has offered: an announcement, or an onboarding beat. */
   offerSpeech(offer: SpeechOffer): void {
     this.#ensureMouth().offer(offer);
   }
@@ -740,7 +740,7 @@ export class VoiceOrchestrator<Stream> {
     kind: ReplyKind | undefined,
     runId: string | undefined,
   ): void {
-    if (kind === REPLY_KIND.BRIEFING) {
+    if (kind === REPLY_KIND.ANNOUNCEMENT) {
       const generation = this.#thread.takeAnnouncementGeneration();
       this.#thread.remember(announcementConversationEntry(joinReplyMessages(texts)), generation);
       return;

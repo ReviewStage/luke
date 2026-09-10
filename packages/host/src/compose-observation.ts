@@ -6,7 +6,7 @@ import {
   type ProductDiagnosticKind,
   productSessionCountBucket,
 } from "@sidecar/analytics";
-import type { BrainRoster, BrainWakeEvent } from "@sidecar/brain";
+import type { BrainRoster } from "@sidecar/brain";
 import { sessionContextText } from "@sidecar/brain";
 import type { CredentialProviderId } from "@sidecar/credentials";
 import {
@@ -67,7 +67,6 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import type { WorkspaceCreationDefaults } from "./brain/action-performer.js";
-import { wakeEventsFromHooks } from "./brain/wiring.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { IssuesComposer } from "./compose-issues.js";
 import type { SettingsComposer } from "./compose-settings.js";
@@ -95,10 +94,9 @@ function isSessionIdentity(value: UnparsedWireValue): value is SessionIdentity &
   );
 }
 
-/** What observation reaches in the brain: a hook's wake, and the look the pass ends with. */
+/** What observation reaches in the brain: the tick every pass ends with, and a hook hurries. */
 interface ObservationLinks {
-  wake: (events: readonly BrainWakeEvent[]) => void;
-  rosterLook: () => void;
+  tick: () => void;
 }
 
 export interface ObservationComposer extends Composer {
@@ -438,17 +436,19 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
 
   function watchObservationSpools(): void {
     if (spoolWatchers.length > 0) return;
-    spoolWatchers = orderedRegistrations.flatMap(({ plugin, observationSpool }) => {
+    spoolWatchers = orderedRegistrations.flatMap(({ observationSpool }) => {
       if (!observationSpool) return [];
-      const providerId = plugin.provider.id;
       return [
         watchObservationSpool({
           spoolDirectory: observationSpool.directory(),
           events: observationSpool.events,
-          onEvents: (events) => {
+          // A hook says only that something moved: the pass reads what, and
+          // the tick that follows it diffs the roster as every tick does, so
+          // a stop lands in seconds rather than at the next minute.
+          onEvents: () => {
             void (async () => {
               await loop.refresh().catch(() => undefined);
-              links.get().wake(wakeEventsFromHooks(providerId, events, sessionRegistry, now()));
+              links.get().tick();
             })();
           },
         }),
@@ -533,7 +533,7 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     intervalMs: SESSION_REFRESH_INTERVAL_MS,
     run: refreshProviderSessions,
     afterRun: () => {
-      links.get().rosterLook();
+      links.get().tick();
     },
   });
 

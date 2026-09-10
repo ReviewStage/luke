@@ -249,12 +249,12 @@ and any Preview that needs a working vault) alongside `DATABASE_URL`.
 ## Hosted conversation store
 
 The tables under `server/db/conversation-schema.ts`, `workspace-schema.ts`,
-`roster-schema.ts`, and `briefing-schema.ts` hold the hosted brain's
-conversation per account: the conversation directory, the standing generation
-with its checkpoint items, cursors, inbox, runs, and action receipts, the
-conversation lines, the retained transcript and its compaction boundaries, the
-identity workspace and daily notes, the remembered facts, the latest roster
-snapshot with its diffs and pass record, and the briefings. Every row is
+and `roster-schema.ts` hold the hosted brain's conversation per account: the
+conversation directory, the standing generation with its checkpoint items,
+runs, and action receipts, the conversation lines, the retained transcript and
+its compaction boundaries, the identity workspace and daily notes, the
+remembered facts, and the latest roster snapshot with its diffs and pass
+record. Every row is
 keyed by `user_id` and cascades with the user row, so `api/account/delete.ts`
 erases them with the account. The roster tables are read and written by the
 scheduled observation below and the routes that serve it; nothing reads the

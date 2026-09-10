@@ -60,8 +60,6 @@ const APPLE_ACCESS_POLL_INTERVAL_MS = 10_000;
 interface CalendarsLinks {
   reconcileSpeech: () => void;
   withdrawBeat: (kind: OnboardingBeatKind) => void;
-  /** The arbiter's held briefings go with the meetings that were holding them. */
-  dropBriefings: () => void;
   /** The gate settling is where the beat that was waiting for it may speak. */
   requestOnboardingBeat: () => void;
 }
@@ -297,7 +295,6 @@ export function composeCalendars(dependencies: CalendarsDependencies): Calendars
     observedCalendars = [];
     googleCalendar.forget();
     appleCalendar.forget();
-    links.get().dropBriefings();
     kernel.emit(GATEWAY_EVENT.CALENDARS_CHANGED, { calendars: [] });
     void refreshAnnouncementHold();
   }

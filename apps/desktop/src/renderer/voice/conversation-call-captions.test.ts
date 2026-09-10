@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BRIEFING_SPEECH_KIND, REALTIME_SERVER_EVENT } from "@sidecar/realtime";
+import { REALTIME_SERVER_EVENT, UTTERANCE_SPEECH_KIND } from "@sidecar/realtime";
 import {
   armDeveloperTurn,
   askBrainDone,
@@ -168,8 +168,8 @@ test("a briefing's caption clears with the reply, and a conversation's stands on
   await context.session.connect();
 
   context.session.speak({
-    kind: BRIEFING_SPEECH_KIND,
-    briefing: "Checkout just finished, and billing wants the migration approved.",
+    kind: UTTERANCE_SPEECH_KIND,
+    text: "Checkout just finished, and billing wants the migration approved.",
     decidedAt: Date.now(),
   });
   context.emit({

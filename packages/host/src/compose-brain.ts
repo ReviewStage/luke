@@ -41,6 +41,7 @@ import {
 } from "@sidecar/wire";
 import { wireBrain } from "./brain/wiring.js";
 import type { AccountComposer } from "./compose-account.js";
+import type { CalendarsComposer } from "./compose-calendars.js";
 import type { IssuesComposer } from "./compose-issues.js";
 import type { ObservationComposer } from "./compose-observation.js";
 import type { SpeechComposer } from "./compose-speech.js";
@@ -74,11 +75,12 @@ export interface BrainDependencies extends ComposerContext {
   account: AccountComposer;
   issues: IssuesComposer;
   observation: ObservationComposer;
+  calendars: CalendarsComposer;
   speech: SpeechComposer;
 }
 
 export function composeBrain(dependencies: BrainDependencies): BrainComposer {
-  const { kernel, account, issues, observation, speech } = dependencies;
+  const { kernel, account, issues, observation, calendars, speech } = dependencies;
   const { runMode, report, now, createId } = kernel;
 
   /**
@@ -190,9 +192,6 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
 
   const wiring = wireBrain({
     repositoryFor: (sessionKey) => store.brainStateRepository(sessionKey),
-    ensureObservedConversation: async (sessionKey, name) => {
-      await store.ensureConversation(sessionKey, CONVERSATION_KIND.OBSERVED, name);
-    },
     ensureChildConversation: async (sessionKey, name) => {
       await store.ensureConversation(sessionKey, CONVERSATION_KIND.CHILD, name);
     },
@@ -210,7 +209,7 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
     broadcastRequests: (snapshots) => kernel.service().runsReported(snapshots),
     onEndPublished: (record, sessionKey) => kernel.service().endPublished(record, sessionKey),
     onGenerationReplaced: (sessionKey) => {
-      if (sessionKey === MAIN_SESSION_KEY) speech.withdrawBriefings();
+      if (sessionKey === MAIN_SESSION_KEY) speech.withdrawUtterances();
       kernel.service().generationReplaced(sessionKey);
     },
     actions: {
@@ -233,7 +232,8 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
     standingContext,
     pluginFor: observation.pluginFor,
     session: observation.session,
-    deliver: speech.deliverBriefing,
+    deliver: speech.deliverUtterance,
+    announcementsQuiet: () => calendars.announcementsQuietNow(now()),
     model: () => account.voiceCapabilities.brainModel,
     credential: () =>
       account.voiceCapabilities.voiceSource === VOICE_SOURCE.KEY
@@ -246,7 +246,7 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
     skillRoots: () => [kernel.agentSkillsPath()],
     runnable: () =>
       runMode.observesProviders && runMode.sendsNetwork && account.capabilitiesActive(),
-    dropBriefings: speech.dropBriefings,
+    withdrawUtterances: speech.withdrawUtterances,
     memory: (sessionKey) => memory.accessFor(sessionKey),
     beforeCompaction: (sessionKey) => memoryMaintenance.flushHookFor(sessionKey),
     flushMarker: (sessionKey) => memoryMaintenance.flushMarkerFor(sessionKey),

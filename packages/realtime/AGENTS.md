@@ -12,9 +12,9 @@ turn on a standing call, opened without tools and with its input behind the
 one marker so nothing a turn carries can become an action. The persona is
 prepended there and nowhere else. `realtime-instructions.ts` is the one tool
 the desktop's call is configured with, `ask_brain`. `proactive-speech.ts` is
-the wire contract for what Luke says first — the briefing the brain decided
-to give and the two onboarding beats — and the two builders that are not a
-scene's: a briefing joins the call's own conversation as one marked item,
+the wire contract for what Luke says first — the words the brain decided to
+say and the two onboarding beats — and the two builders that are not a
+scene's: an utterance joins the call's own conversation as one marked item,
 spoken under the session's standing rule for it rather than instructions on
 the response, and the arrival beat composes its data lines and picks its
 direction before handing them to `responseTurn`. `conversation-seed.ts` is
@@ -44,4 +44,4 @@ this barrel.
 and app tools — `REALTIME_TOOL`, the routing, and each validator's bounds —
 against `./actions.js`. The tests here cover only what this package owns: the
 protocol's events and parser, the scenes and the two functions that speak
-them, the mint, the seed, and the briefing and arrival builders.
+them, the mint, the seed, and the utterance and arrival builders.

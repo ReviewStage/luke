@@ -52,7 +52,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import { BrainAgent, type BrainAgentOptions, LOOK_SUBJECT } from "./agent.js";
+import { BrainAgent, type BrainAgentOptions } from "./agent.js";
 import { toolLoopRuntimeOver } from "./builtins.js";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { HostedModelAdapter } from "./hosted-model-adapter.js";
@@ -70,9 +70,9 @@ import {
 import { ToolLoopAgentRuntime } from "./runtime.js";
 import { BrainStateStore } from "./state-store.js";
 import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
+import { type BrainTick, TICK_CHANGE_KIND } from "./tick.js";
 import { brainToolCatalog, hostedBrainToolCatalog, resolveTurnToolPolicy } from "./tools.js";
 import { BRAIN_TURN_KIND, runOriginOf } from "./turn.js";
-import { BRAIN_WAKE_KIND } from "./wake-events.js";
 import { BRAIN_IDENTITY_LINE, BRAIN_PERSONA, BRAIN_WORKSPACE_SEEDS } from "./workspace-seeds.js";
 
 /**
@@ -89,6 +89,18 @@ const NOW = 1_800_000_000_000;
 const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
 const ABC = { providerId: claude.id, providerSessionId: "abc" };
 const ENCRYPTED = "opaque-reasoning-bytes";
+/** One tick in which the observed session stopped, as the host would compose it. */
+const TICK: BrainTick = {
+  changes: [
+    {
+      kind: TICK_CHANGE_KIND.CHANGED,
+      identity: ABC,
+      title: "Claude Code: abc",
+      fields: { status: SESSION_STATUS.WAITING },
+      transcriptCharsGained: 120,
+    },
+  ],
+};
 
 function message(text: string): WireRecord {
   return {
@@ -277,7 +289,6 @@ function host(
   });
   const agent = new BrainAgent({
     runtime: runtimeOver(model),
-    observes: { kind: LOOK_SUBJECT.NONE },
     prepareTurn: () => ({ prompt: "instructions", layers: {} }),
     actions: {
       perform: async (call) => {
@@ -287,12 +298,6 @@ function host(
     },
     roster: () => ({ text: "- abc", identities: [ABC], sessions: session ? [session] : [] }),
     standingContext: () => "Durable facts: none.",
-    readTranscriptSince: async () => ({
-      status: ACTION_RESULT_STATUS.ACCEPTED,
-      text: "transcript delta",
-      cursor: "c1",
-      truncated: false,
-    }),
     readTranscript: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "whole" }),
     deliver: () => undefined,
     store,
@@ -431,10 +436,9 @@ for (const transport of [KEYED, HOSTED]) {
     const limited = await h.ask("third");
     assert.equal(limited?.status, BRAIN_REQUEST_STATUS.FAILED);
     assert.equal(h.performed.length, 0);
-    // The cooldown stands: a wake is held rather than spent on a refusal.
-    h.agent.wake([{ kind: BRAIN_WAKE_KIND.HOOK, identity: ABC, atMs: NOW }]);
-    await settle();
-    assert.equal(h.agent.pendingWakes(), 1);
+    // The cooldown stands: a tick opens nothing rather than spending a call on a refusal.
+    await h.agent.tick(TICK);
+    assert.equal(upstream.calls.length, 3);
     await h.agent.stop();
   });
 
@@ -462,7 +466,7 @@ for (const transport of [KEYED, HOSTED]) {
   });
 }
 
-test("hosted: a spent allowance ends the run as a failure, holds later wakes until the day resets, and spends nothing more", async () => {
+test("hosted: a spent allowance ends the run as a failure, opens no tick until the day resets, and spends nothing more", async () => {
   const upstream = fakeUpstream([]);
   const exhausted = { remaining: 0 };
   const model = new HostedModelAdapter({
@@ -477,9 +481,7 @@ test("hosted: a spent allowance ends the run as a failure, holds later wakes unt
   const record = await h.ask("anything?");
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(model.quietUntil(), NOW + 3_600_000);
-  h.agent.wake([{ kind: BRAIN_WAKE_KIND.HOOK, identity: ABC, atMs: NOW }]);
-  await settle();
-  assert.equal(h.agent.pendingWakes(), 1);
+  await h.agent.tick(TICK);
   assert.equal(upstream.calls.length, 0);
   await h.agent.stop();
 });
@@ -623,19 +625,14 @@ test("a runtime that is not Responses drives the same host: actions journaled th
   assert.equal(outputs.length, 3);
   await h.agent.stop();
 
-  // An observation turn runs over the same runtime, with the roster's deltas
-  // read by the host and the action the policy allows carried through the same
-  // executor, journaled while it ran and let go of once the turn committed.
+  // A tick turn runs over the same runtime, opened on the host's change records
+  // and the action the policy allows carried through the same executor,
+  // journaled while it ran and let go of once the turn committed.
   const observing = new ScriptedRuntime([REALTIME_TOOL.SEND_SESSION_MESSAGE]);
   const o = host(() => observing, model, repository);
   await o.agent.ready();
-  o.agent.wake([{ kind: BRAIN_WAKE_KIND.HOOK, identity: ABC, hookEvent: "Stop", atMs: NOW }]);
-  await settle();
-  o.clock.now += 3_000;
-  for (const timer of [...o.clock.timers.values()]) timer.callback();
-  await settle();
+  await o.agent.tick(TICK);
   assert.deepEqual(o.performed, [REALTIME_TOOL.SEND_SESSION_MESSAGE]);
-  assert.equal(repository.state?.cursors[claude.id]?.abc, "c1");
   assert.equal(repository.state?.journal.length, 1, "the ask's journal alone stays");
   await o.agent.stop();
 });
@@ -665,11 +662,7 @@ test("the Responses runtime refuses a valid checkpoint of the scripted runtime: 
     outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
     reason: BRAIN_SUBMISSION_REJECTION.INCOMPATIBLE,
   });
-  responses.agent.wake([{ kind: BRAIN_WAKE_KIND.HOOK, identity: ABC, atMs: NOW }]);
-  await settle();
-  responses.clock.now += 3_000;
-  for (const timer of [...responses.clock.timers.values()]) timer.callback();
-  await settle();
+  await responses.agent.tick(TICK);
   assert.equal(upstream.calls.length, 0);
   // Nothing of the stored memory changed: same stamp, same items, same records, same journal.
   const after = repository.state;

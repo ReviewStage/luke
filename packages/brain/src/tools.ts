@@ -28,17 +28,18 @@ import { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
  * registry describes it. The action rows come from the same table the Realtime
  * session was configured from, so the brain can ask for nothing the actions
  * package does not validate; the brain's own tools — the roster in full, a
- * whole transcript, the briefing, the workspace files, a skill's
+ * whole transcript, the announcement, the workspace files, a skill's
  * instructions, the notebook's search and read — are dispatched inside the
  * agent and reach no action path.
  * Which of the catalog a turn is offered is the effective tool policy's
  * decision, resolved from the configuration's layers and enforced twice by
  * the host: when the schemas are built and again at every dispatch. The one
  * rule fixed by the turn's kind rather than by configuration is the
- * briefing's: `announce` is the voice's channel out of a turn nobody is
- * listening to, so a developer's ask, whose reply is the speech, is not
- * offered it, and neither is a child's task, whose final text is the result
- * its requester reviews; a child reaches the developer only through the
+ * announcement's: `announce` is the voice's channel out of a tick, the one
+ * turn nobody is listening to, so a developer's ask, whose reply is the
+ * speech, is not offered it, nor a child's task, whose final text is the
+ * result its requester reviews, nor a child's completion, which the requester
+ * folds into its next reply; a child reaches the developer only through the
  * conversation that asked for it.
  */
 
@@ -68,8 +69,8 @@ export const BRAIN_TOOL = {
 
 export type BrainToolName = (typeof BRAIN_TOOL)[keyof typeof BRAIN_TOOL];
 
-/** The longest briefing the mouth is handed; a briefing is a breath, not a report. */
-export const maximumBriefingLength = 600;
+/** The longest announcement the mouth is handed; an announcement is a breath, not a report. */
+export const MAXIMUM_UTTERANCE_CHARS = 600;
 
 export const TOOL_GROUP = {
   READ: "read",
@@ -108,7 +109,7 @@ const BRAIN_ONLY_TOOLS: readonly ActionToolDefinition[] = [
     name: BRAIN_TOOL.READ_TRANSCRIPT,
     description:
       "Read the recent transcript of one observed session in full, bounded to its tail. Use it " +
-      "when an event's transcript delta is not enough to judge what the agent is doing. A local " +
+      "when a tick says a session changed and the roster fields do not settle what it did. A local " +
       "session answers when its provider's transcript this build reads; a Conductor cloud " +
       "session answers with the developer's messages and the agent's replies, never its tool " +
       "activity; any other cloud session returns a refusal.",
@@ -123,19 +124,19 @@ const BRAIN_ONLY_TOOLS: readonly ActionToolDefinition[] = [
     type: BRAIN_TOOL_TYPE,
     name: BRAIN_TOOL.ANNOUNCE,
     description:
-      "Hand the developer one spoken briefing about what changed. Call it at most once per " +
-      "observed-events turn, covering every agent worth mentioning in one breath, or not at all " +
-      "when nothing is worth interrupting for. Never call it in a developer-ask turn: there your " +
-      "final text is the reply.",
+      "Say something aloud to the developer about what changed. Call it at most once per tick, " +
+      "covering every agent worth mentioning in one breath, or not at all when nothing is worth " +
+      "interrupting for. It is offered only in a tick; in a developer-ask turn your final text " +
+      "is the reply.",
     parameters: {
       type: "object",
       properties: {
-        briefing: {
+        text: {
           type: "string",
-          description: `What Luke says aloud, in his own voice, under ${maximumBriefingLength} characters.`,
+          description: `What Luke says aloud, in his own voice, under ${MAXIMUM_UTTERANCE_CHARS} characters.`,
         },
       },
-      required: ["briefing"],
+      required: ["text"],
       additionalProperties: false,
     },
   },
@@ -424,14 +425,13 @@ export function brainToolCatalog(): readonly ToolDescriptor[] {
 }
 
 /**
- * The layer a turn's kind adds beneath the configured policy: the briefing
- * channel is offered only where the reply is not itself the speech. It is a
- * fact about the voice, not a permission decided from who opened the turn.
+ * The layer a turn's kind adds beneath the configured policy: the voice's
+ * channel is offered only in a tick, the one turn whose text nobody hears.
+ * It is a fact about the voice, not a permission decided from who opened the
+ * turn.
  */
 export function turnToolPolicy(trigger: BrainTurnTrigger): ToolPolicy {
-  return trigger === BRAIN_TURN_TRIGGER.ASK || trigger === BRAIN_TURN_TRIGGER.CHILD_TASK
-    ? { deny: [BRAIN_TOOL.ANNOUNCE] }
-    : {};
+  return trigger === BRAIN_TURN_TRIGGER.TICK ? {} : { deny: [BRAIN_TOOL.ANNOUNCE] };
 }
 
 /**

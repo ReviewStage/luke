@@ -315,7 +315,7 @@ export const BRIDGE = {
     result: result<void>((v) => v === undefined),
   }),
   /**
-   * One proactive turn the speech arbiter decided to voice now — a briefing
+   * One proactive turn the speech arbiter decided to voice now — an announcement
    * or an onboarding beat — with its id and the deadline past which it is
    * stale. At most one is outstanding: the next is offered only after the
    * mouth settles this one.

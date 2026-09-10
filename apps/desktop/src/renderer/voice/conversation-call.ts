@@ -5,8 +5,6 @@ import {
 } from "@sidecar/brain/requests-wire";
 import {
   ASK_BRAIN_TOOL,
-  BRIEFING_SPEECH_KIND,
-  briefingSpeechEvents,
   clearInputAudioEvents,
   functionCallFollowUpEvents,
   mouthToolDefinitions,
@@ -18,6 +16,8 @@ import {
   type RealtimeStatus,
   realtimeSessionConfig,
   SCENE,
+  UTTERANCE_SPEECH_KIND,
+  utteranceSpeechEvents,
   voiceExchangeActive,
 } from "@sidecar/realtime";
 import { maximumTypedAskLength } from "@sidecar/session";
@@ -375,17 +375,17 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
   /**
    * Speaks the brain's reply to a typed ask, reporting whether it could. The
    * ask itself went to the brain over the bridge — the voice never saw it —
-   * so what the call is handed is the finished reply, on the briefing's own
+   * so what the call is handed is the finished reply, on an utterance's own
    * terms: one marked item joining the conversation, spoken by a response
    * with its tools withheld. A reply arriving over another interrupts it:
    * the developer's turn always wins, however it is taken.
    */
-  speakReply(briefing: string, runId?: string): boolean {
+  speakReply(reply: string, runId?: string): boolean {
     if (!this.isConnected) return false;
     if (this.status === REALTIME_STATUS.LISTENING) return false;
-    const events = briefingSpeechEvents({
-      kind: BRIEFING_SPEECH_KIND,
-      briefing,
+    const events = utteranceSpeechEvents({
+      kind: UTTERANCE_SPEECH_KIND,
+      text: reply,
       decidedAt: Date.now(),
     });
     if (events.length === 0) return false;
@@ -544,9 +544,9 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
     if (!resumes) return false;
     // The turn now holds for the follow-up, because the READY an ending here
     // would offer while the brain thinks is the edge the queue rides — a
-    // briefing taken there bumps the epoch, and the follow-up voicing the
+    // announcement taken there bumps the epoch, and the follow-up voicing the
     // answer stands down against it, the developer's answer abandoned for a
-    // briefing. The hold is the ask's, so it gets a clock of its own, long
+    // announcement. The hold is the ask's, so it gets a clock of its own, long
     // enough for a brain turn that reads and actions before it answers — while
     // an ask that hangs past even that still meets a backstop, because a turn
     // that never ends is worse than one that ends early.
@@ -647,7 +647,7 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
     // must not mark words that will never be said. The answer itself still
     // travels, because the brain did what it says it did.
     if (epoch === this.turnEpoch) this.setCaptionKind(REPLY_KIND.REPLY, answer.runId);
-    return { briefing: answer.briefing };
+    return { reply: answer.reply };
   }
 
   /**

@@ -7,11 +7,7 @@ import type {
   ReasoningEffort,
   ScheduledTimer,
 } from "@sidecar/runtime/vocabulary";
-import type {
-  ProviderTranscriptResult,
-  ProviderTranscriptSinceResult,
-  SessionIdentity,
-} from "@sidecar/session";
+import type { ProviderTranscriptResult, SessionIdentity } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
 import { AskLedger, type BrainRequestsListener } from "./asks.js";
 import { type BrainCompletionDelivery, ChildRuns } from "./children.js";
@@ -27,11 +23,10 @@ import {
   generationFrom,
   retireOpenedContext,
 } from "./generation.js";
-import { holdReleasedInputText, wakeInputText } from "./input-items.js";
+import { tickInputText } from "./input-items.js";
 import { journalActionCounts, UNKNOWN_ACTION_RESULT } from "./journal.js";
 import { BrainRequestLedger, PENDING_MARK_FIELD, type PendingMarkField } from "./ledger.js";
 import { type BrainFlushInput, type BrainFlushMarkerStore, Maintenance } from "./maintenance.js";
-import { inboxEvents } from "./observation-inbox.js";
 import type { BrainActionPerformer, BrainRoster } from "./performer.js";
 import {
   BRAIN_REQUEST_STATUS,
@@ -44,6 +39,7 @@ import {
 import type { AgentSeam } from "./seam.js";
 import type { BrainStateStore } from "./state-store.js";
 import { SteeredDeliveries } from "./steered-deliveries.js";
+import type { BrainTick } from "./tick.js";
 import type { BrainChildAccess, BrainMemoryAccess, BrainWorkspaceAccess } from "./tool-executor.js";
 import type { BrainTurnTraceRecord } from "./trace.js";
 import {
@@ -52,18 +48,16 @@ import {
   type BrainTurnPreparation,
   type BrainTurnTrigger,
   type RunControl,
+  TURN_OUTCOME,
 } from "./turn.js";
-import { type BrainOpeningNotes, TurnRunner } from "./turn-runner.js";
-import type { BrainDelivery, BrainTurnReport, BrainWakeEvent } from "./wake-events.js";
-import { type LookSubject, WakeCapture } from "./wakes.js";
+import { TurnRunner } from "./turn-runner.js";
+import type { BrainUtterance } from "./utterance.js";
 
 export type { BrainRequestsListener } from "./asks.js";
 export type { BrainCompletionDelivery } from "./children.js";
 export { BRAIN_DEFAULTS } from "./defaults.js";
 export type { BrainFlushInput, BrainFlushMarkerStore } from "./maintenance.js";
 export type { BrainWorkspaceAccess } from "./tool-executor.js";
-
-export { LOOK_SUBJECT } from "./wakes.js";
 
 /** Runs a turn's work under the host's lane for its trigger, so conversations share the lanes' budgets and nothing wider. */
 type BrainLane = <T>(trigger: BrainTurnTrigger, work: () => Promise<T>) => Promise<T>;
@@ -107,22 +101,11 @@ export interface BrainAgentOptions {
    * this cycle's. Absent, the marker stands in memory alone.
    */
   flushMarker?: BrainFlushMarkerStore;
-  readTranscriptSince: (
-    identity: SessionIdentity,
-    cursor: string | undefined,
-  ) => Promise<ProviderTranscriptSinceResult>;
   readTranscript: (identity: SessionIdentity) => Promise<ProviderTranscriptResult>;
-  deliver: (delivery: BrainDelivery) => void | Promise<void>;
-  /** Hears what each observation or hold-release turn amounted to, in the host's own counts. */
-  notice?: (report: BrainTurnReport) => void;
+  /** Hears each thing the brain decided to say aloud, once the turn that decided it is kept. */
+  deliver: (utterance: BrainUtterance) => void | Promise<void>;
   /** The lane each turn runs under; absent, turns are bounded only by this conversation's own serial queue. */
   lane?: BrainLane;
-  openingNotes?: BrainOpeningNotes;
-  /**
-   * Which session this conversation's roster look reads, so two conversations
-   * never read each other's transcript: its one observed session, or none.
-   */
-  observes: LookSubject;
   /**
    * Set when this conversation is a child's: how deep it is. Every turn is
    * then prepared as a child's — the minimal profile, the child restriction
@@ -160,19 +143,19 @@ export interface BrainAgentOptions {
 }
 
 /**
- * The brain: one long-lived agent that is woken by the agents' hooks and by
- * its own look at the roster, asked things by the developer, and
- * answers with briefings for the voice to speak and actions for the host to
- * carry. Nothing detects a change on its behalf: the roster look carries
- * what stands and what each transcript gained, and the brain notices what is
- * new against its own memory.
+ * The brain: one long-lived agent that is ticked by the host's clock when the
+ * roster or a transcript changed, asked things by the developer, and answers
+ * with words for the voice to speak and actions for the host to carry. The
+ * host's tick says only which sessions moved and by how much; what that
+ * amounts to, and whether it is worth saying, the brain decides against its
+ * own memory and by reading what it chooses to read.
  *
  * It is the host of an execution, not the execution itself. What it owns is
  * the conversation's standing: accepting asks into runs with records,
  * queueing turns, revoking them on a cancel, a deadline, a stop, or the
  * store's generation changing, journaling every action before its effect and
- * its result before the next inference, moving the transcript cursors, and
- * checkpointing the context the runtime hands back. How a turn reaches a
+ * its result before the next inference, and checkpointing the context the
+ * runtime hands back. How a turn reaches a
  * model — which provider, which item shapes, how the loop between model and
  * tools runs — is the agent runtime's and the model adapter's, handed in,
  * and nothing here reads inside a provider's item. The same host runs over
@@ -185,8 +168,8 @@ export interface BrainAgentOptions {
  * one. What a turn may call is the effective tool policy's decision, prepared
  * before the model reads a word: the same policy fixes the schemas the model
  * is offered and the gate every emitted call meets, so nothing the model
- * reads can widen either. Who opened the turn — the developer's ask, a wake,
- * a roster look, a hold release — is recorded as its origin, and an action taken
+ * reads can widen either. Who opened the turn — the developer's ask, the
+ * host's tick, a child's end — is recorded as its origin, and an action taken
  * in a turn the developer did not open is journaled and narrated as Luke's
  * own rather than as anything the developer asked for.
  *
@@ -209,7 +192,6 @@ export class BrainAgent {
   readonly #lease: BrainStoreLease;
   readonly #ledger: BrainRequestLedger;
   readonly #asks: AskLedger;
-  readonly #wakes: WakeCapture;
   readonly #turns: TurnRunner;
   readonly #children: ChildRuns;
   readonly #maintenance: Maintenance;
@@ -270,12 +252,9 @@ export class BrainAgent {
       roster: options.roster,
       standingContext: options.standingContext,
       prepareTurn: options.prepareTurn,
-      readTranscriptSince: options.readTranscriptSince,
       readTranscript: options.readTranscript,
       deliver: options.deliver,
-      ...(options.notice ? { notice: options.notice } : undefined),
       ...(options.trace ? { trace: options.trace } : undefined),
-      ...(options.openingNotes ? { openingNotes: options.openingNotes } : undefined),
       ...(options.workspace ? { workspace: options.workspace } : undefined),
       ...(options.children ? { children: options.children } : undefined),
       ...(options.memory ? { memory: options.memory } : undefined),
@@ -304,18 +283,7 @@ export class BrainAgent {
       createRunId: options.createRunId,
       runAsk: (inputs) => this.#queueTurn(BRAIN_TURN_TRIGGER.ASK, () => this.#turns.runAsk(inputs)),
       active: () => this.#turns.active(),
-      disarmWakes: () => this.#wakes.take(),
       cancelMaintenance: () => this.#maintenance.cancel(),
-    });
-    this.#wakes = new WakeCapture({
-      seam,
-      subject: options.observes,
-      roster: options.roster,
-      readTranscriptSince: options.readTranscriptSince,
-      createRunId: options.createRunId,
-      quietUntil: () => options.runtime.quietUntil(),
-      turnInFlight: () => this.#turns.inFlight(),
-      turn: (plan) => this.#turns.turn(plan),
     });
     this.#children = new ChildRuns({
       seam,
@@ -335,27 +303,19 @@ export class BrainAgent {
     return this.#lease;
   }
 
-  /** How many captured observations are waiting for a turn to consume them. */
-  pendingWakes(): number {
-    return this.#generation?.inbox.length ?? this.#wakes.size();
-  }
-
   /**
-   * Whether anything is under way or owed: a turn running or queued, a
-   * capture still landing, an observation captured and not yet consumed, or
-   * an ask waiting in the queue. A host stands a conversation down only when
-   * this answers false, so an analysis in flight is never cut mid-thought
-   * because its session left the roster.
+   * Whether anything is under way or owed: a turn running or queued, or an
+   * ask waiting in the queue. The host ticks this conversation only when this
+   * answers false, so a tick never piles onto a turn still thinking, and a
+   * host stands a conversation down only when it answers false, so an
+   * analysis in flight is never cut mid-thought.
    */
   busy(): boolean {
     return (
       this.#turns.inFlight() ||
       this.#turnsQueued > 0 ||
-      this.#wakes.capturesInFlight() > 0 ||
       this.#turns.active() !== undefined ||
-      this.#asks.size() > 0 ||
-      (this.#generation?.inbox.length ?? 0) > 0 ||
-      this.#wakes.size() > 0
+      this.#asks.size() > 0
     );
   }
 
@@ -406,7 +366,7 @@ export class BrainAgent {
    * then takes away, and a retry that arrives while the write is out is given
    * the write's own outcome. A new submission id is a new run, however alike
    * the words; the same id with other words or another origin is refused as a
-   * conflict rather than guessed at. Pending wakes ride in the run's turn.
+   * conflict rather than guessed at.
    */
   async submitAsk(submission: BrainSubmission): Promise<BrainSubmissionResult> {
     await this.ready();
@@ -458,46 +418,32 @@ export class BrainAgent {
   }
 
   /**
-   * Captures wake events into the durable inbox and arms the coalescing
-   * window; settles once the capture has landed or been refused.
+   * The host's clock found something changed since it last looked, and this
+   * conversation was free to hear it. One turn opens over the change, as data,
+   * and reads whatever it decides to read for itself; nothing is captured or
+   * queued beyond that turn, because the host diffs against what it last
+   * handed over and a tick that finds this conversation busy is simply not
+   * taken — the change is still standing at the next one. A tick made while
+   * the model is quiet opens nothing and settles at once. Answers whether the
+   * turn ran to its end with its checkpoint kept, so the host knows whether
+   * the brain has seen these changes or should show them again.
    */
-  wake(events: readonly BrainWakeEvent[]): Promise<void> {
-    return this.#wakes.wake(events);
-  }
-
-  /** One look at the whole roster, driven by the host's observation pass rather than an internal timer. */
-  rosterLook(): Promise<void> {
-    return this.#wakes.rosterLook();
-  }
-
-  /**
-   * Hands back briefings the host held while a meeting or a pause stood, for
-   * one re-decision against the roster as it now stands. Pending wakes open
-   * in the same turn, ahead of the held briefings, so the decision is made
-   * knowing everything that happened during the hold.
-   */
-  releaseHeld(held: readonly BrainDelivery[]): void {
-    if (this.#stopped || held.length === 0) return;
+  async tick(tick: BrainTick): Promise<boolean> {
+    if (this.#stopped || tick.changes.length === 0) return false;
+    await this.ready();
     const generation = this.#generation;
-    if (!generation) {
-      // The state is still loading: the briefings wait for the generation
-      // they will be re-decided in.
-      void this.ready().then(() => this.releaseHeld(held));
-      return;
-    }
-    this.#wakes.take();
-    void this.#queueTurn(BRAIN_TURN_TRIGGER.HOLD_RELEASED, () =>
+    if (!generation || this.#stopped) return false;
+    const quietUntil = this.#options.runtime.quietUntil();
+    if (quietUntil !== undefined && quietUntil > this.#now()) return false;
+    const result = await this.#queueTurn(BRAIN_TURN_TRIGGER.TICK, () =>
       this.#turns.turn({
         generation,
-        trigger: BRAIN_TURN_TRIGGER.HOLD_RELEASED,
+        trigger: BRAIN_TURN_TRIGGER.TICK,
         deliveries: new SteeredDeliveries(),
-        events: inboxEvents(generation.inbox),
-        open: (attached: readonly BrainWakeEvent[], now: number) => [
-          ...(attached.length > 0 ? [wakeInputText(attached, now)] : []),
-          holdReleasedInputText(held, now),
-        ],
+        open: (now: number) => [tickInputText(tick, now)],
       }),
     );
+    return result.outcome === TURN_OUTCOME.DONE;
   }
 
   /**
@@ -544,7 +490,6 @@ export class BrainAgent {
   async stop(): Promise<void> {
     this.#stopped = true;
     this.#maintenance.cancel();
-    this.#wakes.clear();
     const waiting = this.#asks.takeWaiting();
     this.#unsubscribeStore?.();
     this.#unsubscribeStore = undefined;
@@ -631,7 +576,6 @@ export class BrainAgent {
     this.#generation = generation;
     const opened = await generation.opened;
     if (generation !== this.#generation) return;
-    this.#wakes.armInbox(generation);
     if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
       this.#reportIncompatible(generation, opened.reason);
     }
@@ -683,7 +627,7 @@ export class BrainAgent {
   /**
    * The store's generation changed under this agent — a reset or a
    * replacement. The old generation's signal fires, so every run and every
-   * observation turn of it loses its execution at once, and whatever they
+   * tick turn of it loses its execution at once, and whatever they
    * still do happens to the orphaned copy, whose checkpoints the store
    * fences. The agent then works from the new envelope, which holds no record
    * of those runs.
@@ -698,11 +642,7 @@ export class BrainAgent {
     previous?.abort.abort();
     this.#asks.revokeAll();
     if (previous) retireOpenedContext(previous);
-    // Wakes coalesced against the old memory — including a quiet retry's —
-    // are that generation's work, and go with it.
-    this.#wakes.clear();
     this.#generation = this.#generationFrom(state);
-    this.#wakes.armInbox(this.#generation);
     this.#asks.notify();
   }
 

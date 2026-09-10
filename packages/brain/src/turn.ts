@@ -9,13 +9,11 @@ import { RUN_ORIGIN, type RunOrigin } from "@sidecar/runtime/vocabulary";
 import type { Generation } from "./generation.js";
 import type { SteeredDeliveries } from "./steered-deliveries.js";
 import type { RecordingContextEngine } from "./transcript-recorder.js";
-import type { BrainWakeEvent } from "./wake-events.js";
 
 export const BRAIN_TURN_TRIGGER = {
-  WAKE: "wake",
-  ROSTER: "roster",
+  /** The host's clock found the roster or a transcript changed since it last looked. */
+  TICK: "tick",
   ASK: "ask",
-  HOLD_RELEASED: "hold-released",
   /** A child's own run: the delegated task, whose final text is the result its requester is handed. */
   CHILD_TASK: "child-task",
   /** A requester's turn opened by a child's completion, when no run of its own was there to steer. */
@@ -43,7 +41,7 @@ export const REFUSAL_REASON = {
   ANNOUNCE_IN_ASK: "reply in text: this is a developer ask, and your final text is the speech",
   NOT_ALLOWED: "not run: the tool policy does not offer this tool in this turn",
   NOT_OFFERED: "not run: no such tool in this turn",
-  EMPTY_BRIEFING: "a briefing needs words",
+  EMPTY_UTTERANCE: "an announcement needs words",
   ACTION_FAILED: "the action did not complete",
   READ_FAILED: "the transcript could not be read",
   RUN_REVOKED: "not run: this ask was cancelled or its run ended",
@@ -86,18 +84,8 @@ export const TURN_OUTCOME = {
   INCOMPATIBLE: "incompatible",
 } as const;
 
-export type TurnOutcome = (typeof TURN_OUTCOME)[keyof typeof TURN_OUTCOME];
-
-/** The outcomes a turn's own conversation reports to the host as a notice; the rest never ran. */
-export const REPORTED_OUTCOMES: ReadonlySet<TurnOutcome> = new Set([
-  TURN_OUTCOME.DONE,
-  TURN_OUTCOME.QUIET,
-  TURN_OUTCOME.FAILED,
-  TURN_OUTCOME.INCOMPLETE,
-]);
-
 export type TurnResult =
-  | { outcome: typeof TURN_OUTCOME.DONE; text: string; briefings: readonly string[] }
+  | { outcome: typeof TURN_OUTCOME.DONE; text: string }
   | { outcome: typeof TURN_OUTCOME.QUIET; until: number }
   | { outcome: typeof TURN_OUTCOME.FAILED }
   | { outcome: typeof TURN_OUTCOME.INCOMPLETE }
@@ -128,9 +116,8 @@ export interface RunControl {
 }
 
 interface TurnPlanBase {
-  events: readonly BrainWakeEvent[];
   /** The words the turn opens with, each ingested as the developer's or the host's, in order. */
-  open: (events: readonly BrainWakeEvent[], now: number) => readonly string[];
+  open: (now: number) => readonly string[];
   /**
    * What the turn owes about the words in it: its opening words, and the
    * words steered into its run. Answered by the checkpoints that land and by
@@ -141,8 +128,8 @@ interface TurnPlanBase {
   run?: RunControl;
   /**
    * The generation the work was queued in. A turn that reaches the front of
-   * the queue in another generation is obsolete — a held briefing or a wake
-   * of a memory that has since been discarded — and opens nothing.
+   * the queue in another generation is obsolete — a tick over a memory that
+   * has since been discarded — and opens nothing.
    */
   generation: Generation;
 }
@@ -157,8 +144,6 @@ export interface TurnContext {
   context: RecordingContextEngine;
   run: RunControl;
   signal: AbortSignal;
-  /** The inbox entries this turn opened with, consumed by its checkpoint and by nothing sooner. */
-  consumes?: readonly string[];
 }
 
 /**
@@ -185,7 +170,7 @@ export interface BrainTurnPreparation {
 }
 
 export const BRAIN_TURN_KIND = {
-  /** A turn a model runs: an ask, a wake, a roster look, or a hold's release. */
+  /** A turn a model runs: a tick, an ask, a child's task, or a child's completion. */
   TURN: "turn",
   /** The housekeeping compaction after a turn, which reads the prompt and runs no tools. */
   MAINTENANCE: "maintenance",

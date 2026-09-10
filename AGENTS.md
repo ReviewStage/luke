@@ -118,7 +118,7 @@ Canonical commands:
   pass reported, each validated against the shape its provider documents.
   Nothing deterministic that decides on the user's behalf may reach a write
   path: the attention evaluator above all, and the speak-only calls that voice
-  a briefing or a reply, which carry no tools at the API and again at a
+  an announcement or a reply, which carry no tools at the API and again at a
   runtime gate, so a session summary or a tool output that reads like an
   instruction can never become an action there. What the brain itself may call
   in any of its turns is decided by the effective tool policy, resolved from
@@ -127,8 +127,8 @@ Canonical commands:
   winning at every layer) over the registered catalog, before the model reads
   a word: the same policy fixes the schemas the model is offered and the gate
   every emitted call meets at dispatch, so nothing the model reads can widen
-  either. Who opened a turn — the developer's ask, a provider's hook, the
-  roster look, a hold's release — is its origin, recorded on the
+  either. Who opened a turn — the developer's ask, the host's tick, a
+  child's end — is its origin, recorded on the
   run and in Conversation, and never by itself a permission: a turn Luke opened
   himself may carry the actions the policy allows, and an action it takes is
   journaled before its effect exactly as an ask's and narrated as Luke's own
@@ -213,45 +213,40 @@ Canonical commands:
   a model unbidden, and both the read and what it leaves behind are bounded
   on every side. Luke's judgment is one agent with several conversations in
   the main process: main (`agent:main:main`), the developer's private
-  threads, and one conversation per observed coding session
-  (`agent:main:observed:<provider>:<session>`, each provider id run through
-  the reversible component encoder in the runtime's vocabulary
-  (`@sidecar/runtime/vocabulary`), never concatenated raw). A provider's hook
-  and the roster look on the observation pass route to the observed session's
-  own conversation, which keeps its own transcript cursor, context, and
-  generation; main is woken by
-  a developer's ask and by a hold's release of a briefing it decided, and
-  is handed no transcript on any look. Nothing else wakes it: there is no
-  scheduled review, and an observed conversation announces its own session's
-  news itself. What main learns of the observed
-  conversations is a compact notice in the host's own counts and Luke's own
-  briefing words, consumed on its next turn and never a transcript's text.
-  An observed conversation's wake or roster look reads only what its one
-  session's transcript gained since the capture cursor it last kept, cut
-  from the front to 20,000 characters, and writes it down before any turn is
-  scheduled: the observation entry and the advanced capture cursor land in
-  one save into the conversation's durable inbox, and the turn that follows
-  consumes the entries it opened with at its checkpoint, moving the consumed
-  cursor there and only there. Which sessions are looked at is the host's
-  decision, local or cloud alike: every session working or waiting now, and
-  every one whose conversation already stands. A session whose provider
-  answers no incremental read (a Conductor chat today) is looked at from its
-  roster fields alone — the look itself reads no message of it — and the
-  turn it opens may read that chat's tail only through the same
-  `read_transcript` tool a developer's ask is offered, under the rule above. The two cursors are two on purpose: a
-  throttled or failed inference leaves every entry standing for the next
-  turn, a crash between capture and run loses nothing and reads nothing
-  twice, and a relaunch runs what was captured without touching a
-  transcript. A repeated look that finds nothing gained and the session
-  unchanged captures nothing and opens no inference, a hook delivered twice
-  is one entry, and the inbox holds at most 20 entries. The conversation
-  may also read one observed session's whole
-  tail, cut from the front to 60,000 characters, through the same read tool
-  a developer's ask is offered; a cloud session whose provider documents no
-  transcript read, and a local provider whose transcript this build does not
-  read, are read from roster fields alone.
-  An observed conversation's `announce` reaches the voice directly; main
-  neither approves nor rewords it. Any conversation may delegate: the brain's
+  threads, and the children main delegates to. Main is woken by a
+  developer's ask, by a child's end, and by the host's tick, and by nothing
+  else: there is no scheduled review beyond the tick, and no conversation
+  stands per observed session (a build before this one kept one per session
+  under `agent:main:observed:<provider>:<session>`; the store's migration
+  archives those rows, and nothing opens or reads one again). The tick is
+  the host's clock and the host's arithmetic, never a model's: after every
+  observation pass, and again behind every provider hook once the pass it
+  hurried has run, the host compares the roster to what the last tick showed
+  the brain — each session's status, hold for the developer, completion
+  cause, activity, error, and workspace name, and how many characters its
+  transcript gained, measured through the provider's own incremental reader
+  and discarded but for the count — and opens one turn on main only when
+  something moved and main is free. What that turn opens with is the
+  difference alone, as data behind the `[tick]` marker: which sessions
+  appeared, changed, or left, which fields moved, how much each transcript
+  grew. No transcript text enters a turn unbidden; the brain reads a
+  session's tail, cut from the front to 60,000 characters, only through its
+  own `read_transcript` tool, the same one a developer's ask is offered,
+  under the rule above, and a cloud session whose provider documents no
+  transcript read, or a local provider whose transcript this build does not
+  read, is read from roster fields alone. A tick that finds nothing moved
+  opens no inference; one that finds main busy, or announcements quiet for a
+  meeting or the developer's own switch, is not taken at all, and the picture
+  it would have compared against stands, so the first tick after the quiet
+  sees everything that changed across it. The picture the brain was shown is
+  committed only behind a turn that ran to its end, so a turn the model
+  failed or a replacement revoked leaves the same change to surface again;
+  it lives in memory alone, so the first tick after a launch finds every live
+  session new and says so once, and nothing of it reaches disk. A session
+  with a live voice conversation over it is left out of the diff. What the
+  brain decides to say out of a tick reaches the voice through `announce`,
+  the one tool offered in a tick and in no other kind of turn, and nothing
+  approves or rewords it. Any conversation may delegate: the brain's
   `sessions_spawn` tool records a child (`agent:main:subagent:<uuid>`, kind
   automation) in the brain's store before its receipt is answered, and the
   child runs in a conversation of its own on the child lane, under the
@@ -511,8 +506,10 @@ Canonical commands:
   renderer never claimed is offered again to the next epoch, a claimed one
   never is, and what is guaranteed is at most one authorization to speak per
   run, never that the words were heard. Meeting and pause holds stay in the
-  host's speech arbiter, and a held observation briefing is re-decided in
-  the conversation that decided it, never through main.
+  host's speech arbiter, and they hold only the scripted onboarding beats: an
+  announcement decided against a roster the quiet then let move on is dropped
+  rather than held, and the brain, which is not ticked while quiet stands,
+  decides afresh from the first tick after it.
 - The runtime is drained at the explicit Quit and at the updater's restart
   into a downloaded build, each of which asks for the drain and waits,
   bounded even under work that stops answering: admissions closed, every run
@@ -586,8 +583,8 @@ Canonical commands:
   retention, not the generation's: each line is stamped with the generation
   that stood when it was written, for attribution alone, and a generation's
   end erases no line. A generation's end revokes its runs and, through
-  the host's own listener, withdraws every briefing it had queued or offered
-  but not yet spoken; a version-1 file, of unknown age, reads as nothing
+  the host's own listener, withdraws every announcement it had queued or
+  offered but not yet spoken; a version-1 file, of unknown age, reads as nothing
   rather than as a fresh lifetime; a generation found unreadable or past its
   bounds at load (or expired, under the opt-in policy) is replaced on disk
   in the same load rather than left for a later write; and the empty
@@ -910,11 +907,11 @@ Canonical commands:
   desktop's own view of its own conversation — the realtime events already
   crossing the data channel, with an audio append reduced to its byte count
   before it leaves the renderer; each brain turn and request as its
-  about-fields and counts (trigger, authority, input item kinds, transcript
-  bytes, tool names, token and briefing character counts, model, timing)
-  and never a transcript's text; and each speech decision the arbiter took,
-  as the turn's kind, the decision, and how many requests still stood, never
-  the briefing's words — appended as
+  about-fields and counts (trigger, authority, input item kinds, tool names,
+  token and announcement character counts, model, timing) and never a
+  transcript's text; and each speech decision the arbiter took, as the
+  turn's kind, the decision, and how many requests still stood, never the
+  announcement's words — appended as
   JSONL under the developer's chosen directory and
   sent nowhere; `pnpm trace:export` turns one file into a document a local
   viewer opens. The tap only observes: nothing reads its result, and the
@@ -1176,21 +1173,23 @@ Canonical commands:
   unbidden in exactly two places, each with its own narrower rule; the
   analytics, replay, and crash streams above are disclosed on their own terms
   and are not counted here. The brain's own turns are the first, under the
-  transcript-read rule above: what a local session's transcript gained since
-  the brain last looked, bounded and behind a marker, on the developer's own
-  key or through Luke's own service. The second is a briefing the brain
-  decided to give — its own words about what changed, under the briefing
-  bound — which reaches the voice service so it can be said aloud, travelling
-  as one conversation item behind a marker into the voice session's own
+  transcript-read rule above: the tick's diff of roster fields and
+  transcript growth counts, and whatever transcript tail the brain then reads for itself,
+  bounded and behind a marker, on the developer's own key or through Luke's
+  own service. The second is an announcement the brain decided to make — its
+  own words about what changed, under the announcement's character bound —
+  which reaches the voice service so it can be said aloud, travelling as one
+  conversation item behind a marker into the voice session's own
   conversation, spoken by a response that declares no tools, under a standing
   rule that it is said as written and answers nothing said before it; what it
   can become is bounded by the withheld tools, not by isolation. Nothing
-  decides an announcement deterministically any
-  more: no status edge speaks on its own, and no evaluator sentence stands
-  between the transcript and the voice. Two onboarding beats are the members
-  of that set about no session, and each keeps the same terms:
-  worded from a script fixed by the build, speak-only and tool-free like a
-  briefing, drawing no notice band and claiming none. The arrival
+  decides an announcement
+  deterministically: the tick decides only that something moved, no status
+  edge speaks on its own, and no evaluator sentence stands between the
+  transcript and the voice. Two onboarding beats are the members of that set
+  about no session, and each keeps the same terms: worded from a script
+  fixed by the build, speak-only and tool-free like an announcement, drawing
+  no notice band and claiming none. The arrival
   beat is spoken once per install at the deterministic edge of the account's
   first sign-in, remembered in Luke's own state file, and carrying as
   observed values only one working session's title, read from the same roster
@@ -1205,13 +1204,13 @@ Canonical commands:
   dropped before its reply began — leaves it owed for the next signed-in
   launch rather than improvising a substitute; only the voice window
   reporting the reply actually begun settles it. When no conversation is
-  open, Luke opens a call of
-  his own to say a briefing, and that call is speak-only by construction: it
-  offers no microphone track, carries no tools, and is sent the briefing and
-  the same 20 recent Conversation lines the brain's standing context carries,
-  each cut to its length bound, never the roster, the guide, a transcript, or
-  a session identity, which reach only the brain, and the voice only as the
-  words the brain chose to say. The desktop's voice knows no roster, guide, or conversation
+  open, Luke opens a call of his own to say an announcement, and that call is
+  speak-only by construction: it offers no microphone track, carries no
+  tools, and is sent the announcement and the same 20 recent Conversation
+  lines the brain's standing context carries, each cut to its length bound,
+  never the roster, the guide, a transcript, or a session identity, which
+  reach only the brain, and the voice only as the words the brain chose to
+  say. The desktop's voice knows no roster, guide, or conversation
   of its own: a developer-opened conversation hands their words to the brain
   through the voice's one tool and says the brain's reply whole. It is the
   brain whose standing context carries the recent exchange — the 20 most
@@ -1219,9 +1218,10 @@ Canonical commands:
   asks, typed or spoken and handed back as text by the service that heard
   them, the words Luke spoke or announced, and the actions he carried at their
   ask), beside the brain's own working memory of its turns — so the one
-  conversation survives the calls that transport it: a briefing read out on
-  Luke's own call, or a call retired idle, is still remembered on the next
-  ask. A reply that quoted or summarized a transcript read is Conversation like
+  conversation survives the calls that transport it: an announcement read
+  out on Luke's own call, or a call retired idle, is still remembered on the
+  next ask, and the announcements it lists are what keeps a tick from saying
+  the same news twice. A reply that quoted or summarized a transcript read is Conversation like
   any other reply, and enters that context under the same bounds. Each
   Conversation line's session identity is the roster-validated one its action
   traveled with, and the conversation is stored only where the constraint above
@@ -1230,17 +1230,17 @@ Canonical commands:
   onto the record rather than a memory of its own. The phone's call keeps the
   older shape: it
   carries the roster it was shown as context and the session actions as its own
-  tools, and no Conversation. A
-  briefing's trigger is an observation turn of the brain — a provider's hook,
-  the brain's own look at the roster on the observation pass, or a hold's
-  release — and the brain's `announce` call inside it, offered in no other
-  kind of turn; an onboarding beat's trigger is its own deterministic one
-  (the recorded sign-in edge, or the calendar gate standing). A briefing
-  speaks whenever voice can, through the speech arbiter, which holds it while
-  a meeting or the pause stands and lets a held briefing be decided again
-  against the roster as it then is rather than spoken stale. Widening either
-  set is a product decision, not an implementation detail; make it
-  deliberately. While a briefing is being spoken, its words are captioned on
+  tools, and no Conversation. An announcement's trigger is a tick of the
+  brain — the host's deterministic diff of the roster after an observation
+  pass or behind a provider's hook — and the brain's `announce` call inside
+  it, offered in no other kind of turn; an onboarding beat's trigger is its
+  own deterministic one (the recorded sign-in edge, or the calendar gate
+  standing). An announcement speaks whenever voice can, through the speech
+  arbiter; while a meeting or the pause stands no tick is taken and an
+  announcement already decided is dropped rather than spoken stale, and the
+  first tick after the quiet decides afresh against the roster as it then
+  is. Widening either set is a product decision, not an implementation
+  detail; make it deliberately. While an announcement is being spoken, its words are captioned on
   Luke's own surface under the housing, and nothing else is drawn about it:
   no notice names a session, no chip previews an issue, and no press under
   the housing opens anything, so the words are the whole of what an
@@ -1315,6 +1315,8 @@ generation's words never reaching its successor; and the bounds on the roster a
 model is shown. Restating them structurally — a type that cannot carry the
 value, a redactor with its own unit, a generated file compared as data — is
 work this rule creates and does not excuse.
+
+## Where the rest of the guidance lives
 
 ## Where the rest of the guidance lives
 

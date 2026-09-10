@@ -45,7 +45,7 @@ test("a briefing's live line settles as an announcement", () => {
     liveConversationEntries({
       spokenAskPreviews: new Map(),
       captions: ["Claude Code finished checkout-service."],
-      kind: REPLY_KIND.BRIEFING,
+      kind: REPLY_KIND.ANNOUNCEMENT,
       runId: undefined,
     }),
     [

@@ -19,7 +19,7 @@ import {
  * with WAL journaling and full synchronous commits, so a crash leaves the
  * database at the envelope before or the envelope after a save, never
  * between. Foreign keys cascade a session's rows with it: replacing a
- * generation deletes the old one's checkpoints, cursors, requests, and
+ * generation deletes the old one's checkpoints, requests, and
  * receipts in the same statement that removes the session.
  */
 

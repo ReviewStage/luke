@@ -51,7 +51,7 @@ small local memory of useful preferences, personal context, goals, and
 recurring constraints; ask him what he remembers, correct something, or tell
 him to forget it.
 
-![Luke's capsule under the notch, captioning a briefing about which sessions finished, which is still packaging, and which are waiting on you.](docs/media/luke-talking.png)
+![Luke's capsule under the notch, captioning an announcement about which sessions finished, which is still packaging, and which are waiting on you.](docs/media/luke-talking.png)
 
 ### Announcements
 

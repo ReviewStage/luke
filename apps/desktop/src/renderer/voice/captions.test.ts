@@ -79,7 +79,7 @@ test("an item's transcript lands on its own segment after the turn has moved pas
 
 test("every segment stays until the reply ends, and the whole reply is handed over", () => {
   const context = harness();
-  context.strip.mark(REPLY_KIND.BRIEFING);
+  context.strip.mark(REPLY_KIND.ANNOUNCEMENT);
   for (const index of [1, 2, 3, 4]) context.strip.append(`item-${index}`, `Sentence ${index}.`);
 
   // No count retires a segment: how many fit under the housing is the
@@ -96,7 +96,7 @@ test("every segment stays until the reply ends, and the whole reply is handed ov
   assert.deepEqual(context.ended, [
     {
       texts: ["Sentence 1.", "Sentence 2.", "Sentence 3.", "Sentence 4."],
-      kind: REPLY_KIND.BRIEFING,
+      kind: REPLY_KIND.ANNOUNCEMENT,
       runId: undefined,
     },
   ]);
@@ -126,14 +126,14 @@ test("a transcript that says what the words already say redraws nothing", () => 
 
 test("ending hands the words over once, then empties", () => {
   const context = harness();
-  context.strip.mark(REPLY_KIND.BRIEFING);
+  context.strip.mark(REPLY_KIND.ANNOUNCEMENT);
   context.strip.append("item-1", "Two agents are waiting.");
 
   context.strip.end();
   context.strip.end();
 
   assert.deepEqual(context.ended, [
-    { texts: ["Two agents are waiting."], kind: REPLY_KIND.BRIEFING, runId: undefined },
+    { texts: ["Two agents are waiting."], kind: REPLY_KIND.ANNOUNCEMENT, runId: undefined },
   ]);
   assert.deepEqual(latest(context.drawn), { texts: undefined, kind: undefined, runId: undefined });
 });
@@ -175,7 +175,7 @@ test("a reply that said nothing and named no run hands nothing over", () => {
 
 test("discarding empties without admitting anything to Conversation", () => {
   const context = harness();
-  context.strip.mark(REPLY_KIND.BRIEFING, "run-7");
+  context.strip.mark(REPLY_KIND.ANNOUNCEMENT, "run-7");
   context.strip.append("item-1", "A briefing nobody heard.");
 
   context.strip.discard();

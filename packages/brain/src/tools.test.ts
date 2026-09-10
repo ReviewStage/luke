@@ -40,31 +40,35 @@ test("the catalog holds every action and every brain tool once, each under its e
   assert.equal(names.length, realtimeToolDefinitions().length + Object.values(BRAIN_TOOL).length);
 });
 
-test("with no configured layers every turn is offered the whole catalog, and only an ask loses announce, to the turn layer", () => {
+test("with no configured layers every turn is offered the whole catalog, and announce is offered only in a tick, at the turn layer", () => {
   const catalog = brainToolCatalog();
   const ask = resolveTurnToolPolicy(catalog, {}, BRAIN_TURN_TRIGGER.ASK);
-  const wake = resolveTurnToolPolicy(catalog, {}, BRAIN_TURN_TRIGGER.WAKE);
+  const tick = resolveTurnToolPolicy(catalog, {}, BRAIN_TURN_TRIGGER.TICK);
   const maintenance = resolveTurnToolPolicy(catalog, {});
   assert.ok(ask.allows(REALTIME_TOOL.SEND_SESSION_MESSAGE));
-  assert.ok(wake.allows(REALTIME_TOOL.SEND_SESSION_MESSAGE));
-  assert.ok(wake.allows(BRAIN_TOOL.WRITE_WORKSPACE_FILE));
+  assert.ok(tick.allows(REALTIME_TOOL.SEND_SESSION_MESSAGE));
+  assert.ok(tick.allows(BRAIN_TOOL.WRITE_WORKSPACE_FILE));
   assert.ok(!ask.allows(BRAIN_TOOL.ANNOUNCE));
-  assert.ok(wake.allows(BRAIN_TOOL.ANNOUNCE));
+  assert.ok(tick.allows(BRAIN_TOOL.ANNOUNCE));
   assert.ok(!ask.allows("delete_everything"));
-  assert.ok(!wake.allows("read_session_transcript"));
+  assert.ok(!tick.allows("read_session_transcript"));
   assert.deepEqual(ask.denied, [{ tool: BRAIN_TOOL.ANNOUNCE, layer: TOOL_POLICY_LAYER.TURN }]);
   assert.deepEqual(maintenance.denied, []);
+  for (const trigger of Object.values(BRAIN_TURN_TRIGGER)) {
+    const offered = resolveTurnToolPolicy(catalog, {}, trigger).allows(BRAIN_TOOL.ANNOUNCE);
+    assert.equal(offered, trigger === BRAIN_TURN_TRIGGER.TICK, trigger);
+  }
   // A configured deny still wins over the turn layer, and is the layer named.
   const configured = resolveTurnToolPolicy(
     catalog,
     { session: { deny: [BRAIN_TOOL.ANNOUNCE] } },
-    BRAIN_TURN_TRIGGER.WAKE,
+    BRAIN_TURN_TRIGGER.TICK,
   );
   assert.ok(!configured.allows(BRAIN_TOOL.ANNOUNCE));
   assert.equal(configured.deniedBy(BRAIN_TOOL.ANNOUNCE), TOOL_POLICY_LAYER.SESSION);
-  assert.equal(brainToolSchemas(wake).length, brainToolCatalog().length);
+  assert.equal(brainToolSchemas(tick).length, brainToolCatalog().length);
   assert.equal(brainToolSchemas(ask).length, brainToolCatalog().length - 1);
-  for (const schema of brainToolSchemas(wake)) assert.ok(schema.name.length > 0);
+  for (const schema of brainToolSchemas(tick)) assert.ok(schema.name.length > 0);
 });
 
 test("a configured deny of the actions group removes every action and keeps the reads", () => {
@@ -77,11 +81,11 @@ test("a configured deny of the actions group removes every action and keeps the 
   assert.ok(policy.allows(BRAIN_TOOL.READ_WORKSPACE_FILE));
 });
 
-test("announce takes the briefing alone and the hosted catalog carries every definition as a function tool", () => {
+test("announce takes the text alone and the hosted catalog carries every definition as a function tool", () => {
   const announce = hostedBrainToolCatalog().get(BRAIN_TOOL.ANNOUNCE);
   assert.ok(announce);
-  assert.deepEqual(announce.parameters.required, ["briefing"]);
-  assert.deepEqual(Object.keys(wireRecord(announce.parameters.properties) ?? {}), ["briefing"]);
+  assert.deepEqual(announce.parameters.required, ["text"]);
+  assert.deepEqual(Object.keys(wireRecord(announce.parameters.properties) ?? {}), ["text"]);
   for (const tool of hostedBrainToolCatalog().values()) assert.equal(tool.type, "function");
   assert.equal(hostedBrainToolCatalog().size, brainToolCatalog().length);
   assert.ok(isBrainOnlyTool(BRAIN_TOOL.READ_TRANSCRIPT));
@@ -89,10 +93,10 @@ test("announce takes the briefing alone and the hosted catalog carries every def
   assert.ok(!isBrainOnlyTool(REALTIME_TOOL.SEND_SESSION_MESSAGE));
 });
 
-test("a child's task turn loses announce like an ask, and the session tools stand in the catalog under their group", () => {
-  const childTask = turnToolPolicy(BRAIN_TURN_TRIGGER.CHILD_TASK);
-  assert.deepEqual(childTask.deny, [BRAIN_TOOL.ANNOUNCE]);
-  assert.deepEqual(turnToolPolicy(BRAIN_TURN_TRIGGER.CHILD_COMPLETION), {});
+test("a child's turns lose announce like an ask, and the session tools stand in the catalog under their group", () => {
+  assert.deepEqual(turnToolPolicy(BRAIN_TURN_TRIGGER.CHILD_TASK).deny, [BRAIN_TOOL.ANNOUNCE]);
+  assert.deepEqual(turnToolPolicy(BRAIN_TURN_TRIGGER.CHILD_COMPLETION).deny, [BRAIN_TOOL.ANNOUNCE]);
+  assert.deepEqual(turnToolPolicy(BRAIN_TURN_TRIGGER.TICK), {});
   const catalog = brainToolCatalog();
   for (const name of [
     BRAIN_TOOL.SESSIONS_SPAWN,

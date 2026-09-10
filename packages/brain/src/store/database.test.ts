@@ -4,7 +4,13 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
-import { DEFAULT_AGENT_ID, MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
+import {
+  ARCHIVE_REASON,
+  CONVERSATION_KIND,
+  DEFAULT_AGENT_ID,
+  MAIN_SESSION_KEY,
+  observedSessionKey,
+} from "@sidecar/runtime/vocabulary";
 import {
   CONVERSATION_ENTRY_KIND,
   maximumStoredConversationEntries,
@@ -26,7 +32,11 @@ import {
   listConversation,
   searchConversation,
 } from "./conversation-table.js";
-import { createConversation, raiseConversationCutoff } from "./conversations-table.js";
+import {
+  conversationRecord,
+  createConversation,
+  raiseConversationCutoff,
+} from "./conversations-table.js";
 import { StoreDatabase } from "./database.js";
 import { EnvelopeTracker, SAVE_KIND } from "./envelope.js";
 import { STORE_SCHEMA_VERSION } from "./schema.js";
@@ -94,7 +104,7 @@ test("deltas leave the tables holding exactly the envelope given, checkpoint by 
   state = {
     ...state,
     items: state.items.slice(0, 2),
-    cursors: {},
+    compactionCount: 2,
     requests: [request("run-2", { status: BRAIN_REQUEST_STATUS.CANCELLED, revision: 4 })],
     journal: [],
   };
@@ -116,14 +126,14 @@ test("a stale handle cannot save over a newer generation, whole or by delta, and
   const gen2 = freshBrainState("gen-2", NOW + 10);
   assert.equal(second.save(gen2), true);
   // The first handle's picture is gen-1: its checkpoint of gen-1 lands nowhere...
-  const staleDelta = { ...gen1, cursors: { codex: { "session-z": "late" } } };
+  const staleDelta = { ...gen1, compactionCount: 5 };
   assert.equal(first.save(staleDelta), false);
   // ...and neither does a whole envelope it composes, because it names gen-1 as what stands.
   assert.equal(first.save(freshBrainState("gen-3", NOW + 20)), false);
   assert.deepEqual(loadBrainEnvelope(database, MAIN_SESSION_KEY).state, gen2);
   // Loading again brings the handle's picture current, and it may write once more.
   first.load();
-  assert.equal(first.save({ ...gen2, cursors: { codex: { "session-z": "now" } } }), true);
+  assert.equal(first.save({ ...gen2, compactionCount: 6 }), true);
   // A handle that believes nothing stands is refused too when something does.
   const third = repository(openTestDatabase());
   assert.equal(
@@ -147,20 +157,19 @@ test("the BrainStateStore keeps its lease, fence, and Clear guarantees over the 
   assert.equal(
     await store.write(lease, "gen-1", (state) => ({
       ...state,
-      cursors: { codex: { s: "c" } },
+      compactionCount: 3,
       requests: [request("run-1")],
     })),
     true,
   );
-  assert.deepEqual(loadBrainEnvelope(database, MAIN_SESSION_KEY).state?.cursors, {
-    codex: { s: "c" },
-  });
+  assert.equal(loadBrainEnvelope(database, MAIN_SESSION_KEY).state?.compactionCount, 3);
   // A later lease releases the earlier one; the old writer's checkpoint lands nowhere.
   const later = store.lease();
-  assert.equal(await store.write(lease, "gen-1", (state) => ({ ...state, cursors: {} })), false);
-  assert.deepEqual(loadBrainEnvelope(database, MAIN_SESSION_KEY).state?.cursors, {
-    codex: { s: "c" },
-  });
+  assert.equal(
+    await store.write(lease, "gen-1", (state) => ({ ...state, compactionCount: 0 })),
+    false,
+  );
+  assert.equal(loadBrainEnvelope(database, MAIN_SESSION_KEY).state?.compactionCount, 3);
   // The Clear fences synchronously and writes the marker over the old content.
   const cleared = store.clear(NOW + 1);
   assert.equal(store.holdsGeneration("gen-1"), false);
@@ -463,13 +472,11 @@ test("a generation whose rows this build cannot read is repaired by the store th
   assert.equal(
     await store.write(lease, fresh.generationId, (state) => ({
       ...state,
-      cursors: { codex: { s: "c" } },
+      compactionCount: 3,
     })),
     true,
   );
-  assert.deepEqual(loadBrainEnvelope(database, MAIN_SESSION_KEY).state?.cursors, {
-    codex: { s: "c" },
-  });
+  assert.equal(loadBrainEnvelope(database, MAIN_SESSION_KEY).state?.compactionCount, 3);
   // The handle that still pictures gen-old cannot replace the repair.
   assert.equal(stale.save(freshBrainState("gen-intruder", NOW)), false);
   assert.equal(loadBrainEnvelope(database, MAIN_SESSION_KEY).state?.generationId, "gen-repaired-1");
@@ -824,53 +831,71 @@ test("a database still carrying the retired memory tables opens with them droppe
   fs.rmSync(directory, { recursive: true, force: true });
 });
 
-test("the observation inbox and capture cursors round-trip, amend whole, and cascade with the generation", () => {
-  const database = openTestDatabase();
-  const state = populatedState("gen-inbox");
-  const entry = {
-    id: "entry-1",
-    kind: "hook" as const,
-    providerId: "claude-code",
-    providerSessionId: "abc",
-    hookEvent: "Stop",
-    atMs: NOW,
-    capturedAt: NOW + 1,
-    session: { title: "synthetic session", status: "waiting" },
-    delta: { text: "synthetic delta", truncated: false, status: "accepted" as const },
-    cursor: "abc-2",
-  };
-  const captured: BrainPersistedState = {
-    ...state,
-    captureCursors: { "claude-code": { abc: "abc-2" } },
-    inbox: [entry],
-  };
-  assert.equal(
-    saveBrainEnvelope(database, MAIN_SESSION_KEY, { kind: SAVE_KIND.REPLACE, state: captured }),
-    true,
+test("a database still carrying the observation tables opens with them dropped and its observed conversations archived as a retired kind", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "luke-store-"));
+  const location = path.join(directory, "agent.sqlite");
+  const seeded = StoreDatabase.open(location);
+  createConversation(seeded, {
+    agentId: DEFAULT_AGENT_ID,
+    sessionKey: MAIN_SESSION_KEY,
+    name: "main",
+    now: NOW,
+  });
+  const observed = observedSessionKey({ providerId: "codex", providerSessionId: "abc" });
+  createConversation(seeded, {
+    agentId: DEFAULT_AGENT_ID,
+    sessionKey: observed,
+    name: "observed",
+    kind: CONVERSATION_KIND.OBSERVED,
+    now: NOW,
+  });
+  saveBrainEnvelope(seeded, MAIN_SESSION_KEY, {
+    kind: SAVE_KIND.REPLACE,
+    state: populatedState("gen-kept"),
+  });
+  seeded.close();
+
+  // The shape the build before the tick kept: one row per observed session in
+  // each of the three tables, and the version before the migration that drops them.
+  const older = new DatabaseSync(location);
+  older.exec(
+    "CREATE TABLE observation_cursors (session_id TEXT NOT NULL, provider_id TEXT NOT NULL, provider_session_id TEXT NOT NULL, cursor TEXT NOT NULL)",
   );
-  assert.deepEqual(loadBrainEnvelope(database, MAIN_SESSION_KEY).state, captured);
-  // Consumption: the inbox emptied and the consumed cursor moved, in one amendment.
-  const consumed: BrainPersistedState = {
-    ...captured,
-    cursors: { "claude-code": { abc: "abc-2" } },
-    inbox: [],
+  older.exec(
+    "CREATE TABLE observation_capture_cursors (session_id TEXT NOT NULL, provider_id TEXT NOT NULL, provider_session_id TEXT NOT NULL, cursor TEXT NOT NULL)",
+  );
+  older.exec(
+    "CREATE TABLE observation_inbox (session_id TEXT NOT NULL, ordinal INTEGER NOT NULL, entry_id TEXT NOT NULL, payload TEXT NOT NULL)",
+  );
+  older
+    .prepare("INSERT INTO observation_cursors VALUES (?, ?, ?, ?)")
+    .run("gen-kept", "codex", "abc", "7");
+  older
+    .prepare("INSERT INTO observation_capture_cursors VALUES (?, ?, ?, ?)")
+    .run("gen-kept", "codex", "abc", "9");
+  older
+    .prepare("INSERT INTO observation_inbox VALUES (?, ?, ?, ?)")
+    .run("gen-kept", 0, "entry-1", JSON.stringify({ id: "entry-1" }));
+  older.exec("UPDATE schema_version SET version = 11");
+  older.close();
+
+  const database = StoreDatabase.open(location);
+  // SAFETY: the query selects the one column its row type names.
+  const tables = database
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'observation_%'")
+    .all() as { name: string }[];
+  assert.deepEqual(tables, []);
+  // SAFETY: as above.
+  const version = database.prepare("SELECT version FROM schema_version").get() as {
+    version: number;
   };
-  const tracker = new EnvelopeTracker();
-  tracker.observe(loadBrainEnvelope(database, MAIN_SESSION_KEY));
-  const save = tracker.saveFor(consumed);
-  assert.equal(save.kind, SAVE_KIND.AMEND);
-  if (save.kind === SAVE_KIND.AMEND) {
-    assert.deepEqual(save.delta.inbox, []);
-    assert.deepEqual(save.delta.cursors, { "claude-code": { abc: "abc-2" } });
-    assert.equal(save.delta.captureCursors, undefined);
-  }
-  assert.equal(saveBrainEnvelope(database, MAIN_SESSION_KEY, save), true);
-  assert.deepEqual(loadBrainEnvelope(database, MAIN_SESSION_KEY).state, consumed);
-  // An entry this build cannot read makes the generation unreadable rather than half-read.
-  database
-    .prepare(
-      "INSERT INTO observation_inbox (session_id, ordinal, entry_id, payload) VALUES (?, ?, ?, ?)",
-    )
-    .run("gen-inbox", 0, "bad", JSON.stringify({ id: "bad" }));
-  assert.equal(loadBrainEnvelope(database, MAIN_SESSION_KEY).unreadable, true);
+  assert.equal(version.version, STORE_SCHEMA_VERSION);
+  const archived = conversationRecord(database, observed);
+  assert.equal(archived?.kind, CONVERSATION_KIND.OBSERVED);
+  assert.ok(archived?.archivedAt !== undefined);
+  assert.equal(archived?.archiveReason, ARCHIVE_REASON.RETIRED_KIND);
+  assert.equal(conversationRecord(database, MAIN_SESSION_KEY)?.archivedAt, undefined);
+  assert.equal(loadBrainEnvelope(database, MAIN_SESSION_KEY).state?.generationId, "gen-kept");
+  database.close();
+  fs.rmSync(directory, { recursive: true, force: true });
 });

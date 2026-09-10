@@ -14,7 +14,6 @@ import {
   retainedBrainState,
 } from "./envelope.js";
 import type { Generation } from "./generation.js";
-import type { BrainObservationEntry } from "./observation-inbox.js";
 import type { BrainRecordChange, BrainRequestRecord } from "./requests.js";
 import type { RecordingContextEngine } from "./transcript-recorder.js";
 
@@ -223,20 +222,19 @@ export class BrainStateStore {
    * copy taken before entering the queue, and never from live state the save
    * does not own — so a save can only add what it owns to what the saves
    * before it kept. Everything a save then applies to live working state —
-   * the retained transcript count, the new inbox, the runs retention let go
-   * of, and the owned record's fields — is applied in the same queue step,
-   * after the write has landed and before any later write composes. The four
-   * methods below are the only ways in, so no caller can put the two halves
-   * anywhere else.
+   * the retained transcript count, the runs retention let go of, and the
+   * owned record's fields — is applied in the same queue step, after the
+   * write has landed and before any later write composes. The three methods
+   * below are the only ways in, so no caller can put the two halves anywhere
+   * else.
    */
 
   /**
-   * A turn's or an action's checkpoint: the working context, cursors, and
-   * journal this turn owns become the committed ones, together with the run's
-   * own accounting when a run owns the turn, and the inbox loses exactly the
-   * entries the turn consumed. Nothing else changes: every other record stays
-   * as committed, so a request accepted or marked meanwhile is untouched and
-   * a request still provisional is not published.
+   * A turn's or an action's checkpoint: the working context and journal this
+   * turn owns become the committed ones, together with the run's own
+   * accounting when a run owns the turn. Nothing else changes: every other
+   * record stays as committed, so a request accepted or marked meanwhile is
+   * untouched and a request still provisional is not published.
    */
   saveWorking(
     lease: BrainStoreLease,
@@ -244,14 +242,11 @@ export class BrainStateStore {
     working: {
       context: RecordingContextEngine;
       record?: BrainRecordChange;
-      /** The inbox entries the turn consumed, gone from the inbox in the same write as the checkpoint. */
-      consumes?: readonly string[];
     },
   ): Promise<BrainSaveResult> {
-    const { context, record, consumes } = working;
+    const { context, record } = working;
     const pruned: string[] = [];
     let carried = 0;
-    let inbox: readonly BrainObservationEntry[] | undefined;
     let owned: BrainRequestRecord | undefined;
     let missing = false;
     return saveResult(
@@ -264,10 +259,6 @@ export class BrainStateStore {
           const checkpoint = context.checkpoint();
           const transcript = context.pending();
           carried = transcript.length;
-          if (consumes) {
-            const consumed = new Set(consumes);
-            inbox = state.inbox.filter((entry) => !consumed.has(entry.id));
-          }
           const changed = record ? changedRequests(state.requests, record) : undefined;
           owned = changed?.owned;
           missing = changed?.missing ?? false;
@@ -275,9 +266,6 @@ export class BrainStateStore {
             checkpointFormat: checkpointFormatTag(checkpoint.format),
             items: checkpoint.items,
             compactionCount: generation.compactionCount,
-            cursors: generation.cursors.persisted(),
-            captureCursors: state.captureCursors,
-            inbox: inbox ?? state.inbox,
             journal: generation.journal.entries(),
             requests: changed?.requests ?? state.requests,
             ...(transcript.length > 0 ? { transcript } : undefined),
@@ -285,7 +273,6 @@ export class BrainStateStore {
         },
         (commit) => {
           if (carried > 0) context.retained(carried);
-          if (inbox) generation.inbox = inbox;
           this.#prune(generation, commit, pruned);
           applyOwned(generation, owned, record);
         },
@@ -361,9 +348,6 @@ export class BrainStateStore {
                 : undefined),
             items: checkpoint ? checkpoint.items : state.items,
             compactionCount: context ? generation.compactionCount : state.compactionCount,
-            cursors: context ? generation.cursors.persisted() : state.cursors,
-            captureCursors: generation.captureCursors.persisted(),
-            inbox: state.inbox,
             journal: context ? generation.journal.entries() : state.journal,
             requests: [...generation.requests.values()].map((record) => ({ ...record })),
             ...(transcript.length > 0 ? { transcript } : undefined),
@@ -371,41 +355,6 @@ export class BrainStateStore {
         },
         (commit) => {
           if (carried > 0) context?.retained(carried);
-          this.#prune(generation, commit, pruned);
-        },
-      ),
-    );
-  }
-
-  /**
-   * Observations captured into the inbox, with the capture cursors they
-   * advanced. The inbox is composed from the committed list, so a capture
-   * landing during a turn is neither lost nor consumed early, and nothing
-   * captured is let go of before a turn has read it.
-   */
-  saveCapture(
-    lease: BrainStoreLease,
-    generation: Generation,
-    entries: readonly BrainObservationEntry[],
-  ): Promise<BrainSaveResult> {
-    const pruned: string[] = [];
-    let inbox: readonly BrainObservationEntry[] = [];
-    return saveResult(
-      pruned,
-      undefined,
-      this.write(
-        lease,
-        generation.id,
-        (state) => {
-          inbox = [...state.inbox, ...entries];
-          return {
-            ...mutableOf(state),
-            captureCursors: generation.captureCursors.persisted(),
-            inbox,
-          };
-        },
-        (commit) => {
-          generation.inbox = inbox;
           this.#prune(generation, commit, pruned);
         },
       ),
@@ -640,9 +589,6 @@ function mutableOf(state: BrainPersistedState): BrainStateMutation {
       : undefined),
     items: state.items,
     compactionCount: state.compactionCount,
-    cursors: state.cursors,
-    captureCursors: state.captureCursors,
-    inbox: state.inbox,
     journal: state.journal,
     requests: state.requests,
   };
