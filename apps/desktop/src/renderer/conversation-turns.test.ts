@@ -16,6 +16,7 @@ import {
   announcedWords,
   ConversationTurns,
   detailToolLabel,
+  foldOpen,
   judgmentOf,
   turnPending,
 } from "./conversation-turns";
@@ -171,6 +172,20 @@ test("a turn's actions fold under a count once there are two: open while it runs
   assert.equal(count(beforeFold, "data-speaker", "you"), 1);
   assert.equal(actionRows(beforeFold), 0);
   assert.equal(count(afterFold, "data-speaker", "luke"), 1);
+});
+
+test("a fold follows the turn's state, and a press holds only until that state next changes", () => {
+  assert.equal(foldOpen(undefined, true), true);
+  assert.equal(foldOpen(undefined, false), false);
+  // Pressed closed while running: held closed while it still runs.
+  assert.equal(foldOpen({ pending: true, open: false }, true), false);
+  // Pressed open once settled: held open while it stays settled.
+  assert.equal(foldOpen({ pending: false, open: true }, false), true);
+  // The turn settled after the press: the turn's own word is the later one, and the fold closes.
+  assert.equal(foldOpen({ pending: true, open: true }, false), false);
+  assert.equal(foldOpen({ pending: true, open: false }, false), false);
+  // And a press made while settled does not reopen a fold for a turn that started running again.
+  assert.equal(foldOpen({ pending: false, open: false }, true), true);
 });
 
 test("a turn of one action draws the row itself, with no fold and no wait", () => {

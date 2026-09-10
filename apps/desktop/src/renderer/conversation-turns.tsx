@@ -454,13 +454,33 @@ function FoldedRows({
   );
 }
 
+/** The reader's press on a fold, remembered with the turn state it was made under. */
+export interface FoldChoice {
+  readonly pending: boolean;
+  readonly open: boolean;
+}
+
+/**
+ * Whether a fold stands open: as the turn's state has it — open while the
+ * turn still runs, closed once settled — unless the reader pressed it under
+ * that same state, in which case their press holds. A press made while the
+ * turn ran does not outlive the turn's settling: the turn's own change is the
+ * later word, and the fold follows it.
+ */
+export function foldOpen(choice: FoldChoice | undefined, pending: boolean): boolean {
+  return choice !== undefined && choice.pending === pending ? choice.open : pending;
+}
+
 /**
  * The actions one turn carried, folded under a line that counts them. The
  * fold follows the turn: open while the turn still runs, so what it is doing
  * is watched as it happens, and closed once it has settled, so a finished
  * turn reads as one line; a press holds whichever the reader chose until the
- * turn's own state next changes. Under Luke's own judgment the line leads
- * with his face, as each row inside it does.
+ * turn's own state next changes. The element's toggle fires for the state the
+ * turn sets as well as for a press, so a toggle is read as the reader's only
+ * when it leaves the element in a state the turn did not ask for; a fold that
+ * mistook the turn's word for the reader's would never close. Under Luke's
+ * own judgment the line leads with his face, as each row inside it does.
  */
 function ActionsFold({
   rows,
@@ -471,8 +491,8 @@ function ActionsFold({
   pending: boolean;
   judgment: Judgment;
 }): React.JSX.Element {
-  const [choice, setChoice] = useState<boolean | undefined>(undefined);
-  const open = choice ?? pending;
+  const [choice, setChoice] = useState<FoldChoice | undefined>(undefined);
+  const open = foldOpen(choice, pending);
   const own = judgment === JUDGMENT.OWN;
   const voice = own ? VOICE.OWN : VOICE.ACTION;
   return (
@@ -487,7 +507,13 @@ function ActionsFold({
         <details
           className="conversation-actions-fold"
           open={open}
-          onToggle={(event) => setChoice(event.currentTarget.open)}
+          onToggle={(event) => {
+            // The browser fires this for the state the turn set as well as for a
+            // press; only a state the prop does not already hold is the reader's.
+            if (event.currentTarget.open !== open) {
+              setChoice({ pending, open: event.currentTarget.open });
+            }
+          }}
         >
           <summary className="conversation-turn-summary">
             {own ? (
