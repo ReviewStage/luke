@@ -1,7 +1,9 @@
-import { sql } from "drizzle-orm";
-import type { HostedQuota } from "../core.js";
+import { eq, sql } from "drizzle-orm";
+import { type HostedQuota, VOICE_USAGE_RECORD } from "../core.js";
+import { user } from "../db/auth-schema.js";
 import type { createDatabase } from "../db/index.js";
-import { hostedUsage, introductionUsage } from "../db/usage-schema.js";
+import { hostedUsage, introductionUsage, voiceSessionUsage } from "../db/usage-schema.js";
+import type { HostedStoreDatabase } from "./store/database.js";
 
 /**
  * The free tier's daily ceiling, spent by every hosted operation alike — a
@@ -99,4 +101,64 @@ export async function spendIntroductionMeter(
   const day = utcDayKey(input.now);
   const used = await incrementIntroductionUsage(database, day);
   return { allowed: used <= HOSTED_DAILY_LIMIT };
+}
+
+/** Whichever driver stands behind the hosted schema, as the store's tables already take it. */
+type VoiceUsageDatabase = Pick<HostedStoreDatabase, "transaction">;
+
+/**
+ * What recording a session's seconds came to: the wire's two records, and the
+ * one the route turns into a refusal rather than an answer, an account the
+ * report names that the database no longer holds.
+ */
+export const VOICE_SECONDS_OUTCOME = {
+  ...VOICE_USAGE_RECORD,
+  UNKNOWN_USER: "unknown-user",
+} as const;
+
+export type VoiceSecondsOutcome =
+  (typeof VOICE_SECONDS_OUTCOME)[keyof typeof VOICE_SECONDS_OUTCOME];
+
+/**
+ * Records the seconds OpenAI billed for one closed GPT Live session, once. The
+ * session row is the ledger: its insert is the idempotent step, and only a
+ * report that created the row moves the day's `voice_seconds`, so a report
+ * the service repeats after a lost answer adds nothing. Both writes share one
+ * transaction so a crash between them cannot leave a session recorded and a
+ * day uncounted. The day is the report's, not the session's start: the
+ * service reports at `session.closed`, and that is the instant it knows.
+ */
+export async function recordVoiceSeconds(
+  database: VoiceUsageDatabase,
+  input: { userId: string; sessionId: string; seconds: number; now: number },
+): Promise<VoiceSecondsOutcome> {
+  return database.transaction(async (transaction) => {
+    const [account] = await transaction
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(user.id, input.userId))
+      .limit(1);
+    if (!account) return VOICE_SECONDS_OUTCOME.UNKNOWN_USER;
+
+    const inserted = await transaction
+      .insert(voiceSessionUsage)
+      .values({
+        sessionId: input.sessionId,
+        userId: input.userId,
+        seconds: input.seconds,
+        recordedAt: input.now,
+      })
+      .onConflictDoNothing({ target: voiceSessionUsage.sessionId })
+      .returning({ sessionId: voiceSessionUsage.sessionId });
+    if (inserted.length === 0) return VOICE_SECONDS_OUTCOME.REPEATED;
+
+    await transaction
+      .insert(hostedUsage)
+      .values({ userId: input.userId, day: utcDayKey(input.now), voiceSeconds: input.seconds })
+      .onConflictDoUpdate({
+        target: [hostedUsage.userId, hostedUsage.day],
+        set: { voiceSeconds: sql`${hostedUsage.voiceSeconds} + ${input.seconds}` },
+      });
+    return VOICE_SECONDS_OUTCOME.RECORDED;
+  });
 }

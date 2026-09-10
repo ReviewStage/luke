@@ -162,3 +162,16 @@ export {
   vaultKeyStoreAnswerSchema,
   vaultKeysListAnswerSchema,
 } from "./vault-wire.js";
+export {
+  VOICE_INTERNAL_BOUNDS,
+  VOICE_USAGE_RECORD,
+  type VoiceAuthorizeAnswer,
+  type VoiceAuthorizeRequest,
+  type VoiceUsageAnswer,
+  type VoiceUsageRecord,
+  type VoiceUsageRequest,
+  voiceAuthorizeAnswerSchema,
+  voiceAuthorizeRequestSchema,
+  voiceUsageAnswerSchema,
+  voiceUsageRequestSchema,
+} from "./voice-internal-wire.js";

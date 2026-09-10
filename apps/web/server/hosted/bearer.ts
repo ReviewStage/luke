@@ -26,11 +26,23 @@ export function oauthUserInfoFromAuthAnswer(value: UnparsedWireValue): OAuthUser
  * purpose: every failure is one 401, and the desktop's existing refresh
  * machinery is what answers it.
  */
-export async function hostedUserId(
+export function hostedUserId(
   request: Request,
   userInfo: UserInfoEndpoint,
 ): Promise<string | undefined> {
-  const authorization = request.headers.get("authorization")?.trim();
+  return userIdForAuthorization(request.headers.get("authorization"), userInfo);
+}
+
+/**
+ * The same resolution for an `Authorization` value that arrived somewhere
+ * other than on its own request: the voice service forwards the header the
+ * desktop opened its socket with, and it is read as if it had been sent here.
+ */
+export async function userIdForAuthorization(
+  value: string | null | undefined,
+  userInfo: UserInfoEndpoint,
+): Promise<string | undefined> {
+  const authorization = value?.trim();
   if (!authorization) return undefined;
   try {
     const identity = await userInfo({ headers: new Headers({ authorization }) });
