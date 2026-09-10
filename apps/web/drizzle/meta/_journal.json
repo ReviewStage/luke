@@ -113,6 +113,13 @@
       "when": 1789076586412,
       "tag": "0015_b1_conversations_messages_turns",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1789077416884,
+      "tag": "0016_b2_events_prompts_tool_sets_cursors",
+      "breakpoints": true
     }
   ]
 }
