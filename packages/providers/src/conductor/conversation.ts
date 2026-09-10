@@ -7,15 +7,11 @@ import {
   type ProviderConversationResult,
   type ProviderTranscriptResult,
 } from "@sidecar/session";
-import { oneLine, type WireRecord } from "@sidecar/wire";
+import { type WireRecord, wholeText } from "@sidecar/wire";
 import { ADAPTER_FAILURE, AdapterFailure } from "../shared/adapter-failure.js";
 import type { CloudPass } from "../shared/cloud-pass.js";
 import { isDefined, recordsFromPage, textFromRecord } from "../shared/cloud-wire.js";
-import {
-  boundedTranscript,
-  TRANSCRIPT_BOUNDS,
-  transcriptLine,
-} from "../shared/jsonl-transcript.js";
+import { boundedTranscript, transcriptLine } from "../shared/jsonl-transcript.js";
 import { CONDUCTOR_PROVIDER_NAME, UUID_PATTERN } from "./vocabulary.js";
 import {
   CONDUCTOR_CONVERSATION_BOUNDS,
@@ -180,12 +176,10 @@ async function readConversationPage(
  * rather than sought: the walk starts one page before the end a previous read
  * of this session already reached — zero the first time — asks for one page
  * there, and stops as soon as a page comes back short or says no more remain.
- * A re-opened chat therefore costs exactly one request, and a first open at
- * most `MAXIMUM_HISTORY_WINDOWS`. The pages the walk read *are* the newest
- * ones, so the tail is assembled from them and no further request is made. A
- * transcript longer than the walk's budget answers with the deepest page it
- * reached; the poll that follows walks forward to the true newest on its own,
- * exactly as it did when the probe seek this replaced fell short.
+ * A re-opened chat therefore costs exactly one request, and a first open as
+ * many as the transcript has pages. Every page the walk read is answered: the
+ * reader that asked bounds what it keeps, and a page withheld here would be
+ * the one the newest words were on.
  *
  * Every request in the walk carries only the fixed page size and an offset
  * this walk composed, so nothing stored can steer one.
@@ -198,11 +192,7 @@ async function readTailPage(
   const walk = async (from: number) => {
     const pages: WalkedPage[] = [];
     let offset = from;
-    for (
-      let window = 0;
-      window < CONDUCTOR_CONVERSATION_BOUNDS.MAXIMUM_HISTORY_WINDOWS;
-      window += 1
-    ) {
+    for (;;) {
       const body = await messagesPage(pass, providerSessionId, {
         [CONDUCTOR_QUERY.LIMIT]: String(CONDUCTOR_CONVERSATION_BOUNDS.PAGE_SIZE),
         [CONDUCTOR_QUERY.OFFSET]: String(offset),
@@ -234,18 +224,7 @@ async function readTailPage(
   }
   rememberEnd(ends, providerSessionId, walked.end);
 
-  // The kept pages are the newest the walk read, enough of them to carry the
-  // history target; the rest is what an older-history scroll will ask for.
-  const kept: WalkedPage[] = [];
-  let attributed = 0;
-  for (let index = walked.pages.length - 1; index >= 0; index -= 1) {
-    const page = walked.pages[index];
-    if (!page) continue;
-    kept.unshift(page);
-    attributed += page.messages.length;
-    if (attributed >= CONDUCTOR_CONVERSATION_BOUNDS.HISTORY_TARGET_MESSAGES) break;
-  }
-  const firstOffset = kept[0]?.offset ?? walked.end;
+  const firstOffset = walked.pages[0]?.offset ?? walked.end;
   // The newest stored message of the whole walk, attributed or not: the poll
   // resumes exactly where this read stopped.
   const lastMessageId = walked.pages
@@ -254,7 +233,7 @@ async function readTailPage(
     .at(-1);
   return {
     status: ACTION_RESULT_STATUS.ACCEPTED,
-    messages: kept.flatMap((page) => page.messages),
+    messages: walked.pages.flatMap((page) => page.messages),
     hasMore: false,
     firstOffset,
     hasOlder: firstOffset > 0,
@@ -328,7 +307,7 @@ export async function readConductorTranscript(
   if (tail.status !== ACTION_RESULT_STATUS.ACCEPTED) return tail;
   const speaker = observation.agent?.displayName ?? CONDUCTOR_SPEAKER_NAME;
   const lines = tail.messages.flatMap((message) => {
-    const words = oneLine(message.text, TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
+    const words = wholeText(message.text);
     if (!words) return [];
     return [
       message.author === CONVERSATION_MESSAGE_AUTHOR.USER

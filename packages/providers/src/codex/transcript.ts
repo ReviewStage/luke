@@ -6,6 +6,7 @@ import {
   text,
   type UnparsedWireValue,
   type WireRecord,
+  wholeText,
 } from "@sidecar/wire";
 import { TRANSCRIPT_BOUNDS, transcriptLine } from "../shared/jsonl-transcript.js";
 import { argumentPhrase, CODEX_CALL_ARGUMENT_KEY } from "./records.js";
@@ -141,11 +142,11 @@ function linesFromResponseItem(payload: WireRecord): string[] {
     const words = messageWords(payload.content);
     if (!words) return [];
     if (payload.role === CODEX_MESSAGE_ROLE.USER) {
-      const typed = oneLine(developerWords(words), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
+      const typed = wholeText(developerWords(words));
       return typed ? [transcriptLine.developer(typed)] : [];
     }
     if (payload.role === CODEX_MESSAGE_ROLE.ASSISTANT) {
-      const said = oneLine(words, TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
+      const said = wholeText(words);
       return said ? [transcriptLine.agent(CODEX_SPEAKER_NAME, said)] : [];
     }
     return [];

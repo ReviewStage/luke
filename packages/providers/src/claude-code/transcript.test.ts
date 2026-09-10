@@ -146,6 +146,34 @@ test("renders every line uncut when no rendered length is asked for", async (t) 
   assert.equal(rendered.split("\n").length, 400);
 });
 
+// A message is rendered whole, line breaks and all; a tool's answer is the
+// gist, cut to its own bound.
+test("renders a long message whole and keeps a tool answer short", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  const report = Array.from({ length: 30 }, (_, index) => `- ${index}: ${"x".repeat(100)}`).join(
+    "\n",
+  );
+  await writeTranscript(claudeHome, TEST_SESSION_ID, [
+    {
+      type: "assistant",
+      message: { role: "assistant", content: [{ type: "text", text: report }] },
+    },
+    {
+      type: "user",
+      message: {
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: "t1", content: "y".repeat(1_000) }],
+      },
+    },
+  ]);
+
+  const lines = await claudeTranscriptLines(claudeHome, TEST_SESSION_ID);
+
+  assert.equal(lines.length, 2);
+  assert.equal(lines[0], `Claude: ${report}`);
+  assert.equal(lines[1]?.length, "← ".length + TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
+});
+
 test("reads nothing for a session that has no transcript file", async (t) => {
   const claudeHome = await temporaryClaudeHome(t);
   await writeTranscript(claudeHome, TEST_SESSION_ID, [

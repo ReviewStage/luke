@@ -37,6 +37,7 @@ export {
   type WireRecord,
   type WireValue,
   wholeNumber,
+  wholeText,
   wireRecord,
   withoutTrailingSlash,
 } from "./json.js";

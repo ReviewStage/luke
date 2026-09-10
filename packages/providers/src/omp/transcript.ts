@@ -1,5 +1,5 @@
 import path from "node:path";
-import { isRecord, oneLine, text, type WireRecord } from "@sidecar/wire";
+import { isRecord, oneLine, text, type WireRecord, wholeText } from "@sidecar/wire";
 import { TRANSCRIPT_BOUNDS, transcriptLine } from "../shared/jsonl-transcript.js";
 import { readDirectory, statDirectoryEntry } from "../shared/local-files.js";
 import {
@@ -44,7 +44,7 @@ export function linesFromOmpRecord(record: WireRecord): string[] {
     // A synthetic user message is OMP's own auto-continue, not the
     // developer's words, so it takes no attributed line.
     if (message.synthetic === true) return [];
-    const prompt = oneLine(ompMessageText(message), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
+    const prompt = wholeText(ompMessageText(message));
     return prompt ? [transcriptLine.developer(prompt)] : [];
   }
   if (role === OMP_MESSAGE_ROLE.TOOL_RESULT) {
@@ -56,7 +56,7 @@ export function linesFromOmpRecord(record: WireRecord): string[] {
   }
   if (role !== OMP_MESSAGE_ROLE.ASSISTANT) return [];
   const lines: string[] = [];
-  const words = oneLine(ompMessageText(message), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
+  const words = wholeText(ompMessageText(message));
   if (words) lines.push(transcriptLine.agent(OMP_SPEAKER_NAME, words));
   for (const block of ompContentBlocks(message)) {
     if (block.type !== OMP_CONTENT_TYPE.TOOL_CALL) continue;

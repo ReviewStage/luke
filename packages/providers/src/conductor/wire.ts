@@ -208,9 +208,15 @@ export const CONDUCTOR_CONVERSATION_BOUNDS = {
   MAXIMUM_PAGES: 10,
   /** How many attributed messages one poll answer may carry. */
   MAXIMUM_MESSAGES: 200,
-  /** How many attributed messages a tail or older-history page aims to carry. */
+  /** How many attributed messages an older-history page aims to carry. */
   HISTORY_TARGET_MESSAGES: 30,
-  /** How many raw windows one tail or older-history read may page backward. */
+  /**
+   * How many raw windows one older-history read may page backward. The end
+   * offset it pages from is the caller's, so the budget is what keeps a far
+   * offset against a short chat from becoming a long chain of requests; the
+   * tail walk needs none, since its offsets are its own and it ends where
+   * the transcript does.
+   */
   MAXIMUM_HISTORY_WINDOWS: 6,
   /**
    * How many sessions' transcript ends one credential's reads remember at

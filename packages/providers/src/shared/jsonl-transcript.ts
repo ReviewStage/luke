@@ -5,8 +5,10 @@
  * name for its replies, `→` for a tool call, `←` for its answer, `Error:` for
  * a failure the provider recorded — and this module holds every rendering to
  * the same bounds however the records differ: how much of the file one read
- * loads, and how long any one line may run. There is no bound on the total:
- * a reader sees the whole rendering the tail it read produces.
+ * loads, and how long a tool line may run. A message is rendered whole, line
+ * breaks and all, and there is no bound on the total: the reader that asked
+ * cuts the rendering from the front to what it can carry, so a second bound
+ * here could only lose words it would have kept.
  */
 
 import {
@@ -37,8 +39,6 @@ export const transcriptLine = {
 export const TRANSCRIPT_BOUNDS = {
   /** How much of the file's end one read may load. */
   READ_TAIL_BYTES: transcriptReadTailBytes,
-  /** A rendered message line: enough to carry meaning, not a document. */
-  MAXIMUM_MESSAGE_LENGTH: 400,
   /** A rendered tool call or its result: the gist, never the payload. */
   MAXIMUM_TOOL_LENGTH: 200,
 } as const;
@@ -46,7 +46,7 @@ export const TRANSCRIPT_BOUNDS = {
 /**
  * Joins rendered lines into one rendering, or nothing when there are no lines
  * to render. With no maximum the whole rendering stands, bounded only by the
- * tail the read loaded and the per-line cuts already applied. When a caller
+ * tail the read loaded and the tool-line cuts already applied. When a caller
  * asks for one, the newest turns win the space: a question about a session is
  * almost always about where it is now, so the rendering is cut from the
  * front, at a line, and says so.
@@ -209,7 +209,7 @@ export interface JsonlTranscriptReader {
  * Every on-demand read of a JSONL-backed transcript: the bounded tail read,
  * the cursor arithmetic, the path cache an incremental read walks by, and the
  * bounds every rendering is held to — the tail the build fixes, and the
- * per-line cuts, with no bound on the total, so a reader sees the whole
+ * tool-line cuts, with no bound on the total, so a reader sees the whole
  * rendering the tail it read produces. A provider supplies only where its
  * records live and what one of them says; nothing here opens a file for
  * writing, and the rendering is kept nowhere.
