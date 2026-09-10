@@ -6,12 +6,11 @@ import {
   BRAIN_TURN_TRIGGER,
   BRAIN_WAKE_KIND,
   BRAIN_WORKSPACE_SEEDS,
+  type BrainActionPerformer,
   BrainAgent,
   type BrainDelivery,
-  type BrainFlushInput,
   type BrainFlushMarkerStore,
   BrainGenerationClock,
-  type BrainMemoryAccess,
   type BrainRoster,
   type BrainStateRepository,
   BrainStateStore,
@@ -32,11 +31,7 @@ import {
   toolLoopRuntimeOver,
 } from "@sidecar/brain";
 import { type BrainRequestSnapshot, brainRequestPending } from "@sidecar/brain/requests-wire";
-import {
-  failedHousekeeping,
-  housekeepingFellShort,
-  type MemoryHousekeepingResult,
-} from "@sidecar/memory";
+import { failedHousekeeping, housekeepingFellShort } from "@sidecar/memory";
 import type { ObservedSpoolEvent } from "@sidecar/providers";
 import {
   BUILTIN_CONTEXT_ENGINE,
@@ -61,7 +56,6 @@ import {
   notebookMemoryProviderFor,
   type ResolvedConfiguration,
   readWorkspaceFile,
-  recentDailyNotes,
   type SkillDescriptor,
   seedWorkspace,
   TOOL_LOOP_RUNTIME,
@@ -75,6 +69,8 @@ import {
   conversationKindOf,
   isReasoningEffort,
   MAIN_SESSION_KEY,
+  MEMORY_CAPTURE_PHASE,
+  type MemoryDefinition,
   type ModelAdapter,
   observedSessionKey,
   observedSessionRefOf,
@@ -143,31 +139,17 @@ export interface BrainWiringDependencies extends ChildWiringDependencies {
   runnable: () => boolean;
   dropBriefings: () => void;
   /**
-   * The notebook's search and read for one conversation's memory tools: a
-   * search may reach past private conversations, never the asking one, whose
-   * words are already its context. Absent, or answering nothing, the tools refuse.
+   * The memory provider one conversation's brain is handed, bound to the
+   * account's scope: the notebook's recall into every turn, its four tools,
+   * and, for main and the developer's durable private threads alone, the
+   * capture run before a compaction and before a reset. The performer this
+   * wiring carries actions through is handed back, so the notebook's two
+   * writes run the same gauntlet as every other action. Absent, nothing is
+   * recalled and the memory tools refuse.
    */
-  memory?: (sessionKey: SessionKey) => BrainMemoryAccess | undefined;
-  /**
-   * The pre-compaction memory flush for one conversation: the host decides
-   * which conversations flush (main and the developer's durable private
-   * threads, never a temporary thread, an observed session, or a child) and
-   * answers nothing for one that does not.
-   */
-  beforeCompaction?: (
-    sessionKey: SessionKey,
-  ) => ((input: BrainFlushInput) => Promise<MemoryHousekeepingResult>) | undefined;
+  memory?: (sessionKey: SessionKey, actions: BrainActionPerformer) => MemoryDefinition | undefined;
   /** Where one conversation's flush marker outlives the process; nothing for one that never flushes. */
   flushMarker?: (sessionKey: SessionKey) => BrainFlushMarkerStore | undefined;
-  /**
-   * The capture run before an eligible conversation starts fresh, over a
-   * copy of its context. Its outcome is reported and never decides the
-   * reset: a capture that failed is recorded honestly and the reset proceeds.
-   */
-  beforeReset?: (
-    sessionKey: SessionKey,
-    items: readonly WireRecord[],
-  ) => Promise<MemoryHousekeepingResult>;
 }
 
 /** The configuration fields a client may set over the protocol; everything else is the build's or the credential policy's. */
@@ -338,6 +320,9 @@ function observedName(session: Session | undefined, identity: SessionIdentity): 
  * account. With neither there is no brain, nothing is announced, and an ask
  * is answered with the honest refusal.
  */
+/** A reset's capture is cut by the capture's own timeout and by nothing of the reset's, so the signal it is handed never fires. */
+const RESET_CAPTURE_SIGNAL = new AbortController().signal;
+
 export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
   const conversations = new Map<SessionKey, OpenConversation>();
   const latestRecords = new Map<SessionKey, readonly BrainRequestSnapshot[]>();
@@ -491,7 +476,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     return configurationStore.snapshot();
   };
 
-  const flushFor = (sessionKey: SessionKey) => dependencies.beforeCompaction?.(sessionKey);
+  const memoryFor = (sessionKey: SessionKey) => dependencies.memory?.(sessionKey, actions);
   const flushMarkerFor = (sessionKey: SessionKey) => dependencies.flushMarker?.(sessionKey);
 
   /** The skills the latest preparation listed to the model: the only ones `load_skill` may load. */
@@ -574,10 +559,9 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     // the child restriction at its depth, the fork it inherited if any, and
     // its own deadline when the spawn set one.
     const childRecord = childRecordOf(children.service, sessionKey);
-    // The memory tools reach the notebook through the host's one service,
-    // bound once here; a host with none leaves the agent to refuse the tools
-    // itself.
-    const memory = dependencies.memory?.(sessionKey);
+    // The memory provider is bound once here, over the performer above; a
+    // host with none leaves the agent to refuse the tools itself.
+    const memory = memoryFor(sessionKey);
     return new BrainAgent({
       observes: observed
         ? { kind: LOOK_SUBJECT.SESSION, identity: observed }
@@ -592,7 +576,6 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
         : undefined),
       children: children.accessFor(sessionKey),
       ...(memory ? { memory } : undefined),
-      ...(flushFor(sessionKey) ? { beforeCompaction: flushFor(sessionKey) } : undefined),
       ...(flushMarkerFor(sessionKey) ? { flushMarker: flushMarkerFor(sessionKey) } : undefined),
       runtime: toolLoopRuntimeOver(model),
       actions,
@@ -610,13 +593,6 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       ...(reasoningEffort ? { reasoningEffort } : undefined),
       promptCacheKey: promptCacheKeyFor(sessionKey),
       ...(maximumOutputTokens !== undefined ? { maximumOutputTokens } : undefined),
-      // Today's and yesterday's notes, primed once into a conversation that
-      // just started fresh and read on no ordinary turn.
-      primeFreshContext: async () => {
-        const notes = await recentDailyNotes(snapshot.configuration.workspaceDirectory, Date.now());
-        if (notes.length === 0) return undefined;
-        return notes.map((note) => `## ${note.name}\n\n${note.content}`).join("\n\n");
-      },
       readTranscriptSince: (identity, cursor) => {
         const plugin = dependencies.pluginFor(identity.providerId);
         if (!plugin) {
@@ -959,14 +935,23 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       // The capture reads a copy of the context the reset is about to let go
       // of and writes only today's note; whatever it answers, the reset goes
       // ahead, and a capture that did not complete is said so.
-      const capture = dependencies.beforeReset;
-      const agent = current(sessionKey);
-      if (capture && agent) {
+      const memory = memoryFor(sessionKey);
+      const capture = memory?.provider.capture?.bind(memory.provider);
+      const opened = openConversation(sessionKey);
+      const agent = opened.host.current();
+      if (memory && capture && agent) {
         const items = await agent.contextSnapshot().catch(() => undefined);
         if (items && items.length > 0) {
-          const result = await capture(sessionKey, items).catch((error: Error) =>
-            failedHousekeeping(error.message),
-          );
+          const result = await capture({
+            scope: memory.scope,
+            phase: MEMORY_CAPTURE_PHASE.RESET_REQUESTED,
+            operation: {
+              generationId: opened.store.generationId() ?? "",
+              compactionCount: opened.store.current()?.compactionCount ?? 0,
+            },
+            items,
+            signal: RESET_CAPTURE_SIGNAL,
+          }).catch((error: Error) => failedHousekeeping(error.message));
           if (housekeepingFellShort(result.outcome)) {
             dependencies.report(
               `Reset capture did not complete (${result.outcome}${result.reason ? `: ${result.reason}` : ""}); ${result.writes} note write(s) stand and the reset proceeds`,
@@ -974,7 +959,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
           }
         }
       }
-      return openConversation(sessionKey).store.reset();
+      return opened.store.reset();
     },
     children: children.service,
     publicationSettled,

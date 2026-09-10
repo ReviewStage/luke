@@ -8,6 +8,10 @@ import {
 } from "@sidecar/memory";
 import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import {
+  MEMORY_CAPTURE_PHASE,
+  MEMORY_SCOPE_KIND,
+  type MemoryCaptureTurn,
+  type MemoryScope,
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
   type ModelAdapter,
@@ -15,12 +19,7 @@ import {
   type ModelResponse,
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import {
-  BrainAgent,
-  type BrainFlushInput,
-  type BrainFlushMarkerStore,
-  LOOK_SUBJECT,
-} from "./agent.js";
+import { BrainAgent, type BrainFlushMarkerStore, LOOK_SUBJECT } from "./agent.js";
 import { ResponsesContextEngine } from "./context-engine.js";
 import {
   BRAIN_REQUEST_ORIGIN,
@@ -41,6 +40,7 @@ import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testi
 
 const IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOOP_RUNTIME.VERSION };
 const NOW = 1_800_000_000_000;
+const SCOPE: MemoryScope = { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: "main" };
 /** Reserve is a quarter of this, 500; compaction at 1,500 tokens; the flush at 750. */
 const WINDOW_TOKENS = 2_000;
 
@@ -137,9 +137,14 @@ interface Launch {
   compacts?: boolean;
 }
 
-/** An agent over the given repository and marker store, as one launch of the app would build it; a second call over the same is a relaunch. */
+/**
+ * An agent over the given repository and marker store, as one launch of the
+ * app would build it; a second call over the same is a relaunch. The memory
+ * provider recalls nothing and offers no tool: the capture is what is under
+ * test.
+ */
 function agentWith(
-  hook: (input: BrainFlushInput) => Promise<MemoryHousekeepingResult>,
+  capture: (turn: MemoryCaptureTurn) => Promise<MemoryHousekeepingResult>,
   launch: Launch = {},
 ) {
   const model = new FakeModel();
@@ -172,7 +177,10 @@ function agentWith(
       reports.push(line);
     },
     now: () => NOW,
-    beforeCompaction: hook,
+    memory: {
+      scope: SCOPE,
+      provider: { recall: async () => ({ messages: [] }), capture, tools: [] },
+    },
     ...(launch.marker ? { flushMarker: launch.marker } : undefined),
   });
   return { agent, model, reports, store, repository };
@@ -193,7 +201,7 @@ async function ask(agent: BrainAgent, question: string) {
 
 test("a turn that leaves the context over the flush threshold runs the flush once, over a copy of the items, and not again in the same cycle", async () => {
   const marker = new FakeMarkerStore();
-  const calls: BrainFlushInput[] = [];
+  const calls: MemoryCaptureTurn[] = [];
   const h = agentWith(
     async (input) => {
       calls.push(input);
@@ -207,9 +215,12 @@ test("a turn that leaves the context over the flush threshold runs the flush onc
   assert.equal(calls.length, 1);
   const [flush] = calls;
   assert.ok(flush);
-  assert.equal(flush.contextWindowTokens, WINDOW_TOKENS);
-  assert.ok(flush.contextTokens >= 750 && flush.contextTokens < 1_500, `${flush.contextTokens}`);
-  assert.equal(flush.compactionCount, 0);
+  assert.equal(flush.phase, MEMORY_CAPTURE_PHASE.COMPACTION_REQUESTED);
+  assert.deepEqual(flush.scope, SCOPE);
+  assert.deepEqual(flush.operation, {
+    generationId: h.store.generationId(),
+    compactionCount: 0,
+  });
   assert.ok(flush.items.length >= 2, "the copy carries the conversation so far");
   const snapshot = await h.agent.contextSnapshot();
   assert.ok(snapshot);

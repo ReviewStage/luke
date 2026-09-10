@@ -1,9 +1,9 @@
-import type { MemoryHousekeepingResult } from "@sidecar/memory";
 import type { ChildEnd, ChildPolicyContext } from "@sidecar/runtime";
 import type {
   AgentRuntime,
   ChildCompletionRecord,
   ChildRunRecord,
+  MemoryDefinition,
   ReasoningEffort,
   ScheduledTimer,
 } from "@sidecar/runtime/vocabulary";
@@ -30,7 +30,7 @@ import {
 import { holdReleasedInputText, wakeInputText } from "./input-items.js";
 import { journalActionCounts, UNKNOWN_ACTION_RESULT } from "./journal.js";
 import { BrainRequestLedger, PENDING_MARK_FIELD, type PendingMarkField } from "./ledger.js";
-import { type BrainFlushInput, type BrainFlushMarkerStore, Maintenance } from "./maintenance.js";
+import { type BrainFlushMarkerStore, Maintenance } from "./maintenance.js";
 import { inboxEvents } from "./observation-inbox.js";
 import type { BrainActionPerformer, BrainRoster } from "./performer.js";
 import {
@@ -45,7 +45,7 @@ import { BRAIN_RUN_EVENT, type BrainRunEvent } from "./run-events.js";
 import type { AgentSeam } from "./seam.js";
 import type { BrainStateStore } from "./state-store.js";
 import { SteeredDeliveries } from "./steered-deliveries.js";
-import type { BrainChildAccess, BrainMemoryAccess, BrainWorkspaceAccess } from "./tool-executor.js";
+import type { BrainChildAccess, BrainWorkspaceAccess } from "./tool-executor.js";
 import type { BrainTurnTraceRecord } from "./trace.js";
 import {
   BRAIN_TURN_TRIGGER,
@@ -61,7 +61,7 @@ import { type LookSubject, WakeCapture } from "./wakes.js";
 export type { BrainRequestsListener } from "./asks.js";
 export type { BrainCompletionDelivery } from "./children.js";
 export { BRAIN_DEFAULTS } from "./defaults.js";
-export type { BrainFlushInput, BrainFlushMarkerStore } from "./maintenance.js";
+export type { BrainFlushMarkerStore } from "./maintenance.js";
 export type { BrainWorkspaceAccess } from "./tool-executor.js";
 
 export { LOOK_SUBJECT } from "./wakes.js";
@@ -87,20 +87,18 @@ export interface BrainAgentOptions {
   /** The agent's own workspace files and skills, for the workspace tools; absent means those tools refuse. */
   workspace?: BrainWorkspaceAccess;
   /**
-   * Words to prime a conversation that just started fresh with — the recent
-   * daily notes, rendered — read once, when the first turn of an empty
-   * context opens, and never on an ordinary turn.
+   * The memory provider bound to this conversation's scope. Its recall is
+   * read into every turn — the remembered facts as a standing item, the
+   * recent daily notes once into a conversation opening fresh — its tools
+   * are the memory tools, and its capture, where it has one, is the flush
+   * run before a compaction: handed a private copy of the context, once per
+   * compaction cycle, a soft margin before the context would fold or once
+   * the retained transcript crosses the byte trigger. What a capture writes
+   * stands whatever it answers; only an answer that says it ran to its end
+   * marks the cycle flushed, so an interrupted flush runs again at the next
+   * assessment. Absent, the memory tools refuse and nothing is recalled.
    */
-  primeFreshContext?: () => Promise<string | undefined>;
-  /**
-   * The memory lifecycle hook run before a compaction: handed a private copy
-   * of the context and the counts the flush gate read, once per compaction
-   * cycle, a soft margin before the context would fold or once the retained
-   * transcript crosses the byte trigger. What it writes stands whatever it
-   * answers; only an answer that says it ran to its end marks the cycle
-   * flushed, so an interrupted flush runs again at the next assessment.
-   */
-  beforeCompaction?: (input: BrainFlushInput) => Promise<MemoryHousekeepingResult>;
+  memory?: MemoryDefinition;
   /**
    * Where the flush marker outlives this process: read once per generation
    * before the first assessment, written after each completed flush, keyed
@@ -132,8 +130,6 @@ export interface BrainAgentOptions {
   child?: ChildPolicyContext;
   /** Delegation, supplied by the host that owns the conversations; absent, the session tools refuse. */
   children?: BrainChildAccess;
-  /** The notebook's search and read, supplied by the host that owns the index; absent, the memory tools refuse. */
-  memory?: BrainMemoryAccess;
   /**
    * The requester's active context a forked child starts over, adopted
    * whole into this conversation's empty context on its first turn and
@@ -279,7 +275,7 @@ export class BrainAgent {
       seam,
       runtime: options.runtime,
       prepareTurn: options.prepareTurn,
-      ...(options.beforeCompaction ? { beforeCompaction: options.beforeCompaction } : undefined),
+      ...(options.memory ? { memory: options.memory } : undefined),
       ...(options.flushMarker ? { flushMarker: options.flushMarker } : undefined),
       holdTurnInFlight: (held) => this.#turns.holdInFlight(held),
     });
@@ -300,7 +296,6 @@ export class BrainAgent {
       ...(options.workspace ? { workspace: options.workspace } : undefined),
       ...(options.children ? { children: options.children } : undefined),
       ...(options.memory ? { memory: options.memory } : undefined),
-      ...(options.primeFreshContext ? { primeFreshContext: options.primeFreshContext } : undefined),
       ...(options.inheritedContext ? { inheritedContext: options.inheritedContext } : undefined),
       ...(options.child ? { child: options.child } : undefined),
       createRunId: options.createRunId,

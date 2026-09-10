@@ -1,4 +1,4 @@
-import type { BrainFlushInput, BrainFlushMarkerStore } from "@sidecar/brain";
+import type { BrainFlushMarkerStore } from "@sidecar/brain";
 import { runMemoryHousekeeping } from "@sidecar/brain";
 import type { StoreClient } from "@sidecar/brain/store";
 import {
@@ -8,21 +8,25 @@ import {
   localDayStamp,
   MEMORY_FLUSH_DEFAULTS,
   MEMORY_HOUSEKEEPING_OUTCOME,
-  type MemoryHousekeepingResult,
   memoryFlushPrompt,
   resetCapturePrompt,
 } from "@sidecar/memory";
 import { readWorkspaceFile, writeWorkspaceFile } from "@sidecar/runtime";
-import type { AgentRuntime, SessionKey } from "@sidecar/runtime/vocabulary";
-import type { WireRecord } from "@sidecar/wire";
+import {
+  type AgentRuntime,
+  MEMORY_CAPTURE_PHASE,
+  type MemoryCaptureResult,
+  type MemoryCaptureTurn,
+  type SessionKey,
+} from "@sidecar/runtime/vocabulary";
 
 /**
- * Memory maintenance as the host wires it: the pre-compaction flush hook
- * and flush marker each eligible conversation's brain is handed, the capture
- * run before an eligible private conversation starts fresh. Every model call
- * is a workspace-only
- * run over a private context that is dropped at its end, on the developer's
- * own key or through Luke's service.
+ * Memory maintenance as the host wires it: the capture each eligible
+ * conversation's memory provider carries — the pre-compaction flush at a
+ * compaction, the reset capture before the conversation starts fresh — and
+ * the flush marker the brain keeps its cycle by. Every model call is a
+ * workspace-only run over a private context that is dropped at its end, on
+ * the developer's own key or through Luke's service.
  */
 
 export interface MemoryMaintenanceDependencies {
@@ -39,11 +43,18 @@ export interface MemoryMaintenanceDependencies {
   onNotebookChanged?: () => void;
 }
 
+type MemoryCapture = (turn: MemoryCaptureTurn) => Promise<MemoryCaptureResult>;
+
 export interface MemoryMaintenance {
-  /** The flush hook for one conversation, or nothing for one that never flushes. */
-  flushHookFor: (
-    sessionKey: SessionKey,
-  ) => ((input: BrainFlushInput) => Promise<MemoryHousekeepingResult>) | undefined;
+  /**
+   * The capture for one conversation, or nothing for one whose memory is
+   * never captured: main and the developer's durable private threads
+   * capture, never a temporary thread, an observed session, or a child. A
+   * reset's capture is cut at its own timeout; the flush runs under the
+   * signal the brain hands it. Neither blocks the compaction or the reset
+   * that asked for it.
+   */
+  captureFor: (sessionKey: SessionKey) => MemoryCapture | undefined;
   /**
    * Where one conversation's flush marker outlives the process: the store's
    * flush-state row, read and written under the generation the brain names,
@@ -51,13 +62,6 @@ export interface MemoryMaintenance {
    * Nothing for a conversation that never flushes.
    */
   flushMarkerFor: (sessionKey: SessionKey) => BrainFlushMarkerStore | undefined;
-  /** Whether a conversation's reset captures first: main and the developer's durable private threads. */
-  capturesOnReset: (sessionKey: SessionKey) => boolean;
-  /** The capture run before a reset, over a copy of the conversation's context; never blocks the reset's outcome. */
-  captureBeforeReset: (
-    sessionKey: SessionKey,
-    items: readonly WireRecord[],
-  ) => Promise<MemoryHousekeepingResult>;
 }
 
 export function wireMemoryMaintenance(
@@ -74,11 +78,11 @@ export function wireMemoryMaintenance(
     isMaintenanceEligibleConversation(sessionKey, dependencies.isTemporary(sessionKey));
 
   const housekeeping = async (
-    items: readonly WireRecord[],
+    turn: MemoryCaptureTurn,
     prompt: HousekeepingPrompt,
     dateStamp: string,
     signal: AbortSignal,
-  ): Promise<MemoryHousekeepingResult> => {
+  ): Promise<MemoryCaptureResult> => {
     const runtime = dependencies.createRuntime();
     if (!runtime) {
       return {
@@ -89,7 +93,7 @@ export function wireMemoryMaintenance(
     }
     const result = await runMemoryHousekeeping({
       runtime,
-      items,
+      items: turn.items,
       prompt,
       dateStamp,
       workspace: workspace(),
@@ -100,12 +104,37 @@ export function wireMemoryMaintenance(
     return result;
   };
 
-  const flushHookFor: MemoryMaintenance["flushHookFor"] = (sessionKey) => {
+  const flush: MemoryCapture = (turn) => {
+    const day = localDayStamp(dependencies.now());
+    return housekeeping(turn, memoryFlushPrompt(day), day, turn.signal);
+  };
+
+  const resetCapture: MemoryCapture = async (turn) => {
+    if (turn.items.length === 0) {
+      return { outcome: MEMORY_HOUSEKEEPING_OUTCOME.NOTHING_TO_STORE, writes: 0 };
+    }
+    const day = localDayStamp(dependencies.now());
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(),
+      MEMORY_FLUSH_DEFAULTS.RESET_CAPTURE_TIMEOUT_MS,
+    );
+    try {
+      return await housekeeping(
+        turn,
+        resetCapturePrompt(day),
+        day,
+        AbortSignal.any([turn.signal, controller.signal]),
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  const captureFor: MemoryMaintenance["captureFor"] = (sessionKey) => {
     if (!eligible(sessionKey)) return undefined;
-    return (input) => {
-      const day = localDayStamp(dependencies.now());
-      return housekeeping(input.items, memoryFlushPrompt(day), day, input.signal);
-    };
+    return (turn) =>
+      turn.phase === MEMORY_CAPTURE_PHASE.RESET_REQUESTED ? resetCapture(turn) : flush(turn);
   };
 
   const flushMarkerFor: MemoryMaintenance["flushMarkerFor"] = (sessionKey) => {
@@ -133,34 +162,5 @@ export function wireMemoryMaintenance(
     };
   };
 
-  const captureBeforeReset: MemoryMaintenance["captureBeforeReset"] = async (sessionKey, items) => {
-    if (!eligible(sessionKey)) {
-      return {
-        outcome: MEMORY_HOUSEKEEPING_OUTCOME.SKIPPED,
-        writes: 0,
-        reason: "not an eligible private conversation",
-      };
-    }
-    if (items.length === 0) {
-      return { outcome: MEMORY_HOUSEKEEPING_OUTCOME.NOTHING_TO_STORE, writes: 0 };
-    }
-    const day = localDayStamp(dependencies.now());
-    const controller = new AbortController();
-    const timer = setTimeout(
-      () => controller.abort(),
-      MEMORY_FLUSH_DEFAULTS.RESET_CAPTURE_TIMEOUT_MS,
-    );
-    try {
-      return await housekeeping(items, resetCapturePrompt(day), day, controller.signal);
-    } finally {
-      clearTimeout(timer);
-    }
-  };
-
-  return {
-    flushHookFor,
-    flushMarkerFor,
-    capturesOnReset: eligible,
-    captureBeforeReset,
-  };
+  return { captureFor, flushMarkerFor };
 }

@@ -69,6 +69,19 @@ export {
   type NotebookMemoryStore,
 } from "./notebook-memory.js";
 export {
+  maximumMemoryQueryLength,
+  maximumMemorySearchResults,
+  NOTEBOOK_MEMORY_REFUSAL,
+  NOTEBOOK_MEMORY_TOOL,
+  NOTEBOOK_RECALL_ID,
+  type NotebookMemoryProviderSeams,
+  type NotebookMemoryToolName,
+  type NotebookMemoryToolShape,
+  notebookMemoryProvider,
+  notebookMemoryToolShapes,
+  primedNotesText,
+} from "./provider.js";
+export {
   bm25RankToScore,
   buildFtsQuery,
   cosineSimilarity,

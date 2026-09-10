@@ -3,7 +3,11 @@ import fs from "node:fs";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { type StorePort, serveStore, storeClient } from "@sidecar/brain/store";
-import { MEMORY_HOUSEKEEPING_OUTCOME } from "@sidecar/memory";
+import {
+  MEMORY_HOUSEKEEPING_OUTCOME,
+  memoryFlushPrompt,
+  resetCapturePrompt,
+} from "@sidecar/memory";
 import { recentDailyNotes } from "@sidecar/runtime";
 import { temporaryDirectory } from "@sidecar/runtime/testing";
 import {
@@ -11,10 +15,15 @@ import {
   DEFAULT_AGENT_ID,
   MAIN_CONVERSATION_NAME,
   MAIN_SESSION_KEY,
+  MEMORY_CAPTURE_PHASE,
+  MEMORY_SCOPE_KIND,
+  type MemoryCapturePhase,
+  type MemoryCaptureTurn,
   RUN_END_REASON,
   type RuntimeRunRequest,
   threadSessionKey,
 } from "@sidecar/runtime/vocabulary";
+import type { WireRecord } from "@sidecar/wire";
 import { type MemoryMaintenanceDependencies, wireMemoryMaintenance } from "./memory-maintenance.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -27,6 +36,17 @@ const stamp = (atMs: number) => {
 const TODAY = stamp(NOW);
 const YESTERDAY = stamp(NOW - DAY_MS);
 const TWO_DAYS_AGO = stamp(NOW - 2 * DAY_MS);
+const NEVER = new AbortController().signal;
+
+function turnOf(phase: MemoryCapturePhase, items: readonly WireRecord[]): MemoryCaptureTurn {
+  return {
+    scope: { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: DEFAULT_AGENT_ID },
+    phase,
+    operation: { generationId: "gen-1", compactionCount: 0 },
+    items,
+    signal: NEVER,
+  };
+}
 
 function client() {
   const channel = new MessageChannel();
@@ -132,22 +152,30 @@ async function harness(
   };
 }
 
-test("the flush hook and the reset capture exist only for main and durable private threads, and a fresh conversation is primed with today's and yesterday's notes, slugged variants included", async (t) => {
+test("the capture exists only for main and durable private threads, runs each phase under its own prompt, and the recent daily notes are today's and yesterday's, slugged variants included", async (t) => {
   const h = await harness(t);
-  assert.ok(h.maintenance.flushHookFor(MAIN_SESSION_KEY));
-  assert.ok(h.maintenance.flushHookFor(h.thread));
-  assert.equal(h.maintenance.flushHookFor(h.temporary), undefined);
+  const main = h.maintenance.captureFor(MAIN_SESSION_KEY);
+  assert.ok(main);
+  assert.ok(h.maintenance.captureFor(h.thread));
+  assert.equal(h.maintenance.captureFor(h.temporary), undefined);
   assert.equal(h.maintenance.flushMarkerFor(h.temporary), undefined);
-  assert.equal(h.maintenance.capturesOnReset(h.temporary), false);
-  const skipped = await h.maintenance.captureBeforeReset(h.temporary, [{ type: "message" }]);
-  assert.equal(skipped.outcome, MEMORY_HOUSEKEEPING_OUTCOME.SKIPPED);
-  const empty = await h.maintenance.captureBeforeReset(MAIN_SESSION_KEY, []);
+  const empty = await main(turnOf(MEMORY_CAPTURE_PHASE.RESET_REQUESTED, []));
   assert.equal(empty.outcome, MEMORY_HOUSEKEEPING_OUTCOME.NOTHING_TO_STORE);
+  assert.equal(h.prompts.length, 0, "a reset over nothing runs no turn");
+  const flushed = await main(
+    turnOf(MEMORY_CAPTURE_PHASE.COMPACTION_REQUESTED, [{ type: "message" }]),
+  );
+  assert.equal(flushed.outcome, MEMORY_HOUSEKEEPING_OUTCOME.NOTHING_TO_STORE);
+  const reset = await main(turnOf(MEMORY_CAPTURE_PHASE.RESET_REQUESTED, [{ type: "message" }]));
+  assert.equal(reset.outcome, MEMORY_HOUSEKEEPING_OUTCOME.NOTHING_TO_STORE);
+  assert.deepEqual(h.prompts, [memoryFlushPrompt(TODAY).system, resetCapturePrompt(TODAY).system]);
   // A capture whose model fails is reported as failed, never as done.
   const failing = await harness(t, () => undefined);
-  const failed = await failing.maintenance.captureBeforeReset(MAIN_SESSION_KEY, [
-    { type: "message" },
-  ]);
+  const failingMain = failing.maintenance.captureFor(MAIN_SESSION_KEY);
+  assert.ok(failingMain);
+  const failed = await failingMain(
+    turnOf(MEMORY_CAPTURE_PHASE.RESET_REQUESTED, [{ type: "message" }]),
+  );
   assert.equal(failed.outcome, MEMORY_HOUSEKEEPING_OUTCOME.FAILED);
   failing.close();
   fs.writeFileSync(path.join(h.workspace, "memory", `${TODAY}.md`), "- today\n");

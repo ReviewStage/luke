@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import { rememberedFactsText } from "@sidecar/actions";
 import { DeliveryLedger, workspaceProjectContextText } from "@sidecar/brain";
 import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
@@ -21,8 +20,10 @@ import { CREDENTIAL_REFERENCE_KIND } from "@sidecar/runtime";
 import {
   CONVERSATION_KIND,
   conversationKindOf,
+  DEFAULT_AGENT_ID,
   isIdentifier,
   MAIN_SESSION_KEY,
+  MEMORY_SCOPE_KIND,
   type SessionKey,
   sessionKey as toSessionKey,
 } from "@sidecar/runtime/vocabulary";
@@ -47,6 +48,7 @@ import type { SpeechComposer } from "./compose-speech.js";
 import type { Composer, ComposerContext } from "./composer.js";
 import { conversationOperations, startConversationMaintenance } from "./conversation-operations.js";
 import { seedWorkspaceThenStartMemory } from "./lifecycle.js";
+import { wireMemoryDefinitions } from "./memory-definition.js";
 import { wireMemoryMaintenance } from "./memory-maintenance.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import {
@@ -134,13 +136,29 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
   });
 
   /**
+   * The notebook as every conversation's memory provider, bound to this
+   * Mac's one account: the one agent's workspace is its notebook, so the
+   * agent's id is the scope's key.
+   */
+  const memoryDefinitions = wireMemoryDefinitions({
+    scope: { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: DEFAULT_AGENT_ID },
+    index: memory,
+    maintenance: memoryMaintenance,
+    facts: store.rememberedFacts,
+    workspaceDirectory: kernel.agentWorkspacePath,
+    now,
+  });
+
+  /**
    * What a conversation is handed beside the roster, by which conversation it
-   * is. The recent exchange and the remembered facts reach every conversation,
-   * so an observed session's knows what the developer was just told before it
-   * briefs. The app guide and the projects a workspace could be created in
-   * belong to the conversations the developer actually holds; an observed
-   * session's conversation and a child's brief one session or one task, and
-   * would pay for both on every call and every iteration of their tool loops.
+   * is. The recent exchange reaches every conversation, so an observed
+   * session's knows what the developer was just told before it briefs; the
+   * remembered facts reach every conversation too, recalled by the memory
+   * provider rather than rendered here. The app guide and the projects a
+   * workspace could be created in belong to the conversations the developer
+   * actually holds; an observed session's conversation and a child's brief
+   * one session or one task, and would pay for both on every call and every
+   * iteration of their tool loops.
    */
   function standingContext(sessionKey: SessionKey): string {
     const sessions = observation.actableSessions();
@@ -157,7 +175,6 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
             ),
           ]
         : []),
-      rememberedFactsText(store.rememberedFacts()),
       conversationLinesText(recentConversationEntries(store.thread().entries()), sessions),
       ...(developerHeld ? [appGuideContextText(appGuide)] : []),
     ]
@@ -247,10 +264,8 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
     runnable: () =>
       runMode.observesProviders && runMode.sendsNetwork && account.capabilitiesActive(),
     dropBriefings: speech.dropBriefings,
-    memory: (sessionKey) => memory.accessFor(sessionKey),
-    beforeCompaction: (sessionKey) => memoryMaintenance.flushHookFor(sessionKey),
+    memory: memoryDefinitions,
     flushMarker: (sessionKey) => memoryMaintenance.flushMarkerFor(sessionKey),
-    beforeReset: (sessionKey, items) => memoryMaintenance.captureBeforeReset(sessionKey, items),
   });
 
   const conversations = conversationOperations({

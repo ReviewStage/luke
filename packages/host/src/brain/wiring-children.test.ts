@@ -28,6 +28,8 @@ import {
   childIdOf,
   conversationKindOf,
   MAIN_SESSION_KEY,
+  MEMORY_CAPTURE_PHASE,
+  MEMORY_SCOPE_KIND,
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
 import type { ConversationEntry } from "@sidecar/session";
@@ -496,10 +498,18 @@ test("a reset capture that was skipped reports nothing, while one that failed is
       report: (message) => {
         reports.push(message);
       },
-      beforeReset: async () => {
-        captures += 1;
-        return { outcome, writes: 0, reason: "not an eligible private conversation" };
-      },
+      memory: () => ({
+        scope: { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: "main" },
+        provider: {
+          recall: async () => ({ messages: [] }),
+          capture: async (turn) => {
+            captures += 1;
+            assert.equal(turn.phase, MEMORY_CAPTURE_PHASE.RESET_REQUESTED);
+            return { outcome, writes: 0, reason: "not an eligible private conversation" };
+          },
+          tools: [],
+        },
+      }),
     });
     await c.wiring.rebuild();
     const main = c.wiring.current();

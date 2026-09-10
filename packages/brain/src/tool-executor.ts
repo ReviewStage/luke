@@ -1,4 +1,3 @@
-import type { NotebookMemoryAccess } from "@sidecar/memory";
 import {
   type ChildCancellation,
   type ChildSpawnOutcome,
@@ -22,6 +21,8 @@ import {
   type ConversationRecord,
   isChildCleanup,
   isChildContextMode,
+  type MemoryDefinition,
+  memoryToolNamed,
   type SessionKey,
   type ToolExecutionContext,
   type ToolExecutor,
@@ -51,8 +52,6 @@ import {
   isBrainOnlyTool,
   maximumBriefingLength,
   maximumChildTaskLength,
-  maximumMemoryQueryLength,
-  maximumMemorySearchResults,
   maximumSessionsConversationLines,
 } from "./tools.js";
 import { REFUSAL_REASON, type RunControl, SPAWN_REFUSAL_REASON, type TurnContext } from "./turn.js";
@@ -62,15 +61,13 @@ import type { BrainDelivery } from "./wake-events.js";
  * The tool executor one turn hands its runtime. Every call the model emits
  * lands here, is refused when the effective policy does not offer it, and is
  * otherwise dispatched by what the catalog says the tool is: an action carried
- * through the journal to the performer, a workspace file's read or write, or
+ * through the journal to the performer, a workspace file's read or write, a
+ * memory provider's read or write — the write through the same journal — or
  * one of the brain's own — the roster in full, a whole transcript, the
  * briefing it decided to give. The policy is enforced again at this door,
  * whatever the model was shown, and the runtime's own standing joins the
  * turn's: an action prepared inside a run the runtime has ended is refused.
  */
-
-/** How the memory tools reach the notebook's index: the memory host's own access, bounded and validated by the host that supplies it. */
-export type BrainMemoryAccess = NotebookMemoryAccess;
 
 /** How the workspace tools reach the agent's own files: bounded to the workspace by the host that supplies it. */
 export interface BrainWorkspaceAccess {
@@ -147,8 +144,8 @@ export interface ToolExecutorDependencies {
   readonly workspace: BrainWorkspaceAccess | undefined;
   /** Delegation, when the host wired it; absent, the session tools refuse. */
   readonly children: BrainChildAccess | undefined;
-  /** The notebook's search and read, when the host wired an index; absent, the memory tools refuse. */
-  readonly memory: BrainMemoryAccess | undefined;
+  /** The memory provider bound to this conversation's scope, when the host wired one; absent, the memory tools refuse. */
+  readonly memory: MemoryDefinition | undefined;
   readonly readWhole: (identity: SessionIdentity, context: TurnContext) => Promise<WireRecord>;
   /** Checkpoints the turn's context and journal; false when the store refused, after which no action may run. */
   readonly checkpoint: (context: TurnContext) => Promise<boolean>;
@@ -190,42 +187,6 @@ export function refusalForPolicy(
     return rejection(REFUSAL_REASON.ANNOUNCE_IN_ASK);
   }
   return rejection(REFUSAL_REASON.NOT_ALLOWED);
-}
-
-/**
- * The memory tools: reads of the notebook's index and files, bounded here
- * and validated by the host, which answers only for paths inside the
- * notebook. Neither is an effect, so neither runs through the journal.
- */
-async function memoryToolCall(
-  call: Pick<ToolInvocation, "name">,
-  args: WireRecord,
-  memory: BrainMemoryAccess,
-  execution: Pick<BrainActionExecution, "isRevoked" | "signal">,
-): Promise<WireRecord> {
-  if (execution.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
-  if (call.name === BRAIN_TOOL.MEMORY_SEARCH) {
-    const query = text(args.query)?.replace(/\s+/g, " ").trim().slice(0, maximumMemoryQueryLength);
-    if (!query) return rejection(REFUSAL_REASON.EMPTY_QUERY);
-    const maxResults =
-      isWireNumber(args.max_results) && args.max_results > 0
-        ? Math.min(Math.floor(args.max_results), maximumMemorySearchResults)
-        : undefined;
-    return memory.search({
-      query,
-      ...(maxResults !== undefined ? { maxResults } : undefined),
-      signal: execution.signal,
-    });
-  }
-  const filePath = text(args.path)?.trim();
-  if (!filePath) return rejection(REFUSAL_REASON.NOT_MEMORY_PATH);
-  const from = isWireNumber(args.from) && args.from >= 1 ? Math.floor(args.from) : undefined;
-  const lines = isWireNumber(args.lines) && args.lines >= 1 ? Math.floor(args.lines) : undefined;
-  return memory.get({
-    path: filePath,
-    ...(from !== undefined ? { from } : undefined),
-    ...(lines !== undefined ? { lines } : undefined),
-  });
 }
 
 export function createTurnToolExecutor(
@@ -426,10 +387,24 @@ export function createTurnToolExecutor(
     }
   };
 
-  const memoryTool = (call: ToolInvocation, args: WireRecord, execution: BrainActionExecution) =>
-    dependencies.memory
-      ? memoryToolCall(call, args, dependencies.memory, execution)
-      : rejection(REFUSAL_REASON.NO_MEMORY);
+  /**
+   * A memory provider's tool: a write through the same journal an action runs
+   * through, a read answered directly. The provider is handed the turn's
+   * standing and the scope it was bound to, and bounds the call's arguments
+   * itself; a conversation with no provider refuses the tools.
+   */
+  const memoryTool = async (
+    call: ToolInvocation,
+    execution: BrainActionExecution,
+  ): Promise<WireRecord> => {
+    const memory = dependencies.memory;
+    const tool = memory ? memoryToolNamed(memory.provider, call.name) : undefined;
+    if (!memory || !tool) return rejection(REFUSAL_REASON.NO_MEMORY);
+    const run = () => tool.execute(call, { ...execution, scope: memory.scope });
+    if (tool.effect === TOOL_EFFECT.WRITE) return performJournaled(call, execution, run);
+    if (execution.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
+    return run();
+  };
 
   return {
     execute: async (call: ToolInvocation, runtimeContext: ToolExecutionContext) => {
@@ -457,6 +432,9 @@ export function createTurnToolExecutor(
       if (tool?.execution === TOOL_EXECUTION.WORKSPACE) {
         return answer(await workspaceTool(call, args, execution));
       }
+      if (tool?.execution === TOOL_EXECUTION.MEMORY) {
+        return answer(await memoryTool(call, execution));
+      }
       if (!isBrainOnlyTool(call.name)) return answer(rejection(REFUSAL_REASON.NOT_OFFERED));
       switch (call.name) {
         case BRAIN_TOOL.LIST_SESSIONS:
@@ -479,9 +457,6 @@ export function createTurnToolExecutor(
         case BRAIN_TOOL.SESSIONS_LIST:
         case BRAIN_TOOL.SESSIONS_HISTORY:
           return answer(await childTool(call, args, execution));
-        case BRAIN_TOOL.MEMORY_SEARCH:
-        case BRAIN_TOOL.MEMORY_GET:
-          return answer(await memoryTool(call, args, execution));
         default:
           return answer(rejection(REFUSAL_REASON.NOT_OFFERED));
       }

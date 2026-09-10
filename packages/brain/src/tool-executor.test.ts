@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_TOOL } from "@sidecar/actions";
-import { CHILD_SPAWN_REFUSAL, TOOL_POLICY_LAYER } from "@sidecar/runtime";
+import { NOTEBOOK_MEMORY_TOOL } from "@sidecar/memory";
+import { CHILD_SPAWN_REFUSAL, TOOL_EFFECT, TOOL_POLICY_LAYER } from "@sidecar/runtime";
 import {
   CHILD_CLEANUP,
   CHILD_CONTEXT_MODE,
@@ -13,6 +14,9 @@ import {
   childSessionKey,
   DEFAULT_AGENT_ID,
   MAIN_SESSION_KEY,
+  MEMORY_SCOPE_KIND,
+  type MemoryDefinition,
+  type MemoryToolContext,
   RUN_ORIGIN,
   type ToolInvocation,
 } from "@sidecar/runtime/vocabulary";
@@ -59,6 +63,7 @@ function parsed(outputJson: string) {
 function executor(
   trigger: BrainTurnTrigger = BRAIN_TURN_TRIGGER.WAKE,
   children: BrainChildAccess | undefined = undefined,
+  memory: MemoryDefinition | undefined = undefined,
 ) {
   const policy = resolveTurnToolPolicy(CATALOG, {}, trigger);
   const journal = new BrainJournal();
@@ -85,7 +90,7 @@ function executor(
     roster: () => ({ text: "roster", identities: [] }),
     actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
     children,
-    memory: undefined,
+    memory,
     workspace: {
       read: async (name) => ({ ok: true, content: `content of ${name}` }),
       write: async (name, content) => {
@@ -368,4 +373,62 @@ test("the session tools render the host's typed answers in the records the model
     reason: REFUSAL_REASON.UNKNOWN_CHILD,
   });
   assert.deepEqual(cancelled, ["child-1"]);
+});
+
+/** A memory provider whose four tools record the standing they were handed and answer accepted. */
+function memoryDefinition() {
+  const contexts: MemoryToolContext[] = [];
+  const definition: MemoryDefinition = {
+    scope: { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: "main" },
+    provider: {
+      recall: async () => ({ messages: [] }),
+      tools: Object.values(NOTEBOOK_MEMORY_TOOL).map((name) => ({
+        schema: { name, description: name, parameters: {} },
+        effect:
+          name === NOTEBOOK_MEMORY_TOOL.SEARCH || name === NOTEBOOK_MEMORY_TOOL.GET
+            ? TOOL_EFFECT.READ
+            : TOOL_EFFECT.WRITE,
+        execute: async (_invocation, context) => {
+          contexts.push(context);
+          return { status: ACTION_RESULT_STATUS.ACCEPTED };
+        },
+      })),
+    },
+  };
+  return { definition, contexts };
+}
+
+test("a memory tool is dispatched to the provider under the turn's standing and scope: a write through the journal, a read directly, and none without a provider", async () => {
+  const memory = memoryDefinition();
+  const h = executor(BRAIN_TURN_TRIGGER.WAKE, undefined, memory.definition);
+  const read = await h.execute(call(NOTEBOOK_MEMORY_TOOL.SEARCH, { query: "deploys" }));
+  assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED);
+  assert.deepEqual(h.journal.entries(), [], "a read is not an effect");
+  const written = await h.execute(call(NOTEBOOK_MEMORY_TOOL.REMEMBER, { words: "likes tea" }));
+  assert.equal(written.status, ACTION_RESULT_STATUS.ACCEPTED);
+  assert.deepEqual(
+    h.journal.entries().map((entry) => entry.name),
+    [NOTEBOOK_MEMORY_TOOL.REMEMBER],
+    "the write went through the journal",
+  );
+  assert.deepEqual(h.checkpoints, [1], "checkpointed before the effect ran");
+  assert.deepEqual(
+    memory.contexts.map((context) => [context.runId, context.origin, context.scope]),
+    [
+      ["run-1", RUN_ORIGIN.OBSERVATION, memory.definition.scope],
+      ["run-1", RUN_ORIGIN.OBSERVATION, memory.definition.scope],
+    ],
+  );
+  // The same call id again is answered from the journal, not performed twice.
+  const again = await h.execute(call(NOTEBOOK_MEMORY_TOOL.REMEMBER, { words: "likes tea" }));
+  assert.equal(again.status, ACTION_RESULT_STATUS.ACCEPTED);
+  assert.equal(memory.contexts.length, 2);
+
+  const without = executor();
+  for (const name of Object.values(NOTEBOOK_MEMORY_TOOL)) {
+    const refused = await without.execute(call(name, { query: "q" }));
+    assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+    assert.equal(refused.reason, REFUSAL_REASON.NO_MEMORY);
+  }
+  assert.deepEqual(without.journal.entries(), []);
 });

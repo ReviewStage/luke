@@ -1,9 +1,9 @@
-import type { BrainMemoryAccess } from "@sidecar/brain";
 import { EMBEDDING_BATCH_SIZE } from "@sidecar/brain";
 import type { StoreClient } from "@sidecar/brain/store";
 import {
   type MemorySyncReport,
   NotebookMemory,
+  type NotebookMemoryAccess,
   RETRIEVAL_MODE,
   type RetrievalMode,
 } from "@sidecar/memory";
@@ -16,8 +16,8 @@ export interface MemoryWiring {
   stop: () => void;
   /** One reconcile of the index against the files; a call during a pass earns one follow-on pass under the adapter standing then. */
   sync: () => Promise<MemorySyncReport | undefined>;
-  /** The brain's memory tools for one conversation. */
-  accessFor: (sessionKey: SessionKey) => BrainMemoryAccess | undefined;
+  /** The index's search and read for one conversation, as the memory provider offers them. */
+  accessFor: (sessionKey: SessionKey) => NotebookMemoryAccess | undefined;
   /** The retrieval mode the last sync settled on. */
   mode: () => RetrievalMode;
 }

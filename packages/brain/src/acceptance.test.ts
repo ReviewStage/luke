@@ -11,6 +11,7 @@ import {
   hostedBrainBounds,
   RESPONSES_INPUT_ITEM_TYPE,
 } from "@sidecar/hosted";
+import { primedNotesText } from "@sidecar/memory";
 import {
   BUILTIN_CONTEXT_ENGINE,
   BUILTIN_MODEL_ADAPTER,
@@ -34,6 +35,8 @@ import {
   type ContextInput,
   type ContextLifecycle,
   type ContextOpening,
+  MEMORY_SCOPE_KIND,
+  type MemoryDefinition,
   type ModelAdapter,
   REASONING_EFFORT,
   RUN_END_REASON,
@@ -145,6 +148,17 @@ interface UpstreamCall {
 }
 
 /** A fake OpenAI: each queued answer is one upstream response, in order. */
+/** The marker each user item of a request opens with, in request order; an item without one contributes nothing. */
+function inputMarkers(input: readonly UnparsedWireValue[]): readonly string[] {
+  return input.filter(isRecord).flatMap((item) => {
+    if (!Array.isArray(item.content)) return [];
+    return item.content.filter(isRecord).flatMap((part) => {
+      const marker = isWireString(part.text) ? /^\[[^\]]+\]/.exec(part.text)?.[0] : undefined;
+      return marker === undefined ? [] : [marker];
+    });
+  });
+}
+
 function fakeUpstream(answers: (() => Response)[]) {
   const calls: UpstreamCall[] = [];
   const fetch = async (url: string, init: RequestInit): Promise<Response> => {
@@ -891,11 +905,20 @@ test("a conversation that starts fresh is primed once with the recent daily note
   await seedWorkspace(root, BRAIN_WORKSPACE_SEEDS);
   await fs.writeFile(path.join(root, "memory", "2027-01-15.md"), "Shipped the release.");
   const now = Date.UTC(2027, 0, 15, 12);
-  const primeFreshContext = async () => {
-    const notes = await recentDailyNotes(root, now);
-    return notes.length > 0
-      ? notes.map((note) => `## ${note.name}\n\n${note.content}`).join("\n\n")
-      : undefined;
+  const histories: number[] = [];
+  // The notebook's recall, as the memory package builds it: the notes are an
+  // unkeyed message into an empty history and nothing into one with items.
+  const memory: MemoryDefinition = {
+    scope: { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: "main" },
+    provider: {
+      recall: async (_scope, history) => {
+        histories.push(history.items.length);
+        if (history.items.length > 0) return { messages: [] };
+        const notes = await recentDailyNotes(root, now);
+        return { messages: notes.length > 0 ? [{ content: primedNotesText(notes) }] : [] };
+      },
+      tools: [],
+    },
   };
   const upstream = fakeUpstream([
     () => payload([message("Noted.")]),
@@ -907,10 +930,25 @@ test("a conversation that starts fresh is primed once with the recent daily note
     fakeBrainStateRepository(),
     undefined,
     {
-      primeFreshContext,
+      memory,
     },
   );
   assert.equal((await h.ask("first"))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assert.equal((await h.ask("second"))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  assert.equal(histories.length, 2, "recall runs once per turn");
+  assert.equal(histories[0], 0, "the first turn opens over an empty history");
+  assert.ok((histories[1] ?? 0) > 0, "the second turn's history holds the first");
+  const recalledItems = (index: number) => {
+    const input = upstream.calls[index]?.body.input;
+    assert.ok(Array.isArray(input));
+    return inputMarkers(input).filter((marker) => marker === BRAIN_INPUT_MARKER.RECALLED_MEMORY)
+      .length;
+  };
+  assert.equal(recalledItems(0), 1, "the notes open the fresh conversation once");
+  assert.equal(
+    recalledItems(1),
+    1,
+    "the second turn carries the first's notes and recalls none anew",
+  );
   await h.agent.stop();
 });
