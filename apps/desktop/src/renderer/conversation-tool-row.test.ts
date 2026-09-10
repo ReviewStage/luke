@@ -239,6 +239,27 @@ test("a creation's chip is the session its answer named, by the roster once it h
     openable: false,
   });
 
+  // The answer named a session the roster does not hold, and the call named nothing: the chip
+  // is still the session, opened by identity, under the agent the call asked for.
+  const departed = toolRow(
+    part(
+      "create_workspace",
+      { provider_id: PROVIDER, agent: AGENT },
+      answered({
+        status: ACTION_OUTPUT_STATUS.ACCEPTED,
+        target: { providerId: PROVIDER },
+        createdSession: { providerId: PROVIDER, providerSessionId: "created-then-archived" },
+      }),
+    ),
+    FIXTURE_ROSTER,
+  );
+  assert.deepEqual(chipOf(departed), {
+    text: UNNAMED_SESSION,
+    markId: AGENT,
+    identity: { providerId: PROVIDER, providerSessionId: "created-then-archived" },
+    openable: true,
+  });
+
   const unnamed = toolRow(
     part(
       "create_workspace",

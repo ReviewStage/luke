@@ -428,7 +428,13 @@
   height: 12px;
 }
 
-.conversation-entry[data-speaker="event"] .conversation-action .conversation-words {
+/* An action row and the turn's fold speak in the quiet voice the requested
+   actions use, but they are Luke's doing, so they read from his edge rather
+   than centered between the two sides the way a dated line is. */
+.conversation-entry[data-action-kind] .conversation-message,
+.conversation-entry[data-folded] .conversation-message {
+  justify-content: flex-start;
+  padding: 2px 12px;
   text-align: left;
 }
 

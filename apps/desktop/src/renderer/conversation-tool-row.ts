@@ -150,18 +150,24 @@ function rosterSession(
   );
 }
 
+/** What a chip falls back on when neither the roster nor the envelope names the session: the call's own words. */
+interface ChipFallback {
+  readonly name?: string;
+  readonly markId?: string;
+}
+
 /**
  * The chip for the session an action named: by the roster while it holds the
- * session, by the envelope's snapshot once it does not. A session the roster
- * holds is pressable exactly when its own row is; one the roster has let go is
- * pressable by identity, and the host answers with the address it last
- * reported or refuses.
+ * session, by the envelope's snapshot once it does not, and by the call's own
+ * words where neither says. A session the roster holds is pressable exactly
+ * when its own row is; one the roster has let go is pressable by identity,
+ * and the host answers with the address it last reported or refuses.
  */
 function sessionChip(
   identity: SessionIdentity | undefined,
   target: ActionTargetSnapshot | undefined,
   roster: readonly SessionView[],
-  fallbackName?: string,
+  fallback: ChipFallback = {},
 ): ToolRowChip {
   const session = rosterSession(identity, roster);
   if (session !== undefined) {
@@ -172,9 +178,9 @@ function sessionChip(
       openable: session.openable,
     };
   }
-  const markId = target?.agentId ?? target?.providerId ?? identity?.providerId;
+  const markId = target?.agentId ?? fallback.markId ?? target?.providerId ?? identity?.providerId;
   return {
-    text: target?.title ?? fallbackName ?? UNNAMED_SESSION,
+    text: target?.title ?? fallback.name ?? UNNAMED_SESSION,
     ...(markId !== undefined ? { markId } : undefined),
     ...(identity !== undefined ? { identity } : undefined),
     openable: identity !== undefined,
@@ -293,18 +299,18 @@ function composeRuns(
         envelope?.status === ACTION_OUTPUT_STATUS.ACCEPTED ? envelope.createdSession : undefined;
       const providerId = target?.providerId ?? (read.ok ? read.value.provider_id : undefined);
       const name = read.ok ? read.value.name : undefined;
-      const agent = read.ok ? read.value.agent : undefined;
-      const session = rosterSession(created, roster);
+      const markId = (read.ok ? read.value.agent : undefined) ?? providerId;
+      const fallback: ChipFallback = {
+        ...(name !== undefined ? { name } : undefined),
+        ...(markId !== undefined ? { markId } : undefined),
+      };
+      // The session the answer named is the chip, wherever the roster stands;
+      // a creation whose answer named none is a name alone, or no chip at all.
       const chip: ToolRowChip | undefined =
-        session !== undefined
-          ? sessionChip(created, target, roster)
+        created !== undefined
+          ? sessionChip(created, target, roster, fallback)
           : name !== undefined
-            ? {
-                text: name,
-                ...((agent ?? providerId) ? { markId: agent ?? providerId } : undefined),
-                ...(created !== undefined ? { identity: created } : undefined),
-                openable: created !== undefined,
-              }
+            ? { text: name, ...(markId !== undefined ? { markId } : undefined), openable: false }
             : undefined;
       return {
         runs:
