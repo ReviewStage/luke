@@ -1,0 +1,14 @@
+{
+  "id": "7d4a9e32-3c6b-4f5d-a08e-1b2c3d4e5f60",
+  "role": "user",
+  "metadata": {
+    "author": "brain",
+    "source": "hold_release"
+  },
+  "parts": [
+    {
+      "type": "text",
+      "text": "[held briefings released] The tests passed on the checkout branch while you were in a meeting."
+    }
+  ]
+}

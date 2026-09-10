@@ -41,10 +41,27 @@ export const MESSAGE_CHANNEL = {
 
 export type MessageChannel = (typeof MESSAGE_CHANNEL)[keyof typeof MESSAGE_CHANNEL];
 
-/** What opened an observation the brain wrote down as a user row. */
+/**
+ * What the brain wrote a user row down for itself about: the words a turn
+ * opened with that no developer typed or spoke. The turn's origin names the
+ * first three the way the turns table does; the rest are the notes the host
+ * hands a turn beside its own words.
+ */
 export const OBSERVATION_SOURCE = {
+  /** A provider's hook reported a session's turn ending or a tool holding. */
   HOOK: "hook",
+  /** The roster look on the observation pass. */
   ROSTER_LOOK: "roster_look",
+  /** Briefings held through a meeting or a pause, handed back for one re-decision. */
+  HOLD_RELEASE: "hold_release",
+  /** A child's own turn: the task its requester delegated, as the child reads it. */
+  CHILD: "child",
+  /** A requester's turn opened by a child's completion, with the child's result as its words. */
+  CHILD_COMPLETION: "child_completion",
+  /** Notes the memory provider recalled for the turn. */
+  RECALLED_NOTES: "recalled_notes",
+  /** The compact notices of what sibling conversations did since main's last turn. */
+  ACTIVITY_NOTICES: "activity_notices",
 } as const;
 
 export type ObservationSource = (typeof OBSERVATION_SOURCE)[keyof typeof OBSERVATION_SOURCE];
@@ -92,7 +109,7 @@ function coherentSpan(metadata: SpokenAskMetadata): boolean {
   return metadata.from_ms <= metadata.to_ms;
 }
 
-/** An observation arrives on no channel: the brain's own note of what a hook or a roster look reported. */
+/** An observation arrives on no channel: the brain's own note of what opened the turn or what the host handed it. */
 const OBSERVATION_METADATA_FIELDS = {
   author: s.literal(MESSAGE_AUTHOR.BRAIN),
   source: s.enumOf(Object.values(OBSERVATION_SOURCE)),

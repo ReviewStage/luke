@@ -72,7 +72,7 @@ export class TurnEvents {
    * message, complete as handed over, saying what the vocabulary lets it say
    * about itself.
    */
-  words(text: string, metadata: UserMessageMetadata | undefined): void {
+  words(text: string, metadata: UserMessageMetadata): void {
     this.#emit({
       kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
       message: userMessage(this.#options.createMessageId(), text, metadata),
@@ -80,7 +80,7 @@ export class TurnEvents {
   }
 
   /** The run under way, its steer telling each message the run takes as words of the turn's own kind. */
-  relaying(run: RuntimeRun, metadata: UserMessageMetadata | undefined): RuntimeRun {
+  relaying(run: RuntimeRun, metadata: UserMessageMetadata): RuntimeRun {
     return {
       runId: run.runId,
       done: run.done,

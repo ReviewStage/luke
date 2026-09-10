@@ -54,6 +54,7 @@ import { BRAIN_TURN_KIND, BRAIN_TURN_TRIGGER, type BrainTurnDescription } from "
 import { TurnEvents } from "./turn-events.js";
 import {
   AssistantMessageBuilder,
+  HOSTED_WORDS_METADATA,
   REASONING_PROVIDER_KEY,
   toolPartType,
   UI_PART_STATE,
@@ -516,7 +517,11 @@ test("a child's task turn is told as a child's, with the task as its words and i
   assert.equal(started?.trigger, BRAIN_TURN_TRIGGER.CHILD_TASK);
   const [task, answer] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
   assert.equal(task?.message.role, MESSAGE_ROLE.USER);
-  assert.equal("metadata" in (task?.message ?? {}), false);
+  assert.deepEqual(task?.message.metadata, {
+    author: MESSAGE_AUTHOR.BRAIN,
+    source: OBSERVATION_SOURCE.CHILD,
+  });
+  assert.deepEqual(answer?.message.metadata, BRAIN_AUTHORED);
   assert.deepEqual(answer?.message.parts, [
     { type: UI_PART_TYPE.TEXT, text: "Looked into it.", state: UI_PART_STATE.DONE },
   ]);
@@ -536,6 +541,11 @@ test("a hold's release is told under its own origin", async () => {
   const [started] = ofKind(events, BRAIN_RUN_EVENT.TURN_STARTED);
   assert.equal(started?.origin, BRAIN_TURN_ORIGIN.HOLD_RELEASE);
   assert.equal(started?.trigger, BRAIN_TURN_TRIGGER.HOLD_RELEASED);
+  const [released] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
+  assert.deepEqual(released?.message.metadata, {
+    author: MESSAGE_AUTHOR.BRAIN,
+    source: OBSERVATION_SOURCE.HOLD_RELEASE,
+  });
   assert.deepEqual(kinds(events).at(-1), BRAIN_RUN_EVENT.TURN_ENDED);
   await h.agent.stop();
 });
@@ -783,7 +793,7 @@ test("every trigger has one origin: an ask's by where the ask came from, the res
   );
 });
 
-test("a user row's metadata follows the trigger: asks by channel, observations by source, and none where the vocabulary has no shape", () => {
+test("a user row's metadata follows the trigger: asks by channel, everything the brain writes for itself by source", () => {
   assert.deepEqual(
     [
       userMetadataOf(BRAIN_TURN_TRIGGER.ASK, BRAIN_REQUEST_ORIGIN.TYPED),
@@ -799,11 +809,15 @@ test("a user row's metadata follows the trigger: asks by channel, observations b
       { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
       { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.HOOK },
       { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.ROSTER_LOOK },
-      undefined,
-      undefined,
-      undefined,
+      { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.HOLD_RELEASE },
+      { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.CHILD },
+      { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.CHILD_COMPLETION },
     ],
   );
+  assert.deepEqual(Object.values(HOSTED_WORDS_METADATA), [
+    { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.RECALLED_NOTES },
+    { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.ACTIVITY_NOTICES },
+  ]);
 });
 
 test("a tool's result settles as an answer unless its status is a refusal or its silence, and an error carries the output's reason or the text itself", () => {

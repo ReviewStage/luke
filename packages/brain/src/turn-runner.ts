@@ -74,7 +74,7 @@ import {
   turnRevoked,
 } from "./turn.js";
 import { TurnEvents } from "./turn-events.js";
-import { userMetadataOf } from "./ui-messages.js";
+import { HOSTED_WORDS_METADATA, userMetadataOf } from "./ui-messages.js";
 import type {
   BrainDelivery,
   BrainTurnNotice,
@@ -574,23 +574,25 @@ export class TurnRunner {
           contextMark = context.mark();
           const recalled = await this.#recall(turnContext);
           notes = this.#options.openingNotes?.take() ?? [];
-          const hosted = [
-            ...recalled.opening,
-            ...(notes.length > 0 ? [activityNoticesInputText(notes, startedAt)] : []),
-          ];
+          const notices = notes.length > 0 ? [activityNoticesInputText(notes, startedAt)] : [];
           const words = plan.open(events, startedAt);
           // The words the turn opens with are its first messages, told before
-          // the model reads them: the host's own notes say nothing of
-          // themselves, and the turn's words say what opened them.
+          // the model reads them, each saying what it is: a recalled note, the
+          // siblings' notices, or the turn's own words by what opened them.
           const metadata = userMetadataOf(plan.trigger, plan.askOrigin);
-          for (const text of hosted) turnContext.events.words(text, undefined);
+          for (const text of recalled.opening) {
+            turnContext.events.words(text, HOSTED_WORDS_METADATA.RECALLED_NOTES);
+          }
+          for (const text of notices) {
+            turnContext.events.words(text, HOSTED_WORDS_METADATA.ACTIVITY_NOTICES);
+          }
           for (const text of words) turnContext.events.words(text, metadata);
           const end = await this.#execute(turnContext, execution, gathering, {
             prompt: preparation.prompt,
             policy,
             plan,
             riders,
-            opening: [...hosted, ...words],
+            opening: [...recalled.opening, ...notices, ...words],
             steered: metadata,
             recalled: recalled.standing,
             advanceMark,
@@ -807,7 +809,7 @@ export class TurnRunner {
       riders: RunControl[];
       opening: readonly string[];
       /** What an ask steered into this run says about itself: the turn's own kind, since only an ask's turn takes one. */
-      steered: UserMessageMetadata | undefined;
+      steered: UserMessageMetadata;
       /** What the memory provider recalled for every inference of the turn, after the standing context. */
       recalled: readonly string[];
       advanceMark: () => Promise<void>;

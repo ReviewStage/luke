@@ -1,0 +1,14 @@
+{
+  "id": "5b2e7c10-1a4f-4d3b-8e6c-9f0a1b2c3d4e",
+  "role": "user",
+  "metadata": {
+    "author": "brain",
+    "source": "hook"
+  },
+  "parts": [
+    {
+      "type": "text",
+      "text": "[observation] Claude Code: checkout finished its turn and is waiting."
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "b18ed276-70af-4d91-e4c2-5f60718293a4",
+  "role": "user",
+  "metadata": {
+    "author": "brain",
+    "source": "activity_notices"
+  },
+  "parts": [
+    {
+      "type": "text",
+      "text": "[activity] The checkout conversation announced once and sent one message."
+    }
+  ]
+}

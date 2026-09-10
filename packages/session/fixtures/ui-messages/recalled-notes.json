@@ -1,0 +1,14 @@
+{
+  "id": "a07dc165-6f9e-4c80-d3b1-4e5f60718293",
+  "role": "user",
+  "metadata": {
+    "author": "brain",
+    "source": "recalled_notes"
+  },
+  "parts": [
+    {
+      "type": "text",
+      "text": "[recalled] The developer prefers tests before a refactor lands."
+    }
+  ]
+}

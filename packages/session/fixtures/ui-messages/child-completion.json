@@ -1,0 +1,14 @@
+{
+  "id": "9f6cb054-5e8d-4b7f-c2a0-3d4e5f607182",
+  "role": "user",
+  "metadata": {
+    "author": "brain",
+    "source": "child_completion"
+  },
+  "parts": [
+    {
+      "type": "text",
+      "text": "[child completed] The fixture session renamed two files and added a test."
+    }
+  ]
+}
