@@ -44,6 +44,8 @@ required_files=(
     packages/host/CLAUDE.md
     packages/hosted/AGENTS.md
     packages/hosted/CLAUDE.md
+    packages/live/AGENTS.md
+    packages/live/CLAUDE.md
     packages/providers/AGENTS.md
     packages/providers/CLAUDE.md
     packages/realtime/AGENTS.md
