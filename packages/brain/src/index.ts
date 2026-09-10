@@ -83,10 +83,13 @@ export {
   type BrainRunEventBody,
   type BrainRunEventKind,
   type BrainTurnOrigin,
+  isToolRefusalStatus,
   SLOW_STEP_KIND,
   type SlowStepKind,
   TOOL_CALL_SETTLEMENT,
+  TOOL_REFUSAL_STATUS,
   type ToolCallSettlement,
+  type ToolRefusalStatus,
   type TurnCompaction,
 } from "./run-events.js";
 export {

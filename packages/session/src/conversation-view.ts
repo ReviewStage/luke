@@ -20,10 +20,14 @@
 import {
   CONVERSATION_EVENT_KIND,
   type ConversationEventKind,
+  isRecord,
   isSpeechEventKind,
   MESSAGE_ROLE,
   type TurnOrigin,
   type TurnStatus,
+  UNKNOWN_ACTION_STATUS,
+  unparsedWire,
+  type WireBoundaryInput,
 } from "@sidecar/wire";
 import type { SessionIdentity } from "./session-identity.js";
 import {
@@ -115,6 +119,42 @@ type ToolPartIdentity = {
 };
 
 /**
+ * How an action stands, read from its part: pending until it settles,
+ * refused when it settled as an error, and otherwise by the envelope its
+ * output carries — unknown where the envelope says the call was dispatched
+ * and its effect is uncertain, accepted otherwise. Refused and unknown are
+ * opposite claims, one that nothing happened and one that something may have,
+ * and the view keeps them apart so a reader is never told the first when the
+ * truth is the second.
+ */
+export const CONVERSATION_VIEW_ACTION_OUTCOME = {
+  PENDING: "pending",
+  ACCEPTED: "accepted",
+  UNKNOWN: "unknown",
+  REFUSED: "refused",
+} as const;
+
+export type ConversationViewActionOutcome =
+  (typeof CONVERSATION_VIEW_ACTION_OUTCOME)[keyof typeof CONVERSATION_VIEW_ACTION_OUTCOME];
+
+function actionOutcome(part: StoredToolPart): ConversationViewActionOutcome {
+  switch (part.state) {
+    case TOOL_PART_STATE.INPUT_STREAMING:
+    case TOOL_PART_STATE.INPUT_AVAILABLE:
+      return CONVERSATION_VIEW_ACTION_OUTCOME.PENDING;
+    case TOOL_PART_STATE.OUTPUT_ERROR:
+      return CONVERSATION_VIEW_ACTION_OUTCOME.REFUSED;
+    case TOOL_PART_STATE.OUTPUT_AVAILABLE: {
+      // SAFETY: a stored part's output is JSON the store holds as jsonb; the wire boundary is where it is read.
+      const envelope = unparsedWire(part.output as WireBoundaryInput);
+      return isRecord(envelope) && envelope.status === UNKNOWN_ACTION_STATUS
+        ? CONVERSATION_VIEW_ACTION_OUTCOME.UNKNOWN
+        : CONVERSATION_VIEW_ACTION_OUTCOME.ACCEPTED;
+    }
+  }
+}
+
+/**
  * One tool call of a shown message, as the view decided it: which kind it is,
  * and the one fact of each row kind the renderer cannot read from the part
  * alone. An announcement is unspoken when the latest speech event on its
@@ -122,8 +162,9 @@ type ToolPartIdentity = {
  * nobody heard it. Any other latest event, or none yet, leaves it standing as
  * a briefing that was or may still be delivered. The events hang on the
  * message, and a turn announces at most once, so every announce part of one
- * message reads the same mark. An action is refused when its part ended in
- * error, the one case an action draws collapsed like a detail.
+ * message reads the same mark. An action carries its outcome: refused, the
+ * one case an action draws collapsed like a detail; unknown, when it was
+ * dispatched and its effect is uncertain; accepted; or pending.
  */
 export type ConversationViewToolPart =
   | (ToolPartIdentity & {
@@ -132,7 +173,7 @@ export type ConversationViewToolPart =
     })
   | (ToolPartIdentity & {
       readonly kind: typeof CONVERSATION_VIEW_TOOL_KIND.ACTION;
-      readonly refused: boolean;
+      readonly outcome: ConversationViewActionOutcome;
     })
   | (ToolPartIdentity & { readonly kind: typeof CONVERSATION_VIEW_TOOL_KIND.DETAIL });
 
@@ -192,7 +233,7 @@ function describeToolPart(
         unspoken: speech.get(messageId)?.kind === CONVERSATION_EVENT_KIND.SPEECH_EXPIRED,
       };
     case CONVERSATION_VIEW_TOOL_KIND.ACTION:
-      return { ...identity, kind, refused: part.state === TOOL_PART_STATE.OUTPUT_ERROR };
+      return { ...identity, kind, outcome: actionOutcome(part) };
     case CONVERSATION_VIEW_TOOL_KIND.DETAIL:
       return { ...identity, kind };
   }

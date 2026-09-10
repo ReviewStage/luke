@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ACTION_OUTPUT_STATUS, REALTIME_TOOL, refusedActionOutput } from "@sidecar/actions";
+import {
+  ACTION_OUTPUT_STATUS,
+  REALTIME_TOOL,
+  refusedActionOutput,
+  unknownActionOutput,
+} from "@sidecar/actions";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
 import { TOOL_PART_STATE } from "@sidecar/session";
 import { readStoredUIMessages } from "@sidecar/session/ui-messages";
@@ -40,6 +45,7 @@ import {
   BRAIN_TURN_ORIGIN,
   type BrainRunEvent,
   type BrainRunEventKind,
+  isToolRefusalStatus,
   replySentences,
   SLOW_STEP_KIND,
   slowStepOf,
@@ -616,6 +622,35 @@ test("a refused call settles as an error carrying the refusal's own reason, and 
   await h.agent.stop();
 });
 
+test("an action dispatched whose effect is uncertain settles as an answer carrying the envelope, never as an error, and the message's tool part keeps the envelope", async () => {
+  const h = harness({
+    actions: performerWith(async () => unknownActionOutput("the node closed first")).actions,
+  });
+  const events = listen(h);
+  h.client.answers.push(answered([messageAbc("send_u")]), answered([message("Unsure.")]));
+  const record = await ask(h, "tell abc to run the tests");
+  assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  const [settled] = ofKind(events, BRAIN_RUN_EVENT.TOOL_CALL_SETTLED);
+  assert.deepEqual(settled?.settlement, {
+    state: TOOL_CALL_SETTLEMENT.OUTPUT_AVAILABLE,
+    output: { status: ACTION_OUTPUT_STATUS.UNKNOWN, reason: "the node closed first" },
+    status: ACTION_OUTPUT_STATUS.UNKNOWN,
+  });
+  const [, answer] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
+  assert.deepEqual(answer?.message.parts[0], {
+    type: toolPartType(REALTIME_TOOL.SEND_SESSION_MESSAGE),
+    toolCallId: "send_u",
+    state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
+    input: {
+      provider_id: ABC.providerId,
+      provider_session_id: ABC.providerSessionId,
+      text: "run the tests",
+    },
+    output: { status: ACTION_OUTPUT_STATUS.UNKNOWN, reason: "the node closed first" },
+  });
+  await h.agent.stop();
+});
+
 test("an ask steered into a running turn is a message of that turn, and its record's end is numbered in that turn before the turn's own end", async () => {
   const inner = new FakeClient();
   const gated = gatedClient(inner);
@@ -797,7 +832,7 @@ test("a user row's metadata follows the trigger: asks by channel, everything the
   ]);
 });
 
-test("a tool's result settles as an answer unless its status is a refusal or its silence, and an error carries the output's reason or the text itself", () => {
+test("a tool's result settles as an answer unless its status is a refusal, an unknown outcome among the answers, and an error carries the output's reason or the text itself", () => {
   const accepted = JSON.stringify({ status: ACTION_RESULT_STATUS.ACCEPTED, sent: true });
   assert.deepEqual(toolCallSettlementOf(accepted, ACTION_RESULT_STATUS.ACCEPTED), {
     state: TOOL_CALL_SETTLEMENT.OUTPUT_AVAILABLE,
@@ -815,13 +850,15 @@ test("a tool's result settles as an answer unless its status is a refusal or its
     errorText: "not here",
     status: ACTION_RESULT_STATUS.REJECTED,
   });
-  const silent = JSON.stringify({ status: TOOL_RESULT_STATUS.UNKNOWN });
-  assert.deepEqual(toolCallSettlementOf(silent, TOOL_RESULT_STATUS.UNKNOWN), {
-    state: TOOL_CALL_SETTLEMENT.OUTPUT_ERROR,
-    output: { status: TOOL_RESULT_STATUS.UNKNOWN },
-    errorText: silent,
-    status: TOOL_RESULT_STATUS.UNKNOWN,
+  const uncertain = JSON.stringify(unknownActionOutput("the node closed first"));
+  assert.deepEqual(toolCallSettlementOf(uncertain, ACTION_OUTPUT_STATUS.UNKNOWN), {
+    state: TOOL_CALL_SETTLEMENT.OUTPUT_AVAILABLE,
+    output: { status: ACTION_OUTPUT_STATUS.UNKNOWN, reason: "the node closed first" },
+    status: ACTION_OUTPUT_STATUS.UNKNOWN,
   });
+  assert.equal(isToolRefusalStatus(TOOL_RESULT_STATUS.UNKNOWN), false);
+  assert.equal(isToolRefusalStatus(ACTION_OUTPUT_STATUS.UNKNOWN), false);
+  assert.equal(isToolRefusalStatus(ACTION_RESULT_STATUS.ACCEPTED), false);
   const refused = JSON.stringify(refusedActionOutput("not here either"));
   assert.equal(
     toolCallSettlementOf(refused, ACTION_OUTPUT_STATUS.REFUSED).state,
@@ -886,6 +923,7 @@ test("the assistant message gathers reasoning, text, and tool parts in order, se
     state: TOOL_CALL_SETTLEMENT.OUTPUT_ERROR,
     output: { status: ACTION_RESULT_STATUS.REJECTED },
     errorText: "no",
+    status: ACTION_RESULT_STATUS.REJECTED,
   });
   builder.toolResult("c_3", { state: TOOL_CALL_SETTLEMENT.OUTPUT_AVAILABLE, output: 1 });
   builder.text("Done.");

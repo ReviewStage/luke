@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import type { ReasoningUIPart, ToolSet, ToolUIPart, UIMessage, UITools } from "ai";
+import {
+  asSchema,
+  type ReasoningUIPart,
+  type ToolSet,
+  type ToolUIPart,
+  type UIMessage,
+  type UITools,
+} from "ai";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import {
   BRAIN_REQUEST_STATUS,
@@ -33,6 +40,7 @@ import {
   UI_PART_STATE,
   UI_PART_TYPE,
   type UnparsedWireValue,
+  unknownActionOutput,
   unparsedWire,
 } from "../../core.js";
 import { conversations, events, messages, turns } from "../../db/storage-schema.js";
@@ -66,7 +74,33 @@ import { type HostedStoreDatabase, nullable } from "./database.js";
  * register, an input its schema refuses, or metadata outside the set. A
  * message refused there is refused whole and reported, never cut down to
  * the parts that would pass: a cut message says something its author did not.
+ *
+ * One outcome any call can have is an answer the catalog never wrote: the
+ * envelope saying the call was dispatched and its effect is unknown, which
+ * the runtime hands the model for a tool that did not answer and this writer
+ * gives a call the turn ended without answering. A tool's declared output
+ * schema therefore has to admit that envelope, or the row of such a call
+ * could not be read back; the writer holds the catalog to it once, when it
+ * is composed, and refuses to exist over a catalog that fails it.
  */
+
+/** The one output any tool's schema must admit: the envelope of a call whose effect is unknown. */
+const UNKNOWN_OUTCOME_PROBE = unknownActionOutput(
+  "the call was dispatched and its effect is unknown",
+);
+
+/** The tools whose declared output schema would refuse the unknown outcome's envelope. */
+async function toolsRefusingUnknownOutcome(tools: ToolSet): Promise<readonly string[]> {
+  const refusing: string[] = [];
+  for (const [name, declared] of Object.entries(tools)) {
+    if (declared.outputSchema === undefined) continue;
+    const validate = asSchema(declared.outputSchema).validate;
+    if (validate === undefined) continue;
+    const result = await validate(UNKNOWN_OUTCOME_PROBE);
+    if (!result.success) refusing.push(name);
+  }
+  return refusing;
+}
 
 export interface ConversationTarget {
   readonly userId: string;
@@ -247,17 +281,23 @@ function pendingToolPart(name: string, callId: string, input: UnparsedWireValue)
   };
 }
 
-/** A call the turn left unanswered, settled as the error it is once the turn is over: it will never answer now. */
+/**
+ * A call the turn left unanswered, settled once the turn is over as the one
+ * thing the record can truthfully say of it: the call was dispatched and its
+ * effect is unknown, an answer whose envelope says so, never an error, which
+ * would read as a refusal and license doing it again.
+ */
 function unansweredToolPart(part: StoredToolPart, status: BrainRequestStatus): ToolPart {
   return {
     type: part.type,
     toolCallId: part.toolCallId,
-    state: TOOL_PART_STATE.OUTPUT_ERROR,
+    state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
     input: part.input,
-    errorText:
+    output: unknownActionOutput(
       status === BRAIN_REQUEST_STATUS.CANCELLED
-        ? "The turn was cancelled before the call answered."
-        : "The turn ended before the call answered.",
+        ? "The turn was cancelled before the call answered; it may have run."
+        : "The turn ended before the call answered; it may have run.",
+    ),
   };
 }
 
@@ -579,7 +619,7 @@ async function toolCallSettled(
   // different one, after the turn's end already settled the call as
   // unanswered, finds the call closed and is refused rather than rewritten.
   if (isSettledToolPartState(found.part.state)) {
-    return found.part.state === event.settlement.state
+    return isDeepStrictEqual(settledToolPart(found.part, event.settlement), found.part)
       ? { ok: true, effect: STORE_WRITE_EFFECT.REPEATED }
       : { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
   }
@@ -805,11 +845,17 @@ async function recordEvent(context: WriterContext, event: EventWrite): Promise<E
   return { ok: true, id: inserted.id, seq };
 }
 
-export function storeWriter({
+export async function storeWriter({
   db,
   tools,
   now = () => new Date(),
-}: StoreWriterOptions): StoreWriter {
+}: StoreWriterOptions): Promise<StoreWriter> {
+  const refusing = await toolsRefusingUnknownOutcome(tools);
+  if (refusing.length > 0) {
+    throw new Error(
+      `the output schema of ${refusing.join(", ")} does not admit the unknown outcome's envelope`,
+    );
+  }
   /**
    * Runs one write under the conversation's row lock, or answers that no such
    * conversation stands for this account: none by that id, or one Clear

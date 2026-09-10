@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  CONVERSATION_VIEW_ACTION_OUTCOME,
   CONVERSATION_VIEW_TOOL_KIND,
   type ConversationViewTurnGroup,
   isStoredToolPart,
@@ -106,7 +107,8 @@ test("a refused action and the turn's details draw only inside the turn's fold",
       view.tools.some(
         (tool) =>
           tool.kind === CONVERSATION_VIEW_TOOL_KIND.DETAIL ||
-          (tool.kind === CONVERSATION_VIEW_TOOL_KIND.ACTION && tool.refused),
+          (tool.kind === CONVERSATION_VIEW_TOOL_KIND.ACTION &&
+            tool.outcome === CONVERSATION_VIEW_ACTION_OUTCOME.REFUSED),
       ),
     ),
   );
@@ -120,7 +122,11 @@ test("a refused action and the turn's details draw only inside the turn's fold",
     assert.equal(count(aboveFold, "class", "conversation-detail"), 0);
     const failedActions = group.messages
       .flatMap((view) => view.tools)
-      .filter((tool) => tool.kind === CONVERSATION_VIEW_TOOL_KIND.ACTION && tool.refused).length;
+      .filter(
+        (tool) =>
+          tool.kind === CONVERSATION_VIEW_TOOL_KIND.ACTION &&
+          tool.outcome === CONVERSATION_VIEW_ACTION_OUTCOME.REFUSED,
+      ).length;
     const details = group.messages
       .flatMap((view) => view.tools)
       .filter((tool) => tool.kind === CONVERSATION_VIEW_TOOL_KIND.DETAIL).length;

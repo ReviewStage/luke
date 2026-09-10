@@ -16,6 +16,7 @@ import {
 import { type ToolSet, tool } from "ai";
 import { z } from "zod";
 import {
+  CONVERSATION_VIEW_ACTION_OUTCOME,
   CONVERSATION_VIEW_SOURCE,
   CONVERSATION_VIEW_TOOL_KIND,
   type ConversationViewEvent,
@@ -299,7 +300,7 @@ test("an observation that acted crosses as its action parts, the refused one fla
   const [message] = group?.messages ?? [];
   assert.deepEqual(
     message?.message.parts.map((part) => part.type),
-    ["tool-send_session_message", "tool-run_session_control"],
+    ["tool-send_session_message", "tool-run_session_control", "tool-send_session_message"],
   );
   assert.deepEqual(message?.tools, [
     {
@@ -307,14 +308,21 @@ test("an observation that acted crosses as its action parts, the refused one fla
       toolCallId: "call_4a0000000000000001",
       toolName: "send_session_message",
       state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
-      refused: false,
+      outcome: CONVERSATION_VIEW_ACTION_OUTCOME.ACCEPTED,
     },
     {
       kind: CONVERSATION_VIEW_TOOL_KIND.ACTION,
       toolCallId: "call_4a0000000000000002",
       toolName: "run_session_control",
       state: TOOL_PART_STATE.OUTPUT_ERROR,
-      refused: true,
+      outcome: CONVERSATION_VIEW_ACTION_OUTCOME.REFUSED,
+    },
+    {
+      kind: CONVERSATION_VIEW_TOOL_KIND.ACTION,
+      toolCallId: "call_4a0000000000000003",
+      toolName: "send_session_message",
+      state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
+      outcome: CONVERSATION_VIEW_ACTION_OUTCOME.UNKNOWN,
     },
   ]);
 });
@@ -342,8 +350,46 @@ test("an observed turn whose only action was refused still crosses, with the ref
         toolCallId: "call_4a0000000000000002",
         toolName: "run_session_control",
         state: TOOL_PART_STATE.OUTPUT_ERROR,
-        refused: true,
+        outcome: CONVERSATION_VIEW_ACTION_OUTCOME.REFUSED,
       },
+    ],
+  );
+});
+
+test("an action's outcome is read from its part alone: pending until settled, refused on error, and by the envelope's status once answered", async () => {
+  const input = await loadView(FIXTURE.OBSERVATION_ACTED);
+  const [conversation] = input.observed;
+  if (conversation === undefined) throw new Error("unreachable");
+  const messages = conversation.messages.map((row) => ({
+    ...row,
+    message: {
+      ...row.message,
+      parts: row.message.parts.map((part): StoredUIMessage["parts"][number] =>
+        part.type === "tool-run_session_control" && "toolCallId" in part
+          ? {
+              type: part.type,
+              toolCallId: part.toolCallId,
+              state: TOOL_PART_STATE.INPUT_AVAILABLE,
+              input: part.input,
+            }
+          : part,
+      ),
+    },
+  }));
+  const groups = selectConversationView({ ...input, observed: [{ ...conversation, messages }] });
+  assert.deepEqual(
+    groups.flatMap((group) =>
+      group.messages.flatMap((message) =>
+        message.tools.map((tool) => [
+          tool.state,
+          tool.kind === CONVERSATION_VIEW_TOOL_KIND.ACTION ? tool.outcome : undefined,
+        ]),
+      ),
+    ),
+    [
+      [TOOL_PART_STATE.OUTPUT_AVAILABLE, CONVERSATION_VIEW_ACTION_OUTCOME.ACCEPTED],
+      [TOOL_PART_STATE.INPUT_AVAILABLE, CONVERSATION_VIEW_ACTION_OUTCOME.PENDING],
+      [TOOL_PART_STATE.OUTPUT_AVAILABLE, CONVERSATION_VIEW_ACTION_OUTCOME.UNKNOWN],
     ],
   );
 });
