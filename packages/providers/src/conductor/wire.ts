@@ -208,10 +208,8 @@ export const CONDUCTOR_CONVERSATION_BOUNDS = {
   MAXIMUM_PAGES: 10,
   /** How many attributed messages one poll answer may carry. */
   MAXIMUM_MESSAGES: 200,
-  /** How many attributed messages a tail or older-history page aims to carry. */
+  /** How many attributed messages an older-history page aims to carry. */
   HISTORY_TARGET_MESSAGES: 30,
-  /** How many raw windows one tail or older-history read may page backward. */
-  MAXIMUM_HISTORY_WINDOWS: 6,
   /**
    * How many sessions' transcript ends one credential's reads remember at
    * once. A re-opened chat starts its walk where the last read of it reached,

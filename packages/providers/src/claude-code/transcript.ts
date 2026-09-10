@@ -6,6 +6,7 @@ import {
   text,
   type UnparsedWireValue,
   type WireRecord,
+  wholeText,
 } from "@sidecar/wire";
 import { TRANSCRIPT_BOUNDS, transcriptLine } from "../shared/jsonl-transcript.js";
 import { readDirectory, statDirectoryEntry } from "../shared/local-files.js";
@@ -89,12 +90,12 @@ export function linesFromClaudeRecord(record: WireRecord): string[] {
       const answer = oneLine(toolResultText(record), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
       return answer ? [transcriptLine.toolResult(answer)] : [];
     }
-    const prompt = oneLine(claudeMessageText(record), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
+    const prompt = wholeText(claudeMessageText(record));
     return prompt ? [transcriptLine.developer(prompt)] : [];
   }
   if (record.type === CLAUDE_EVENT_TYPE.ASSISTANT) {
     const lines: string[] = [];
-    const words = oneLine(claudeMessageText(record), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
+    const words = wholeText(claudeMessageText(record));
     if (words) lines.push(transcriptLine.agent("Claude", words));
     for (const block of claudeContentBlocks(record)) {
       if (block.type !== CLAUDE_CONTENT_TYPE.TOOL_USE) continue;
@@ -114,7 +115,7 @@ export function linesFromClaudeRecord(record: WireRecord): string[] {
     return words ? [transcriptLine.error(words)] : [];
   }
   if (record.type === CLAUDE_EVENT_TYPE.RESULT) {
-    const words = oneLine(text(record.result), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
+    const words = wholeText(text(record.result));
     return words ? [`Result: ${words}`] : [];
   }
   return [];

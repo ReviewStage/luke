@@ -289,6 +289,8 @@ test("a whole-transcript read is cut from the front to 60,000 characters", async
   assert.ok(record && isWireString(record.transcript));
   assert.equal(record.truncated, true);
   assert.ok(record.transcript.length <= FULL_TRANSCRIPT_CHARS);
+  // From the front: the newest characters are the ones kept.
+  assert.equal(record.transcript.slice(-3), "END");
 });
 
 /**

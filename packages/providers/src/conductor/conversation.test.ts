@@ -317,7 +317,7 @@ function longConversationApi() {
   });
 }
 
-test("an opening read walks to the end of a long transcript in a bounded few requests", async () => {
+test("an opening read walks to the end of a long transcript one page at a time", async () => {
   const api = longConversationApi();
   const plugin = pluginFor(api.fetch);
   await plugin.observe();
@@ -327,9 +327,8 @@ test("an opening read walks to the end of a long transcript in a bounded few req
 
   assert.equal(result.status, "accepted");
   if (result.status !== "accepted") return;
-  // The walk reached the end of the 120 stored messages and answers with the
-  // pages it read: the newest page carries 20 attributed messages, short of
-  // the history target, so the page before it stands with it.
+  // The walk reached the end of the 120 stored messages and answers with
+  // every page it read.
   assert.equal(result.messages.length, LONG_TRANSCRIPT_LENGTH);
   assert.equal(result.messages[0]?.id, longMessageUuid(0));
   assert.equal(result.messages.at(-1)?.id, longMessageUuid(119));
@@ -482,7 +481,9 @@ test("the brain's transcript read renders the attributed words one line each, in
     read.transcript,
     [
       "Developer: Fix the flaky roster test",
-      "Conductor: Looking at the test now. It races the clock.",
+      "Conductor: Looking at the test now.",
+      "",
+      "It races the clock.",
       "Conductor: Fixed: the test now stubs the clock.",
     ].join("\n"),
   );
@@ -492,6 +493,52 @@ test("the brain's transcript read renders the attributed words one line each, in
     assert.equal(request.method, "GET");
     assert.equal(request.pathname, `/v0/sessions/${IDLE_SESSION_UUID}/messages`);
   }
+});
+
+// An agent's final report is a document, not a line: the read hands the brain
+// the whole of it, and only the brain's own tail cut bounds the total.
+test("a transcript read renders a long message whole, with its line breaks", async () => {
+  const report = Array.from(
+    { length: 60 },
+    (_, index) => `- finding ${index}: ${"x".repeat(80)}`,
+  ).join("\n");
+  const api = conversationApi({
+    storedMessages: [
+      storedUserMessage(longMessageUuid(0), "Write the report", TEST_TIME - 2_000),
+      storedAgentEvent(
+        longMessageUuid(1),
+        { type: "assistant", message: { content: [{ type: "text", text: report }] } },
+        TEST_TIME - 1_000,
+      ),
+    ],
+  });
+  const plugin = pluginFor(api.fetch);
+  await plugin.observe();
+
+  const read = await dispatchRead(plugin, "transcript", IDLE_SESSION_UUID);
+
+  assert.equal(read.status, "accepted");
+  if (read.status !== "accepted") return;
+  const lines = read.transcript.split("\n");
+  assert.equal(lines.length, 1 + report.split("\n").length);
+  assert.equal(
+    read.transcript.length,
+    "Developer: Write the report\n".length + "Conductor: ".length + report.length,
+  );
+});
+
+test("a transcript read of a chat longer than one page reaches the stored newest message", async () => {
+  const api = longConversationApi();
+  const plugin = pluginFor(api.fetch);
+  await plugin.observe();
+
+  const read = await dispatchRead(plugin, "transcript", IDLE_SESSION_UUID);
+
+  assert.equal(read.status, "accepted");
+  if (read.status !== "accepted") return;
+  const lines = read.transcript.split("\n");
+  assert.equal(lines.length, LONG_TRANSCRIPT_LENGTH);
+  assert.equal(lines.at(-1), `Developer: message ${LONG_TRANSCRIPT_LENGTH - 1}`);
 });
 
 test("a transcript read refuses a session the latest pass did not report and reaches nothing", async () => {
