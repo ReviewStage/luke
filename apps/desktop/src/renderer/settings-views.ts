@@ -108,17 +108,6 @@ export function standDownReturnPage(stood: StoodDown): SettingsView {
   }
 }
 
-/** How each page names itself, which is how the guide's by-hand paths word it. */
-export const SETTINGS_PAGE_LABEL = {
-  // Not a page a row opens, but a place a setting can be drawn — and the
-  // words the guide's by-hand paths use for it.
-  [SETTINGS_VIEW.ROOT]: "front page",
-  [SETTINGS_VIEW.VOICE]: "Voice",
-  [SETTINGS_VIEW.APPEARANCE]: "Appearance",
-  [SETTINGS_VIEW.SHORTCUTS]: "Keyboard shortcuts",
-  [SETTINGS_VIEW.CONNECTIONS]: "Connections",
-};
-
 const NAV_ROW_ID = {
   [SETTINGS_VIEW.VOICE]: "settings-nav-voice",
   [SETTINGS_VIEW.APPEARANCE]: "settings-nav-appearance",

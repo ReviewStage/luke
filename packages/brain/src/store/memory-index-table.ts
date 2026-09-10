@@ -48,7 +48,7 @@ import type { NotebookEntry } from "./notebook-table.js";
  * indexes everything again from the files alone.
  */
 
-export const MEMORY_ROOT_FILES: readonly string[] = NOTEBOOK_ROOT_FILES;
+const MEMORY_ROOT_FILES: readonly string[] = NOTEBOOK_ROOT_FILES;
 
 /** A chunk's id names its place and content, so an unchanged chunk keeps its id across scans. */
 function chunkId(filePath: string, startLine: number, endLine: number, hash: string): string {
@@ -113,7 +113,7 @@ function walkNotes(directory: string, found: string[]): void {
 }
 
 /** Every file the notebook root holds that the index may carry, read whole. */
-export function scanMemoryFiles(root: string): readonly ScannedFile[] {
+function scanMemoryFiles(root: string): readonly ScannedFile[] {
   const absolutes = MEMORY_ROOT_FILES.map((name) => path.join(root, name));
   walkNotes(path.join(root, DAILY_NOTES_DIRECTORY), absolutes);
   const files: ScannedFile[] = [];
@@ -133,7 +133,7 @@ export function scanMemoryFiles(root: string): readonly ScannedFile[] {
   return files.sort((a, b) => a.path.localeCompare(b.path));
 }
 
-export function listIndexedSources(database: StoreDatabase): readonly IndexedSourceRecord[] {
+function listIndexedSources(database: StoreDatabase): readonly IndexedSourceRecord[] {
   // SAFETY: the columns selected are the ones the row type names.
   const rows = database
     .prepare("SELECT path, source, hash, mtime, size FROM memory_index_sources ORDER BY path")
@@ -247,7 +247,7 @@ function lacksVectors(
   return row.count > 0;
 }
 
-export function cachedEmbeddings(
+function cachedEmbeddings(
   database: StoreDatabase,
   identity: EmbeddingModelIdentity,
   hashes: readonly string[],
@@ -299,7 +299,7 @@ function putCachedEmbeddings(
     .run(MEMORY_SEARCH_DEFAULTS.EMBEDDING_CACHE_MAXIMUM_ENTRIES);
 }
 
-export function removeIndexedPath(database: StoreDatabase, filePath: string): void {
+function removeIndexedPath(database: StoreDatabase, filePath: string): void {
   database.prepare("DELETE FROM memory_index_chunks_fts WHERE path = ?").run(filePath);
   database.prepare("DELETE FROM memory_index_chunks WHERE path = ?").run(filePath);
   database.prepare("DELETE FROM memory_index_sources WHERE path = ?").run(filePath);
@@ -444,7 +444,7 @@ function provenanceOf(row: ChunkRow): MemoryProvenance {
 const CHUNK_COLUMNS = `c.id, c.path, c.start_line, c.end_line, c.text, c.embedding, c.entry_ids, c.updated_at,
   COALESCE(s.origin, '') AS origin`;
 
-export function keywordSearch(
+function keywordSearch(
   database: StoreDatabase,
   query: string,
   limit: number,
@@ -474,7 +474,7 @@ export function keywordSearch(
 }
 
 /** Cosine similarity over every stored vector of the model given, here on the worker. */
-export function vectorSearch(
+function vectorSearch(
   database: StoreDatabase,
   queryVector: readonly number[],
   identity: EmbeddingModelIdentity,
@@ -534,8 +534,8 @@ export function searchMemoryIndex(
 }
 
 /** The most lines one read answers when none are asked for. */
-export const MEMORY_READ_DEFAULT_LINES = 120;
-export const MEMORY_READ_MAXIMUM_LINES = 400;
+const MEMORY_READ_DEFAULT_LINES = 120;
+const MEMORY_READ_MAXIMUM_LINES = 400;
 
 /**
  * Reads lines of one memory file for the model, the path validated against

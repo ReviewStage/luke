@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { WireBoundaryInput } from "@sidecar/wire";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
   type BrainPersistedState,
@@ -13,12 +12,6 @@ import { BrainStateStore } from "./state-store.js";
 import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
 
 const NOW = 1_800_000_000_000;
-
-/** A record as it would come off the wire: the same fields, with no domain type attached. */
-function _raw(value: BrainPersistedState | BrainPersistedState["requests"][number] | undefined) {
-  // SAFETY: a JSON round trip of a plain record is boundary input by construction.
-  return JSON.parse(JSON.stringify(value)) as Record<string, WireBoundaryInput>;
-}
 
 function complete(): BrainPersistedState {
   return {

@@ -53,7 +53,7 @@ type StoredSettings = SettingsUpdateResult["settings"]["stored"];
  * a loop, a credential, or a voice does, so the write cannot be the leaf of
  * the graph however much simpler that would be.
  */
-export interface SettingsLinks {
+interface SettingsLinks {
   refreshAccount: () => Promise<void>;
   applyVoiceCredential: () => Promise<void>;
   setVoice: (voice: StoredSettings["voice"]) => void;

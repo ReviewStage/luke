@@ -15,11 +15,8 @@ export {
 } from "./http-fake.js";
 export {
   isJsonObject,
-  type JsonArray,
   type JsonObject,
-  type JsonPrimitive,
   type JsonValue,
-  type MutableWireRecord,
   type ParsedJsonObject,
 } from "./json.js";
 export { temporaryDirectory } from "./temporary-directory.js";

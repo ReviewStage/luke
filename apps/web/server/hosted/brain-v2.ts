@@ -97,7 +97,7 @@ const HTTP_METHOD = {
 
 type HttpMethod = (typeof HTTP_METHOD)[keyof typeof HTTP_METHOD];
 
-export function hostedBrainCapabilities(model: string | undefined): HostedBrainCapabilities {
+function hostedBrainCapabilities(model: string | undefined): HostedBrainCapabilities {
   return {
     contract: HOSTED_BRAIN_CONTRACT_VERSION,
     model: modelOf(model),

@@ -10,8 +10,8 @@ import { type AgentId, DEFAULT_AGENT_ID } from "@sidecar/runtime/vocabulary";
  * patched file system.
  */
 
-export const AGENTS_DIRECTORY = "agents";
-export const STORE_WORKER_FILE = "store-worker.js";
+const AGENTS_DIRECTORY = "agents";
+const STORE_WORKER_FILE = "store-worker.js";
 const ASAR_ARCHIVE = "app.asar";
 const ASAR_UNPACKED = "app.asar.unpacked";
 

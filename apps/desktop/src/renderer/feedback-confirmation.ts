@@ -21,7 +21,7 @@ export const CONFIRMATION_SCENE = {
   BOOP: "boop",
 } as const;
 
-export type ConfirmationScene = (typeof CONFIRMATION_SCENE)[keyof typeof CONFIRMATION_SCENE];
+type ConfirmationScene = (typeof CONFIRMATION_SCENE)[keyof typeof CONFIRMATION_SCENE];
 
 export interface FeedbackConfirmation {
   motion: FaceMotion;

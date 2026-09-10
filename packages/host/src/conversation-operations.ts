@@ -59,7 +59,7 @@ export function conversationOperations(
 }
 
 /** How often maintenance looks again between launches; a store crosses none of its bounds faster than this. */
-export const CONVERSATION_MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000;
+const CONVERSATION_MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000;
 
 export interface ConversationMaintenanceDependencies {
   store: Pick<StoreWiring, "runMaintenance">;

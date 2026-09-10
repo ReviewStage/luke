@@ -5,11 +5,11 @@ import {
 } from "@sidecar/settings";
 
 /** What one host-side effect is handed: the snapshot the write just stored. */
-export interface HostSettingSideEffectContext {
+interface HostSettingSideEffectContext {
   readonly settings: StoredAppSettings;
 }
 
-export type HostSettingSideEffect = (context: HostSettingSideEffectContext) => Promise<void> | void;
+type HostSettingSideEffect = (context: HostSettingSideEffectContext) => Promise<void> | void;
 
 /**
  * Every side effect a setting can have, over the whole of the id set. Total on
@@ -17,10 +17,10 @@ export type HostSettingSideEffect = (context: HostSettingSideEffectContext) => P
  * say what it does, where the `switch` this replaces ended in a `default` that
  * silently did nothing.
  */
-export type HostSettingSideEffects = Readonly<Record<SettingSideEffectId, HostSettingSideEffect>>;
+type HostSettingSideEffects = Readonly<Record<SettingSideEffectId, HostSettingSideEffect>>;
 
 /** An effect this side has nothing to do about, whichever side owns it. */
-export const noHostSettingSideEffect: HostSettingSideEffect = () => {};
+const noHostSettingSideEffect: HostSettingSideEffect = () => {};
 
 /** What the host's own side effects reach in the concerns around them. */
 export interface HostSettingSideEffectDependencies {

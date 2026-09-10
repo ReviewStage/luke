@@ -5,7 +5,7 @@ import { NativeHelper, type NativeHelperProcess } from "./native-helper";
  * symbol, so a watcher whose state is itself a string can still return one.
  */
 export const LINE_UNAVAILABLE: unique symbol = Symbol("line-unavailable");
-export type LineUnavailable = typeof LINE_UNAVAILABLE;
+type LineUnavailable = typeof LINE_UNAVAILABLE;
 
 /**
  * A line's meaning: a state to report, the helper saying it cannot answer, or

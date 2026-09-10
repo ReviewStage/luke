@@ -14,7 +14,7 @@ import type { SettingsWrites } from "./writes";
  * chord. One press is one ask of the store; the control rests until the
  * store answers, and a refusal is worded where the press was.
  */
-export function ResetGroupButton({
+function ResetGroupButton({
   scope,
   label,
   onReset,

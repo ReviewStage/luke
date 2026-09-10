@@ -1,7 +1,4 @@
-import type { WireRecord, WireValue } from "../json.js";
-
-/** JSON values used by fake HTTP bodies and transcript fixtures. */
-export type JsonPrimitive = string | number | boolean | null;
+import type { WireRecord } from "../json.js";
 
 /**
  * An absent property is spelled `undefined` because that is what a fixture
@@ -12,19 +9,7 @@ export interface JsonObject {
   [key: string]: JsonValue | undefined;
 }
 
-/** Readonly, because a fixture hands its array over rather than lending it. */
-export type JsonArray = readonly JsonValue[];
-
-export type JsonValue = JsonPrimitive | JsonObject | JsonArray;
-
-/**
- * A wire record still being built. The same values a parsed one carries — no
- * absent-field `undefined` — but writable, so a fixture can add the fields its
- * scenario calls for and then hand the record on.
- */
-export interface MutableWireRecord {
-  [key: string]: WireValue;
-}
+export type JsonValue = string | number | boolean | null | JsonObject | readonly JsonValue[];
 
 /**
  * A JSON object parsed from a realtime or transcript fixture line. It is the

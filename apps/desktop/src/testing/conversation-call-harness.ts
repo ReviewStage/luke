@@ -36,7 +36,7 @@ import {
   type MockTrackEvent,
 } from "#testing/realtime-fixtures";
 
-export function sessionField(event: ParsedJsonObject | undefined): ParsedJsonObject | undefined {
+function sessionField(event: ParsedJsonObject | undefined): ParsedJsonObject | undefined {
   if (!event) return undefined;
   const session = event.session;
   return isRecord(session) ? session : undefined;
@@ -53,7 +53,7 @@ export const CONNECTION: RealtimeConnection = {
   callsUrl: "https://api.openai.com/v1/realtime/calls",
 };
 
-export interface ReplyEnding {
+interface ReplyEnding {
   texts: readonly string[];
   kind: ReplyKind | undefined;
   runId?: string;

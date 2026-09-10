@@ -7,7 +7,7 @@ import {
 import { ProviderMark } from "@sidecar/panel";
 
 /** One connectable calendar source the gate offers, absent where the build cannot. */
-export interface CalendarGateSource {
+interface CalendarGateSource {
   /** True while this source's connect is under way, which holds every control. */
   connecting: boolean;
   /** Starts the source's own consent flow, the same one its settings row runs. */

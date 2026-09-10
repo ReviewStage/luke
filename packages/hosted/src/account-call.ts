@@ -47,7 +47,7 @@ export const CALL_FAULT = {
   NETWORK: "network",
 } as const;
 
-export type CallFault = (typeof CALL_FAULT)[keyof typeof CALL_FAULT];
+type CallFault = (typeof CALL_FAULT)[keyof typeof CALL_FAULT];
 
 /** The service answered; every status, including a refusal, is the caller's to read. */
 export interface CallResponse {
@@ -71,7 +71,7 @@ export function callAnswered(answer: CallAnswer): answer is CallResponse {
 }
 
 /** One request, as the build fixes it: nothing here is composed from what a service answered. */
-export interface CallRequest {
+interface CallRequest {
   method: HttpMethod;
   /** The path under the call's own base address. */
   path: string;

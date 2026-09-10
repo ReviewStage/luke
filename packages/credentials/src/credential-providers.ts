@@ -45,8 +45,7 @@ export const CREDENTIAL_CONNECTION = {
   CONSENT: "consent",
 } as const;
 
-export type CredentialConnection =
-  (typeof CREDENTIAL_CONNECTION)[keyof typeof CREDENTIAL_CONNECTION];
+type CredentialConnection = (typeof CREDENTIAL_CONNECTION)[keyof typeof CREDENTIAL_CONNECTION];
 
 /**
  * `<PROVIDER>_API_KEY` is the convention every provider follows. A provider may
@@ -82,7 +81,7 @@ export interface CredentialFormat {
  * than one string so the link can sit on the destination itself instead of
  * beside the sentence.
  */
-export interface CredentialHint {
+interface CredentialHint {
   /** The sentence up to the linked words: "Create a key in Conductor under". */
   lead: string;
   /**

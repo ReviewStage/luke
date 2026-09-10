@@ -180,7 +180,7 @@ export const ARCHIVE_ENCODING = {
 
 export type ArchiveEncoding = (typeof ARCHIVE_ENCODING)[keyof typeof ARCHIVE_ENCODING];
 
-export function isArchiveEncoding(value: UnparsedWireValue): value is ArchiveEncoding {
+function isArchiveEncoding(value: UnparsedWireValue): value is ArchiveEncoding {
   return value === ARCHIVE_ENCODING.IDENTITY || value === ARCHIVE_ENCODING.ZSTD;
 }
 

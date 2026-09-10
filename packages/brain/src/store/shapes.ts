@@ -6,18 +6,11 @@
  * cannot drift in what a checkpoint or a transcript payload means.
  */
 export {
-  type BrainItemsDelta,
-  type BrainJournalDelta,
-  type BrainRequestsDelta,
-  type BrainStateDelta,
   type BrainStateSave,
-  brainStateSave,
   EnvelopeTracker,
   SAVE_KIND,
-  type SaveKind,
 } from "./envelope.js";
 export {
-  contextInputFromWire,
   transcriptEventFromPayload,
   transcriptPayload,
 } from "./transcript-payload.js";

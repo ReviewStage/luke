@@ -14,13 +14,13 @@ import {
 
 export const METRICS_PATH = "/api/admin/metrics";
 
-export const USER_DETAIL_PATH = "/api/admin/user";
+const USER_DETAIL_PATH = "/api/admin/user";
 
 export const USERS_PATH = "/api/admin/users";
 
 export const FAVORITE_PATH = "/api/admin/favorite";
 
-export const DAY_DETAIL_PATH = "/api/admin/day";
+const DAY_DETAIL_PATH = "/api/admin/day";
 
 /**
  * The page's own addresses, distinct from the API's parameters so a pasted

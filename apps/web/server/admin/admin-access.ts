@@ -19,8 +19,6 @@ export const USER_ROLE = {
   ADMIN: "admin",
 } as const;
 
-export type UserRole = (typeof USER_ROLE)[keyof typeof USER_ROLE];
-
 /** Whether a stored role string is the admin role — the whole authorization decision. */
 export function isAdminRole(role: string | null | undefined): boolean {
   return role === USER_ROLE.ADMIN;

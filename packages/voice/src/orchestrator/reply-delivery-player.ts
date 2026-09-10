@@ -3,7 +3,7 @@ import type { BrainReplyClaimResult, BrainReplyOffer } from "@sidecar/brain/requ
 import { REALTIME_STATUS, type RealtimeStatus, voiceExchangeActive } from "@sidecar/realtime";
 
 /** The slice of the voice session a delivered reply is spoken through. */
-export interface ReplyDeliverySession {
+interface ReplyDeliverySession {
   readonly isConnected: boolean;
   readonly microphoneCall: boolean;
   readonly status: RealtimeStatus;

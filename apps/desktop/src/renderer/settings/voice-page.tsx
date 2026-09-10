@@ -141,7 +141,7 @@ export function VoiceSection({
 }
 
 /** The voice controls themselves, below the permission that lets Luke listen. */
-export function VoiceControlsSection({
+function VoiceControlsSection({
   view,
   writes,
 }: {
@@ -175,7 +175,7 @@ export function VoiceControlsSection({
  * that would store one, which is the same action the row's Connect was: a source
  * you have not supplied yet has to be supplied before it can be chosen.
  */
-export function VoiceSourceToggle({
+function VoiceSourceToggle({
   source,
   keyStored,
   storageLocked,
@@ -267,7 +267,7 @@ export function VoiceSourceToggle({
  * cannot be taken back, and they sit at the foot of the Settings front page;
  * this section is only ever read and switched.
  */
-export function ProviderSection({
+function ProviderSection({
   input,
   writes,
   rowIndex,

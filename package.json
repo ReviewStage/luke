@@ -9,9 +9,10 @@
   },
   "scripts": {
     "build": "pnpm --recursive --if-present run build",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "check": "pnpm lint && pnpm knip && pnpm typecheck && pnpm test && pnpm build",
     "evidence:record": "node scripts/record-evidence.mjs",
     "format": "biome format --write .",
+    "knip": "knip --no-config-hints",
     "lint": "biome check . && pnpm oxlint",
     "lint:fix": "biome check --write .",
     "oxlint": "./scripts/oxlint.sh",
@@ -31,6 +32,7 @@
     "@biomejs/biome": "2.5.8",
     "@oxlint/plugins": "1.79.0",
     "husky": "9.1.7",
+    "knip": "6.35.1",
     "lint-staged": "17.3.0",
     "oxlint": "1.79.0",
     "tsx": "4.23.12"

@@ -88,7 +88,7 @@ export async function listConversations(
   return rows.map(recordFromRow);
 }
 
-export async function conversationRecord(
+async function conversationRecord(
   db: HostedStoreDatabase,
   userId: string,
   sessionKey: SessionKey,
@@ -157,7 +157,7 @@ export async function conversationCutoff(
 }
 
 /** Raises the conversation's durable cutoff to `clearedAt`; never lowers it. */
-export async function raiseConversationCutoff(
+async function raiseConversationCutoff(
   db: HostedStoreDatabase,
   userId: string,
   sessionKey: SessionKey,

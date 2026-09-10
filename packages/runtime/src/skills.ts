@@ -14,7 +14,7 @@ import type { SkillDescriptor } from "./registry.js";
 export const SKILL_FILE = "SKILL.md";
 
 /** The most of one skill's instructions a load answers with, cut from the end. */
-export const MAXIMUM_SKILL_CHARS = 20_000;
+const MAXIMUM_SKILL_CHARS = 20_000;
 
 const FRONT_MATTER = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u;
 
@@ -46,7 +46,7 @@ function listValue(value: string): readonly string[] {
 }
 
 /** Reads the few front-matter keys a skill may carry; anything else is left to the file. */
-export function parseSkillFrontMatter(text: string): SkillFrontMatter {
+function parseSkillFrontMatter(text: string): SkillFrontMatter {
   const match = FRONT_MATTER.exec(text);
   if (!match?.[1]) return {};
   const parsed: SkillFrontMatter = {};

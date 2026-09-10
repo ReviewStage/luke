@@ -7,7 +7,7 @@ import { app, nativeImage, nativeTheme } from "electron";
  * and cannot follow the theme, and an unpackaged run has only Electron's stock
  * icon, so the running app draws the Dock image itself from these.
  */
-export const DOCK_ICON_FILES = {
+const DOCK_ICON_FILES = {
   LIGHT: "luke-icon-light.png",
   DARK: "luke-icon-dark.png",
 } as const;
@@ -17,7 +17,7 @@ export const DOCK_ICON_FILES = {
  * switch pressed twice cannot be honoured call by call; the applier below
  * paces itself to this instead, which is Electron's documented floor.
  */
-export const DOCK_SETTLE_MS = 1100;
+const DOCK_SETTLE_MS = 1100;
 
 export interface DockPresenceOptions {
   /** The display whose panel held the switch is brought back forward. */

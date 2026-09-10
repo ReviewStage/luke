@@ -72,10 +72,6 @@ export function isBrainRequestSnapshot(value: UnparsedWireValue): boolean {
   return brainRequestRecordFromWire(value) !== undefined;
 }
 
-export function isBrainRequestSnapshotList(value: UnparsedWireValue): boolean {
-  return Array.isArray(value) && value.every(isBrainRequestSnapshot);
-}
-
 /** A run the renderer may still cancel: accepted, not yet ended. */
 export function brainRequestPending(snapshot: BrainRequestSnapshot): boolean {
   return (

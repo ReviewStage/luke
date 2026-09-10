@@ -64,7 +64,7 @@ const HOOK_EVENT_FILE_EXTENSION = ".json";
 export const HOOK_SPOOL_MAXIMUM_AGE_MS = 24 * 60 * 60 * 1000;
 
 /** One registered entry: the lifecycle event, and the token its hook writes. */
-export interface ObservationHookRegistration<Event extends string> {
+interface ObservationHookRegistration<Event extends string> {
   event: Event;
   /** The provider-defined matcher narrowing which occurrences fire at all. */
   matcher?: string;
@@ -298,7 +298,7 @@ function registrationEntry<Event extends string>(
  * Nothing is returned for a file that cannot be read as a JSON object — never
  * rewrite a file that cannot be read back.
  */
-export function configurationWithObservationHooks<Event extends string>(
+function configurationWithObservationHooks<Event extends string>(
   spec: ObservationHookSpec<Event>,
   source: string | undefined,
   hookScriptPath: string,
@@ -337,7 +337,7 @@ export function configurationWithObservationHooks<Event extends string>(
  * @internal Part of the removal path, reached through
  * {@link removeObservationHooks} and never exported from the package barrel.
  */
-export function configurationWithoutObservationHooks<Event extends string>(
+function configurationWithoutObservationHooks<Event extends string>(
   spec: ObservationHookSpec<Event>,
   source: string,
 ): string | undefined {
@@ -428,7 +428,7 @@ async function writeFileIfChanged(filePath: string, content: string, mode: numbe
  * rather than performed once — and safe to run again at any time: an
  * unchanged file is left untouched down to its mtime.
  */
-export async function installObservationHooks<Event extends string>(
+async function installObservationHooks<Event extends string>(
   spec: ObservationHookSpec<Event>,
   installation: ObservationHookInstallation,
 ): Promise<void> {
@@ -468,7 +468,7 @@ export async function installObservationHooks<Event extends string>(
  * and never exported from the package barrel: nothing outside this package
  * takes a registration back out.
  */
-export async function removeObservationHooks<Event extends string>(
+async function removeObservationHooks<Event extends string>(
   spec: ObservationHookSpec<Event>,
   installation: ObservationHookInstallation,
 ): Promise<void> {

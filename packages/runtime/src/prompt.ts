@@ -136,7 +136,7 @@ export interface ExecutionDirectoryFacts {
  * it under. The description and the parameters are not repeated here — the
  * same request carries the tool's schema, which holds both.
  */
-export interface PromptToolFacts {
+interface PromptToolFacts {
   readonly name: string;
   readonly groups: readonly string[];
 }
@@ -276,7 +276,7 @@ const HEADINGS = {
 } as const satisfies Record<PromptSectionId, string>;
 
 /** The files a profile injects: everything gathered for full, AGENTS.md alone for minimal. */
-export function bootstrapFilesForProfile(
+function bootstrapFilesForProfile(
   files: readonly BootstrapFile[],
   profile: PromptProfile,
 ): readonly BootstrapFile[] {

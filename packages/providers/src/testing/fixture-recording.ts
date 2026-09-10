@@ -50,7 +50,7 @@ type GoldenAnswer =
   | ProviderConversationResult;
 
 /** The same value with every object's keys in one order, at every depth. */
-export function sortedValue(value: JsonValue): JsonValue {
+function sortedValue(value: JsonValue): JsonValue {
   if (Array.isArray(value)) return value.map(sortedValue);
   if (!isJsonObject(value)) return value;
   const record: JsonObject = value;
@@ -61,11 +61,11 @@ export function sortedValue(value: JsonValue): JsonValue {
   );
 }
 
-export function sortedJson(value: JsonValue): string {
+function sortedJson(value: JsonValue): string {
   return `${JSON.stringify(sortedValue(value), undefined, 2)}\n`;
 }
 
-export async function readOptionalFile(filePath: string): Promise<string | undefined> {
+async function readOptionalFile(filePath: string): Promise<string | undefined> {
   return fs.readFile(filePath, "utf8").catch(() => undefined);
 }
 
@@ -153,10 +153,7 @@ const PAGE_FIELD = { DATA: "data", ID: "id" } as const;
 const DEFAULT_RECORDED_PAGE_SIZE = 100;
 
 /** One window of a recorded page, answered as the paged endpoints document it. */
-export function pagedAnswer(
-  stored: readonly JsonValue[],
-  searchParams: URLSearchParams,
-): JsonValue {
+function pagedAnswer(stored: readonly JsonValue[], searchParams: URLSearchParams): JsonValue {
   const after = searchParams.get(PAGE_QUERY.AFTER);
   const limit = Number(searchParams.get(PAGE_QUERY.LIMIT) ?? DEFAULT_RECORDED_PAGE_SIZE);
   let offset = Number(searchParams.get(PAGE_QUERY.OFFSET) ?? 0);
@@ -172,12 +169,12 @@ export function pagedAnswer(
   return { data, offset, hasMore: offset + data.length < stored.length };
 }
 
-export function routeSlug(route: string): string {
+function routeSlug(route: string): string {
   const [method, pathname] = route.split(" ");
   return `${(method ?? "").toLowerCase()}${(pathname ?? "").replaceAll("/", "-")}`;
 }
 
-export async function readDirectoryFiles(directory: string): Promise<readonly string[]> {
+async function readDirectoryFiles(directory: string): Promise<readonly string[]> {
   return (await fs.readdir(directory).catch(() => [])).filter((name) => name.endsWith(".json"));
 }
 

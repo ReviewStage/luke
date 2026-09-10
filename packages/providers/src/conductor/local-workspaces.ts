@@ -26,7 +26,7 @@ import { conductorCreateWorkspaceLink, defaultConductorDatabasePath } from "./ap
  * picker or asked for by name out loud. The mark stays Conductor's; only the
  * word carries the locality.
  */
-export const CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_NAME = "Conductor (local)";
+const CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_NAME = "Conductor (local)";
 
 /** How the reader names the columns it reads, so a rename here is one edit. */
 const CONDUCTOR_REPO_FIELD = {

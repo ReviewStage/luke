@@ -14,8 +14,8 @@ import { getDatabase } from "./db/index.js";
 import * as schema from "./db/schema.js";
 import { DESKTOP_OAUTH_CLIENT, MOBILE_OAUTH_CLIENT } from "./oauth-clients.js";
 
-export const DESKTOP_OAUTH_CLIENT_ID = DESKTOP_OAUTH_CLIENT.id;
-export const MOBILE_OAUTH_CLIENT_ID = MOBILE_OAUTH_CLIENT.id;
+const DESKTOP_OAUTH_CLIENT_ID = DESKTOP_OAUTH_CLIENT.id;
+const MOBILE_OAUTH_CLIENT_ID = MOBILE_OAUTH_CLIENT.id;
 
 const deployment = authDeployment(process.env);
 

@@ -7,12 +7,12 @@ import type { NativeHelperProcess } from "./native-helper";
  * key's lines: a state the reader guessed at would put a "turn your volume up"
  * hint on screen over sound the user can hear perfectly well.
  */
-export const OUTPUT_VOLUME_EVENT = {
+const OUTPUT_VOLUME_EVENT = {
   OUTPUT: "output",
   UNAVAILABLE: "unavailable",
 } as const;
 
-export interface OutputVolumeEdges {
+interface OutputVolumeEdges {
   /** The default output device's switches, on start and on every change. */
   onState(state: OutputAudioState): void;
   /**

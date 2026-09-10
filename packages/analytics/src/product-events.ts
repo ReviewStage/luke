@@ -171,8 +171,7 @@ export const PRODUCT_CALENDAR_SOURCE = {
   APPLE: "apple",
 } as const;
 
-export type ProductCalendarSource =
-  (typeof PRODUCT_CALENDAR_SOURCE)[keyof typeof PRODUCT_CALENDAR_SOURCE];
+type ProductCalendarSource = (typeof PRODUCT_CALENDAR_SOURCE)[keyof typeof PRODUCT_CALENDAR_SOURCE];
 
 /** Where a Luke account stands after an action, never who the account is. */
 export const PRODUCT_ACCOUNT_ACTION = {
@@ -193,8 +192,7 @@ export const PRODUCT_SUPERSET_ACTION = {
   DISCONNECT: "disconnect",
 } as const;
 
-export type ProductSupersetAction =
-  (typeof PRODUCT_SUPERSET_ACTION)[keyof typeof PRODUCT_SUPERSET_ACTION];
+type ProductSupersetAction = (typeof PRODUCT_SUPERSET_ACTION)[keyof typeof PRODUCT_SUPERSET_ACTION];
 
 /**
  * The things the Updates section's buttons ever do. It repeats the guide's
@@ -211,17 +209,16 @@ export const PRODUCT_UPDATE_ACTION = {
   CHANGELOG_OPEN: "changelog_open",
 } as const;
 
-export type ProductUpdateAction =
-  (typeof PRODUCT_UPDATE_ACTION)[keyof typeof PRODUCT_UPDATE_ACTION];
+type ProductUpdateAction = (typeof PRODUCT_UPDATE_ACTION)[keyof typeof PRODUCT_UPDATE_ACTION];
 
 /** Which half of the panel is drawn, said exactly as the guide says it. */
-export const PRODUCT_PANEL_TAB = {
+const PRODUCT_PANEL_TAB = {
   SESSIONS: APP_PANEL_TAB.SESSIONS,
   CONVERSATION: APP_PANEL_TAB.CONVERSATION,
   SETTINGS: APP_PANEL_TAB.SETTINGS,
 } as const satisfies Record<string, AppPanelTab>;
 
-export type ProductPanelTab = (typeof PRODUCT_PANEL_TAB)[keyof typeof PRODUCT_PANEL_TAB];
+type ProductPanelTab = (typeof PRODUCT_PANEL_TAB)[keyof typeof PRODUCT_PANEL_TAB];
 
 /**
  * What opened the panel, never what was on it when it opened. The two the
@@ -235,7 +232,7 @@ export const PRODUCT_PANEL_SOURCE = {
   HOTKEY: "hotkey",
 } as const;
 
-export type ProductPanelSource = (typeof PRODUCT_PANEL_SOURCE)[keyof typeof PRODUCT_PANEL_SOURCE];
+type ProductPanelSource = (typeof PRODUCT_PANEL_SOURCE)[keyof typeof PRODUCT_PANEL_SOURCE];
 
 /**
  * Which settings page a front-page row opened. It repeats the settings
@@ -261,8 +258,7 @@ export const PRODUCT_SEARCH_SURFACE = {
   SETTINGS: "settings",
 } as const;
 
-export type ProductSearchSurface =
-  (typeof PRODUCT_SEARCH_SURFACE)[keyof typeof PRODUCT_SEARCH_SURFACE];
+type ProductSearchSurface = (typeof PRODUCT_SEARCH_SURFACE)[keyof typeof PRODUCT_SEARCH_SURFACE];
 
 /** Whether an ask reached a conversation, never the words it carried. */
 export const PRODUCT_ASK_OUTCOME = {
@@ -310,7 +306,7 @@ export const PRODUCT_ISSUE_ACTION = {
   COMMENT_ADD: "comment_add",
 } as const;
 
-export type ProductIssueAction = (typeof PRODUCT_ISSUE_ACTION)[keyof typeof PRODUCT_ISSUE_ACTION];
+type ProductIssueAction = (typeof PRODUCT_ISSUE_ACTION)[keyof typeof PRODUCT_ISSUE_ACTION];
 
 /**
  * The shape a setting's new value is counted in, never the value itself: a
@@ -425,7 +421,7 @@ interface ProductEventPropertyValue {
  * all are narrower than free text by construction: a version parses as `x.y.z`
  * or not at all, and a count must be a rung of the ladder above.
  */
-export type EnumeratedProductEventProperty = Exclude<
+type EnumeratedProductEventProperty = Exclude<
   ProductEventProperty,
   | typeof PRODUCT_EVENT_PROPERTY.APP_VERSION
   | typeof PRODUCT_EVENT_PROPERTY.SESSION_COUNT
@@ -433,7 +429,7 @@ export type EnumeratedProductEventProperty = Exclude<
 >;
 
 /** Every value each enumerable property may ever hold. */
-export const PRODUCT_EVENT_PROPERTY_VALUES = {
+const PRODUCT_EVENT_PROPERTY_VALUES = {
   [PRODUCT_EVENT_PROPERTY.CONNECTION_ID]: Object.values(CREDENTIAL_PROVIDER_ID),
   [PRODUCT_EVENT_PROPERTY.PROVIDER_ID]: PROVIDER_ID_LIST,
   [PRODUCT_EVENT_PROPERTY.TRACKER_ID]: Object.values(ISSUE_TRACKER_ID),
@@ -518,7 +514,7 @@ export type ProductEventPropertiesFor<Name extends ProductEventName> = {
 };
 
 /** Any event's properties, as a validated event holds them. */
-export type ProductEventProperties = {
+type ProductEventProperties = {
   readonly [Property in ProductEventProperty]?: ProductEventPropertyValue[Property];
 };
 

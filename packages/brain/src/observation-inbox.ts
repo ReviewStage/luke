@@ -156,7 +156,7 @@ export function entryFromEvent(
 }
 
 /** An entry as the turn opens with it: the delta already attached, so nothing is read again. */
-export function eventFromEntry(entry: BrainObservationEntry): BrainWakeEvent {
+function eventFromEntry(entry: BrainObservationEntry): BrainWakeEvent {
   const identity: SessionIdentity = {
     providerId: entry.providerId,
     providerSessionId: entry.providerSessionId,

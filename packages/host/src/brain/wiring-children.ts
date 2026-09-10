@@ -45,7 +45,7 @@ export interface ChildWiringDependencies {
 }
 
 /** What the brain wiring lends delegation: its conversations, opened and closed only through it. */
-export interface ChildWiringHost {
+interface ChildWiringHost {
   /** The brain standing for a conversation now, if any. */
   current: (sessionKey: SessionKey) => BrainAgent | undefined;
   /**
@@ -58,7 +58,7 @@ export interface ChildWiringHost {
   closeConversation: (sessionKey: SessionKey) => Promise<void>;
 }
 
-export interface ChildWiring {
+interface ChildWiring {
   /** The child records, completions, and their lifecycle, for inspection and tests. */
   readonly service: ChildRunService;
   /** The session tools of one conversation: a child named through them must be its own. */

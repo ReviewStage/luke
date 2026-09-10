@@ -68,12 +68,12 @@ export type ChildRunStatus = (typeof CHILD_RUN_STATUS)[keyof typeof CHILD_RUN_ST
 
 const CHILD_RUN_STATUS_LIST: readonly ChildRunStatus[] = Object.values(CHILD_RUN_STATUS);
 
-export function isChildRunStatus(value: UnparsedWireValue): value is ChildRunStatus {
+function isChildRunStatus(value: UnparsedWireValue): value is ChildRunStatus {
   // SAFETY: value is a string; list membership is the vocabulary check.
   return isWireString(value) && CHILD_RUN_STATUS_LIST.includes(value as ChildRunStatus);
 }
 
-export const CHILD_RUN_TERMINAL_STATUS: ReadonlySet<ChildRunStatus> = new Set([
+const CHILD_RUN_TERMINAL_STATUS: ReadonlySet<ChildRunStatus> = new Set([
   CHILD_RUN_STATUS.COMPLETED,
   CHILD_RUN_STATUS.FAILED,
   CHILD_RUN_STATUS.TIMED_OUT,
@@ -230,16 +230,14 @@ export const COMPLETION_DELIVERY_STATUS = {
   NOT_REQUIRED: "not_required",
 } as const;
 
-export type CompletionDeliveryStatus =
+type CompletionDeliveryStatus =
   (typeof COMPLETION_DELIVERY_STATUS)[keyof typeof COMPLETION_DELIVERY_STATUS];
 
 const COMPLETION_DELIVERY_STATUS_LIST: readonly CompletionDeliveryStatus[] = Object.values(
   COMPLETION_DELIVERY_STATUS,
 );
 
-export function isCompletionDeliveryStatus(
-  value: UnparsedWireValue,
-): value is CompletionDeliveryStatus {
+function isCompletionDeliveryStatus(value: UnparsedWireValue): value is CompletionDeliveryStatus {
   return (
     isWireString(value) &&
     // SAFETY: value is a string; list membership is the vocabulary check.

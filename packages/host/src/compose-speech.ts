@@ -26,7 +26,7 @@ import { type OnboardingBeatKind, SpeechArbiter } from "./voice/speech-arbiter.j
 import { VoiceReceiver } from "./voice-receiver.js";
 
 /** What speech reaches in the brain whose words it says. */
-export interface SpeechLinks {
+interface SpeechLinks {
   /** Whether a conversation stands that a held briefing can be given back to. */
   brainCurrent: () => boolean;
   releaseHeld: (briefings: ReturnType<SpeechArbiter["takeHeldBriefings"]>) => void;

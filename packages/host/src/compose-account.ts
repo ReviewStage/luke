@@ -33,7 +33,7 @@ const ACCOUNT_CLIENT_ID = "luke-desktop";
  * genuine cycle: signing in starts the loops, and the loops read the gate, so
  * neither side can be the other's constructor argument.
  */
-export interface AccountLinks {
+interface AccountLinks {
   startCapabilities: () => Promise<void>;
   stopCapabilities: () => Promise<void>;
   /** The calendar step of onboarding, raised before the account event so the gate already stands when the renderer learns of the sign-in. */

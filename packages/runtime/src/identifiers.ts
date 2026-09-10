@@ -116,11 +116,6 @@ export function childIdOf(key: SessionKey | string): string | undefined {
   return parsed?.rest.length === 2 && segment === SUBAGENT_SEGMENT ? childId : undefined;
 }
 
-export function childAgentOf(key: SessionKey | string): AgentId | undefined {
-  const parsed = parsedSessionKey(key);
-  return parsed && parsed.rest[0] === SUBAGENT_SEGMENT ? agentId(parsed.agent) : undefined;
-}
-
 /**
  * The reversible encoding a provider's own identifiers take inside a session
  * key. A provider id or a provider's session id is untrusted text that may
@@ -180,12 +175,6 @@ export function observedSessionRefOf(key: SessionKey | string): SourceSessionRef
   const providerSessionId = decodeKeyComponent(parsed.rest[2] ?? "");
   if (providerId === undefined || providerSessionId === undefined) return undefined;
   return { providerId, providerSessionId };
-}
-
-/** The agent a key belongs to, for a key of the `agent:<id>:...` shape. */
-export function agentIdOf(key: SessionKey | string): AgentId | undefined {
-  const parsed = parsedSessionKey(key);
-  return parsed ? agentId(parsed.agent) : undefined;
 }
 
 /** The agent and the segments after it, for a key of the `agent:<id>:...` shape; nothing for any other. */

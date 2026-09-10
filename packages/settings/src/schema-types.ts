@@ -78,7 +78,7 @@ export const SETTING_ROWS = {
   NONE: "none",
 } as const;
 
-export type SettingRows = (typeof SETTING_ROWS)[keyof typeof SETTING_ROWS];
+type SettingRows = (typeof SETTING_ROWS)[keyof typeof SETTING_ROWS];
 
 /** The concrete runtime families a stored setting may use after its schema guard. */
 export type StoredSettingValue =

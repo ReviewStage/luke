@@ -58,10 +58,10 @@ import { parseMilliseconds, parsePixels, STILL_MS } from "./session-motion";
 export const ERRAND_TARGET_ATTRIBUTE = "data-errand-target";
 
 /** How the stage says which shape is drawn, so a flight can watch it. */
-export const PRESENTATION_ATTRIBUTE = "data-presentation";
+const PRESENTATION_ATTRIBUTE = "data-presentation";
 
 /** How Luke's own face says an errand sets off from it. */
-export const ERRAND_ORIGIN_ATTRIBUTE = "data-errand-origin";
+const ERRAND_ORIGIN_ATTRIBUTE = "data-errand-origin";
 
 /**
  * The landing places that are not a setting's own control. A setting is named

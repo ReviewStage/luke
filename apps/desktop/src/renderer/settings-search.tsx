@@ -96,11 +96,10 @@ export interface SettingsSearchEntry {
 export type SettingsSearchInput = SettingsRowsInput;
 
 /**
- * The page named the way a group's head says it. `SETTINGS_PAGE_LABEL` words
- * the guide's by-hand paths mid-sentence; a head stands alone, so the front
- * page takes its name capitalized — though its rows are drawn headless, at
- * the top of the results, because a search made from the front page needs no
- * row saying where the front page is.
+ * The page named the way a group's head says it. A head stands alone, so the
+ * front page takes its name capitalized — though its rows are drawn
+ * headless, at the top of the results, because a search made from the front
+ * page needs no row saying where the front page is.
  */
 const RESULT_PAGE_WORD = {
   [SETTINGS_VIEW.ROOT]: "Front page",
@@ -274,7 +273,7 @@ export function settingsSearchEntries(input: SettingsSearchInput): readonly Sett
 }
 
 /** One page's matches: the page that heads the group, and the rows under it. */
-export interface SettingsSearchGroup {
+interface SettingsSearchGroup {
   page: SettingsView;
   items: readonly SettingsSearchEntry[];
 }

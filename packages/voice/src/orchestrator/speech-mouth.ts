@@ -116,15 +116,6 @@ export class SpeechMouth {
   /** How many times the offer now in hand has tried to open Luke's own call. */
   #connectAttempts = 0;
   #retryTimer: ScheduledTimer | undefined;
-  /**
-   * Whether the hold, as the panel last drew it, is standing. Read by nothing
-   * that decides whether to speak: the main process is the authority on the
-   * quiet and never offers under it, and the panel's copy reaches here a
-   * render behind, so gating an offer on it would hand a released beat back
-   * held against a quiet that had already ended. It stands only so a hold
-   * beginning can cut a reply and settle the unspoken offer.
-   */
-  #quiet = false;
 
   constructor(options: SpeechMouthOptions) {
     this.#options = options;
@@ -142,7 +133,6 @@ export class SpeechMouth {
    * no action here — the arbiter offers what it held when the quiet ends.
    */
   setHeld(active: boolean): void {
-    this.#quiet = active;
     if (!active) return;
     this.#settleCurrent(SPEECH_OUTCOME.HELD);
     this.#connectAttempts = 0;

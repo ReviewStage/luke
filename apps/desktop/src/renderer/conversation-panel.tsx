@@ -59,10 +59,10 @@ const ENTRY_TIME = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute:
 const timeBreakLabel = createConversationTimeBreakFormatter();
 
 /** What a reader is told of a run still going; the sighted read the face and the dots. */
-export const CONVERSATION_THINKING_LABEL = "Luke is thinking";
+const CONVERSATION_THINKING_LABEL = "Luke is thinking";
 
 /** What a reader is told while a spoken turn is still owed its first words. */
-export const CONVERSATION_LISTENING_LABEL = "Luke is listening";
+const CONVERSATION_LISTENING_LABEL = "Luke is listening";
 
 /** How long a run goes before the wait says how long it has been. */
 const THINKING_ELAPSED_AFTER_MS = 10_000;

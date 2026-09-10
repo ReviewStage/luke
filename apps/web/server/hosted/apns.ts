@@ -97,17 +97,16 @@ export const APNS_INTERRUPTION_LEVEL = {
   TIME_SENSITIVE: "time-sensitive",
 } as const;
 
-export type ApnsInterruptionLevel =
-  (typeof APNS_INTERRUPTION_LEVEL)[keyof typeof APNS_INTERRUPTION_LEVEL];
+type ApnsInterruptionLevel = (typeof APNS_INTERRUPTION_LEVEL)[keyof typeof APNS_INTERRUPTION_LEVEL];
 
-export interface ApnsAlert {
+interface ApnsAlert {
   title: string;
   subtitle?: string;
   body?: string;
 }
 
 /** The `aps` dictionary the system reads, as Apple documents it. */
-export interface ApnsSystemFields {
+interface ApnsSystemFields {
   alert: ApnsAlert;
   sound?: string;
   "interruption-level"?: ApnsInterruptionLevel;
@@ -190,7 +189,7 @@ const APNS_REQUEST_TIMEOUT_MS = 10_000;
  * for the life of the sender so a tick's notifications share it and closed
  * when the sender is.
  */
-export function http2ApnsTransport(): ApnsTransport {
+function http2ApnsTransport(): ApnsTransport {
   const sessions = new Map<string, ReturnType<typeof connectHttp2>>();
 
   /**

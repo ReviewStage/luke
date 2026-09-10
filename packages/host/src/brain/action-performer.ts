@@ -33,7 +33,7 @@ export interface WorkspaceCreationDefaults {
 }
 
 /** The notebook as an action reaches it: remember answers whether the words now stand, forget whether the entry is gone. */
-export interface BrainNotebookWriter {
+interface BrainNotebookWriter {
   remember(ask: { id: string; words: string; replaces?: string }): Promise<boolean>;
   forget(id: string): Promise<boolean>;
 }

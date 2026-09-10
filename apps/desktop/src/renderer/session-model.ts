@@ -50,13 +50,7 @@ import type { AppState } from "#shared/messages/app-state";
  * combination is validated against the observed roster by the same rules the
  * chips narrow the drawn list by, and the two readings must not drift apart.
  */
-export {
-  SESSION_FILTER,
-  SESSION_FILTER_AXIS,
-  type SessionFilter,
-  type SessionFilterAxis,
-  sessionFilterAxis,
-};
+export { SESSION_FILTER, SESSION_FILTER_AXIS, type SessionFilter, type SessionFilterAxis };
 
 function matchesFilter(session: SessionView, filter: SessionFilter): boolean {
   if (filter === SESSION_FILTER.LOCAL || filter === SESSION_FILTER.CLOUD) {
@@ -72,10 +66,7 @@ function matchesFilter(session: SessionView, filter: SessionFilter): boolean {
 }
 
 /** Whether a row answers the whole selection, on the axes' own combining rules. */
-export function matchesSessionFilters(
-  session: SessionView,
-  filters: readonly SessionFilter[],
-): boolean {
+function matchesSessionFilters(session: SessionView, filters: readonly SessionFilter[]): boolean {
   return matchesFilterSelection(filters, (filter) => matchesFilter(session, filter));
 }
 
@@ -211,7 +202,7 @@ export const DEFAULT_SESSION_VIEW: SessionArrangement = {
  * two providers' workspace ids share no namespace — and the name is what the
  * group is titled.
  */
-export interface DisplayWorkspace {
+interface DisplayWorkspace {
   id: string;
   scopeId?: string;
   managerName?: string;
@@ -219,7 +210,7 @@ export interface DisplayWorkspace {
 }
 
 /** One app that independently associates itself with the session. */
-export interface DisplayApplication {
+interface DisplayApplication {
   id: string;
   name: string;
   scope: SessionApplicationScope;
@@ -315,14 +306,14 @@ export interface SessionFilterOption {
 }
 
 /** One axis's choices, offered as a labelled row of the options sheet. */
-export interface SessionFilterGroup {
+interface SessionFilterGroup {
   axis: SessionFilterAxis;
   label: string;
   options: readonly SessionFilterOption[];
 }
 
 /** What became of the query, reported so no narrowing is ever silent. */
-export interface SessionSearchOutcome {
+interface SessionSearchOutcome {
   /** The query's words, lowercased — what each row was actually read against. */
   tokens: readonly string[];
   /** How many sessions the query was read against: the filtered set. */
@@ -399,7 +390,7 @@ function sessionDetail(session: Session, urgency: SessionUrgency): string {
  * provider's own; only the wording is the surface's, and the minus is the
  * real minus sign so the two figures read as a diff rather than arithmetic.
  */
-export function sessionDiffLabel(diff: SessionDiffSummary): string {
+function sessionDiffLabel(diff: SessionDiffSummary): string {
   const files = `${diff.filesChanged} ${diff.filesChanged === 1 ? "file" : "files"}`;
   return `${files} +${diff.linesAdded} −${diff.linesRemoved}`;
 }

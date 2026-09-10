@@ -57,7 +57,7 @@ const HELD_NOTICE_RELEASE_INTERVAL_MS = 30_000;
 const APPLE_ACCESS_POLL_INTERVAL_MS = 10_000;
 
 /** What the calendars reach in the speech the meetings hold. */
-export interface CalendarsLinks {
+interface CalendarsLinks {
   reconcileSpeech: () => void;
   withdrawBeat: (kind: OnboardingBeatKind) => void;
   /** The arbiter's held briefings go with the meetings that were holding them. */

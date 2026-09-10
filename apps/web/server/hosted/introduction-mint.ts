@@ -61,7 +61,7 @@ const INTRODUCTION_MINT_FIELDS: readonly string[] = ["voice", "speed"];
  * anonymous caller sending something this endpoint does not take is probing
  * it, not misconfigured.
  */
-export async function introductionMintPreferences(
+async function introductionMintPreferences(
   request: Request,
 ): Promise<VoiceMintPreferences | undefined> {
   return voiceMintPreferences(request, INTRODUCTION_MINT_FIELDS);

@@ -215,14 +215,14 @@ export function nextIntroductionBeat(
  * exactly as the panel's list does — but what leaves the machine stays a
  * first impression, not an inventory: the panel's own visible depth.
  */
-export const INTRODUCTION_SPOKEN_SESSION_LIMIT = 5;
+const INTRODUCTION_SPOKEN_SESSION_LIMIT = 5;
 
 /**
  * The script, as directions to the voice rather than text to display: the
  * introduction is entirely spoken, so these lines never render. Quoted words
  * are kept exactly; the rest is said in Luke's own voice.
  */
-export const INTRODUCTION_SCRIPT = {
+const INTRODUCTION_SCRIPT = {
   // Where Luke lives is said after he has flown there, not before: the words
   // and the screen must agree.
   HELLO: [

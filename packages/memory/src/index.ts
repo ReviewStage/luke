@@ -1,15 +1,8 @@
-export {
-  type ChunkingOptions,
-  chunkMarkdown,
-  DEFAULT_CHUNKING,
-  hashText,
-  type MemoryChunk,
-} from "./chunking.js";
+export { chunkMarkdown, hashText } from "./chunking.js";
 export {
   type ConversationLineHit,
   type EmbeddingModelIdentity,
   type EmbeddingWrite,
-  type IndexedChunkWrite,
   type IndexedFileWrite,
   type IndexedSourceRecord,
   type KeywordHit,
@@ -62,15 +55,10 @@ export {
 export {
   appendNotebookEntry,
   isNotebookRootFile,
-  maximumNotebookEntryLength,
   NOTEBOOK_FILE,
   NOTEBOOK_ROOT_FILES,
-  type NotebookFile,
   notebookEntryText,
-  type ParsedNotebook,
-  type ParsedNotebookEntry,
   parseNotebook,
-  REMEMBERED_HEADING,
   removeNotebookEntry,
 } from "./notebook-markdown.js";
 export {

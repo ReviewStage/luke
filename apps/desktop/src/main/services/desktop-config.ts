@@ -5,7 +5,7 @@ import type { RunMode } from "@sidecar/host";
  * from `process.argv` again. The capture and fixture flags travel as one
  * record because the bootstrap reads them as a block.
  */
-export interface DesktopLaunch {
+interface DesktopLaunch {
   /** Where an evidence run writes its PNG, and the sign that this is one. */
   readonly captureOutput: string | undefined;
   readonly profile: string;

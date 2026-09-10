@@ -68,9 +68,9 @@ export function secretOrUnavailable(secret: string | undefined): { secret: strin
  * small positive integer so a rotation can add the next key beside the last
  * and every stored envelope still says which one opens it.
  */
-export type PayloadKeyId = number;
+type PayloadKeyId = number;
 
-export const CURRENT_PAYLOAD_KEY_ID: PayloadKeyId = 1;
+const CURRENT_PAYLOAD_KEY_ID: PayloadKeyId = 1;
 
 export interface PayloadKeyRing {
   /** The key new envelopes are sealed under. */

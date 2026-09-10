@@ -15,24 +15,24 @@ import type { EnvelopeRead } from "./brain-envelope.js";
  * other envelope is saved whole, replacing whatever stood.
  */
 
-export interface BrainItemsDelta {
+interface BrainItemsDelta {
   /** How many leading items are unchanged; everything after them is replaced by `append`. */
   keepPrefix: number;
   append: readonly ResponsesInputItem[];
 }
 
-export interface BrainRequestsDelta {
+interface BrainRequestsDelta {
   /** Records to insert or replace, each with the position it holds in the envelope's list. */
   upsert: readonly { ordinal: number; record: BrainRequestRecord }[];
   remove: readonly string[];
 }
 
-export interface BrainJournalDelta {
+interface BrainJournalDelta {
   upsert: readonly { ordinal: number; entry: BrainJournalEntry }[];
   remove: readonly { runId: string; callId: string }[];
 }
 
-export interface BrainStateDelta {
+interface BrainStateDelta {
   /** The generation's stamp, when this save sets, changes, or clears it. */
   checkpointFormat?: { stamp: string | undefined };
   items?: BrainItemsDelta;
@@ -52,8 +52,6 @@ export const SAVE_KIND = {
   /** The difference from the last envelope saved, applied to the generation it names. */
   AMEND: "amend",
 } as const;
-
-export type SaveKind = (typeof SAVE_KIND)[keyof typeof SAVE_KIND];
 
 /**
  * What one save carries, and the one generation id the database checks it

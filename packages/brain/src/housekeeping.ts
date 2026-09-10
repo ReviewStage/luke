@@ -37,7 +37,7 @@ import { REFUSAL_REASON } from "./turn.js";
  * outcome says which, and only a turn that ran to its end is reported done.
  */
 
-export const HOUSEKEEPING_TOOLS: ReadonlySet<string> = new Set([
+const HOUSEKEEPING_TOOLS: ReadonlySet<string> = new Set([
   BRAIN_TOOL.READ_WORKSPACE_FILE,
   BRAIN_TOOL.WRITE_WORKSPACE_FILE,
 ]);
@@ -59,7 +59,7 @@ export interface MemoryHousekeepingOptions {
   readonly runId: string;
 }
 
-export interface PrivateTurnOptions {
+interface PrivateTurnOptions {
   readonly runtime: AgentRuntime;
   /** A conversation's context as it stands, copied into the private context; none for a turn over nothing. */
   readonly items?: readonly WireRecord[];
@@ -78,7 +78,7 @@ export interface PrivateTurnOptions {
  * with an inert event sink, and disposed whatever happened, so nothing the
  * turn read or said outlives it or reaches a conversation.
  */
-export async function runPrivateTurn(options: PrivateTurnOptions): Promise<RuntimeRunEnd> {
+async function runPrivateTurn(options: PrivateTurnOptions): Promise<RuntimeRunEnd> {
   const opened = await options.runtime.openContext(undefined, JSON.stringify({}));
   try {
     if (options.items && options.items.length > 0) {

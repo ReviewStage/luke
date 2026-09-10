@@ -11,7 +11,7 @@ import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
  * of this kind is waiting, because pressing it then continues rather than
  * opens.
  */
-export function FeedbackOffer({
+function FeedbackOffer({
   kind,
   control,
 }: {

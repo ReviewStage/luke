@@ -58,7 +58,7 @@ export interface PosthogPerson {
 }
 
 /** Every kind of value one of this build's event properties may hold. */
-export type PosthogPropertyValue = string | number | boolean | PosthogPerson;
+type PosthogPropertyValue = string | number | boolean | PosthogPerson;
 
 /** One item of the documented batch document, as this build builds it. */
 export interface PosthogBatchItem {

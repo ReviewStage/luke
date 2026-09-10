@@ -11,7 +11,7 @@ import { ARCHIVE_ENCODING, type ArchiveEncoding } from "@sidecar/runtime/vocabul
  * reason named rather than read as garbage.
  */
 
-export const ARCHIVE_ZSTD_SUFFIX = ".zst";
+const ARCHIVE_ZSTD_SUFFIX = ".zst";
 
 /** The runtime's zstd pair, or nothing on a runtime whose zlib lacks it, which keeps the plain path instead of throwing. */
 const zstd =

@@ -50,7 +50,7 @@ function connectionSource(provider: AccountProvider): LoopbackConnectionSource |
   return undefined;
 }
 
-export interface AccountSessionStore {
+interface AccountSessionStore {
   readAccount(): Promise<StoredAccount | undefined>;
   setAccount(account: StoredAccount): Promise<AccountSnapshot>;
   clearAccount(): Promise<AccountSnapshot>;

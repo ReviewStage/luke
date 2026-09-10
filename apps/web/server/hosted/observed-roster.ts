@@ -29,7 +29,7 @@ import {
  */
 export const OBSERVED_ROSTER_VERSION = 1;
 
-export interface ObservedRosterProvider {
+interface ObservedRosterProvider {
   readonly providerId: CloudAgentProviderId;
   readonly observations: readonly ProviderSessionObservation[];
   readonly projects: readonly WorkspaceProject[];
@@ -177,12 +177,4 @@ export function parseStoredJson(body: string): UnparsedWireValue {
  */
 export function decodeObservedRoster(body: string): ObservedRoster | undefined {
   return observedRosterSchema.parse(parseStoredJson(body));
-}
-
-/** One provider's slice of the roster, or nothing where the snapshot holds none for it. */
-export function rosterProvider(
-  roster: ObservedRoster,
-  providerId: CloudAgentProviderId,
-): ObservedRosterProvider | undefined {
-  return roster.providers.find((provider) => provider.providerId === providerId);
 }

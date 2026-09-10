@@ -62,9 +62,3 @@ export interface MicrophoneRoute {
   lid: LidState;
   builtInName?: string;
 }
-
-/** The talk key as the panel should describe it, as an accelerator. */
-export interface VoiceHotkeyState {
-  hotkey?: string;
-  held: boolean;
-}

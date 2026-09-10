@@ -7,7 +7,7 @@ import type { NativeHelperProcess } from "./native-helper";
  * the difference between hold-to-talk and no talk key at all, and the app has a
  * fallback to reach for if it says so.
  */
-export const TALK_KEY_EVENT = {
+const TALK_KEY_EVENT = {
   REGISTERED: "registered",
   DOWN: "down",
   UP: "up",
@@ -15,10 +15,7 @@ export const TALK_KEY_EVENT = {
 } as const;
 
 /** One thing the helper reported about the chord it was given. */
-export type TalkKeyEdge =
-  | { kind: "down" }
-  | { kind: "up" }
-  | { kind: "registered"; accelerator: string };
+type TalkKeyEdge = { kind: "down" } | { kind: "up" } | { kind: "registered"; accelerator: string };
 
 export interface TalkKeyEdges {
   onPress(): void;
@@ -61,7 +58,7 @@ export interface TalkKeyWatch {
  */
 const EXIT_WAIT_MS = 1000;
 
-export function parseTalkKeyLine(line: string): ParsedLine<TalkKeyEdge> {
+function parseTalkKeyLine(line: string): ParsedLine<TalkKeyEdge> {
   if (line === TALK_KEY_EVENT.DOWN) return { kind: "down" };
   if (line === TALK_KEY_EVENT.UP) return { kind: "up" };
   if (line.startsWith(`${TALK_KEY_EVENT.REGISTERED} `)) {

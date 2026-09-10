@@ -31,7 +31,7 @@ export function Skeleton({
 }
 
 /** A bone boxed to the height of the text line it stands for, so the swap to words moves nothing. */
-export function SkeletonLine({ box, bone }: { box: string; bone: string }): React.JSX.Element {
+function SkeletonLine({ box, bone }: { box: string; bone: string }): React.JSX.Element {
   return (
     <div className={`flex items-center ${box}`}>
       <Skeleton className={bone} />
@@ -46,7 +46,7 @@ export const SKELETON_PLOT = {
   SIGN_IN_METHODS: "h-[120px]",
 } as const;
 
-export type SkeletonPlot = (typeof SKELETON_PLOT)[keyof typeof SKELETON_PLOT];
+type SkeletonPlot = (typeof SKELETON_PLOT)[keyof typeof SKELETON_PLOT];
 
 export const SKELETON_SHAPE = {
   HEADING: "heading",

@@ -216,7 +216,6 @@ export function brainHarness() {
       thread.filter((e) => e.kind === CONVERSATION_ENTRY_KIND.REPLY && e.requestId === runId),
     submitMany,
     broadcasts,
-    deliveries,
     unclaimed,
     receiver,
     offers,

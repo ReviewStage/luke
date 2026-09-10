@@ -59,7 +59,7 @@ import { agentRootPath } from "./store-path.js";
 import { type StoreWiring, wireStore } from "./store-wiring.js";
 import { reporterOf } from "./wire-helpers.js";
 
-export type BrainWiring = ReturnType<typeof wireBrain>;
+type BrainWiring = ReturnType<typeof wireBrain>;
 
 export interface BrainComposer extends Composer {
   readonly wiring: BrainWiring;

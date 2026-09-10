@@ -119,10 +119,8 @@ const NO_CREDENTIAL = "no embedding credential stands";
 const RATE_LIMITED = "the embedding provider is rate limiting";
 
 /** A conversation hit's path names the conversation, never a file; a read of it answers nothing. */
-export const CONVERSATION_RESULT_PATH_PREFIX = "conversation:";
-
 export function conversationResultPath(sessionKey: SessionKey): string {
-  return `${CONVERSATION_RESULT_PATH_PREFIX}${sessionKey}`;
+  return `conversation:${sessionKey}`;
 }
 
 /** A line's keyword score: the share of the query's tokens it carries; a search has no bm25 over Conversation. */

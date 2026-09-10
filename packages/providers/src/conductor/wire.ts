@@ -156,18 +156,18 @@ export const CONDUCTOR_STORED_MESSAGE_FIELD = {
  * else the endpoint may answer with is a kind this build does not know, and
  * is dropped rather than guessed at.
  */
-export const CONDUCTOR_STORED_MESSAGE_TYPE = {
+const CONDUCTOR_STORED_MESSAGE_TYPE = {
   USER_MESSAGE: "userMessage",
   AGENT: "agent",
 } as const;
 
 /** Inside a stored user message's content: the developer's words themselves. */
-export const CONDUCTOR_USER_CONTENT_FIELD = {
+const CONDUCTOR_USER_CONTENT_FIELD = {
   MESSAGE: "message",
 } as const;
 
 /** Inside a stored agent message's content: the harness event it wraps, whole. */
-export const CONDUCTOR_AGENT_CONTENT_FIELD = {
+const CONDUCTOR_AGENT_CONTENT_FIELD = {
   RAW_PAYLOAD: "rawPayload",
 } as const;
 
@@ -180,7 +180,7 @@ export const CONDUCTOR_AGENT_CONTENT_FIELD = {
  * tool calls, tool output, lifecycle — is not the agent speaking to the
  * developer, so it never becomes a bubble.
  */
-export const CONDUCTOR_HARNESS_EVENT_FIELD = {
+const CONDUCTOR_HARNESS_EVENT_FIELD = {
   TYPE: "type",
   MESSAGE: "message",
   CONTENT: "content",
@@ -189,10 +189,10 @@ export const CONDUCTOR_HARNESS_EVENT_FIELD = {
   TEXT: "text",
 } as const;
 
-export const CONDUCTOR_CLAUDE_ASSISTANT_EVENT_TYPE = "assistant";
-export const CONDUCTOR_CLAUDE_TEXT_BLOCK_TYPE = "text";
-export const CONDUCTOR_CODEX_ITEM_COMPLETED_EVENT_TYPE = "item.completed";
-export const CONDUCTOR_CODEX_AGENT_MESSAGE_ITEM_TYPE = "agentMessage";
+const CONDUCTOR_CLAUDE_ASSISTANT_EVENT_TYPE = "assistant";
+const CONDUCTOR_CLAUDE_TEXT_BLOCK_TYPE = "text";
+const CONDUCTOR_CODEX_ITEM_COMPLETED_EVENT_TYPE = "item.completed";
+const CONDUCTOR_CODEX_AGENT_MESSAGE_ITEM_TYPE = "agentMessage";
 
 /**
  * How a conversation read is bounded: the documented page size the endpoint
@@ -345,7 +345,7 @@ export function conversationMessageFromRecord(
  * whole; a started item is still empty and an item of any other kind is a
  * tool at work. Every other event answers nothing, which drops its message.
  */
-export function agentWordsFromHarnessEvent(rawPayload: UnparsedWireValue): string | undefined {
+function agentWordsFromHarnessEvent(rawPayload: UnparsedWireValue): string | undefined {
   if (!isRecord(rawPayload)) return undefined;
   if (rawPayload[CONDUCTOR_HARNESS_EVENT_FIELD.TYPE] === CONDUCTOR_CLAUDE_ASSISTANT_EVENT_TYPE) {
     const message = rawPayload[CONDUCTOR_HARNESS_EVENT_FIELD.MESSAGE];
@@ -413,8 +413,6 @@ export function workspaceFromRecord(record: WireRecord): ConductorWorkspace | un
   const repoUrl = textFromRecord(record, CONDUCTOR_FIELD.REPO_URL);
   return {
     id,
-    // The listing names each workspace's repository itself, so the label no
-    // longer rides in from the project that grouped it.
     repositoryLabel: repositoryLabel(repoUrl, undefined),
     lastActivityAt,
     ...(name ? { name } : undefined),

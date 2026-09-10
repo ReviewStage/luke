@@ -80,7 +80,7 @@ export interface BrainWorkspaceAccess {
 }
 
 /** One spawn as the agent asks it of the host, already bounded and validated from the model's call. */
-export interface BrainChildSpawnAsk {
+interface BrainChildSpawnAsk {
   readonly task: string;
   readonly label?: string;
   readonly context?: ChildContextMode;
@@ -96,7 +96,7 @@ export interface BrainChildSpawnAsk {
 }
 
 /** One child as the host lists it: its record and, once it has ended, its completion. */
-export interface BrainChildListing {
+interface BrainChildListing {
   readonly record: ChildRunRecord;
   readonly completion: ChildCompletionRecord | undefined;
 }
@@ -197,7 +197,7 @@ export function refusalForPolicy(
  * and validated by the host, which answers only for paths inside the
  * notebook. Neither is an effect, so neither runs through the journal.
  */
-export async function memoryToolCall(
+async function memoryToolCall(
   call: Pick<ToolInvocation, "name">,
   args: WireRecord,
   memory: BrainMemoryAccess,

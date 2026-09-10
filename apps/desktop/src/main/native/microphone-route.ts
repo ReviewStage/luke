@@ -11,7 +11,7 @@ import type { NativeHelperProcess } from "./native-helper";
 /** The one word the helper takes; its one line is read by the parser below. */
 export const MICROPHONE_ROUTE_PROBE = "probe";
 
-export interface MicrophoneRouteEdges {
+interface MicrophoneRouteEdges {
   /** The route as read, on start, on every input change, and per probe. */
   onRoute(route: MicrophoneRoute): void;
   /** The route cannot be read — no helper, or the helper died. */

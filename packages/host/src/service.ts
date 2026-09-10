@@ -77,7 +77,7 @@ const REFUSAL = {
  * in-process transport; the seams are drawn so the process split that
  * follows moves the transport and nothing here.
  */
-export interface GatewayBrainAccess {
+interface GatewayBrainAccess {
   /** The brain of one conversation as it stands now; nothing between transitions or for an unopened key. */
   current: (sessionKey?: SessionKey) => BrainAgent | undefined;
   agentForRun: (runId: string) => BrainAgent | undefined;
@@ -94,12 +94,12 @@ export interface GatewayBrainAccess {
   updateConfiguration: (patch: SettableConfigurationPatch) => readonly string[];
 }
 
-export interface GatewayMemoryAccess {
+interface GatewayMemoryAccess {
   status: () => WireRecord;
 }
 
 /** The one current voice receiver, as the client owning it reports: ready, and under which epoch. */
-export interface GatewayReceiverState {
+interface GatewayReceiverState {
   isReady: () => boolean;
   epoch: () => number;
 }

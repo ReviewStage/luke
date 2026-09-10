@@ -50,10 +50,10 @@ export const PROVIDER_OBSERVATION = {
   KEY: "key",
 } as const;
 
-export type ProviderObservation = (typeof PROVIDER_OBSERVATION)[keyof typeof PROVIDER_OBSERVATION];
+type ProviderObservation = (typeof PROVIDER_OBSERVATION)[keyof typeof PROVIDER_OBSERVATION];
 
 /** Everything a provider's plugin is built from inside one contract case. */
-export interface ProviderFixtureInput {
+interface ProviderFixtureInput {
   /** A temporary directory seeded from `home/`; the provider's home for this case. */
   readonly home: string;
   readonly now: () => number;

@@ -68,10 +68,10 @@ export const WRITE_SUBJECT = {
   WORKSPACE: "workspace",
 } as const;
 
-export type WriteSubject = (typeof WRITE_SUBJECT)[keyof typeof WRITE_SUBJECT];
+type WriteSubject = (typeof WRITE_SUBJECT)[keyof typeof WRITE_SUBJECT];
 
 /** What one authenticated write became, and whatever the provider answered with. */
-export interface CloudWriteOutcome {
+interface CloudWriteOutcome {
   outcome: ProviderActionResult;
   body?: WireRecord;
 }
@@ -83,7 +83,7 @@ export interface CloudWriteOutcome {
  * returned, so the check and the write share one synchronous step and a
  * credential cleared in the gap between them has no gap to land in.
  */
-export type CredentialBoundRead = (
+type CredentialBoundRead = (
   segments: readonly string[],
   query: Readonly<Record<string, string>> | undefined,
   options: Readonly<{ timeoutMs?: number; document?: string }> | undefined,

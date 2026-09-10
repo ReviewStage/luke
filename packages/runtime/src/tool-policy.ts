@@ -108,7 +108,7 @@ export interface ChildPolicyContext {
 }
 
 /** The child restriction layer for a child at this depth: the fixed exclusions, widened at the cap. */
-export function childToolPolicy(child: ChildPolicyContext): ToolPolicy {
+function childToolPolicy(child: ChildPolicyContext): ToolPolicy {
   const cap = child.depthCap ?? CHILD_DEPTH_CAP;
   return {
     deny:

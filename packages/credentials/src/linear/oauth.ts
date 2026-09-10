@@ -135,7 +135,7 @@ export interface LinearSignInOptions {
  * nothing to read Linear with, and the caller says so rather than storing a
  * grant that cannot work.
  */
-export function grantFrom(payload: UnparsedWireValue, now: number): LinearGrant | undefined {
+function grantFrom(payload: UnparsedWireValue, now: number): LinearGrant | undefined {
   if (!isRecord(payload)) return undefined;
   const record = payload;
   const accessToken = record.access_token;
@@ -283,9 +283,6 @@ export const LINEAR_REFRESH_STATUS = {
   REFUSED: ACTION_RESULT_STATUS.REJECTED,
   UNREACHABLE: "unreachable",
 } as const;
-
-export type LinearRefreshStatus =
-  (typeof LINEAR_REFRESH_STATUS)[keyof typeof LINEAR_REFRESH_STATUS];
 
 export type LinearRefreshOutcome =
   | { status: typeof LINEAR_REFRESH_STATUS.RENEWED; grant: LinearGrant }

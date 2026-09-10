@@ -36,6 +36,7 @@ export * from "../../../packages/actions/src/index.js";
 // table's is the whole of it and the session package's is the advertised
 // subset of the same strings, proven identical where the table declares it. A
 // star export from two doors carries neither, so the whole one is named here.
+/** @public No file imports the type by name, but without this door the two star exports collide on it. */
 export { ACTION_KIND, type ActionKind } from "../../../packages/actions/src/index.js";
 export * from "../../../packages/analytics/src/index.js";
 export * from "../../../packages/brain/src/index.js";

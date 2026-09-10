@@ -27,7 +27,7 @@ export const SPOKEN_NOTICE_MAX_AGE_MS = 2 * 60_000;
  */
 export const MAXIMUM_PENDING_BRIEFINGS = 8;
 
-export type SpeechKind = ProactiveSpeechTurn["kind"];
+type SpeechKind = ProactiveSpeechTurn["kind"];
 
 /** The scripted beats, each spoken at most once to the end per run. */
 export type OnboardingBeatKind = Exclude<SpeechKind, typeof BRIEFING_SPEECH_KIND>;
@@ -45,7 +45,7 @@ export const SPEECH_DECISION = {
   ...SPEECH_OUTCOME,
 } as const;
 
-export type SpeechDecision = (typeof SPEECH_DECISION)[keyof typeof SPEECH_DECISION];
+type SpeechDecision = (typeof SPEECH_DECISION)[keyof typeof SPEECH_DECISION];
 
 /**
  * One proactive turn waiting to be offered. A briefing keeps the whole
@@ -53,7 +53,7 @@ export type SpeechDecision = (typeof SPEECH_DECISION)[keyof typeof SPEECH_DECISI
  * beat is its kind alone, worded by the mouth at speak time from what the
  * renderer already draws.
  */
-export type SpeechRequest = {
+type SpeechRequest = {
   id: string;
   requestedAt: number;
   /** Whether the request waits out the announcement hold rather than the clock. */
@@ -64,17 +64,17 @@ export type SpeechRequest = {
   | { kind: typeof CALENDAR_ONBOARDING_SPEECH_KIND }
 );
 
-export type SpeechRequestInput =
+type SpeechRequestInput =
   | { kind: typeof BRIEFING_SPEECH_KIND; delivery: BrainDelivery }
   | { kind: OnboardingBeatKind };
 
-export interface SpeechSettlement {
+interface SpeechSettlement {
   kind: SpeechKind;
   outcome: SpeechOutcome;
   request: SpeechRequest;
 }
 
-export interface SpeechArbiterOptions {
+interface SpeechArbiterOptions {
   now: () => number;
   nextId: () => string;
   trace?: (record: SpeechTraceRecord) => void;

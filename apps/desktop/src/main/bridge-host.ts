@@ -12,7 +12,7 @@ import type { AppStateSnapshot } from "#shared/messages/app-state";
 import type { ActRouter, ActSender } from "./act-router";
 
 /** Which window a report came from, which is all a report's handler is told. */
-export interface BridgeContext {
+interface BridgeContext {
   sender: WebContents;
 }
 
@@ -31,7 +31,7 @@ type SubscribeMethod = {
  * bridge is an entry this registrar demands a handler for, and the only way
  * to add an effect without one is to add an act.
  */
-export type ReportMethod = Exclude<BridgeMethod, SubscribeMethod | "act" | "requestAppState">;
+type ReportMethod = Exclude<BridgeMethod, SubscribeMethod | "act" | "requestAppState">;
 
 export type ReportHandlers = { readonly [Method in ReportMethod]: BridgeHandler<Method> };
 

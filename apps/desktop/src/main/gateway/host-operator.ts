@@ -74,13 +74,13 @@ export interface HostBootstrap {
   agentTraceEnabled: boolean;
 }
 
-export interface HostSettingsChange {
+interface HostSettingsChange {
   settings: AppSettings;
   /** The opaque reporter whose write produced the change, so the relay can skip echoing it. */
   reporter?: string;
 }
 
-export interface HostSessionReplay {
+interface HostSessionReplay {
   permitted: boolean;
   accountId?: string;
 }
@@ -191,7 +191,7 @@ export interface HostOperatorOptions {
   report: (message: string) => void;
 }
 
-export const HOST_UNREACHABLE_REFUSAL = "Luke's runtime is not reachable right now.";
+const HOST_UNREACHABLE_REFUSAL = "Luke's runtime is not reachable right now.";
 
 /**
  * The host's answers are the same structured-clone payloads the windows

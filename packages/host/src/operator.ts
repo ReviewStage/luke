@@ -45,7 +45,7 @@ export interface GatewayOperator {
   readonly client: GatewayClient;
 }
 
-export interface GatewayConversationChange {
+interface GatewayConversationChange {
   sessionKey: string;
   entries: readonly WireValue[];
   cleared: boolean;

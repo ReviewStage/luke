@@ -68,7 +68,7 @@ const RESPONSE_STATUS = {
 export type LoopbackConsentOutcome<Grant> = Grant | { reason: string };
 
 /** One landing card's words. The tone and the mark are the flow's own. */
-export interface LoopbackConsentCard {
+interface LoopbackConsentCard {
   /** The pill's one word or two: "Signed in", "Not connected". */
   badge: string;
   title: string;
@@ -76,13 +76,13 @@ export interface LoopbackConsentCard {
 }
 
 /** The two cards a trip can end on, worded by the flow that owns it. */
-export interface LoopbackConsentPages {
+interface LoopbackConsentPages {
   granted: LoopbackConsentCard;
   notGranted: LoopbackConsentCard;
 }
 
 /** The two sentences a row shows that name the flow's own provider. */
-export interface LoopbackConsentReasons {
+interface LoopbackConsentReasons {
   /** The provider's redirect carried a refusal, or carried no code. */
   refused: string;
   /** Nothing came back before the wait expired. */

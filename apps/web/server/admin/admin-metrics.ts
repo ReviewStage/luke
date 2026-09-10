@@ -124,7 +124,7 @@ export interface AdminRetentionCell {
   inProgress: boolean;
 }
 
-export interface AdminRetentionCohort {
+interface AdminRetentionCohort {
   /** The cohort's UTC week, named by its Monday as YYYY-MM-DD. */
   weekStart: string;
   /** Accounts created during this week. */
@@ -158,7 +158,7 @@ export interface AdminTopUser {
   calls: number;
 }
 
-export interface AdminDatabaseHealth {
+interface AdminDatabaseHealth {
   reachable: boolean;
   /** Round-trip of a trivial probe query, in milliseconds. */
   latencyMs: number;

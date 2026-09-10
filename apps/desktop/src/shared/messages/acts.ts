@@ -615,9 +615,6 @@ export type Act = {
     : { readonly kind: Kind; readonly payload: ActPayload<Kind> };
 }[ActKind];
 
-/** One act narrowed to a single kind, which is what a router row is handed. */
-export type ActOf<Kind extends ActKind> = Extract<Act, { kind: Kind }>;
-
 /** What became of one act. Every answer is a value; nothing here is a throw. */
 export const ACT_OUTCOME_STATUS = {
   DONE: "done",
@@ -627,8 +624,6 @@ export const ACT_OUTCOME_STATUS = {
   UNKNOWN_ACT: "unknown-act",
 } as const;
 
-export type ActOutcomeStatus = (typeof ACT_OUTCOME_STATUS)[keyof typeof ACT_OUTCOME_STATUS];
-
 export type ActOutcome<Kind extends ActKind = ActKind> =
   | { readonly status: typeof ACT_OUTCOME_STATUS.DONE; readonly value: ActResultFor<Kind> }
   | { readonly status: typeof ACT_OUTCOME_STATUS.REFUSED; readonly reason: string }
@@ -636,7 +631,7 @@ export type ActOutcome<Kind extends ActKind = ActKind> =
 
 const ACT_KINDS: readonly string[] = Object.values(ACT_KIND);
 
-export function isActKind(value: UnparsedWireValue): value is ActKind {
+function isActKind(value: UnparsedWireValue): value is ActKind {
   return isWireString(value) && ACT_KINDS.includes(value);
 }
 

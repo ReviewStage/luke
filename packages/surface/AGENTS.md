@@ -2,7 +2,7 @@
 
 The design generators write their committed surface vocabulary to
 `packages/surface/src/generated`: `motion-tokens.css`, `motion-tokens.ts`,
-`provider-marks.ts`, and `face-art.ts`. Regenerate those files from the design
+`provider-mark-paths.ts`, and `face-art.ts`. Regenerate those files from the design
 sources; do not hand-edit them.
 
 This package stays React-free. `@sidecar/panel` is the shared React layer that

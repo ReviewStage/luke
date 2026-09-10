@@ -22,7 +22,7 @@ export interface ChunkingOptions {
   readonly overlap: number;
 }
 
-export const DEFAULT_CHUNKING: ChunkingOptions = {
+const DEFAULT_CHUNKING: ChunkingOptions = {
   tokens: MEMORY_SEARCH_DEFAULTS.CHUNK_TOKENS,
   overlap: MEMORY_SEARCH_DEFAULTS.CHUNK_OVERLAP_TOKENS,
 };

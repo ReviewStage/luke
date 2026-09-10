@@ -330,7 +330,7 @@ export function useFaceHover(face: RefObject<HTMLElement | null>): boolean {
  * gesture twice is the likeliest thing to happen, and a second session starting
  * to ask while the first nudge is still playing has to bounce again.
  */
-export interface PlayingGesture {
+interface PlayingGesture {
   motion: FaceMotion;
   play: number;
 }

@@ -71,7 +71,7 @@ export interface IndexedSourceRecord {
 }
 
 /** A chunk as the index writes it: the vector is absent in keyword-only mode. */
-export interface IndexedChunkWrite {
+interface IndexedChunkWrite {
   readonly startLine: number;
   readonly endLine: number;
   readonly text: string;

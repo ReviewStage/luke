@@ -25,8 +25,6 @@ export const TRACE_ENTRY_KIND = {
   SPEECH: "speech",
 } as const;
 
-export type TraceEntryKind = (typeof TRACE_ENTRY_KIND)[keyof typeof TRACE_ENTRY_KIND];
-
 export const TRACE_DIRECTION = {
   CLIENT: "client",
   SERVER: "server",

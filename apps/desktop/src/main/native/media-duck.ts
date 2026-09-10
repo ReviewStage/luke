@@ -5,7 +5,7 @@ import { NativeHelper, type NativeHelperProcess } from "./native-helper";
  * apps, what levels, whose volume changes are the user's to keep — so this side
  * only ever says which of the two states the exchange is in.
  */
-export const MEDIA_DUCK_COMMAND = {
+const MEDIA_DUCK_COMMAND = {
   DUCK: "duck",
   RESTORE: "restore",
 } as const;
@@ -18,7 +18,7 @@ type MediaDuckCommand = (typeof MEDIA_DUCK_COMMAND)[keyof typeof MEDIA_DUCK_COMM
  * every gap only to dive at the next word would pump; the hangover is longer
  * than the pause between a reply and the follow-up press.
  */
-export const MEDIA_DUCK_RELEASE_DELAY_MS = 1_000;
+const MEDIA_DUCK_RELEASE_DELAY_MS = 1_000;
 
 export interface MediaDuckControllerOptions {
   /** Injectable so the ordering can be exercised without a Mac or a binary. */

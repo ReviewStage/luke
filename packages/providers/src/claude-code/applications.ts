@@ -16,7 +16,7 @@ const CLAUDE_DESKTOP_SESSIONS_DIRECTORY = "claude-code-sessions";
 const CLAUDE_DESKTOP_SESSION_FILE_EXTENSION = ".json";
 
 /** The app's own name: its Code tab is where these sessions are held. */
-export const CLAUDE_DESKTOP_APPLICATION_NAME = "Claude";
+const CLAUDE_DESKTOP_APPLICATION_NAME = "Claude";
 
 /**
  * The fields of one record in the Claude desktop app's session store. The app
@@ -90,7 +90,7 @@ interface ClaudeDesktopSessionContext {
   archived?: boolean;
 }
 
-export function defaultClaudeDesktopSessionsDirectory(): string {
+function defaultClaudeDesktopSessionsDirectory(): string {
   return path.join(
     os.homedir(),
     "Library",

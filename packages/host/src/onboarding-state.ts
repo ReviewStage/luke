@@ -39,7 +39,7 @@ export interface OnboardingState {
  * this state treats an absent moment as never observed — the safe direction,
  * since it can only withhold a beat or a gate, never replay one already given.
  */
-export function onboardingStateFrom(record: WireRecord): OnboardingState | undefined {
+function onboardingStateFrom(record: WireRecord): OnboardingState | undefined {
   const introductionCompletedAt = text(record.introductionCompletedAt);
   const arrivalSignedInAt = text(record.arrivalSignedInAt);
   const arrivalSpokenAt = text(record.arrivalSpokenAt);

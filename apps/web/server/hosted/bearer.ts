@@ -5,14 +5,6 @@ export interface OAuthUserInfo {
   sub: string;
 }
 
-/** Fields the auth userinfo endpoint may return before subject extraction. */
-export interface AuthUserInfoFields {
-  sub?: string | number | boolean | null;
-}
-
-/** Answers the auth service's userinfo endpoint may return before parsing. */
-export type AuthUserInfoAnswer = AuthUserInfoFields | string | number | boolean | null | undefined;
-
 /**
  * The auth service's own userinfo endpoint, called in process. It is the same
  * validation the desktop's identity request goes through over HTTP: expiry,
