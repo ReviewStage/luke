@@ -96,6 +96,55 @@ test("an action draws as a row led by the mark of its kind, with no bubble and n
   assert.match(unmarked, /<span class="conversation-action-mark" aria-hidden="true"><\/span>/);
 });
 
+test("an action row is worded from its record and the roster, and from its recorded words when it cannot be", () => {
+  const entry = {
+    kind: CONVERSATION_ENTRY_KIND.ACTION,
+    words: 'sent a message to "checkout-service": "please add tests"',
+    identity: { providerId: "claude-code", providerSessionId: "session-a" },
+    action: { kind: ACTION_KIND.MESSAGE, runId: "run-1", text: "please add tests" },
+  };
+  const render = (sessions: Parameters<typeof ConversationPanel>[0]["sessions"]) =>
+    renderToStaticMarkup(
+      createElement(ConversationPanel, {
+        entries: [entry],
+        sessions,
+        now: NOW,
+        ask: async () => undefined,
+        onAskEngaged: () => undefined,
+      }),
+    );
+  const composed = render([
+    {
+      id: "session-a",
+      title: "checkout",
+      providerId: "claude-code",
+      provider: "Claude Code",
+      applications: [],
+      detail: "Working",
+      urgency: "urgency-working",
+      label: "Working",
+      location: "local",
+      lastActivityAt: 0,
+      openable: false,
+      canMessage: true,
+      actions: [],
+      hasChange: false,
+    },
+  ]);
+  // The session by its current name, set apart, in a sentence the build wrote.
+  assert.match(
+    composed,
+    /<span class="conversation-words"><span>Sent a message to <\/span><span class="conversation-action-name">checkout<\/span><span>: &quot;please add tests&quot;<\/span><\/span>/,
+  );
+  assert.doesNotMatch(composed, /checkout-service|class="markdown/);
+  // Without the session on the roster, the words recorded at the time stand.
+  const recorded = render([]);
+  assert.match(
+    recorded,
+    /<div class="markdown conversation-words"><p>sent a message to &quot;checkout-service&quot;/,
+  );
+});
+
 test("an action row ends on the mark of the provider it reached", () => {
   const render = (entry: Parameters<typeof ConversationPanel>[0]["entries"][number]) =>
     renderToStaticMarkup(

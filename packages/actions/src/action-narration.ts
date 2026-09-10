@@ -18,6 +18,7 @@ import {
   type ActionKind,
   type CarriedAction,
   type CarriedSessionAction,
+  type SessionActionKind,
 } from "./action-kinds.js";
 
 /**
@@ -99,6 +100,43 @@ const ACTION_NARRATION = {
   [K in ActionKind]: (action: CarriedAction<K>, context: ActionNarrationContext) => string;
 };
 
+/**
+ * The act's own facts, for the panel to compose its row from: one table over
+ * the session kinds, so a kind whose facts are not written down does not
+ * compile. Only what the narration names rides along — never a model or an
+ * effort, which the row has no words for.
+ */
+const ACTION_RECORD = {
+  [ACTION_KIND.MESSAGE]: (action) => ({ text: action.text }),
+  [ACTION_KIND.CONTROL]: (action) => ({ label: action.control.label }),
+  [ACTION_KIND.OPEN]: (action) =>
+    action.applicationId !== undefined ? { applicationId: action.applicationId } : {},
+  [ACTION_KIND.CREATE_WORKSPACE]: (action) => ({
+    providerId: action.providerId,
+    ...(action.name !== undefined ? { name: action.name } : undefined),
+  }),
+  [ACTION_KIND.ADD_AGENT]: (action) => ({
+    agent: action.agent,
+    ...(action.name !== undefined ? { name: action.name } : undefined),
+  }),
+  [ACTION_KIND.RENAME_WORKSPACE]: (action) => ({ name: action.name }),
+  [ACTION_KIND.RENAME_SESSION]: (action) => ({ name: action.name }),
+} as const satisfies {
+  [K in SessionActionKind]: (
+    action: CarriedAction<K>,
+  ) => Omit<ConversationEntryAction, "kind" | "runId">;
+};
+
+function carriedActionRecord(action: CarriedSessionAction, runId: string): ConversationEntryAction {
+  const record = ACTION_RECORD[action.kind];
+  // SAFETY: the table is keyed by the same union `action.kind` ranges over, so the
+  // entry selected is the one written for this action's own shape.
+  const details = (
+    record as (action: CarriedSessionAction) => Omit<ConversationEntryAction, "kind" | "runId">
+  )(action);
+  return { kind: action.kind, runId, ...details };
+}
+
 /** The Conversation sentence declared by the same vocabulary that declared the action. */
 export function actionNarration(action: CarriedAction, context: ActionNarrationContext): string {
   const narrate = ACTION_NARRATION[action.kind];
@@ -130,9 +168,7 @@ export function sessionActionConversationEntry(
   runId: string,
 ): ConversationEntry {
   const words = actionNarration(action, context);
-  const carried: ConversationEntryAction = { kind: action.kind, runId };
-  if (action.kind === ACTION_KIND.CREATE_WORKSPACE) carried.providerId = action.providerId;
-  const entry: ConversationEntry = { kind, words, action: carried };
+  const entry: ConversationEntry = { kind, words, action: carriedActionRecord(action, runId) };
   if ("identity" in action) entry.identity = action.identity;
   return entry;
 }

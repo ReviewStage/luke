@@ -191,6 +191,8 @@ export interface PanelBodyProps {
   writes: SessionWriteHandlers;
   /** The conversation between the developer and Luke, this launch's and what survived the last. */
   conversationLines: readonly ConversationEntry[];
+  /** Every observed session, unnarrowed, for the thread to name the sessions its actions reached. */
+  roster: readonly SessionView[];
   /** The lines still being said, drawn under that thread while their words grow. */
   liveConversationEntries: readonly ConversationEntry[];
   /** Clears that same thread from the view, Luke's next context, and the stored file. */
@@ -249,6 +251,7 @@ export function PanelBody({
   onOpenSessionApplication,
   writes,
   conversationLines,
+  roster,
   liveConversationEntries,
   onClearConversationConversation,
   brainRequests,
@@ -373,6 +376,7 @@ export function PanelBody({
       ) : tab === PANEL_TAB.CONVERSATION ? (
         <ConversationPanel
           entries={conversationLines}
+          sessions={roster}
           live={liveConversationEntries}
           requests={brainRequests}
           now={now}

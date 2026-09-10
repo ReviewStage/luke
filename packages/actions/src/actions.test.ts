@@ -241,19 +241,23 @@ test("an action's line records the ask in words, with the identity it named", ()
   assert.equal(message.kind, CONVERSATION_ENTRY_KIND.ACTION);
   assert.equal(message.words, 'sent a message to "checkout-service": "please add tests"');
   assert.deepEqual(message.identity, identity);
-  // The kind and the run ride beside the words, for the panel to draw and fold by.
-  assert.deepEqual(message.action, { kind: ACTION_KIND.MESSAGE, runId: "run-1" });
+  // The kind, the run, and the act's own facts ride beside the words, for the
+  // panel to compose its row from and fold by.
+  assert.deepEqual(message.action, {
+    kind: ACTION_KIND.MESSAGE,
+    runId: "run-1",
+    text: "please add tests",
+  });
 
   const control: AdvertisedControl = { kind: ACTION_KIND.CONTROL, id: "retry", label: "Retry" };
-  assert.equal(
-    sessionActionConversationEntry(
-      { kind: ACTION_KIND.CONTROL, identity, control },
-      { sessions, projects },
-      CONVERSATION_ENTRY_KIND.ACTION,
-      "run-1",
-    ).words,
-    'ran "Retry" on "checkout-service"',
+  const pressed = sessionActionConversationEntry(
+    { kind: ACTION_KIND.CONTROL, identity, control },
+    { sessions, projects },
+    CONVERSATION_ENTRY_KIND.ACTION,
+    "run-1",
   );
+  assert.equal(pressed.words, 'ran "Retry" on "checkout-service"');
+  assert.deepEqual(pressed.action, { kind: ACTION_KIND.CONTROL, runId: "run-1", label: "Retry" });
 
   // A session the roster no longer shows is still named honestly.
   assert.equal(

@@ -176,7 +176,11 @@ test("a session action reaches the performer only for a session the roster holds
   // names the run that carried it, so the panel can fold the turn's actions.
   assert.equal(recorded.length, 1);
   assert.equal(recorded[0]?.kind, "action");
-  assert.deepEqual(recorded[0]?.action, { kind: "message", runId: LIVE.runId });
+  assert.deepEqual(recorded[0]?.action, {
+    kind: "message",
+    runId: LIVE.runId,
+    text: "go ahead",
+  });
 
   const stranger = await actions.perform(
     {
@@ -344,7 +348,7 @@ test("an action in a turn Luke opened himself runs under the same validators and
   assert.equal(performed.length, 1);
   assert.equal(recorded.length, 1);
   assert.equal(recorded[0]?.kind, "own-action");
-  assert.deepEqual(recorded[0]?.action, { kind: "message", runId: "wake-1" });
+  assert.deepEqual(recorded[0]?.action, { kind: "message", runId: "wake-1", text: "go ahead" });
 });
 
 test("an action with no turn standing is refused in main before any validator or effect", async () => {

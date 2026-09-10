@@ -152,6 +152,13 @@ export interface ConversationEntry {
   action?: ConversationEntryAction;
 }
 
+/**
+ * The act as it was carried, in its own facts rather than in a sentence, so
+ * the panel composes the row it draws from them and the roster as they stand
+ * — a session by its current name, a provider by its display name, a wording
+ * the build may change — while the line's words stay the record the model
+ * was read. Each kind fills the fields its narration names and no other.
+ */
 export interface ConversationEntryAction {
   kind: ActionKind;
   runId: string;
@@ -161,7 +168,26 @@ export interface ConversationEntryAction {
    * from. Every other action's provider is its identity's.
    */
   providerId?: string;
+  /** The message a send carried, the developer's own words. */
+  text?: string;
+  /** The label of the control a press ran, as the provider advertised it. */
+  label?: string;
+  /** The application an open was aimed at, when the developer named one. */
+  applicationId?: string;
+  /** The kind of agent an add started, as the provider's endpoint takes it. */
+  agent?: string;
+  /** The name a creation, an add, or a rename gave. */
+  name?: string;
 }
+
+const CONVERSATION_ENTRY_ACTION_DETAILS = [
+  "providerId",
+  "text",
+  "label",
+  "applicationId",
+  "agent",
+  "name",
+] as const satisfies readonly (keyof ConversationEntryAction)[];
 
 /** The line as the Gateway protocol carries it; the unstrict read below takes it back whole. */
 export function conversationEntryToWire(entry: ConversationEntry): WireRecord {
@@ -581,18 +607,14 @@ function storedConversationEntryAction(
   if (!isRecord(value) || !isConversationEntryActionKind(value.kind)) return undefined;
   if (!isWireString(value.runId)) return undefined;
   if (strict && value.runId.length === 0) return undefined;
-  const providerId = value.providerId;
-  if (
-    providerId !== undefined &&
-    !(isWireString(providerId) && (!strict || providerId.length > 0))
-  ) {
-    return undefined;
+  const action: ConversationEntryAction = { kind: value.kind, runId: value.runId };
+  for (const detail of CONVERSATION_ENTRY_ACTION_DETAILS) {
+    const held = value[detail];
+    if (held === undefined) continue;
+    if (!isWireString(held) || (strict && held.length === 0)) return undefined;
+    action[detail] = held;
   }
-  return {
-    kind: value.kind,
-    runId: value.runId,
-    ...(isWireString(providerId) ? { providerId } : undefined),
-  };
+  return action;
 }
 
 /**

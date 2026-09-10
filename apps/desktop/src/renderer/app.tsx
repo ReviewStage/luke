@@ -44,6 +44,7 @@ import {
   type PanelPresentation,
 } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
+import { displaySessions } from "./session-model";
 import { applySessionReplay } from "./session-replay";
 import { focusSearchField } from "./session-search";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
@@ -1050,6 +1051,7 @@ export function App(): React.JSX.Element {
             onOpenSessionApplication={sessions.onOpenSessionApplication}
             writes={sessions.writes}
             conversationLines={state.conversation.entries}
+            roster={displaySessions(state)}
             liveConversationEntries={liveConversationEntries}
             onClearConversationConversation={clearConversationLines}
             brainRequests={brainRequests}

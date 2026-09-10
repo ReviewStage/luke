@@ -448,6 +448,28 @@ test("a stored line reads back, and retention cuts by age and by count", () => {
     storedConversationEntry({ ...created, action: { ...created.action, providerId: 7 } }),
     undefined,
   );
+  // Every detail a kind records rides the same way, and is held to the same read.
+  const detailed = {
+    ...acted,
+    action: {
+      kind: ACTION_KIND.MESSAGE,
+      runId: "run-1",
+      text: "go ahead",
+      label: "Retry",
+      applicationId: "cursor",
+      agent: "claude",
+      name: "release-candidate",
+    },
+  };
+  assert.deepEqual(storedConversationEntry(conversationEntryToWire(detailed)), detailed);
+  assert.equal(
+    storedConversationEntry({ ...detailed, action: { ...detailed.action, text: "" } }),
+    undefined,
+  );
+  assert.equal(
+    storedConversationEntry({ ...detailed, action: { ...detailed.action, name: ["x"] } }),
+    undefined,
+  );
 
   const stale = { ...line, recordedAt: now - storedConversationMaximumAgeMs - 1 };
   assert.deepEqual(retainedConversationEntries([stale, line], now), [line]);

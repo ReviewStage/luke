@@ -24,12 +24,14 @@ import { useEffect, useId, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { tell } from "./act";
 import { type AskHandler, AskLuke } from "./ask-luke";
+import { actionRowParts } from "./conversation-action";
 import {
   createConversationTimeBreakFormatter,
   opensConversationTimeBreak,
 } from "./conversation-time-break";
 import { MarkdownMessage } from "./markdown-message";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
+import type { SessionView } from "./session-model";
 
 export const CONVERSATION_ENTRY_SPEAKER = {
   YOU: "you",
@@ -242,18 +244,27 @@ function ConversationMessageRow({
  * from a turn nobody opened leads with Luke's face instead — he signs his own
  * work here as the errand has him do on a control — so whose judgment an
  * action was is read at a glance and never wears a reply's bubble. The words
- * end on the mark of the provider the action reached — the session's own for
- * an action on a session, the one a creation asked for a new workspace — so
- * a row is placed the way a session row is, by its mark. A line an earlier
- * build recorded without its kind draws with the mark's room left empty
- * rather than guessing one. No copy control: the words are a record of an
- * act, not something said.
+ * are composed from the act's record and the roster as it stands, the session
+ * set apart by name; a line whose record cannot be read back to a row draws
+ * the words recorded at the time instead. They end on the mark of the
+ * provider the action reached — the session's own for an action on a
+ * session, the one a creation asked for a new workspace — so a row is placed
+ * the way a session row is, by its mark. A line an earlier build recorded
+ * without its kind draws with the mark's room left empty rather than guessing
+ * one. No copy control: the words are a record of an act, not something said.
  */
-function ConversationActionRow({ entry }: { entry: ConversationEntry }): React.JSX.Element {
+function ConversationActionRow({
+  entry,
+  sessions,
+}: {
+  entry: ConversationEntry;
+  sessions: readonly SessionView[];
+}): React.JSX.Element {
   const presentation = conversationEntryPresentation(entry.kind);
   const own = entry.kind === CONVERSATION_ENTRY_KIND.OWN_ACTION;
   const Glyph = entry.action ? ACTION_GLYPH[entry.action.kind] : undefined;
   const providerId = entry.identity?.providerId ?? entry.action?.providerId;
+  const parts = actionRowParts(entry, sessions);
   return (
     <li
       className="conversation-entry"
@@ -266,7 +277,23 @@ function ConversationActionRow({ entry }: { entry: ConversationEntry }): React.J
           <span className="conversation-action-mark" aria-hidden="true">
             {own ? <WingFace /> : Glyph ? <Glyph /> : null}
           </span>
-          <MarkdownMessage words={entry.words} className="conversation-words" />
+          {parts ? (
+            <span className="conversation-words">
+              {parts.map((part, index) =>
+                part.name ? (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: The parts are a fixed composition of one record, so a position names a part for as long as the row stands.
+                  <span key={index} className="conversation-action-name">
+                    {part.text}
+                  </span>
+                ) : (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: As above.
+                  <span key={index}>{part.text}</span>
+                ),
+              )}
+            </span>
+          ) : (
+            <MarkdownMessage words={entry.words} className="conversation-words" />
+          )}
           {providerId === undefined ? null : (
             <span className="conversation-action-provider" aria-hidden="true">
               <ProviderMark providerId={providerId} />
@@ -279,13 +306,17 @@ function ConversationActionRow({ entry }: { entry: ConversationEntry }): React.J
   );
 }
 
-function ConversationEntryRow(props: {
+function ConversationEntryRow({
+  sessions,
+  ...props
+}: {
   entry: ConversationEntry;
+  sessions: readonly SessionView[];
   streaming?: boolean;
 }): React.JSX.Element {
   return conversationEntryPresentation(props.entry.kind).speaker ===
     CONVERSATION_ENTRY_SPEAKER.EVENT ? (
-    <ConversationActionRow entry={props.entry} />
+    <ConversationActionRow entry={props.entry} sessions={sessions} />
   ) : (
     <ConversationMessageRow {...props} />
   );
@@ -305,9 +336,11 @@ function ConversationEntryRow(props: {
  */
 function ConversationTurn({
   entries,
+  sessions,
   pending,
 }: {
   entries: readonly KeyedConversationEntry[];
+  sessions: readonly SessionView[];
   pending: boolean;
 }): React.JSX.Element {
   const [choice, setChoice] = useState<boolean | undefined>(undefined);
@@ -336,7 +369,7 @@ function ConversationTurn({
       </div>
       <ol id={actionsId} className="conversation-turn-actions" hidden={!open}>
         {entries.map(({ entry, key }) => (
-          <ConversationActionRow key={key} entry={entry} />
+          <ConversationActionRow key={key} entry={entry} sessions={sessions} />
         ))}
       </ol>
     </li>
@@ -472,6 +505,7 @@ export function ConversationPanel({
   entries,
   live = [],
   requests = [],
+  sessions = [],
   now,
   ask,
   onAskEngaged,
@@ -492,6 +526,11 @@ export function ConversationPanel({
    * the stop is the composer's.
    */
   requests?: readonly BrainRequestSnapshot[];
+  /**
+   * The roster as the rows draw it, for an action row to name its session as
+   * it is called now and a creation its provider as the provider names itself.
+   */
+  sessions?: readonly SessionView[];
   /**
    * The lines still being said, drawn under the settled thread as the same
    * bubbles they will settle into — words growing, no timestamp, no copy.
@@ -576,13 +615,18 @@ export function ConversationPanel({
                     <ConversationTurn
                       key={`turn:${lead.key}`}
                       entries={item.items}
+                      sessions={sessions}
                       pending={turnPending(item.turn, index === items.length - 1)}
                     />,
                   );
                 }
                 return dated(
                   item.item,
-                  <ConversationEntryRow key={item.item.key} entry={item.item.entry} />,
+                  <ConversationEntryRow
+                    key={item.item.key}
+                    entry={item.item.entry}
+                    sessions={sessions}
+                  />,
                 );
               })}
               {live.map((entry, index) => (
@@ -590,6 +634,7 @@ export function ConversationPanel({
                   // biome-ignore lint/suspicious/noArrayIndexKey: A line still being said has no durable id, and its words change on every delta — a key made of either would remount the bubble mid-sentence, while its position holds still for exactly as long as the line does.
                   key={`live:${entry.kind}:${index}`}
                   entry={entry}
+                  sessions={sessions}
                   streaming
                 />
               ))}
