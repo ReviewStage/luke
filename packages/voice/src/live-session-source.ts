@@ -597,14 +597,10 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
   async create(input: LiveSessionCreateInput): Promise<LiveSessionOpened | undefined> {
     const opened = await this.createSession(input);
     if (!opened) return undefined;
-    let sideband: LiveSideband | undefined;
-    return {
-      ...opened.created,
-      attach: async () => {
-        sideband ??= this.holdSideband(opened.socket);
-        return sideband;
-      },
-    };
+    // The socket that answered is already the session's: the sideband is held
+    // now, so nothing the session says before the host attaches is lost.
+    const sideband = this.holdSideband(opened.socket);
+    return { ...opened.created, attach: async () => sideband };
   }
 }
 

@@ -60,11 +60,36 @@ test("a sideband's close listener follows the socket's and unsubscribes", () => 
   socket.closeFromServer({ code: 1000 });
 
   assert.deepEqual(closes, [{ code: 1006 }]);
-  assert.equal(socket.listenerCounts.closes, 0);
 });
 
 test("an opening is a socket or one of the two faults", () => {
   assert.equal(socketOpened({ socket: new FakeLiveSocket() }), true);
   assert.equal(socketOpened({ fault: SOCKET_OPEN_FAULT.REFUSED, status: 401 }), false);
   assert.equal(socketOpened({ fault: SOCKET_OPEN_FAULT.NETWORK }), false);
+});
+
+test("a sideband holds what arrived before anyone listened and replays it to the first listener", () => {
+  const socket = new FakeLiveSocket();
+  const sideband = sidebandOverSocket(socket);
+  socket.receive({
+    type: LIVE_SERVER_EVENT.SESSION_STARTED,
+    event_id: "ev_1",
+    session: { id: "ls_1" },
+  });
+  socket.receive({ type: LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA, delta: "AAAA" });
+  socket.closeFromServer({ code: 1006 });
+
+  const seen: LiveServerEvent[] = [];
+  const closes: Array<{ code?: number }> = [];
+  sideband.onEvent((event) => seen.push(event));
+  sideband.onClose((close) => closes.push(close));
+  const late: LiveServerEvent[] = [];
+  sideband.onEvent((event) => late.push(event));
+
+  assert.deepEqual(
+    seen.map((event) => event.type),
+    [LIVE_SERVER_EVENT.SESSION_STARTED],
+  );
+  assert.deepEqual(late, []);
+  assert.deepEqual(closes, [{ code: 1006 }]);
 });

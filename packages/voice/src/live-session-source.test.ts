@@ -302,10 +302,16 @@ test("the hosted source's attach is the socket that answered, and the answer fra
   assert.ok(socket);
   assert.equal(socket.closedByClient, false);
 
+  assert.equal(source.diagnostics().sidebandAttached, true);
+  socket.receive({
+    type: LIVE_SERVER_EVENT.SESSION_STARTED,
+    event_id: "ev_0",
+    session: { id: SESSION_ID },
+  });
+
   const sideband = await opened.attach();
   assert.equal(await opened.attach(), sideband);
   assert.equal(script.opens.length, 1);
-  assert.equal(source.diagnostics().sidebandAttached, true);
 
   const seen: LiveServerEvent[] = [];
   sideband.onEvent((event) => seen.push(event));
@@ -317,7 +323,7 @@ test("the hosted source's attach is the socket that answered, and the answer fra
   });
   assert.deepEqual(
     seen.map((event) => event.type),
-    [LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
+    [LIVE_SERVER_EVENT.SESSION_STARTED, LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
   );
 
   sideband.send({ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "c_2" });

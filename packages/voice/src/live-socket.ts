@@ -79,17 +79,55 @@ const REFLECTED_AUDIO_TYPES: ReadonlySet<string> = new Set([
  * A sideband over an open socket. Frames that are not events this build reads
  * are discarded, and the two reflected audio events are dropped by type
  * before any listener sees them: the developer's voice is heard by the model
- * over the media track and is never kept or read here.
+ * over the media track and is never kept or read here. Events and a close
+ * that arrive before anyone listens are held and replayed to the first
+ * listener, so a session that spoke between its creation and the host's
+ * attach loses nothing, and a socket that died in that gap is seen dead.
  */
 export function sidebandOverSocket(socket: LiveSocket): LiveSideband {
+  const eventListeners = new Set<(event: LiveServerEvent) => void>();
+  const closeListeners = new Set<(close: SocketClose) => void>();
+  let heldEvents: LiveServerEvent[] = [];
+  let heldClose: SocketClose | undefined;
+
+  socket.onMessage((data) => {
+    const event = parseLiveServerEvent(data);
+    if (event === undefined || REFLECTED_AUDIO_TYPES.has(event.type)) return;
+    if (eventListeners.size === 0) {
+      heldEvents.push(event);
+      return;
+    }
+    for (const listener of [...eventListeners]) listener(event);
+  });
+  socket.onClose((close) => {
+    if (closeListeners.size === 0) {
+      heldClose = close;
+      return;
+    }
+    for (const listener of [...closeListeners]) listener(close);
+  });
+
   return {
-    onEvent: (listener) =>
-      socket.onMessage((data) => {
-        const event = parseLiveServerEvent(data);
-        if (event === undefined || REFLECTED_AUDIO_TYPES.has(event.type)) return;
-        listener(event);
-      }),
-    onClose: (listener) => socket.onClose(listener),
+    onEvent: (listener) => {
+      eventListeners.add(listener);
+      const replay = heldEvents;
+      heldEvents = [];
+      for (const event of replay) listener(event);
+      return () => {
+        eventListeners.delete(listener);
+      };
+    },
+    onClose: (listener) => {
+      closeListeners.add(listener);
+      if (heldClose !== undefined) {
+        const close = heldClose;
+        heldClose = undefined;
+        listener(close);
+      }
+      return () => {
+        closeListeners.delete(listener);
+      };
+    },
     send: (event) => socket.send(JSON.stringify(event)),
     close: () => socket.close(),
   };
