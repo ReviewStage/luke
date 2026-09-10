@@ -4,6 +4,7 @@ import {
   closeEvent,
   LIVE_SERVER_EVENT,
   type LiveClientEvent,
+  type LiveSessionClosed,
   parseLiveServerEvent,
 } from "../live.js";
 import {
@@ -50,8 +51,10 @@ export interface RelayOptions {
   route: VoiceRoute;
   desktop: WebSocket;
   upstream: WebSocket;
-  /** Runs once, on the first `session.closed`, with the seconds it named; the relay waits for it before settling. */
-  onSessionClosed?: (seconds: number) => Promise<void>;
+  /** Runs once, on the first `session.closed`; the relay waits for it before settling. */
+  onSessionClosed?: (closed: LiveSessionClosed) => Promise<void>;
+  /** Runs on every `session.usage.updated`, with the seconds it named. */
+  onUsageUpdated?: (seconds: number) => void;
   /** Asked once, on the first `session.started`, for an event to send upstream from the service's own side. */
   onSessionStarted?: () => LiveClientEvent | undefined;
   closeTimeoutMs?: number;
@@ -87,7 +90,7 @@ export function relaySession(options: RelayOptions): Promise<RelaySummary> {
   };
   let closedSeen = false;
   let startedSeen = false;
-  let seconds: number | undefined;
+  let closed: LiveSessionClosed | undefined;
   let closeTimer: ReturnType<typeof setTimeout> | undefined;
 
   return new Promise<RelaySummary>((resolve) => {
@@ -105,12 +108,12 @@ export function relaySession(options: RelayOptions): Promise<RelaySummary> {
         );
       }
       if (isOpen(upstream)) upstream.close(SOCKET_CLOSE_CODE.NORMAL);
-      resolve({ ...counts, finalization, seconds });
+      resolve({ ...counts, finalization, seconds: closed?.usage.seconds });
     };
 
     const finalize = async (): Promise<void> => {
-      if (seconds !== undefined && options.onSessionClosed) {
-        await options.onSessionClosed(seconds).catch(() => undefined);
+      if (closed !== undefined && options.onSessionClosed) {
+        await options.onSessionClosed(closed).catch(() => undefined);
       }
       settle(FINALIZATION.CONFIRMED);
     };
@@ -133,10 +136,16 @@ export function relaySession(options: RelayOptions): Promise<RelaySummary> {
         const opening = options.onSessionStarted?.();
         if (opening !== undefined && isOpen(upstream)) upstream.send(JSON.stringify(opening));
       }
+      if (type === LIVE_SERVER_EVENT.USAGE_UPDATED && options.onUsageUpdated) {
+        const updated = parseLiveServerEvent(text);
+        if (updated?.type === LIVE_SERVER_EVENT.USAGE_UPDATED) {
+          options.onUsageUpdated(updated.usage.seconds);
+        }
+      }
       if (type === LIVE_SERVER_EVENT.SESSION_CLOSED && !closedSeen) {
         closedSeen = true;
-        const closed = parseLiveServerEvent(text);
-        if (closed?.type === LIVE_SERVER_EVENT.SESSION_CLOSED) seconds = closed.usage.seconds;
+        const event = parseLiveServerEvent(text);
+        if (event?.type === LIVE_SERVER_EVENT.SESSION_CLOSED) closed = event;
         void finalize();
       }
     };

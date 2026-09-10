@@ -33,6 +33,7 @@ import { IntroductionMeter } from "./introduction-meter.js";
 import { LOG_EVENT, type Log, standardOutputLog } from "./log.js";
 import { createLiveUpstream, type LiveUpstream } from "./openai.js";
 import { RELAY_DEFAULTS, relaySession, SOCKET_CLOSE_CODE } from "./relay.js";
+import type { VoiceSessionRecord } from "./session-record.js";
 
 /**
  * The hosted voice service: the part of Luke's own deployment that holds the
@@ -53,8 +54,8 @@ import { RELAY_DEFAULTS, relaySession, SOCKET_CLOSE_CODE } from "./relay.js";
  * A connection is one function invocation, and the platform closes it at the
  * function's maximum duration while the WebRTC session between the desktop
  * and OpenAI stands on. So a socket may also open with `session.attach`: the
- * account that created the session, proven by the row creation wrote,
- * attaches a fresh sideband to it and the pipe resumes. Whatever the session
+ * account that created the session, proven by the `voice_sessions` row
+ * creation wrote, attaches a fresh sideband to it and the pipe resumes. Whatever the session
  * said between the two connections is not replayed.
  *
  * A refusal has one of two shapes the desktop reads: an HTTP status on the
@@ -102,6 +103,8 @@ export interface VoiceServiceOptions {
   apiKey: string | undefined;
   model?: string | undefined;
   accounts: VoiceAccounts;
+  /** The `voice_sessions` row of each signed-in session; the introduction, with no account, writes none. */
+  record: VoiceSessionRecord;
   /** The OpenAI `/v1` base; a test points it at a fake. */
   openAiBaseUrl?: string;
   fetch?: CloudFetch;
@@ -173,6 +176,7 @@ export class VoiceService {
   readonly #options: VoiceServiceOptions;
   readonly #log: Log;
   readonly #accounts: VoiceAccounts;
+  readonly #record: VoiceSessionRecord;
   readonly #upstream: LiveUpstream | undefined;
   readonly #meter: IntroductionMeter;
   readonly #sockets: WebSocketServer;
@@ -188,6 +192,7 @@ export class VoiceService {
     this.#options = options;
     this.#log = options.log ?? standardOutputLog;
     this.#accounts = options.accounts;
+    this.#record = options.record;
     const apiKey = options.apiKey?.trim();
     this.#upstream = apiKey
       ? createLiveUpstream({
@@ -330,10 +335,23 @@ export class VoiceService {
               });
             }
           : undefined,
+      onUsageUpdated:
+        accountId === undefined
+          ? undefined
+          : (seconds) => {
+              void this.#record.noteUsage({ sessionId, seconds }).catch(() => undefined);
+            },
       onSessionClosed:
         accountId === undefined
           ? undefined
-          : (seconds) => this.#recordUsage(accountId, sessionId, seconds),
+          : async (closed) => {
+              await this.#record.close({
+                sessionId,
+                seconds: closed.usage.seconds,
+                reason: closed.reason,
+              });
+              await this.#recordUsage(accountId, sessionId, closed.usage.seconds);
+            },
     });
     this.#log({ event: LOG_EVENT.SESSION_ENDED, route, ...summary });
   }
@@ -383,7 +401,7 @@ export class VoiceService {
     answer.sessionId = created.answer.session.id;
     answer.sdpAnswer = created.answer.transport.sdp;
     if (accountId !== undefined) {
-      await this.#accounts.registerSession({ userId: accountId, sessionId: answer.sessionId });
+      await this.#record.register({ userId: accountId, sessionId: answer.sessionId });
     }
     const sideband = await this.#attach(upstream, answer.sessionId);
     if (sideband === undefined) return { refusal: HOSTED_API_ERROR.UPSTREAM_ERROR };
@@ -414,7 +432,7 @@ export class VoiceService {
     const accountId = await this.#accounts.resolveUserId(admission.bearer);
     if (
       accountId === undefined ||
-      (await this.#accounts.sessionOwner(frame.sessionId)) !== accountId
+      !(await this.#record.owned({ userId: accountId, sessionId: frame.sessionId }))
     ) {
       return { refusal: HOSTED_API_ERROR.INVALID_TOKEN };
     }

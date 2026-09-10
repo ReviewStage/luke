@@ -203,7 +203,8 @@ hosted route uses, and its daily allowance is spent by the same `hosted_usage`
 meter before any session exists, so a refused account costs no session. The
 socket's first frame is `session.create` (the SDP offer, a voice, the seed);
 the function creates the session at OpenAI on the deployment's key, writes
-down which account it was created for, attaches the trusted sideband, and
+down the session's `voice_sessions` row (the account, the live session id,
+client delegation), attaches the trusted sideband, and
 answers `session.created` with the id, the SDP answer, and the quota. From
 then on it is a pipe: desktop frames to OpenAI untouched, OpenAI frames to the
 desktop untouched except `session.input_audio.append` and
@@ -226,8 +227,9 @@ its maximum duration — `vercel.json` gives both functions 800 seconds, the
 longest generally available — while the WebRTC session between the desktop
 and OpenAI stands on. So a socket may also open with `session.attach` naming
 a session id. The function resolves the bearer, checks that this account is
-the one the session was created for (the `voice_session_usage` row written at
-creation, whose seconds stay null until the session closes), attaches a fresh
+the one the session was created for (the `voice_sessions` row written at
+creation, indexed over the owner and the live session id for this lookup),
+attaches a fresh
 sideband to OpenAI's `/v1/live/sessions/{id}/attach`, answers
 `session.attached`, and pipes as before. Nothing the session said between the
 two connections is replayed. The desktop's `HostedLiveSessionSource` in
@@ -238,16 +240,23 @@ The introduction never re-attaches; one connection covers it.
 
 ### How a session ends
 
-`session.closed` is finalization. Whichever connection sees it forwards it,
-records `usage.seconds` through `recordVoiceSeconds` in `server/hosted/quota.ts`
+While a signed-in session runs, every `session.usage.updated` overwrites the
+row's `usage` with `{ seconds, confirmed: false }`, a snapshot and never a
+sum. `session.closed` is finalization. Whichever connection sees it forwards
+it, writes the row's `closed_at`, `close_reason`, and
+`usage { seconds, confirmed: true }`, records `usage.seconds` through
+`recordVoiceSeconds` in `server/hosted/quota.ts`
 — the session row is the idempotency ledger: the seconds land only where none
 stand yet, and only then does the day's `voice_seconds` on `hosted_usage`
 move, in one transaction, so a report seen by two connections adds nothing —
 and closes both ends. A desktop that hangs up first has `session.close` sent
 on its behalf and the sideband held for `session.closed` for 15 seconds, the
 docs' close sequence. A sideband that ends first closes the desktop socket
-with code 1001 and reason `upstream-closed` and records nothing. Both tables
-cascade with the user row. The seconds column stands beside the call count
+with code 1001 and reason `upstream-closed` and records nothing: the last
+unconfirmed snapshot standing with `closed_at` null is the honest record, and
+a re-attached connection's `session.closed` later confirms it. Only these
+functions write `voice_sessions`; the seconds ledger and it both cascade with
+the user row. The seconds column stands beside the call count
 rather than replacing it: a session still spends one call when it opens, and
 the mint routes and their meter stay as they are for installed desktops until
 the seconds are what the allowance is measured in.
@@ -271,9 +280,7 @@ answered 429.
 
 Enable the WebSockets feature on the Vercel team, make sure Fluid compute is
 on for the project, and set `OPENAI_API_KEY`; `LUKE_LIVE_MODEL` optionally pins
-the model. Nothing else: no separate service, secret, or origin. Migration
-0016 makes the session row's seconds nullable so creation can write it.
-Tests run against a fake OpenAI on loopback and an in-memory account side
+the model. Nothing else: no separate service, secret, or origin. Tests run against a fake OpenAI on loopback and an in-memory account side
 (`tests/voice-service.test.ts`, `tests/support/voice-fakes.ts`).
 
 ## Hosted brain inference

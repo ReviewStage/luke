@@ -43,7 +43,9 @@ import {
   FAKE_USER_ID,
   type FakeAccounts,
   type FakeOpenAi,
+  type FakeSessionRecord,
   fakeAccounts,
+  fakeSessionRecord,
   readSocket,
   send,
   sendText,
@@ -94,6 +96,7 @@ function record(text: string): WireRecord {
 interface Stand {
   openAi: FakeOpenAi;
   accounts: FakeAccounts;
+  record: FakeSessionRecord;
   service: VoiceService;
   log: LogEntry[];
   url(path: string): string;
@@ -103,10 +106,12 @@ interface Stand {
 async function stand(overrides: Partial<VoiceServiceOptions> = {}): Promise<Stand> {
   const openAi = await startFakeOpenAi();
   const accounts = fakeAccounts();
+  const record = fakeSessionRecord();
   const log: LogEntry[] = [];
   const service = new VoiceService({
     apiKey: API_KEY,
     accounts,
+    record,
     openAiBaseUrl: openAi.baseUrl,
     log: (entry) => {
       log.push(entry);
@@ -120,6 +125,7 @@ async function stand(overrides: Partial<VoiceServiceOptions> = {}): Promise<Stan
   return {
     openAi,
     accounts,
+    record,
     service,
     log,
     url: (path) => `ws://127.0.0.1:${port}${path}`,
@@ -249,7 +255,7 @@ test("a session is authorized, created, registered to its account, attached, and
 
   assert.deepEqual(context.accounts.resolved, [BEARER]);
   assert.deepEqual(context.accounts.spent, [FAKE_USER_ID]);
-  assert.deepEqual(context.accounts.registered, [
+  assert.deepEqual(context.record.registered, [
     { userId: FAKE_USER_ID, sessionId: created.sessionId },
   ]);
 
@@ -291,7 +297,7 @@ test("a session is authorized, created, registered to its account, attached, and
 test("frames pass through untouched in both directions, except reflected audio, which is dropped by type", async (t) => {
   const context = await stand();
   t.after(() => context.stop());
-  const { desktop, upstream } = await openSession(context);
+  const { desktop, upstream, created } = await openSession(context);
 
   const toUpstream = [
     JSON.stringify({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE, event_id: "u1" }),
@@ -349,6 +355,8 @@ test("frames pass through untouched in both directions, except reflected audio, 
   for (let index = 0; index < shown.length; index += 1) seen.push(await desktop.next());
   assert.deepEqual(seen, shown);
   assert.equal(await desktop.arrives(), false);
+  assert.deepEqual(context.record.usage, [{ sessionId: created.sessionId, seconds: 12 }]);
+  assert.deepEqual(context.record.closes, []);
 });
 
 test("session.closed is forwarded, its seconds reported exactly once, and both ends closed", async (t) => {
@@ -372,6 +380,9 @@ test("session.closed is forwarded, its seconds reported exactly once, and both e
 
   assert.deepEqual(context.accounts.reports, [
     { userId: FAKE_USER_ID, sessionId: created.sessionId, seconds: 61.5 },
+  ]);
+  assert.deepEqual(context.record.closes, [
+    { sessionId: created.sessionId, seconds: 61.5, reason: LIVE_CLOSE_REASON.CLOSE_REQUESTED },
   ]);
   const recorded = context.log.find((entry) => entry.event === LOG_EVENT.USAGE_RECORDED);
   assert.ok(recorded && recorded.event === LOG_EVENT.USAGE_RECORDED);
@@ -429,6 +440,7 @@ test("a sideband that closes first takes the desktop socket with it and reports 
   assert.equal(end.code, SOCKET_CLOSE_CODE.GOING_AWAY);
   assert.equal(end.reason, UPSTREAM_CLOSED_REASON);
   assert.equal(context.accounts.reports.length, 0);
+  assert.deepEqual(context.record.closes, []);
 });
 
 test("a creation OpenAI refuses is answered as an upstream error and nothing is attached", async (t) => {
@@ -464,7 +476,7 @@ test("the introduction is created without an account, greeted exactly once after
   assert.ok(created);
   assert.equal(created.quota, undefined);
   assert.equal(context.accounts.resolved.length, 0);
-  assert.equal(context.accounts.registered.length, 0);
+  assert.equal(context.record.registered.length, 0);
 
   const create = context.openAi.creates[0];
   assert.ok(create && isRecord(create.body.session));
@@ -533,6 +545,8 @@ test("the introduction is created without an account, greeted exactly once after
   );
   await desktop.closed;
   assert.equal(context.accounts.reports.length, 0);
+  assert.deepEqual(context.record.usage, []);
+  assert.deepEqual(context.record.closes, []);
 });
 
 test("an introduction seed beyond one bounded developer message is refused before any session is spent", async (t) => {
@@ -702,7 +716,7 @@ test("an attach to a session another account created, or one never created, is r
   const context = await stand();
   t.after(() => context.stop());
   const { created } = await openSession(context);
-  await context.accounts.registerSession({ userId: "user-2", sessionId: "live_theirs" });
+  await context.record.register({ userId: "user-2", sessionId: "live_theirs" });
 
   for (const sessionId of ["live_theirs", "live_never"]) {
     const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {

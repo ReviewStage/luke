@@ -2,10 +2,12 @@ import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
+import type { VoiceCloseReason } from "../../server/db/voice-schema";
 import type { HostedSpend } from "../../server/hosted/quota";
 import { VOICE_SECONDS_OUTCOME } from "../../server/hosted/quota";
 import { LIVE_SESSIONS_PATH, LIVE_TRANSPORT_TYPE } from "../../server/live";
 import type { VoiceAccounts } from "../../server/voice/accounts";
+import type { VoiceSessionRecord } from "../../server/voice/session-record";
 
 /**
  * What the voice service talks to, stood up for a test: an OpenAI on this
@@ -157,7 +159,6 @@ export interface FakeAccounts extends VoiceAccounts {
   resolved: string[];
   /** Every account whose allowance was spent, in order. */
   spent: string[];
-  registered: Array<{ userId: string; sessionId: string }>;
   /** Every seconds report taken, repeated ones included. */
   reports: RecordedSeconds[];
   /** What the next spend answers; open by default. */
@@ -166,14 +167,12 @@ export interface FakeAccounts extends VoiceAccounts {
   knownBearer: string;
 }
 
-/** An account side that behaves as the ledger does: one owner per session, seconds landing once. */
+/** An account side that behaves as the ledger does: seconds landing once per session. */
 export function fakeAccounts(): FakeAccounts {
-  const owners = new Map<string, string>();
   const landed = new Set<string>();
   const fake: FakeAccounts = {
     resolved: [],
     spent: [],
-    registered: [],
     reports: [],
     spendAnswer: { allowed: true, quota: FAKE_QUOTA },
     knownBearer: FAKE_BEARER,
@@ -185,18 +184,48 @@ export function fakeAccounts(): FakeAccounts {
       fake.spent.push(userId);
       return fake.spendAnswer;
     },
-    async registerSession(input) {
-      fake.registered.push(input);
-      if (!owners.has(input.sessionId)) owners.set(input.sessionId, input.userId);
-    },
-    async sessionOwner(sessionId) {
-      return owners.get(sessionId);
-    },
     async recordSeconds(input) {
       fake.reports.push(input);
       if (landed.has(input.sessionId)) return VOICE_SECONDS_OUTCOME.REPEATED;
       landed.add(input.sessionId);
       return VOICE_SECONDS_OUTCOME.RECORDED;
+    },
+  };
+  return fake;
+}
+
+interface RecordedClose {
+  sessionId: string;
+  seconds: number;
+  reason: VoiceCloseReason;
+}
+
+export interface FakeSessionRecord extends VoiceSessionRecord {
+  registered: Array<{ userId: string; sessionId: string }>;
+  /** Every usage snapshot, in order. */
+  usage: Array<{ sessionId: string; seconds: number }>;
+  closes: RecordedClose[];
+}
+
+/** A session record that keeps one owner per live session, as the unique column does. */
+export function fakeSessionRecord(): FakeSessionRecord {
+  const owners = new Map<string, string>();
+  const fake: FakeSessionRecord = {
+    registered: [],
+    usage: [],
+    closes: [],
+    async register(input) {
+      fake.registered.push(input);
+      if (!owners.has(input.sessionId)) owners.set(input.sessionId, input.userId);
+    },
+    async owned(input) {
+      return owners.get(input.sessionId) === input.userId;
+    },
+    async noteUsage(input) {
+      fake.usage.push(input);
+    },
+    async close(input) {
+      fake.closes.push(input);
     },
   };
   return fake;

@@ -2,14 +2,10 @@ import { auth } from "../auth.js";
 import { getDatabase } from "../db/index.js";
 import { oauthUserInfoFromAuthAnswer, userIdForAuthorization } from "../hosted/bearer.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "../hosted/openai.js";
-import {
-  recordVoiceSeconds,
-  registerVoiceSession,
-  spendHostedMeter,
-  voiceSessionOwner,
-} from "../hosted/quota.js";
+import { recordVoiceSeconds, spendHostedMeter } from "../hosted/quota.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { VoiceService } from "./service.js";
+import { voiceSessionRecord } from "./session-record.js";
 
 /**
  * The deployment's real seams handed to the voice service, once per function
@@ -31,8 +27,6 @@ const deploymentAccounts: VoiceAccounts = {
       oauthUserInfoFromAuthAnswer(await auth.api.oauth2UserInfo(input)),
     ),
   spend: (userId) => spendHostedMeter(getDatabase(), { userId, now: Date.now() }),
-  registerSession: (input) => registerVoiceSession(getDatabase(), input),
-  sessionOwner: (sessionId) => voiceSessionOwner(getDatabase(), sessionId),
   recordSeconds: (input) => recordVoiceSeconds(getDatabase(), { ...input, now: Date.now() }),
 };
 
@@ -44,6 +38,7 @@ export function voiceFunctionServer() {
     apiKey: process.env[VOICE_FUNCTION_ENVIRONMENT.API_KEY],
     model: process.env[VOICE_FUNCTION_ENVIRONMENT.LIVE_MODEL],
     accounts: deploymentAccounts,
+    record: voiceSessionRecord(getDatabase()),
   });
   return service.server;
 }
