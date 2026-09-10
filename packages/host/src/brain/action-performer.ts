@@ -7,6 +7,7 @@ import {
   acceptedActionOutput,
   actionOutputFromResult,
   actionTargetSnapshot,
+  type CarriedActionResult,
   dispatchByKind,
   type RealtimeFunctionCall,
   type RememberedFact,
@@ -24,12 +25,18 @@ import type { TrackedIssue } from "@sidecar/session";
 import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
-  isSessionWriteResult,
   type ObservedWorkspaceProject,
   type Session,
   workspaceAgentModels,
 } from "@sidecar/session";
-import { isWireString, type WireRecord } from "@sidecar/wire";
+import {
+  ACTION_RESULT_STATUS,
+  isWireString,
+  RECORD_EXTRA_KEYS,
+  s,
+  UNKNOWN_ACTION_STATUS,
+  type WireRecord,
+} from "@sidecar/wire";
 import type { SessionActionPerformer } from "../session-action-performer.js";
 
 /** The developer's saved creation tie-breaks, as the projects context narrates them. */
@@ -83,6 +90,36 @@ const REFUSAL = {
   MEMORY_NOT_REMOVED: "That memory could not be removed.",
   UNREADABLE_PANEL_ANSWER: "The panel answered in a shape this build cannot read.",
 } as const;
+
+/**
+ * The panel's answer to an app action, read as untrusted: the status and the
+ * sentence beside it, in the panel's own dialect — a refusal's reason, or the
+ * note or outcome an acceptance sometimes carries — and nothing else it says.
+ */
+const PANEL_ANSWER = s.record(
+  {
+    status: s.enumOf<CarriedActionResult["status"]>([
+      ACTION_RESULT_STATUS.ACCEPTED,
+      ACTION_RESULT_STATUS.REJECTED,
+      ACTION_RESULT_STATUS.UNSUPPORTED,
+      UNKNOWN_ACTION_STATUS,
+    ]),
+    reason: s.dropRefused(s.text()),
+    note: s.dropRefused(s.text()),
+    outcome: s.dropRefused(s.text()),
+  },
+  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+);
+
+function panelResult(answered: WireRecord): CarriedActionResult | undefined {
+  const read = PANEL_ANSWER.parse(answered);
+  if (read === undefined) return undefined;
+  if (read.status === ACTION_RESULT_STATUS.ACCEPTED) {
+    const note = read.note ?? read.outcome;
+    return { status: read.status, ...(note !== undefined ? { note } : undefined) };
+  }
+  return read.reason === undefined ? undefined : { status: read.status, reason: read.reason };
+}
 
 /**
  * The gauntlet every action the brain asks for runs, in the main process: the
@@ -170,14 +207,14 @@ export function createBrainActionPerformer(
     );
   };
 
-  /** The panel's answer, read as untrusted: a shape this build cannot read is a refusal, never an acceptance. */
+  /** A panel answer this build cannot read is a refusal, never an acceptance. */
   const carryAppAction = async (
     action: BrainAppActionRequest["action"],
   ): Promise<ActionOutputEnvelope> => {
-    const answered = await dependencies.performAppAction(action);
-    return isSessionWriteResult(answered)
-      ? actionOutputFromResult(answered)
-      : refusedActionOutput(REFUSAL.UNREADABLE_PANEL_ANSWER);
+    const result = panelResult(await dependencies.performAppAction(action));
+    return result === undefined
+      ? refusedActionOutput(REFUSAL.UNREADABLE_PANEL_ANSWER)
+      : actionOutputFromResult(result);
   };
 
   return {

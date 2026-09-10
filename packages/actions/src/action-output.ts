@@ -68,6 +68,8 @@ export type AcceptedActionOutput = {
   readonly target?: ActionTargetSnapshot;
   /** The session a creation's answer named: an identifier, never an address. */
   readonly createdSession?: Readonly<SessionIdentity>;
+  /** The carrier's own sentence about how the action landed, where it had one. */
+  readonly note?: string;
   /** The action landed, and a non-essential follow-up did not. */
   readonly warning?: string;
 };
@@ -133,6 +135,7 @@ export const ACTION_OUTPUT: Schema<ActionOutputEnvelope> = s.union([
     status: s.literal(ACTION_OUTPUT_STATUS.ACCEPTED),
     target: TARGET_SNAPSHOT.optional(),
     createdSession: CREATED_SESSION.optional(),
+    note: s.dropRefused(sentence),
     warning: s.dropRefused(sentence),
   }),
   answer({
@@ -186,6 +189,7 @@ export type CarriedActionResult =
   | {
       readonly status: typeof ACTION_RESULT_STATUS.ACCEPTED;
       readonly createdSession?: Readonly<SessionIdentity>;
+      readonly note?: string;
       readonly warning?: string;
     }
   | Exclude<ActionResult, { status: typeof ACTION_RESULT_STATUS.ACCEPTED }>
@@ -203,6 +207,7 @@ export function actionOutputFromResult(
         ...(result.createdSession !== undefined
           ? { createdSession: result.createdSession }
           : undefined),
+        ...(result.note !== undefined ? { note: result.note } : undefined),
         ...(result.warning !== undefined ? { warning: result.warning } : undefined),
       });
     case UNKNOWN_ACTION_STATUS:

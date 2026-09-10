@@ -294,20 +294,33 @@ test("a carried action's refusal and lost answer keep their words apart: refused
   });
 });
 
-test("a panel's answer is read as untrusted: a bare result folds into the envelope and an unreadable shape is a refusal", async () => {
+test("a panel's answer is read in its own dialect: an acceptance keeps its note and drops the rest, a lost answer stays unknown, and an unreadable shape is a refusal", async () => {
   const answers: WireRecord[] = [
+    { status: ACTION_RESULT_STATUS.ACCEPTED, tab: "settings", kind: "setting" },
+    { status: ACTION_RESULT_STATUS.ACCEPTED, note: "The ask is drafted in the composer." },
+    { status: ACTION_RESULT_STATUS.ACCEPTED, outcome: "Up to date." },
     { status: UNKNOWN_ACTION_STATUS, reason: "the panel went away" },
+    { status: ACTION_RESULT_STATUS.REJECTED },
     { outcome: "fine" },
   ];
   const { actions } = performer({
     appGuide: () => CAPTIONS_GUIDE,
     performAppAction: async () => answers.shift() ?? {},
   });
-  assert.deepEqual(await actions.perform(SETTING_CALL, LIVE), {
-    status: ACTION_OUTPUT_STATUS.UNKNOWN,
-    reason: "the panel went away",
-  });
-  assert.equal((await actions.perform(SETTING_CALL, LIVE)).status, ACTION_OUTPUT_STATUS.REFUSED);
+  const outcomes = [];
+  while (answers.length > 0) outcomes.push(await actions.perform(SETTING_CALL, LIVE));
+  const unreadable = {
+    status: ACTION_OUTPUT_STATUS.REFUSED,
+    reason: "The panel answered in a shape this build cannot read.",
+  };
+  assert.deepEqual(outcomes, [
+    { status: ACTION_OUTPUT_STATUS.ACCEPTED },
+    { status: ACTION_OUTPUT_STATUS.ACCEPTED, note: "The ask is drafted in the composer." },
+    { status: ACTION_OUTPUT_STATUS.ACCEPTED, note: "Up to date." },
+    { status: ACTION_OUTPUT_STATUS.UNKNOWN, reason: "the panel went away" },
+    unreadable,
+    unreadable,
+  ]);
 });
 
 test("an issue action is refused outright while no tracker is connected", async () => {
