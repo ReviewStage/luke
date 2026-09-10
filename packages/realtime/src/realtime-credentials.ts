@@ -1,15 +1,12 @@
-import { remoteRealtimeToolDefinitions } from "@sidecar/actions";
+import { type ActionToolDefinition, remoteRealtimeToolDefinitions } from "@sidecar/actions";
 import type { RealtimeCredential } from "@sidecar/hosted";
 import { isRecord, text, type UnparsedWireValue, wholeNumber } from "@sidecar/wire";
 import { PRESS_AUDIO_SAMPLE_RATE } from "./press-audio.js";
 import { REALTIME_SESSION_TYPE } from "./realtime-events.js";
-import {
-  mouthToolDefinitions,
-  realtimeInstructions,
-  remoteRealtimeInstructions,
-} from "./realtime-instructions.js";
+import { type MouthToolDefinition, mouthToolDefinitions } from "./realtime-instructions.js";
 import { REALTIME_DEFAULTS } from "./realtime-voice-settings.js";
 import { trimmedText } from "./trimmed-text.js";
+import { SCENE, sessionInstructions } from "./voice-scene.js";
 
 /**
  * Minting an ephemeral Realtime credential and diagnosing why voice is or is
@@ -25,7 +22,6 @@ export interface RealtimeSessionOptions {
   voice?: string;
   /** A multiple of the voice's natural rate, within the API's 0.25–1.5. */
   speed?: number;
-  instructions?: string;
 }
 
 /**
@@ -53,23 +49,32 @@ export function realtimeReasoning(model: string): { effort: "low" } | undefined 
 }
 
 /**
- * Builds the session a client secret is minted against. Turn detection is
- * disabled outright so the developer, not a voice-activity heuristic, decides
- * when Luke is listening — an always-open microphone is exactly what a sidecar
- * that sits on someone's desk all day must not have.
+ * Builds the session a client secret is minted against: the scene's rules as
+ * its instructions, and the tools the call carries, or `"none"`, which
+ * declares no tools and no way to choose one — the bound then lives in the
+ * minted document itself, where no caller can widen it after connecting.
+ * Turn detection is disabled outright so the developer, not a voice-activity
+ * heuristic, decides when Luke is listening — an always-open microphone is
+ * exactly what a sidecar that sits on someone's desk all day must not have.
  */
-export function realtimeSessionConfig(options: RealtimeSessionOptions = {}) {
+export function realtimeSessionConfig<Tool extends MouthToolDefinition | ActionToolDefinition>(
+  rules: readonly string[],
+  tools: readonly Tool[] | "none",
+  options: RealtimeSessionOptions = {},
+) {
   const model = trimmedText(options.model) ?? REALTIME_DEFAULTS.MODEL;
   const reasoning = realtimeReasoning(model);
+  const noTools: readonly Tool[] = [];
   return {
     type: REALTIME_SESSION_TYPE,
     model,
     ...(reasoning ? { reasoning } : undefined),
-    instructions: trimmedText(options.instructions) ?? realtimeInstructions(),
-    tools: mouthToolDefinitions(),
-    // Auto for the conversation: the voice decides when to ask the brain;
-    // each briefing narrows itself to none.
-    tool_choice: "auto",
+    instructions: sessionInstructions(rules),
+    // Auto for a conversation: the voice decides when to ask the brain, and
+    // each speak-only turn narrows itself to none.
+    ...(tools === "none"
+      ? { tools: noTools, tool_choice: "none" as const }
+      : { tools, tool_choice: "auto" as const }),
     truncation: {
       type: REALTIME_TRUNCATION.TYPE,
       retention_ratio: REALTIME_TRUNCATION.RETENTION_RATIO,
@@ -101,28 +106,36 @@ export function realtimeSessionConfig(options: RealtimeSessionOptions = {}) {
   };
 }
 
-/** Builds the request body that mints an ephemeral client secret. */
+/** Builds the request body that mints the desktop's ephemeral client secret: the brain's mouth, with its one ask. */
 export function realtimeClientSecretRequest(options: RealtimeSessionOptions = {}) {
-  return { session: realtimeSessionConfig(options) };
+  return { session: realtimeSessionConfig(SCENE.DESKTOP, mouthToolDefinitions(), options) };
 }
 
 /**
- * Builds the request body for a mobile Realtime mint. The session config
- * matches the desktop's audio format and turn detection, but the call still
- * carries the roster itself and actions through its own tools, so it keeps the
- * instructions that resolve agents from that roster and the actions the mobile
- * action endpoints serve.
+ * Builds the request body for a mobile Realtime mint. The session matches the
+ * desktop's audio format and turn detection, but the call still carries the
+ * roster itself and actions through its own tools, so it keeps the rules that
+ * resolve agents from that roster and the actions the mobile action endpoints
+ * serve.
  */
 export function remoteRealtimeClientSecretRequest(options: RealtimeSessionOptions = {}) {
   return {
-    session: {
-      ...realtimeSessionConfig({
-        ...options,
-        instructions: trimmedText(options.instructions) ?? remoteRealtimeInstructions(),
-      }),
-      tools: remoteRealtimeToolDefinitions(),
-    },
+    session: realtimeSessionConfig(SCENE.PHONE, remoteRealtimeToolDefinitions(), options),
   };
+}
+
+/**
+ * The session document an introduction credential is minted against: no
+ * tools declared and no way to choose one. The bound has to live in the
+ * minted document itself — the introduction endpoint answers callers with no
+ * account, so a credential that merely expected the takeover to narrow the
+ * session after connecting would hand any other caller the conversation's
+ * full tool surface.
+ */
+export function introductionSessionConfig(options: RealtimeSessionOptions = {}) {
+  // Typed as the desktop's own document: the takeover hands it to the same
+  // call the conversation runs on, which reads a session's tools as the ask.
+  return realtimeSessionConfig<MouthToolDefinition>(SCENE.INTRODUCTION, "none", options);
 }
 
 /**

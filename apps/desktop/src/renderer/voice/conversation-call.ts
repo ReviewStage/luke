@@ -9,6 +9,7 @@ import {
   briefingSpeechEvents,
   clearInputAudioEvents,
   functionCallFollowUpEvents,
+  mouthToolDefinitions,
   type ParsedRealtimeFunctionCall,
   pushToTalkCommitEvents,
   REALTIME_CLIENT_EVENT,
@@ -16,6 +17,7 @@ import {
   REALTIME_STATUS,
   type RealtimeStatus,
   realtimeSessionConfig,
+  SCENE,
   voiceExchangeActive,
 } from "@sidecar/realtime";
 import { maximumTypedAskLength } from "@sidecar/session";
@@ -208,7 +210,10 @@ export class ConversationCall extends SpeakOnlyCall<ConversationCallOptions> {
   protected override sessionConfig(model: string): BuiltRealtimeSessionConfig {
     const supplied = this.options.sessionConfig?.(model);
     if (supplied) return supplied;
-    return realtimeSessionConfig({ model, ...this.options.voice?.() });
+    return realtimeSessionConfig(SCENE.DESKTOP, mouthToolDefinitions(), {
+      model,
+      ...this.options.voice?.(),
+    });
   }
 
   /**

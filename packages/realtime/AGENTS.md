@@ -2,16 +2,22 @@
 
 ## The transport is this package's, and everything above it lives elsewhere
 
-Three files carry what a call speaks. `realtime-events.ts` is the wire grammar
+Five files carry what a call speaks. `realtime-events.ts` is the wire grammar
 — the statuses, both sides' event names, the outbound builders, and the parser
 that reads inbound events so a second file cannot re-encode it.
-`realtime-instructions.ts` is what a voice is told before it hears anything,
-and the one tool the desktop's call is configured with, `ask_brain`.
-`proactive-speech.ts` is what Luke says first: the briefing the brain decided
-to give and the two onboarding beats, each turn built without tools so nothing
-a beat carries can become an action. A briefing joins the call's own
-conversation as one marked item, and the rule for saying it as written stands
-in `realtime-instructions.ts`, not on the response. `conversation-seed.ts` is
+`voice-scene.ts` is where every scene's rules live, one `SCENE` entry each,
+and the two functions that put a scene on the wire: `sessionInstructions`
+for what a session is minted with, and `responseTurn` for one speak-only
+turn on a standing call, opened without tools and with its input behind the
+one marker so nothing a turn carries can become an action. The persona is
+prepended there and nowhere else. `realtime-instructions.ts` is the one tool
+the desktop's call is configured with, `ask_brain`. `proactive-speech.ts` is
+the wire contract for what Luke says first — the briefing the brain decided
+to give and the two onboarding beats — and the two builders that are not a
+scene's: a briefing joins the call's own conversation as one marked item,
+spoken under the session's standing rule for it rather than instructions on
+the response, and the arrival beat composes its data lines and picks its
+direction before handing them to `responseTurn`. `conversation-seed.ts` is
 what every call is told as it opens: the recent Conversation lines from Luke's
 own record, in the conversation's own roles, without the actions or any
 session identity, closed by a note saying none of it awaits an answer.
@@ -37,5 +43,5 @@ this barrel.
 `actions-validation.test.ts` and `guide.test.ts` there cover the session, issue,
 and app tools — `REALTIME_TOOL`, the routing, and each validator's bounds —
 against `./actions.js`. The tests here cover only what this package owns: the
-protocol's events and parser, the standing instructions, the mint, and the
-briefing and onboarding speech builders.
+protocol's events and parser, the scenes and the two functions that speak
+them, the mint, the seed, and the briefing and arrival builders.
