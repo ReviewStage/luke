@@ -29,10 +29,10 @@ import {
   leaseNow,
   leaseWithin,
   openAiKeyOrUnavailable,
-  openBrainSession,
   pathSegmentAfter,
   readRunRecord,
   runToWire,
+  underLease,
 } from "./route.js";
 
 /**
@@ -111,23 +111,23 @@ export async function handleBrainAsk(route: HostedBrainRoute): Promise<Response>
 
   const lease = await leaseWithin(route, admission.store, admission.userId);
   if (!lease) return busyResponse();
-  const session = await openBrainSession(route, admission, openAiKey, lease);
-  const { agent } = session.brain;
-  await session.ready();
-  const result = await agent.submitAsk({
-    submissionId: ask.submissionId ?? randomUUID(),
-    question: ask.question,
-    origin: ask.origin,
+  return underLease(route, admission, openAiKey, lease, async (session) => {
+    await session.ready();
+    const result = await session.brain.agent.submitAsk({
+      submissionId: ask.submissionId ?? randomUUID(),
+      question: ask.question,
+      origin: ask.origin,
+    });
+    // The ask's own line stands in the Conversation before the caller hears
+    // of the run, so a device reading the thread finds the ask beside the run.
+    await session.brain.publish();
+    route.continueAfterResponse(session.finish());
+    const answer: HostedBrainAskAnswer =
+      result.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED
+        ? { outcome: result.outcome, runId: result.runId, acceptedAt: result.acceptedAt }
+        : { outcome: result.outcome, reason: result.reason };
+    return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
   });
-  // The ask's own line stands in the Conversation before the caller hears
-  // of the run, so a device reading the thread finds the ask beside the run.
-  await session.brain.publish();
-  route.continueAfterResponse(session.finish());
-  const answer: HostedBrainAskAnswer =
-    result.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED
-      ? { outcome: result.outcome, runId: result.runId, acceptedAt: result.acceptedAt }
-      : { outcome: result.outcome, reason: result.reason };
-  return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
 }
 
 function waitMsOf(request: Request): number {
@@ -181,16 +181,19 @@ export async function handleBrainAskWait(route: HostedBrainRoute): Promise<Respo
       if (openAiKey instanceof Response) return openAiKey;
       const lease = await leaseNow(route, admission.store, admission.userId);
       if (lease) {
-        const session = await openBrainSession(route, admission, openAiKey, lease);
-        await session.ready();
-        const waited = await session.brain.agent.waitAsk(runId, Math.max(0, deadline - now()));
-        // A run that ended inside the hold reaches the Conversation before
-        // its reply is answered, so a device never hears a reply the thread
-        // has yet to take.
-        if (waited && isTerminalBrainRequestStatus(waited.status)) await session.brain.publish();
-        route.continueAfterResponse(session.finish());
-        const current = waited ?? (await readRunRecord(admission.store, admission.userId, runId));
-        return current ? runAnswer(HOSTED_HTTP_STATUS.OK, current) : notFound();
+        return underLease(route, admission, openAiKey, lease, async (session) => {
+          await session.ready();
+          const waited = await session.brain.agent.waitAsk(runId, Math.max(0, deadline - now()));
+          // A run that ended inside the hold reaches the Conversation before
+          // its reply is answered, so a device never hears a reply the thread
+          // has yet to take.
+          if (waited && isTerminalBrainRequestStatus(waited.status)) {
+            await session.brain.publish();
+          }
+          route.continueAfterResponse(session.finish());
+          const current = waited ?? (await readRunRecord(admission.store, admission.userId, runId));
+          return current ? runAnswer(HOSTED_HTTP_STATUS.OK, current) : notFound();
+        });
       }
     }
     const current = await readRunRecord(admission.store, admission.userId, runId);
@@ -228,14 +231,16 @@ export async function handleBrainAskCancel(route: HostedBrainRoute): Promise<Res
     openAiKey instanceof Response
       ? undefined
       : await leaseNow(route, admission.store, admission.userId);
-  if (lease && !(openAiKey instanceof Response)) {
-    const session = await openBrainSession(route, admission, openAiKey, lease);
+  const noted202 = async () => {
+    const record = await readRunRecord(admission.store, admission.userId, runId);
+    return record ? runAnswer(HOSTED_HTTP_STATUS.ACCEPTED, record) : notFound();
+  };
+  if (!lease || openAiKey instanceof Response) return noted202();
+  return underLease(route, admission, openAiKey, lease, async (session) => {
     await session.ready();
     const cancelled = await session.brain.agent.cancelAsk(runId);
     if (cancelled) await session.brain.publish();
     route.continueAfterResponse(session.finish());
-    if (cancelled) return runAnswer(HOSTED_HTTP_STATUS.OK, cancelled);
-  }
-  const record = await readRunRecord(admission.store, admission.userId, runId);
-  return record ? runAnswer(HOSTED_HTTP_STATUS.ACCEPTED, record) : notFound();
+    return cancelled ? runAnswer(HOSTED_HTTP_STATUS.OK, cancelled) : noted202();
+  });
 }

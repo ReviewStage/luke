@@ -5,6 +5,7 @@ import type { HostedStore } from "../store/index.js";
 import { BRAIN_HOST } from "./bounds.js";
 import { acquireLeaseNow } from "./lease-run.js";
 import {
+  type BrainSession,
   type BrainSessionSeams,
   HOSTED_CONVERSATION_KEY,
   leaseSeamsFor,
@@ -73,8 +74,19 @@ async function wakeConversation(
 ): Promise<WakeOutcome> {
   const lease = await acquireLeaseNow(leaseSeamsFor(options, store, userId));
   if (!lease) return WAKE_OUTCOME.BUSY;
-  const session = await openBrainSession(options, { userId, secret, store }, openAiKey, lease);
   const now = options.now ?? Date.now;
+  let session: BrainSession;
+  try {
+    session = await openBrainSession(options, { userId, secret, store }, openAiKey, lease);
+  } catch (error) {
+    // A brain that could not open holds nothing: the lease goes back at
+    // once rather than standing until it expires.
+    await lease.release().catch(() => undefined);
+    reporter(options)(
+      `The brain could not be opened for one account: ${error instanceof Error ? error.name : "unknown error"}`,
+    );
+    return WAKE_OUTCOME.FAILED;
+  }
   try {
     await session.ready();
     const pending = await store.roster.pendingDiffs(userId);
@@ -98,6 +110,26 @@ async function wakeConversation(
   } finally {
     await session.finish();
   }
+}
+
+/**
+ * Whom one wake reaches, in order: the conversations a function left a run
+ * unfinished in come first, longest waiting first, because a developer is
+ * waiting on each of those and a wake that only ever starts one batch must
+ * not let pending diffs starve them; the accounts with a diff waiting follow.
+ * The same session runs both for an account on both lists, resuming first.
+ */
+export async function wakeCandidates(
+  store: Pick<HostedStore, "roster" | "runs">,
+): Promise<readonly string[]> {
+  const listed = new Set<string>();
+  for (const unfinished of await store.runs.unfinished(BRAIN_HOST.WAKE_MAX_USERS)) {
+    if (unfinished.sessionKey === HOSTED_CONVERSATION_KEY) listed.add(unfinished.userId);
+  }
+  for (const userId of await store.roster.usersWithPendingDiffs(BRAIN_HOST.WAKE_MAX_USERS)) {
+    listed.add(userId);
+  }
+  return [...listed];
 }
 
 export async function handleBrainWake(options: BrainWakeOptions): Promise<Response> {
@@ -124,16 +156,7 @@ export async function handleBrainWake(options: BrainWakeOptions): Promise<Respon
   const concurrency = options.concurrency ?? BRAIN_HOST.WAKE_CONCURRENCY;
   const store = options.store(encryptionSecret);
 
-  // A user with a diff waiting and a user with a run left unfinished are one
-  // list: the same session runs both, resuming first, then observing.
-  const listed = new Set<string>();
-  for (const userId of await store.roster.usersWithPendingDiffs(BRAIN_HOST.WAKE_MAX_USERS)) {
-    listed.add(userId);
-  }
-  for (const unfinished of await store.runs.unfinished(BRAIN_HOST.WAKE_MAX_USERS)) {
-    if (unfinished.sessionKey === HOSTED_CONVERSATION_KEY) listed.add(unfinished.userId);
-  }
-  const users = [...listed];
+  const users = await wakeCandidates(store);
 
   const answer: BrainWakeAnswer = {
     users: 0,

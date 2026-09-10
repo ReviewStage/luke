@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test, { after } from "node:test";
-import { BRAIN_TOOL } from "@sidecar/brain";
-import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
+import { BRAIN_TOOL, freshBrainState } from "@sidecar/brain";
+import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { CONVERSATION_ENTRY_KIND, SESSION_STATUS } from "@sidecar/session";
 import { and, eq } from "drizzle-orm";
 import {
@@ -19,7 +19,11 @@ import {
 import { CLOUD_AGENT_PROVIDER_ID, MAIN_SESSION_KEY } from "../server/core";
 import { briefing, observationCursor, rosterDiff } from "../server/db/schema";
 import { BRAIN_HOST } from "../server/hosted/brain-host/bounds";
-import { type BrainWakeOptions, handleBrainWake } from "../server/hosted/brain-host/wake";
+import {
+  type BrainWakeOptions,
+  handleBrainWake,
+  wakeCandidates,
+} from "../server/hosted/brain-host/wake";
 import { cloudSessionPluginFor } from "../server/hosted/cloud-adapters";
 import { encryptProviderKey } from "../server/hosted/encryption";
 import { encodeObservedRoster, type ObservedRoster } from "../server/hosted/observed-roster";
@@ -342,4 +346,58 @@ test("the wake and the ask routes get the function duration the run deadline nee
   assert.ok(
     BRAIN_HOST.RUN_DEADLINE_MS + BRAIN_HOST.WAKE_BUDGET_MS < BRAIN_HOST.MAX_DURATION_SECONDS * 1000,
   );
+});
+
+test("a wake lists the conversations with unfinished runs before the accounts with pending diffs", async () => {
+  const database = await opening;
+  const now = TEST_TIME + 60_000;
+  const diffOnly = await database.createUser();
+  const runOnly = await database.createUser();
+  const both = await database.createUser();
+  const pendingDiff = async (userId: string, at: number) => {
+    await database.store.roster.advance(
+      userId,
+      { body: encodeObservedRoster(snapshot(SESSION_STATUS.WORKING)), observedAt: at },
+      {
+        id: `diff-${userId}`,
+        observedAt: at,
+        previousObservedAt: at - 60_000,
+        payload: encodeRosterDiff(statusDiff()),
+      },
+      undefined,
+    );
+  };
+  const unfinishedRun = async (userId: string, at: number) => {
+    await database.store.conversations.create(userId, {
+      sessionKey: MAIN_SESSION_KEY,
+      name: "main",
+      now: at,
+    });
+    await database.store.brainStateRepository(userId, MAIN_SESSION_KEY).save({
+      ...freshBrainState(`gen-${userId}`, at),
+      requests: [
+        {
+          runId: `run-${userId}`,
+          submissionId: `submission-${userId}`,
+          origin: BRAIN_REQUEST_ORIGIN.TYPED,
+          question: "left running",
+          status: BRAIN_REQUEST_STATUS.RUNNING,
+          revision: 1,
+          acceptedAt: at,
+          startedAt: at,
+          performedActions: 0,
+          unknownActions: 0,
+        },
+      ],
+    });
+  };
+  await pendingDiff(diffOnly, now - 5_000);
+  await pendingDiff(both, now - 4_000);
+  await unfinishedRun(both, now - 2_000);
+  await unfinishedRun(runOnly, now - 1_000);
+
+  const candidates = await wakeCandidates(database.store);
+
+  const ours = candidates.filter((userId) => [diffOnly, runOnly, both].includes(userId));
+  assert.deepEqual(ours, [both, runOnly, diffOnly]);
 });

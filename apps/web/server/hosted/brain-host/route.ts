@@ -311,13 +311,14 @@ export async function openBrainSession(
   // A lease that passed to another holder means that holder now runs the
   // conversation: this brain writes nothing more and stands down, its runs
   // ending in memory alone while the successor resumes them from the store.
+  const standDown = (why: string) => {
+    lost = true;
+    report(why);
+    void brain.stop();
+  };
   const stopHeartbeat = lease.heartbeat(
     () => brain.applyCancels(),
-    () => {
-      lost = true;
-      report("The conversation's lease passed to another holder; this brain stands down.");
-      void brain.stop();
-    },
+    () => standDown("The conversation's lease passed to another holder; this brain stands down."),
   );
   const sleep = sleeper(route);
   const drainMs = route.drainMs ?? BRAIN_HOST.RUN_DEADLINE_MS + 20_000;
@@ -336,8 +337,11 @@ export async function openBrainSession(
         ]);
         if (lost) return;
         if (!idle) {
-          report("A brain run outlasted its function's drain and is left for the next holder.");
+          // The run is the next holder's from here: this one stops writing
+          // now, so the lease can expire under a run nobody else is touching,
+          // and the successor resumes it from the last checkpoint that landed.
           stopHeartbeat();
+          standDown("A brain run outlasted its function's drain and is left for the next holder.");
           return;
         }
         await brain.publish();
@@ -346,10 +350,38 @@ export async function openBrainSession(
         await lease.release();
       } catch (error) {
         stopHeartbeat();
-        report(
+        standDown(
           `The brain session did not finish cleanly: ${error instanceof Error ? error.name : "unknown error"}`,
         );
       }
     },
   };
+}
+
+/**
+ * Runs a route's work over a session opened under a lease already taken, and
+ * makes sure the lease is let go however the work ends: a session that opened
+ * finishes after the answer, and a lease whose session never opened is
+ * released at once, so a throw cannot leave the conversation busy until the
+ * lease expires.
+ */
+export async function underLease(
+  route: BrainSessionSeams & Pick<HostedBrainRoute, "continueAfterResponse">,
+  admission: BrainRouteAdmission,
+  openAiKey: string,
+  lease: HeldLease,
+  work: (session: BrainSession) => Promise<Response>,
+): Promise<Response> {
+  let session: BrainSession | undefined;
+  try {
+    session = await openBrainSession(route, admission, openAiKey, lease);
+    return await work(session);
+  } catch (error) {
+    reporter(route)(
+      `A brain route failed: ${error instanceof Error ? error.message : "unknown error"}`,
+    );
+    if (session) route.continueAfterResponse(session.finish());
+    else await lease.release().catch(() => undefined);
+    return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
+  }
 }

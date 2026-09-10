@@ -759,3 +759,53 @@ test("a holder whose lease passed to another writes nothing more: no fact, no fi
     .where(eq(conversationRun.userId, userId));
   assert.equal(row?.status, BRAIN_REQUEST_STATUS.RUNNING);
 });
+
+test("a route whose brain cannot open lets the lease go at once, and a holder whose drain ran out stops writing", async () => {
+  const { database, userId, harness } = await developer();
+
+  const broken = await handleBrainAsk(
+    harness.route(jsonRequest(ASK_URL, "POST", { question: "hello", origin: "typed" }), {
+      modelAdapter: () => {
+        throw new Error("no adapter today");
+      },
+    }),
+  );
+  assert.equal(broken.status, 503);
+  assert.equal(await database.store.leases.read(userId, MAIN_SESSION_KEY), undefined);
+
+  // A model that never answers: the drain runs out, the holder fences its
+  // writes and stands down, and the run stays running for the next holder.
+  const model = new ScriptedModel();
+  let release: (() => void) | undefined;
+  model.respond = () =>
+    new Promise((resolve) => {
+      release = () => resolve(answered([message("too late")]));
+    });
+  const slow = brainRouteHarness(database, userId, {
+    modelAdapter: () => bareModelAdapter(model),
+    drainMs: 50,
+  });
+  const accepted = await ask(slow, "take your time");
+  assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
+  if (accepted.outcome !== BRAIN_SUBMISSION_OUTCOME.ACCEPTED) return;
+  await slow.drain();
+  const [row] = await database.db
+    .select({ status: conversationRun.status })
+    .from(conversationRun)
+    .where(and(eq(conversationRun.userId, userId), eq(conversationRun.runId, accepted.runId)));
+  assert.equal(row?.status, BRAIN_REQUEST_STATUS.RUNNING);
+  // The lease is left to expire rather than released under a run still going.
+  assert.notEqual(await database.store.leases.read(userId, MAIN_SESSION_KEY), undefined);
+  release?.();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const [after] = await database.db
+    .select({ status: conversationRun.status })
+    .from(conversationRun)
+    .where(and(eq(conversationRun.userId, userId), eq(conversationRun.runId, accepted.runId)));
+  assert.equal(after?.status, BRAIN_REQUEST_STATUS.RUNNING);
+  const thread = await lines(harness);
+  assert.deepEqual(
+    thread.lines.map((line) => line.kind),
+    [CONVERSATION_ENTRY_KIND.TYPED_ASK],
+  );
+});
