@@ -320,8 +320,9 @@ conversation's lines, transcript, and boundaries at or before its instant,
 with no recovery archive and no maintenance ladder.
 
 Beside those v1 tables stand the storage rework's, under
-`server/db/storage-schema.ts`: `conversations`, `messages`, `turns`, and
-`conversation_lease`, the shape `plan/storage-plan.md` on the
+`server/db/storage-schema.ts`: `conversations`, `messages`, `turns`,
+`conversation_lease`, `events`, `prompts`, `tool_sets`, and
+`provider_cursors`, the shape `plan/storage-plan.md` on the
 `orchestration/storage-plan` branch settles on. A conversation row names its
 kind (main, observed, child, or thread), the provider session it observes,
 the parent and spawning message a child came from, the runtime's own session
@@ -329,9 +330,23 @@ id, its soft-delete instant, and the two counters that number its messages
 and events. A message is one AI SDK `UIMessage`, its parts and metadata as
 plain `jsonb`, unique on `(conversation_id, client_id)` as its idempotency
 key; a turn is one run's origin, status, model, prompt and tool-set hashes,
-response ids, usage, timings, and failure. Nothing in these tables is sealed,
-and nothing reads or writes them yet: the store writer lands on them in its
-own change, and the v1 tables are dropped only after every reader has moved.
+response ids, usage, timings, and failure. An event is one thing that
+happened to a message after it was written, numbered by the conversation's
+own event sequence, unique on `(conversation_id, seq)` like a message: a
+briefing's `speech.offered`, `speech.claimed`, `speech.spoken`,
+`speech.pushed`, `speech.expired`, or `speech.held`, or a `rating`. The
+partial unique index over `message_id` where the kind is `speech.claimed` is
+the reply-grant ledger's guarantee of at most one authorization to speak per
+briefing, carried by the schema alone: two devices claiming at once both
+insert and exactly one insert lands. A prompt and a tool set are
+content-addressed, the hash of the text or the schemas as the key, so the same
+prompt written by every turn is one row a turn's hash names without a foreign
+key. A provider cursor is where the observation of one provider session last
+reached, one row per session per account, advanced in the same transaction as
+the observation message it produced and referenced by no message. Nothing in
+these tables is sealed, and nothing reads or writes them yet: the store writer
+lands on them in its own change, and the v1 tables are dropped only after
+every reader has moved.
 
 The store tests run the generated migrations on PGlite in process, so
 `check.sh` needs no service; the `postgres` CI job runs the same migrations

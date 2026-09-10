@@ -1,11 +1,13 @@
 import type { BrainRunUsage } from "@sidecar/brain";
 import type { StoredUIMessage } from "@sidecar/session/ui-messages";
 import type { MessageRole, StoredMessageMetadata } from "@sidecar/wire";
+import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   bigint,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -66,6 +68,23 @@ export const TURN_STATUS = {
 } as const;
 
 type TurnStatus = (typeof TURN_STATUS)[keyof typeof TURN_STATUS];
+
+/**
+ * What an event records about a message: a briefing's life from offered
+ * through claimed or held to spoken, pushed, or expired, or a rating the
+ * developer gave. The claim is the one kind the schema itself makes exclusive.
+ */
+export const EVENT_KIND = {
+  SPEECH_OFFERED: "speech.offered",
+  SPEECH_CLAIMED: "speech.claimed",
+  SPEECH_SPOKEN: "speech.spoken",
+  SPEECH_PUSHED: "speech.pushed",
+  SPEECH_EXPIRED: "speech.expired",
+  SPEECH_HELD: "speech.held",
+  RATING: "rating",
+} as const;
+
+type EventKind = (typeof EVENT_KIND)[keyof typeof EVENT_KIND];
 
 const instant = (name: string) => timestamp(name, { withTimezone: true });
 
@@ -193,3 +212,84 @@ export const conversationLease = pgTable("conversation_lease", {
   heartbeatAt: instant("heartbeat_at").notNull(),
   expiresAt: instant("expires_at").notNull(),
 });
+
+/**
+ * What happened to a message after it was written, one row per happening,
+ * numbered by the conversation's own event sequence under the same unique
+ * pair as messages, so every device converges on the same events in the same
+ * order. A briefing's delivery is this table alone: `announce` writes
+ * `speech.offered`, a device that means to say it writes `speech.claimed`,
+ * and the partial unique index over the claim is the whole of the reply-grant
+ * ledger's guarantee of at most one authorization to speak per briefing. Two
+ * devices claiming at once both insert, and exactly one insert lands; there
+ * is no state column to race on and no briefing row to fall back to. The
+ * device is a plain column, because a device row goes at sign-out and the
+ * event stays what happened. An event goes with its message.
+ */
+export const events = pgTable(
+  "events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    seq: bigint("seq", { mode: "number" }).notNull(),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => messages.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<EventKind>().notNull(),
+    /** The device that claimed, spoke, or rated; null for a kind no device took part in. */
+    deviceId: text("device_id"),
+    payload: jsonb("payload"),
+    createdAt: instant("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    unique("events_conversation_seq").on(table.conversationId, table.seq),
+    // The predicate is DDL, which takes no bound parameter, so the kind is inlined rather than passed.
+    uniqueIndex("events_speech_claimed_message")
+      .on(table.messageId)
+      .where(sql`${table.kind} = ${sql.raw(`'${EVENT_KIND.SPEECH_CLAIMED}'`)}`),
+  ],
+);
+
+/**
+ * The prompts turns ran under, content-addressed: the hash of the text is
+ * the key, so the same prompt written by a thousand turns is one row, which
+ * a turn's `prompt_hash` names.
+ */
+export const prompts = pgTable("prompts", {
+  hash: text("hash").primaryKey(),
+  text: text("text").notNull(),
+  createdAt: instant("created_at").notNull().defaultNow(),
+});
+
+/** The tool sets turns were offered, content-addressed like prompts: the schemas as the model saw them, keyed by their hash. */
+export const toolSets = pgTable("tool_sets", {
+  hash: text("hash").primaryKey(),
+  schemas: jsonb("schemas").notNull(),
+  createdAt: instant("created_at").notNull().defaultNow(),
+});
+
+/**
+ * Where an observation of a provider session last reached: the cursor the
+ * provider's own read handed back, advanced in the same transaction as the
+ * observation message it produced. One row per observed session per account,
+ * so the three together are the key. No message references this row: the
+ * cursor is the observer's bookmark, not part of what was observed.
+ */
+export const providerCursors = pgTable(
+  "provider_cursors",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    providerId: text("provider_id").notNull(),
+    providerSessionId: text("provider_session_id").notNull(),
+    cursor: text("cursor").notNull(),
+    updatedAt: instant("updated_at").notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.providerId, table.providerSessionId] })],
+);
