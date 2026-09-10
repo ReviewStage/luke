@@ -108,6 +108,7 @@ export {
   type ToolEffect,
   type ToolExecution,
   type ToolPlacement,
+  UI_MESSAGE_ITEM_FORMAT,
 } from "./registry.js";
 export {
   discoverSkills,

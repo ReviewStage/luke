@@ -23,17 +23,37 @@ export interface ItemFormatIdentity {
   readonly version: number;
 }
 
-/** The item format every built-in of this build speaks: the Responses input array, first shape. */
+/** The item format the tool loop's adapters speak: the Responses input array, first shape. */
 export const RESPONSES_ITEM_FORMAT = {
   format: "openai-responses-input",
+  version: 1,
+} as const satisfies ItemFormatIdentity;
+
+/**
+ * The item format the UIMessage engine persists: the conversation's stored
+ * rows, each the AI SDK `UIMessage` a store holds and the model its turn ran
+ * on. There is no checkpoint on this path — the rows are the record, and the
+ * model's input is derived from them each turn — so the format names what
+ * the engine reads, not a second copy it keeps.
+ */
+export const UI_MESSAGE_ITEM_FORMAT = {
+  format: "ai-ui-message",
   version: 1,
 } as const satisfies ItemFormatIdentity;
 
 /** The tool-loop runtime's identity, as a checkpoint is stamped with it. */
 export const TOOL_LOOP_RUNTIME = { ID: "tool-loop", VERSION: 1 } as const;
 
-/** The one context engine this build compiles in: the Responses input array. */
-export const BUILTIN_CONTEXT_ENGINE = { RESPONSES: "openai-responses" } as const;
+/**
+ * The two context engines this build compiles in: the Responses input array
+ * the tool loop's checkpoint is written in, and the derivation over stored
+ * UIMessages that replaces it once the host is swapped. Both stand so a
+ * configuration can name either while the swap is under way.
+ */
+export const BUILTIN_CONTEXT_ENGINE = {
+  RESPONSES: "openai-responses",
+  UI_MESSAGES: "ai-ui-messages",
+} as const;
 
 /** The two model adapters: the developer's own OpenAI key, and Luke's hosted service. */
 export const BUILTIN_MODEL_ADAPTER = {
@@ -151,9 +171,14 @@ interface BuiltinMemoryProvider {
   readonly embeddingAdapterId: string;
 }
 
+interface BuiltinContextEngine {
+  /** The item format the engine reads and, where it keeps one, checkpoints in. */
+  readonly itemFormat: ItemFormatIdentity;
+}
+
 interface Builtins {
   readonly agentRuntimeIds: readonly string[];
-  readonly contextEngineIds: readonly string[];
+  readonly contextEngines: Readonly<Record<string, BuiltinContextEngine>>;
   readonly modelAdapters: Readonly<Record<string, BuiltinModelAdapter>>;
   readonly memoryProviders: Readonly<Record<string, BuiltinMemoryProvider>>;
 }
@@ -177,7 +202,10 @@ const NOTEBOOK_MEMORY_CAPABILITIES = [
  */
 export const BUILTINS = {
   agentRuntimeIds: [TOOL_LOOP_RUNTIME.ID],
-  contextEngineIds: [BUILTIN_CONTEXT_ENGINE.RESPONSES],
+  contextEngines: {
+    [BUILTIN_CONTEXT_ENGINE.RESPONSES]: { itemFormat: RESPONSES_ITEM_FORMAT },
+    [BUILTIN_CONTEXT_ENGINE.UI_MESSAGES]: { itemFormat: UI_MESSAGE_ITEM_FORMAT },
+  },
   modelAdapters: {
     [BUILTIN_MODEL_ADAPTER.OPENAI]: {
       credentialKind: CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY,
@@ -199,7 +227,7 @@ export const BUILTINS = {
 } as const satisfies Builtins;
 
 export type BuiltinAgentRuntimeId = (typeof BUILTINS.agentRuntimeIds)[number];
-export type BuiltinContextEngineId = (typeof BUILTINS.contextEngineIds)[number];
+export type BuiltinContextEngineId = keyof typeof BUILTINS.contextEngines;
 export type BuiltinModelAdapterId = keyof typeof BUILTINS.modelAdapters;
 export type BuiltinMemoryProviderId = keyof typeof BUILTINS.memoryProviders;
 
@@ -283,7 +311,7 @@ export function resolveConfiguration(names: AgentConfiguration): ConfigurationOu
   const adapter = table.modelAdapters[names.modelAdapterId];
   if (
     !table.agentRuntimeIds.includes(names.agentRuntimeId) ||
-    !table.contextEngineIds.includes(names.contextEngineId) ||
+    !table.contextEngines[names.contextEngineId] ||
     !adapter ||
     (names.memoryProviderId !== undefined && !table.memoryProviders[names.memoryProviderId])
   ) {

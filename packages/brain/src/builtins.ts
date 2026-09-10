@@ -9,7 +9,10 @@ import { ToolLoopAgentRuntime } from "./runtime.js";
  * built here rather than beside the table because the runtime package must
  * not reach the brain to build one. The model adapters have no counterpart
  * here on purpose: the credential policy builds those from the credential a
- * configuration's reference names.
+ * configuration's reference names. The table's other context engine, the
+ * derivation over stored UIMessages, is constructed behind
+ * `@sidecar/brain/ui-message-context` rather than here, because it reaches
+ * the AI SDK at run time and the barrel must not.
  */
 export function toolLoopRuntimeOver(model: ModelAdapter): AgentRuntime {
   return new ToolLoopAgentRuntime({

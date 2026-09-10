@@ -15,8 +15,10 @@ import {
   defaultAgentConfiguration,
   MEMORY_CAPABILITY,
   notebookMemoryProviderFor,
+  RESPONSES_ITEM_FORMAT,
   resolveConfiguration,
   TOOL_LOOP_RUNTIME,
+  UI_MESSAGE_ITEM_FORMAT,
 } from "./registry.js";
 
 function configuration(overrides: Partial<Parameters<typeof defaultAgentConfiguration>[0]> = {}) {
@@ -55,6 +57,23 @@ test("the notebook index stands as a memory provider per embedding adapter, one 
     notebookMemoryProviderFor(CREDENTIAL_REFERENCE_KIND.HOSTED_ACCOUNT),
     BUILTIN_MEMORY_PROVIDER.HOSTED,
   );
+});
+
+test("both context engines stand in the table, each under its own item format, and either resolves", () => {
+  assert.deepEqual(
+    Object.entries(BUILTINS.contextEngines).map(([id, engine]) => [id, engine.itemFormat]),
+    [
+      [BUILTIN_CONTEXT_ENGINE.RESPONSES, RESPONSES_ITEM_FORMAT],
+      [BUILTIN_CONTEXT_ENGINE.UI_MESSAGES, UI_MESSAGE_ITEM_FORMAT],
+    ],
+  );
+  assert.notDeepEqual(RESPONSES_ITEM_FORMAT, UI_MESSAGE_ITEM_FORMAT);
+  for (const contextEngineId of Object.values(BUILTIN_CONTEXT_ENGINE)) {
+    assert.equal(
+      resolveConfiguration(configuration({ contextEngineId })).outcome,
+      CONFIGURATION_OUTCOME.RESOLVED,
+    );
+  }
 });
 
 /** The refusal an outcome carries, or nothing when it resolved. */
