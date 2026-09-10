@@ -547,8 +547,14 @@ button:disabled {
    priority; the shape reads the same answer off the stage's own facts — a run
    pending and no live turn, whose face rests are what displace the wait — so
    the two cannot grow apart. A turn under way keeps the voice rule's width
-   instead, and the dots are not drawn there at all. */
-.app-stage[data-presentation="capsule"][data-thinking="true"]:not([data-voice]) .panel-surface {
+   instead, and the dots are not drawn there at all. The caption gate is not a
+   tie to win but a disjoint state: `:not()` lifts this rule's specificity past
+   the caption rule below, which must take the peek's width whenever words
+   stand under the shape, so the wait may only grow a capsule with no words to
+   cover — a captioned one is already wide enough for the dots. */
+.app-stage[data-presentation="capsule"][data-thinking="true"][data-caption="false"]:not(
+  [data-voice]
+) .panel-surface {
   width: var(--capsule-thinking-width);
   transform: translate(calc(-50% - var(--capsule-thinking-shift)), var(--shape-top, 0px));
   /* Growing leads, exactly as the voice growth above: the base rule's delay is
@@ -557,7 +563,9 @@ button:disabled {
   transition-delay: 0s;
 }
 
-.app-stage[data-presentation="capsule"][data-thinking="true"]:not([data-voice])
+.app-stage[data-presentation="capsule"][data-thinking="true"][data-caption="false"]:not(
+    [data-voice]
+  )
   .compact-hover-target {
   width: var(--capsule-thinking-width);
   transform: translateX(calc(-50% - var(--capsule-thinking-shift)));
@@ -568,7 +576,9 @@ button:disabled {
    rather than the transition, because a wait beginning at rest mounts the dots
    on the very frame the growth starts, and a mounting element has no earlier
    style to transition from. */
-.app-stage[data-presentation="capsule"][data-thinking="true"]:not([data-voice]) .wing-thinking {
+.app-stage[data-presentation="capsule"][data-thinking="true"][data-caption="false"]:not(
+  [data-voice]
+) .wing-thinking {
   opacity: 1;
   transform: none;
   transition-duration: var(--duration-quick), var(--duration-shape);
@@ -579,6 +589,14 @@ button:disabled {
     calc(var(--duration-shape) - var(--duration-quick)) backwards,
     wing-mount-travel var(--duration-shape) var(--spring)
     calc(var(--duration-shape) - var(--duration-quick)) backwards;
+}
+
+/* A captioned capsule already holds the peek's width, so dots drawn there have
+   their room without any growth: they arrive at once on the base rule's mount
+   fade, the way they arrive in the peek itself. */
+.app-stage[data-presentation="capsule"][data-caption="true"] .wing-thinking {
+  opacity: 1;
+  transform: none;
 }
 
 @keyframes wing-mount-fade {
