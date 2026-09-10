@@ -163,7 +163,6 @@ test("a brain turn becomes its own generation, and junk lines cost only themselv
     deliveries: [{ briefingChars: 96 }],
     elapsedMs: 321,
     iterations: 1,
-    compacted: false,
   });
   const trace = unboxTraceFromLines(["not json", turn]);
   assert.deepEqual(trace.total_tokens, { input: 1_500, output: 0 });
@@ -211,7 +210,6 @@ test("a failed brain turn shows its error, and a keyed turn its model", () => {
     deliveries: [],
     elapsedMs: 100,
     iterations: 0,
-    compacted: false,
     model: "gpt-5.6-luna",
     error: "request failed with status 500",
   });

@@ -32,7 +32,6 @@ import {
   CHECKPOINT,
   call,
   claude,
-  compaction,
   DEF,
   edge,
   FakeClient,
@@ -227,25 +226,6 @@ test("the tool loop has no iteration cap: it runs until the model answers withou
   assert.equal(h.traces[0]?.runtime, TOOL_LOOP_RUNTIME.ID);
 });
 
-test("a compaction item drops everything before it from the remembered array", async () => {
-  const h = harness();
-  h.client.answers.push(answered([message("first turn")]));
-  await h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 3_000);
-  assert.equal(h.persisted.at(-1)?.items.length, 2);
-
-  h.client.answers.push(answered([compaction("cmp_1"), reasoning("rs"), message("folded")]));
-  await h.agent.wake([edge(DEF)]);
-  await h.clock.advance(NOW + 6_000);
-  const remembered = h.persisted.at(-1)?.items ?? [];
-  assert.deepEqual(
-    remembered.map((item) => item.type),
-    ["compaction", "reasoning", "message"],
-  );
-  assert.equal(h.traces[1]?.compacted, true);
-  assert.equal(h.client.inputs[1]?.length, 4);
-});
-
 test("a failed turn rolls the memory and cursors back and persists nothing", async () => {
   const h = harness();
   h.client.answers.push(failedAnswer("boom"));
@@ -289,7 +269,7 @@ test("a call that fails mid-loop rolls back the whole turn, calls and all", asyn
 });
 
 test("restored memory opens the next turn, and held briefings are re-decided from their own item", async () => {
-  const prior = [compaction("cmp_0"), message("earlier")];
+  const prior = [message("the conversation so far, summarized"), message("earlier")];
   const repository = fakeBrainStateRepository({
     ...freshBrainState("gen-prior", NOW - 1),
     checkpointFormat: checkpointFormatTag(CHECKPOINT),
@@ -1038,7 +1018,7 @@ test("an expiry is enforced at the door of a turn and a submission even when no 
   assert.equal(idle.store.current()?.requests.length, 0);
 });
 
-test("a compaction and a fortnight of writes never extend a generation's life", async () => {
+test("a fortnight of writes never extends a generation's life", async () => {
   const h = harness();
   const generationClock = new BrainGenerationClock({
     store: h.store,
@@ -1052,9 +1032,8 @@ test("a compaction and a fortnight of writes never extend a generation's life", 
   const born = h.store.current();
   assert.ok(born);
   await h.clock.advance(NOW + 7 * 24 * 60 * 60 * 1000);
-  h.client.answers.push(answered([compaction("cmp_1"), message("two")]));
+  h.client.answers.push(answered([message("two")]));
   await ask(h, "two");
-  assert.equal(h.traces.at(-1)?.compacted, true);
   assert.equal(h.store.current()?.expiresAt, born.expiresAt);
   assert.equal(h.store.current()?.createdAt, born.createdAt);
   assert.equal(h.repository.state?.expiresAt, born.expiresAt);

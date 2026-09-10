@@ -79,22 +79,17 @@ test("words, model output, and tool results become their Responses items; epheme
   assert.equal(context.checkpoint().items.length, 3);
 });
 
-test("compact drops everything before the latest compaction item; adopting a window replaces everything", () => {
+test("adopting items replaces everything retained, whatever the items are", () => {
   const context = engine();
   context.bootstrap(undefined, LOST);
   context.ingest({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: "one" });
   context.ingest({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: "two" });
-  assert.equal(context.compact(), 0);
-  const folded = { type: RESPONSES_INPUT_ITEM_TYPE.COMPACTION, id: "cmp", encrypted_content: "x" };
-  context.ingest({ kind: CONTEXT_INPUT_KIND.MODEL_OUTPUT, items: [folded] });
-  assert.equal(context.compact(), 2);
-  assert.deepEqual(context.checkpoint().items, [folded]);
-  const window: WireRecord[] = [
-    { type: RESPONSES_INPUT_ITEM_TYPE.COMPACTION, id: "cmp2", encrypted_content: "y" },
+  const inherited: WireRecord[] = [
+    userMessageItem("a requester's ask"),
     { type: RESPONSES_INPUT_ITEM_TYPE.MESSAGE, role: "assistant", content: [] },
   ];
-  context.adoptCompaction(window);
-  assert.deepEqual(context.checkpoint().items, window);
+  context.adopt(inherited);
+  assert.deepEqual(context.checkpoint().items, inherited);
 });
 
 test("a mark rolls the items back and dispose empties them", () => {

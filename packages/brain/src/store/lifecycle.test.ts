@@ -144,15 +144,15 @@ test("a compaction changes the projection and keeps the transcript searchable, w
     ],
   };
   assert.equal(repo.save(state, [userText(SECRET), userText("noted")]), true);
-  // The explicit compaction: the window replaced whole, the boundary recorded beside it.
-  state = { ...state, items: [{ type: "compaction", encrypted_content: "folded" }] };
+  // The fold: the projection replaced by its summary, the boundary recorded beside it.
+  state = { ...state, items: [{ type: "message", role: "assistant", content: "folded" }] };
   assert.equal(
     repo.save(state, [
       {
         kind: TRANSCRIPT_EVENT_KIND.COMPACTION,
         recordedAt: NOW + 1,
         boundary: {
-          source: COMPACTION_SOURCE.PROVIDER_EXPLICIT,
+          source: COMPACTION_SOURCE.LOCAL_SUMMARY,
           dropped: 2,
           checkpointFormat: "tool-loop@1:openai-responses-input/1",
         },
@@ -161,7 +161,7 @@ test("a compaction changes the projection and keeps the transcript searchable, w
     true,
   );
   assert.deepEqual(loadBrainEnvelope(database, MAIN_SESSION_KEY).state?.items, [
-    { type: "compaction", encrypted_content: "folded" },
+    { type: "message", role: "assistant", content: "folded" },
   ]);
   const transcript = listTranscript(database, MAIN_SESSION_KEY);
   assert.equal(transcript.length, 3);
@@ -173,7 +173,7 @@ test("a compaction changes the projection and keeps the transcript searchable, w
       b.dropped,
       b.transcriptSequence,
     ]),
-    [[COMPACTION_SOURCE.PROVIDER_EXPLICIT, 2, 3]],
+    [[COMPACTION_SOURCE.LOCAL_SUMMARY, 2, 3]],
   );
   // A save from a stale picture of the generation carries no transcript either.
   const stale = repository(database);

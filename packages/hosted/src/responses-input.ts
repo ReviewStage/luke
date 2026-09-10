@@ -320,11 +320,14 @@ function admitReasoning(item: WireRecord): WireRecord | undefined {
 }
 
 /**
- * A compaction item comes back from the API with `created_by`, the actor that
- * produced it, and goes back in without: the API's own input form omits the
- * field. It is the one field admission drops rather than refuses or keeps,
- * because it is output metadata carrying no replay content, and a request
- * built from stored output must not fail on a field the input never took.
+ * A compaction item is one an earlier build stored, from the explicit
+ * compaction this build no longer asks OpenAI for; it is admitted so a memory
+ * standing since then replays whole rather than being refused at the door.
+ * It comes back from the API with `created_by`, the actor that produced it,
+ * and goes back in without: the API's own input form omits the field. It is
+ * the one field admission drops rather than refuses or keeps, because it is
+ * output metadata carrying no replay content, and a request built from
+ * stored output must not fail on a field the input never took.
  */
 function admitCompaction(item: WireRecord): WireRecord | undefined {
   if (!keysWithin(item, ALLOWED_KEYS.COMPACTION)) return undefined;

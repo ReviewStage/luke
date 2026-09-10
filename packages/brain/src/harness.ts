@@ -140,10 +140,6 @@ export function call(callId: string, name: string, args: WireRecord): WireRecord
   };
 }
 
-export function compaction(id: string): WireRecord {
-  return { type: RESPONSES_INPUT_ITEM_TYPE.COMPACTION, id, encrypted_content: "folded" };
-}
-
 /**
  * The transport a test stands in for: what the old brain client answered,
  * now in the model adapter's normalized shape. Tests compose the same raw
@@ -218,7 +214,6 @@ export function adapterOf(client: BrainClient): ModelAdapter {
         ...(client.model ? { model: client.model } : undefined),
         checkpoint: CHECKPOINT,
         countsInputTokens: false,
-        compacts: false,
         maximumOutputTokens: 16_000,
       },
     }),
@@ -227,11 +222,6 @@ export function adapterOf(client: BrainClient): ModelAdapter {
       outcome: MODEL_RESPONSE_OUTCOME.FAILED,
       failure: MODEL_FAILURE.UPSTREAM,
       reason: "not counted",
-    }),
-    compact: async () => ({
-      outcome: MODEL_RESPONSE_OUTCOME.FAILED,
-      failure: MODEL_FAILURE.UPSTREAM,
-      reason: "not compacted",
     }),
     quietUntil: () => client.quietUntil(),
   };

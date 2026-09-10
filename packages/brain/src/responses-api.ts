@@ -26,20 +26,18 @@ import {
 /**
  * The one OpenAI Responses request a brain turn may be, and the one reading of
  * its answer. Built here once so the keyed client and the hosted service send
- * the same shape: instructions, tools, the reasoning summary, and server-side
- * compaction are fixed by the build, and only the input array varies. The
- * request leaves OpenAI's `store` at its default, so each response stands
- * with OpenAI under its own retention and is named back by its id, which the
- * run keeps; the brain still replays its context itself and never reads a
- * stored response back.
+ * the same shape: instructions, tools, and the reasoning summary are fixed by
+ * the build, and only the input array varies. The request leaves OpenAI's
+ * `store` at its default, so each response stands with OpenAI under its own
+ * retention and is named back by its id, which the run keeps; the brain
+ * still replays its context itself and never reads a stored response back.
  *
  * Item shapes follow the Responses API reference as it stands today. A
  * `function_call` output carries `call_id`, `name`, and `arguments` (a JSON
  * string); its answer is a `function_call_output` carrying the same `call_id`
  * and a string `output`. A `reasoning` item carries `encrypted_content`
  * because the request asks for it, and a `summary` in words because the
- * request asks for that too; a `compaction` item carries `type: "compaction"`
- * and its own `encrypted_content`. Every output item is appended to the input
+ * request asks for that too. Every output item is appended to the input
  * array verbatim, because a reasoning model run statelessly must see its own
  * reasoning items replayed beside the function calls they preceded.
  */
@@ -48,9 +46,9 @@ export const BRAIN_RESPONSES_PATH = "/responses";
 
 /**
  * One item of the brain's input array. The brain never reads inside an item it
- * did not build itself — reasoning and compaction items are opaque, and even a
- * message it wrote is replayed rather than re-read — so an item is a record
- * and nothing narrower.
+ * did not build itself — a reasoning item is opaque, and even a message it
+ * wrote is replayed rather than re-read — so an item is a record and nothing
+ * narrower.
  */
 export type ResponsesInputItem = WireRecord;
 
@@ -95,12 +93,11 @@ export interface BrainResponsesOptions {
 }
 
 /**
- * Builds the Responses request body one brain turn is run with. No automatic
- * compaction is asked of the API: the host schedules compaction itself, so
- * two policies never compete over one window, and an explicit compaction is
- * a request of its own. Reasoning items come back encrypted so the memory
- * can replay them itself, and summarized so the record can say in words what
- * the model was reasoning about.
+ * Builds the Responses request body one brain turn is run with. No compaction
+ * is asked of the API: the brain folds its own context behind a summary, so
+ * no provider policy competes with its own over one window. Reasoning items
+ * come back encrypted so the memory can replay them itself, and summarized
+ * so the record can say in words what the model was reasoning about.
  */
 export function brainResponsesRequest(
   input: readonly ResponsesInputItem[],
@@ -133,6 +130,15 @@ export function userMessageItem(text: string): ResponsesInputItem {
   };
 }
 
+/** Words in Luke's own voice, as the input array carries them: a fold's summary standing in for the items it replaced. */
+export function assistantMessageItem(text: string): ResponsesInputItem {
+  return {
+    type: RESPONSES_INPUT_ITEM_TYPE.MESSAGE,
+    role: RESPONSES_MESSAGE_ROLE.ASSISTANT,
+    content: [{ type: RESPONSES_CONTENT_PART_TYPE.OUTPUT_TEXT, text }],
+  };
+}
+
 /** The answer to one function call, keyed by the call the model made. */
 export function functionCallOutputItem(callId: string, output: string): ResponsesInputItem {
   return {
@@ -142,12 +148,7 @@ export function functionCallOutputItem(callId: string, output: string): Response
   };
 }
 
-/** Whether an input item is a compaction item, one of the two kinds the memory reads the type of. */
-export function isCompactionItem(item: ResponsesInputItem): boolean {
-  return item.type === RESPONSES_INPUT_ITEM_TYPE.COMPACTION;
-}
-
-/** Whether an input item is a user message, the boundary a local fold may cut at. */
+/** Whether an input item is a user message, the boundary a fold may cut at. */
 export function isUserMessageItem(item: ResponsesInputItem): boolean {
   return (
     item.type === RESPONSES_INPUT_ITEM_TYPE.MESSAGE && item.role === RESPONSES_MESSAGE_ROLE.USER
@@ -163,16 +164,15 @@ interface BrainFunctionCall {
 /**
  * One Responses answer read down to what a turn acts on: every output item
  * verbatim for the memory, the function calls to dispatch, the text the model
- * wrote, the reasoning summaries in words, whether a compaction item arrived,
- * the input size the API counted, which is the one honest measure of how
- * large the memory really is, and the id OpenAI stored the response under.
+ * wrote, the reasoning summaries in words, the input size the API counted,
+ * which is the one honest measure of how large the memory really is, and the
+ * id OpenAI stored the response under.
  */
 export interface BrainResponsesOutput {
   items: readonly ResponsesInputItem[];
   functionCalls: readonly BrainFunctionCall[];
   outputText: string;
   reasoning: readonly ReasoningSummary[];
-  compacted: boolean;
   inputTokens?: number;
   responseId?: string;
   status?: string;
@@ -233,11 +233,9 @@ export function brainResponsesOutput(payload: UnparsedWireValue): BrainResponses
   const functionCalls: BrainFunctionCall[] = [];
   const reasoning: ReasoningSummary[] = [];
   const texts: string[] = [];
-  let compacted = false;
   for (const item of payload.output) {
     if (!isRecord(item)) continue;
     items.push(item);
-    if (isCompactionItem(item)) compacted = true;
     const call = functionCallFromItem(item);
     if (call) functionCalls.push(call);
     const summary = reasoningSummaryFromItem(item);
@@ -260,7 +258,6 @@ export function brainResponsesOutput(payload: UnparsedWireValue): BrainResponses
     functionCalls,
     outputText: joinReplyMessages(texts),
     reasoning,
-    compacted,
     ...(inputTokens !== undefined ? { inputTokens } : undefined),
     ...(responseId ? { responseId } : undefined),
     ...(status ? { status } : undefined),
@@ -268,7 +265,6 @@ export function brainResponsesOutput(payload: UnparsedWireValue): BrainResponses
   };
 }
 
-export const BRAIN_RESPONSES_COMPACT_PATH = "/responses/compact";
 export const BRAIN_RESPONSES_INPUT_TOKENS_PATH = "/responses/input_tokens";
 
 /** A tool as the brain's contracts carry it, as the Responses API takes it: a function tool. */
@@ -294,16 +290,6 @@ export function toolSchemaFromDefinition(definition: ActionToolDefinition): Tool
   };
 }
 
-/** The explicit compaction request: the model and the window to fold, and the same instructions the window was built under. */
-export function brainCompactRequest(
-  input: readonly ResponsesInputItem[],
-  options: Pick<BrainResponsesOptions, "model" | "instructions">,
-) {
-  return { model: options.model, instructions: options.instructions, input };
-}
-
-export type BrainCompactRequest = ReturnType<typeof brainCompactRequest>;
-
 /** The token count request: everything one inference would carry except the output budget. */
 export function brainInputTokensRequest(
   input: readonly ResponsesInputItem[],
@@ -327,7 +313,7 @@ const RESPONSES_STATUS = {
 /**
  * One Responses answer as the brain's contracts carry it: the output items
  * verbatim for the context engine, the text, the tool calls, the usage, and
- * whether the provider folded the context or stopped short. An HTTP success
+ * whether the model stopped short. An HTTP success
  * is not a reply: a response the provider itself marks failed, cancelled, or
  * still under way is a provider failure with the provider's own code, and
  * never a completed answer with no words. A payload with no output array is
@@ -371,7 +357,6 @@ export function responsesModelAnswer(payload: UnparsedWireValue): ModelResponse 
     ...(usage ? { usage: modelUsage } : undefined),
     ...(output.responseId !== undefined ? { responseId: output.responseId } : undefined),
     ...(output.reasoning.length > 0 ? { reasoning: output.reasoning } : undefined),
-    compacted: output.compacted,
     ...(output.incompleteReason
       ? {
           incomplete: {
@@ -381,19 +366,6 @@ export function responsesModelAnswer(payload: UnparsedWireValue): ModelResponse 
         }
       : undefined),
   };
-}
-
-/** The compacted window an explicit compaction answered, or nothing when the payload carries none. */
-export function responsesCompactedWindow(
-  payload: UnparsedWireValue,
-): readonly ResponsesInputItem[] | undefined {
-  if (!isRecord(payload) || !Array.isArray(payload.output)) return undefined;
-  const items: ResponsesInputItem[] = [];
-  for (const item of payload.output) {
-    if (!isRecord(item)) return undefined;
-    items.push(item);
-  }
-  return items;
 }
 
 /** The count a token-count answer carries — a non-negative safe integer — or nothing. */

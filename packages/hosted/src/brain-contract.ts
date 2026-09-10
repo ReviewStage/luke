@@ -35,7 +35,6 @@ export const HOSTED_BRAIN_CONTRACT_VERSION = 2;
 export const HOSTED_BRAIN_OPERATION = {
   RESPOND: "respond",
   COUNT_TOKENS: "count-tokens",
-  COMPACT: "compact",
   /** Embeddings for the notebook index: texts in, one vector each out, under the model the service fixes. */
   EMBED: "embed",
 } as const;
@@ -159,12 +158,6 @@ export interface HostedBrainCountTokensRequest {
   contract: typeof HOSTED_BRAIN_CONTRACT_VERSION;
   prompt: string;
   tools: readonly string[];
-  input: readonly WireRecord[];
-}
-
-export interface HostedBrainCompactRequest {
-  contract: typeof HOSTED_BRAIN_CONTRACT_VERSION;
-  prompt: string;
   input: readonly WireRecord[];
 }
 
@@ -332,12 +325,6 @@ function hostedBrainCountTokensRequestSchema(
   });
 }
 
-const hostedBrainCompactRequestSchema: Schema<HostedBrainCompactRequest> = s.record({
-  contract: contractSchema,
-  prompt: promptSchema,
-  input: inputSchema,
-});
-
 const hostedBrainEmbedRequestSchema: Schema<HostedBrainEmbedRequest> = s.record({
   contract: contractSchema,
   texts: textsSchema,
@@ -355,12 +342,6 @@ export function hostedBrainCountTokensRequestFromWire(
   catalog: ReadonlySet<string>,
 ): HostedBrainRequestRead<HostedBrainCountTokensRequest> {
   return hostedBrainRequestRead(hostedBrainCountTokensRequestSchema(catalog), value);
-}
-
-export function hostedBrainCompactRequestFromWire(
-  value: UnparsedWireValue,
-): HostedBrainRequestRead<HostedBrainCompactRequest> {
-  return hostedBrainRequestRead(hostedBrainCompactRequestSchema, value);
 }
 
 export function hostedBrainEmbedRequestFromWire(

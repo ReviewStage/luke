@@ -99,7 +99,6 @@ export function tracedModelAdapter(
       return answer;
     },
     countInputTokens: (input, options) => adapter.countInputTokens(input, options),
-    compact: (input, options) => adapter.compact(input, options),
     quietUntil: () => adapter.quietUntil(),
   };
 }

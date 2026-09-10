@@ -46,7 +46,6 @@ test("lines land in the named file, stamped, in the order they were recorded", a
     deliveries: [{ briefingChars: 96 }],
     elapsedMs: 1_250,
     iterations: 1,
-    compacted: false,
   });
   writer.recordSpeechDecision({ kind: "briefing", decision: "offered", pendingCount: 2 });
   await writer.settled();

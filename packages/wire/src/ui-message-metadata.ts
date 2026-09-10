@@ -128,11 +128,14 @@ export const USER_MESSAGE_METADATA: Schema<UserMessageMetadata> = s.union([
 
 /**
  * A compaction row's account of what it folded: the first message the model
- * still reads after it, and how many tokens the folded messages had cost.
+ * still reads after it, which is always knowable, and how many tokens the
+ * folded messages had cost, where the runtime that folded them reported it.
+ * An absent count means it did not; it is never written as zero, which would
+ * say nothing was folded, nor as an estimate wearing a measurement's shape.
  */
 const COMPACTION_METADATA_FIELDS = {
   first_kept_message_id: identifier,
-  tokens_before: s.wholeNumber({ minimum: 0 }),
+  tokens_before: s.wholeNumber({ minimum: 0 }).optional(),
 } satisfies SchemaFields;
 
 export type CompactionMetadata = RecordOf<typeof COMPACTION_METADATA_FIELDS>;

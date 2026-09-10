@@ -33,7 +33,6 @@ function answered(
     items: [],
     text: "",
     toolCalls: [],
-    compacted: false,
     ...overrides,
   };
 }
@@ -63,7 +62,6 @@ class FakeModel implements ModelAdapter {
           formatVersion: RESPONSES_ITEM_FORMAT.version,
         },
         countsInputTokens: false,
-        compacts: false,
         maximumOutputTokens: 16_000,
       },
     } as const;
@@ -81,10 +79,6 @@ class FakeModel implements ModelAdapter {
 
   countInputTokens(): never {
     throw new Error("not counted here");
-  }
-
-  compact(): never {
-    throw new Error("not compacted here");
   }
 
   quietUntil(): number | undefined {
@@ -265,16 +259,6 @@ test("a throttle, a provider failure, and an answer that stopped short each end 
     detail: "incomplete: max_output_tokens",
   });
   assert.ok(incomplete.events.some((event) => event.kind === RUNTIME_EVENT.INCOMPLETE));
-});
-
-test("a compaction item in the answer folds the context and is reported", async () => {
-  const h = harness();
-  const folded = { type: RESPONSES_INPUT_ITEM_TYPE.COMPACTION, id: "cmp", encrypted_content: "x" };
-  h.model.answers.push(answered({ items: [folded], text: "ok", compacted: true }));
-  await runtime(h.model).start(h.request()).done;
-  assert.deepEqual(h.events[0], { kind: RUNTIME_EVENT.ANSWERED, toolCalls: 0 });
-  assert.deepEqual(h.events[1], { kind: RUNTIME_EVENT.COMPACTED, dropped: 1 });
-  assert.deepEqual(h.context.checkpoint().items, [folded]);
 });
 
 test("a cancel while the model is thinking ends the run cancelled; a deadline says so", async () => {
@@ -523,22 +507,16 @@ test("an engine whose lifecycle hooks are asynchronous is awaited at every step"
       log.push("assemble");
       return later(inner.assemble(assembly));
     },
-    compact: async () => {
-      log.push("compact");
-      return later(inner.compact());
-    },
-    adoptCompaction: async (items) => later(inner.adoptCompaction(items)),
+    adopt: async (items) => later(inner.adopt(items)),
     afterTurn: async () => later(undefined),
     mark: () => inner.mark(),
     rollback: (mark) => inner.rollback(mark),
     checkpoint: () => inner.checkpoint(),
     dispose: async () => later(inner.dispose()),
   };
-  const folded = { type: RESPONSES_INPUT_ITEM_TYPE.COMPACTION, id: "cmp", encrypted_content: "x" };
   h.model.answers.push(
     answered({
       items: [
-        folded,
         {
           type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
           call_id: "c1",
@@ -547,7 +525,6 @@ test("an engine whose lifecycle hooks are asynchronous is awaited at every step"
         },
       ],
       toolCalls: [toolCall("c1", "act")],
-      compacted: true,
     }),
     answered({ text: "ok" }),
   );
@@ -560,14 +537,15 @@ test("an engine whose lifecycle hooks are asynchronous is awaited at every step"
     "ingest:user_text",
     "assemble",
     "ingest:model_output",
-    "compact",
     "ingest:tool_result",
     "assemble",
     "ingest:model_output",
   ]);
-  const window = [{ type: RESPONSES_INPUT_ITEM_TYPE.COMPACTION, id: "w", encrypted_content: "y" }];
-  await asyncEngine.adoptCompaction(window);
-  assert.deepEqual(asyncEngine.checkpoint().items, window);
+  const inherited = [
+    { type: RESPONSES_INPUT_ITEM_TYPE.MESSAGE, role: "user", content: "a requester's ask" },
+  ];
+  await asyncEngine.adopt(inherited);
+  assert.deepEqual(asyncEngine.checkpoint().items, inherited);
 });
 
 test("an answer that stopped short while still carrying words ends completed with the shortfall beside the words, and every answer's text is reported, the empty one included", async () => {

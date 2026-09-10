@@ -145,7 +145,7 @@ test("a recorder that throws costs the trace line, never the request", async () 
   assert.equal(await adapter.respond(INPUT, OPTIONS), ANSWERED);
 });
 
-test("quiet, capabilities, counting, and compaction pass through the wrapped adapter untouched", async () => {
+test("quiet, capabilities, and counting pass through the wrapped adapter untouched", async () => {
   const inner = bareModelAdapter({ respond: async () => ANSWERED, quietUntil: () => 42 });
   const adapter = tracedModelAdapter(inner, () => undefined);
   assert.equal(adapter.quietUntil(), 42);
@@ -154,7 +154,6 @@ test("quiet, capabilities, counting, and compaction pass through the wrapped ada
     await adapter.countInputTokens(INPUT, OPTIONS),
     await inner.countInputTokens(INPUT, OPTIONS),
   );
-  assert.deepEqual(await adapter.compact(INPUT, OPTIONS), await inner.compact(INPUT, OPTIONS));
 });
 
 test("a keyed turn records that it asked for a prefix cache, and what the provider answered from one", async () => {

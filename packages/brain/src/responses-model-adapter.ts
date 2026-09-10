@@ -5,7 +5,6 @@ import {
   type ModelAdapter,
   type ModelCapabilities,
   type ModelCapabilitiesAnswer,
-  type ModelCompaction,
   type ModelRequestOptions,
   type ModelResponse,
   type ModelTokenCount,
@@ -25,11 +24,10 @@ import { type Failure, type Normalized, payloadOf, throttled } from "./model-ada
  * body is composed, and how each answer is read.
  */
 
-/** The three Responses operations, named as the hosted contract names them; the keyed transport addresses the same three on the provider. Embedding is the embedding adapters' own. */
+/** The two Responses operations, named as the hosted contract names them; the keyed transport addresses the same two on the provider. Embedding is the embedding adapters' own. */
 export const RESPONSES_OPERATION = {
   RESPOND: HOSTED_BRAIN_OPERATION.RESPOND,
   COUNT_TOKENS: HOSTED_BRAIN_OPERATION.COUNT_TOKENS,
-  COMPACT: HOSTED_BRAIN_OPERATION.COMPACT,
 } as const satisfies Partial<Record<string, HostedBrainOperation>>;
 export type ResponsesOperation = (typeof RESPONSES_OPERATION)[keyof typeof RESPONSES_OPERATION];
 
@@ -78,11 +76,6 @@ export interface ResponsesTransport<Admitted> {
     items: readonly WireRecord[],
     options: Pick<ModelRequestOptions, "prompt" | "tools">,
   ): PreparedOperation<ModelTokenCount> | Normalized;
-  compact(
-    admitted: Admitted,
-    items: readonly WireRecord[],
-    options: Pick<ModelRequestOptions, "prompt">,
-  ): PreparedOperation<ModelCompaction> | Normalized;
   /** One request on the transport's own credential; a response is the adapter's to read, anything else is already an end. */
   request(
     operation: ResponsesOperation,
@@ -145,16 +138,6 @@ export class ResponsesModelAdapter<Admitted> implements ModelAdapter {
   ): Promise<ModelTokenCount> {
     return this.#operation(RESPONSES_OPERATION.COUNT_TOKENS, options.signal, (admitted) =>
       this.#transport.countInputTokens(admitted, items, options),
-    );
-  }
-
-  /** The explicit compaction: the whole window the transport answers is the next context, adopted as it came. */
-  compact(
-    items: readonly WireRecord[],
-    options: Pick<ModelRequestOptions, "prompt" | "signal">,
-  ): Promise<ModelCompaction> {
-    return this.#operation(RESPONSES_OPERATION.COMPACT, options.signal, (admitted) =>
-      this.#transport.compact(admitted, items, options),
     );
   }
 

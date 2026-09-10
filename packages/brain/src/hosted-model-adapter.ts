@@ -6,7 +6,6 @@ import {
   HOSTED_SERVICE_PATH,
   type HostedBrainCapabilities,
   type HostedBrainRequestRead,
-  hostedBrainCompactRequestFromWire,
   hostedBrainCountTokensAnswerFromWire,
   hostedBrainCountTokensRequestFromWire,
   hostedBrainRespondRequestFromWire,
@@ -17,7 +16,6 @@ import { BUILTIN_MODEL_ADAPTER } from "@sidecar/runtime";
 import {
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
-  type ModelCompaction,
   type ModelRequestOptions,
   type ModelResponse,
   type ModelTokenCount,
@@ -38,7 +36,7 @@ import {
   notServed,
   payloadOf,
 } from "./model-adapter-shared.js";
-import { responsesCompactedWindow, responsesModelAnswer } from "./responses-api.js";
+import { responsesModelAnswer } from "./responses-api.js";
 import {
   type Admission,
   type PreparedOperation,
@@ -61,7 +59,6 @@ export interface HostedModelAdapterOptions extends AccountToken {
 const HOSTED_PATH = {
   [RESPONSES_OPERATION.RESPOND]: HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2,
   [RESPONSES_OPERATION.COUNT_TOKENS]: HOSTED_SERVICE_PATH.BRAIN_COUNT_TOKENS,
-  [RESPONSES_OPERATION.COMPACT]: HOSTED_SERVICE_PATH.BRAIN_COMPACT,
 } as const satisfies Record<ResponsesOperation, string>;
 
 /**
@@ -102,7 +99,6 @@ class HostedTransport implements ResponsesTransport<HostedBrainCapabilities> {
     return {
       model: capabilities.model,
       countsInputTokens: capabilities.operations.includes(RESPONSES_OPERATION.COUNT_TOKENS),
-      compacts: capabilities.operations.includes(RESPONSES_OPERATION.COMPACT),
       maximumOutputTokens: capabilities.bounds.maximumOutputTokens,
       tools: capabilities.tools,
       contextWindowTokens: COMPACTION_POLICY.DEFAULT_CONTEXT_WINDOW_TOKENS,
@@ -159,29 +155,6 @@ class HostedTransport implements ResponsesTransport<HostedBrainCapabilities> {
         return count
           ? { outcome: MODEL_RESPONSE_OUTCOME.ANSWERED, inputTokens: count.inputTokens }
           : failed(MODEL_FAILURE.MALFORMED, "count carried no inputTokens");
-      },
-    );
-  }
-
-  compact(
-    _: HostedBrainCapabilities,
-    items: readonly WireRecord[],
-    options: Pick<ModelRequestOptions, "prompt">,
-  ): PreparedOperation<ModelCompaction> | Normalized {
-    return prepared(
-      hostedBrainCompactRequestFromWire({
-        contract: HOSTED_BRAIN_CONTRACT_VERSION,
-        prompt: options.prompt,
-        input: items,
-      }),
-      (payload) => {
-        const window = responsesCompactedWindow(payload);
-        return (
-          replayable(payload, "compaction") ??
-          (window
-            ? { outcome: MODEL_RESPONSE_OUTCOME.ANSWERED, items: window }
-            : failed(MODEL_FAILURE.MALFORMED, "compaction carried no output"))
-        );
       },
     );
   }

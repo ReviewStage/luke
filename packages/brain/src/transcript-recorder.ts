@@ -20,7 +20,7 @@ import type { WireRecord } from "@sidecar/wire";
  * The context engine with the transcript written beside it. Every input the
  * runtime ingests and every fold of the projection is recorded here as it
  * happens, as the event it was — a user text, a model's output items kept
- * opaque, a tool's answer, a compaction boundary — and handed to the host
+ * opaque, a tool's answer, a fold's boundary — and handed to the host
  * with the checkpoint that carries it, so the retained transcript and the
  * active projection are written in one save. Nothing here reads inside an
  * item: the engine beneath owns the provider's shapes, and this wrapper
@@ -72,22 +72,9 @@ export class RecordingContextEngine implements ContextEngine {
     return this.#engine.assemble(assembly, lifecycle);
   }
 
-  compact(lifecycle?: ContextLifecycle): MaybePromise<number> {
-    const result = this.#engine.compact(lifecycle);
-    const record = (dropped: number) => {
-      if (dropped > 0) this.#boundary(COMPACTION_SOURCE.PROVIDER_INLINE, dropped);
-      return dropped;
-    };
-    return result instanceof Promise ? result.then(record) : record(result);
-  }
-
-  adoptCompaction(items: readonly WireRecord[], lifecycle?: ContextLifecycle): MaybePromise<void> {
-    const replaced = this.#engine.checkpoint().items.length;
-    const result = this.#engine.adoptCompaction(items, lifecycle);
-    const record = () => this.#boundary(COMPACTION_SOURCE.PROVIDER_EXPLICIT, replaced);
-    if (result instanceof Promise) return result.then(record);
-    record();
-    return result;
+  /** Items adopted whole for a housekeeping copy are the private turn's own and enter no record. */
+  adopt(items: readonly WireRecord[], lifecycle?: ContextLifecycle): MaybePromise<void> {
+    return this.#engine.adopt(items, lifecycle);
   }
 
   /**
@@ -96,14 +83,14 @@ export class RecordingContextEngine implements ContextEngine {
    * transcript says where the inherited history ends and the child's begins.
    */
   adoptFork(items: readonly WireRecord[], lifecycle?: ContextLifecycle): MaybePromise<void> {
-    const result = this.#engine.adoptCompaction(items, lifecycle);
+    const result = this.#engine.adopt(items, lifecycle);
     const record = () => this.#boundary(COMPACTION_SOURCE.FORK, 0);
     if (result instanceof Promise) return result.then(record);
     record();
     return result;
   }
 
-  /** The local fold, delegated to the engine beneath and recorded as a boundary when it folded anything. */
+  /** The fold, delegated to the engine beneath and recorded as a boundary when it folded anything. */
   async foldBehindSummary(
     summarize: (older: readonly WireRecord[]) => Promise<string | undefined>,
     keepRecentTokens: number,

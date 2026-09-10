@@ -56,7 +56,7 @@
       "project": ["api/**", "src/**", "server/**", "scripts/**", "tests/**"]
     },
     "packages/*": {
-      "entry": ["src/**/*.test.ts", "src/**/worker-entry.ts"],
+      "entry": ["src/**/*.test.ts", "src/**/worker-entry.ts", "src/ui-messages/index.ts"],
       "project": ["src/**"]
     },
     "tools/*": {

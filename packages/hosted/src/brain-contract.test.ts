@@ -10,7 +10,6 @@ import {
   HOSTED_BRAIN_REQUEST_REFUSAL,
   hostedBrainBounds,
   hostedBrainCapabilitiesFromWire,
-  hostedBrainCompactRequestFromWire,
   hostedBrainCountTokensAnswerFromWire,
   hostedBrainCountTokensRequestFromWire,
   hostedBrainEmbedAnswerFromWire,
@@ -119,7 +118,7 @@ test("each refusal is named: malformed, prompt too large, unknown tool, options 
   );
 });
 
-test("count-tokens and compact requests read the same way, each with exactly its own keys", () => {
+test("a count-tokens request reads the same way as an inference, with exactly its own keys", () => {
   const count = hostedBrainCountTokensRequestFromWire(
     { contract: 2, prompt: "p", tools: ["announce"], input: INPUT },
     CATALOG,
@@ -131,15 +130,6 @@ test("count-tokens and compact requests read the same way, each with exactly its
     CATALOG,
   );
   assert.ok(!extra.ok && extra.refusal === HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
-  const compact = hostedBrainCompactRequestFromWire({ contract: 2, prompt: "p", input: INPUT });
-  assert.ok(compact.ok);
-  const compactTools = hostedBrainCompactRequestFromWire({
-    contract: 2,
-    prompt: "p",
-    tools: [],
-    input: INPUT,
-  });
-  assert.ok(!compactTools.ok);
 });
 
 test("a count answer is a non-negative safe integer or nothing", () => {

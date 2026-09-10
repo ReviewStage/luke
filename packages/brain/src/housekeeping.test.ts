@@ -68,7 +68,6 @@ function adapterOf(model: FakeModel): ModelAdapter {
           formatVersion: RESPONSES_ITEM_FORMAT.version,
         },
         countsInputTokens: false,
-        compacts: false,
         maximumOutputTokens: 16_000,
       },
     }),
@@ -77,11 +76,6 @@ function adapterOf(model: FakeModel): ModelAdapter {
       outcome: MODEL_RESPONSE_OUTCOME.FAILED,
       failure: MODEL_FAILURE.UPSTREAM,
       reason: "not counted",
-    }),
-    compact: async () => ({
-      outcome: MODEL_RESPONSE_OUTCOME.FAILED,
-      failure: MODEL_FAILURE.UPSTREAM,
-      reason: "not compacted",
     }),
     quietUntil: () => undefined,
   };

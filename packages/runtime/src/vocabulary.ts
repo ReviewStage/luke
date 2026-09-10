@@ -26,6 +26,7 @@ export {
   isChildContextMode,
   isTerminalChildRunStatus,
 } from "./child-records.js";
+export { reserveTokens, shouldCompact } from "./compaction-policy.js";
 export {
   type AgentRuntime,
   type CheckpointFormat,
@@ -51,7 +52,6 @@ export {
   type ModelAnswer,
   type ModelCapabilities,
   type ModelCapabilitiesAnswer,
-  type ModelCompaction,
   type ModelFailure,
   type ModelIncomplete,
   type ModelRequestOptions,

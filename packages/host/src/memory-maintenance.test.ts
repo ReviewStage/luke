@@ -69,7 +69,7 @@ function fakeRuntime(answer: (prompt: string, input: string) => string | undefin
   // SAFETY: the sweep reaches only openContext and start, both present; the rest of the runtime is never called.
   const runtime = {
     openContext: async () => ({
-      context: { dispose: () => undefined, adoptCompaction: () => undefined },
+      context: { dispose: () => undefined, adopt: () => undefined },
       bootstrap: {},
     }),
     start: (request: RuntimeRunRequest) => {

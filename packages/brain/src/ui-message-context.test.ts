@@ -720,14 +720,14 @@ test("rows are read back field by field, and a refusal names the item and the fi
   ]);
 });
 
-test("the engine writes no row: the loop's inputs and a provider's window are refused, not dropped", async () => {
+test("the engine writes no row: the loop's inputs and adopted items are refused, not dropped", async () => {
   const { context } = await bootstrapped([ASK_ROW]);
   const seam: ContextEngine = context;
   assert.throws(() => seam.ingest({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: "late words" }), {
     message: UI_MESSAGE_ENGINE_REFUSAL.INGEST,
   });
-  assert.throws(() => seam.adoptCompaction([]), {
-    message: UI_MESSAGE_ENGINE_REFUSAL.ADOPT_COMPACTION,
+  assert.throws(() => seam.adopt([]), {
+    message: UI_MESSAGE_ENGINE_REFUSAL.ADOPT,
   });
   assert.equal(seam.foldBehindSummary, undefined);
   assert.equal(context.checkpoint().items.length, 1);

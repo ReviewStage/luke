@@ -15,8 +15,8 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { isWireString, type WireRecord } from "@sidecar/wire";
 import {
+  assistantMessageItem,
   functionCallOutputItem,
-  isCompactionItem,
   isUserMessageItem,
   type ResponsesInputItem,
   userMessageItem,
@@ -28,8 +28,9 @@ import {
  * a model's output items are kept verbatim so a reasoning model run
  * statelessly sees its own reasoning replayed beside the calls it preceded,
  * a tool's answer becomes the `function_call_output` paired to its call, and
- * a compaction item is the memory of everything before it, opaque and safe
- * to keep. What persists is the array from the latest compaction onward,
+ * a fold's summary is an assistant message standing in for everything
+ * before it. Every other item is opaque, an item an earlier build stored
+ * included. What persists is the array from the latest summary onward,
  * stamped with the runtime that wrote it and this item format, and an engine
  * loads only a checkpoint stamped exactly the same.
  */
@@ -93,27 +94,21 @@ export class ResponsesContextEngine implements ContextEngine {
     return [...this.#items, ...assembly.ephemeral.map((text) => userMessageItem(text))];
   }
 
-  /** Drops every item before the latest compaction item; answers how many went. */
-  compact(): number {
-    const index = this.#items.findLastIndex(isCompactionItem);
-    if (index <= 0) return 0;
-    this.#items = this.#items.slice(index);
-    return index;
-  }
-
-  /** Adopts the window an explicit compaction answered, whole: it is the canonical next context. */
-  adoptCompaction(items: readonly WireRecord[]): void {
+  adopt(items: readonly WireRecord[]): void {
     this.#items = [...items];
   }
 
   /**
-   * The local fold, the port of OpenClaw's recent-tail cut: walking back from
-   * the end until roughly `keepRecentTokens` are kept, the cut lands on the
-   * latest user message at or before that point, so every function call
-   * stays beside its output and every reasoning item beside the call it
-   * preceded. The older items are handed to the summarizer and replaced by
-   * its words as one user message; a summary that does not come leaves the
-   * items untouched.
+   * The fold, the port of OpenClaw's recent-tail cut: walking back from the
+   * end until roughly `keepRecentTokens` are kept, the cut lands on the
+   * latest user message at or before that point. A user message never stands
+   * inside one answer's items — the runtime ingests an answer whole and its
+   * tool results after it, and words reach the array only at a model
+   * boundary — so every function call stays beside its output and every
+   * reasoning item beside the call it preceded, whole or folded whole. The
+   * older items are handed to the summarizer and replaced by its words as
+   * one assistant message; a summary that does not come leaves the items
+   * untouched.
    */
   async foldBehindSummary(
     summarize: (older: readonly WireRecord[]) => Promise<string | undefined>,
@@ -127,7 +122,7 @@ export class ResponsesContextEngine implements ContextEngine {
     // A turn or a mark may have moved the items while the summary was
     // written; the fold applies only to the array it was planned over.
     if (summary === undefined || this.#items !== before) return 0;
-    this.#items = [userMessageItem(summary), ...before.slice(cut)];
+    this.#items = [assistantMessageItem(summary), ...before.slice(cut)];
     return older.length;
   }
 

@@ -82,7 +82,7 @@ async function runPrivateTurn(options: PrivateTurnOptions): Promise<RuntimeRunEn
   const opened = await options.runtime.openContext(undefined, JSON.stringify({}));
   try {
     if (options.items && options.items.length > 0) {
-      await opened.context.adoptCompaction([...options.items], { signal: options.signal });
+      await opened.context.adopt([...options.items], { signal: options.signal });
     }
     const run = options.runtime.start({
       runId: options.runId,

@@ -3,10 +3,8 @@ import {
   BRAIN_EMBEDDING_MODEL,
   BRAIN_EMBEDDINGS_PATH,
   BRAIN_OPENAI_DEFAULTS,
-  BRAIN_RESPONSES_COMPACT_PATH,
   BRAIN_RESPONSES_INPUT_TOKENS_PATH,
   BRAIN_RESPONSES_PATH,
-  brainCompactRequest,
   brainEmbeddingsRequest,
   brainInputTokensRequest,
   brainOutputReplayable,
@@ -21,7 +19,6 @@ import {
   type HostedBrainRequestRead,
   type HostedBrainRequestRefusal,
   hostedBrainBounds,
-  hostedBrainCompactRequestFromWire,
   hostedBrainCountTokensRequestFromWire,
   hostedBrainEmbedRequestFromWire,
   hostedBrainRespondRequestFromWire,
@@ -31,7 +28,6 @@ import {
   RETRY_AFTER_HEADER,
   type ResponsesFunctionTool,
   rateLimitWaitMs,
-  responsesCompactedWindow,
   responsesInputTokens,
   text as trimmedText,
   type UnparsedWireValue,
@@ -57,8 +53,7 @@ import type { HostedSpend } from "./quota.js";
  * catalog does not hold refuses the request. The service fixes the model, the
  * upstream, its credential, the reasoning summary, and the bounds, answers its
  * capabilities so a desktop can decide before sending anything, and posts each
- * operation once: an inference, a token count, or an explicit compaction whose
- * answered window the desktop adopts whole. It runs no tool, keeps no
+ * operation once: an inference or a token count. It runs no tool, keeps no
  * conversation, and stores and logs none of the request, the reply, or the
  * encrypted items that travel in them.
  */
@@ -328,20 +323,6 @@ export function handleBrainEmbed(options: BrainV2Options): Promise<Response> {
       return answer && dimensions
         ? { model: answer.model, dimensions, vectors: answer.vectors }
         : undefined;
-    },
-  });
-}
-
-/** POST: an explicit compaction; the whole window the upstream answers is the desktop's next context. */
-export function handleBrainCompact(options: BrainV2Options): Promise<Response> {
-  return brainOperation(options, {
-    read: hostedBrainCompactRequestFromWire,
-    path: BRAIN_RESPONSES_COMPACT_PATH,
-    body: (request, model) =>
-      brainCompactRequest(request.input, { model, instructions: request.prompt }),
-    answer: (payload) => {
-      const window = responsesCompactedWindow(payload);
-      return window && brainOutputReplayable(payload) ? { output: window } : undefined;
     },
   });
 }

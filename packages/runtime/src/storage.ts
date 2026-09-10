@@ -22,10 +22,11 @@ export interface ConversationAppendOutcome<Entry> {
 }
 
 /**
- * Where a compaction came from. The provider may fold the context inline
- * inside an answer; the host may ask the provider for an explicit compaction
- * and adopt the window it answers whole; or, on a transport that cannot
- * compact, the host folds the older part behind a summary of its own.
+ * Where a compaction came from. This build folds a context one way, behind a
+ * summary the model writes; the two provider sources name folds earlier
+ * builds asked OpenAI for, inline inside an answer or as an explicit
+ * compaction, and stay in the vocabulary so the boundaries those builds
+ * recorded still read back rather than dropping from a transcript.
  */
 export const COMPACTION_SOURCE = {
   PROVIDER_INLINE: "provider_inline",
