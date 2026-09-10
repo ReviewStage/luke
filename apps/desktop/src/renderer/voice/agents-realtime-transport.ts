@@ -11,10 +11,12 @@ import {
   type TransportToolCallEvent,
   tool,
 } from "@openai/agents-realtime";
-import type { realtimeSessionConfig } from "@sidecar/realtime";
+import type { MouthToolDefinition, realtimeSessionConfig } from "@sidecar/realtime";
 import { isRecord, text, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 
-export type BuiltRealtimeSessionConfig = ReturnType<typeof realtimeSessionConfig>;
+export type BuiltRealtimeSessionConfig = ReturnType<
+  typeof realtimeSessionConfig<MouthToolDefinition>
+>;
 
 export interface SdkToolCallDetails {
   toolCall?: {

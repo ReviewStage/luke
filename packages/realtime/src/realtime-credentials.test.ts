@@ -4,6 +4,7 @@ import { remoteRealtimeToolDefinitions } from "@sidecar/actions";
 import { realtimeCredentialIsUsable } from "@sidecar/hosted";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import {
+  introductionSessionConfig,
   REALTIME_TRUNCATION,
   realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
@@ -11,7 +12,7 @@ import {
   remoteRealtimeClientSecretRequest,
 } from "./realtime-credentials.js";
 import { REALTIME_SESSION_TYPE } from "./realtime-events.js";
-import { ASK_BRAIN_TOOL, remoteRealtimeInstructions } from "./realtime-instructions.js";
+import { ASK_BRAIN_TOOL, mouthToolDefinitions } from "./realtime-instructions.js";
 import {
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
@@ -19,11 +20,12 @@ import {
   REALTIME_VOICE_LIST,
   REALTIME_VOICE_SPEED_LIST,
 } from "./realtime-voice-settings.js";
+import { SCENE, sessionInstructions } from "./voice-scene.js";
 
 const EXPIRES_AT_SECONDS = 1_800_000_060;
 
 test("the minted session closes the microphone until push-to-talk opens it", () => {
-  const config = realtimeSessionConfig();
+  const config = realtimeSessionConfig(SCENE.DESKTOP, mouthToolDefinitions());
 
   assert.equal(config.type, REALTIME_SESSION_TYPE);
   assert.equal(REALTIME_DEFAULTS.MODEL, "gpt-realtime-2.1");
@@ -40,17 +42,24 @@ test("the minted session asks for the developer's spoken words back as text", ()
   // transcription only hands the text back, so the history can hold both
   // halves of the exchange.
   assert.equal(REALTIME_DEFAULTS.TRANSCRIPTION_MODEL, "gpt-live-transcribe");
-  assert.deepEqual(realtimeSessionConfig().audio.input.transcription, {
-    model: REALTIME_DEFAULTS.TRANSCRIPTION_MODEL,
-  });
+  assert.deepEqual(
+    realtimeSessionConfig(SCENE.DESKTOP, mouthToolDefinitions()).audio.input.transcription,
+    {
+      model: REALTIME_DEFAULTS.TRANSCRIPTION_MODEL,
+    },
+  );
 });
 
 test("a model override receives no unsupported reasoning configuration", () => {
-  assert.equal(realtimeSessionConfig({ model: "gpt-realtime-preview" }).reasoning, undefined);
+  assert.equal(
+    realtimeSessionConfig(SCENE.DESKTOP, mouthToolDefinitions(), { model: "gpt-realtime-preview" })
+      .reasoning,
+    undefined,
+  );
 });
 
 test("the minted session chooses how it gives way at the edge of the window", () => {
-  const config = realtimeSessionConfig();
+  const config = realtimeSessionConfig(SCENE.DESKTOP, mouthToolDefinitions());
 
   // Eviction happens either way; left unset the service trims the least it can,
   // which means trimming again on every turn once the ceiling is reached and
@@ -104,7 +113,10 @@ test("a mint response without a session model falls back to the requested model"
 
 test("a male voice is what the session is minted with", () => {
   assert.equal(REALTIME_DEFAULTS.VOICE, "echo");
-  assert.equal(realtimeSessionConfig().audio.output.voice, "echo");
+  assert.equal(
+    realtimeSessionConfig(SCENE.DESKTOP, mouthToolDefinitions()).audio.output.voice,
+    "echo",
+  );
 });
 
 test("the default voice is one the settings can offer", () => {
@@ -120,13 +132,20 @@ test("every offered voice is recognized and anything else is refused", () => {
 
 test("the session is minted at the voice's natural pace unless asked otherwise", () => {
   assert.equal(REALTIME_DEFAULTS.SPEED, 1);
-  assert.equal(realtimeSessionConfig().audio.output.speed, 1);
-  assert.equal(realtimeSessionConfig({ speed: 1.25 }).audio.output.speed, 1.25);
+  assert.equal(realtimeSessionConfig(SCENE.DESKTOP, mouthToolDefinitions()).audio.output.speed, 1);
+  assert.equal(
+    realtimeSessionConfig(SCENE.DESKTOP, mouthToolDefinitions(), { speed: 1.25 }).audio.output
+      .speed,
+    1.25,
+  );
 });
 
 test("a pace that is not a usable number falls back rather than minting a refusal", () => {
   for (const speed of [Number.NaN, Number.POSITIVE_INFINITY, 0, -1]) {
-    assert.equal(realtimeSessionConfig({ speed }).audio.output.speed, REALTIME_DEFAULTS.SPEED);
+    assert.equal(
+      realtimeSessionConfig(SCENE.DESKTOP, mouthToolDefinitions(), { speed }).audio.output.speed,
+      REALTIME_DEFAULTS.SPEED,
+    );
   }
 });
 
@@ -139,7 +158,7 @@ test("every offered pace is recognized and anything else is refused", () => {
 });
 
 test("the desktop session is minted with the one ask and nothing wider", () => {
-  const config = realtimeSessionConfig();
+  const config = realtimeSessionConfig(SCENE.DESKTOP, mouthToolDefinitions());
 
   assert.deepEqual(
     config.tools.map((tool) => tool.name),
@@ -161,7 +180,26 @@ test("the remote mint still carries the phone's own acts and roster rules", () =
     remoteNames,
   );
   assert.equal(remoteNames.includes(ASK_BRAIN_TOOL.name), false);
-  // The mint trims the standing text; the rules it carries are what matter.
   assert.match(request.session.instructions, /\[observed session status\]/);
-  assert.equal(request.session.instructions, remoteRealtimeInstructions().trim());
+  assert.equal(request.session.instructions, sessionInstructions(SCENE.PHONE));
+});
+
+test("the minted introduction session declares no tools and no way to choose one", () => {
+  const config = introductionSessionConfig({ voice: "marin", speed: 1.2 });
+  assert.deepEqual(config.tools, []);
+  assert.equal(config.tool_choice, "none");
+  // Everything else keeps the ordinary config: the same model, the caller's
+  // voice and pace, and the push-to-talk posture.
+  const ordinary = realtimeSessionConfig(SCENE.DESKTOP, mouthToolDefinitions(), {
+    voice: "marin",
+    speed: 1.2,
+  });
+  assert.equal(config.model, ordinary.model);
+  assert.deepEqual(config.reasoning, ordinary.reasoning);
+  assert.deepEqual(config.audio, ordinary.audio);
+  assert.equal(config.audio.input.turn_detection, null);
+  assert.equal(config.instructions, sessionInstructions(SCENE.INTRODUCTION));
+  // The practice reply is the last word the developer can hear before the
+  // sign-off: a question asked there is one nobody can answer.
+  assert.match(config.instructions, /practice moment[\s\S]*ask no follow-up[\s\S]*question/i);
 });

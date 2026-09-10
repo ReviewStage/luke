@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ScriptedRealtimeTransport } from "@openai/agents-realtime/testing";
 import type { RealtimeConnection } from "@sidecar/hosted";
-import { introductionSessionConfig, realtimeSessionConfig } from "@sidecar/realtime";
+import {
+  introductionSessionConfig,
+  mouthToolDefinitions,
+  realtimeSessionConfig,
+  SCENE,
+} from "@sidecar/realtime";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import {
   agentsRealtimeErrorMessage,
@@ -56,7 +61,10 @@ async function connect(context: ReturnType<typeof sdkHarness>) {
 }
 
 test("the production SDK adapter preserves full, empty, and subset tool lists", async () => {
-  const full = realtimeSessionConfig({ voice: "ash", speed: 1.25 });
+  const full = realtimeSessionConfig(SCENE.DESKTOP, mouthToolDefinitions(), {
+    voice: "ash",
+    speed: 1.25,
+  });
   const cases: readonly {
     name: string;
     config: BuiltRealtimeSessionConfig;
@@ -100,7 +108,9 @@ test("the production SDK adapter preserves full, empty, and subset tool lists", 
 });
 
 test("the production SDK adapter carries the complete session configuration", async () => {
-  const context = sdkHarness(realtimeSessionConfig({ voice: "ash", speed: 1.25 }));
+  const context = sdkHarness(
+    realtimeSessionConfig(SCENE.DESKTOP, mouthToolDefinitions(), { voice: "ash", speed: 1.25 }),
+  );
   const call = await connect(context);
   const config = call.options.initialSessionConfig;
 
@@ -125,7 +135,9 @@ test("the production SDK adapter carries the complete session configuration", as
 });
 
 test("the production SDK adapter omits reasoning for an unsupported model", async () => {
-  const context = sdkHarness(realtimeSessionConfig({ model: "gpt-realtime-preview" }));
+  const context = sdkHarness(
+    realtimeSessionConfig(SCENE.DESKTOP, mouthToolDefinitions(), { model: "gpt-realtime-preview" }),
+  );
   const call = await connect(context);
 
   assert.equal(call.options.initialSessionConfig?.reasoning, undefined);
@@ -136,7 +148,7 @@ test("the production SDK adapter omits reasoning for an unsupported model", asyn
 });
 
 test("the production SDK adapter executes only its configured tool", async () => {
-  const full = realtimeSessionConfig();
+  const full = realtimeSessionConfig(SCENE.DESKTOP, mouthToolDefinitions());
   const [definition] = full.tools;
   assert.ok(definition);
   const context = sdkHarness({ ...full, tools: [definition] });
@@ -208,7 +220,7 @@ test("an RTCErrorEvent is rendered by the error it carries, never as its tag", (
 });
 
 test("an error on a call already put away is not reported", async () => {
-  const closedFirst = sdkHarness(realtimeSessionConfig());
+  const closedFirst = sdkHarness(realtimeSessionConfig(SCENE.DESKTOP, mouthToolDefinitions()));
   await connect(closedFirst);
   const close = closedFirst.transport.expectCall("close");
   closedFirst.session.close();
@@ -216,7 +228,9 @@ test("an error on a call already put away is not reported", async () => {
   closedFirst.transport.emit("error", { type: "error", error: new Error("channel aborted") });
   assert.deepEqual(closedFirst.errors, []);
 
-  const disconnectedFirst = sdkHarness(realtimeSessionConfig());
+  const disconnectedFirst = sdkHarness(
+    realtimeSessionConfig(SCENE.DESKTOP, mouthToolDefinitions()),
+  );
   await connect(disconnectedFirst);
   disconnectedFirst.transport.disconnect();
   disconnectedFirst.transport.emit("error", { type: "error", error: new Error("channel aborted") });
@@ -224,7 +238,7 @@ test("an error on a call already put away is not reported", async () => {
 });
 
 test("a server error is left to the session's own filter, not reported twice", async () => {
-  const context = sdkHarness(realtimeSessionConfig());
+  const context = sdkHarness(realtimeSessionConfig(SCENE.DESKTOP, mouthToolDefinitions()));
   await connect(context);
 
   context.transport.emit("error", {
@@ -239,7 +253,7 @@ test("a server error is left to the session's own filter, not reported twice", a
 });
 
 test("an SDK close failure is reported without escaping or running twice", async () => {
-  const context = sdkHarness(realtimeSessionConfig());
+  const context = sdkHarness(realtimeSessionConfig(SCENE.DESKTOP, mouthToolDefinitions()));
   await connect(context);
   context.transport.failNextCall("close", new Error("close failed"));
 

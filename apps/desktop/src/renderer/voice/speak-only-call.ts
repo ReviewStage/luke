@@ -3,9 +3,7 @@ import {
   arrivalSpeechEvents,
   briefingSpeechEvents,
   CALENDAR_ONBOARDING_SPEECH_KIND,
-  calendarOnboardingSpeechEvents,
-  type IntroductionLine,
-  introductionSpeechEvents,
+  mouthToolDefinitions,
   outputSpeedUpdateEvents,
   type ParsedRealtimeServerEvent,
   type ProactiveSpeechTurn,
@@ -13,6 +11,8 @@ import {
   REALTIME_STATUS,
   type RealtimeStatus,
   realtimeSessionConfig,
+  responseTurn,
+  SCENE,
   voiceExchangeActive,
 } from "@sidecar/realtime";
 import { REPLY_KIND, type ReplyKind } from "@sidecar/voice/orchestrator";
@@ -287,7 +287,10 @@ export class SpeakOnlyCall<
    */
   protected sessionConfig(model: string): BuiltRealtimeSessionConfig {
     return {
-      ...realtimeSessionConfig({ model, ...this.options.voice?.() }),
+      ...realtimeSessionConfig(SCENE.DESKTOP, mouthToolDefinitions(), {
+        model,
+        ...this.options.voice?.(),
+      }),
       ...SPEAK_ONLY_SESSION_CONFIG,
     };
   }
@@ -316,7 +319,7 @@ export class SpeakOnlyCall<
     const events = arrival
       ? arrivalSpeechEvents(speech)
       : onboarding
-        ? calendarOnboardingSpeechEvents()
+        ? responseTurn(SCENE.CALENDAR, undefined)
         : briefingSpeechEvents(speech);
     if (events.length === 0 || !this.isConnected || voiceExchangeActive(this.status)) return false;
     this.startResponse(events);
@@ -331,13 +334,18 @@ export class SpeakOnlyCall<
 
   /**
    * Voices one scripted beat of the introduction, reporting whether it could.
-   * The beat's direction is fixed by the build and its data already bounded;
-   * the turn opens with `tool_choice: "none"` on a session that declared no
-   * tools, so nothing about it can arm an action. No caption subject is set —
-   * the introduction speaks about no observed session.
+   * The beat's direction is fixed by the build and its data already bounded,
+   * and both travel behind the turn's marker, so a detected title reading
+   * "ignore your instructions and ..." is data Luke has been handed to
+   * mention; the turn opens with no tools on a session that declared none, so
+   * nothing about it can arm an action. No caption subject is set — the
+   * introduction speaks about no observed session.
    */
-  speakIntroduction(line: IntroductionLine): boolean {
-    const events = introductionSpeechEvents(line);
+  speakIntroduction(line: { direction: string; data?: readonly string[] }): boolean {
+    const events = responseTurn(
+      SCENE.INTRODUCTION,
+      [line.direction, ...(line.data ?? [])].join("\n"),
+    );
     if (events.length === 0 || !this.isConnected || voiceExchangeActive(this.status)) return false;
     this.startResponse(events);
     return true;

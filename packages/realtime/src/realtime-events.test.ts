@@ -16,7 +16,8 @@ import {
   REALTIME_SERVER_EVENT,
   truncateResponseEvents,
 } from "./realtime-events.js";
-import { ASK_BRAIN_TOOL } from "./realtime-instructions.js";
+import { ASK_BRAIN_TOOL, mouthToolDefinitions } from "./realtime-instructions.js";
+import { SCENE } from "./voice-scene.js";
 
 test("a refused delete is read back with the event it names", () => {
   // The caller tells its own delete's refusal from a fault meant for the
@@ -107,7 +108,7 @@ test("a captured turn declares its audio's format before appending any", () => {
 });
 
 test("the keyed mint pins the same input format the appends travel as", () => {
-  const config = realtimeSessionConfig();
+  const config = realtimeSessionConfig(SCENE.DESKTOP, mouthToolDefinitions());
 
   assert.deepEqual(config.audio.input.format, {
     type: "audio/pcm",

@@ -7,11 +7,13 @@ import {
   BRIEFING_SPEECH_KIND,
   type BriefingSpeech,
   CALENDAR_ONBOARDING_SPEECH_KIND,
+  mouthToolDefinitions,
   REALTIME_CLIENT_EVENT,
   REALTIME_SERVER_EVENT,
   REALTIME_STATUS,
   type RealtimeStatus,
   realtimeSessionConfig,
+  SCENE,
 } from "@sidecar/realtime";
 import { REPLY_KIND, type ReplyKind } from "@sidecar/voice/orchestrator";
 import { ACTION_RESULT_STATUS, isRecord, type WireRecord } from "@sidecar/wire";
@@ -159,7 +161,7 @@ test("the speak-only document is the conversation's with its tools taken away", 
   // voice, the truncation — is the conversation's own, so the narrowing is
   // exactly the tools and nothing quietly beside them.
   assert.deepEqual(context.sessionConfig(), {
-    ...realtimeSessionConfig({ model: CONNECTION.model }),
+    ...realtimeSessionConfig(SCENE.DESKTOP, mouthToolDefinitions(), { model: CONNECTION.model }),
     ...SPEAK_ONLY_SESSION_CONFIG,
   });
 });

@@ -1,10 +1,5 @@
 export { conversationSeedEvents } from "./conversation-seed.js";
 export {
-  type IntroductionLine,
-  introductionSessionConfig,
-  introductionSpeechEvents,
-} from "./introduction.js";
-export {
   MAXIMUM_PRESS_AUDIO_MS,
   PRESS_AUDIO_SAMPLE_RATE,
   PressAudioBuffer,
@@ -13,17 +8,16 @@ export {
   ARRIVAL_SPEECH_KIND,
   type ArrivalSpeech,
   arrivalSpeechEvents,
-  BRIEFING_INPUT_MARKER,
   BRIEFING_SPEECH_KIND,
   type BriefingSpeech,
   briefingSpeechEvents,
   CALENDAR_ONBOARDING_SPEECH_KIND,
   type CalendarOnboardingSpeech,
-  calendarOnboardingSpeechEvents,
   isProactiveSpeechTurn,
   type ProactiveSpeechTurn,
 } from "./proactive-speech.js";
 export {
+  introductionSessionConfig,
   REALTIME_CLIENT_SECRETS_PATH,
   REALTIME_MINT_OUTCOME,
   REALTIME_TRUNCATION,
@@ -60,8 +54,6 @@ export {
   ASK_BRAIN_TOOL,
   type MouthToolDefinition,
   mouthToolDefinitions,
-  realtimeInstructions,
-  remoteRealtimeInstructions,
 } from "./realtime-instructions.js";
 export {
   isRealtimeVoice,
@@ -74,3 +66,10 @@ export {
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
 } from "./realtime-voice-settings.js";
+export {
+  BRIEFING_INPUT_MARKER,
+  NOTE_MARKER,
+  responseTurn,
+  SCENE,
+  sessionInstructions,
+} from "./voice-scene.js";
