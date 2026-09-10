@@ -6,6 +6,7 @@ import { registerDesktopIpc } from "./ipc/register-desktop-ipc";
 import { composeDesktop, type DesktopServices } from "./services/compose-desktop";
 import type { DesktopConfig } from "./services/desktop-config";
 import { initializeCrashReporting } from "./services/telemetry-service";
+import { reportToStderr, tolerateClosedStderr } from "./stderr-report";
 
 /**
  * The desktop client's entry: the process that draws. It owns the windows,
@@ -49,6 +50,7 @@ const fixtureName = argumentValue("--fixture");
 const captureMode = captureOutput !== undefined;
 const runMode = runModeFor({ capture: captureMode, fixture: fixtureName !== undefined });
 initializeCrashReporting(runMode);
+tolerateClosedStderr();
 
 // The introduction's mint lives on the same origin as the account service;
 // the one development override redirects both, and stops at packaging.
@@ -75,7 +77,7 @@ const config: DesktopConfig = {
     captureMode,
     fixtureMode: captureMode || fixtureName !== undefined,
   },
-  report: (message) => process.stderr.write(`${message}\n`),
+  report: reportToStderr,
   openExternal: (url) => shell.openExternal(url),
   quit: () => app.quit(),
 };
@@ -86,8 +88,8 @@ const config: DesktopConfig = {
 if (app.requestSingleInstanceLock()) {
   void main();
 } else {
-  process.stderr.write(
-    "Luke is already running; the existing panel was refreshed instead of starting a second copy.\n",
+  reportToStderr(
+    "Luke is already running; the existing panel was refreshed instead of starting a second copy.",
   );
   app.quit();
 }
