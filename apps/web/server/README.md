@@ -470,8 +470,29 @@ with a flag saying whether the API confirmed them or a lost connection left
 them estimated. A segment is one span of what was actually said, by whom, in
 milliseconds on the session's clock. Nothing spoken is ever a message: the
 brain's reply is the assistant message, and what the voice said of it lives
-here as segments alone. No audio is ever stored, and nothing reads or writes
-these tables yet.
+here as segments alone. No audio is ever stored.
+
+Two writers share those tables and never a column. The voice service's own
+`server/voice/session-record.ts` owns the session row's whole life: it is
+inserted when the session is created, found again by `(user_id,
+live_session_id)` when a fresh function instance re-attaches to the same
+live session, overwritten with each unconfirmed usage snapshot while open,
+and closed once with the confirmed seconds, the instant, and the reason. The
+voice writer in `server/hosted/store/voice-writer.ts` only reads that row
+for its id and hangs everything else off it: a segment per transcript delta
+at the next position of the session's own sequence, the `speech.spoken`
+event on a briefing's message once the session's voice follows the
+commentary append that carried it (the first output delta beginning at or
+after the append's acknowledged end), and the developer's spoken ask as a
+user message on the voice channel, cut from the stored user segments between
+the previous ask's end and the delegation's offset and named with the
+session, the delegation, and the span. A row whose `closed_at` is still
+null may keep gaining segments, because an instance that dies at its
+duration bound never sends `session.closed` and the re-attach lands on the
+same row; the writer reads nothing from the row's state but its id. It
+keeps one thing in memory, which message a commentary append carried until
+its speech lands, and reads everything else back from the record, so a
+fresh instance continues a session where the last one stopped.
 
 The store tests run the generated migrations on PGlite in process, so
 `check.sh` needs no service; the `postgres` CI job runs the same migrations

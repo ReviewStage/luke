@@ -8,7 +8,7 @@ import {
   type UIMessage,
   type UITools,
 } from "ai";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import {
   BRAIN_REQUEST_STATUS,
   BRAIN_RUN_EVENT,
@@ -40,6 +40,7 @@ import {
   UI_PART_STATE,
   UI_PART_TYPE,
   type UnparsedWireValue,
+  type UserMessageMetadata,
   unknownActionOutput,
   unparsedWire,
 } from "../../core.js";
@@ -194,6 +195,32 @@ interface CompactionWrite {
   readonly tokensBefore?: number;
 }
 
+/**
+ * A user message written outside the run stream: the developer's own words
+ * as another writer cut them — a spoken ask from a voice session's transcript
+ * — with the metadata that says how they arrived. Idempotent on its client id.
+ */
+interface UserMessageWrite {
+  readonly clientId: string;
+  readonly turnId?: string;
+  readonly text: string;
+  readonly metadata: UserMessageMetadata;
+}
+
+/** Where the developer's earlier spoken asks on one voice session end, for the next to be cut from. */
+interface SpokenAskEnd {
+  readonly voiceSessionId: string;
+  /** The ask being cut, left out so a delegation told twice cuts the same span. */
+  readonly delegationId: string;
+}
+
+type SpokenAskEndResult = { readonly ok: true; readonly toMs: number } | typeof NO_CONVERSATION;
+
+type UserMessageWriteResult =
+  | { readonly ok: true; readonly id: string; readonly effect: StoreWriteEffect }
+  | typeof NO_CONVERSATION
+  | Extract<StoreWriteResult, { ok: false; refusal: typeof STORE_WRITE_REFUSAL.MESSAGE_REFUSED }>;
+
 interface EventWrite {
   readonly messageId: string;
   readonly kind: ConversationEventKind;
@@ -209,7 +236,7 @@ type EventWriteResult =
       | typeof STORE_WRITE_REFUSAL.ALREADY_CLAIMED
     >;
 
-interface StoreWriter {
+export interface StoreWriter {
   /** Consumes one event of the run stream for the conversation it names. */
   consume(target: ConversationTarget, event: BrainRunEvent): Promise<StoreWriteResult>;
   /** Writes a turn as queued, ahead of the stream telling its start; answers the turn's id. */
@@ -221,6 +248,13 @@ interface StoreWriter {
   ): Promise<StoreWriteResult>;
   /** Appends one event about a message, numbered by the conversation's event sequence. */
   recordEvent(target: ConversationTarget, event: EventWrite): Promise<EventWriteResult>;
+  /** Writes the developer's own words as a finished user message, once per client id. */
+  recordUserMessage(
+    target: ConversationTarget,
+    message: UserMessageWrite,
+  ): Promise<UserMessageWriteResult>;
+  /** The latest end, on the session's clock, of the spoken asks already written for one voice session; zero for none. */
+  spokenAskEnd(target: ConversationTarget, end: SpokenAskEnd): Promise<SpokenAskEndResult>;
 }
 
 /**
@@ -802,6 +836,47 @@ async function recordCompaction(
   return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
 }
 
+async function spokenAskEnd(
+  context: WriterContext,
+  end: SpokenAskEnd,
+): Promise<SpokenAskEndResult> {
+  const [row] = await context.tx
+    .select({ toMs: sql<number>`coalesce(max((${messages.metadata} ->> 'to_ms')::int), 0)::int` })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.conversationId, context.target.conversationId),
+        ne(messages.clientId, end.delegationId),
+        sql`${messages.metadata} ->> 'voice_session_id' = ${end.voiceSessionId}`,
+      ),
+    );
+  return { ok: true, toMs: row?.toMs ?? 0 };
+}
+
+async function recordUserMessage(
+  context: WriterContext,
+  write: UserMessageWrite,
+): Promise<UserMessageWriteResult> {
+  const standing = await messageByClientId(context, write.clientId);
+  if (standing !== undefined) {
+    return { ok: true, id: standing.id, effect: STORE_WRITE_EFFECT.REPEATED };
+  }
+  const read = await admitted(context, {
+    id: write.clientId,
+    role: MESSAGE_ROLE.USER,
+    metadata: write.metadata,
+    parts: [{ type: UI_PART_TYPE.TEXT, text: write.text, state: UI_PART_STATE.DONE }],
+  });
+  if (!read.ok) return read;
+  const id = await insertMessage(context, {
+    clientId: write.clientId,
+    turnId: write.turnId,
+    message: read.message,
+    finishedAt: context.now(),
+  });
+  return { ok: true, id, effect: STORE_WRITE_EFFECT.WRITTEN };
+}
+
 /**
  * One event about a message. A claim is the one kind the schema makes
  * exclusive, and under the conversation's lock the check for a standing claim
@@ -890,5 +965,9 @@ export async function storeWriter({
       underConversation(target, (context) => recordCompaction(context, compaction)),
     recordEvent: (target, event) =>
       underConversation(target, (context) => recordEvent(context, event)),
+    recordUserMessage: (target, message) =>
+      underConversation(target, (context) => recordUserMessage(context, message)),
+    spokenAskEnd: (target, end) =>
+      underConversation(target, (context) => spokenAskEnd(context, end)),
   };
 }

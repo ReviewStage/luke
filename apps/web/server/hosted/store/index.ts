@@ -332,6 +332,14 @@ export {
 export { CLEARED_CONVERSATION_RETENTION_MS } from "./soft-delete.js";
 
 export {
+  type CommentaryAppend,
+  VOICE_WRITE_REFUSAL,
+  type VoiceTarget,
+  type VoiceWriteResult,
+  type VoiceWriter,
+  voiceWriter,
+} from "./voice-writer.js";
+export {
   type ConversationTarget,
   STORE_WRITE_EFFECT,
   STORE_WRITE_REFUSAL,
