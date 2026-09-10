@@ -4,6 +4,7 @@ import {
   type UpdateSnapshot,
   type UpdateStatus,
 } from "#shared/messages/update";
+import { reportToStderr } from "./stderr-report";
 
 /**
  * The addresses updating ever touches, fixed here rather than passed in,
@@ -195,7 +196,7 @@ export class UpdateService {
       options.justUpdatedFirstCheckDelayMs ??
       UPDATE_CHECK_DEFAULTS.JUST_UPDATED_FIRST_CHECK_DELAY_MS;
     this.#publishingRetryDelaysMs = options.publishingRetryDelaysMs ?? PUBLISHING_RETRY_DELAYS_MS;
-    this.#report = options.report ?? ((line) => process.stderr.write(`${line}\n`));
+    this.#report = options.report ?? reportToStderr;
     this.#snapshot = this.#idle(false);
     this.#engine?.wire({
       onChecking: () => this.#move({ ...this.#base(UPDATE_STATUS.CHECKING) }),
