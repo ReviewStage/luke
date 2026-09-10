@@ -486,10 +486,13 @@ function ActionsFold({
   rows,
   pending,
   judgment,
+  at,
 }: {
   rows: readonly React.JSX.Element[];
   pending: boolean;
   judgment: Judgment;
+  /** When the first of the folded actions ran: the line's stamp, since the rows inside carry none. */
+  at: number;
 }): React.JSX.Element {
   const [choice, setChoice] = useState<FoldChoice | undefined>(undefined);
   const open = foldOpen(choice, pending);
@@ -526,6 +529,7 @@ function ActionsFold({
           <ol className="conversation-turn-rows">{rows}</ol>
         </details>
       </div>
+      <RowStamp at={at} />
     </li>
   );
 }
@@ -582,10 +586,19 @@ function userVoice(
  * view's decision, read back by call id; a call the view did not describe is
  * a detail.
  */
-/** One drawn row, and whether it is an action the turn may fold under its count. */
-interface DrawnRow {
-  readonly element: React.JSX.Element;
-  readonly action: boolean;
+/**
+ * One row as a message hands it to its turn: drawn already, or an action the
+ * turn decides the place of — a stamped row of its own, or a row inside the
+ * fold, whose line carries the stamp for all of them.
+ */
+type DrawnRow =
+  | { readonly element: React.JSX.Element; readonly action?: undefined }
+  | { readonly element?: undefined; readonly action: DrawnAction };
+
+interface DrawnAction {
+  readonly key: string;
+  readonly row: ToolRow;
+  readonly at: number;
 }
 
 interface MessageRows {
@@ -597,7 +610,6 @@ function messageRows(
   view: ConversationViewMessage,
   judgment: Judgment,
   roster: readonly SessionView[],
-  onOpenChat: ((identity: SessionIdentity) => void) | undefined,
 ): MessageRows {
   const { message } = view;
   if (message.role === MESSAGE_ROLE.USER) {
@@ -614,7 +626,6 @@ function messageRows(
               copy={voice === VOICE.YOU}
             />
           ),
-          action: false,
         },
       ],
       folded: [],
@@ -626,8 +637,7 @@ function messageRows(
     view.tools.map((tool) => [tool.toolCallId, tool]),
   );
   const rows: DrawnRow[] = [];
-  const draw = (element: React.JSX.Element) => rows.push({ element, action: false });
-  const open = onOpenChat ? { onOpenChat } : undefined;
+  const draw = (element: React.JSX.Element) => rows.push({ element });
   message.parts.forEach((part: StoredPart, index) => {
     const key = `${message.id}:${index}`;
     if (isTextPart(part)) {
@@ -669,12 +679,7 @@ function messageRows(
         } else if (tool.refused) {
           folded.push({ kind: CONVERSATION_VIEW_TOOL_KIND.ACTION, row, part });
         } else {
-          rows.push({
-            element: (
-              <ActionRow key={key} row={row} judgment={judgment} at={view.createdAt} {...open} />
-            ),
-            action: true,
-          });
+          rows.push({ action: { key, row, at: view.createdAt } });
         }
         return;
       }
@@ -689,32 +694,50 @@ function messageRows(
 const FOLD_FROM_ACTIONS = 2;
 
 /**
- * One turn's rows in order, its actions folded under a count where there are
- * enough of them to fold: the fold stands where the first action stood, and
- * the rows between actions keep their places around it.
+ * One turn's rows in order, its actions placed: each a stamped row of its own
+ * while there are too few to fold, or all of them inside one fold standing
+ * where the first stood, unstamped, under the fold's own stamp. The rows
+ * between actions keep their places around it.
  */
 function turnRows(
   drawn: readonly DrawnRow[],
   pending: boolean,
   judgment: Judgment,
   turnId: string,
+  onOpenChat: ((identity: SessionIdentity) => void) | undefined,
 ): readonly React.JSX.Element[] {
-  const actions = drawn.filter((row) => row.action).map((row) => row.element);
-  if (actions.length < FOLD_FROM_ACTIONS) return drawn.map((row) => row.element);
-  const first = drawn.findIndex((row) => row.action);
-  return drawn.flatMap((row, index) => {
-    if (index === first) {
-      return [
-        <ActionsFold
-          key={`${turnId}:actions`}
-          rows={actions}
-          pending={pending}
+  const open = onOpenChat ? { onOpenChat } : undefined;
+  const actions = drawn.flatMap((row) => (row.action ? [row.action] : []));
+  const first = actions[0];
+  if (first === undefined || actions.length < FOLD_FROM_ACTIONS) {
+    return drawn.map((row) =>
+      row.action ? (
+        <ActionRow
+          key={row.action.key}
+          row={row.action.row}
           judgment={judgment}
-        />,
-      ];
-    }
-    return row.action ? [] : [row.element];
-  });
+          at={row.action.at}
+          {...open}
+        />
+      ) : (
+        row.element
+      ),
+    );
+  }
+  const fold = (
+    <ActionsFold
+      key={`${turnId}:actions`}
+      rows={actions.map((action) => (
+        <ActionRow key={action.key} row={action.row} judgment={judgment} {...open} />
+      ))}
+      pending={pending}
+      judgment={judgment}
+      at={first.at}
+    />
+  );
+  return drawn.flatMap((row) =>
+    row.action ? (row.action === first ? [fold] : []) : [row.element],
+  );
 }
 
 /**
@@ -749,14 +772,13 @@ export function ConversationTurns({
       {groups.flatMap((group) => {
         const judgment = judgmentOf(group.turn);
         const pending = turnPending(group.turn);
-        const drawn = group.messages.map((message) =>
-          messageRows(message, judgment, roster, onOpenChat),
-        );
+        const drawn = group.messages.map((message) => messageRows(message, judgment, roster));
         const rows = turnRows(
           drawn.flatMap((message) => message.rows),
           pending,
           judgment,
           group.turnId,
+          onOpenChat,
         );
         const folded = drawn.flatMap((message) => message.folded);
         return [

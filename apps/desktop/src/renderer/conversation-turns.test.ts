@@ -161,6 +161,14 @@ test("a turn's actions fold under a count once there are two: open while it runs
   assert.equal((running.match(/<details class="conversation-actions-fold" open/g) ?? []).length, 1);
   assert.equal(actionRows(running), 3);
 
+  // Inside the fold the rows carry no stamp of their own; the fold's line carries the turn's.
+  const [, insideRunning] = running.split('<details class="conversation-actions-fold"');
+  assert.ok(insideRunning !== undefined);
+  const [foldBody] = insideRunning.split("</details>");
+  assert.ok(foldBody !== undefined);
+  assert.equal(count(foldBody, "class", "conversation-time"), 0);
+  assert.equal(count(running, "class", "conversation-time"), 2);
+
   const settled = render([groupOf(FIXTURE_TURN.EVERY_KIND)], OPEN);
   assert.equal(count(settled, "data-actions-fold", "settled"), 1);
   assert.equal((settled.match(/<details class="conversation-actions-fold" open/g) ?? []).length, 0);
