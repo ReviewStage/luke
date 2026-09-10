@@ -21,7 +21,7 @@ import {
  * content — so what the pointer is confirmed over inside this window may be
  * ground the shape is about to leave.
  */
-export const RECEDE_SETTLE_MS = MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SURFACE;
+const RECEDE_SETTLE_MS = MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SURFACE;
 
 function usePointerPassthrough(
   onHitRegionEnter: () => void,

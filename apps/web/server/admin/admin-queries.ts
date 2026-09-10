@@ -43,7 +43,7 @@ import {
 import { ADMIN_METRICS_SCOPE, type AdminMetricsScope, type AdminMetricsWindow } from "./http.js";
 
 /** How many of the most active hosted-tier accounts the overview names. */
-export const ADMIN_TOP_USERS_LIMIT = 10;
+const ADMIN_TOP_USERS_LIMIT = 10;
 
 type Database = ReturnType<typeof createDatabase>;
 

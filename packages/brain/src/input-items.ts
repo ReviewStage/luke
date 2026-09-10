@@ -27,7 +27,7 @@ export const BRAIN_INPUT_MARKER = {
   CHILD_COMPLETION: "[child completion]",
 } as const;
 
-export type BrainInputMarker = (typeof BRAIN_INPUT_MARKER)[keyof typeof BRAIN_INPUT_MARKER];
+type BrainInputMarker = (typeof BRAIN_INPUT_MARKER)[keyof typeof BRAIN_INPUT_MARKER];
 
 function marked(marker: BrainInputMarker, now: number, body: string): string {
   return `${marker} ${new Date(now).toISOString()}\n${body}`;

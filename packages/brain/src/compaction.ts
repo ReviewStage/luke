@@ -61,11 +61,11 @@ export function estimateTokens(items: readonly WireRecord[]): number {
 }
 
 /** How many bytes a request of these items under this prompt weighs, as the transport measures it. */
-export function requestBytes(items: readonly WireRecord[], prompt: string): number {
+function requestBytes(items: readonly WireRecord[], prompt: string): number {
   return Buffer.byteLength(JSON.stringify({ instructions: prompt, input: items }), "utf8");
 }
 
-export function transportNeedsPreparation(
+function transportNeedsPreparation(
   bytes: number,
   maximumRequestBytes: number | undefined,
 ): boolean {
@@ -81,7 +81,7 @@ export const COMPACTION_NEED = {
   TRANSPORT: "transport",
 } as const;
 
-export type CompactionNeed = (typeof COMPACTION_NEED)[keyof typeof COMPACTION_NEED];
+type CompactionNeed = (typeof COMPACTION_NEED)[keyof typeof COMPACTION_NEED];
 
 export interface CompactionAssessment {
   need: CompactionNeed;
@@ -115,7 +115,7 @@ export interface CompactionRequest extends CompactionOptions {
 }
 
 /** Ported in shape from OpenClaw's summarization prompt: a checkpoint another model continues from. */
-export const LOCAL_SUMMARY_INSTRUCTIONS = [
+const LOCAL_SUMMARY_INSTRUCTIONS = [
   "You are a context summarization assistant. The items above are the older part of a conversation",
   "between a developer and Luke, an assistant that watches their coding-agent sessions. Produce a",
   "structured checkpoint summary another model will continue from. Do NOT continue the conversation",

@@ -24,7 +24,7 @@ export interface MicrophoneSender {
 }
 
 /** The open capture device a press is being read from, as the capture needs it. */
-export interface PressCaptureDevice {
+interface PressCaptureDevice {
   stream: MediaStream;
   track: MediaStreamTrack;
   /** The sender the track rides once the captured turn is over; absent before the handshake. */

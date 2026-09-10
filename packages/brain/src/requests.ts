@@ -30,7 +30,7 @@ export type BrainRequestStatus = (typeof BRAIN_REQUEST_STATUS)[keyof typeof BRAI
 const BRAIN_REQUEST_STATUS_LIST: readonly BrainRequestStatus[] =
   Object.values(BRAIN_REQUEST_STATUS);
 
-export const BRAIN_REQUEST_TERMINAL_STATUS: ReadonlySet<BrainRequestStatus> = new Set([
+const BRAIN_REQUEST_TERMINAL_STATUS: ReadonlySet<BrainRequestStatus> = new Set([
   BRAIN_REQUEST_STATUS.SUCCEEDED,
   BRAIN_REQUEST_STATUS.FAILED,
   BRAIN_REQUEST_STATUS.CANCELLED,
@@ -38,7 +38,7 @@ export const BRAIN_REQUEST_TERMINAL_STATUS: ReadonlySet<BrainRequestStatus> = ne
   BRAIN_REQUEST_STATUS.INTERRUPTED,
 ]);
 
-export function isBrainRequestStatus(value: UnparsedWireValue): value is BrainRequestStatus {
+function isBrainRequestStatus(value: UnparsedWireValue): value is BrainRequestStatus {
   return (
     isWireString(value) &&
     // SAFETY: value is a string; list membership is the vocabulary check.
@@ -98,7 +98,7 @@ export type BrainRequestFailure =
 const BRAIN_REQUEST_FAILURE_LIST: readonly BrainRequestFailure[] =
   Object.values(BRAIN_REQUEST_FAILURE);
 
-export function isBrainRequestFailure(value: UnparsedWireValue): value is BrainRequestFailure {
+function isBrainRequestFailure(value: UnparsedWireValue): value is BrainRequestFailure {
   // SAFETY: value is a string; list membership is the vocabulary check.
   return isWireString(value) && BRAIN_REQUEST_FAILURE_LIST.includes(value as BrainRequestFailure);
 }

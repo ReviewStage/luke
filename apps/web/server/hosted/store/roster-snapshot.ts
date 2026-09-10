@@ -148,7 +148,7 @@ export function advanceRosterSnapshot(
  * going first; a consumed diff has been read and is dropped on the next
  * insert rather than kept. An id already recorded is one diff.
  */
-export async function insertRosterDiff(
+async function insertRosterDiff(
   db: HostedStoreDatabase,
   seal: UserSeal,
   userId: string,

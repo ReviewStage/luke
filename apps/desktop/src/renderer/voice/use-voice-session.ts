@@ -27,7 +27,7 @@ import { startVoiceLevelMeter } from "./voice-level-meter";
  * state satisfies — and the words keep arriving on the stream regardless, so
  * a short clock loses less of the sentence than a longer one would.
  */
-export const REMOTE_AUDIO_RETRY_MS = 1_000;
+const REMOTE_AUDIO_RETRY_MS = 1_000;
 
 /**
  * The callbacks and seams every call of either kind is built with beyond the

@@ -24,7 +24,7 @@ export type PressCaptureFactory = (
  * to the release the captured audio can end: small enough that letting go of
  * the key costs less than a syllable, large enough not to flood the channel.
  */
-export const PRESS_CAPTURE_CHUNK_SAMPLES = 2_048;
+const PRESS_CAPTURE_CHUNK_SAMPLES = 2_048;
 
 /**
  * Captures the stream at the rate the appends need. The context is created at

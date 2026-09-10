@@ -16,7 +16,7 @@ export function textFromRow(row: WireRecord, key: string): string | undefined {
  * here opens a database for writing, and no caller may.
  */
 
-export interface SqliteStatement {
+interface SqliteStatement {
   all(...anonymousParameters: readonly unknown[]): UnparsedWireValue[];
 }
 

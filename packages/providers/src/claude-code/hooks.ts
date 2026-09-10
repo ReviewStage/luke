@@ -90,5 +90,4 @@ export function defaultClaudeHome(): string {
 const claudeHooks = observationHooksFor(CLAUDE_HOOK_SPEC);
 
 export const installClaudeCodeObservationHooks = claudeHooks.install;
-export const removeClaudeCodeObservationHooks = claudeHooks.remove;
 export const readClaudeHookEvent = claudeHooks.read;

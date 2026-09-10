@@ -40,7 +40,7 @@ this barrel.
 
 ## The action and guide validator tests live in `packages/actions`
 
-`actions-validation.test.ts` and `guide.test.ts` there cover the session, issue,
+`actions.test.ts`, `admit.test.ts`, and `guide.test.ts` there cover the session, issue,
 and app tools — `REALTIME_TOOL`, the routing, and each validator's bounds —
 against `./actions.js`. The tests here cover only what this package owns: the
 protocol's events and parser, the scenes and the two functions that speak

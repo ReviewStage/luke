@@ -38,7 +38,7 @@ export const LOOP_GUARD_LEVEL = {
   CRITICAL: "critical",
 } as const;
 
-export type LoopGuardLevel = (typeof LOOP_GUARD_LEVEL)[keyof typeof LOOP_GUARD_LEVEL];
+type LoopGuardLevel = (typeof LOOP_GUARD_LEVEL)[keyof typeof LOOP_GUARD_LEVEL];
 
 export const LOOP_GUARD_DETECTOR = {
   GENERIC_REPEAT: "generic_repeat",
@@ -48,7 +48,7 @@ export const LOOP_GUARD_DETECTOR = {
   ARGUMENT_CHURN: "argument_churn",
 } as const;
 
-export type LoopGuardDetector = (typeof LOOP_GUARD_DETECTOR)[keyof typeof LOOP_GUARD_DETECTOR];
+type LoopGuardDetector = (typeof LOOP_GUARD_DETECTOR)[keyof typeof LOOP_GUARD_DETECTOR];
 
 export type LoopGuardVerdict =
   | { stuck: false }

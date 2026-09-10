@@ -45,7 +45,7 @@ export const OBSERVATION_TICK = {
   ACCOUNT_SEEN_WITHIN_MS: 7 * 24 * 60 * 60 * 1000,
 } as const;
 
-export interface ObservedAccount {
+interface ObservedAccount {
   userId: string;
 }
 
@@ -76,7 +76,7 @@ export interface ObservationTickOptions {
   passDeadlineMs?: number;
 }
 
-export interface ObservationTickAnswer {
+interface ObservationTickAnswer {
   /** Accounts the tick reached. */
   accounts: number;
   /** Accounts whose roster was read whole and written down. */

@@ -10,10 +10,8 @@ import { hostedUsage, introductionUsage } from "../db/usage-schema.js";
  * behind the key is the backstop it exists to keep distant.
  */
 export const HOSTED_DAILY_LIMIT = 5_000;
-
 /* The quota shape is the wire contract's, imported rather than restated, so
    the endpoint and the desktop reading it cannot drift. */
-export type { HostedQuota } from "../core.js";
 
 export interface HostedSpend {
   allowed: boolean;

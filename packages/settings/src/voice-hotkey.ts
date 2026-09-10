@@ -67,15 +67,14 @@ export function askHotkeyCandidates(
  * name them. Their order here is the order macOS writes a chord in — ⌃⌥⇧⌘ —
  * so every accelerator this module produces follows macOS's chord order.
  */
-export const VOICE_HOTKEY_MODIFIER = {
+const VOICE_HOTKEY_MODIFIER = {
   CONTROL: "Control",
   ALT: "Alt",
   SHIFT: "Shift",
   COMMAND: "Command",
 } as const;
 
-export type VoiceHotkeyModifier =
-  (typeof VOICE_HOTKEY_MODIFIER)[keyof typeof VOICE_HOTKEY_MODIFIER];
+type VoiceHotkeyModifier = (typeof VOICE_HOTKEY_MODIFIER)[keyof typeof VOICE_HOTKEY_MODIFIER];
 
 const MODIFIER_ORDER: readonly VoiceHotkeyModifier[] = [
   VOICE_HOTKEY_MODIFIER.CONTROL,
@@ -173,9 +172,6 @@ export const VOICE_HOTKEY_CAPTURE = {
   /** A key the talk key cannot be, or one held by nothing heavier than Shift. */
   REFUSED: ACTION_RESULT_STATUS.REJECTED,
 } as const;
-
-export type VoiceHotkeyCaptureOutcome =
-  (typeof VOICE_HOTKEY_CAPTURE)[keyof typeof VOICE_HOTKEY_CAPTURE];
 
 export type VoiceHotkeyCaptureResult =
   | { outcome: typeof VOICE_HOTKEY_CAPTURE.CAPTURED; accelerator: string }

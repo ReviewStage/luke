@@ -58,7 +58,7 @@ export function transcriptEventFromPayload(
   return undefined;
 }
 
-export function contextInputFromWire(value: UnparsedWireValue): ContextInput | undefined {
+function contextInputFromWire(value: UnparsedWireValue): ContextInput | undefined {
   if (!isRecord(value)) return undefined;
   switch (value.kind) {
     case CONTEXT_INPUT_KIND.USER_TEXT:

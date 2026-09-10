@@ -160,7 +160,7 @@ export function newRunControl(
 }
 
 /** The question one turn opens with for the asks that opened it: the overflow's summary first, then each ask's words. */
-export function askQuestion(opened: readonly AskInput[]): string {
+function askQuestion(opened: readonly AskInput[]): string {
   const summaryLines = opened.filter((input) => input.folded).map((input) => input.text);
   const summary = queueSummaryText({
     entries: [],
@@ -913,7 +913,7 @@ export class TurnRunner {
 }
 
 /** How a run's turn result reads as its record's end. */
-export function runOutcomeOf(flags: RunEndFlags, result: TurnResult, stopped: boolean): RunOutcome {
+function runOutcomeOf(flags: RunEndFlags, result: TurnResult, stopped: boolean): RunOutcome {
   const end: RunEnd = {};
   let status: BrainRequestRecord["status"];
   if (flags.timedOut) {

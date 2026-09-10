@@ -1,4 +1,4 @@
-import { maximumRememberedFactLength, rememberedFactText } from "@sidecar/actions";
+import { rememberedFactText } from "@sidecar/actions";
 import { WORKSPACE_FILE } from "@sidecar/runtime";
 
 /**
@@ -27,18 +27,15 @@ export function isNotebookRootFile(relativePath: string): boolean {
 }
 
 /** The heading remembered facts live under in USER.md; text above it is the developer's own. */
-export const REMEMBERED_HEADING = "## Remembered";
+const REMEMBERED_HEADING = "## Remembered";
 
 const BULLET_RE = /^\s*[-*]\s+(.*\S)\s*$/u;
-
-/** One flattening and bound for a fact's words: the actions package's, the same one a remember action applies at the door. */
-export const maximumNotebookEntryLength = maximumRememberedFactLength;
 
 export function notebookEntryText(value: string): string | undefined {
   return rememberedFactText(value);
 }
 
-export interface ParsedNotebookEntry {
+interface ParsedNotebookEntry {
   readonly words: string;
   /** One-based line number in the file. */
   readonly line: number;

@@ -50,7 +50,7 @@ import { BRAIN_TOOL, isBrainOnlyTool, TOOL_GROUP } from "./tools.js";
 import type { BrainTurnTraceRecord } from "./trace.js";
 import { BRAIN_WAKE_KIND, type BrainDelivery, type BrainWakeEvent } from "./wake-events.js";
 
-export const TOOL_LOOP_IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOOP_RUNTIME.VERSION };
+const TOOL_LOOP_IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOOP_RUNTIME.VERSION };
 
 export const NOW = 1_800_000_000_000;
 export const { DELTA_PER_SESSION_CHARS, FULL_TRANSCRIPT_CHARS } = BRAIN_DEFAULTS;
@@ -231,7 +231,7 @@ export class FakeClient implements BrainClient {
   }
 }
 
-export class FakeClock {
+class FakeClock {
   now = NOW;
   readonly timers = new Map<ScheduledTimer, { callback: () => void; at: number }>();
 
@@ -571,16 +571,6 @@ export function gatedClient(inner: FakeClient) {
 }
 
 export const OLD_SECRET = "OLD_SECRET_FROM_PRIOR_GENERATION";
-
-/** Everything a later generation could have been polluted through, flattened for a marker search. */
-export function generationSurface(h: Harness, inner: FakeClient): string {
-  return JSON.stringify({
-    inputs: inner.inputs.at(-1),
-    stored: h.repository.state,
-    held: h.store.current(),
-    deliveries: h.deliveries,
-  });
-}
 
 /** A completed run on a harness whose repository never refuses, for the save-ordering regressions. */
 export async function completedRun(h: Harness, question = "hello"): Promise<string> {

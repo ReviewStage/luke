@@ -55,7 +55,7 @@ const SILENT_NETWORK_ERROR_PATTERNS = [
   "ECONNRESET",
 ] as const;
 
-export function isNetworkErrorMessage(message: string): boolean {
+function isNetworkErrorMessage(message: string): boolean {
   return SILENT_NETWORK_ERROR_PATTERNS.some((pattern) => message.includes(pattern));
 }
 
@@ -70,7 +70,7 @@ export function isNetworkErrorMessage(message: string): boolean {
  */
 const PUBLISHING_WINDOW_ERROR_PATTERNS = ["status 404", "sha512 checksum mismatch"] as const;
 
-export function isPublishingWindowErrorMessage(message: string): boolean {
+function isPublishingWindowErrorMessage(message: string): boolean {
   return PUBLISHING_WINDOW_ERROR_PATTERNS.some((pattern) => message.includes(pattern));
 }
 

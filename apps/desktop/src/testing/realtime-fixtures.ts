@@ -1,4 +1,4 @@
-export interface MockAudioTrack {
+interface MockAudioTrack {
   enabled: boolean;
   stop: () => void;
 }

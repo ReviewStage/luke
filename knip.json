@@ -1,0 +1,66 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreDependencies": ["oxlint", "husky", "lint-staged"],
+  "ignoreBinaries": [
+    "iconutil",
+    "ditto",
+    "shasum",
+    "tiffutil",
+    "codesign",
+    "xcrun",
+    "hdiutil",
+    "swiftc",
+    "electron"
+  ],
+  "ignore": [".opencode/**"],
+  "workspaces": {
+    ".": {
+      "entry": [
+        "scripts/*.mjs",
+        "scripts/*.test.mjs",
+        "design/*.mjs",
+        "tools/**/*.ts",
+        "tools/**/*.mjs",
+        "apps/ios/*.test.mjs",
+        "scripts/*.ts"
+      ],
+      "project": ["scripts/**", "design/**", "tools/**"]
+    },
+    "apps/desktop": {
+      "entry": [
+        "src/main/index.ts",
+        "src/main/store-worker.ts",
+        "src/preload/index.ts",
+        "src/renderer/index.tsx",
+        "src/renderer/voice/index.tsx",
+        "src/**/*.test.ts",
+        "scripts/*.mjs",
+        "electron-builder.ts"
+      ],
+      "project": ["src/**", "scripts/**"]
+    },
+    "apps/web": {
+      "entry": [
+        "api/**/*.ts",
+        "api/**/*.mjs",
+        "src/*.tsx",
+        "src/entry-server.tsx",
+        "server/db/migrate.ts",
+        "scripts/*.ts",
+        "tests/**/*.test.ts"
+      ],
+      "project": ["api/**", "src/**", "server/**", "scripts/**", "tests/**"]
+    },
+    "packages/*": {
+      "entry": ["src/**/*.test.ts", "src/**/worker-entry.ts"],
+      "project": ["src/**"]
+    },
+    "tools/*": {
+      "entry": ["src/*.ts", "*.ts", "*.mjs", "**/*.test.*"],
+      "project": ["**/*.ts", "**/*.mjs"]
+    }
+  },
+  "rules": {
+    "duplicates": "off"
+  }
+}

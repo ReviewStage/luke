@@ -57,8 +57,7 @@ export const BRAIN_REASONING_EFFORT = {
   HIGH: "high",
 } as const;
 
-export type BrainReasoningEffort =
-  (typeof BRAIN_REASONING_EFFORT)[keyof typeof BRAIN_REASONING_EFFORT];
+type BrainReasoningEffort = (typeof BRAIN_REASONING_EFFORT)[keyof typeof BRAIN_REASONING_EFFORT];
 
 /** A function tool built from a contract schema, whose parameters travel as they were declared. */
 export interface ResponsesToolDefinition {
@@ -145,7 +144,7 @@ export function isUserMessageItem(item: ResponsesInputItem): boolean {
   );
 }
 
-export interface BrainFunctionCall {
+interface BrainFunctionCall {
   callId: string;
   name: string;
   argumentsJson: string;
@@ -275,7 +274,7 @@ export function brainInputTokensRequest(
 export type BrainInputTokensRequest = ReturnType<typeof brainInputTokensRequest>;
 
 /** The states a Responses object may be in; only two carry a reply. */
-export const RESPONSES_STATUS = {
+const RESPONSES_STATUS = {
   COMPLETED: "completed",
   INCOMPLETE: "incomplete",
   FAILED: "failed",

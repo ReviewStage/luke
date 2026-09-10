@@ -25,15 +25,7 @@ export const VOICE_RESTART = {
   RESTART: "restart",
 } as const;
 
-export type VoiceRestart = (typeof VOICE_RESTART)[keyof typeof VOICE_RESTART];
-
-/**
- * How long a voice failure stays on the caption strip. The strip takes no
- * pointer, so time is its only dismissal: long enough to be read twice, short
- * enough that the shape does not wear a fault all afternoon. The next attempt
- * clears it sooner — connecting starts by reporting nothing wrong.
- */
-export const VOICE_ERROR_NOTICE_MS = 12_000;
+type VoiceRestart = (typeof VOICE_RESTART)[keyof typeof VOICE_RESTART];
 
 /**
  * The stream the meter should listen to for this status, or none. Typed over

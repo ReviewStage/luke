@@ -19,7 +19,7 @@ export function localSessionStatus(
   return agedStatus(status, lastActivityAt, now, freshnessMs);
 }
 
-export interface HookEventStatus<Event extends string> {
+interface HookEventStatus<Event extends string> {
   event: Event;
   fresh: SessionStatus;
   stale?: SessionStatus;
@@ -67,7 +67,7 @@ function refineStatusWithHookEvent<Event extends string>(
  * by a breath — never by more than this. An event further behind describes a
  * turn the provider has already moved past, and refines nothing.
  */
-export const HOOK_EVENT_TOLERANCE_MS = 5_000;
+const HOOK_EVENT_TOLERANCE_MS = 5_000;
 
 /** What the hook settled for one observation, beyond the status itself. */
 export interface HookRefinedStatus {

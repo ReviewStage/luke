@@ -65,7 +65,7 @@ export interface RememberedValue<T> {
  * recognise reads as nothing at all, never as a guess at what an old build
  * meant by it.
  */
-export function rememberedValue<T>(
+function rememberedValue<T>(
   key: string,
   encode: (value: T) => string,
   decode: (stored: string) => T | undefined,

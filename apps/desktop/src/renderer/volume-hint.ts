@@ -18,7 +18,7 @@ import type { OutputAudioState } from "#shared/messages/audio";
  * a scalar, and a volume the keys have stepped to nothing reads as exactly 0;
  * the margin only catches a device that lands a rounding error above it.
  */
-export const SILENT_OUTPUT_VOLUME = 0.01;
+const SILENT_OUTPUT_VOLUME = 0.01;
 
 /**
  * How long a dismissal outlives the silence it answered. Unmuting to hear one
@@ -34,7 +34,7 @@ export const VOLUME_HINT_REARM_MS = 15 * 60_000;
  * is, with the sentence beside it, so the inset above and below the row is
  * the inset around what is actually drawn.
  */
-export const VOLUME_HINT_HEIGHT = 20;
+const VOLUME_HINT_HEIGHT = 20;
 
 /**
  * The band the shape grows for the hint: the row plus the one inset every

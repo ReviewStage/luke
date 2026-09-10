@@ -4,11 +4,9 @@ import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 
 export {
   SUPERSET_SIGN_IN_STAGE,
-  type SupersetOrganizationChoice,
   type SupersetSignInSnapshot,
 } from "@sidecar/providers/superset/sign-in-stage";
 export {
-  isSessionWriteResult,
   isWorkspaceProviderId,
   type SessionOpenResult,
   type SessionWriteResult,

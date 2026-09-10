@@ -19,7 +19,7 @@ import type { SettingsWrites } from "./writes";
    "the provider's own default" and the project rows' "ask each time" are the
    same absence, and an empty value for the same reason — no model, effort, or
    project id can collide with it. */
-export const PROVIDER_DEFAULT_VALUE = "";
+const PROVIDER_DEFAULT_VALUE = "";
 
 /**
  * Which model — and, where its agent takes one, which effort — this provider

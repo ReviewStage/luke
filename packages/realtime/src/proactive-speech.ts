@@ -158,7 +158,7 @@ export function isProactiveSpeechTurn(
  * whether the talk key would work. No observed value can change which line is
  * said.
  */
-export function arrivalTryDirection(input: { talkKeyLabel?: string }): string {
+function arrivalTryDirection(input: { talkKeyLabel?: string }): string {
   if (input.talkKeyLabel !== undefined) {
     return (
       "End by inviting exactly one thing to try: hold the talk key named in the data and " +

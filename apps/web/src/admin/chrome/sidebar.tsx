@@ -6,14 +6,14 @@ import { type AdminTab, plainLeftClick, tabHref } from "../routing";
  * `style` reads so the fold's geometry is one value a test can pin rather than
  * a Tailwind class literal it cannot.
  */
-export const SIDEBAR_WIDTH = {
+const SIDEBAR_WIDTH = {
   EXPANDED: 224,
   COLLAPSED: 62,
 } as const;
 
-export type SidebarWidth = (typeof SIDEBAR_WIDTH)[keyof typeof SIDEBAR_WIDTH];
+type SidebarWidth = (typeof SIDEBAR_WIDTH)[keyof typeof SIDEBAR_WIDTH];
 
-export function sidebarRailWidth(collapsed: boolean): SidebarWidth {
+function sidebarRailWidth(collapsed: boolean): SidebarWidth {
   return collapsed ? SIDEBAR_WIDTH.COLLAPSED : SIDEBAR_WIDTH.EXPANDED;
 }
 
@@ -22,12 +22,12 @@ export function sidebarRailWidth(collapsed: boolean): SidebarWidth {
  * collapsed it offers to expand, expanded to collapse. The icon carries the
  * direction; this carries the word.
  */
-export const SIDEBAR_TOGGLE_LABEL = {
+const SIDEBAR_TOGGLE_LABEL = {
   EXPAND: "Expand sidebar",
   COLLAPSE: "Collapse sidebar",
 } as const;
 
-export function sidebarToggleLabel(collapsed: boolean): string {
+function sidebarToggleLabel(collapsed: boolean): string {
   return collapsed ? SIDEBAR_TOGGLE_LABEL.EXPAND : SIDEBAR_TOGGLE_LABEL.COLLAPSE;
 }
 
@@ -41,7 +41,7 @@ export function sidebarToggleLabel(collapsed: boolean): string {
  * would leave a sliver of the next label inside it; a wider one would push the
  * icon off centre. Tying it to the collapsed width keeps both true at once.
  */
-export const SIDEBAR_ICON_SLOT = SIDEBAR_WIDTH.COLLAPSED;
+const SIDEBAR_ICON_SLOT = SIDEBAR_WIDTH.COLLAPSED;
 
 /**
  * The hover and active fill cannot be the row's own background: the row is
@@ -53,9 +53,9 @@ export const SIDEBAR_ICON_SLOT = SIDEBAR_WIDTH.COLLAPSED;
  * which is what keeps the pill's rounded right end exactly this margin inside
  * the clip edge at every intermediate width, not only at rest.
  */
-export const SIDEBAR_PILL_INSET = 8;
+const SIDEBAR_PILL_INSET = 8;
 
-export function sidebarPillWidth(collapsed: boolean): number {
+function sidebarPillWidth(collapsed: boolean): number {
   return sidebarRailWidth(collapsed) - SIDEBAR_PILL_INSET * 2;
 }
 

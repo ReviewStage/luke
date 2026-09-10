@@ -5,14 +5,13 @@ import type { RuntimeStatus } from "./status.js";
 
 export type { AccountCalendar, ObservedAccountCalendars } from "@sidecar/calendar/observation";
 export type { SettingsResetScope, VoiceSource } from "./schema.js";
-export { isVoiceSource, SETTINGS_RESET_SCOPE, VOICE_SOURCE } from "./schema.js";
+export { SETTINGS_RESET_SCOPE, VOICE_SOURCE } from "./schema.js";
 export type {
   AppSettingField,
   AppSettingValue,
   KeyedAppSettingField,
   SettingEntryValue,
 } from "./schema-access.js";
-export { APP_SETTING_DEFAULTS, isSettingsResetScope } from "./schema-access.js";
 
 export type { CalendarAccount, RuntimeStatus } from "./status.js";
 

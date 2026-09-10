@@ -48,7 +48,7 @@ export const CONVERSATION_DELETE_OUTCOME = {
 export type ConversationDeleteOutcome =
   (typeof CONVERSATION_DELETE_OUTCOME)[keyof typeof CONVERSATION_DELETE_OUTCOME];
 
-export const CONVERSATION_DELETION_INCOMPLETE = {
+const CONVERSATION_DELETION_INCOMPLETE = {
   MARKER: "the brain's memory could not be marked erased on disk",
   CUTOFF: "the conversation's earlier cutoff could not be read for the recovery archive",
   ROWS: "the stored conversation could not be removed",

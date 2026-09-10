@@ -39,7 +39,7 @@ export interface ActSender {
 export class ActRefused extends Error {}
 
 /** What one kind does. The payload is the one its own schema admitted. */
-export type ActRow<Kind extends ActKind> = (
+type ActRow<Kind extends ActKind> = (
   payload: ActPayload<Kind>,
   sender: ActSender,
 ) => ActResultFor<Kind> | Promise<ActResultFor<Kind>>;

@@ -12,7 +12,7 @@ import { conductorPlugin } from "../conductor/index.js";
  */
 
 export const TEST_TIME = Date.parse("2026-08-12T02:45:00.000Z");
-export const TEST_BASE_URL = "https://api.conductor.test";
+const TEST_BASE_URL = "https://api.conductor.test";
 export const TEST_API_KEY = "conductor-test-key";
 export const TEST_USER_ID = "user-under-observation";
 export const OTHER_USER_ID = "another-user";
@@ -83,11 +83,11 @@ export function isoTimestamp(timestampMs: number): string {
   return new Date(timestampMs).toISOString();
 }
 
-export function page(data: readonly JsonValue[]): JsonObject {
+function page(data: readonly JsonValue[]): JsonObject {
   return { data, offset: 0, hasMore: false };
 }
 
-export function workspacePayload(workspace: TestWorkspace, projects: readonly TestProject[]) {
+function workspacePayload(workspace: TestWorkspace, projects: readonly TestProject[]) {
   const payload: JsonObject = {
     id: workspace.id,
     name: workspace.name,
@@ -103,7 +103,7 @@ export function workspacePayload(workspace: TestWorkspace, projects: readonly Te
   return payload;
 }
 
-export function sessionPayload(session: TestSession) {
+function sessionPayload(session: TestSession) {
   const payload: JsonObject = {
     id: session.id,
     deepLink: `conductor://workspace?session=${session.id}`,
@@ -342,4 +342,4 @@ export const SECOND_IDLE_SESSION_UUID = "22222222-2222-4222-8222-222222222222";
 export const WORKING_SESSION_UUID = "33333333-3333-4333-8333-333333333333";
 export const ERRORED_SESSION_UUID = "44444444-4444-4444-8444-444444444444";
 /** What the transcripts view holds for every chat and an observation never reports. */
-export const TEST_TRANSCRIPT_WORDS = "SECRET_TRANSCRIPT_WORDS";
+const TEST_TRANSCRIPT_WORDS = "SECRET_TRANSCRIPT_WORDS";

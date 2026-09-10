@@ -37,7 +37,7 @@ const deviceRateLimited = createRateBrake({
 });
 
 /** A push token with the gateway that issued it, as a row stores the pair. */
-export interface DevicePushAddress {
+interface DevicePushAddress {
   token: string;
   environment: PushEnvironment;
 }

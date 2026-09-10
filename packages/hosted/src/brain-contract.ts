@@ -108,7 +108,7 @@ export function hostedBrainBounds(): HostedBrainBounds {
   };
 }
 
-export const hostedBrainCapabilitiesSchema: Schema<HostedBrainCapabilities> = s.record(
+const hostedBrainCapabilitiesSchema: Schema<HostedBrainCapabilities> = s.record(
   {
     contract: s.literal(HOSTED_BRAIN_CONTRACT_VERSION),
     model: s.text({ ends: TEXT_ENDS.KEEP }),
@@ -229,7 +229,7 @@ function requestRefusal(refusal: SchemaRefusal, path: SchemaPath): HostedBrainRe
 }
 
 /** One request read for the whole contract: the schema's answer in this contract's words. */
-export function hostedBrainRequestRead<Request>(
+function hostedBrainRequestRead<Request>(
   schema: Schema<Request>,
   value: UnparsedWireValue,
 ): HostedBrainRequestRead<Request> {
@@ -309,7 +309,7 @@ const textsSchema = s.array(
  * request naming a tool the other side does not know is refused before it
  * costs anything. The same declaration runs on both ends.
  */
-export function hostedBrainRespondRequestSchema(
+function hostedBrainRespondRequestSchema(
   catalog: ReadonlySet<string>,
 ): Schema<HostedBrainRespondRequest> {
   return s.record({
@@ -321,7 +321,7 @@ export function hostedBrainRespondRequestSchema(
   });
 }
 
-export function hostedBrainCountTokensRequestSchema(
+function hostedBrainCountTokensRequestSchema(
   catalog: ReadonlySet<string>,
 ): Schema<HostedBrainCountTokensRequest> {
   return s.record({
@@ -332,13 +332,13 @@ export function hostedBrainCountTokensRequestSchema(
   });
 }
 
-export const hostedBrainCompactRequestSchema: Schema<HostedBrainCompactRequest> = s.record({
+const hostedBrainCompactRequestSchema: Schema<HostedBrainCompactRequest> = s.record({
   contract: contractSchema,
   prompt: promptSchema,
   input: inputSchema,
 });
 
-export const hostedBrainEmbedRequestSchema: Schema<HostedBrainEmbedRequest> = s.record({
+const hostedBrainEmbedRequestSchema: Schema<HostedBrainEmbedRequest> = s.record({
   contract: contractSchema,
   texts: textsSchema,
 });
@@ -370,7 +370,7 @@ export function hostedBrainEmbedRequestFromWire(
 }
 
 /** The vectors are one width, and the width is the one the answer names. */
-export const hostedBrainEmbedAnswerSchema: Schema<HostedBrainEmbedAnswer> = s.refine(
+const hostedBrainEmbedAnswerSchema: Schema<HostedBrainEmbedAnswer> = s.refine(
   s.record(
     {
       model: s.text({ ends: TEXT_ENDS.KEEP }),
@@ -392,7 +392,7 @@ export interface HostedBrainCountTokensAnswer {
   inputTokens: number;
 }
 
-export const hostedBrainCountTokensAnswerSchema: Schema<HostedBrainCountTokensAnswer> = s.record(
+const hostedBrainCountTokensAnswerSchema: Schema<HostedBrainCountTokensAnswer> = s.record(
   { inputTokens: s.wholeNumber({ minimum: 0 }) },
   { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
 );

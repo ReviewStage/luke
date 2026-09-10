@@ -17,7 +17,7 @@ import {
 import { SESSION_URGENCY, type SessionUrgency } from "./urgency.js";
 
 /** The workspace a fixture row is one chat of, shaped as the surface draws it. */
-export interface WorkspaceSnapshot {
+interface WorkspaceSnapshot {
   id: string;
   name: string;
   /** The manager whose mark the tray header carries, when one owns the workspace. */
@@ -26,13 +26,13 @@ export interface WorkspaceSnapshot {
 }
 
 /** One app association drawn by a synthetic fixture row. */
-export interface SessionApplicationSnapshot {
+interface SessionApplicationSnapshot {
   id: SessionApplicationId;
   name: string;
   scope: SessionApplicationScope;
 }
 
-export interface SessionSnapshot {
+interface SessionSnapshot {
   id: string;
   title: string;
   /** The observing provider's stable identity, as an adapter reports it. */
@@ -112,19 +112,6 @@ function minutesBeforeEpoch(minutes: number): number {
 
 const providerName = (providerId: ProviderId): string =>
   PROVIDER_IDENTITY_BY_ID[providerId].displayName;
-
-/** Smoke rows owned by each provider, including explicit empty coverage. */
-export const FIXTURE_SESSION_IDS_BY_PROVIDER = {
-  [PROVIDER_ID.CLAUDE_CODE]: ["claude-review"],
-  [PROVIDER_ID.CODEX]: ["codex-bootstrap"],
-  [PROVIDER_ID.CONDUCTOR]: [
-    "conductor-chat-package",
-    "conductor-chat-tidy",
-    "conductor-cursor-agent",
-    "conductor-opencode-session",
-  ],
-  [PROVIDER_ID.OMP]: [],
-} as const satisfies Readonly<Record<ProviderId, readonly string[]>>;
 
 const smokeFixture: FixtureSnapshot = {
   scenario: "smoke",
@@ -338,9 +325,4 @@ export function fixtureSnapshot(name: string): FixtureSnapshot {
     throw new Error(`Unknown fixture scenario: ${name}`);
   }
   return smokeFixture;
-}
-
-export function urgentSessionCount(snapshot: FixtureSnapshot): number {
-  return snapshot.sessions.filter((session) => session.urgency === SESSION_URGENCY.ATTENTION)
-    .length;
 }

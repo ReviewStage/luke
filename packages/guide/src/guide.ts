@@ -24,7 +24,7 @@ export const APP_SETTING_KIND = {
   CHOICE: "choice",
 } as const;
 
-export type AppSettingKind = (typeof APP_SETTING_KIND)[keyof typeof APP_SETTING_KIND];
+type AppSettingKind = (typeof APP_SETTING_KIND)[keyof typeof APP_SETTING_KIND];
 
 /** The two words a toggle's state is said in, on screen and out loud. */
 export const APP_TOGGLE_VALUE = {

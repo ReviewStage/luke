@@ -74,14 +74,14 @@ export type OpenedContext =
     }
   | { kind: typeof CONTEXT_OPENING.INCOMPATIBLE; reason: string };
 
-export function incompatibleContext(reason: string): OpenedContext {
+function incompatibleContext(reason: string): OpenedContext {
   return { kind: CONTEXT_OPENING.INCOMPATIBLE, reason };
 }
 
 const REPLACED_WHILE_OPENING = "the generation was replaced while its context was opening";
 
 /** The stored items as a checkpoint, or nothing for a generation never checkpointed into. */
-export function storedCheckpoint(state: BrainPersistedState): RuntimeCheckpoint | undefined {
+function storedCheckpoint(state: BrainPersistedState): RuntimeCheckpoint | undefined {
   if (state.checkpointFormat === undefined) return undefined;
   const format = checkpointFormatFromTag(state.checkpointFormat);
   if (!format) return undefined;

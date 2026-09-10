@@ -143,7 +143,7 @@ export const SESSION_OPTIONS_ID = "session-options";
  * "outside" either.
  */
 export const SESSION_OPTIONS_CONTROL_ID = "session-options-control";
-export const SESSION_OPTIONS_BUTTON_ID = "session-options-button";
+const SESSION_OPTIONS_BUTTON_ID = "session-options-button";
 
 /** What each coarse chip is drawn with. An agent carries its own mark instead. */
 function FilterIcon({ filter }: { filter: SessionFilter }): React.JSX.Element | null {

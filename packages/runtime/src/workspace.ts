@@ -46,7 +46,7 @@ export const BOOTSTRAP_BOUNDS = {
 
 const WORKSPACE_FILE_LIST: readonly string[] = Object.values(WORKSPACE_FILE);
 
-export function isWorkspaceFile(name: string): name is WorkspaceFile {
+function isWorkspaceFile(name: string): name is WorkspaceFile {
   return WORKSPACE_FILE_LIST.includes(name);
 }
 

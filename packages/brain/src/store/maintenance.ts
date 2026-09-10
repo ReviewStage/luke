@@ -84,7 +84,7 @@ export interface MaintenanceProtections {
   readonly preserve: ReadonlySet<SessionKey>;
 }
 
-export function activityAt(record: ConversationRecord): number {
+function activityAt(record: ConversationRecord): number {
   return Math.max(record.lastActivityAt, record.createdAt);
 }
 
@@ -101,7 +101,7 @@ function preservedUnarchived(
 }
 
 /** Whether ordinary age and count maintenance leaves the record alone. */
-export function preservedFromMaintenance(
+function preservedFromMaintenance(
   record: ConversationRecord,
   protections: MaintenanceProtections,
 ): boolean {
@@ -109,7 +109,7 @@ export function preservedFromMaintenance(
 }
 
 /** Whether the disk budget may delete the record permanently: only the cap's own archives, and none still protected. */
-export function evictableForDiskBudget(
+function evictableForDiskBudget(
   record: ConversationRecord,
   protections: MaintenanceProtections,
 ): boolean {

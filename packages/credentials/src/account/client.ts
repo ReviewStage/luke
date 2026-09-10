@@ -41,7 +41,7 @@ export interface AccountIdentity {
  * dropped rather than handed to a renderer whose CSP would refuse it — and the
  * set is fixed by this build, like every address the renderer is given.
  */
-export function accountPictureUrl(value: UnparsedWireValue): string | undefined {
+function accountPictureUrl(value: UnparsedWireValue): string | undefined {
   if (!isWireString(value) || !value) return undefined;
   let url: URL;
   try {

@@ -43,7 +43,7 @@ export const REALTIME_TRUNCATION = {
 } as const;
 
 /** Reasoning is rejected by unsupported Realtime models, so only send it where documented. */
-export function realtimeReasoning(model: string): { effort: "low" } | undefined {
+function realtimeReasoning(model: string): { effort: "low" } | undefined {
   if (model !== "gpt-realtime-2" && model !== REALTIME_DEFAULTS.MODEL) return undefined;
   return { effort: "low" };
 }

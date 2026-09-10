@@ -31,7 +31,7 @@ const SIGN_IN_FACE_CYCLE = [
 const SIGN_IN_FACE_REST_MS = 1_100;
 
 /** Which gesture a step of the cycle plays, wrapping forever. */
-export function signInFaceMotion(step: number): FaceMotion {
+function signInFaceMotion(step: number): FaceMotion {
   return SIGN_IN_FACE_CYCLE[step % SIGN_IN_FACE_CYCLE.length] ?? FACE_MOTION.IDLE;
 }
 

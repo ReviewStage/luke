@@ -30,7 +30,7 @@ import { readWorkspaceFileSync, writeWorkspaceFileSync } from "./workspace-files
  */
 
 /** What a reconcile answers: the entries as they then stand, and the file content it read. */
-export interface NotebookReconciliation {
+interface NotebookReconciliation {
   readonly entries: readonly NotebookEntry[];
   readonly content: string;
 }
@@ -130,7 +130,7 @@ function insertEntry(
  * own origin under a fresh id, and an entry whose line is gone is dropped.
  * Answers the entries as they then stand and the content that was read.
  */
-export function reconcileNotebook(
+function reconcileNotebook(
   database: StoreDatabase,
   root: string,
   now: number,

@@ -26,7 +26,7 @@ import {
 const CONDUCTOR_APPLICATION_SUPPORT_DIRECTORY = "com.conductor.app";
 const CONDUCTOR_DATABASE_FILE = "conductor.db";
 
-export const CONDUCTOR_APPLICATION_NAME = "Conductor";
+const CONDUCTOR_APPLICATION_NAME = "Conductor";
 
 const CONDUCTOR_AGENT_TYPE = {
   CLAUDE: "claude",
@@ -77,7 +77,7 @@ const CONDUCTOR_UNNAMED_CHAT_TITLE = "Untitled";
  * the workspace id and takes the chat id as the focus inside it, which is
  * why a session without a workspace has no address at all.
  */
-export function conductorWorkspaceLink(workspaceId: string, conductorChatId?: string): string {
+function conductorWorkspaceLink(workspaceId: string, conductorChatId?: string): string {
   const link = new URL("conductor://workspace");
   link.searchParams.set("id", workspaceId);
   if (conductorChatId !== undefined) link.searchParams.set("session", conductorChatId);

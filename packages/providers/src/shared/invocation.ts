@@ -1,8 +1,6 @@
 import { execFile } from "node:child_process";
 import path from "node:path";
 
-export const DEFAULT_CLI_PATH_DIRECTORIES = ["/opt/homebrew/bin", "/usr/local/bin"] as const;
-
 export const INVOCATION_FAILURE = {
   UNAVAILABLE: "unavailable",
   FAILED: "failed",

@@ -33,7 +33,7 @@ import type { DesktopService } from "./service";
 const BRAIN_APP_ACTION_TIMEOUT_MS = 10_000;
 
 /** What this machine's devices reach in the windows that draw for them. */
-export interface NativeNodeLinks {
+interface NativeNodeLinks {
   /** The one window an app act is carried to; none open is a refusal, not a wait. */
   sendToPrimaryPanel: (channel: string, payload: BrainAppActionRequest) => boolean;
   /**

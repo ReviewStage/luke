@@ -253,27 +253,13 @@ export function hostedStore({ db, keys }: HostedStoreContext): HostedStore {
   };
 }
 
-export {
-  BRIEFING_STATE,
-  type BriefingInsert,
-  type BriefingRecord,
-  type BriefingState,
-} from "./briefings.js";
-export type { ConversationCreation } from "./conversations.js";
+export { BRIEFING_STATE } from "./briefings.js";
+
 export type { HostedStoreContext, HostedStoreDatabase } from "./database.js";
-export type { FactWrite, StoredFact } from "./facts.js";
+
 export {
   MAXIMUM_PENDING_ROSTER_DIFFS,
-  type ObservationEligibility,
   type ObservationPassRecord,
-  type RosterDiffInsert,
   type RosterDiffRecord,
   type RosterSnapshotRecord,
 } from "./roster-snapshot.js";
-export type { RunAboutFields } from "./run-about.js";
-export type { StoredCompactionBoundary, TranscriptListOptions } from "./transcript.js";
-export {
-  isWorkspacePath,
-  type WorkspaceFileListing,
-  type WorkspaceFileRecord,
-} from "./workspace-files.js";

@@ -15,7 +15,7 @@ import type { NativeNodeCapabilities } from "./native-node";
 import type { DesktopService } from "./service";
 
 /** What the host's events reach in the windows that draw them. */
-export interface OperatorClientLinks {
+interface OperatorClientLinks {
   sendToVoice: <Payload>(channel: string, payload: Payload) => void;
   /**
    * A voice that came or went moves the talk key: claimed now that there is

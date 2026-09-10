@@ -66,7 +66,7 @@ export interface StoreWiringDependencies {
  * change so the client can skip the window that already holds the lines.
  * The host reads nothing into it.
  */
-export type ConversationReporter = string;
+type ConversationReporter = string;
 
 /** How the store's side of a deletion ended; the archive itself stays with the store. */
 export type ConversationErasure = Pick<DeletionOutcome, "published">;

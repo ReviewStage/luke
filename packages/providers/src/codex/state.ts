@@ -87,7 +87,7 @@ export interface CodexStateLocation {
  * home, then the one `config.toml` names, then wherever `CODEX_SQLITE_HOME`
  * points, then the paths Codex writes by default.
  */
-export async function stateDatabasePaths(
+async function stateDatabasePaths(
   codexHome: string,
   configuredSqliteHome: string | undefined,
 ): Promise<string[]> {

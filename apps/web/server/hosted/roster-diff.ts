@@ -24,7 +24,7 @@ import {
  */
 
 /** How a diff names a session: its identity and what the next snapshot showed of it. */
-export interface RosterDiffSession {
+interface RosterDiffSession {
   readonly providerId: CloudAgentProviderId;
   readonly providerSessionId: string;
   readonly title: string;
@@ -33,19 +33,19 @@ export interface RosterDiffSession {
   readonly workspaceName?: string;
 }
 
-export interface RosterDiffWorkspace {
+interface RosterDiffWorkspace {
   readonly providerId: CloudAgentProviderId;
   readonly providerWorkspaceId: string;
   readonly name?: string;
 }
 
-export interface RosterStatusTransition {
+interface RosterStatusTransition {
   readonly session: RosterDiffSession;
   readonly from: SessionStatus;
   readonly to: SessionStatus;
 }
 
-export interface RosterLineChange {
+interface RosterLineChange {
   readonly session: RosterDiffSession;
   readonly from?: string;
   readonly to?: string;

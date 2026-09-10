@@ -11,7 +11,7 @@ import { HOTKEY_RANK, type HotkeyRegistrar } from "../window/hotkey-registrar";
 import type { PanelManager } from "../window/panel-manager";
 
 /** What one client-side effect is handed: the snapshot, and who asked for it. */
-export interface ClientSettingSideEffectContext {
+interface ClientSettingSideEffectContext {
   readonly settings: AppSettings;
   readonly sender: WebContents;
   /**
@@ -21,9 +21,7 @@ export interface ClientSettingSideEffectContext {
   readonly waitForDeferredEffects: boolean;
 }
 
-export type ClientSettingSideEffect = (
-  context: ClientSettingSideEffectContext,
-) => Promise<void> | void;
+type ClientSettingSideEffect = (context: ClientSettingSideEffectContext) => Promise<void> | void;
 
 /**
  * Every side effect a setting can have, over the whole of the id set. Total on
@@ -31,12 +29,10 @@ export type ClientSettingSideEffect = (
  * what it does, where the `switch` this replaces ended in a `default` that
  * silently did nothing.
  */
-export type ClientSettingSideEffects = Readonly<
-  Record<SettingSideEffectId, ClientSettingSideEffect>
->;
+type ClientSettingSideEffects = Readonly<Record<SettingSideEffectId, ClientSettingSideEffect>>;
 
 /** An effect this side has nothing to do about, whichever side owns it. */
-export const noClientSettingSideEffect: ClientSettingSideEffect = () => {};
+const noClientSettingSideEffect: ClientSettingSideEffect = () => {};
 
 /** What the client's own side effects have hands on. */
 export interface ClientSettingSideEffectDependencies {

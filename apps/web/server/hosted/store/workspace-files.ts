@@ -24,7 +24,7 @@ export interface WorkspaceFileListing {
 
 const PATH_SEPARATOR = "/";
 
-export function isWorkspacePath(path: string): boolean {
+function isWorkspacePath(path: string): boolean {
   if (path.length === 0 || path.startsWith(PATH_SEPARATOR) || path.includes("\\")) return false;
   return path
     .split(PATH_SEPARATOR)

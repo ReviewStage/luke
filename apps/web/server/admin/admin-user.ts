@@ -27,7 +27,7 @@ import {
  */
 
 /** How many complete weeks the account calendar reaches back past the current one. */
-export const CALENDAR_COMPLETE_WEEKS = 52;
+const CALENDAR_COMPLETE_WEEKS = 52;
 
 const DAY_MS = 86_400_000;
 const DAYS_PER_WEEK = 7;
@@ -60,7 +60,7 @@ export interface AdminUserAccount {
 }
 
 /** The account's whole hosted-tier history, folded to counts and two dates. */
-export interface AdminUserAllTime {
+interface AdminUserAllTime {
   activeDays: number;
   firstActiveDay: string | null;
   lastActiveDay: string | null;

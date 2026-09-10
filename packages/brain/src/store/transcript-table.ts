@@ -190,7 +190,7 @@ function storedEvents(rows: readonly TranscriptRow[]): readonly StoredTranscript
 }
 
 /** A row read back as an event, or nothing for one this build cannot vouch for; a bad row drops the row, not the transcript. */
-export function transcriptEventFromRow(
+function transcriptEventFromRow(
   kind: string,
   recordedAt: number,
   payload: string,

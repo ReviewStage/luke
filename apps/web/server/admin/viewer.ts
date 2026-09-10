@@ -10,7 +10,7 @@ import { adminViewerGate } from "./gate.js";
  * viewer seam into a 503, where swallowing it here would misreport an auth
  * outage as a signed-out 401 and offer a sign-in that cannot succeed.
  */
-export async function resolveSessionViewer(request: Request): Promise<AdminViewer | undefined> {
+async function resolveSessionViewer(request: Request): Promise<AdminViewer | undefined> {
   const authenticated = await auth.api.getSession({ headers: request.headers });
   const account = authenticated?.user;
   if (!account) return undefined;

@@ -12,7 +12,7 @@ import type { UpdateControl } from "./controls";
  * announced the news with; checking stays the quiet button, because checking
  * is maintenance.
  */
-export function updateButton(action: UpdateRowAction, control: UpdateControl): React.JSX.Element {
+function updateButton(action: UpdateRowAction, control: UpdateControl): React.JSX.Element {
   switch (action) {
     case UPDATE_ROW_ACTION.DOWNLOADING:
       return (

@@ -23,7 +23,7 @@ export function panelEntryOpen<T extends PanelEntryBase>(
   return entry !== undefined && !entry.busy;
 }
 
-export interface PanelEntryHost {
+interface PanelEntryHost {
   /**
    * The shape this composer stands the panel down to — the slot, or the
    * feedback surface. Asking to write one thing is asking for one shape.

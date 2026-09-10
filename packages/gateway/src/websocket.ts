@@ -439,7 +439,7 @@ export interface WebSocketGatewayConnectOptions {
   timeoutMs?: number;
 }
 
-export const WEB_SOCKET_GATEWAY_CONNECT_DEFAULTS = {
+const WEB_SOCKET_GATEWAY_CONNECT_DEFAULTS = {
   TIMEOUT_MS: 5_000,
 } as const;
 
@@ -463,7 +463,7 @@ function disconnected(id: string): GatewayResponse {
   };
 }
 
-export class WebSocketGatewayConnection implements GatewayTransport {
+class WebSocketGatewayConnection implements GatewayTransport {
   readonly #socket: WebSocket;
   readonly #pending = new Map<string, (response: GatewayResponse) => void>();
   readonly #sinks = new Set<GatewayEventSink>();

@@ -34,7 +34,7 @@ export const RESPONSES_OPERATION = {
 export type ResponsesOperation = (typeof RESPONSES_OPERATION)[keyof typeof RESPONSES_OPERATION];
 
 /** The checkpoint every Responses transport writes: the tool loop over the Responses input array. */
-export const RESPONSES_CHECKPOINT = {
+const RESPONSES_CHECKPOINT = {
   runtime: TOOL_LOOP_RUNTIME.ID,
   runtimeVersion: TOOL_LOOP_RUNTIME.VERSION,
   format: RESPONSES_ITEM_FORMAT.format,

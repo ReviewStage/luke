@@ -18,16 +18,6 @@ export const DELIVERY_STATE = {
 
 export type DeliveryState = (typeof DELIVERY_STATE)[keyof typeof DELIVERY_STATE];
 
-export const TERMINAL_DELIVERY_STATES: ReadonlySet<DeliveryState> = new Set<DeliveryState>([
-  DELIVERY_STATE.ACKNOWLEDGED,
-  DELIVERY_STATE.GRANTED_ON_CALL,
-  DELIVERY_STATE.WITHDRAWN,
-]);
-
-export function isTerminalDeliveryState(state: DeliveryState): boolean {
-  return TERMINAL_DELIVERY_STATES.has(state);
-}
-
 /**
  * One reply owed to the ear after its words already stand in Conversation. Never
  * persisted: a claimed delivery may already have been audible, so a launch

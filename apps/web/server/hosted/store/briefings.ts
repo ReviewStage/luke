@@ -24,7 +24,7 @@ export type BriefingState = (typeof BRIEFING_STATE)[keyof typeof BRIEFING_STATE]
 
 const BRIEFING_STATE_LIST: readonly BriefingState[] = Object.values(BRIEFING_STATE);
 
-export function isBriefingState(value: UnparsedWireValue): value is BriefingState {
+function isBriefingState(value: UnparsedWireValue): value is BriefingState {
   // SAFETY: value is a string; list membership is the vocabulary check.
   return isWireString(value) && BRIEFING_STATE_LIST.includes(value as BriefingState);
 }

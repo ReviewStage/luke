@@ -96,7 +96,7 @@ function isSessionIdentity(value: UnparsedWireValue): value is SessionIdentity &
 }
 
 /** What observation reaches in the brain: a hook's wake, and the look the pass ends with. */
-export interface ObservationLinks {
+interface ObservationLinks {
   wake: (events: readonly BrainWakeEvent[]) => void;
   rosterLook: () => void;
 }

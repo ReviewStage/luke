@@ -32,8 +32,6 @@ export const LOOK_SUBJECT = {
   SESSION: "session",
 } as const;
 
-export type LookSubjectKind = (typeof LOOK_SUBJECT)[keyof typeof LOOK_SUBJECT];
-
 export type LookSubject =
   | { readonly kind: typeof LOOK_SUBJECT.NONE }
   | { readonly kind: typeof LOOK_SUBJECT.SESSION; readonly identity: SessionIdentity };

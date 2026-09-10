@@ -65,7 +65,7 @@ export function AccountAvatar({
 const ACCOUNT_MENU_ITEM =
   "flex min-h-11 w-full cursor-pointer items-center px-3 py-2 text-left text-sm font-medium transition-colors duration-150 outline-offset-[-2px] hover:bg-muted focus-visible:bg-muted";
 
-export function AccountMenu({
+function AccountMenu({
   account,
   avatarSkeleton = false,
   onSignOut,

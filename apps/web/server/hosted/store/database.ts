@@ -9,7 +9,7 @@ import { openPayload, type PayloadKeyRing, sealPayload } from "../encryption.js"
  * database with the same query surface. The modules never name a driver,
  * so the one store runs against both.
  */
-export type HostedSchema = typeof schema;
+type HostedSchema = typeof schema;
 
 export type HostedStoreDatabase = PgDatabase<PgQueryResultHKT, HostedSchema>;
 

@@ -49,7 +49,7 @@ export interface MaintenanceRunOptions {
   createArchiveId?: () => string;
 }
 
-export interface DiskBudgetReport {
+interface DiskBudgetReport {
   before: number;
   after: number;
   maximumBytes: number;
@@ -180,7 +180,7 @@ interface DiskBudgetOptions {
  * every step and stopping at the high-water mark. Protected data is never a
  * victim, and pressure it leaves is reported rather than resolved.
  */
-export function enforceDiskBudget(
+function enforceDiskBudget(
   database: StoreDatabase,
   agentRoot: string,
   options: DiskBudgetOptions,
@@ -319,12 +319,12 @@ function archiveEntries(agentRoot: string): ArchiveEntry[] {
   return entries;
 }
 
-export function listArchiveFiles(agentRoot: string): ArchiveEntry[] {
+function listArchiveFiles(agentRoot: string): ArchiveEntry[] {
   return archiveEntries(agentRoot).filter((entry) => !entry.staging);
 }
 
 /** Removes staging files older than the stale window; a fresh one may be another publication in flight. */
-export function removeStaleStaging(agentRoot: string, now: number): number {
+function removeStaleStaging(agentRoot: string, now: number): number {
   let removed = 0;
   for (const entry of archiveEntries(agentRoot)) {
     if (!entry.staging || now - entry.mtimeMs <= ARCHIVE_STAGING_STALE_MS) continue;

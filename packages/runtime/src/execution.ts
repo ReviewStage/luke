@@ -172,9 +172,6 @@ export const MODEL_RESPONSE_OUTCOME = {
   FAILED: "failed",
 } as const;
 
-export type ModelResponseOutcome =
-  (typeof MODEL_RESPONSE_OUTCOME)[keyof typeof MODEL_RESPONSE_OUTCOME];
-
 /**
  * Why a model call failed, as a fixed word. A compatibility failure is the
  * one a host must never paper over: the adapter and the service it speaks to
@@ -339,8 +336,6 @@ export const CONTEXT_INPUT_KIND = {
   TOOL_RESULT: "tool_result",
 } as const;
 
-export type ContextInputKind = (typeof CONTEXT_INPUT_KIND)[keyof typeof CONTEXT_INPUT_KIND];
-
 export type ContextInput =
   | { readonly kind: typeof CONTEXT_INPUT_KIND.USER_TEXT; readonly text: string }
   | {
@@ -454,8 +449,6 @@ export const RUNTIME_EVENT = {
   ENDED: "ended",
 } as const;
 
-export type RuntimeEventKind = (typeof RUNTIME_EVENT)[keyof typeof RUNTIME_EVENT];
-
 export const RUN_END_REASON = {
   COMPLETED: "completed",
   CANCELLED: "cancelled",
@@ -518,7 +511,7 @@ export type RuntimeEvent =
  * next inference has the guarantee by construction: the model is not asked
  * again until the listener has returned.
  */
-export type RuntimeEventListener = (event: RuntimeEvent) => void | Promise<void>;
+type RuntimeEventListener = (event: RuntimeEvent) => void | Promise<void>;
 
 /** One execution as a host asks for it. */
 export interface RuntimeRunRequest {

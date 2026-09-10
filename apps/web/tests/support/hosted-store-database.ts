@@ -20,7 +20,7 @@ import { type HostedStore, type HostedStoreDatabase, hostedStore } from "../../s
  */
 
 /** The env var naming a Postgres the store tests should run against instead of PGlite. */
-export const STORE_TEST_DATABASE_ENVIRONMENT = {
+const STORE_TEST_DATABASE_ENVIRONMENT = {
   URL: "LUKE_STORE_TEST_DATABASE_URL",
 } as const;
 

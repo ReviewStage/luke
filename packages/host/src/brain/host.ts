@@ -11,7 +11,7 @@ import type { BrainAgent } from "@sidecar/brain";
  * the latest transition: when the queue reaches a build, only the newest
  * request still owns the outcome, and every older one installs nothing.
  */
-export interface BrainHostDependencies {
+interface BrainHostDependencies {
   /** Follows a newly installed agent; answers the unfollow, which settles once its publication has drained. */
   follow: (agent: BrainAgent) => () => Promise<void>;
   /** Tells every window what stands when no agent does: no runs at all. */

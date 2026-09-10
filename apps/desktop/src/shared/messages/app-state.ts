@@ -24,7 +24,7 @@ import type { VoiceView } from "./voice-view";
  * save the trace gate, which is the host's answer about this run rather than
  * the launch's own argument.
  */
-export interface AppRunFacts {
+interface AppRunFacts {
   profile: string;
   packaged: boolean;
   platform: string;
@@ -39,7 +39,7 @@ export interface AppRunFacts {
   agentTraceEnabled: boolean;
 }
 
-export interface AppSessionsSlice {
+interface AppSessionsSlice {
   roster: SessionRosterPayload;
   /**
    * Whether the roster reflects a reading Luke actually took. A run that
@@ -56,7 +56,7 @@ export interface AppAudioSlice {
   outputAudio?: OutputAudioState;
 }
 
-export interface AppHotkeysSlice {
+interface AppHotkeysSlice {
   /**
    * The accelerator each key was registered as, absent where the system
    * refused one — a chord nothing can trigger must not be drawn as though it
@@ -74,7 +74,7 @@ export interface AppHotkeysSlice {
   stop?: string;
 }
 
-export interface AppVoiceSlice {
+interface AppVoiceSlice {
   /**
    * The live conversation as the voice window last reported it, so a panel
    * that opens mid-exchange draws the exchange rather than an idle voice.
@@ -91,13 +91,13 @@ export interface AppVoiceSlice {
   epoch?: number;
 }
 
-export interface AppSupersetSlice {
+interface AppSupersetSlice {
   installed: boolean;
   connected: boolean;
   signIn?: SupersetSignInSnapshot;
 }
 
-export interface AppConversationSlice {
+interface AppConversationSlice {
   /**
    * Every line the thread holds, words whole — this launch's and, ahead of
    * them, what the last launch left within the retention policy — the same on
@@ -118,7 +118,7 @@ export interface AppConversationSlice {
  * whether an action that ended the account it files under has stood recording
  * down for the rest of the run.
  */
-export interface AppSessionReplaySlice {
+interface AppSessionReplaySlice {
   permitted: boolean;
   accountId?: string;
   halted: boolean;

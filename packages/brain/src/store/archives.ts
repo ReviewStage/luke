@@ -40,7 +40,7 @@ import { listTranscript } from "./transcript-table.js";
  * the developer's own disk for the developer alone.
  */
 
-export const ARCHIVE_DIRECTORY = "archives";
+const ARCHIVE_DIRECTORY = "archives";
 const ARCHIVE_STAGING_SUFFIX = ".tmp";
 const ARCHIVE_REASON_DELETED = "deleted";
 /** Room under the 255-byte component limit for the timestamp, the id, and the suffixes. */
@@ -63,7 +63,7 @@ function archiveTimestamp(ms: number): string {
   return new Date(ms).toISOString().replaceAll(":", "-");
 }
 
-export function archiveFileName(
+function archiveFileName(
   sessionKey: string,
   deletedAt: number,
   archiveId: string,
@@ -338,7 +338,7 @@ export function deleteConversation(
  * failure, the directory sync's included, leaves it there for the next
  * attempt, because a name the disk may not hold is not a recovery copy.
  */
-export function publishArchive(
+function publishArchive(
   database: StoreDatabase,
   agentRoot: string,
   archiveId: string,

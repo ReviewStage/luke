@@ -36,7 +36,7 @@ export interface AdminDayAccount {
 }
 
 /** The whole day's counts, over every account the scope keeps, past the row bound. */
-export interface AdminDayTotals {
+interface AdminDayTotals {
   accounts: number;
   calls: number;
 }

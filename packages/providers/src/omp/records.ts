@@ -3,7 +3,7 @@ import path from "node:path";
 import { isRecord, isWireString, text, type WireRecord } from "@sidecar/wire";
 
 export const OMP_SESSIONS_DIRECTORY = "sessions";
-export const OMP_SESSION_FILE_EXTENSION = ".jsonl";
+const OMP_SESSION_FILE_EXTENSION = ".jsonl";
 
 export const OMP_RECORD_TYPE = {
   TITLE: "title",

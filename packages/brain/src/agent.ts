@@ -62,11 +62,11 @@ export type { BrainCompletionDelivery } from "./children.js";
 export { BRAIN_DEFAULTS } from "./defaults.js";
 export type { BrainFlushInput, BrainFlushMarkerStore } from "./maintenance.js";
 export type { BrainWorkspaceAccess } from "./tool-executor.js";
-export type { BrainOpeningNotes } from "./turn-runner.js";
-export { LOOK_SUBJECT, type LookSubject, type LookSubjectKind } from "./wakes.js";
+
+export { LOOK_SUBJECT } from "./wakes.js";
 
 /** Runs a turn's work under the host's lane for its trigger, so conversations share the lanes' budgets and nothing wider. */
-export type BrainLane = <T>(trigger: BrainTurnTrigger, work: () => Promise<T>) => Promise<T>;
+type BrainLane = <T>(trigger: BrainTurnTrigger, work: () => Promise<T>) => Promise<T>;
 
 export interface BrainAgentOptions {
   /** The execution the host runs turns on; it decides how a model and its tools loop, and it alone reaches the model. */

@@ -31,7 +31,7 @@ type HostDrain = (typeof HOST_DRAIN)[keyof typeof HOST_DRAIN];
 const STANDUP_DRAIN_WAIT_MS = 5_000;
 
 /** What the host's standup reaches in the client that operates it. */
-export interface HostServiceLinks {
+interface HostServiceLinks {
   /**
    * The operator's first attach. It rides inside the standup because the
    * drain has to interrupt the whole of it: a quit landing between the store

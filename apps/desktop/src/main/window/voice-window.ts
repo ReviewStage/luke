@@ -25,9 +25,9 @@ export interface VoiceWindowOptions {
 }
 
 /** How many times a run may stand the voice renderer back up before a load succeeds. */
-export const MAXIMUM_REOPENS_PER_RUN = 3;
+const MAXIMUM_REOPENS_PER_RUN = 3;
 /** The pause before a replacement, so a renderer dying on load cannot spin the process. */
-export const REOPEN_DELAY_MS = 1_000;
+const REOPEN_DELAY_MS = 1_000;
 
 /**
  * The one hidden window that will hold the live conversation, so that it

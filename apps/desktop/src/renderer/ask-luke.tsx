@@ -20,7 +20,7 @@ const ASK_PLACEHOLDER = "Ask Luke…";
 
 /** The disc's two names: the field's own ask, and the stop of a run of Luke's still going. */
 const SEND_LABEL = "Ask Luke";
-export const STOP_LABEL = "Stop Luke's reply";
+const STOP_LABEL = "Stop Luke's reply";
 
 /**
  * How the ask field is found from outside the component, the way the options

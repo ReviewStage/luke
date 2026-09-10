@@ -79,5 +79,4 @@ export const CODEX_HOOK_SPEC: ObservationHookSpec<CodexHookEvent> = {
 const codexHooks = observationHooksFor(CODEX_HOOK_SPEC);
 
 export const installCodexObservationHooks = codexHooks.install;
-export const removeCodexObservationHooks = codexHooks.remove;
 export const readCodexHookEvent = codexHooks.read;

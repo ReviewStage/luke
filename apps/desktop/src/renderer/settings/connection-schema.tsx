@@ -73,7 +73,7 @@ export const CONNECTION_LAYOUT = {
   NESTED: "nested",
 } as const;
 
-export type ConnectionLayout = (typeof CONNECTION_LAYOUT)[keyof typeof CONNECTION_LAYOUT];
+type ConnectionLayout = (typeof CONNECTION_LAYOUT)[keyof typeof CONNECTION_LAYOUT];
 
 /** The control an action wears, which is what says how it reads on the line. */
 export const CONNECTION_CONTROL = {
@@ -90,7 +90,7 @@ export const CONNECTION_CONTROL = {
 export type ConnectionControl = (typeof CONNECTION_CONTROL)[keyof typeof CONNECTION_CONTROL];
 
 /** How an action that cannot be undone from here asks first, and answers. */
-export interface ConnectionConfirm {
+interface ConnectionConfirm {
   /** What is being asked, in the words a hand and a reader both get. */
   question: string;
   /** The dangerous answer's word, and its word while it runs. */
@@ -120,7 +120,7 @@ export type ConnectionAction = {
 } & ({ confirm: ConnectionConfirm; run?: never } | { confirm?: never; run: () => void });
 
 /** What a row says about the connection now. */
-export interface ConnectionStatus {
+interface ConnectionStatus {
   connected: boolean;
   /**
    * Words for what neither the check nor the controls can say. Absent where the

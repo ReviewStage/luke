@@ -11,7 +11,7 @@ import { REFUSAL_REASON } from "./turn.js";
 import type { BrainTranscriptDelta, BrainWakeEvent } from "./wake-events.js";
 
 /** A transcript held to a bound from the front, and whether anything was cut. */
-export interface FrontCut {
+interface FrontCut {
   text: string;
   cut: boolean;
 }
@@ -23,7 +23,7 @@ function cutFront(value: string, maximumChars: number): FrontCut {
 }
 
 /** The cursor each session's transcript was last read to, kept by the turn's own generation. */
-export interface TranscriptCursors {
+interface TranscriptCursors {
   cursor(identity: SessionIdentity): string | undefined;
   setCursor(identity: SessionIdentity, cursor: string): void;
 }

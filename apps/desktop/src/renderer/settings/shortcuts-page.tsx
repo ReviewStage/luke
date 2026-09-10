@@ -26,7 +26,7 @@ import type { SettingsWrites } from "./writes";
 
 /* What a talk key may be: offered the moment recording starts, and restated
    in the error line for the keystroke that was not one. */
-export const SHORTCUT_HINT = "Hold ⌃, ⌥ or ⌘ — ⇧ may join — and press a letter or Space.";
+const SHORTCUT_HINT = "Hold ⌃, ⌥ or ⌘ — ⇧ may join — and press a letter or Space.";
 
 /**
  * How Luke is reached rather than what he can see. The chord is drawn as the
@@ -53,7 +53,7 @@ export const SHORTCUT_HINT = "Hold ⌃, ⌥ or ⌘ — ⇧ may join — and pres
  * standing in. The row then says "None" rather than "Unavailable", because
  * this absence is the user's own choice, and Reset is the way back.
  */
-export function ShortcutRow({
+function ShortcutRow({
   title,
   detail,
   anchor,
