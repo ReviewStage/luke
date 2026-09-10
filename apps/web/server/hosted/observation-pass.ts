@@ -1,4 +1,4 @@
-import { createHmac, randomUUID } from "node:crypto";
+import { pbkdf2Sync, randomUUID } from "node:crypto";
 import { type CloudAgentProviderId, isCloudAgentProviderId } from "../core.js";
 import { type ActionRoster, actionRosterFor } from "./action-execute.js";
 import {
@@ -72,14 +72,33 @@ export interface StoredSnapshot {
 }
 
 /**
- * What identifies the key a provider was observed under: an HMAC of the key
- * itself under the deployment's secret. The same key saved again — which the
- * Mac does on every launch, rewriting the stored ciphertext under a fresh
- * nonce — keeps its fingerprint, and a different key has another; the
- * fingerprint itself reveals nothing about the key.
+ * How a key's fingerprint is derived. The key is a credential, so the
+ * derivation is a password one rather than a plain hash: salted with the
+ * deployment's secret and stretched, so a fingerprint in a stored snapshot
+ * cannot be brute-forced back to the key even with the database in hand.
+ * The stretch is kept light because every read of the snapshot derives one
+ * fingerprint per key row.
+ */
+const KEY_FINGERPRINT = {
+  ITERATIONS: 10_000,
+  LENGTH_BYTES: 32,
+  DIGEST: "sha256",
+} as const;
+
+/**
+ * What identifies the key a provider was observed under: a derivation of the
+ * key itself under the deployment's secret. The same key saved again — which
+ * the Mac does on every launch, rewriting the stored ciphertext under a fresh
+ * nonce — keeps its fingerprint, and a different key has another.
  */
 export function keyFingerprint(apiKey: string, secret: string): string {
-  return createHmac("sha256", secret).update(apiKey).digest("hex");
+  return pbkdf2Sync(
+    apiKey,
+    secret,
+    KEY_FINGERPRINT.ITERATIONS,
+    KEY_FINGERPRINT.LENGTH_BYTES,
+    KEY_FINGERPRINT.DIGEST,
+  ).toString("hex");
 }
 
 /** The fingerprint of each cloud provider's standing key, by provider; a row this secret cannot open names none. */
