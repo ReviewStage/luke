@@ -82,8 +82,8 @@ test("every segment stays until the reply ends, and the whole reply is handed ov
   context.strip.mark(REPLY_KIND.BRIEFING);
   for (const index of [1, 2, 3, 4]) context.strip.append(`item-${index}`, `Sentence ${index}.`);
 
-  // How many the housing draws is the surface's own limit; the record is
-  // owed every message the reply said.
+  // No count retires a segment: how many fit under the housing is the
+  // surface's question, and the record is owed every message the reply said.
   assert.deepEqual(latest(context.drawn)?.texts, [
     "Sentence 1.",
     "Sentence 2.",

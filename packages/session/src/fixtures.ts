@@ -83,12 +83,17 @@ export interface FixtureSnapshot {
  * What the speaking evidence run captions the reply with. A capture run never
  * opens a call, so there are no words to draw unless the fixture supplies
  * them — and it must, or the caption strip ships unphotographed. Synthetic,
- * like every fixture, and long enough to wrap: a one-line fixture would leave
- * the wrapped form of the strip unphotographed too. It lives here, beside the
- * roster it talks about, so the sentence stays true to the rows it names.
+ * like every fixture, and shaped like a reply of several messages: the first
+ * long enough to wrap, and two more behind it, so the wrapped form of the
+ * strip and the stack of segments it draws are both in the frame. It lives
+ * here, beside the roster it talks about, so the sentences stay true to the
+ * rows they name.
  */
-export const FIXTURE_SPEAKING_CAPTION =
-  "Bootstrap the desktop shell and Review trust constraints are finished, lisbon-v2 is packaging the macOS build, and Follow a cloud agent and Watch a cloud session are waiting on you.";
+export const FIXTURE_SPEAKING_CAPTIONS: readonly string[] = [
+  "Bootstrap the desktop shell and Review trust constraints are finished, lisbon-v2 is packaging the macOS build, and Follow a cloud agent and Watch a cloud session are waiting on you.",
+  "Nothing else has moved since you last looked.",
+  "Say the word and I'll open either of the two that are waiting.",
+];
 
 /**
  * A fixed instant the fixture's observation times are measured back from. A

@@ -43,6 +43,29 @@ test("an unchanged sentence keeps the hold's identity", () => {
   assert.equal(stripHoldNext({ hovered: true, drawn: rebuilt, held: WORDS }), WORDS);
 });
 
+test("a hold keeps every stacked segment, and a new segment arriving refreshes it whole", () => {
+  const three: SpokenStripContent = {
+    texts: ["Looking now.", "Two agents are waiting.", "Nothing else has moved."],
+    tone: CAPTION_TONE.WORDS,
+  };
+  // The snapshot is the whole stack, however many segments it holds...
+  assert.equal(stripHoldNext({ hovered: true, drawn: three, held: undefined }), three);
+  assert.equal(stripHoldNext({ hovered: true, drawn: undefined, held: three }), three);
+  // ...and the same three rebuilt keep the hold's identity, while a fourth
+  // segment arriving under the pointer is new content and replaces it.
+  const rebuilt: SpokenStripContent = { ...three, texts: [...three.texts] };
+  assert.equal(stripHoldNext({ hovered: true, drawn: rebuilt, held: three }), three);
+  const four: SpokenStripContent = { ...three, texts: [...three.texts, "Say the word."] };
+  assert.equal(stripHoldNext({ hovered: true, drawn: four, held: three }), four);
+  // A settled segment's transcript landing late changes one line of the
+  // stack, and that too is new content rather than the held frame.
+  const corrected: SpokenStripContent = {
+    ...three,
+    texts: ["Looking now, corrected.", ...three.texts.slice(1)],
+  };
+  assert.equal(stripHoldNext({ hovered: true, drawn: corrected, held: three }), corrected);
+});
+
 test("a tone change is a content change", () => {
   // The same words in a different tone are drawn differently, so a held
   // snapshot must not keep its identity across one.

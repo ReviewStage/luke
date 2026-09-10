@@ -23,6 +23,6 @@ export {
   type VoiceState,
   type VoiceSurroundings,
 } from "./voice-orchestrator.js";
-export { activeVoiceStream, CAPTION_SEGMENT_LIMIT } from "./voice-policy.js";
+export { activeVoiceStream } from "./voice-policy.js";
 export { VOICE_READINESS_PART, type VoiceReadinessPart } from "./voice-readiness.js";
 export type { VoiceExchangeOpening, VoiceViewReport } from "./voice-view-reporter.js";
