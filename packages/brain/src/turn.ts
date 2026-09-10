@@ -1,15 +1,24 @@
 import {
   CHILD_SPAWN_REFUSAL,
   type ChildSpawnRefusal,
+  queueSummaryText,
   type ToolDescriptor,
   type ToolPolicyLayers,
 } from "@sidecar/runtime";
 import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import { RUN_ORIGIN, type RunOrigin } from "@sidecar/runtime/vocabulary";
 import type { Generation } from "./generation.js";
-import type { BrainRequestOrigin, BrainRunUsage } from "./requests.js";
+import type { RunEnd } from "./ledger.js";
+import {
+  BRAIN_REQUEST_FAILURE,
+  BRAIN_REQUEST_STATUS,
+  type BrainRequestOrigin,
+  type BrainRequestRecord,
+  type BrainRunUsage,
+} from "./requests.js";
 import type { SteeredDeliveries } from "./steered-deliveries.js";
 import type { RecordingContextEngine } from "./transcript-recorder.js";
+import type { TurnEvents } from "./turn-events.js";
 import type { BrainWakeEvent } from "./wake-events.js";
 
 export const BRAIN_TURN_TRIGGER = {
@@ -131,6 +140,100 @@ export interface RunControl {
   responseIds: string[];
 }
 
+/** A run's live controls as every run starts: nothing revoked, nothing failed, nothing yet done. */
+export function newRunControl(
+  runId: string,
+  generation: Generation,
+  recorded: boolean,
+): RunControl {
+  return {
+    runId,
+    generation,
+    recorded,
+    abort: new AbortController(),
+    cancelled: false,
+    timedOut: false,
+    checkpointFailed: false,
+    performedActions: 0,
+    unknownActions: 0,
+    responseIds: [],
+  };
+}
+
+/**
+ * What a run's end is read from: the flags its own execution set and the
+ * generation it ran in. A rider's end is the primary's flags with its own
+ * record, so nothing has to fabricate a control to reuse the reading.
+ */
+type RunEndFlags = Pick<
+  RunControl,
+  "generation" | "cancelled" | "timedOut" | "checkpointFailed" | "compactionFailed"
+>;
+
+/** How a run ended, as its record takes it: the status and what rides beside it. */
+interface RunOutcome {
+  status: BrainRequestRecord["status"];
+  end: RunEnd;
+}
+
+/** How a run's turn result reads as its record's end. */
+export function runOutcomeOf(flags: RunEndFlags, result: TurnResult, stopped: boolean): RunOutcome {
+  const end: RunEnd = {};
+  let status: BrainRequestRecord["status"];
+  if (flags.timedOut) {
+    status = BRAIN_REQUEST_STATUS.TIMED_OUT;
+    end.failure = BRAIN_REQUEST_FAILURE.DEADLINE;
+  } else if (flags.cancelled) {
+    status = BRAIN_REQUEST_STATUS.CANCELLED;
+  } else if (stopped || flags.generation.abort.signal.aborted) {
+    status = BRAIN_REQUEST_STATUS.INTERRUPTED;
+  } else if (flags.checkpointFailed) {
+    // What the run did may be unrecorded; that outranks whatever the model
+    // did afterwards, and the reply, if one formed, still travels.
+    status = BRAIN_REQUEST_STATUS.FAILED;
+    end.failure = BRAIN_REQUEST_FAILURE.PERSISTENCE;
+    if (result.outcome === TURN_OUTCOME.DONE && result.text) end.text = result.text;
+  } else if (flags.compactionFailed) {
+    status = BRAIN_REQUEST_STATUS.FAILED;
+    end.failure = BRAIN_REQUEST_FAILURE.COMPACTION;
+  } else if (result.outcome === TURN_OUTCOME.INCOMPLETE) {
+    status = BRAIN_REQUEST_STATUS.FAILED;
+    end.failure = BRAIN_REQUEST_FAILURE.INCOMPLETE;
+  } else if (result.outcome !== TURN_OUTCOME.DONE) {
+    status = BRAIN_REQUEST_STATUS.FAILED;
+    end.failure = BRAIN_REQUEST_FAILURE.MODEL;
+  } else {
+    status = BRAIN_REQUEST_STATUS.SUCCEEDED;
+    if (result.text) end.text = result.text;
+  }
+  return { status, end };
+}
+
+/**
+ * One ask as its turn reads it: the run that records it and the words the
+ * model is shown for it, its question or, once the overflow folded it, the
+ * one summary line the queue cut it to.
+ */
+export interface AskInput {
+  readonly run: RunControl;
+  readonly text: string;
+  readonly folded: boolean;
+}
+
+/** The question one turn opens with for the asks that opened it: the overflow's summary first, then each ask's words. */
+export function askQuestion(opened: readonly AskInput[]): string {
+  const summaryLines = opened.filter((input) => input.folded).map((input) => input.text);
+  const summary = queueSummaryText({
+    entries: [],
+    summaryLines,
+    summarizedCount: summaryLines.length,
+  });
+  return [
+    ...(summary === undefined ? [] : [summary]),
+    ...opened.filter((input) => !input.folded).map((input) => input.text),
+  ].join("\n\n");
+}
+
 interface TurnPlanBase {
   events: readonly BrainWakeEvent[];
   /** The words the turn opens with, each ingested as the developer's or the host's, in order. */
@@ -163,6 +266,8 @@ export interface TurnContext {
   context: RecordingContextEngine;
   run: RunControl;
   signal: AbortSignal;
+  /** The turn's one emitter of run events, so a compaction the maintenance folds after the turn is numbered in the turn's sequence. */
+  events: TurnEvents;
   /** The inbox entries this turn opened with, consumed by its checkpoint and by nothing sooner. */
   consumes?: readonly string[];
 }

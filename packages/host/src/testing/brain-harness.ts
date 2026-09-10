@@ -23,7 +23,7 @@ import {
   fakeBrainStateRepository,
 } from "@sidecar/brain/testing";
 import { drainMicrotasks } from "@sidecar/runtime/testing";
-import type { ModelResponse } from "@sidecar/runtime/vocabulary";
+import { MAIN_SESSION_KEY, type ModelResponse } from "@sidecar/runtime/vocabulary";
 import {
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
@@ -180,6 +180,7 @@ export function brainHarness() {
   const build = (client: BareResponsesModel, options: Partial<BrainAgentOptions> = {}) => {
     const model = bareModelAdapter(client);
     return new BrainAgent({
+      conversationId: MAIN_SESSION_KEY,
       observes: { kind: LOOK_SUBJECT.NONE },
       ...options,
       runtime: toolLoopRuntimeOver(model),

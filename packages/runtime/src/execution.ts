@@ -178,6 +178,10 @@ export interface ReasoningSummary {
   /** The provider's id for the reasoning item the summary describes. */
   readonly itemId: string;
   readonly summary: string;
+  /** The item's encrypted content, lifted beside it by the adapter where the provider gives one, so a replay elsewhere can carry it. */
+  readonly encryptedContent?: string;
+  /** The item itself, opaque and whole, as the context ingested it; carried for a record and never read inside. */
+  readonly item: WireRecord;
 }
 
 export const MODEL_RESPONSE_OUTCOME = {
@@ -461,6 +465,8 @@ export const RUNTIME_EVENT = {
   USAGE: "usage",
   /** One inference was answered under a provider response id. */
   RESPONSE: "response",
+  /** One reasoning item of an answer, after the answer's items are in the context. */
+  REASONING: "reasoning",
   COMPACTED: "compacted",
   INCOMPLETE: "incomplete",
   THROTTLED: "throttled",
@@ -515,6 +521,7 @@ export type RuntimeEvent =
     }
   | { readonly kind: typeof RUNTIME_EVENT.USAGE; readonly usage: ModelUsage }
   | { readonly kind: typeof RUNTIME_EVENT.RESPONSE; readonly responseId: string }
+  | { readonly kind: typeof RUNTIME_EVENT.REASONING; readonly reasoning: ReasoningSummary }
   | { readonly kind: typeof RUNTIME_EVENT.COMPACTED; readonly dropped: number }
   | { readonly kind: typeof RUNTIME_EVENT.INCOMPLETE; readonly incomplete: ModelIncomplete }
   | { readonly kind: typeof RUNTIME_EVENT.THROTTLED; readonly until: number }
@@ -580,7 +587,13 @@ export interface RuntimeIdentity {
 
 /** That a compaction happened, by which way and folding how much, or why it did not. */
 export type RuntimeCompaction =
-  | { readonly compacted: true; readonly source: CompactionSource; readonly dropped: number }
+  | {
+      readonly compacted: true;
+      readonly source: CompactionSource;
+      readonly dropped: number;
+      /** The summary the older items were folded behind, where the compaction wrote one; a provider's opaque window carries none. */
+      readonly summary?: string;
+    }
   | { readonly compacted: false; readonly reason: string };
 
 /** What a compaction runs under: the prompt the next request will carry, and the signal that ends the wait. */

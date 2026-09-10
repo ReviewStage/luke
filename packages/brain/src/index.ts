@@ -82,9 +82,16 @@ export {
 } from "./responses-api.js";
 export {
   BRAIN_RUN_EVENT,
+  BRAIN_TURN_ORIGIN,
   type BrainRunEvent,
+  type BrainRunEventBody,
+  type BrainRunEventKind,
+  type BrainTurnOrigin,
   SLOW_STEP_KIND,
   type SlowStepKind,
+  TOOL_CALL_SETTLEMENT,
+  type ToolCallSettlement,
+  type TurnCompaction,
 } from "./run-events.js";
 export {
   CONTEXT_ITEM_KIND,

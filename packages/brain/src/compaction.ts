@@ -167,6 +167,7 @@ export async function compactContext(
     return { compacted: false, reason: "this transport offers no compaction" };
   }
   let failure: string | undefined;
+  let summary: string | undefined;
   const summarize = async (older: readonly WireRecord[]): Promise<string | undefined> => {
     const answer = await model.respond(older, {
       prompt: LOCAL_SUMMARY_INSTRUCTIONS,
@@ -185,12 +186,18 @@ export async function compactContext(
       failure = "the summary came back empty";
       return undefined;
     }
-    return `${LOCAL_SUMMARY_MARKER}\n${answer.text.trim()}`;
+    summary = `${LOCAL_SUMMARY_MARKER}\n${answer.text.trim()}`;
+    return summary;
   };
   const dropped = await context.foldBehindSummary(summarize, COMPACTION_POLICY.KEEP_RECENT_TOKENS, {
     signal: request.signal,
   });
   if (request.signal.aborted) return { compacted: false, reason: "compaction cancelled" };
   if (dropped <= 0) return { compacted: false, reason: failure ?? "nothing could be folded" };
-  return { compacted: true, source: COMPACTION_SOURCE.LOCAL_SUMMARY, dropped };
+  return {
+    compacted: true,
+    source: COMPACTION_SOURCE.LOCAL_SUMMARY,
+    dropped,
+    ...(summary !== undefined ? { summary } : undefined),
+  };
 }

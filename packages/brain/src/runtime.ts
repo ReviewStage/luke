@@ -351,6 +351,9 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
     }
     await ingest({ kind: CONTEXT_INPUT_KIND.MODEL_OUTPUT, items: answer.items });
     if (lifecycle.signal?.aborted) return false;
+    for (const reasoning of answer.reasoning ?? []) {
+      await emit({ kind: RUNTIME_EVENT.REASONING, reasoning });
+    }
     if (answer.compacted) {
       const settled = await settledUnlessAborted(
         Promise.resolve(request.context.compact(lifecycle)),

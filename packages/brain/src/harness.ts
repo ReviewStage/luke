@@ -371,6 +371,7 @@ export function harness(
   // so the two writes reach the performer under test like every other action.
   const scope = { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: DEFAULT_AGENT_ID };
   const agent = new BrainAgent({
+    conversationId: MAIN_SESSION_KEY,
     runtime,
     prepareTurn: PLAIN_PREPARATION,
     observes: { kind: LOOK_SUBJECT.SESSION, identity: ABC },
@@ -691,6 +692,7 @@ export function heldOpenRuntime(model: ModelAdapter, disposeHangs = false) {
 
 export function agentOn(runtime: ToolLoopAgentRuntime, h: Harness) {
   return new BrainAgent({
+    conversationId: MAIN_SESSION_KEY,
     runtime,
     prepareTurn: PLAIN_PREPARATION,
     observes: { kind: LOOK_SUBJECT.NONE },

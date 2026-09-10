@@ -6,7 +6,7 @@ import {
   refusedActionOutput,
 } from "@sidecar/actions";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
-import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
+import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { BrainAgent, LOOK_SUBJECT } from "./agent.js";
 import { type BrainPersistedState, freshBrainState } from "./envelope.js";
@@ -264,6 +264,7 @@ test("stop settles only after a held acceptance, which the successor then finds 
   // — here, a mark — lands nowhere, while the successor's own writes do.
   const successorModel = adapterOf(new FakeClient());
   const successor = new BrainAgent({
+    conversationId: MAIN_SESSION_KEY,
     runtime: runtimeOver(successorModel),
     observes: { kind: LOOK_SUBJECT.NONE },
     prepareTurn: PLAIN_PREPARATION,

@@ -8,6 +8,7 @@ import {
 } from "@sidecar/memory";
 import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import {
+  MAIN_SESSION_KEY,
   MEMORY_CAPTURE_PHASE,
   MEMORY_SCOPE_KIND,
   type MemoryCaptureTurn,
@@ -162,6 +163,7 @@ function agentWith(
     now: () => NOW,
   });
   const agent = new BrainAgent({
+    conversationId: MAIN_SESSION_KEY,
     runtime,
     observes: { kind: LOOK_SUBJECT.NONE },
     prepareTurn: () => ({ prompt: "flush test", layers: {} }),

@@ -202,9 +202,15 @@ test("the response id, each reasoning item's summary, and the four-way usage are
     cachedInputTokens: 768,
     reasoningTokens: 100,
   });
-  // One summary per item that has words, joined as paragraphs; an item with none is not a summary.
+  // One summary per item that has words, joined as paragraphs, the encrypted
+  // content lifted beside it and the item whole; an item with none is not a summary.
   assert.deepEqual(answer.reasoning, [
-    { itemId: "rs_1", summary: "Checking which session is waiting.\n\nOnly one needs a reply." },
+    {
+      itemId: "rs_1",
+      summary: "Checking which session is waiting.\n\nOnly one needs a reply.",
+      encryptedContent: "opaque",
+      item: summarized,
+    },
   ]);
   // The items themselves are untouched: the opaque content rides with the summary for replay.
   assert.deepEqual(answer.items[0], summarized);
