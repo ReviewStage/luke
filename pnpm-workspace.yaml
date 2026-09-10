@@ -5,6 +5,7 @@ packages:
 
 catalog:
   typescript: 7.0.2
+  effect: 3.22.2
   "@types/node": 26.2.0
   tsx: 4.23.12
   react: 19.2.8
