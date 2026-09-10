@@ -12,7 +12,9 @@ import {
   hostedQuotaSchema,
   isHostedVoiceServiceAddress,
   type LiveSessionCreated,
+  type SessionAttachFrame,
   type SessionCreateFrame,
+  sessionAttachedFrameSchema,
   sessionCreatedFrameSchema,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
@@ -48,6 +50,7 @@ import {
   type LiveSocket,
   type OpenSocket,
   SOCKET_OPEN_FAULT,
+  type SocketClose,
   type SocketOpenFailure,
   type SocketOpening,
   sidebandOverSocket,
@@ -494,6 +497,40 @@ class ServiceLiveSessionSource {
     return sidebandOverSocket(socket);
   }
 
+  /**
+   * One attempt to stand a fresh connection on a session that already exists:
+   * a new socket under the current bearer, `session.attach` as its first
+   * frame, and the service's `session.attached` for the same id as the
+   * answer. A socket that would not open or went quiet is a transport
+   * failure worth another try; a frame that is not the answer — a hosted
+   * refusal, or another session's id — is the service's decision and ends
+   * the attempts.
+   */
+  protected async attachOnce(sessionId: string): Promise<ReattachAttempt> {
+    const bearer = await this.#bearer();
+    if (this.#authorization && bearer === undefined) return { outcome: REATTACH_ATTEMPT.REFUSED };
+    const opening = await this.#open(bearer);
+    if (!socketOpened(opening)) {
+      return {
+        outcome:
+          opening.fault === SOCKET_OPEN_FAULT.REFUSED && opening.status === HTTP_STATUS.UNAUTHORIZED
+            ? REATTACH_ATTEMPT.REFUSED
+            : REATTACH_ATTEMPT.FAILED,
+      };
+    }
+    const { socket } = opening;
+    const frame: SessionAttachFrame = { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId };
+    const answer = await this.#firstFrame(socket, () => socket.send(JSON.stringify(frame)));
+    if (answer === undefined) {
+      socket.close();
+      return { outcome: REATTACH_ATTEMPT.FAILED };
+    }
+    const attached = sessionAttachedFrameSchema.parse(answer);
+    if (attached?.sessionId === sessionId) return { outcome: REATTACH_ATTEMPT.ATTACHED, socket };
+    socket.close();
+    return { outcome: REATTACH_ATTEMPT.REFUSED };
+  }
+
   async #bearer(): Promise<string | undefined> {
     if (!this.#authorization) return undefined;
     const token = await this.#authorization.readAccessToken().catch(() => undefined);
@@ -571,27 +608,169 @@ class ServiceLiveSessionSource {
   }
 }
 
+const REATTACH_ATTEMPT = {
+  ATTACHED: "attached",
+  /** The transport did not carry the attempt to an answer; another try may. */
+  FAILED: "failed",
+  /** The service answered, and the answer was not the attachment; no further try is made. */
+  REFUSED: "refused",
+} as const;
+
+type ReattachAttempt =
+  | { outcome: typeof REATTACH_ATTEMPT.ATTACHED; socket: LiveSocket }
+  | { outcome: typeof REATTACH_ATTEMPT.FAILED }
+  | { outcome: typeof REATTACH_ATTEMPT.REFUSED };
+
+/**
+ * When a lost connection is tried again: three tries over about ten
+ * seconds — at once, three seconds later, and seven after that — because a
+ * connection to the voice service is one function invocation the platform
+ * closes at the function's maximum duration while the session stands on.
+ */
+export const HOSTED_REATTACH_DELAYS_MS: readonly number[] = [0, 3_000, 7_000];
+
+/** The close code of a connection that ended because the session did, after which nothing is tried again. */
+const NORMAL_CLOSE_CODE = 1000;
+
+/**
+ * The hosted sideband as one socket that outlives its connections. The host
+ * holds this; underneath, the connection to the voice service is replaced
+ * whenever it closes for any reason but the session's own end: a new socket
+ * opens with `session.attach`, and the pipe resumes on it. What the session
+ * said between the two connections is lost — the service replays nothing,
+ * and no event that crossed in the gap reaches a listener — which is
+ * accepted: the WebRTC media never crossed this socket, and the host reads a
+ * sideband that went quiet the same way it reads any other silence. Sends
+ * made during the gap are held and sent on the next connection. Only when
+ * every try fails, or the service refuses the attachment, does the close
+ * reach the listeners, as the connection loss the host already handles.
+ */
+class ReattachingSocket implements LiveSocket {
+  #inner: LiveSocket;
+  readonly #attach: (sessionId: string) => Promise<ReattachAttempt>;
+  readonly #sessionId: string;
+  readonly #delaysMs: readonly number[];
+  readonly #messageListeners = new Set<(data: string) => void>();
+  readonly #closeListeners = new Set<(close: SocketClose) => void>();
+  #held: string[] | undefined;
+  #closedByClient = false;
+  #ended = false;
+
+  constructor(options: {
+    socket: LiveSocket;
+    sessionId: string;
+    attach: (sessionId: string) => Promise<ReattachAttempt>;
+    delaysMs: readonly number[];
+  }) {
+    this.#inner = options.socket;
+    this.#sessionId = options.sessionId;
+    this.#attach = options.attach;
+    this.#delaysMs = options.delaysMs;
+    this.#adopt(options.socket);
+  }
+
+  send(data: string): void {
+    if (this.#held !== undefined) {
+      this.#held.push(data);
+      return;
+    }
+    this.#inner.send(data);
+  }
+
+  close(): void {
+    this.#closedByClient = true;
+    this.#inner.close();
+  }
+
+  onMessage(listener: (data: string) => void): () => void {
+    this.#messageListeners.add(listener);
+    return () => {
+      this.#messageListeners.delete(listener);
+    };
+  }
+
+  onClose(listener: (close: SocketClose) => void): () => void {
+    this.#closeListeners.add(listener);
+    return () => {
+      this.#closeListeners.delete(listener);
+    };
+  }
+
+  #adopt(socket: LiveSocket): void {
+    socket.onMessage((data) => {
+      if (socket !== this.#inner || this.#ended) return;
+      for (const listener of [...this.#messageListeners]) listener(data);
+    });
+    socket.onClose((close) => {
+      if (socket !== this.#inner || this.#ended) return;
+      if (this.#closedByClient || close.code === NORMAL_CLOSE_CODE) {
+        this.#end(close);
+        return;
+      }
+      void this.#recover(close);
+    });
+  }
+
+  async #recover(close: SocketClose): Promise<void> {
+    this.#held = [];
+    for (const delayMs of this.#delaysMs) {
+      if (delayMs > 0) await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+      if (this.#closedByClient) break;
+      const attempt = await this.#attach(this.#sessionId);
+      if (attempt.outcome === REATTACH_ATTEMPT.REFUSED) break;
+      if (attempt.outcome === REATTACH_ATTEMPT.FAILED) continue;
+      if (this.#closedByClient) {
+        attempt.socket.close();
+        break;
+      }
+      this.#inner = attempt.socket;
+      this.#adopt(attempt.socket);
+      const held = this.#held;
+      this.#held = undefined;
+      for (const data of held) attempt.socket.send(data);
+      return;
+    }
+    this.#held = undefined;
+    this.#end(close);
+  }
+
+  #end(close: SocketClose): void {
+    if (this.#ended) return;
+    this.#ended = true;
+    for (const listener of [...this.#closeListeners]) listener(close);
+  }
+}
+
 type ServiceSourceOptions = Omit<
   ServiceSessionOptions,
   "servicePath" | "logLabel" | "authorization"
 >;
 
-export type HostedLiveSessionOptions = ServiceSourceOptions & AccountToken;
+export type HostedLiveSessionOptions = ServiceSourceOptions &
+  AccountToken & {
+    /** The waits between tries at re-attaching a lost connection; `HOSTED_REATTACH_DELAYS_MS` by default. */
+    reattachDelaysMs?: readonly number[];
+  };
 
 /**
  * The signed-in account's sessions, through Luke's voice service, for a
  * developer who has not connected an OpenAI key of their own. The socket the
- * service answered on is the sideband, so attaching opens nothing further.
+ * service answered on is the sideband, so attaching opens nothing further;
+ * when that connection closes before the session does, the sideband re-attaches
+ * to the same session over a fresh one.
  */
 export class HostedLiveSessionSource extends ServiceLiveSessionSource implements LiveSessionSource {
+  readonly #reattachDelaysMs: readonly number[];
+
   constructor(options: HostedLiveSessionOptions) {
-    const { readAccessToken, refreshAccount, readAccountKey, ...rest } = options;
+    const { readAccessToken, refreshAccount, readAccountKey, reattachDelaysMs, ...rest } = options;
     super({
       ...rest,
       servicePath: VOICE_SERVICE_PATH.SESSIONS,
       logLabel: "Hosted live session",
       authorization: { readAccessToken, refreshAccount, readAccountKey },
     });
+    this.#reattachDelaysMs = reattachDelaysMs ?? HOSTED_REATTACH_DELAYS_MS;
   }
 
   async create(input: LiveSessionCreateInput): Promise<LiveSessionOpened | undefined> {
@@ -599,7 +778,14 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
     if (!opened) return undefined;
     // The socket that answered is already the session's: the sideband is held
     // now, so nothing the session says before the host attaches is lost.
-    const sideband = this.holdSideband(opened.socket);
+    const sideband = this.holdSideband(
+      new ReattachingSocket({
+        socket: opened.socket,
+        sessionId: opened.created.sessionId,
+        attach: (sessionId) => this.attachOnce(sessionId),
+        delaysMs: this.#reattachDelaysMs,
+      }),
+    );
     return { ...opened.created, attach: async () => sideband };
   }
 }

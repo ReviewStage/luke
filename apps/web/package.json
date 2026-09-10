@@ -44,7 +44,8 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "recharts": "3.8.0",
-    "tailwindcss": "4.3.3"
+    "tailwindcss": "4.3.3",
+    "ws": "8.21.3"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
@@ -52,6 +53,7 @@
     "@types/pg": "8.21.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
+    "@types/ws": "8.18.1",
     "@vitejs/plugin-react": "5.1.2",
     "drizzle-kit": "0.31.10",
     "tsx": "4.23.12",

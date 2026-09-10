@@ -1,5 +1,5 @@
-import { eq, sql } from "drizzle-orm";
-import { type HostedQuota, VOICE_USAGE_RECORD } from "../core.js";
+import { eq, isNull, sql } from "drizzle-orm";
+import type { HostedQuota } from "../core.js";
 import { user } from "../db/auth-schema.js";
 import type { createDatabase } from "../db/index.js";
 import { hostedUsage, introductionUsage, voiceSessionUsage } from "../db/usage-schema.js";
@@ -104,15 +104,16 @@ export async function spendIntroductionMeter(
 }
 
 /** Whichever driver stands behind the hosted schema, as the store's tables already take it. */
-type VoiceUsageDatabase = Pick<HostedStoreDatabase, "transaction">;
+type VoiceUsageDatabase = Pick<HostedStoreDatabase, "transaction" | "select" | "insert">;
 
 /**
- * What recording a session's seconds came to: the wire's two records, and the
- * one the route turns into a refusal rather than an answer, an account the
+ * What recording a session's seconds came to: recorded, repeated for a
+ * session whose seconds already stand, and unknown user for an account the
  * report names that the database no longer holds.
  */
 export const VOICE_SECONDS_OUTCOME = {
-  ...VOICE_USAGE_RECORD,
+  RECORDED: "recorded",
+  REPEATED: "repeated",
   UNKNOWN_USER: "unknown-user",
 } as const;
 
@@ -120,13 +121,45 @@ export type VoiceSecondsOutcome =
   (typeof VOICE_SECONDS_OUTCOME)[keyof typeof VOICE_SECONDS_OUTCOME];
 
 /**
+ * Writes down which account a GPT Live session was created for, the moment
+ * it is created, as a session row with no seconds yet. The row is what a
+ * later function connection checks before it re-attaches to the session: only
+ * the account that created a session may attach to it. A session id seen
+ * twice keeps its first owner.
+ */
+export async function registerVoiceSession(
+  database: VoiceUsageDatabase,
+  input: { userId: string; sessionId: string },
+): Promise<void> {
+  await database
+    .insert(voiceSessionUsage)
+    .values({ sessionId: input.sessionId, userId: input.userId })
+    .onConflictDoNothing({ target: voiceSessionUsage.sessionId });
+}
+
+/** The account a session was created for, or nothing for a session this deployment never created. */
+export async function voiceSessionOwner(
+  database: VoiceUsageDatabase,
+  sessionId: string,
+): Promise<string | undefined> {
+  const [row] = await database
+    .select({ userId: voiceSessionUsage.userId })
+    .from(voiceSessionUsage)
+    .where(eq(voiceSessionUsage.sessionId, sessionId))
+    .limit(1);
+  return row?.userId;
+}
+
+/**
  * Records the seconds OpenAI billed for one closed GPT Live session, once. The
- * session row is the ledger: its insert is the idempotent step, and only a
- * report that created the row moves the day's `voice_seconds`, so a report
- * the service repeats after a lost answer adds nothing. Both writes share one
- * transaction so a crash between them cannot leave a session recorded and a
- * day uncounted. The day is the report's, not the session's start: the
- * service reports at `session.closed`, and that is the instant it knows.
+ * session row is the ledger: the seconds land only where none stand yet, on
+ * the row creation registered or on one this report creates, and only a
+ * report that landed them moves the day's `voice_seconds`, so a report
+ * repeated after a lost answer, or seen by two function connections, adds
+ * nothing. Both writes share one transaction so a crash between them cannot
+ * leave a session recorded and a day uncounted. The day is the report's, not
+ * the session's start: the function reports at `session.closed`, and that is
+ * the instant it knows.
  */
 export async function recordVoiceSeconds(
   database: VoiceUsageDatabase,
@@ -140,7 +173,7 @@ export async function recordVoiceSeconds(
       .limit(1);
     if (!account) return VOICE_SECONDS_OUTCOME.UNKNOWN_USER;
 
-    const inserted = await transaction
+    const landed = await transaction
       .insert(voiceSessionUsage)
       .values({
         sessionId: input.sessionId,
@@ -148,9 +181,13 @@ export async function recordVoiceSeconds(
         seconds: input.seconds,
         recordedAt: input.now,
       })
-      .onConflictDoNothing({ target: voiceSessionUsage.sessionId })
+      .onConflictDoUpdate({
+        target: voiceSessionUsage.sessionId,
+        set: { seconds: input.seconds, recordedAt: input.now },
+        setWhere: isNull(voiceSessionUsage.seconds),
+      })
       .returning({ sessionId: voiceSessionUsage.sessionId });
-    if (inserted.length === 0) return VOICE_SECONDS_OUTCOME.REPEATED;
+    if (landed.length === 0) return VOICE_SECONDS_OUTCOME.REPEATED;
 
     await transaction
       .insert(hostedUsage)

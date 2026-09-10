@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
+import type { RawData, WebSocket } from "ws";
 import {
   closeEvent,
   LIVE_SERVER_EVENT,
   type LiveClientEvent,
   parseLiveServerEvent,
-} from "@sidecar/live";
-import type { RawData, WebSocket } from "ws";
+} from "../live.js";
 import {
   desktopFrameDecision,
   FRAME_DECISION,

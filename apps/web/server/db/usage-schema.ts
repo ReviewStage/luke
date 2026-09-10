@@ -48,17 +48,20 @@ export const introductionUsage = pgTable(
 );
 
 /**
- * One closed GPT Live session's billed seconds, keyed by the session id OpenAI
- * minted, so the voice service's report is taken once however many times it
- * is sent: the row is the idempotency ledger, and the day's `voice_seconds`
- * moves only when the row is new. Nothing of the conversation is here, only
- * the id, the account, the seconds, and when the report landed.
+ * One GPT Live session, keyed by the session id OpenAI minted: the account it
+ * was created for, written at creation so a later function connection can
+ * prove the account attaching to the session is the one that opened it, and
+ * once the session closes the seconds OpenAI billed. A row with no seconds
+ * is a session still standing. The row is the idempotency ledger for the
+ * report too: the seconds land once, whichever connection sees
+ * `session.closed`, and the day's `voice_seconds` moves only when they do.
+ * Nothing of the conversation is here.
  */
 export const voiceSessionUsage = pgTable("voice_session_usage", {
   sessionId: text("session_id").primaryKey(),
   userId: text("user_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
-  seconds: doublePrecision("seconds").notNull(),
-  recordedAt: bigint("recorded_at", { mode: "number" }).notNull(),
+  seconds: doublePrecision("seconds"),
+  recordedAt: bigint("recorded_at", { mode: "number" }),
 });

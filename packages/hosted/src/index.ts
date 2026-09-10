@@ -80,17 +80,25 @@ export {
   type PushEnvironment,
 } from "./device-wire.js";
 export {
+  HOSTED_SERVICE_ORIGIN,
   HOSTED_VOICE_SERVICE_ORIGIN,
   hostedVoiceServiceOrigin,
   isHostedVoiceServiceAddress,
   type LiveSessionCreated,
   liveSessionCreatedSchema,
   SESSION_CREATE_BOUNDS,
+  type SessionAttachedFrame,
+  type SessionAttachFrame,
   type SessionCreatedFrame,
   type SessionCreateFrame,
+  type SessionOpeningFrame,
+  sessionAttachedFrameSchema,
+  sessionAttachFrameSchema,
   sessionCreatedFrameSchema,
   sessionCreateFrameSchema,
+  sessionOpeningFrameSchema,
   VOICE_SERVICE_FRAME,
+  webSocketOrigin,
 } from "./live-contract.js";
 export {
   HOSTED_CALLS_URL,
@@ -136,11 +144,7 @@ export {
   RESPONSES_MESSAGE_ROLE,
   serializedRequestBytes,
 } from "./responses-input.js";
-export {
-  HOSTED_SERVICE_PATH,
-  VOICE_SERVICE_PATH,
-  VOICE_SERVICE_SECRET_HEADER,
-} from "./service-paths.js";
+export { HOSTED_SERVICE_PATH, VOICE_SERVICE_PATH } from "./service-paths.js";
 export {
   HOSTED_API_ERROR,
   type HostedApiError,
@@ -160,16 +164,3 @@ export {
   vaultKeyStoreAnswerSchema,
   vaultKeysListAnswerSchema,
 } from "./vault-wire.js";
-export {
-  VOICE_INTERNAL_BOUNDS,
-  VOICE_USAGE_RECORD,
-  type VoiceAuthorizeAnswer,
-  type VoiceAuthorizeRequest,
-  type VoiceUsageAnswer,
-  type VoiceUsageRecord,
-  type VoiceUsageRequest,
-  voiceAuthorizeAnswerSchema,
-  voiceAuthorizeRequestSchema,
-  voiceUsageAnswerSchema,
-  voiceUsageRequestSchema,
-} from "./voice-internal-wire.js";

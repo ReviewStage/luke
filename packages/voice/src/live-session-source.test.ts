@@ -465,6 +465,157 @@ test("the hosted source records a socket closed or silent before it answered as 
   assert.deepEqual(silent.sockets[0]?.listenerCounts, { messages: 0, closes: 0 });
 });
 
+function attachedFrame(sessionId = SESSION_ID) {
+  return { type: VOICE_SERVICE_FRAME.SESSION_ATTACHED, sessionId };
+}
+
+/** Waits for the scripted seam to have opened the given number of sockets, or fails. */
+async function openedSockets(script: ScriptedSocketSeam, count: number): Promise<void> {
+  for (let waited = 0; script.sockets.length < count && waited < 200; waited += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+  assert.equal(script.sockets.length, count);
+}
+
+function reattaching(script: ScriptedSocketSeam, options: Partial<HostedLiveSessionOptions> = {}) {
+  return hosted(script, { reattachDelaysMs: [0, 0, 0], ...options });
+}
+
+test("a hosted connection lost mid-session re-attaches with session.attach and the pipe resumes", async () => {
+  const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
+  const source = reattaching(script, { readAccessToken: async () => "token-2" });
+  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
+  assert.ok(opened);
+  const sideband = await opened.attach();
+  const seen: LiveServerEvent[] = [];
+  const closes: unknown[] = [];
+  sideband.onEvent((event) => seen.push(event));
+  sideband.onClose((close) => closes.push(close));
+  const [first] = script.sockets;
+  assert.ok(first);
+
+  first.closeFromServer({ code: 1006 });
+  await openedSockets(script, 2);
+  const [, second] = script.sockets;
+  assert.ok(second);
+  await new Promise((resolve) => setTimeout(resolve, 5));
+
+  assert.deepEqual(script.opens[1], {
+    url: `${SERVICE_ORIGIN}${VOICE_SERVICE_PATH.SESSIONS}`,
+    headers: { authorization: "Bearer token-2" },
+  });
+  assert.deepEqual(JSON.parse(second.sent[0] ?? ""), {
+    type: VOICE_SERVICE_FRAME.SESSION_ATTACH,
+    sessionId: SESSION_ID,
+  });
+  assert.deepEqual(closes, []);
+  assert.equal(source.diagnostics().sidebandAttached, true);
+
+  second.receive({
+    type: LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED,
+    event_id: "ev_2",
+    client_event_id: "c_2",
+  });
+  assert.deepEqual(
+    seen.map((event) => event.type),
+    [LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
+  );
+  sideband.send({ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "c_3" });
+  assert.equal(second.sent.length, 2);
+  assert.equal(first.sent.length, 1);
+});
+
+test("sends made during the gap are held and sent on the re-attached connection, in order", async () => {
+  const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
+  const source = reattaching(script);
+  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
+  assert.ok(opened);
+  const sideband = await opened.attach();
+  script.sockets[0]?.closeFromServer({ code: 1001 });
+  sideband.send({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "c_1" });
+  sideband.send({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE, event_id: "c_2" });
+  await openedSockets(script, 2);
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  const second = script.sockets[1];
+  assert.ok(second);
+  assert.deepEqual(
+    second.sent.map((data) => JSON.parse(data).type),
+    [
+      VOICE_SERVICE_FRAME.SESSION_ATTACH,
+      LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE,
+      LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE,
+    ],
+  );
+});
+
+test("re-attaching tries as many times as it has delays and then reports the loss", async () => {
+  const script = scriptedOpenSocket([answering(createdFrame()), closingOnSend(1011)]);
+  const source = reattaching(script);
+  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
+  assert.ok(opened);
+  const sideband = await opened.attach();
+  const closes: Array<{ code?: number }> = [];
+  sideband.onClose((close) => closes.push(close));
+
+  script.sockets[0]?.closeFromServer({ code: 1006 });
+  await openedSockets(script, 4);
+  for (let waited = 0; closes.length === 0 && waited < 200; waited += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+  assert.deepEqual(closes, [{ code: 1006 }]);
+  assert.equal(script.sockets.length, 4);
+  assert.equal(source.diagnostics().sidebandAttached, false);
+  for (const socket of script.sockets.slice(1)) assert.equal(socket.closedByClient, true);
+});
+
+test("a service that refuses the attachment ends the tries at once", async () => {
+  const script = scriptedOpenSocket([
+    answering(createdFrame()),
+    answering({ error: HOSTED_API_ERROR.UPSTREAM_ERROR }),
+  ]);
+  const source = reattaching(script);
+  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
+  assert.ok(opened);
+  const sideband = await opened.attach();
+  const closes: Array<{ code?: number }> = [];
+  sideband.onClose((close) => closes.push(close));
+
+  script.sockets[0]?.closeFromServer({ code: 1001 });
+  for (let waited = 0; closes.length === 0 && waited < 200; waited += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+  assert.deepEqual(closes, [{ code: 1001 }]);
+  assert.equal(script.sockets.length, 2);
+  assert.equal(script.sockets[1]?.closedByClient, true);
+});
+
+test("a connection closed normally, or by the host itself, is the session's end and is not re-attached", async () => {
+  const normal = scriptedOpenSocket([answering(createdFrame())]);
+  const ended = reattaching(normal);
+  const first = await ended.create({ sdpOffer: SDP_OFFER, input: [] });
+  assert.ok(first);
+  const firstCloses: unknown[] = [];
+  (await first.attach()).onClose((close) => firstCloses.push(close));
+  normal.sockets[0]?.closeFromServer({ code: 1000 });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.deepEqual(firstCloses, [{ code: 1000 }]);
+  assert.equal(normal.sockets.length, 1);
+
+  const own = scriptedOpenSocket([answering(createdFrame())]);
+  const hungUp = reattaching(own);
+  const second = await hungUp.create({ sdpOffer: SDP_OFFER, input: [] });
+  assert.ok(second);
+  const sideband = await second.attach();
+  const secondCloses: unknown[] = [];
+  sideband.onClose((close) => secondCloses.push(close));
+  sideband.close();
+  assert.equal(own.sockets[0]?.closedByClient, true);
+  own.sockets[0]?.closeFromServer({ code: 1005 });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.deepEqual(secondCloses, [{ code: 1005 }]);
+  assert.equal(own.sockets.length, 1);
+});
+
 test("the introduction source carries no authorization and opens no sideband", async () => {
   const { quota: _quota, ...unmetered } = createdFrame();
   const script = scriptedOpenSocket([answering(unmetered)]);

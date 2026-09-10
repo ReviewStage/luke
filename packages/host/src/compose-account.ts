@@ -124,11 +124,12 @@ export function composeAccount(dependencies: AccountDependencies): AccountCompos
     fixtureRun: () => !runMode.sendsNetwork,
     accountSignedIn: () => account.status === ACCOUNT_STATUS.SIGNED_IN,
     hostedServiceBaseUrl: kernel.hostedServiceBaseUrl,
-    // The voice service origin is pinned by the build; a development build may
-    // point it elsewhere the way the account service is, and a packaged one may not.
+    // The voice functions live on the account service's origin, so its
+    // development override reaches them too; a voice override of its own stands
+    // where a `vercel dev` serves the functions apart, and a packaged build takes neither.
     hostedVoiceServiceOrigin: hostedVoiceServiceOrigin({
       packaged: options.packaged,
-      override: options.environment.LUKE_VOICE_SERVICE_ORIGIN,
+      override: options.environment.LUKE_VOICE_SERVICE_ORIGIN ?? kernel.hostedServiceBaseUrl,
     }),
     openSocket: openSocketOverWs,
     refreshAccount: session.refreshOnce,

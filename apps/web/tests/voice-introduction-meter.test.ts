@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { INTRODUCTION_METER_LIMITS, IntroductionMeter } from "./introduction-meter.js";
+import { INTRODUCTION_METER_LIMITS, IntroductionMeter } from "../server/voice/introduction-meter";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

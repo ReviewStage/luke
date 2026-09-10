@@ -185,41 +185,96 @@ one atomic upsert before each upstream call, checked against the ceilings in
 long they run; a spend limit on the OpenAI project behind the key is the
 backstop and should be configured with it.
 
-## Hosted voice service routes
+## Hosted voice service
 
-`api/internal/voice/authorize.ts` and `api/internal/voice/usage.ts` are the
-two routes only the hosted voice service calls, the long-running process on
-its own origin that holds the GPT Live project key and owns each hosted voice
+`api/voice/sessions.ts` and `api/voice/introduction.ts` are the hosted voice
+service: two Vercel Functions serving WebSockets on Fluid compute, the part of
+this deployment that holds the GPT Live project key and owns each hosted voice
 session (`live-contract.ts` in `@sidecar/hosted` is the desktop's contract
-with it). Neither route takes an account bearer as its identity: both accept
-one header, `x-luke-voice-service-secret`, compared in constant time against
-`VOICE_SERVICE_SECRET`, and answer 503 while that variable is absent or
-blank, the same kill switch as every other hosted secret. Their paths are
-`HOSTED_SERVICE_PATH.VOICE_AUTHORIZE` and `VOICE_USAGE`, exact-path files
-under `api/internal/`, so Vercel's zero-config detection routes them without
-a `routes` entry.
+with them). Each file exports the `http.Server` that `server/voice/service.ts`
+builds, with `ws` handling the upgrade on it, exactly as Vercel's WebSocket
+guide has it; the desktop opens `wss://` on this deployment's own origin,
+`HOSTED_VOICE_SERVICE_ORIGIN` in `@sidecar/hosted`, at `VOICE_SERVICE_PATH`.
+A plain request to either path answers 426, since the path is a socket's.
 
-Authorize is asked before the service spends a session: the body carries the
-`Authorization` value the desktop opened its socket with, resolved to a user
-through the same in-process `/oauth2/userinfo` seam the mint uses, and the
-account's daily allowance is spent by the same `hosted_usage` meter every
-hosted operation shares, before any session exists, so a refused account costs
-no session. The answer is the user id and the quota; a bearer that resolves to
-nobody is a 401, a spent allowance a 429 carrying the quota.
+On `/api/voice/sessions` a signed-in desktop's handshake carries its account
+bearer, resolved through the same in-process `/oauth2/userinfo` seam every
+hosted route uses, and its daily allowance is spent by the same `hosted_usage`
+meter before any session exists, so a refused account costs no session. The
+socket's first frame is `session.create` (the SDP offer, a voice, the seed);
+the function creates the session at OpenAI on the deployment's key, writes
+down which account it was created for, attaches the trusted sideband, and
+answers `session.created` with the id, the SDP answer, and the quota. From
+then on it is a pipe: desktop frames to OpenAI untouched, OpenAI frames to the
+desktop untouched except `session.input_audio.append` and
+`session.output_audio.delta`, dropped by type so the developer's voice and
+Luke's never transit the service. It keeps no conversation, reads no frame
+past its `type`, and logs status codes, outcome names, and counts.
 
-Usage is reported after `session.closed`: the user id authorize answered, the
-session id OpenAI minted, and the seconds it billed. `voice_session_usage`
-keeps one row per session id and is the idempotency ledger; a report the
-service repeats after a lost answer is answered `repeated` and moves nothing,
-and only a report that created its row adds to the day's `voice_seconds` on
-`hosted_usage`, in one transaction. The seconds column stands beside the call
-count rather than replacing it: a session still spends one call when it
-opens, and the mint routes and their meter stay as they are for installed
-desktops until the seconds are what the allowance is measured in. Both
-tables cascade with the user row. The caller is `apps/voice-service`, and the
-desktop never calls either route; the voice service's own origin is pinned by
-the desktop's build in `@sidecar/hosted` rather than answered by this
-deployment.
+`/api/voice/introduction` takes a fresh install with no account, under the
+function's own meter (per hashed caller address and shared, per UTC day, in
+the instance's memory, so the ceiling is per instance). There the sideband is
+the function's alone: the caller may send only what a renderer's data channel
+may, is shown only what one is shown, and `greetingInstruction()` goes up once
+on `session.started`. The seed is bounded to one developer message of at most
+1,024 characters.
+
+### One connection is one invocation
+
+A WebSocket connection to a Vercel Function closes when the function reaches
+its maximum duration — `vercel.json` gives both functions 800 seconds, the
+longest generally available — while the WebRTC session between the desktop
+and OpenAI stands on. So a socket may also open with `session.attach` naming
+a session id. The function resolves the bearer, checks that this account is
+the one the session was created for (the `voice_session_usage` row written at
+creation, whose seconds stay null until the session closes), attaches a fresh
+sideband to OpenAI's `/v1/live/sessions/{id}/attach`, answers
+`session.attached`, and pipes as before. Nothing the session said between the
+two connections is replayed. The desktop's `HostedLiveSessionSource` in
+`@sidecar/voice` does the reconnecting: three tries over about ten seconds,
+sends made in the gap held for the next connection, and only after the last
+failure does the host see the loss it already handles as `connection_lost`.
+The introduction never re-attaches; one connection covers it.
+
+### How a session ends
+
+`session.closed` is finalization. Whichever connection sees it forwards it,
+records `usage.seconds` through `recordVoiceSeconds` in `server/hosted/quota.ts`
+— the session row is the idempotency ledger: the seconds land only where none
+stand yet, and only then does the day's `voice_seconds` on `hosted_usage`
+move, in one transaction, so a report seen by two connections adds nothing —
+and closes both ends. A desktop that hangs up first has `session.close` sent
+on its behalf and the sideband held for `session.closed` for 15 seconds, the
+docs' close sequence. A sideband that ends first closes the desktop socket
+with code 1001 and reason `upstream-closed` and records nothing. Both tables
+cascade with the user row. The seconds column stands beside the call count
+rather than replacing it: a session still spends one call when it opens, and
+the mint routes and their meter stay as they are for installed desktops until
+the seconds are what the allowance is measured in.
+
+### How a refusal looks
+
+Before any socket stands, an HTTP status on the upgrade: `401` for
+`/api/voice/sessions` without a bearer, `403` for a handshake carrying a
+browser `Origin` header (the desktop connects from its main process and never
+sends one), `429` for an introduction past the meter, `503` while
+`OPENAI_API_KEY` is absent. Once a socket stands, one frame `{ "error": <reason> }`
+in `hostedErrorSchema`'s vocabulary, then a close with code 1008 and the same
+reason: `invalid-request` for a first frame that is not a valid `session.create`
+or `session.attach`, or an attach on the introduction; `invalid-token` for a
+bearer no account stands behind, and for an attach to a session this account
+did not create; `quota-exhausted`; `upstream-error` when OpenAI refused the
+creation or the sideband could not attach; `upstream-throttled` when OpenAI
+answered 429.
+
+### Deploying
+
+Enable the WebSockets feature on the Vercel team, make sure Fluid compute is
+on for the project, and set `OPENAI_API_KEY`; `LUKE_LIVE_MODEL` optionally pins
+the model. Nothing else: no separate service, secret, or origin. Migration
+0016 makes the session row's seconds nullable so creation can write it.
+Tests run against a fake OpenAI on loopback and an in-memory account side
+(`tests/voice-service.test.ts`, `tests/support/voice-fakes.ts`).
 
 ## Hosted brain inference
 

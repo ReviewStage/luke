@@ -2,15 +2,20 @@ import { randomUUID } from "node:crypto";
 import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
+import { type RawData, type WebSocket, WebSocketServer } from "ws";
 import {
+  type CloudFetch,
   HOSTED_API_ERROR,
   type HostedApiError,
+  HTTP_STATUS,
+  type SessionAttachedFrame,
+  type SessionAttachFrame,
   type SessionCreatedFrame,
   type SessionCreateFrame,
-  sessionCreateFrameSchema,
+  type SessionOpeningFrame,
+  sessionOpeningFrameSchema,
   VOICE_SERVICE_FRAME,
-  type VoiceAuthorizeAnswer,
-} from "@sidecar/hosted";
+} from "../core.js";
 import {
   decodeLivePayload,
   greetingInstruction,
@@ -21,10 +26,8 @@ import {
   RENDERER_CLIENT_EVENTS,
   RENDERER_SERVER_EVENTS,
   SEED_ROLE,
-} from "@sidecar/live";
-import { type CloudFetch, HTTP_STATUS } from "@sidecar/wire";
-import { type RawData, type WebSocket, WebSocketServer } from "ws";
-import { type AccountService, AUTHORIZE_OUTCOME, createAccountService } from "./account-service.js";
+} from "../live.js";
+import { AUTHORIZE_OUTCOME, authorizeSession, type VoiceAccounts } from "./accounts.js";
 import { frameText, routeForPath, VOICE_ROUTE, type VoiceRoute } from "./frames.js";
 import { IntroductionMeter } from "./introduction-meter.js";
 import { LOG_EVENT, type Log, standardOutputLog } from "./log.js";
@@ -32,20 +35,27 @@ import { createLiveUpstream, type LiveUpstream } from "./openai.js";
 import { RELAY_DEFAULTS, relaySession, SOCKET_CLOSE_CODE } from "./relay.js";
 
 /**
- * The hosted voice service: the one process on Luke's side that holds a GPT
- * Live project key, so it is the one that creates each hosted session,
- * attaches the trusted sideband, and carries events between the desktop and
- * OpenAI. It keeps no conversation and executes nothing: a session's
- * transcript crosses it as bytes it never reads past the `type` field, and
- * what it writes down is status codes and counts.
+ * The hosted voice service: the part of Luke's own deployment that holds the
+ * GPT Live project key, so it is what creates each hosted session, attaches
+ * the trusted sideband, and carries events between the desktop and OpenAI.
+ * It runs as two Vercel Functions serving WebSockets, and keeps no
+ * conversation and executes nothing: a session's transcript crosses it as
+ * bytes it never reads past the `type` field, and what it writes down is
+ * status codes and counts.
  *
- * Two upgrades stand. `/sessions` takes a signed-in desktop under its account
- * bearer, which the service never verifies itself: it forwards the bearer to
- * the account service's authorize route, which resolves the account and
- * spends its allowance before any session exists. `/introduction` takes a
- * fresh install with no account under the service's own meter, and on that
- * route the sideband is the service's alone: it sends the greeting once the
- * session starts and shows the caller only captions and status.
+ * Two upgrades stand. `/api/voice/sessions` takes a signed-in desktop under
+ * its account bearer, resolved and spent by the same account code every
+ * hosted route uses, before any session exists. `/api/voice/introduction`
+ * takes a fresh install with no account under the function's own meter, and
+ * on that route the sideband is the service's alone: it sends the greeting
+ * once the session starts and shows the caller only captions and status.
+ *
+ * A connection is one function invocation, and the platform closes it at the
+ * function's maximum duration while the WebRTC session between the desktop
+ * and OpenAI stands on. So a socket may also open with `session.attach`: the
+ * account that created the session, proven by the row creation wrote,
+ * attaches a fresh sideband to it and the pipe resumes. Whatever the session
+ * said between the two connections is not replayed.
  *
  * A refusal has one of two shapes the desktop reads: an HTTP status on the
  * upgrade (401, 429, 503) before any socket stands, or, once one does, a
@@ -53,7 +63,7 @@ import { RELAY_DEFAULTS, relaySession, SOCKET_CLOSE_CODE } from "./relay.js";
  */
 
 const SERVICE_DEFAULTS = {
-  /** How long a fresh socket has to send `session.create` before it is refused. */
+  /** How long a fresh socket has to send its opening frame before it is refused. */
   FIRST_FRAME_TIMEOUT_MS: 10_000,
   /** The largest frame either side may send; `ws` closes the connection on a larger one. */
   MAXIMUM_FRAME_BYTES: 2 * 1024 * 1024,
@@ -69,10 +79,8 @@ export const UPGRADE_STATUS = {
   SERVICE_UNAVAILABLE: 503,
 } as const;
 
-const HTTP_OK = 200;
-
-/** Answers the platform's health probe; nothing else is served over plain HTTP. */
-const HEALTH_PATH = "/healthz";
+/** A plain request to a socket path: the answer says what the path is for. */
+const UPGRADE_REQUIRED = 426;
 
 /**
  * What an accountless introduction may put into a session running on Luke's
@@ -90,10 +98,10 @@ const BEARER_SCHEME = "Bearer ";
 const FORWARDED_FOR_HEADER = "x-forwarded-for";
 
 export interface VoiceServiceOptions {
-  apiKey: string;
-  model?: string;
-  webOrigin: string;
-  serviceSecret: string;
+  /** The GPT Live project key; absent, every upgrade is refused with 503. */
+  apiKey: string | undefined;
+  model?: string | undefined;
+  accounts: VoiceAccounts;
   /** The OpenAI `/v1` base; a test points it at a fake. */
   openAiBaseUrl?: string;
   fetch?: CloudFetch;
@@ -105,7 +113,7 @@ export interface VoiceServiceOptions {
   now?: () => number;
 }
 
-/** Who an upgrade admitted: a desktop with the `Authorization` value it presented, forwarded whole to authorize, or an introduction with nothing. */
+/** Who an upgrade admitted: a desktop with the `Authorization` value it presented, or an introduction with nothing. */
 type Admission =
   | { route: typeof VOICE_ROUTE.SESSIONS; bearer: string }
   | { route: typeof VOICE_ROUTE.INTRODUCTION };
@@ -123,10 +131,10 @@ function presentedBearer(request: IncomingMessage): string | undefined {
 }
 
 /**
- * The caller as the platform's proxy names it: the last `X-Forwarded-For`
- * hop, which is the one the proxy in front of this process appended and the
- * only one a client cannot write for itself, or the socket's own peer when
- * nothing stands in front.
+ * The caller as the platform names it: the last `X-Forwarded-For` hop, which
+ * is the one the proxy in front of this function appended and the only one a
+ * client cannot write for itself, or the socket's own peer when nothing
+ * stands in front.
  */
 function callerAddress(request: IncomingMessage): string {
   const hops = headerValue(request.headers[FORWARDED_FOR_HEADER])?.split(",") ?? [];
@@ -145,19 +153,20 @@ function introductionInputAdmitted(frame: SessionCreateFrame): boolean {
   );
 }
 
+function isOpen(socket: WebSocket): boolean {
+  return socket.readyState === socket.OPEN;
+}
+
 export class VoiceService {
   readonly #options: VoiceServiceOptions;
   readonly #log: Log;
-  readonly #accounts: AccountService;
-  readonly #upstream: LiveUpstream;
+  readonly #accounts: VoiceAccounts;
+  readonly #upstream: LiveUpstream | undefined;
   readonly #meter: IntroductionMeter;
   readonly #sockets: WebSocketServer;
   readonly #http = http.createServer((request, response) => {
-    if (request.url === HEALTH_PATH) {
-      response.writeHead(HTTP_OK).end();
-      return;
-    }
-    response.writeHead(UPGRADE_STATUS.NOT_FOUND).end();
+    const path = new URL(request.url ?? "/", "http://voice-service").pathname;
+    response.writeHead(routeForPath(path) ? UPGRADE_REQUIRED : UPGRADE_STATUS.NOT_FOUND).end();
   });
   /** Every session under way, so a close can wait for each to finalize. */
   readonly #active = new Set<Promise<void>>();
@@ -166,18 +175,17 @@ export class VoiceService {
   constructor(options: VoiceServiceOptions) {
     this.#options = options;
     this.#log = options.log ?? standardOutputLog;
-    this.#accounts = createAccountService({
-      webOrigin: options.webOrigin,
-      serviceSecret: options.serviceSecret,
-      fetch: options.fetch,
-    });
-    this.#upstream = createLiveUpstream({
-      apiKey: options.apiKey,
-      baseUrl: options.openAiBaseUrl,
-      fetch: options.fetch,
-      createTimeoutMs: options.createTimeoutMs,
-      attachTimeoutMs: options.attachTimeoutMs,
-    });
+    this.#accounts = options.accounts;
+    const apiKey = options.apiKey?.trim();
+    this.#upstream = apiKey
+      ? createLiveUpstream({
+          apiKey,
+          baseUrl: options.openAiBaseUrl,
+          fetch: options.fetch,
+          createTimeoutMs: options.createTimeoutMs,
+          attachTimeoutMs: options.attachTimeoutMs,
+        })
+      : undefined;
     this.#meter = new IntroductionMeter({ now: options.now });
     this.#sockets = new WebSocketServer({
       noServer: true,
@@ -188,6 +196,11 @@ export class VoiceService {
     });
   }
 
+  /** The server a function exports: Vercel upgrades each WebSocket into it. */
+  get server(): http.Server {
+    return this.#http;
+  }
+
   listen(port: number, host: string): Promise<number> {
     return new Promise((resolve, reject) => {
       this.#http.once("error", reject);
@@ -195,7 +208,6 @@ export class VoiceService {
         this.#http.off("error", reject);
         // SAFETY: a TCP server that is listening answers an AddressInfo, never a pipe path.
         const address = this.#http.address() as AddressInfo;
-        this.#log({ event: LOG_EVENT.LISTENING, host, port: address.port });
         resolve(address.port);
       });
     });
@@ -242,7 +254,9 @@ export class VoiceService {
 
   /** Who an upgrade admits before any socket stands, or the status it is refused with. */
   #admit(request: IncomingMessage, route: VoiceRoute | undefined): UpgradeDecision {
-    if (!this.#admitting) return { status: UPGRADE_STATUS.SERVICE_UNAVAILABLE };
+    if (!this.#admitting || this.#upstream === undefined) {
+      return { status: UPGRADE_STATUS.SERVICE_UNAVAILABLE };
+    }
     if (route === undefined) return { status: UPGRADE_STATUS.NOT_FOUND };
     if (request.headers.origin !== undefined) return { status: UPGRADE_STATUS.FORBIDDEN };
     if (route === VOICE_ROUTE.SESSIONS) {
@@ -254,86 +268,122 @@ export class VoiceService {
       : { status: UPGRADE_STATUS.TOO_MANY_REQUESTS };
   }
 
-  /** One socket, one session: the create frame, the authorization, the creation, the attach, the pipe. */
+  /** One socket, one session: the opening frame, the authorization, the creation or attachment, the pipe. */
   async #serve(desktop: WebSocket, admission: Admission): Promise<void> {
+    const upstream = this.#upstream;
+    if (upstream === undefined) return;
     const { route } = admission;
     const refuse = (reason: HostedApiError): void => {
       this.#log({ event: LOG_EVENT.SESSION_REFUSED, route, reason });
-      if (desktop.readyState !== desktop.OPEN) return;
+      if (!isOpen(desktop)) return;
       desktop.send(JSON.stringify({ error: reason }));
       desktop.close(SOCKET_CLOSE_CODE.POLICY_VIOLATION, reason);
     };
 
     const frame = await this.#firstFrame(desktop);
-    if (desktop.readyState !== desktop.OPEN) return;
+    if (!isOpen(desktop)) return;
     if (frame === undefined) {
       refuse(HOSTED_API_ERROR.INVALID_REQUEST);
       return;
     }
-    if (route === VOICE_ROUTE.INTRODUCTION && !introductionInputAdmitted(frame)) {
-      refuse(HOSTED_API_ERROR.INVALID_REQUEST);
-      return;
-    }
 
-    let account: VoiceAuthorizeAnswer | undefined;
-    if (admission.route === VOICE_ROUTE.SESSIONS) {
-      const authorized = await this.#accounts.authorize(admission.bearer);
-      if (authorized.outcome !== AUTHORIZE_OUTCOME.AUTHORIZED) {
+    let sessionId: string;
+    let accountId: string | undefined;
+    let sideband: WebSocket;
+    if (frame.type === VOICE_SERVICE_FRAME.SESSION_ATTACH) {
+      if (admission.route !== VOICE_ROUTE.SESSIONS) {
+        refuse(HOSTED_API_ERROR.INVALID_REQUEST);
+        return;
+      }
+      const owner = await this.#attachingAccount(admission.bearer, frame);
+      if (owner === undefined) {
+        refuse(HOSTED_API_ERROR.INVALID_TOKEN);
+        return;
+      }
+      if (!isOpen(desktop)) return;
+      const attached = await this.#attach(upstream, frame.sessionId);
+      if (attached === undefined) {
+        refuse(HOSTED_API_ERROR.UPSTREAM_ERROR);
+        return;
+      }
+      sessionId = frame.sessionId;
+      accountId = owner;
+      sideband = attached;
+      if (isOpen(desktop)) {
+        const answer: SessionAttachedFrame = {
+          type: VOICE_SERVICE_FRAME.SESSION_ATTACHED,
+          sessionId,
+        };
+        desktop.send(JSON.stringify(answer));
+        this.#log({ event: LOG_EVENT.SESSION_ATTACHED, route });
+      }
+    } else {
+      if (route === VOICE_ROUTE.INTRODUCTION && !introductionInputAdmitted(frame)) {
+        refuse(HOSTED_API_ERROR.INVALID_REQUEST);
+        return;
+      }
+      let quota: SessionCreatedFrame["quota"];
+      if (admission.route === VOICE_ROUTE.SESSIONS) {
+        const authorized = await authorizeSession(this.#accounts, admission.bearer);
+        if (authorized.outcome !== AUTHORIZE_OUTCOME.AUTHORIZED) {
+          refuse(
+            authorized.outcome === AUTHORIZE_OUTCOME.NOT_SIGNED_IN
+              ? HOSTED_API_ERROR.INVALID_TOKEN
+              : HOSTED_API_ERROR.QUOTA_EXHAUSTED,
+          );
+          return;
+        }
+        accountId = authorized.userId;
+        quota = authorized.quota;
+      }
+      if (!isOpen(desktop)) return;
+
+      const config = liveSessionConfig({
+        scene: route === VOICE_ROUTE.SESSIONS ? LIVE_SCENE.DESKTOP : LIVE_SCENE.INTRODUCTION,
+        model: this.#options.model,
+        voice: frame.voice,
+        input: frame.input,
+        clientEvents: RENDERER_CLIENT_EVENTS,
+        serverEvents: RENDERER_SERVER_EVENTS,
+      });
+      const created = await upstream.create(config, frame.sdp);
+      if (created.outcome !== LIVE_SESSION_OUTCOME.SUCCEEDED) {
         refuse(
-          authorized.outcome === AUTHORIZE_OUTCOME.REFUSED
-            ? authorized.reason
-            : HOSTED_API_ERROR.UNAVAILABLE,
+          created.outcome === LIVE_SESSION_OUTCOME.HTTP_ERROR &&
+            created.status === HTTP_STATUS.TOO_MANY_REQUESTS
+            ? HOSTED_API_ERROR.UPSTREAM_THROTTLED
+            : HOSTED_API_ERROR.UPSTREAM_ERROR,
         );
         return;
       }
-      account = { userId: authorized.userId, quota: authorized.quota };
-    }
-    if (desktop.readyState !== desktop.OPEN) return;
+      sessionId = created.answer.session.id;
+      if (accountId !== undefined) {
+        await this.#accounts.registerSession({ userId: accountId, sessionId });
+      }
 
-    const config = liveSessionConfig({
-      scene: route === VOICE_ROUTE.SESSIONS ? LIVE_SCENE.DESKTOP : LIVE_SCENE.INTRODUCTION,
-      model: this.#options.model,
-      voice: frame.voice,
-      input: frame.input,
-      clientEvents: RENDERER_CLIENT_EVENTS,
-      serverEvents: RENDERER_SERVER_EVENTS,
-    });
-    const created = await this.#upstream.create(config, frame.sdp);
-    if (created.outcome !== LIVE_SESSION_OUTCOME.SUCCEEDED) {
-      refuse(
-        created.outcome === LIVE_SESSION_OUTCOME.HTTP_ERROR &&
-          created.status === HTTP_STATUS.TOO_MANY_REQUESTS
-          ? HOSTED_API_ERROR.UPSTREAM_THROTTLED
-          : HOSTED_API_ERROR.UPSTREAM_ERROR,
-      );
-      return;
-    }
-    const sessionId = created.answer.session.id;
-
-    let upstream: WebSocket;
-    try {
-      upstream = await this.#upstream.attach(sessionId);
-    } catch {
-      refuse(HOSTED_API_ERROR.UPSTREAM_ERROR);
-      return;
+      const attached = await this.#attach(upstream, sessionId);
+      if (attached === undefined) {
+        refuse(HOSTED_API_ERROR.UPSTREAM_ERROR);
+        return;
+      }
+      sideband = attached;
+      if (isOpen(desktop)) {
+        const answer: SessionCreatedFrame = {
+          type: VOICE_SERVICE_FRAME.SESSION_CREATED,
+          sessionId,
+          sdpAnswer: created.answer.transport.sdp,
+        };
+        if (quota !== undefined) answer.quota = quota;
+        desktop.send(JSON.stringify(answer));
+        this.#log({ event: LOG_EVENT.SESSION_CREATED, route });
+      }
     }
 
-    if (desktop.readyState === desktop.OPEN) {
-      const answer: SessionCreatedFrame = {
-        type: VOICE_SERVICE_FRAME.SESSION_CREATED,
-        sessionId,
-        sdpAnswer: created.answer.transport.sdp,
-      };
-      if (account !== undefined) answer.quota = account.quota;
-      desktop.send(JSON.stringify(answer));
-      this.#log({ event: LOG_EVENT.SESSION_CREATED, route });
-    }
-
-    const accountId = account?.userId;
+    const owner = accountId;
     const summary = await relaySession({
       route,
       desktop,
-      upstream,
+      upstream: sideband,
       closeTimeoutMs: this.#options.closeTimeoutMs ?? RELAY_DEFAULTS.CLOSE_TIMEOUT_MS,
       onSessionStarted:
         route === VOICE_ROUTE.INTRODUCTION
@@ -347,28 +397,42 @@ export class VoiceService {
             }
           : undefined,
       onSessionClosed:
-        accountId === undefined
-          ? undefined
-          : (seconds) => this.#reportUsage(accountId, sessionId, seconds),
+        owner === undefined ? undefined : (seconds) => this.#recordUsage(owner, sessionId, seconds),
     });
     this.#log({ event: LOG_EVENT.SESSION_ENDED, route, ...summary });
   }
 
-  async #reportUsage(userId: string, sessionId: string, seconds: number): Promise<void> {
-    const reported = await this.#accounts.recordUsage({ userId, sessionId, seconds });
-    this.#log({
-      event: LOG_EVENT.USAGE_REPORTED,
-      route: VOICE_ROUTE.SESSIONS,
-      seconds,
-      status: reported.status,
-    });
+  /**
+   * The account a `session.attach` may proceed under: the bearer's account,
+   * and only when the session named was created for that very account. A
+   * session this deployment never created, or another account's, is refused
+   * as the bearer's own failure rather than as a hint that the id exists.
+   */
+  async #attachingAccount(bearer: string, frame: SessionAttachFrame): Promise<string | undefined> {
+    const userId = await this.#accounts.resolveUserId(bearer);
+    if (userId === undefined) return undefined;
+    const owner = await this.#accounts.sessionOwner(frame.sessionId);
+    return owner === userId ? userId : undefined;
   }
 
-  /** The socket's first frame as a `session.create`, or nothing when it was late, closed, or not one. */
-  #firstFrame(desktop: WebSocket): Promise<SessionCreateFrame | undefined> {
+  async #attach(upstream: LiveUpstream, sessionId: string): Promise<WebSocket | undefined> {
+    try {
+      return await upstream.attach(sessionId);
+    } catch {
+      return undefined;
+    }
+  }
+
+  async #recordUsage(userId: string, sessionId: string, seconds: number): Promise<void> {
+    const outcome = await this.#accounts.recordSeconds({ userId, sessionId, seconds });
+    this.#log({ event: LOG_EVENT.USAGE_RECORDED, route: VOICE_ROUTE.SESSIONS, seconds, outcome });
+  }
+
+  /** The socket's first frame as a `session.create` or `session.attach`, or nothing when it was late, closed, or neither. */
+  #firstFrame(desktop: WebSocket): Promise<SessionOpeningFrame | undefined> {
     const timeoutMs = this.#options.firstFrameTimeoutMs ?? SERVICE_DEFAULTS.FIRST_FRAME_TIMEOUT_MS;
     return new Promise((resolve) => {
-      const done = (frame: SessionCreateFrame | undefined): void => {
+      const done = (frame: SessionOpeningFrame | undefined): void => {
         clearTimeout(timer);
         desktop.off("message", onMessage);
         desktop.off("close", onClose);
@@ -377,7 +441,7 @@ export class VoiceService {
       const timer = setTimeout(() => done(undefined), timeoutMs);
       const onMessage = (data: RawData, isBinary: boolean): void => {
         const payload = decodeLivePayload(frameText(data, isBinary));
-        done(payload === undefined ? undefined : sessionCreateFrameSchema.parse(payload));
+        done(payload === undefined ? undefined : sessionOpeningFrameSchema.parse(payload));
       };
       const onClose = (): void => done(undefined);
       desktop.once("message", onMessage);

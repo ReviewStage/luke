@@ -1,4 +1,12 @@
-import { callAnswered, createAccountCall, fixedBearer } from "@sidecar/hosted";
+import { WebSocket } from "ws";
+import {
+  type CloudFetch,
+  callAnswered,
+  createAccountCall,
+  fixedBearer,
+  HTTP_METHOD,
+  withoutTrailingSlash,
+} from "../core.js";
 import {
   LIVE_SESSION_OUTCOME,
   LIVE_SESSIONS_PATH,
@@ -7,9 +15,7 @@ import {
   liveAttachPath,
   liveCreateAnswerSchema,
   liveCreateRequest,
-} from "@sidecar/live";
-import { type CloudFetch, HTTP_METHOD, withoutTrailingSlash } from "@sidecar/wire";
-import { WebSocket } from "ws";
+} from "../live.js";
 
 /**
  * How the service reaches OpenAI on Luke's project key: the one POST that

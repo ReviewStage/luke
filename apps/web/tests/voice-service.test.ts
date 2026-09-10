@@ -3,10 +3,13 @@ import test from "node:test";
 import {
   HOSTED_API_ERROR,
   hostedErrorSchema,
+  sessionAttachedFrameSchema,
   sessionCreatedFrameSchema,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
 } from "@sidecar/hosted";
+import { isRecord, isWireString, unparsedWire, type WireRecord } from "@sidecar/wire";
+import { VOICE_SECONDS_OUTCOME } from "../server/hosted/quota";
 import {
   greetingInstruction,
   LIVE_CLIENT_EVENT,
@@ -22,29 +25,33 @@ import {
   SEED_ITEM_TYPE,
   SEED_ROLE,
   sessionInstructions,
-} from "@sidecar/live";
-import { isRecord, isWireString, unparsedWire, type WireRecord } from "@sidecar/wire";
-import { INTRODUCTION_METER_LIMITS } from "./introduction-meter.js";
-import type { LogEntry } from "./log.js";
-import { SOCKET_CLOSE_CODE, UPSTREAM_CLOSED_REASON } from "./relay.js";
-import { INTRODUCTION_INPUT_BOUNDS, UPGRADE_STATUS, VoiceService } from "./service.js";
+} from "../server/live";
+import { INTRODUCTION_METER_LIMITS } from "../server/voice/introduction-meter";
+import { LOG_EVENT, type LogEntry } from "../server/voice/log";
+import { SOCKET_CLOSE_CODE, UPSTREAM_CLOSED_REASON } from "../server/voice/relay";
+import {
+  INTRODUCTION_INPUT_BOUNDS,
+  UPGRADE_STATUS,
+  VoiceService,
+  type VoiceServiceOptions,
+} from "../server/voice/service";
 import {
   connect,
+  FAKE_BEARER,
   FAKE_QUOTA,
   FAKE_SDP_ANSWER,
   FAKE_USER_ID,
-  type FakeAccountService,
+  type FakeAccounts,
   type FakeOpenAi,
+  fakeAccounts,
   readSocket,
   send,
   sendText,
-  startFakeAccountService,
   startFakeOpenAi,
-} from "./testing/fakes.js";
+} from "./support/voice-fakes";
 
 const API_KEY = "sk-test-project-key";
-const SERVICE_SECRET = "shared-service-secret";
-const BEARER = "Bearer account-token-1";
+const BEARER = FAKE_BEARER;
 const SDP_OFFER =
   "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n";
 const CLOSE_TIMEOUT_MS = 300;
@@ -86,21 +93,20 @@ function record(text: string): WireRecord {
 
 interface Stand {
   openAi: FakeOpenAi;
-  accounts: FakeAccountService;
+  accounts: FakeAccounts;
   service: VoiceService;
   log: LogEntry[];
   url(path: string): string;
   stop(): Promise<void>;
 }
 
-async function stand(): Promise<Stand> {
+async function stand(overrides: Partial<VoiceServiceOptions> = {}): Promise<Stand> {
   const openAi = await startFakeOpenAi();
-  const accounts = await startFakeAccountService();
+  const accounts = fakeAccounts();
   const log: LogEntry[] = [];
   const service = new VoiceService({
     apiKey: API_KEY,
-    webOrigin: accounts.origin,
-    serviceSecret: SERVICE_SECRET,
+    accounts,
     openAiBaseUrl: openAi.baseUrl,
     log: (entry) => {
       log.push(entry);
@@ -108,6 +114,7 @@ async function stand(): Promise<Stand> {
     closeTimeoutMs: CLOSE_TIMEOUT_MS,
     firstFrameTimeoutMs: 1_000,
     attachTimeoutMs: 2_000,
+    ...overrides,
   });
   const port = await service.listen(0, "127.0.0.1");
   return {
@@ -119,9 +126,20 @@ async function stand(): Promise<Stand> {
     stop: async () => {
       await service.close();
       await openAi.close();
-      await accounts.close();
     },
   };
+}
+
+/** A fresh connection re-attached to a standing session: the attached frame read, and OpenAI's end of the new sideband. */
+async function reattach(context: Stand, sessionId: string) {
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
+  assert.ok("reader" in opened);
+  const desktop = opened.reader;
+  await send(desktop.socket, { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId });
+  const attach = await context.openAi.nextAttach();
+  const attached = sessionAttachedFrameSchema.parse(record(await desktop.next()));
+  assert.ok(attached);
+  return { desktop, upstream: readSocket(attach.socket), attach, attached };
 }
 
 /** A signed-in desktop through to a standing session: the created frame read, and OpenAI's end of the sideband. */
@@ -146,7 +164,22 @@ test("a /sessions upgrade without a bearer is refused with 401 before any socket
     authorization: "Bearer  ",
   });
   assert.deepEqual(blank, { status: UPGRADE_STATUS.UNAUTHORIZED });
-  assert.equal(context.accounts.authorizeCalls.length, 0);
+  assert.equal(context.accounts.resolved.length, 0);
+});
+
+test("without a project key every upgrade is refused with 503 and nothing is resolved", async (t) => {
+  const context = await stand({ apiKey: "  " });
+  t.after(() => context.stop());
+  assert.deepEqual(
+    await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER }),
+    {
+      status: UPGRADE_STATUS.SERVICE_UNAVAILABLE,
+    },
+  );
+  assert.deepEqual(await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION)), {
+    status: UPGRADE_STATUS.SERVICE_UNAVAILABLE,
+  });
+  assert.equal(context.accounts.resolved.length, 0);
 });
 
 test("an unknown path is refused with 404", async (t) => {
@@ -155,13 +188,10 @@ test("an unknown path is refused with 404", async (t) => {
   assert.deepEqual(await connect(context.url("/elsewhere")), { status: UPGRADE_STATUS.NOT_FOUND });
 });
 
-test("an authorize refusal closes the socket behind one hosted error frame and spends no session", async (t) => {
+test("a spent allowance closes the socket behind one hosted error frame and spends no session", async (t) => {
   const context = await stand();
   t.after(() => context.stop());
-  context.accounts.authorizeAnswer = {
-    status: 429,
-    body: { error: HOSTED_API_ERROR.QUOTA_EXHAUSTED, quota: FAKE_QUOTA },
-  };
+  context.accounts.spendAnswer = { allowed: false, quota: FAKE_QUOTA };
 
   const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
   assert.ok("reader" in opened);
@@ -175,22 +205,25 @@ test("an authorize refusal closes the socket behind one hosted error frame and s
   assert.equal(end.code, SOCKET_CLOSE_CODE.POLICY_VIOLATION);
   assert.equal(end.reason, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   assert.equal(context.openAi.creates.length, 0);
-  assert.equal(context.accounts.authorizeCalls.length, 1);
+  assert.deepEqual(context.accounts.resolved, [BEARER]);
+  assert.deepEqual(context.accounts.spent, [FAKE_USER_ID]);
 });
 
-test("an account service that does not answer refuses as unavailable", async (t) => {
+test("a bearer no account stands behind is refused as an invalid token and spends nothing", async (t) => {
   const context = await stand();
   t.after(() => context.stop());
-  context.accounts.authorizeAnswer = { status: 500, body: {} };
 
-  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+    authorization: "Bearer stale",
+  });
   assert.ok("reader" in opened);
   await send(opened.reader.socket, createFrame());
   assert.equal(
     hostedErrorSchema.parse(record(await opened.reader.next())),
-    HOSTED_API_ERROR.UNAVAILABLE,
+    HOSTED_API_ERROR.INVALID_TOKEN,
   );
   assert.equal(context.openAi.creates.length, 0);
+  assert.equal(context.accounts.spent.length, 0);
 });
 
 test("a first frame that is not session.create is refused as an invalid request", async (t) => {
@@ -205,17 +238,19 @@ test("a first frame that is not session.create is refused as an invalid request"
     HOSTED_API_ERROR.INVALID_REQUEST,
   );
   assert.equal((await opened.reader.closed).code, SOCKET_CLOSE_CODE.POLICY_VIOLATION);
-  assert.equal(context.accounts.authorizeCalls.length, 0);
+  assert.equal(context.accounts.resolved.length, 0);
 });
 
-test("a session is authorized, created, attached, and answered in that order with the documented shapes", async (t) => {
+test("a session is authorized, created, registered to its account, attached, and answered in that order", async (t) => {
   const context = await stand();
   t.after(() => context.stop());
 
   const { attach, created } = await openSession(context);
 
-  assert.deepEqual(context.accounts.authorizeCalls, [
-    { secret: SERVICE_SECRET, body: { bearer: BEARER } },
+  assert.deepEqual(context.accounts.resolved, [BEARER]);
+  assert.deepEqual(context.accounts.spent, [FAKE_USER_ID]);
+  assert.deepEqual(context.accounts.registered, [
+    { userId: FAKE_USER_ID, sessionId: created.sessionId },
   ]);
 
   assert.equal(context.openAi.creates.length, 1);
@@ -335,12 +370,12 @@ test("session.closed is forwarded, its seconds reported exactly once, and both e
   assert.equal(desktopEnd.code, SOCKET_CLOSE_CODE.NORMAL);
   await upstream.closed;
 
-  assert.deepEqual(context.accounts.usageCalls, [
-    {
-      secret: SERVICE_SECRET,
-      body: { userId: FAKE_USER_ID, sessionId: created.sessionId, seconds: 61.5 },
-    },
+  assert.deepEqual(context.accounts.reports, [
+    { userId: FAKE_USER_ID, sessionId: created.sessionId, seconds: 61.5 },
   ]);
+  const recorded = context.log.find((entry) => entry.event === LOG_EVENT.USAGE_RECORDED);
+  assert.ok(recorded && recorded.event === LOG_EVENT.USAGE_RECORDED);
+  assert.equal(recorded.outcome, VOICE_SECONDS_OUTCOME.RECORDED);
   assert.equal(context.service.sessions(), 0);
 });
 
@@ -364,10 +399,9 @@ test("a desktop that hangs up first has session.close sent for it and its second
     }),
   );
   assert.equal((await upstream.closed).code, SOCKET_CLOSE_CODE.NORMAL);
-  assert.deepEqual(
-    context.accounts.usageCalls.map((call) => call.body),
-    [{ userId: FAKE_USER_ID, sessionId: created.sessionId, seconds: 30 }],
-  );
+  assert.deepEqual(context.accounts.reports, [
+    { userId: FAKE_USER_ID, sessionId: created.sessionId, seconds: 30 },
+  ]);
 });
 
 test("a sideband that never answers session.close is released at the timeout with usage unconfirmed", async (t) => {
@@ -379,9 +413,9 @@ test("a sideband that never answers session.close is released at the timeout wit
   await upstream.next();
   const end = await upstream.closed;
   assert.equal(end.code, SOCKET_CLOSE_CODE.NORMAL);
-  assert.equal(context.accounts.usageCalls.length, 0);
-  const ended = context.log.find((entry) => entry.event === "session-ended");
-  assert.ok(ended && ended.event === "session-ended");
+  assert.equal(context.accounts.reports.length, 0);
+  const ended = context.log.find((entry) => entry.event === LOG_EVENT.SESSION_ENDED);
+  assert.ok(ended && ended.event === LOG_EVENT.SESSION_ENDED);
   assert.equal(ended.finalization, "unconfirmed");
 });
 
@@ -394,7 +428,7 @@ test("a sideband that closes first takes the desktop socket with it and reports 
   const end = await desktop.closed;
   assert.equal(end.code, SOCKET_CLOSE_CODE.GOING_AWAY);
   assert.equal(end.reason, UPSTREAM_CLOSED_REASON);
-  assert.equal(context.accounts.usageCalls.length, 0);
+  assert.equal(context.accounts.reports.length, 0);
 });
 
 test("a creation OpenAI refuses is answered as an upstream error and nothing is attached", async (t) => {
@@ -429,7 +463,8 @@ test("the introduction is created without an account, greeted exactly once after
   const created = sessionCreatedFrameSchema.parse(record(await desktop.next()));
   assert.ok(created);
   assert.equal(created.quota, undefined);
-  assert.equal(context.accounts.authorizeCalls.length, 0);
+  assert.equal(context.accounts.resolved.length, 0);
+  assert.equal(context.accounts.registered.length, 0);
 
   const create = context.openAi.creates[0];
   assert.ok(create && isRecord(create.body.session));
@@ -497,7 +532,7 @@ test("the introduction is created without an account, greeted exactly once after
     }),
   );
   await desktop.closed;
-  assert.equal(context.accounts.usageCalls.length, 0);
+  assert.equal(context.accounts.reports.length, 0);
 });
 
 test("an introduction seed beyond one bounded developer message is refused before any session is spent", async (t) => {
@@ -590,19 +625,125 @@ test("an upgrade carrying a browser Origin is refused with 403 on both routes", 
     }),
     { status: UPGRADE_STATUS.FORBIDDEN },
   );
-  assert.equal(context.accounts.authorizeCalls.length, 0);
+  assert.equal(context.accounts.resolved.length, 0);
 });
 
 test("closing the service closes every desktop socket and refuses new upgrades with 503", async (t) => {
   const context = await stand();
   const { desktop, upstream } = await openSession(context);
-  t.after(async () => {
-    await context.openAi.close();
-    await context.accounts.close();
-  });
+  t.after(() => context.openAi.close());
 
   const closing = context.service.close();
   assert.equal(await desktop.closed.then((end) => end.code), SOCKET_CLOSE_CODE.GOING_AWAY);
   assert.equal(record(await upstream.next()).type, LIVE_CLIENT_EVENT.CLOSE);
   await closing;
+});
+
+test("a fresh connection re-attaches its account's session, answers session.attached, and pipes again without spending", async (t) => {
+  const context = await stand();
+  t.after(() => context.stop());
+  const first = await openSession(context);
+  first.desktop.socket.terminate();
+  assert.equal(record(await first.upstream.next()).type, LIVE_CLIENT_EVENT.CLOSE);
+
+  const second = await reattach(context, first.created.sessionId);
+  assert.equal(second.attached.sessionId, first.created.sessionId);
+  assert.equal(second.attach.sessionId, first.created.sessionId);
+  assert.equal(second.attach.authorization, `Bearer ${API_KEY}`);
+  assert.equal(context.openAi.creates.length, 1);
+  assert.deepEqual(context.accounts.spent, [FAKE_USER_ID]);
+  assert.deepEqual(context.accounts.resolved, [BEARER, BEARER]);
+
+  const mute = JSON.stringify({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "m1" });
+  await sendText(second.desktop.socket, mute);
+  assert.equal(await second.upstream.next(), mute);
+  const caption = JSON.stringify({
+    type: LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA,
+    event_id: "e4",
+    delta: "Hi",
+    start_ms: 0,
+    end_ms: 300,
+  });
+  await sendText(second.upstream.socket, caption);
+  assert.equal(await second.desktop.next(), caption);
+});
+
+test("seconds are recorded once across a re-attach, whichever connection sees session.closed", async (t) => {
+  const context = await stand({ closeTimeoutMs: 5_000 });
+  t.after(() => context.stop());
+  const first = await openSession(context);
+  first.desktop.socket.terminate();
+  await first.upstream.next();
+  const second = await reattach(context, first.created.sessionId);
+
+  const closedEvent = JSON.stringify({
+    type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+    event_id: "e9",
+    reason: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
+    usage: { seconds: 40 },
+  });
+  await sendText(second.upstream.socket, closedEvent);
+  assert.equal(await second.desktop.next(), closedEvent);
+  await second.desktop.closed;
+  await sendText(first.upstream.socket, closedEvent);
+  await first.upstream.closed;
+
+  assert.deepEqual(context.accounts.reports, [
+    { userId: FAKE_USER_ID, sessionId: first.created.sessionId, seconds: 40 },
+    { userId: FAKE_USER_ID, sessionId: first.created.sessionId, seconds: 40 },
+  ]);
+  const outcomes = context.log
+    .filter((entry) => entry.event === LOG_EVENT.USAGE_RECORDED)
+    .map((entry) => (entry.event === LOG_EVENT.USAGE_RECORDED ? entry.outcome : undefined));
+  assert.deepEqual(outcomes, [VOICE_SECONDS_OUTCOME.RECORDED, VOICE_SECONDS_OUTCOME.REPEATED]);
+});
+
+test("an attach to a session another account created, or one never created, is refused as the bearer's own failure", async (t) => {
+  const context = await stand();
+  t.after(() => context.stop());
+  const { created } = await openSession(context);
+  await context.accounts.registerSession({ userId: "user-2", sessionId: "live_theirs" });
+
+  for (const sessionId of ["live_theirs", "live_never"]) {
+    const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+      authorization: BEARER,
+    });
+    assert.ok("reader" in opened);
+    await send(opened.reader.socket, { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId });
+    assert.equal(
+      hostedErrorSchema.parse(record(await opened.reader.next())),
+      HOSTED_API_ERROR.INVALID_TOKEN,
+    );
+    assert.equal((await opened.reader.closed).code, SOCKET_CLOSE_CODE.POLICY_VIOLATION);
+  }
+  const stale = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+    authorization: "Bearer stale",
+  });
+  assert.ok("reader" in stale);
+  await send(stale.reader.socket, {
+    type: VOICE_SERVICE_FRAME.SESSION_ATTACH,
+    sessionId: created.sessionId,
+  });
+  assert.equal(
+    hostedErrorSchema.parse(record(await stale.reader.next())),
+    HOSTED_API_ERROR.INVALID_TOKEN,
+  );
+  assert.equal(context.openAi.attaches.length, 1);
+  assert.deepEqual(context.accounts.spent, [FAKE_USER_ID]);
+});
+
+test("the introduction never re-attaches", async (t) => {
+  const context = await stand();
+  t.after(() => context.stop());
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION));
+  assert.ok("reader" in opened);
+  await send(opened.reader.socket, {
+    type: VOICE_SERVICE_FRAME.SESSION_ATTACH,
+    sessionId: "live_intro",
+  });
+  assert.equal(
+    hostedErrorSchema.parse(record(await opened.reader.next())),
+    HOSTED_API_ERROR.INVALID_REQUEST,
+  );
+  assert.equal(context.openAi.attaches.length, 0);
 });
