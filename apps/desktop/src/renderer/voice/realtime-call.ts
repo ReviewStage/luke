@@ -122,6 +122,13 @@ export abstract class RealtimeCall<Options extends RealtimeCallOptions = Realtim
    */
   protected abstract handlers(): RealtimeServerEventHandlers;
 
+  /**
+   * Runs once the channel is open, before the call reports itself ready. A
+   * status listener may speak the moment READY is published, so anything
+   * that must reach the channel ahead of the first turn is sent here.
+   */
+  protected onChannelConnected(): void {}
+
   /** Runs once the channel is open and the call has reported itself ready. */
   protected onChannelOpen(): void {}
 
@@ -273,6 +280,7 @@ export abstract class RealtimeCall<Options extends RealtimeCallOptions = Realtim
         if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
       }
       if (this.#closed) return this.#abandonConnect();
+      this.onChannelConnected();
       this.setStatus(REALTIME_STATUS.READY);
       this.onChannelOpen();
       return true;

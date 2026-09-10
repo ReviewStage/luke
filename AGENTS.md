@@ -1180,10 +1180,12 @@ Canonical commands:
   the brain last looked, bounded and behind a marker, on the developer's own
   key or through Luke's own service. The second is a briefing the brain
   decided to give — its own words about what changed, under the briefing
-  bound — which reaches the voice service so it can be said aloud, as the one
-  input of a call that carries no tools and no conversation, behind a marker
-  that says it is data, so nothing in a briefing can become an action or inherit
-  an earlier question. Nothing decides an announcement deterministically any
+  bound — which reaches the voice service so it can be said aloud, travelling
+  as one conversation item behind a marker into the voice session's own
+  conversation, spoken by a response that declares no tools, under a standing
+  rule that it is said as written and answers nothing said before it; what it
+  can become is bounded by the withheld tools, not by isolation. Nothing
+  decides an announcement deterministically any
   more: no status edge speaks on its own, and no evaluator sentence stands
   between the transcript and the voice. Two onboarding beats are the members
   of that set about no session, and each keeps the same terms:
@@ -1205,10 +1207,11 @@ Canonical commands:
   reporting the reply actually begun settles it. When no conversation is
   open, Luke opens a call of
   his own to say a briefing, and that call is speak-only by construction: it
-  offers no microphone track, carries no tools, and is sent the one briefing
-  alone: never the roster, the guide, or a
-  transcript, which reach only the brain, and the voice only as the words the
-  brain chose to say. The desktop's voice knows no roster, guide, or conversation
+  offers no microphone track, carries no tools, and is sent the briefing and
+  the same 20 recent Conversation lines the brain's standing context carries,
+  each cut to its length bound, never the roster, the guide, a transcript, or
+  a session identity, which reach only the brain, and the voice only as the
+  words the brain chose to say. The desktop's voice knows no roster, guide, or conversation
   of its own: a developer-opened conversation hands their words to the brain
   through the voice's one tool and says the brain's reply whole. It is the
   brain whose standing context carries the recent exchange — the 20 most
@@ -1222,8 +1225,10 @@ Canonical commands:
   any other reply, and enters that context under the same bounds. Each
   Conversation line's session identity is the roster-validated one its action
   traveled with, and the conversation is stored only where the constraint above
-  puts it, on this machine and under its retention policy, and is never sent
-  on Luke's speak-only call. The phone's call keeps the older shape: it
+  puts it, on this machine and under its retention policy, and rides into
+  every voice call as it opens, bounded the same way, so a call is a window
+  onto the record rather than a memory of its own. The phone's call keeps the
+  older shape: it
   carries the roster it was shown as context and the session actions as its own
   tools, and no Conversation. A
   briefing's trigger is an observation turn of the brain — a provider's hook,

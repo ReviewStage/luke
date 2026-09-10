@@ -3,6 +3,7 @@ import type { BrainAskResult, BrainReplyOffer } from "@sidecar/brain/requests-wi
 import {
   ARRIVAL_SPEECH_KIND,
   type ArrivalSpeech,
+  conversationSeedEvents,
   REALTIME_STATUS,
   type RealtimeStatus,
   type RealtimeVoice,
@@ -20,6 +21,7 @@ import {
   type Session,
 } from "@sidecar/session";
 import { TALK_KEY_RELEASE, talkKeyRelease, voiceHotkeyLabel } from "@sidecar/settings";
+import type { WireRecord } from "@sidecar/wire";
 import { askBrain } from "./brain-ask.js";
 import { ConversationThread } from "./conversation-thread.js";
 import { NoticeStrip } from "./notice-strip.js";
@@ -98,6 +100,13 @@ export interface VoiceState<Stream> {
 
 /** What the orchestrator supplies to a call of either kind; the surface adds the transport. */
 export interface SpeakOnlyCallHooks<Stream> {
+  /**
+   * The items that seed a call with the recent conversation as its channel
+   * opens, read from the thread at that moment and never captured: the thread
+   * is generation-fenced, so a Clear empties it and retires the call, and
+   * the next open seeds nothing.
+   */
+  conversationSeed(): readonly WireRecord[];
   onStatus(status: RealtimeStatus): void;
   onRemoteStream(stream: Stream | undefined): void;
   onError(message: string | undefined): void;
@@ -495,6 +504,7 @@ export class VoiceOrchestrator<Stream> {
 
   #ensureConversationCall(): ConversationVoiceCall {
     this.#conversationCall ??= this.#deps.createConversationCall({
+      conversationSeed: () => conversationSeedEvents(this.#thread.entries),
       onStatus: (status) => this.#setStatus(status),
       onRemoteStream: (stream) => this.#setRemoteStream(stream),
       onLocalStream: (stream) => this.#setLocalStream(stream),
@@ -536,6 +546,7 @@ export class VoiceOrchestrator<Stream> {
     const heard = (): boolean =>
       !this.#conversationCall?.isConnected && !this.#conversationCall?.isConnecting;
     this.#speakOnlyCall ??= this.#deps.createSpeakOnlyCall({
+      conversationSeed: () => conversationSeedEvents(this.#thread.entries),
       onStatus: (status) => {
         if (heard()) this.#setStatus(status);
       },
@@ -581,9 +592,11 @@ export class VoiceOrchestrator<Stream> {
   }
 
   /**
-   * Opens the developer's call. Nothing is fed to it: the roster, the history,
-   * and the guide are the brain's, in the main process, and the voice reaches
-   * them through its one tool. Nothing is asked of the system on the way
+   * Opens the developer's call. The one thing fed to it is the recent
+   * conversation, seeded from the thread as the channel opens, so the voice
+   * can follow what was just said; the roster and the guide are the brain's,
+   * in the main process, and the voice reaches them through its one tool.
+   * Nothing is asked of the system on the way
    * either: connecting declares a bare transceiver, no capture device opens,
    * and the microphone permission has no part in it.
    */
@@ -642,7 +655,9 @@ export class VoiceOrchestrator<Stream> {
   /**
    * The mouth that lets Luke speak into silence: it takes the one turn the
    * arbiter offers and, when no conversation is open, opens a speak-only call
-   * of Luke's own to say it through, then closes it. The call it drives is
+   * of Luke's own — seeded from the thread like the developer's, so the
+   * briefing is said against what was said before — to say it through, then
+   * closes it. The call it drives is
    * wrapped once, so an arrival beat is worded at the moment of speaking;
    * every other member forwards untouched.
    */

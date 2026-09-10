@@ -77,7 +77,8 @@ export interface SpeechMouthOptions {
  *
  * An offer arriving while the developer's call is up rides it. One arriving
  * into silence is what this class exists for: it opens a call of Luke's own —
- * speak-only, no microphone, no context — says the turn as one reply, lingers
+ * speak-only, no microphone, no tools, seeded with the recent conversation
+ * as it opens — says the turn as one reply, lingers
  * briefly for the next offer the same cluster of finishes usually brings, and
  * closes the call it opened. It never closes the developer's call.
  *

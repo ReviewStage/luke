@@ -187,18 +187,58 @@ test("a briefing is spoken once the call is open", async () => {
 
   await context.session.connect();
   assert.equal(context.session.speak(speech), true);
-  // The briefing travels inside one isolated response request, so it can read
-  // neither the developer's conversation nor another briefing, and no tool
-  // may answer it.
+  // The briefing joins the conversation as one marked item, and the response
+  // that speaks it declares no tools and may choose none, so nothing in it can
+  // become an action.
   assert.deepEqual(
     context.sent.map((event) => event.type),
-    [REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
+    [REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE, REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
   );
-  const response = context.sent[0]?.response;
+  const response = context.sent[1]?.response;
   assert.ok(isRecord(response));
-  assert.equal(response.conversation, "none");
+  assert.equal(response.conversation, undefined);
+  assert.equal(response.instructions, undefined);
   assert.deepEqual(response.tools, []);
   assert.equal(response.tool_choice, "none");
+});
+
+/** One seed item, as the orchestrator would build it from a line of the thread. */
+function seedItem(role: string, text: string): WireRecord {
+  return {
+    type: REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
+    item: { type: "message", role, content: [{ type: "input_text", text }] },
+  };
+}
+
+test("the seed lands as the channel opens, ahead of the first turn, and again after the session expires", async () => {
+  let seed: readonly WireRecord[] = [
+    seedItem("user", "what needs me?"),
+    seedItem("assistant", "Nothing right now."),
+  ];
+  const context = harness({ conversationSeed: () => seed });
+
+  await context.session.connect();
+  await holdTurn(context);
+  context.session.stopListening(true);
+
+  const types = context.sent.map((event) => event.type);
+  assert.deepEqual(context.sent.slice(0, seed.length), seed);
+  assert.ok(types.indexOf(REALTIME_CLIENT_EVENT.RESPONSE_CREATE) >= seed.length);
+
+  seed = [...seed, seedItem("user", "and now?")];
+  context.emit({
+    type: REALTIME_SERVER_EVENT.ERROR,
+    error: { type: "invalid_request_error", code: "session_expired", message: "Maximum duration." },
+  });
+  const sentBeforeReconnect = context.sent.length;
+  assert.equal(await context.session.connect(), true);
+  assert.deepEqual(context.sent.slice(sentBeforeReconnect), seed);
+});
+
+test("an empty seed sends no items at all", async () => {
+  const context = harness({ conversationSeed: () => [] });
+  await context.session.connect();
+  assert.deepEqual<ParsedJsonObject[]>(context.sent, []);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.

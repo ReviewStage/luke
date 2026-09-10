@@ -9,7 +9,12 @@ that reads inbound events so a second file cannot re-encode it.
 and the one tool the desktop's call is configured with, `ask_brain`.
 `proactive-speech.ts` is what Luke says first: the briefing the brain decided
 to give and the two onboarding beats, each turn built without tools so nothing
-a beat carries can become an action.
+a beat carries can become an action. A briefing joins the call's own
+conversation as one marked item, and the rule for saying it as written stands
+in `realtime-instructions.ts`, not on the response. `conversation-seed.ts` is
+what every call is told as it opens: the recent Conversation lines from Luke's
+own record, in the conversation's own roles, without the actions or any
+session identity, closed by a note saying none of it awaits an answer.
 
 Two things a transport does not own left. `ConversationEntry` and the retained
 thread are `@sidecar/session`'s: they are what a line of the conversation is,

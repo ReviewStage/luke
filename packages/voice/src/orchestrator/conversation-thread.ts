@@ -469,7 +469,8 @@ export class ConversationThread {
   /**
    * Persists what this window appended. The main process's store takes each
    * line by its id, relays the thread to every panel's Conversation, and reads the
-   * recent slice for the brain, so nothing is re-fed to a call here. A line
+   * recent slice for the brain; the thread itself is what seeds each call
+   * as it opens, read then rather than re-fed from here. A line
    * is marked reported only once the store said it took it; one it refused is
    * sent again on the next publish. Before the restore this thread is only
    * part of itself, and a report then would name lines the store already
