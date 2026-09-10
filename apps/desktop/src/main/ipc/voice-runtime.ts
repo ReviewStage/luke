@@ -1,6 +1,5 @@
 import { PRODUCT_EVENT, type RecordProductEvent } from "@sidecar/analytics";
 import { CREDENTIAL_CONNECTION, CREDENTIAL_PROVIDERS } from "@sidecar/credentials";
-import type { RealtimeConnection } from "@sidecar/hosted";
 import { type LiveDiagnostics, liveExchangeActive } from "@sidecar/live";
 import type { BrowserWindow, WebContents } from "electron";
 import { channels } from "#shared/bridge";
@@ -33,12 +32,6 @@ export interface VoiceRuntimeDependencies {
   state: AppStateStore;
   openExternal: (url: string) => Promise<void>;
   liveSession: LiveSessionActs;
-  /**
-   * The one Realtime credential left: the introduction's bounded mint,
-   * answered only while the takeover holds the panel. The voice window's own
-   * sessions are the host's and carry no credential.
-   */
-  mintIntroductionCredential: () => Promise<RealtimeConnection | undefined>;
   liveDiagnostics: () => Promise<LiveDiagnostics | undefined>;
   recordProductEvent: RecordProductEvent;
   /**
@@ -58,7 +51,6 @@ type VoiceRuntimeActKind =
   | typeof ACT_KIND.VOICE_END_LIVE_SESSION
   | typeof ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT
   | typeof ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY
-  | typeof ACT_KIND.VOICE_MINT_CREDENTIAL
   | typeof ACT_KIND.VOICE_DIAGNOSTICS
   | typeof ACT_KIND.MICROPHONE_OPEN_SETTINGS
   | typeof ACT_KIND.CREDENTIAL_OPEN_API_KEYS;
@@ -100,8 +92,6 @@ export function voiceRuntimeActRows(
     [ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY]: ({ idle }, { voice }) => {
       if (voice) void liveSession.reportLiveActivity(idle);
     },
-    [ACT_KIND.VOICE_MINT_CREDENTIAL]: (_payload, { introduction }) =>
-      introduction ? dependencies.mintIntroductionCredential() : Promise.resolve(undefined),
     [ACT_KIND.VOICE_DIAGNOSTICS]: () => dependencies.liveDiagnostics(),
     [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: () =>
       dependencies.openExternal(

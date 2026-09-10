@@ -1124,32 +1124,44 @@ Canonical commands:
 - The spoken introduction is the one moment Luke runs before the account gate,
   and it is bounded on every side. It plays on the first interactive launch,
   before any account exists, at most once to the end: a completion on file
-  never replays, and it never runs in a fixture or evidence run. Its voice is
-  the introduction mint, an accountless endpoint on Luke's own service that
-  issues one short-lived credential per call, keeps nothing about the caller
-  but a hashed network address for its own daily caps (per caller and global
-  both), and answers the same pinned OpenAI calls endpoint every minted call
-  uses. The call itself is tool-free at the API — no tools declared, every
-  scripted turn opened with none — and no carrier is wired behind it, so
-  nothing said, heard, or shown during the introduction can become an action.
-  What travels on it is the build's own script and one observed thing: the
-  detected sessions' titles, as data behind a marker, never as instructions,
-  and capped at the panel's own visible depth however many sessions stand on
-  screen. Detection is the keyless local peek — the same read-only observe
-  every pass runs, once, with no hook registration and no credential, and
-  answered only to the panel the takeover holds, which draws every fresh
-  session it reports in a list that scrolls like the panel's own. The
-  microphone is
-  asked for at its own beat through the system's real dialog, the talk key is
-  routed to the takeover for the introduction's duration, and the spoken
-  sign-off is where the introduction ends: the takeover ends, the panel leaves
-  the display it took and stands up as the ordinary
-  signed-out panel with its own gate, and observation,
-  announcements, and every other capability still release only through the
-  ordinary account gate when the sign-in itself lands. An introduction
-  that cannot speak stands down to the ordinary signed-out launch and writes
-  nothing. Widening what the introduction reads, sends, or can do is a
-  product decision, not an implementation detail.
+  never replays, and it never runs in a fixture or evidence run. It is the
+  GPT Live guide's greeting before the caller speaks, so its order is fixed
+  by that: the takeover asks for the microphone first, through the system's
+  real dialog raised by the developer's own press on the dark stage, and only
+  a granted microphone opens a session at all. Its voice is one GPT Live
+  session created through the accountless introduction endpoint of Luke's own
+  voice service (`VOICE_SERVICE_PATH.INTRODUCTION`), which holds the project
+  key and the session's trusted sideband itself, keeps nothing about the
+  caller but a hashed network address for its own daily caps (per caller and
+  global both), and sends the greeting as the one `session.instructions.append`
+  on `session.started`; the takeover is a peer of that session and nothing
+  more, the same `LiveCall` the conversation runs on, permitted only the
+  microphone switch and the hang-up and shown only captions, and the
+  connection the session was created over is what the main process holds
+  for the introduction's duration, because the service reads its close as
+  the hang-up. No credential reaches the desktop at any point, no backend
+  listens, and no carrier is wired behind it, so nothing said, heard, or
+  shown during the introduction can become an action. What travels on it is
+  one observed thing: the detected sessions' titles, as one developer message
+  in the session's `input`, at most eight titles each cut to eighty characters
+  (`INTRODUCTION_SEED_BOUNDS`, mirrored by the service's own admission), and
+  nothing for pretend rows. Detection is the keyless local peek — the same
+  read-only observe every pass runs, once, with no hook registration and no
+  credential, and answered only to the panel the takeover holds, which draws
+  every fresh session it reports in a list that scrolls like the panel's own.
+  The microphone is unmuted the moment the session starts, since the greeting
+  is meant to be answered, and the talk key routed to the takeover for the
+  introduction's duration is the same unmute; the introduction ends when
+  Luke's output has gone quiet after the greeting — read from the transcript
+  ledger's settle and the remote track's level, never from a missing event —
+  and a bounded listening window for a word back has passed: the takeover
+  hangs up, the panel leaves the display it took and stands up as the ordinary
+  signed-out panel with its own gate, and observation, announcements, and
+  every other capability still release only through the ordinary account gate
+  when the sign-in itself lands. A developer who refuses the microphone, and
+  an introduction that cannot speak, stand down to the ordinary signed-out
+  launch and write nothing. Widening what the introduction reads, sends, or
+  can do is a product decision, not an implementation detail.
 
 ### The surface and its fixtures
 

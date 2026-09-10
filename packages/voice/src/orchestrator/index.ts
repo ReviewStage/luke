@@ -9,6 +9,4 @@ export {
   type LiveVoiceSurroundings,
 } from "./live-voice-orchestrator.js";
 export { NoticeStrip, VOICE_ERROR_NOTICE_MS } from "./notice-strip.js";
-export { SpeechMouth } from "./speech-mouth.js";
 export { REPLY_KIND, type ReplyKind } from "./voice-call.js";
-export { activeVoiceStream } from "./voice-policy.js";

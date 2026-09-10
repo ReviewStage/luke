@@ -126,7 +126,7 @@ export type ProductEventProperty =
 export const PRODUCT_CREDENTIAL_SOURCE = {
   ACCOUNT: "account",
   KEY: "key",
-  /** The one-time onboarding introduction's own bounded, accountless mint. */
+  /** The one-time onboarding introduction's own bounded, accountless session. */
   INTRODUCTION: "introduction",
 } as const;
 

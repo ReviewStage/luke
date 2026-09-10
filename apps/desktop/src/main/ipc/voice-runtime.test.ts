@@ -106,7 +106,6 @@ function fixture(clearConversation: () => Promise<boolean>) {
         liveCalls.push(`activity:${idle}`);
       },
     },
-    mintIntroductionCredential: async () => undefined,
     liveDiagnostics: async () => undefined,
     recordProductEvent: () => undefined,
     clearConversation,

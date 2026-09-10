@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { PRODUCT_CREDENTIAL_SOURCE, PRODUCT_EVENT } from "@sidecar/analytics";
 import { INTRODUCTION_PEEK_FRESH_MS } from "@sidecar/host";
 import { peekLocalSessions } from "@sidecar/providers";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
@@ -30,7 +29,7 @@ import { windowSurfaceActRows, windowSurfaceReports } from "./window-surface";
 export function registerDesktopIpc(services: DesktopServices): void {
   const { config, state, telemetry, native, updates, operator, windows } = services;
   const { runMode, launch } = config;
-  const { panels, voiceWindow, hotkeys, dock, introductionMinter } = windows;
+  const { panels, voiceWindow, hotkeys, dock, introductionSession } = windows;
   const recordProductEvent = telemetry.recordProductEvent;
 
   /**
@@ -48,19 +47,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
     clearConversation: () => operator.operator.deleteConversation(MAIN_SESSION_KEY),
     setShortcutCapturing: (capturing: boolean) => hotkeys.setShortcutCapturing(capturing),
     openExternal: config.openExternal,
-    // The introduction's bounded mint is the one Realtime credential left,
-    // answered only while the takeover holds the panel; the voice window's own
-    // sessions are the host's and carry no credential.
-    mintIntroductionCredential: async () => {
-      if (!windows.introductionPlaying()) return undefined;
-      const credential = await introductionMinter.mint();
-      if (credential) {
-        recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {
-          credential_source: PRODUCT_CREDENTIAL_SOURCE.INTRODUCTION,
-        });
-      }
-      return credential;
-    },
     liveDiagnostics: () => operator.host.liveDiagnostics(),
     liveSession: operator.host,
     recordProductEvent,
@@ -131,6 +117,17 @@ export function registerDesktopIpc(services: DesktopServices): void {
       return sessions.filter(
         (session) => now - session.lastActivityAt <= INTRODUCTION_PEEK_FRESH_MS,
       );
+    },
+    // The takeover's own session, answered only while it holds the panel and
+    // only on a run that reaches the network at all: the offer goes to the
+    // accountless voice service with the titles the takeover may name, and
+    // the hang-up closes the connection the service reads as the end.
+    [ACT_KIND.INTRODUCTION_CREATE_SESSION]: ({ sdp, titles }, { introduction }) =>
+      introduction && runMode.sendsNetwork
+        ? introductionSession.open({ sdp, titles })
+        : Promise.resolve(undefined),
+    [ACT_KIND.INTRODUCTION_END_SESSION]: (_payload, { introduction }) => {
+      if (introduction) introductionSession.end();
     },
     [ACT_KIND.INTRODUCTION_COMPLETE]: async ({ given }, { introduction }) => {
       if (!introduction) return;

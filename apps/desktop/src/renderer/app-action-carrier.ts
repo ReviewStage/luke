@@ -1,4 +1,5 @@
 import { ACTION_KIND, dispatchByKind } from "@sidecar/actions";
+import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
 import type { FeedbackKind } from "@sidecar/feedback";
 import { FEEDBACK_KIND } from "@sidecar/feedback";
 import {
@@ -25,7 +26,15 @@ import { displaySessions, sessionFiltersFromSpoken, spokenSearchOutcome } from "
 import { SETTING_PAGE } from "./settings-views";
 import { UPDATE_ROW_ACTION, updateRow } from "./update-row";
 import { appSettingsNow, appStateNow } from "./use-app-state";
-import type { AppActionCarrier } from "./voice/conversation-call";
+
+/**
+ * Performs one app action the brain asked for and answers its result. The
+ * action was already validated against the guide in the main process before
+ * it got here; the carrier only performs and reports. Nothing here sends a
+ * note: the feedback act opens the composer, and what it holds leaves only by
+ * its own Send button.
+ */
+type AppActionCarrier = (action: BrainAppActionRequest["action"]) => Promise<WireRecord>;
 
 /**
  * The composer kind a spoken open names, matched to the composer's own. The

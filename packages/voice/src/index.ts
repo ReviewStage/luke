@@ -51,7 +51,5 @@ export {
 export {
   type HostedRealtimeCredentialOptions,
   hostedRealtimeCredentialMinter,
-  type IntroductionRealtimeCredentialOptions,
-  introductionRealtimeCredentialMinter,
   type RealtimeCredentialMinter,
 } from "./service-mint.js";

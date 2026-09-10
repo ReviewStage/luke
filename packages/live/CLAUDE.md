@@ -46,7 +46,10 @@ and `INTRODUCTION` with none, and `sessionInstructionBlocks` exposes which
 sections a scene emits so a test asserts the decision and not the words.
 `greetingInstruction` is the introduction's opening, sent as one
 instructions append after `session.started` by the voice service, from the
-trusted side. The docs' backend preamble is not here: it is a prompt section
+trusted side; `introductionSeedItems` is the one developer message the
+introduction's `input` may carry, the detected titles under
+`INTRODUCTION_SEED_BOUNDS`, composed by the takeover and admitted by the
+service against the same bound. The docs' backend preamble is not here: it is a prompt section
 of `@sidecar/brain`, and the roster rendering the voice is shown is the
 host's, which already holds the brain's redacted view; neither package
 depends on this one and this one depends on neither.

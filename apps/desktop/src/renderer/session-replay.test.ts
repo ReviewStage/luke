@@ -54,14 +54,10 @@ test("no account is no reason not to record: the launch is what it is there for"
  * rather than as containment, so widening what this renderer may reach at all
  * has to be done deliberately here as well.
  */
-test("the connect policy names both recorder hosts, and only what else is reached", () => {
+test("the connect policy names both recorder hosts, and nothing else", () => {
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   const connectSrc = html.match(/connect-src ([^;"]+)/)?.[1];
-  assert.deepEqual(connectSrc?.split(" "), [
-    "https://api.openai.com",
-    POSTHOG_HOST,
-    POSTHOG_ASSETS_HOST,
-  ]);
+  assert.deepEqual(connectSrc?.split(" "), [POSTHOG_HOST, POSTHOG_ASSETS_HOST]);
 });
 
 /**

@@ -409,12 +409,17 @@ and email you signed it with, and any screenshots you attached.
   development build run from a checkout can write a local trace of this
   traffic when the developer's own shell asks for one; a packaged build has no
   such switch and writes none.
-  The one voice call that happens before you sign in is the spoken
-  introduction on first launch of the Mac app: it sends its own fixed script,
-  the titles of the coding agent sessions found on your Mac, and anything you
-  say during its practice moment. It plays once, can act on nothing, and our
-  service issues its credential without an account — keeping only a hash of
-  your network address for that day's rate limit, tied to nobody.
+  The one voice session that happens before you sign in is the spoken
+  introduction on first launch of the Mac app. It asks for your microphone
+  first, through macOS's own dialog at your press, and opens no session if
+  you decline. With the microphone granted it opens one GPT Live session
+  through our voice service without an account: what travels is the titles
+  of the coding agent sessions found on your Mac (at most eight, each cut
+  short), our own fixed greeting instruction, and your voice for as long as
+  the introduction stands, since the microphone is live from the greeting on
+  so you can answer it. It plays once, can act on nothing, and our service
+  keeps only a hash of your network address for that day's rate limit, tied
+  to nobody, and none of the conversation.
 - Coding agent providers you connect (Conductor) and Linear, using the key or
   account access you supply. The synced-key vault holds Conductor keys only.
   Luke reads your sessions or issues, and sends something back

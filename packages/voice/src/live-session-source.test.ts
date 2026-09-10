@@ -628,7 +628,8 @@ test("the introduction source carries no authorization and opens no sideband", a
 
   const opened = await source.create({ sdpOffer: SDP_OFFER, input: INPUT });
 
-  assert.deepEqual(opened, { sessionId: SESSION_ID, sdpAnswer: SDP_ANSWER });
+  assert.equal(opened?.sessionId, SESSION_ID);
+  assert.equal(opened?.sdpAnswer, SDP_ANSWER);
   assert.equal("attach" in (opened ?? {}), false);
   assert.equal(script.opens[0]?.url, `${SERVICE_ORIGIN}${VOICE_SERVICE_PATH.INTRODUCTION}`);
   assert.deepEqual(script.opens[0]?.headers, {});
@@ -637,6 +638,10 @@ test("the introduction source carries no authorization and opens no sideband", a
   assert.equal(frame.type, VOICE_SERVICE_FRAME.SESSION_CREATE);
   assert.equal(frame.voice, LIVE_DEFAULTS.VOICE);
   assert.deepEqual(frame.input, INPUT);
+  // The service reads the connection's close as the hang-up, so the socket
+  // stands until the caller closes it.
+  assert.equal(script.sockets[0]?.closedByClient, false);
+  opened?.close();
   assert.equal(script.sockets[0]?.closedByClient, true);
   const report = source.diagnostics();
   assert.equal(report.lastOutcome, LIVE_SESSION_OUTCOME.SUCCEEDED);
