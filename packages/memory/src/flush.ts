@@ -12,6 +12,11 @@
  */
 
 import { DAILY_NOTES_DIRECTORY, parseDailyNoteName, WORKSPACE_FILE } from "@sidecar/runtime";
+import {
+  MEMORY_CAPTURE_OUTCOME,
+  type MemoryCaptureOutcome,
+  type MemoryCaptureResult,
+} from "@sidecar/runtime/vocabulary";
 
 export const MEMORY_FLUSH_DEFAULTS = {
   /** How far under the compaction threshold the flush fires. */
@@ -42,27 +47,16 @@ export type MemoryHousekeepingKind =
   (typeof MEMORY_HOUSEKEEPING_KIND)[keyof typeof MEMORY_HOUSEKEEPING_KIND];
 
 /**
- * How a housekeeping turn ended. Only `completed` and `nothing-to-store`
- * mean the turn ran to its end; an interrupted or failed flush is not marked
- * done, so the next assessment runs it again.
+ * How a housekeeping turn ended: a housekeeping turn is a memory capture,
+ * and its outcomes are the capture vocabulary's. Only `completed` and
+ * `nothing-to-store` mean the turn ran to its end; an interrupted or failed
+ * flush is not marked done, so the next assessment runs it again.
  */
-export const MEMORY_HOUSEKEEPING_OUTCOME = {
-  COMPLETED: "completed",
-  NOTHING_TO_STORE: "nothing-to-store",
-  SKIPPED: "skipped",
-  INTERRUPTED: "interrupted",
-  FAILED: "failed",
-} as const;
+export const MEMORY_HOUSEKEEPING_OUTCOME = MEMORY_CAPTURE_OUTCOME;
 
-export type MemoryHousekeepingOutcome =
-  (typeof MEMORY_HOUSEKEEPING_OUTCOME)[keyof typeof MEMORY_HOUSEKEEPING_OUTCOME];
+export type MemoryHousekeepingOutcome = MemoryCaptureOutcome;
 
-export interface MemoryHousekeepingResult {
-  readonly outcome: MemoryHousekeepingOutcome;
-  /** How many note writes the turn committed; each stands whatever the turn's end. */
-  readonly writes: number;
-  readonly reason?: string;
-}
+export type MemoryHousekeepingResult = MemoryCaptureResult;
 
 /** A housekeeping turn that failed before it could answer for itself, with nothing written. */
 export function failedHousekeeping(reason: string): MemoryHousekeepingResult {

@@ -58,8 +58,6 @@ export const REFUSAL_REASON = {
   UNKNOWN_CHILD: "no child of this conversation has that id",
   EMPTY_TASK: "a task needs words",
   NO_MEMORY: "not run: this agent has no notebook index",
-  EMPTY_QUERY: "a search needs words",
-  NOT_MEMORY_PATH: "not read: that path is not a notebook file",
 } as const;
 
 /** A spawn refusal in the words the model reads; the service answers the code and this the sentence. */

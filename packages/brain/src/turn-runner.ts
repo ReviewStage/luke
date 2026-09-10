@@ -7,6 +7,7 @@ import {
   type AgentRuntime,
   CONTEXT_INPUT_KIND,
   type ContextMark,
+  type MemoryDefinition,
   type ReasoningEffort,
   RUN_END_REASON,
   RUN_ORIGIN,
@@ -32,7 +33,7 @@ import {
 import {
   activityNoticesInputText,
   askInputText,
-  primedNotesInputText,
+  recalledMemoryInputText,
   standingContextText,
   subagentTaskInputText,
 } from "./input-items.js";
@@ -55,7 +56,6 @@ import { settledUnlessAborted } from "./settled.js";
 import { SteeredDeliveries } from "./steered-deliveries.js";
 import {
   type BrainChildAccess,
-  type BrainMemoryAccess,
   type BrainWorkspaceAccess,
   createTurnToolExecutor,
   journaledEffect,
@@ -198,8 +198,8 @@ export interface TurnRunnerOptions {
   openingNotes?: BrainOpeningNotes;
   workspace?: BrainWorkspaceAccess;
   children?: BrainChildAccess;
-  memory?: BrainMemoryAccess;
-  primeFreshContext?: () => Promise<string | undefined>;
+  /** The memory provider bound to this conversation's scope: recalled into every turn, and asked for the memory tools. */
+  memory?: MemoryDefinition;
   inheritedContext?: readonly WireRecord[];
   child?: ChildPolicyContext;
   createRunId: () => string;
@@ -583,7 +583,7 @@ export class TurnRunner {
           // The cursors keep their mark from before the deltas were read, so
           // a failed turn still reads them again.
           contextMark = context.mark();
-          const primed = await this.#primeIfFresh(turnContext);
+          const recalled = await this.#recall(turnContext);
           notes = this.#options.openingNotes?.take() ?? [];
           const end = await this.#execute(turnContext, execution, gathering, {
             prompt: preparation.prompt,
@@ -591,10 +591,11 @@ export class TurnRunner {
             plan,
             riders,
             opening: [
-              ...primed,
+              ...recalled.opening,
               ...(notes.length > 0 ? [activityNoticesInputText(notes, startedAt)] : []),
               ...plan.open(events, startedAt),
             ],
+            recalled: recalled.standing,
             advanceMark,
           });
           failure = this.#turnResultFrom(end, turnContext, gathering);
@@ -731,16 +732,20 @@ export class TurnRunner {
   }
 
   /**
-   * The one-shot priming of a conversation that just started fresh: a
-   * context with nothing in it yet is handed the host's primer — the recent
-   * daily notes — as the first words of its first turn, behind a marker that
-   * says it is data. An ordinary turn over a context with items reads none.
+   * The memory provider's recall for the turn, over the context as it stands
+   * once a forked child has adopted its opening history: a keyed message is
+   * a standing item, rebuilt every turn beside the standing context and
+   * stored nowhere; an unkeyed one — the recent daily notes, into a
+   * conversation opening fresh — is the first words of this turn, remembered
+   * like any other. Each rides behind a marker that says it is data. A
+   * recall that fails or is cut off recalls nothing, and the turn goes on.
    */
-  async #primeIfFresh(turnContext: TurnContext): Promise<readonly string[]> {
+  async #recall(
+    turnContext: TurnContext,
+  ): Promise<{ opening: readonly string[]; standing: readonly string[] }> {
     const context = turnContext.context;
-    if (context.checkpoint().items.length > 0) return [];
     const inherited = this.#options.inheritedContext;
-    if (inherited && inherited.length > 0) {
+    if (context.checkpoint().items.length === 0 && inherited && inherited.length > 0) {
       // A forked child: the requester's context is the child's opening
       // history, adopted whole and recorded as a fork boundary, and the task
       // then follows it as the first words of the child's own.
@@ -748,13 +753,29 @@ export class TurnRunner {
         Promise.resolve(context.adoptFork(inherited, { signal: turnContext.signal })),
         turnContext.signal,
       );
-      return [];
     }
-    const primer = this.#options.primeFreshContext;
-    if (!primer) return [];
-    const settled = await settledUnlessAborted(primer(), turnContext.signal);
-    if (settled.aborted || !settled.value) return [];
-    return [primedNotesInputText(settled.value)];
+    const memory = this.#options.memory;
+    if (!memory) return { opening: [], standing: [] };
+    const settled = await settledUnlessAborted(
+      memory.provider
+        .recall(memory.scope, { items: context.checkpoint().items, signal: turnContext.signal })
+        .catch((error: Error) => {
+          this.#seam.report(`Memory recall failed: ${error.message}`);
+          return { messages: [] };
+        }),
+      turnContext.signal,
+    );
+    if (settled.aborted) return { opening: [], standing: [] };
+    const now = this.#seam.now();
+    const opening: string[] = [];
+    const standing: string[] = [];
+    for (const message of settled.value.messages) {
+      if (message.content.trim().length === 0) continue;
+      (message.id === undefined ? opening : standing).push(
+        recalledMemoryInputText(message.content, now),
+      );
+    }
+    return { opening, standing };
   }
 
   /**
@@ -790,6 +811,8 @@ export class TurnRunner {
       plan: TurnPlan;
       riders: RunControl[];
       opening: readonly string[];
+      /** What the memory provider recalled for every inference of the turn, after the standing context. */
+      recalled: readonly string[];
       advanceMark: () => Promise<void>;
     },
   ): Promise<RuntimeRunEnd> {
@@ -884,6 +907,7 @@ export class TurnRunner {
           this.#options.standingContext(),
           this.#seam.now(),
         ),
+        ...turn.recalled,
       ],
       maximumOutputTokens: this.#options.maximumOutputTokens,
       ...(this.#options.reasoningEffort

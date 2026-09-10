@@ -2,11 +2,13 @@ import {
   failedHousekeeping,
   housekeepingCompleted,
   MEMORY_FLUSH_DEFAULTS,
-  type MemoryHousekeepingResult,
   shouldRunMemoryFlush,
 } from "@sidecar/memory";
-import type { AgentRuntime } from "@sidecar/runtime/vocabulary";
-import type { WireRecord } from "@sidecar/wire";
+import {
+  type AgentRuntime,
+  MEMORY_CAPTURE_PHASE,
+  type MemoryDefinition,
+} from "@sidecar/runtime/vocabulary";
 import {
   assessCompaction,
   COMPACTION_NEED,
@@ -25,16 +27,6 @@ import {
   turnRevoked,
 } from "./turn.js";
 
-/** What the pre-compaction flush is handed: a copy of the context, never the engine itself, and the counts its gate read. */
-export interface BrainFlushInput {
-  readonly items: readonly WireRecord[];
-  readonly contextTokens: number;
-  readonly contextWindowTokens: number;
-  readonly transcriptBytes: number;
-  readonly compactionCount: number;
-  readonly signal: AbortSignal;
-}
-
 /**
  * The durable side of the flush gate. The compaction count is the
  * generation's own and rides on its envelope; the marker saying which count
@@ -52,7 +44,8 @@ export interface MaintenanceOptions {
   seam: AgentSeam;
   runtime: AgentRuntime;
   prepareTurn: (turn: BrainTurnDescription) => BrainTurnPreparation | Promise<BrainTurnPreparation>;
-  beforeCompaction?: (input: BrainFlushInput) => Promise<MemoryHousekeepingResult>;
+  /** The memory provider bound to this conversation; one with a capture is asked for the pre-compaction flush. */
+  memory?: MemoryDefinition;
   flushMarker?: BrainFlushMarkerStore;
   /** Holds the turn-in-flight flag while maintenance holds the context the way a turn does. */
   holdTurnInFlight: (held: boolean) => void;
@@ -175,11 +168,12 @@ export class Maintenance {
   /**
    * The pre-compaction memory flush, under the pinned gate: over the soft
    * threshold or the byte trigger, and not yet flushed in this compaction
-   * cycle. The hook is handed a copy of the items and never the engine, so
-   * the housekeeping turn cannot reach the conversation's context; a hook
+   * cycle. The memory provider's capture is handed a copy of the items and
+   * never the engine, so the housekeeping turn cannot reach the
+   * conversation's context; a capture
    * that says it ran to its end marks the cycle flushed, and any other
    * answer — interrupted, failed, or the signal firing first — leaves the
-   * cycle unflushed so the next assessment runs it again. What the hook
+   * cycle unflushed so the next assessment runs it again. What the capture
    * wrote before then stands either way. The cycle is the generation's own
    * compaction count, and the marker of the last completed flush is read
    * from the marker store once per generation and written to it after each
@@ -193,8 +187,9 @@ export class Maintenance {
     assessment: CompactionAssessment,
   ): Promise<void> {
     const { generation, context, signal } = turnContext;
-    const hook = this.#options.beforeCompaction;
-    if (!hook || signal.aborted) return;
+    const memory = this.#options.memory;
+    const capture = memory?.provider.capture?.bind(memory.provider);
+    if (!memory || !capture || signal.aborted) return;
     if (!(await this.#readFlushMarker(turnContext))) return;
     const due = shouldRunMemoryFlush({
       contextTokens: assessment.contextTokens,
@@ -209,12 +204,11 @@ export class Maintenance {
     if (!due) return;
     const cycle = generation.compactionCount;
     const settled = await settledUnlessAborted(
-      hook({
+      capture({
+        scope: memory.scope,
+        phase: MEMORY_CAPTURE_PHASE.COMPACTION_REQUESTED,
+        operation: { generationId: generation.id, compactionCount: cycle },
         items: [...context.checkpoint().items],
-        contextTokens: assessment.contextTokens,
-        contextWindowTokens: assessment.contextWindowTokens,
-        transcriptBytes: assessment.bytes,
-        compactionCount: cycle,
         signal,
       }).catch((error: Error) => failedHousekeeping(error.message)),
       signal,

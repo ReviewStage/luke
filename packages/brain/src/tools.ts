@@ -3,7 +3,11 @@ import {
   realtimeToolDefinitions,
   realtimeToolFamily,
 } from "@sidecar/actions";
-import { MEMORY_QUERY_MAXIMUM_CHARS } from "@sidecar/memory";
+import {
+  NOTEBOOK_MEMORY_TOOL,
+  type NotebookMemoryToolShape,
+  notebookMemoryToolShapes,
+} from "@sidecar/memory";
 import {
   type ChildPolicyContext,
   type EffectiveToolPolicy,
@@ -29,8 +33,10 @@ import { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
  * session was configured from, so the brain can ask for nothing the actions
  * package does not validate; the brain's own tools — the roster in full, a
  * whole transcript, the briefing, the workspace files, a skill's
- * instructions, the notebook's search and read — are dispatched inside the
- * agent and reach no action path.
+ * instructions — are dispatched inside the agent and reach no action path;
+ * the memory tools are the configured memory provider's own, the notebook's
+ * search and read and its two writes, and the provider's shapes are what the
+ * catalog lists for them.
  * Which of the catalog a turn is offered is the effective tool policy's
  * decision, resolved from the configuration's layers and enforced twice by
  * the host: when the schemas are built and again at every dispatch. The one
@@ -62,8 +68,6 @@ export const BRAIN_TOOL = {
   SUBAGENTS: "subagents",
   SESSIONS_LIST: "sessions_list",
   SESSIONS_HISTORY: "sessions_history",
-  MEMORY_SEARCH: "memory_search",
-  MEMORY_GET: "memory_get",
 } as const;
 
 export type BrainToolName = (typeof BRAIN_TOOL)[keyof typeof BRAIN_TOOL];
@@ -79,13 +83,9 @@ export const TOOL_GROUP = {
   SKILLS: "skills",
   /** Delegation and the inspection of Luke's own conversations, OpenClaw's session tools. */
   SESSIONS: "sessions",
-  /** The notebook's search and read, OpenClaw's memory tools. */
+  /** The memory provider's tools: the notebook's search, read, and two writes, OpenClaw's memory tools. */
   MEMORY: "memory",
 } as const;
-
-/** The most results one memory search answers, and the longest query it takes. */
-export const maximumMemorySearchResults = 20;
-export const maximumMemoryQueryLength = MEMORY_QUERY_MAXIMUM_CHARS;
 
 /** The most of a child task's words a spawn carries; a task is a brief, not a transcript. */
 export const maximumChildTaskLength = 8_000;
@@ -277,52 +277,6 @@ const BRAIN_ONLY_TOOLS: readonly ActionToolDefinition[] = [
       additionalProperties: false,
     },
   },
-  {
-    type: BRAIN_TOOL_TYPE,
-    name: BRAIN_TOOL.MEMORY_SEARCH,
-    description:
-      "Mandatory recall step: search your notebook — MEMORY.md, USER.md, and the notes under " +
-      "memory/ — before answering anything about prior work, decisions, dates, people, " +
-      "preferences, or todos. Each result names its file, line range, score, and provenance; " +
-      "the answer names the retrieval mode it actually ran in (hybrid or keyword-only) and a " +
-      "note when it was not hybrid. Say you checked when confidence is low.",
-    parameters: {
-      type: "object",
-      properties: {
-        query: {
-          type: "string",
-          description: `What to look for, under ${maximumMemoryQueryLength} characters.`,
-        },
-        max_results: {
-          type: "integer",
-          description: `How many results at most; ${maximumMemorySearchResults} is the ceiling.`,
-        },
-      },
-      required: ["query"],
-      additionalProperties: false,
-    },
-  },
-  {
-    type: BRAIN_TOOL_TYPE,
-    name: BRAIN_TOOL.MEMORY_GET,
-    description:
-      "Read an exact excerpt of one notebook file by the path a memory_search result named: " +
-      "MEMORY.md, USER.md, or memory/<note>.md. Defaults to a bounded excerpt when lines are " +
-      "omitted and says when more content follows. Nothing outside the notebook can be named.",
-    parameters: {
-      type: "object",
-      properties: {
-        path: {
-          type: "string",
-          description: "The file's path relative to the notebook, as a result named it.",
-        },
-        from: { type: "integer", description: "The first line to read, counting from 1." },
-        lines: { type: "integer", description: "How many lines to read." },
-      },
-      required: ["path"],
-      additionalProperties: false,
-    },
-  },
 ];
 
 const BRAIN_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(BRAIN_TOOL));
@@ -383,16 +337,6 @@ const BRAIN_ONLY_DESCRIPTORS = {
     effect: TOOL_EFFECT.READ,
     groups: [TOOL_GROUP.SESSIONS, TOOL_GROUP.READ],
   },
-  [BRAIN_TOOL.MEMORY_SEARCH]: {
-    execution: TOOL_EXECUTION.HOST,
-    effect: TOOL_EFFECT.READ,
-    groups: [TOOL_GROUP.MEMORY, TOOL_GROUP.READ],
-  },
-  [BRAIN_TOOL.MEMORY_GET]: {
-    execution: TOOL_EXECUTION.HOST,
-    effect: TOOL_EFFECT.READ,
-    groups: [TOOL_GROUP.MEMORY, TOOL_GROUP.READ],
-  },
 } as const satisfies Record<BrainToolName, ToolPlacement & { groups: readonly string[] }>;
 
 function actionDescriptor(definition: ActionToolDefinition): ToolDescriptor {
@@ -415,11 +359,36 @@ function brainOnlyDescriptor(definition: ActionToolDefinition): ToolDescriptor {
   };
 }
 
-/** The whole catalog as descriptors: every action, then the brain's own tools, in a fixed order. */
+const MEMORY_TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(NOTEBOOK_MEMORY_TOOL));
+
+/**
+ * The memory provider's tools as the catalog places them: a read is a read
+ * like the roster's, and a write keeps the action groups it always had —
+ * `remember_fact` and `forget_fact` are still actions of the app family,
+ * admitted and journaled as such — with the memory group beside them, so a
+ * policy that names `group:memory` names the whole of what the notebook does.
+ */
+function memoryDescriptor(shape: NotebookMemoryToolShape): ToolDescriptor {
+  const family = realtimeToolFamily(shape.schema.name);
+  return {
+    schema: shape.schema,
+    execution: TOOL_EXECUTION.MEMORY,
+    effect: shape.effect,
+    groups:
+      shape.effect === TOOL_EFFECT.READ
+        ? [TOOL_GROUP.MEMORY, TOOL_GROUP.READ]
+        : [TOOL_GROUP.MEMORY, TOOL_GROUP.ACTIONS, ...(family === undefined ? [] : [family])],
+  };
+}
+
+/** The whole catalog as descriptors: every action, then the brain's own tools, then the memory provider's, in a fixed order. */
 export function brainToolCatalog(): readonly ToolDescriptor[] {
   return [
-    ...realtimeToolDefinitions().map(actionDescriptor),
+    ...realtimeToolDefinitions()
+      .filter((definition) => !MEMORY_TOOL_NAMES.has(definition.name))
+      .map(actionDescriptor),
     ...BRAIN_ONLY_TOOLS.map(brainOnlyDescriptor),
+    ...notebookMemoryToolShapes().map(memoryDescriptor),
   ];
 }
 

@@ -1,11 +1,11 @@
 /**
  * The runtime's vocabulary: the identities it keeps apart, the storage
  * contracts a durable owner of conversation state satisfies, the execution
- * seams a host composes over, the records delegation keeps, and the one
- * scheduler handle. A re-export door and nothing else, Node-free by
- * construction, because packages below the runtime — realtime, hosted,
- * voice, devtrace, memory — import this door and not the barrel, which
- * reaches `node:fs`.
+ * seams a host composes over, the memory provider contract, the records
+ * delegation keeps, and the one scheduler handle. A re-export door and
+ * nothing else, Node-free by construction, because packages below the
+ * runtime — realtime, hosted, voice, devtrace, memory — import this door and
+ * not the barrel, which reaches `node:fs`.
  */
 
 export {
@@ -100,6 +100,25 @@ export {
   sessionKey,
   threadSessionKey,
 } from "./identifiers.js";
+export {
+  MEMORY_CAPTURE_OUTCOME,
+  MEMORY_CAPTURE_PHASE,
+  MEMORY_SCOPE_KIND,
+  type MemoryCaptureOutcome,
+  type MemoryCapturePhase,
+  type MemoryCaptureResult,
+  type MemoryCaptureTurn,
+  type MemoryDefinition,
+  type MemoryProvider,
+  type MemoryRecallHistory,
+  type MemoryRecallMessage,
+  type MemoryRecallResult,
+  type MemoryScope,
+  type MemoryTool,
+  type MemoryToolContext,
+  memoryToolNamed,
+  sameMemoryScope,
+} from "./memory.js";
 export {
   ARCHIVE_ENCODING,
   ARCHIVE_REASON,

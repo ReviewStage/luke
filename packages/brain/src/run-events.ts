@@ -1,4 +1,4 @@
-import { type EffectiveToolPolicy, TOOL_EXECUTION } from "@sidecar/runtime";
+import { type EffectiveToolPolicy, TOOL_EFFECT, TOOL_EXECUTION } from "@sidecar/runtime";
 import type { BrainRequestFailure, BrainRequestStatus, BrainRunUsage } from "./requests.js";
 import { BRAIN_TOOL } from "./tools.js";
 
@@ -58,7 +58,12 @@ export type BrainRunEvent =
 export function slowStepOf(policy: EffectiveToolPolicy, name: string): SlowStepKind | undefined {
   const tool = policy.allowed.find((candidate) => candidate.schema.name === name);
   if (!tool) return undefined;
-  if (tool.execution === TOOL_EXECUTION.PERFORMER) return SLOW_STEP_KIND.PROVIDER_WRITE;
+  if (
+    tool.execution === TOOL_EXECUTION.PERFORMER ||
+    (tool.execution === TOOL_EXECUTION.MEMORY && tool.effect === TOOL_EFFECT.WRITE)
+  ) {
+    return SLOW_STEP_KIND.PROVIDER_WRITE;
+  }
   if (name === BRAIN_TOOL.READ_TRANSCRIPT) return SLOW_STEP_KIND.TRANSCRIPT_READ;
   return undefined;
 }

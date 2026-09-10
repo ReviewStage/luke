@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { REALTIME_TOOL, type RealtimeFunctionCall } from "@sidecar/actions";
+import { REALTIME_TOOL, type RealtimeFunctionCall, realtimeToolFamily } from "@sidecar/actions";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
+import { notebookMemoryProvider } from "@sidecar/memory";
 import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import {
@@ -13,6 +14,7 @@ import {
   childSessionKey,
   DEFAULT_AGENT_ID,
   MAIN_SESSION_KEY,
+  MEMORY_SCOPE_KIND,
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
   type ModelAdapter,
@@ -46,7 +48,7 @@ import { type ResponsesInputItem, responsesModelAnswer } from "./responses-api.j
 import { ToolLoopAgentRuntime } from "./runtime.js";
 import { BrainStateStore } from "./state-store.js";
 import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
-import { BRAIN_TOOL, isBrainOnlyTool, TOOL_GROUP } from "./tools.js";
+import { BRAIN_TOOL, TOOL_GROUP } from "./tools.js";
 import type { BrainTurnTraceRecord } from "./trace.js";
 import { BRAIN_WAKE_KIND, type BrainDelivery, type BrainWakeEvent } from "./wake-events.js";
 
@@ -182,9 +184,9 @@ export function failedAnswer(reason: string): BrainClientAnswer {
   return { outcome: MODEL_RESPONSE_OUTCOME.FAILED, failure: MODEL_FAILURE.UPSTREAM, reason };
 }
 
-/** Whether a request was offered any action at all, read off the toolset, as the adapters see it. */
+/** Whether a request was offered any action at all, read off the toolset, as the adapters see it: a name the actions table holds, the notebook's two writes included. */
 export function actionsOffered(options: BrainRespondOptions): boolean {
-  return options.tools.some((tool) => !isBrainOnlyTool(tool.name));
+  return options.tools.some((tool) => realtimeToolFamily(tool.name) !== undefined);
 }
 
 export const CHECKPOINT = {
@@ -347,16 +349,30 @@ export function harness(
   const traces: BrainTurnTraceRecord[] = [];
   const sinceReads: Harness["sinceReads"] = [];
   const wholeReads: SessionIdentity[] = [];
+  const actions: BrainActionPerformer = agentOverrides.actions ?? {
+    perform: async (functionCall, execution) => {
+      performed.push(functionCall);
+      executions.push(execution);
+      return { status: ACTION_RESULT_STATUS.ACCEPTED };
+    },
+  };
+  // The notebook as the host wires it, over no index and an empty notebook,
+  // so the two writes reach the performer under test like every other action.
+  const scope = { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: DEFAULT_AGENT_ID };
   const agent = new BrainAgent({
     runtime,
     prepareTurn: PLAIN_PREPARATION,
     observes: { kind: LOOK_SUBJECT.SESSION, identity: ABC },
-    actions: {
-      perform: async (functionCall, execution) => {
-        performed.push(functionCall);
-        executions.push(execution);
-        return { status: ACTION_RESULT_STATUS.ACCEPTED };
-      },
+    actions,
+    memory: {
+      scope,
+      provider: notebookMemoryProvider({
+        scope,
+        access: undefined,
+        facts: () => [],
+        recentNotes: async () => [],
+        perform: (functionCall, execution) => actions.perform(functionCall, execution),
+      }),
     },
     roster: () => ({ text: "Currently observed sessions:\n- abc\n- def", identities: [ABC, DEF] }),
     standingContext: () => "Durable facts: none.",

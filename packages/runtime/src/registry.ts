@@ -58,11 +58,12 @@ export const BUILTIN_EMBEDDING_ADAPTER = {
   HOSTED: "hosted-embeddings",
 } as const;
 
-/** How a tool's call is carried out: inside the host, by the host's action performer, or against the agent's own workspace files. */
+/** How a tool's call is carried out: inside the host, by the host's action performer, against the agent's own workspace files, or by the configured memory provider. */
 export const TOOL_EXECUTION = {
   HOST: "host",
   PERFORMER: "performer",
   WORKSPACE: "workspace",
+  MEMORY: "memory",
 } as const;
 
 export type ToolExecution = (typeof TOOL_EXECUTION)[keyof typeof TOOL_EXECUTION];
@@ -76,15 +77,19 @@ export const TOOL_EFFECT = {
 export type ToolEffect = (typeof TOOL_EFFECT)[keyof typeof TOOL_EFFECT];
 
 /**
- * Where a tool runs and what it does. A performer carries acts and a
- * workspace tool writes the agent's own files, so neither can be the tool
- * that speaks: only a host tool may, and the union is what says so rather
- * than a check something has to remember to run.
+ * Where a tool runs and what it does. A performer carries acts, a workspace
+ * tool writes the agent's own files, and a memory tool reads or writes what
+ * the memory provider keeps, so none of them can be the tool that speaks:
+ * only a host tool may, and the union is what says so rather than a check
+ * something has to remember to run.
  */
 export type ToolPlacement =
   | { readonly execution: typeof TOOL_EXECUTION.HOST; readonly effect: ToolEffect }
   | {
-      readonly execution: typeof TOOL_EXECUTION.PERFORMER | typeof TOOL_EXECUTION.WORKSPACE;
+      readonly execution:
+        | typeof TOOL_EXECUTION.PERFORMER
+        | typeof TOOL_EXECUTION.WORKSPACE
+        | typeof TOOL_EXECUTION.MEMORY;
       readonly effect: typeof TOOL_EFFECT.READ | typeof TOOL_EFFECT.WRITE;
     };
 

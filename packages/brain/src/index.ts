@@ -2,7 +2,6 @@ export {
   BRAIN_DEFAULTS,
   BrainAgent,
   type BrainAgentOptions,
-  type BrainFlushInput,
   type BrainFlushMarkerStore,
   type BrainWorkspaceAccess,
   LOOK_SUBJECT,
@@ -94,7 +93,7 @@ export {
   workspaceProjectContextText,
 } from "./standing-context.js";
 export { BrainStateStore } from "./state-store.js";
-export type { BrainChildAccess, BrainMemoryAccess } from "./tool-executor.js";
+export type { BrainChildAccess } from "./tool-executor.js";
 export {
   BRAIN_TOOL,
   brainToolCatalog,
