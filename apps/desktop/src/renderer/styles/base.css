@@ -201,6 +201,13 @@
   /* Growing one side moves the shape's centre half the growth away from it, so
      the right edge stays exactly where it was and only the left one travels. */
   --capsule-voice-shift: calc(var(--capsule-voice-growth) / 2);
+  /* The same growth for the wait: a run of Luke's still going needs the face
+     playing the hop and the dots rippling off it, and the capsule's side holds
+     one thing. 31px to the meter's 26px because the dots' strip is 23px to the
+     meter's 18px, keeping the meter's own 9px to the shape's turning corner. */
+  --capsule-thinking-growth: 31px;
+  --capsule-thinking-width: calc(var(--capsule-width) + var(--capsule-thinking-growth));
+  --capsule-thinking-shift: calc(var(--capsule-thinking-growth) / 2);
   /* Luke's words under the housing, wrapping as they stream in and shown
      whole. `--caption-max` arrives from the shared surface tokens, the
      same number the compact window already holds below the capsule, so growing
@@ -535,6 +542,50 @@ button:disabled {
     calc(var(--duration-shape) - var(--duration-quick)) backwards;
 }
 
+/* Luke thinking, with nothing else open: the reply's growth for the wait that
+   precedes it. The wing decides whether the dots are drawn from the resting
+   priority; the shape reads the same answer off the stage's own facts — a run
+   pending and no live turn, whose face rests are what displace the wait — so
+   the two cannot grow apart. A turn under way keeps the voice rule's width
+   instead, and the dots are not drawn there at all. The caption gate is not a
+   tie to win but a disjoint state: `:not()` lifts this rule's specificity past
+   the caption rule below, which must take the peek's width whenever words
+   stand under the shape, so the wait may only grow a capsule with no words to
+   cover — a captioned one is already wide enough for the dots. */
+.app-stage[data-presentation="capsule"][data-thinking="true"][data-caption="false"]:not(
+  [data-voice]
+) .panel-surface {
+  width: var(--capsule-thinking-width);
+  transform: translate(calc(-50% - var(--capsule-thinking-shift)), var(--shape-top, 0px));
+  /* Growing leads, exactly as the voice growth above: the base rule's delay is
+     for leaving, and the wait's dots arrive behind this edge. */
+  transition-duration: var(--duration-shape);
+  transition-delay: 0s;
+}
+
+.app-stage[data-presentation="capsule"][data-thinking="true"][data-caption="false"]:not(
+    [data-voice]
+  )
+  .compact-hover-target {
+  width: var(--capsule-thinking-width);
+  transform: translateX(calc(-50% - var(--capsule-thinking-shift)));
+}
+
+/* Dots standing in the capsule at all mean the wait holds the face, and the
+   wait means the shape already made room for them — the growth above, or the
+   caption's peek width, which the growth yields to. So the pose needs no gate
+   of its own: the element's presence is the gate, and the base rule's delayed
+   mount pair is the arrival, crossing over the last of the shape's travel the
+   way the meter crosses into the same growth. Ungated also means a caption
+   coming or going mid-wait re-matches nothing here, so nothing replays. */
+.app-stage[data-presentation="capsule"] .wing-thinking {
+  opacity: 1;
+  transform: none;
+  transition-duration: var(--duration-quick), var(--duration-shape);
+  transition-timing-function: var(--motion-exit), var(--spring);
+  transition-delay: calc(var(--duration-shape) - var(--duration-quick));
+}
+
 @keyframes wing-mount-fade {
   from {
     opacity: 0;
@@ -839,6 +890,42 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transform: none;
 }
 
+/* The wait's dots in the wing: the same slot treatment as the meter's, on the
+   same beat, because both trail the face outward from the housing. The
+   capsule's own 36px side holds the face and nothing beside it, so the resting
+   pose is folded; the peek and the panel unfold the dots into the room they
+   already have, and the capsule grows its own room for them below, the way it
+   grows for Luke's reply meter. The mount animation is Luke's meter's own
+   delayed pair — the dots may mount on the very frame that growth starts, and
+   an undelayed arrival would draw them ahead of an edge still most of its
+   travel away — and it is stated here, once, in every state alike: the states
+   that re-match this element's rules (a caption clearing mid-wait, the pointer
+   opening the peek) would replay any animation they changed, so none of them
+   may carry one. */
+.wing-thinking {
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  transform: translateX(8px);
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-shape) var(--spring);
+  animation:
+    wing-mount-fade var(--duration-quick) var(--motion-exit)
+    calc(var(--duration-shape) - var(--duration-quick)) backwards,
+    wing-mount-travel var(--duration-shape) var(--spring)
+    calc(var(--duration-shape) - var(--duration-quick)) backwards;
+}
+
+.app-stage[data-presentation="peek"] .wing-thinking,
+.app-stage[data-presentation="panel"] .wing-thinking {
+  opacity: 1;
+  transform: none;
+  transition-duration: var(--duration-quick), var(--duration-shape);
+  transition-timing-function: var(--motion-exit), var(--spring);
+  transition-delay: var(--peek-delay);
+}
+
 .provider-mark {
   width: 14px;
   height: 14px;
@@ -1065,6 +1152,104 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .luke-face-eye {
   transform-box: fill-box;
   transform-origin: center;
+}
+
+/* The wait's three dots, one drawing wherever a run of Luke's is still going:
+   the Conversation bubble and the notch strip both ride them beside the face
+   playing the success hop on repeat. */
+.thinking-dots {
+  display: inline-flex;
+  height: 12px;
+  align-items: center;
+  gap: 4px;
+}
+
+/* The dots follow the generated `success` cycle the face beside them is
+   playing on repeat — luke-success-2, 2s, the head off the ground from 25% to
+   65% and highest at 45% — each rising as the head comes down, one after
+   another, a ripple off the hop. The stagger is cut into the keyframes rather
+   than carried as a delay, so a paused loop holds every dot at rest, the pose
+   the face itself holds paused; and being timed to a face gesture, they answer
+   --face-motion rather than --loop-motion, so the two can never stop apart. */
+.thinking-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  opacity: 0.35;
+  animation-duration: 2s;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  animation-iteration-count: infinite;
+  animation-play-state: var(--face-motion);
+}
+
+.thinking-dots i:nth-child(1) {
+  animation-name: thinking-dot-1;
+}
+
+.thinking-dots i:nth-child(2) {
+  animation-name: thinking-dot-2;
+}
+
+.thinking-dots i:nth-child(3) {
+  animation-name: thinking-dot-3;
+}
+
+@keyframes thinking-dot-1 {
+  0%,
+  45% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+
+  55% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+
+  65%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+}
+
+@keyframes thinking-dot-2 {
+  0%,
+  53% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+
+  63% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+
+  73%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+}
+
+@keyframes thinking-dot-3 {
+  0%,
+  61% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+
+  71% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+
+  81%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
 }
 
 /* Luke's errand ---------------------------------------------------------- */
@@ -2587,6 +2772,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   .key-slot-confirm,
   .wing-mark,
   .wing-meter,
+  .wing-thinking,
   .sign-in-label,
   .session-row {
     transition-duration: 1ms;

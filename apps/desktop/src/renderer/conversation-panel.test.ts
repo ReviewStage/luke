@@ -282,6 +282,8 @@ test("a run still going draws Luke's turn at the tail, with no control of its ow
   assert.match(pending, /<\/li><li class="conversation-entry" data-speaker="luke" data-thinking/);
   assert.match(pending, /class="conversation-thinking"/);
   assert.match(pending, /data-motion="success" data-repeat="true"/);
+  // The dots are the shared drawing the notch strip rides beside the same hop.
+  assert.match(pending, /class="thinking-dots" aria-hidden="true"><i><\/i><i><\/i><i><\/i>/);
   assert.match(pending, new RegExp(`role="status">${CONVERSATION_THINKING_LABEL}`));
   assert.doesNotMatch(pending, /conversation-cancel|conversation-pending|Cancel/);
   // Under ten seconds the wait says nothing of its age; past it, how long.

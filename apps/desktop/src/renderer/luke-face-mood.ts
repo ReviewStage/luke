@@ -15,6 +15,12 @@ export interface FaceContext {
   speaking: boolean;
   microphoneLive: boolean;
   /**
+   * Whether a run of Luke's own is still going, read from the same records
+   * the Conversation tab draws its wait from, so the strip and the thread
+   * cannot disagree about whether Luke is thinking.
+   */
+  thinking: boolean;
+  /**
    * Whether announcements are held right now. A deterministic fact from the
    * main process — the developer's own announce switch off, or the clock against
    * observed meeting intervals — never anything a model decided.
@@ -97,6 +103,13 @@ export function faceYieldsToMeter(input: { turn?: SpeechTurn; hasAudioSignal: bo
 export function restingMotion(context: FaceContext): FaceMotion | undefined {
   if (context.speaking) return FACE_MOTION.TALKING;
   if (context.microphoneLive) return FACE_MOTION.LISTENING;
+  // A run still going is continuously true, which is what a rest is for — and
+  // it plays the same success hop, on repeat, that the Conversation tab's wait
+  // plays, so the two surfaces report one wait with one face. Below speech,
+  // because a spoken exchange already reads on the face turn by turn; above
+  // the sleeps, because a meeting holds announcements, never the developer's
+  // own ask, and a face asleep over a run it is working would be lying.
+  if (context.thinking) return FACE_MOTION.SUCCESS;
   // A meeting the calendar is holding announcements through. Sleeping is the
   // one visual report the hold makes — Luke is deliberately not speaking —
   // and it stays true for exactly as long as the meeting covers now, which is
@@ -110,6 +123,19 @@ export function restingMotion(context: FaceContext): FaceMotion | undefined {
   // empty desk he has not actually seen.
   if (context.total === 0 && context.settled) return FACE_MOTION.SLEEPING;
   return undefined;
+}
+
+/**
+ * Whether the wait's dots ride beside the face: only while the thinking rest
+ * is what actually holds it, decided from the same resting priority the face
+ * plays, so speech taking the face back takes the dots with it — and a face
+ * the meter or the gate displaced leaves no orphaned dots. Read from the
+ * context rather than from the played motion, because reduced motion plays
+ * nothing at all while the dots still stand, paused, the way the
+ * Conversation tab's do.
+ */
+export function thinkingDotsShown(context: FaceContext, faceDrawn: boolean): boolean {
+  return faceDrawn && context.thinking && restingMotion(context) === FACE_MOTION.SUCCESS;
 }
 
 /**

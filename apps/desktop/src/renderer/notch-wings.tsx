@@ -3,7 +3,14 @@ import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, peekWidth } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { errandOriginProps } from "./luke-errand";
-import { faceYieldsToMeter, speechFaceInputs, useFaceHover, useFaceMotion } from "./luke-face-mood";
+import {
+  type FaceContext,
+  faceYieldsToMeter,
+  speechFaceInputs,
+  thinkingDotsShown,
+  useFaceHover,
+  useFaceMotion,
+} from "./luke-face-mood";
 import { PANEL_PRESENTATION, type PanelPresentation } from "./panel-state";
 import type { ProviderTally, SessionTally } from "./session-model";
 import {
@@ -13,6 +20,7 @@ import {
   WING_SLOT_ID_ATTRIBUTE,
   WING_SPREAD_ATTRIBUTE,
 } from "./session-motion";
+import { ThinkingDots } from "./thinking-dots";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
 import { WAVEFORM_VOICE, Waveform, type WaveformVoice } from "./waveform";
 
@@ -44,6 +52,12 @@ interface NotchWingsProps {
   fixtureSpeaking: boolean;
   hasAudioSignal: boolean;
   voiceOpening: boolean;
+  /**
+   * Whether a run of Luke's is still going, read from the same records the
+   * Conversation tab draws its wait from, so the strip and the thread cannot
+   * disagree about whether Luke is thinking.
+   */
+  thinking: boolean;
   /** Whether announcements are held, by the announce switch off or a meeting — the face sleeps on it. */
   announcementsHeld: boolean;
   /**
@@ -127,6 +141,7 @@ export function NotchWings({
   fixtureSpeaking,
   hasAudioSignal,
   voiceOpening,
+  thinking,
   announcementsHeld,
   sessionsSettled,
   presentation,
@@ -153,24 +168,23 @@ export function NotchWings({
   // The box the hover is read against, not the face itself: the drawing is
   // remounted for every play, and the hover has to survive the trick it fires.
   const faceElement = useRef<HTMLSpanElement>(null);
-  const face = useFaceMotion(
-    {
-      ...speechFaceInputs({
-        ...(voice ? { turn: voice } : undefined),
-        hasAudioSignal,
-        fixtureSpeaking,
-        voiceActive,
-      }),
-      announcementsHeld,
-      settled: sessionsSettled,
-      attention: tally.attentionIds,
-      working: tally.working,
-      complete: tally.complete,
-      total: tally.total,
-    },
-    usePrefersReducedMotion(),
-    useFaceHover(faceElement),
-  );
+  const faceContext: FaceContext = {
+    ...speechFaceInputs({
+      ...(voice ? { turn: voice } : undefined),
+      hasAudioSignal,
+      fixtureSpeaking,
+      voiceActive,
+    }),
+    thinking,
+    announcementsHeld,
+    settled: sessionsSettled,
+    attention: tally.attentionIds,
+    working: tally.working,
+    complete: tally.complete,
+    total: tally.total,
+  };
+  const face = useFaceMotion(faceContext, usePrefersReducedMotion(), useFaceHover(faceElement));
+  const faceDrawn = !yieldToMeter && !accountGated;
 
   // The wing is bounded by the shape its state draws, so its capacity is too:
   // the panel's side holds more marks than the peek's, and every other state
@@ -235,6 +249,19 @@ export function NotchWings({
               />
             </span>
           )}
+          {/* The wait's dots, trailing outward from the face they ripple off:
+              the same three the Conversation bubble draws beside the same
+              repeating hop. Drawn only while the thinking rest is what holds
+              the face, so speech taking the face back takes them with it, and
+              the meter or the gate displacing the face leaves none orphaned.
+              The peek and the panel unfold their slot the way they unfold the
+              meter's; the capsule grows its own room for it, the way it grows
+              for Luke's reply meter. */}
+          {thinkingDotsShown(faceContext, faceDrawn) && (
+            <span className="wing-thinking">
+              <ThinkingDots />
+            </span>
+          )}
           {/* Luke himself. He is drawn in every state but one: he steps out of
               the way of your own voice, which is the only thing that displaces
               him.
@@ -244,7 +271,7 @@ export function NotchWings({
               replay it on being handed the same one. The wrapper is what the
               hover is measured against, so it holds still across those
               remounts — and hovering it is a moment the face reacts to. */}
-          {yieldToMeter || accountGated ? null : (
+          {faceDrawn ? (
             /* The wrapper is also where an errand sets off from, for the same
                reason the hover is measured against it: it holds still while a
                motion transforms layers inside the drawing, so a mark peeling
@@ -254,7 +281,7 @@ export function NotchWings({
             <span className="wing-face" ref={faceElement} {...errandOriginProps()}>
               <WingFace key={face.play} motion={face.motion} repeat={face.repeat} />
             </span>
-          )}
+          ) : null}
         </div>
       </div>
 
