@@ -282,7 +282,7 @@ test("discovers host-scoped projects and creates a workspace with a generated br
   const mutableCommands = commands as string[][];
   const cli = new SupersetCli({
     ...testCliOptions(home),
-    uniqueId: () => "deadbeef-0000-0000-0000-000000000000",
+    createId: () => "deadbeef-0000-0000-0000-000000000000",
     query: async (_executable, arguments_) => {
       if (arguments_[0] === "hosts") return "[]";
       if (arguments_[0] === "projects") {

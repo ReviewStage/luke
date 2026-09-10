@@ -9,6 +9,7 @@
  * a reader sees the whole rendering the tail it read produces.
  */
 
+import { BoundedMap } from "@sidecar/runtime/vocabulary";
 import {
   ACTION_RESULT_STATUS,
   OMISSION_MARKER,
@@ -153,7 +154,7 @@ export async function readRecordsSince(
 export class TranscriptPathCache {
   static readonly MAXIMUM_ENTRIES = 64;
 
-  readonly #paths = new Map<string, string>();
+  readonly #paths = new BoundedMap<string, string>(TranscriptPathCache.MAXIMUM_ENTRIES);
 
   async resolve(
     providerSessionId: string,
@@ -165,10 +166,6 @@ export class TranscriptPathCache {
     const located = await locate();
     if (located === undefined) return undefined;
     this.#paths.set(providerSessionId, located);
-    const oldest = this.#paths.keys().next();
-    if (this.#paths.size > TranscriptPathCache.MAXIMUM_ENTRIES && !oldest.done) {
-      this.#paths.delete(oldest.value);
-    }
     return located;
   }
 }

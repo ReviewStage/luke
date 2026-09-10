@@ -1,5 +1,5 @@
 import type { MaybePromise } from "@sidecar/runtime/vocabulary";
-import type { WireRecord, WireValue } from "@sidecar/wire";
+import { Emitter, type Event, type WireRecord, type WireValue } from "@sidecar/wire";
 import { NODE_CAPABILITY_STATUS, type NodeCapabilityResult } from "./protocol.js";
 
 export type NodeCapabilityHandler = (params: WireRecord) => MaybePromise<WireValue | undefined>;
@@ -35,8 +35,6 @@ export interface NodeSnapshot {
   connected: boolean;
 }
 
-export type NodeRegistryListener = (nodes: readonly NodeSnapshot[]) => void;
-
 /**
  * The nodes connected to the host and what each can do. A native capability
  * — opening an address on this machine, carrying an action to a panel — is the
@@ -49,7 +47,9 @@ export type NodeRegistryListener = (nodes: readonly NodeSnapshot[]) => void;
  */
 export class NodeRegistry {
   readonly #nodes = new Map<string, HeldNode>();
-  readonly #listeners = new Set<NodeRegistryListener>();
+  readonly #changes = new Emitter<readonly NodeSnapshot[]>();
+  /** Hears the whole registry whenever a node registers, disconnects, or comes back. */
+  readonly onChange: Event<readonly NodeSnapshot[]> = this.#changes.event;
 
   register(registration: NodeRegistration): void {
     this.#nodes.set(registration.nodeId, {
@@ -146,13 +146,6 @@ export class NodeRegistry {
     return provider.perform(capability, params);
   }
 
-  onChange(listener: NodeRegistryListener): () => void {
-    this.#listeners.add(listener);
-    return () => {
-      this.#listeners.delete(listener);
-    };
-  }
-
   #provider(capability: string): HeldNode | undefined {
     for (const node of this.#nodes.values()) {
       if (node.connected && node.capabilities.includes(capability)) return node;
@@ -169,8 +162,7 @@ export class NodeRegistry {
   }
 
   #changed(): void {
-    const nodes = this.list();
-    for (const listener of [...this.#listeners]) listener(nodes);
+    this.#changes.fire(this.list());
   }
 }
 

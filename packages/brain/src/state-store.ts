@@ -1,4 +1,5 @@
 import { checkpointFormatTag, type TranscriptEvent } from "@sidecar/runtime/vocabulary";
+import { Emitter, type Event } from "@sidecar/wire";
 import {
   BRAIN_STATE_VERSION,
   type BrainPersistedState,
@@ -58,7 +59,9 @@ export class BrainStateStore {
   #state: BrainPersistedState | undefined;
   #lease: BrainStoreLease | undefined;
   #queue: Promise<unknown> = Promise.resolve();
-  readonly #replacedListeners = new Set<(state: BrainPersistedState) => void>();
+  readonly #replaced = new Emitter<BrainPersistedState>();
+  /** Hears every replacement, expiry, or Clear, with the generation that now stands. */
+  readonly onReplaced: Event<BrainPersistedState> = this.#replaced.event;
 
   constructor(options: BrainStateStoreOptions) {
     this.automaticReset = options.automaticReset ?? false;
@@ -534,14 +537,6 @@ export class BrainStateStore {
     });
   }
 
-  /** Hears every replacement, expiry, or Clear, with the generation that now stands. */
-  onReplaced(listener: (state: BrainPersistedState) => void): () => void {
-    this.#replacedListeners.add(listener);
-    return () => {
-      this.#replacedListeners.delete(listener);
-    };
-  }
-
   /** Settles once every write queued so far has landed or been refused. */
   async flush(): Promise<void> {
     await this.#queue;
@@ -571,7 +566,7 @@ export class BrainStateStore {
   }
 
   #announceReplaced(state: BrainPersistedState): void {
-    for (const listener of [...this.#replacedListeners]) listener(state);
+    this.#replaced.fire(state);
   }
 
   async #persist(

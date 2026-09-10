@@ -132,9 +132,12 @@ hosted tier's Postgres store under `apps/web/server/hosted/store/` writes and
 reads the same rows the SQLite store does without resolving `node:sqlite`.
 
 `@sidecar/runtime/vocabulary` is the same rule at the bottom of the graph: the
-identities, the storage contracts, and the execution seams are Node-free, and
-the packages below the runtime import that door so the barrel's `node:fs`
-never reaches a renderer or a web function. Nothing is behind both
+identities, the storage contracts, the execution seams, and the two
+collections a layer keeps its bookkeeping in — `BoundedMap` for a cache that
+must not grow for as long as a process runs, `SingleFlight` for concurrent
+asks that are one run — are Node-free, and the packages below the runtime
+import that door so the barrel's `node:fs` never reaches a renderer or a web
+function. Nothing is behind both
 doors: the barrel re-exports no vocabulary name, so every symbol has exactly
 one way in.
 

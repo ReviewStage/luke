@@ -12,8 +12,8 @@ import type {
   ProviderTranscriptSinceResult,
   SessionIdentity,
 } from "@sidecar/session";
-import type { WireRecord } from "@sidecar/wire";
-import { AskLedger, type BrainRequestsListener } from "./asks.js";
+import type { IDisposable, WireRecord } from "@sidecar/wire";
+import { AskLedger } from "./asks.js";
 import { type BrainCompletionDelivery, ChildRuns } from "./children.js";
 import { BRAIN_DEFAULTS } from "./defaults.js";
 import {
@@ -57,7 +57,6 @@ import { type BrainOpeningNotes, TurnRunner } from "./turn-runner.js";
 import type { BrainDelivery, BrainTurnReport, BrainWakeEvent } from "./wake-events.js";
 import { type LookSubject, WakeCapture } from "./wakes.js";
 
-export type { BrainRequestsListener } from "./asks.js";
 export type { BrainCompletionDelivery } from "./children.js";
 export { BRAIN_DEFAULTS } from "./defaults.js";
 export type { BrainFlushInput, BrainFlushMarkerStore } from "./maintenance.js";
@@ -217,7 +216,7 @@ export class BrainAgent {
   #restored: Promise<void> | undefined;
   #queue: Promise<unknown> = Promise.resolve();
   #stopped = false;
-  #unsubscribeStore: (() => void) | undefined;
+  #storeReplacements: IDisposable | undefined;
   #incompatibleReported: string | undefined;
 
   constructor(options: BrainAgentOptions) {
@@ -327,7 +326,7 @@ export class BrainAgent {
       active: () => this.#turns.active(),
       turn: (plan) => this.#turns.turn(plan),
     });
-    this.#unsubscribeStore = options.store.onReplaced((state) => this.#adoptGeneration(state));
+    this.#storeReplacements = options.store.onReplaced((state) => this.#adoptGeneration(state));
   }
 
   /** The store lease this agent writes under, for a host to check who owns the store. */
@@ -394,7 +393,7 @@ export class BrainAgent {
   }
 
   /** Hears the whole list on every change to any record. */
-  subscribe(listener: BrainRequestsListener): () => void {
+  subscribe(listener: (records: readonly BrainRequestRecord[]) => void): IDisposable {
     return this.#asks.subscribe(listener);
   }
 
@@ -546,8 +545,8 @@ export class BrainAgent {
     this.#maintenance.cancel();
     this.#wakes.clear();
     const waiting = this.#asks.takeWaiting();
-    this.#unsubscribeStore?.();
-    this.#unsubscribeStore = undefined;
+    this.#storeReplacements?.dispose();
+    this.#storeReplacements = undefined;
     this.#generation?.abort.abort();
     this.#asks.abortAll();
     // An acceptance whose write is still out settles before the stop does:

@@ -60,6 +60,7 @@ import {
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import {
   ACTION_RESULT_STATUS,
+  type IDisposable,
   isRecord,
   isWireString,
   lateRef,
@@ -194,7 +195,7 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
 
   let spoolWatchers: readonly ObservationSpoolWatcher[] = [];
   const createdWorkspaceOpens = new CreatedWorkspaceOpenTracker();
-  let unsubscribeSessions: (() => void) | undefined;
+  let observedPasses: IDisposable | undefined;
   let lastWorkspaceProjects: string | undefined;
   let workspaceProjectsBroadcastGeneration = 0;
   let rosterBroadcast = false;
@@ -390,6 +391,7 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
 
   const sessionActions = createSessionActionPerformer({
     sessionRegistry,
+    createId: kernel.createId,
     openExternal: (url, kind) => kernel.openExternalThroughNode(url, kind),
     pluginFor,
     sendsNetwork: runMode.sendsNetwork,
@@ -573,8 +575,8 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
   }
 
   function startObservation(): void {
-    if (!runMode.observesProviders || !account.capabilitiesActive() || unsubscribeSessions) return;
-    unsubscribeSessions = sessionRegistry.subscribe((sessions) => {
+    if (!runMode.observesProviders || !account.capabilitiesActive() || observedPasses) return;
+    observedPasses = sessionRegistry.subscribe((sessions) => {
       broadcastSessions(sessions);
       openCreatedWorkspaces(sessions);
       void broadcastWorkspaceProjects();
@@ -584,8 +586,8 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
 
   function stopObservation(): void {
     workspaceProjectsBroadcastGeneration += 1;
-    unsubscribeSessions?.();
-    unsubscribeSessions = undefined;
+    observedPasses?.dispose();
+    observedPasses = undefined;
     for (const { plugin } of orderedRegistrations) {
       sessionRegistry.replaceProvider(plugin.provider, []);
     }
@@ -743,8 +745,8 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
       });
     },
     stop: async () => {
-      unsubscribeSessions?.();
-      unsubscribeSessions = undefined;
+      observedPasses?.dispose();
+      observedPasses = undefined;
       for (const watcher of spoolWatchers) watcher.close();
       spoolWatchers = [];
       supersetSignIn.shutdown();

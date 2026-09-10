@@ -1,3 +1,5 @@
+import { Emitter, type Event } from "@sidecar/wire";
+
 /**
  * Whether the hidden voice renderer can receive anything right now, as the
  * main process alone decides it. A BrowserWindow standing is not a receiver:
@@ -10,15 +12,17 @@
  * makes the receiver unready again; whatever was offered to the old epoch is
  * the caller's to reoffer once a new one reports.
  */
-export type VoiceReceiverListener = (epoch: number) => void;
-
 export class VoiceReceiver {
   #epoch = 0;
   /** Whether a renderer has been begun and not since ended; no report counts otherwise. */
   #open = false;
   #ready = false;
-  readonly #readyListeners = new Set<VoiceReceiverListener>();
-  readonly #resetListeners = new Set<VoiceReceiverListener>();
+  readonly #readied = new Emitter<number>();
+  readonly #reset = new Emitter<number>();
+  /** Hears the epoch that just became ready to receive. */
+  readonly onReady: Event<number> = this.#readied.event;
+  /** Hears every epoch ending, with the epoch that ended, after a reset or a new beginning. */
+  readonly onReset: Event<number> = this.#reset.event;
 
   /** Begins a new epoch for a renderer about to load, unready, and answers it. */
   begin(): number {
@@ -51,29 +55,14 @@ export class VoiceReceiver {
   markReady(epoch: number): boolean {
     if (!this.#open || epoch !== this.#epoch || this.#ready) return false;
     this.#ready = true;
-    for (const listener of [...this.#readyListeners]) listener(epoch);
+    this.#readied.fire(epoch);
     return true;
-  }
-
-  onReady(listener: VoiceReceiverListener): () => void {
-    this.#readyListeners.add(listener);
-    return () => {
-      this.#readyListeners.delete(listener);
-    };
-  }
-
-  /** Hears every epoch ending, with the epoch that ended, after a reset or a new beginning. */
-  onReset(listener: VoiceReceiverListener): () => void {
-    this.#resetListeners.add(listener);
-    return () => {
-      this.#resetListeners.delete(listener);
-    };
   }
 
   #end(): void {
     const ended = this.#epoch;
     this.#open = false;
     this.#ready = false;
-    for (const listener of [...this.#resetListeners]) listener(ended);
+    this.#reset.fire(ended);
   }
 }

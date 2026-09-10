@@ -1,3 +1,4 @@
+import { Emitter, type Event, type IDisposable, toDisposable } from "@sidecar/wire";
 import {
   InvocationMemory,
   NODE_INVOCATION_REFUSAL,
@@ -29,10 +30,10 @@ export type GatewayEventSink = (event: GatewayEvent) => void;
  */
 export interface GatewayTransport {
   request(request: GatewayRequest): Promise<GatewayResponse>;
-  events(sink: GatewayEventSink): () => void;
+  events(sink: GatewayEventSink): IDisposable;
   connected(): boolean;
   /** Serves the host's invocations of this client's node capabilities, deduped by id before anything native runs. */
-  serveInvocations?(handler: NodeInvocationHandler): () => void;
+  serveInvocations?(handler: NodeInvocationHandler): IDisposable;
 }
 
 /**
@@ -46,7 +47,7 @@ export interface GatewayTransport {
 export interface GatewayHostConnection {
   connectionId: string;
   invoke(invocation: NodeInvocation): Promise<NodeCapabilityResult>;
-  onClosed(listener: () => void): () => void;
+  onClosed: Event<void>;
 }
 
 /**
@@ -61,10 +62,10 @@ export abstract class ServerBoundTransport implements GatewayTransport {
   protected readonly identity: GatewayClientIdentity;
   /** This transport as the host sees it: the connection its requests arrive on and its node is asked through. */
   protected readonly hostConnection: GatewayHostConnection;
-  readonly #sinks = new Set<GatewayEventSink>();
-  readonly #closedListeners = new Set<() => void>();
+  readonly #sinks = new Emitter<GatewayEvent>();
+  readonly #closed = new Emitter<void>();
   #memory: InvocationMemory | undefined;
-  #unsubscribe: (() => void) | undefined;
+  #serverEvents: IDisposable | undefined;
   #connected = true;
   static #connections = 0;
 
@@ -75,21 +76,16 @@ export abstract class ServerBoundTransport implements GatewayTransport {
     this.hostConnection = {
       connectionId: `in-process-${ServerBoundTransport.#connections}`,
       invoke: (invocation) => this.#invoke(invocation),
-      onClosed: (listener) => {
-        this.#closedListeners.add(listener);
-        return () => {
-          this.#closedListeners.delete(listener);
-        };
-      },
+      onClosed: this.#closed.event,
     };
   }
 
-  serveInvocations(handler: NodeInvocationHandler): () => void {
+  serveInvocations(handler: NodeInvocationHandler): IDisposable {
     const memory = new InvocationMemory(handler);
     this.#memory = memory;
-    return () => {
+    return toDisposable(() => {
       if (this.#memory === memory) this.#memory = undefined;
-    };
+    });
   }
 
   async #invoke(invocation: NodeInvocation): Promise<NodeCapabilityResult> {
@@ -110,12 +106,10 @@ export abstract class ServerBoundTransport implements GatewayTransport {
     return this.carryRequest(request);
   }
 
-  events(sink: GatewayEventSink): () => void {
-    this.#sinks.add(sink);
-    this.#unsubscribe ??= this.server.subscribe((event) => this.carryEvent(event));
-    return () => {
-      this.#sinks.delete(sink);
-    };
+  events(sink: GatewayEventSink): IDisposable {
+    const subscription = this.#sinks.event(sink);
+    this.#serverEvents ??= this.server.subscribe((event) => this.carryEvent(event));
+    return subscription;
   }
 
   connected(): boolean {
@@ -130,16 +124,16 @@ export abstract class ServerBoundTransport implements GatewayTransport {
   /** Ends the transport for good: no request answers, no event is delivered, and the host hears the connection close. */
   close(): void {
     this.#connected = false;
-    this.#unsubscribe?.();
-    this.#unsubscribe = undefined;
-    this.#sinks.clear();
-    for (const listener of [...this.#closedListeners]) listener();
-    this.#closedListeners.clear();
+    this.#serverEvents?.dispose();
+    this.#serverEvents = undefined;
+    this.#sinks.dispose();
+    this.#closed.fire();
+    this.#closed.dispose();
   }
 
   /** Hands one event, already carried across, to every sink. */
   protected deliver(event: GatewayEvent): void {
-    for (const held of [...this.#sinks]) held(event);
+    this.#sinks.fire(event);
   }
 
   /** Carries a request the connected transport admitted to the server and answers what came back. */

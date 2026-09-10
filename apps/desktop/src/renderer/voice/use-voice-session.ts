@@ -153,7 +153,13 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   const audioContext = useRef<AudioContext | undefined>(undefined);
 
   const { meterStream, remoteStream } = useSyncExternalStore(
-    useMemo(() => orchestrator.subscribe.bind(orchestrator), [orchestrator]),
+    useMemo(
+      () => (onStoreChange: () => void) => {
+        const subscription = orchestrator.subscribe(onStoreChange);
+        return () => subscription.dispose();
+      },
+      [orchestrator],
+    ),
     useMemo(() => orchestrator.snapshot.bind(orchestrator), [orchestrator]),
   );
 

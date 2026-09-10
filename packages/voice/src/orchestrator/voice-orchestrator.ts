@@ -11,7 +11,7 @@ import {
   voiceExchangeActive,
 } from "@sidecar/realtime";
 import type { SpeechOffer } from "@sidecar/realtime/speech";
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
+import type { CreateId, ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import {
   announcementConversationEntry,
   type ConversationEntry,
@@ -21,7 +21,7 @@ import {
   type Session,
 } from "@sidecar/session";
 import { TALK_KEY_RELEASE, talkKeyRelease, voiceHotkeyLabel } from "@sidecar/settings";
-import type { WireRecord } from "@sidecar/wire";
+import { Emitter, type Event, type WireRecord } from "@sidecar/wire";
 import { askBrain } from "./brain-ask.js";
 import { ConversationThread } from "./conversation-thread.js";
 import { NoticeStrip } from "./notice-strip.js";
@@ -155,7 +155,7 @@ export interface VoiceOrchestratorDeps<Stream> {
   elapsed?: () => number;
   schedule?: (callback: () => void, delayMs: number) => ScheduledTimer;
   cancel?: (timer: ScheduledTimer) => void;
-  newEventId?: () => string;
+  createEventId?: CreateId;
 }
 
 /**
@@ -177,7 +177,9 @@ export class VoiceOrchestrator<Stream> {
   readonly #strip: NoticeStrip;
   /** What leaves for every panel to draw, and the rules about when. */
   readonly #reporter: VoiceViewReporter;
-  readonly #listeners = new Set<(state: VoiceState<Stream>) => void>();
+  readonly #states = new Emitter<VoiceState<Stream>>();
+  /** Hears the streams the surface draws, whenever either changes. */
+  readonly subscribe: Event<VoiceState<Stream>> = this.#states.event;
 
   #surroundings: VoiceSurroundings = NO_SURROUNDINGS;
   /**
@@ -251,18 +253,11 @@ export class VoiceOrchestrator<Stream> {
       now: deps.now,
       schedule: deps.schedule,
       cancel: deps.cancel,
-      newEventId: deps.newEventId,
+      createEventId: deps.createEventId,
     });
   }
 
   // — what the surface reads —
-
-  subscribe(listener: (state: VoiceState<Stream>) => void): () => void {
-    this.#listeners.add(listener);
-    return () => {
-      this.#listeners.delete(listener);
-    };
-  }
 
   snapshot(): VoiceState<Stream> {
     return this.#state;
@@ -890,7 +885,7 @@ export class VoiceOrchestrator<Stream> {
       return;
     }
     this.#state = { meterStream, remoteStream: this.#remoteStream };
-    for (const listener of [...this.#listeners]) listener(this.#state);
+    this.#states.fire(this.#state);
   }
 
   #view(): VoiceViewReport {

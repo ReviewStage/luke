@@ -1,5 +1,5 @@
-import type { MaybePromise } from "@sidecar/runtime/vocabulary";
-import { isWireNumber, type WireRecord, type WireValue } from "@sidecar/wire";
+import { BoundedMap, type MaybePromise } from "@sidecar/runtime/vocabulary";
+import { Emitter, type Event, isWireNumber, type WireRecord, type WireValue } from "@sidecar/wire";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_ERROR,
@@ -75,8 +75,6 @@ interface IdempotentAnswer {
   answer: Promise<GatewayMethodOutcome>;
 }
 
-export type GatewayEventListener = (event: GatewayEvent) => void;
-
 /** The methods a node may call: to offer itself and to be told what it owes; everything else is the operator's. */
 const NODE_METHODS: ReadonlySet<GatewayMethod> = new Set<GatewayMethod>([
   GATEWAY_METHOD.HELLO,
@@ -100,9 +98,11 @@ export class GatewayServer {
   readonly #options: GatewayServerOptions;
   /** The host's handlers, with the two the protocol itself answers: hello and reconnect are the server's own. */
   readonly #methods: GatewayMethodTable;
-  readonly #idempotent = new Map<GatewayMethod, Map<string, IdempotentAnswer>>();
+  readonly #idempotent = new Map<GatewayMethod, BoundedMap<string, IdempotentAnswer>>();
   readonly #events: GatewayEvent[] = [];
-  readonly #listeners = new Set<GatewayEventListener>();
+  readonly #published = new Emitter<GatewayEvent>();
+  /** Hears every event the server emits, in the sequence it numbered them. */
+  readonly subscribe: Event<GatewayEvent> = this.#published.event;
   #sequence = 0;
   #admitting = true;
 
@@ -170,15 +170,8 @@ export class GatewayServer {
     this.#events.push(event);
     const window = this.#options.replayWindow ?? GATEWAY_SERVER_DEFAULTS.REPLAY_WINDOW;
     if (this.#events.length > window) this.#events.splice(0, this.#events.length - window);
-    for (const listener of [...this.#listeners]) listener(event);
+    this.#published.fire(event);
     return event;
-  }
-
-  subscribe(listener: GatewayEventListener): () => void {
-    this.#listeners.add(listener);
-    return () => {
-      this.#listeners.delete(listener);
-    };
   }
 
   /**
@@ -300,7 +293,11 @@ export class GatewayServer {
         .catch((error: Error) => gatewayError(GATEWAY_ERROR.INTERNAL, error.message));
     const key = request.idempotencyKey;
     if (key === undefined || !isMutatingGatewayMethod(request.method)) return run();
-    const ledger = this.#idempotent.get(request.method) ?? new Map<string, IdempotentAnswer>();
+    const ledger =
+      this.#idempotent.get(request.method) ??
+      new BoundedMap<string, IdempotentAnswer>(
+        this.#options.idempotencyCapacity ?? GATEWAY_SERVER_DEFAULTS.IDEMPOTENCY_CAPACITY,
+      );
     this.#idempotent.set(request.method, ledger);
     const paramsText = JSON.stringify(request.params);
     const held = ledger.get(key);
@@ -317,12 +314,6 @@ export class GatewayServer {
     }
     const answer = run();
     ledger.set(key, { paramsText, answer });
-    const capacity =
-      this.#options.idempotencyCapacity ?? GATEWAY_SERVER_DEFAULTS.IDEMPOTENCY_CAPACITY;
-    if (ledger.size > capacity) {
-      const oldest = ledger.keys().next().value;
-      if (oldest !== undefined) ledger.delete(oldest);
-    }
     return answer;
   }
 

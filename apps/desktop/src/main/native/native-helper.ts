@@ -1,5 +1,6 @@
 import { type StdioOptions, spawn } from "node:child_process";
 import path from "node:path";
+import { Emitter, type Event } from "@sidecar/wire";
 import { app } from "electron";
 
 export interface NativeHelperProcess {
@@ -47,22 +48,18 @@ export function nativeHelperPath(binary: string): string {
  */
 export class NativeHelper {
   readonly #options: NativeHelperOptions;
-  readonly #lineListeners = new Set<(line: string) => void>();
-  readonly #exitListeners = new Set<() => void>();
+  readonly #lines = new Emitter<string>();
+  readonly #exits = new Emitter<void>();
+  /** Hears each complete line the helper wrote, trimmed of its newline. */
+  readonly onLine: Event<string> = this.#lines.event;
+  /** Hears the one ending: an exit, a spawn failure, or a broken pipe, whichever came first. */
+  readonly onExit: Event<void> = this.#exits.event;
   #child: NativeHelperProcess | undefined;
   #buffer = "";
   #ended = false;
 
   constructor(options: NativeHelperOptions) {
     this.#options = options;
-  }
-
-  onLine(listener: (line: string) => void): void {
-    this.#lineListeners.add(listener);
-  }
-
-  onExit(listener: () => void): void {
-    this.#exitListeners.add(listener);
   }
 
   start(): boolean {
@@ -146,8 +143,7 @@ export class NativeHelper {
     const lines = this.#buffer.split("\n");
     this.#buffer = lines.pop() ?? "";
     for (const line of lines) {
-      const trimmed = line.trim();
-      for (const listener of this.#lineListeners) listener(trimmed);
+      this.#lines.fire(line.trim());
     }
   }
 
@@ -159,7 +155,7 @@ export class NativeHelper {
     this.#buffer = "";
     this.#ended = true;
     this.#child = undefined;
-    for (const listener of this.#exitListeners) listener();
+    this.#exits.fire();
   }
 
   #detach(): NativeHelperProcess | undefined {

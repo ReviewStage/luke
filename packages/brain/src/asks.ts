@@ -6,6 +6,7 @@ import {
 } from "@sidecar/runtime";
 import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import { CONTEXT_INPUT_KIND } from "@sidecar/runtime/vocabulary";
+import { Emitter, type Event } from "@sidecar/wire";
 import { CONTEXT_OPENING, type Generation } from "./generation.js";
 import { askInputText } from "./input-items.js";
 import {
@@ -21,8 +22,6 @@ import type { AgentSeam } from "./seam.js";
 import type { BrainStateStore } from "./state-store.js";
 import { BRAIN_TURN_TRIGGER, type RunControl } from "./turn.js";
 import { type ActiveExecution, type AskInput, newRunControl } from "./turn-runner.js";
-
-export type BrainRequestsListener = (records: readonly BrainRequestRecord[]) => void;
 
 /** A pending submission, held so a retry of the same id awaits the same durable answer. */
 interface PendingSubmission {
@@ -58,7 +57,9 @@ export class AskLedger {
   readonly #seam: AgentSeam;
   readonly #runs = new Map<string, RunControl>();
   readonly #pendingSubmissions = new Map<string, PendingSubmission>();
-  readonly #listeners = new Set<BrainRequestsListener>();
+  readonly #changes = new Emitter<readonly BrainRequestRecord[]>();
+  /** Hears the whole list on every change to any record. */
+  readonly subscribe: Event<readonly BrainRequestRecord[]> = this.#changes.event;
   /** Where an ask that arrives while this conversation is busy waits, under the queue's own mode and bounds. */
   readonly #queue: PendingInputQueue;
   /**
@@ -120,10 +121,9 @@ export class AskLedger {
     );
   }
 
-  /** Hears the whole list on every change to any record. */
+  /** Hands the whole list to every listener, on every change to any record. */
   notify(): void {
-    const records = this.records();
-    for (const listener of [...this.#listeners]) listener(records);
+    this.#changes.fire(this.records());
   }
 
   /** Every acknowledged run this generation holds, oldest acceptance first. */
@@ -140,14 +140,6 @@ export class AskLedger {
     if (!generation || generation.provisional.has(runId)) return undefined;
     const record = generation.requests.get(runId);
     return record ? { ...record } : undefined;
-  }
-
-  /** Hears the whole list on every change to any record. */
-  subscribe(listener: BrainRequestsListener): () => void {
-    this.#listeners.add(listener);
-    return () => {
-      this.#listeners.delete(listener);
-    };
   }
 
   /**
@@ -437,11 +429,11 @@ export class AskLedger {
     return new Promise((resolve) => {
       let timer: ScheduledTimer | undefined;
       const finish = () => {
-        unsubscribe();
+        subscription.dispose();
         if (timer !== undefined) this.#seam.cancel(timer);
         resolve(this.record(runId));
       };
-      const unsubscribe = this.subscribe(() => {
+      const subscription = this.subscribe(() => {
         const current = this.record(runId);
         if (!current || isTerminalBrainRequestStatus(current.status)) finish();
       });

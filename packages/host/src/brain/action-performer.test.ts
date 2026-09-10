@@ -107,7 +107,9 @@ function performer(overrides: Partial<BrainActionPerformerDependencies> = {}) {
   const recorded: ConversationEntry[] = [];
   const appActions: BrainAppActionRequest["action"][] = [];
   let facts: readonly RememberedFact[] = [];
+  let ids = 0;
   const dependencies: BrainActionPerformerDependencies = {
+    createId: () => `fact-${++ids}`,
     sessionActions: {
       perform: async (action) => {
         performed.push(action);

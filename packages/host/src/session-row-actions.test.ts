@@ -84,6 +84,7 @@ function fixture() {
   };
   const performer = createSessionActionPerformer({
     sessionRegistry: registry,
+    createId: () => "press-nonce",
     openExternal: async () => {},
     pluginFor: (providerId) => (providerId === PROVIDER.id ? plugin : undefined),
     sendsNetwork: true,

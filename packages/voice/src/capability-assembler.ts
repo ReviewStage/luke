@@ -15,6 +15,7 @@ import {
   VOICE_SOURCE,
   type VoiceSource,
 } from "@sidecar/settings";
+import { Emitter, type Event } from "@sidecar/wire";
 import { openAiRealtimeCredentials, unavailableRealtimeDiagnostics } from "./openai-credentials.js";
 import { hostedRealtimeCredentialMinter, type RealtimeCredentialMinter } from "./service-mint.js";
 
@@ -105,7 +106,13 @@ export class VoiceCapabilityAssembler {
   #unavailableDiagnostics: RealtimeDiagnostics;
   #voiceSource: VoiceSource = VOICE_SOURCE.ACCOUNT;
   #applications = 0;
-  readonly #applied = new Set<() => void>();
+  readonly #applied = new Emitter<void>();
+  /**
+   * Hears every application that published, after its capability set stands,
+   * so a reader of the adapters can follow a credential change without
+   * polling.
+   */
+  readonly onApplied: Event<void> = this.#applied.event;
 
   constructor(options: VoiceCapabilityAssemblerOptions) {
     this.#options = options;
@@ -136,18 +143,6 @@ export class VoiceCapabilityAssembler {
    */
   get embeddingAdapter(): EmbeddingAdapter | undefined {
     return this.#embeddingAdapter;
-  }
-
-  /**
-   * Hears every application that published, after its capability set stands,
-   * so a reader of the adapters can follow a credential change without
-   * polling. Answers the unsubscribe.
-   */
-  onApplied(listener: () => void): () => void {
-    this.#applied.add(listener);
-    return () => {
-      this.#applied.delete(listener);
-    };
   }
 
   get realtimeCredentials(): RealtimeCredentialMinter | undefined {
@@ -233,7 +228,7 @@ export class VoiceCapabilityAssembler {
     this.#voiceSource = policy.source;
     if (policy.useHosted) this.#warmHostedVoice();
     this.#report(apiKey !== undefined);
-    for (const listener of this.#applied) listener();
+    this.#applied.fire();
     return { latest: true, isCurrent };
   }
 

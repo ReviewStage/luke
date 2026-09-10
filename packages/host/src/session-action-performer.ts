@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   ACTION_KIND,
   ACTION_REFUSAL,
@@ -29,6 +28,7 @@ import {
   type SupersetSessionContext,
   supersetPressedLink,
 } from "@sidecar/providers";
+import type { CreateId } from "@sidecar/runtime/vocabulary";
 import {
   dispatchAction,
   ExternalOpenAnswerLostError,
@@ -76,6 +76,7 @@ function unknownOpen(error: ExternalOpenAnswerLostError): SessionOpenResult {
  */
 export interface SessionActionPerformerDependencies {
   sessionRegistry: SessionRoster;
+  createId: CreateId;
   /**
    * Hands an address to the operating system through the native node, told
    * what the address is: a row's press has already stood its panel down, and
@@ -163,6 +164,7 @@ export function createSessionActionPerformer(
 ): SessionActionPerformer {
   const {
     sessionRegistry,
+    createId,
     openExternal,
     pluginFor,
     sendsNetwork,
@@ -233,7 +235,7 @@ export function createSessionActionPerformer(
   // focus once per request id, so a nonce composed at observation time would
   // be spent by the first press and dead for every later one.
   const pressedLink = (link: string | undefined): string | undefined =>
-    link === undefined ? undefined : supersetPressedLink(link, randomUUID());
+    link === undefined ? undefined : supersetPressedLink(link, createId());
 
   const countOpen = (identity: SessionIdentity) => {
     if (isProviderId(identity.providerId)) {

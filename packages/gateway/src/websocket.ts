@@ -3,7 +3,15 @@ import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
 import { isIdentifier } from "@sidecar/runtime/vocabulary";
-import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import {
+  Emitter,
+  type Event,
+  type IDisposable,
+  isRecord,
+  isWireString,
+  toDisposable,
+  type UnparsedWireValue,
+} from "@sidecar/wire";
 import { WebSocket, WebSocketServer } from "ws";
 import {
   InvocationMemory,
@@ -105,7 +113,8 @@ interface AdmittedClient {
   /** The asks out on this socket; closed with it, so every unanswered ask reads unavailable and uncertain. */
   pending: PendingInvocations;
   connection: GatewayHostConnection;
-  closedListeners: Set<() => void>;
+  /** Fired once when this client's socket closes, so every node registered on it is marked disconnected. */
+  closed: Emitter<void>;
 }
 
 type HandshakeDecision =
@@ -161,8 +170,10 @@ export class WebSocketTransport {
   readonly #clients = new Map<WebSocket, AdmittedClient>();
   /** The raw sockets whose credential is still being checked; `ws` owns none of them yet. */
   readonly #handshaking = new Set<Duplex>();
-  readonly #closedListeners = new Set<(client: GatewayClientIdentity) => void>();
-  #unsubscribe: (() => void) | undefined;
+  readonly #clientClosed = new Emitter<GatewayClientIdentity>();
+  /** Hears every admitted socket close, with the identity it was admitted under. */
+  readonly onClientClosed: Event<GatewayClientIdentity> = this.#clientClosed.event;
+  #serverEvents: IDisposable | undefined;
   #admitting = true;
   #connections = 0;
 
@@ -193,7 +204,7 @@ export class WebSocketTransport {
         this.#http.off("error", reject);
         // SAFETY: a TCP server that is listening answers an AddressInfo, never a pipe path.
         const address = this.#http.address() as AddressInfo;
-        this.#unsubscribe = this.#options.server.subscribe((event) => {
+        this.#serverEvents = this.#options.server.subscribe((event) => {
           const frame = JSON.stringify({
             kind: GATEWAY_FRAME.EVENT,
             envelope: eventToWire(event),
@@ -211,14 +222,6 @@ export class WebSocketTransport {
     return this.#clients.size;
   }
 
-  /** Hears every admitted socket close, with the identity it was admitted under. */
-  onClientClosed(listener: (client: GatewayClientIdentity) => void): () => void {
-    this.#closedListeners.add(listener);
-    return () => {
-      this.#closedListeners.delete(listener);
-    };
-  }
-
   /** Refuses every new connection from here on and closes the server's own door to mutations. */
   closeAdmissions(): void {
     this.#admitting = false;
@@ -227,8 +230,8 @@ export class WebSocketTransport {
 
   async close(): Promise<void> {
     this.#admitting = false;
-    this.#unsubscribe?.();
-    this.#unsubscribe = undefined;
+    this.#serverEvents?.dispose();
+    this.#serverEvents = undefined;
     for (const socket of [...this.#clients.keys()]) socket.close(1001, "the host is leaving");
     this.#clients.clear();
     // A socket whose credential is still being checked belongs to nobody
@@ -305,12 +308,7 @@ export class WebSocketTransport {
         );
         return answered;
       },
-      onClosed: (listener) => {
-        client.closedListeners.add(listener);
-        return () => {
-          client.closedListeners.delete(listener);
-        };
-      },
+      onClosed: client.closed.event,
     };
   }
 
@@ -333,7 +331,7 @@ export class WebSocketTransport {
       admitted: {
         identity: authenticated.admitted,
         pending: new PendingInvocations(),
-        closedListeners: new Set(),
+        closed: new Emitter(),
       },
     };
   }
@@ -372,9 +370,9 @@ export class WebSocketTransport {
       // reads unavailable before it hears the connection is gone and marks
       // the node disconnected.
       client.pending.close();
-      for (const listener of [...client.closedListeners]) listener();
-      client.closedListeners.clear();
-      for (const listener of [...this.#closedListeners]) listener(client.identity);
+      client.closed.fire();
+      client.closed.dispose();
+      this.#clientClosed.fire(client.identity);
     });
     socket.on("error", (error) => {
       this.#options.report?.(`a Gateway client socket failed: ${error.message}`);
@@ -466,8 +464,10 @@ function disconnected(id: string): GatewayResponse {
 export class WebSocketGatewayConnection implements GatewayTransport {
   readonly #socket: WebSocket;
   readonly #pending = new Map<string, (response: GatewayResponse) => void>();
-  readonly #sinks = new Set<GatewayEventSink>();
-  readonly #closedListeners = new Set<() => void>();
+  readonly #sinks = new Emitter<GatewayEvent>();
+  readonly #closed = new Emitter<void>();
+  /** Hears this connection's socket close, however it closed. */
+  readonly onClosed: Event<void> = this.#closed.event;
   #memory: InvocationMemory | undefined;
   #open = true;
 
@@ -477,8 +477,8 @@ export class WebSocketGatewayConnection implements GatewayTransport {
       if (isBinary) return;
       this.#take(data.toString());
     });
-    socket.on("close", () => this.#closed());
-    socket.on("error", () => this.#closed());
+    socket.on("close", () => this.#settleClosed());
+    socket.on("error", () => this.#settleClosed());
   }
 
   request(request: GatewayRequest): Promise<GatewayResponse> {
@@ -501,11 +501,8 @@ export class WebSocketGatewayConnection implements GatewayTransport {
     });
   }
 
-  events(sink: GatewayEventSink): () => void {
-    this.#sinks.add(sink);
-    return () => {
-      this.#sinks.delete(sink);
-    };
+  events(sink: GatewayEventSink): IDisposable {
+    return this.#sinks.event(sink);
   }
 
   connected(): boolean {
@@ -518,25 +515,18 @@ export class WebSocketGatewayConnection implements GatewayTransport {
    * invocation arriving while no handler is served is answered unavailable,
    * so the host never waits on a node that is not there.
    */
-  serveInvocations(handler: NodeInvocationHandler): () => void {
+  serveInvocations(handler: NodeInvocationHandler): IDisposable {
     const memory = new InvocationMemory(handler);
     this.#memory = memory;
-    return () => {
+    return toDisposable(() => {
       if (this.#memory === memory) this.#memory = undefined;
-    };
-  }
-
-  onClosed(listener: () => void): () => void {
-    this.#closedListeners.add(listener);
-    return () => {
-      this.#closedListeners.delete(listener);
-    };
+    });
   }
 
   close(): void {
     if (!this.#open) return;
     this.#socket.close(1000, "the client is leaving");
-    this.#closed();
+    this.#settleClosed();
   }
 
   #take(text: string): void {
@@ -561,7 +551,7 @@ export class WebSocketGatewayConnection implements GatewayTransport {
     if (kind === GATEWAY_FRAME.EVENT) {
       const event: GatewayEvent | undefined = gatewayEventFromWire(envelope);
       if (!event) return;
-      for (const sink of [...this.#sinks]) sink(event);
+      this.#sinks.fire(event);
       return;
     }
     if (kind === GATEWAY_FRAME.INVOCATION) {
@@ -588,14 +578,15 @@ export class WebSocketGatewayConnection implements GatewayTransport {
     );
   }
 
-  #closed(): void {
+  /** Settles every ask still out, tells whoever is holding this connection, and delivers nothing further. */
+  #settleClosed(): void {
     if (!this.#open) return;
     this.#open = false;
     for (const [id, resolve] of this.#pending) resolve(disconnected(id));
     this.#pending.clear();
-    for (const listener of [...this.#closedListeners]) listener();
-    this.#closedListeners.clear();
-    this.#sinks.clear();
+    this.#closed.fire();
+    this.#closed.dispose();
+    this.#sinks.dispose();
   }
 }
 

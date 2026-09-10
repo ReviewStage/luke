@@ -185,7 +185,7 @@ export function followBrainRequests(
       ),
     );
   };
-  const unsubscribe = agent.subscribe(listener);
+  const subscription = agent.subscribe(listener);
   void agent.ready().then(() => listener(agent.requests()));
   // Unfollowing takes no more reports at once, but lets the ones already
   // taken finish: the stop that retires an agent reports every run it
@@ -194,7 +194,7 @@ export function followBrainRequests(
   // so the drain is bounded by the reports already queued.
   return async () => {
     accepting = false;
-    unsubscribe();
+    subscription.dispose();
     await publishing;
     following = false;
   };

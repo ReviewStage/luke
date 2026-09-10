@@ -1,9 +1,8 @@
+import { Emitter, type Event } from "@sidecar/wire";
 import { normalizeSession, normalizeSessionIdentity } from "./normalize.js";
 import type { SessionProviderPlugin } from "./provider-plugin.js";
 import type { SessionIdentity, SessionProvider } from "./session-identity.js";
 import type { ProviderSessionObservation, Session } from "./session-shape.js";
-
-export type SessionRosterListener = (sessions: readonly Session[]) => void;
 
 type SessionObservationTransform = (
   providerId: string,
@@ -29,7 +28,9 @@ function normalizedProviderId(provider: SessionProvider): string {
  */
 export class SessionRoster {
   #sessions = new Map<string, ProviderSessions>();
-  #listeners = new Set<SessionRosterListener>();
+  readonly #passes = new Emitter<readonly Session[]>();
+  /** Hears every pass, whether or not anything moved; what is new is the reader's own to notice. */
+  readonly subscribe: Event<readonly Session[]> = this.#passes.event;
 
   get(identity: SessionIdentity): Session | undefined {
     const normalizedIdentity = normalizeSessionIdentity(identity);
@@ -48,11 +49,6 @@ export class SessionRoster {
           first.providerId.localeCompare(second.providerId) ||
           first.providerSessionId.localeCompare(second.providerSessionId),
       );
-  }
-
-  subscribe(listener: SessionRosterListener): () => void {
-    this.#listeners.add(listener);
-    return () => this.#listeners.delete(listener);
   }
 
   /**
@@ -79,7 +75,7 @@ export class SessionRoster {
     if (replacement.size === 0) this.#sessions.delete(providerId);
     else this.#sessions.set(providerId, replacement);
     const sessions = this.list();
-    for (const listener of this.#listeners) listener(sessions);
+    this.#passes.fire(sessions);
     return sessions;
   }
 

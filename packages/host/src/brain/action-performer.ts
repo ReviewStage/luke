@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   ACTION_KIND,
   ACTION_REFUSAL,
@@ -14,7 +13,7 @@ import {
 import type { BrainActionExecution, BrainActionPerformer } from "@sidecar/brain";
 import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
 import type { AppGuideSnapshot } from "@sidecar/guide";
-import { isRunOrigin, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
+import { type CreateId, isRunOrigin, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import type { TrackedIssue } from "@sidecar/session";
 import {
   CONVERSATION_ENTRY_KIND,
@@ -40,6 +39,7 @@ export interface BrainNotebookWriter {
 
 export interface BrainActionPerformerDependencies {
   sessionActions: SessionActionPerformer;
+  createId: CreateId;
   /** The roster as the brain was shown it: every observed session still worth a row. */
   sessions: () => readonly Session[];
   /**
@@ -173,7 +173,7 @@ export function createBrainActionPerformer(
       return dispatchByKind(admitted, {
         [ACTION_KIND.REMEMBER]: async (action) =>
           (await dependencies.notebook.remember({
-            id: randomUUID(),
+            id: dependencies.createId(),
             words: action.words,
             ...(action.replaces !== undefined ? { replaces: action.replaces } : undefined),
           }))

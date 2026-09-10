@@ -1,4 +1,5 @@
 import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
+import type { IDisposable } from "@sidecar/wire";
 import { type BrainPersistedState, brainGenerationExpired } from "./envelope.js";
 import type { BrainStateStore } from "./state-store.js";
 
@@ -28,7 +29,7 @@ export class BrainGenerationClock {
   readonly #schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
   readonly #cancel: (timer: ScheduledTimer) => void;
   #timer: ScheduledTimer | undefined;
-  #unsubscribe: (() => void) | undefined;
+  #replacements: IDisposable | undefined;
   #stopped = false;
 
   constructor(options: BrainGenerationClockOptions) {
@@ -46,7 +47,7 @@ export class BrainGenerationClock {
 
   /** Loads the store, arms the timer for the generation that stands, and follows every replacement. */
   async start(): Promise<void> {
-    this.#unsubscribe ??= this.#store.onReplaced((state) => this.#arm(state));
+    this.#replacements ??= this.#store.onReplaced((state) => this.#arm(state));
     const state = await this.#store.load();
     if (!this.#stopped) this.#arm(this.#store.current() ?? state);
   }
@@ -54,8 +55,8 @@ export class BrainGenerationClock {
   stop(): void {
     this.#stopped = true;
     this.#disarm();
-    this.#unsubscribe?.();
-    this.#unsubscribe = undefined;
+    this.#replacements?.dispose();
+    this.#replacements = undefined;
   }
 
   #arm(state: BrainPersistedState): void {

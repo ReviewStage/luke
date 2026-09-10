@@ -1,3 +1,4 @@
+import { BoundedMap, SingleFlight } from "@sidecar/runtime/vocabulary";
 import {
   NODE_CAPABILITY_STATUS,
   type NodeCapabilityResult,
@@ -108,28 +109,22 @@ export const INVOCATION_MEMORY_DEFAULTS = {
  */
 export class InvocationMemory {
   readonly #handler: NodeInvocationHandler;
-  readonly #inFlight = new Map<string, Promise<NodeCapabilityResult>>();
-  readonly #settled = new Map<string, NodeCapabilityResult>();
-  readonly #capacity: number;
+  readonly #performing = new SingleFlight<string, NodeCapabilityResult>();
+  readonly #settled: BoundedMap<string, NodeCapabilityResult>;
 
   constructor(
     handler: NodeInvocationHandler,
     capacity = INVOCATION_MEMORY_DEFAULTS.SETTLED_CAPACITY,
   ) {
     this.#handler = handler;
-    this.#capacity = capacity;
+    this.#settled = new BoundedMap(capacity);
   }
 
   async take(invocation: NodeInvocation): Promise<NodeInvocationAnswer> {
     const { invocationId } = invocation;
     const settled = this.#settled.get(invocationId);
     if (settled) return { invocationId, result: settled };
-    let performance = this.#inFlight.get(invocationId);
-    if (!performance) {
-      performance = this.#perform(invocation);
-      this.#inFlight.set(invocationId, performance);
-    }
-    const result = await performance;
+    const result = await this.#performing.run(invocationId, () => this.#perform(invocation));
     return { invocationId, result };
   }
 
@@ -144,12 +139,7 @@ export class InvocationMemory {
         reason: error instanceof Error ? error.message : String(error),
       };
     }
-    this.#inFlight.delete(invocation.invocationId);
     this.#settled.set(invocation.invocationId, result);
-    if (this.#settled.size > this.#capacity) {
-      const oldest = this.#settled.keys().next().value;
-      if (oldest !== undefined) this.#settled.delete(oldest);
-    }
     return result;
   }
 }

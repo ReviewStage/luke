@@ -215,6 +215,7 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
     },
     actions: {
       sessionActions: observation.sessionActions,
+      createId,
       sessions: observation.actableSessions,
       refreshSessions: () => observation.loop.refresh(),
       workspaceProjects: observation.workspaceProjects,

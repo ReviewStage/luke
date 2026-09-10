@@ -1,3 +1,4 @@
+import { BoundedMap } from "@sidecar/runtime/vocabulary";
 import {
   ACTION_RESULT_STATUS,
   CONVERSATION_MESSAGE_AUTHOR,
@@ -45,14 +46,15 @@ import {
 /**
  * The newest offset a read of each session already reached, per credential.
  * It is the whole reason a re-opened chat costs one request: the walk starts
- * where the last read stopped instead of seeking the end again.
+ * where the last read stopped instead of seeking the end again. It is bounded
+ * and least-recently-reached first, so it stays a cache and not a ledger.
  */
 export interface ConductorConversationEnds {
-  reached: Map<string, number>;
+  reached: BoundedMap<string, number>;
 }
 
 export function conductorConversationEnds(): ConductorConversationEnds {
-  return { reached: new Map() };
+  return { reached: new BoundedMap(CONDUCTOR_CONVERSATION_BOUNDS.END_CACHE_ENTRIES) };
 }
 
 /** One documented stored-messages read, with the query the mode composed. */
@@ -232,7 +234,7 @@ async function readTailPage(
     ends.reached.delete(providerSessionId);
     walked = await walk(0);
   }
-  rememberEnd(ends, providerSessionId, walked.end);
+  ends.reached.set(providerSessionId, walked.end);
 
   // The kept pages are the newest the walk read, enough of them to carry the
   // history target; the rest is what an older-history scroll will ask for.
@@ -260,21 +262,6 @@ async function readTailPage(
     hasOlder: firstOffset > 0,
     ...(lastMessageId ? { lastMessageId } : undefined),
   };
-}
-
-/** Least-recently-reached first, so the cache stays a cache and not a ledger. */
-function rememberEnd(
-  ends: ConductorConversationEnds,
-  providerSessionId: string,
-  end: number,
-): void {
-  ends.reached.delete(providerSessionId);
-  ends.reached.set(providerSessionId, end);
-  while (ends.reached.size > CONDUCTOR_CONVERSATION_BOUNDS.END_CACHE_ENTRIES) {
-    const oldest = ends.reached.keys().next();
-    if (oldest.done) break;
-    ends.reached.delete(oldest.value);
-  }
 }
 
 /**

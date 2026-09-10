@@ -5,7 +5,7 @@ import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { HOST_OPERATOR_CLIENT_ID } from "@sidecar/host";
 import { SUPERSET_SIGN_IN_STAGE } from "@sidecar/providers/superset/sign-in-stage";
 import type { AppSettings } from "@sidecar/settings/wire";
-import { type LateRef, lateRef } from "@sidecar/wire";
+import { DisposableStore, type LateRef, lateRef } from "@sidecar/wire";
 import { channels } from "#shared/bridge";
 import { type AppStateStore, bootstrapPatch } from "../app-state";
 import type { HostBootstrap, HostOperator } from "../gateway/host-operator";
@@ -76,7 +76,7 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
    */
   let voiceAvailable = false;
   let attachments = 0;
-  const unsubscribers: (() => void)[] = [];
+  const subscriptions = new DisposableStore();
 
   const gateway = wireGateway({
     transport: new InProcessTransport(dependencies.server, {
@@ -97,7 +97,7 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
 
   // The two offers a receiver alone may take are not state and reach the voice
   // window directly; everything else is written to the document.
-  unsubscribers.push(
+  for (const subscription of [
     gateway.host.onSettingsChanged((change) => {
       const stoodVoice = voiceAvailable;
       voiceAvailable = change.settings.status.voiceAvailable;
@@ -151,7 +151,9 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
     gateway.host.onSessionReplayChanged((replay) => {
       state.update({ sessionReplay: { ...replay, halted: false } });
     }),
-  );
+  ]) {
+    subscriptions.add(subscription);
+  }
 
   function setSessionReplayHalted(halted: boolean): void {
     state.update({ sessionReplay: { ...state.snapshot().sessionReplay, halted } });
@@ -205,7 +207,7 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
       relay.recycleVoiceWindow();
     },
     stop: async () => {
-      while (unsubscribers.length > 0) unsubscribers.pop()?.();
+      subscriptions.dispose();
       gateway.client.close();
     },
   };

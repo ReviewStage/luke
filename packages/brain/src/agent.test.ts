@@ -730,9 +730,9 @@ test("a spoken submission keeps its origin, and an empty ask is refused without 
   });
   const runId = acceptedRunId(accepted);
   const heard: (readonly BrainRequestRecord[])[] = [];
-  const unsubscribe = h.agent.subscribe((records) => heard.push(records));
+  const subscription = h.agent.subscribe((records) => heard.push(records));
   const record = await h.agent.waitAsk(runId, 60_000);
-  unsubscribe();
+  subscription.dispose();
   assert.equal(record?.origin, BRAIN_REQUEST_ORIGIN.SPOKEN);
   assert.equal(record?.question, "hello there");
   assert.ok(heard.length > 0);
