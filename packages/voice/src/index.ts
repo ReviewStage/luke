@@ -8,6 +8,36 @@ export {
   type VoiceSettings,
 } from "./capability-assembler.js";
 export {
+  environmentLiveVoice,
+  type HostedLiveSessionOptions,
+  HostedLiveSessionSource,
+  type IntroductionLiveSessionOpened,
+  type IntroductionLiveSessionOptions,
+  IntroductionLiveSessionSource,
+  type IntroductionSessionSource,
+  type KeyedLiveSessionOptions,
+  KeyedLiveSessionSource,
+  type KeyedLiveSessionSourceOptions,
+  keyedLiveSessions,
+  LIVE_ENVIRONMENT,
+  type LiveSessionCreateInput,
+  type LiveSessionOpened,
+  type LiveSessionSource,
+  unavailableLiveDiagnostics,
+} from "./live-session-source.js";
+export {
+  type LiveSideband,
+  type LiveSocket,
+  type OpenSocket,
+  SOCKET_OPEN_FAULT,
+  type SocketClose,
+  type SocketOpenFailure,
+  type SocketOpenFault,
+  type SocketOpening,
+  sidebandOverSocket,
+  socketOpened,
+} from "./live-socket.js";
+export {
   environmentRealtimeSpeed,
   environmentRealtimeVoice,
   OPENAI_ENVIRONMENT,

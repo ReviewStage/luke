@@ -795,6 +795,9 @@ importers:
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../hosted
+      '@sidecar/live':
+        specifier: workspace:*
+        version: link:../live
       '@sidecar/realtime':
         specifier: workspace:*
         version: link:../realtime

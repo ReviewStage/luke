@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
-    "./orchestrator": "./src/orchestrator/index.js"
+    "./orchestrator": "./src/orchestrator/index.js",
+    "./testing": "./src/testing.js"
   },
   "types": "./src/index.ts",
   "scripts": {
@@ -21,6 +22,7 @@
     "@sidecar/brain": "workspace:*",
     "@sidecar/credentials": "workspace:*",
     "@sidecar/hosted": "workspace:*",
+    "@sidecar/live": "workspace:*",
     "@sidecar/realtime": "workspace:*",
     "@sidecar/runtime": "workspace:*",
     "@sidecar/session": "workspace:*",
