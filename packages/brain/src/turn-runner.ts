@@ -47,6 +47,7 @@ import {
   BRAIN_REQUEST_STATUS,
   type BrainRequestRecord,
 } from "./requests.js";
+import { BRAIN_RUN_EVENT, type BrainRunEvent, replySentences, slowStepOf } from "./run-events.js";
 import { incompleteDetail, TOOL_RESULT_STATUS } from "./runtime.js";
 import type { AgentSeam } from "./seam.js";
 import { settledUnlessAborted } from "./settled.js";
@@ -127,6 +128,8 @@ interface TurnGathering {
   /** The final answer's shortfall, when it stopped short with words still delivered. */
   incomplete?: string;
   error?: string;
+  /** Whether the run's slow step was already told; it is told once. */
+  slowStepTold: boolean;
 }
 
 /**
@@ -187,6 +190,8 @@ export interface TurnRunnerOptions {
   readTranscript: (identity: SessionIdentity) => Promise<ProviderTranscriptResult>;
   deliver: (delivery: BrainDelivery) => void | Promise<void>;
   notice?: (report: BrainTurnReport) => void;
+  /** Hears a recorded run's slow step, its actions settling, and its reply's sentences; the ledger tells its end. */
+  onRunEvent: (event: BrainRunEvent) => void;
   trace?: (record: BrainTurnTraceRecord) => void;
   openingNotes?: BrainOpeningNotes;
   workspace?: BrainWorkspaceAccess;
@@ -326,7 +331,8 @@ export class TurnRunner {
       // A child's task runs under its own trigger: the words open as the
       // delegated task rather than the developer's ask, and the final text is
       // the result its requester is handed rather than speech.
-      const childTask = generation.requests.get(run.runId)?.origin === BRAIN_REQUEST_ORIGIN.CHILD;
+      const askOrigin = generation.requests.get(run.runId)?.origin;
+      const childTask = askOrigin === BRAIN_REQUEST_ORIGIN.CHILD;
       let result: TurnResult;
       try {
         const opened = {
@@ -345,6 +351,7 @@ export class TurnRunner {
             : {
                 ...opened,
                 trigger: BRAIN_TURN_TRIGGER.ASK,
+                ...(askOrigin !== undefined ? { askOrigin } : undefined),
                 open: (attached, now) => [askInputText(question, attached, now)],
               },
           riders,
@@ -498,6 +505,7 @@ export class TurnRunner {
       compacted: false,
       said: [],
       outputText: "",
+      slowStepTold: false,
     };
     let preparation: BrainTurnPreparation | undefined;
     let policy: EffectiveToolPolicy | undefined;
@@ -553,6 +561,7 @@ export class TurnRunner {
         preparation = await this.#options.prepareTurn({
           kind: BRAIN_TURN_KIND.TURN,
           trigger: plan.trigger,
+          ...(plan.askOrigin !== undefined ? { askOrigin: plan.askOrigin } : undefined),
         });
         policy = this.#resolvePolicy(preparation, plan.trigger);
         const prepared = this.#revoked(turnContext)
@@ -614,6 +623,19 @@ export class TurnRunner {
       if (written) {
         plan.deliveries.persisted();
         await context.afterTurn({ signal: turnContext.signal });
+      }
+      // The reply is relayed only once the checkpoint that carries every
+      // action's result has landed: nothing is said of the run before what it
+      // did is on record, and a revoked turn says nothing.
+      if (run.recorded && written && !this.#revoked(turnContext)) {
+        this.#options.onRunEvent({ kind: BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: run.runId });
+        for (const sentence of replySentences(gathering.outputText)) {
+          this.#options.onRunEvent({
+            kind: BRAIN_RUN_EVENT.REPLY_SENTENCE,
+            runId: run.runId,
+            sentence,
+          });
+        }
       }
       // A briefing leaves only from a turn that still stands: the stop or the
       // replacement that landed during the write — or during an earlier
@@ -816,6 +838,14 @@ export class TurnRunner {
         case RUNTIME_EVENT.STEERED:
           turn.plan.deliveries.ingested();
           return;
+        case RUNTIME_EVENT.TOOL_CALL: {
+          if (!run.recorded || gathering.slowStepTold) return;
+          const step = slowStepOf(turn.policy, event.invocation.name);
+          if (step === undefined) return;
+          gathering.slowStepTold = true;
+          this.#options.onRunEvent({ kind: BRAIN_RUN_EVENT.SLOW_STEP, runId, step });
+          return;
+        }
         case RUNTIME_EVENT.TOOL_RESULT:
           gathering.toolCalls.push({
             name: event.invocation.name,

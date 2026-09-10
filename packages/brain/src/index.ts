@@ -7,6 +7,7 @@ export {
   type BrainWorkspaceAccess,
   LOOK_SUBJECT,
 } from "./agent.js";
+export { BACKEND_PREAMBLE, type BrainPromptVoice, brainPromptVoice } from "./backend-preamble.js";
 export { toolLoopRuntimeOver } from "./builtins.js";
 export {
   DELIVERY_STATE,
@@ -78,6 +79,12 @@ export {
   responsesModelAnswer,
   userMessageItem,
 } from "./responses-api.js";
+export {
+  BRAIN_RUN_EVENT,
+  type BrainRunEvent,
+  SLOW_STEP_KIND,
+  type SlowStepKind,
+} from "./run-events.js";
 export {
   CONTEXT_ITEM_KIND,
   contextItemId,

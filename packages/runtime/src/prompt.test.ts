@@ -76,6 +76,36 @@ function facts(overrides: Partial<PromptFacts> = {}): PromptFacts {
   };
 }
 
+test("a backend preamble is its own section ahead of the identity, stable, and absent when none is handed in", () => {
+  const withPreamble = buildSystemPrompt(facts({ backendPreamble: "Answer with facts." }));
+  assert.deepEqual(
+    withPreamble.sections.slice(0, 2).map((section) => section.id),
+    [PROMPT_SECTION.BACKEND_PREAMBLE, PROMPT_SECTION.IDENTITY],
+  );
+  assert.equal(withPreamble.sections[0]?.stable, true);
+  assert.equal(withPreamble.sections[0]?.text, "Answer with facts.");
+  const without = buildSystemPrompt(facts());
+  assert.equal(without.sections[0]?.id, PROMPT_SECTION.IDENTITY);
+  assert.equal(
+    without.sections.some((section) => section.id === PROMPT_SECTION.BACKEND_PREAMBLE),
+    false,
+  );
+  const minimal = buildSystemPrompt(
+    facts({ profile: PROMPT_PROFILE.MINIMAL, backendPreamble: "Answer with facts." }),
+  );
+  assert.equal(
+    minimal.sections.some((section) => section.id === PROMPT_SECTION.BACKEND_PREAMBLE),
+    false,
+  );
+  assert.ok(
+    minimal.diagnostics.some(
+      (diagnostic) =>
+        diagnostic.kind === PROMPT_DIAGNOSTIC.SECTION_OMITTED &&
+        diagnostic.subject === PROMPT_SECTION.BACKEND_PREAMBLE,
+    ),
+  );
+});
+
 test("the full profile emits every section in order, files injected, skills listed by location, boundary before the dynamic tail", () => {
   const built = buildSystemPrompt(
     facts({ executionDirectory: { path: "/repo", instructions: "Run pnpm." } }),

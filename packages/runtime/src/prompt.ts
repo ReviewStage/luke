@@ -25,7 +25,10 @@ import {
  * conversation and everything below it changes per turn, so a provider's
  * prefix cache sees the same bytes until a workspace file actually changes.
  * The persona is a section handed in like the identity line: the product owns
- * its words, this package owns where they sit.
+ * its words, this package owns where they sit. The backend preamble is the
+ * same kind of section for a turn that answers a live voice conversation as
+ * its backend: handed in by the product, placed first here, and absent
+ * from every other turn.
  * The order and the profiles follow OpenClaw `b7528507`
  * (`docs/concepts/system-prompt.md`).
  */
@@ -38,6 +41,7 @@ export const PROMPT_PROFILE = {
 export type PromptProfile = (typeof PROMPT_PROFILE)[keyof typeof PROMPT_PROFILE];
 
 export const PROMPT_SECTION = {
+  BACKEND_PREAMBLE: "backend_preamble",
   IDENTITY: "identity",
   PERSONA: "persona",
   TOOLING: "tooling",
@@ -57,6 +61,7 @@ export type PromptSectionId = (typeof PROMPT_SECTION)[keyof typeof PROMPT_SECTIO
 
 /** The sections in the order they are emitted; the boundary sits after the last stable one. */
 export const PROMPT_SECTION_ORDER: readonly PromptSectionId[] = [
+  PROMPT_SECTION.BACKEND_PREAMBLE,
   PROMPT_SECTION.IDENTITY,
   PROMPT_SECTION.PERSONA,
   PROMPT_SECTION.TOOLING,
@@ -147,6 +152,8 @@ export interface PromptFacts {
   readonly identity: string;
   /** Who the agent is, in the product's words; absent in a profile that carries none. */
   readonly persona?: string;
+  /** How a backend answers a live voice conversation, in the product's words; present on such a turn alone. */
+  readonly backendPreamble?: string;
   /** Every tool the run is offered, after policy: the prompt names them and nothing the policy removed. */
   readonly tools: readonly PromptToolFacts[];
   /** The build's own lines about the turns and the tools, in the fixed vocabulary. */
@@ -260,6 +267,7 @@ function runtimeText(facts: PromptFacts["runtime"]): string {
 }
 
 const HEADINGS = {
+  [PROMPT_SECTION.BACKEND_PREAMBLE]: "Backend Preamble",
   [PROMPT_SECTION.IDENTITY]: "Identity",
   [PROMPT_SECTION.PERSONA]: "Persona",
   [PROMPT_SECTION.TOOLING]: "Tooling",
@@ -290,6 +298,8 @@ function bootstrapFilesForProfile(
 
 function sectionText(id: PromptSectionId, facts: PromptFacts, files: readonly BootstrapFile[]) {
   switch (id) {
+    case PROMPT_SECTION.BACKEND_PREAMBLE:
+      return facts.backendPreamble ?? "";
     case PROMPT_SECTION.IDENTITY:
       return facts.identity;
     case PROMPT_SECTION.PERSONA:
@@ -408,6 +418,8 @@ export interface GatherOptions {
   readonly identity: string;
   /** The persona section, handed in like the identity line; a profile that carries none omits it. */
   readonly persona?: string;
+  /** The backend preamble, handed in for a turn answering a live voice conversation and no other. */
+  readonly backendPreamble?: string;
   readonly tools: readonly PromptToolFacts[];
   readonly toolNotes: readonly string[];
   readonly runtimeContextMarker: string;
@@ -459,6 +471,9 @@ export async function gatherPromptFacts(options: GatherOptions): Promise<PromptF
     profile,
     identity: options.identity,
     ...(options.persona !== undefined ? { persona: options.persona } : undefined),
+    ...(options.backendPreamble !== undefined
+      ? { backendPreamble: options.backendPreamble }
+      : undefined),
     tools: options.tools,
     toolNotes: options.toolNotes,
     runtimeContextMarker: options.runtimeContextMarker,

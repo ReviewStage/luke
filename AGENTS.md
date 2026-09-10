@@ -374,7 +374,12 @@ Canonical commands:
   `b7528507`'s prompt composition. The persona itself is the build's
   (`@sidecar/guide`'s `LUKE_PERSONA`), handed to the prompt as its own section
   right after the identity line and never a workspace file, so every surface
-  that gives Luke a voice moves together when it changes. A
+  that gives Luke a voice moves together when it changes. A spoken ask's turn
+  is the one exception: the live voice model that delegated it carries the
+  persona itself, so that turn is prepared with no persona section and,
+  ahead of the identity line, the GPT Live delegation guide's backend
+  preamble (`@sidecar/brain`'s `BACKEND_PREAMBLE`, the guide's own words),
+  and the diagnostics show that section like every other. A
   missing file is seeded once at launch; an existing one, edited or not, is
   never rewritten by an upgrade. Each file is cut to 20,000 characters and
   the set to 60,000, and a cut is named in the prompt and the diagnostics
