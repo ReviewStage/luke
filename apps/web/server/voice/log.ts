@@ -1,4 +1,5 @@
-import type { HostedApiError } from "@sidecar/hosted";
+import type { HostedApiError } from "../core.js";
+import type { VoiceSecondsOutcome } from "../hosted/quota.js";
 import type { VoiceRoute } from "./frames.js";
 
 /**
@@ -8,14 +9,15 @@ import type { VoiceRoute } from "./frames.js";
  * for a year would still say nothing about anyone's conversation.
  */
 export const LOG_EVENT = {
-  LISTENING: "listening",
   /** A handshake refused before any socket stood: the HTTP status says why. */
   UPGRADE_REFUSED: "upgrade-refused",
   /** A socket refused after standing: the reason frame the desktop was sent says why. */
   SESSION_REFUSED: "session-refused",
   SESSION_CREATED: "session-created",
+  /** A fresh connection's sideband stands again on a session created earlier. */
+  SESSION_ATTACHED: "session-attached",
   GREETING_SENT: "greeting-sent",
-  USAGE_REPORTED: "usage-reported",
+  USAGE_RECORDED: "usage-recorded",
   SESSION_ENDED: "session-ended",
 } as const;
 
@@ -39,17 +41,16 @@ export interface RelayCounts {
 }
 
 export type LogEntry =
-  | { event: typeof LOG_EVENT.LISTENING; host: string; port: number }
   | { event: typeof LOG_EVENT.UPGRADE_REFUSED; route: string; status: number }
   | { event: typeof LOG_EVENT.SESSION_REFUSED; route: VoiceRoute; reason: HostedApiError }
   | { event: typeof LOG_EVENT.SESSION_CREATED; route: VoiceRoute }
+  | { event: typeof LOG_EVENT.SESSION_ATTACHED; route: VoiceRoute }
   | { event: typeof LOG_EVENT.GREETING_SENT; route: VoiceRoute }
   | {
-      event: typeof LOG_EVENT.USAGE_REPORTED;
+      event: typeof LOG_EVENT.USAGE_RECORDED;
       route: VoiceRoute;
       seconds: number;
-      /** The account service's status, or nothing when the report never reached it. */
-      status: number | undefined;
+      outcome: VoiceSecondsOutcome;
     }
   | ({
       event: typeof LOG_EVENT.SESSION_ENDED;
@@ -60,7 +61,7 @@ export type LogEntry =
 
 export type Log = (entry: LogEntry) => void;
 
-/** One JSON line per entry on standard output, which is what a container platform collects. */
+/** One JSON line per entry on standard output, which is what the platform's function logs collect. */
 export const standardOutputLog: Log = (entry) => {
   process.stdout.write(`${JSON.stringify(entry)}\n`);
 };

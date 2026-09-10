@@ -11,22 +11,53 @@ import { RECORD_EXTRA_KEYS, SCHEMA_REFUSAL, type Schema, s, TEXT_ENDS } from "@s
 import { type HostedQuota, hostedQuotaSchema } from "./service-wire.js";
 
 /**
- * The desktop's contract with the hosted voice service, the one process on
- * Luke's side that may hold a GPT Live project key: it creates the session at
- * OpenAI (`POST /v1/live/sessions`), attaches the trusted sideband itself, and
- * then carries Live events between the desktop and OpenAI untouched. The
- * desktop reaches it over one WebSocket per session, and what travels on that
- * socket before the Live events do is declared here, once, for both ends.
+ * The desktop's contract with the hosted voice service: the two Vercel
+ * Functions of Luke's own service that hold the GPT Live project key, create
+ * the session at OpenAI (`POST /v1/live/sessions`), attach the trusted
+ * sideband themselves, and then carry Live events between the desktop and
+ * OpenAI untouched. The desktop reaches them over one WebSocket per function
+ * connection, and what travels on that socket before the Live events do is
+ * declared here, once, for both ends.
  */
 
+/** The origin of Luke's own service, the same one every hosted call is addressed to. */
+export const HOSTED_SERVICE_ORIGIN = "https://tryluke.dev";
+
+const WEB_SOCKET_SCHEME = {
+  "https:": "wss:",
+  "http:": "ws:",
+  "wss:": "wss:",
+  "ws:": "ws:",
+} as const;
+
+function isWebSocketReachable(protocol: string): protocol is keyof typeof WEB_SOCKET_SCHEME {
+  return protocol in WEB_SOCKET_SCHEME;
+}
+
 /**
- * The one origin a hosted desktop opens a voice socket to. Pinned by the
- * build the way `HOSTED_CALLS_URL` pins the Realtime host, and compared as an
- * origin — scheme, host, and port — so a path or query can never make
- * another host read as Luke's service. A development build may be pointed
- * elsewhere through {@link hostedVoiceServiceOrigin}; a packaged one may not.
+ * The socket origin of an HTTP or socket origin, or nothing for an address
+ * that is not an absolute URL on a scheme a socket can be opened over.
  */
-export const HOSTED_VOICE_SERVICE_ORIGIN = "wss://voice.tryluke.dev";
+export function webSocketOrigin(address: string): string | undefined {
+  try {
+    const url = new URL(address);
+    if (!isWebSocketReachable(url.protocol)) return undefined;
+    url.protocol = WEB_SOCKET_SCHEME[url.protocol];
+    return url.origin === "null" ? undefined : url.origin;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The one origin a hosted desktop opens a voice socket to: Luke's own
+ * service, in its socket form (the test holds it to `webSocketOrigin` of
+ * `HOSTED_SERVICE_ORIGIN`). Pinned by the build and compared as an origin —
+ * scheme, host, and port — so a path or query can never make another host
+ * read as Luke's service. A development build may be pointed elsewhere
+ * through {@link hostedVoiceServiceOrigin}; a packaged one may not.
+ */
+export const HOSTED_VOICE_SERVICE_ORIGIN = "wss://tryluke.dev";
 
 /** Whether an address is on the hosted voice service's origin, by `URL.origin` alone. */
 export function isHostedVoiceServiceAddress(address: string, origin = HOSTED_VOICE_SERVICE_ORIGIN) {
@@ -41,28 +72,35 @@ export function isHostedVoiceServiceAddress(address: string, origin = HOSTED_VOI
  * The origin a build connects to: the pinned one, or — only where the caller
  * says the build is unpackaged and hands an override it read from its own
  * environment, the same mechanism the account service's development override
- * uses — that override reduced to its origin. An override that is not an
- * absolute URL is ignored rather than reached.
+ * uses — that override reduced to its socket origin, so the account
+ * service's own `http://localhost` override reaches the functions `vercel
+ * dev` serves beside it. An override that is not an absolute URL is ignored
+ * rather than reached.
  */
 export function hostedVoiceServiceOrigin(options: {
   packaged: boolean;
   override: string | undefined;
 }): string {
   if (options.packaged || options.override === undefined) return HOSTED_VOICE_SERVICE_ORIGIN;
-  try {
-    const origin = new URL(options.override).origin;
-    return origin === "null" ? HOSTED_VOICE_SERVICE_ORIGIN : origin;
-  } catch {
-    return HOSTED_VOICE_SERVICE_ORIGIN;
-  }
+  return webSocketOrigin(options.override) ?? HOSTED_VOICE_SERVICE_ORIGIN;
 }
 
-/** The frames the desktop and the voice service exchange before Live events flow. */
+/**
+ * The frames the desktop and the voice service exchange before Live events
+ * flow. A socket opens with one of the desktop's two: `session.create` for a
+ * new session, or `session.attach` for a session that stands already, because
+ * the WebRTC session between the desktop and OpenAI outlives any one function
+ * connection, which the platform closes at the function's maximum duration.
+ */
 export const VOICE_SERVICE_FRAME = {
-  /** The desktop's first and only frame of its own: the offer, the voice, and the seed. */
+  /** The desktop's opening frame for a new session: the offer, the voice, and the seed. */
   SESSION_CREATE: "session.create",
   /** The service's answer once OpenAI has created the session and the sideband stands. */
   SESSION_CREATED: "session.created",
+  /** The desktop's opening frame on a fresh connection to a session this account created. */
+  SESSION_ATTACH: "session.attach",
+  /** The service's answer once its sideband stands on that session again. */
+  SESSION_ATTACHED: "session.attached",
 } as const;
 
 /**
@@ -97,6 +135,21 @@ export interface SessionCreatedFrame extends LiveSessionCreated {
   type: typeof VOICE_SERVICE_FRAME.SESSION_CREATED;
   quota?: HostedQuota;
 }
+
+/** The desktop's opening frame on a connection to a session it already holds. */
+export interface SessionAttachFrame {
+  type: typeof VOICE_SERVICE_FRAME.SESSION_ATTACH;
+  sessionId: string;
+}
+
+/** The service's answer: the sideband stands again on the session named. */
+export interface SessionAttachedFrame {
+  type: typeof VOICE_SERVICE_FRAME.SESSION_ATTACHED;
+  sessionId: string;
+}
+
+/** Either frame a socket may open with. */
+export type SessionOpeningFrame = SessionCreateFrame | SessionAttachFrame;
 
 /**
  * An SDP is admitted as written: its lines are its syntax, and a reader that
@@ -164,8 +217,28 @@ export const sessionCreateFrameSchema: Schema<SessionCreateFrame> = s.record({
   input: s.array(liveInitialItemSchema, { max: LIVE_INPUT_BOUNDS.MESSAGES }),
 });
 
+/** A GPT Live session id is opaque and short; the bound only refuses a document standing in for one. */
+const SESSION_ID_CHARS = 256;
+
+const sessionId = s.text({ max: SESSION_ID_CHARS });
+
+export const sessionAttachFrameSchema: Schema<SessionAttachFrame> = s.record({
+  type: s.literal(VOICE_SERVICE_FRAME.SESSION_ATTACH),
+  sessionId,
+});
+
+export const sessionOpeningFrameSchema: Schema<SessionOpeningFrame> = s.union([
+  sessionCreateFrameSchema,
+  sessionAttachFrameSchema,
+]);
+
+export const sessionAttachedFrameSchema: Schema<SessionAttachedFrame> = s.record(
+  { type: s.literal(VOICE_SERVICE_FRAME.SESSION_ATTACHED), sessionId },
+  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+);
+
 const CREATED_FIELDS = {
-  sessionId: s.text(),
+  sessionId,
   sdpAnswer: verbatimText(SESSION_CREATE_BOUNDS.SDP_CHARS),
 } as const;
 

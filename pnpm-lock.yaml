@@ -148,34 +148,6 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
-  apps/voice-service:
-    dependencies:
-      '@sidecar/hosted':
-        specifier: workspace:*
-        version: link:../../packages/hosted
-      '@sidecar/live':
-        specifier: workspace:*
-        version: link:../../packages/live
-      '@sidecar/wire':
-        specifier: workspace:*
-        version: link:../../packages/wire
-      tsx:
-        specifier: 4.23.12
-        version: 4.23.12
-      ws:
-        specifier: 8.21.3
-        version: 8.21.3
-    devDependencies:
-      '@types/node':
-        specifier: 26.2.0
-        version: 26.2.0
-      '@types/ws':
-        specifier: 8.18.1
-        version: 8.18.1
-      typescript:
-        specifier: 7.0.2
-        version: 7.0.2
-
   apps/web:
     dependencies:
       '@better-auth/drizzle-adapter':
@@ -250,6 +222,9 @@ importers:
       tailwindcss:
         specifier: 4.3.3
         version: 4.3.3
+      ws:
+        specifier: 8.21.3
+        version: 8.21.3
     devDependencies:
       '@electric-sql/pglite':
         specifier: 0.5.8
@@ -266,6 +241,9 @@ importers:
       '@types/react-dom':
         specifier: 19.2.4
         version: 19.2.4(@types/react@19.2.18)
+      '@types/ws':
+        specifier: 8.18.1
+        version: 8.18.1
       '@vitejs/plugin-react':
         specifier: 5.1.2
         version: 5.1.2(vite@7.3.1(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0))

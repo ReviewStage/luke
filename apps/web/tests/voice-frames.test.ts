@@ -6,7 +6,7 @@ import {
   LIVE_SERVER_EVENT,
   RENDERER_CLIENT_EVENTS,
   RENDERER_SERVER_EVENTS,
-} from "@sidecar/live";
+} from "../server/live";
 import {
   desktopFrameDecision,
   FRAME_DECISION,
@@ -15,7 +15,7 @@ import {
   routeForPath,
   upstreamFrameDecision,
   VOICE_ROUTE,
-} from "./frames.js";
+} from "../server/voice/frames";
 
 test("the two upgrade paths map to the two routes and nothing else does", () => {
   assert.equal(routeForPath(VOICE_SERVICE_PATH.SESSIONS), VOICE_ROUTE.SESSIONS);

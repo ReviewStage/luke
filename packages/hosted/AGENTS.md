@@ -40,45 +40,41 @@ included, and so do the two hosted endpoints that reach a third party on a
 key the deployment fixed: a `fixedBearer` for OpenAI, and `NO_CREDENTIAL` for
 the analytics batch, whose project token travels in the document itself.
 
-## The live contract is a socket's first two frames
+## The live contract is a socket's opening frames
 
-`live-contract.ts` is the desktop's contract with the hosted voice service,
-the one process on Luke's side that holds a GPT Live project key. The
-service is not the account service: it is a long-running process on its own
-origin, `HOSTED_VOICE_SERVICE_ORIGIN`, pinned by the build the way
-`HOSTED_CALLS_URL` pins the Realtime host and compared as `URL.origin` —
-scheme, host, and port, never a path or a query — so nothing a service
-answers can send a desktop's socket elsewhere. `hostedVoiceServiceOrigin`
-is where a development build's override enters, reduced to its origin and
+`live-contract.ts` is the desktop's contract with the hosted voice service:
+the two Vercel Functions of Luke's own service that hold the GPT Live project
+key. They live on the service's own origin, so `HOSTED_VOICE_SERVICE_ORIGIN`
+is `HOSTED_SERVICE_ORIGIN` in socket form (`webSocketOrigin` swaps the
+scheme and nothing else) and is compared as `URL.origin` — scheme, host, and
+port, never a path or a query — so nothing a service answers can send a
+desktop's socket elsewhere. `hostedVoiceServiceOrigin` is where a development
+build's override enters, reduced to its socket origin (an `http://localhost`
+account override reaches the functions `vercel dev` serves beside it) and
 refused past the packaging boundary, the same rule `LUKE_ACCOUNT_BASE_URL`
 follows in the host; the package reads no environment itself and is handed
-the value. The socket's own vocabulary is two frames, `VOICE_SERVICE_FRAME`:
+the value. The socket's own vocabulary is `VOICE_SERVICE_FRAME`, two pairs:
 the desktop's `session.create` (the SDP offer as written, a voice that is a
 member of `LIVE_VOICE`, and a seed of at most 128 `InitialItem`s of one text
 part each, bounded per item so a frame the Live API would refuse is refused
-before a session is spent on it) and the service's `session.created` (the
-opaque session id, the SDP answer, and the quota the session was spent
-against, dropped if mis-answered). After those two, GPT Live events pass
-through the same socket as themselves and are declared in `@sidecar/live`,
-not here. A request frame refuses a key it did not name; an answer ignores
-one a newer service added, the rule every wire module here keeps.
+before a session is spent on it) answered by `session.created` (the opaque
+session id, the SDP answer, and the quota the session was spent against,
+dropped if mis-answered); and the desktop's `session.attach` (one session id)
+answered by `session.attached`, for a fresh connection to a session that
+stands, because a connection to a Vercel Function ends at the function's
+maximum duration while the WebRTC session does not. `sessionOpeningFrameSchema`
+reads either opener. After the opening pair, GPT Live events pass through the
+same socket as themselves and are declared in `@sidecar/live`, not here. A
+request frame refuses a key it did not name; an answer ignores one a newer
+service added, the rule every wire module here keeps.
 
-`service-paths.ts` carries the two sides of that service: `VOICE_SERVICE_PATH`
-for the upgrades on the voice service's origin (`/sessions` under an account
-bearer, `/introduction` under none), and under `HOSTED_SERVICE_PATH` the two
-internal routes on the account service that only the voice service calls,
-`VOICE_AUTHORIZE` and `VOICE_USAGE`, authenticated by the shared secret in
-`VOICE_SERVICE_SECRET_HEADER` rather than by any account's bearer. The
-Realtime mint paths and `realtime-contract.ts` stand beside it untouched for
-the installed desktops and the phone that still speak them.
-
-`voice-internal-wire.ts` is what travels on those two internal routes:
-authorize takes the forwarded `Authorization` value and answers the user id
-and quota; usage takes one session's id, account, and billed seconds and
-answers one of `VOICE_USAGE_RECORD`'s two members, `recorded` or `repeated`,
-so a report sent twice is one record and the service can tell the two apart.
-The seconds are bounded under a day and the ids under a short length, because
-a value past either is a document standing in for an id, not a long call.
+`service-paths.ts` carries `VOICE_SERVICE_PATH`, the two function routes the
+upgrades stand on (`/api/voice/sessions` under an account bearer,
+`/api/voice/introduction` under none). The service authorizes and meters a
+session by direct calls into its own account code, so no internal route and
+no shared secret exist between two deployments. The Realtime mint paths and
+`realtime-contract.ts` stand beside it untouched for the installed desktops
+and the phone that still speak them.
 
 A renamed wire field keeps its old name on the wire for one iOS release. The
 desktop and the service ship together, but an installed phone reads whatever

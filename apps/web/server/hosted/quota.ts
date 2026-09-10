@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { type HostedQuota, VOICE_USAGE_RECORD } from "../core.js";
+import type { HostedQuota } from "../core.js";
 import { user } from "../db/auth-schema.js";
 import type { createDatabase } from "../db/index.js";
 import { hostedUsage, introductionUsage, voiceSessionUsage } from "../db/usage-schema.js";
@@ -107,12 +107,13 @@ export async function spendIntroductionMeter(
 type VoiceUsageDatabase = Pick<HostedStoreDatabase, "transaction">;
 
 /**
- * What recording a session's seconds came to: the wire's two records, and the
- * one the route turns into a refusal rather than an answer, an account the
- * report names that the database no longer holds.
+ * What recording a session's seconds came to: recorded, repeated for a
+ * session already recorded, and unknown user for an account the report names
+ * that the database no longer holds.
  */
 export const VOICE_SECONDS_OUTCOME = {
-  ...VOICE_USAGE_RECORD,
+  RECORDED: "recorded",
+  REPEATED: "repeated",
   UNKNOWN_USER: "unknown-user",
 } as const;
 
@@ -123,7 +124,8 @@ export type VoiceSecondsOutcome =
  * Records the seconds OpenAI billed for one closed GPT Live session, once. The
  * session row is the ledger: its insert is the idempotent step, and only a
  * report that created the row moves the day's `voice_seconds`, so a report
- * the service repeats after a lost answer adds nothing. Both writes share one
+ * repeated after a lost answer, or seen by two function connections, adds
+ * nothing. Both writes share one
  * transaction so a crash between them cannot leave a session recorded and a
  * day uncounted. The day is the report's, not the session's start: the
  * service reports at `session.closed`, and that is the instant it knows.

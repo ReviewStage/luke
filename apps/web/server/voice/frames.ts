@@ -1,12 +1,11 @@
-import { VOICE_SERVICE_PATH } from "@sidecar/hosted";
+import type { RawData } from "ws";
+import { isWireString, type UnparsedWireValue, VOICE_SERVICE_PATH } from "../core.js";
 import {
   decodeLivePayload,
   LIVE_SERVER_EVENT,
   RENDERER_CLIENT_EVENTS,
   RENDERER_SERVER_EVENTS,
-} from "@sidecar/live";
-import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import type { RawData } from "ws";
+} from "../live.js";
 
 /**
  * Which frames cross the service in which direction. The service is a pipe,

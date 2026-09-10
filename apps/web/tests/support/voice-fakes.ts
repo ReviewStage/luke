@@ -1,25 +1,23 @@
 import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
-import {
-  HOSTED_SERVICE_PATH,
-  VOICE_SERVICE_SECRET_HEADER,
-  VOICE_USAGE_RECORD,
-} from "@sidecar/hosted";
-import { LIVE_SESSIONS_PATH, LIVE_TRANSPORT_TYPE } from "@sidecar/live";
-import { isRecord, type UnparsedWireValue, unparsedWire, type WireRecord } from "@sidecar/wire";
+import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
+import type { VoiceCloseReason } from "../../server/db/voice-schema";
+import type { HostedSpend, IntroductionSpend } from "../../server/hosted/quota";
+import { VOICE_SECONDS_OUTCOME } from "../../server/hosted/quota";
+import { LIVE_SESSIONS_PATH, LIVE_TRANSPORT_TYPE } from "../../server/live";
+import type { VoiceAccounts } from "../../server/voice/accounts";
+import type { VoiceSessionRecord } from "../../server/voice/session-record";
 
 /**
- * The two services this one talks to, stood up on this machine for a test:
- * an OpenAI that creates sessions and takes attaches, and an account service
- * that authorizes and records usage. Each remembers what it was asked and
- * answers what the test told it to, and hands the test the far end of every
- * socket so the test can play OpenAI's part.
+ * What the voice service talks to, stood up for a test: an OpenAI on this
+ * machine that creates sessions and takes attaches, handing the test the far
+ * end of every socket so it can play OpenAI's part, and an in-memory account
+ * side that remembers what it was asked and answers what the test told it to.
  */
 
 const LOOPBACK = "127.0.0.1";
 const HTTP_CREATED = 201;
-const HTTP_OK = 200;
 
 export const FAKE_SDP_ANSWER =
   "v=0\r\no=- 2 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n";
@@ -146,62 +144,100 @@ export async function startFakeOpenAi(): Promise<FakeOpenAi> {
   return fake;
 }
 
-interface RecordedInternalCall {
-  secret: string | undefined;
-  body: WireRecord;
-}
-
-interface FakeAnswer {
-  status: number;
-  body: UnparsedWireValue;
-}
-
-export interface FakeAccountService {
-  origin: string;
-  authorizeCalls: RecordedInternalCall[];
-  usageCalls: RecordedInternalCall[];
-  authorizeAnswer: FakeAnswer;
-  usageAnswer: FakeAnswer;
-  close(): Promise<void>;
-}
-
 export const FAKE_QUOTA = { used: 3, limit: 5000, resetsAt: 1_800_000_000_000 };
 export const FAKE_USER_ID = "user-1";
+export const FAKE_BEARER = "Bearer account-token-1";
 
-export async function startFakeAccountService(): Promise<FakeAccountService> {
-  const authorizeCalls: RecordedInternalCall[] = [];
-  const usageCalls: RecordedInternalCall[] = [];
-  const fake: FakeAccountService = {
-    origin: "",
-    authorizeCalls,
-    usageCalls,
-    authorizeAnswer: { status: HTTP_OK, body: { userId: FAKE_USER_ID, quota: FAKE_QUOTA } },
-    usageAnswer: { status: HTTP_OK, body: { record: VOICE_USAGE_RECORD.RECORDED } },
-    close: () => closeServer(server),
+interface RecordedSeconds {
+  userId: string;
+  sessionId: string;
+  seconds: number;
+}
+
+export interface FakeAccounts extends VoiceAccounts {
+  /** Every bearer resolved, in order, whatever it resolved to. */
+  resolved: string[];
+  /** Every account whose allowance was spent, in order. */
+  spent: string[];
+  /** Every seconds report taken, repeated ones included. */
+  reports: RecordedSeconds[];
+  /** What the next spend answers; open by default. */
+  spendAnswer: HostedSpend;
+  /** What the next introduction spend answers; open by default. */
+  introductionAnswer: IntroductionSpend;
+  /** How many introductions were spent, refused ones included. */
+  introductions: number;
+  /** The one bearer that resolves to `FAKE_USER_ID`; every other resolves to nobody. */
+  knownBearer: string;
+}
+
+/** An account side that behaves as the ledger does: seconds landing once per session. */
+export function fakeAccounts(): FakeAccounts {
+  const landed = new Set<string>();
+  const fake: FakeAccounts = {
+    resolved: [],
+    spent: [],
+    reports: [],
+    spendAnswer: { allowed: true, quota: FAKE_QUOTA },
+    introductionAnswer: { allowed: true },
+    introductions: 0,
+    knownBearer: FAKE_BEARER,
+    async resolveUserId(authorization) {
+      fake.resolved.push(authorization);
+      return authorization === fake.knownBearer ? FAKE_USER_ID : undefined;
+    },
+    async spend(userId) {
+      fake.spent.push(userId);
+      return fake.spendAnswer;
+    },
+    async spendIntroduction() {
+      fake.introductions += 1;
+      return fake.introductionAnswer;
+    },
+    async recordSeconds(input) {
+      fake.reports.push(input);
+      if (landed.has(input.sessionId)) return VOICE_SECONDS_OUTCOME.REPEATED;
+      landed.add(input.sessionId);
+      return VOICE_SECONDS_OUTCOME.RECORDED;
+    },
   };
-  const server = http.createServer(async (request, response) => {
-    const call: RecordedInternalCall = {
-      secret: request.headers[VOICE_SERVICE_SECRET_HEADER]?.toString(),
-      body: jsonRecord(await readBody(request)),
-    };
-    let answer: FakeAnswer | undefined;
-    if (request.url === HOSTED_SERVICE_PATH.VOICE_AUTHORIZE) {
-      authorizeCalls.push(call);
-      answer = fake.authorizeAnswer;
-    } else if (request.url === HOSTED_SERVICE_PATH.VOICE_USAGE) {
-      usageCalls.push(call);
-      answer = fake.usageAnswer;
-    }
-    if (answer === undefined) {
-      response.writeHead(404).end();
-      return;
-    }
-    response
-      .writeHead(answer.status, { "content-type": "application/json" })
-      .end(JSON.stringify(answer.body));
-  });
-  const port = await listen(server);
-  fake.origin = `http://${LOOPBACK}:${port}`;
+  return fake;
+}
+
+interface RecordedClose {
+  sessionId: string;
+  seconds: number;
+  reason: VoiceCloseReason;
+}
+
+export interface FakeSessionRecord extends VoiceSessionRecord {
+  registered: Array<{ userId: string; sessionId: string }>;
+  /** Every usage snapshot, in order. */
+  usage: Array<{ sessionId: string; seconds: number }>;
+  closes: RecordedClose[];
+}
+
+/** A session record that keeps one owner per live session, as the unique column does. */
+export function fakeSessionRecord(): FakeSessionRecord {
+  const owners = new Map<string, string>();
+  const fake: FakeSessionRecord = {
+    registered: [],
+    usage: [],
+    closes: [],
+    async register(input) {
+      fake.registered.push(input);
+      if (!owners.has(input.sessionId)) owners.set(input.sessionId, input.userId);
+    },
+    async owned(input) {
+      return owners.get(input.sessionId) === input.userId;
+    },
+    async noteUsage(input) {
+      fake.usage.push(input);
+    },
+    async close(input) {
+      fake.closes.push(input);
+    },
+  };
   return fake;
 }
 

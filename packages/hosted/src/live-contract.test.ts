@@ -3,14 +3,19 @@ import test from "node:test";
 import { LIVE_INPUT_BOUNDS, LIVE_VOICE } from "@sidecar/live";
 import { SCHEMA_REFUSAL, type UnparsedWireValue, type WireValue } from "@sidecar/wire";
 import {
+  HOSTED_SERVICE_ORIGIN,
   HOSTED_VOICE_SERVICE_ORIGIN,
   hostedVoiceServiceOrigin,
   isHostedVoiceServiceAddress,
   liveSessionCreatedSchema,
   SESSION_CREATE_BOUNDS,
+  sessionAttachedFrameSchema,
+  sessionAttachFrameSchema,
   sessionCreatedFrameSchema,
   sessionCreateFrameSchema,
+  sessionOpeningFrameSchema,
   VOICE_SERVICE_FRAME,
+  webSocketOrigin,
 } from "./live-contract.js";
 import { VOICE_SERVICE_PATH } from "./service-paths.js";
 
@@ -139,8 +144,59 @@ test("the created session read on its own is the id and the answer, both require
   assert.equal(liveSessionCreatedSchema.parse({ sdpAnswer: SDP }), undefined);
 });
 
-test("the frame types are two distinct members", () => {
-  assert.equal(new Set(Object.values(VOICE_SERVICE_FRAME)).size, 2);
+test("a session.attach frame is the type and one session id, and nothing else", () => {
+  const attach = { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId: "live_123" };
+  assert.deepEqual(sessionAttachFrameSchema.parse(attach), attach);
+  assert.equal(sessionAttachFrameSchema.parse({ ...attach, sdp: SDP }), undefined);
+  assert.equal(
+    sessionAttachFrameSchema.parse({ type: VOICE_SERVICE_FRAME.SESSION_ATTACH }),
+    undefined,
+  );
+  assert.equal(sessionAttachFrameSchema.parse({ ...attach, sessionId: "" }), undefined);
+  assert.equal(sessionAttachFrameSchema.parse(createFrame()), undefined);
+});
+
+test("an opening frame is either a create or an attach, told apart by type", () => {
+  const attach = { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId: "live_123" };
+  assert.equal(
+    sessionOpeningFrameSchema.parse(createFrame())?.type,
+    VOICE_SERVICE_FRAME.SESSION_CREATE,
+  );
+  assert.equal(sessionOpeningFrameSchema.parse(attach)?.type, VOICE_SERVICE_FRAME.SESSION_ATTACH);
+  assert.equal(
+    sessionOpeningFrameSchema.parse({ type: VOICE_SERVICE_FRAME.SESSION_CREATED, sessionId: "x" }),
+    undefined,
+  );
+});
+
+test("a session.attached frame answers the id it stands on, ignoring what a newer service adds", () => {
+  const attached = { type: VOICE_SERVICE_FRAME.SESSION_ATTACHED, sessionId: "live_123" };
+  assert.deepEqual(sessionAttachedFrameSchema.parse({ ...attached, later: true }), attached);
+  assert.equal(
+    sessionAttachedFrameSchema.parse({ type: VOICE_SERVICE_FRAME.SESSION_ATTACHED }),
+    undefined,
+  );
+});
+
+test("the frame types are four distinct members", () => {
+  assert.equal(new Set(Object.values(VOICE_SERVICE_FRAME)).size, 4);
+});
+
+test("the voice service origin is the service's own origin in socket form", () => {
+  assert.equal(HOSTED_VOICE_SERVICE_ORIGIN, webSocketOrigin(HOSTED_SERVICE_ORIGIN));
+  assert.equal(new URL(HOSTED_VOICE_SERVICE_ORIGIN).protocol, "wss:");
+  assert.equal(new URL(HOSTED_VOICE_SERVICE_ORIGIN).host, new URL(HOSTED_SERVICE_ORIGIN).host);
+  assert.equal(new URL(HOSTED_VOICE_SERVICE_ORIGIN).origin, HOSTED_VOICE_SERVICE_ORIGIN);
+});
+
+test("a socket origin is derived from an http or socket address, and from nothing else", () => {
+  assert.equal(webSocketOrigin("https://luke.test/api/auth"), "wss://luke.test");
+  assert.equal(webSocketOrigin("http://localhost:3000/"), "ws://localhost:3000");
+  assert.equal(webSocketOrigin("ws://localhost:8788/sessions"), "ws://localhost:8788");
+  assert.equal(webSocketOrigin("wss://luke.test:8443"), "wss://luke.test:8443");
+  assert.equal(webSocketOrigin("data:text/plain,x"), undefined);
+  assert.equal(webSocketOrigin("localhost:8788"), undefined);
+  assert.equal(webSocketOrigin("not a url"), undefined);
 });
 
 test("an address is the voice service's by origin alone", () => {
@@ -149,11 +205,11 @@ test("an address is the voice service's by origin alone", () => {
     true,
   );
   assert.equal(isHostedVoiceServiceAddress(`${HOSTED_VOICE_SERVICE_ORIGIN}/other?x=1#y`), true);
-  assert.equal(isHostedVoiceServiceAddress("wss://voice.tryluke.dev.evil.example/sessions"), false);
-  assert.equal(isHostedVoiceServiceAddress("ws://voice.tryluke.dev/sessions"), false);
-  assert.equal(isHostedVoiceServiceAddress("wss://voice.tryluke.dev:8443/sessions"), false);
+  const { host } = new URL(HOSTED_VOICE_SERVICE_ORIGIN);
+  assert.equal(isHostedVoiceServiceAddress(`wss://${host}.evil.example/sessions`), false);
+  assert.equal(isHostedVoiceServiceAddress(`ws://${host}/sessions`), false);
+  assert.equal(isHostedVoiceServiceAddress(`wss://${host}:8443/sessions`), false);
   assert.equal(isHostedVoiceServiceAddress("not a url"), false);
-  assert.equal(new URL(HOSTED_VOICE_SERVICE_ORIGIN).origin, HOSTED_VOICE_SERVICE_ORIGIN);
 });
 
 test("a development override reduces to its origin; a packaged build never leaves the pinned one", () => {
@@ -164,6 +220,10 @@ test("a development override reduces to its origin; a packaged build never leave
   assert.equal(
     hostedVoiceServiceOrigin({ packaged: false, override: "ws://localhost:8788/sessions" }),
     "ws://localhost:8788",
+  );
+  assert.equal(
+    hostedVoiceServiceOrigin({ packaged: false, override: "http://localhost:3000/api/auth" }),
+    "ws://localhost:3000",
   );
   assert.equal(
     hostedVoiceServiceOrigin({ packaged: true, override: "ws://localhost:8788" }),

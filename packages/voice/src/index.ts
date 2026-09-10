@@ -9,6 +9,7 @@ export {
 } from "./capability-assembler.js";
 export {
   environmentLiveVoice,
+  HOSTED_REATTACH_DELAYS_MS,
   type HostedLiveSessionOptions,
   HostedLiveSessionSource,
   type IntroductionLiveSessionOpened,

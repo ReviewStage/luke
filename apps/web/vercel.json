@@ -2,17 +2,51 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "pnpm db:migrate && pnpm auth:seed && pnpm build",
   "functions": {
-    "api/brain/v2/respond.ts": { "maxDuration": 120 },
-    "api/brain/v2/count-tokens.ts": { "maxDuration": 120 },
-    "api/brain/v2/embed.ts": { "maxDuration": 60 },
-    "api/observation/tick.ts": { "maxDuration": 60 }
+    "api/brain/v2/respond.ts": {
+      "maxDuration": 120
+    },
+    "api/brain/v2/count-tokens.ts": {
+      "maxDuration": 120
+    },
+    "api/brain/v2/embed.ts": {
+      "maxDuration": 60
+    },
+    "api/observation/tick.ts": {
+      "maxDuration": 60
+    },
+    "api/voice/sessions.ts": {
+      "maxDuration": 800
+    },
+    "api/voice/introduction.ts": {
+      "maxDuration": 800
+    }
   },
-  "crons": [{ "path": "/api/observation/tick", "schedule": "* * * * *" }],
+  "crons": [
+    {
+      "path": "/api/observation/tick",
+      "schedule": "* * * * *"
+    }
+  ],
   "routes": [
-    { "src": "/api/auth/(.*)", "dest": "/api/auth/[...all].ts" },
-    { "src": "/about", "dest": "/about.html" },
-    { "src": "/privacy", "dest": "/privacy.html" },
-    { "src": "/changelog", "dest": "/changelog.html" },
-    { "src": "/admin", "dest": "/admin.html" }
+    {
+      "src": "/api/auth/(.*)",
+      "dest": "/api/auth/[...all].ts"
+    },
+    {
+      "src": "/about",
+      "dest": "/about.html"
+    },
+    {
+      "src": "/privacy",
+      "dest": "/privacy.html"
+    },
+    {
+      "src": "/changelog",
+      "dest": "/changelog.html"
+    },
+    {
+      "src": "/admin",
+      "dest": "/admin.html"
+    }
   ]
 }
