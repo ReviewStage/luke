@@ -93,22 +93,50 @@ function compactionOf(row: ContextRow): CompactionMetadata | undefined {
   return row.message.role === MESSAGE_ROLE.ASSISTANT ? row.message.metadata.compaction : undefined;
 }
 
-/**
- * The rows the model still reads. The latest compaction message stands in
- * for every row before the one it named as first kept, so the derivation is
- * that message first, then every row from the first kept one on, in the
- * order they were written. A marker naming a row the set does not hold keeps
- * what follows the compaction; no compaction keeps everything.
- */
-export function rowsSinceCompaction(rows: readonly ContextRow[]): readonly ContextRow[] {
+interface CompactionCut {
+  readonly compaction: ContextRow;
+  /** The compaction row's index. */
+  readonly at: number;
+  /** Where the kept tail begins: the row the compaction named as first kept, or the row after the compaction when the set does not hold it. */
+  readonly from: number;
+}
+
+/** Where the latest compaction, by written order, cuts the rows; nothing when no row is one. */
+function compactionCut(rows: readonly ContextRow[]): CompactionCut | undefined {
   const at = rows.findLastIndex((row) => compactionOf(row) !== undefined);
   const compaction = rows[at];
-  if (at < 0 || compaction === undefined) return rows;
+  if (at < 0 || compaction === undefined) return undefined;
   const firstKeptId = compactionOf(compaction)?.first_kept_message_id;
   const firstKept = rows.findIndex((row) => row.message.id === firstKeptId);
-  const kept =
-    firstKept < 0 ? rows.slice(at + 1) : rows.slice(firstKept).filter((row) => row !== compaction);
-  return [compaction, ...kept];
+  return { compaction, at, from: firstKept < 0 ? at + 1 : firstKept };
+}
+
+/**
+ * The rows still worth holding, in the order they were written: the latest
+ * compaction message and every row from the one it named as first kept.
+ * Written order is kept on purpose, because the latest compaction is the
+ * last one written, and a kept tail may hold an earlier compaction of its
+ * own; reordering here would let that earlier one read as the latest on the
+ * next cut.
+ */
+export function retainedRows(rows: readonly ContextRow[]): readonly ContextRow[] {
+  const cut = compactionCut(rows);
+  if (!cut) return rows;
+  return rows.filter((_row, index) => index === cut.at || index >= cut.from);
+}
+
+/**
+ * The rows the model reads, in the order it reads them. The latest
+ * compaction message stands in for every row before the one it named as
+ * first kept, so it comes first, then every row from the first kept one on
+ * in written order. A marker naming a row the set does not hold keeps what
+ * follows the compaction; no compaction keeps everything. The same rows in,
+ * retained or not, give the same derivation out.
+ */
+export function rowsSinceCompaction(rows: readonly ContextRow[]): readonly ContextRow[] {
+  const cut = compactionCut(rows);
+  if (!cut) return rows;
+  return [cut.compaction, ...rows.slice(cut.from).filter((row) => row !== cut.compaction)];
 }
 
 /** Whether metadata a part carries for replay may travel: it names this inference's provider, and the row's turn ran on its model. */
@@ -380,9 +408,9 @@ export class UIMessageContextEngine implements ContextEngine {
     return [...derived, ...ephemeral].map(toWireRecord);
   }
 
-  /** Drops the rows the derivation no longer reads; answers how many went. */
+  /** Drops the rows the derivation no longer reads, keeping the rest in written order; answers how many went. */
   compact(): number {
-    const kept = rowsSinceCompaction(this.#rows);
+    const kept = retainedRows(this.#rows);
     const dropped = this.#rows.length - kept.length;
     this.#rows = kept;
     return dropped;

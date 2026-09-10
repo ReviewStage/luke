@@ -44,6 +44,7 @@ import {
   modelInputFrom,
   type ReplayTarget,
   readContextRows,
+  retainedRows,
   rowsSinceCompaction,
   UI_MESSAGE_ENGINE_REFUSAL,
   UIMessageContextEngine,
@@ -603,6 +604,14 @@ test("the derivation is the latest compaction first, then every row from the one
   assert.deepEqual(ids(rowsSinceCompaction(uncompacted)), ids(uncompacted));
   const twice = [...compactedRows(), compactionRow("m10", SUMMARY, "m9"), userRow("m11", "five")];
   assert.deepEqual(ids(rowsSinceCompaction(twice)), ["m10", "m9", "m11"]);
+  // A later compaction may keep an earlier one in its tail; the later one still cuts.
+  const nested = [...compactedRows(), compactionRow("m10", SUMMARY, "m6"), userRow("m11", "five")];
+  assert.deepEqual(ids(rowsSinceCompaction(nested)), ["m10", "m6", "m7", "m8", "m9", "m11"]);
+  assert.deepEqual(ids(retainedRows(nested)), ["m6", "m7", "m8", "m9", "m10", "m11"]);
+  assert.deepEqual(
+    ids(rowsSinceCompaction(retainedRows(nested))),
+    ids(rowsSinceCompaction(nested)),
+  );
 
   const messages = await modelInputFrom(compactedRows(), OPTIONS);
   assert.equal(messages.length, 6);
@@ -611,15 +620,16 @@ test("the derivation is the latest compaction first, then every row from the one
   assert.deepEqual(assistantParts(first), [{ type: MODEL_PART.TEXT, text: SUMMARY }]);
 });
 
-test("compact drops the rows the derivation no longer reads, and the record it keeps stays in that order", async () => {
-  const { context } = await bootstrapped(compactedRows());
-  assert.equal(context.compact(), 3);
-  assert.deepEqual(
-    context
-      .checkpoint()
-      .items.map((item) => (isRecord(item.message) ? item.message.id : undefined)),
-    ["m7", "m4", "m5", "m6", "m8", "m9"],
-  );
+test("compact drops the rows the derivation no longer reads, keeps the rest in written order, and cuts the same way again", async () => {
+  const rows = [...compactedRows(), compactionRow("m10", SUMMARY, "m6"), userRow("m11", "five")];
+  const { context } = await bootstrapped(rows);
+  const before = shownByModelMessages(await context.assemble({ ephemeral: [] }));
+  assert.equal(context.compact(), 5);
+  const retained = context
+    .checkpoint()
+    .items.map((item) => (isRecord(item.message) ? item.message.id : undefined));
+  assert.deepEqual(retained, ["m6", "m7", "m8", "m9", "m10", "m11"]);
+  assert.deepEqual(shownByModelMessages(await context.assemble({ ephemeral: [] })), before);
   assert.equal(context.compact(), 0);
 });
 
