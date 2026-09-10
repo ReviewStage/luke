@@ -176,7 +176,9 @@ Canonical commands:
   recorded, and the host answers it from the roster as it stands or, for a
   session the roster has since let go, from the address that session last
   reported, which the host keeps in memory for the run and nowhere else. A
-  line that names no session — a workspace creation — draws no press. Beyond
+  workspace creation's line names the session the provider's creation answer
+  identified — an id and never an address — so its chip is that same press,
+  and a line that names no session draws none. Beyond
   that, a session's address is reached by its row's press or by a validated
   ask in a developer-opened turn, and by nothing else. A workspace Luke just
   created opens itself the same way: the creation ask, already a
