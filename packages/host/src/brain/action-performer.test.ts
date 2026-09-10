@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ACTION_OUTPUT,
+  ACTION_OUTPUT_STATUS,
   ACTION_REFUSAL,
+  type CarriedActionResult,
   type CarriedIssueAction,
   type CarriedSessionAction,
   REALTIME_TOOL,
@@ -17,11 +20,12 @@ import {
   ACTION_KIND,
   normalizeSession,
   type ObservedWorkspaceProject,
+  SESSION_CONTROL_KIND,
   SESSION_STATUS,
   type Session,
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
-import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS, type WireRecord } from "@sidecar/wire";
 import {
   type BrainActionPerformerDependencies,
   createBrainActionPerformer,
@@ -91,6 +95,12 @@ const LISTED_PROJECT: ObservedWorkspaceProject = {
   taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
 };
 
+const STOP_CONTROL = {
+  kind: ACTION_KIND.CONTROL,
+  id: "stop",
+  label: "Stop",
+  controlKind: SESSION_CONTROL_KIND.STOP,
+} as const;
 const observed = normalizeSession(
   { id: "claude-code", displayName: "Claude Code" },
   {
@@ -98,11 +108,22 @@ const observed = normalizeSession(
     title: "Fix the flaky test",
     status: SESSION_STATUS.WAITING,
     lastActivityAt: NOW,
-    advertises: [{ kind: ACTION_KIND.MESSAGE }],
+    agent: { id: "cursor", displayName: "Cursor" },
+    advertises: [{ kind: ACTION_KIND.MESSAGE }, STOP_CONTROL],
   },
 );
+const CONTROL_CALL = {
+  name: REALTIME_TOOL.RUN_SESSION_CONTROL,
+  argumentsJson: `{${IDENTITY},"control_id":"stop"}`,
+};
 
-function performer(overrides: Partial<BrainActionPerformerDependencies> = {}) {
+/** The one performer fake, answering every carried action with the result the test chose. */
+function performer(
+  overrides: Partial<BrainActionPerformerDependencies> = {},
+  answer: (action: CarriedSessionAction | CarriedIssueAction) => CarriedActionResult = () => ({
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+  }),
+) {
   const performed: (CarriedSessionAction | CarriedIssueAction)[] = [];
   const recorded: ConversationEntry[] = [];
   const appActions: BrainAppActionRequest["action"][] = [];
@@ -111,7 +132,7 @@ function performer(overrides: Partial<BrainActionPerformerDependencies> = {}) {
     sessionActions: {
       perform: async (action) => {
         performed.push(action);
-        return { status: ACTION_RESULT_STATUS.ACCEPTED };
+        return answer(action);
       },
       openSession: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
       openSessionApplication: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
@@ -183,14 +204,123 @@ test("a session action reaches the performer only for a session the roster holds
     },
     LIVE,
   );
-  assert.equal(stranger.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.equal(stranger.status, ACTION_OUTPUT_STATUS.REFUSED);
   assert.equal(performed.length, 1);
 
   const unknown = await actions.perform({ name: "delete_everything", argumentsJson: "{}" }, LIVE);
   assert.deepEqual(unknown, {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: "No such tool exists.",
+    status: ACTION_OUTPUT_STATUS.REFUSED,
+    reason: ACTION_REFUSAL.NO_TOOL,
   });
+});
+
+test("every answer is the envelope: a session action's target as the roster held it, and the created session a creation named", async () => {
+  const { actions } = performer({ workspaceProjects: () => [LISTED_PROJECT] }, (action) =>
+    action.kind === ACTION_KIND.CREATE_WORKSPACE
+      ? {
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          createdSession: { providerId: "conductor", providerSessionId: "workspace-9" },
+        }
+      : { status: ACTION_RESULT_STATUS.ACCEPTED },
+  );
+
+  const sent = await actions.perform(MESSAGE_CALL, LIVE);
+  assert.deepEqual(sent, {
+    status: ACTION_OUTPUT_STATUS.ACCEPTED,
+    target: {
+      providerId: "claude-code",
+      providerSessionId: "session-a",
+      title: "Fix the flaky test",
+      agentId: "cursor",
+    },
+  });
+
+  const stopped = await actions.perform(CONTROL_CALL, LIVE);
+  assert.deepEqual(stopped, {
+    status: ACTION_OUTPUT_STATUS.ACCEPTED,
+    target: {
+      providerId: "claude-code",
+      providerSessionId: "session-a",
+      title: "Fix the flaky test",
+      agentId: "cursor",
+      controlKind: SESSION_CONTROL_KIND.STOP,
+      controlLabel: "Stop",
+    },
+  });
+
+  const created = await actions.perform(CREATE_CALL, LIVE);
+  assert.deepEqual(created, {
+    status: ACTION_OUTPUT_STATUS.ACCEPTED,
+    target: { providerId: "conductor" },
+    createdSession: { providerId: "conductor", providerSessionId: "workspace-9" },
+  });
+
+  for (const envelope of [sent, stopped, created]) {
+    assert.deepEqual(ACTION_OUTPUT.parse(envelope), envelope);
+  }
+});
+
+test("a carried action's refusal and lost answer keep their words apart: refused folds the adapter's two words, unknown stays unknown", async () => {
+  const outcomes: CarriedActionResult[] = [
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: "the provider said no" },
+    { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: "no documented way in" },
+    { status: UNKNOWN_ACTION_STATUS, reason: "the node went away" },
+  ];
+  const { actions } = performer({}, () => {
+    const next = outcomes.shift();
+    assert.ok(next);
+    return next;
+  });
+  const target = {
+    providerId: "claude-code",
+    providerSessionId: "session-a",
+    title: "Fix the flaky test",
+    agentId: "cursor",
+  };
+  assert.deepEqual(await actions.perform(MESSAGE_CALL, LIVE), {
+    status: ACTION_OUTPUT_STATUS.REFUSED,
+    reason: "the provider said no",
+    target,
+  });
+  assert.deepEqual(await actions.perform(MESSAGE_CALL, LIVE), {
+    status: ACTION_OUTPUT_STATUS.REFUSED,
+    reason: "no documented way in",
+    target,
+  });
+  assert.deepEqual(await actions.perform(MESSAGE_CALL, LIVE), {
+    status: ACTION_OUTPUT_STATUS.UNKNOWN,
+    reason: "the node went away",
+    target,
+  });
+});
+
+test("a panel's answer is read in its own dialect: an acceptance keeps its note and drops the rest, a lost answer stays unknown, and an unreadable shape is a refusal", async () => {
+  const answers: WireRecord[] = [
+    { status: ACTION_RESULT_STATUS.ACCEPTED, tab: "settings", kind: "setting" },
+    { status: ACTION_RESULT_STATUS.ACCEPTED, note: "The ask is drafted in the composer." },
+    { status: ACTION_RESULT_STATUS.ACCEPTED, outcome: "Up to date." },
+    { status: UNKNOWN_ACTION_STATUS, reason: "the panel went away" },
+    { status: ACTION_RESULT_STATUS.REJECTED },
+    { outcome: "fine" },
+  ];
+  const { actions } = performer({
+    appGuide: () => CAPTIONS_GUIDE,
+    performAppAction: async () => answers.shift() ?? {},
+  });
+  const outcomes = [];
+  while (answers.length > 0) outcomes.push(await actions.perform(SETTING_CALL, LIVE));
+  const unreadable = {
+    status: ACTION_OUTPUT_STATUS.REFUSED,
+    reason: "The panel answered in a shape this build cannot read.",
+  };
+  assert.deepEqual(outcomes, [
+    { status: ACTION_OUTPUT_STATUS.ACCEPTED },
+    { status: ACTION_OUTPUT_STATUS.ACCEPTED, note: "The ask is drafted in the composer." },
+    { status: ACTION_OUTPUT_STATUS.ACCEPTED, note: "Up to date." },
+    { status: ACTION_OUTPUT_STATUS.UNKNOWN, reason: "the panel went away" },
+    unreadable,
+    unreadable,
+  ]);
 });
 
 test("an issue action is refused outright while no tracker is connected", async () => {
@@ -202,7 +332,7 @@ test("an issue action is refused outright while no tracker is connected", async 
     },
     LIVE,
   );
-  assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.equal(refused.status, ACTION_OUTPUT_STATUS.REFUSED);
   assert.equal(performed.length, 0);
 });
 
@@ -303,7 +433,7 @@ test("an app action is validated against the reported guide before a renderer ca
     },
     LIVE,
   );
-  assert.equal(unlisted.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.equal(unlisted.status, ACTION_OUTPUT_STATUS.REFUSED);
   assert.equal(appActions.length, 1);
 });
 
@@ -344,7 +474,7 @@ test("an action with no turn standing is refused in main before any validator or
   for (const execution of malformed) {
     for (const call of [MESSAGE_CALL, REMEMBER_CALL, SETTING_CALL]) {
       const refused = await actions.perform(call, execution);
-      assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+      assert.equal(refused.status, ACTION_OUTPUT_STATUS.REFUSED);
     }
   }
   assert.deepEqual(performed, []);
@@ -364,7 +494,7 @@ test("a turn revoked while the roster refreshed is refused before the effect, an
     MESSAGE_CALL,
     developerTurn(() => revoked),
   );
-  assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.equal(refused.status, ACTION_OUTPUT_STATUS.REFUSED);
   assert.equal(refused.reason, ACTION_REFUSAL.TURN_OVER);
   assert.deepEqual(performed, []);
   assert.deepEqual(recorded, []);
@@ -383,7 +513,7 @@ test("a turn revoked while the creation defaults were read is refused before the
     CREATE_CALL,
     developerTurn(() => revoked),
   );
-  assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.equal(refused.status, ACTION_OUTPUT_STATUS.REFUSED);
   assert.deepEqual(performed, []);
   assert.deepEqual(recorded, []);
 });
@@ -392,10 +522,10 @@ test("a revoked turn reaches no memory write and no renderer action", async () =
   const { actions, facts, appActions } = performer({ appGuide: () => CAPTIONS_GUIDE });
   const over = developerTurn(() => true);
   const notSaved = await actions.perform(REMEMBER_CALL, over);
-  assert.equal(notSaved.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.equal(notSaved.status, ACTION_OUTPUT_STATUS.REFUSED);
   assert.deepEqual(facts(), []);
   const notChanged = await actions.perform(SETTING_CALL, over);
-  assert.equal(notChanged.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.equal(notChanged.status, ACTION_OUTPUT_STATUS.REFUSED);
   assert.deepEqual(appActions, []);
 });
 
@@ -409,7 +539,7 @@ test("an action is validated against the roster as refreshed inside the turn, no
     },
   });
   const refused = await actions.perform(MESSAGE_CALL, LIVE);
-  assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.equal(refused.status, ACTION_OUTPUT_STATUS.REFUSED);
   assert.deepEqual(performed, []);
 });
 
@@ -444,7 +574,7 @@ test("an issue act observes nothing: no pass runs for an action the roster canno
     { name: REALTIME_TOOL.COMMENT_ON_ISSUE, argumentsJson: "{}" },
     LIVE,
   );
-  assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.equal(refused.status, ACTION_OUTPUT_STATUS.REFUSED);
   assert.equal(passes, 0);
 });
 
@@ -482,7 +612,7 @@ test("a cancel during the roster refresh or the defaults read settles the action
     assert.equal(settled, false);
     controller.abort();
     const outcome = await pending;
-    assert.equal(outcome.status, ACTION_RESULT_STATUS.REJECTED);
+    assert.equal(outcome.status, ACTION_OUTPUT_STATUS.REFUSED);
     assert.deepEqual(h.performed, []);
     release?.();
     await drainMicrotasks(1);

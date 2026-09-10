@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { REALTIME_TOOL, type RealtimeFunctionCall } from "@sidecar/actions";
+import {
+  type ActionOutputEnvelope,
+  acceptedActionOutput,
+  REALTIME_TOOL,
+  type RealtimeFunctionCall,
+  refusedActionOutput,
+} from "@sidecar/actions";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import { checkpointFormatTag, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
@@ -9,7 +15,7 @@ import {
   type ProviderTranscriptSinceResult,
   SESSION_STATUS,
 } from "@sidecar/session";
-import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { type BrainPersistedState, freshBrainState } from "./envelope.js";
 import { BrainGenerationClock } from "./generation-clock.js";
 import {
@@ -441,12 +447,10 @@ test("a developer ask carries every action with a live execution, revoked once t
   });
   const h = harness({
     actions: {
-      perform: async (functionCall, execution): Promise<WireRecord> => {
+      perform: async (functionCall, execution): Promise<ActionOutputEnvelope> => {
         performedLate.push({ call: functionCall, execution });
         await held;
-        return execution.isRevoked()
-          ? { status: ACTION_RESULT_STATUS.REJECTED, reason: "turn over" }
-          : { status: ACTION_RESULT_STATUS.ACCEPTED };
+        return execution.isRevoked() ? refusedActionOutput("turn over") : acceptedActionOutput();
       },
     },
   });
@@ -1066,15 +1070,13 @@ test("a Clear or expiry asked for while a write is out on disk revokes a held ac
     let releasePreparation: (() => void) | undefined;
     let effects = 0;
     const actions: BrainActionPerformer = {
-      perform: async (_call, execution): Promise<WireRecord> => {
+      perform: async (_call, execution): Promise<ActionOutputEnvelope> => {
         await new Promise<void>((resolve) => {
           releasePreparation = resolve;
         });
-        if (execution.isRevoked()) {
-          return { status: ACTION_RESULT_STATUS.REJECTED, reason: "revoked before the effect" };
-        }
+        if (execution.isRevoked()) return refusedActionOutput("revoked before the effect");
         effects += 1;
-        return { status: ACTION_RESULT_STATUS.ACCEPTED };
+        return acceptedActionOutput();
       },
     };
     const h = harness({ actions });

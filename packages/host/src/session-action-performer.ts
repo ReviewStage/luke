@@ -3,6 +3,7 @@ import {
   ACTION_KIND,
   ACTION_REFUSAL,
   type ActionGuard,
+  type CarriedActionResult,
   dispatchByKind,
   guardedRead,
   type IssueActionKind,
@@ -51,7 +52,6 @@ import {
   ACTION_RESULT_STATUS,
   UNKNOWN_ACTION_STATUS,
   type UnknownActionResult,
-  type WireRecord,
 } from "@sidecar/wire";
 import { HOST_NODE_OPEN_KIND, type HostNodeOpenKind } from "./node-capabilities.js";
 import type { SettingsStore } from "./settings-store.js";
@@ -126,7 +126,7 @@ export interface SessionActionPerformer {
   perform(
     action: ValidatedAction<SessionActionKind | IssueActionKind>,
     guard?: ActionGuard,
-  ): Promise<WireRecord>;
+  ): Promise<CarriedActionResult>;
   openSession(identity: SessionIdentity): Promise<SessionOpenResult>;
   openSessionApplication(
     identity: SessionIdentity,
@@ -327,7 +327,7 @@ export function createSessionActionPerformer(
   // or, for a Superset-managed row, through the CLI that owns its terminal.
   const sendMessage = async (
     action: ValidatedAction<typeof ACTION_KIND.MESSAGE>,
-  ): Promise<WireRecord> => {
+  ): Promise<CarriedActionResult> => {
     const { identity } = action;
     const managed = supersetContext(identity);
     if (managed) {
@@ -346,7 +346,7 @@ export function createSessionActionPerformer(
   // the effect is built from on either path.
   const executeControl = async (
     action: ValidatedAction<typeof ACTION_KIND.CONTROL>,
-  ): Promise<WireRecord> => {
+  ): Promise<CarriedActionResult> => {
     const { identity, control } = action;
     const managed = supersetContext(identity);
     if (managed && isSupersetControlId(control.id)) {
@@ -455,12 +455,21 @@ export function createSessionActionPerformer(
         action.agent,
       );
       countSessionAction(plugin.provider.id, PRODUCT_SESSION_ACTION.WORKSPACE_CREATE, result);
-      // The named session was consumed above; the answer stays what became
-      // of the ask, so nothing rides out that the roster will not report on
-      // its own.
-      return result.warning
-        ? { status: ACTION_RESULT_STATUS.ACCEPTED, warning: result.warning }
-        : { status: ACTION_RESULT_STATUS.ACCEPTED };
+      // The session the creation named rides out as an identity under the
+      // provider that was asked — an identifier, never an address — for the
+      // envelope to record as the created session.
+      return {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        ...(result.providerSessionId !== undefined
+          ? {
+              createdSession: {
+                providerId: plugin.provider.id,
+                providerSessionId: result.providerSessionId,
+              },
+            }
+          : undefined),
+        ...(result.warning !== undefined ? { warning: result.warning } : undefined),
+      };
     }
     return result;
   };
@@ -471,7 +480,7 @@ export function createSessionActionPerformer(
   const addWorkspaceAgent = async (
     action: ValidatedAction<typeof ACTION_KIND.ADD_AGENT>,
     guard: ActionGuard | undefined,
-  ): Promise<WireRecord> => {
+  ): Promise<CarriedActionResult> => {
     const { identity } = action;
     const managed = supersetContext(identity);
     if (managed) {
@@ -501,7 +510,7 @@ export function createSessionActionPerformer(
   // last pass, never from the action, which carries the session and the name.
   const renameWorkspace = async (
     action: ValidatedAction<typeof ACTION_KIND.RENAME_WORKSPACE>,
-  ): Promise<WireRecord> => {
+  ): Promise<CarriedActionResult> => {
     const { identity } = action;
     const managed = supersetContext(identity);
     if (managed) {
@@ -518,7 +527,7 @@ export function createSessionActionPerformer(
 
   const renameSession = async (
     action: ValidatedAction<typeof ACTION_KIND.RENAME_SESSION>,
-  ): Promise<WireRecord> =>
+  ): Promise<CarriedActionResult> =>
     performOnSession(action.identity, PRODUCT_SESSION_ACTION.SESSION_RENAME, (plugin) =>
       dispatchAction(plugin, "renameSession", providerSessionRenameRequest(action)),
     );
@@ -590,13 +599,13 @@ export function createSessionActionPerformer(
   const performSessionAction = (
     action: ValidatedAction<SessionActionKind>,
     guard: ActionGuard | undefined,
-  ): Promise<WireRecord> =>
+  ): Promise<CarriedActionResult> =>
     dispatchByKind(action, {
       [ACTION_KIND.MESSAGE]: sendMessage,
       [ACTION_KIND.CONTROL]: executeControl,
       // An open the brain carries was asked of Luke, never pressed on a row,
       // so the node is told a panel still stands over the chat coming forward.
-      [ACTION_KIND.OPEN]: async (open): Promise<WireRecord> =>
+      [ACTION_KIND.OPEN]: async (open): Promise<CarriedActionResult> =>
         open.applicationId
           ? openSessionApplication(
               open.identity,
@@ -604,7 +613,7 @@ export function createSessionActionPerformer(
               HOST_NODE_OPEN_KIND.ASKED_SESSION,
             )
           : openSession(open.identity, HOST_NODE_OPEN_KIND.ASKED_SESSION),
-      [ACTION_KIND.CREATE_WORKSPACE]: async (creation): Promise<WireRecord> =>
+      [ACTION_KIND.CREATE_WORKSPACE]: async (creation): Promise<CarriedActionResult> =>
         createWorkspace(creation, guard),
       [ACTION_KIND.ADD_AGENT]: (spawn) => addWorkspaceAgent(spawn, guard),
       [ACTION_KIND.RENAME_WORKSPACE]: renameWorkspace,

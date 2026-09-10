@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { REALTIME_TOOL } from "@sidecar/actions";
+import { REALTIME_TOOL, refusedActionOutput } from "@sidecar/actions";
 import { ACTION_RESULT_STATUS, isWireString } from "@sidecar/wire";
 import { freshBrainState } from "./envelope.js";
 import {
@@ -89,7 +89,7 @@ test("a performer that throws after dispatch leaves an unknown action, kept thro
   // A confirmed refusal, by contrast, is a refusal: nothing unknown about it.
   const refusing = harness({
     actions: {
-      perform: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "not observed" }),
+      perform: async () => refusedActionOutput("not observed"),
     },
   });
   refusing.client.answers.push(

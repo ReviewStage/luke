@@ -180,6 +180,18 @@ export interface ProviderSessionObservation extends SessionFields {
   directory?: string;
 }
 
+/** The observed session standing under one identity, or nothing once the roster has let it go. */
+export function sessionWithIdentity(
+  identity: SessionIdentity,
+  sessions: readonly Session[],
+): Session | undefined {
+  return sessions.find(
+    (candidate) =>
+      candidate.providerId === identity.providerId &&
+      candidate.providerSessionId === identity.providerSessionId,
+  );
+}
+
 export type Session = SessionIdentity &
   Omit<SessionFields, NormalizedSessionField> &
   Required<Pick<SessionFields, NormalizedSessionField>> & { provider: SessionProvider };

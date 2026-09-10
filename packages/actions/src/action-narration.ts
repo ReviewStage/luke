@@ -4,12 +4,13 @@
  * written and no action can be recorded as "an action" with nothing said about it.
  */
 
-import type {
-  CONVERSATION_ENTRY_KIND,
-  ConversationEntry,
-  Session,
-  SessionApplicationId,
-  SessionIdentity,
+import {
+  type CONVERSATION_ENTRY_KIND,
+  type ConversationEntry,
+  type Session,
+  type SessionApplicationId,
+  type SessionIdentity,
+  sessionWithIdentity,
 } from "@sidecar/session";
 import {
   ACTION_KIND,
@@ -19,11 +20,7 @@ import {
 } from "./action-kinds.js";
 
 function observedSessionName(identity: SessionIdentity, sessions: readonly Session[]): string {
-  const session = sessions.find(
-    (candidate) =>
-      candidate.providerId === identity.providerId &&
-      candidate.providerSessionId === identity.providerSessionId,
-  );
+  const session = sessionWithIdentity(identity, sessions);
   return session ? `"${session.title}"` : "a session";
 }
 
@@ -32,11 +29,7 @@ function observedApplicationName(
   applicationId: SessionApplicationId,
   sessions: readonly Session[],
 ): string {
-  const session = sessions.find(
-    (candidate) =>
-      candidate.providerId === identity.providerId &&
-      candidate.providerSessionId === identity.providerSessionId,
-  );
+  const session = sessionWithIdentity(identity, sessions);
   return (
     session?.applications.find((application) => application.id === applicationId)?.displayName ??
     applicationId

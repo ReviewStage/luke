@@ -2,10 +2,16 @@ import { randomUUID } from "node:crypto";
 import {
   ACTION_KIND,
   ACTION_REFUSAL,
+  type ActionOutputEnvelope,
   type AdmitContext,
+  acceptedActionOutput,
+  actionOutputFromResult,
+  actionTargetSnapshot,
+  type CarriedActionResult,
   dispatchByKind,
   type RealtimeFunctionCall,
   type RememberedFact,
+  refusedActionOutput,
   type SessionActionKind,
   sessionActionConversationEntry,
   toolAction,
@@ -23,7 +29,14 @@ import {
   type Session,
   workspaceAgentModels,
 } from "@sidecar/session";
-import { ACTION_RESULT_STATUS, isWireString, type WireRecord } from "@sidecar/wire";
+import {
+  ACTION_RESULT_STATUS,
+  isWireString,
+  RECORD_EXTRA_KEYS,
+  s,
+  UNKNOWN_ACTION_STATUS,
+  type WireRecord,
+} from "@sidecar/wire";
 import type { SessionActionPerformer } from "../session-action-performer.js";
 
 /** The developer's saved creation tie-breaks, as the projects context narrates them. */
@@ -75,10 +88,37 @@ const REFUSAL = {
   TURN_OVER: ACTION_REFUSAL.TURN_OVER,
   MEMORY_NOT_SAVED: "That memory could not be saved.",
   MEMORY_NOT_REMOVED: "That memory could not be removed.",
+  UNREADABLE_PANEL_ANSWER: "The panel answered in a shape this build cannot read.",
 } as const;
 
-function rejection(reason: string): WireRecord {
-  return { status: ACTION_RESULT_STATUS.REJECTED, reason };
+/**
+ * The panel's answer to an app action, read as untrusted: the status and the
+ * sentence beside it, in the panel's own dialect — a refusal's reason, or the
+ * note or outcome an acceptance sometimes carries — and nothing else it says.
+ */
+const PANEL_ANSWER = s.record(
+  {
+    status: s.enumOf<CarriedActionResult["status"]>([
+      ACTION_RESULT_STATUS.ACCEPTED,
+      ACTION_RESULT_STATUS.REJECTED,
+      ACTION_RESULT_STATUS.UNSUPPORTED,
+      UNKNOWN_ACTION_STATUS,
+    ]),
+    reason: s.dropRefused(s.text()),
+    note: s.dropRefused(s.text()),
+    outcome: s.dropRefused(s.text()),
+  },
+  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+);
+
+function panelResult(answered: WireRecord): CarriedActionResult | undefined {
+  const read = PANEL_ANSWER.parse(answered);
+  if (read === undefined) return undefined;
+  if (read.status === ACTION_RESULT_STATUS.ACCEPTED) {
+    const note = read.note ?? read.outcome;
+    return { status: read.status, ...(note !== undefined ? { note } : undefined) };
+  }
+  return read.reason === undefined ? undefined : { status: read.status, reason: read.reason };
 }
 
 /**
@@ -138,17 +178,22 @@ export function createBrainActionPerformer(
     };
   };
 
-  const carrySessionAction = (
+  const carrySessionAction = async (
     action: ValidatedAction<SessionActionKind>,
     execution: BrainActionExecution,
-  ): Promise<WireRecord> => {
+  ): Promise<ActionOutputEnvelope> => {
+    // The roster as admission just refreshed it is the snapshot the envelope
+    // carries: the title and agent the target wore when the action ran, read
+    // now rather than at render, when the session may be renamed or gone.
+    const sessions = dependencies.sessions();
+    const target = actionTargetSnapshot(action, sessions);
     // The ask is recorded before the outcome is known: a refusal still leaves
     // the developer having asked it, and the reply voicing the outcome is
     // recorded as what Luke said.
     dependencies.recordConversationEntry(
       sessionActionConversationEntry(
         action,
-        dependencies.sessions(),
+        sessions,
         execution.origin === RUN_ORIGIN.USER
           ? CONVERSATION_ENTRY_KIND.ACTION
           : CONVERSATION_ENTRY_KIND.OWN_ACTION,
@@ -156,20 +201,33 @@ export function createBrainActionPerformer(
     );
     // The performer awaits once more of its own before a create or a spawn,
     // so the execution rides along to be asked again there.
-    return dependencies.sessionActions.perform(action, execution);
+    return actionOutputFromResult(
+      await dependencies.sessionActions.perform(action, execution),
+      target,
+    );
+  };
+
+  /** A panel answer this build cannot read is a refusal, never an acceptance. */
+  const carryAppAction = async (
+    action: BrainAppActionRequest["action"],
+  ): Promise<ActionOutputEnvelope> => {
+    const result = panelResult(await dependencies.performAppAction(action));
+    return result === undefined
+      ? refusedActionOutput(REFUSAL.UNREADABLE_PANEL_ANSWER)
+      : actionOutputFromResult(result);
   };
 
   return {
     async perform(call: RealtimeFunctionCall, execution: BrainActionExecution) {
-      if (!isExecution(execution)) return rejection(REFUSAL.NO_EXECUTION);
-      if (execution.isRevoked()) return rejection(REFUSAL.TURN_OVER);
+      if (!isExecution(execution)) return refusedActionOutput(REFUSAL.NO_EXECUTION);
+      if (execution.isRevoked()) return refusedActionOutput(REFUSAL.TURN_OVER);
       const admitted = await toolAction(call, admissionContext(execution));
-      if (admitted.kind === undefined) return rejection(admitted.reason);
-      if (execution.isRevoked()) return rejection(REFUSAL.TURN_OVER);
+      if (admitted.kind === undefined) return refusedActionOutput(admitted.reason);
+      if (execution.isRevoked()) return refusedActionOutput(REFUSAL.TURN_OVER);
       // Where each admitted action goes, named kind by kind: the two notebook
       // writes are carried here, an app action is the renderer's to perform, an
       // issue action reaches its tracker without a Conversation line, and a session
-      // action is recorded as it is carried.
+      // action is recorded as it is carried. Every answer is the one envelope.
       return dispatchByKind(admitted, {
         [ACTION_KIND.REMEMBER]: async (action) =>
           (await dependencies.notebook.remember({
@@ -177,20 +235,20 @@ export function createBrainActionPerformer(
             words: action.words,
             ...(action.replaces !== undefined ? { replaces: action.replaces } : undefined),
           }))
-            ? { status: ACTION_RESULT_STATUS.ACCEPTED }
-            : rejection(REFUSAL.MEMORY_NOT_SAVED),
+            ? acceptedActionOutput()
+            : refusedActionOutput(REFUSAL.MEMORY_NOT_SAVED),
         [ACTION_KIND.FORGET]: async (action) =>
           (await dependencies.notebook.forget(action.id))
-            ? { status: ACTION_RESULT_STATUS.ACCEPTED }
-            : rejection(REFUSAL.MEMORY_NOT_REMOVED),
-        [ACTION_KIND.SETTING]: (action) => dependencies.performAppAction(action),
-        [ACTION_KIND.PANEL]: (action) => dependencies.performAppAction(action),
-        [ACTION_KIND.FEEDBACK]: (action) => dependencies.performAppAction(action),
-        [ACTION_KIND.UPDATE]: (action) => dependencies.performAppAction(action),
-        [ACTION_KIND.ISSUE_STATE]: (action) =>
-          dependencies.sessionActions.perform(action, execution),
-        [ACTION_KIND.ISSUE_COMMENT]: (action) =>
-          dependencies.sessionActions.perform(action, execution),
+            ? acceptedActionOutput()
+            : refusedActionOutput(REFUSAL.MEMORY_NOT_REMOVED),
+        [ACTION_KIND.SETTING]: carryAppAction,
+        [ACTION_KIND.PANEL]: carryAppAction,
+        [ACTION_KIND.FEEDBACK]: carryAppAction,
+        [ACTION_KIND.UPDATE]: carryAppAction,
+        [ACTION_KIND.ISSUE_STATE]: async (action) =>
+          actionOutputFromResult(await dependencies.sessionActions.perform(action, execution)),
+        [ACTION_KIND.ISSUE_COMMENT]: async (action) =>
+          actionOutputFromResult(await dependencies.sessionActions.perform(action, execution)),
         [ACTION_KIND.MESSAGE]: (action) => carrySessionAction(action, execution),
         [ACTION_KIND.CONTROL]: (action) => carrySessionAction(action, execution),
         [ACTION_KIND.OPEN]: (action) => carrySessionAction(action, execution),
