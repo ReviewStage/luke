@@ -76,12 +76,11 @@ import {
   type TurnResult,
   turnRevoked,
 } from "./turn.js";
-import {
-  BRAIN_WAKE_KIND,
-  type BrainDelivery,
-  type BrainTurnNotice,
-  type BrainTurnReport,
-  type BrainWakeEvent,
+import type {
+  BrainDelivery,
+  BrainTurnNotice,
+  BrainTurnReport,
+  BrainWakeEvent,
 } from "./wake-events.js";
 
 /**
@@ -534,16 +533,11 @@ export class TurnRunner {
       // host has already withdrawn; the cursors go back with the context.
       failure = revocation();
     } else {
-      // A scheduled look carries the whole roster in its own words, so a
-      // session whose transcript gained nothing is left out of the events
-      // rather than repeated as an empty delta.
-      const events =
-        plan.trigger === BRAIN_TURN_TRIGGER.ROSTER
-          ? attachedDeltas.events.filter(
-              (event) =>
-                event.kind !== BRAIN_WAKE_KIND.ROSTER || Boolean(event.transcriptDelta?.text),
-            )
-          : attachedDeltas.events;
+      // A look's event is news by the time it is here — the capture already
+      // dropped a look over a session that gained nothing and stood unchanged
+      // — so an empty delta is kept beside the session fields that moved,
+      // which for a provider answering no incremental read is all a look has.
+      const events = attachedDeltas.events;
       // Every turn advances its rollback point: each answered effect is
       // checkpointed and the mark moves past it, so a later failure returns
       // the context to the last paired state and never to before an action that

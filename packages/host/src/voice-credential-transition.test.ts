@@ -7,6 +7,7 @@ import {
   BrainAgent,
   BrainStateStore,
   hostedBrainToolCatalog,
+  LOOK_SUBJECT,
   toolLoopRuntimeOver,
 } from "@sidecar/brain";
 import { fakeBrainStateRepository } from "@sidecar/brain/testing";
@@ -137,6 +138,7 @@ function composition() {
       builds.push(model.model ?? "hosted");
       return new BrainAgent({
         runtime: toolLoopRuntimeOver(model),
+        observes: { kind: LOOK_SUBJECT.NONE },
         prepareTurn: () => ({ prompt: "instructions", layers: {} }),
         actions: { perform: async () => ({ status: "accepted" }) },
         roster: () => ({ text: "none", identities: [] }),

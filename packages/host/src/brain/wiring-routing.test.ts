@@ -30,6 +30,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import {
   normalizeSession,
+  SESSION_LOCATION,
   SESSION_STATUS,
   type Session,
   type SessionIdentity,
@@ -46,8 +47,10 @@ import { type BrainWiring, wireBrain } from "./wiring.js";
  */
 
 const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
+const conductor: SessionProvider = { id: "conductor", displayName: "Conductor" };
 const ABC: SessionIdentity = { providerId: claude.id, providerSessionId: "abc" };
 const DEF: SessionIdentity = { providerId: claude.id, providerSessionId: "def" };
+const CLOUD: SessionIdentity = { providerId: conductor.id, providerSessionId: "cloud-1" };
 const SECRET = (id: string) => `TRANSCRIPT_OF_${id}`;
 
 function session(id: string): Session {
@@ -56,6 +59,16 @@ function session(id: string): Session {
     title: `Claude Code: ${id}`,
     status: SESSION_STATUS.WORKING,
     lastActivityAt: 1_800_000_000_000,
+  });
+}
+
+function cloudSession(): Session {
+  return normalizeSession(conductor, {
+    providerSessionId: CLOUD.providerSessionId,
+    title: "Conductor: cloud",
+    status: SESSION_STATUS.WORKING,
+    lastActivityAt: 1_800_000_000_000,
+    location: SESSION_LOCATION.CLOUD,
   });
 }
 
@@ -218,13 +231,20 @@ function composed(t: TestContext, gate?: Gate): Composed {
     // The host decides what belongs in one conversation's standing context by
     // its key; this harness reports the key it was asked about.
     standingContext: (sessionKey) => `standing context for ${sessionKey}`,
-    pluginFor: () => ({
-      provider: claude,
+    pluginFor: (providerId) => ({
+      provider: providerId === conductor.id ? conductor : claude,
       observe: async () => [],
       latest: () => [],
       reads: {
         transcriptSince: async (providerSessionId: string, cursor?: string) => {
-          reads.push({ providerId: claude.id, providerSessionId });
+          reads.push({ providerId, providerSessionId });
+          // A cloud provider answers no incremental read; the look still opens.
+          if (providerId === conductor.id) {
+            return {
+              status: ACTION_RESULT_STATUS.UNSUPPORTED,
+              reason: "This provider keeps no transcript this build can read.",
+            };
+          }
           // The transcript grows once; every later read from the cursor finds
           // nothing new.
           return {
@@ -348,6 +368,48 @@ test("a roster look opens one conversation per observed session, each reading on
   await until(() => c.wiring.current(defKey) === undefined);
   assert.equal(c.wiring.current(defKey), undefined);
   assert.ok(c.wiring.current(abcKey));
+  c.wiring.retire();
+  await c.wiring.rebuild();
+});
+
+test("a roster look opens a cloud session's conversation like a local one, reads no message, and stands it down when the session leaves", async (t) => {
+  const c = composed(t);
+  c.roster.push(cloudSession());
+  await c.wiring.rebuild();
+  c.wiring.rosterLook();
+  await until(() => c.inputs.length >= 3 && c.wiring.pendingNotices().length === 3);
+  const cloudKey = observedSessionKey(CLOUD);
+  assert.ok(c.ensured.some((entry) => entry.sessionKey === cloudKey));
+  assert.ok(c.wiring.current(cloudKey));
+  // The cloud session's read went through its own provider and answered no
+  // transcript; its turn opened on the roster fields alone, and no other
+  // session's transcript reached its conversation.
+  assert.deepEqual(
+    c.reads.filter((identity) => identity.providerId === conductor.id),
+    [CLOUD],
+  );
+  const cloudInput = c.inputs.find((input) => itemTexts(input).join("\n").includes("cloud-1"));
+  assert.ok(cloudInput);
+  const cloudTexts = itemTexts(cloudInput).join("\n");
+  assert.ok(!cloudTexts.includes("TRANSCRIPT_OF"));
+  assert.ok(cloudTexts.includes(`standing context for ${cloudKey}`));
+  const cloudNotice = c.wiring
+    .pendingNotices()
+    .find((notice) => notice.label === "Conductor: cloud");
+  assert.ok(cloudNotice);
+  assert.equal(cloudNotice.trigger, BRAIN_TURN_TRIGGER.ROSTER);
+  // A second look at the unchanged cloud session opens no inference.
+  await c.wiring.rosterLook();
+  await pause(200);
+  assert.equal(c.inputs.length, 3);
+  // Gone from the roster, its idle conversation stands down like a local one's.
+  c.roster.splice(
+    c.roster.findIndex((held) => held.providerId === conductor.id),
+    1,
+  );
+  c.wiring.rosterLook();
+  await until(() => c.wiring.current(cloudKey) === undefined);
+  assert.ok(c.wiring.current(observedSessionKey(ABC)));
   c.wiring.retire();
   await c.wiring.rebuild();
 });

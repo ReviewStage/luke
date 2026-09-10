@@ -3,10 +3,13 @@ import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import {
   normalizeSession,
+  type ProviderSessionObservation,
   type ProviderTranscriptSinceResult,
   SESSION_COMPLETION_CAUSE,
+  SESSION_LOCATION,
   SESSION_STATUS,
   type SessionIdentity,
+  type SessionStatus,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, unparsedWire, wireRecord } from "@sidecar/wire";
 import { type BrainAgentOptions, LOOK_SUBJECT } from "./agent.js";
@@ -128,31 +131,40 @@ test("stop opens nothing more, and a captured observation stays for the next age
   });
 });
 
-test("a roster look carries only the transcripts that grew, never the roster", async () => {
-  const working = session("abc", { status: SESSION_STATUS.WORKING });
-  const settled = session("def", { status: SESSION_STATUS.COMPLETE, lastActivityAt: NOW - 60_000 });
-  const cloud = normalizeSession(
-    { id: "conductor", displayName: "Conductor" },
-    {
-      providerSessionId: "cloud-1",
-      title: "Conductor: cloud",
-      status: SESSION_STATUS.WORKING,
-      lastActivityAt: NOW,
-      location: "cloud",
-    },
-  );
+const CONDUCTOR = { id: "conductor", displayName: "Conductor" };
+const CLOUD: SessionIdentity = { providerId: CONDUCTOR.id, providerSessionId: "cloud-1" };
+
+function cloudSession(overrides: Partial<ProviderSessionObservation> = {}) {
+  return normalizeSession(CONDUCTOR, {
+    providerSessionId: CLOUD.providerSessionId,
+    title: "Conductor: cloud",
+    status: SESSION_STATUS.WORKING,
+    lastActivityAt: NOW,
+    location: SESSION_LOCATION.CLOUD,
+    ...overrides,
+  });
+}
+
+const NO_TRANSCRIPT: ProviderTranscriptSinceResult = {
+  status: ACTION_RESULT_STATUS.UNSUPPORTED,
+  reason: "This provider keeps no transcript this build can read.",
+};
+
+test("a look at a cloud session reads its roster fields alone, carrying an unsupported, empty delta", async () => {
   const read: string[] = [];
   const h = harness({
+    observes: { kind: LOOK_SUBJECT.SESSION, identity: CLOUD },
     roster: () => ({
-      text: "Currently observed sessions:\n- abc\n- def\n- cloud-1",
-      identities: [ABC, DEF, { providerId: "conductor", providerSessionId: "cloud-1" }],
-      sessions: [working, settled, cloud],
+      text: "Currently observed sessions:\n- abc\n- cloud-1",
+      identities: [ABC, CLOUD],
+      sessions: [session("abc", { status: SESSION_STATUS.WORKING }), cloudSession()],
     }),
     readTranscriptSince: async (identity): Promise<ProviderTranscriptSinceResult> => {
       read.push(identity.providerSessionId);
+      if (identity.providerId === CONDUCTOR.id) return NO_TRANSCRIPT;
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
-        text: identity.providerSessionId === "abc" ? "assistant: still going" : "",
+        text: "assistant: still going",
         cursor: `${identity.providerSessionId}-cursor`,
         truncated: false,
       };
@@ -161,40 +173,91 @@ test("a roster look carries only the transcripts that grew, never the roster", a
   h.agent.rosterLook();
   await settle();
 
+  // The cloud session is the only one read, through the same seam a local
+  // one is, and the provider's refusal is a defined delta rather than a
+  // reason to capture nothing.
+  assert.deepEqual(read, ["cloud-1"]);
   assert.equal(h.client.inputs.length, 1);
-  const input = h.client.inputs[0] ?? [];
-  const opening = itemText(itemsOfType(input, RESPONSES_INPUT_ITEM_TYPE.MESSAGE)[0]);
+  const entry = h.persisted[0]?.inbox[0];
+  assert.equal(entry?.providerSessionId, "cloud-1");
+  assert.deepEqual(entry?.delta, {
+    text: "",
+    truncated: false,
+    status: ACTION_RESULT_STATUS.UNSUPPORTED,
+  });
+  assert.equal(entry?.cursor, undefined);
+  const opening = itemText((h.client.inputs[0] ?? [])[0]);
   assert.ok(opening.startsWith(`${BRAIN_INPUT_MARKER.OBSERVED_EVENTS} `));
   const body = wireRecord(unparsedWire(JSON.parse(opening.slice(opening.indexOf("\n") + 1))));
-  assert.ok(body);
-  // The roster rides in the standing context of the same request, so the
-  // opening item repeats neither it nor a flag naming the look.
-  assert.equal(body.scheduled_roster_look, undefined);
-  assert.equal(body.roster, undefined);
-  // Only the working local session's transcript is carried: the settled one
-  // had no cursor and nothing live, the cloud one is not read on a look, and
-  // a delta that came back empty is left out rather than reported as news.
-  assert.ok(Array.isArray(body.events));
+  assert.ok(body && Array.isArray(body.events));
   assert.equal(body.events.length, 1);
   const only = wireRecord(unparsedWire(body.events[0]));
   assert.equal(only?.kind, BRAIN_WAKE_KIND.ROSTER);
-  assert.equal(only?.provider_session_id, "abc");
-  assert.deepEqual(read, ["abc"]);
+  assert.equal(only?.provider_id, CONDUCTOR.id);
+  assert.equal(only?.provider_session_id, "cloud-1");
+  assert.equal(wireRecord(unparsedWire(only?.transcript_delta))?.status, "unsupported");
+  assert.equal(wireRecord(unparsedWire(only?.session))?.status, SESSION_STATUS.WORKING);
+  assert.ok(!opening.includes("still going"));
   assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.ROSTER);
+  await h.agent.stop();
+});
 
-  // The look can be triggered again by the host.
+test("a cloud session seen working and then reported failed opens a look for the edge", async () => {
+  let current = cloudSession();
+  const h = harness({
+    observes: { kind: LOOK_SUBJECT.SESSION, identity: CLOUD },
+    roster: () => ({ text: "roster", identities: [CLOUD], sessions: [current] }),
+    readTranscriptSince: async () => NO_TRANSCRIPT,
+  });
+  h.client.answers.push(answered([message("")]), answered([message("")]));
+  h.agent.rosterLook();
+  await settle();
+  assert.equal(h.client.inputs.length, 1);
+
+  current = cloudSession({
+    status: SESSION_STATUS.ERROR,
+    detail: { error: "The agent stopped on an error." },
+  });
   h.agent.rosterLook();
   await settle();
   assert.equal(h.client.inputs.length, 2);
+  const entry = h.persisted
+    .flatMap((state) => state.inbox)
+    .find((captured) => captured.session?.status === SESSION_STATUS.ERROR);
+  assert.ok(entry);
+  assert.equal(entry.session?.error, "The agent stopped on an error.");
+  const second = (h.client.inputs[1] ?? []).map(itemText).join("\n");
+  assert.ok(second.includes(`"status":"${SESSION_STATUS.ERROR}"`));
+  assert.ok(second.includes("The agent stopped on an error."));
+  await h.agent.stop();
+});
+
+test("two identical cloud looks capture once", async () => {
+  const h = harness({
+    observes: { kind: LOOK_SUBJECT.SESSION, identity: CLOUD },
+    roster: () => ({ text: "roster", identities: [CLOUD], sessions: [cloudSession()] }),
+    readTranscriptSince: async () => NO_TRANSCRIPT,
+  });
+  h.client.answers.push(answered([message("")]));
+  h.agent.rosterLook();
+  await settle();
+  assert.equal(h.client.inputs.length, 1);
+  const captures = h.persisted.length;
+  h.agent.rosterLook();
+  await settle();
+  assert.equal(h.persisted.length, captures);
+  assert.equal(h.client.inputs.length, 1);
+  assert.equal(h.agent.pendingWakes(), 0);
   await h.agent.stop();
 });
 
 test("a roster look is skipped while the client is quiet or a turn is in flight", async () => {
+  let status: SessionStatus = SESSION_STATUS.WORKING;
   const h = harness({
     roster: () => ({
       text: "roster",
       identities: [ABC],
-      sessions: [session("abc", { status: SESSION_STATUS.WORKING })],
+      sessions: [session("abc", { status })],
     }),
   });
 
@@ -225,7 +288,8 @@ test("a roster look is skipped while the client is quiet or a turn is in flight"
   await settle();
   assert.equal(h.client.inputs.length, 1);
 
-  // After the turn completes, the look proceeds.
+  // After the turn completes, a look that finds the session moved proceeds.
+  status = SESSION_STATUS.WAITING;
   h.agent.rosterLook();
   await settle();
   assert.equal(h.client.inputs.length, 2);

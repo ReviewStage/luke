@@ -52,7 +52,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import { BrainAgent, type BrainAgentOptions } from "./agent.js";
+import { BrainAgent, type BrainAgentOptions, LOOK_SUBJECT } from "./agent.js";
 import { toolLoopRuntimeOver } from "./builtins.js";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { HostedModelAdapter } from "./hosted-model-adapter.js";
@@ -278,6 +278,7 @@ function host(
   });
   const agent = new BrainAgent({
     runtime: runtimeOver(model),
+    observes: { kind: LOOK_SUBJECT.NONE },
     prepareTurn: () => ({ prompt: "instructions", layers: {} }),
     actions: {
       perform: async (call) => {

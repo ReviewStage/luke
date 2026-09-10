@@ -41,9 +41,10 @@ session, which keeps no transcript on your Mac, the same "read the recent
 tail" ask reads the newest page of that chat's conversation from Conductor
 instead — your own messages and the agent's replies, not its tool activity —
 using the Conductor key you gave the Mac app, only for a session Luke was just
-shown, and never on his periodic look; what he reads is held in that turn's
-working memory and stored nowhere else. Nothing else reads message history, file
-contents, or command output. If you run
+shown, and only inside a turn: one you opened, or one a status change on that
+chat woke; the periodic look itself reads no message of any chat. What he
+reads is held in that turn's working memory and stored nowhere else. Nothing
+else reads message history, file contents, or command output. If you run
 agents inside the Herdr terminal manager, Luke also asks Herdr's own
 command-line tool which of those sessions it holds, so their rows can say so;
 that read never starts Herdr, reads no terminal output, and sends nothing
@@ -311,11 +312,15 @@ Conductor key and have signed in within the last 7 days, our service reads
 your Conductor sessions on its own schedule, about once a minute, the same
 read-only pass the iOS app used to ask for on demand: your open workspaces,
 their chats, each chat's status, the agent kind running it, and the error
-line it stopped on. It never reads a chat's messages. We keep the latest
-roster it read, encrypted at rest with the same server-only secret as your
-keys, and beside it what changed since the pass before — a session that
-appeared or vanished, a status that moved, an error line that changed — so
-Luke can later be woken by a change rather than by a clock, and so the phone
+line it stopped on. It never reads a chat's messages. On your Mac, a status
+change on a Conductor chat wakes Luke's judgment for that chat the way a
+change on a local session does; that turn may read the chat's recent messages
+under the "read the recent tail" terms above, and the pass itself still reads
+none. We keep the latest roster it read, encrypted at rest with the same
+server-only secret as your keys, and beside it what changed since the pass
+before — a session that appeared or vanished, a status that moved, an error
+line that changed — so Luke can later be woken by a change rather than by a
+clock, and so the phone
 and watch can later be shown your sessions without asking Conductor again;
 today they still ask Conductor directly. The roster and its changes are
 replaced on every pass; nothing older is kept.

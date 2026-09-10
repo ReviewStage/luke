@@ -7,6 +7,7 @@ import {
   DELIVERY_STATE,
   DeliveryLedger,
   type DeliveryRecord,
+  LOOK_SUBJECT,
   responsesModelAnswer,
   toolLoopRuntimeOver,
 } from "@sidecar/brain";
@@ -179,6 +180,7 @@ export function brainHarness() {
   const build = (client: BareResponsesModel, options: Partial<BrainAgentOptions> = {}) => {
     const model = bareModelAdapter(client);
     return new BrainAgent({
+      observes: { kind: LOOK_SUBJECT.NONE },
       ...options,
       runtime: toolLoopRuntimeOver(model),
       prepareTurn: () => ({ prompt: "instructions", layers: {} }),

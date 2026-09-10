@@ -15,7 +15,12 @@ import {
   type ModelResponse,
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { BrainAgent, type BrainFlushInput, type BrainFlushMarkerStore } from "./agent.js";
+import {
+  BrainAgent,
+  type BrainFlushInput,
+  type BrainFlushMarkerStore,
+  LOOK_SUBJECT,
+} from "./agent.js";
 import { ResponsesContextEngine } from "./context-engine.js";
 import {
   BRAIN_REQUEST_ORIGIN,
@@ -153,6 +158,7 @@ function agentWith(
   });
   const agent = new BrainAgent({
     runtime,
+    observes: { kind: LOOK_SUBJECT.NONE },
     prepareTurn: () => ({ prompt: "flush test", layers: {} }),
     actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
     roster: () => ({ text: "", identities: [] }),

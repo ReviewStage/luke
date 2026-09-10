@@ -55,7 +55,7 @@ import {
 } from "./turn.js";
 import { type BrainOpeningNotes, TurnRunner } from "./turn-runner.js";
 import type { BrainDelivery, BrainTurnReport, BrainWakeEvent } from "./wake-events.js";
-import { LOOK_SUBJECT, type LookSubject, WakeCapture } from "./wakes.js";
+import { type LookSubject, WakeCapture } from "./wakes.js";
 
 export type { BrainRequestsListener } from "./asks.js";
 export type { BrainCompletionDelivery } from "./children.js";
@@ -119,11 +119,10 @@ export interface BrainAgentOptions {
   lane?: BrainLane;
   openingNotes?: BrainOpeningNotes;
   /**
-   * Which sessions this conversation's roster look reads, so two
-   * conversations never read each other's transcript. Absent, the look reads
-   * every local session that is working, waiting, or read before.
+   * Which session this conversation's roster look reads, so two conversations
+   * never read each other's transcript: its one observed session, or none.
    */
-  observes?: LookSubject;
+  observes: LookSubject;
   /**
    * Set when this conversation is a child's: how deep it is. Every turn is
    * then prepared as a child's — the minimal profile, the child restriction
@@ -310,7 +309,7 @@ export class BrainAgent {
     });
     this.#wakes = new WakeCapture({
       seam,
-      subject: options.observes ?? { kind: LOOK_SUBJECT.ROSTER },
+      subject: options.observes,
       roster: options.roster,
       readTranscriptSince: options.readTranscriptSince,
       createRunId: options.createRunId,

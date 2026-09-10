@@ -1,12 +1,5 @@
-import {
-  type ProviderTranscriptSinceResult,
-  SESSION_LOCATION,
-  SESSION_STATUS,
-  type Session,
-  type SessionIdentity,
-} from "@sidecar/session";
+import type { ProviderTranscriptSinceResult, Session, SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import type { TranscriptCursors } from "./cursors.js";
 import { BRAIN_DEFAULTS } from "./defaults.js";
 import type { Generation } from "./generation.js";
 import { wakeInputText } from "./input-items.js";
@@ -28,14 +21,13 @@ import { BRAIN_WAKE_KIND, type BrainTranscriptDelta, type BrainWakeEvent } from 
 import { WakeQueue } from "./wake-queue.js";
 
 /**
- * Which sessions a conversation's own roster look reads. It is a fact of the
+ * Which session a conversation's own roster look reads. It is a fact of the
  * conversation, fixed when its agent is built: an observed conversation names
- * its one session and can read no other's transcript, main's ordinary
- * conversation reads none on a look at all, and the whole local roster is
- * what a conversation with no host to narrow it reads.
+ * its one session and can read no other's transcript, and main's ordinary
+ * conversation reads none on a look at all. Which sessions are looked at is
+ * the host's decision, made before it calls `rosterLook()` on a conversation.
  */
 export const LOOK_SUBJECT = {
-  ROSTER: "roster",
   NONE: "none",
   SESSION: "session",
 } as const;
@@ -43,7 +35,6 @@ export const LOOK_SUBJECT = {
 export type LookSubjectKind = (typeof LOOK_SUBJECT)[keyof typeof LOOK_SUBJECT];
 
 export type LookSubject =
-  | { readonly kind: typeof LOOK_SUBJECT.ROSTER }
   | { readonly kind: typeof LOOK_SUBJECT.NONE }
   | { readonly kind: typeof LOOK_SUBJECT.SESSION; readonly identity: SessionIdentity };
 
@@ -145,20 +136,20 @@ export class WakeCapture {
   }
 
   /**
-   * One look at the whole roster, driven by the host's observation pass rather
-   * than an internal timer. Carries the roster as `list_sessions` renders it
-   * and, for every local session the brain has read before or that is working
-   * or waiting now, what its transcript gained since — sessions with nothing
-   * new are left out. Skipped while a turn is in flight or the model is
-   * quiet, because the next look reads the same deltas; pending hook wakes
-   * ride along rather than waiting for their own.
+   * One look at this conversation's session, driven by the host's observation
+   * pass rather than an internal timer. The host decides which sessions are
+   * looked at — local or cloud, working, waiting, or already followed — and
+   * the brain reads its one: what the session's transcript gained since the
+   * last look where the provider answers an incremental read, and its roster
+   * fields alone where it does not. Skipped while a turn is in flight or the
+   * model is quiet, because the next look reads the same deltas; pending hook
+   * wakes ride along rather than waiting for their own.
    */
   rosterLook(): Promise<void> {
     if (this.#seam.stopped()) return Promise.resolve();
     const generation = this.#seam.generation();
     if (!generation) return this.#seam.ready().then(() => this.rosterLook());
-    const roster = this.#options.roster();
-    const looks = this.#ownLooks(roster, generation.captureCursors, this.#seam.now());
+    const looks = this.#ownLooks(this.#options.roster(), this.#seam.now());
     // The look is captured before anything opens, like a hook: what each
     // session gained stands in the inbox with its cursor, and the turn that
     // follows — now, or the next one if the model is quiet or a turn is in
@@ -167,16 +158,7 @@ export class WakeCapture {
       if (this.#seam.stopped() || this.#options.turnInFlight()) return;
       if (generation !== this.#seam.generation()) return;
       if (this.#options.quietUntil() !== undefined) return;
-      // A conversation looking at everything still opens its look with no
-      // events, as the whole-roster look it is; one looking at its own
-      // session opens nothing when nothing was captured and nothing waits.
-      if (
-        this.#subject.kind !== LOOK_SUBJECT.ROSTER &&
-        captured === 0 &&
-        generation.inbox.length === 0
-      ) {
-        return;
-      }
+      if (captured === 0 && generation.inbox.length === 0) return;
       this.#queue.take();
       void this.#seam.queueTurn(BRAIN_TURN_TRIGGER.ROSTER, () =>
         this.#options.turn({
@@ -304,16 +286,15 @@ export class WakeCapture {
   }
 
   /**
-   * The sessions this conversation's own look reads, by its subject: its one
-   * observed session, every local session it has read before or that is live
-   * now, or nothing at all. A session another conversation observes is never
-   * among them, whatever the roster holds.
+   * The one event this conversation's look reads: its observed session as the
+   * roster holds it now, or nothing when the conversation observes none or
+   * the roster no longer holds its session. Whether the session is worth a
+   * look at all — live, or one already followed — was the host's test before
+   * it asked; repeating a narrower one here would only lose edges, such as a
+   * cloud chat's move from waiting to error. A session another conversation
+   * observes is never read, whatever the roster holds.
    */
-  #ownLooks(
-    roster: BrainRoster,
-    cursors: TranscriptCursors,
-    now: number,
-  ): readonly BrainWakeEvent[] {
+  #ownLooks(roster: BrainRoster, now: number): readonly BrainWakeEvent[] {
     const subject = this.#subject;
     if (subject.kind === LOOK_SUBJECT.NONE) return [];
     return (roster.sessions ?? []).flatMap((session) => {
@@ -321,13 +302,7 @@ export class WakeCapture {
         providerId: session.providerId,
         providerSessionId: session.providerSessionId,
       };
-      if (subject.kind === LOOK_SUBJECT.SESSION && !sameIdentity(subject.identity, identity)) {
-        return [];
-      }
-      const readBefore = cursors.cursor(identity) !== undefined;
-      const live =
-        session.status === SESSION_STATUS.WORKING || session.status === SESSION_STATUS.WAITING;
-      if (session.location !== SESSION_LOCATION.LOCAL || !(readBefore || live)) return [];
+      if (!sameIdentity(subject.identity, identity)) return [];
       return [{ kind: BRAIN_WAKE_KIND.ROSTER, identity, session, atMs: now }];
     });
   }
