@@ -527,7 +527,20 @@ Canonical commands:
   capabilities first and fails with a compatibility error when the service
   lacks them; there is no older contract to fall back to. The service
   therefore deploys before such a desktop ships, and widening the contract
-  is a product decision, not an implementation detail.
+  is a product decision, not an implementation detail. Beside that contract
+  the service now also runs the brain itself, over its own Postgres store
+  (`apps/web/server/hosted/brain-host/`): the same `BrainAgent`, composed
+  request-scoped under a per-conversation lease with a heartbeat, resuming a
+  run a function left unfinished from its journal rather than performing a
+  journaled action again, its prompt built from the account's workspace rows,
+  its roster the stored snapshot, its tools the facts table, the workspace
+  rows, the briefing table, and the cloud action execution, and nothing on
+  any machine; a tool the catalog has but the service cannot perform is not
+  offered. Its turns read a working or waiting Conductor chat's new messages
+  through the plugin's documented read on a wake, every inference spends the
+  same daily allowance, and `PRIVACY.md` says each in as many words. The
+  desktop still runs its own local brain over SQLite until the change that
+  moves it.
 
 ### Storage, retention, and conversation maintenance
 

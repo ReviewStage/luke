@@ -29,7 +29,6 @@
 import "../../../packages/credentials/src/credential-providers.js";
 import "../../../packages/guide/src/index.js";
 import "../../../packages/memory/src/index.js";
-import "../../../packages/runtime/src/index.js";
 
 export * from "../../../packages/actions/src/index.js";
 // The action table and the session package both name the action vocabulary: the
@@ -42,6 +41,10 @@ export * from "../../../packages/brain/src/index.js";
 export * from "../../../packages/brain/src/store/shapes.js";
 export * from "../../../packages/hosted/src/index.js";
 export * from "../../../packages/realtime/src/index.js";
+// The runtime's barrel and its vocabulary door carry no name in common, so
+// both stand here: the brain host composes prompts and tool policies from
+// the barrel, and every function on this server reaches `node:fs` anyway.
+export * from "../../../packages/runtime/src/index.js";
 export * from "../../../packages/runtime/src/vocabulary.js";
 export * from "../../../packages/session/src/index.js";
 export * from "../../../packages/wire/src/index.js";

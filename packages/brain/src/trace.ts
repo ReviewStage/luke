@@ -1,4 +1,4 @@
-import type { RunOrigin } from "@sidecar/runtime/vocabulary";
+import type { RunEndReason, RunOrigin } from "@sidecar/runtime/vocabulary";
 import type { BrainTurnTrigger } from "./turn.js";
 
 export interface BrainToolCallTrace {
@@ -16,6 +16,8 @@ export interface BrainToolCallTrace {
  * prompt's.
  */
 export interface BrainTurnTraceRecord {
+  /** The run the turn ran under: a recorded ask's own id, or the id an observation turn minted for itself. */
+  runId: string;
   trigger: BrainTurnTrigger;
   origin: RunOrigin;
   /** Which agent runtime ran the turn, by its id. */
@@ -24,6 +26,9 @@ export interface BrainTurnTraceRecord {
   tools: readonly string[];
   promptChars: number;
   inputTokens?: number;
+  outputTokens?: number;
+  /** How the runtime ended the run, when the run reached the runtime at all. */
+  ending?: RunEndReason;
   transcriptBytes: number;
   toolCalls: readonly BrainToolCallTrace[];
   outputText?: string;

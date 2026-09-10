@@ -226,6 +226,70 @@ nothing in a request can name one. Without `OPENAI_API_KEY` the routes answer
 503 like the rest of the hosted tier. The existing mint and device routes are
 untouched by these routes and keep their contracts for released clients.
 
+## Hosted brain host
+
+The routes under `api/brain/ask*`, `api/conversation*`, and `api/facts.ts`
+run Luke's brain itself in the service — the same `BrainAgent` the desktop
+runs, composed in `server/hosted/brain-host/` over the Postgres store below
+rather than over a SQLite file — for one conversation per account, shared by
+every device that signs in. The tool loop runs over the Responses context
+engine on the OpenAI adapter called directly with `OPENAI_API_KEY`
+(`LUKE_BRAIN_MODEL` overrides the model, as it does for the inference
+routes), and every inference spends the same `hosted_usage` meter; a spend
+the meter refuses ends the run as the desktop's own meter refusal does.
+
+The host is request-scoped. A run is executed by whichever function holds the
+conversation's lease (`conversation_lease`): the ask acquires it, or waits up
+to 20 seconds for a holder to finish and answers `409 conversation-busy`
+otherwise; the holder heartbeats the lease every 10 seconds while it works,
+applying any cancel the developer noted meanwhile, and releases it when the
+run has settled and its lines are written. A lease whose heartbeat stopped
+expires after 30 seconds, and the next request or wake that finds it expired
+with a run still queued or running takes it over and resumes the run from
+its journal: the checkpoint already holds the ask's words and every answered
+tool result, a call that started and never answered is paired as an unknown
+result, and nothing journaled is performed again. Runs execute under a
+240-second deadline inside the 300-second function duration `vercel.json`
+gives these routes, and a function answers its request first and finishes
+the run afterwards through Vercel's `waitUntil`.
+
+| Route | What it does |
+| --- | --- |
+| `POST /api/brain/ask` | Accepts one typed or spoken ask into a run and answers the run's id; the run finishes after the answer. |
+| `GET /api/brain/ask/{runId}?wait=ms` | Answers the run when it ends or as it stands after a hold of at most 25 seconds; a run whose holder died is resumed by this request. |
+| `POST /api/brain/ask/{runId}/cancel` | Notes the cancel for the holder, or performs it when no holder stands. |
+| `GET /api/conversation?after=ms` | The Conversation's lines as the panel draws them, with each line's rating and a cursor for what is newer. |
+| `DELETE /api/conversation` | Clear: a hard delete of the conversation and everything under it, taken under the lease. |
+| `PUT /api/conversation/lines/{lineId}/rating` | A thumb up or down, an optional note, and the device, on a line Luke authored in the caller's own conversation. |
+| `GET /api/facts` | The facts Luke remembers about the developer. |
+
+`api/brain/wake.ts` is the second cron: `vercel.json` schedules it every
+minute with a 300-second duration, under the same `CRON_SECRET` bearer as the
+observation tick. It lists every account with a `roster_diff` still pending
+and every conversation with a run left unfinished, longest waiting first,
+and runs four at a time, starting a batch only while a whole run deadline
+still fits inside the function and answering `exhausted: true` when
+accounts remained. For each it takes the lease (an account another holder is
+running is left for the next minute), resumes anything unfinished, opens one
+observation turn over the pending diffs — the brain's own look at what
+changed, in which each working or waiting Conductor chat the diffs named has
+its new messages read through the plugin's `transcriptSince` behind the
+`after` cursor, 20,000 characters per chat per turn, the cursor written to
+`observation_cursor` with the checkpoint — and consumes the diffs. The tick
+stays as it was and runs no brain turn inside its 60-second function.
+
+The brain's tools on the service are the catalog's, less what the service
+cannot perform: the cloud actions through `action-execute.ts`, admitted
+against the snapshot; `list_sessions` and `read_transcript` over the
+snapshot and the Conductor plugin; `remember_fact` and `forget_fact` on the
+facts table; the workspace read and write on the workspace rows, seeded once
+from the brain's own seeds; and `announce`, which inserts an offered
+`briefing` row expiring after five minutes and the announcement's line, and
+delivers nothing yet. Opening a session, the app actions, the issue actions,
+delegation, the notebook index, and skills are not offered. Every turn
+writes its about-fields onto its run row. The runtime's development trace
+is the desktop's and records nothing here.
+
 ## Provider key vault
 
 `api/vault/key.ts` and `api/vault/keys.ts` store, list, and delete the provider
@@ -254,13 +318,15 @@ conversation per account: the conversation directory, the standing generation
 with its checkpoint items, cursors, inbox, runs, and action receipts, the
 conversation lines, the retained transcript and its compaction boundaries, the
 identity workspace and daily notes, the remembered facts, the latest roster
-snapshot with its diffs and pass record, and the briefings. Every row is
-keyed by `user_id` and cascades with the user row, so `api/account/delete.ts`
-erases them with the account. The roster tables are read and written by the
-scheduled observation below and the routes that serve it; nothing reads the
-conversation tables yet. `server/hosted/store/` is the store the brain host
-will compose against, implementing the storage contracts the desktop's SQLite
-store implements under `packages/brain/src/store`.
+snapshot with its diffs and pass record, the briefings, and, under
+`brain-host-schema.ts`, the conversation leases and the ratings of Luke's
+lines. Every row is keyed by `user_id` and cascades with the user row, so
+`api/account/delete.ts` erases them with the account. The roster tables are
+read and written by the scheduled observation below and the routes that
+serve it; the conversation tables by the brain host above.
+`server/hosted/store/` is the store the brain host composes against,
+implementing the storage contracts the desktop's SQLite store implements
+under `packages/brain/src/store`.
 
 Every user-derived column is a `sealed_*` column: the payload envelope in
 `server/hosted/encryption.ts`, AES-256-GCM under the vault's
@@ -342,7 +408,8 @@ reads a chat's messages; the brain host's own reads will write them.
 own live pass per request for now; serving the stored snapshot and admitting
 actions against it lands in a follow-up once the schedule has run in
 production. `api/sessions/messages.ts` keeps its own fresh pass before the
-read either way.
+read either way. The hosted brain host above is what consumes the diffs the
+tick leaves; the tick itself still decides nothing.
 
 ## Devices
 

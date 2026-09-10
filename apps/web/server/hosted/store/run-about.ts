@@ -1,5 +1,6 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, min } from "drizzle-orm";
 import {
+  BRAIN_REQUEST_STATUS,
   BRAIN_TURN_TRIGGER,
   type BrainTurnTrigger,
   isRunOrigin,
@@ -7,9 +8,10 @@ import {
   RUN_END_REASON,
   type RunEndReason,
   type RunOrigin,
+  type SessionKey,
   type UnparsedWireValue,
 } from "../../core.js";
-import { conversationRun } from "../../db/schema.js";
+import { conversationRun, conversationSession } from "../../db/schema.js";
 import type { HostedStoreDatabase } from "./database.js";
 
 /**
@@ -112,4 +114,96 @@ export async function runAbout(
     ...(row.toolNames !== null ? { toolNames: row.toolNames } : undefined),
     ...(row.compacted !== null ? { compacted: row.compacted } : undefined),
   };
+}
+
+/** The statuses a run still has ahead of it, which a cancel may still reach and a resume still picks up. */
+const UNFINISHED_STATUSES = [BRAIN_REQUEST_STATUS.QUEUED, BRAIN_REQUEST_STATUS.RUNNING];
+
+/**
+ * Notes the developer's cancel on the run row, for whichever function holds
+ * the run to read at its next heartbeat; answers false for a run the tables
+ * do not hold or that has already ended, whose record the cancel cannot move.
+ */
+export async function requestRunCancel(
+  db: HostedStoreDatabase,
+  userId: string,
+  runId: string,
+  now: number,
+): Promise<boolean> {
+  const noted = await db
+    .update(conversationRun)
+    .set({ cancelRequestedAt: now })
+    .where(
+      and(
+        eq(conversationRun.userId, userId),
+        eq(conversationRun.runId, runId),
+        inArray(conversationRun.status, UNFINISHED_STATUSES),
+      ),
+    )
+    .returning({ runId: conversationRun.runId });
+  return noted.length > 0;
+}
+
+/** The unfinished runs of one conversation the developer asked to cancel, for the holder to act on. */
+export async function cancelRequestedRuns(
+  db: HostedStoreDatabase,
+  userId: string,
+  sessionKey: SessionKey,
+): Promise<readonly string[]> {
+  const rows = await db
+    .select({ runId: conversationRun.runId })
+    .from(conversationRun)
+    .innerJoin(
+      conversationSession,
+      and(
+        eq(conversationSession.userId, conversationRun.userId),
+        eq(conversationSession.sessionId, conversationRun.sessionId),
+      ),
+    )
+    .where(
+      and(
+        eq(conversationRun.userId, userId),
+        eq(conversationSession.sessionKey, sessionKey),
+        inArray(conversationRun.status, UNFINISHED_STATUSES),
+        isNotNull(conversationRun.cancelRequestedAt),
+      ),
+    )
+    .orderBy(asc(conversationRun.ordinal));
+  return rows.map((row) => row.runId);
+}
+
+export interface UnfinishedConversation {
+  readonly userId: string;
+  readonly sessionKey: SessionKey;
+}
+
+/**
+ * The conversations holding a run a function left unfinished, the one whose
+ * earliest run has waited longest first, for the wake to resume under the
+ * lease. Whether the holder is still alive is the lease's to say.
+ */
+export async function unfinishedConversations(
+  db: HostedStoreDatabase,
+  limit: number,
+): Promise<readonly UnfinishedConversation[]> {
+  const rows = await db
+    .select({
+      userId: conversationRun.userId,
+      sessionKey: conversationSession.sessionKey,
+      waitingSince: min(conversationRun.acceptedAt),
+    })
+    .from(conversationRun)
+    .innerJoin(
+      conversationSession,
+      and(
+        eq(conversationSession.userId, conversationRun.userId),
+        eq(conversationSession.sessionId, conversationRun.sessionId),
+      ),
+    )
+    .where(inArray(conversationRun.status, UNFINISHED_STATUSES))
+    .groupBy(conversationRun.userId, conversationSession.sessionKey)
+    .orderBy(asc(min(conversationRun.acceptedAt)))
+    .limit(limit);
+  // SAFETY: the column holds the key the constructor admitted when the row was written.
+  return rows.map((row) => ({ userId: row.userId, sessionKey: row.sessionKey as SessionKey }));
 }

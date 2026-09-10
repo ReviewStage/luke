@@ -191,6 +191,34 @@ export class WakeCapture {
   }
 
   /**
+   * Captures the events as a wake does and opens their turn at once, settling
+   * when it has ended: for a host whose wakes arrive already batched, with no
+   * window in which to coalesce them. Entries a failed or throttled turn left
+   * standing open with them; nothing captured and nothing waiting opens no
+   * turn, and a throttled turn leaves its entries for the next.
+   */
+  observe(events: readonly BrainWakeEvent[]): Promise<void> {
+    if (this.#seam.stopped()) return Promise.resolve();
+    return this.#capture(events).then(async (captured) => {
+      if (this.#seam.stopped()) return;
+      const generation = this.#seam.generation();
+      if (!generation || (captured === 0 && generation.inbox.length === 0)) return;
+      this.#queue.take();
+      await this.#seam.queueTurn(BRAIN_TURN_TRIGGER.WAKE, async () => {
+        const inbox = inboxEvents(generation.inbox);
+        if (inbox.length === 0) return;
+        await this.#options.turn({
+          generation,
+          trigger: BRAIN_TURN_TRIGGER.WAKE,
+          deliveries: new SteeredDeliveries(),
+          events: inbox,
+          open: (attached, now) => [wakeInputText(attached, now)],
+        });
+      });
+    });
+  }
+
+  /**
    * Observations captured before the last launch ended, or left standing by a
    * turn that failed, open a turn once the state is read: they were written
    * down to be read, and a relaunch reads them without touching a transcript.

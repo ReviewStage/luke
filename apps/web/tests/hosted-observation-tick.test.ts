@@ -183,7 +183,10 @@ test("the budget leaves headroom under the function cap, and the cron entry name
     functions: Record<string, { maxDuration: number }>;
     crons: Array<{ path: string; schedule: string }>;
   };
-  assert.deepEqual(vercel.crons, [{ path: OBSERVATION_TICK_PATH, schedule: "* * * * *" }]);
+  assert.deepEqual(
+    vercel.crons.filter((cron) => cron.path === OBSERVATION_TICK_PATH),
+    [{ path: OBSERVATION_TICK_PATH, schedule: "* * * * *" }],
+  );
   assert.equal(
     vercel.functions[`${OBSERVATION_TICK_PATH.slice(1)}.ts`]?.maxDuration,
     OBSERVATION_TICK.MAX_DURATION_SECONDS,

@@ -53,7 +53,7 @@ import {
   type BrainTurnTrigger,
   type RunControl,
 } from "./turn.js";
-import { type BrainOpeningNotes, TurnRunner } from "./turn-runner.js";
+import { type BrainOpeningNotes, newRunControl, TurnRunner } from "./turn-runner.js";
 import type { BrainDelivery, BrainTurnReport, BrainWakeEvent } from "./wake-events.js";
 import { LOOK_SUBJECT, type LookSubject, WakeCapture } from "./wakes.js";
 
@@ -64,6 +64,27 @@ export type { BrainFlushInput, BrainFlushMarkerStore } from "./maintenance.js";
 export type { BrainWorkspaceAccess } from "./tool-executor.js";
 export type { BrainOpeningNotes } from "./turn-runner.js";
 export { LOOK_SUBJECT, type LookSubject, type LookSubjectKind } from "./wakes.js";
+
+/**
+ * What a launch does with the runs the last one left unfinished. Interrupting
+ * is the desktop's: a process that died mid-action cannot know the action's
+ * effect, so every unfinished record ends as interrupted and nothing is run
+ * again. Resuming is a request-scoped host's, where a function cut off by its
+ * own duration is the ordinary end of a run and the next request picks it
+ * up: a queued ask opens as it would have, and a running one is asked again
+ * over the checkpoint it left — its opening words and every answered effect
+ * already on record, a call it started and never answered paired as unknown
+ * at load — so nothing journaled is performed twice.
+ */
+export const BRAIN_RECOVERY = {
+  INTERRUPT: "interrupt",
+  RESUME: "resume",
+} as const;
+
+export type BrainRecovery = (typeof BRAIN_RECOVERY)[keyof typeof BRAIN_RECOVERY];
+
+/** How long the idle wait sleeps between looks at the conversation's standing. */
+const IDLE_POLL_MS = 25;
 
 /** Runs a turn's work under the host's lane for its trigger, so conversations share the lanes' budgets and nothing wider. */
 export type BrainLane = <T>(trigger: BrainTurnTrigger, work: () => Promise<T>) => Promise<T>;
@@ -158,6 +179,8 @@ export interface BrainAgentOptions {
    */
   promptCacheKey?: string;
   executionDeadlineMs?: number;
+  /** What a load does with unfinished runs; interrupting them unless the host says to resume. */
+  recovery?: BrainRecovery;
 }
 
 /**
@@ -290,6 +313,7 @@ export class BrainAgent {
         ? { promptCacheKey: options.promptCacheKey }
         : undefined),
       executionDeadlineMs: options.executionDeadlineMs ?? BRAIN_DEFAULTS.EXECUTION_DEADLINE_MS,
+      checkpointOpening: options.recovery === BRAIN_RECOVERY.RESUME,
       compactIfNeeded: (turnContext, prompt, countedTokens) =>
         this.#maintenance.compactIfNeeded(turnContext, prompt, countedTokens),
       scheduleMaintenance: (turnContext, countedTokens) =>
@@ -304,6 +328,8 @@ export class BrainAgent {
       store: options.store,
       createRunId: options.createRunId,
       runAsk: (inputs) => this.#queueTurn(BRAIN_TURN_TRIGGER.ASK, () => this.#turns.runAsk(inputs)),
+      resumeAsk: (runs) =>
+        this.#queueTurn(BRAIN_TURN_TRIGGER.ASK, () => this.#turns.resumeAsk(runs)),
       active: () => this.#turns.active(),
       disarmWakes: () => this.#wakes.take(),
       cancelMaintenance: () => this.#maintenance.cancel(),
@@ -472,6 +498,46 @@ export class BrainAgent {
   }
 
   /**
+   * Captures wake events and opens their turn at once, settling when the
+   * turn has ended: for a host whose wakes arrive already batched, with no
+   * window in which to coalesce them. Entries a failed or throttled turn
+   * left standing open with them; nothing captured and nothing waiting opens
+   * no turn.
+   */
+  observe(events: readonly BrainWakeEvent[]): Promise<void> {
+    return this.#wakes.observe(events);
+  }
+
+  /**
+   * Settles once nothing is under way or owed a turn: no turn running or
+   * queued, no capture landing, no ask waiting, no wake armed. A host that
+   * runs one request's work over this agent awaits it before stopping the
+   * agent, so a run is never cut by the request that opened it. Entries
+   * standing in the inbox do not hold it: they wait for the next turn to open
+   * with them, whichever request opens it.
+   */
+  async idle(): Promise<void> {
+    for (;;) {
+      await this.#queue;
+      if (!this.#working()) return;
+      await new Promise<void>((resolve) => {
+        this.#schedule(resolve, IDLE_POLL_MS);
+      });
+    }
+  }
+
+  #working(): boolean {
+    return (
+      this.#turns.inFlight() ||
+      this.#turnsQueued > 0 ||
+      this.#wakes.capturesInFlight() > 0 ||
+      this.#turns.active() !== undefined ||
+      this.#asks.size() > 0 ||
+      this.#wakes.size() > 0
+    );
+  }
+
+  /**
    * Hands back briefings the host held while a meeting or a pause stood, for
    * one re-decision against the roster as it now stands. Pending wakes open
    * in the same turn, ahead of the held briefings, so the decision is made
@@ -632,11 +698,17 @@ export class BrainAgent {
     this.#generation = generation;
     const opened = await generation.opened;
     if (generation !== this.#generation) return;
-    this.#wakes.armInbox(generation);
+    const resume = this.#options.recovery === BRAIN_RECOVERY.RESUME;
+    // A resuming host opens the inbox's entries with the turn it came to run,
+    // ask or observation; arming the window here would only hold that
+    // request for a turn the same entries are about to open anyway.
+    if (!resume) this.#wakes.armInbox(generation);
     if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
       this.#reportIncompatible(generation, opened.reason);
     }
-    const interrupted = interruptedUnfinishedRequests(state.requests, this.#now());
+    const interrupted = resume
+      ? state.requests
+      : interruptedUnfinishedRequests(state.requests, this.#now());
     // An action found started with no result may have happened: the runtime's
     // context paired it as unknown at load, and the interrupted run says so
     // in its count; neither is ever a call to make again.
@@ -650,7 +722,6 @@ export class BrainAgent {
     if (orphaned.length > 0) {
       generation.journal.dropRuns(new Set(orphaned.map((entry) => entry.runId)));
     }
-    if (interrupted === state.requests && repaired === 0 && orphaned.length === 0) return;
     const unfinished = new Set(
       state.requests
         .filter((record) => !isTerminalBrainRequestStatus(record.status))
@@ -660,19 +731,51 @@ export class BrainAgent {
     // whose result was accepted went through, actions whose result says unknown
     // or never arrived may have. Counted from the journal alone, so a copy
     // taken mid-run and a copy taken after it both say the same.
-    generation.requests = new Map(
-      interrupted.map((record) => [
-        record.runId,
-        unfinished.has(record.runId)
-          ? { ...record, ...journalActionCounts(state.journal, record.runId) }
-          : record,
-      ]),
-    );
-    await this.#ledger.restored(
-      generation,
-      opened.kind === CONTEXT_OPENING.LOADED ? opened.context : undefined,
-    );
-    this.#asks.notify();
+    if (interrupted !== state.requests || repaired > 0 || orphaned.length > 0) {
+      generation.requests = new Map(
+        interrupted.map((record) => [
+          record.runId,
+          unfinished.has(record.runId)
+            ? { ...record, ...journalActionCounts(state.journal, record.runId) }
+            : record,
+        ]),
+      );
+      await this.#ledger.restored(
+        generation,
+        opened.kind === CONTEXT_OPENING.LOADED ? opened.context : undefined,
+      );
+      this.#asks.notify();
+    }
+    if (resume && opened.kind === CONTEXT_OPENING.LOADED && unfinished.size > 0) {
+      this.#resumeUnfinished(generation, state.journal);
+    }
+  }
+
+  /**
+   * Picks the unfinished runs up where the last host left them. The running
+   * ones open one turn together, the earliest started standing as the turn's
+   * own and the rest riding inside it as their steered words already did,
+   * each carrying the accounting its journal established so a resumed run
+   * reports every action the run before the cut performed. The queued ones
+   * are admitted as their acceptance would have admitted them, behind it.
+   */
+  #resumeUnfinished(generation: Generation, journal: BrainPersistedState["journal"]): void {
+    const records = [...generation.requests.values()];
+    const running = records
+      .filter((record) => record.status === BRAIN_REQUEST_STATUS.RUNNING)
+      .sort(
+        (left, right) =>
+          (left.startedAt ?? left.acceptedAt) - (right.startedAt ?? right.acceptedAt) ||
+          left.acceptedAt - right.acceptedAt,
+      )
+      .map((record) => ({
+        ...newRunControl(record.runId, generation, true),
+        ...journalActionCounts(journal, record.runId),
+      }));
+    if (running.length > 0) this.#asks.resume(running);
+    for (const record of records) {
+      if (record.status === BRAIN_REQUEST_STATUS.QUEUED) this.#asks.readmit(record);
+    }
   }
 
   #reportIncompatible(generation: Generation, reason: string): void {

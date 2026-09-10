@@ -531,6 +531,10 @@ export function cloudPass(input: CloudPassInput): CloudPass {
     },
 
     async credentialBoundRead(segments, query, options, apply) {
+      // A read on a pass that has not run — the hosted brain reads a chat
+      // against the roster its stored snapshot holds — takes the credential
+      // the way a pass would, so the read is bound to it from here on.
+      if (credential === undefined) credential = await readApiKey();
       const epoch = credentialEpoch;
       const apiKey = credential;
       if (!apiKey) {

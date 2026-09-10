@@ -311,17 +311,53 @@ Conductor key and have signed in within the last 7 days, our service reads
 your Conductor sessions on its own schedule, about once a minute, the same
 read-only pass the iOS app used to ask for on demand: your open workspaces,
 their chats, each chat's status, the agent kind running it, and the error
-line it stopped on. It never reads a chat's messages. We keep the latest
-roster it read, encrypted at rest with the same server-only secret as your
-keys, and beside it what changed since the pass before — a session that
-appeared or vanished, a status that moved, an error line that changed — so
-Luke can later be woken by a change rather than by a clock, and so the phone
-and watch can later be shown your sessions without asking Conductor again;
-today they still ask Conductor directly. The roster and its changes are
-replaced on every pass; nothing older is kept.
+line it stopped on. The pass itself never reads a chat's messages. We keep
+the latest roster it read, encrypted at rest with the same server-only
+secret as your keys, and beside it what changed since the pass before — a
+session that appeared or vanished, a status that moved, an error line that
+changed — so Luke is woken by a change rather than by a clock, and so the
+phone and watch can later be shown your sessions without asking Conductor
+again; today they still ask Conductor directly. The roster and its changes
+are replaced on every pass; nothing older is kept.
 Observation stops, and the stored roster and changes are deleted, when you
 delete the synced key, when you have not signed in for 7 days, and alongside
 your account if you delete that.
+
+**Luke's hosted brain.** Luke's judgment now runs in our own service as well
+as on your Mac: one conversation per account, shared by every device you sign
+into. What you ask him there — typed or spoken, handed to the service as
+text — his replies, the actions he carried at your ask, and the briefings he
+decided to give live in our own database, encrypted at rest with the same
+server-only secret as your keys, beside his working memory of the
+conversation (the model's own context, including the encrypted compaction
+items the model provider hands back), the facts he remembers about you, and
+his identity workspace — the same `AGENTS.md`, `SOUL.md`, `USER.md`,
+`MEMORY.md`, and dated notes the Mac keeps under his application data —
+seeded once per account and edited only by his own tools. Each turn he runs
+there sends the same things a turn on your Mac sends, to the same model
+provider on our key, asked not to store them: the prompt built from those
+workspace files, his memory of the conversation, the stored roster, and the
+words that opened the turn. When the stored roster changes, our service wakes
+him about once a minute over what changed, and in that turn he reads what
+each working or waiting Conductor chat the change named has said since he
+last looked — your own messages and the agent's replies, through Conductor's
+documented messages endpoint under your synced key, never a tool call, tool
+output, or unattributed record — bounded to 20,000 characters per chat per
+turn, and where he last read to is kept so the next wake reads only what is
+newer. He may also read one chat's recent transcript whole, up to 60,000
+characters, when you ask him about it or he judges he needs it. What he reads
+enters his working memory like everything else in a turn and is kept only as
+that memory keeps it. Each turn he runs also writes down its own shape beside
+the run: what woke it, how it ended, its token counts, how many transcript
+characters it read, and which tools it used, as numbers and fixed names,
+never the words. Every inference spends your account's one daily allowance.
+When you rate one of his lines with a thumb, we store the thumb, the note you
+added if any (encrypted), which device you pressed it on, and when, beside
+that line. Clearing the conversation from any device deletes the
+conversation, his working memory of it, the lines, and their ratings
+outright, with no recovery copy on our side; his workspace files and the
+facts he remembers stay until you edit or forget them. All of it is deleted
+alongside your account if you delete that.
 
 **Devices.** When you sign in on the Mac app, the iOS app, or the Apple Watch
 app, that installation registers itself with our service as one device row.
@@ -432,13 +468,15 @@ your network address, as it does for the app's recordings.
 
 ## Storage
 
-Your settings, your conversation with Luke, his working memory, his workspace
-files, the things he remembers about you, local provider API keys, and
-calendar access stay on your Mac.
+Your settings, the Mac app's own conversation with Luke, his working memory
+of it, his workspace files, the things he remembers about you, local provider
+API keys, and calendar access stay on your Mac.
 Local keys and calendar access are encrypted in the macOS Keychain. Provider
-API keys you sync to the hosted service, and the latest roster of your
-Conductor sessions with what changed since the pass before, are stored
-encrypted in our own database, as described above. Your account information is held by our own
+API keys you sync to the hosted service, the latest roster of your Conductor
+sessions with what changed since the pass before, and the hosted brain's
+conversation, working memory, remembered facts, identity workspace, briefings,
+and line ratings are stored encrypted in our own database, as described
+above. Your account information is held by our own
 service, usage counts and recordings by PostHog, and crash reports by Sentry.
 
 ## Your choices
@@ -449,7 +487,9 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
   are also deleted when you delete your account.
 - Clear the Conversation tab to remove the stored conversation and Luke's working
   memory of it behind a recovery archive on your Mac. Nothing discards them
-  on a schedule: a conversation stands until you clear it.
+  on a schedule: a conversation stands until you clear it. Clearing the
+  hosted conversation deletes it, his working memory of it, and its ratings
+  from our database outright, with no recovery copy.
 - Ask Luke what he remembers, correct a memory, or tell him to forget one.
 - Edit or delete any of Luke's workspace files yourself; Luke never overwrites
   your edit, and clearing the Conversation tab does not touch them.
@@ -462,8 +502,10 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
   moved afterwards.
 - Luke does not use your microphone until you start a turn.
 - Delete your account from the Account section in Settings. This erases your
-  account, your sign-in records, your usage counts, and any provider API keys
-  you synced to the hosted service, and asks PostHog to erase your usage data
+  account, your sign-in records, your usage counts, any provider API keys
+  you synced to the hosted service, and everything the hosted brain kept for
+  you — its conversation, working memory, remembered facts, identity
+  workspace, briefings, and ratings — and asks PostHog to erase your usage data
   and recordings, including the iOS and Apple Watch apps'. It does not reach a recording that was
   never attached to your account, as described above. Luke stops recording for
   the rest of the session, and starts again the next time you open it or sign

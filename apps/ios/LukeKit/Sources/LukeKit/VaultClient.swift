@@ -96,6 +96,10 @@ public enum HostedAPIError: String, Sendable {
     case promptTooLarge = "prompt-too-large"
     case unknownTool = "unknown-tool"
     case methodNotAllowed = "method-not-allowed"
+    /// The run, line, or record the path names is not one this account holds.
+    case notFound = "not-found"
+    /// Another request holds the conversation; nothing changed, ask again shortly.
+    case conversationBusy = "conversation-busy"
 }
 
 public enum VaultClientError: Error, Equatable {

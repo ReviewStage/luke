@@ -203,6 +203,12 @@ export const conversationRun = pgTable(
     unknownActions: integer("unknown_actions").notNull(),
     askRecordedAt: bigint("ask_recorded_at", { mode: "number" }),
     conversationRecordedAt: bigint("conversation_recorded_at", { mode: "number" }),
+    /**
+     * When the developer asked for the run to be cancelled through the
+     * service, for the function running it — or the one that resumes it — to
+     * read at its next heartbeat; the record's own end is still the brain's.
+     */
+    cancelRequestedAt: bigint("cancel_requested_at", { mode: "number" }),
     trigger: text("trigger"),
     runOrigin: text("run_origin"),
     ending: text("ending"),

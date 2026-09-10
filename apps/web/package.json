@@ -36,6 +36,7 @@
     "@sidecar/surface": "workspace:*",
     "@sidecar/wire": "workspace:*",
     "@tailwindcss/vite": "4.3.3",
+    "@vercel/functions": "3.4.2",
     "better-auth": "1.6.29",
     "drizzle-orm": "0.45.2",
     "marked": "18.0.9",

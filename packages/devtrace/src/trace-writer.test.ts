@@ -35,6 +35,7 @@ test("lines land in the named file, stamped, in the order they were recorded", a
     outputTokens: 60,
   });
   writer.recordBrainTurn({
+    runId: "wake:run-1",
     trigger: BRAIN_TURN_TRIGGER.WAKE,
     origin: RUN_ORIGIN.OBSERVATION,
     runtime: TOOL_LOOP_RUNTIME.ID,

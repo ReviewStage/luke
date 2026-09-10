@@ -62,6 +62,29 @@ export const HOSTED_SERVICE_PATH = {
   BRAIN_COMPACT: "/api/brain/v2/compact",
   /** Embeddings for the notebook index on Luke's key (POST), the fourth operation of the second contract. */
   BRAIN_EMBED: "/api/brain/v2/embed",
+  /**
+   * Ask Luke's hosted brain (POST): the developer's typed or spoken words
+   * become a run of the account's one conversation, answered by its id. The
+   * run is waited on at `brainAskRunPath` and cancelled at
+   * `brainAskCancelPath`; the service runs the turn itself, over its own
+   * store, and the routes are how every device reaches the same brain.
+   */
+  BRAIN_ASK: "/api/brain/ask",
+  /**
+   * The scheduled wake of the hosted brain: for every account whose stored
+   * roster changed since the brain last looked, one observation turn over the
+   * pending diffs, and for a run a function left unfinished, its resumption.
+   * Called by Vercel's cron under `CRON_SECRET`, never by a client.
+   */
+  BRAIN_WAKE: "/api/brain/wake",
+  /**
+   * The account's one Conversation (GET), the lines the panel draws with a
+   * cursor for what is newer, and its Clear (DELETE), a hard delete of the
+   * conversation with no archive behind it.
+   */
+  CONVERSATION: "/api/conversation",
+  /** The facts Luke remembers about the developer (GET), as the brain's standing context lists them. */
+  FACTS: "/api/facts",
   ACCOUNT_DELETE: "/api/account/delete",
   USAGE: "/api/usage",
   EVENTS: "/api/events",
@@ -97,3 +120,23 @@ export const HOSTED_SERVICE_PATH = {
    */
   SESSION_MESSAGES: "/api/sessions/messages",
 } as const;
+
+/**
+ * Where one run of the hosted brain is waited on (GET) and, under `/cancel`,
+ * cancelled (POST). The run id is the brain's own, answered by the ask.
+ */
+export function brainAskRunPath(runId: string): string {
+  return `${HOSTED_SERVICE_PATH.BRAIN_ASK}/${encodeURIComponent(runId)}`;
+}
+
+export function brainAskCancelPath(runId: string): string {
+  return `${brainAskRunPath(runId)}/cancel`;
+}
+
+/**
+ * Where one Conversation line's rating is written (PUT): the line by the id
+ * its writer minted, the rating in the body.
+ */
+export function conversationLineRatingPath(lineId: string): string {
+  return `${HOSTED_SERVICE_PATH.CONVERSATION}/lines/${encodeURIComponent(lineId)}/rating`;
+}

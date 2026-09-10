@@ -55,6 +55,11 @@ export function memoryObservationStore(): MemoryObservationStore {
       },
       pendingDiffs: async (userId) =>
         (diffs.get(userId) ?? []).filter((one) => one.consumedAt === undefined),
+      usersWithPendingDiffs: async (limit) =>
+        [...diffs.entries()]
+          .filter(([, held]) => held.some((one) => one.consumedAt === undefined))
+          .map(([userId]) => userId)
+          .slice(0, limit),
       consumeDiff: async (userId, id, now) => {
         const held = diffs.get(userId) ?? [];
         const index = held.findIndex((one) => one.id === id && one.consumedAt === undefined);

@@ -6,11 +6,13 @@ import {
 import {
   type AgentRuntime,
   CONTEXT_INPUT_KIND,
+  type ContextInput,
   type ContextMark,
   type ReasoningEffort,
   RUN_END_REASON,
   RUN_ORIGIN,
   RUNTIME_EVENT,
+  type RunEndReason,
   type RuntimeEvent,
   type RuntimeRun,
   type RuntimeRunEnd,
@@ -122,6 +124,8 @@ interface TurnGathering {
   iterations: number;
   compacted: boolean;
   inputTokens?: number;
+  outputTokens?: number;
+  ending?: RunEndReason;
   /** Each answer's words in order, the empty ones included, so the reply is composed from all of them. */
   said: string[];
   outputText: string;
@@ -201,6 +205,13 @@ export interface TurnRunnerOptions {
   reasoningEffort?: ReasoningEffort;
   promptCacheKey?: string;
   executionDeadlineMs: number;
+  /**
+   * Whether a recorded run's opening words are checkpointed before the model
+   * reads them. A host that resumes unfinished runs needs them on record: a
+   * function cut off mid-inference then resumes over the words that opened
+   * the run rather than over a context that never heard them.
+   */
+  checkpointOpening?: boolean;
   /** The one compaction path, owned by the maintenance that also holds the flush counters. */
   compactIfNeeded: (
     turnContext: Omit<TurnContext, "run"> & { run?: RunControl },
@@ -359,6 +370,46 @@ export class TurnRunner {
       await this.#seam.ledger.settleRun(generation, run.runId, status, end, run);
       return;
     }
+  }
+
+  /**
+   * Continues the runs a load found running, as one turn: the checkpoint
+   * already holds their opening words and every answered effect, each call
+   * left unanswered paired as unknown at load, so the model is asked again
+   * over that context with no new words. A call it repeats under a journaled
+   * id is answered from the journal rather than performed again. The first
+   * run stands as the turn's own and the rest ride inside it, as they did
+   * when their words were steered in, and every one ends with the turn.
+   */
+  async resumeAsk(runs: readonly RunControl[]): Promise<void> {
+    const [primary, ...riders] = runs;
+    if (!primary) return;
+    const generation = primary.generation;
+    primary.deadline = this.#seam.schedule(() => {
+      primary.timedOut = true;
+      primary.abort.abort();
+    }, this.#options.executionDeadlineMs);
+    const childTask = generation.requests.get(primary.runId)?.origin === BRAIN_REQUEST_ORIGIN.CHILD;
+    let result: TurnResult;
+    try {
+      result = await this.turn(
+        {
+          generation,
+          deliveries: new SteeredDeliveries(),
+          events: inboxEvents(generation.inbox),
+          run: primary,
+          trigger: childTask ? BRAIN_TURN_TRIGGER.CHILD_TASK : BRAIN_TURN_TRIGGER.ASK,
+          open: () => [],
+        },
+        riders,
+      );
+    } catch {
+      result = { outcome: TURN_OUTCOME.FAILED };
+    }
+    if (primary.deadline !== undefined) this.#seam.cancel(primary.deadline);
+    this.#options.forgetRun(primary.runId);
+    const { status, end } = runOutcomeOf(primary, result, this.#seam.stopped());
+    await this.#seam.ledger.settleRun(generation, primary.runId, status, end, primary);
   }
 
   /**
@@ -647,12 +698,17 @@ export class TurnRunner {
 
     const { id: runtime, model } = this.#options.runtime.descriptor;
     this.#options.trace?.({
+      runId: run.runId,
       trigger: plan.trigger,
       origin: runOriginOf(plan.trigger),
       runtime,
       tools: policy?.allowed.map((tool) => tool.schema.name) ?? [],
       promptChars: preparation?.prompt.length ?? 0,
       ...(gathering.inputTokens !== undefined ? { inputTokens: gathering.inputTokens } : undefined),
+      ...(gathering.outputTokens !== undefined
+        ? { outputTokens: gathering.outputTokens }
+        : undefined),
+      ...(gathering.ending !== undefined ? { ending: gathering.ending } : undefined),
       transcriptBytes,
       toolCalls: gathering.toolCalls,
       ...(gathering.outputText ? { outputText: gathering.outputText } : undefined),
@@ -762,7 +818,7 @@ export class TurnRunner {
    * inference, and a listener that keeps what the run gathers and
    * checkpoints each answered effect before the runtime asks the model again.
    */
-  #execute(
+  async #execute(
     turnContext: TurnContext,
     execution: BrainActionExecution,
     gathering: TurnGathering,
@@ -777,6 +833,25 @@ export class TurnRunner {
   ): Promise<RuntimeRunEnd> {
     const { context, run } = turnContext;
     const runId = run.runId;
+    const opening: ContextInput[] = turn.opening.map((text) => ({
+      kind: CONTEXT_INPUT_KIND.USER_TEXT,
+      text,
+    }));
+    // Under a resuming host a recorded run's opening words stand on disk
+    // before the model reads them: ingested here and checkpointed, so the
+    // runtime opens with nothing new and a resume opens over the same words.
+    const checkpointedOpening =
+      this.#options.checkpointOpening === true && run.recorded && opening.length > 0;
+    if (checkpointedOpening) {
+      for (const input of opening) {
+        const ingested = await settledUnlessAborted(
+          Promise.resolve(context.ingest(input, { signal: turnContext.signal })),
+          turnContext.signal,
+        );
+        if (ingested.aborted) break;
+      }
+      if (!turnContext.signal.aborted) await turn.advanceMark();
+    }
     const tools = createTurnToolExecutor(
       {
         roster: this.#options.roster,
@@ -814,6 +889,9 @@ export class TurnRunner {
           if (event.usage.inputTokens !== undefined) {
             gathering.inputTokens = event.usage.inputTokens;
           }
+          if (event.usage.outputTokens !== undefined) {
+            gathering.outputTokens = (gathering.outputTokens ?? 0) + event.usage.outputTokens;
+          }
           return;
         case RUNTIME_EVENT.COMPACTED:
           gathering.compacted = true;
@@ -847,7 +925,7 @@ export class TurnRunner {
       tools,
       toolSchemas: brainToolSchemas(turn.policy),
       prompt: turn.prompt,
-      input: turn.opening.map((text) => ({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text })),
+      input: checkpointedOpening ? [] : opening,
       ephemeral: () => [
         standingContextText(
           this.#options.roster().text,
@@ -877,6 +955,7 @@ export class TurnRunner {
     turnContext: TurnContext,
     gathering: TurnGathering,
   ): TurnResult | undefined {
+    gathering.ending = end.reason;
     if (this.#revoked(turnContext)) {
       gathering.error = turnContext.run.timedOut ? "execution deadline passed" : "turn revoked";
       return { outcome: TURN_OUTCOME.REVOKED };

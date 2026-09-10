@@ -39,6 +39,14 @@ export const HOSTED_API_ERROR = {
   /** A tool name the service's catalog does not register; no schema was selected. */
   UNKNOWN_TOOL: "unknown-tool",
   METHOD_NOT_ALLOWED: "method-not-allowed",
+  /** The run, line, or record the path names is not one this account holds. */
+  NOT_FOUND: "not-found",
+  /**
+   * Another request holds the conversation — a turn is under way in a
+   * function that is still alive — and this one would not wait any longer
+   * for it. Nothing was changed; the caller asks again shortly.
+   */
+  CONVERSATION_BUSY: "conversation-busy",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];

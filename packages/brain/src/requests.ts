@@ -1,4 +1,16 @@
 import {
+  BRAIN_REQUEST_FAILURE,
+  BRAIN_REQUEST_ORIGIN,
+  BRAIN_REQUEST_STATUS,
+  BRAIN_SUBMISSION_OUTCOME,
+  BRAIN_SUBMISSION_REJECTION,
+  type BrainRequestFailure,
+  type BrainRequestOrigin,
+  type BrainRequestStatus,
+  type BrainSubmissionRejection,
+  isBrainRequestOrigin,
+} from "@sidecar/hosted";
+import {
   isRecord,
   isWireNumber,
   isWireString,
@@ -15,17 +27,18 @@ import {
  * than resuming an action it cannot know the state of.
  */
 
-export const BRAIN_REQUEST_STATUS = {
-  QUEUED: "queued",
-  RUNNING: "running",
-  SUCCEEDED: "succeeded",
-  FAILED: "failed",
-  CANCELLED: "cancelled",
-  TIMED_OUT: "timed_out",
-  INTERRUPTED: "interrupted",
-} as const;
-
-export type BrainRequestStatus = (typeof BRAIN_REQUEST_STATUS)[keyof typeof BRAIN_REQUEST_STATUS];
+export {
+  BRAIN_REQUEST_FAILURE,
+  BRAIN_REQUEST_ORIGIN,
+  BRAIN_REQUEST_STATUS,
+  BRAIN_SUBMISSION_OUTCOME,
+  BRAIN_SUBMISSION_REJECTION,
+  type BrainRequestFailure,
+  type BrainRequestOrigin,
+  type BrainRequestStatus,
+  type BrainSubmissionRejection,
+  isBrainRequestOrigin,
+};
 
 const BRAIN_REQUEST_STATUS_LIST: readonly BrainRequestStatus[] =
   Object.values(BRAIN_REQUEST_STATUS);
@@ -49,51 +62,6 @@ export function isBrainRequestStatus(value: UnparsedWireValue): value is BrainRe
 export function isTerminalBrainRequestStatus(status: BrainRequestStatus): boolean {
   return BRAIN_REQUEST_TERMINAL_STATUS.has(status);
 }
-
-/** Where the ask came from, which decides who records its words in the thread. */
-export const BRAIN_REQUEST_ORIGIN = {
-  /** Typed into a composer; the words travel with the submission and the host records them. */
-  TYPED: "typed",
-  /** Spoken; the voice service's own transcript is the record, and the question here is the mouth's relay. */
-  SPOKEN: "spoken",
-  /** A child's delegated task, handed to the child's own conversation by its requester's spawn. */
-  CHILD: "child",
-} as const;
-
-export type BrainRequestOrigin = (typeof BRAIN_REQUEST_ORIGIN)[keyof typeof BRAIN_REQUEST_ORIGIN];
-
-const BRAIN_REQUEST_ORIGIN_LIST: readonly BrainRequestOrigin[] =
-  Object.values(BRAIN_REQUEST_ORIGIN);
-
-export function isBrainRequestOrigin(value: UnparsedWireValue): value is BrainRequestOrigin {
-  // SAFETY: value is a string; list membership is the vocabulary check.
-  return isWireString(value) && BRAIN_REQUEST_ORIGIN_LIST.includes(value as BrainRequestOrigin);
-}
-
-/**
- * Why a run ended without a reply, as a fixed word rather than a provider's
- * sentence: the host words each one for the thread, so no raw model or
- * network output reaches the developer's record.
- */
-export const BRAIN_REQUEST_FAILURE = {
-  /** The model did not answer, or answered nothing readable. */
-  MODEL: "model",
-  /** A checkpoint could not be written, so the run stopped before or after an action. */
-  PERSISTENCE: "persistence",
-  /** The run reached its execution deadline. */
-  DEADLINE: "deadline",
-  /** The model stopped before a reply formed: an incomplete output, or the tool budget spent. */
-  INCOMPLETE: "incomplete",
-  /**
-   * The context had to be compacted before the run could be sent and the
-   * compaction did not succeed. The conversation stands exactly as it was;
-   * the ask can be made again once the model or the network is back.
-   */
-  COMPACTION: "compaction",
-} as const;
-
-export type BrainRequestFailure =
-  (typeof BRAIN_REQUEST_FAILURE)[keyof typeof BRAIN_REQUEST_FAILURE];
 
 const BRAIN_REQUEST_FAILURE_LIST: readonly BrainRequestFailure[] =
   Object.values(BRAIN_REQUEST_FAILURE);
@@ -236,30 +204,6 @@ export function interruptedUnfinishedRequests(
  * retry of the same submission — and rejected says why in a word the host
  * words for the developer.
  */
-export const BRAIN_SUBMISSION_REJECTION = {
-  EMPTY: "empty",
-  ABSENT: "absent",
-  PERSISTENCE: "persistence",
-  /** The submission id is already taken by an ask with other words or another origin. */
-  CONFLICT: "conflict",
-  /** The generation holds as many records as it may, and none is yet eligible to be let go. */
-  FULL: "full",
-  /**
-   * The generation's checkpoint was written by a runtime this build does not
-   * run; it is kept whole, and nothing may open a turn over it until a
-   * compatible runtime loads it or the developer starts fresh.
-   */
-  INCOMPATIBLE: "incompatible",
-} as const;
-
-export type BrainSubmissionRejection =
-  (typeof BRAIN_SUBMISSION_REJECTION)[keyof typeof BRAIN_SUBMISSION_REJECTION];
-
-export const BRAIN_SUBMISSION_OUTCOME = {
-  ACCEPTED: "accepted",
-  REJECTED: "rejected",
-} as const;
-
 export type BrainSubmissionResult =
   | { outcome: typeof BRAIN_SUBMISSION_OUTCOME.ACCEPTED; runId: string; acceptedAt: number }
   | { outcome: typeof BRAIN_SUBMISSION_OUTCOME.REJECTED; reason: BrainSubmissionRejection };

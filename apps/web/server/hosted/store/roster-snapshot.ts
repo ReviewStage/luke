@@ -8,6 +8,7 @@ import {
   isNotNull,
   isNull,
   lte,
+  min,
   notInArray,
   or,
 } from "drizzle-orm";
@@ -214,6 +215,21 @@ export async function listPendingRosterDiffs(
       },
     ];
   });
+}
+
+/** The users with a diff still waiting, the one waiting longest first, for the wake to open a turn for. */
+export async function usersWithPendingRosterDiffs(
+  db: HostedStoreDatabase,
+  limit: number,
+): Promise<readonly string[]> {
+  const rows = await db
+    .select({ userId: rosterDiff.userId, waitingSince: min(rosterDiff.observedAt) })
+    .from(rosterDiff)
+    .where(isNull(rosterDiff.consumedAt))
+    .groupBy(rosterDiff.userId)
+    .orderBy(asc(min(rosterDiff.observedAt)))
+    .limit(limit);
+  return rows.map((row) => row.userId);
 }
 
 /** Marks one diff read; only a diff still pending can be, and only once. */

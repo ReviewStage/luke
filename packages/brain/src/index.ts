@@ -1,9 +1,11 @@
 export {
   BRAIN_DEFAULTS,
+  BRAIN_RECOVERY,
   BrainAgent,
   type BrainAgentOptions,
   type BrainFlushInput,
   type BrainFlushMarkerStore,
+  type BrainRecovery,
   type BrainWorkspaceAccess,
   LOOK_SUBJECT,
   type LookSubjectKind,
@@ -65,11 +67,20 @@ export {
 } from "./openai-model-adapter.js";
 export type { BrainActionExecution, BrainActionPerformer, BrainRoster } from "./performer.js";
 export {
+  type BrainPublicationAgent,
+  type BrainRunReference,
+  type ConversationLineRecorder,
+  publishAsk,
+  publishEnd,
+  publishRuns,
+} from "./publication.js";
+export {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
   BRAIN_SUBMISSION_OUTCOME,
   type BrainRequestRecord,
   type BrainSubmission,
+  isTerminalBrainRequestStatus,
 } from "./requests.js";
 export {
   BRAIN_RESPONSES_COMPACT_PATH,
@@ -105,6 +116,7 @@ export {
   brainToolCatalog,
   hostedBrainToolCatalog,
   resolveTurnToolPolicy,
+  TOOL_GROUP,
 } from "./tools.js";
 export type { BrainTurnTraceRecord } from "./trace.js";
 export {

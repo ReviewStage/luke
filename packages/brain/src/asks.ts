@@ -37,6 +37,8 @@ export interface AskLedgerOptions {
   createRunId: () => string;
   /** Opens one turn for the asks a drain handed over; the runner's own. */
   runAsk: (inputs: readonly AskInput[]) => Promise<void>;
+  /** Continues the runs a load found running, in one turn; the runner's own. */
+  resumeAsk: (runs: readonly RunControl[]) => Promise<void>;
   /** The execution under way, for steering and interrupt. */
   active: () => ActiveExecution | undefined;
   /** Disarms the wake window before an ask's turn opens with the inbox as it stands. */
@@ -288,6 +290,33 @@ export class AskLedger {
     this.#runs.set(run.runId, run);
     this.#admit(run, submission.question);
     return accepted;
+  }
+
+  /**
+   * The runs a load found running, under a host that resumes rather than
+   * interrupts: each is held as a live run again, its accounting the
+   * journal's, and the turn that continues them is queued at once. The
+   * wake window is disarmed as for any ask's turn, since the turn opens with
+   * the inbox as it stands.
+   */
+  resume(runs: readonly RunControl[]): void {
+    if (runs.length === 0) return;
+    for (const run of runs) this.#runs.set(run.runId, run);
+    this.#options.disarmWakes();
+    void this.#options.resumeAsk(runs);
+  }
+
+  /**
+   * An ask a load found still queued, under a host that resumes: admitted
+   * exactly as its acceptance admitted it, its record already durable, so it
+   * opens a turn of its own or waits behind the one under way.
+   */
+  readmit(record: BrainRequestRecord): void {
+    const generation = this.#seam.generation();
+    if (!generation || this.#runs.has(record.runId)) return;
+    const run = newRunControl(record.runId, generation, true);
+    this.#runs.set(run.runId, run);
+    this.#admit(run, record.question);
   }
 
   /**

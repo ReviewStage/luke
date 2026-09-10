@@ -17,6 +17,29 @@ export {
   hostedActionWorkspaceAnswerSchema,
 } from "./action-wire.js";
 export {
+  BRAIN_REQUEST_FAILURE,
+  BRAIN_REQUEST_ORIGIN,
+  BRAIN_REQUEST_STATUS,
+  BRAIN_SUBMISSION_ID_BOUNDS,
+  BRAIN_SUBMISSION_OUTCOME,
+  BRAIN_SUBMISSION_REJECTION,
+  type BrainRequestFailure,
+  type BrainRequestOrigin,
+  type BrainRequestStatus,
+  type BrainSubmissionOutcome,
+  type BrainSubmissionRejection,
+  HOSTED_BRAIN_WAIT,
+  type HostedBrainAskAnswer,
+  type HostedBrainAskRequest,
+  type HostedBrainRun,
+  type HostedBrainRunAnswer,
+  hostedBrainAskAnswerSchema,
+  hostedBrainAskRequestSchema,
+  hostedBrainRunAnswerSchema,
+  hostedBrainRunSchema,
+  isBrainRequestOrigin,
+} from "./brain-ask-wire.js";
+export {
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_EMBED_BOUNDS,
   HOSTED_BRAIN_OPERATION,
@@ -45,6 +68,22 @@ export {
   hostedBrainEmbedRequestFromWire,
   hostedBrainRespondRequestFromWire,
 } from "./brain-contract.js";
+export {
+  HOSTED_CONVERSATION_QUERY,
+  type HostedConversationClearAnswer,
+  type HostedConversationLine,
+  type HostedConversationLinesAnswer,
+  type HostedLineRatingAnswer,
+  type HostedLineRatingRequest,
+  hostedConversationClearAnswerSchema,
+  hostedConversationLinesAnswerSchema,
+  hostedLineRatingAnswerSchema,
+  hostedLineRatingRequestSchema,
+  LINE_RATING,
+  LINE_RATING_NOTE_BOUNDS,
+  type LineRating,
+  lineRatingSchema,
+} from "./conversation-lines-wire.js";
 export {
   type HostedConversationAnswer,
   type HostedConversationMessage,
@@ -81,6 +120,7 @@ export {
   PUSH_ENVIRONMENT,
   type PushEnvironment,
 } from "./device-wire.js";
+export { type HostedFact, type HostedFactsAnswer, hostedFactsAnswerSchema } from "./facts-wire.js";
 export {
   HOSTED_CALLS_URL,
   HOSTED_WS_BASE_URL,
@@ -125,7 +165,12 @@ export {
   RESPONSES_MESSAGE_ROLE,
   serializedRequestBytes,
 } from "./responses-input.js";
-export { HOSTED_SERVICE_PATH } from "./service-paths.js";
+export {
+  brainAskCancelPath,
+  brainAskRunPath,
+  conversationLineRatingPath,
+  HOSTED_SERVICE_PATH,
+} from "./service-paths.js";
 export {
   HOSTED_API_ERROR,
   type HostedApiError,

@@ -236,7 +236,7 @@ const VALUE_EVENT_KEY_PREFIX = "value:";
  * a value-keyed line's identity is its words and the key column is indexed
  * in the clear.
  */
-function conversationEventKey(entry: ConversationEntry): string {
+export function conversationEventKey(entry: ConversationEntry): string {
   const identity = conversationEntryIdentity(entry);
   const prefixed =
     entry.eventId !== undefined

@@ -6,6 +6,7 @@ import {
   type ConversationEntry,
   type ConversationRecord,
   EnvelopeTracker,
+  type LineRating,
   type SessionKey,
   type StoredTranscriptEvent,
   type TranscriptEvent,
@@ -36,6 +37,18 @@ import {
 import { type HostedStoreContext, userSeal } from "./database.js";
 import { type FactWrite, listFacts, replaceFacts, type StoredFact } from "./facts.js";
 import {
+  acquireLease,
+  heartbeatLease,
+  type LeaseRecord,
+  readLease,
+  releaseLease,
+} from "./lease.js";
+import {
+  type LineRatingWrite,
+  listConversationLineRatings,
+  rateConversationLine,
+} from "./ratings.js";
+import {
   advanceRosterSnapshot,
   consumeRosterDiff,
   forgetObservationIneligible,
@@ -49,9 +62,18 @@ import {
   readRosterSnapshot,
   recordObservationPass,
   rosterSnapshotObservedAt,
+  usersWithPendingRosterDiffs,
   writeRosterSnapshot,
 } from "./roster-snapshot.js";
-import { type RunAboutFields, recordRunAbout, runAbout } from "./run-about.js";
+import {
+  cancelRequestedRuns,
+  type RunAboutFields,
+  recordRunAbout,
+  requestRunCancel,
+  runAbout,
+  type UnfinishedConversation,
+  unfinishedConversations,
+} from "./run-about.js";
 import {
   listCompactionBoundaries,
   listTranscript,
@@ -122,6 +144,36 @@ export interface HostedStore {
   runs: {
     recordAbout(userId: string, runId: string, about: RunAboutFields): Promise<boolean>;
     about(userId: string, runId: string): Promise<RunAboutFields | undefined>;
+    /** Notes the developer's cancel on an unfinished run for its holder to read; false once the run has ended. */
+    requestCancel(userId: string, runId: string, now: number): Promise<boolean>;
+    /** The unfinished runs of one conversation the developer asked to cancel. */
+    cancelRequested(userId: string, sessionKey: SessionKey): Promise<readonly string[]>;
+    /** The conversations holding a run a function left unfinished, longest waiting first. */
+    unfinished(limit: number): Promise<readonly UnfinishedConversation[]>;
+  };
+  leases: {
+    acquire(
+      userId: string,
+      sessionKey: SessionKey,
+      ownerId: string,
+      now: number,
+      ttlMs: number,
+    ): Promise<boolean>;
+    heartbeat(
+      userId: string,
+      sessionKey: SessionKey,
+      ownerId: string,
+      now: number,
+      ttlMs: number,
+    ): Promise<boolean>;
+    release(userId: string, sessionKey: SessionKey, ownerId: string): Promise<boolean>;
+    read(userId: string, sessionKey: SessionKey): Promise<LeaseRecord | undefined>;
+  };
+  ratings: {
+    /** Writes the developer's rating of one line Luke authored; false for any other line. */
+    rate(userId: string, sessionKey: SessionKey, write: LineRatingWrite): Promise<boolean>;
+    /** Every rating in the conversation, by the key each line is idempotent on. */
+    list(userId: string, sessionKey: SessionKey): Promise<ReadonlyMap<string, LineRating>>;
   };
   facts: {
     list(userId: string): Promise<readonly StoredFact[]>;
@@ -155,6 +207,8 @@ export interface HostedStore {
       previousObservedAt: number | undefined,
     ): Promise<boolean>;
     pendingDiffs(userId: string): Promise<readonly RosterDiffRecord[]>;
+    /** The users with a diff still waiting, longest waiting first, for the wake to open a turn for. */
+    usersWithPendingDiffs(limit: number): Promise<readonly string[]>;
     consumeDiff(userId: string, id: string, now: number): Promise<boolean>;
     pass(userId: string): Promise<ObservationPassRecord | undefined>;
     recordPass(userId: string, attempt: { attemptedAt: number; failure?: string }): Promise<void>;
@@ -216,6 +270,22 @@ export function hostedStore({ db, keys }: HostedStoreContext): HostedStore {
     runs: {
       recordAbout: (userId, runId, about) => recordRunAbout(db, userId, runId, about),
       about: (userId, runId) => runAbout(db, userId, runId),
+      requestCancel: (userId, runId, now) => requestRunCancel(db, userId, runId, now),
+      cancelRequested: (userId, sessionKey) => cancelRequestedRuns(db, userId, sessionKey),
+      unfinished: (limit) => unfinishedConversations(db, limit),
+    },
+    leases: {
+      acquire: (userId, sessionKey, ownerId, now, ttlMs) =>
+        acquireLease(db, userId, sessionKey, ownerId, now, ttlMs),
+      heartbeat: (userId, sessionKey, ownerId, now, ttlMs) =>
+        heartbeatLease(db, userId, sessionKey, ownerId, now, ttlMs),
+      release: (userId, sessionKey, ownerId) => releaseLease(db, userId, sessionKey, ownerId),
+      read: (userId, sessionKey) => readLease(db, userId, sessionKey),
+    },
+    ratings: {
+      rate: (userId, sessionKey, write) =>
+        rateConversationLine(db, sealFor(userId), userId, sessionKey, write),
+      list: (userId, sessionKey) => listConversationLineRatings(db, userId, sessionKey),
     },
     facts: {
       list: (userId) => listFacts(db, sealFor(userId), userId),
@@ -237,6 +307,7 @@ export function hostedStore({ db, keys }: HostedStoreContext): HostedStore {
       advance: (userId, snapshot, diff, previousObservedAt) =>
         advanceRosterSnapshot(db, sealFor(userId), userId, snapshot, diff, previousObservedAt),
       pendingDiffs: (userId) => listPendingRosterDiffs(db, sealFor(userId), userId),
+      usersWithPendingDiffs: (limit) => usersWithPendingRosterDiffs(db, limit),
       consumeDiff: (userId, id, now) => consumeRosterDiff(db, userId, id, now),
       pass: (userId) => readObservationPass(db, userId),
       recordPass: (userId, attempt) => recordObservationPass(db, userId, attempt),
@@ -262,6 +333,8 @@ export {
 export type { ConversationCreation } from "./conversations.js";
 export type { HostedStoreContext, HostedStoreDatabase } from "./database.js";
 export type { FactWrite, StoredFact } from "./facts.js";
+export type { LeaseRecord } from "./lease.js";
+export { type LineRatingWrite, ratingOf } from "./ratings.js";
 export {
   MAXIMUM_PENDING_ROSTER_DIFFS,
   type ObservationEligibility,
@@ -270,7 +343,7 @@ export {
   type RosterDiffRecord,
   type RosterSnapshotRecord,
 } from "./roster-snapshot.js";
-export type { RunAboutFields } from "./run-about.js";
+export type { RunAboutFields, UnfinishedConversation } from "./run-about.js";
 export type { StoredCompactionBoundary, TranscriptListOptions } from "./transcript.js";
 export {
   isWorkspacePath,

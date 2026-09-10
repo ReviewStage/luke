@@ -239,22 +239,74 @@ test("a poll walks the store's pages to the fixed bounds and answers hasMore hon
   assert.equal(reads[2]?.searchParams.get("after"), STORED_MESSAGE_UUIDS[6]);
 });
 
-test("an incremental transcript read keeps the inherited unsupported answer and reads nothing", async () => {
+test("an incremental transcript read opens on the newest page and then reads only what is newer", async () => {
   const api = conversationApi();
   const plugin = pluginFor(api.fetch);
   await plugin.observe();
-  const requestsBefore = api.requests.length;
 
   const opening = await dispatchRead(plugin, "transcriptSince", IDLE_SESSION_UUID);
-  const poll = await dispatchRead(
+
+  assert.equal(opening.status, "accepted");
+  if (opening.status !== "accepted") return;
+  assert.equal(
+    opening.text,
+    [
+      "Developer: Fix the flaky roster test",
+      "Conductor: Looking at the test now. It races the clock.",
+      "Conductor: Fixed: the test now stubs the clock.",
+    ].join("\n"),
+  );
+  // The cursor is the newest stored message the page consumed, kept or
+  // dropped, so the next read resumes past the lifecycle noise as well.
+  assert.equal(opening.cursor, STORED_MESSAGE_UUIDS[7]);
+  assert.equal(opening.truncated, false);
+
+  const requestsBefore = api.requests.length;
+  const quiet = await dispatchRead(plugin, "transcriptSince", IDLE_SESSION_UUID, opening.cursor);
+
+  assert.deepEqual(quiet, {
+    status: "accepted",
+    text: "",
+    cursor: STORED_MESSAGE_UUIDS[7],
+    truncated: false,
+  });
+  const poll = api.requests.slice(requestsBefore);
+  assert.equal(poll.length, 1);
+  assert.equal(poll[0]?.method, "GET");
+  assert.equal(poll[0]?.pathname, `/v0/sessions/${IDLE_SESSION_UUID}/messages`);
+  assert.equal(poll[0]?.searchParams.get("after"), STORED_MESSAGE_UUIDS[7]);
+  assert.equal(poll[0]?.searchParams.get("offset"), null);
+
+  const since = await dispatchRead(
     plugin,
     "transcriptSince",
     IDLE_SESSION_UUID,
     STORED_MESSAGE_UUIDS[2],
   );
 
-  assert.equal(opening.status, "unsupported");
-  assert.equal(poll.status, "unsupported");
+  assert.deepEqual(since, {
+    status: "accepted",
+    text: "Conductor: Fixed: the test now stubs the clock.",
+    cursor: STORED_MESSAGE_UUIDS[7],
+    truncated: false,
+  });
+});
+
+test("an incremental transcript read refuses a cursor Conductor never handed back and reaches nothing", async () => {
+  const api = conversationApi();
+  const plugin = pluginFor(api.fetch);
+  await plugin.observe();
+  const requestsBefore = api.requests.length;
+
+  const read = await dispatchRead(plugin, "transcriptSince", IDLE_SESSION_UUID, "../not-a-cursor");
+  const unknown = await dispatchRead(
+    plugin,
+    "transcriptSince",
+    "99999999-9999-4999-8999-999999999999",
+  );
+
+  assert.equal(read.status, "rejected");
+  assert.equal(unknown.status, "unsupported");
   assert.equal(api.requests.length, requestsBefore);
 });
 

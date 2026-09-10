@@ -139,6 +139,7 @@ export {
   DAILY_NOTES_DIRECTORY,
   type DailyNote,
   dailyNoteName,
+  isWorkspaceFile,
   parseDailyNoteName,
   readBootstrapFiles,
   readWorkspaceFile,
