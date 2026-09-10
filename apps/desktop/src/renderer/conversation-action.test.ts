@@ -41,7 +41,12 @@ test("a row is composed from the act's record and the session's current name", (
     lisbon,
   ]);
   assert.equal(text(sent), 'Sent a message to lisbon-v2: "ship it"');
-  assert.deepEqual(sent?.[1], { text: "lisbon-v2", name: true });
+  // The name is a chip under the mark the session's own row wears.
+  assert.deepEqual(sent?.[1], { text: "lisbon-v2", name: { markId: "codex" } });
+  const hosted = actionRowParts(line({ kind: ACTION_KIND.MESSAGE, runId: "r", text: "go" }), [
+    { ...lisbon, agentId: "cursor", agent: "Cursor" },
+  ]);
+  assert.deepEqual(hosted?.[1]?.name, { markId: "cursor" });
   assert.equal(
     text(actionRowParts(line({ kind: ACTION_KIND.CONTROL, runId: "r", label: "Retry" }), [lisbon])),
     'Ran "Retry" on lisbon-v2',
@@ -135,7 +140,9 @@ test("a creation names its provider as the roster's rows for that provider do", 
     words: "recorded",
     action: { kind: ACTION_KIND.CREATE_WORKSPACE, runId: "r", providerId: "codex", name: "Notch" },
   };
-  assert.equal(text(actionRowParts(created, [lisbon])), 'Created a new workspace "Notch" in Codex');
+  const parts = actionRowParts(created, [lisbon]);
+  assert.equal(text(parts), 'Created a new workspace "Notch" in Codex');
+  assert.deepEqual(parts?.[1], { text: "Codex", name: { markId: "codex" } });
   assert.equal(actionRowParts(created, []), undefined);
 });
 

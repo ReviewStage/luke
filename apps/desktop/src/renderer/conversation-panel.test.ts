@@ -131,12 +131,13 @@ test("an action row is worded from its record and the roster, and from its recor
       hasChange: false,
     },
   ]);
-  // The session by its current name, set apart, in a sentence the build wrote.
+  // The session by its current name, as a chip under its row's mark, in a
+  // sentence the build wrote; the chip is the mark, so the row ends on none.
   assert.match(
     composed,
-    /<span class="conversation-words"><span>Sent a message to <\/span><span class="conversation-action-name">checkout<\/span><span>: &quot;please add tests&quot;<\/span><\/span>/,
+    /<span class="conversation-words"><span>Sent a message to <\/span><span class="conversation-action-chip"><svg class="provider-mark conversation-chip-mark" data-mark="claude-code"[^>]*>.*?<\/svg>checkout<\/span><span>: &quot;please add tests&quot;<\/span><\/span>/,
   );
-  assert.doesNotMatch(composed, /checkout-service|class="markdown/);
+  assert.doesNotMatch(composed, /checkout-service|class="markdown|conversation-action-provider/);
   // Without the session on the roster, the words recorded at the time stand.
   const recorded = render([]);
   assert.match(
@@ -145,7 +146,7 @@ test("an action row is worded from its record and the roster, and from its recor
   );
 });
 
-test("an action row ends on the mark of the provider it reached", () => {
+test("a row drawn from its recorded words ends on the mark of the provider it reached", () => {
   const render = (entry: Parameters<typeof ConversationPanel>[0]["entries"][number]) =>
     renderToStaticMarkup(
       createElement(ConversationPanel, {

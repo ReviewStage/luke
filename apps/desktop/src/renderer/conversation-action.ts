@@ -1,14 +1,19 @@
 import { ACTION_KIND, type ConversationEntry, SESSION_CONTROL_KIND } from "@sidecar/session";
 import type { SessionView } from "./session-model";
 
-/** One run of an action row's words; a name is a session's title, set apart from the rest. */
+/**
+ * One run of an action row's words. A name is the session the action reached,
+ * or the provider a creation asked, drawn as a chip under the mark its own
+ * row wears — the agent's where the provider hosts agents, else the
+ * provider's — so the thread names things the way the roster does.
+ */
 export interface ActionRowPart {
   text: string;
-  name?: true;
+  name?: { markId: string };
 }
 
-function named(title: string): ActionRowPart {
-  return { text: title, name: true };
+function named(session: SessionView): ActionRowPart {
+  return { text: session.title, name: { markId: session.agentId ?? session.providerId } };
 }
 
 /**
@@ -37,16 +42,16 @@ export function actionRowParts(
   switch (action.kind) {
     case ACTION_KIND.MESSAGE:
       if (!session || action.text === undefined) return undefined;
-      return [{ text: "Sent a message to " }, named(session.title), { text: `: "${action.text}"` }];
+      return [{ text: "Sent a message to " }, named(session), { text: `: "${action.text}"` }];
     case ACTION_KIND.CONTROL:
       if (!session || action.label === undefined) return undefined;
       switch (action.controlKind) {
         case SESSION_CONTROL_KIND.ARCHIVE:
-          return [{ text: "Archived " }, named(session.title)];
+          return [{ text: "Archived " }, named(session)];
         case SESSION_CONTROL_KIND.STOP:
-          return [{ text: "Stopped " }, named(session.title)];
+          return [{ text: "Stopped " }, named(session)];
         default:
-          return [{ text: `Ran "${action.label}" on ` }, named(session.title)];
+          return [{ text: `Ran "${action.label}" on ` }, named(session)];
       }
     case ACTION_KIND.OPEN: {
       if (!session) return undefined;
@@ -57,7 +62,7 @@ export function actionRowParts(
               ?.name ?? action.applicationId);
       return [
         { text: "Opened " },
-        named(session.title),
+        named(session),
         ...(application === undefined ? [] : [{ text: ` in ${application}` }]),
       ];
     }
@@ -65,16 +70,19 @@ export function actionRowParts(
       const provider = sessions.find((candidate) => candidate.providerId === action.providerId);
       if (!provider) return undefined;
       const name = action.name === undefined ? "" : ` "${action.name}"`;
-      return [{ text: `Created a new workspace${name} in ${provider.provider}` }];
+      return [
+        { text: `Created a new workspace${name} in ` },
+        { text: provider.provider, name: { markId: provider.providerId } },
+      ];
     }
     case ACTION_KIND.ADD_AGENT:
       if (!session || action.agent === undefined) return undefined;
-      return [{ text: `Added a ${action.agent} agent to ` }, named(session.title)];
+      return [{ text: `Added a ${action.agent} agent to ` }, named(session)];
     case ACTION_KIND.RENAME_WORKSPACE:
       if (!session || action.name === undefined) return undefined;
       return [
         { text: "Renamed the workspace of " },
-        named(session.title),
+        named(session),
         { text: ` to "${action.name}"` },
       ];
     case ACTION_KIND.RENAME_SESSION:
@@ -82,7 +90,7 @@ export function actionRowParts(
       // has landed, so the row repeats the name only while the two differ.
       if (!session || action.name === undefined) return undefined;
       return session.title === action.name
-        ? [{ text: "Renamed " }, named(session.title)]
-        : [{ text: "Renamed " }, named(session.title), { text: ` to "${action.name}"` }];
+        ? [{ text: "Renamed " }, named(session)]
+        : [{ text: "Renamed " }, named(session), { text: ` to "${action.name}"` }];
   }
 }

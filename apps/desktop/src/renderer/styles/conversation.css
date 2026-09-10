@@ -442,11 +442,31 @@
   line-height: 1.4;
 }
 
-/* The session an action reached, set apart by name the way the row for it is:
-   the one thing in the sentence the eye is looking for. */
-.conversation-action-name {
+/* The session an action reached, or the provider a creation asked, as a chip
+   under the mark its own row wears: the one thing in the sentence the eye is
+   looking for, named the way the roster names it. It is a name and not a
+   press, so it takes no hover and no ground change. */
+.conversation-action-chip {
+  display: inline-flex;
+  height: 18px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px 0 4px;
+  border-radius: 6px;
+  background: var(--raised-strong);
   color: var(--text-primary);
   font-weight: 600;
+  vertical-align: -4px;
+  white-space: nowrap;
+}
+
+.conversation-action-chip .provider-mark {
+  width: 11px;
+  height: 11px;
+}
+
+.conversation-action-chip .provider-mark[data-mark="superset"] {
+  width: 19px;
 }
 
 /* A line drawn from its recorded words rather than its record keeps the
