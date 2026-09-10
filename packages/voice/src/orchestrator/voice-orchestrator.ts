@@ -753,8 +753,9 @@ export class VoiceOrchestrator<Stream> {
     this.#replyPlayer?.onStatus(status);
     this.#considerRestart();
     // The call gone takes its half-transcribed turns with it: no completed
-    // transcript can arrive to settle a preview, so none may keep streaming.
-    if (!spokenAskPreviewSurvives(status)) this.#thread.clearPreviews();
+    // transcript can arrive to settle a preview or end a wait, so none may
+    // keep streaming and none may keep standing as owed.
+    if (!spokenAskPreviewSurvives(status)) this.#thread.callGone();
     // Any settled status ends the wait the press started, however it ended,
     // unless the press is still owed a turn — a takeover passes through
     // Luke's own call settling on its way to the developer's.

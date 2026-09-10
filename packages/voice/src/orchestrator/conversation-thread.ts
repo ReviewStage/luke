@@ -390,15 +390,25 @@ export class ConversationThread {
   }
 
   /**
-   * The call gone takes its half-transcribed turns with it: no completed
-   * transcript can arrive to settle a preview, so none may keep streaming —
-   * and no commit can arrive either, so nothing is left waiting for one.
+   * The call gone takes its half-transcribed turns with it. Nothing more
+   * arrives over a dead channel — no delta, no commit, no completed
+   * transcript — so no preview may keep streaming, and no turn may keep
+   * standing as one still owed its words: a mark left behind would hold the
+   * wait up again the moment a later call went live, and a pending one would
+   * hand its old place in the thread to the next call's first turn.
    */
-  clearPreviews(): void {
+  callGone(): void {
+    const stood =
+      this.#previews !== NO_SPOKEN_ASK_PREVIEWS ||
+      this.#marks.size > 0 ||
+      this.#pendingMarks.length > 0 ||
+      this.#activeMark !== undefined;
     this.#uncommitted.clear();
-    if (this.#previews === NO_SPOKEN_ASK_PREVIEWS) return;
     this.#previews = NO_SPOKEN_ASK_PREVIEWS;
-    this.#options.onChanged();
+    this.#marks.clear();
+    this.#pendingMarks = [];
+    this.#activeMark = undefined;
+    if (stood) this.#options.onChanged();
   }
 
   /**
