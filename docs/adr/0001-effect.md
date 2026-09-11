@@ -524,6 +524,9 @@ design decision stated as such:
 | `LiveCall`'s `open`/`unmute`/`mute`/`close` over the renderer's runtime | P9-03 | P9-08 |
 | `LiveVoiceOrchestrator`'s `beginTalk`/`endTalk`/`stopSpeaking` over its own runtime | P6-07 | P7-07 |
 | `ReattachingSocket`'s recovery fiber over its own runtime | P6-07 | P7-07 |
+| `LiveSessionSourceTag`/`IntroductionSessionSourceTag` over their plain source objects | P6-08 | P7-07 |
+| `LiveVoiceBridgeTag` / `liveVoiceBridgeLayer(bridge)` over the plain `LiveVoiceBridge` object | P6-08 | P7-07 |
+| `LiveBrainTag`/`LiveRecordTag` over their plain collaborator objects | P6-08 | P7-07 |
 | `Settled` Promise signatures | P5-01 | P12-02 |
 | `runOnBrainRuntime`, the `Promise` a run's `done` answers | P5-14 | P5-14b |
 | `BrainAgent`'s own `eventFromStream` bridge over its run events | P5-06 | P5-14b |
