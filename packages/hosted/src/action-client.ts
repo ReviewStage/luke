@@ -1,11 +1,14 @@
+import type * as HttpClient from "@effect/platform/HttpClient";
 import type { CloudAgentProviderId } from "@sidecar/session";
 import { type CloudFetch, HTTP_METHOD, unparsedWire, type WireRecord } from "@sidecar/wire";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
+import { Effect, type Layer } from "effect";
 import {
-  type AccountCall,
+  type AccountCallEffects,
   accountBearer,
+  accountCall,
   CALL_FAULT,
   callAnswered,
-  createAccountCall,
 } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
 import { type HostedActionAnswer, hostedActionAnswerSchema } from "./action-wire.js";
@@ -56,15 +59,16 @@ export type HostedActionOutcome = { answer: HostedActionAnswer } | { failure: Ho
  * holds a roster: the target is two identifiers and the ask is the words.
  */
 export class HostedActionClient {
-  readonly #call: AccountCall;
+  readonly #call: AccountCallEffects;
+  readonly #client: Layer.Layer<HttpClient.HttpClient>;
 
   constructor(options: HostedActionClientOptions) {
-    this.#call = createAccountCall({
+    this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
       credential: accountBearer(options),
-      fetch: options.fetch,
       requestTimeoutMs: options.requestTimeoutMs,
     });
+    this.#client = layerFromCloudFetch(options.fetch ?? ((input, init) => fetch(input, init)));
   }
 
   sendMessage(target: HostedActionTarget, text: string): Promise<HostedActionOutcome> {
@@ -76,14 +80,16 @@ export class HostedActionClient {
   }
 
   async #post(path: string, body: WireRecord): Promise<HostedActionOutcome> {
-    const sent = await this.#call.send({
-      method: HTTP_METHOD.POST,
-      path,
-      body: JSON.stringify(body),
-    });
+    const sent = await this.#run(
+      this.#call.send({
+        method: HTTP_METHOD.POST,
+        path,
+        body: JSON.stringify(body),
+      }),
+    );
     if (!callAnswered(sent)) {
-      // A fetch that threw may have thrown after the request left, so a
-      // network fault is an answer lost rather than a call never made.
+      // A client that could not carry the request may have failed after it
+      // left, so a network fault is an answer lost rather than a call never made.
       return {
         failure:
           sent.fault === CALL_FAULT.NETWORK
@@ -96,6 +102,10 @@ export class HostedActionClient {
     const answer =
       payload === undefined ? undefined : hostedActionAnswerSchema.parse(unparsedWire(payload));
     return answer ? { answer } : { failure: HOSTED_ACTION_FAILURE.UNREADABLE };
+  }
+
+  #run<Answer>(effect: Effect.Effect<Answer, never, HttpClient.HttpClient>): Promise<Answer> {
+    return Effect.runPromise(Effect.provide(effect, this.#client));
   }
 }
 
