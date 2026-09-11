@@ -16,7 +16,7 @@ test("a registered session names its account, keeps its first owner, and answers
   try {
     const owner = await opened.createUser();
     const other = await opened.createUser();
-    const record = voiceSessionRecord(opened.db, () => NOW);
+    const record = voiceSessionRecord(opened.run, () => NOW);
     await record.register({ userId: owner, sessionId: "live_r" });
     await record.register({ userId: other, sessionId: "live_r" });
 
@@ -44,7 +44,7 @@ test("usage snapshots overwrite one another unconfirmed, the close confirms the 
   const opened = await openHostedStoreTestDatabase();
   try {
     const owner = await opened.createUser();
-    const record = voiceSessionRecord(opened.db, () => NOW);
+    const record = voiceSessionRecord(opened.run, () => NOW);
     await record.register({ userId: owner, sessionId: "live_u" });
     await record.noteUsage({ sessionId: "live_u", seconds: 10 });
     await record.noteUsage({ sessionId: "live_u", seconds: 25 });

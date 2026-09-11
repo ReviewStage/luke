@@ -57,7 +57,7 @@ const relay = new StreamRelay({
   now: () => NOW,
   report: () => undefined,
 });
-const sessionRecord = voiceSessionRecord(database.db, () => NOW);
+const sessionRecord = voiceSessionRecord(database.run, () => NOW);
 const speech = { run: database.run, writer };
 
 async function account(): Promise<ConversationTarget> {

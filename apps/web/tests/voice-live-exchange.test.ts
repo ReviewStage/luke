@@ -86,7 +86,7 @@ const relay = new StreamRelay({
   now: () => NOW,
   report: () => undefined,
 });
-const sessionRecord = voiceSessionRecord(database.db, () => NOW);
+const sessionRecord = voiceSessionRecord(database.run, () => NOW);
 
 /** An eve session id of this test's own: the relay names a turn by session and eve turn, so a counted id would collide across the files that share one database on CI. */
 function mintEveSession(): string {
