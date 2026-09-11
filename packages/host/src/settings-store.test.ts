@@ -5,7 +5,7 @@ import test from "node:test";
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "@sidecar/credentials/vocabulary";
-import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
+import { LIVE_DEFAULTS, LIVE_VOICE } from "@sidecar/live";
 import { temporaryDirectory } from "@sidecar/runtime/testing";
 import {
   PROVIDER_ID,
@@ -197,8 +197,7 @@ async function readSettingsFile(directory: string): Promise<string> {
 const SAMPLE_VALUE = {
   openAtLogin: false,
   showInDock: true,
-  voice: REALTIME_VOICE.MARIN,
-  voiceSpeed: REALTIME_VOICE_SPEED.QUICK,
+  voice: LIVE_VOICE.MARIN,
   voiceCaptions: true,
   voiceHotkey: "Shift+Command+L",
   askHotkey: "Control+Alt+K",
@@ -226,7 +225,6 @@ const SAMPLE_VALUE = {
  */
 const RESOLVED_FIELDS = new Set<AppSettingField>([
   APP_SETTING_SCHEMA.voice.field,
-  APP_SETTING_SCHEMA.voiceSpeed.field,
   APP_SETTING_SCHEMA.voiceSource.field,
   APP_SETTING_SCHEMA.formFactor.field,
 ]);
@@ -826,20 +824,20 @@ test("decides the Dock icon from the file alone, never the keychain", async (t) 
 test("prefers the chosen voice over the environment, and the environment over the default", async (t) => {
   const directory = temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory, {
-    environment: { LUKE_REALTIME_VOICE: REALTIME_VOICE.SAGE },
+    environment: { LUKE_LIVE_VOICE: LIVE_VOICE.SAGE },
   });
 
-  assert.equal(appSettingsView(await store.snapshot()).voice, REALTIME_VOICE.SAGE);
+  assert.equal(appSettingsView(await store.snapshot()).voice, LIVE_VOICE.SAGE);
   // The environment names the voice only until the user does, so it is
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // reported in the snapshot but never as something the user stored.
   assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
 
-  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN);
-  assert.equal(appSettingsView(await store.snapshot()).voice, REALTIME_VOICE.MARIN);
+  await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.MARIN);
+  assert.equal(appSettingsView(await store.snapshot()).voice, LIVE_VOICE.MARIN);
 
   await store.set(APP_SETTING_SCHEMA.voice.field, undefined);
-  assert.equal(appSettingsView(await store.snapshot()).voice, REALTIME_VOICE.SAGE);
+  assert.equal(appSettingsView(await store.snapshot()).voice, LIVE_VOICE.SAGE);
 });
 
 test("ignores a stored or environment voice this build does not offer", async (t) => {
@@ -848,55 +846,24 @@ test("ignores a stored or environment voice this build does not offer", async (t
     path.join(directory, SETTINGS_FILE_NAME),
     JSON.stringify({ version: 2, apiKeys: {}, voice: "baritone" }),
   );
-  const store = storeIn(directory, { environment: { LUKE_REALTIME_VOICE: "baritone" } });
+  const store = storeIn(directory, { environment: { LUKE_LIVE_VOICE: "baritone" } });
 
   assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
-  assert.equal(appSettingsView(await store.snapshot()).voice, REALTIME_DEFAULTS.VOICE);
-});
-
-test("prefers the chosen pace over the environment, and the environment over the default", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory, {
-    environment: { LUKE_REALTIME_SPEED: String(REALTIME_VOICE_SPEED.SLOW) },
-  });
-
-  assert.equal(appSettingsView(await store.snapshot()).voiceSpeed, REALTIME_VOICE_SPEED.SLOW);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.voiceSpeed.field), undefined);
-
-  await store.set(APP_SETTING_SCHEMA.voiceSpeed.field, REALTIME_VOICE_SPEED.FAST);
-  assert.equal(appSettingsView(await store.snapshot()).voiceSpeed, REALTIME_VOICE_SPEED.FAST);
-
-  await store.set(APP_SETTING_SCHEMA.voiceSpeed.field, undefined);
-  assert.equal(appSettingsView(await store.snapshot()).voiceSpeed, REALTIME_VOICE_SPEED.SLOW);
-});
-
-test("ignores a stored or environment pace this build does not offer", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, voiceSpeed: 3 }),
-  );
-  const store = storeIn(directory, { environment: { LUKE_REALTIME_SPEED: "0.1" } });
-
-  assert.equal(await store.get(APP_SETTING_SCHEMA.voiceSpeed.field), undefined);
-  assert.equal(appSettingsView(await store.snapshot()).voiceSpeed, REALTIME_DEFAULTS.SPEED);
+  assert.equal(appSettingsView(await store.snapshot()).voice, LIVE_DEFAULTS.VOICE);
 });
 
 test("account preferences extraction excludes resolved defaults and local-only preferences", async (t) => {
   const directory = temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory, {
-    environment: {
-      LUKE_REALTIME_VOICE: REALTIME_VOICE.SAGE,
-      LUKE_REALTIME_SPEED: String(REALTIME_VOICE_SPEED.SLOW),
-    },
+    environment: { LUKE_LIVE_VOICE: LIVE_VOICE.SAGE },
   });
 
   await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
   await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, VOICE_HOTKEY_NONE);
-  await store.set(APP_SETTING_SCHEMA.voiceSpeed.field, REALTIME_VOICE_SPEED.FAST);
+  await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.CEDAR);
 
   assert.deepEqual(await store.accountPreferences(), {
-    voiceSpeed: REALTIME_VOICE_SPEED.FAST,
+    voice: LIVE_VOICE.CEDAR,
   });
 });
 
@@ -905,26 +872,23 @@ test("applies account preferences to disk and restores them from a new store", a
   const store = storeIn(directory);
   await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
   await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, VOICE_HOTKEY_NONE);
-  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.SAGE);
-  await store.set(APP_SETTING_SCHEMA.voiceSpeed.field, REALTIME_VOICE_SPEED.FAST);
+  await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.SAGE);
   await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "project-local");
 
   const result = await store.applyAccountPreferences({
-    voice: REALTIME_VOICE.MARIN,
+    voice: LIVE_VOICE.MARIN,
     workspaceAgentDefaults: { conductor: { agent: "codex", model: "gpt-5.6-sol" } },
   });
 
   assert.deepEqual(result.changed, [
     APP_SETTING_SCHEMA.voice.field,
-    APP_SETTING_SCHEMA.voiceSpeed.field,
     APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
     APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
   ]);
   const reopened = storeIn(directory);
   assert.equal(await reopened.get(APP_SETTING_SCHEMA.showInDock.field), true);
   assert.equal(await reopened.get(APP_SETTING_SCHEMA.voiceHotkey.field), VOICE_HOTKEY_NONE);
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voice.field), REALTIME_VOICE.MARIN);
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voiceSpeed.field), undefined);
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voice.field), LIVE_VOICE.MARIN);
   assert.equal(await readWorkspaceProjectDefault(reopened, PROVIDER_ID.CONDUCTOR), undefined);
   assert.deepEqual(await readWorkspaceAgentDefault(reopened, PROVIDER_ID.CONDUCTOR), {
     agent: "codex",
@@ -943,26 +907,29 @@ test("merges hosted account preferences around concurrent local preference edits
     provider: "github" as const,
   };
   await store.setAccount(account);
-  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.SAGE);
+  await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.SAGE);
   const expected = await store.accountPreferences();
 
-  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.ECHO);
+  await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.ECHO);
   await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "local-project");
   const result = await store.applyAccountPreferences(
     {
-      voice: REALTIME_VOICE.MARIN,
-      voiceSpeed: REALTIME_VOICE_SPEED.FAST,
+      voice: LIVE_VOICE.MARIN,
+      defaultWorkspaceProvider: PROVIDER_ID.CODEX,
       workspaceProjectDefaults: { [PROVIDER_ID.CODEX]: "remote-project" },
     },
     { accountEmail: account.email, preferences: expected },
   );
 
   assert.deepEqual(result.changed, [
-    APP_SETTING_SCHEMA.voiceSpeed.field,
+    APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
     APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
   ]);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), REALTIME_VOICE.ECHO);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.voiceSpeed.field), REALTIME_VOICE_SPEED.FAST);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), LIVE_VOICE.ECHO);
+  assert.equal(
+    await store.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
+    PROVIDER_ID.CODEX,
+  );
   assert.equal(await readWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR), "local-project");
   assert.equal(await readWorkspaceProjectDefault(store, PROVIDER_ID.CODEX), "remote-project");
 });
@@ -978,21 +945,24 @@ test("keeps local account preference edits across a failed hosted write and rest
   };
   const store = storeIn(directory);
   await store.setAccount(account);
-  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.SAGE);
+  await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.SAGE);
   await store.setAccountPreferencesSyncBaseline(account.email, await store.accountPreferences());
 
-  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.ECHO);
+  await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.ECHO);
   const reopened = storeIn(directory);
   const baseline = await reopened.accountPreferencesSyncBaseline(account.email);
-  assert.deepEqual(baseline, { voice: REALTIME_VOICE.SAGE });
+  assert.deepEqual(baseline, { voice: LIVE_VOICE.SAGE });
   const result = await reopened.applyAccountPreferences(
-    { voice: REALTIME_VOICE.SAGE, voiceSpeed: REALTIME_VOICE_SPEED.FAST },
+    { voice: LIVE_VOICE.SAGE, defaultWorkspaceProvider: PROVIDER_ID.CODEX },
     { accountEmail: account.email, preferences: baseline ?? {} },
   );
 
-  assert.deepEqual(result.changed, [APP_SETTING_SCHEMA.voiceSpeed.field]);
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voice.field), REALTIME_VOICE.ECHO);
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voiceSpeed.field), REALTIME_VOICE_SPEED.FAST);
+  assert.deepEqual(result.changed, [APP_SETTING_SCHEMA.defaultWorkspaceProvider.field]);
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voice.field), LIVE_VOICE.ECHO);
+  assert.equal(
+    await reopened.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
+    PROVIDER_ID.CODEX,
+  );
 });
 
 test("skips a guarded account preference apply after account sign-out", async (t) => {
@@ -1006,20 +976,18 @@ test("skips a guarded account preference apply after account sign-out", async (t
     provider: "github" as const,
   };
   await store.setAccount(account);
-  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.SAGE);
-  await store.set(APP_SETTING_SCHEMA.voiceSpeed.field, REALTIME_VOICE_SPEED.FAST);
+  await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.SAGE);
   await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "local-project");
   const expected = await store.accountPreferences();
 
   await store.clearAccount();
   const result = await store.applyAccountPreferences(
-    { voice: REALTIME_VOICE.MARIN },
+    { voice: LIVE_VOICE.MARIN },
     { accountEmail: account.email, preferences: expected },
   );
 
   assert.deepEqual(result.changed, []);
   assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.voiceSpeed.field), undefined);
   assert.equal(await readWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
   assert.equal(await store.accountPreferencesSyncBaseline(account.email), undefined);
 });
@@ -1394,39 +1362,36 @@ test("recovers from a corrupt settings file", async (t) => {
   assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
 });
 
-test("a voice reset forgets the voice, pace, captions, and duck in one action", async (t) => {
+test("a voice reset forgets the voice, captions, and duck in one action", async (t) => {
   const directory = temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
-  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN);
-  await store.set(APP_SETTING_SCHEMA.voiceSpeed.field, REALTIME_VOICE_SPEED.QUICK);
+  await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.CEDAR);
   await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true);
   await store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, false);
 
   const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
 
   assert.equal(reason, undefined);
-  assert.equal(appSettingsView(settings).voice, REALTIME_DEFAULTS.VOICE);
-  assert.equal(appSettingsView(settings).voiceSpeed, REALTIME_DEFAULTS.SPEED);
+  assert.equal(appSettingsView(settings).voice, LIVE_DEFAULTS.VOICE);
   assert.equal(appSettingsView(settings).voiceCaptions, false);
   assert.equal(appSettingsView(settings).duckOtherMedia, true);
   // The choices are forgotten rather than restated, so a default that moves
   // in a later build moves these settings with it.
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.voice.field), undefined);
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.voiceSpeed.field), undefined);
 });
 
 test("a voice reset returns to the environment's voice where one stands behind the choice", async (t) => {
   const directory = temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory, {
-    environment: { LUKE_REALTIME_VOICE: REALTIME_VOICE.SAGE },
+    environment: { LUKE_LIVE_VOICE: LIVE_VOICE.SAGE },
   });
-  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN);
+  await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.MARIN);
 
   const { settings } = await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
 
   // Forgetting the choice is the reset's whole meaning: what stands afterwards
   // is whatever would have stood had none been made.
-  assert.equal(appSettingsView(settings).voice, REALTIME_VOICE.SAGE);
+  assert.equal(appSettingsView(settings).voice, LIVE_VOICE.SAGE);
   assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
 });
 
@@ -1436,7 +1401,7 @@ test("an appearance reset returns Luke's stances without touching the voice page
   await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
   await store.set(APP_SETTING_SCHEMA.showOnAllDisplays.field, true);
   await store.set(APP_SETTING_SCHEMA.formFactor.field, PANEL_FORM_FACTOR.NOTCH);
-  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN);
+  await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.MARIN);
 
   const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.APPEARANCE);
 
@@ -1446,7 +1411,7 @@ test("an appearance reset returns Luke's stances without touching the voice page
   assert.equal(appSettingsView(settings).formFactor, PANEL_FORM_FACTOR.BUBBLE);
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.formFactor.field), undefined);
   // One scope's reset is that scope's alone.
-  assert.equal(appSettingsView(settings).voice, REALTIME_VOICE.MARIN);
+  assert.equal(appSettingsView(settings).voice, LIVE_VOICE.MARIN);
 });
 
 test("a shortcuts reset forgets all three chords at once", async (t) => {
@@ -1498,7 +1463,7 @@ test("a reset of settings already at their defaults writes nothing", async (t) =
   const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
 
   assert.equal(reason, undefined);
-  assert.equal(appSettingsView(settings).voice, REALTIME_DEFAULTS.VOICE);
+  assert.equal(appSettingsView(settings).voice, LIVE_DEFAULTS.VOICE);
   // Nothing changed, so no file was created — the same silence every setter
   // keeps when asked for the value it already holds.
   await assert.rejects(readSettingsFile(directory));

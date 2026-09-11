@@ -523,9 +523,6 @@ importers:
       '@sidecar/providers':
         specifier: workspace:*
         version: link:../providers
-      '@sidecar/realtime':
-        specifier: workspace:*
-        version: link:../realtime
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
@@ -775,6 +772,9 @@ importers:
       '@sidecar/guide':
         specifier: workspace:*
         version: link:../guide
+      '@sidecar/live':
+        specifier: workspace:*
+        version: link:../live
       '@sidecar/realtime':
         specifier: workspace:*
         version: link:../realtime

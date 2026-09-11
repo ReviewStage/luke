@@ -4,7 +4,7 @@ import type { AccountPreferences } from "@sidecar/settings";
 import { AccountPreferencesClient } from "./account-preferences-client.js";
 
 const PREFERENCES_ANSWER = {
-  preferences: { voice: "marin", voiceSpeed: 1.5 },
+  preferences: { voice: "marin", defaultWorkspaceProvider: "conductor" },
   updatedAt: 1_800_000_000_000,
 };
 
@@ -72,7 +72,7 @@ test("writes account preferences as a full snapshot", async () => {
 
   const answer = await client({ fetch: fetchLike }).writePreferences({
     voice: "marin",
-    voiceSpeed: 1.5,
+    defaultWorkspaceProvider: "conductor",
   });
   assert.deepEqual(answer, {
     preferences: PREFERENCES_ANSWER.preferences,
@@ -84,7 +84,7 @@ test("writes account preferences as a full snapshot", async () => {
   assert.equal(request?.init?.method, "PUT");
   assert.equal(new Headers(request?.init?.headers).get("content-type"), "application/json");
   assert.deepEqual(JSON.parse(String(request?.init?.body)), {
-    preferences: { voice: "marin", voiceSpeed: 1.5 },
+    preferences: { voice: "marin", defaultWorkspaceProvider: "conductor" },
   });
 });
 

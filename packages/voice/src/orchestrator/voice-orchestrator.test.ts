@@ -45,7 +45,6 @@ class FakeCall {
   stopSpeaking() {
     return true;
   }
-  applySpeed() {}
   reportRemoteAudioLevel() {}
   beginTurn() {
     this.turns += 1;

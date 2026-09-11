@@ -8,6 +8,8 @@ import {
   APP_SETTING_KIND,
   isAppSettingId,
 } from "@sidecar/guide";
+import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE } from "@sidecar/live";
+import { isRealtimeVoice } from "@sidecar/realtime";
 import { PROVIDER_ID, SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/session";
 import {
   APP_SETTING_SCHEMA,
@@ -326,14 +328,7 @@ test("a page's section draws its own members, in the order they claim", () => {
   const voice = settingRowsForPage(SETTINGS_PAGE.VOICE, SETTING_SECTION.CONTROLS, view);
   assert.deepEqual(
     voice.map((row) => row.field),
-    [
-      "voice",
-      "voiceSpeed",
-      "voiceCaptions",
-      "duckOtherMedia",
-      "preferBuiltInMicrophone",
-      "announceSessions",
-    ],
+    ["voice", "voiceCaptions", "duckOtherMedia", "preferBuiltInMicrophone", "announceSessions"],
   );
   // The credential picker draws the source itself, so the controls do not.
   assert.ok(!voice.some((row) => row.field === "voiceSource"));
@@ -346,22 +341,32 @@ test("a page's section draws its own members, in the order they claim", () => {
 
 test("a choice row's control offers what its own values say, worded for a control", () => {
   const view = settingsVisibility({ voiceControlsDrawn: true });
-  const [speed] = settingRowsForPage(SETTINGS_PAGE.VOICE, SETTING_SECTION.CONTROLS, view).filter(
-    (row) => row.field === "voiceSpeed",
+  const [voice] = settingRowsForPage(SETTINGS_PAGE.VOICE, SETTING_SECTION.CONTROLS, view).filter(
+    (row) => row.field === "voice",
   );
-  assert.ok(speed?.control);
-  // The guide offers the word and the multiple; the control wears the
-  // multiple alone, and the token it stores is the word either way.
+  assert.ok(voice?.control);
+  // Every offered voice is one the Live API speaks and one the phone's
+  // Realtime reader still names, with the default among them; the default
+  // carries its status into the menu alone.
+  const offered = voice.control.options.map((option) => option.value);
+  assert.ok(offered.length > 1);
+  assert.equal(offered.every(isLiveVoice), true);
+  assert.equal(offered.every(isRealtimeVoice), true);
+  assert.equal(offered.includes(LIVE_DEFAULTS.VOICE), true);
   assert.deepEqual(
-    speed.control.options.map((option) => option.value),
-    ["slow", "normal", "quick", "fast"],
+    voice.control.options
+      .filter((option) => option.label.endsWith("(default)"))
+      .map((option) => option.value),
+    [LIVE_DEFAULTS.VOICE],
   );
-  assert.deepEqual(
-    speed.control.options.map((option) => option.label),
-    ["0.75×", "1× (default)", "1.25×", "1.5×"],
-  );
-  assert.equal(speed.control.value, "normal");
-  assert.equal(speed.changed, false);
+  assert.equal(voice.control.value, LIVE_VOICE.CEDAR);
+  assert.equal(voice.changed, true);
+  const [resting] = settingRowsForPage(
+    SETTINGS_PAGE.VOICE,
+    SETTING_SECTION.CONTROLS,
+    settingsVisibility({ voiceControlsDrawn: true, settings: { voice: LIVE_DEFAULTS.VOICE } }),
+  ).filter((row) => row.field === "voice");
+  assert.equal(resting?.changed, false);
 
   // The default-workspace row offers what the observation reported and one
   // token for no default at all, which no provider id can collide with.

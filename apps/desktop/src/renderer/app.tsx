@@ -265,7 +265,6 @@ export function App(): React.JSX.Element {
       // another app for a chord nobody is contesting.
       hotkey: {
         ...(held.hotkeys.talk ? { hotkey: voiceHotkeyLabel(held.hotkeys.talk) } : undefined),
-        held: held.hotkeys.talkHeld,
         removed: current.voiceHotkey === VOICE_HOTKEY_NONE,
       },
       ...(held.hotkeys.ask ? { askKey: voiceHotkeyLabel(held.hotkeys.ask) } : undefined),

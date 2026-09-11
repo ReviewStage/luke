@@ -3,7 +3,7 @@ import {
   CREDENTIAL_SOURCE,
   SECRET_STORAGE,
 } from "@sidecar/credentials/vocabulary";
-import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
+import { LIVE_VOICE } from "@sidecar/live";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { VOICE_SOURCE } from "./schema.js";
 import { APP_SETTING_DEFAULTS } from "./schema-access.js";
@@ -27,8 +27,7 @@ export function settingsView(overrides: Partial<AppSettingsView> = {}): AppSetti
       },
       secretStorage: SECRET_STORAGE.UNKNOWN,
       showInDock: false,
-      voice: REALTIME_VOICE.CEDAR,
-      voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
+      voice: LIVE_VOICE.CEDAR,
       voiceCaptions: false,
       duckOtherMedia: true,
       quietDuringMeetings: true,

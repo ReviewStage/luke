@@ -7,7 +7,6 @@
  */
 export const APP_SETTING_ID = {
   VOICE: "voice",
-  VOICE_SPEED: "voice_speed",
   VOICE_CAPTIONS: "voice_captions",
   DUCK_OTHER_MEDIA: "duck_other_media",
   PREFER_BUILT_IN_MICROPHONE: "prefer_built_in_microphone",

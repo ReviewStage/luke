@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
+import { LIVE_VOICE } from "@sidecar/live";
 import { PROVIDER_ID, SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "./schema.js";
 import {
@@ -12,7 +12,6 @@ import {
 test("the account preference allowlist contains only cross-device preferences", () => {
   assert.deepEqual(ACCOUNT_PREFERENCE_FIELDS, [
     "voice",
-    "voiceSpeed",
     "defaultWorkspaceProvider",
     "workspaceProjectDefaults",
     "workspaceAgentDefaults",
@@ -28,8 +27,7 @@ test("the account preference allowlist contains only cross-device preferences", 
 test("account preferences validate the shared fields and reject local-only payloads", () => {
   assert.deepEqual(
     accountPreferencesFromWire({
-      voice: REALTIME_VOICE.MARIN,
-      voiceSpeed: REALTIME_VOICE_SPEED.FAST,
+      voice: LIVE_VOICE.MARIN,
       defaultWorkspaceProvider: PROVIDER_ID.CONDUCTOR,
       workspaceProjectDefaults: { conductor: "project-1" },
       workspaceAgentDefaults: {
@@ -38,8 +36,7 @@ test("account preferences validate the shared fields and reject local-only paylo
       },
     }),
     {
-      voice: REALTIME_VOICE.MARIN,
-      voiceSpeed: REALTIME_VOICE_SPEED.FAST,
+      voice: LIVE_VOICE.MARIN,
       defaultWorkspaceProvider: PROVIDER_ID.CONDUCTOR,
       workspaceProjectDefaults: { conductor: "project-1" },
       workspaceAgentDefaults: {
@@ -51,6 +48,11 @@ test("account preferences validate the shared fields and reject local-only paylo
 
   assert.equal(accountPreferencesFromWire({ voiceHotkey: "Command+Space" }), undefined);
   assert.equal(accountPreferencesFromWire({ voice: "baritone" }), undefined);
+  // The phone's Realtime pace still travels in the shared snapshot; here it
+  // is dropped rather than refused, so a phone's write stays readable.
+  assert.deepEqual(accountPreferencesFromWire({ voice: LIVE_VOICE.MARIN, voiceSpeed: 1.5 }), {
+    voice: LIVE_VOICE.MARIN,
+  });
 });
 
 test("null clears an account preference field in write payloads", () => {
@@ -66,11 +68,11 @@ test("null clears an account preference field in write payloads", () => {
 test("account preferences reads ignore newer and corrupt stored fields", () => {
   assert.deepEqual(
     accountPreferencesFromStored({
-      voice: REALTIME_VOICE.SAGE,
+      voice: LIVE_VOICE.SAGE,
       futureSetting: "held by a newer build",
       workspaceAgentDefaults: { conductor: { agent: "codex", model: "no-such-model" } },
     }),
-    { voice: REALTIME_VOICE.SAGE },
+    { voice: LIVE_VOICE.SAGE },
   );
 });
 

@@ -23,7 +23,7 @@ import {
   SECRET_STORAGE,
   type SecretStorage,
 } from "@sidecar/credentials/vocabulary";
-import { REALTIME_DEFAULTS } from "@sidecar/realtime";
+import { LIVE_DEFAULTS } from "@sidecar/live";
 import {
   type AppSettings,
   type SettingsResetScope,
@@ -66,11 +66,7 @@ import {
   type StoredAppSettings,
   sameSettingEntry,
 } from "@sidecar/settings";
-import {
-  environmentRealtimeSpeed,
-  environmentRealtimeVoice,
-  resolveVoiceCapability,
-} from "@sidecar/voice";
+import { environmentLiveVoice, resolveVoiceCapability } from "@sidecar/voice";
 
 const SETTINGS_FILE_NAME = "settings.json";
 const SETTINGS_TEMPORARY_FILE_NAME = "settings.json.tmp";
@@ -719,14 +715,9 @@ export class SettingsStore {
     return {
       stored: {
         ...storedSettingsFromPersisted(persisted),
-        // Resolved the way the minter resolves them, so the panel marks what
-        // would actually be heard while the persisted file remains optional.
-        voice:
-          persisted.voice ?? environmentRealtimeVoice(this.#environment) ?? REALTIME_DEFAULTS.VOICE,
-        voiceSpeed:
-          persisted.voiceSpeed ??
-          environmentRealtimeSpeed(this.#environment) ??
-          REALTIME_DEFAULTS.SPEED,
+        // Resolved the way the session source resolves it, so the panel marks
+        // what would actually be heard while the persisted file remains optional.
+        voice: persisted.voice ?? environmentLiveVoice(this.#environment) ?? LIVE_DEFAULTS.VOICE,
         voiceSource: voiceCapability.source,
         formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
       },

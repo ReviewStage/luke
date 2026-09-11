@@ -94,7 +94,6 @@ struct WatchVoiceSettingsView: View {
             set: { chosen in
                 guard chosen != speed else { return }
                 speed = chosen
-                events.record(.settingUpdate(setting: .voiceSpeed, value: .set))
             }
         )
     }

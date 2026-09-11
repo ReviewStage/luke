@@ -10,16 +10,8 @@ import {
   type AppSettingId,
   isAppSettingId,
 } from "@sidecar/guide";
-import {
-  isRealtimeVoice,
-  isRealtimeVoiceSpeed,
-  REALTIME_DEFAULTS,
-  REALTIME_VOICE_LIST,
-  REALTIME_VOICE_SPEED,
-  REALTIME_VOICE_SPEED_LIST,
-  type RealtimeVoice,
-  type RealtimeVoiceSpeed,
-} from "@sidecar/realtime";
+import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE_LIST, type LiveVoice } from "@sidecar/live";
+import { isRealtimeVoice } from "@sidecar/realtime";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   isProviderId,
@@ -111,28 +103,19 @@ const VOICE_SOURCE_CHOICE = {
   [VOICE_SOURCE.KEY]: "your OpenAI key",
 } as const satisfies Record<VoiceSource, string>;
 
-const VOICE_SPEED_WORD = {
-  [REALTIME_VOICE_SPEED.SLOW]: "slow",
-  [REALTIME_VOICE_SPEED.NORMAL]: "normal",
-  [REALTIME_VOICE_SPEED.QUICK]: "quick",
-  [REALTIME_VOICE_SPEED.FAST]: "fast",
-} as const satisfies Record<RealtimeVoiceSpeed, string>;
-
-const voiceSpeedMultiple = (speed: RealtimeVoiceSpeed): string => `${speed}×`;
+/* The voice is an account preference every device applies, and the phone
+   still speaks through the Realtime API, whose reader refuses a snapshot
+   naming a voice it does not know. So the row offers the Live voices the
+   Realtime contract also names, until the phone moves to Live; the guard
+   still admits any Live voice, so a stored one stands whatever is offered. */
+const OFFERED_VOICE_LIST: readonly LiveVoice[] = LIVE_VOICE_LIST.filter(isRealtimeVoice);
 
 /* The API names its voices in lowercase; on a control they read as names. The
    default carries its status into the menu, so returning to it never needs the
    README or a memory of what shipped. */
-function voiceOptionLabel(voice: RealtimeVoice): string {
+function voiceOptionLabel(voice: LiveVoice): string {
   const name = voice.charAt(0).toUpperCase() + voice.slice(1);
-  return voice === REALTIME_DEFAULTS.VOICE ? `${name} (default)` : name;
-}
-
-/* A pace reads as a rate multiple, the way every player writes one. The
-   natural rate carries its status into the menu for the same reason the
-   default voice does. */
-function speedOptionLabel(speed: RealtimeVoiceSpeed): string {
-  return speed === REALTIME_DEFAULTS.SPEED ? `${speed}× (default)` : `${speed}×`;
+  return voice === LIVE_DEFAULTS.VOICE ? `${name} (default)` : name;
 }
 
 /* The forms read as names, and the bubble carries its status into the menu the
@@ -286,47 +269,18 @@ export const APP_SETTING_SCHEMA = {
     id: APP_SETTING_ID.VOICE,
     label: "Voice",
     description:
-      "Which voice Luke speaks with; a change is heard right away — a conversation under way starts afresh in the new voice.",
-    values: REALTIME_VOICE_LIST,
+      "Which voice Luke speaks with. A conversation keeps the voice it opened with, so a change is heard from the next conversation on.",
+    values: OFFERED_VOICE_LIST,
     say: (voice) => voice,
     optionLabel: voiceOptionLabel,
-    guard: (value: UnparsedWireValue) => optional(value, isRealtimeVoice),
-    default: REALTIME_DEFAULTS.VOICE,
+    guard: (value: UnparsedWireValue) => optional(value, isLiveVoice),
+    default: LIVE_DEFAULTS.VOICE,
     page: SETTINGS_PAGE.VOICE,
     section: SETTING_SECTION.CONTROLS,
     order: 30,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
     manual: VOICE_PAGE,
     sideEffect: SETTING_SIDE_EFFECT.VOICE,
-    adjustable: true,
-    visible: voiceControlDrawn,
-  }),
-  voiceSpeed: choiceSetting({
-    field: "voiceSpeed",
-    id: APP_SETTING_ID.VOICE_SPEED,
-    label: "Speed",
-    description:
-      "How fast Luke talks: slow 0.75×, normal 1×, quick 1.25×, fast 1.5× the voice's natural rate. An ask may use the word or the multiple. A change is heard from the next reply on.",
-    values: REALTIME_VOICE_SPEED_LIST,
-    say: (speed) => VOICE_SPEED_WORD[speed],
-    optionLabel: speedOptionLabel,
-    // The multiple is a second spelling of the same pace, so an ask may name
-    // either; the guide offers both and the control wears the multiple alone.
-    alias: Object.fromEntries(
-      REALTIME_VOICE_SPEED_LIST.map((speed) => [voiceSpeedMultiple(speed), speed]),
-    ),
-    choices: REALTIME_VOICE_SPEED_LIST.flatMap((speed) => [
-      VOICE_SPEED_WORD[speed],
-      voiceSpeedMultiple(speed),
-    ]),
-    guard: (value: UnparsedWireValue) => optional(value, isRealtimeVoiceSpeed),
-    default: REALTIME_DEFAULTS.SPEED,
-    page: SETTINGS_PAGE.VOICE,
-    section: SETTING_SECTION.CONTROLS,
-    order: 40,
-    resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    manual: VOICE_PAGE,
-    sideEffect: SETTING_SIDE_EFFECT.VOICE_SPEED,
     adjustable: true,
     visible: voiceControlDrawn,
   }),

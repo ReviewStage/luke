@@ -1,4 +1,4 @@
-import type { AccountPreferences } from "@sidecar/settings";
+import { isRealtimeVoiceSpeed } from "@sidecar/realtime";
 import { accountPreferencesFromStored } from "@sidecar/settings";
 import { eq } from "drizzle-orm";
 import { getDatabase } from "../../server/db/index.js";
@@ -6,6 +6,7 @@ import { accountPreference, accountWorkspacePreference } from "../../server/db/s
 import {
   type AccountPreferencesReadOptions,
   type AccountPreferencesWriteOptions,
+  type HostedAccountPreferences,
   handleAccountPreferencesRead,
   handleAccountPreferencesWrite,
 } from "../../server/hosted/account-preferences.js";
@@ -24,7 +25,7 @@ function rowPreferences(
     model: string | null;
     effort: string | null;
   }[],
-): AccountPreferences {
+): HostedAccountPreferences {
   const workspaceProjectDefaults: Record<string, string> = {};
   const workspaceAgentDefaults: Record<string, { agent: string; model?: string; effort?: string }> =
     {};
@@ -42,10 +43,9 @@ function rowPreferences(
     }
   }
 
-  return (
+  const shared =
     accountPreferencesFromStored({
       ...(preference.voice ? { voice: preference.voice } : undefined),
-      ...(preference.voiceSpeed !== null ? { voiceSpeed: preference.voiceSpeed } : undefined),
       ...(preference.defaultWorkspaceProvider
         ? { defaultWorkspaceProvider: preference.defaultWorkspaceProvider }
         : undefined),
@@ -53,11 +53,20 @@ function rowPreferences(
         ? { workspaceProjectDefaults }
         : undefined),
       ...(Object.keys(workspaceAgentDefaults).length > 0 ? { workspaceAgentDefaults } : undefined),
-    }) ?? {}
-  );
+    }) ?? {};
+  return {
+    ...shared,
+    ...(isRealtimeVoiceSpeed(preference.voiceSpeed)
+      ? { voiceSpeed: preference.voiceSpeed }
+      : undefined),
+  };
 }
 
-function workspacePreferenceRows(userId: string, preferences: AccountPreferences, updatedAt: Date) {
+function workspacePreferenceRows(
+  userId: string,
+  preferences: HostedAccountPreferences,
+  updatedAt: Date,
+) {
   const projects = preferences.workspaceProjectDefaults ?? {};
   const agents = preferences.workspaceAgentDefaults ?? {};
   const rows = new Map<

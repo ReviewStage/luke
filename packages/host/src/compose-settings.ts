@@ -57,7 +57,6 @@ interface SettingsLinks {
   refreshAccount: () => Promise<void>;
   applyVoiceCredential: () => Promise<void>;
   setVoice: (voice: StoredSettings["voice"]) => void;
-  setVoiceSpeed: (speed: StoredSettings["voiceSpeed"]) => void;
   reconcileSpeech: () => void;
   refreshSupersetWorkspaceHost: () => Promise<void>;
   broadcastWorkspaceProjects: () => Promise<void>;
@@ -303,7 +302,6 @@ export function composeSettings(dependencies: SettingsDependencies): SettingsCom
 
   const sideEffects = hostSettingSideEffects({
     setVoice: (voice) => links.get().setVoice(voice),
-    setVoiceSpeed: (speed) => links.get().setVoiceSpeed(speed),
     applyVoiceCredential: () => links.get().applyVoiceCredential(),
     reconcileSpeech: () => links.get().reconcileSpeech(),
     applyVaultSync: (syncProviderKeys) => void vaultSync.apply(syncProviderKeys, { claim: true }),

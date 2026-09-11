@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import { PROVIDER_ID } from "@sidecar/session";
-import type { AccountPreferences } from "@sidecar/settings";
 import type { WireBoundaryInput } from "@sidecar/wire";
+import type { HostedAccountPreferences } from "../server/hosted/account-preferences";
 import {
   type AccountPreferencesRow,
   handleAccountPreferencesRead,
@@ -46,7 +46,7 @@ function writeOptions(
   return {
     request: writeRequest({ preferences: { voice: REALTIME_VOICE.SAGE } }),
     resolveUserId: async () => "user-1",
-    writePreferences: async (_userId: string, _preferences: AccountPreferences) => NOW,
+    writePreferences: async (_userId: string, _preferences: HostedAccountPreferences) => NOW,
     ...overrides,
   };
 }
@@ -121,7 +121,7 @@ test("the account preferences write gate order is method, token, then body", asy
 });
 
 test("writing account preferences validates and stores a full snapshot", async () => {
-  let stored: { userId: string; preferences: AccountPreferences } | undefined;
+  let stored: { userId: string; preferences: HostedAccountPreferences } | undefined;
 
   const response = await handleAccountPreferencesWrite(
     writeOptions({
@@ -163,7 +163,7 @@ test("writing account preferences validates and stores a full snapshot", async (
 });
 
 test("omitted and null account preference fields clear the stored value", async () => {
-  let stored: AccountPreferences | undefined;
+  let stored: HostedAccountPreferences | undefined;
 
   const response = await handleAccountPreferencesWrite(
     writeOptions({
@@ -207,4 +207,32 @@ test("writes reject unknown or invalid preferences instead of storing arbitrary 
     }),
   );
   assert.equal(trimmedMap.status, 400);
+});
+
+test("the phone's pace is kept beside the shared snapshot and refused outside its contract", async () => {
+  let stored: HostedAccountPreferences | undefined;
+  const writeOptionsFor = (preferences: WireBoundaryInput) =>
+    writeOptions({
+      request: writeRequest({ preferences }),
+      writePreferences: async (_userId: string, preferences: HostedAccountPreferences) => {
+        stored = preferences;
+        return NOW;
+      },
+    });
+
+  const desktop = await handleAccountPreferencesWrite(
+    writeOptionsFor({ voice: REALTIME_VOICE.MARIN }),
+  );
+  assert.equal(desktop.status, 200);
+  assert.deepEqual(Object.keys(stored ?? {}), ["voice"]);
+
+  const phone = await handleAccountPreferencesWrite(
+    writeOptionsFor({ voice: REALTIME_VOICE.MARIN, voiceSpeed: REALTIME_VOICE_SPEED.SLOW }),
+  );
+  assert.equal(phone.status, 200);
+  assert.equal(stored?.voiceSpeed, REALTIME_VOICE_SPEED.SLOW);
+
+  const badPace = await handleAccountPreferencesWrite(writeOptionsFor({ voiceSpeed: 9 }));
+  assert.equal(badPace.status, 400);
+  assert.equal((await badPace.json()).error, HOSTED_API_ERROR.INVALID_REQUEST);
 });

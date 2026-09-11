@@ -92,7 +92,6 @@ export function composeHost(options: HostSeams): Host {
     },
     applyVoiceCredential: account.applyVoiceCredential,
     setVoice: (voice) => account.voiceCapabilities.liveSessions?.setVoice(voice),
-    setVoiceSpeed: (speed) => account.voiceCapabilities.realtimeCredentials?.setSpeed(speed),
     reconcileSpeech: () => {
       void live.service.reconcile();
     },

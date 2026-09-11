@@ -50,7 +50,6 @@ public enum ProductSessionAction: String, Sendable {
 /// The subset of the shared vocabulary's `APP_SETTING_ID` this app can change.
 public enum ProductSettingID: String, Sendable {
     case voice
-    case voiceSpeed = "voice_speed"
 }
 
 /// The shape of a setting's change, never its value.
