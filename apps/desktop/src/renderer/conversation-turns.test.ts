@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { FEEDBACK_LIMITS } from "@sidecar/feedback";
 import {
   CONVERSATION_VIEW_ACTION_OUTCOME,
   CONVERSATION_VIEW_TOOL_KIND,
@@ -8,10 +9,18 @@ import {
   type SessionIdentity,
   selectConversationView,
 } from "@sidecar/session";
-import { CONVERSATION_EVENT_KIND, TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
+import { CONVERSATION_EVENT_KIND, MESSAGE_RATING, TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
+import {
+  DRAFT_QUOTE_MAX_LENGTH,
+  DRAFT_SPEAKER,
+  RATING_LABEL,
+  ratingFeedbackDraft,
+  ratingFeedbackDraftLines,
+} from "./conversation-rating";
+import { CONVERSATION_ENTRY_SPEAKER } from "./conversation-rows";
 import { TOOL_ROW_STATUS, toolRow } from "./conversation-tool-row";
 import {
   announcedWords,
@@ -24,6 +33,7 @@ import {
 import {
   FIXTURE_INPUT,
   FIXTURE_NOW,
+  FIXTURE_RATED_MESSAGE,
   FIXTURE_ROSTER,
   FIXTURE_TURN,
   fixtureConversationTurns,
@@ -348,4 +358,115 @@ test("a turn that followed a long silence is dated over it, and the caller's row
     withFoot.lastIndexOf('data-foot="true"') > withFoot.lastIndexOf('class="conversation-time"'),
   );
   assert.ok(withFoot.lastIndexOf('data-foot="true"') < withFoot.lastIndexOf("</ol>"));
+});
+
+/** The rating controls a rendering draws, each on one of Luke's messages. */
+function ratingControls(markup: string): number {
+  return count(markup, "class", "conversation-rating");
+}
+
+function pressed(markup: string, label: string): readonly boolean[] {
+  return [...markup.matchAll(/<button[^>]*aria-label="([^"]+)"[^>]*aria-pressed="([^"]+)"/g)]
+    .filter((match) => match[1] === label)
+    .map((match) => match[2] === "true");
+}
+
+test("each of Luke's messages carries one rating control on its last words, and the developer's ask and the brain's note carry none", () => {
+  const groups = fixtureConversationTurns();
+  const lukes = groups
+    .flatMap((group) => group.messages)
+    .filter(
+      (view) =>
+        view.message.role === MESSAGE_ROLE.ASSISTANT &&
+        view.message.parts.some(
+          (part) =>
+            part.type === "text" ||
+            (isStoredToolPart(part) &&
+              view.tools.some(
+                (tool) =>
+                  tool.toolCallId === part.toolCallId &&
+                  tool.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE,
+              )),
+        ),
+    ).length;
+  assert.ok(lukes > 0);
+  const markup = render(groups, OPEN);
+  assert.equal(ratingControls(markup), lukes);
+  assert.equal(pressed(markup, RATING_LABEL[MESSAGE_RATING.UP]).length, lukes);
+  assert.equal(pressed(markup, RATING_LABEL[MESSAGE_RATING.DOWN]).length, lukes);
+  // No control on a sent bubble or a note: every one stands on Luke's side.
+  for (const entry of markup.split('<li class="conversation-entry"').slice(1)) {
+    if (ratingControls(entry) === 0) continue;
+    assert.equal(count(entry, "data-speaker", CONVERSATION_ENTRY_SPEAKER.YOU), 0);
+  }
+  // Words on Luke's own judgment take the control too: the service accepts a rating on them.
+  const own = render([groupOf(FIXTURE_TURN.OWN)], OPEN);
+  assert.equal(ratingControls(own), 1);
+  assert.equal(count(own, "data-own-words", "true"), 1);
+});
+
+test("the thumbs show the message's newest rating, and a thumbs down stands the composer's offer beside them only where one can be offered", () => {
+  const rated = groupOf(FIXTURE_TURN.ASK);
+  const verdicts = rated.messages.map((view) => view.rating?.rating);
+  assert.deepEqual(verdicts, [undefined, MESSAGE_RATING.DOWN]);
+
+  const offered = renderToStaticMarkup(
+    createElement(ConversationTurns, {
+      groups: [rated],
+      roster: FIXTURE_ROSTER,
+      now: FIXTURE_NOW,
+      onOfferRatingFeedback: () => undefined,
+    }),
+  );
+  assert.deepEqual(pressed(offered, RATING_LABEL[MESSAGE_RATING.UP]), [false]);
+  assert.deepEqual(pressed(offered, RATING_LABEL[MESSAGE_RATING.DOWN]), [true]);
+  assert.equal(count(offered, "data-rating", MESSAGE_RATING.DOWN), 1);
+  assert.equal(count(offered, "class", "conversation-rating-offer"), 1);
+
+  // The same thread with nowhere to offer a composer: the verdict shows, the offer does not.
+  const unoffered = render([rated], OPEN);
+  assert.deepEqual(pressed(unoffered, RATING_LABEL[MESSAGE_RATING.DOWN]), [true]);
+  assert.equal(count(unoffered, "class", "conversation-rating-offer"), 0);
+
+  // An unrated message: neither thumb pressed, no offer.
+  const unrated = render([groupOf(FIXTURE_TURN.SINGLE)], OPEN);
+  assert.deepEqual(pressed(unrated, RATING_LABEL[MESSAGE_RATING.UP]), [false]);
+  assert.deepEqual(pressed(unrated, RATING_LABEL[MESSAGE_RATING.DOWN]), [false]);
+  assert.equal(count(unrated, "class", "conversation-rating-offer"), 0);
+});
+
+test("the offered draft quotes the ask the turn answered and then the rated message, each cut to the quote bound, over a blank line to write under", () => {
+  const short = ratingFeedbackDraftLines({
+    messageId: FIXTURE_RATED_MESSAGE,
+    words: "It is holding on a permission prompt.",
+    ask: "Is the fixture session still waiting?",
+  });
+  assert.deepEqual(short, [
+    `${DRAFT_SPEAKER.YOU} Is the fixture session still waiting?`,
+    "",
+    `${DRAFT_SPEAKER.LUKE} It is holding on a permission prompt.`,
+    "",
+    "",
+  ]);
+  // A briefing answered no ask: only Luke's words are quoted.
+  const briefing = ratingFeedbackDraftLines({ messageId: FIXTURE_RATED_MESSAGE, words: "A word." });
+  assert.deepEqual(briefing, [`${DRAFT_SPEAKER.LUKE} A word.`, "", ""]);
+  // A long reply is cut so the whole draft leaves room under the composer's bound.
+  const long = ratingFeedbackDraftLines({
+    messageId: FIXTURE_RATED_MESSAGE,
+    words: "x".repeat(FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH),
+    ask: "y".repeat(FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH),
+  });
+  assert.equal(long.length, short.length);
+  assert.deepEqual(
+    [long[0]?.length, long[2]?.length],
+    [
+      DRAFT_SPEAKER.YOU.length + 1 + DRAFT_QUOTE_MAX_LENGTH,
+      DRAFT_SPEAKER.LUKE.length + 1 + DRAFT_QUOTE_MAX_LENGTH,
+    ],
+  );
+  assert.ok(
+    ratingFeedbackDraft({ messageId: FIXTURE_RATED_MESSAGE, words: "w" }).length <
+      FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH,
+  );
 });

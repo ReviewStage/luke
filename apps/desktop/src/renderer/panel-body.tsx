@@ -201,6 +201,8 @@ export interface PanelBodyProps {
   onOpenChat: (identity: SessionIdentity) => void;
   /** The lines still being said, drawn under that thread while their words grow. */
   liveConversationEntries: readonly ConversationEntry[];
+  /** Opens the feedback composer on the draft a thumbs down offers, as the Conversation tab's own press. */
+  onOfferRatingFeedback: (draft: string) => void;
   /** Whether a spoken turn is still owed its first words, so the thread holds its place. */
   spokenAskPending: boolean;
   /** Clears that same thread on the service, for every Mac signed in to the account. */
@@ -256,6 +258,7 @@ export function PanelBody({
   roster,
   onOpenChat,
   liveConversationEntries,
+  onOfferRatingFeedback,
   spokenAskPending,
   onClearConversationConversation,
   brainRequests,
@@ -376,6 +379,7 @@ export function PanelBody({
           view={conversation}
           roster={roster}
           onOpenChat={onOpenChat}
+          onOfferRatingFeedback={onOfferRatingFeedback}
           live={liveConversationEntries}
           spokenAskPending={spokenAskPending}
           requests={brainRequests}

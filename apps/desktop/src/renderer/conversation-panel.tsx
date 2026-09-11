@@ -121,6 +121,7 @@ export function ConversationPanel({
   view,
   roster = [],
   onOpenChat,
+  onOfferRatingFeedback,
   live = [],
   requests = [],
   spokenAskPending = false,
@@ -132,6 +133,8 @@ export function ConversationPanel({
   roster?: readonly SessionView[];
   /** A session row's own press by identity, for the chip naming the session an action reached. */
   onOpenChat?: (identity: SessionIdentity) => void;
+  /** Opens the feedback composer on the draft a thumbs down offers; absent where no composer can be offered. */
+  onOfferRatingFeedback?: (draft: string) => void;
   /**
    * The instant the thread's dates are read against, so a line from earlier
    * today says Today and one from last week says which day. Passed down like
@@ -210,6 +213,7 @@ export function ConversationPanel({
               roster={roster}
               now={now}
               {...(onOpenChat ? { onOpenChat } : undefined)}
+              {...(onOfferRatingFeedback ? { onOfferRatingFeedback } : undefined)}
             >
               {/* A line still being said has no durable id, and its words change
                   on every delta — a key made of either would remount the bubble

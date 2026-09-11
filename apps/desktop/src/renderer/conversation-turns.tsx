@@ -40,6 +40,7 @@ import {
 } from "@sidecar/wire";
 import { useState } from "react";
 import { ConversationCopyButton } from "./conversation-copy";
+import { ConversationRatingControl, type RateableMessage } from "./conversation-rating";
 import {
   CONVERSATION_ENTRY_SPEAKER,
   type ConversationEntrySpeaker,
@@ -70,7 +71,11 @@ import { ThinkingDots } from "./thinking-dots";
  * open — a roster look, a hold's release, a child's end — is Luke's own
  * judgment, and everything it did leads with his face under that name and
  * never wears a reply's bubble, so what he decided for himself is never read
- * as something the developer asked.
+ * as something the developer asked. Each of Luke's messages — a reply, a
+ * briefing, words on his own judgment: the assistant rows the service takes
+ * a verdict on — carries the rating control on its last words, so one
+ * message takes one control; the developer's own ask and the brain's note to
+ * itself carry none, since the service would refuse a rating on either.
  *
  * Everything here is drawn inside the Conversation subtree, which the session
  * recording blocks whole: a session's title on a chip, a briefing's words, a
@@ -169,12 +174,15 @@ function BubbleRow({
   at,
   copy = true,
   unspoken = false,
+  rating,
 }: {
   voice: RowVoice;
   words: string;
   at: number;
   copy?: boolean;
   unspoken?: boolean;
+  /** The rating control, on the last words of one of Luke's messages and nowhere else. */
+  rating?: React.ReactNode;
 }): React.JSX.Element {
   return (
     <li
@@ -187,6 +195,7 @@ function BubbleRow({
         <span className="conversation-bubble">
           <MarkdownMessage words={words} className="conversation-words" />
           {unspoken ? <span className="conversation-unspoken">{UNSPOKEN_LABEL}</span> : null}
+          {rating}
           {copy ? <ConversationCopyButton words={words} /> : null}
         </span>
       </div>
@@ -219,7 +228,16 @@ function ReasoningRow({ text }: { text: string }): React.JSX.Element {
  * quiet voice under his face and never as a reply's bubble, because a bubble
  * would read as an answer to something the developer said.
  */
-function OwnWordsRow({ words, at }: { words: string; at: number }): React.JSX.Element {
+function OwnWordsRow({
+  words,
+  at,
+  rating,
+}: {
+  words: string;
+  at: number;
+  /** The rating control, on the last words of the message and nowhere else. */
+  rating?: React.ReactNode;
+}): React.JSX.Element {
   return (
     <li
       className="conversation-entry"
@@ -233,7 +251,10 @@ function OwnWordsRow({ words, at }: { words: string; at: number }): React.JSX.El
           <span className="conversation-action-mark" aria-hidden="true">
             <WingFace />
           </span>
-          <MarkdownMessage words={words} className="conversation-words" />
+          <span className="conversation-action-body">
+            <MarkdownMessage words={words} className="conversation-words" />
+            {rating}
+          </span>
         </span>
       </div>
       <RowStamp at={at} />
@@ -583,13 +604,6 @@ function userVoice(
 }
 
 /**
- * One message's rows: a user row is one bubble; an assistant row is its parts
- * in order, each drawn as what it is, with the turn's working set aside for
- * the fold. Which tool calls are announcements, actions, or details is the
- * view's decision, read back by call id; a call the view did not describe is
- * a detail.
- */
-/**
  * One row as a message hands it to its turn: drawn already, or an action the
  * turn decides the place of — a stamped row of its own, or a row inside the
  * fold, whose line carries the stamp for all of them.
@@ -609,10 +623,54 @@ interface MessageRows {
   readonly folded: readonly FoldedRow[];
 }
 
+/**
+ * What the rating control on a message is handed beside the message itself:
+ * the developer's ask the turn answered, where the turn had one, for the
+ * draft a thumbs down offers, and the composer that offer opens.
+ */
+interface RatingContext {
+  readonly ask?: string | undefined;
+  readonly onOfferFeedback?: ((draft: string) => void) | undefined;
+}
+
+/** The last words of a message as drawn, kept so the rating control can be placed on them once the message is read through. */
+interface LastWords {
+  readonly index: number;
+  readonly words: string;
+  readonly redraw: (rating: React.JSX.Element | undefined) => React.JSX.Element;
+}
+
+function ratingControl(
+  view: ConversationViewMessage,
+  words: string,
+  context: RatingContext,
+): React.JSX.Element {
+  const rated: RateableMessage = {
+    messageId: view.message.id,
+    words,
+    ...(context.ask !== undefined ? { ask: context.ask } : undefined),
+  };
+  return (
+    <ConversationRatingControl
+      rated={rated}
+      rating={view.rating?.rating}
+      {...(context.onOfferFeedback ? { onOfferFeedback: context.onOfferFeedback } : undefined)}
+    />
+  );
+}
+
+/**
+ * One message's rows: a user row is one bubble; an assistant row is its parts
+ * in order, each drawn as what it is, with the turn's working set aside for
+ * the fold, and the rating control on its last words. Which tool calls are
+ * announcements, actions, or details is the view's decision, read back by
+ * call id; a call the view did not describe is a detail.
+ */
 function messageRows(
   view: ConversationViewMessage,
   judgment: Judgment,
   roster: readonly SessionView[],
+  rating: RatingContext,
 ): MessageRows {
   const { message } = view;
   if (message.role === MESSAGE_ROLE.USER) {
@@ -641,14 +699,25 @@ function messageRows(
   );
   const rows: DrawnRow[] = [];
   const draw = (element: React.JSX.Element) => rows.push({ element });
+  let lastWords: LastWords | undefined;
+  const drawWords = (words: string, redraw: LastWords["redraw"]) => {
+    draw(redraw(undefined));
+    lastWords = { index: rows.length - 1, words, redraw };
+  };
   message.parts.forEach((part: StoredPart, index) => {
     const key = `${message.id}:${index}`;
     if (isTextPart(part)) {
-      draw(
+      drawWords(part.text, (control) =>
         judgment === JUDGMENT.OWN ? (
-          <OwnWordsRow key={key} words={part.text} at={view.createdAt} />
+          <OwnWordsRow key={key} words={part.text} at={view.createdAt} rating={control} />
         ) : (
-          <BubbleRow key={key} voice={VOICE.LUKE} words={part.text} at={view.createdAt} />
+          <BubbleRow
+            key={key}
+            voice={VOICE.LUKE}
+            words={part.text}
+            at={view.createdAt}
+            rating={control}
+          />
         ),
       );
       return;
@@ -663,15 +732,16 @@ function messageRows(
       case CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE: {
         const words = announcedWords(part);
         if (words !== undefined) {
-          draw(
+          drawWords(words, (control) => (
             <BubbleRow
               key={key}
               voice={VOICE.LUKE}
               words={words}
               at={view.createdAt}
               unspoken={tool.unspoken}
-            />,
-          );
+              rating={control}
+            />
+          ));
         }
         return;
       }
@@ -690,6 +760,12 @@ function messageRows(
         folded.push({ kind: CONVERSATION_VIEW_TOOL_KIND.DETAIL, part });
     }
   });
+  if (lastWords !== undefined) {
+    const placed: LastWords = lastWords;
+    rows[placed.index] = {
+      element: placed.redraw(ratingControl(view, placed.words, rating)),
+    };
+  }
   return { rows, folded };
 }
 
@@ -764,6 +840,7 @@ export function ConversationTurns({
   groups,
   roster = [],
   onOpenChat,
+  onOfferRatingFeedback,
   now,
   children,
 }: {
@@ -777,6 +854,8 @@ export function ConversationTurns({
   roster?: readonly SessionView[];
   /** The row's own press by identity; absent where nothing can open a session, and every chip is a name. */
   onOpenChat?: (identity: SessionIdentity) => void;
+  /** Opens the feedback composer on the draft a thumbs down offers; absent where no composer can be offered. */
+  onOfferRatingFeedback?: (draft: string) => void;
   /** The instant a running turn's wait is read against; passed down because only the app knows which clock is honest. */
   now: number;
   /** Rows drawn after the last turn, inside the same list. */
@@ -791,7 +870,23 @@ export function ConversationTurns({
         previousAt = span.last;
         const judgment = judgmentOf(group.turn);
         const pending = turnPending(group.turn);
-        const drawn = group.messages.map((message) => messageRows(message, judgment, roster));
+        // The ask a rated reply answered is the developer's latest words in
+        // the same turn before it; a turn Luke opened himself answered none.
+        let ask: string | undefined;
+        const drawn = group.messages.map((message) => {
+          const rows = messageRows(message, judgment, roster, {
+            ask,
+            onOfferFeedback: onOfferRatingFeedback,
+          });
+          if (
+            judgment === JUDGMENT.ASK &&
+            message.message.role === MESSAGE_ROLE.USER &&
+            message.message.metadata.author === MESSAGE_AUTHOR.DEVELOPER
+          ) {
+            ask = userWords(message.message);
+          }
+          return rows;
+        });
         const rows = turnRows(
           drawn.flatMap((message) => message.rows),
           pending,
