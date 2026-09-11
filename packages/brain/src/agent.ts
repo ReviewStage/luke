@@ -28,8 +28,9 @@ import {
   CONTEXT_OPENING,
   type Generation,
   generationFrom,
-  retireOpenedContext,
+  retireGeneration,
 } from "./generation.js";
+import { GENERATION_ADOPTION, GenerationHolder } from "./generation-holder.js";
 import { holdReleasedInputText, wakeInputText } from "./input-items.js";
 import { journalActionCounts, UNKNOWN_ACTION_RESULT } from "./journal.js";
 import { BrainRequestLedger, PENDING_MARK_FIELD, type PendingMarkField } from "./ledger.js";
@@ -208,7 +209,7 @@ export class BrainAgent {
   readonly #schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
   readonly #cancel: (timer: ScheduledTimer) => void;
   readonly #report: (message: string) => void;
-  #generation: Generation | undefined;
+  readonly #generations = new GenerationHolder();
   readonly #lease: BrainStoreLease;
   readonly #ledger: BrainRequestLedger;
   readonly #asks: AskLedger;
@@ -296,7 +297,7 @@ export class BrainAgent {
       cancel: this.#cancel,
       report: this.#report,
       ledger: this.#ledger,
-      generation: () => this.#generation,
+      generation: () => this.#generations.standing(),
       stopped: () => this.#stopped,
       ready: () => this.ready(),
       expireIfDue: () => this.#expireIfDue(),
@@ -388,7 +389,7 @@ export class BrainAgent {
 
   /** How many captured observations are waiting for a turn to consume them. */
   pendingWakes(): number {
-    return this.#generation?.inbox.length ?? this.#wakes.size();
+    return this.#generations.standing()?.inbox.length ?? this.#wakes.size();
   }
 
   /**
@@ -405,7 +406,7 @@ export class BrainAgent {
       this.#wakes.capturesInFlight() > 0 ||
       this.#turns.active() !== undefined ||
       this.#asks.size() > 0 ||
-      (this.#generation?.inbox.length ?? 0) > 0 ||
+      (this.#generations.standing()?.inbox.length ?? 0) > 0 ||
       this.#wakes.size() > 0
     );
   }
@@ -429,7 +430,7 @@ export class BrainAgent {
    */
   async incompatibility(): Promise<string | undefined> {
     await this.ready();
-    const generation = this.#generation;
+    const generation = this.#generations.standing();
     if (!generation) return undefined;
     const opened = await generation.opened;
     return opened.kind === CONTEXT_OPENING.INCOMPATIBLE ? opened.reason : undefined;
@@ -507,7 +508,7 @@ export class BrainAgent {
 
   async #mark(runId: string, field: PendingMarkField, recordedAt: number): Promise<boolean> {
     await this.ready();
-    const generation = this.#generation;
+    const generation = this.#generations.standing();
     return generation ? this.#ledger.mark(generation, runId, field, recordedAt) : false;
   }
 
@@ -532,7 +533,7 @@ export class BrainAgent {
    */
   releaseHeld(held: readonly BrainDelivery[]): void {
     if (this.#stopped || held.length === 0) return;
-    const generation = this.#generation;
+    const generation = this.#generations.standing();
     if (!generation) {
       // The state is still loading: the briefings wait for the generation
       // they will be re-decided in.
@@ -602,14 +603,14 @@ export class BrainAgent {
     const waiting = this.#asks.takeWaiting();
     this.#unsubscribeStore?.();
     this.#unsubscribeStore = undefined;
-    this.#generation?.abort.abort();
+    this.#generations.standing()?.abort.abort();
     this.#asks.abortAll();
     // An acceptance whose write is still out settles before the stop does:
     // its caller hears the durable answer, its run is recorded interrupted,
     // and nothing of it is left to land on the agent that comes next.
     await this.#asks.drainPendingSubmissions();
     await this.#asks.settleWaiting(waiting);
-    const generation = this.#generation;
+    const generation = this.#generations.standing();
     if (generation) {
       for (const record of this.requests()) {
         if (record.status === BRAIN_REQUEST_STATUS.QUEUED) {
@@ -623,7 +624,8 @@ export class BrainAgent {
       }
     }
     await this.#queue;
-    if (this.#generation) retireOpenedContext(this.#generation);
+    const retiring = this.#generations.standing();
+    if (retiring) retireGeneration(retiring);
     // Closing this scope interrupts the bridge's daemon pump, which may be
     // suspended waiting on the pubsub; that interruption is not guaranteed
     // to settle synchronously, so the close runs to a promise here rather
@@ -641,7 +643,7 @@ export class BrainAgent {
    * never handed out.
    */
   async contextSnapshot(): Promise<readonly WireRecord[] | undefined> {
-    const generation = this.#generation;
+    const generation = this.#generations.standing();
     if (!generation) return undefined;
     const standing = await generation.opened;
     if (standing.kind !== CONTEXT_OPENING.LOADED) return undefined;
@@ -681,14 +683,16 @@ export class BrainAgent {
     // A generation adopted from the store's announcement while the load was
     // out — a Clear or expiry pressed under a starting agent — is the one
     // that stands; the loaded copy is not built over it.
-    const adopted = this.#generation;
     const current = this.#options.store.current() ?? state;
-    if (adopted && adopted.id === current.generationId) return;
+    const adoption = this.#generations.adopt(current.generationId, (previous) => {
+      if (previous) retireGeneration(previous);
+      return this.#generationFrom(current);
+    });
+    if (adoption.kind === GENERATION_ADOPTION.STANDING) return;
     state = current;
-    const generation = this.#generationFrom(state);
-    this.#generation = generation;
+    const generation = adoption.generation;
     const opened = await generation.opened;
-    if (generation !== this.#generation) return;
+    if (generation !== this.#generations.standing()) return;
     this.#wakes.armInbox(generation);
     if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
       this.#reportIncompatible(generation, opened.reason);
@@ -747,20 +751,20 @@ export class BrainAgent {
    * of those runs.
    */
   #adoptGeneration(state: BrainPersistedState): void {
-    const previous = this.#generation;
-    if (previous?.id === state.generationId) return;
-    this.#maintenance.cancel();
-    // Asks that only ever waited belong to the memory being replaced: nothing
-    // opens for them, and each record ends as the replacement leaves it.
-    void this.#asks.settleWaiting(this.#asks.takeWaiting());
-    previous?.abort.abort();
-    this.#asks.revokeAll();
-    if (previous) retireOpenedContext(previous);
-    // Wakes coalesced against the old memory — including a quiet retry's —
-    // are that generation's work, and go with it.
-    this.#wakes.clear();
-    this.#generation = this.#generationFrom(state);
-    this.#wakes.armInbox(this.#generation);
+    const adoption = this.#generations.adopt(state.generationId, (previous) => {
+      this.#maintenance.cancel();
+      // Asks that only ever waited belong to the memory being replaced: nothing
+      // opens for them, and each record ends as the replacement leaves it.
+      void this.#asks.settleWaiting(this.#asks.takeWaiting());
+      if (previous) retireGeneration(previous);
+      this.#asks.revokeAll();
+      // Wakes coalesced against the old memory — including a quiet retry's —
+      // are that generation's work, and go with it.
+      this.#wakes.clear();
+      return this.#generationFrom(state);
+    });
+    if (adoption.kind === GENERATION_ADOPTION.STANDING) return;
+    this.#wakes.armInbox(adoption.generation);
     this.#asks.notify();
   }
 
@@ -776,7 +780,7 @@ export class BrainAgent {
    * fired and nothing of it can open, dispatch, or deliver.
    */
   #expireIfDue(): void {
-    const generation = this.#generation;
+    const generation = this.#generations.standing();
     if (this.#stopped || !generation || !brainGenerationExpired(generation, this.#now())) return;
     this.#options.store.expireIfDue(this.#now());
   }
