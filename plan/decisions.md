@@ -1288,3 +1288,33 @@ pass (a transport problem is not each recipient's problem), while **`TOKEN_GONE`
 device's own answer and the pass continues**, the next tick delivering the spared offer exactly
 once. Marking-and-failing the remainder would have written a lie into the record about offers
 nothing ever tried.
+
+
+## 2026-09-11 — The observation tick has three consumers and one budget; the order is unstated (orchestrator)
+
+Raised with C3 and D3 rather than ruled, because it is a question about a shape only visible from
+outside any one pass.
+
+**`observation-tick.ts` owns the outer bound and owns it well:** `BUDGET_MS = 50_000`, a per-account
+deadline, and a flag for whether the tick stopped on its budget with accounts still listed, under a
+function duration the bundle declares with headroom left beneath it.
+
+**Inside that bound there are now three consumers:** C5b's **speech sweep**, D3's **push pass** with
+its own `SPEECH_PUSH.BUDGET_MS = 15_000`, and **C3's opener** draining queued `turns` rows, being
+written now.
+
+**The outer bound is not the problem; the order is.** If the sweep runs first and takes forty
+seconds, the push gets ten of its fifteen and the opener gets nothing — **the starvation shape found
+twice this morning, one level up: the passes starve each other rather than the accounts starving
+each other.** And it is just as invisible, because each pass tests green on its own.
+
+**Asked of both, as a sentence rather than a design:** state in the PR body where the pass sits in
+the tick's order, what share it takes, and what happens to the passes after it when it takes its
+whole share. *"The tick's budget flag already reports it and the next tick picks up where this one
+stopped"* is a fine answer and should be written down. *"Nothing — the later passes silently do not
+run"* is a ticket, and better had now than after the first quiet morning where Luke never woke.
+**C3 is told not to add a fourth budget constant without saying how it relates to the other two.**
+
+**And one ordering detail from D3 worth keeping:** `SPEECH_PUSH.BUDGET_MS` is checked **before the
+mark**, so nothing is settled unsent. Same family as record-precedes-speech and
+claim-before-append — **never record an effect you have not performed.**
