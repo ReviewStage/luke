@@ -1,5 +1,5 @@
-import fs from "node:fs/promises";
-import path from "node:path";
+import type * as FileSystem from "@effect/platform/FileSystem";
+import { NodeFileSystem } from "@effect/platform-node";
 import { APPLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
 import {
   CREDENTIAL_CONNECTION,
@@ -42,11 +42,16 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
-import { Redacted } from "effect";
+import { Either, ManagedRuntime, Redacted } from "effect";
 // The reader owns the shape it is fed: what this store resolves a stored
 // connection into is exactly what `readAppleCalendarConnection` promises it.
 import type { AppleCalendarConnection } from "./apple-calendar.js";
 import type { SettingsEnvironmentOverrides } from "./effect/settings-overrides.js";
+import {
+  parsePersistedSettingsEither,
+  readSettingsFileText,
+  writeSettingsFileAtomic,
+} from "./effect/settings-store-io.js";
 
 export type { StoredAccount } from "@sidecar/credentials";
 
@@ -68,10 +73,7 @@ import {
 } from "@sidecar/settings";
 import { resolveVoiceCapability } from "@sidecar/voice";
 
-const SETTINGS_FILE_NAME = "settings.json";
-const SETTINGS_TEMPORARY_FILE_NAME = "settings.json.tmp";
 const SETTINGS_FILE_VERSION = 2;
-const SETTINGS_FILE_MODE = 0o600;
 
 const SETTINGS_FIELD = {
   ACCOUNT: "account",
@@ -125,7 +127,7 @@ export interface SettingsStoreOptions {
   credentialsUsable?: boolean;
 }
 
-interface PersistedSettings extends StoredAppSettings {
+export interface PersistedSettings extends StoredAppSettings {
   version: number;
   /**
    * Ciphertext by provider id. A provider this build does not know is carried
@@ -346,19 +348,6 @@ function storedGrants(record: WireRecord) {
   }
   return grants;
 }
-function isNodeError(error: Error): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error;
-}
-
-function canIgnoreFilesystemError(error: Error): boolean {
-  return (
-    isNodeError(error) &&
-    (error.code === "ENOENT" ||
-      error.code === "ENOTDIR" ||
-      error.code === "EACCES" ||
-      error.code === "EPERM")
-  );
-}
 
 /**
  * A rejected key never reaches disk, and the reason never echoes the submitted
@@ -502,7 +491,13 @@ function defaultPersistedSettings(): PersistedSettings {
   };
 }
 
-function parsePersistedSettings(
+/**
+ * The throwing parse this store's earlier body kept; `SettingsParseRefusal`
+ * over `parsePersistedSettingsEither` in `./effect/settings-store-io.js` is
+ * what a caller reads today, and this stays private to that Either's own
+ * `Either.try` rather than a second parse a caller could reach directly.
+ */
+export function parsePersistedSettingsThrowing(
   source: string,
   providers: readonly CredentialProvider[],
 ): PersistedSettings {
@@ -546,6 +541,19 @@ export class SettingsStore {
   readonly #cipher: SecretCipher;
   readonly #overrides: SettingsEnvironmentOverrides;
   readonly #credentialsUsable: boolean;
+  /**
+   * The runtime `#readPersisted` and `#write` below run their `FileSystem`
+   * effects on.
+   *
+   * @deprecated The strangler shim on the `docs/adr/0001-effect.md` allowlist:
+   * `compose-settings.ts` still constructs this class from a plain object
+   * rather than a `Scope` of its own to hand a `NodeFileSystem` layer through,
+   * so the class builds its own `ManagedRuntime` here, the same shape
+   * `AgentTraceWriter` in `@sidecar/devtrace` uses for the same reason. Both
+   * go once their composer is a `Layer` that can hold the runtime itself, in
+   * P7-05's `compose-settings.ts` conversion.
+   */
+  readonly #runtime: ManagedRuntime.ManagedRuntime<FileSystem.FileSystem, never>;
   #loading: Promise<PersistedSettings> | undefined;
   #resolved = new Map<CredentialProviderId, ResolvedApiKey>();
   /** Decrypted accounts, cached like the keys so timers never drum the Keychain. */
@@ -696,6 +704,7 @@ export class SettingsStore {
     this.#cipher = options.cipher;
     this.#overrides = options.overrides;
     this.#credentialsUsable = options.credentialsUsable ?? true;
+    this.#runtime = ManagedRuntime.make(NodeFileSystem.layer);
   }
 
   async snapshot(): Promise<AppSettings> {
@@ -1437,39 +1446,23 @@ export class SettingsStore {
   }
 
   async #readPersisted(): Promise<PersistedSettings> {
-    const settingsPath = path.join(this.#directory(), SETTINGS_FILE_NAME);
-    let source: string | undefined;
-    try {
-      source = await fs.readFile(settingsPath, "utf8");
-    } catch (error) {
-      if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
-    }
-
-    let persisted = defaultPersistedSettings();
-    if (source) {
-      try {
-        persisted = parsePersistedSettings(source, CREDENTIAL_PROVIDER_LIST);
-      } catch {
-        // A corrupt settings file is replaced by the next write rather than
-        // failing app start.
-      }
-    }
-    return persisted;
+    const directory = this.#directory();
+    const source = await this.#runtime.runPromise(readSettingsFileText(directory));
+    if (!source) return defaultPersistedSettings();
+    // A corrupt settings file is replaced by the next write rather than
+    // failing app start, so a refusal here falls back to defaults exactly as
+    // an absent file does.
+    return Either.getOrElse(
+      parsePersistedSettingsEither(source, CREDENTIAL_PROVIDER_LIST),
+      defaultPersistedSettings,
+    );
   }
 
   /** Only ever called from inside `#serialize`, so writes cannot interleave. */
   async #write(persisted: PersistedSettings): Promise<void> {
     const directory = this.#directory();
-    const settingsPath = path.join(directory, SETTINGS_FILE_NAME);
-    const temporaryPath = path.join(directory, SETTINGS_TEMPORARY_FILE_NAME);
-    await fs.mkdir(directory, { recursive: true });
-    await fs.writeFile(temporaryPath, `${JSON.stringify(persisted, undefined, 2)}\n`, {
-      encoding: "utf8",
-      mode: SETTINGS_FILE_MODE,
-    });
-    // `mode` only applies when the file is created, so a temporary file left
-    // behind by an interrupted write keeps whatever mode it already had.
-    await fs.chmod(temporaryPath, SETTINGS_FILE_MODE);
-    await fs.rename(temporaryPath, settingsPath);
+    await this.#runtime.runPromise(
+      writeSettingsFileAtomic(directory, `${JSON.stringify(persisted, undefined, 2)}\n`),
+    );
   }
 }

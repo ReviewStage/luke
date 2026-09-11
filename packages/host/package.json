@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@effect/platform": "catalog:",
+    "@effect/platform-node": "catalog:",
     "@sidecar/actions": "workspace:*",
     "@sidecar/analytics": "workspace:*",
     "@sidecar/brain": "workspace:*",
@@ -38,7 +39,6 @@
     "ws": "catalog:"
   },
   "devDependencies": {
-    "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
     "@types/ws": "8.18.1",
