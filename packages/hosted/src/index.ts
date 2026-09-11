@@ -94,6 +94,7 @@ export {
   type HostedDeviceClientOptions,
 } from "./device-client.js";
 export {
+  BRIEFING_PUSH_PAYLOAD_KEY,
   DEVICE_ID_LENGTH,
   DEVICE_PLATFORM,
   DEVICE_TOKEN_BOUNDS,

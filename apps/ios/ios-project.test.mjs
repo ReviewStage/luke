@@ -102,6 +102,15 @@ test("both apps ship a privacy manifest that matches the APIs the code calls", (
   }
 });
 
+const phoneEntitlements = fs.readFileSync(path.join(iosRoot, "Luke", "Luke.entitlements"), "utf8");
+
+test("the iPhone app alone signs with the push entitlement, in both configurations", () => {
+  assert.equal(project.match(/CODE_SIGN_ENTITLEMENTS = Luke\/Luke\.entitlements;/g)?.length, 2);
+  assert.equal(project.match(/CODE_SIGN_ENTITLEMENTS = /g)?.length, 2);
+  assert.match(project, /path = Luke\.entitlements;/);
+  assert.match(phoneEntitlements, /<key>aps-environment<\/key>\s*<string>development<\/string>/);
+});
+
 test("the export options upload to App Store Connect without naming a team", () => {
   assert.match(exportOptions, /<key>method<\/key>\s*<string>app-store-connect<\/string>/);
   assert.match(exportOptions, /<key>destination<\/key>\s*<string>upload<\/string>/);

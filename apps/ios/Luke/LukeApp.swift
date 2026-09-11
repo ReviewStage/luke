@@ -7,6 +7,7 @@ struct LukeApp: App {
     @State private var vault: VaultStore
     @State private var events: ProductEventSender
     @State private var conversation = VoiceConversationThread()
+    @UIApplicationDelegateAdaptor(PushCoordinator.self) private var push
     @Environment(\.scenePhase) private var scenePhase
     // Held for its lifetime — the WCSessionDelegate must not be deallocated.
     private let phoneRelay: PhoneSessionRelay
@@ -77,6 +78,15 @@ struct LukeApp: App {
                 .environment(vault)
                 .environment(events)
                 .environment(conversation)
+                .environment(push)
+                // Notification permission is asked at the first launch, over
+                // the sign-in card and before any account: the phone runs no
+                // introduction, so no spoken beat is there to interrupt. Every
+                // later launch, a keychain restore included, passes through to
+                // the reconcile without a dialog.
+                .task {
+                    if accountPreferencesEnabled { push.requestPermission(registering: devices) }
+                }
                 .onChange(of: session.state) { previous, current in
                     accountEdge(from: previous, to: current)
                     switch current {
@@ -84,6 +94,7 @@ struct LukeApp: App {
                         if accountPreferencesEnabled {
                             accountPreferences.reconcile()
                             devices.register()
+                            push.reconcileRegistration(registering: devices)
                         }
                         phoneRelay.push()
                     case .signedOut:
@@ -99,6 +110,9 @@ struct LukeApp: App {
             if phase == .active && accountPreferencesEnabled {
                 accountPreferences.reconcile()
                 devices.heartbeat()
+                // Every foreground, so a token Apple reissued reaches the row
+                // and a permission withdrawn in Settings clears it.
+                if case .signedIn = session.state { push.reconcileRegistration(registering: devices) }
             }
         }
     }

@@ -19,6 +19,11 @@ enum SessionsRoute: Hashable {
     case session(RosterSession)
 }
 
+/// Where the Luke tab can stand beyond the voice screen: on the Conversation.
+enum LukeRoute: Hashable {
+    case conversation
+}
+
 /// The list's state and the stack above it, shared between the list, the
 /// session screens, and the voice screen, because Luke can be asked in
 /// conversation for the same presses the list offers by hand: open a
@@ -48,6 +53,7 @@ final class SessionsStore {
     /// where a launch lands.
     var tab: AppTab = .luke
     var path: [SessionsRoute] = []
+    var lukePath: [LukeRoute] = []
 
     /// Counts refresh passes so a stale answer cannot outrank a newer one:
     /// a pass's roster lands only when no newer pass has landed one (an
@@ -82,6 +88,13 @@ final class SessionsStore {
     func openLeavingConversation(_ session: RosterSession) {
         tab = .sessions
         path.append(.session(session))
+    }
+
+    /// Opens the Conversation on the Luke tab, the press its toolbar link
+    /// takes: what a briefing's notification tapped lands on.
+    func openConversation() {
+        tab = .luke
+        lukePath = [.conversation]
     }
 
     /// A session that just left the roster has no screen to stand on any more.

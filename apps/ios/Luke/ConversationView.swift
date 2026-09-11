@@ -17,10 +17,17 @@ import SwiftUI
 /// The screen polls the change signal while it stands in the foreground and
 /// draws only what it holds in memory.
 ///
+/// A briefing's notification tapped opens this screen at that briefing: the
+/// store resolves the tapped message to its row, the screen scrolls there and
+/// lifts the row for a moment, and where the message is not in the thread —
+/// cleared, past the view's window, or another account's — the screen opens
+/// at its end and says so under the last row rather than scrolling nowhere.
+///
 /// Every row here is masked from the session recording — the whole scroll
 /// carries the recording library's mask, the way the desktop blocks its
 /// Conversation subtree — so the conversation's words, the sessions named in
-/// it, and a refusal's reason reach this phone and nothing else.
+/// it, a refusal's reason, and the lifted row and the missing-briefing line a
+/// tap draws reach this phone and nothing else.
 struct ConversationView: View {
     let conversation: ConversationStore
 
@@ -33,8 +40,12 @@ struct ConversationView: View {
     /// The instant the thread's dates are read against; moves when a poll
     /// lands, when the screen appears, and at midnight.
     @State private var now = Date()
+    /// The row a tap opened the screen at, lifted while the developer finds it.
+    @State private var liftedRow: String?
 
     private static let endId = "conversation-end"
+    /// How long the row a tap opened at stays lifted.
+    private static let liftDuration: Duration = .seconds(2)
 
     private var turns: [ConversationTurnRows] {
         conversation.groups.map { ConversationTurnRows(group: $0, roster: store.sessions) }
@@ -76,10 +87,20 @@ struct ConversationView: View {
                                 canRate: conversation.canRate,
                                 rate: rate
                             )
+                            .background {
+                                if liftedRow == row.id {
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(Color.ink.opacity(0.08))
+                                        .padding(-6)
+                                }
+                            }
                         }
                     }
                     if let failure = conversation.failure {
                         failureRow(failure)
+                    }
+                    if conversation.opening == .missing {
+                        missingBriefingRow
                     }
                     Color.clear
                         .frame(height: 1)
@@ -93,15 +114,38 @@ struct ConversationView: View {
             // its words.
             .postHogMask()
             .defaultScrollAnchor(.bottom)
+            .animation(.easeOut(duration: 0.5), value: liftedRow)
             .onChange(of: conversation.groups.count) {
                 now = Date()
-                withAnimation { proxy.scrollTo(Self.endId, anchor: .bottom) }
+                // Rows landing re-aim the scroll at the row a tap opened at,
+                // never past it to the end; a tap still seeking holds the
+                // screen where it is.
+                switch conversation.opening {
+                case .seeking: return
+                case .found(let rowId): scroll(proxy, to: rowId)
+                case .missing, nil: scroll(proxy, to: Self.endId)
+                }
+            }
+            .onChange(of: conversation.opening) { _, opening in follow(opening, proxy) }
+            // A row found before the screen was pushed is scrolled to once the
+            // lazy stack has laid out, on the run loop turn after appearing,
+            // rather than at appearance, when the row's id is not yet placed.
+            .onAppear { DispatchQueue.main.async { follow(conversation.opening, proxy) } }
+            .task(id: liftedRow) {
+                guard liftedRow != nil else { return }
+                try? await Task.sleep(for: Self.liftDuration)
+                guard !Task.isCancelled else { return }
+                liftedRow = nil
+                conversation.openingSettled()
             }
         }
         .background(Color.ground.ignoresSafeArea())
         .navigationTitle("Conversation")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { now = Date() }
+        // The missing-briefing line stands while the screen does; leaving
+        // settles it, so the next opening starts clean.
+        .onDisappear { conversation.openingSettled() }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
             now = Date()
         }
@@ -144,6 +188,34 @@ struct ConversationView: View {
             .frame(maxWidth: .infinity)
             .padding(.top, 4)
             .accessibilityElement(children: .combine)
+    }
+
+    private func follow(_ opening: ConversationStore.Opening?, _ proxy: ScrollViewProxy) {
+        switch opening {
+        case .found(let rowId):
+            scroll(proxy, to: rowId)
+            liftedRow = rowId
+        case .missing:
+            scroll(proxy, to: Self.endId)
+        case .seeking, nil:
+            break
+        }
+    }
+
+    private func scroll(_ proxy: ScrollViewProxy, to id: String) {
+        withAnimation { proxy.scrollTo(id, anchor: id == Self.endId ? .bottom : .center) }
+    }
+
+    /// What stands where a tapped briefing would have: the thread has moved
+    /// past it, or it was never this account's. Drawn in the dates' quiet
+    /// voice, and inside the masked scroll like every other row.
+    private var missingBriefingRow: some View {
+        Text("The briefing you tapped is no longer in the conversation.")
+            .font(.footnote)
+            .foregroundStyle(Color.inkTertiary)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
     }
 
     /// Why the thread is not being read, in the quiet voice the dates use.

@@ -158,6 +158,22 @@ public struct ConversationTurnRows: Equatable, Sendable, Identifiable {
         return choice.open
     }
 
+    /// The row a screen asked to open at one message — a push's tap — scrolls
+    /// to: the message's own row where it drew one, or the first of its parts'
+    /// rows, whose id is the message's with the part's index behind a colon
+    /// (a message id is a UUID and holds none). Nil where the message drew no
+    /// row of its own, every part folded into the turn's details, or stands
+    /// in none of these turns at all.
+    public static func anchor(forMessage messageId: String, in turns: [ConversationTurnRows]) -> String? {
+        let partPrefix = "\(messageId):"
+        for turn in turns {
+            if let row = turn.rows.first(where: { $0.id == messageId || $0.id.hasPrefix(partPrefix) }) {
+                return row.id
+            }
+        }
+        return nil
+    }
+
     public init(group: ConversationReadTurnGroup, roster: [RosterSession]) {
         turnId = group.turnId
         judgment = Self.judgment(of: group.turn)

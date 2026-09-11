@@ -61,6 +61,19 @@ export function isPushEnvironment(value: UnparsedWireValue): value is PushEnviro
 }
 
 /**
+ * The one custom key a briefing's notification carries beside `aps`, and
+ * what travels under it: the pushed message's own id, so a tap on the phone
+ * opens the Conversation at that briefing rather than at whichever arrived
+ * last. The id is Luke's own opaque UUID — it names no session, branch, path,
+ * or error line, is unique to one message so it correlates nothing across
+ * pushes, and means nothing to Apple — and it is the only identifier the
+ * payload carries. Shared on the wire with the Swift `BriefingPushTap`.
+ */
+export const BRIEFING_PUSH_PAYLOAD_KEY = {
+  MESSAGE_ID: "messageId",
+} as const;
+
+/**
  * The bounds a device token must sit inside before the service stores it.
  * Apple hands the app the token as bytes, and the phone sends its hex; Apple
  * documents no fixed length, so the bound is generous on both sides and the
