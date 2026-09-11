@@ -201,12 +201,22 @@
      the right edge stays exactly where it was and only the left one travels. */
   --capsule-voice-shift: calc(var(--capsule-voice-growth) / 2);
   /* The same growth for the wait: a run of Luke's still going needs the face
-     playing the hop and the dots rippling off it, and the capsule's side holds
-     one thing. 31px to the meter's 26px because the dots' strip is 23px to the
-     meter's 18px, keeping the meter's own 9px to the shape's turning corner. */
+     and the dots beside it, and the capsule's side holds one thing. 31px to
+     the meter's 26px because the dots' strip is 23px to the meter's 18px,
+     keeping the meter's own 9px to the shape's turning corner. */
   --capsule-thinking-growth: 31px;
   --capsule-thinking-width: calc(var(--capsule-width) + var(--capsule-thinking-growth));
   --capsule-thinking-shift: calc(var(--capsule-thinking-growth) / 2);
+  /* A run answered aloud is three things on the one side — the face, the dots,
+     and the meter — so the two growths are spent together rather than the
+     wider of them winning: the dots and the meter each need their own room,
+     and either drawn past the black is drawn on the desktop. */
+  --capsule-voice-thinking-growth: calc(
+    var(--capsule-voice-growth) +
+    var(--capsule-thinking-growth)
+  );
+  --capsule-voice-thinking-width: calc(var(--capsule-width) + var(--capsule-voice-thinking-growth));
+  --capsule-voice-thinking-shift: calc(var(--capsule-voice-thinking-growth) / 2);
   /* Luke's words under the housing, wrapping as they stream in and shown
      whole. `--caption-max` arrives from the shared surface tokens, the
      same number the compact window already holds below the capsule, so growing
@@ -535,18 +545,18 @@ button:disabled {
     calc(var(--duration-shape) - var(--duration-quick)) backwards;
 }
 
-/* Luke thinking, with nothing else open: the reply's growth for the wait that
-   precedes it. The wing decides whether the dots are drawn from the resting
-   priority; the shape reads the same answer off the stage's own facts — a run
-   pending and neither speaker heard, whose face rests are what displace the
-   wait — so the two cannot grow apart. Luke answering keeps the voice rule's
-   width instead, the microphone heard keeps the capsule's, and the dots are
-   not drawn in either. The caption gate is not a tie to win but a disjoint
-   state: the two speaker attributes lift this rule's specificity past the
-   caption rule below, which must take the peek's width whenever words stand
-   under the shape, so the wait may only grow a capsule with no words to
-   cover — a captioned one is already wide enough for the dots. */
-.app-stage[data-presentation="capsule"][data-thinking="true"][data-caption="false"][data-luke-speaking="false"][data-listening="false"]
+/* Luke thinking, with nothing said aloud and no words open: the reply's growth
+   for the wait that precedes it. The wing draws the dots from the run alone,
+   and the shape reads that same run off the stage's own facts, so the two
+   cannot grow apart. The microphone being heard needs nothing more of this
+   side: the developer's meter takes the resting mark's room on the other one
+   and grows nothing, so a run under a held talk key grows exactly here. The
+   caption gate is not a tie to win but a disjoint state: the speaker attribute
+   lifts this rule's specificity past the caption rule below, which must take
+   the peek's width whenever words stand under the shape, so the wait may only
+   grow a capsule with no words to cover — a captioned one is already wide
+   enough for the dots. */
+.app-stage[data-presentation="capsule"][data-thinking="true"][data-caption="false"][data-luke-speaking="false"]
 .panel-surface {
   width: var(--capsule-thinking-width);
   transform: translate(calc(-50% - var(--capsule-thinking-shift)), var(--shape-top, 0px));
@@ -556,19 +566,39 @@ button:disabled {
   transition-delay: 0s;
 }
 
-.app-stage[data-presentation="capsule"][data-thinking="true"][data-caption="false"][data-luke-speaking="false"][data-listening="false"]
+.app-stage[data-presentation="capsule"][data-thinking="true"][data-caption="false"][data-luke-speaking="false"]
   .compact-hover-target {
   width: var(--capsule-thinking-width);
   transform: translateX(calc(-50% - var(--capsule-thinking-shift)));
 }
 
-/* Dots standing in the capsule at all mean the wait holds the face, and the
-   wait means the shape already made room for them — the growth above, or the
-   caption's peek width, which the growth yields to. So the pose needs no gate
-   of its own: the element's presence is the gate, and the base rule's delayed
-   mount pair is the arrival, crossing over the last of the shape's travel the
-   way the meter crosses into the same growth. Ungated also means a caption
-   coming or going mid-wait re-matches nothing here, so nothing replays. */
+/* A run Luke is already answering aloud, with no words drawn yet: the side
+   holds his face, the dots, and his meter, so the shape spends both growths
+   rather than the wider of them. Written after the voice rule above and one
+   attribute wider than it, so the pair wins that tie — the meter's growth
+   alone would leave the dots drawn on the desktop. */
+.app-stage[data-presentation="capsule"][data-thinking="true"][data-caption="false"][data-luke-speaking="true"]
+.panel-surface {
+  width: var(--capsule-voice-thinking-width);
+  transform: translate(calc(-50% - var(--capsule-voice-thinking-shift)), var(--shape-top, 0px));
+  transition-duration: var(--duration-shape);
+  transition-delay: 0s;
+}
+
+.app-stage[data-presentation="capsule"][data-thinking="true"][data-caption="false"][data-luke-speaking="true"]
+  .compact-hover-target {
+  width: var(--capsule-voice-thinking-width);
+  transform: translateX(calc(-50% - var(--capsule-voice-thinking-shift)));
+}
+
+/* Dots standing in the capsule at all mean a run is going, and every capsule
+   state a run can stand in has already made room for them — one of the two
+   growths above, both of them together, or the caption's peek width, which
+   they yield to. So the pose needs no gate of its own: the element's presence
+   is the gate, and the base rule's delayed mount pair is the arrival, crossing
+   over the last of the shape's travel the way the meter crosses into the same
+   growth. Ungated also means a caption coming or going mid-wait re-matches
+   nothing here, so nothing replays. */
 .app-stage[data-presentation="capsule"] .wing-thinking {
   opacity: 1;
   transform: none;
@@ -1122,8 +1152,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 }
 
 /* The wait's three dots, one drawing wherever a run of Luke's is still going:
-   the Conversation bubble and the notch strip both ride them beside the face
-   playing the success hop on repeat. */
+   the Conversation bubble and the notch strip both ride them beside his face. */
 .thinking-dots {
   display: inline-flex;
   height: 12px;
@@ -1131,10 +1160,11 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   gap: 4px;
 }
 
-/* The dots follow the generated `success` cycle the face beside them is
-   playing on repeat — luke-success-2, 2s, the head off the ground from 25% to
-   65% and highest at 45% — each rising as the head comes down, one after
-   another, a ripple off the hop. The stagger is cut into the keyframes rather
+/* The dots keep the generated `success` cycle's beat — luke-success-2, 2s, the
+   head off the ground from 25% to 65% and highest at 45% — each rising as that
+   head would come down, one after another: a ripple off the hop wherever the
+   face is playing it, and its own steady rhythm beside a face taken by the
+   exchange. The stagger is cut into the keyframes rather
    than carried as a delay, so a paused loop holds every dot at rest, the pose
    the face itself holds paused; and being timed to a face gesture, they answer
    --face-motion rather than --loop-motion, so the two can never stop apart. */

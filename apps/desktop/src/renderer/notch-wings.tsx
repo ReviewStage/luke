@@ -290,14 +290,17 @@ export function NotchWings({
               grows the capsule, and the meter trails the edge growing under
               it rather than being drawn on the desktop ahead of it. */}
           {placement.lukeMeter && meterFor(WAVEFORM_VOICE.LUKE)}
-          {/* The wait's dots, trailing outward from the face they ripple off:
-              the same three the Conversation bubble draws beside the same
-              repeating hop. Drawn only while the thinking rest is what holds
-              the face, so speech taking the face back takes them with it, and
-              the gate displacing the face leaves none orphaned. The peek and
-              the panel unfold their slot the way they unfold the meter's; the
-              capsule grows its own room for it, the way it grows for Luke's
-              reply meter. */}
+          {/* The wait's dots, trailing outward from the face: the same three
+              the Conversation bubble draws. Drawn for as long as a run of
+              Luke's is going, whichever motion the face is playing about the
+              exchange, so a run under a held talk key is reported rather than
+              hidden behind the listening rest; only the gate displacing the
+              face leaves none. Between the face and Luke's meter, so each of
+              the three keeps its distance from the housing whether or not the
+              other two stand. The peek and the panel unfold their slot the way
+              they unfold the meter's; the capsule grows its own room for it,
+              the way it grows for Luke's reply meter, and grows for both
+              together while a run is answered aloud. */}
           {thinkingDotsShown(faceContext, placement.face) && (
             <span className="wing-thinking">
               <ThinkingDots />

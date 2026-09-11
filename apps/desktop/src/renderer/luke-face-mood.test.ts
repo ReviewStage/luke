@@ -79,14 +79,23 @@ test("a run still going holds the face in the conversation wait's own hop", () =
   assert.equal(restingMotion(context({ thinking: true, total: 0 })), FACE_MOTION.SUCCESS);
 });
 
-test("the wait's dots stand only beside a face the thinking rest holds", () => {
+test("the wait's dots stand beside a drawn face whenever a run is going", () => {
   assert.equal(thinkingDotsShown(context({ thinking: true }), true), true);
   // No run, no dots — the hop alone is a completion's one-shot gesture.
   assert.equal(thinkingDotsShown(context(), true), false);
-  // Speech took the face back, so it takes the dots with it.
-  assert.equal(thinkingDotsShown(context({ thinking: true, microphoneLive: true }), true), false);
+  // The exchange has the face and the wait still has the dots: a run under a
+  // held talk key is the case the panel otherwise reported not at all.
+  assert.equal(thinkingDotsShown(context({ thinking: true, microphoneLive: true }), true), true);
+  assert.equal(thinkingDotsShown(context({ thinking: true, speaking: true }), true), true);
+  assert.equal(
+    thinkingDotsShown(context({ thinking: true, speaking: true, microphoneLive: true }), true),
+    true,
+  );
+  // The listening face without a run of its own still draws none.
+  assert.equal(thinkingDotsShown(context({ microphoneLive: true }), true), false);
   // The gate displaced the face; dots without one would be orphaned.
   assert.equal(thinkingDotsShown(context({ thinking: true }), false), false);
+  assert.equal(thinkingDotsShown(context({ thinking: true, microphoneLive: true }), false), false);
 });
 
 test("the fidget answers a session that has just started asking", () => {

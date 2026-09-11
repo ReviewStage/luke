@@ -300,8 +300,18 @@ room, which grows nothing. Nothing displaces the face but the sign-in gate:
 the face listens to the developer's voice as a face and its mouth follows
 Luke's own track alone. `wingPlacement` in `notch-wings.tsx` is the one
 decision, and the stage carries the same two facts as `data-luke-speaking`
-and `data-listening` for the capsule's growth, the errand's colour, and the
-wait's room.
+and `data-listening` for the capsule's growth and the errand's colour.
+
+The wait is a third thing on Luke's side, and it is independent of both. The
+dots stand for as long as a run of his is going, whatever the face is playing
+about the exchange — `thinkingDotsShown` reads the run alone, because the
+session is full duplex and a run may be under way through the whole of a held
+talk key, where the face is listening and the panel would otherwise say
+nothing about the wait at all. So the face reports the conversation, the dots
+report the brain, and the stage carries `data-thinking` beside the two speaker
+facts because the capsule's room is the one thing they decide together: a run
+alone grows for the dots, a run answered aloud grows for the dots and the
+meter both, and a captioned capsule already holds the peek's width.
 
 Two rules follow from playing a motion once, and both belong to the artwork
 table rather than the app. Every motion the app plays begins and ends at the

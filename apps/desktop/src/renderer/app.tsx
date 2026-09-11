@@ -947,13 +947,14 @@ export function App(): React.JSX.Element {
     <div
       className="app-stage"
       // Who is being heard, so the capsule can make room for Luke's meter
-      // beside his face, and the errand and the wait read the same two facts
-      // the face rests on.
+      // beside his face, and the errand reads the same two facts the face
+      // rests on.
       data-luke-speaking={String(speakers.lukeSpeaking)}
       data-listening={String(speakers.listening)}
       // Whether a run of Luke's is still going, so the capsule can make room
-      // for the wait's dots the same way; a live turn's own growth wins, and
-      // the wing draws no dots there either.
+      // for the wait's dots the same way; the dots stand through a spoken
+      // exchange, so his reply's own growth is spent alongside the wait's
+      // rather than instead of it.
       data-thinking={String(thinking)}
       // Whether there are words to draw under the shape — a caption or a
       // failure borrowing its strip — so the surface can grow the room they
