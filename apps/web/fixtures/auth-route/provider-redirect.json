@@ -1,0 +1,11 @@
+{
+  "status": 302,
+  "statusText": "",
+  "headers": [
+    [
+      "location",
+      "https://luke.test/sign-in.html?ok=1"
+    ]
+  ],
+  "body": ""
+}

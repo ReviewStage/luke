@@ -10,6 +10,7 @@ import {
   InvalidRequestRefusal,
   InvalidTokenRefusal,
   MethodNotAllowedRefusal,
+  NotFoundRefusal,
   RequestTooLargeRefusal,
   UnavailableRefusal,
 } from "../server/hosted/http-effect.js";
@@ -66,6 +67,11 @@ const REFUSALS = [
     refusal: HOSTED_REFUSAL.METHOD_NOT_ALLOWED,
     schema: MethodNotAllowedRefusal,
     status: HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+  },
+  {
+    refusal: HOSTED_REFUSAL.NOT_FOUND,
+    schema: NotFoundRefusal,
+    status: HOSTED_HTTP_STATUS.NOT_FOUND,
   },
   {
     refusal: HOSTED_REFUSAL.REQUEST_TOO_LARGE,

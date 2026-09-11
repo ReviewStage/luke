@@ -21,6 +21,7 @@ const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.INVALID_TOKEN]: HOSTED_HTTP_STATUS.UNAUTHORIZED,
   [HOSTED_API_ERROR.INVALID_REQUEST]: HOSTED_HTTP_STATUS.BAD_REQUEST,
   [HOSTED_API_ERROR.METHOD_NOT_ALLOWED]: HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+  [HOSTED_API_ERROR.NOT_FOUND]: HOSTED_HTTP_STATUS.NOT_FOUND,
   [HOSTED_API_ERROR.REQUEST_TOO_LARGE]: HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE,
   [HOSTED_API_ERROR.UNAVAILABLE]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
 } as const;
@@ -36,16 +37,19 @@ function refusalSchema<Slug extends HostedRefusalSlug>(slug: Slug) {
 export const InvalidTokenRefusal = refusalSchema(HOSTED_API_ERROR.INVALID_TOKEN);
 export const InvalidRequestRefusal = refusalSchema(HOSTED_API_ERROR.INVALID_REQUEST);
 export const MethodNotAllowedRefusal = refusalSchema(HOSTED_API_ERROR.METHOD_NOT_ALLOWED);
+export const NotFoundRefusal = refusalSchema(HOSTED_API_ERROR.NOT_FOUND);
 export const RequestTooLargeRefusal = refusalSchema(HOSTED_API_ERROR.REQUEST_TOO_LARGE);
 export const UnavailableRefusal = refusalSchema(HOSTED_API_ERROR.UNAVAILABLE);
 
 export type HostedRefusal = { readonly error: HostedRefusalSlug };
 
-/** The refusal values themselves, since none of the five carries a field. */
+/** The refusal values themselves, since not one of them carries a field. */
 export const HOSTED_REFUSAL = {
   INVALID_TOKEN: { error: HOSTED_API_ERROR.INVALID_TOKEN },
   INVALID_REQUEST: { error: HOSTED_API_ERROR.INVALID_REQUEST },
   METHOD_NOT_ALLOWED: { error: HOSTED_API_ERROR.METHOD_NOT_ALLOWED },
+  /** A path the group the request reached declares no route for. */
+  NOT_FOUND: { error: HOSTED_API_ERROR.NOT_FOUND },
   REQUEST_TOO_LARGE: { error: HOSTED_API_ERROR.REQUEST_TOO_LARGE },
   UNAVAILABLE: { error: HOSTED_API_ERROR.UNAVAILABLE },
 } as const satisfies Record<string, HostedRefusal>;

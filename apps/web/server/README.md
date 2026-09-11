@@ -147,8 +147,9 @@ half is a small `SqlClient` over `@electric-sql/pglite`, because no
 a function default-exports. It reads the runtime through `runWeb` and then
 holds the handler for the instance's life, so it is a caller of the edge rather
 than a second one, and a warm invocation reaches the services the cold one
-built. `server/routes/brain/capabilities.ts` is the route converted this way;
-every other route still default-exports the promise-shaped handler beside it.
+built. `server/routes/brain/capabilities.ts` and `server/routes/auth/[...all].ts`
+are the routes converted this way; every other route still default-exports the
+promise-shaped handler beside it.
 
 `server/hosted/http-effect.ts` is the response vocabulary that conversion
 speaks: one schema per refusal, each annotated with the status it answers, and
@@ -159,6 +160,27 @@ discriminant the desktop's hosted clients read and a `_tag` beside it would be
 a byte they never asked for. `fixtures/hosted-refusal/` records the status,
 content type, and body bytes of each one, and `tests/hosted-refusal.test.ts`
 holds both shapes to them; `LUKE_UPDATE_FIXTURES=1` records.
+
+## The auth group
+
+`server/auth-app.ts` is the auth route group: Better Auth's own `fetch`
+handler on the path set `vercel.json` routes here, and the hosted
+vocabulary's `not-found` on any other path, which nothing routes to this
+function. The handler is held as a passthrough rather than described as
+endpoints — an `HttpApi` declaring them would be a second copy of a contract
+Better Auth already versions, and the first to drift would be the one Luke
+ships. The request handed over is the very `Request` the function was invoked
+with, and the answer travels back as a raw body, so the status, the headers,
+every `set-cookie`, and the bytes are the handler's own. Nothing is mirrored
+onto the `HttpServerResponse` beside it, because the platform writes such a
+record onto the answer's own `Headers` and a redirect's are immutable; a HEAD
+is the exception, where that record is all the web handler reads, and there
+the status and headers are carried and the body dropped.
+`fixtures/auth-route/` records what the group answers for a sign-in, a
+provider redirect, an unknown endpoint, a refused method, a HEAD, and a path
+outside the group, and `tests/auth-app.test.ts` answers each twice — through
+the group and by calling the handler the way the route called it before — and
+compares the two.
 
 ## Signing in on a Preview deployment
 

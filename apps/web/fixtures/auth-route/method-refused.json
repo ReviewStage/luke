@@ -1,0 +1,15 @@
+{
+  "status": 405,
+  "statusText": "",
+  "headers": [
+    [
+      "allow",
+      "POST"
+    ],
+    [
+      "content-type",
+      "application/json"
+    ]
+  ],
+  "body": "{\"message\":\"Method Not Allowed\"}"
+}
