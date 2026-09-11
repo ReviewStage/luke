@@ -522,3 +522,36 @@ C2c's merged ownership suite drives the relay through the real writer, and C2b-1
 boundary to every answer, so C2c's assertions could have moved — and they would have moved **in
 the merge group**, which runs on current main, where a failure reads like somebody else's problem
 and costs an eviction to learn. Added to the standing addendum.
+
+
+## 2026-09-11 — SPEECH_EXPIRY_REASON, and `unless` as a store contract (orchestrator, from C5a #1030)
+
+**Wire value set added**, per Dean's standing instruction that a wire value-set decision is
+recorded the hour it is made: **`SPEECH_EXPIRY_REASON = { DUE: "due", HOLD_RELEASED:
+"hold_released" }`** in `packages/wire/src/conversation-event.ts`, beside
+`SPEECH_OFFERED_EVENT_PAYLOAD { expiresAt }`, `SPEECH_HELD_EVENT_PAYLOAD { quietUntil }`, and
+`SPEECH_EXPIRED_EVENT_PAYLOAD { reason }`. An expiry that cannot say which of the two it was
+would leave the view unable to tell a briefing that timed out from one a meeting retired.
+
+**Store contract widened: `recordEvent` takes an optional `unless: ConversationEventKind[]`** —
+kinds whose standing on the message refuses the write, checked under the conversation lock and
+answered as `STORE_WRITE_REFUSAL.SUPERSEDED`. Found by C5a's thermo-nuclear pass, tested, and
+mutation-checked five ways.
+
+This is what turns "the unique index stops a double claim" into the property the speech states
+actually need: **no transition can land after a settled one.** A claim racing a push, or the
+sweep's expiry arriving after a claim, cannot re-open a settled offer.
+
+**Two races, two mechanisms, and both must be understood together:** a claim losing to another
+claim is refused by B2's unique partial index on `(message_id) where kind = 'speech.claimed'`; a
+claim losing to a *settled* transition is refused as `SUPERSEDED`.
+
+**Ruling: the speech store module is the one door, and `unless` is not a caller's option.**
+`unless` is a list the caller supplies, so a caller who omits it silently loses the atomicity —
+and the callers are other lanes: **C8 writes `speech.spoken`** through B7's voice writer, **D3
+writes `speech.pushed`**. Every `speech.*` write goes through `offer` / `claim` / `spoken` /
+`pushed`, each carrying its own `unless` set internally, exactly as `admit()` is the one door for
+actions and the strip is the only way to mint a `ClientUIMessage`. Stated in the module comment,
+and better still made unrepresentable in `recordEvent`'s own kind union if a type can carry it —
+this repository prefers the unrepresentable to the refused. Carried into C8's and D3's notes so
+neither begins by writing a `speech.*` event the wrong way.
