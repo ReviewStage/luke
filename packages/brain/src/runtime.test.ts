@@ -597,3 +597,103 @@ test("an answer that stopped short while still carrying words ends completed wit
   );
   assert.deepEqual(texts, ["Let me check.", ""]);
 });
+
+test("a cancel inside a batch parts no call from the result its host records, and the end is told once", async () => {
+  const h = harness();
+  let run: RuntimeRun | undefined;
+  const recorded: string[] = [];
+  const executor: ToolExecutor = {
+    execute: async (invocation) => {
+      h.executed.push(invocation);
+      if (invocation.callId === "c1") run?.cancel();
+      return { outputJson: JSON.stringify({ status: "accepted" }) };
+    },
+  };
+  h.model.answers.push(
+    answered({
+      items: [
+        {
+          type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
+          call_id: "c1",
+          name: "act",
+          arguments: "{}",
+        },
+        {
+          type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
+          call_id: "c2",
+          name: "act",
+          arguments: "{}",
+        },
+      ],
+      toolCalls: [toolCall("c1", "act"), toolCall("c2", "act")],
+    }),
+  );
+  run = runtime(h.model).start(
+    h.request({
+      tools: executor,
+      // The host's own recording of a result is asynchronous, as the
+      // checkpoint behind it is: a cancel that cut the run between an
+      // action and the record of what it did would leave this short.
+      onEvent: async (event) => {
+        h.events.push(event);
+        if (event.kind === RUNTIME_EVENT.TOOL_RESULT) {
+          await new Promise((resolve) => setImmediate(resolve));
+          recorded.push(event.invocation.callId);
+        }
+      },
+    }),
+  );
+  assert.deepEqual(await run.done, { reason: RUN_END_REASON.CANCELLED });
+  assert.deepEqual(recorded, ["c1", "c2"]);
+  assert.deepEqual(
+    h.executed.map((call) => call.callId),
+    ["c1", "c2"],
+  );
+  assert.equal(kinds(h.events).filter((kind) => kind === RUNTIME_EVENT.CANCELLED).length, 1);
+  assert.equal(kinds(h.events).filter((kind) => kind === RUNTIME_EVENT.ENDED).length, 1);
+  assert.equal(h.model.requests.length, 1);
+});
+
+test("a run whose signal fired before it opened ingests nothing, asks no model, and ends cancelled", async () => {
+  const h = harness();
+  h.abort.abort();
+  const run = runtime(h.model).start(h.request());
+  assert.deepEqual(await run.done, { reason: RUN_END_REASON.CANCELLED });
+  assert.deepEqual(kinds(h.events), [RUNTIME_EVENT.CANCELLED, RUNTIME_EVENT.ENDED]);
+  assert.equal(h.model.requests.length, 0);
+  assert.equal(h.context.checkpoint().items.length, 0);
+});
+
+test("a cancel while the model is thinking settles the wait at once and the late answer reaches nothing", async () => {
+  const h = harness();
+  h.model.hold = true;
+  const run = runtime(h.model).start(h.request());
+  await new Promise((resolve) => setImmediate(resolve));
+  run.cancel();
+  assert.deepEqual(await run.done, { reason: RUN_END_REASON.CANCELLED });
+  const told = h.events.length;
+  const carried = h.context.checkpoint().items.length;
+  h.model.held?.(answered({ text: "late" }));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.events.length, told);
+  assert.equal(h.context.checkpoint().items.length, carried);
+});
+
+test("a cancel that lands while the run is telling its end leaves that end standing and tells no second one", async () => {
+  const h = harness();
+  h.model.answers.push(answered({ text: "done" }));
+  let run: RuntimeRun | undefined;
+  run = runtime(h.model).start(
+    h.request({
+      onEvent: async (event) => {
+        h.events.push(event);
+        if (event.kind !== RUNTIME_EVENT.ENDED) return;
+        run?.cancel();
+        await new Promise((resolve) => setImmediate(resolve));
+      },
+    }),
+  );
+  assert.deepEqual(await run.done, { reason: RUN_END_REASON.COMPLETED, text: "done" });
+  assert.equal(kinds(h.events).filter((kind) => kind === RUNTIME_EVENT.ENDED).length, 1);
+  assert.equal(kinds(h.events).filter((kind) => kind === RUNTIME_EVENT.CANCELLED).length, 0);
+});

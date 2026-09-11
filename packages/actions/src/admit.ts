@@ -1043,7 +1043,7 @@ export function admitEffect<Kind extends ActionKind>(
  * roster read that failed rejects with its own failure, as it always has. This
  * door is the strangler shim that runs the effect where no runtime edge does
  * yet; callers move onto `admitEffect` as their own runs become Effects
- * (P5-14's turn runner, P7's composers), and the door goes with the `Settled`
+ * (P5-14b's turn runner, P7's composers), and the door goes with the `Settled`
  * Promise signatures in P12-02.
  */
 export async function admit<Kind extends ActionKind>(

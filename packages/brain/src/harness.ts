@@ -44,6 +44,7 @@ import {
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
 import { BRAIN_DEFAULTS, BrainAgent, type BrainAgentOptions, LOOK_SUBJECT } from "./agent.js";
 import { ResponsesContextEngine } from "./context-engine.js";
+import type { BrainExecutionRuntime } from "./effect/execution.js";
 import { type BrainPersistedState, MAXIMUM_TERMINAL_REQUESTS } from "./envelope.js";
 import type { BrainActionExecution, BrainActionPerformer } from "./performer.js";
 import {
@@ -246,11 +247,15 @@ export function adapterOf(client: BrainClient): ModelAdapter {
   };
 }
 
-export function runtimeOver(model: ModelAdapter): ToolLoopAgentRuntime {
+export function runtimeOver(
+  model: ModelAdapter,
+  execution?: BrainExecutionRuntime,
+): ToolLoopAgentRuntime {
   return new ToolLoopAgentRuntime({
     model,
     itemFormat: RESPONSES_ITEM_FORMAT,
     createContext: () => new ResponsesContextEngine(TOOL_LOOP_IDENTITY),
+    ...(execution ? { execution } : undefined),
   });
 }
 
@@ -338,6 +343,8 @@ export const PLAIN_PREPARATION: BrainAgentOptions["prepareTurn"] = () => ({
 
 export type HarnessOverrides = Partial<Omit<BrainAgentOptions, "runtime">> & {
   client?: BrainClient;
+  /** The runtime every run of this harness is a fiber on; the test's own where a test has one. */
+  execution?: BrainExecutionRuntime;
 };
 
 export function harness(
@@ -345,9 +352,9 @@ export function harness(
   repository = fakeBrainStateRepository(),
 ): Harness {
   const client = new FakeClient();
-  const { client: clientOverride, ...agentOverrides } = overrides;
+  const { client: clientOverride, execution, ...agentOverrides } = overrides;
   const model = adapterOf(clientOverride ?? client);
-  const runtime = runtimeOver(model);
+  const runtime = runtimeOver(model, execution);
   const clock = new FakeClock();
   const deliveries: BrainDelivery[] = [];
   const persisted: BrainPersistedState[] = [];

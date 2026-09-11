@@ -22,7 +22,7 @@ succeeds with the minted action or fails with an `AdmitRefusal` carrying the
 same sentence a `Refusal` does, and reads the roster for itself inside the
 effect; `admit()` is the Promise door over it, the strangler shim that runs
 the effect for the callers still holding a Promise — the brain's tool modules,
-the hosted action endpoint, the provider contract — until P5-14's turn runner
+the hosted action endpoint, the provider contract — until P5-14b's turn runner
 and P7's composers call `admitEffect()` themselves, and P12-02 deletes the door
 with the `Settled` Promise signatures. `repository-checks.sh` fences both names
 to the brain's tool modules alike. Everything below it re-shapes what it
