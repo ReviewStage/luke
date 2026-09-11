@@ -7,6 +7,7 @@ import { executeSessionAction } from "../action-execute.js";
 import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "../bearer.js";
 import { CATALOG_TOOL_SET } from "../brain-tool-set.js";
 import { payloadKeyRing, VAULT_ENCRYPTION_ENVIRONMENT } from "../encryption.js";
+import { OBSERVATION_ENVIRONMENT } from "../observation-tick.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "../openai.js";
 import { type HostedSpend, spendHostedMeter } from "../quota.js";
 import type { HostedStoreDatabase, HostedStoreRun } from "../store/database.js";
@@ -47,6 +48,8 @@ export interface BrainHostSeams {
   readonly userInfo: UserInfoEndpoint;
   /** Who a session or a conversation belongs to, for the door. */
   readonly ownership: SessionOwnership;
+  /** The secret the deployment acts for an account under at eve's door, the tick's own; nothing while the environment names none. */
+  readonly deploymentSecret: () => string | undefined;
   /** Luke's own OpenAI access, or nothing when the deployment holds no key and the hosted brain is off. */
   readonly openAi: () => OpenAiAccess | undefined;
   /** Whether the deployment asked for the scripted fixture model in place of OpenAI. */
@@ -121,6 +124,7 @@ export function productionBrainHostSeams(): BrainHostSeams {
       ownsConversation: (userId, conversationId) =>
         runWeb(conversationOwnedBy(userId, conversationId)),
     },
+    deploymentSecret: () => process.env[OBSERVATION_ENVIRONMENT.CRON_SECRET]?.trim() || undefined,
     // The auth service opens the database as it is imported, so it is reached
     // only when a bearer is checked and never by discovery of these files.
     userInfo: async (input) => {

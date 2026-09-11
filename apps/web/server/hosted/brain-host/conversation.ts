@@ -4,7 +4,7 @@ import { Effect, Option, type ParseResult, Schema } from "effect";
 import type { SessionAuth } from "eve/context";
 import { CONVERSATION_KIND } from "../../db/storage-schema.js";
 import type { ConversationTarget } from "../store/index.js";
-import { conversationIdOf } from "./auth.js";
+import { actedForAccount, conversationIdOf } from "./auth.js";
 import { BRAIN_HOST_REFUSAL, type BrainHostRefusal } from "./bounds.js";
 
 /**
@@ -149,9 +149,12 @@ export function admitConversation(
   session: { readonly id: string; readonly standing: SessionStanding },
 ): Effect.Effect<ConversationAdmission, ConversationFailure, SqlClient.SqlClient> {
   const current = auth.current;
-  if (!current) return Effect.succeed({ ok: false, refusal: BRAIN_HOST_REFUSAL.NO_PRINCIPAL });
+  const account = actedForAccount(current);
+  if (!current || account === undefined) {
+    return Effect.succeed({ ok: false, refusal: BRAIN_HOST_REFUSAL.NO_PRINCIPAL });
+  }
   const initiator = auth.initiator ?? current;
-  if (initiator.principalId !== current.principalId) {
+  if (actedForAccount(initiator) !== account) {
     return Effect.succeed({ ok: false, refusal: BRAIN_HOST_REFUSAL.NOT_INITIATOR });
   }
   const conversationId = conversationIdOf(initiator);
@@ -160,7 +163,7 @@ export function admitConversation(
   return Effect.map(findConversation(conversationId), (found) => {
     if (Option.isNone(found)) return { ok: false, refusal: BRAIN_HOST_REFUSAL.NO_CONVERSATION };
     const row = found.value;
-    if (row.userId !== current.principalId) {
+    if (row.userId !== account) {
       return { ok: false, refusal: BRAIN_HOST_REFUSAL.NOT_OWNER };
     }
     if (session.standing === SESSION_STANDING.CURRENT && row.runtimeSessionId !== session.id) {

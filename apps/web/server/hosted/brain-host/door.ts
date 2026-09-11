@@ -1,7 +1,8 @@
 import { type AuthFn, ForbiddenError, routeAuth } from "eve/channels/auth";
 import type { EveMessageContext } from "eve/channels/eve";
 import type { SessionAuthContext } from "eve/context";
-import { conversationIdOf, sessionAuthFor, turnKindOf } from "./auth.js";
+import { RECORD_EXTRA_KEYS, s, unparsedWire, type WireBoundaryInput } from "../../core.js";
+import { actedForAccount, conversationIdOf, sessionAuthFor, turnKindOf } from "./auth.js";
 import { BRAIN_HOST_REFUSAL } from "./bounds.js";
 
 /**
@@ -19,7 +20,9 @@ import { BRAIN_HOST_REFUSAL } from "./bounds.js";
  * A request to open a session must name a conversation of the caller's at
  * the door as well: eve dispatches a durable run before the host's first
  * resolver could refuse it, and a run no conversation records is one nobody
- * can attach to, meter, or retire.
+ * can attach to, meter, or retire. Whose a session or a conversation must
+ * be is the account the caller acts for — the bearer's own, or the one the
+ * deployment's principal names — read through the one accessor for it.
  */
 
 /** What the store answers about who a session or a conversation belongs to. */
@@ -31,6 +34,17 @@ export interface SessionOwnership {
 }
 
 const SESSION_ROUTE = /^\/eve\/v1\/session\/([^/]+)(?:\/|$)/;
+
+const FORBIDDEN_STATUS = 403;
+
+const refusalBody = s.record({ error: s.text() }, { extraKeys: RECORD_EXTRA_KEYS.IGNORE });
+
+/** The reason a refusal response carries, as eve writes one; the refusal itself where the body cannot be read. */
+async function refusalMessageOf(response: Response): Promise<string> {
+  // SAFETY: eve's own JSON refusal body; the schema read that follows is what holds it to a shape.
+  const body = refusalBody.read(unparsedWire((await response.json()) as WireBoundaryInput));
+  return body.ok ? body.value.error : BRAIN_HOST_REFUSAL.NOT_OWNER;
+}
 const OPEN_ROUTE = /^\/eve\/v1\/session\/?$/;
 
 /** The session id a route names, or nothing for the routes that name none. */
@@ -56,12 +70,19 @@ export function ownedAuth(
 ): AuthFn<Request> {
   return async (request) => {
     const caller = await routeAuth(request, inner);
-    if (caller instanceof Response) return null;
+    if (caller instanceof Response) {
+      // eve's walk turns a refusal an inner authenticator threw into its
+      // response; a 403 is a caller it recognised and refused, whose reason
+      // must reach the caller rather than read as nobody signed in.
+      if (caller.status === FORBIDDEN_STATUS) {
+        throw new ForbiddenError({ message: await refusalMessageOf(caller) });
+      }
+      return null;
+    }
+    const account = actedForAccount(caller);
+    if (account === undefined) throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NO_ACCOUNT });
     const sessionId = sessionIdOf(request);
-    if (
-      sessionId !== undefined &&
-      (await ownership.sessionOwner(sessionId)) !== caller.principalId
-    ) {
+    if (sessionId !== undefined && (await ownership.sessionOwner(sessionId)) !== account) {
       throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NOT_OWNER });
     }
     const conversationId = conversationIdOf(sessionAuthFor(caller, request));
@@ -71,7 +92,7 @@ export function ownedAuth(
       }
       return caller;
     }
-    if (!(await ownership.ownsConversation(caller.principalId, conversationId))) {
+    if (!(await ownership.ownsConversation(account, conversationId))) {
       throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NOT_OWNER });
     }
     return caller;

@@ -30,23 +30,61 @@ export const BRAIN_HOST = {
 export const CONVERSATION_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** The request headers a client names the conversation and the turn's kind with. */
+/**
+ * The request headers a client names the conversation and the turn's kind
+ * with, and the one the deployment names the account it acts for with: read
+ * only from a request the deployment's own credential admitted, never from
+ * an account's bearer, whose account is the bearer's.
+ */
 export const BRAIN_HOST_HEADER = {
   CONVERSATION: "x-luke-conversation",
   TURN: "x-luke-turn",
+  ACCOUNT: "x-luke-account",
 } as const;
 
-/** The attribute names the session's auth carries those two under, for the session's life. */
+/** An account id as the header carries it: the auth service's own id shape, bounded, and nothing else names a user row. */
+export const ACCOUNT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+
+/**
+ * The attribute names the session's auth carries those under, for the
+ * session's life: the conversation and the turn from any request's headers,
+ * and the acted-for account only on a principal the deployment's own
+ * credential minted, never laid over from a request.
+ */
 export const BRAIN_HOST_ATTRIBUTE = {
   CONVERSATION: "luke:conversation",
   TURN: "luke:turn",
+  ACCOUNT: "luke:account",
 } as const;
 
-/** The authenticator name a Luke account bearer is admitted under. */
-export const BRAIN_HOST_AUTHENTICATOR = "luke-account";
+/**
+ * The authenticator names the door admits a principal under: an account's
+ * own bearer, or the deployment acting for an account it names under the
+ * deployment's one secret. The deployment's name is one name whatever role
+ * it acts in — the scheduled observation today, the voice service next —
+ * because one secret proves no more than that something holding it acted;
+ * which role is the turn kind on the principal, recorded as such, and never
+ * a name the credential cannot support.
+ */
+export const BRAIN_HOST_AUTHENTICATOR = {
+  ACCOUNT: "luke-account",
+  DEPLOYMENT: "luke-deployment",
+} as const;
 
-/** The principal type every account principal carries; eve's own vocabulary for a person. */
-export const BRAIN_HOST_PRINCIPAL_TYPE = "user";
+/**
+ * The principal types the door mints, in eve's own vocabulary: a person for
+ * an account's bearer, a service for the deployment acting for an account.
+ * The two are different types rather than one type with a flag, so a reader
+ * of a session's initiator can tell a developer's opening from the
+ * deployment's without remembering to check a field.
+ */
+export const BRAIN_HOST_PRINCIPAL_TYPE = {
+  ACCOUNT: "user",
+  DEPLOYMENT: "service",
+} as const;
+
+/** The one principal id the deployment acts under; the account it acts for is its attribute, never its id. */
+export const BRAIN_HOST_DEPLOYMENT_PRINCIPAL = "luke-deployment";
 
 /** What kind of turn a request opens, as the header names it. */
 export const BRAIN_HOST_TURN = {
@@ -95,6 +133,8 @@ export const BRAIN_HOST_REFUSAL = {
   NOT_OWNER: "Not run: this conversation belongs to another account.",
   NOT_INITIATOR: "Not run: this session was opened by another account.",
   NO_TURN_KIND: "Not run: the request names no kind of turn.",
+  NO_ACCOUNT: "Not run: the deployment's request names no account.",
+  NOT_DEPLOYMENT_ACT: "Not run: the deployment may only open the turns it is admitted for.",
   NO_MODEL: "Not run: this deployment holds no model key, so the hosted brain is off.",
   NOT_CURRENT_SESSION: "Not run: this conversation runs in another session now.",
 } as const;
