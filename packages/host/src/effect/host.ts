@@ -17,7 +17,7 @@ import {
   type GatewayShutdownSteps,
   shutdownGateway,
 } from "@sidecar/gateway";
-import type { GatewayServer } from "@sidecar/gateway/server";
+import type { GatewayInProcessHost } from "@sidecar/gateway/server";
 import { Context, Data, Deferred, Effect, Layer, Ref } from "effect";
 import type { Composer } from "../composer.js";
 import { composerLayer, layersInOrder } from "./composer.js";
@@ -79,8 +79,8 @@ export const hostDrain = (
 
 /** Everything constructed and linked, and nothing yet begun. */
 export interface HostAssembly {
-  /** The one boundary a client reaches this host through. */
-  readonly server: GatewayServer;
+  /** The one boundary a client reaches this host through: the in-process host every transport here is bound to. */
+  readonly gateway: GatewayInProcessHost;
   /** The composers in the order the launch has to keep; the quit is this order reversed. */
   readonly startOrder: readonly Composer[];
   /** Arms the loops once every owner of one has started. */
@@ -97,7 +97,7 @@ export class HostAssemblyTag extends Context.Tag("@sidecar/host/HostAssembly")<
 
 /** The host with every composer started: what a client operates and what the quit drains. */
 export interface StandingHost {
-  readonly server: GatewayServer;
+  readonly gateway: GatewayInProcessHost;
   readonly drain: HostDrain;
 }
 
@@ -122,7 +122,7 @@ export const hostStandingLayer: Layer.Layer<HostTag, never, HostAssemblyTag> = L
       HostTag,
       Effect.as(
         Effect.addFinalizer(() => Effect.ignore(assembly.drain())),
-        { server: assembly.server, drain: assembly.drain },
+        { gateway: assembly.gateway, drain: assembly.drain },
       ),
     );
     return standing.pipe(Layer.provideMerge(armed), Layer.provideMerge(composers));

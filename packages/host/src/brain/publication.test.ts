@@ -60,7 +60,7 @@ function markingBrain(
 }
 
 test("an ask with no brain is refused in fixed words", async () => {
-  const operator = operatorOverBrain({ current: () => undefined });
+  const operator = await operatorOverBrain({ current: () => undefined });
   const result = await operator.submit({
     submissionId: "sub-1",
     question: "what needs me?",
@@ -72,7 +72,7 @@ test("an ask with no brain is refused in fixed words", async () => {
 test("an ask is bounded and handed to the brain whole under its own submission id", async () => {
   const asked: BrainSubmission[] = [];
   const long = `  ${"a".repeat(maximumAskLength + 50)}`;
-  const operator = operatorOverBrain({ current: () => acceptingBrain(asked) });
+  const operator = await operatorOverBrain({ current: () => acceptingBrain(asked) });
   const result = await operator.submit({
     submissionId: "sub-1",
     question: long,

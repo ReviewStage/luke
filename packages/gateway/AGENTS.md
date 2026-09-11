@@ -173,28 +173,25 @@ frames — and `GatewaySocketBinding` is what a host holds of it: the port it
 bound, how many connections stand, and the one close of admissions that shuts
 its own door and the server's together.
 
-The `GatewayServer` class is what `@sidecar/host`'s `GatewayService` and the
-in-process transports still hold, and it is a
-strangler shim (`@deprecated`, on the ADR's allowlist): it makes the log, the
-admissions door, and the registry ahead of
-a `ManagedRuntime` over the layers above, runs a request as a promise through
-the in-process protocol, and runs an emit, a reconnect, and the close of
-admissions synchronously, delivering each emitted event to its own listeners
-on the same tick beside the stream the log publishes. The socket binding holds
-it no longer: it provides the `Protocol` a server is built over rather than
-attaching to one already built, so what it needs of a host is the server's own
-layer options, which `GatewayService` hands out as `serverOptions` — a shim of
-the same family. P7-02 composed the host itself as a `Layer` and left both
-standing, because `transport.ts`'s `ServerBoundTransport` (and the
-`TextLoopbackTransport` `testing.ts` builds over it) still construct with a
-`GatewayServer` in hand, and the desktop's own `InProcessTransport` is one of
-its subclasses; moving `ServerBoundTransport`'s callers onto the layers
-directly changed the request's own microtask timing enough to break the
-reconnection-race tests it and its callers hold, so P6-04 left it standing on
-purpose, and P8-04 (the desktop's host service) confirmed the same is still
-true of the desktop rather than converting it. Both fields go together once
-P6-13 converts `transport.ts` and `testing.ts` and hands every transport the
-layers directly.
+What a process holds of the in-process end is `gatewayInProcessHost`, and
+there is no server object behind it: the effect builds the whole host end in
+the caller's own `Scope` and reads four things out of that one build — the
+protocol's door, the event log, the admissions door, and the runtime the
+layers were built on — so closing that scope is what lets the server's fiber
+go, and the process that composed the layers is the one that owns them.
+`ServerBoundTransport` is bound to that, not to an object: it opens the one
+door its client is admitted through at the first request and holds it for its
+life, carries each envelope as the text a socket would carry, and runs both
+on the host's own runtime, which is the boundary — what a transport answers
+its client with is a promise and a callback, so the effects behind them are
+run there and nowhere deeper. Its events come from the log's own `listen`,
+which delivers on the tick an event is emitted, because a stream read by a
+fiber of its own could not. The socket binding is the same shape one level
+out: it provides the `Protocol` a server is built over rather than attaching
+to one already built, so what it needs of a host is the server's own layer
+options, which `GatewayService` hands out as `layerOptions` — the same
+methods, the same readers, and the same registry its own server answers
+over.
 
 ## Five doors, because three of them reach beyond the vocabulary
 

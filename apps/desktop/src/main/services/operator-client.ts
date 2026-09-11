@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { GATEWAY_CLIENT_ROLE, InProcessTransport } from "@sidecar/gateway";
-import type { GatewayServer } from "@sidecar/gateway/server";
+import type { GatewayInProcessHost } from "@sidecar/gateway/server";
 import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { HOST_OPERATOR_CLIENT_ID } from "@sidecar/host";
 import { SUPERSET_SIGN_IN_STAGE } from "@sidecar/providers/superset/sign-in-stage";
@@ -52,7 +52,7 @@ export interface OperatorClient extends DesktopService {
 export interface OperatorClientDependencies {
   config: DesktopConfig;
   /** The host this client operates, reached over the in-process transport. */
-  server: GatewayServer;
+  gateway: GatewayInProcessHost;
   node: NativeNodeCapabilities;
   /** Everything the host says, written down once; the windows are told from it. */
   state: AppStateStore;
@@ -80,7 +80,7 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
   const unsubscribers: (() => void)[] = [];
 
   const gateway = wireGateway({
-    transport: new InProcessTransport(dependencies.server, {
+    transport: new InProcessTransport(dependencies.gateway, {
       clientId: HOST_OPERATOR_CLIENT_ID,
       role: GATEWAY_CLIENT_ROLE.OPERATOR,
     }),

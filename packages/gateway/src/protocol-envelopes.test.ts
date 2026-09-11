@@ -24,8 +24,8 @@ import {
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
 } from "./protocol.js";
-import { GatewayServer, type GatewayServerOptions } from "./server.js";
-import { TextLoopbackTransport } from "./testing.js";
+
+import { type GatewayTestHost, gatewayTestHost, TextLoopbackTransport } from "./testing.js";
 
 /**
  * The envelopes as they cross, recorded. Every case here is carried by the
@@ -139,12 +139,12 @@ async function settleExchange(
   return response;
 }
 
-function goldenServer(
+function goldenHost(
   methods: GatewayMethodTable,
-  options: Pick<Partial<GatewayServerOptions>, "replayWindow"> = {},
-): GatewayServer {
+  options: { replayWindow?: number } = {},
+): Promise<GatewayTestHost> {
   let events = 0;
-  return new GatewayServer({
+  return gatewayTestHost({
     methods,
     configurationRevision: () => FIXTURE_CONFIGURATION_REVISION,
     sessionRevision: (key) => (key === FIXTURE_SESSION_KEY ? FIXTURE_SESSION_REVISION : undefined),
@@ -217,7 +217,7 @@ test("the declared parameters the fixtures carry are the shapes the protocol adm
 });
 
 test("every method's request and answer cross as the recorded envelopes", async () => {
-  const transport = new TextLoopbackTransport(goldenServer(answeringTable()), OPERATOR);
+  const transport = new TextLoopbackTransport(await goldenHost(answeringTable()), OPERATOR);
   for (const method of METHODS) {
     const response = await settleExchange(methodGoldenName(method), transport, requestFor(method));
     assert.equal(response.ok, true);
@@ -228,7 +228,7 @@ test("every error code crosses as the recorded envelope", async () => {
   const throwing = new Error("the handler failed");
   const unanswered = answeringTable();
   delete unanswered[GATEWAY_METHOD.MEMORY_STATUS];
-  const server = goldenServer({
+  const host = await goldenHost({
     ...unanswered,
     [GATEWAY_METHOD.CONVERSATION_LINES]: () =>
       gatewayError(GATEWAY_ERROR.NOT_FOUND, "no conversation stands under that key"),
@@ -242,17 +242,17 @@ test("every error code crosses as the recorded envelope", async () => {
       throw throwing;
     },
   });
-  const transport = new TextLoopbackTransport(server, OPERATOR);
-  const nodeTransport = new TextLoopbackTransport(server, NODE);
+  const transport = new TextLoopbackTransport(host, OPERATOR);
+  const nodeTransport = new TextLoopbackTransport(host, NODE);
 
   const conflicting = requestFor(GATEWAY_METHOD.CONFIGURATION_UPDATE);
   await transport.request(conflicting);
 
-  const shuttingDown = goldenServer(answeringTable());
+  const shuttingDown = await goldenHost(answeringTable());
   shuttingDown.closeAdmissions();
   const shuttingDownTransport = new TextLoopbackTransport(shuttingDown, OPERATOR);
 
-  const disconnected = new TextLoopbackTransport(goldenServer(answeringTable()), OPERATOR);
+  const disconnected = new TextLoopbackTransport(await goldenHost(answeringTable()), OPERATOR);
   disconnected.setConnected(false);
 
   const cases: readonly {
@@ -349,17 +349,13 @@ test("every error code crosses as the recorded envelope", async () => {
 });
 
 test("a reconnection inside the window replays, and one past it is handed a snapshot", async () => {
-  const server = goldenServer(answeringTable(), { replayWindow: 3 });
-  const transport = new TextLoopbackTransport(server, OPERATOR);
-  server.emit(GATEWAY_EVENT.SETTINGS_CHANGED, { setting: "first" });
-  server.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, { account: "second" });
-  server.emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
-  server.emit(
-    GATEWAY_EVENT.CONVERSATION_CHANGED,
-    { lines: 1 },
-    { sessionKey: FIXTURE_SESSION_KEY },
-  );
-  server.emit(
+  const host = await goldenHost(answeringTable(), { replayWindow: 3 });
+  const transport = new TextLoopbackTransport(host, OPERATOR);
+  host.emit(GATEWAY_EVENT.SETTINGS_CHANGED, { setting: "first" });
+  host.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, { account: "second" });
+  host.emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
+  host.emit(GATEWAY_EVENT.CONVERSATION_CHANGED, { lines: 1 }, { sessionKey: FIXTURE_SESSION_KEY });
+  host.emit(
     GATEWAY_EVENT.RUNS_CHANGED,
     { runs: 1 },
     { sessionKey: FIXTURE_SESSION_KEY, runId: "run-1" },
@@ -383,11 +379,11 @@ test("a reconnection inside the window replays, and one past it is handed a snap
 });
 
 test("a named revision and an empty answer cross as the recorded envelopes", async () => {
-  const server = goldenServer({
+  const host = await goldenHost({
     ...answeringTable(),
     [GATEWAY_METHOD.GUIDE_REPORT]: () => gatewayOk(),
   });
-  const transport = new TextLoopbackTransport(server, OPERATOR);
+  const transport = new TextLoopbackTransport(host, OPERATOR);
 
   const named = await settleExchange(ENVELOPE_GOLDEN_NAME.EXPECTED_REVISION, transport, {
     ...requestFor(GATEWAY_METHOD.RUN_SUBMIT),

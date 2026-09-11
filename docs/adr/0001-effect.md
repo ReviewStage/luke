@@ -235,34 +235,40 @@ is a `runSync` over a scope that closes at once, holding nothing; P7-05
 converts the observation composer that reads the record, hands the layer to
 the host itself, and deletes the door.
 
-`GatewayServer` in `packages/gateway/src/server.ts` is on the same allowlist,
-as the class `@sidecar/host`'s `GatewayService` and the in-process transports
-still hold: the server itself is `layerGatewayServer`, an
-`RpcServer` over the protocol's group with its ledger and revision checks as
-middleware and its event log a service, but the host composes it from a promise
-and the transports subscribe to it with callbacks, so the class builds a
-`ManagedRuntime` over those layers, runs a request as a promise on it, and runs
-an emit, a reconnect, and the close of admissions synchronously against the
-services it made ahead of the runtime. P7-02 composed the host as a `Layer`
-and left the class standing, because the in-process transports and the
-desktop's host service still hold it; P6-04 left the transports as they
-stood — moving `ServerBoundTransport`'s callers onto the layers directly
-turned out to change the request's own microtask timing enough to break the
-transports' own reconnection-race tests. P8-04 is the desktop's host service,
-and it leaves the class standing too, for the same reason: the desktop's
-`InProcessTransport` (`apps/desktop/src/main/services/operator-client.ts`)
-is one of `ServerBoundTransport`'s own subclasses, so detaching the desktop
-from `GatewayServer` without the microtask-timing regression means converting
-`transport.ts` and `testing.ts` first, which is not this PR's diff. P6-13 is
-that conversion — the in-process transports onto the Rpc layers, and only
-then the class deletion. The
-socket binding
-(`packages/gateway/src/websocket.ts`) holds the class no longer: it provides
+`ServerBoundTransport#run` in `packages/gateway/src/transport.ts` is on the
+same allowlist, and it is what is left of the `GatewayServer` class P6-02
+introduced and P6-13 deleted. The server is its layers and there is no object
+of it any more: `gatewayInProcessHost` builds the whole in-process host end
+in the caller's own `Scope` — the assembly's, in `@sidecar/host`, and a test
+harness's in the two suites that hold one — and answers the protocol's door,
+the event log, the admissions door, and the runtime those layers were built
+on. What still runs an effect is the boundary itself: `GatewayTransport`
+answers its client a `Promise` and hands it events through a callback, so
+`ServerBoundTransport` runs the door's `connect` and `carry` with
+`Runtime.runPromise` on that runtime, and the log's `listen` delivers each
+event on the tick it was emitted, which a stream read by a fiber of its own
+could not. P6-04 had found that routing the request half through
+`@effect/rpc`'s own `RpcClient` shifted the microtask timing enough to break
+the transports' reconnection-race tests; carrying the same envelopes to the
+protocol's door on the host's own runtime does not, and every one of those
+tests passes with its exact in-flight assertions unchanged. P12-09 decides
+the door: either `GatewayTransport` answers effects by then and its caller
+runs them, or the edge rule records this boundary as one.
+Two faces beside it run on the same runtime for the same reason and are on
+the allowlist too: `createGatewayService`'s own `emit` and `closeAdmissions`
+in `packages/host/src/service.ts`, because a change is reported to that
+service from a composer's callback rather than from an effect and P12-05
+deletes that face, and
+`gatewayTestHost` (`packages/gateway/src/testing.ts`) with
+`scopedGatewayService` (`packages/host/src/testing/gateway-service.ts`),
+which are the test's own edge while those suites are plain `test` bodies
+rather than `it.effect`. The socket binding
+(`packages/gateway/src/websocket.ts`) never needed any of it: it provides
 the `Protocol` a server is built over rather than attaching to one already
 built, and composes `layerGatewayServer` over it itself, so what it needs of
 a host is the server's own layer options, which `GatewayService` hands out as
-`serverOptions`. That field runs no effect and is on no allowlist, but it is
-the same shim wearing a smaller face, and P6-13 deletes it too.
+`layerOptions` — `GatewayServerLayerOptions` now rather than the deleted
+class's own, so it is the layer's own contract and no longer a shim.
 
 `composeHost`'s `start()`/`stop()` in `packages/host/src/compose-host.ts` is
 on the same allowlist. Nothing of the product operates it any more — P8-01
@@ -693,7 +699,9 @@ design decision stated as such:
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04 |
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
 | `providerRegistrations` record door over `providersLayer` | P6-09 | P7-01, P7-02 |
-| `GatewayServer`, the promise-and-callback adaptor over `layerGatewayServer` | P6-02 | P6-13 |
+| `ServerBoundTransport#run`, the in-process transports' runs on the host's runtime | P6-13 | P12-09 |
+| `createGatewayService`'s `emit`/`closeAdmissions` on the host's runtime | P6-13 | P12-05 |
+| `gatewayTestHost`/`scopedGatewayService`, the suites' own scoped builds | P6-13 | P12-09 |
 | `shutdownGateway`, the promise door over `shutdownGatewayEffect` | P6-04 | P7-10 |
 | `retryAttachWhileDetached`, the promise door over `retryAttachWhileDetachedEffect` | P6-04 | none yet — no caller can genuinely detach |
 | `runAdapterRead`, every adapter's Promise face over its read effects | P6-11a | P7-05 |

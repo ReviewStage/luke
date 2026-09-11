@@ -12,6 +12,7 @@ import {
   GATEWAY_ERROR,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
+  type GatewayEventKind,
   type GatewayMethodContext,
   type GatewayMethodHandler,
   type GatewayMethodOutcome,
@@ -23,7 +24,12 @@ import {
   NodeRegistry,
   nodeSnapshotToWire,
 } from "@sidecar/gateway";
-import { GatewayServer, type GatewayServerOptions } from "@sidecar/gateway/server";
+import {
+  type GatewayInProcessHost,
+  type GatewayServerLayerOptions,
+  gatewayInProcessHost,
+  gatewayMethodEffects,
+} from "@sidecar/gateway/server";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
 import {
   type ChildRunRecord,
@@ -39,7 +45,14 @@ import {
   conversationEntryToWire,
   maximumAskLength,
 } from "@sidecar/session";
-import { isRecord, isWireNumber, isWireString, type WireRecord } from "@sidecar/wire";
+import {
+  isRecord,
+  isWireNumber,
+  isWireString,
+  type WireRecord,
+  type WireValue,
+} from "@sidecar/wire";
+import { Effect, Runtime, type Scope } from "effect";
 import type { SettableConfigurationPatch } from "./brain/wiring.js";
 import type { ConversationOperations } from "./conversation-operations.js";
 
@@ -94,25 +107,24 @@ export interface GatewayServiceDependencies {
 }
 
 export interface GatewayService {
-  readonly server: GatewayServer;
+  /** The in-process host every transport in this process is bound to: the protocol's door, the log, and the admissions door. */
+  readonly gateway: GatewayInProcessHost;
   /**
    * What its own server was built over, so a transport that composes a server
    * of its own — the socket binding, which provides the `Protocol` a server is
    * built on rather than attaching to one already built — answers the same
    * methods over the same readers.
-   *
-   * @deprecated A strangler shim beside `GatewayServer`'s: P7-02 composed the
-   * host as a `Layer` and left both standing. `packages/gateway`'s
-   * `ServerBoundTransport` (`transport.ts`) and `TextLoopbackTransport`
-   * (`testing.ts`) still construct over `GatewayServer` directly — moving
-   * their callers onto the layers changed the request's own microtask timing
-   * enough to break their reconnection-race tests (the reason P6-04 left them
-   * standing, and P8-04 confirmed the desktop's own `InProcessTransport`
-   * construction in `apps/desktop/src/main/services/operator-client.ts` goes
-   * through the same `transport.ts` rather than converting it) — so both
-   * fields go together once P6-13 hands every transport the layers directly.
    */
-  readonly serverOptions: GatewayServerOptions;
+  readonly layerOptions: GatewayServerLayerOptions;
+  /**
+   * Closes the door to new work: every mutating method but the shutdown
+   * itself answers shutting-down from here on, while reads, hellos, and
+   * reconnections still answer, so a client can see the host leaving rather
+   * than lose it. Nothing under way is touched; that is the coordinator's.
+   */
+  readonly closeAdmissions: () => void;
+  /** Appends one event to the log, for a host concern with no narrower report of its own below. */
+  readonly emit: (kind: GatewayEventKind, payload: WireValue) => void;
   readonly nodes: NodeRegistry;
   /** The brain's whole list of records, as the followers report it, for every client to hear. */
   runsReported: (snapshots: readonly BrainRequestSnapshot[]) => void;
@@ -281,7 +293,15 @@ function submissionResultToWire(result: BrainSubmissionResult): WireRecord {
     : { outcome: result.outcome, reason: result.reason };
 }
 
-export function createGatewayService(dependencies: GatewayServiceDependencies): GatewayService {
+/**
+ * The host's side of the Gateway, composed in the caller's own `Scope`: the
+ * method table this service answers, and the in-process host the server's
+ * layers were built into, which every transport in this process is bound to
+ * and whose event log each change below becomes a numbered event in.
+ */
+export function createGatewayService(
+  dependencies: GatewayServiceDependencies,
+): Effect.Effect<GatewayService, never, Scope.Scope> {
   const { brain, conversations } = dependencies;
   const nodes = dependencies.nodes ?? new NodeRegistry();
   const askWaitMs = dependencies.askWaitMs ?? BRAIN_DEFAULTS.ASK_WAIT_MS;
@@ -428,8 +448,8 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
     }),
   };
 
-  const serverOptions: GatewayServerOptions = {
-    methods,
+  const layerOptions: GatewayServerLayerOptions = {
+    methods: gatewayMethodEffects(methods),
     configurationRevision: () => brain.configuration().revision,
     sessionRevision: (key) =>
       isIdentifier(key) ? brain.generationId(toSessionKey(key)) : undefined,
@@ -437,47 +457,68 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
     now: dependencies.now,
     createEventId: dependencies.createId,
   };
-  const server = new GatewayServer(serverOptions);
 
-  nodes.onChange((list) => {
-    server.emit(GATEWAY_EVENT.NODE_CHANGED, { nodes: list.map(nodeSnapshotToWire) });
+  return Effect.map(gatewayInProcessHost(layerOptions), (gateway) => {
+    /**
+     * The log's own append, run where the composers still ask for it: every
+     * change below is reported to this service synchronously, from a
+     * callback rather than from an effect, and an in-process transport
+     * delivers what it appended on the same tick.
+     *
+     * @deprecated A strangler shim on the ADR's allowlist, deleted by
+     * P12-05 with the `Composer` promise face: a composer that is an effect
+     * appends to the log itself.
+     */
+    const emit = (
+      kind: GatewayEventKind,
+      payload: WireValue,
+      identity?: { sessionKey?: string; runId?: string },
+    ): void => {
+      Runtime.runSync(gateway.runtime)(gateway.log.emit(kind, payload, identity));
+    };
+
+    nodes.onChange((list) => {
+      emit(GATEWAY_EVENT.NODE_CHANGED, { nodes: list.map(nodeSnapshotToWire) });
+    });
+
+    return {
+      gateway,
+      layerOptions,
+      emit,
+      closeAdmissions: () => Runtime.runSync(gateway.runtime)(gateway.admissions.close),
+      nodes,
+      runsReported: (snapshots) => {
+        emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: snapshots.map(brainRequestRecordToWire) });
+      },
+      conversationChanged: (sessionKey, entries, reporter) => {
+        emit(
+          GATEWAY_EVENT.CONVERSATION_CHANGED,
+          {
+            sessionKey,
+            entries: entries.map(conversationEntryToWire),
+            cleared: entries.length === 0,
+            ...(reporter !== undefined ? { reporter } : undefined),
+          },
+          { sessionKey },
+        );
+      },
+      directoryChanged: () => {
+        emit(GATEWAY_EVENT.DIRECTORY_CHANGED, {
+          entries: conversations.directory().map(conversationRecordToWire),
+        });
+      },
+      observationChanged: () => {
+        emit(GATEWAY_EVENT.OBSERVATION_CHANGED, {
+          sessions: dependencies.observedSessionCount(),
+        });
+      },
+      configurationChanged: () => {
+        emit(GATEWAY_EVENT.CONFIGURATION_CHANGED, configurationToWire(brain.configuration()));
+      },
+      childChanged: (childId) => {
+        const record = brain.children.child(childId);
+        emit(GATEWAY_EVENT.CHILD_CHANGED, record ? childRecordToWire(record) : { childId });
+      },
+    };
   });
-
-  return {
-    server,
-    serverOptions,
-    nodes,
-    runsReported: (snapshots) => {
-      server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: snapshots.map(brainRequestRecordToWire) });
-    },
-    conversationChanged: (sessionKey, entries, reporter) => {
-      server.emit(
-        GATEWAY_EVENT.CONVERSATION_CHANGED,
-        {
-          sessionKey,
-          entries: entries.map(conversationEntryToWire),
-          cleared: entries.length === 0,
-          ...(reporter !== undefined ? { reporter } : undefined),
-        },
-        { sessionKey },
-      );
-    },
-    directoryChanged: () => {
-      server.emit(GATEWAY_EVENT.DIRECTORY_CHANGED, {
-        entries: conversations.directory().map(conversationRecordToWire),
-      });
-    },
-    observationChanged: () => {
-      server.emit(GATEWAY_EVENT.OBSERVATION_CHANGED, {
-        sessions: dependencies.observedSessionCount(),
-      });
-    },
-    configurationChanged: () => {
-      server.emit(GATEWAY_EVENT.CONFIGURATION_CHANGED, configurationToWire(brain.configuration()));
-    },
-    childChanged: (childId) => {
-      const record = brain.children.child(childId);
-      server.emit(GATEWAY_EVENT.CHILD_CHANGED, record ? childRecordToWire(record) : { childId });
-    },
-  };
 }

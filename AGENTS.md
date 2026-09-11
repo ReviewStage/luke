@@ -427,8 +427,8 @@ Canonical commands:
   carries the Rpc model's messages as the recorded envelopes), because it
   reaches `@effect/rpc`, and so does the host's server
   (`@sidecar/gateway/server`), an `RpcServer` over that group. The host side
-  (`layerGatewayServer`, which `@sidecar/host`'s `GatewayService` still holds
-  through the `GatewayServer` adaptor) owns the idempotency ledger as a
+  (`layerGatewayServer`, which `@sidecar/host`'s `GatewayService` builds into
+  the assembly's own scope) owns the idempotency ledger as a
   middleware (every mutating method carries an idempotency key; the same key
   finds the first answer, a retry still deciding joins that decision, the
   same key with other parameters is a conflict, never a second effect), the

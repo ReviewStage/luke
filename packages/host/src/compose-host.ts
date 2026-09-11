@@ -7,7 +7,7 @@ import {
   type GatewayShutdownSteps,
   gatewayOk,
 } from "@sidecar/gateway";
-import type { GatewayServer } from "@sidecar/gateway/server";
+import type { GatewayInProcessHost } from "@sidecar/gateway/server";
 import { HostedChangesClient, HostedConversationClient } from "@sidecar/hosted";
 import { PROACTIVE_SPEECH_KIND } from "@sidecar/live";
 import { ObservationSupervisor } from "@sidecar/runtime";
@@ -63,8 +63,8 @@ import { createGatewayService } from "./service.js";
 const HOST_CLOSE_WAIT_MS = 5_000;
 
 export interface Host {
-  /** The one boundary a client reaches this host through. */
-  readonly server: GatewayServer;
+  /** The one boundary a client reaches this host through: the in-process host every transport here is bound to. */
+  readonly gateway: GatewayInProcessHost;
   /** Opens the store, seeds the workspace, starts maintenance, scheduling, hooks, and observation. */
   start: () => Promise<void>;
   /**
@@ -116,13 +116,15 @@ export const HOST_START_ORDER: readonly HostConcern[] = [
  * Every concern constructed, linked, and merged, with nothing yet begun: the
  * composers in the launch's order, the arming that follows the last of them,
  * and the drain. A method two concerns claim fails this build, so which
- * concern answers a method is checked before anything starts.
+ * concern answers a method is checked before anything starts. The Gateway's
+ * own layers are built in this layer's scope, so the server's fiber stands
+ * for exactly as long as the assembly does.
  */
 export const hostAssemblyLayer: Layer.Layer<
   HostAssemblyTag,
   DuplicateGatewayMethod,
   HostKernelTag | HostService | HostSeamsObject | RunMode | Reporter | Environment
-> = Layer.effect(
+> = Layer.scoped(
   HostAssemblyTag,
   Effect.gen(function* () {
     const kernel = yield* HostKernelTag;
@@ -301,7 +303,7 @@ export const hostAssemblyLayer: Layer.Layer<
     };
 
     const methods = yield* mergedMethods(Object.values(concerns));
-    const service = createGatewayService({
+    const service = yield* createGatewayService({
       brain: {
         current: (sessionKey) => brain.wiring.current(sessionKey),
         agentForRun: (runId) => brain.wiring.agentForRun(runId),
@@ -335,7 +337,7 @@ export const hostAssemblyLayer: Layer.Layer<
      */
     const drainSteps: GatewayShutdownSteps = shutdownStepsFlushingEvents(
       {
-        closeAdmissions: () => service.server.closeAdmissions(),
+        closeAdmissions: () => service.closeAdmissions(),
         cancelActive: async () => {
           supervisor.setEnabled(false);
           const cancelled: string[] = [];
@@ -391,7 +393,7 @@ export const hostAssemblyLayer: Layer.Layer<
     const shutdownSteps = shutdownStepsClosingLiveSession(drainSteps, () => live.service.stop());
 
     const assembly: HostAssembly = {
-      server: service.server,
+      gateway: service.gateway,
       startOrder: HOST_START_ORDER.map((name) => concerns[name]),
       arm: async () => {
         if (account.signedIn()) void settings.reconcileAccountPreferences();
@@ -503,7 +505,7 @@ export function composeHost(options: HostSeams): Host {
 
   let stopping: Promise<void> | undefined;
   return {
-    server: assembly.server,
+    gateway: assembly.gateway,
     start: async () => {
       const fiber = runtime.runFork(Layer.buildWithScope(hostStandingLayer, standing));
       standup = fiber;

@@ -118,7 +118,7 @@ export function composeDesktop(
       const native = createNativeNode({ config, state });
       const operator = createOperatorClient({
         config,
-        server: host.server,
+        gateway: host.gateway,
         node: native.capabilities,
         state,
       });

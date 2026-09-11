@@ -55,7 +55,15 @@ The host is one `Layer` (`hostLayer`, behind `@sidecar/host/effect`) over the
 kernel: `hostAssemblyLayer` constructs, links, and merges, holding no state of
 a concern's own and beginning nothing, and `hostStandingLayer` over it starts
 every concern in the launch's order (`HOST_START_ORDER`), arms the loops after
-the last of them, and registers the drain last of all. Each concern is a
+the last of them, and registers the drain last of all. The Gateway's own
+layers are built in the assembly's scope: `createGatewayService` is an
+`Effect` that folds the merged methods into `layerGatewayInProcess`'s options
+and answers the `GatewayInProcessHost` every transport in this process is
+bound to, so the server's fiber stands exactly as long as the assembly does
+and nothing composes a runtime of its own behind it. What the composers still
+hold is a synchronous `emit` over that host's event log, run on the assembly's
+own runtime, because a change is reported to the service from a callback
+rather than from an effect. Each concern is a
 composer — settings, account, devices,
 conversation, issues, observation, calendars, brain, live — that owns its own mutable
 state, its own timers, and the Gateway methods of its domain, and answers

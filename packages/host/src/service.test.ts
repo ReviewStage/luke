@@ -18,7 +18,7 @@ import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
 import type { ConversationOperations } from "./conversation-operations.js";
 import { HOST_NATIVE_NODE_ID } from "./node-capabilities.js";
 import { createGatewayOperator } from "./operator.js";
-import { createGatewayService } from "./service.js";
+import { scopedGatewayService } from "./testing/gateway-service.js";
 
 const NOW = 1_800_000_000_000;
 
@@ -55,7 +55,7 @@ function record(overrides: RecordOverrides = {}): BrainRequestRecord {
  * sets, submissions counted and answered with fresh runs, and a generation
  * the test can replace as a credential change would.
  */
-function fixture(transportKind: "in-process" | "loopback" = "in-process") {
+async function fixture(transportKind: "in-process" | "loopback" = "in-process") {
   let ids = 0;
   let runs = 0;
   const records = new Map<string, BrainRequestRecord>();
@@ -90,7 +90,7 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
     markAskRecorded: async () => true,
   } as unknown as BrainAgent;
   let brainStands = true;
-  const service = createGatewayService({
+  const { service } = await scopedGatewayService({
     brain: {
       current: () => (brainStands ? agent : undefined),
       agentForRun: (runId) => (brainStands && records.has(runId) ? agent : undefined),
@@ -120,13 +120,13 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
   const identity = { clientId: "operator", role: GATEWAY_CLIENT_ROLE.OPERATOR };
   const transport =
     transportKind === "in-process"
-      ? new InProcessTransport(service.server, identity)
-      : new TextLoopbackTransport(service.server, identity);
+      ? new InProcessTransport(service.gateway, identity)
+      : new TextLoopbackTransport(service.gateway, identity);
   const operator = createGatewayOperator({
     client: new GatewayClient({ transport, createId: () => `request-${++ids}` }),
   });
   const events: { kind: string; payload: WireValue }[] = [];
-  service.server.subscribe((event) => events.push({ kind: event.kind, payload: event.payload }));
+  service.gateway.log.listen((event) => events.push({ kind: event.kind, payload: event.payload }));
   return {
     service,
     operator,
@@ -146,7 +146,7 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
 
 for (const kind of ["in-process", "loopback"] as const) {
   test(`[${kind}] a duplicate submission finds the one run`, async () => {
-    const f = fixture(kind);
+    const f = await fixture(kind);
     const submission = {
       submissionId: "sub-1",
       question: "what needs me?",
@@ -163,13 +163,13 @@ for (const kind of ["in-process", "loopback"] as const) {
   });
 
   test(`[${kind}] the Clear crosses the boundary as Delete conversation on main and answers whether it landed`, async () => {
-    const f = fixture(kind);
+    const f = await fixture(kind);
     assert.equal(await f.operator.deleteConversation(MAIN_SESSION_KEY), true);
     assert.deepEqual(f.deleted, [MAIN_SESSION_KEY]);
   });
 
   test(`[${kind}] the run list and conversation changes reach the client as numbered events it can reconcile against`, async () => {
-    const f = fixture(kind);
+    const f = await fixture(kind);
     const runs: number[] = [];
     f.operator.onRunsChanged((list) => runs.push(list.length));
     const changes: string[] = [];
@@ -196,7 +196,7 @@ for (const kind of ["in-process", "loopback"] as const) {
   });
 
   test(`[${kind}] a node the host needs that is not connected answers unavailable through the protocol`, async () => {
-    const f = fixture(kind);
+    const f = await fixture(kind);
     const missing = await f.operator.client.call(GATEWAY_METHOD.NODE_INVOKE, {
       capability: "os.openExternal",
       params: { url: "https://example.test" },

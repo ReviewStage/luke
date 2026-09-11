@@ -12,7 +12,6 @@ import {
   NODE_CAPABILITY_STATUS,
   shutdownGateway,
 } from "@sidecar/gateway";
-import { gatewayMethodEffects } from "@sidecar/gateway/server";
 import {
   bearerAuthentication,
   connectWebSocketGateway,
@@ -61,62 +60,64 @@ function record(overrides: Partial<BrainRequestRecord> = {}): BrainRequestRecord
  * persist leaves the persisted record running, which is what a launch finds.
  */
 function fakeHost(options: { persistCancellations?: boolean } = {}) {
-  let ids = 0;
-  let runs = 0;
-  const live = new Map<string, BrainRequestRecord>();
-  const persisted = new Map<string, BrainRequestRecord>();
-  const lines: ConversationEntry[] = [];
-  // SAFETY: the service reads only these members off an agent; the fixture stands in for the rest.
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- A fake agent is stood up whole for the host under test.
-  const agent = {
-    submitAsk: async (submission: BrainSubmission) => {
-      const runId = `run-${++runs}`;
-      const held = record({
-        runId,
-        submissionId: submission.submissionId,
-        question: submission.question,
-      });
-      live.set(runId, held);
-      persisted.set(runId, held);
-      return { outcome: "accepted", runId, acceptedAt: NOW };
-    },
-    request: (runId: string) => live.get(runId),
-    waitAsk: async (runId: string) => live.get(runId),
-    cancelAsk: async (runId: string) => {
-      const held = live.get(runId);
-      if (!held) return undefined;
-      const cancelled = { ...held, status: BRAIN_REQUEST_STATUS.CANCELLED, settledAt: NOW + 1 };
-      live.set(runId, cancelled);
-      if (options.persistCancellations !== false) persisted.set(runId, cancelled);
-      return cancelled;
-    },
-    markAskRecorded: async () => true,
-  } as unknown as BrainAgent;
-  const service = createGatewayService({
-    brain: {
-      current: () => agent,
-      agentForRun: (runId) => (live.has(runId) ? agent : undefined),
-      allRequests: () => [...live.values()],
-      generationId: () => "gen-1",
-      // SAFETY: no test here reaches a child; the fixture stands in for the service.
-      children: {} as ChildRunService,
-      // SAFETY: only the revision is read; the fixture stands in for the snapshot.
-      configuration: () => ({ revision: 1 }) as unknown as ResolvedConfiguration,
-      updateConfiguration: () => [],
-    },
-    // SAFETY: the tests reach Conversation and the deletion alone; the fixture stands in for the rest.
-    conversations: {
-      deleteConversation: async () => CONVERSATION_DELETE_OUTCOME.COMPLETE,
-      holds: () => true,
-      lines: () => lines,
-      directory: () => [],
-    } as unknown as ConversationOperations,
-    memory: { status: () => ({}) },
-    observedSessionCount: () => 0,
-    now: () => NOW,
-    createId: () => `id-${++ids}`,
+  return Effect.gen(function* () {
+    let ids = 0;
+    let runs = 0;
+    const live = new Map<string, BrainRequestRecord>();
+    const persisted = new Map<string, BrainRequestRecord>();
+    const lines: ConversationEntry[] = [];
+    // SAFETY: the service reads only these members off an agent; the fixture stands in for the rest.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- A fake agent is stood up whole for the host under test.
+    const agent = {
+      submitAsk: async (submission: BrainSubmission) => {
+        const runId = `run-${++runs}`;
+        const held = record({
+          runId,
+          submissionId: submission.submissionId,
+          question: submission.question,
+        });
+        live.set(runId, held);
+        persisted.set(runId, held);
+        return { outcome: "accepted", runId, acceptedAt: NOW };
+      },
+      request: (runId: string) => live.get(runId),
+      waitAsk: async (runId: string) => live.get(runId),
+      cancelAsk: async (runId: string) => {
+        const held = live.get(runId);
+        if (!held) return undefined;
+        const cancelled = { ...held, status: BRAIN_REQUEST_STATUS.CANCELLED, settledAt: NOW + 1 };
+        live.set(runId, cancelled);
+        if (options.persistCancellations !== false) persisted.set(runId, cancelled);
+        return cancelled;
+      },
+      markAskRecorded: async () => true,
+    } as unknown as BrainAgent;
+    const service = yield* createGatewayService({
+      brain: {
+        current: () => agent,
+        agentForRun: (runId) => (live.has(runId) ? agent : undefined),
+        allRequests: () => [...live.values()],
+        generationId: () => "gen-1",
+        // SAFETY: no test here reaches a child; the fixture stands in for the service.
+        children: {} as ChildRunService,
+        // SAFETY: only the revision is read; the fixture stands in for the snapshot.
+        configuration: () => ({ revision: 1 }) as unknown as ResolvedConfiguration,
+        updateConfiguration: () => [],
+      },
+      // SAFETY: the tests reach Conversation and the deletion alone; the fixture stands in for the rest.
+      conversations: {
+        deleteConversation: async () => CONVERSATION_DELETE_OUTCOME.COMPLETE,
+        holds: () => true,
+        lines: () => lines,
+        directory: () => [],
+      } as unknown as ConversationOperations,
+      memory: { status: () => ({}) },
+      observedSessionCount: () => 0,
+      now: () => NOW,
+      createId: () => `id-${++ids}`,
+    });
+    return { service, live, persisted, lines, agent };
   });
-  return { service, live, persisted, lines, agent };
 }
 
 /** One host's own methods on a real socket, bound for as long as the test's scope stands. */
@@ -134,13 +135,12 @@ interface Listening {
  * holds.
  */
 const listen = (
-  service: ReturnType<typeof fakeHost>["service"],
+  service: Effect.Effect.Success<ReturnType<typeof fakeHost>>["service"],
 ): Effect.Effect<Listening, never, Scope.Scope> =>
   Effect.gen(function* () {
     const context = yield* Layer.build(
       layerGatewaySocket({
-        ...service.serverOptions,
-        methods: gatewayMethodEffects(service.serverOptions.methods),
+        ...service.layerOptions,
         authenticate: bearerAuthentication(TOKEN),
       }),
     ).pipe(Effect.orDie);
@@ -177,7 +177,7 @@ it.live(
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const f = fakeHost();
+        const f = yield* fakeHost();
         const { port } = yield* listen(f.service);
         yield* Effect.promise(async () => {
           const first = await client(port, "desktop-1");
@@ -216,7 +216,7 @@ it.live(
 it.live("while no client stands, a native capability the host needs answers unavailable", () =>
   Effect.scoped(
     Effect.gen(function* () {
-      const f = fakeHost();
+      const f = yield* fakeHost();
       const { port } = yield* listen(f.service);
       yield* Effect.promise(async () => {
         const desktop = await client(port, "desktop");
@@ -255,7 +255,7 @@ it.live(
       (persistCancellations: boolean) =>
         Effect.scoped(
           Effect.gen(function* () {
-            const f = fakeHost({ persistCancellations });
+            const f = yield* fakeHost({ persistCancellations });
             const { port, closeAdmissions } = yield* listen(f.service);
             yield* Effect.promise(async () => {
               const desktop = await client(port, "desktop");

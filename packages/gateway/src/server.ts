@@ -21,11 +21,11 @@ import {
   HashMap,
   Layer,
   Mailbox,
-  ManagedRuntime,
   MutableRef,
   Option,
   PubSub,
   Ref,
+  type Runtime,
   type Scope,
   Stream,
 } from "effect";
@@ -43,21 +43,16 @@ import {
   GATEWAY_PROTOCOL_VERSION,
   GATEWAY_RECONNECT_KIND,
   type GatewayClientIdentity,
-  type GatewayClientRole,
   type GatewayEvent,
   type GatewayEventKind,
   type GatewayMethod,
   type GatewayReconnectAnswer,
   type GatewayRefusal,
   GatewayRefusalSchema,
-  type GatewayRequest,
-  type GatewayResponse,
   type GatewayRevision,
   gatewayEventToWire,
   gatewayRefusal,
   gatewayRefusalFromError,
-  gatewayRequestToWire,
-  gatewayResponseFromWire,
   gatewayResponseToWire,
   gatewayVersionRefusal,
   IdempotencyConflictRefusal,
@@ -72,9 +67,9 @@ import {
 } from "./protocol.js";
 import {
   GatewayRpcs,
+  gatewayEnvelopeSerialization,
   gatewayHeaderFields,
   gatewayRpcMutates,
-  layerGatewayEnvelopeSerialization,
   readRpcRequestMessage,
 } from "./rpc.js";
 import type { GatewayHostConnection } from "./transport.js";
@@ -170,6 +165,9 @@ export interface GatewayEventLogOptions {
   replayWindow?: number;
 }
 
+/** What an in-process transport hands each event to, on the tick the host emitted it. */
+export type GatewayEventListener = (event: GatewayEvent) => void;
+
 /**
  * The event log: a ring of the newest events, bounded to the replay window,
  * and the stream every transport delivers from. The sequence is the newest
@@ -197,6 +195,13 @@ export class GatewayEventLog extends Context.Tag("@sidecar/gateway/GatewayEventL
     /** The events from the moment of subscribing on, so a transport that subscribes before it reads misses none. */
     readonly events: Effect.Effect<Stream.Stream<GatewayEvent>, never, Scope.Scope>;
     readonly revision: () => GatewayRevision;
+    /**
+     * Hands every event from here on to this listener on the tick it is
+     * emitted, beside the stream: an in-process transport delivers to a
+     * client's own callback in the turn the host emitted, which a stream
+     * read by a fiber of its own could not.
+     */
+    readonly listen: (listener: GatewayEventListener) => () => void;
   }
 >() {}
 
@@ -215,6 +220,7 @@ function makeGatewayEventLog(
     const ring = yield* Ref.make(Chunk.empty<GatewayEvent>());
     const stamp = MutableRef.make(0);
     const bus = yield* PubSub.unbounded<GatewayEvent>();
+    const listeners = new Set<GatewayEventListener>();
     return GatewayEventLog.of({
       emit: (kind, payload, identity = {}) =>
         Effect.gen(function* () {
@@ -234,6 +240,7 @@ function makeGatewayEventLog(
           });
           MutableRef.update(stamp, (held) => Math.max(held, event.sequence));
           yield* PubSub.publish(bus, event);
+          for (const listener of [...listeners]) listener(event);
           return event;
         }),
       replayFrom: (lastSequence) =>
@@ -263,6 +270,12 @@ function makeGatewayEventLog(
         configuration: options.configurationRevision(),
         sequence: MutableRef.get(stamp),
       }),
+      listen: (listener) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
     });
   });
 }
@@ -844,155 +857,61 @@ export const layerGatewayInProcessProtocol: Layer.Layer<
   ),
 );
 
-export interface GatewayServerOptions extends GatewayEventLogOptions {
-  methods: GatewayMethodTable;
-  sessionRevision: (sessionKey: string) => string | undefined;
-  authorize?: (client: GatewayClientIdentity, method: GatewayMethod) => boolean;
-  idempotencyCapacity?: number;
+/**
+ * The whole host end in one process: the event log, the admissions door, and
+ * the client registry the transports and the server share, the serialization
+ * that stamps an answer with the log's own revision, and
+ * `layerGatewayServer` over the in-process `Protocol`, so the server that
+ * answers a transport in this process is the same server, with the same
+ * middleware, that answers a socket. It is module-private because what a
+ * process holds of it is the four services below, read out of one build.
+ */
+function layerGatewayInProcess(
+  options: GatewayServerLayerOptions,
+): Layer.Layer<GatewayInProcessProtocol | GatewayEventLog | GatewayAdmissions | GatewayClients> {
+  const serialization = Layer.effect(
+    RpcSerialization.RpcSerialization,
+    Effect.map(GatewayEventLog, (log) => gatewayEnvelopeSerialization({ revision: log.revision })),
+  );
+  return layerGatewayServer(options).pipe(
+    Layer.provideMerge(layerGatewayInProcessProtocol),
+    Layer.provide(serialization),
+    Layer.provideMerge(
+      Layer.mergeAll(layerGatewayEventLog(options), layerGatewayAdmissions, layerGatewayClients),
+    ),
+  );
 }
 
-export type GatewayEventListener = (event: GatewayEvent) => void;
+/**
+ * What an in-process transport is bound to. The server is its layers, so
+ * there is no object of it to hold: a transport holds the door its client
+ * enters through, the log it delivers events from, the admissions door the
+ * quit closes, and the runtime those layers were built on, and runs each
+ * effect there itself, because what it answers its own client with is a
+ * promise and a callback.
+ */
+export interface GatewayInProcessHost {
+  readonly protocol: GatewayInProcessProtocol["Type"];
+  readonly log: GatewayEventLog["Type"];
+  readonly admissions: GatewayAdmissions["Type"];
+  readonly runtime: Runtime.Runtime<never>;
+}
 
 /**
- * The server behind the promise-and-callback face `@sidecar/host`'s
- * `GatewayService` and the in-process transports still hold. It composes the
- * layers above into a runtime of its own and runs them there: a request is a
- * promise over the in-process protocol, and an emit, a subscription, a
- * reconnect, and the revision are synchronous, as the host's callbacks and
- * the transports' listeners still are. The event log, the admissions door,
- * and the client registry are made ahead of the runtime for that reason, and
- * an event reaches this class's own listeners on the same tick it is
- * emitted, beside the stream the log publishes.
- *
- * @deprecated A strangler shim over `layerGatewayServer`: P7-01 hands the
- * host the layers and the services as `Context` tags, and P7-02 composes
- * the host as a `Layer`, at which point this class and its runtime go.
+ * The in-process host built in the caller's own `Scope`, on the runtime the
+ * caller runs this effect on: closing that scope is what lets the server's
+ * fiber and everything under it go.
  */
-export class GatewayServer {
-  readonly #log: GatewayEventLog["Type"];
-  readonly #admissions: GatewayAdmissions["Type"];
-  readonly #runtime: ManagedRuntime.ManagedRuntime<
-    RpcServer.Protocol | GatewayInProcessProtocol,
-    never
-  >;
-  readonly #listeners = new Set<GatewayEventListener>();
-  readonly #byConnection = new Map<string, Promise<GatewayInProcessConnection>>();
-  readonly #byIdentity = new Map<
-    GatewayClientRole,
-    Map<string, Promise<GatewayInProcessConnection>>
-  >();
-
-  constructor(options: GatewayServerOptions) {
-    const [log, admissions, clients] = Effect.runSync(
-      Effect.all([makeGatewayEventLog(options), makeGatewayAdmissions, makeGatewayClients]),
-    );
-    this.#log = log;
-    this.#admissions = admissions;
-    this.#runtime = ManagedRuntime.make(
-      layerGatewayServer({ ...options, methods: gatewayMethodEffects(options.methods) }).pipe(
-        Layer.provideMerge(layerGatewayInProcessProtocol),
-        Layer.provide(layerGatewayEnvelopeSerialization({ revision: log.revision })),
-        Layer.provide(Layer.succeed(GatewayEventLog, log)),
-        Layer.provide(Layer.succeed(GatewayAdmissions, admissions)),
-        Layer.provide(Layer.succeed(GatewayClients, clients)),
-      ),
-    );
-  }
-
-  sequence(): number {
-    return this.#log.revision().sequence;
-  }
-
-  /**
-   * Closes the door to new work: every mutating method but the shutdown
-   * itself answers shutting-down from here on, while reads, hellos, and
-   * reconnections still answer, so a client can see the host leaving rather
-   * than lose it. Nothing under way is touched; that is the coordinator's.
-   */
-  closeAdmissions(): void {
-    Effect.runSync(this.#admissions.close);
-  }
-
-  revision(): GatewayRevision {
-    return this.#log.revision();
-  }
-
-  async handle(
-    request: GatewayRequest,
-    client: GatewayClientIdentity,
-    connection?: GatewayHostConnection,
-  ): Promise<GatewayResponse> {
-    const door = await this.#door(client, connection);
-    const frame = await this.#runtime.runPromise(
-      door.carry(JSON.stringify(gatewayRequestToWire(request))),
-    );
-    return (
-      gatewayResponseFromWire(valueFromJsonText(frame)) ??
-      gatewayRefusal(
-        request.id,
-        GATEWAY_ERROR.INTERNAL,
-        "the answer did not survive the wire",
-        this.revision(),
-      )
-    );
-  }
-
-  /** Appends one event to the log and hands it to every listener, numbered as the next in sequence. */
-  emit(
-    kind: GatewayEventKind,
-    payload: WireValue,
-    identity: { sessionKey?: string; runId?: string } = {},
-  ): GatewayEvent {
-    const event = Effect.runSync(this.#log.emit(kind, payload, identity));
-    for (const listener of [...this.#listeners]) listener(event);
-    return event;
-  }
-
-  subscribe(listener: GatewayEventListener): () => void {
-    this.#listeners.add(listener);
-    return () => {
-      this.#listeners.delete(listener);
+export function gatewayInProcessHost(
+  options: GatewayServerLayerOptions,
+): Effect.Effect<GatewayInProcessHost, never, Scope.Scope> {
+  return Effect.gen(function* () {
+    const context = yield* Layer.build(layerGatewayInProcess(options));
+    return {
+      protocol: Context.get(context, GatewayInProcessProtocol),
+      log: Context.get(context, GatewayEventLog),
+      admissions: Context.get(context, GatewayAdmissions),
+      runtime: yield* Effect.runtime<never>(),
     };
-  }
-
-  reconnect(lastSequence: number): GatewayReconnectAnswer {
-    return Effect.runSync(this.#log.replayFrom(lastSequence));
-  }
-
-  /** Lets the runtime and the server fiber go; nothing answers after this. */
-  dispose(): Promise<void> {
-    return this.#runtime.dispose();
-  }
-
-  /** One in-process connection per host connection, or per identity when the transport named none, admitted once. */
-  #door(
-    client: GatewayClientIdentity,
-    connection: GatewayHostConnection | undefined,
-  ): Promise<GatewayInProcessConnection> {
-    const connect = () =>
-      this.#runtime.runPromise(
-        Effect.flatMap(GatewayInProcessProtocol, (protocol) =>
-          protocol.connect({ identity: client, ...(connection ? { connection } : undefined) }),
-        ),
-      );
-    if (connection) {
-      const standing = this.#byConnection.get(connection.connectionId);
-      if (standing) return standing;
-      const admitted = connect();
-      this.#byConnection.set(connection.connectionId, admitted);
-      connection.onClosed(() => {
-        this.#byConnection.delete(connection.connectionId);
-        void admitted.then((door) => this.#runtime.runPromise(door.close));
-      });
-      return admitted;
-    }
-    const byClient =
-      this.#byIdentity.get(client.role) ?? new Map<string, Promise<GatewayInProcessConnection>>();
-    this.#byIdentity.set(client.role, byClient);
-    const standing = byClient.get(client.clientId);
-    if (standing) return standing;
-    const admitted = connect();
-    byClient.set(client.clientId, admitted);
-    return admitted;
-  }
+  });
 }
