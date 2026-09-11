@@ -141,6 +141,42 @@ node --input-type=module -e '
   }
 ' "$SIDECAR_REPO_ROOT"
 
+# The packages below the runtime (live, hosted, voice, devtrace, memory) open
+# `@sidecar/runtime/vocabulary` precisely because it resolves no Node module
+# and no Effect layer that would carry one in. The renderer's own `node:` grep
+# (below) can only see files inside one directory; this walks the door's
+# actual relative-import graph, the way the barrel/vocabulary check above
+# walks its export lists, so a later re-export cannot quietly reintroduce
+# `@effect/platform-node` a few files deep.
+node --input-type=module -e '
+  import { readFile } from "node:fs/promises";
+  import path from "node:path";
+  const root = path.join(process.argv[1], "packages/runtime/src");
+  const forbidden = /^(node:|@effect\/(platform-node|sql))/;
+  const seen = new Set();
+  const offenders = [];
+  const walk = async (file) => {
+    if (seen.has(file)) return;
+    seen.add(file);
+    const text = await readFile(file, "utf8");
+    for (const match of text.matchAll(/from\s+"([^"]+)"/g)) {
+      const specifier = match[1];
+      if (forbidden.test(specifier)) {
+        offenders.push(`${path.relative(root, file)}: ${specifier}`);
+      } else if (specifier.startsWith("./") || specifier.startsWith("../")) {
+        await walk(path.join(path.dirname(file), specifier.replace(/\.js$/, ".ts")));
+      }
+    }
+  };
+  await walk(path.join(root, "vocabulary.ts"));
+  if (offenders.length > 0) {
+    process.stderr.write(
+      `error: @sidecar/runtime/vocabulary resolves a Node-reaching import: ${offenders.join(", ")}\n`,
+    );
+    process.exit(1);
+  }
+' "$SIDECAR_REPO_ROOT"
+
 # A tool module under `packages/brain/src/tools/` reaches the brain only
 # through the context its `execute` is handed: it imports the packages below
 # the brain and its own directory, never the agent, the turn runner, the
