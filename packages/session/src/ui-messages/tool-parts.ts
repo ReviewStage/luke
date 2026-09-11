@@ -1,4 +1,5 @@
 import type { ToolUIPart, UIDataTypes, UIMessagePart, UITools } from "ai";
+import { Schema } from "effect";
 
 /**
  * The tool part of a stored assistant message is the journal: a call is
@@ -18,10 +19,12 @@ export const TOOL_PART_STATE = {
 
 export type ToolPartState = (typeof TOOL_PART_STATE)[keyof typeof TOOL_PART_STATE];
 
-const TOOL_PART_STATE_LIST: readonly string[] = Object.values(TOOL_PART_STATE);
+export const ToolPartStateSchema = Schema.Literal(...Object.values(TOOL_PART_STATE));
+
+const readsToolPartState = Schema.is(ToolPartStateSchema);
 
 export function isToolPartState(value: string): value is ToolPartState {
-  return TOOL_PART_STATE_LIST.includes(value);
+  return readsToolPartState(value);
 }
 
 /** The states a resume has nothing left to do for: the call answered or failed. */

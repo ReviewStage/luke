@@ -6,6 +6,7 @@
  */
 
 import { type ActionResult, text, type UnparsedWireValue } from "@sidecar/wire";
+import { Schema } from "effect";
 
 export const ISSUE_TRACKER_ID = {
   LINEAR: "linear",
@@ -13,10 +14,12 @@ export const ISSUE_TRACKER_ID = {
 
 export type IssueTrackerId = (typeof ISSUE_TRACKER_ID)[keyof typeof ISSUE_TRACKER_ID];
 
-const ISSUE_TRACKER_IDS: ReadonlySet<string> = new Set(Object.values(ISSUE_TRACKER_ID));
+export const IssueTrackerIdSchema = Schema.Literal(...Object.values(ISSUE_TRACKER_ID));
+
+const readsIssueTrackerId = Schema.is(IssueTrackerIdSchema);
 
 export function isIssueTrackerId(value: string): value is IssueTrackerId {
-  return ISSUE_TRACKER_IDS.has(value);
+  return readsIssueTrackerId(value);
 }
 
 export interface IssueTracker {

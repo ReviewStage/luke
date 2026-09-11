@@ -1,4 +1,5 @@
-import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import type { UnparsedWireValue } from "@sidecar/wire";
+import { Schema } from "effect";
 import { SESSION_APPLICATION_ID } from "./session-identity.js";
 
 export const PROVIDER_LOCATION_KIND = {
@@ -22,6 +23,8 @@ export const PROVIDER_ID = {
 } as const;
 
 export type ProviderId = (typeof PROVIDER_ID)[keyof typeof PROVIDER_ID];
+
+export const ProviderIdSchema = Schema.Literal(...Object.values(PROVIDER_ID));
 
 export interface ProviderIdentity {
   readonly id: ProviderId;
@@ -73,13 +76,13 @@ export const CLOUD_AGENT_PROVIDER_ID = {
 export type CloudAgentProviderId =
   (typeof CLOUD_AGENT_PROVIDER_ID)[keyof typeof CLOUD_AGENT_PROVIDER_ID];
 
-const CLOUD_AGENT_PROVIDER_IDS: ReadonlySet<string> = new Set(
-  Object.values(CLOUD_AGENT_PROVIDER_ID),
-);
+export const CloudAgentProviderIdSchema = Schema.Literal(...Object.values(CLOUD_AGENT_PROVIDER_ID));
+
+const readsCloudAgentProviderId = Schema.is(CloudAgentProviderIdSchema);
 
 /** Whether an untrusted value names a provider whose sessions Luke observes in the cloud. */
 export function isCloudAgentProviderId(value: UnparsedWireValue): value is CloudAgentProviderId {
-  return isWireString(value) && CLOUD_AGENT_PROVIDER_IDS.has(value);
+  return readsCloudAgentProviderId(value);
 }
 
 /**
@@ -107,6 +110,11 @@ export type WorkspaceProviderId =
   | typeof SUPERSET_WORKSPACE_PROVIDER_ID
   | typeof CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID;
 
+export const WorkspaceProviderIdSchema = Schema.Union(
+  ProviderIdSchema,
+  Schema.Literal(SUPERSET_WORKSPACE_PROVIDER_ID, CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID),
+);
+
 /**
  * The order any list of providers reads in. It is the registry's own order
  * rather than one derived from live sessions, so a list of agents does not
@@ -133,26 +141,26 @@ export const HOSTED_AGENT_ID = {
 
 export type HostedAgentId = (typeof HOSTED_AGENT_ID)[keyof typeof HOSTED_AGENT_ID];
 
+export const HostedAgentIdSchema = Schema.Literal(...Object.values(HOSTED_AGENT_ID));
+
 /** The registry's own order, for the same reason `PROVIDER_ID_LIST` keeps one. */
 export const HOSTED_AGENT_ID_LIST: readonly HostedAgentId[] = Object.values(HOSTED_AGENT_ID);
 
-const HOSTED_AGENT_IDS: ReadonlySet<string> = new Set(HOSTED_AGENT_ID_LIST);
+const readsHostedAgentId = Schema.is(HostedAgentIdSchema);
 
 /** Whether this build draws the hosted agent an observation names. */
 export function isHostedAgentId(value: string): value is HostedAgentId {
-  return HOSTED_AGENT_IDS.has(value);
+  return readsHostedAgentId(value);
 }
 
-const PROVIDER_IDS: ReadonlySet<string> = new Set(PROVIDER_ID_LIST);
+const readsProviderId = Schema.is(ProviderIdSchema);
 
 export function isProviderId(value: string): value is ProviderId {
-  return PROVIDER_IDS.has(value);
+  return readsProviderId(value);
 }
 
+const readsWorkspaceProviderId = Schema.is(WorkspaceProviderIdSchema);
+
 export function isWorkspaceProviderId(value: string): value is WorkspaceProviderId {
-  return (
-    isProviderId(value) ||
-    value === SUPERSET_WORKSPACE_PROVIDER_ID ||
-    value === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID
-  );
+  return readsWorkspaceProviderId(value);
 }

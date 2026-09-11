@@ -1,3 +1,5 @@
+import { Schema } from "effect";
+
 /**
  * Where a session's work is actually running. It is not the provider: the same
  * provider can hold a session on this machine and one in a datacentre, and only
@@ -32,11 +34,15 @@ export const SESSION_APPLICATION_ID = {
 export type SessionApplicationId =
   (typeof SESSION_APPLICATION_ID)[keyof typeof SESSION_APPLICATION_ID];
 
+export const SessionApplicationIdSchema = Schema.Literal(...Object.values(SESSION_APPLICATION_ID));
+
 export const SESSION_APPLICATION_ID_LIST: readonly SessionApplicationId[] =
   Object.values(SESSION_APPLICATION_ID);
 
+const readsSessionApplicationId = Schema.is(SessionApplicationIdSchema);
+
 export function isSessionApplicationId(value: string): value is SessionApplicationId {
-  return SESSION_APPLICATION_ID_LIST.some((candidate) => candidate === value);
+  return readsSessionApplicationId(value);
 }
 
 /** Where an app association is drawn when several chats share one workspace. */
@@ -85,12 +91,14 @@ export const SESSION_LINK_SCHEME = {
   SUPERSET: "superset:",
 } as const;
 
-const SESSION_LINK_SCHEMES: ReadonlySet<string> = new Set(Object.values(SESSION_LINK_SCHEME));
+export const SessionLinkSchemeSchema = Schema.Literal(...Object.values(SESSION_LINK_SCHEME));
+
+const readsSessionLinkScheme = Schema.is(SessionLinkSchemeSchema);
 
 /** Whether an address is one Luke may ask the system to open. */
 export function isOpenableSessionLink(link: string): boolean {
   try {
-    return SESSION_LINK_SCHEMES.has(new URL(link).protocol);
+    return readsSessionLinkScheme(new URL(link).protocol);
   } catch {
     return false;
   }
