@@ -1118,3 +1118,41 @@ Same reasoning as the a1/a2 split one layer down: **a trust-ordering fix to a li
 reviewed inside eight hundred lines of new web source.** Its body names the motivation honestly —
 benign on the desktop today, wrong the moment the record splits — so a reviewer does not spend the
 review wondering why a no-op changed.
+
+
+## 2026-09-11 — The Security Agent found the `prompts` exposure independently, at HIGH (orchestrator)
+
+Cursor's Security Agent reviewed C4's #1045 and raised, from the code and without reading the
+escalation above: **"hosted sessions persist unsealed workspace/notebook prompt text in a global,
+non-cascading `prompts` table"**, rated **HIGH**. Corroboration of the strongest available kind —
+two independent readings of the same schema reaching the same conclusion.
+
+**This changes the decision's character.** A is no longer "the plan's shape" beside a safer
+alternative; **A is "ship against an open HIGH from the security reviewer."** The thread stays
+unresolved until the decision lands rather than being tidied away.
+
+**The hold is the orchestrator's and stands whatever the shape:** a PR with an unresolved HIGH is
+not enqueued. So the practical position is that **B+ is the only path that lands C4 at all**, and
+Dean's ruling narrows to authorizing the schema change or explicitly accepting the finding. The
+default of silence is stasis, not risk.
+
+### A third option, named because CLAUDE.md already takes it for this content
+
+**C′: store the hash and not the text at all** — `text` dropped in the same migration, `prompts`
+keeping `(user_id, hash)` and `created_at`.
+
+The argument is the repository's own: for the developer's facts, *"the canonical record is the
+notebook … and the runtime store keeps only provenance beside it."* **A hash is provenance; the text
+is a copy.** C′ stores nothing sensitive rather than storing it well.
+
+**Recommendation stays B+**, on a narrow ground: the seal under the user's own ring makes the copy no
+more exposed than its source, `(user_id, hash)` makes deletion reach it, and **C′ loses a capability
+the ticket asked for** — "any turn is replayable" cannot be satisfied from a hash, because the
+workspace rows are not versioned, so the prompt a turn ran under becomes unrecoverable the moment a
+file changes. B+'s only loss is that an operator cannot read it by eye.
+
+C4 keeps B+ prebuilt as one commit (migration `0021`, `tool_sets` untouched and the asymmetry stated
+in the schema comment, cross-account tests flipped to per-user, `prompts.read` proving the sealed row
+re-hashes to the turn's hash). **Under C′ it is the same migration with the column dropped rather
+than sealed** — the switch is cheap either way, and `prompts.read`'s test disappears, which is worth
+noting because it is the test that proves the seal is reversible by the service and by nobody else.
