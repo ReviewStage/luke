@@ -181,6 +181,14 @@ private struct SignedInView: View {
     @State private var store = SessionsStore(
         rosterClient: RosterClient(serviceURL: AccountConstants.serviceURL)
     )
+    /// The Conversation's reading, owned here so it is torn down with the
+    /// signed-in hierarchy: the next account starts with nothing of the last
+    /// one's thread. It polls under the device row the registrar stored, or
+    /// reads the messages alone before a registration lands.
+    @State private var conversation = ConversationStore(
+        client: ConversationReadClient(serviceURL: AccountConstants.serviceURL),
+        deviceId: { DeviceRegistrar.storedDeviceId() }
+    )
 
     private let actionClient = ActionClient(baseURL: AccountConstants.serviceURL)
     private let projectsClient = ProjectsClient(serviceURL: AccountConstants.serviceURL)
@@ -198,6 +206,15 @@ private struct SignedInView: View {
             NavigationStack {
                 VoiceView()
                     .toolbar { profileToolbar }
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            NavigationLink {
+                                ConversationView(conversation: conversation)
+                            } label: {
+                                Label("Conversation", systemImage: "text.bubble")
+                            }
+                        }
+                    }
             }
             .tabItem {
                 Label {

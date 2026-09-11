@@ -12,13 +12,21 @@ extension AccountTokenProviding {
     /// Runs one authorized hosted call with the account's token discipline:
     /// `validAccessToken()` refreshes near-expiry tokens, so an unauthorized
     /// answer means the server rejected the token outright — refresh and
-    /// retry once.
+    /// retry once. The retry is a second request, and the account can change
+    /// between the two: a sign-out and another sign-in while the first
+    /// attempt was out would hand the retry the new account's token, so the
+    /// holder is captured before the first attempt and the retry runs only
+    /// while the same account still holds the session. A holder that moved
+    /// reads as the first account's sign-out, and the call is refused rather
+    /// than carried under an account the caller never decided on.
     public func authorized<T>(_ call: (String) async throws -> T) async throws -> T {
+        guard let holder = accountEmail else { throw AccountSessionError.signedOut }
         let token = try await validAccessToken()
         do {
             return try await call(token)
         } catch let error as HostedUnauthorizedSignaling where error.isUnauthorized {
             let fresh = try await refreshAccessToken()
+            guard accountEmail == holder else { throw AccountSessionError.signedOut }
             return try await call(fresh)
         }
     }

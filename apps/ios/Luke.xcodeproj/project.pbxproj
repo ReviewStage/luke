@@ -42,6 +42,7 @@
 		AABBCC0000000000000000F4 /* MarkdownMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000A3 /* MarkdownMessageView.swift */; };
 		AABBCC0000000000000000F0 /* LukeWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000B3 /* LukeWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AABBCC0000000000000000D4 /* VoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D0 /* VoiceView.swift */; };
+		AABBCC000000000000000121 /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000120 /* ConversationView.swift */; };
 		AABBCC0000000000000000D9 /* VoiceSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D8 /* VoiceSettingsSheet.swift */; };
 		AABBCC0000000000000000F9 /* SessionsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000F8 /* SessionsStore.swift */; };
 		AABBCC0000000000000000E6 /* WatchVoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000E5 /* WatchVoiceView.swift */; };
@@ -119,6 +120,7 @@
 		AABBCC0000000000000000C4 /* PhoneSessionRelay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneSessionRelay.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000C5 /* WatchConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WatchConnectivity.framework; path = System/Library/Frameworks/WatchConnectivity.framework; sourceTree = SDKROOT; };
 		AABBCC0000000000000000D0 /* VoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceView.swift; sourceTree = "<group>"; };
+		AABBCC000000000000000120 /* ConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationView.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000D8 /* VoiceSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSettingsSheet.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000F8 /* SessionsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsStore.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000E5 /* WatchVoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchVoiceView.swift; sourceTree = "<group>"; };
@@ -201,6 +203,7 @@
 				AABBCC0000000000000000A3 /* MarkdownMessageView.swift */,
 				AABBCC0000000000000000C4 /* PhoneSessionRelay.swift */,
 				AABBCC0000000000000000D0 /* VoiceView.swift */,
+				AABBCC000000000000000120 /* ConversationView.swift */,
 				AABBCC0000000000000000D8 /* VoiceSettingsSheet.swift */,
 				AABBCC000000000000000014 /* Assets.xcassets */,
 				AABBCC00000000000000001C /* Info.plist */,
@@ -412,6 +415,7 @@
 				AABBCC0000000000000000A4 /* MarkdownMessageView.swift in Sources */,
 				AABBCC0000000000000000CA /* PhoneSessionRelay.swift in Sources */,
 				AABBCC0000000000000000D4 /* VoiceView.swift in Sources */,
+				AABBCC000000000000000121 /* ConversationView.swift in Sources */,
 				AABBCC0000000000000000D9 /* VoiceSettingsSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
