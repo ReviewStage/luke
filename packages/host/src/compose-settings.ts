@@ -1,10 +1,10 @@
 import {
   PRODUCT_EVENT,
   type ProductEventPropertiesFor,
-  ProductEventSender,
   productEventFromWire,
   type RecordProductEvent,
 } from "@sidecar/analytics";
+import { ProductEventSender } from "@sidecar/analytics/sender";
 import {
   CREDENTIAL_PROVIDER_ID,
   isCredentialProviderId,

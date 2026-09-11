@@ -47,4 +47,3 @@ export {
   productSignInAge,
   type RecordProductEvent,
 } from "./product-events.js";
-export { ProductEventSender } from "./sender.js";

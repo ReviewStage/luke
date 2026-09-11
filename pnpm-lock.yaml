@@ -363,6 +363,9 @@ importers:
 
   packages/analytics:
     dependencies:
+      '@effect/platform':
+        specifier: 'catalog:'
+        version: 0.97.2(effect@3.22.2)
       '@sidecar/credentials':
         specifier: workspace:*
         version: link:../credentials
@@ -372,13 +375,22 @@ importers:
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../hosted
+      '@sidecar/runtime':
+        specifier: workspace:*
+        version: link:../runtime
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.2
     devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 0.30.0(effect@3.22.2)(vitest@3.2.7(@types/debug@4.1.13)(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0))
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0

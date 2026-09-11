@@ -141,7 +141,10 @@ per-resource reads and its rating still read the raw `Response` through
 `send`, because the unreadable-row refusal and the two rating refusals need
 the body under a status `ask` would already have discarded. `createAccountCall`
 itself is deleted with `CloudFetch` in P12-04, at which point `accountCall` is
-what every client in this package already holds.
+what every client in this package already holds. Both are on the barrel,
+because a caller outside this package can hold one too: `@sidecar/analytics`'s
+`ProductEventSender` is the first, its own flush cadence an effect over
+`accountCall` rather than the promise face.
 
 ## The live contract is a socket's opening frames
 
