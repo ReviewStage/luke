@@ -37,6 +37,12 @@
       "rules": {
         "anti-slop/no-chained-type-assertions": "off"
       }
+    },
+    {
+      "files": ["packages/wire/src/effect/**"],
+      "rules": {
+        "anti-slop/no-unknown-parameters": "off"
+      }
     }
   ]
 }
