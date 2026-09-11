@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "vitest";
+import { webFunctions } from "../server/function-layout";
 import {
   apiRewrites,
   rewritesDrifted,
@@ -12,7 +13,6 @@ import {
   VERCEL_CONFIG_FILE,
   vercelConfigSource,
 } from "../server/function-rewrites";
-import { webFunctions } from "../server/function-stubs";
 
 interface Route {
   readonly src: string;
