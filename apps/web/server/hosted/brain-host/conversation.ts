@@ -179,27 +179,6 @@ export function admitConversation(
 }
 
 /** The eve session the conversation's row records it running in; nothing while no session has claimed it. */
-const findStandingSession = SqlSchema.findOne({
-  Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
-  Result: RecordedSessionSchema,
-  execute: (target) =>
-    statement(
-      (sql) => sql`
-        select runtime_session_id
-        from conversations
-        where id = ${target.conversationId} and user_id = ${target.userId} and deleted_at is null
-      `,
-    ),
-});
-
-/** The eve session the account's own standing conversation runs in, where one has been recorded; a cleared or foreign conversation records none. */
-export function recordedRuntimeSession(
-  target: ConversationTarget,
-): Effect.Effect<string | undefined, ConversationFailure, SqlClient.SqlClient> {
-  return Effect.map(findStandingSession(target), (row) =>
-    Option.isSome(row) ? (row.value.runtimeSessionId ?? undefined) : undefined,
-  );
-}
 
 /** The account whose standing conversation recorded this runtime session; nothing while none has. */
 export function runtimeSessionOwner(

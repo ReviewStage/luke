@@ -1,5 +1,5 @@
 import { HOSTED_SERVICE_PATH, VOICE_SERVICE_PATH } from "@sidecar/hosted";
-import { OBSERVATION_TICK, OBSERVATION_TICK_PATH } from "./hosted/observation-tick.js";
+import { OBSERVATION_TICK, OBSERVATION_TICK_PATH } from "./hosted/observation-bounds.js";
 import { TURN_EVENT_STREAM_BOUNDS, TURN_EVENT_STREAM_PATH } from "./hosted/turn-event-stream.js";
 
 /**

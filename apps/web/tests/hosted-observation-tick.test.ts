@@ -6,11 +6,10 @@ import { FUNCTION_MAX_DURATION_SECONDS } from "../server/function-durations";
 import { APNS_REQUEST_TIMEOUT_MS } from "../server/hosted/apns";
 import type { TurnOpeningOutcome } from "../server/hosted/brain-host/opener";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
+import { OBSERVATION_TICK, OBSERVATION_TICK_PATH } from "../server/hosted/observation-bounds";
 import {
   type AccountPassOutcome,
   handleObservationTick,
-  OBSERVATION_TICK,
-  OBSERVATION_TICK_PATH,
   type ObservationTickOptions,
 } from "../server/hosted/observation-tick";
 import { SPEECH_PUSH, type SpeechPushOutcome } from "../server/hosted/speech-push";
