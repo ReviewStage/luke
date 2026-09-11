@@ -9,12 +9,12 @@
   },
   "types": "./src/index.ts",
   "scripts": {
-    "test": "tsx --test 'src/**/*.test.ts'",
+    "test": "vitest run",
     "typecheck": "tsc --project tsconfig.json"
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "tsx": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

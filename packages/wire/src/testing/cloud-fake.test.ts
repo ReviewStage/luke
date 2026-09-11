@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { fakeCloudApi, recordedRoutes } from "./cloud-fake.js";
 import { HTTP_STATUS } from "./http-fake.js";
 
