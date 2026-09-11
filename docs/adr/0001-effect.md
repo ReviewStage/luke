@@ -254,6 +254,15 @@ component to hold a hook's return value. `runAct` sets the atom and reads its
 result back to a promise there instead. P9-08 deletes it once nothing outside
 a hook still asks for an act.
 
+`Maintenance`'s `#writeFlushMarker` in `packages/brain/src/maintenance.ts` is on
+the allowlist too: its own caller still holds a `Promise<Settled<...>>` for
+the flush marker's write outcome, so `writeFlushMarkerEffect` — an
+`Effect.retry` over `@sidecar/memory/effect`'s `markerWriteSchedule`, the same
+bound `MEMORY_FLUSH_DEFAULTS.MARKER_WRITE_ATTEMPTS` states — is run to that
+promise here rather than on a fiber of its own. It goes in P7-08 once the
+brain composes onto the host's own `Layer` and this write reaches a runtime
+edge of its own.
+
 ## Strangler shims and their deletions
 
 Old and new coexist behind a named shim rather than in a long-lived branch, so
@@ -286,6 +295,7 @@ design decision stated as such:
 | `runAct` Promise door over the act `Atom.fn` | P9-02 | P9-08 |
 | `Settled` Promise signatures | P5-01 | P12-02 |
 | `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | P5-10a..d |
+| `Maintenance`'s `#writeFlushMarker` over its own `Effect.runPromise` | P5-13 | P7-08 |
 | `Layer.succeed(oldObject)` / `createHostKernel(options)` | P7-01 | P12-05 |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |
 

@@ -4,12 +4,14 @@ import {
   MEMORY_FLUSH_DEFAULTS,
   shouldRunMemoryFlush,
 } from "@sidecar/memory";
+import { markerWriteSchedule } from "@sidecar/memory/effect";
 import {
   type AgentRuntime,
   MEMORY_CAPTURE_PHASE,
   type MemoryDefinition,
   reserveTokens,
 } from "@sidecar/runtime/vocabulary";
+import { Data, Effect } from "effect";
 import { assessCompaction, COMPACTION_NEED, type CompactionAssessment } from "./compaction.js";
 import { CONTEXT_OPENING } from "./generation.js";
 import { turnCompactionOf } from "./run-events.js";
@@ -35,6 +37,40 @@ export interface BrainFlushMarkerStore {
   read(generationId: string): Promise<number | undefined>;
   /** Records that a flush completed under this compaction count of this generation. */
   write(generationId: string, compactionCount: number): Promise<void>;
+}
+
+/** A failed offer of the flush marker to its store; `revoked` marks the turn having ended rather than the write itself failing. */
+export class FlushMarkerWriteFailed extends Data.TaggedError("FlushMarkerWriteFailed")<{
+  readonly reason: string;
+  readonly revoked: boolean;
+}> {}
+
+/**
+ * Offers the flush marker to its store under `markerWriteSchedule`'s bound —
+ * the same `MARKER_WRITE_ATTEMPTS` the port states, expressed as a
+ * `Schedule` rather than a loop counter. A turn revoked before an attempt
+ * fails at once without spending the rest of the schedule; a write that
+ * merely failed is retried until the schedule is spent, and the effect then
+ * carries the last attempt's own reason.
+ */
+export function writeFlushMarkerEffect(
+  store: BrainFlushMarkerStore,
+  generationId: string,
+  cycle: number,
+  signal: AbortSignal,
+): Effect.Effect<void, FlushMarkerWriteFailed> {
+  return Effect.suspend(() =>
+    signal.aborted
+      ? Effect.fail(new FlushMarkerWriteFailed({ reason: "the turn was revoked", revoked: true }))
+      : Effect.tryPromise({
+          try: () => store.write(generationId, cycle),
+          catch: (error) =>
+            new FlushMarkerWriteFailed({
+              reason: error instanceof Error ? error.message : String(error),
+              revoked: false,
+            }),
+        }),
+  ).pipe(Effect.retry({ schedule: markerWriteSchedule, while: (error) => !error.revoked }));
 }
 
 export interface MaintenanceOptions {
@@ -290,19 +326,19 @@ export class Maintenance {
     const store = this.#options.flushMarker;
     if (!store) return { aborted: false, value: { ok: true } };
     const { generation, signal } = turnContext;
-    const attempts = async (): Promise<{ ok: true } | { ok: false; reason: string }> => {
-      let reason = "";
-      for (let attempt = 0; attempt < MEMORY_FLUSH_DEFAULTS.MARKER_WRITE_ATTEMPTS; attempt += 1) {
-        if (signal.aborted) return { ok: false, reason: "the turn was revoked" };
-        try {
-          await store.write(generation.id, cycle);
-          return { ok: true };
-        } catch (error) {
-          reason = error instanceof Error ? error.message : String(error);
-        }
-      }
-      return { ok: false, reason };
-    };
+    /**
+     * @deprecated Runs `writeFlushMarkerEffect` to the `Promise` this method's
+     * own callers still hold; deleted in P7-08 once the brain composes onto
+     * the host's own `Layer` and this write reaches a runtime edge of its
+     * own rather than being run here.
+     */
+    const attempts = (): Promise<{ ok: true } | { ok: false; reason: string }> =>
+      Effect.runPromise(
+        writeFlushMarkerEffect(store, generation.id, cycle, signal).pipe(
+          Effect.as({ ok: true as const }),
+          Effect.catchAll((error) => Effect.succeed({ ok: false as const, reason: error.reason })),
+        ),
+      );
     const outcome = attempts();
     const settled = await claimedUnlessAborted(outcome, signal, (late) => {
       if (late.ok) generation.flush.lastCompactionCount = cycle;
