@@ -62,6 +62,7 @@ import {
   AssistantMessageBuilder,
   HOSTED_WORDS_METADATA,
   REASONING_PROVIDER_KEY,
+  STEP_START_PART,
   toolPartType,
   UI_PART_STATE,
   UI_PART_TYPE,
@@ -208,9 +209,11 @@ test("a developer turn tells the documented sequence, every event stamped with t
   assert.deepEqual(kinds(events), [
     BRAIN_RUN_EVENT.TURN_STARTED,
     BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+    BRAIN_RUN_EVENT.STEP_STARTED,
     BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
     BRAIN_RUN_EVENT.SLOW_STEP,
     BRAIN_RUN_EVENT.TOOL_CALL_SETTLED,
+    BRAIN_RUN_EVENT.STEP_STARTED,
     BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
     BRAIN_RUN_EVENT.ACTIONS_SETTLED,
     BRAIN_RUN_EVENT.REPLY_SENTENCE,
@@ -255,7 +258,10 @@ test("a developer turn tells the documented sequence, every event stamped with t
   );
   assert.equal(answer?.message.role, MESSAGE_ROLE.ASSISTANT);
   assert.deepEqual(answer?.message.metadata, BRAIN_AUTHORED);
+  // Each inference's parts stand behind their own step boundary: the call the
+  // first answered with, then the words the second did.
   assert.deepEqual(answer?.message.parts, [
+    STEP_START_PART,
     {
       type: toolPartType(BRAIN_TOOL.READ_TRANSCRIPT),
       toolCallId: "read_1",
@@ -263,6 +269,7 @@ test("a developer turn tells the documented sequence, every event stamped with t
       input: { provider_id: ABC.providerId, provider_session_id: ABC.providerSessionId },
       output: callSettled?.settlement.output,
     },
+    STEP_START_PART,
     {
       type: UI_PART_TYPE.TEXT,
       text: "The tests pass. Nothing needs you!",
@@ -371,7 +378,15 @@ test("two provider writes are one slow step, and the reply streams only after bo
   const sent = toolPartType(ACTION_TOOL.SEND_SESSION_MESSAGE);
   assert.deepEqual(
     answer?.message.parts.map((part) => part.type),
-    [UI_PART_TYPE.TEXT, sent, sent, UI_PART_TYPE.TEXT],
+    [
+      UI_PART_TYPE.STEP_START,
+      UI_PART_TYPE.TEXT,
+      sent,
+      UI_PART_TYPE.STEP_START,
+      sent,
+      UI_PART_TYPE.STEP_START,
+      UI_PART_TYPE.TEXT,
+    ],
   );
   await h.agent.stop();
 });
@@ -466,8 +481,10 @@ test("an observation turn tells its start, its words, its calls, its answer, and
   assert.deepEqual(kinds(events), [
     BRAIN_RUN_EVENT.TURN_STARTED,
     BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+    BRAIN_RUN_EVENT.STEP_STARTED,
     BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
     BRAIN_RUN_EVENT.TOOL_CALL_SETTLED,
+    BRAIN_RUN_EVENT.STEP_STARTED,
     BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
     BRAIN_RUN_EVENT.TURN_ENDED,
   ]);
@@ -486,10 +503,11 @@ test("an observation turn tells its start, its words, its calls, its answer, and
     source: OBSERVATION_SOURCE.HOOK,
   });
   assert.equal(answer?.message.role, MESSAGE_ROLE.ASSISTANT);
-  // An answer that said nothing adds no text part: the call is the whole message.
+  // An answer that said nothing adds no text part: the call is the whole of
+  // its step, and the silent second inference leaves its boundary alone.
   assert.deepEqual(
     answer?.message.parts.map((part) => part.type),
-    [toolPartType(BRAIN_TOOL.READ_TRANSCRIPT)],
+    [UI_PART_TYPE.STEP_START, toolPartType(BRAIN_TOOL.READ_TRANSCRIPT), UI_PART_TYPE.STEP_START],
   );
   const messages = [observation?.message, answer?.message];
   assert.deepEqual(await readStoredUIMessages(stored(messages), STORED_TOOLS), {
@@ -511,6 +529,7 @@ test("a child's task turn is told as a child's, with the task as its words and i
   assert.deepEqual(kinds(events), [
     BRAIN_RUN_EVENT.TURN_STARTED,
     BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+    BRAIN_RUN_EVENT.STEP_STARTED,
     BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
     BRAIN_RUN_EVENT.ACTIONS_SETTLED,
     BRAIN_RUN_EVENT.REPLY_SENTENCE,
@@ -529,6 +548,7 @@ test("a child's task turn is told as a child's, with the task as its words and i
   });
   assert.deepEqual(answer?.message.metadata, BRAIN_AUTHORED);
   assert.deepEqual(answer?.message.parts, [
+    STEP_START_PART,
     { type: UI_PART_TYPE.TEXT, text: "Looked into it.", state: UI_PART_STATE.DONE },
   ]);
   const [ended] = ofKind(events, BRAIN_RUN_EVENT.ENDED);
@@ -565,6 +585,7 @@ test("a reasoning item is told with its summary and the opaque item, and the mes
   assert.deepEqual(kinds(events), [
     BRAIN_RUN_EVENT.TURN_STARTED,
     BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+    BRAIN_RUN_EVENT.STEP_STARTED,
     BRAIN_RUN_EVENT.REASONING_COMPLETED,
     BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
     BRAIN_RUN_EVENT.ACTIONS_SETTLED,
@@ -580,6 +601,7 @@ test("a reasoning item is told with its summary and the opaque item, and the mes
   });
   const [, answer] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
   assert.deepEqual(answer?.message.parts, [
+    STEP_START_PART,
     {
       type: UI_PART_TYPE.REASONING,
       id: "rs_1",
@@ -608,7 +630,8 @@ test("a refused call settles as an error carrying the refusal's own reason, and 
     status: ACTION_OUTPUT_STATUS.REFUSED,
   });
   const [, answer] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
-  assert.deepEqual(answer?.message.parts[0], {
+  assert.deepEqual(answer?.message.parts[0], STEP_START_PART);
+  assert.deepEqual(answer?.message.parts[1], {
     type: toolPartType(ACTION_TOOL.SEND_SESSION_MESSAGE),
     toolCallId: "send_x",
     state: TOOL_PART_STATE.OUTPUT_ERROR,
@@ -637,7 +660,8 @@ test("an action dispatched whose effect is uncertain settles as an answer carryi
     status: ACTION_OUTPUT_STATUS.UNKNOWN,
   });
   const [, answer] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
-  assert.deepEqual(answer?.message.parts[0], {
+  assert.deepEqual(answer?.message.parts[0], STEP_START_PART);
+  assert.deepEqual(answer?.message.parts[1], {
     type: toolPartType(ACTION_TOOL.SEND_SESSION_MESSAGE),
     toolCallId: "send_u",
     state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
@@ -666,10 +690,14 @@ test("an ask steered into a running turn is a message of that turn, and its reco
   await settle();
   assert.equal((await h.agent.waitAsk(second, 1))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assertOneTurn(events, first);
+  // The steered words are told as they are taken, before the inference that
+  // was running answers, so the two steps' boundaries follow both asks.
   assert.deepEqual(kinds(events), [
     BRAIN_RUN_EVENT.TURN_STARTED,
     BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
     BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+    BRAIN_RUN_EVENT.STEP_STARTED,
+    BRAIN_RUN_EVENT.STEP_STARTED,
     BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
     BRAIN_RUN_EVENT.ACTIONS_SETTLED,
     BRAIN_RUN_EVENT.REPLY_SENTENCE,
@@ -710,6 +738,8 @@ test("a rider withdrawn mid-turn ends where it was withdrawn, numbered in the tu
     BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
     BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
     BRAIN_RUN_EVENT.ENDED,
+    BRAIN_RUN_EVENT.STEP_STARTED,
+    BRAIN_RUN_EVENT.STEP_STARTED,
     BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
     BRAIN_RUN_EVENT.ACTIONS_SETTLED,
     BRAIN_RUN_EVENT.REPLY_SENTENCE,

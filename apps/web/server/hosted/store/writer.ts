@@ -27,6 +27,7 @@ import {
   SCHEMA_REFUSAL,
   type SchemaPath,
   type SchemaRefusal,
+  STEP_START_PART,
   type StoredMessageMetadata,
   type StoredToolPart,
   type StoredUIMessage,
@@ -617,6 +618,27 @@ async function turnEnded(
   return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
 }
 
+/**
+ * A step joins the journal as the boundary before its parts. Steps are
+ * counted, not named, so the journal's own count of boundaries is what tells
+ * a step told twice from the next one: a step the journal already holds is a
+ * repeat, and any later step appends one boundary, whatever the stream
+ * dropped between. The turn's completed projection replaces the journal
+ * whole, boundaries and all, when the turn answers.
+ */
+async function stepStarted(
+  context: WriterContext,
+  event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.STEP_STARTED }>,
+): Promise<StoreWriteResult> {
+  const opened = await journal(context, event.turnId);
+  if (!opened.ok) return opened;
+  const { row } = opened;
+  const held = row.parts.filter((part) => part.type === UI_PART_TYPE.STEP_START).length;
+  if (held >= event.step) return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
+  if (row.finishedAt !== null) return { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
+  return amendJournal(context, row, [...row.parts, STEP_START_PART]);
+}
+
 async function toolCallStarted(
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TOOL_CALL_STARTED }>,
@@ -736,6 +758,8 @@ function consume(context: WriterContext, event: BrainRunEvent): Promise<StoreWri
       return turnStarted(context, event);
     case BRAIN_RUN_EVENT.TURN_ENDED:
       return turnEnded(context, event);
+    case BRAIN_RUN_EVENT.STEP_STARTED:
+      return stepStarted(context, event);
     case BRAIN_RUN_EVENT.TOOL_CALL_STARTED:
       return toolCallStarted(context, event);
     case BRAIN_RUN_EVENT.TOOL_CALL_SETTLED:

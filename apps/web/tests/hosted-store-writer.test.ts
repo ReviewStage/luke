@@ -27,6 +27,7 @@ import {
   readStoredUIMessages,
   SCHEMA_REFUSAL,
   SLOW_STEP_KIND,
+  STEP_START_PART,
   TOOL_CALL_SETTLEMENT,
   TOOL_PART_STATE,
   type ToolRefusalStatus,
@@ -170,6 +171,10 @@ class Stream {
         parts: [{ type: UI_PART_TYPE.TEXT, text, state: UI_PART_STATE.DONE }],
       },
     });
+  }
+
+  step(step: number): BrainRunEvent {
+    return this.event({ kind: BRAIN_RUN_EVENT.STEP_STARTED, step });
   }
 
   toolCall(callId: string, name: string, input: UnparsedWireValue): BrainRunEvent {
@@ -958,6 +963,65 @@ test("a closed journal takes its own projection again as a repeat and a differen
   assert.deepEqual(different, { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED });
   const [, reply] = await storedMessages(target);
   assert.deepEqual(reply?.parts, REPLY_PARTS);
+});
+
+test("a step joins the journal as one boundary before its parts, a step told twice is one, and the answer's projection keeps the boundaries", async () => {
+  const target = await conversation();
+  const stream = new Stream();
+  await feed(target, [
+    stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK),
+    stream.words("ask-1", "What is the fixture session doing?", TYPED_ASK),
+  ]);
+  const opened = effects(
+    await feed(target, [
+      stream.step(1),
+      stream.step(1),
+      stream.toolCall("call_1", "read_transcript", TRANSCRIPT_INPUT),
+      stream.toolAnswered("call_1", "read_transcript", TRANSCRIPT_OUTPUT),
+      stream.reasoning("rs_1", "Read the tail first."),
+      stream.step(2),
+    ]),
+  );
+  assert.deepEqual(opened, [
+    STORE_WRITE_EFFECT.WRITTEN,
+    STORE_WRITE_EFFECT.REPEATED,
+    STORE_WRITE_EFFECT.WRITTEN,
+    STORE_WRITE_EFFECT.WRITTEN,
+    STORE_WRITE_EFFECT.WRITTEN,
+    STORE_WRITE_EFFECT.WRITTEN,
+  ]);
+  const [, journal] = await storedMessages(target);
+  assert.ok(journal);
+  // SAFETY: the parts column is jsonb holding the message's parts the writer admitted.
+  const journaled = journal.parts as UIMessage["parts"];
+  assert.deepEqual(
+    journaled.map((part) => part.type),
+    [
+      UI_PART_TYPE.STEP_START,
+      toolPartType("read_transcript"),
+      UI_PART_TYPE.REASONING,
+      UI_PART_TYPE.STEP_START,
+    ],
+  );
+
+  const [reasoned] = REPLY_PARTS;
+  assert.ok(reasoned);
+  const projection: UIMessage["parts"] = [
+    STEP_START_PART,
+    answeredCall("call_1"),
+    reasoned,
+    STEP_START_PART,
+    { type: UI_PART_TYPE.TEXT, text: "It is waiting on a permission.", state: UI_PART_STATE.DONE },
+  ];
+  await feed(target, [
+    stream.answered(stream.turnId, projection),
+    stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED),
+  ]);
+  const [, answered] = await storedMessages(target);
+  assert.deepEqual(answered?.parts, projection);
+  assert.ok(answered?.finishedAt);
+  const late = await feed(target, [stream.step(3)]);
+  assert.deepEqual(effects(late), [STORE_WRITE_REFUSAL.FINISHED]);
 });
 
 test("a reasoning item naming no id is not journaled, since nothing could tell its repeat from a second item", async () => {
