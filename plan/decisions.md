@@ -673,3 +673,44 @@ comment and flips the test; the next service PR touching the rating fold matches
 structural half: the phone should decode through the **typed `RatingEventPayload`** that already
 exists in `ConversationReads.swift` rather than hand-parsing a `JSONValue`, so "malformed" becomes
 a decode failure and the divergence cannot return.
+
+
+## 2026-09-11 — C8 reaches the brain in process, not over HTTP, and the lift goes through @sidecar/voice (orchestrator, from C8)
+
+**The finding: the voice function drops the bearer after the handshake, by design (`accounts.ts`),
+so it cannot call `/api/brain/ask` or C7's stream as the user.** A session-lifetime bearer held in
+a function to call our own routes would be a credential living far longer than the request that
+earned it.
+
+**Ruling: C8 calls the ask door and projects turn events IN PROCESS**, the same shape #1030 already
+uses for the speech claim. Two consequences:
+
+- **The 800 s / 300 s re-attach dance does not apply to C8.** It is in C8's brief because C7's
+  stream is a 300 s function and a voice session's is 800 s; in process there is no HTTP hop and no
+  second ceiling. C8 reuses `projectTurnEvents` over the store.
+- **A cost to state honestly: C7's stated consumer will not use C7's HTTP route.** The
+  *projection* C7 built is load-bearing and is what C8 reuses; the **HTTP wrapper around it**
+  currently has no caller. It stays as the out-of-process seam — the original design had a separate
+  `apps/voice-service`, and a client following a turn over HTTP is the shape a phone or a
+  detached service would need — but **if nothing calls it by G-lane, deleting it is the honest
+  outcome and should be considered rather than carried.**
+
+**The lift's shape, approved.** A straight copy into `apps/web` is ~3,400 lines and a straight move
+breaks the desktop before E5, so the transport-neutral machinery (`LiveSessionService`,
+`AppendChannel`, `ProactiveQueue`, roster context, trace, the `LiveBrain`/`LiveRecord` doors,
+graceful close) moves by `git mv` into **`@sidecar/voice` behind a live-session door**; the host
+composes it from there unchanged, and `apps/web/server/voice/` gains the record over `voiceWriter`,
+the sideband over the upstream socket, and the composition. Conditions: **the door is not optional**
+— `apps/web` must not resolve `ws`, `node:http`, or anything Electron-shaped through that import,
+and `@sidecar/gateway/websocket` is the precedent under `packages/AGENTS.md`; **C8 rebases onto the
+rollout's PR 13 deletions** in `packages/voice/src/orchestrator/*` rather than asking them to hold,
+as already ruled for their PR 12; and **the machinery lands unattached to the sessions route**,
+because with the desktop still owning the exchange both ends would append.
+
+**Escalated to the rollout, not decided here: how a desktop asks for a service-owned exchange.**
+`VOICE_DELEGATION_MODE = { CLIENT, RESPONSES }` already exists and is recorded per session at
+create, but what those words *mean* is the rollout's design and the create frame is theirs. The two
+shapes are a create-frame field (per session, widens their contract) or **by build** (one mode at a
+time, no wire change, the switch flips in our E5) — by build is my stated preference, because every
+other cutover in this rework worked that way and two live modes is two paths to test forever.
+**C8 is told not to invent a third mode** and to leave the attach seam explicit and unwired.
