@@ -413,6 +413,46 @@ const REPLAY_SLOT = {
   openai: { itemId: "rs_fixture_0f3a1c22", reasoningEncryptedContent: "Zml4dHVyZS1vcGFxdWU=" },
 };
 
+test("a spoken ask's transcript row, which no turn owns, is answered as a group of its own under its message id with no turn beside it, and the turn's group holds the reply alone", async () => {
+  const userId = await database.createUser();
+  const main = await insertConversation(userId);
+  const spoken = await insertTurn(userId, main, { origin: TURN_ORIGIN.SPOKEN });
+  const transcript = await insertMessage(userId, main, 1, {
+    clientId: "dl_1",
+    metadata: {
+      author: MESSAGE_AUTHOR.DEVELOPER,
+      channel: MESSAGE_CHANNEL.VOICE,
+      voice_session_id: "vs_1",
+      delegation_id: "dl_1",
+      from_ms: 0,
+      to_ms: 2500,
+    },
+    parts: [{ type: "text", text: "What needs me?" }],
+  });
+  const reply = await insertMessage(userId, main, 2, {
+    turnId: spoken,
+    role: MESSAGE_ROLE.ASSISTANT,
+    metadata: BRAIN_REPLY,
+    parts: [{ type: "text", text: "One agent finished.", state: "done" }],
+  });
+
+  const answer = await answered(
+    await handleConversationMessages(options(userId, request(READ_PATH.MESSAGES))),
+    conversationMessagesAnswerSchema,
+  );
+  assert.deepEqual(
+    answer.groups.map((group) => [
+      group.turnId,
+      group.turn?.id,
+      group.messages.map((row) => String(row.message.id)),
+    ]),
+    [
+      [transcript, undefined, [transcript]],
+      [spoken, spoken, [reply]],
+    ],
+  );
+});
+
 test("a message's replay slot never leaves the service, and the stored row keeps it", async () => {
   const userId = await database.createUser();
   const main = await insertConversation(userId);

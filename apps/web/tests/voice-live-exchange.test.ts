@@ -291,11 +291,11 @@ test("a spoken ask runs a turn through the ask door and is spoken from the servi
     .from(messages)
     .where(eq(messages.conversationId, target.conversationId))
     .orderBy(asc(messages.seq));
-  // Two user rows stand for one spoken ask: the developer's words as the session transcribed
-  // them, under the delegation's id, and the question as eve received it, written by the relay.
+  // One user row stands for one spoken ask: the developer's words as the session transcribed
+  // them, under the delegation's id. The question as eve received it is on the ask's record,
+  // never a second line.
   const userRows = rows.filter((row) => row.role === MESSAGE_ROLE.USER).map((row) => row.clientId);
-  assert.equal(userRows.length, 2);
-  assert.ok(userRows.includes("dl_1"));
+  assert.deepEqual(userRows, ["dl_1"]);
   const [session] = await database.db
     .select({ id: voiceSessions.id })
     .from(voiceSessions)

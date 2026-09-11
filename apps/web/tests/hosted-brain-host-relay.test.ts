@@ -43,6 +43,7 @@ import {
 } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import { stampedEveEvent } from "./support/eve-events";
+import { spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 /**
@@ -239,6 +240,32 @@ test("a typed ask lands as one turn and its messages through the writer: the wor
   assert.equal(toolPart.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
   assert.equal(toolPart.toolCallId, "call-1");
   assert.deepEqual(standing.state.get(), { turns: {} });
+  assert.deepEqual(refusals, []);
+});
+
+test("a spoken turn's received message writes no user row, since the developer's line is the transcript's under the delegation; a typed turn's still does, so one utterance is one line either way", async () => {
+  const spoken = await conversation();
+  const typed = await conversation();
+  await play(spokenTurn("turn_0", NOW), standingFor(spoken, BRAIN_HOST_TURN.SPOKEN));
+  await play(typedTurn("turn_0", 0), standingFor(typed, BRAIN_HOST_TURN.TYPED));
+
+  const spokenRows = await rows(spoken);
+  const typedRows = await rows(typed);
+  assert.deepEqual(
+    spokenRows.messageRows.map((row) => [row.role, row.finishedAt !== null]),
+    [[MESSAGE_ROLE.ASSISTANT, true]],
+  );
+  assert.deepEqual(
+    typedRows.messageRows.map((row) => [row.role, row.finishedAt !== null]),
+    [
+      [MESSAGE_ROLE.USER, true],
+      [MESSAGE_ROLE.ASSISTANT, true],
+    ],
+  );
+  assert.deepEqual(
+    [spokenRows.turnRows[0]?.status, typedRows.turnRows[0]?.status],
+    [TURN_STATUS.SETTLED, TURN_STATUS.SETTLED],
+  );
   assert.deepEqual(refusals, []);
 });
 

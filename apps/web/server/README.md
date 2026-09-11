@@ -553,7 +553,16 @@ end inside the follow bound, or an ask the record no longer holds, is told as
 a failed end so the exchange settles rather than waiting forever. On the eve
 path the reply arrives whole at the turn's end; what the follow carries
 mid-turn is the slow step and the actions settling. A refusal at the door is
-spoken as the build's own note for it, never composed with the ask.
+spoken as the build's own note for it, never composed with the ask. One
+spoken ask leaves one developer line: the transcript's row, cut at the
+delegation by the voice writer under the delegation's id. Eve's received
+message for a spoken turn is the question the service composed around those
+words, which stands on the ask's record and is not written as a user row,
+where a typed ask's, an observation's, and a hold release's are;
+`BRAIN_HOST_TURN_KIND` says for each kind whose row the received message is,
+so the relay consults the table rather than a branch. That line stands in the
+device's view as a group of its own, since no turn owns it, and its place
+beside the reply's group follows the order the two writes landed in.
 
 ### Briefings claimed before they are spoken
 

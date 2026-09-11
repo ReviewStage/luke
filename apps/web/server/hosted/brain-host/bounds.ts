@@ -103,21 +103,56 @@ export function isBrainHostTurn(value: string): value is BrainHostTurn {
   return BRAIN_HOST_TURN_LIST.includes(value);
 }
 
-/** The run stream's origin and trigger for each kind of turn a request opens. */
+/**
+ * Where the developer's line of a turn stands on the record. Eve's received
+ * message is the brain's input: for a typed ask it is the developer's own
+ * words and the relay writes it as the user row; for an observation or a
+ * hold's release it is the host's own notice and is written the same way. A
+ * spoken ask is the exception: the developer's line is the voice session's
+ * transcript, cut at the delegation and written by the voice writer under the
+ * delegation's id, while eve's input is the question the service composed
+ * around it, already on record on the ask. Writing that input as a user row
+ * too would leave two developer lines for one utterance, read back to the
+ * brain twice, so the relay writes none for a spoken turn.
+ */
+export const RECEIVED_LINE = {
+  /** The relay writes eve's received message as the turn's user row. */
+  RELAY: "relay",
+  /** The transcript's row, another writer's, is the line; the relay writes none. */
+  TRANSCRIPT: "transcript",
+} as const;
+
+export type ReceivedLine = (typeof RECEIVED_LINE)[keyof typeof RECEIVED_LINE];
+
+/** The run stream's origin and trigger for each kind of turn a request opens, and whose row its received message is. */
 export const BRAIN_HOST_TURN_KIND = {
-  [BRAIN_HOST_TURN.TYPED]: { origin: BRAIN_TURN_ORIGIN.TYPED, trigger: BRAIN_TURN_TRIGGER.ASK },
-  [BRAIN_HOST_TURN.SPOKEN]: { origin: BRAIN_TURN_ORIGIN.SPOKEN, trigger: BRAIN_TURN_TRIGGER.ASK },
+  [BRAIN_HOST_TURN.TYPED]: {
+    origin: BRAIN_TURN_ORIGIN.TYPED,
+    trigger: BRAIN_TURN_TRIGGER.ASK,
+    receivedLine: RECEIVED_LINE.RELAY,
+  },
+  [BRAIN_HOST_TURN.SPOKEN]: {
+    origin: BRAIN_TURN_ORIGIN.SPOKEN,
+    trigger: BRAIN_TURN_TRIGGER.ASK,
+    receivedLine: RECEIVED_LINE.TRANSCRIPT,
+  },
   [BRAIN_HOST_TURN.OBSERVATION]: {
     origin: BRAIN_TURN_ORIGIN.OBSERVATION,
     trigger: BRAIN_TURN_TRIGGER.ROSTER,
+    receivedLine: RECEIVED_LINE.RELAY,
   },
   [BRAIN_HOST_TURN.HOLD_RELEASE]: {
     origin: BRAIN_TURN_ORIGIN.HOLD_RELEASE,
     trigger: BRAIN_TURN_TRIGGER.HOLD_RELEASED,
+    receivedLine: RECEIVED_LINE.RELAY,
   },
 } as const satisfies Record<
   BrainHostTurn,
-  { readonly origin: BrainTurnOrigin; readonly trigger: BrainTurnTrigger }
+  {
+    readonly origin: BrainTurnOrigin;
+    readonly trigger: BrainTurnTrigger;
+    readonly receivedLine: ReceivedLine;
+  }
 >;
 
 /** The environment the host reads beside the names every hosted route already honours. */
