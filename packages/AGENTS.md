@@ -333,7 +333,12 @@ provider contract are Node-free, and
 the packages below the runtime import that door so the barrel's `node:fs`
 never reaches a renderer or a web function. Nothing is behind both
 doors: the barrel re-exports no vocabulary name, so every symbol has exactly
-one way in.
+one way in. Its fixed value sets carry the same `Schema.Literal` declarations
+`@sidecar/session`'s do, each `is*` guard becoming that schema's own
+`Schema.is`: `effect` itself is Node-free, so declaring it here costs the door
+nothing the rule above did not already pay for `@sidecar/runtime/effect`'s
+bridges, and the renderer, which names the vocabulary door only for types,
+resolves none of it.
 
 A barrel over modules that are all one vocabulary is written as `export *` per
 module (`@sidecar/session`), because a hand-listed re-export of a package whose

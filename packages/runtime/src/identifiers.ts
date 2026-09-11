@@ -1,4 +1,5 @@
 import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import { Schema } from "effect";
 
 /**
  * The identities the runtime keeps apart, each a string with one meaning.
@@ -73,11 +74,12 @@ export const CONVERSATION_KIND = {
 
 export type ConversationKind = (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND];
 
-const CONVERSATION_KIND_LIST: readonly ConversationKind[] = Object.values(CONVERSATION_KIND);
+export const ConversationKindSchema = Schema.Literal(...Object.values(CONVERSATION_KIND));
+
+const readsConversationKind = Schema.is(ConversationKindSchema);
 
 export function isConversationKind(value: UnparsedWireValue): value is ConversationKind {
-  // SAFETY: value is a string; list membership is the vocabulary check.
-  return isWireString(value) && CONVERSATION_KIND_LIST.includes(value as ConversationKind);
+  return readsConversationKind(value);
 }
 
 const THREAD_SEGMENT = "thread";
@@ -214,9 +216,10 @@ export const RUN_ORIGIN = {
 
 export type RunOrigin = (typeof RUN_ORIGIN)[keyof typeof RUN_ORIGIN];
 
-const RUN_ORIGIN_LIST: readonly RunOrigin[] = Object.values(RUN_ORIGIN);
+export const RunOriginSchema = Schema.Literal(...Object.values(RUN_ORIGIN));
+
+const readsRunOrigin = Schema.is(RunOriginSchema);
 
 export function isRunOrigin(value: UnparsedWireValue): value is RunOrigin {
-  // SAFETY: value is a string; list membership is the vocabulary check.
-  return isWireString(value) && RUN_ORIGIN_LIST.includes(value as RunOrigin);
+  return readsRunOrigin(value);
 }

@@ -5,6 +5,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { Schema } from "effect";
 import type { ContextInput } from "./execution.js";
 import { type ConversationKind, isConversationKind, type SessionKey } from "./identifiers.js";
 
@@ -38,11 +39,12 @@ export const COMPACTION_SOURCE = {
 
 export type CompactionSource = (typeof COMPACTION_SOURCE)[keyof typeof COMPACTION_SOURCE];
 
-const COMPACTION_SOURCE_LIST: readonly CompactionSource[] = Object.values(COMPACTION_SOURCE);
+export const CompactionSourceSchema = Schema.Literal(...Object.values(COMPACTION_SOURCE));
+
+const readsCompactionSource = Schema.is(CompactionSourceSchema);
 
 export function isCompactionSource(value: UnparsedWireValue): value is CompactionSource {
-  // SAFETY: value is a string; list membership is the vocabulary check.
-  return isWireString(value) && COMPACTION_SOURCE_LIST.includes(value as CompactionSource);
+  return readsCompactionSource(value);
 }
 
 /**
@@ -101,11 +103,12 @@ export const ARCHIVE_REASON = {
 
 export type ArchiveReason = (typeof ARCHIVE_REASON)[keyof typeof ARCHIVE_REASON];
 
-const ARCHIVE_REASON_LIST: readonly ArchiveReason[] = Object.values(ARCHIVE_REASON);
+export const ArchiveReasonSchema = Schema.Literal(...Object.values(ARCHIVE_REASON));
+
+const readsArchiveReason = Schema.is(ArchiveReasonSchema);
 
 export function isArchiveReason(value: UnparsedWireValue): value is ArchiveReason {
-  // SAFETY: value is a string; list membership is the vocabulary check.
-  return isWireString(value) && ARCHIVE_REASON_LIST.includes(value as ArchiveReason);
+  return readsArchiveReason(value);
 }
 
 /** One conversation as the directory lists it: its address, its kind, and where it stands in its lifecycle. */
@@ -181,8 +184,12 @@ export const ARCHIVE_ENCODING = {
 
 export type ArchiveEncoding = (typeof ARCHIVE_ENCODING)[keyof typeof ARCHIVE_ENCODING];
 
+const ArchiveEncodingSchema = Schema.Literal(...Object.values(ARCHIVE_ENCODING));
+
+const readsArchiveEncoding = Schema.is(ArchiveEncodingSchema);
+
 function isArchiveEncoding(value: UnparsedWireValue): value is ArchiveEncoding {
-  return value === ARCHIVE_ENCODING.IDENTITY || value === ARCHIVE_ENCODING.ZSTD;
+  return readsArchiveEncoding(value);
 }
 
 /**

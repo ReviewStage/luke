@@ -4,6 +4,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { Schema } from "effect";
 import type { CompactionSource } from "./storage.js";
 
 /**
@@ -140,10 +141,12 @@ export const REASONING_EFFORT = {
 
 export type ReasoningEffort = (typeof REASONING_EFFORT)[keyof typeof REASONING_EFFORT];
 
-const REASONING_EFFORT_LIST: readonly string[] = Object.values(REASONING_EFFORT);
+export const ReasoningEffortSchema = Schema.Literal(...Object.values(REASONING_EFFORT));
+
+const readsReasoningEffort = Schema.is(ReasoningEffortSchema);
 
 export function isReasoningEffort(value: UnparsedWireValue): value is ReasoningEffort {
-  return isWireString(value) && REASONING_EFFORT_LIST.includes(value);
+  return readsReasoningEffort(value);
 }
 
 /** What one inference is asked to do beyond the items it is shown. */
