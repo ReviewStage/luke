@@ -1878,3 +1878,33 @@ were rewritten some other wrong way, where a test of the mechanism would pass.**
   convenient fixture** — the two cursor tests that used a queued row — **and move them onto the new
   one with their assertions unchanged**, so they keep testing what they tested rather than passing
   on a row the code now skips.
+
+
+## 2026-09-11 ~12:20Z — The fourth cross-workstream shape change to reach held work, and the first quiet period (orchestrator)
+
+**The watcher reported 45 minutes of no worker traffic — the first quiet stretch since the graph
+started.** Every lane is either merged or holding for a decision. Using the quiet to sweep rather
+than wait turned up the fourth shape change to land under held work.
+
+**#1093: the brain contract's four routes are now one HttpApi group.** It added
+`apps/web/server/brain-app.ts` and `apps/web/server/routes/brain/capabilities.ts`, rewrote
+`hosted/brain-route.ts`, `brain-v2.ts`, `http-effect.ts` and `environment.ts`, and brought a
+`fixtures/brain-route/` set with it.
+
+**Why it matters to held work: "a brain route" is no longer a standalone function beside the
+others.** C2b-2b adds three — the ask, the turn read, the cancel — and must now decide whether they
+belong inside that group. **Told to read `brain-app.ts` and `routes/brain/capabilities.ts` before
+opening and to state the answer either way**, because a reviewer who has just read #1093 will ask
+why three new brain routes sit outside the group it created. If they genuinely do not fit (the ask
+door admits before dispatch, which may not suit an HttpApi handler's shape), that reason goes in the
+body.
+
+Also on main now: **`api/brain/turns.js` beside `api/brain/turns/events.js`**, so paths resolve
+differently than they did when C7 landed; regenerate rather than assume.
+
+**The running count of shape changes that reached this rework's held branches, none of them caused
+by it:** the `vercel.json` services conversion (ours, C2a's), #1081's Effect migrator and the store
+test harness, G4's table drops, and now #1093's brain group. **All four were absorbed while the
+branches waited rather than discovered at the rebase.** That is the whole argument for sweeping main
+during a quiet period instead of treating quiet as idle: **a lane that is finished and waiting is
+not static, and the cost of finding out late is paid by three PRs at once.**
