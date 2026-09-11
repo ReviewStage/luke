@@ -1,5 +1,5 @@
 /**
- * The actions Luke can carry for the developer, named as Realtime tools, in one
+ * The actions Luke can carry for the developer, named as function tools, in one
  * table. Family membership, the spoken tool count, and the schema list are
  * derived from it; adding a tool is adding a row.
  *
@@ -219,7 +219,7 @@ function namesFromToolTable<T extends Record<string, { readonly name: string }>>
   return names;
 }
 
-export const REALTIME_TOOL = namesFromToolTable(ACTIONS);
+export const ACTION_TOOL = namesFromToolTable(ACTIONS);
 
 const ACTION_LIST: readonly ToolSpec<ActionFamily, ActionKind>[] = Object.values(ACTIONS);
 
@@ -228,16 +228,16 @@ const ACTS_BY_NAME = new Map<string, ToolSpec<ActionFamily, ActionKind>>(
 );
 
 /** The family a named tool belongs to, or nothing when no such tool exists. */
-export function realtimeToolFamily(name: string): ActionFamily | undefined {
+export function actionToolFamily(name: string): ActionFamily | undefined {
   return ACTS_BY_NAME.get(name)?.family;
 }
 
 /** The kind of action a named tool carries, or nothing when no such tool exists. */
-export function realtimeToolKind(name: string): ActionKind | undefined {
+export function actionToolKind(name: string): ActionKind | undefined {
   return ACTS_BY_NAME.get(name)?.kind;
 }
 
-/** One function tool as a Responses or Realtime request carries it. */
+/** One function tool as a function-calling request carries it. */
 export interface ActionToolDefinition {
   type: "function";
   name: string;
@@ -258,8 +258,8 @@ function definitionOf(
   };
 }
 
-/** The tool schemas a Realtime session is configured with. */
-export function realtimeToolDefinitions(): readonly ActionToolDefinition[] {
+/** The tool schemas the brain's action catalog is declared from. */
+export function actionToolDefinitions(): readonly ActionToolDefinition[] {
   return ACTION_LIST.map((tool) => definitionOf(tool, false));
 }
 

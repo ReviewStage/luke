@@ -23,9 +23,9 @@ import {
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import {
   ACTION_FAMILY,
-  REALTIME_TOOL,
-  type RealtimeFunctionCall,
-  realtimeToolFamily,
+  ACTION_TOOL,
+  type ActionFunctionCall,
+  actionToolFamily,
   SESSION_LIST_VOICE,
 } from "./index.js";
 import { withoutAdmission } from "./testing/admitted.js";
@@ -33,7 +33,7 @@ import { admitToolCall } from "./testing/tool-call.js";
 
 /** One app action admitted, as the payload alone: the brand and the origin are dropped. */
 async function appToolAction(
-  functionCall: RealtimeFunctionCall,
+  functionCall: ActionFunctionCall,
   guide: AppGuideSnapshot,
   sessions: readonly Session[],
 ) {
@@ -99,7 +99,7 @@ const GUIDE: AppGuideSnapshot = {
   ],
 };
 
-function call(name: string, argumentsJson: string): RealtimeFunctionCall {
+function call(name: string, argumentsJson: string): ActionFunctionCall {
   return { name, argumentsJson };
 }
 
@@ -130,16 +130,16 @@ test("a spoken toggle accepts the unambiguous words and nothing else", async () 
 });
 
 test("only the app's own tools are routed to the guide", async () => {
-  assert.equal(realtimeToolFamily(REALTIME_TOOL.CHANGE_APP_SETTING), ACTION_FAMILY.APP);
-  assert.equal(realtimeToolFamily(REALTIME_TOOL.SHOW_PANEL), ACTION_FAMILY.APP);
-  assert.equal(realtimeToolFamily(REALTIME_TOOL.OPEN_FEEDBACK_COMPOSER), ACTION_FAMILY.APP);
-  assert.equal(realtimeToolFamily(REALTIME_TOOL.RUN_UPDATE_ACTION), ACTION_FAMILY.APP);
-  assert.equal(realtimeToolFamily(REALTIME_TOOL.SEND_SESSION_MESSAGE), ACTION_FAMILY.SESSION);
+  assert.equal(actionToolFamily(ACTION_TOOL.CHANGE_APP_SETTING), ACTION_FAMILY.APP);
+  assert.equal(actionToolFamily(ACTION_TOOL.SHOW_PANEL), ACTION_FAMILY.APP);
+  assert.equal(actionToolFamily(ACTION_TOOL.OPEN_FEEDBACK_COMPOSER), ACTION_FAMILY.APP);
+  assert.equal(actionToolFamily(ACTION_TOOL.RUN_UPDATE_ACTION), ACTION_FAMILY.APP);
+  assert.equal(actionToolFamily(ACTION_TOOL.SEND_SESSION_MESSAGE), ACTION_FAMILY.SESSION);
 });
 
 test("a spoken change can name only a setting the guide lists, to a value it accepts", async () => {
   const change = async (argumentsJson: string) =>
-    await appToolAction(call(REALTIME_TOOL.CHANGE_APP_SETTING, argumentsJson), GUIDE, []);
+    await appToolAction(call(ACTION_TOOL.CHANGE_APP_SETTING, argumentsJson), GUIDE, []);
 
   assert.deepEqual(await change('{"setting_id":"voice_captions","value":"on"}'), {
     kind: "setting",
@@ -157,7 +157,7 @@ test("a spoken change can name only a setting the guide lists, to a value it acc
   assert.equal(unknown.status, ACTION_RESULT_STATUS.REJECTED);
 
   const unreadable = await appToolAction(
-    call(REALTIME_TOOL.CHANGE_APP_SETTING, "not json"),
+    call(ACTION_TOOL.CHANGE_APP_SETTING, "not json"),
     GUIDE,
     [],
   );
@@ -172,7 +172,7 @@ test("a spoken change can name only a setting the guide lists, to a value it acc
 
 test("a value and its effort named in one change are validated as the pair they are", async () => {
   const change = async (argumentsJson: string) =>
-    await appToolAction(call(REALTIME_TOOL.CHANGE_APP_SETTING, argumentsJson), GUIDE, []);
+    await appToolAction(call(ACTION_TOOL.CHANGE_APP_SETTING, argumentsJson), GUIDE, []);
 
   // The pair rides one action, the effort matched like the value: case
   // retold rather than copied, answered in the guide's own casing.
@@ -218,7 +218,7 @@ test("a value and its effort named in one change are validated as the pair they 
 
 test("a by-hand-only setting is refused with the path to it, so the refusal is the guidance", async () => {
   const action = await appToolAction(
-    call(REALTIME_TOOL.CHANGE_APP_SETTING, '{"setting_id":"microphone","value":"on"}'),
+    call(ACTION_TOOL.CHANGE_APP_SETTING, '{"setting_id":"microphone","value":"on"}'),
     GUIDE,
     [],
   );
@@ -229,7 +229,7 @@ test("a by-hand-only setting is refused with the path to it, so the refusal is t
 test("a spoken panel ask opens a real tab and narrows only to what is observed", async () => {
   const sessions = [observedConductorSession()];
   const show = async (argumentsJson: string) =>
-    await appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, sessions);
+    await appToolAction(call(ACTION_TOOL.SHOW_PANEL, argumentsJson), GUIDE, sessions);
 
   assert.deepEqual(await show("{}"), { kind: "panel", tab: APP_PANEL_TAB.SESSIONS });
   assert.deepEqual(await show('{"tab":"settings"}'), {
@@ -265,7 +265,7 @@ test("a spoken panel ask opens a real tab and narrows only to what is observed",
   assert.equal((await show('{"filters":["codex"]}')).status, ACTION_RESULT_STATUS.REJECTED);
 
   const voiceShow = async (argumentsJson: string) =>
-    await appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, [
+    await appToolAction(call(ACTION_TOOL.SHOW_PANEL, argumentsJson), GUIDE, [
       observedConductorSession(true),
     ]);
   assert.deepEqual(await voiceShow('{"filters":["voice"]}'), {
@@ -278,7 +278,7 @@ test("a spoken panel ask opens a real tab and narrows only to what is observed",
 test("a spoken panel ask can combine filters, on the axes the chips combine on", async () => {
   const sessions = [observedConductorSession(), observedConductorSession(true)];
   const show = async (argumentsJson: string) =>
-    await appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, sessions);
+    await appToolAction(call(ACTION_TOOL.SHOW_PANEL, argumentsJson), GUIDE, sessions);
 
   // Values on different axes narrow: a cloud Conductor voice chat is observed.
   assert.deepEqual(await show('{"filters":["cloud","conductor","voice"]}'), {
@@ -302,7 +302,7 @@ test("a spoken panel ask can combine filters, on the axes the chips combine on",
     reason: "No local sessions are observed right now.",
   });
   const mixed = async (argumentsJson: string) =>
-    await appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, [
+    await appToolAction(call(ACTION_TOOL.SHOW_PANEL, argumentsJson), GUIDE, [
       ...sessions,
       normalizeSession(
         { id: "conductor", displayName: "Conductor" },
@@ -358,7 +358,7 @@ test("a spoken panel ask can search, only where the list offers a search at all"
     ),
   ];
   const show = async (argumentsJson: string, sessions = pair) =>
-    await appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, sessions);
+    await appToolAction(call(ACTION_TOOL.SHOW_PANEL, argumentsJson), GUIDE, sessions);
 
   assert.deepEqual(await show('{"query":" parser build "}'), {
     kind: "panel",
@@ -390,7 +390,7 @@ test("a spoken panel ask can search, only where the list offers a search at all"
 test("a spoken panel ask can reorder the list in the panel's own two words", async () => {
   const sessions = [observedConductorSession()];
   const show = async (argumentsJson: string) =>
-    await appToolAction(call(REALTIME_TOOL.SHOW_PANEL, argumentsJson), GUIDE, sessions);
+    await appToolAction(call(ACTION_TOOL.SHOW_PANEL, argumentsJson), GUIDE, sessions);
 
   assert.deepEqual(await show('{"sort":"recency"}'), {
     kind: "panel",
@@ -408,7 +408,7 @@ test("a spoken panel ask can reorder the list in the panel's own two words", asy
 
 test("a spoken composer open takes only the two kinds, drafting only the developer's words", async () => {
   const open = async (argumentsJson: string) =>
-    await appToolAction(call(REALTIME_TOOL.OPEN_FEEDBACK_COMPOSER, argumentsJson), GUIDE, []);
+    await appToolAction(call(ACTION_TOOL.OPEN_FEEDBACK_COMPOSER, argumentsJson), GUIDE, []);
 
   assert.deepEqual(await open('{"kind":"prompt","draft":"  let Luke restart a stuck run  "}'), {
     kind: "feedback",
@@ -436,7 +436,7 @@ test("a spoken composer open takes only the two kinds, drafting only the develop
 test("a spoken draft is bounded like a typed ask", async () => {
   const action = await appToolAction(
     call(
-      REALTIME_TOOL.OPEN_FEEDBACK_COMPOSER,
+      ACTION_TOOL.OPEN_FEEDBACK_COMPOSER,
       `{"kind":"prompt","draft":"${"a".repeat(maximumSessionMessageLength + 100)}"}`,
     ),
     GUIDE,
@@ -461,7 +461,7 @@ function guideWithUpdate(button: AppUpdateButton, detail: string): AppGuideSnaps
 
 test("a spoken update ask runs only the action the row's button offers", async () => {
   const ask = async (argumentsJson: string, guide: AppGuideSnapshot) =>
-    await appToolAction(call(REALTIME_TOOL.RUN_UPDATE_ACTION, argumentsJson), guide, []);
+    await appToolAction(call(ACTION_TOOL.RUN_UPDATE_ACTION, argumentsJson), guide, []);
 
   const offersCheck = guideWithUpdate(
     APP_UPDATE_ACTION.CHECK,
@@ -497,7 +497,7 @@ test("a spoken update ask runs only the action the row's button offers", async (
 
 test("a spoken update ask waits out a check or download already running", async () => {
   const ask = async (argumentsJson: string, guide: AppGuideSnapshot) =>
-    await appToolAction(call(REALTIME_TOOL.RUN_UPDATE_ACTION, argumentsJson), guide, []);
+    await appToolAction(call(ACTION_TOOL.RUN_UPDATE_ACTION, argumentsJson), guide, []);
 
   const checking = await ask(
     '{"action":"check"}',
@@ -518,7 +518,7 @@ test("a spoken update ask outside the vocabulary, or with no row to press, is re
   assert.equal(
     (
       await appToolAction(
-        call(REALTIME_TOOL.RUN_UPDATE_ACTION, '{"action":"install"}'),
+        call(ACTION_TOOL.RUN_UPDATE_ACTION, '{"action":"install"}'),
         offersCheck,
         [],
       )
@@ -526,13 +526,13 @@ test("a spoken update ask outside the vocabulary, or with no row to press, is re
     ACTION_RESULT_STATUS.REJECTED,
   );
   assert.equal(
-    (await appToolAction(call(REALTIME_TOOL.RUN_UPDATE_ACTION, "{}"), offersCheck, [])).status,
+    (await appToolAction(call(ACTION_TOOL.RUN_UPDATE_ACTION, "{}"), offersCheck, [])).status,
     ACTION_RESULT_STATUS.REJECTED,
   );
   // A guide with no update entry — a run that reports nothing about updates —
   // advertises no action at all.
   const unreported = await appToolAction(
-    call(REALTIME_TOOL.RUN_UPDATE_ACTION, '{"action":"check"}'),
+    call(ACTION_TOOL.RUN_UPDATE_ACTION, '{"action":"check"}'),
     GUIDE,
     [],
   );

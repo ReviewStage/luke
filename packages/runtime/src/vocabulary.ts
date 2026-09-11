@@ -4,7 +4,7 @@
  * seams a host composes over, the memory provider contract, the records
  * delegation keeps, and the one scheduler handle. A re-export door and
  * nothing else, Node-free by construction, because packages below the
- * runtime — realtime, hosted, voice, devtrace, memory — import this door and
+ * runtime — live, hosted, voice, devtrace, memory — import this door and
  * not the barrel, which reaches `node:fs`.
  */
 

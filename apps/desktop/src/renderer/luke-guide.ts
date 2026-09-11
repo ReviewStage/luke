@@ -77,7 +77,7 @@ export interface LukeGuideInput {
   settings: AppSettingsView;
   /** Where the build stands, for the guide's Updates entry. */
   update: UpdateSnapshot;
-  /** Whether a Realtime credential can be minted at all. */
+  /** Whether a live voice session can be opened at all. */
   voiceAvailable: boolean;
   microphoneStatus: MicrophoneStatus;
   /**

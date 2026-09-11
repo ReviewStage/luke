@@ -24,7 +24,7 @@ test("lines land in the named file, stamped, in the order they were recorded", a
   const writer = new AgentTraceWriter({ directory, now: fixedClock() });
   writer.recordWire({
     direction: TRACE_DIRECTION.CLIENT,
-    event: { type: "response.create" },
+    event: { type: "session.input_audio.mute" },
   });
   writer.recordBrainRequest({
     inputItems: 3,

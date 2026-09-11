@@ -162,8 +162,8 @@ which chord is a product decision and is argued about here rather than in
   assistant: Superwhisper, the ChatGPT desktop app, and Alfred all sit there.
 - **Option-S stops.** S is for stop, and Option-letter is the family the other
   two keys live in. It is a sibling of Escape rather than of the talk key: it
-  asks for quiet and nothing in its place, where the talk key over a reply
-  interrupts by taking the turn.
+  asks for quiet and nothing in its place, where speaking over a reply with
+  the talk key held interrupts Luke and carries the conversation on.
 - **Option-L asks.** Hold Option-Space to speak to Luke, tap Option-L to type
   to him — one modifier for both halves of the same conversation. Deliberately
   not Command-L, which is the address bar in every browser and a taken chord in
@@ -188,7 +188,7 @@ Three categories, and only the first is ever cut:
   after." under a switch reading *Quiet Music and Spotify*. Delete it. If the
   line seems necessary, the label is what to fix.
 - **Instructs.** Tells the developer something they cannot act without.
-  "Talking uses the Realtime API, which needs billing enabled." Nobody can
+  "Talking uses the GPT Live API, which needs billing enabled." Nobody can
   guess that. Keep it.
 - **Reports state.** This is the row's content. "Version 0.2.0 is available to
   download." Keep it.
@@ -220,7 +220,7 @@ What follows from this everywhere else:
   `repository-checks.sh` runs it with `--check`.
 
 Copy that reaches a model rather than the screen (`luke-guide.ts`, the
-realtime instructions) obeys a different rule. Verbosity there is not slop,
+live session's instructions) obeys a different rule. Verbosity there is not slop,
 but a capability the guide does not describe is one Luke will deny having, so
 compress the prose and never drop the fact. One rule per line beats three
 fused with em-dashes: the instruction to be brief has to be readable itself.

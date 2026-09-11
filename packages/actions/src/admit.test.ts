@@ -23,10 +23,10 @@ import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import {
   ACTION_FAMILY,
   ACTION_REFUSAL,
+  ACTION_TOOL,
   ACTIONS,
-  REALTIME_TOOL,
-  type RealtimeFunctionCall,
-  realtimeToolFamily,
+  type ActionFunctionCall,
+  actionToolFamily,
   SESSION_LIST_ALL,
   SESSION_LIST_VOICE,
 } from "./index.js";
@@ -40,7 +40,7 @@ import { admitToolCall } from "./testing/tool-call.js";
  * case below reads admission's own answer, which is the only answer there is.
  */
 async function sessionToolAction(
-  call: RealtimeFunctionCall,
+  call: ActionFunctionCall,
   sessions: readonly Session[],
   workspaceProjects: readonly ListedProject[] = [],
   agentModels: (providerId: string) => readonly WorkspaceAgentModels[] = () => [],
@@ -60,7 +60,7 @@ async function sessionToolAction(
   );
 }
 
-async function issueToolAction(call: RealtimeFunctionCall, issues: readonly TrackedIssue[]) {
+async function issueToolAction(call: ActionFunctionCall, issues: readonly TrackedIssue[]) {
   return withoutAdmission(
     await admitToolCall(call, {
       origin: RUN_ORIGIN.USER,
@@ -94,7 +94,7 @@ function actionableSession() {
   );
 }
 
-function messageCall(argumentsJson: string, name: string = REALTIME_TOOL.SEND_SESSION_MESSAGE) {
+function messageCall(argumentsJson: string, name: string = ACTION_TOOL.SEND_SESSION_MESSAGE) {
   return { name, argumentsJson };
 }
 
@@ -112,7 +112,7 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
   );
   assert.deepEqual(
     await sessionToolAction(
-      messageCall(`{${identity},"control_id":"cancel-run"}`, REALTIME_TOOL.RUN_SESSION_CONTROL),
+      messageCall(`{${identity},"control_id":"cancel-run"}`, ACTION_TOOL.RUN_SESSION_CONTROL),
       roster,
     ),
     {
@@ -129,7 +129,7 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
   // The open action carries the identity and nothing else: the address stays
   // in the main process's registry, where the press reads it back.
   assert.deepEqual(
-    await sessionToolAction(messageCall(`{${identity}}`, REALTIME_TOOL.OPEN_SESSION), roster),
+    await sessionToolAction(messageCall(`{${identity}}`, ACTION_TOOL.OPEN_SESSION), roster),
     {
       kind: "open",
       identity: { providerId: "conductor", providerSessionId: "conductor-1" },
@@ -147,7 +147,7 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
     await sessionToolAction(messageCall(`{${identity},"text":""}`), roster),
     await sessionToolAction(messageCall(`{${identity},"text":"${"a".repeat(4_100)}"}`), roster),
     await sessionToolAction(
-      messageCall(`{${identity},"control_id":"terminate"}`, REALTIME_TOOL.RUN_SESSION_CONTROL),
+      messageCall(`{${identity},"control_id":"terminate"}`, ACTION_TOOL.RUN_SESSION_CONTROL),
       roster,
     ),
     await sessionToolAction(messageCall(`{${identity},"text":"hi"}`, "delete_everything"), roster),
@@ -173,7 +173,7 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
   const nowhereToOpen = await sessionToolAction(
     messageCall(
       '{"provider_id":"codex","provider_session_id":"thread-1"}',
-      REALTIME_TOOL.OPEN_SESSION,
+      ACTION_TOOL.OPEN_SESSION,
     ),
     [quiet],
   );
@@ -219,7 +219,7 @@ test("an open ask can pick the app, held to the roster's own associations", asyn
   // never the address behind it.
   assert.deepEqual(
     await sessionToolAction(
-      messageCall(`{${identity},"application":"superset"}`, REALTIME_TOOL.OPEN_SESSION),
+      messageCall(`{${identity},"application":"superset"}`, ACTION_TOOL.OPEN_SESSION),
       [held],
     ),
     {
@@ -231,7 +231,7 @@ test("an open ask can pick the app, held to the roster's own associations", asyn
 
   // An ask that names no app keeps the row's own destination.
   assert.deepEqual(
-    await sessionToolAction(messageCall(`{${identity}}`, REALTIME_TOOL.OPEN_SESSION), [held]),
+    await sessionToolAction(messageCall(`{${identity}}`, ACTION_TOOL.OPEN_SESSION), [held]),
     { kind: "open", identity: { providerId: "codex", providerSessionId: "thread-2" } },
   );
 
@@ -239,7 +239,7 @@ test("an open ask can pick the app, held to the roster's own associations", asyn
   // never listed opens nothing; each refusal says where the session does open.
   for (const application of ["Conductor", "TextEdit"]) {
     const refusal = await sessionToolAction(
-      messageCall(`{${identity},"application":"${application}"}`, REALTIME_TOOL.OPEN_SESSION),
+      messageCall(`{${identity},"application":"${application}"}`, ACTION_TOOL.OPEN_SESSION),
       [held],
     );
     assert.equal(refusal.status, ACTION_RESULT_STATUS.REJECTED);
@@ -274,7 +274,7 @@ test("a creation ask may name a model, by the name the guide lists it under", as
   // Named by label, carried as the wire pairing, effort beside it.
   assert.deepEqual(
     await sessionToolAction(
-      messageCall(`{${identity},"model":"Fable 5","effort":"max"}`, REALTIME_TOOL.CREATE_WORKSPACE),
+      messageCall(`{${identity},"model":"Fable 5","effort":"max"}`, ACTION_TOOL.CREATE_WORKSPACE),
       [],
       projects,
       conductorAgentModels,
@@ -293,7 +293,7 @@ test("a creation ask may name a model, by the name the guide lists it under", as
   // build documents no models for at all.
   const refusals = [
     await sessionToolAction(
-      messageCall(`{${identity},"model":"GPT-9"}`, REALTIME_TOOL.CREATE_WORKSPACE),
+      messageCall(`{${identity},"model":"GPT-9"}`, ACTION_TOOL.CREATE_WORKSPACE),
       [],
       projects,
       conductorAgentModels,
@@ -301,20 +301,20 @@ test("a creation ask may name a model, by the name the guide lists it under", as
     await sessionToolAction(
       messageCall(
         `{${identity},"model":"Cursor Auto","effort":"max"}`,
-        REALTIME_TOOL.CREATE_WORKSPACE,
+        ACTION_TOOL.CREATE_WORKSPACE,
       ),
       [],
       projects,
       conductorAgentModels,
     ),
     await sessionToolAction(
-      messageCall(`{${identity},"effort":"max"}`, REALTIME_TOOL.CREATE_WORKSPACE),
+      messageCall(`{${identity},"effort":"max"}`, ACTION_TOOL.CREATE_WORKSPACE),
       [],
       projects,
       conductorAgentModels,
     ),
     await sessionToolAction(
-      messageCall(`{${identity},"model":"Fable 5"}`, REALTIME_TOOL.CREATE_WORKSPACE),
+      messageCall(`{${identity},"model":"Fable 5"}`, ACTION_TOOL.CREATE_WORKSPACE),
       [],
       projects,
     ),
@@ -339,7 +339,7 @@ test("an added agent may carry a model, only of the asked-for kind", async () =>
     await sessionToolAction(
       messageCall(
         `{${identity},"agent":"claude","model":"Fable 5","effort":"max"}`,
-        REALTIME_TOOL.ADD_WORKSPACE_AGENT,
+        ACTION_TOOL.ADD_WORKSPACE_AGENT,
       ),
       [spawning],
       [],
@@ -359,7 +359,7 @@ test("an added agent may carry a model, only of the asked-for kind", async () =>
   const mismatched = await sessionToolAction(
     messageCall(
       `{${identity},"agent":"cursor","model":"Fable 5"}`,
-      REALTIME_TOOL.ADD_WORKSPACE_AGENT,
+      ACTION_TOOL.ADD_WORKSPACE_AGENT,
     ),
     [spawning],
     [],
@@ -374,7 +374,7 @@ test("a creation ask can only name a project Luke was shown", async () => {
 
   assert.deepEqual(
     await sessionToolAction(
-      messageCall(`{${identity}}`, REALTIME_TOOL.CREATE_WORKSPACE),
+      messageCall(`{${identity}}`, ACTION_TOOL.CREATE_WORKSPACE),
       [],
       projects,
     ),
@@ -382,7 +382,7 @@ test("a creation ask can only name a project Luke was shown", async () => {
   );
   assert.deepEqual(
     await sessionToolAction(
-      messageCall(`{${identity},"name":"fix the panel"}`, REALTIME_TOOL.CREATE_WORKSPACE),
+      messageCall(`{${identity},"name":"fix the panel"}`, ACTION_TOOL.CREATE_WORKSPACE),
       [],
       projects,
     ),
@@ -398,28 +398,25 @@ test("a creation ask can only name a project Luke was shown", async () => {
   // outside its bound — is a refusal with a reason he can say aloud.
   const refusals = [
     await sessionToolAction(
-      messageCall(
-        '{"provider_id":"conductor","project_id":"other"}',
-        REALTIME_TOOL.CREATE_WORKSPACE,
-      ),
+      messageCall('{"provider_id":"conductor","project_id":"other"}', ACTION_TOOL.CREATE_WORKSPACE),
       [],
       projects,
     ),
     await sessionToolAction(
-      messageCall('{"provider_id":"codex","project_id":"proj-1"}', REALTIME_TOOL.CREATE_WORKSPACE),
+      messageCall('{"provider_id":"codex","project_id":"proj-1"}', ACTION_TOOL.CREATE_WORKSPACE),
       [],
       projects,
     ),
     await sessionToolAction(
       messageCall(
         `{${identity},"name":"${"a".repeat(maximumWorkspaceNameLength + 1)}"}`,
-        REALTIME_TOOL.CREATE_WORKSPACE,
+        ACTION_TOOL.CREATE_WORKSPACE,
       ),
       [],
       projects,
     ),
     // No list, no ask: a roster of sessions is not a list of projects.
-    await sessionToolAction(messageCall(`{${identity}}`, REALTIME_TOOL.CREATE_WORKSPACE), [
+    await sessionToolAction(messageCall(`{${identity}}`, ACTION_TOOL.CREATE_WORKSPACE), [
       actionableSession(),
     ]),
   ];
@@ -429,7 +426,7 @@ test("a creation ask can only name a project Luke was shown", async () => {
 test("an implicit project resolves only when the latest roster has one match", async () => {
   assert.deepEqual(
     await sessionToolAction(
-      messageCall('{"provider_id":"conductor"}', REALTIME_TOOL.CREATE_WORKSPACE),
+      messageCall('{"provider_id":"conductor"}', ACTION_TOOL.CREATE_WORKSPACE),
       [],
       [OFFERED_PROJECT],
     ),
@@ -437,7 +434,7 @@ test("an implicit project resolves only when the latest roster has one match", a
   );
 
   const ambiguous = await sessionToolAction(
-    messageCall('{"provider_id":"conductor"}', REALTIME_TOOL.CREATE_WORKSPACE),
+    messageCall('{"provider_id":"conductor"}', ACTION_TOOL.CREATE_WORKSPACE),
     [],
     [OFFERED_PROJECT, { ...OFFERED_PROJECT, providerProjectId: "proj-2" }],
   );
@@ -469,7 +466,7 @@ test("a target names a host only where the listed project carries one", async ()
       await sessionToolAction(
         messageCall(
           `{"provider_id":"conductor","project_id":"proj-1","target_id":"${invented}"}`,
-          REALTIME_TOOL.CREATE_WORKSPACE,
+          ACTION_TOOL.CREATE_WORKSPACE,
         ),
         [],
         [OFFERED_PROJECT, localTwin],
@@ -484,7 +481,7 @@ test("a target names a host only where the listed project carries one", async ()
   // the default provider's target-less twin.
   assert.deepEqual(
     await sessionToolAction(
-      messageCall(`{"target_id":"${localTwin.providerTargetId}"}`, REALTIME_TOOL.CREATE_WORKSPACE),
+      messageCall(`{"target_id":"${localTwin.providerTargetId}"}`, ACTION_TOOL.CREATE_WORKSPACE),
       [],
       [OFFERED_PROJECT, localTwin],
       noModels,
@@ -506,7 +503,7 @@ test("a target names a host only where the listed project carries one", async ()
     await sessionToolAction(
       messageCall(
         '{"provider_id":"superset","project_id":"proj-1","target_id":"studio"}',
-        REALTIME_TOOL.CREATE_WORKSPACE,
+        ACTION_TOOL.CREATE_WORKSPACE,
       ),
       [],
       hosts,
@@ -521,7 +518,7 @@ test("a target names a host only where the listed project carries one", async ()
   const unlisted = await sessionToolAction(
     messageCall(
       '{"provider_id":"superset","project_id":"proj-1","target_id":"host-old"}',
-      REALTIME_TOOL.CREATE_WORKSPACE,
+      ACTION_TOOL.CREATE_WORKSPACE,
     ),
     [],
     hosts,
@@ -532,7 +529,7 @@ test("a target names a host only where the listed project carries one", async ()
   const wrongHostOnly = await sessionToolAction(
     messageCall(
       '{"provider_id":"conductor-local","target_id":"/Users/me/elsewhere"}',
-      REALTIME_TOOL.CREATE_WORKSPACE,
+      ACTION_TOOL.CREATE_WORKSPACE,
     ),
     [],
     [OFFERED_PROJECT, localTwin],
@@ -554,7 +551,7 @@ test("the saved defaults settle what a creation ask leaves unnamed", async () =>
   // A nameless ask between the two Conductors goes to the default provider.
   assert.deepEqual(
     await sessionToolAction(
-      messageCall("{}", REALTIME_TOOL.CREATE_WORKSPACE),
+      messageCall("{}", ACTION_TOOL.CREATE_WORKSPACE),
       [],
       [OFFERED_PROJECT, localTwin],
       noModels,
@@ -566,7 +563,7 @@ test("the saved defaults settle what a creation ask leaves unnamed", async () =>
   // An ask that names its own provider is never overridden by the default.
   assert.deepEqual(
     await sessionToolAction(
-      messageCall('{"provider_id":"conductor-local"}', REALTIME_TOOL.CREATE_WORKSPACE),
+      messageCall('{"provider_id":"conductor-local"}', ACTION_TOOL.CREATE_WORKSPACE),
       [],
       [OFFERED_PROJECT, localTwin],
       noModels,
@@ -578,7 +575,7 @@ test("the saved defaults settle what a creation ask leaves unnamed", async () =>
   // The provider's chosen project settles an ask that names no project.
   assert.deepEqual(
     await sessionToolAction(
-      messageCall('{"provider_id":"conductor"}', REALTIME_TOOL.CREATE_WORKSPACE),
+      messageCall('{"provider_id":"conductor"}', ACTION_TOOL.CREATE_WORKSPACE),
       [],
       [OFFERED_PROJECT, { ...OFFERED_PROJECT, providerProjectId: "proj-2" }],
       noModels,
@@ -591,7 +588,7 @@ test("the saved defaults settle what a creation ask leaves unnamed", async () =>
   // A default provider offering nothing settles nothing: the ask stays
   // ambiguous between the projects actually listed.
   const unsettled = await sessionToolAction(
-    messageCall("{}", REALTIME_TOOL.CREATE_WORKSPACE),
+    messageCall("{}", ACTION_TOOL.CREATE_WORKSPACE),
     [],
     [OFFERED_PROJECT, localTwin],
     noModels,
@@ -604,7 +601,7 @@ test("the saved defaults settle what a creation ask leaves unnamed", async () =>
   // question even when exactly one candidate is some provider's chosen
   // project.
   const crossProvider = await sessionToolAction(
-    messageCall("{}", REALTIME_TOOL.CREATE_WORKSPACE),
+    messageCall("{}", ACTION_TOOL.CREATE_WORKSPACE),
     [],
     [OFFERED_PROJECT, { ...OFFERED_PROJECT, providerProjectId: "proj-2" }, localTwin],
     noModels,
@@ -632,7 +629,7 @@ test("another agent can only be added as a kind the session's own entry lists", 
     await sessionToolAction(
       messageCall(
         `{${identity},"agent":"codex","name":"xyz feature","task":"Build the XYZ feature"}`,
-        REALTIME_TOOL.ADD_WORKSPACE_AGENT,
+        ACTION_TOOL.ADD_WORKSPACE_AGENT,
       ),
       roster,
     ),
@@ -647,7 +644,7 @@ test("another agent can only be added as a kind the session's own entry lists", 
   // Bare is fine too: the agent is the only thing the endpoint cannot default.
   assert.deepEqual(
     await sessionToolAction(
-      messageCall(`{${identity},"agent":"claude"}`, REALTIME_TOOL.ADD_WORKSPACE_AGENT),
+      messageCall(`{${identity},"agent":"claude"}`, ACTION_TOOL.ADD_WORKSPACE_AGENT),
       roster,
     ),
     {
@@ -660,14 +657,14 @@ test("another agent can only be added as a kind the session's own entry lists", 
   const refusals = [
     // An agent kind the entry does not list is refused, not forwarded.
     await sessionToolAction(
-      messageCall(`{${identity},"agent":"unlisted-agent"}`, REALTIME_TOOL.ADD_WORKSPACE_AGENT),
+      messageCall(`{${identity},"agent":"unlisted-agent"}`, ACTION_TOOL.ADD_WORKSPACE_AGENT),
       roster,
     ),
     // A session that lists no new agents takes no such ask at all.
     await sessionToolAction(
       messageCall(
         '{"provider_id":"conductor","provider_session_id":"conductor-1","agent":"claude"}',
-        REALTIME_TOOL.ADD_WORKSPACE_AGENT,
+        ACTION_TOOL.ADD_WORKSPACE_AGENT,
       ),
       roster,
     ),
@@ -675,14 +672,14 @@ test("another agent can only be added as a kind the session's own entry lists", 
     await sessionToolAction(
       messageCall(
         `{${identity},"agent":"claude","name":"${"a".repeat(maximumWorkspaceNameLength + 1)}"}`,
-        REALTIME_TOOL.ADD_WORKSPACE_AGENT,
+        ACTION_TOOL.ADD_WORKSPACE_AGENT,
       ),
       roster,
     ),
     await sessionToolAction(
       messageCall(
         `{${identity},"agent":"claude","task":"${"a".repeat(4_100)}"}`,
-        REALTIME_TOOL.ADD_WORKSPACE_AGENT,
+        ACTION_TOOL.ADD_WORKSPACE_AGENT,
       ),
       roster,
     ),
@@ -710,7 +707,7 @@ test("an opening task is held to the project's own word for it", async () => {
     await sessionToolAction(
       messageCall(
         '{"provider_id":"cursor","project_id":"proj-1","task":"Add the XYZ feature"}',
-        REALTIME_TOOL.CREATE_WORKSPACE,
+        ACTION_TOOL.CREATE_WORKSPACE,
       ),
       [],
       projects,
@@ -724,10 +721,7 @@ test("an opening task is held to the project's own word for it", async () => {
   );
   // A project with an optional task is happy either way.
   const bare = await sessionToolAction(
-    messageCall(
-      '{"provider_id":"conductor","project_id":"proj-1"}',
-      REALTIME_TOOL.CREATE_WORKSPACE,
-    ),
+    messageCall('{"provider_id":"conductor","project_id":"proj-1"}', ACTION_TOOL.CREATE_WORKSPACE),
     [],
     projects,
   );
@@ -736,7 +730,7 @@ test("an opening task is held to the project's own word for it", async () => {
   const refusals = [
     // A project that needs a task cannot be created without one.
     await sessionToolAction(
-      messageCall('{"provider_id":"cursor","project_id":"proj-1"}', REALTIME_TOOL.CREATE_WORKSPACE),
+      messageCall('{"provider_id":"cursor","project_id":"proj-1"}', ACTION_TOOL.CREATE_WORKSPACE),
       [],
       projects,
     ),
@@ -744,7 +738,7 @@ test("an opening task is held to the project's own word for it", async () => {
     await sessionToolAction(
       messageCall(
         '{"provider_id":"codex","project_id":"proj-1","task":"Add the XYZ feature"}',
-        REALTIME_TOOL.CREATE_WORKSPACE,
+        ACTION_TOOL.CREATE_WORKSPACE,
       ),
       [],
       projects,
@@ -753,7 +747,7 @@ test("an opening task is held to the project's own word for it", async () => {
     await sessionToolAction(
       messageCall(
         `{"provider_id":"cursor","project_id":"proj-1","task":"${"a".repeat(4_100)}"}`,
-        REALTIME_TOOL.CREATE_WORKSPACE,
+        ACTION_TOOL.CREATE_WORKSPACE,
       ),
       [],
       projects,
@@ -782,7 +776,7 @@ function actionableIssue() {
   return issue;
 }
 
-function issueCall(argumentsJson: string, name: string = REALTIME_TOOL.UPDATE_ISSUE_STATE) {
+function issueCall(argumentsJson: string, name: string = ACTION_TOOL.UPDATE_ISSUE_STATE) {
   return { name, argumentsJson };
 }
 
@@ -803,7 +797,7 @@ test("an issue tool call can act only on an issue Luke was shown, going where it
   });
   assert.deepEqual(
     await issueToolAction(
-      issueCall(`{${identity},"body":"deferred to next release"}`, REALTIME_TOOL.COMMENT_ON_ISSUE),
+      issueCall(`{${identity},"body":"deferred to next release"}`, ACTION_TOOL.COMMENT_ON_ISSUE),
       roster,
     ),
     {
@@ -825,11 +819,11 @@ test("an issue tool call can act only on an issue Luke was shown, going where it
     await issueToolAction(issueCall(`{${identity},"state":"In Progress"}`), roster),
     await issueToolAction(issueCall(`{${identity},"state":""}`), roster),
     await issueToolAction(
-      issueCall(`{${identity},"body":""}`, REALTIME_TOOL.COMMENT_ON_ISSUE),
+      issueCall(`{${identity},"body":""}`, ACTION_TOOL.COMMENT_ON_ISSUE),
       roster,
     ),
     await issueToolAction(
-      issueCall(`{${identity},"body":"${"a".repeat(4_100)}"}`, REALTIME_TOOL.COMMENT_ON_ISSUE),
+      issueCall(`{${identity},"body":"${"a".repeat(4_100)}"}`, ACTION_TOOL.COMMENT_ON_ISSUE),
       roster,
     ),
     await issueToolAction(issueCall(`{${identity},"state":"Done"}`, "delete_everything"), roster),
@@ -856,7 +850,7 @@ test("an issue tool call can act only on an issue Luke was shown, going where it
   assert.equal(
     (
       await issueToolAction(
-        issueCall(`{${quietIdentity},"body":"hi"}`, REALTIME_TOOL.COMMENT_ON_ISSUE),
+        issueCall(`{${quietIdentity},"body":"hi"}`, ACTION_TOOL.COMMENT_ON_ISSUE),
         [still],
       )
     ).status,
@@ -865,10 +859,10 @@ test("an issue tool call can act only on an issue Luke was shown, going where it
 });
 
 test("each action belongs to one family", async () => {
-  assert.equal(realtimeToolFamily(REALTIME_TOOL.SEND_SESSION_MESSAGE), ACTION_FAMILY.SESSION);
-  assert.equal(realtimeToolFamily(REALTIME_TOOL.UPDATE_ISSUE_STATE), ACTION_FAMILY.ISSUE);
-  assert.equal(realtimeToolFamily(REALTIME_TOOL.COMMENT_ON_ISSUE), ACTION_FAMILY.ISSUE);
-  assert.equal(realtimeToolFamily("delete_everything"), undefined);
+  assert.equal(actionToolFamily(ACTION_TOOL.SEND_SESSION_MESSAGE), ACTION_FAMILY.SESSION);
+  assert.equal(actionToolFamily(ACTION_TOOL.UPDATE_ISSUE_STATE), ACTION_FAMILY.ISSUE);
+  assert.equal(actionToolFamily(ACTION_TOOL.COMMENT_ON_ISSUE), ACTION_FAMILY.ISSUE);
+  assert.equal(actionToolFamily("delete_everything"), undefined);
   assert.equal(ACTIONS.CHANGE_APP_SETTING.family, ACTION_FAMILY.APP);
   assert.equal(ACTIONS.SEND_SESSION_MESSAGE.family, ACTION_FAMILY.SESSION);
   assert.equal(ACTIONS.UPDATE_ISSUE_STATE.family, ACTION_FAMILY.ISSUE);

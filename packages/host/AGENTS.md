@@ -89,13 +89,11 @@ everything Luke says unprompted: `compose-live.ts` takes every briefing from
 the brain, every typed ask's run to speak its reply, and the two onboarding
 beats. A briefing or reply with no session standing makes the service say it
 wants one, and the voice window opens it muted. Nothing else in the host
-speaks: the Realtime path's speech arbiter, reply ledger, and receiver epochs
+speaks: the earlier speech arbiter, reply ledger, and receiver epochs
 are gone, and the guarantee they carried — at most one spoken reply per run —
 now holds by construction, since a run's sentences reach the voice only as
 the run's own events arriving at this one service, each appended once in
-order and none after the run's end. The `speech` and `receiver` methods the
-protocol still names have no handler here, so the server answers them
-unknown until the protocol retires them.
+order and none after the run's end.
 
 ## The account preference client is here for the graph's sake
 

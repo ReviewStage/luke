@@ -456,7 +456,7 @@ Canonical commands:
   beside them, each mutating and idempotency-keyed so a retried SDP offer
   cannot create and bill a second session, their shapes declared once as
   `@sidecar/wire` schemas in `protocol.ts`, and answered by the host's live
-  composer, which owns the one session; the retired Realtime path's
+  composer, which owns the one session; the retired credential-mint path's
   methods and events — the credential mint, the speech settle, the receiver
   report, the delivery claims, and the speech offers — are gone from the
   table rather than kept as names no handler answers, so a client of an
@@ -531,7 +531,7 @@ Canonical commands:
   two onboarding beats are each appended into the standing session as
   commentary with no delegation id, or into the one session the voice window
   opens muted when the service says it wants one. There is no other speech
-  path: the Realtime reply-grant ledger, receiver epochs, and speech offers
+  path: the earlier reply-grant ledger, receiver epochs, and speech offers
   are gone, and the guarantee they carried is now the service's own, held by
   construction rather than by a ledger. A run's reply is spoken at most once:
   its sentences reach the voice only as the run's own events arriving at this

@@ -249,7 +249,10 @@ it.
 **Usage data.** We count how Luke's features are used, on the Mac, in the
 iOS app, and in the Apple Watch app, and attach your name and email to that
 record. The counts are event names and values from a fixed list, and each one
-says which of the three apps it came from. Nothing you type or say and nothing
+says which of the three apps it came from. A voice session's start is counted
+with which of three sources opened it — our voice service on your account,
+your own OpenAI key, or the accountless introduction — and never with a key
+or a session id. Nothing you type or say and nothing
 from a session can appear in one: no titles, branches, file paths, prompts, or
 error text.
 

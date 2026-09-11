@@ -1,5 +1,5 @@
 import { ACTION_RESULT_STATUS, isRecord, type UnparsedWireValue } from "@sidecar/wire";
-import type { RealtimeFunctionCall } from "../action-kinds.js";
+import type { ActionFunctionCall } from "../action-kinds.js";
 import { ACTIONS } from "../actions.js";
 import {
   ACTION_REFUSAL,
@@ -17,7 +17,7 @@ import {
  * them and never take a call.
  */
 export async function admitToolCall(
-  call: RealtimeFunctionCall,
+  call: ActionFunctionCall,
   context: AdmitContext,
 ): Promise<ValidatedAction | Refusal> {
   const spec = Object.values(ACTIONS).find((candidate) => candidate.name === call.name);

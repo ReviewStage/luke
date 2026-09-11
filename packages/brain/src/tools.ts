@@ -32,7 +32,7 @@ export { BRAIN_TOOL, isBrainOnlyTool, maximumBriefingLength, TOOL_GROUP } from "
 /**
  * The brain's tool catalog: every tool a turn could be offered, as the
  * registry describes it, each one a module. The action rows are the action
- * tool modules, each declared from the same table the Realtime session was
+ * tool modules, each declared from the same action table the voice's tools were once
  * configured from, so the brain can ask for nothing the actions package does
  * not validate; the brain's own tools — the roster in full, a whole
  * transcript, the briefing, the workspace files, a skill's instructions, and

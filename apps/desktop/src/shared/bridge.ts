@@ -201,7 +201,7 @@ export const BRIDGE = {
     result: result<boolean>(isWireBoolean),
   }),
   /**
-   * One tapped realtime event for the development trace. Fire-and-forget on
+   * One tapped live event for the development trace. Fire-and-forget on
    * purpose: the tap must cost the conversation nothing, and the main process
    * simply drops it when no traced run is on — which is every packaged run,
    * because the writer only exists behind the unpackaged `LUKE_TRACE_DIR`

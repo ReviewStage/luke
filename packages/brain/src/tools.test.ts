@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ACTION_FAMILY, REALTIME_TOOL, realtimeToolDefinitions } from "@sidecar/actions";
+import { ACTION_FAMILY, ACTION_TOOL, actionToolDefinitions } from "@sidecar/actions";
 import { NOTEBOOK_MEMORY_TOOL } from "@sidecar/memory";
 import {
   GROUP_PREFIX,
@@ -30,7 +30,7 @@ test("the catalog holds every action, every brain tool, and every memory tool on
   const names = catalog.map((tool) => tool.schema.name);
   assert.equal(new Set(names).size, names.length);
   const memoryTools: readonly string[] = Object.values(NOTEBOOK_MEMORY_TOOL);
-  for (const tool of realtimeToolDefinitions()) {
+  for (const tool of actionToolDefinitions()) {
     const entry = catalog.find((candidate) => candidate.schema.name === tool.name);
     assert.ok(entry, `${tool.name} is in the catalog`);
     // Every action is the performer's to carry, the notebook's two writes included.
@@ -51,7 +51,7 @@ test("the catalog holds every action, every brain tool, and every memory tool on
   }
   assert.equal(
     names.length,
-    realtimeToolDefinitions().length + Object.values(BRAIN_TOOL).length + memoryTools.length,
+    actionToolDefinitions().length + Object.values(BRAIN_TOOL).length + memoryTools.length,
   );
 });
 
@@ -60,8 +60,8 @@ test("with no configured layers every turn is offered the whole catalog, and onl
   const ask = resolveTurnToolPolicy(catalog, {}, BRAIN_TURN_TRIGGER.ASK);
   const wake = resolveTurnToolPolicy(catalog, {}, BRAIN_TURN_TRIGGER.WAKE);
   const maintenance = resolveTurnToolPolicy(catalog, {});
-  assert.ok(ask.allows(REALTIME_TOOL.SEND_SESSION_MESSAGE));
-  assert.ok(wake.allows(REALTIME_TOOL.SEND_SESSION_MESSAGE));
+  assert.ok(ask.allows(ACTION_TOOL.SEND_SESSION_MESSAGE));
+  assert.ok(wake.allows(ACTION_TOOL.SEND_SESSION_MESSAGE));
   assert.ok(wake.allows(BRAIN_TOOL.WRITE_WORKSPACE_FILE));
   assert.ok(!ask.allows(BRAIN_TOOL.ANNOUNCE));
   assert.ok(wake.allows(BRAIN_TOOL.ANNOUNCE));
@@ -86,7 +86,7 @@ test("a configured deny of the actions group removes every action and keeps the 
   const policy = resolveToolPolicy(brainToolCatalog(), {
     agent: { deny: [`group:${TOOL_GROUP.ACTIONS}`] },
   });
-  for (const tool of realtimeToolDefinitions()) assert.ok(!policy.allows(tool.name), tool.name);
+  for (const tool of actionToolDefinitions()) assert.ok(!policy.allows(tool.name), tool.name);
   assert.ok(policy.allows(BRAIN_TOOL.LIST_SESSIONS));
   assert.ok(policy.allows(BRAIN_TOOL.READ_TRANSCRIPT));
   assert.ok(policy.allows(BRAIN_TOOL.READ_WORKSPACE_FILE));
@@ -101,7 +101,7 @@ test("announce takes the briefing alone and the hosted catalog carries every def
   assert.equal(hostedBrainToolCatalog().size, brainToolCatalog().length);
   assert.ok(isBrainOnlyTool(BRAIN_TOOL.READ_TRANSCRIPT));
   assert.ok(isBrainOnlyTool(BRAIN_TOOL.LOAD_SKILL));
-  assert.ok(!isBrainOnlyTool(REALTIME_TOOL.SEND_SESSION_MESSAGE));
+  assert.ok(!isBrainOnlyTool(ACTION_TOOL.SEND_SESSION_MESSAGE));
 });
 
 test("a child's task turn loses announce like an ask, and the session tools stand in the catalog under their group", () => {
@@ -141,7 +141,7 @@ test("the notebook stands in the catalog under the memory group: the provider's 
     assert.equal(entry.effect, TOOL_EFFECT.READ);
     assert.deepEqual([...entry.groups], [TOOL_GROUP.MEMORY, TOOL_GROUP.READ]);
   }
-  const notebookWrites = [REALTIME_TOOL.REMEMBER_FACT, REALTIME_TOOL.FORGET_FACT];
+  const notebookWrites = [ACTION_TOOL.REMEMBER_FACT, ACTION_TOOL.FORGET_FACT];
   for (const name of notebookWrites) {
     const entry = entryOf(name);
     assert.equal(entry.execution, TOOL_EXECUTION.PERFORMER);
@@ -149,7 +149,7 @@ test("the notebook stands in the catalog under the memory group: the provider's 
     assert.deepEqual([...entry.groups], [TOOL_GROUP.MEMORY, TOOL_GROUP.ACTIONS, ACTION_FAMILY.APP]);
   }
   assert.equal(
-    catalog.filter((tool) => tool.schema.name === REALTIME_TOOL.REMEMBER_FACT).length,
+    catalog.filter((tool) => tool.schema.name === ACTION_TOOL.REMEMBER_FACT).length,
     1,
     "a notebook write is listed once, as an action",
   );
@@ -163,7 +163,7 @@ test("the notebook stands in the catalog under the memory group: the provider's 
   const deniedActions = resolveToolPolicy(catalog, {
     agent: { deny: [`${GROUP_PREFIX}${TOOL_GROUP.ACTIONS}`] },
   });
-  assert.equal(deniedActions.allows(REALTIME_TOOL.REMEMBER_FACT), false);
+  assert.equal(deniedActions.allows(ACTION_TOOL.REMEMBER_FACT), false);
   assert.equal(deniedActions.allows(NOTEBOOK_MEMORY_TOOL.SEARCH), true);
 });
 

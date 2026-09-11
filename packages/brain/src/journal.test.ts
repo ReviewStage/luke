@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { REALTIME_TOOL, refusedActionOutput } from "@sidecar/actions";
+import { ACTION_TOOL, refusedActionOutput } from "@sidecar/actions";
 import { ACTION_RESULT_STATUS, isWireString } from "@sidecar/wire";
 import { freshBrainState } from "./envelope.js";
 import {
@@ -42,7 +42,7 @@ test("an observation turn's run id never repeats across a rebuild, and a journal
       {
         runId: "wake-1",
         callId: messageAction.call_id,
-        name: REALTIME_TOOL.SEND_SESSION_MESSAGE,
+        name: ACTION_TOOL.SEND_SESSION_MESSAGE,
         argumentsJson: messageAction.arguments,
         startedAt: NOW - 10,
         outputJson: JSON.stringify({ status: ACTION_RESULT_STATUS.ACCEPTED }),

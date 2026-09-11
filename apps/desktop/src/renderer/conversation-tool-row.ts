@@ -5,7 +5,7 @@ import {
   ACTIONS,
   type ActionOutputEnvelope,
   type ActionTargetSnapshot,
-  realtimeToolKind,
+  actionToolKind,
   type SessionActionKind,
 } from "@sidecar/actions";
 import {
@@ -356,7 +356,7 @@ function composeRuns(
  * a session it still holds.
  */
 export function toolRow(part: StoredToolPart, roster: readonly SessionView[]): ToolRow | undefined {
-  const kind = realtimeToolKind(storedToolName(part));
+  const kind = actionToolKind(storedToolName(part));
   if (kind === undefined || !isSessionActionKind(kind)) return undefined;
   const envelope = envelopeOf(part);
   const target = envelope?.target;

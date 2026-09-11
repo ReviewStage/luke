@@ -1,8 +1,8 @@
 import {
   ACTION_REFUSAL,
+  type ActionFunctionCall,
   type ActionOutputEnvelope,
   acceptedActionOutput,
-  type RealtimeFunctionCall,
   refusedActionOutput,
   type ValidatedAction,
 } from "@sidecar/actions";
@@ -247,7 +247,7 @@ export function fakeActionPerformer(options: FakeActionPerformerOptions = {}): F
  */
 export async function performCall(
   actions: BrainActionPerformer,
-  call: RealtimeFunctionCall,
+  call: ActionFunctionCall,
   execution: BrainActionExecution,
 ): Promise<ActionOutputEnvelope> {
   const tool = actionToolNamed(call.name);

@@ -37,6 +37,10 @@ they left the switch on.
 A value set another package already declares is imported where the graph
 allows it: `connection_id` is `CREDENTIAL_PROVIDER_ID` itself, read from
 `@sidecar/credentials/vocabulary`, so there is no second list to drift. A set
+this package alone declares is still one closed here: `session_source` on
+`voice:call_start` is `PRODUCT_VOICE_SESSION_SOURCE` (`hosted`, `keyed`,
+`introduction`), which source opened a live session and never a credential
+or a session id. A set
 whose package reads this one — the diagnostic kinds, the settings pages —
 still repeats it, because the edge would close a loop; each of those gaps is
 closed by a total `Record` bridge in the package that reads this one

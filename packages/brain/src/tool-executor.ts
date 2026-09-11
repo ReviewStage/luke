@@ -1,7 +1,7 @@
 import {
   ACTION_OUTPUT,
   ACTION_REFUSAL,
-  realtimeToolFamily,
+  actionToolFamily,
   refusedActionOutput,
   unknownActionOutput,
 } from "@sidecar/actions";
@@ -119,7 +119,7 @@ const ACTION_OUTCOMES: ExecutorOutcomes = {
 };
 
 function outcomesFor(name: string): ExecutorOutcomes {
-  return realtimeToolFamily(name) !== undefined ? ACTION_OUTCOMES : RECORD_OUTCOMES;
+  return actionToolFamily(name) !== undefined ? ACTION_OUTCOMES : RECORD_OUTCOMES;
 }
 
 /**

@@ -1,7 +1,7 @@
 import Foundation
 
 /// The Realtime tools the phone's session may be handed, by the names
-/// `REALTIME_TOOL` in `@sidecar/actions` gives them. A call naming anything
+/// `ACTION_TOOL` in `@sidecar/actions` gives them. A call naming anything
 /// else is refused before it is looked at.
 public enum VoiceToolName: String, Sendable, CaseIterable {
     case sendSessionMessage = "send_session_message"
