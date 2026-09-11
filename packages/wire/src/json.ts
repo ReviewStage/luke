@@ -151,15 +151,19 @@ export function wholeText(value: string | undefined): string | undefined {
   return normalized || undefined;
 }
 
-export function recordFromJsonLine(line: string): WireRecord | undefined {
+/** JSON read back as the data it carries; text that is not JSON is kept as the text it is. */
+export function valueFromJsonText(text: string): WireValue {
   try {
-    // SAFETY: JSON.parse returns a runtime value; isRecord validates the object contract.
-    const parsed = JSON.parse(line) as UnparsedWireValue;
-    return isRecord(parsed) ? parsed : undefined;
-  } catch (error) {
-    if (error instanceof SyntaxError) return undefined;
-    throw error;
+    // SAFETY: JSON.parse answers a wire value; a caller keeps it as data and validates what it reads off it.
+    return JSON.parse(text) as WireValue;
+  } catch {
+    return text;
   }
+}
+
+export function recordFromJsonLine(line: string): WireRecord | undefined {
+  const parsed = valueFromJsonText(line);
+  return isRecord(parsed) ? parsed : undefined;
 }
 
 export function positiveInteger(value: number | undefined, fallback: number): number {

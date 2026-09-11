@@ -1,4 +1,9 @@
-import { isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import {
+  isWireString,
+  type UnknownActionResult,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "@sidecar/wire";
 import type { CompactionSource } from "./storage.js";
 
 /**
@@ -396,10 +401,14 @@ export interface ContextLifecycle {
  */
 export interface ContextEngine {
   readonly checkpointFormat: CheckpointFormat;
-  /** Loads a checkpoint, refusing one of another format, and repairs what a crash left unpaired. */
+  /**
+   * Loads a checkpoint, refusing one of another format, and answers a call a
+   * crash left unpaired with the lost result: the envelope saying the call
+   * was dispatched and its effect is unknown.
+   */
   bootstrap(
     checkpoint: RuntimeCheckpoint | undefined,
-    lostResultJson: string,
+    lostResult: UnknownActionResult,
     lifecycle?: ContextLifecycle,
   ): MaybePromise<ContextBootstrap>;
   ingest(input: ContextInput, lifecycle?: ContextLifecycle): MaybePromise<void>;
@@ -599,17 +608,17 @@ export interface AgentRuntime {
    * for the turn that needed it.
    */
   compact(context: ContextEngine, options: CompactionOptions): Promise<RuntimeCompaction>;
-  /** A context engine of this runtime's format, bootstrapped from the checkpoint when one is compatible. */
+  /** A context engine of this runtime's format, bootstrapped from the checkpoint when one is compatible, its unpaired calls answered with the lost result. */
   openContext(
     checkpoint: RuntimeCheckpoint | undefined,
-    lostResultJson: string,
+    lostResult: UnknownActionResult,
     lifecycle?: ContextLifecycle,
   ): Promise<ContextOpening>;
   start(request: RuntimeRunRequest): RuntimeRun;
-  /** Starts a run over a context restored from the checkpoint; a checkpoint of another format is refused. */
+  /** Starts a run over a context restored from the checkpoint, its unpaired calls answered with the lost result; a checkpoint of another format is refused. */
   resume(
     checkpoint: RuntimeCheckpoint,
     request: Omit<RuntimeRunRequest, "context">,
-    lostResultJson: string,
+    lostResult: UnknownActionResult,
   ): Promise<RuntimeRun | { readonly refused: string }>;
 }

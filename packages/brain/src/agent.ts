@@ -646,12 +646,7 @@ export class BrainAgent {
   }
 
   #generationFrom(state: BrainPersistedState): Generation {
-    return generationFrom(
-      state,
-      this.#options.runtime,
-      JSON.stringify(UNKNOWN_ACTION_RESULT),
-      this.#now,
-    );
+    return generationFrom(state, this.#options.runtime, UNKNOWN_ACTION_RESULT, this.#now);
   }
 
   async #restore(): Promise<void> {

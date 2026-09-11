@@ -38,6 +38,7 @@ export {
   text,
   type UnparsedWireValue,
   unparsedWire,
+  valueFromJsonText,
   type WireBoundaryInput,
   type WirePrimitive,
   type WireRecord,

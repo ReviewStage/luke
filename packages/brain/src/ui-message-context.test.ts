@@ -53,7 +53,6 @@ import {
 
 const RUNTIME = { id: "tool-loop", version: 1 };
 const LOST_RESULT = { status: UNKNOWN_ACTION_STATUS, reason: "the result was lost" } as const;
-const LOST = JSON.stringify(LOST_RESULT);
 /** How the SDK marks a tool result's output to the model when it is an answer rather than an error. */
 const MODEL_RESULT_OUTPUT = { JSON: "json" } as const;
 const MODEL = "gpt-5.4-mini";
@@ -69,7 +68,7 @@ const TOOLS: ToolSet = {
   }),
 };
 
-const OPTIONS: ModelInputOptions = { tools: TOOLS, replay: REPLAY, lostResultJson: LOST };
+const OPTIONS: ModelInputOptions = { tools: TOOLS, replay: REPLAY, lostResult: LOST_RESULT };
 
 /** One turn: an ask, a reasoning item before a transcript read, the read's answer, a reasoning item before the reply. */
 const TURN = {
@@ -245,7 +244,7 @@ function checkpointOf(context: UIMessageContextEngine, rows: readonly ContextRow
 
 async function bootstrapped(rows: readonly ContextRow[]) {
   const context = engine();
-  const bootstrap = await context.bootstrap(checkpointOf(context, rows), LOST);
+  const bootstrap = await context.bootstrap(checkpointOf(context, rows), LOST_RESULT);
   return { context, bootstrap };
 }
 
@@ -384,7 +383,7 @@ function shownByModelMessages(messages: readonly WireRecord[]): Shown[] {
 
 test("the same turn produces equivalent model input from both engines", async () => {
   const responses = new ResponsesContextEngine(RUNTIME);
-  responses.bootstrap(undefined, LOST);
+  responses.bootstrap(undefined, LOST_RESULT);
   responses.ingest({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: TURN.ASK });
   responses.ingest({
     kind: CONTEXT_INPUT_KIND.MODEL_OUTPUT,
@@ -642,14 +641,14 @@ test("compact drops the rows the derivation no longer reads, keeps the rest in w
 
 test("a call left unanswered is shown to the model as an answer whose envelope says unknown, the same from both engines", async () => {
   const responses = new ResponsesContextEngine(RUNTIME);
-  responses.bootstrap(undefined, LOST);
+  responses.bootstrap(undefined, LOST_RESULT);
   responses.ingest({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: TURN.ASK });
   responses.ingest({
     kind: CONTEXT_INPUT_KIND.MODEL_OUTPUT,
     items: [reasoningItem(TURN.REASONING_BEFORE_CALL), functionCallItem()],
   });
   const resumed = new ResponsesContextEngine(RUNTIME);
-  resumed.bootstrap(responses.checkpoint(), LOST);
+  resumed.bootstrap(responses.checkpoint(), LOST_RESULT);
   const interrupted = assistantRow(
     "m2",
     replyParts(TOOL_PART_STATE.INPUT_AVAILABLE).slice(0, PARTS_THROUGH_CALL),
@@ -697,7 +696,7 @@ test("a call the record left unanswered is answered with the lost result, and th
 test("the stamp joins the runtime and the row format, and an empty checkpoint loads as nothing", async () => {
   const context = engine();
   assert.equal(checkpointFormatTag(context.checkpointFormat), "tool-loop@1:ai-ui-message/1");
-  assert.deepEqual(await context.bootstrap(undefined, LOST), { loaded: true, repaired: 0 });
+  assert.deepEqual(await context.bootstrap(undefined, LOST_RESULT), { loaded: true, repaired: 0 });
   assert.deepEqual(await context.assemble({ ephemeral: [] }), []);
   assert.deepEqual(context.checkpoint().items, []);
 });
@@ -709,7 +708,7 @@ test("a checkpoint of another stamp, or rows the vocabulary refuses, loads nothi
     { ...context.checkpointFormat, runtime: "other-runtime" },
     { ...context.checkpointFormat, formatVersion: 2 },
   ]) {
-    const result = await context.bootstrap({ format, items }, LOST);
+    const result = await context.bootstrap({ format, items }, LOST_RESULT);
     assert.equal(result.loaded, false);
     assert.equal(result.repaired, 0);
     assert.deepEqual(context.checkpoint().items, []);
@@ -727,7 +726,10 @@ test("a checkpoint of another stamp, or rows the vocabulary refuses, loads nothi
     ],
     MODEL,
   );
-  const refused = await context.bootstrap(checkpointOf(context, [ASK_ROW, unregistered]), LOST);
+  const refused = await context.bootstrap(
+    checkpointOf(context, [ASK_ROW, unregistered]),
+    LOST_RESULT,
+  );
   assert.equal(refused.loaded, false);
   assert.deepEqual(context.checkpoint().items, []);
 });

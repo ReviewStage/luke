@@ -17,6 +17,7 @@ import {
   type ToolSchema,
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, isWireString, type WireRecord, wireRecord } from "@sidecar/wire";
+import { UNKNOWN_ACTION_RESULT } from "./journal.js";
 import type { BrainWorkspaceAccess } from "./tool-executor.js";
 import { answer } from "./tool-results.js";
 import { REFUSAL_REASON } from "./tools/refusals.js";
@@ -79,7 +80,7 @@ interface PrivateTurnOptions {
  * turn read or said outlives it or reaches a conversation.
  */
 async function runPrivateTurn(options: PrivateTurnOptions): Promise<RuntimeRunEnd> {
-  const opened = await options.runtime.openContext(undefined, JSON.stringify({}));
+  const opened = await options.runtime.openContext(undefined, UNKNOWN_ACTION_RESULT);
   try {
     if (options.items && options.items.length > 0) {
       await opened.context.adopt([...options.items], { signal: options.signal });

@@ -6,6 +6,7 @@ import {
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
 import type { UserMessageMetadata } from "@sidecar/wire";
+import { valueFromJsonText } from "@sidecar/wire";
 import type { BrainRequestFailure, BrainRequestRecord, BrainRequestStatus } from "./requests.js";
 import {
   BRAIN_RUN_EVENT,
@@ -14,7 +15,6 @@ import {
   type BrainTurnOrigin,
   type SlowStepKind,
   type TurnCompaction,
-  toolCallInput,
   toolCallSettlementOf,
 } from "./run-events.js";
 import type { BrainTurnTrigger, RunControl } from "./turn.js";
@@ -108,7 +108,7 @@ export class TurnEvents {
         this.#message.text(event.text);
         return;
       case RUNTIME_EVENT.TOOL_CALL: {
-        const input = toolCallInput(event.invocation.argumentsJson);
+        const input = valueFromJsonText(event.invocation.argumentsJson);
         this.#message.toolCall(event.invocation, input);
         this.#emit({
           kind: BRAIN_RUN_EVENT.TOOL_CALL_STARTED,

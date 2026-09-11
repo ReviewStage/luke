@@ -6,6 +6,7 @@ import {
   checkpointFormatTag,
   type RuntimeCheckpoint,
 } from "@sidecar/runtime/vocabulary";
+import type { UnknownActionResult } from "@sidecar/wire";
 import { TranscriptCursors } from "./cursors.js";
 import type { BrainPersistedState } from "./envelope.js";
 import { BrainJournal } from "./journal.js";
@@ -131,7 +132,7 @@ export async function claimOpenedContext(
 export function generationFrom(
   state: BrainPersistedState,
   runtime: AgentRuntime,
-  lostResultJson: string,
+  lostResult: UnknownActionResult,
   now: () => number = Date.now,
 ): Generation {
   const abort = new AbortController();
@@ -144,7 +145,7 @@ export function generationFrom(
           ),
         )
       : claimOpenedContext(
-          runtime.openContext(checkpoint, lostResultJson, { signal: abort.signal }),
+          runtime.openContext(checkpoint, lostResult, { signal: abort.signal }),
           abort.signal,
           `checkpoint ${checkpoint ? checkpointFormatTag(checkpoint.format) : "(none)"} could not be loaded`,
           now,

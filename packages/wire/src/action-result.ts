@@ -32,7 +32,10 @@ export function isActionResultStatus(value: UnparsedWireValue): value is ActionR
  */
 export const UNKNOWN_ACTION_STATUS = "unknown";
 
-export type UnknownActionResult = { status: typeof UNKNOWN_ACTION_STATUS; reason: string };
+export type UnknownActionResult = {
+  readonly status: typeof UNKNOWN_ACTION_STATUS;
+  readonly reason: string;
+};
 
 export type ActionResult =
   | { status: typeof ACTION_RESULT_STATUS.ACCEPTED }

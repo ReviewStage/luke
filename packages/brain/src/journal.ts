@@ -3,6 +3,7 @@ import {
   isWireNumber,
   isWireString,
   UNKNOWN_ACTION_STATUS,
+  type UnknownActionResult,
   type UnparsedWireValue,
 } from "@sidecar/wire";
 import { NestedMap } from "./nested-map.js";
@@ -60,7 +61,7 @@ export { UNKNOWN_ACTION_STATUS };
 export const UNKNOWN_ACTION_RESULT = {
   status: UNKNOWN_ACTION_STATUS,
   reason: "the action was started but its result was lost before it was recorded",
-} as const;
+} as const satisfies UnknownActionResult;
 
 /**
  * What a model is told about a call whose performer threw after dispatch: the
@@ -70,7 +71,7 @@ export const UNKNOWN_ACTION_RESULT = {
 export const UNCONFIRMED_ACTION_RESULT = {
   status: UNKNOWN_ACTION_STATUS,
   reason: "the action was dispatched but did not answer; it may have happened, so do not repeat it",
-} as const;
+} as const satisfies UnknownActionResult;
 
 /** What a run's journal can vouch for: actions that went through, and actions whose outcome is not known. */
 export interface JournalActionCounts {

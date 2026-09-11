@@ -13,7 +13,7 @@ import {
   type RuntimeCheckpoint,
   sameCheckpointFormat,
 } from "@sidecar/runtime/vocabulary";
-import { isWireString, type WireRecord } from "@sidecar/wire";
+import { isWireString, type UnknownActionResult, type WireRecord } from "@sidecar/wire";
 import {
   assistantMessageItem,
   functionCallOutputItem,
@@ -56,7 +56,10 @@ export class ResponsesContextEngine implements ContextEngine {
    * with its stamp named, the engine stays empty, and what the caller does
    * about a memory it cannot read is the caller's decision.
    */
-  bootstrap(checkpoint: RuntimeCheckpoint | undefined, lostResultJson: string): ContextBootstrap {
+  bootstrap(
+    checkpoint: RuntimeCheckpoint | undefined,
+    lostResult: UnknownActionResult,
+  ): ContextBootstrap {
     // Synchronous throughout: every hook answers before a signal could fire, so none reads one.
     if (!checkpoint) {
       this.#items = [];
@@ -70,7 +73,8 @@ export class ResponsesContextEngine implements ContextEngine {
         repaired: 0,
       };
     }
-    const paired = pairedDanglingCalls(checkpoint.items, () => lostResultJson);
+    // A Responses function call output is text, so the envelope crosses as its JSON here and nowhere earlier.
+    const paired = pairedDanglingCalls(checkpoint.items, JSON.stringify(lostResult));
     this.#items = [...paired];
     return { loaded: true, repaired: paired.length - checkpoint.items.length };
   }
@@ -167,7 +171,7 @@ export class ResponsesContextEngine implements ContextEngine {
  */
 export function pairedDanglingCalls(
   items: readonly ResponsesInputItem[],
-  outputFor: (callId: string) => string,
+  output: string,
 ): readonly ResponsesInputItem[] {
   const answered = new Set<string>();
   for (const item of items) {
@@ -187,7 +191,7 @@ export function pairedDanglingCalls(
     dangling.push({
       type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
       call_id: item.call_id,
-      output: outputFor(item.call_id),
+      output,
     });
   }
   return dangling.length === 0 ? items : [...items, ...dangling];

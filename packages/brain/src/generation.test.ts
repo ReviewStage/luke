@@ -9,6 +9,7 @@ import {
 import { ResponsesContextEngine } from "./context-engine.js";
 import { freshBrainState } from "./envelope.js";
 import { CONTEXT_OPENING, generationFrom } from "./generation.js";
+import { UNKNOWN_ACTION_RESULT } from "./journal.js";
 
 const TOOL_LOOP_IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOOP_RUNTIME.VERSION };
 
@@ -46,7 +47,11 @@ async function tick(): Promise<void> {
 
 test("an abort and the open's resolution in the same turn leave the context discarded exactly once and never installed, in either order", async () => {
   const abortFirst = heldRuntime();
-  const first = generationFrom(freshBrainState("gen-1", NOW), abortFirst.runtime, "{}");
+  const first = generationFrom(
+    freshBrainState("gen-1", NOW),
+    abortFirst.runtime,
+    UNKNOWN_ACTION_RESULT,
+  );
   first.abort.abort();
   abortFirst.release();
   const firstOpened = await first.opened;
@@ -55,7 +60,11 @@ test("an abort and the open's resolution in the same turn leave the context disc
   assert.equal(abortFirst.disposed(), 1);
 
   const releaseFirst = heldRuntime();
-  const second = generationFrom(freshBrainState("gen-2", NOW), releaseFirst.runtime, "{}");
+  const second = generationFrom(
+    freshBrainState("gen-2", NOW),
+    releaseFirst.runtime,
+    UNKNOWN_ACTION_RESULT,
+  );
   releaseFirst.release();
   second.abort.abort();
   assert.equal((await second.opened).kind, CONTEXT_OPENING.INCOMPATIBLE);
@@ -64,7 +73,7 @@ test("an abort and the open's resolution in the same turn leave the context disc
 
   // Released later, across turns: still discarded, still once.
   const later = heldRuntime();
-  const third = generationFrom(freshBrainState("gen-3", NOW), later.runtime, "{}");
+  const third = generationFrom(freshBrainState("gen-3", NOW), later.runtime, UNKNOWN_ACTION_RESULT);
   third.abort.abort();
   await third.opened;
   assert.equal(later.disposed(), 0);
@@ -77,7 +86,11 @@ test("an abort and the open's resolution in the same turn leave the context disc
 
 test("an open that resolves while the generation stands installs the context and disposes nothing", async () => {
   const standing = heldRuntime();
-  const generation = generationFrom(freshBrainState("gen-4", NOW), standing.runtime, "{}");
+  const generation = generationFrom(
+    freshBrainState("gen-4", NOW),
+    standing.runtime,
+    UNKNOWN_ACTION_RESULT,
+  );
   standing.release();
   const opened = await generation.opened;
   assert.equal(opened.kind, CONTEXT_OPENING.LOADED);
