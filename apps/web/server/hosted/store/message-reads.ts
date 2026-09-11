@@ -1,5 +1,5 @@
 import type { ToolSet } from "ai";
-import { and, asc, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   CONVERSATION_EVENT_KIND,
@@ -36,7 +36,7 @@ import { type HostedStoreDatabase, optionalField } from "./database.js";
  */
 
 /** The most rows one read answers; a device with more to take asks again from the last sequence it took. */
-const MAXIMUM_READ_PAGE = 200;
+export const MAXIMUM_READ_PAGE = 200;
 
 export interface SequenceCursor {
   /** Rows after this sequence; absent or zero for the conversation's beginning. */
@@ -167,6 +167,44 @@ export async function listMessages(
   };
 }
 
+/**
+ * The events about the given messages, wherever their conversations number
+ * them, so a page of the view can mark each announcement by the latest speech
+ * event on its message without reading every event the conversations hold.
+ */
+export async function eventsForMessages(
+  db: HostedStoreDatabase,
+  userId: string,
+  messageIds: readonly string[],
+): Promise<readonly StoredEventRecord[]> {
+  if (messageIds.length === 0) return [];
+  const rows = await db
+    .select({
+      id: events.id,
+      conversationId: events.conversationId,
+      seq: events.seq,
+      messageId: events.messageId,
+      kind: events.kind,
+      deviceId: events.deviceId,
+      payload: events.payload,
+      createdAt: events.createdAt,
+    })
+    .from(events)
+    .innerJoin(conversations, standingConversation(events))
+    .where(and(eq(events.userId, userId), inArray(events.messageId, messageIds)))
+    .orderBy(asc(events.conversationId), asc(events.seq));
+  return rows.map((row) => ({
+    id: row.id,
+    conversationId: row.conversationId,
+    seq: row.seq,
+    messageId: row.messageId,
+    kind: row.kind,
+    ...optionalField("deviceId", row.deviceId),
+    ...optionalField("payload", row.payload),
+    createdAt: row.createdAt,
+  }));
+}
+
 export interface StoredEventRecord {
   readonly id: string;
   readonly conversationId: string;
@@ -225,7 +263,7 @@ export async function listEvents(
  * millisecond as the one a device already took would otherwise never read as
  * later; the text round-trips through `::timestamptz` exactly.
  */
-interface TurnCursorPosition {
+export interface TurnCursorPosition {
   readonly changedAt: string;
   readonly id: string;
 }
@@ -342,4 +380,59 @@ export async function latestMessageRating(
     ...optionalField("deviceId", row.deviceId),
     ratedAt: row.createdAt,
   };
+}
+
+/** The turn rows a page of messages names, whichever standing conversations they ran over, so the view can place each group under its turn. */
+export async function turnsNamed(
+  db: HostedStoreDatabase,
+  userId: string,
+  turnIds: readonly string[],
+): Promise<readonly StoredTurnRecord[]> {
+  if (turnIds.length === 0) return [];
+  const rows = await db
+    .select({ turn: turns, changedAt: sql<string>`(${turnChangedAt})::text` })
+    .from(turns)
+    .innerJoin(conversations, standingConversation(turns))
+    .where(and(eq(turns.userId, userId), inArray(turns.id, turnIds)))
+    .orderBy(asc(turnChangedAt), asc(turns.id));
+  return rows.map((row) => ({
+    ...row.turn,
+    cursor: { changedAt: row.changedAt, id: row.turn.id },
+  }));
+}
+
+/** The rows at or before the position: changed earlier, or changed at the same instant with an id no greater. */
+function changedAtOrBefore(position: TurnCursorPosition) {
+  const instant = sql`${position.changedAt}::timestamptz`;
+  return or(
+    lt(turnChangedAt, instant),
+    and(eq(turnChangedAt, instant), lte(turns.id, position.id)),
+  );
+}
+
+/**
+ * Where the account's turns stand: the cursor of the turn that changed last,
+ * or, given a position, of the last turn at or before it — the place a
+ * cursor naming a turn a Clear has since taken falls back to, which skips
+ * nothing because every turn after the position would have been answered
+ * from it. Nothing while no such turn stands.
+ */
+export async function latestTurnPosition(
+  db: HostedStoreDatabase,
+  userId: string,
+  notAfter?: TurnCursorPosition,
+): Promise<TurnCursorPosition | undefined> {
+  const [row] = await db
+    .select({ id: turns.id, changedAt: sql<string>`(${turnChangedAt})::text` })
+    .from(turns)
+    .innerJoin(conversations, standingConversation(turns))
+    .where(
+      and(
+        eq(turns.userId, userId),
+        notAfter === undefined ? undefined : changedAtOrBefore(notAfter),
+      ),
+    )
+    .orderBy(desc(turnChangedAt), desc(turns.id))
+    .limit(1);
+  return row === undefined ? undefined : { changedAt: row.changedAt, id: row.id };
 }

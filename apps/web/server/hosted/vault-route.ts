@@ -37,14 +37,15 @@ export interface HostedVaultRoute {
   deleteKey: (userId: string, providerId: string) => Promise<boolean>;
 }
 
-function resolveUserId(request: Request): Promise<string | undefined> {
+/** The bearer resolved against the deployment's own account store, the same for every hosted route. */
+export function resolveHostedUserId(request: Request): Promise<string | undefined> {
   return hostedUserId(request, async (input) =>
     oauthUserInfoFromAuthAnswer(await auth.api.oauth2UserInfo(input)),
   );
 }
 
 const seams = {
-  resolveUserId,
+  resolveUserId: resolveHostedUserId,
   encryptionSecret: process.env[VAULT_ENCRYPTION_ENVIRONMENT.SECRET],
   readKey: async (userId: string, providerId: string) => {
     const rows = await getDatabase()

@@ -38,6 +38,13 @@ export const HOSTED_API_ERROR = {
   PROMPT_TOO_LARGE: "prompt-too-large",
   /** A tool name the service's catalog does not register; no schema was selected. */
   UNKNOWN_TOOL: "unknown-tool",
+  /**
+   * A stored row this build cannot read back — a tool part naming a tool the
+   * catalog does not register, or parts that are not a message's — so the page
+   * it stands on was refused whole rather than answered without it; the
+   * answer names the row's conversation and sequence.
+   */
+  UNREADABLE_ROW: "unreadable-row",
   METHOD_NOT_ALLOWED: "method-not-allowed",
   /** The row the path names is not one this account holds; another account's and none at all read alike. */
   NOT_FOUND: "not-found",

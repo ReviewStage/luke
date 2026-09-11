@@ -15,6 +15,7 @@ import {
   BRAIN_TOOL,
   BRAIN_TOOLS,
   brainToolCatalog,
+  brainToolRegistry,
   brainToolSchemas,
   hostedBrainToolCatalog,
   isBrainOnlyTool,
@@ -183,4 +184,23 @@ test("every tool the catalog lists is a module of one shape: a name, words, a wi
   }
   assert.equal(new Set(modules.map((module) => module.name)).size, modules.length);
   assert.equal(modules.length + memoryTools.length, catalog.length);
+});
+
+test("the registry holds every catalog tool once under its name, with the schema the catalog's parameters were emitted from", () => {
+  const catalog = brainToolCatalog();
+  const registry = brainToolRegistry();
+  assert.deepEqual(
+    [...registry.keys()],
+    catalog.map((entry) => entry.schema.name),
+  );
+  for (const entry of catalog) {
+    const registration = registry.get(entry.schema.name);
+    assert.ok(registration);
+    assert.equal(registration.name, entry.schema.name);
+    assert.equal(registration.description, entry.schema.description);
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(registration.inputSchema.jsonSchema())),
+      entry.schema.parameters,
+    );
+  }
 });

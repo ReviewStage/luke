@@ -2,10 +2,14 @@
 
 This package is the desktop-to-service wire boundary. It owns the hosted
 service paths (`service-paths.ts`), one wire module per domain — vault,
-device, observe, conversation, projects, mint, act, live, and the service
-vocabulary they share — each a `Schema` declaration rather than a hand-written
-reader, and the realtime credential contract (`realtime-contract.ts`, with the reader of a mint response into it), and depends only on lower
-wire/session vocabulary and `@sidecar/live` for the Live voice set and the
+device, observe, conversation, projects, mint, act, live, the per-resource
+reads and their change signal (`reads-wire.ts`, whose answers are pinned by
+the synthetic fixtures under `fixtures/reads/` the Swift mirror reads
+against), and the service vocabulary they share — each a `Schema`
+declaration rather than a hand-written reader, and the realtime credential
+contract (`realtime-contract.ts`, with the reader of a mint response into
+it), and depends only on lower wire/session vocabulary and `@sidecar/live`
+for the Live voice set and the
 `InitialItem` shape (that package imports nothing of this one, so the edge
 points down). The two clients here are `vault-client.ts`, the desktop's side of
 the three vault routes, and `device-client.ts`, its side of the one devices
@@ -82,3 +86,19 @@ the service sends until its owner updates it, so the service writes both names
 and every reader accepts either; the comment on the legacy field in
 `observe-wire.ts` names it and says when it may go. Today that is
 `observedAt`, the name `lastActivityAt` traveled under before the rename.
+
+## A cursor is minted here and echoed by a device
+
+`reads-wire.ts` declares the cursors the per-resource reads stand on as
+opaque strings: a record's JSON, base64url-encoded, read back by the same
+schema that bounded it, so a device holds one string per resource and never
+composes one. The sequence cursor positions every conversation the view
+stood on, in conversation-id order, which is what makes two cursors over the
+same positions one string and lets the change signal's head be compared by
+equality; the turn cursor carries the store's own microsecond instant as
+text beside the id, because a millisecond number cannot tell two stamps in
+the same millisecond apart. An answer carries a cursor as the validated
+string, not the decoded record, since the string is what goes back on the
+wire. The message inside a group is admitted as a record and nothing
+narrower: holding it to the vocabulary is `readStoredUIMessages`'s step,
+above this package, under the registry the reader holds.

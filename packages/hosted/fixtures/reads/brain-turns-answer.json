@@ -1,0 +1,27 @@
+{
+  "turns": [
+    {
+      "id": "1a000000-0000-4000-8000-000000000001",
+      "conversationId": "3c000000-0000-4000-8000-000000000001",
+      "origin": "typed",
+      "status": "settled",
+      "model": "gpt-5",
+      "queuedAt": 1757505600000,
+      "startedAt": 1757505600100,
+      "settledAt": 1757505603000,
+      "cursor": "eyJjaGFuZ2VkQXQiOiIyMDI2LTA5LTEwIDEyOjAwOjAzKzAwIiwiaWQiOiIxYTAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEifQ"
+    },
+    {
+      "id": "1a000000-0000-4000-8000-000000000003",
+      "conversationId": "3c000000-0000-4000-8000-000000000002",
+      "origin": "roster_diff",
+      "status": "settled",
+      "queuedAt": 1757505720000,
+      "startedAt": 1757505720200,
+      "settledAt": 1757505722400,
+      "cursor": "eyJjaGFuZ2VkQXQiOiIyMDI2LTA5LTEwIDEyOjAyOjAyLjQrMDAiLCJpZCI6IjFhMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMyJ9"
+    }
+  ],
+  "next": "eyJjaGFuZ2VkQXQiOiIyMDI2LTA5LTEwIDEyOjAyOjAyLjQrMDAiLCJpZCI6IjFhMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMyJ9",
+  "hasMore": false
+}

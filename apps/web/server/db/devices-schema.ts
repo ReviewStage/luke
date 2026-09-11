@@ -10,8 +10,9 @@ import { user } from "./auth-schema.js";
  * device now signed in as someone else. The id is the service's own, minted
  * once for the row and answered back so a heartbeat can name it without
  * repeating the installation id. Presence (`active_until`) is written only by a
- * platform that can read its own input activity; the Mac begins to in a later
- * change and nothing writes it today. A push token is not a credential:
+ * platform that can read its own input activity, and the meeting hold
+ * (`quiet_until`) by one that reads a calendar; both arrive on the
+ * change-signal poll, and the Mac begins to send them in a later change. A push token is not a credential:
  * nothing but this deployment's own Apple key can address it. Every row goes
  * with the account, at sign-out, and when Apple reports its token gone.
  */
@@ -27,6 +28,13 @@ export const devices = pgTable("devices", {
   lastSeenAt: timestamp("last_seen_at").notNull().defaultNow(),
   /** The instant the device's reported presence holds until; null for one that reports none. */
   activeUntil: timestamp("active_until"),
+  /**
+   * The instant a meeting hold the device observes ends, reported by the Mac
+   * from its calendar intervals on the change-signal poll; null for a device
+   * that reports none. It holds speech and nothing more: a delivery reads it
+   * to wait, never to decide, reword, or act.
+   */
+  quietUntil: timestamp("quiet_until"),
   /** Apple issues one per installation, so the same token never stands on two rows. */
   pushToken: text("push_token").unique(),
   /** Which of Apple's two push gateways issued the token: sandbox or production. Null without a token. */
