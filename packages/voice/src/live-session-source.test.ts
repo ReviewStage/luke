@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { HOSTED_API_ERROR, VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/hosted";
 import {
   developerSeedItem,
@@ -14,8 +15,10 @@ import {
   RENDERER_SERVER_EVENTS,
 } from "@sidecar/live";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
+import { Effect, TestClock } from "effect";
 import { test } from "vitest";
 import {
+  HOSTED_REATTACH_DELAYS_MS,
   type HostedLiveSessionOptions,
   HostedLiveSessionSource,
   IntroductionLiveSessionSource,
@@ -567,6 +570,50 @@ test("re-attaching tries as many times as it has delays and then reports the los
   assert.equal(source.diagnostics().sidebandAttached, false);
   for (const socket of script.sockets.slice(1)) assert.equal(socket.closedByClient, true);
 });
+
+it.effect("reattaches on HOSTED_REATTACH_DELAYS_MS's own cadence, then gives up", () =>
+  Effect.gen(function* () {
+    const runtime = yield* Effect.runtime<never>();
+    const script = scriptedOpenSocket([answering(createdFrame()), closingOnSend(1011)]);
+    const source = reattaching(script, { reattachDelaysMs: HOSTED_REATTACH_DELAYS_MS, runtime });
+    const opened = yield* Effect.promise(() => source.create({ sdpOffer: SDP_OFFER, input: [] }));
+    assert.ok(opened);
+    const sideband = yield* Effect.promise(() => opened.attach());
+    const closes: Array<{ code?: number }> = [];
+    sideband.onClose((close) => closes.push(close));
+
+    script.sockets[0]?.closeFromServer({ code: 1006 });
+    yield* Effect.promise(() => openedSockets(script, 2));
+    assert.deepEqual(closes, []);
+
+    yield* TestClock.adjust("3 seconds");
+    yield* Effect.promise(() => openedSockets(script, 3));
+    assert.deepEqual(closes, []);
+
+    yield* TestClock.adjust("7 seconds");
+    yield* Effect.promise(() => openedSockets(script, 4));
+    assert.deepEqual(closes, [{ code: 1006 }]);
+    assert.equal(script.sockets.length, 4);
+  }),
+);
+
+it.effect("closing while a reattach wait stands interrupts it, opening no further attempt", () =>
+  Effect.gen(function* () {
+    const runtime = yield* Effect.runtime<never>();
+    const script = scriptedOpenSocket([answering(createdFrame()), closingOnSend(1011)]);
+    const source = reattaching(script, { reattachDelaysMs: HOSTED_REATTACH_DELAYS_MS, runtime });
+    const opened = yield* Effect.promise(() => source.create({ sdpOffer: SDP_OFFER, input: [] }));
+    assert.ok(opened);
+    const sideband = yield* Effect.promise(() => opened.attach());
+
+    script.sockets[0]?.closeFromServer({ code: 1006 });
+    yield* Effect.promise(() => openedSockets(script, 2));
+    sideband.close();
+    yield* TestClock.adjust("1 minute");
+    yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)));
+    assert.equal(script.sockets.length, 2);
+  }),
+);
 
 test("a service that refuses the attachment ends the tries at once", async () => {
   const script = scriptedOpenSocket([

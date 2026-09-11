@@ -45,6 +45,7 @@ import {
   type WireRecord,
   withoutTrailingSlash,
 } from "@sidecar/wire";
+import { Data, Duration, Effect, Fiber, Runtime, Schedule } from "effect";
 import {
   type LiveSideband,
   type LiveSocket,
@@ -640,6 +641,30 @@ export const HOSTED_REATTACH_DELAYS_MS: readonly number[] = [0, 3_000, 7_000];
 /** The close code of a connection that ended because the session did, after which nothing is tried again. */
 const NORMAL_CLOSE_CODE = 1000;
 
+/** The transport did not carry the attempt to an answer; the schedule's own `while` is what decides whether another try may. */
+class ReattachFailed extends Data.TaggedError("ReattachFailed") {}
+
+/** The service answered, and the answer was not the attachment; no further try is made. */
+class ReattachRefused extends Data.TaggedError("ReattachRefused") {}
+
+/**
+ * The gap between each of `delaysMs`' tries, read the way the hand-rolled loop
+ * read it: the first entry is the wait before the very first try, which
+ * `Effect.retry`'s own first attempt already stands in for, so what the
+ * schedule states is the wait before every try after that — `delaysMs.length`
+ * tries in all, `undefined` for no tries at all, and `Schedule.stop` for
+ * exactly one.
+ */
+function reattachRetrySchedule(
+  delaysMs: readonly number[],
+): Schedule.Schedule<unknown> | undefined {
+  if (delaysMs.length === 0) return undefined;
+  const [, ...gaps] = delaysMs;
+  const [first, ...rest] = gaps;
+  if (first === undefined) return Schedule.stop;
+  return Schedule.fromDelays(Duration.millis(first), ...rest.map((ms) => Duration.millis(ms)));
+}
+
 /**
  * The hosted sideband as one socket that outlives its connections. The host
  * holds this; underneath, the connection to the voice service is replaced
@@ -652,28 +677,38 @@ const NORMAL_CLOSE_CODE = 1000;
  * made during the gap are held and sent on the next connection. Only when
  * every try fails, or the service refuses the attachment, does the close
  * reach the listeners, as the connection loss the host already handles.
+ *
+ * The tries themselves are one fiber, on the runtime the source was handed:
+ * closing the socket while it stands is that fiber's interruption, which
+ * abandons whichever wait or attempt was in flight rather than polling a flag
+ * for it, and an attempt that still lands the instant after is the one race
+ * interruption cannot reach, so it is still closed by hand.
  */
 class ReattachingSocket implements LiveSocket {
   #inner: LiveSocket;
   readonly #attach: (sessionId: string) => Promise<ReattachAttempt>;
   readonly #sessionId: string;
   readonly #delaysMs: readonly number[];
+  readonly #runtime: Runtime.Runtime<never>;
   readonly #messageListeners = new Set<(data: string) => void>();
   readonly #closeListeners = new Set<(close: SocketClose) => void>();
   #held: string[] | undefined;
   #closedByClient = false;
   #ended = false;
+  #recovery: Fiber.RuntimeFiber<void> | undefined;
 
   constructor(options: {
     socket: LiveSocket;
     sessionId: string;
     attach: (sessionId: string) => Promise<ReattachAttempt>;
     delaysMs: readonly number[];
+    runtime: Runtime.Runtime<never>;
   }) {
     this.#inner = options.socket;
     this.#sessionId = options.sessionId;
     this.#attach = options.attach;
     this.#delaysMs = options.delaysMs;
+    this.#runtime = options.runtime;
     this.#adopt(options.socket);
   }
 
@@ -687,6 +722,8 @@ class ReattachingSocket implements LiveSocket {
 
   close(): void {
     this.#closedByClient = true;
+    const recovery = this.#recovery;
+    if (recovery) Runtime.runFork(this.#runtime)(Fiber.interrupt(recovery));
     this.#inner.close();
   }
 
@@ -715,31 +752,64 @@ class ReattachingSocket implements LiveSocket {
         this.#end(close);
         return;
       }
-      void this.#recover(close);
+      this.#recovery = Runtime.runFork(this.#runtime)(
+        this.#recoverEffect(close).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              this.#recovery = undefined;
+            }),
+          ),
+        ),
+      );
     });
   }
 
-  async #recover(close: SocketClose): Promise<void> {
-    this.#held = [];
-    for (const delayMs of this.#delaysMs) {
-      if (delayMs > 0) await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
-      if (this.#closedByClient) break;
-      const attempt = await this.#attach(this.#sessionId);
-      if (attempt.outcome === REATTACH_ATTEMPT.REFUSED) break;
-      if (attempt.outcome === REATTACH_ATTEMPT.FAILED) continue;
-      if (this.#closedByClient) {
-        attempt.socket.close();
-        break;
-      }
-      this.#inner = attempt.socket;
-      this.#adopt(attempt.socket);
-      const held = this.#held;
-      this.#held = undefined;
-      for (const data of held) attempt.socket.send(data);
-      return;
+  #outcomeEffect(
+    attempt: ReattachAttempt,
+  ): Effect.Effect<LiveSocket, ReattachFailed | ReattachRefused> {
+    if (this.#closedByClient) {
+      if (attempt.outcome === REATTACH_ATTEMPT.ATTACHED) attempt.socket.close();
+      return Effect.fail(new ReattachRefused());
     }
-    this.#held = undefined;
-    this.#end(close);
+    if (attempt.outcome === REATTACH_ATTEMPT.ATTACHED) return Effect.succeed(attempt.socket);
+    if (attempt.outcome === REATTACH_ATTEMPT.REFUSED) return Effect.fail(new ReattachRefused());
+    return Effect.fail(new ReattachFailed());
+  }
+
+  #attemptEffect(): Effect.Effect<LiveSocket, ReattachFailed | ReattachRefused> {
+    return Effect.promise(() => this.#attach(this.#sessionId)).pipe(
+      Effect.flatMap((attempt) => this.#outcomeEffect(attempt)),
+    );
+  }
+
+  #recoverEffect(close: SocketClose): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      this.#held = [];
+      const schedule = reattachRetrySchedule(this.#delaysMs);
+      if (schedule === undefined) {
+        this.#held = undefined;
+        this.#end(close);
+        return Effect.void;
+      }
+      return Effect.retry(this.#attemptEffect(), {
+        schedule,
+        while: (error) => error._tag === "ReattachFailed",
+      }).pipe(
+        Effect.match({
+          onFailure: () => {
+            this.#held = undefined;
+            this.#end(close);
+          },
+          onSuccess: (socket) => {
+            this.#inner = socket;
+            this.#adopt(socket);
+            const held = this.#held ?? [];
+            this.#held = undefined;
+            for (const data of held) socket.send(data);
+          },
+        }),
+      );
+    });
   }
 
   #end(close: SocketClose): void {
@@ -758,6 +828,8 @@ export type HostedLiveSessionOptions = ServiceSourceOptions &
   AccountToken & {
     /** The waits between tries at re-attaching a lost connection; `HOSTED_REATTACH_DELAYS_MS` by default. */
     reattachDelaysMs?: readonly number[];
+    /** The runtime the reattach tries are forked on, for a caller (a test today) that holds its own. */
+    runtime?: Runtime.Runtime<never>;
   };
 
 /**
@@ -769,9 +841,11 @@ export type HostedLiveSessionOptions = ServiceSourceOptions &
  */
 export class HostedLiveSessionSource extends ServiceLiveSessionSource implements LiveSessionSource {
   readonly #reattachDelaysMs: readonly number[];
+  readonly #runtime: Runtime.Runtime<never>;
 
   constructor(options: HostedLiveSessionOptions) {
-    const { readAccessToken, refreshAccount, readAccountKey, reattachDelaysMs, ...rest } = options;
+    const { readAccessToken, refreshAccount, readAccountKey, reattachDelaysMs, runtime, ...rest } =
+      options;
     super({
       ...rest,
       servicePath: VOICE_SERVICE_PATH.SESSIONS,
@@ -779,6 +853,7 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
       authorization: { readAccessToken, refreshAccount, readAccountKey },
     });
     this.#reattachDelaysMs = reattachDelaysMs ?? HOSTED_REATTACH_DELAYS_MS;
+    this.#runtime = runtime ?? Runtime.defaultRuntime;
   }
 
   async create(input: LiveSessionCreateInput): Promise<LiveSessionOpened | undefined> {
@@ -792,6 +867,7 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
         sessionId: opened.created.sessionId,
         attach: (sessionId) => this.attachOnce(sessionId),
         delaysMs: this.#reattachDelaysMs,
+        runtime: this.#runtime,
       }),
     );
     return { ...opened.created, attach: async () => sideband };

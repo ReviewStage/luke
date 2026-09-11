@@ -74,6 +74,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   const orchestratorRef = useRef<LiveVoiceOrchestrator | undefined>(undefined);
   orchestratorRef.current ??= new LiveVoiceOrchestrator({
     bridge: BRIDGE,
+    runtime: rendererRuntimeNow(),
     createCall: (events) => {
       const call = new LiveCall({
         events,
