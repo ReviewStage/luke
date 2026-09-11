@@ -551,6 +551,19 @@ if [[ -n "$admitted_casts" ]]; then
     exit 1
 fi
 
+# The SpeechClaim brand is the one authorization to speak a briefing, and
+# claimSpeech() in the speech store module is its one minter: a briefing
+# append takes a claim, so an append that never claimed does not compile, and
+# that holds only while nothing else can spell the brand into being.
+speech_claim_casts=$(grep -rEn --exclude-dir=node_modules --include='*.ts' --include='*.tsx' 'as SpeechClaim\b' \
+    "$SIDECAR_REPO_ROOT/apps" "$SIDECAR_REPO_ROOT/packages" "$SIDECAR_REPO_ROOT/tools" |
+    grep -vE '/apps/web/server/hosted/store/speech\.ts:' || true)
+if [[ -n "$speech_claim_casts" ]]; then
+    printf 'error: the SpeechClaim brand is minted only by claimSpeech() in the speech store module — a briefing is spoken with the claim it answered, never one spelled elsewhere:\n%s\n' \
+        "$speech_claim_casts" >&2
+    exit 1
+fi
+
 # A file ported from OpenClaw stays faithful to the pinned `b7528507`, so a
 # later port of an upstream change reads as a diff of that source and nothing
 # else. Effect reaches these through a sibling `*.effect.ts` beside each one,

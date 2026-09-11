@@ -11,7 +11,7 @@ import { SCHEMA_REFUSAL } from "@sidecar/wire";
 import { eq } from "drizzle-orm";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
-import { ASK_ORIGIN, BRAIN_TOOL, TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP } from "../server/core";
+import { ASK_ORIGIN, TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP } from "../server/core";
 import { CONVERSATION_KIND, conversations } from "../server/db/storage-schema";
 import { ASK_REFUSAL } from "../server/hosted/brain-ask";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
@@ -35,7 +35,7 @@ import {
   type HostedLiveBrainOptions,
   hostedLiveBrain,
 } from "../server/voice/live-brain";
-import { stampedEveEvent } from "./support/eve-events";
+import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 /**
@@ -52,7 +52,6 @@ const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
 const NOW = 1_800_000_000_000;
-const EVE_TURN = "turn_0";
 /**
  * The follow's bounds narrowed so a poll is milliseconds, with the bound left
  * wide: a turn's events land through the store, and the store on CI is one
@@ -77,10 +76,9 @@ const relay = new StreamRelay({
   report: () => undefined,
 });
 
-let sessionsMinted = 0;
+/** An eve session id of this test's own: the relay names a turn by session and eve turn, so a counted id would collide across the files that share one database on CI. */
 function mintSession(): string {
-  sessionsMinted += 1;
-  return `wrun_01M${String(sessionsMinted).padStart(22, "0")}`;
+  return `wrun_${randomUUID()}`;
 }
 
 interface FakeEve extends EveSessions {
@@ -149,70 +147,6 @@ function stand(
   return { eve, brain, events, reports };
 }
 
-const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
-  stampedEveEvent(event, NOW);
-
-/** One spoken ask's turn as eve emits it: a transcript read, then a two-sentence answer. */
-function spokenTurn(turnId: string): readonly MessageStreamEvent[] {
-  const sequence = 0;
-  return [
-    stamped({ type: "turn.started", data: { turnId, sequence } }),
-    stamped({ type: "message.received", data: { turnId, sequence, message: "what changed?" } }),
-    stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 0, modelId: "m" } }),
-    stamped({
-      type: "actions.requested",
-      data: {
-        turnId,
-        sequence,
-        stepIndex: 0,
-        actions: [
-          {
-            kind: "tool-call",
-            callId: "call-1",
-            toolName: BRAIN_TOOL.READ_TRANSCRIPT,
-            input: { provider_id: "conductor", provider_session_id: "s-1" },
-          },
-        ],
-      },
-    }),
-    stamped({
-      type: "action.result",
-      data: {
-        turnId,
-        sequence,
-        stepIndex: 0,
-        status: "completed",
-        result: {
-          kind: "tool-result",
-          callId: "call-1",
-          toolName: BRAIN_TOOL.READ_TRANSCRIPT,
-          output: { lines: ["a"] },
-        },
-      },
-    }),
-    stamped({
-      type: "step.completed",
-      data: { turnId, sequence, stepIndex: 0, finishReason: "tool-calls" },
-    }),
-    stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 1, modelId: "m" } }),
-    stamped({
-      type: "message.completed",
-      data: {
-        turnId,
-        sequence,
-        stepIndex: 1,
-        finishReason: "stop",
-        message: "One agent finished. Another is waiting on you.",
-      },
-    }),
-    stamped({
-      type: "step.completed",
-      data: { turnId, sequence, stepIndex: 1, finishReason: "stop" },
-    }),
-    stamped({ type: "turn.completed", data: { turnId, sequence } }),
-  ];
-}
-
 /** The eve session an accepted ask was handed to, from the record; a follow-up would read it the same way. */
 async function sessionOf(target: ConversationTarget, askId: string): Promise<string> {
   const ask = await asks.named(target.userId, askId);
@@ -273,7 +207,7 @@ test("an accepted ask's turn is followed from the record: the slow step, the set
     model: "scripted-model",
     state: memoryRelayState(),
   };
-  const events = spokenTurn(EVE_TURN);
+  const events = spokenTurn(FIRST_EVE_TURN, NOW);
   const requested = events.findIndex((event) => event.type === "actions.requested") + 1;
   await play(events.slice(0, requested), standing);
   await until(() => f.events.length === 1, "the slow step");
@@ -355,7 +289,7 @@ test("a journal the store cannot read ends the ask as failed, once, and is repor
   const accepted = await f.brain.submitAsk({ submissionId: randomUUID(), question: "q" });
   assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
   if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
-  await play(spokenTurn(EVE_TURN), {
+  await play(spokenTurn(FIRST_EVE_TURN, NOW), {
     sessionId: await sessionOf(target, accepted.runId),
     target,
     turn: BRAIN_HOST_TURN.SPOKEN,
@@ -392,7 +326,7 @@ test("stop ends every follow: a turn that completes after it reaches no listener
   assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
   if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
   f.brain.stop();
-  await play(spokenTurn(EVE_TURN), {
+  await play(spokenTurn(FIRST_EVE_TURN, NOW), {
     sessionId: await sessionOf(target, accepted.runId),
     target,
     turn: BRAIN_HOST_TURN.SPOKEN,

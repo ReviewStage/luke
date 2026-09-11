@@ -237,6 +237,8 @@ interface Fixture {
   quiet: boolean;
   sourceAvailable: boolean;
   open: () => Promise<FakeSideband>;
+  /** What the test wants told of a briefing's last append; nothing by default. */
+  onBriefingAppend?: (delivery: { briefing: string; decidedAt: number }, eventId: string) => void;
 }
 
 function fixture(): Fixture {
@@ -286,6 +288,7 @@ function fixture(): Fixture {
     report: () => undefined,
     trace: (trace) => traces.push(trace),
     onProactiveSpoken: (kind) => spoken.push(kind),
+    onBriefingAppend: (delivery, eventId) => fixtureState.onBriefingAppend?.(delivery, eventId),
   });
   const fixtureState: Fixture = {
     clock,
@@ -945,6 +948,27 @@ test("an utterance that settled before its delegation is written again under the
   // The settle timer has nothing more to write for the row.
   await f.clock.advance(f.clock.now + UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
   assert.equal(f.record.developer.length, 2);
+});
+
+test("a briefing's last append is told to the record before it is sent, once, under the event id the append carries; a beat tells nothing", async () => {
+  const f = fixture();
+  const told: { briefing: string; eventId: string }[] = [];
+  f.onBriefingAppend = (delivery, eventId) => told.push({ briefing: delivery.briefing, eventId });
+  const sideband = await f.open();
+  const long = Array.from({ length: 40 }, (_, index) => `Sentence ${index} is long enough.`).join(
+    " ",
+  );
+  f.service.deliverBriefing({ briefing: long, decidedAt: f.clock.now });
+  f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING, decidedAt: f.clock.now });
+  await drainMicrotasks();
+  const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+  assert.ok(commentary.length >= 1);
+  assert.equal(told.length, 1);
+  assert.equal(told[0]?.briefing, long);
+  // The id told is the one on the last chunk of the briefing, which is the append whose speech settles it.
+  const briefingAppends = commentary.slice(0, commentary.length);
+  const lastBriefingChunk = briefingAppends.find((event) => event.event_id === told[0]?.eventId);
+  assert.ok(lastBriefingChunk);
 });
 
 test("creating a session while one stands closes the standing one first", async () => {
