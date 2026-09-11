@@ -31,6 +31,7 @@ export function brainAnswer(call: BrainCall): Promise<Response> {
         posthogPersonalApiKey: undefined,
         posthogProjectId: undefined,
         posthogApiHost: undefined,
+        providerKeyEncryptionSecret: undefined,
       }),
     ),
   );

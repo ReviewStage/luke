@@ -2,13 +2,12 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { DEVICE_PLATFORM, PUSH_ENVIRONMENT } from "@sidecar/hosted";
 import { CLOUD_AGENT_PROVIDER_ID } from "@sidecar/session";
-import { afterEach, beforeEach, test, vi } from "vitest";
-import { type DevicesVaultSeams, devicesVaultApp } from "../server/devices-vault-app.js";
+import { test } from "vitest";
+import type { DevicesVaultSeams } from "../server/devices-vault-app.js";
 import type { DeviceHeartbeat, DeviceRegistration } from "../server/hosted/devices.js";
 import { decryptProviderKey } from "../server/hosted/encryption.js";
 import { HOSTED_API_ERROR } from "../server/hosted/http.js";
-import { routeFromHttpApp } from "../server/route-effect.js";
-import { disposeWebRuntime } from "../server/runtime.js";
+import { type DevicesVaultCall, devicesVaultAnswer } from "./support/devices-vault-call.js";
 import {
   recordedGoldenNames,
   recordedResponse,
@@ -21,19 +20,9 @@ import {
  * (method, bearer, brake or secret, body), the same validation, and the same
  * bytes. `fixtures/devices-vault-route/` pins a representative exchange on
  * each of the three paths, and every other test here exercises the group's
- * behavior directly.
+ * behavior directly, with the deployment's environment handed in the way
+ * `devicesVaultAnswer` takes it rather than read from `process.env`.
  */
-
-const PLACEHOLDER_DATABASE_URL = "postgresql://route:effect@127.0.0.1:5432/luke";
-
-beforeEach(() => {
-  vi.stubEnv("DATABASE_URL", PLACEHOLDER_DATABASE_URL);
-});
-
-afterEach(async () => {
-  await disposeWebRuntime();
-  vi.unstubAllEnvs();
-});
 
 const INSTALLATION_ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
 const DEVICE_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
@@ -87,7 +76,6 @@ function seamsFor(overrides: Partial<DevicesVaultSeams> = {}) {
   };
   const seams: DevicesVaultSeams = {
     resolveUserId: async (authorization) => authorization?.replace("Bearer ", "") || undefined,
-    encryptionSecret: SECRET,
     now: () => NOON,
     mintId: () => DEVICE_ID,
     registerDevice: async (userId, registration, mintId, now) => {
@@ -115,8 +103,15 @@ function seamsFor(overrides: Partial<DevicesVaultSeams> = {}) {
   return { seams, recorded };
 }
 
-function route(seams: DevicesVaultSeams) {
-  return routeFromHttpApp(devicesVaultApp(seams));
+/** Answers a request against the group, the deployment's vault secret defaulted to a valid one. */
+function answer(
+  seams: DevicesVaultSeams,
+  request: Request,
+  /** `null` asks for no secret at all; a default parameter cannot say that, since it also fires on `undefined`. */
+  secret: string | null = SECRET,
+): Promise<Response> {
+  const call: DevicesVaultCall = { ...seams, request, encryptionSecret: secret ?? undefined };
+  return devicesVaultAnswer(call);
 }
 
 // --- Devices: gate order and validation ---
@@ -124,11 +119,12 @@ function route(seams: DevicesVaultSeams) {
 test("the devices gate order is method, bearer, brake, and every refusal is one shape", async () => {
   const { seams } = seamsFor();
 
-  const wrongMethod = await route(seams).fetch(devicesRequest("GET"));
+  const wrongMethod = await answer(seams, devicesRequest("GET"));
   assert.equal(wrongMethod.status, 405);
   assert.equal((await wrongMethod.json()).error, HOSTED_API_ERROR.METHOD_NOT_ALLOWED);
 
-  const anonymous = await route(seamsFor({ resolveUserId: async () => undefined }).seams).fetch(
+  const anonymous = await answer(
+    seamsFor({ resolveUserId: async () => undefined }).seams,
     devicesRequest("POST"),
   );
   assert.equal(anonymous.status, 401);
@@ -136,7 +132,7 @@ test("the devices gate order is method, bearer, brake, and every refusal is one 
 
   for (const method of ["POST", "PUT", "DELETE"]) {
     const { seams: noBody, recorded } = seamsFor();
-    const response = await route(noBody).fetch(devicesRequest(method));
+    const response = await answer(noBody, devicesRequest(method));
     assert.equal(response.status, 400, method);
     assert.equal((await response.json()).error, HOSTED_API_ERROR.INVALID_REQUEST);
     assert.equal(
@@ -148,7 +144,8 @@ test("the devices gate order is method, bearer, brake, and every refusal is one 
 
 test("a registration is upserted for the bearer's account and answers the row's id", async () => {
   const { seams, recorded } = seamsFor();
-  const response = await route(seams).fetch(
+  const response = await answer(
+    seams,
     devicesRequest("POST", {
       platform: DEVICE_PLATFORM.IOS,
       installationId: INSTALLATION_ID.toUpperCase(),
@@ -175,7 +172,8 @@ test("a registration is upserted for the bearer's account and answers the row's 
 test("a registration without a push token carries none, on every platform", async () => {
   for (const platform of Object.values(DEVICE_PLATFORM)) {
     const { seams, recorded } = seamsFor();
-    const response = await route(seams).fetch(
+    const response = await answer(
+      seams,
       devicesRequest("POST", { platform, installationId: INSTALLATION_ID }),
     );
     assert.equal(response.status, 200);
@@ -209,7 +207,7 @@ test("a registration outside the contract is refused before anything is stored",
   ];
   for (const body of bodies) {
     const { seams, recorded } = seamsFor();
-    const response = await route(seams).fetch(devicesRequest("POST", body));
+    const response = await answer(seams, devicesRequest("POST", body));
     assert.equal(response.status, 400, JSON.stringify(body));
     assert.equal((await response.json()).error, HOSTED_API_ERROR.INVALID_REQUEST);
     assert.equal(recorded.registrations.length, 0);
@@ -219,10 +217,8 @@ test("a registration outside the contract is refused before anything is stored",
 test("a heartbeat moves last seen and carries only the changes it named", async () => {
   const bare = seamsFor();
   assert.deepEqual(
-    await (await route(bare.seams).fetch(devicesRequest("PUT", { deviceId: DEVICE_ID }))).json(),
-    {
-      seen: true,
-    },
+    await (await answer(bare.seams, devicesRequest("PUT", { deviceId: DEVICE_ID }))).json(),
+    { seen: true },
   );
   assert.deepEqual(bare.recorded.heartbeats, [
     {
@@ -233,7 +229,8 @@ test("a heartbeat moves last seen and carries only the changes it named", async 
   ]);
 
   const present = seamsFor();
-  await route(present.seams).fetch(
+  await answer(
+    present.seams,
     devicesRequest("PUT", { deviceId: DEVICE_ID, activeUntil: NOON + 120_000 }),
   );
   assert.deepEqual(present.recorded.heartbeats[0]?.heartbeat, {
@@ -243,7 +240,8 @@ test("a heartbeat moves last seen and carries only the changes it named", async 
   });
 
   const retokened = seamsFor();
-  await route(retokened.seams).fetch(
+  await answer(
+    retokened.seams,
     devicesRequest("PUT", {
       deviceId: DEVICE_ID,
       pushToken: TOKEN,
@@ -256,13 +254,13 @@ test("a heartbeat moves last seen and carries only the changes it named", async 
   });
 
   const cleared = seamsFor();
-  await route(cleared.seams).fetch(devicesRequest("PUT", { deviceId: DEVICE_ID, pushToken: null }));
+  await answer(cleared.seams, devicesRequest("PUT", { deviceId: DEVICE_ID, pushToken: null }));
   assert.equal(cleared.recorded.heartbeats[0]?.heartbeat.push, null);
 });
 
 test("a heartbeat for a row the account does not hold answers unseen", async () => {
   const { seams } = seamsFor({ touchDevice: async () => false });
-  const response = await route(seams).fetch(devicesRequest("PUT", { deviceId: DEVICE_ID }));
+  const response = await answer(seams, devicesRequest("PUT", { deviceId: DEVICE_ID }));
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { seen: false });
 });
@@ -278,7 +276,7 @@ test("a heartbeat outside the contract is refused before anything moves", async 
   for (const body of bodies) {
     const { seams, recorded } = seamsFor();
     assert.equal(
-      (await route(seams).fetch(devicesRequest("PUT", body))).status,
+      (await answer(seams, devicesRequest("PUT", body))).status,
       400,
       JSON.stringify(body),
     );
@@ -288,19 +286,19 @@ test("a heartbeat outside the contract is refused before anything moves", async 
 
 test("a forget is scoped to the bearer's account and answers whether a row went", async () => {
   const { seams, recorded } = seamsFor();
-  const gone = await route(seams).fetch(
-    devicesRequest("DELETE", { deviceId: DEVICE_ID.toUpperCase() }),
-  );
+  const gone = await answer(seams, devicesRequest("DELETE", { deviceId: DEVICE_ID.toUpperCase() }));
   assert.equal(gone.status, 200);
   assert.deepEqual(await gone.json(), { deleted: true });
   assert.deepEqual(recorded.forgets, [{ userId: "user-1", deviceId: DEVICE_ID }]);
 
-  const absent = await route(seamsFor({ forgetDevice: async () => false }).seams).fetch(
+  const absent = await answer(
+    seamsFor({ forgetDevice: async () => false }).seams,
     devicesRequest("DELETE", { deviceId: DEVICE_ID }),
   );
   assert.deepEqual(await absent.json(), { deleted: false });
 
-  const malformed = await route(seamsFor().seams).fetch(
+  const malformed = await answer(
+    seamsFor().seams,
     devicesRequest("DELETE", { installationId: INSTALLATION_ID }),
   );
   assert.equal(malformed.status, 400);
@@ -310,7 +308,7 @@ test("a hammering account is braked to a trickle without reaching a seam", async
   let brakedAt: number | undefined;
   for (let call = 0; call < 200; call += 1) {
     const { seams, recorded } = seamsFor({ resolveUserId: async () => "user-braked" });
-    const response = await route(seams).fetch(devicesRequest("PUT", { deviceId: DEVICE_ID }));
+    const response = await answer(seams, devicesRequest("PUT", { deviceId: DEVICE_ID }));
     if (response.status === 429) {
       assert.equal((await response.json()).error, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
       assert.equal(recorded.heartbeats.length, 0);
@@ -324,32 +322,34 @@ test("a hammering account is braked to a trickle without reaching a seam", async
 
 // --- Vault key: store and delete ---
 
-function vaultStoreOptions(overrides: Partial<DevicesVaultSeams> = {}) {
-  return seamsFor(overrides).seams;
-}
-
 test("the vault store gate order is method, secret, token, body", async () => {
-  const wrongMethod = await route(vaultStoreOptions()).fetch(vaultKeyRequest("GET"));
+  const wrongMethod = await answer(seamsFor().seams, vaultKeyRequest("GET"));
   assert.equal(wrongMethod.status, 405);
 
-  const noSecret = await route(vaultStoreOptions({ encryptionSecret: undefined })).fetch(
+  const noSecret = await answer(
+    seamsFor().seams,
     vaultKeyRequest("POST", { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, key: "sk-abc1234" }),
+    null,
   );
   assert.equal(noSecret.status, 503);
   assert.equal((await noSecret.json()).error, HOSTED_API_ERROR.UNAVAILABLE);
 
-  const blankSecret = await route(vaultStoreOptions({ encryptionSecret: "   " })).fetch(
+  const blankSecret = await answer(
+    seamsFor().seams,
     vaultKeyRequest("POST", { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, key: "sk-abc1234" }),
+    "   ",
   );
   assert.equal(blankSecret.status, 503);
 
-  const anonymous = await route(vaultStoreOptions({ resolveUserId: async () => undefined })).fetch(
+  const anonymous = await answer(
+    seamsFor({ resolveUserId: async () => undefined }).seams,
     vaultKeyRequest("POST", { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, key: "sk-abc1234" }),
   );
   assert.equal(anonymous.status, 401);
   assert.equal((await anonymous.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);
 
-  const noBody = await route(vaultStoreOptions()).fetch(
+  const noBody = await answer(
+    seamsFor().seams,
     new Request("https://luke.test/api/vault/key", {
       method: "POST",
       headers: { authorization: "Bearer t" },
@@ -361,7 +361,8 @@ test("the vault store gate order is method, secret, token, body", async () => {
 
 test("storing a valid key answers { stored: true } and writes an encrypted ciphertext", async () => {
   const { seams, recorded } = seamsFor();
-  const response = await route(seams).fetch(
+  const response = await answer(
+    seams,
     vaultKeyRequest("POST", { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, key: "sk-abc1234" }),
   );
 
@@ -376,7 +377,8 @@ test("storing a valid key answers { stored: true } and writes an encrypted ciphe
 });
 
 test("an unknown provider id is refused", async () => {
-  const response = await route(vaultStoreOptions()).fetch(
+  const response = await answer(
+    seamsFor().seams,
     vaultKeyRequest("POST", { providerId: "not-a-provider", key: "sk-abc" }),
   );
   assert.equal(response.status, 400);
@@ -384,21 +386,24 @@ test("an unknown provider id is refused", async () => {
 });
 
 test("a key with internal whitespace is refused", async () => {
-  const response = await route(vaultStoreOptions()).fetch(
+  const response = await answer(
+    seamsFor().seams,
     vaultKeyRequest("POST", { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, key: "sk ab cd" }),
   );
   assert.equal(response.status, 400);
 });
 
 test("an empty key is refused", async () => {
-  const response = await route(vaultStoreOptions()).fetch(
+  const response = await answer(
+    seamsFor().seams,
     vaultKeyRequest("POST", { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, key: "" }),
   );
   assert.equal(response.status, 400);
 });
 
 test("a key longer than 512 characters is refused", async () => {
-  const response = await route(vaultStoreOptions()).fetch(
+  const response = await answer(
+    seamsFor().seams,
     vaultKeyRequest("POST", {
       providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
       key: "k".repeat(513),
@@ -410,13 +415,15 @@ test("a key longer than 512 characters is refused", async () => {
 test("storing again for the same provider replaces the previous entry (upsert)", async () => {
   const { seams, recorded } = seamsFor();
 
-  await route(seams).fetch(
+  await answer(
+    seams,
     vaultKeyRequest("POST", {
       providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
       key: "first-key-0001",
     }),
   );
-  await route(seams).fetch(
+  await answer(
+    seams,
     vaultKeyRequest("POST", {
       providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
       key: "second-key-9999",
@@ -432,17 +439,21 @@ test("storing again for the same provider replaces the previous entry (upsert)",
 });
 
 test("the delete gate order is method, secret, token, body", async () => {
-  const noSecret = await route(vaultStoreOptions({ encryptionSecret: undefined })).fetch(
+  const noSecret = await answer(
+    seamsFor().seams,
     vaultKeyRequest("DELETE", { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR }),
+    null,
   );
   assert.equal(noSecret.status, 503);
 
-  const anonymous = await route(vaultStoreOptions({ resolveUserId: async () => undefined })).fetch(
+  const anonymous = await answer(
+    seamsFor({ resolveUserId: async () => undefined }).seams,
     vaultKeyRequest("DELETE", { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR }),
   );
   assert.equal(anonymous.status, 401);
 
-  const unknownProvider = await route(vaultStoreOptions()).fetch(
+  const unknownProvider = await answer(
+    seamsFor().seams,
     vaultKeyRequest("DELETE", { providerId: "not-a-provider" }),
   );
   assert.equal(unknownProvider.status, 400);
@@ -451,7 +462,8 @@ test("the delete gate order is method, secret, token, body", async () => {
 
 test("deleting an existing key answers { deleted: true }", async () => {
   const { seams } = seamsFor({ deleteKey: async () => true });
-  const response = await route(seams).fetch(
+  const response = await answer(
+    seams,
     vaultKeyRequest("DELETE", { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR }),
   );
   assert.equal(response.status, 200);
@@ -460,7 +472,8 @@ test("deleting an existing key answers { deleted: true }", async () => {
 
 test("deleting a key that was not stored answers { deleted: false }", async () => {
   const { seams } = seamsFor({ deleteKey: async () => false });
-  const response = await route(seams).fetch(
+  const response = await answer(
+    seams,
     vaultKeyRequest("DELETE", { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR }),
   );
   assert.equal(response.status, 200);
@@ -469,9 +482,7 @@ test("deleting a key that was not stored answers { deleted: false }", async () =
 
 test("the delete passes the resolved user id and provider id to the seam", async () => {
   const { seams, recorded } = seamsFor();
-  await route(seams).fetch(
-    vaultKeyRequest("DELETE", { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR }),
-  );
+  await answer(seams, vaultKeyRequest("DELETE", { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR }));
   assert.deepEqual(recorded.deletes, [
     { userId: "user-1", providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR },
   ]);
@@ -480,22 +491,21 @@ test("the delete passes the resolved user id and provider id to the seam", async
 // --- Vault keys: list ---
 
 test("the list gate order is method, secret, token", async () => {
-  const wrongMethod = await route(vaultStoreOptions()).fetch(vaultKeysRequest("POST"));
+  const wrongMethod = await answer(seamsFor().seams, vaultKeysRequest("POST"));
   assert.equal(wrongMethod.status, 405);
 
-  const noSecret = await route(vaultStoreOptions({ encryptionSecret: undefined })).fetch(
-    vaultKeysRequest(),
-  );
+  const noSecret = await answer(seamsFor().seams, vaultKeysRequest(), null);
   assert.equal(noSecret.status, 503);
 
-  const anonymous = await route(vaultStoreOptions({ resolveUserId: async () => undefined })).fetch(
+  const anonymous = await answer(
+    seamsFor({ resolveUserId: async () => undefined }).seams,
     vaultKeysRequest(),
   );
   assert.equal(anonymous.status, 401);
 });
 
 test("the list answer never contains ciphertext or plaintext keys", async () => {
-  const response = await route(vaultStoreOptions()).fetch(vaultKeysRequest());
+  const response = await answer(seamsFor().seams, vaultKeysRequest());
 
   assert.equal(response.status, 200);
   const body = await response.json();
@@ -514,7 +524,7 @@ test("the list omits rows stored for a provider the vault no longer accepts", as
       { providerId: "devin", updatedAt: NOW_DATE },
     ],
   });
-  const response = await route(seams).fetch(vaultKeysRequest());
+  const response = await answer(seams, vaultKeysRequest());
 
   assert.equal(response.status, 200);
   const body = await response.json();
@@ -533,7 +543,7 @@ test("the list calls the seam with the resolved user id", async () => {
     },
   });
 
-  await route(seams).fetch(vaultKeysRequest());
+  await answer(seams, vaultKeysRequest());
   assert.equal(calledWithUserId, "user-xyz");
 });
 
@@ -544,6 +554,8 @@ const GOLDEN_ROOT = path.join(import.meta.dirname, "../fixtures/devices-vault-ro
 interface Exchange {
   name: string;
   seams?: Partial<DevicesVaultSeams>;
+  /** Absent means the golden runs under the valid `SECRET`; present names the secret to run under, even `undefined`. */
+  encryptionSecret?: { value: string | undefined };
   request: () => Request;
 }
 
@@ -586,7 +598,7 @@ const EXCHANGES: readonly Exchange[] = [
   { name: "vault-list", request: () => vaultKeysRequest() },
   {
     name: "vault-unavailable",
-    seams: { encryptionSecret: undefined },
+    encryptionSecret: { value: undefined },
     request: () =>
       vaultKeyRequest("POST", { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, key: "sk-abc1234" }),
   },
@@ -596,7 +608,8 @@ const EXCHANGES: readonly Exchange[] = [
 test("the group's bytes are pinned per exchange", async () => {
   for (const exchange of EXCHANGES) {
     const { seams } = seamsFor(exchange.seams);
-    const response = await route(seams).fetch(exchange.request());
+    const secret = exchange.encryptionSecret ? (exchange.encryptionSecret.value ?? null) : SECRET;
+    const response = await answer(seams, exchange.request(), secret);
     await settleResponseGolden(GOLDEN_ROOT, exchange.name, await recordedResponse(response));
   }
 });

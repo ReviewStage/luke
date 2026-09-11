@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { type HttpApp, HttpRouter, HttpServerRequest } from "@effect/platform";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either } from "effect";
+import { Effect, Either, Redacted } from "effect";
 import {
   DEVICE_METHOD,
   deviceForgetRequestSchema,
@@ -23,6 +23,7 @@ import {
   pushAddress,
 } from "./hosted/devices.js";
 import { encryptProviderKey } from "./hosted/encryption.js";
+import { HostedEnvironment } from "./hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
   HOSTED_REFUSAL,
@@ -66,8 +67,6 @@ const deviceRateLimited = createRateBrake({
 export interface DevicesVaultSeams extends DeviceSeams {
   /** Reads the signed-in account behind the request's bearer, or nothing. */
   resolveUserId: (authorization: string | undefined) => Promise<string | undefined>;
-  /** The value of PROVIDER_KEY_ENCRYPTION_SECRET; undefined means the env var is absent. */
-  encryptionSecret: string | undefined;
   storeKey: (userId: string, providerId: string, ciphertext: string) => Promise<void>;
   listKeys: (userId: string) => Promise<{ providerId: string; updatedAt: Date }[]>;
   deleteKey: (userId: string, providerId: string) => Promise<boolean>;
@@ -150,12 +149,15 @@ function devicesEffect(seams: DevicesVaultSeams): HttpApp.Default {
   }).pipe(Effect.catchAll((refusal) => Effect.succeed(hostedRefusalResponse(refusal))));
 }
 
-/** The trimmed vault secret, or the unavailable refusal every vault endpoint answers without one. */
-function vaultSecret(
-  seams: Pick<DevicesVaultSeams, "encryptionSecret">,
-): Effect.Effect<string, HostedRefusal> {
-  const trimmed = seams.encryptionSecret?.trim();
-  return trimmed ? Effect.succeed(trimmed) : Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+/** The vault's encryption secret, read from the environment, or the unavailable refusal without one. */
+function vaultSecret(): Effect.Effect<string, HostedRefusal, HostedEnvironment> {
+  return Effect.gen(function* () {
+    const environment = yield* HostedEnvironment;
+    if (environment.providerKeyEncryptionSecret === undefined) {
+      return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    }
+    return Redacted.value(environment.providerKeyEncryptionSecret);
+  });
 }
 
 /**
@@ -168,13 +170,13 @@ function parseProviderKey(value: UnparsedWireValue): string | undefined {
 }
 
 /** Stores, replaces, or deletes the provider API key for the signed-in user. */
-function vaultKeyEffect(seams: DevicesVaultSeams): HttpApp.Default {
+function vaultKeyEffect(seams: DevicesVaultSeams): HttpApp.Default<never, HostedEnvironment> {
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     if (request.method !== "POST" && request.method !== "DELETE") {
       return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
     }
-    const secret = yield* vaultSecret(seams);
+    const secret = yield* vaultSecret();
     const userId = yield* bearerUserId(seams);
     const payload = yield* readJsonBodyEffect(MAXIMUM_VAULT_BODY_BYTES);
     if (!isRecord(payload)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
@@ -197,11 +199,11 @@ function vaultKeyEffect(seams: DevicesVaultSeams): HttpApp.Default {
 }
 
 /** Lists stored provider keys for the signed-in user. Never returns ciphertext or plaintext. */
-function vaultKeysEffect(seams: DevicesVaultSeams): HttpApp.Default {
+function vaultKeysEffect(seams: DevicesVaultSeams): HttpApp.Default<never, HostedEnvironment> {
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     if (request.method !== "GET") return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-    yield* vaultSecret(seams);
+    yield* vaultSecret();
     const userId = yield* bearerUserId(seams);
     const rows = yield* Effect.promise(() => seams.listKeys(userId));
     // The table outlives the provider set: a key stored for a provider this
@@ -224,7 +226,9 @@ function vaultKeysEffect(seams: DevicesVaultSeams): HttpApp.Default {
  * this function, so the refusal says what the group declares rather than
  * what a caller can reach.
  */
-export function devicesVaultApp(seams: DevicesVaultSeams): HttpApp.Default {
+export function devicesVaultApp(
+  seams: DevicesVaultSeams,
+): HttpApp.Default<never, HostedEnvironment> {
   return HttpRouter.empty.pipe(
     HttpRouter.all(DEVICES_PATH, devicesEffect(seams)),
     HttpRouter.all(VAULT_KEY_PATH, vaultKeyEffect(seams)),
