@@ -7,7 +7,7 @@ import {
 import { text } from "@sidecar/wire";
 
 /** One manager's annotation of one provider's already-observed sessions. */
-export type WorkspaceHostEnrichment = (
+type WorkspaceHostEnrichment = (
   providerId: string,
   observations: readonly ProviderSessionObservation[],
 ) => readonly ProviderSessionObservation[];

@@ -22,8 +22,8 @@ import {
   textFromRecord,
   timestampFromRecord,
 } from "../shared/cloud-wire.js";
-import { CONDUCTOR_AGENT_BY_TYPE } from "./applications.js";
 import {
+  CONDUCTOR_AGENT_BY_TYPE,
   CONDUCTOR_CANCEL_ADVERTISEMENT,
   CONDUCTOR_DEFAULTS,
   CONDUCTOR_PROVIDER_ID,

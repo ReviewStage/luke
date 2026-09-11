@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import {
   CLOUD_AGENT_PROVIDER_ID,
   CloudAgentProviderIdSchema,
-  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   CONVERSATION_ENTRY_KIND,
   ConversationEntryKindSchema,
   HOSTED_AGENT_ID,
@@ -17,7 +16,6 @@ import {
   SessionApplicationIdSchema,
   SessionFilterSchema,
   SessionLinkSchemeSchema,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
   TOOL_PART_STATE,
   ToolPartStateSchema,
   WorkspaceProviderIdSchema,
@@ -51,8 +49,8 @@ function settlesVocabulary<Member extends string>(
 
 test("the provider catalog's schemas hold exactly the ids the build declares", () => {
   settlesVocabulary(ProviderIdSchema, Object.values(PROVIDER_ID), [
-    SUPERSET_WORKSPACE_PROVIDER_ID,
-    CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
+    SESSION_APPLICATION_ID.SUPERSET,
+    HOSTED_AGENT_ID.CURSOR,
   ]);
   settlesVocabulary(CloudAgentProviderIdSchema, Object.values(CLOUD_AGENT_PROVIDER_ID), [
     PROVIDER_ID.CLAUDE_CODE,
@@ -60,10 +58,8 @@ test("the provider catalog's schemas hold exactly the ids the build declares", (
     PROVIDER_ID.OMP,
   ]);
   settlesVocabulary(HostedAgentIdSchema, Object.values(HOSTED_AGENT_ID), [PROVIDER_ID.CODEX]);
-  settlesVocabulary(WorkspaceProviderIdSchema, [
-    ...Object.values(PROVIDER_ID),
-    SUPERSET_WORKSPACE_PROVIDER_ID,
-    CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
+  settlesVocabulary(WorkspaceProviderIdSchema, Object.values(PROVIDER_ID), [
+    SESSION_APPLICATION_ID.SUPERSET,
   ]);
 });
 

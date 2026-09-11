@@ -9,7 +9,7 @@ import {
   isAppSettingId,
 } from "@sidecar/guide";
 import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE } from "@sidecar/live";
-import { PROVIDER_ID, SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/session";
+import { PROVIDER_ID } from "@sidecar/session";
 import { test } from "vitest";
 import {
   APP_SETTING_SCHEMA,
@@ -252,7 +252,7 @@ test("a keyed field validates one entry exactly as its whole map would", () => {
     false,
   );
   assert.equal(
-    settingEntryGuard("workspaceAgentDefaults", SUPERSET_WORKSPACE_PROVIDER_ID, { agent: 7 }).valid,
+    settingEntryGuard("workspaceAgentDefaults", PROVIDER_ID.CONDUCTOR, { agent: 7 }).valid,
     false,
   );
 });

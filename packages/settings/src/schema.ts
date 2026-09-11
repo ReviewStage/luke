@@ -1,10 +1,5 @@
 import { isRealtimeVoice } from "@sidecar/actions";
-import {
-  CREDENTIAL_PROVIDER_ID,
-  CREDENTIAL_PROVIDERS,
-  CREDENTIAL_SOURCE,
-  isCredentialProviderId,
-} from "@sidecar/credentials/vocabulary";
+import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
 import {
   APP_SETTING_ID,
   APP_SETTING_KIND,
@@ -13,19 +8,15 @@ import {
 } from "@sidecar/guide";
 import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE_LIST, type LiveVoice } from "@sidecar/live";
 import {
-  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   isProviderId,
   isSessionFilter,
   isWorkspaceProviderId,
   PROVIDER_ID,
   PROVIDER_IDENTITY_BY_ID,
   type ProviderId,
-  parseWorkspaceAgentKindSelection,
   parseWorkspaceAgentSelection,
   type SessionFilter,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
   type WorkspaceAgentDefaults,
-  type WorkspaceAgentKindSelection,
   type WorkspaceAgentSelection,
   type WorkspaceProviderId,
   workspaceAgentModelLabel,
@@ -132,14 +123,7 @@ function formFactorOptionLabel(formFactor: PanelFormFactor): string {
 }
 
 function workspaceProviderName(providerId: WorkspaceProviderId): string {
-  if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return "Superset";
-  if (providerId === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID) {
-    return `${PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.CONDUCTOR].displayName} (local)`;
-  }
-  if (isCredentialProviderId(providerId)) return CREDENTIAL_PROVIDERS[providerId].displayName;
-  // The one workspace-capable provider with no credential row to take a
-  // display name from.
-  return isProviderId(providerId) ? PROVIDER_IDENTITY_BY_ID[providerId].displayName : providerId;
+  return PROVIDER_IDENTITY_BY_ID[providerId].displayName;
 }
 
 /** Voice available and the microphone granted: the whole of what a control needs. */
@@ -168,14 +152,8 @@ function workspaceAgentDefaultsGuard(
   if (!isRecord(value)) {
     return settingGuardFromEither(Either.left(undefined));
   }
-  const defaults: Partial<Record<ProviderId, WorkspaceAgentSelection>> &
-    Partial<Record<typeof SUPERSET_WORKSPACE_PROVIDER_ID, WorkspaceAgentKindSelection>> = {};
+  const defaults: Partial<Record<ProviderId, WorkspaceAgentSelection>> = {};
   for (const [providerId, selection] of Object.entries(value)) {
-    if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) {
-      const parsed = parseWorkspaceAgentKindSelection(selection);
-      if (parsed) defaults[SUPERSET_WORKSPACE_PROVIDER_ID] = parsed;
-      continue;
-    }
     const parsed = parseWorkspaceAgentSelection(providerId, selection);
     if (!isProviderId(providerId) || !parsed) continue;
     defaults[providerId] = parsed;
@@ -524,11 +502,7 @@ export const APP_SETTING_SCHEMA = {
         choices: [
           ASK_EACH_TIME_CHOICE,
           workspaceProviderName(PROVIDER_ID.CODEX),
-          // Both Conductors, or the guide would read the stored cloud
-          // default's plain "Conductor" as the only Conductor there is.
           workspaceProviderName(PROVIDER_ID.CONDUCTOR),
-          workspaceProviderName(CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID),
-          "Superset",
         ],
         defaultValue: ASK_EACH_TIME_CHOICE,
         adjustable: false,
@@ -626,15 +600,11 @@ export const APP_SETTING_SCHEMA = {
       [APP_SETTING_ID.WORKSPACE_AGENT_EFFORT]: conductorAgentRowDrawn,
     },
     entry: {
-      // Local Conductor is deliberately not a key: its creation link
-      // documents no agent choice, so no entry could ever steer one.
-      isKey: (
-        value: UnparsedWireValue,
-      ): value is ProviderId | typeof SUPERSET_WORKSPACE_PROVIDER_ID =>
-        isWireString(value) && (value === SUPERSET_WORKSPACE_PROVIDER_ID || isProviderId(value)),
+      isKey: (value: UnparsedWireValue): value is ProviderId =>
+        isWireString(value) && isProviderId(value),
       same: (
-        current: WorkspaceAgentSelection | WorkspaceAgentKindSelection | undefined,
-        next: WorkspaceAgentSelection | WorkspaceAgentKindSelection | undefined,
+        current: WorkspaceAgentSelection | undefined,
+        next: WorkspaceAgentSelection | undefined,
       ) =>
         current?.agent === next?.agent &&
         current?.model === next?.model &&

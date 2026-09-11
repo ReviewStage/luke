@@ -27,7 +27,6 @@ import {
   type SessionFilterAxis,
   type SessionLocation,
   type SessionUrgency,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
   sessionChangeNumber,
   sessionFilterAxis,
 } from "@sidecar/session";
@@ -702,7 +701,7 @@ function filterGroups(sessions: readonly SessionView[]): readonly SessionFilterG
             filter: SESSION_FILTER.SUPERSET,
             label: "Superset",
             count: managed,
-            markId: SUPERSET_WORKSPACE_PROVIDER_ID,
+            markId: SESSION_FILTER.SUPERSET,
           },
         ]
       : [];

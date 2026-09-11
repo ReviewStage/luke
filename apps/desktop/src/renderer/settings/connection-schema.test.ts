@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { CLOUD_AGENT_PROVIDER_LIST, CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
-import { CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID } from "@sidecar/session";
 import { settingsView } from "@sidecar/settings/testing";
 import { VOICE_SOURCE } from "@sidecar/settings/wire";
 import { test } from "vitest";
@@ -16,12 +15,8 @@ import {
   offeredConnections,
 } from "./connection-schema";
 
-/** Local Conductor stands only where its own index reported a repository. */
 function everything(): ConnectionVisibility {
-  return {
-    ...everyConnectionOffered(),
-    workspaceProjects: [{ id: CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID, name: "Conductor (local)" }],
-  };
+  return everyConnectionOffered();
 }
 
 test("a connection is named once, and lands where its own id says", () => {
@@ -59,7 +54,6 @@ test("every connection this build can offer stands when its condition is true", 
   for (const id of [
     CREDENTIAL_PROVIDER_ID.OPENAI,
     CREDENTIAL_PROVIDER_ID.LINEAR,
-    CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
     "apple-calendar",
     "google-calendar",
   ]) {
@@ -85,16 +79,6 @@ test("the voice key's row stands with the half that supplies it, and nowhere els
     false,
     "no account, no Provider section",
   );
-});
-
-test("a connection made somewhere else offers no control that pretends otherwise", () => {
-  // Local Conductor connects by an index on disk: a declaration of having
-  // nothing to press rather than an absence of code.
-  for (const id of [CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID]) {
-    const spec = CONNECTION_SCHEMA.find((entry) => entry.id === id);
-    assert.ok(spec, id);
-    assert.equal(spec.actions(connectionInput()).length, 0, id);
-  }
 });
 
 test("at most one of a row's actions asks first", () => {
@@ -126,7 +110,6 @@ test("a query reads the connections in the order the page draws them", () => {
     .map((spec) => spec.id);
   assert.deepEqual(offered, [
     ...CLOUD_AGENT_PROVIDER_LIST.map((provider) => provider.id),
-    CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
     CREDENTIAL_PROVIDER_ID.LINEAR,
     "apple-calendar",
     "google-calendar",

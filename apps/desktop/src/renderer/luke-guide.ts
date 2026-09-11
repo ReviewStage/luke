@@ -228,12 +228,8 @@ function integrationFacts(settings: AppSettingsView): AppGuideFact[] {
   facts.push({
     label: "Conductor",
     detail:
-      "Conductor cloud connects with a key under Providers and creates workspaces in the " +
-      "cloud projects that key lists. Conductor on this Mac needs no key and is recognized " +
-      "read-only, and an ask can create a new workspace in any repository it holds locally; " +
-      "the opening task is pre-filled in Conductor but not sent, so the developer presses " +
-      "Return there to start it. Local Conductor chats stay read-only otherwise: Luke " +
-      "cannot message, archive, or add an agent to one.",
+      "Conductor connects with a key under Providers and creates workspaces in the cloud " +
+      "projects that key lists.",
   });
   return facts;
 }
@@ -408,8 +404,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "developer's own words where the project takes one, named as the developer chose or, " +
         "when they chose none, by a short name Luke composes for the work, so a Conductor " +
         "cloud workspace never falls back to the random city name it would otherwise get; a " +
-        "project listed as naming its own workspaces — Conductor's local create link — " +
-        "takes no name at all. Only reported " +
+        "project listed as naming its own workspaces takes no name at all. Only reported " +
         "projects can be named, a project that needs a task cannot be created without one, " +
         "and a provider that reports none takes no ask. A bare " +
         "ask for a new agent creates a new workspace — an ask naming an existing workspace " +

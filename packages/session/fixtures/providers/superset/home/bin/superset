@@ -1,3 +1,0 @@
-#!/bin/sh
-# A stub so the fixture home reads as one where Superset is installed.
-exit 1

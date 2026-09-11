@@ -6,7 +6,6 @@
   "exports": {
     ".": "./src/index.js",
     "./effect": "./src/effect/index.js",
-    "./superset/sign-in-stage": "./src/superset/sign-in-stage.js",
     "./testing": "./src/testing/index.js"
   },
   "types": "./src/index.ts",

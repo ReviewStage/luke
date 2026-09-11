@@ -64,10 +64,9 @@ it.layer(testSqlClient)("the account group's seams over @effect/sql", (it) => {
         voice: "cedar",
         voiceSpeed: 1.25,
         defaultWorkspaceProvider: "conductor",
-        workspaceProjectDefaults: { conductor: "project-a", superset: "project-b" },
+        workspaceProjectDefaults: { conductor: "project-a", codex: "project-b" },
         workspaceAgentDefaults: {
           conductor: { agent: "claude", model: "opus", effort: "high" },
-          superset: { agent: "codex" },
         },
       });
 
@@ -76,10 +75,9 @@ it.layer(testSqlClient)("the account group's seams over @effect/sql", (it) => {
         voice: "cedar",
         voiceSpeed: 1.25,
         defaultWorkspaceProvider: "conductor",
-        workspaceProjectDefaults: { conductor: "project-a", superset: "project-b" },
+        workspaceProjectDefaults: { conductor: "project-a", codex: "project-b" },
         workspaceAgentDefaults: {
           conductor: { agent: "claude", model: "opus", effort: "high" },
-          superset: { agent: "codex" },
         },
       });
       assert.equal(read?.updatedAt.getTime(), written.getTime());
@@ -90,7 +88,7 @@ it.layer(testSqlClient)("the account group's seams over @effect/sql", (it) => {
     Effect.gen(function* () {
       const userId = yield* openUser;
       yield* writeAccountPreferences(userId, {
-        workspaceProjectDefaults: { conductor: "project-a", superset: "project-b" },
+        workspaceProjectDefaults: { conductor: "project-a", codex: "project-b" },
       });
       yield* writeAccountPreferences(userId, {
         voice: "marin",
