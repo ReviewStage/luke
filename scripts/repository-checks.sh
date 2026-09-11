@@ -248,6 +248,24 @@ node --input-type=module -e '
   }
 ' "$SIDECAR_REPO_ROOT"
 
+# The brain's acts and reads leave this Mac through the service, never through
+# a provider adapter held here: the brain wiring under `packages/host/src/brain`
+# and the performer every admitted action passes through import nothing from
+# `@sidecar/providers`, so no path from a turn can reach a provider plugin, a
+# CLI, or a local file without the service's admission in between. The
+# observation composer still constructs the plugins for the seams outside the
+# brain, and is deleted with them.
+brain_provider_imports=$(grep -rEn 'from "@sidecar/providers(/[^"]*)?"' \
+    --include='*.ts' --exclude='*.test.ts' \
+    "$SIDECAR_REPO_ROOT"/packages/host/src/brain \
+    "$SIDECAR_REPO_ROOT"/packages/host/src/session-action-performer.ts \
+    "$SIDECAR_REPO_ROOT"/packages/host/src/session-row-actions.ts || true)
+if [[ -n "$brain_provider_imports" ]]; then
+    printf 'error: the brain path reaches a provider adapter outside the service:\n%s\n' \
+        "$brain_provider_imports" >&2
+    exit 1
+fi
+
 # The brand artwork has one source and three sets of committed outputs cut from
 # it: the SVGs, the face the renderer draws, and the motions it plays. If the
 # copies no longer match the source, one of them is telling a story the artwork

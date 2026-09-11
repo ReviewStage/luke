@@ -37,6 +37,7 @@ export * from "./session-identity.js";
 export * from "./session-registry.js";
 export * from "./session-shape.js";
 export * from "./session-status.js";
+export * from "./transcript-lines.js";
 export * from "./ui-messages/tool-parts.js";
 export * from "./urgency.js";
 export * from "./workspace-agents.js";

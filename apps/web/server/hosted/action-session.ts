@@ -83,7 +83,13 @@ const HOSTED_ACTION_FIELDS = {
   [ACTION_KIND.MESSAGE]: (body: WireRecord) => aimed(body, { text: body.text }),
   [ACTION_KIND.CONTROL]: (body: WireRecord) => aimed(body, { control_id: body.controlId }),
   [ACTION_KIND.ADD_AGENT]: (body: WireRecord) =>
-    aimed(body, { agent: body.agent, name: body.name, task: body.task }),
+    aimed(body, {
+      agent: body.agent,
+      model: body.model,
+      effort: body.effort,
+      name: body.name,
+      task: body.task,
+    }),
   [ACTION_KIND.RENAME_SESSION]: (body: WireRecord) => aimed(body, { name: body.name }),
   [ACTION_KIND.RENAME_WORKSPACE]: (body: WireRecord) => aimed(body, { name: body.name }),
   [ACTION_KIND.CREATE_WORKSPACE]: (body: WireRecord) =>

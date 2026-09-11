@@ -4,7 +4,6 @@ import {
   BRAIN_INPUT_MARKER,
   BRAIN_TURN_KIND,
   BRAIN_TURN_TRIGGER,
-  BRAIN_WAKE_KIND,
   BRAIN_WORKSPACE_SEEDS,
   BrainAgent,
   type BrainDelivery,
@@ -31,7 +30,6 @@ import {
 } from "@sidecar/brain";
 import { type BrainRequestSnapshot, brainRequestPending } from "@sidecar/brain/requests-wire";
 import { failedHousekeeping, housekeepingFellShort } from "@sidecar/memory";
-import type { ObservedSpoolEvent } from "@sidecar/providers";
 import {
   BUILTIN_CONTEXT_ENGINE,
   BUILTIN_MODEL_ADAPTER,
@@ -77,19 +75,14 @@ import {
   RUN_ORIGIN,
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
-import {
-  dispatchRead,
-  SESSION_STATUS,
-  type Session,
-  type SessionIdentity,
-  type SessionProviderPlugin,
-} from "@sidecar/session";
+import { SESSION_STATUS, type Session, type SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import {
   type BrainActionPerformerDependencies,
   createBrainActionPerformer,
 } from "./action-performer.js";
 import { BrainHost } from "./host.js";
+import type { SessionTranscriptReads } from "./hosted-transcripts.js";
 import { followBrainRequests } from "./publication.js";
 import {
   type ChildWiringDependencies,
@@ -117,7 +110,8 @@ export interface BrainWiringDependencies extends ChildWiringDependencies {
    * host decides that, not this wiring.
    */
   standingContext: (sessionKey: SessionKey) => string;
-  pluginFor: (providerId: string) => SessionProviderPlugin | undefined;
+  /** The two transcript reads a conversation makes, each through the service's documented read of that session's conversation. */
+  transcripts: SessionTranscriptReads;
   session: (identity: SessionIdentity) => Session | undefined;
   deliver: (delivery: BrainDelivery) => void | Promise<void>;
   /** Which credential the policy would build an adapter under, by reference; the value never enters a configuration. */
@@ -576,29 +570,19 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       ...(reasoningEffort ? { reasoningEffort } : undefined),
       promptCacheKey: promptCacheKeyFor(sessionKey),
       ...(maximumOutputTokens !== undefined ? { maximumOutputTokens } : undefined),
-      readTranscriptSince: (identity, cursor) => {
-        const plugin = dependencies.pluginFor(identity.providerId);
-        if (!plugin) {
-          return Promise.resolve({
-            status: ACTION_RESULT_STATUS.UNSUPPORTED,
-            reason: "That session's provider is not connected.",
-          });
-        }
-        return dispatchRead(plugin, "transcriptSince", identity.providerSessionId, cursor);
-      },
+      readTranscriptSince: (identity, cursor) =>
+        dependencies.transcripts.readTranscriptSince(identity, cursor),
       readTranscript: (identity) => {
-        const session = dependencies.session(identity);
-        const plugin = dependencies.pluginFor(identity.providerId);
-        if (!session || !plugin) {
+        if (!dependencies.session(identity)) {
           return Promise.resolve({
             status: ACTION_RESULT_STATUS.REJECTED,
             reason: "No observed session matches that identity.",
           });
         }
-        // Whether a session's transcript can be read is the provider's own
-        // word: a local reader opens its file, Conductor reads its documented
-        // messages endpoint, and a provider naming no handler refuses.
-        return dispatchRead(plugin, "transcript", identity.providerSessionId);
+        // Whether a session's transcript can be read is its provider's own
+        // word, answered by the service's documented read of that provider's
+        // conversations; a provider it does not read refuses there.
+        return dependencies.transcripts.readTranscript(identity);
       },
       deliver: (delivery) => dependencies.deliver({ ...delivery, sessionKey }),
       store,
@@ -961,33 +945,4 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       return toolLoopRuntimeOver(model);
     },
   };
-}
-
-/**
- * Turns one provider's batch of spool events into wakes. Every hook event
- * wakes the brain — the brain decides what matters, so nothing is filtered
- * here — and each wake carries the session as the registry holds it at that
- * moment, when it holds it at all: a hook can land for a session the poll has
- * not yet seen, and the brain still hears that it moved.
- */
-export function wakeEventsFromHooks(
-  providerId: string,
-  hookEvents: readonly ObservedSpoolEvent<string>[],
-  registry: { get(identity: SessionIdentity): Session | undefined },
-  now: number,
-): readonly BrainWakeEvent[] {
-  return hookEvents.map((hookEvent) => {
-    const identity: SessionIdentity = {
-      providerId,
-      providerSessionId: hookEvent.providerSessionId,
-    };
-    const session = registry.get(identity);
-    return {
-      kind: BRAIN_WAKE_KIND.HOOK,
-      identity,
-      hookEvent: hookEvent.event,
-      ...(session ? { session } : undefined),
-      atMs: Number.isFinite(hookEvent.atMs) ? hookEvent.atMs : now,
-    };
-  });
 }

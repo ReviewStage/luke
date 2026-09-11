@@ -65,10 +65,15 @@ those callers declares against the `Effect` export directly. The clients here ar
 the three vault routes, `device-client.ts`, its side of the one devices
 path, `changes-client.ts`, its side of the change-signal poll that carries
 the device's presence and quiet instants, `roster-client.ts`, its read of the
-stored roster the observe path answers, beside the mapping of that wire's
+stored roster the observe path answers and of the projects the same snapshot
+lists for the account's keys, beside the mapping of that wire's
 rows onto the session vocabulary's observations (advertisements as presence
 alone, since what a control targets never travels), `action-client.ts`,
-its side of the two session actions a row asks for, and
+its side of every session action the service carries — the two a row asks
+for and the four the brain asks for at the developer's word (a new workspace,
+another agent, and the two renames), `session-messages-client.ts`, its
+read of one observed session's own conversation for the brain's transcript
+reads, and
 `conversation-client.ts`, its side of the Conversation's per-resource reads,
 Clear, and the rating write (`PUT` on `conversationMessageRatingPath`, the
 request held to `rating-wire.ts`'s schema before it travels and the two

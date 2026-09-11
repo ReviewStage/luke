@@ -143,17 +143,14 @@ Canonical commands:
   conversation, lands only in a project its provider reported on the latest
   observation pass and documents a creation endpoint for; the ask names a
   reported project, never a repository URL or path of its own, and a provider
-  that documents no such endpoint offers nowhere to create. A local manager's
-  documented creation endpoint may be its own deep link rather than a network
-  call: for a workspace on this machine (Conductor today) the ask is honored
-  by handing that link to the operating system the way an open is, except that
-  where an open reaches no provider this one asks the manager to make exactly
-  what the developer asked. The project it names is still a reported one — a
-  repository that manager's own index listed on the latest pass — and the path
-  the create lands on is the one that report carried, read back from the
-  offered project rather than composed by the ask; a manager that lists no
-  repository offers nowhere to create, and the link carries the opening task
-  alone, since Conductor's creation link documents no agent, model, or name.
+  that documents no such endpoint offers nowhere to create. The projects the
+  brain may name are the ones Luke's own service lists for the account's
+  synced keys, read from the same stored snapshot a creation is admitted
+  against there, and the ask itself is carried to that service, which admits
+  it once more by the same `admit()` and reaches the provider's documented
+  creation endpoint under the synced key; nothing on this Mac composes a
+  creation link, reads a local manager's index for somewhere to create, or
+  reaches a provider's creation endpoint directly.
   The ask may carry
   the new agent's opening task, the developer's own words, bounded and
   delivered like a message to an existing session, through the provider's
@@ -188,20 +185,21 @@ Canonical commands:
   brain's `read_transcript` tool, offered in every kind of turn, names a
   session by the identity the standing context lists, is refused in the
   agent for any identity the roster does not hold, is refused again in the
-  main process for a session whose provider is not connected, and reads
-  through that provider's own reader, bounded as the next rule says. The read
+  main process for a session whose provider documents no such read, and reads
+  through Luke's own service, bounded as the next rule says. The read
   performs nothing and answers only where this build documents reading a
-  transcript: for a local session, the provider's own file (Claude Code,
-  Codex, and OMP today), reaching no provider; for a Conductor cloud session,
-  the same documented messages endpoint the iOS screen reads
-  (`GET /v0/sessions/{id}/messages`), under the developer's own Conductor
-  key on this Mac, only for a session the plugin's latest pass reported, only
-  as the product of the tool call itself and never of an observation pass,
-  answering the newest page of the developer's own sends and the agent's own
-  words — a tool call, tool output, or unattributed record is dropped whole —
-  rendered in the same line vocabulary the local readers use and held only in
-  the turn's working memory; any other cloud session's conversation lives
-  with its provider and is never fetched. The read renders only what the
+  transcript: for a Conductor cloud session, the same documented messages
+  endpoint the iOS screen reads (`GET /v0/sessions/{id}/messages`), read by
+  the service under the developer's synced Conductor key after a fresh pass
+  on the same request has reported that session, only as the product of the
+  tool call itself and never of an observation pass, answering the newest
+  page of the developer's own sends and the agent's own words — a tool call,
+  tool output, or unattributed record is dropped whole — rendered on this Mac
+  in the one line vocabulary every transcript reading speaks and held only in
+  the turn's working memory, which the service stores nothing of; no
+  provider's file is read on this Mac, because no local session stands
+  behind a row, and any other cloud session's conversation lives with its
+  provider and is never fetched. The read renders only what the
   provider actually wrote down, and a provider whose stored shape this build
   cannot render faithfully keeps the honest refusal instead. What the read rendered enters
   the brain's working memory like every other tool answer, and lives and dies

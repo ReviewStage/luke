@@ -16,11 +16,14 @@ import {
   gatewayOk,
   invalid,
 } from "@sidecar/gateway";
-import { HostedActionClient, HostedRosterClient } from "@sidecar/hosted";
+import {
+  HostedActionClient,
+  HostedRosterClient,
+  HostedSessionMessagesClient,
+} from "@sidecar/hosted";
 import {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticKind,
-  conductorLocalWorkspacePlugin,
   ObservationHookRegistry,
   type ProviderRegistration,
   providerRegistrations,
@@ -32,11 +35,10 @@ import {
 } from "@sidecar/providers";
 import { ObservationLoop } from "@sidecar/runtime";
 import {
-  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
+  type CloudAgentProviderId,
   CreatedWorkspaceOpenTracker,
   isProviderId,
   isSessionApplicationId,
-  isWorkspaceProviderId,
   normalizeObservedWorkspaceProjects,
   type ObservedWorkspaceProject,
   PROVIDER_ID_LIST,
@@ -44,7 +46,6 @@ import {
   rosterRelevantSessions,
   type Session,
   type SessionIdentity,
-  type SessionProviderPlugin,
   SessionRoster,
   SUPERSET_WORKSPACE_PROVIDER_ID,
   staleWorkspaceProjectDefaults,
@@ -61,6 +62,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import type { WorkspaceCreationDefaults } from "./brain/action-performer.js";
+import { hostedTranscriptReads, type SessionTranscriptReads } from "./brain/hosted-transcripts.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { IssuesComposer } from "./compose-issues.js";
 import type { SettingsComposer } from "./compose-settings.js";
@@ -71,7 +73,7 @@ import {
   type SessionActionPerformer,
 } from "./session-action-performer.js";
 import { createSessionRowActions } from "./session-row-actions.js";
-import { drawSnapshotRoster } from "./snapshot-roster.js";
+import { drawSnapshotProjects, drawSnapshotRoster } from "./snapshot-roster.js";
 
 /**
  * How often the stored snapshot is drawn again: the cadence the service's
@@ -106,7 +108,8 @@ export interface ObservationComposer extends Composer {
   readonly loop: ObservationLoop;
   readonly sessionActions: SessionActionPerformer;
   readonly supersetCli: ReturnType<typeof supersetPlugin>["cli"];
-  pluginFor: (providerId: string) => SessionProviderPlugin | undefined;
+  /** The brain's transcript reads, each through the service's documented read of the session's conversation. */
+  readonly transcripts: SessionTranscriptReads;
   session: (identity: SessionIdentity) => Session | undefined;
   observedSessionCount: () => number;
   /** The roster a client draws: the sessions still worth a row, the same gate every broadcast passes. */
@@ -164,12 +167,9 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     serviceBaseUrl: kernel.hostedServiceBaseUrl,
     ...account.token,
   });
-  // The local counterpart of the cloud Conductor adapter's creation path: it
-  // reads the repositories Conductor holds and creates a workspace in one by
-  // handing Conductor's own creation deep link to the operating system, through
-  // the native node.
-  const conductorLocalWorkspaces = conductorLocalWorkspacePlugin({
-    openExternal: (url: string) => kernel.openExternalThroughNode(url),
+  const messagesClient = new HostedSessionMessagesClient({
+    serviceBaseUrl: kernel.hostedServiceBaseUrl,
+    ...account.token,
   });
   const supersetHomeDirectory =
     options.environment.SUPERSET_HOME_DIR ?? path.join(options.homeDirectory, ".superset");
@@ -177,8 +177,8 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
   const supersetCli = superset.cli;
   // The hook spool and every provider script live under the explicit state
   // root, the same directory Luke always kept them in; nothing registers a
-  // hook or watches the spool any more, and the plugins here observe nothing.
-  // They stand for the reads the brain still makes through them.
+  // hook or watches the spool any more, and the plugins here observe nothing
+  // and answer no read: they stand only for the slices the stop empties.
   const observationHooks = new ObservationHookRegistry(() => kernel.stateRoot);
   const providerRegistry = providerRegistrations({
     readApiKey: (providerId) => settingsStore.readApiKey(providerId),
@@ -192,6 +192,8 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
   const createdWorkspaceOpens = new CreatedWorkspaceOpenTracker();
   let unsubscribeSessions: (() => void) | undefined;
   let lastWorkspaceProjects: string | undefined;
+  /** Where a workspace can be created, as the service's snapshot last listed it. */
+  let heldWorkspaceProjects: readonly ObservedWorkspaceProject[] = [];
   let workspaceProjectsBroadcastGeneration = 0;
   let rosterBroadcast = false;
   let brainWorkspaceDefaults: WorkspaceCreationDefaults = {};
@@ -209,30 +211,20 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     },
   });
 
-  function pluginFor(providerId: string) {
-    if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return superset;
-    if (providerId === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID) return conductorLocalWorkspaces;
-    return isProviderId(providerId) ? providerRegistry[providerId].plugin : undefined;
-  }
-
   function workspaceProjectOffered(providerId: string, providerProjectId: string): boolean {
-    const projects = pluginFor(providerId)?.projects?.() ?? [];
-    return projects.some((project) => workspaceProjectSelectionId(project) === providerProjectId);
+    return heldWorkspaceProjects.some(
+      (project) =>
+        project.providerId === providerId &&
+        workspaceProjectSelectionId(project) === providerProjectId,
+    );
   }
 
+  // The one list every offer of a project reads: the settings rows, the
+  // bootstrap, and the brain's admission all see what the service's stored
+  // snapshot lists for the account's keys, which is what a creation is
+  // admitted against there.
   function offeredWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
-    if (!runMode.observesProviders) return [];
-    return [
-      ...orderedRegistrations.map(({ plugin }) => plugin),
-      superset,
-      conductorLocalWorkspaces,
-    ].flatMap((plugin) =>
-      (plugin.projects?.() ?? []).map((project) => ({
-        ...project,
-        providerId: plugin.provider.id,
-        providerName: plugin.provider.displayName,
-      })),
-    );
+    return runMode.observesProviders ? heldWorkspaceProjects : [];
   }
 
   async function readWorkspaceDefaults(): Promise<WorkspaceCreationDefaults> {
@@ -298,14 +290,10 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
   }
 
   async function rememberWorkspaceDefaults(
-    plugin: SessionProviderPlugin,
+    providerId: CloudAgentProviderId,
     providerProjectId: string,
-    providerTargetId: string | undefined,
     namedSelection: WorkspaceAgentSelection | undefined,
-    agent: string | undefined,
   ): Promise<void> {
-    const providerId = plugin.provider.id;
-    if (!isWorkspaceProviderId(providerId)) return;
     try {
       let accountPreferencesTouched = false;
       if (
@@ -319,21 +307,6 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
         accountPreferencesTouched = true;
       }
       if (
-        providerId === SUPERSET_WORKSPACE_PROVIDER_ID &&
-        agent !== undefined &&
-        (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
-          SUPERSET_WORKSPACE_PROVIDER_ID
-        ] === undefined
-      ) {
-        const saved = await settingsStore.setEntry(
-          APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-          SUPERSET_WORKSPACE_PROVIDER_ID,
-          { agent },
-        );
-        settings.emitSettingsSnapshot(saved.settings);
-        accountPreferencesTouched = true;
-      }
-      if (
         (await settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field))?.[
           providerId
         ] === undefined
@@ -341,15 +314,12 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
         const saved = await settingsStore.setEntry(
           APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
           providerId,
-          workspaceProjectSelectionId(
-            providerTargetId ? { providerProjectId, providerTargetId } : { providerProjectId },
-          ),
+          workspaceProjectSelectionId({ providerProjectId }),
         );
         settings.emitSettingsSnapshot(saved.settings);
         accountPreferencesTouched = true;
       }
       if (
-        isProviderId(providerId) &&
         namedSelection !== undefined &&
         (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId] ===
           undefined
@@ -383,7 +353,8 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
   const sessionActions = createSessionActionPerformer({
     sessionRegistry,
     openExternal: (url, kind) => kernel.openExternalThroughNode(url, kind),
-    pluginFor,
+    actions: actionClient,
+    refreshSessions: () => loop.refresh(),
     sendsNetwork: runMode.sendsNetwork,
     settingsStore,
     rememberWorkspaceDefaults,
@@ -392,10 +363,12 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     trackedIssues: () => issues.issues(),
     issueTrackers: issues.trackers,
     refreshIssues: () => issues.refresh(),
-    supersetContext: (identity) =>
-      superset.actableContext(identity.providerId, identity.providerSessionId),
-    supersetCli,
     recordProductEvent: settings.recordProductEvent,
+  });
+
+  const transcripts = hostedTranscriptReads({
+    client: messagesClient,
+    session: (identity) => sessionRegistry.get(identity),
   });
 
   // A row's own send or press is admitted where its roster is: the service
@@ -427,13 +400,19 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
   const loop = new ObservationLoop({
     gate: observationGate,
     intervalMs: SESSION_REFRESH_INTERVAL_MS,
-    run: (generation) =>
-      drawSnapshotRoster({
+    // The projects are drawn before the roster, so the broadcast the roster's
+    // commit fires already reads the list the same pass listed.
+    run: async (generation) => {
+      const isCurrent = () => loop.isCurrent(generation);
+      const projects = await drawSnapshotProjects({ client: rosterClient, isCurrent, report });
+      if (projects) heldWorkspaceProjects = projects;
+      await drawSnapshotRoster({
         client: rosterClient,
         registry: sessionRegistry,
-        isCurrent: () => loop.isCurrent(generation),
+        isCurrent,
         report,
-      }),
+      });
+    },
     afterRun: () => {
       links.get().rosterLook();
     },
@@ -495,6 +474,7 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     kernel.emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [], settled: true });
     kernel.emit(GATEWAY_EVENT.WORKSPACE_PROJECTS_CHANGED, { projects: [] });
     lastWorkspaceProjects = undefined;
+    heldWorkspaceProjects = [];
   }
 
   function actableSessions(): readonly Session[] {
@@ -606,7 +586,7 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     loop,
     sessionActions,
     supersetCli,
-    pluginFor,
+    transcripts,
     session: (identity) => sessionRegistry.get(identity),
     observedSessionCount: () => actableSessions().length,
     rosterForClients,

@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
-import type { ObserveAnswer } from "@sidecar/hosted";
-import { CLOUD_AGENT_PROVIDER_ID, SESSION_STATUS, SessionRoster } from "@sidecar/session";
+import type { HostedProjectsAnswer, ObserveAnswer } from "@sidecar/hosted";
+import {
+  CLOUD_AGENT_PROVIDER_ID,
+  PROVIDER_IDENTITY_BY_ID,
+  SESSION_STATUS,
+  SessionRoster,
+  WORKSPACE_TASK_SUPPORT,
+} from "@sidecar/session";
 import { test } from "vitest";
-import { drawSnapshotRoster } from "./snapshot-roster.js";
+import { drawSnapshotProjects, drawSnapshotRoster, snapshotProjects } from "./snapshot-roster.js";
 
 const OBSERVED_AT = 1_800_000_000_000;
 
@@ -111,4 +117,76 @@ test("the sessions drawn carry the provider's identity and the snapshot's advert
   });
   assert.equal(session?.detail.link, "conductor://session/chat-newer");
   assert.equal(session?.advertises.length, 1);
+});
+
+const PROJECT = {
+  providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
+  providerProjectId: "project-1",
+  repository: "acme/app",
+  taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+  targetName: "Default host",
+};
+
+test("the projects answer becomes the app's own project list, stamped with the provider's name, and a provider not observed in the cloud is dropped", () => {
+  const listed = snapshotProjects({
+    projects: [
+      PROJECT,
+      {
+        providerId: "claude-code",
+        providerProjectId: "local-1",
+        repository: "acme/local",
+        taskSupport: WORKSPACE_TASK_SUPPORT.NONE,
+      },
+      {
+        providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
+        providerProjectId: "project-2",
+        repository: "acme/web",
+        taskSupport: WORKSPACE_TASK_SUPPORT.REQUIRED,
+        namesItself: true,
+      },
+    ],
+    agentModels: [],
+  });
+
+  assert.deepEqual(listed, [
+    {
+      providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
+      providerName: PROVIDER_IDENTITY_BY_ID[CLOUD_AGENT_PROVIDER_ID.CONDUCTOR].displayName,
+      providerProjectId: "project-1",
+      repository: "acme/app",
+      taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+      targetName: "Default host",
+    },
+    {
+      providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
+      providerName: PROVIDER_IDENTITY_BY_ID[CLOUD_AGENT_PROVIDER_ID.CONDUCTOR].displayName,
+      providerProjectId: "project-2",
+      repository: "acme/web",
+      taskSupport: WORKSPACE_TASK_SUPPORT.REQUIRED,
+      namesItself: true,
+    },
+  ]);
+});
+
+test("a projects read that answers nothing, or answers after the pass was stopped, replaces no list and reports only the first", async () => {
+  const reports: string[] = [];
+  let current = true;
+  const answers: (HostedProjectsAnswer | undefined)[] = [
+    { projects: [PROJECT], agentModels: [] },
+    undefined,
+    { projects: [PROJECT], agentModels: [] },
+  ];
+  const draw = () =>
+    drawSnapshotProjects({
+      client: { projects: async () => answers.shift() },
+      isCurrent: () => current,
+      report: (line) => reports.push(line),
+    });
+
+  assert.equal((await draw())?.length, 1);
+  assert.equal(await draw(), undefined);
+  assert.equal(reports.length, 1);
+  current = false;
+  assert.equal(await draw(), undefined);
+  assert.equal(reports.length, 1);
 });

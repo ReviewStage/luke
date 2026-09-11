@@ -40,10 +40,12 @@ own lifetime, described below, one memory per conversation. For a Conductor
 session, which keeps no transcript on your Mac, the same "read the recent
 tail" ask reads the newest page of that chat's conversation from Conductor
 instead — your own messages and the agent's replies, not its tool activity —
-using the Conductor key you gave the Mac app, only for a session Luke was just
+through our own service, under the synced copy of the Conductor key you gave
+the Mac app (see "Provider API keys" below), only for a session Luke was just
 shown, and only inside a turn: one you opened, or one a status change on that
-chat woke; the periodic look itself reads no message of any chat. What he
-reads is held in that turn's working memory and stored nowhere else. Nothing
+chat woke; the periodic look itself reads no message of any chat. Our service
+stores nothing of that page, and what he reads is held in that turn's working
+memory on your Mac and stored nowhere else. Nothing
 else reads message history, file contents, or command output. If you run
 agents inside the Herdr terminal manager, Luke also asks Herdr's own
 command-line tool which of those sessions it holds, so their rows can say so;
@@ -546,9 +548,11 @@ Send.
   passes it to your phone while the screen is open. We store none of it: each
   refresh is a new read, and nothing about the conversation stays on our
   servers after the response is sent. The Mac app reads the same conversation
-  directly from Conductor, with your own key and through no server of ours,
-  when Luke reads a Conductor session's recent tail as described under "What
-  we collect".
+  through the same service read, under the same synced key, when Luke reads
+  a Conductor session's recent tail as described under "What we collect", and
+  a message or a workspace Luke sends to a Conductor session at your ask
+  travels the same way, admitted by our service against the sessions it last
+  showed you.
 - Google, if you connect Google Calendar. We request your calendar list and your
   availability. Google returns busy times only, so event titles and attendees
   are never available to Luke.
