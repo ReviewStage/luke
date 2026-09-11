@@ -15,7 +15,8 @@
   },
   "dependencies": {
     "@sidecar/wire": "workspace:*",
-    "ai": "catalog:"
+    "ai": "catalog:",
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",

@@ -156,3 +156,20 @@ The two permanent entries are not unfinished work. A `GATEWAY_ERROR` code and
 the envelope shape in `packages/gateway/src/protocol.ts` are what a client
 speaks, and a client is not upgraded by this repository's merge queue; the
 goldens in `packages/gateway/fixtures/protocol` are what keeps both byte-stable.
+
+## What Effect costs the renderer bundles
+
+Effect's `Schema`, `SchemaAST`, and `ParseResult` and the core modules beneath
+them are one fixed cost each renderer bundle pays the first time any module it
+reaches resolves them, and nothing after that adds another copy. The session
+vocabulary's guards (P3-01) are where that first reach happened, ahead of the
+renderer's own adoption in P9-01 and P9-03: `renderer.js` went from 455,802 to
+555,670 gzipped bytes and `voice.js` from 137,943 to 236,810, both recorded as
+the new baselines in `apps/desktop/bundle-budget.json`. Paying it there rather
+than at P9-01 changes when, not whether, since Effect in the renderer is a
+decision this ADR already records. The budget exists to catch growth nobody
+chose, so a deliberate adoption re-records it and says so; what it still
+refuses is a second copy of `effect`, which is the catalog's guarantee, and a
+Node-reaching companion such as `@effect/platform` arriving behind a barrel.
+P12-12's tightening of the budget's slack to five percent measures from these
+post-Effect numbers.

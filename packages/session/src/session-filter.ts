@@ -1,14 +1,16 @@
+import { Schema } from "effect";
 import {
   type HostedAgentId,
-  isHostedAgentId,
-  isProviderId,
+  HostedAgentIdSchema,
   type ProviderId,
+  ProviderIdSchema,
 } from "./provider-identity.js";
 import {
   isSessionApplicationId,
   SESSION_APPLICATION_ID,
   SESSION_LOCATION,
   type SessionApplicationId,
+  SessionApplicationIdSchema,
 } from "./session-identity.js";
 
 /**
@@ -38,15 +40,17 @@ export type SessionFilter =
   | HostedAgentId
   | SessionApplicationId;
 
+export const SessionFilterSchema = Schema.Union(
+  Schema.Literal(...Object.values(SESSION_FILTER)),
+  ProviderIdSchema,
+  HostedAgentIdSchema,
+  SessionApplicationIdSchema,
+);
+
+const readsSessionFilter = Schema.is(SessionFilterSchema);
+
 export function isSessionFilter(value: string): value is SessionFilter {
-  return (
-    value === SESSION_FILTER.LOCAL ||
-    value === SESSION_FILTER.CLOUD ||
-    value === SESSION_FILTER.VOICE ||
-    isProviderId(value) ||
-    isHostedAgentId(value) ||
-    isSessionApplicationId(value)
-  );
+  return readsSessionFilter(value);
 }
 
 /**

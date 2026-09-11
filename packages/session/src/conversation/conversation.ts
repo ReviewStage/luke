@@ -22,6 +22,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { Schema } from "effect";
 import type { SessionIdentity } from "../session-identity.js";
 import type { Session } from "../session-shape.js";
 
@@ -54,12 +55,14 @@ export const CONVERSATION_ENTRY_KIND = {
 export type ConversationEntryKind =
   (typeof CONVERSATION_ENTRY_KIND)[keyof typeof CONVERSATION_ENTRY_KIND];
 
-const CONVERSATION_ENTRY_KIND_LIST = Object.values(CONVERSATION_ENTRY_KIND);
+export const ConversationEntryKindSchema = Schema.Literal(
+  ...Object.values(CONVERSATION_ENTRY_KIND),
+);
+
+const readsConversationEntryKind = Schema.is(ConversationEntryKindSchema);
 
 export function isConversationEntryKind(value: UnparsedWireValue): value is ConversationEntryKind {
-  if (!isWireString(value)) return false;
-  // SAFETY: value is a string; list membership is the history vocabulary contract check.
-  return CONVERSATION_ENTRY_KIND_LIST.includes(value as ConversationEntryKind);
+  return readsConversationEntryKind(value);
 }
 
 /**

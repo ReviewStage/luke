@@ -183,7 +183,14 @@ wanted to draw.
 beside the hand-rolled base while both are still in use — the `Scope`,
 `Stream`, and `HttpClient` bridges over `IDisposable`, `Event`, and
 `CloudFetch` — kept off the main barrel so a caller that only wants the wire
-vocabulary never resolves `effect`.
+vocabulary never resolves `effect`. A door is not what keeps `effect` out of a
+bundle generally, and `@sidecar/session` is where that stops being true: its
+fixed value sets are declared as `Schema.Literal` beside the `as const` object
+they derive from, and each `is*` guard over one is that schema's own `Schema.is`,
+so a renderer naming a single guard resolves `Schema`, `SchemaAST`, and
+`ParseResult`. That is the deliberate cost `docs/adr/0001-effect.md` records
+against the desktop's bundle budget: one copy per bundle, paid once, and what
+the door still keeps out is a Node-reaching companion like `@effect/platform`.
 
 A subpath is also how a package keeps something out of a bundle that has no
 use for it. `@sidecar/session/fixtures` is the synthetic snapshot the fixture
