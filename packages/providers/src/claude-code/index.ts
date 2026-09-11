@@ -13,8 +13,8 @@ import {
 import { claudeTranscriptFilePath, linesFromClaudeRecord } from "./transcript.js";
 
 export interface ClaudeCodePluginOptions {
-  claudeHome?: string;
-  now?: () => number;
+  claudeHome?: string | undefined;
+  now?: (() => number) | undefined;
   /**
    * Where the observation hook spools its events, when hooks are on at all.
    * Read lazily like the cloud plugins' credentials, because the app decides
