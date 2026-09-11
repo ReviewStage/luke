@@ -56,3 +56,9 @@ export {
   settingsOverrides,
   settingsOverridesFromEnvironment,
 } from "./settings-overrides.js";
+export {
+  parsePersistedSettingsEither,
+  readSettingsFileText,
+  SettingsParseRefusal,
+  writeSettingsFileAtomic,
+} from "./settings-store-io.js";

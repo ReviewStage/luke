@@ -371,6 +371,28 @@ is run on the writer's own `ManagedRuntime` here. It is deleted once the host
 composer that holds it is a `Layer` able to hold that runtime itself, in
 Phase 7's devtrace composer conversion.
 
+`SettingsStore`'s `#readPersisted` and `#write` in
+`packages/host/src/settings-store.ts` are on the same terms as
+`AgentTraceWriter`, and for the same reason: `compose-settings.ts` still
+constructs this class from a plain object rather than a `Scope`, so the class
+builds its own `ManagedRuntime` over `NodeFileSystem.layer` and runs
+`readSettingsFileText` and `writeSettingsFileAtomic` — the atomic
+write-then-rename, now an `Effect` over `@effect/platform`'s `FileSystem` in
+`packages/host/src/effect/settings-store-io.ts` — to a promise on it. The
+parse failure beside them, `parsePersistedSettingsEither`, answers an `Either`
+rather than a throw and is not on this allowlist, since it runs no effect: it
+wraps the store's own `parsePersistedSettingsThrowing` in `Either.try`, kept
+private to that wrapping rather than a second parse a caller could reach
+directly, and every caller today still folds a refusal into
+`defaultPersistedSettings()` exactly as the throwing form's catch already did.
+The cipher stays a plain field passed to the class rather than read through
+the `SecretCipher` tag `@sidecar/host/effect` already declares: decrypting a
+stored key or grant is still synchronous and throws on its own terms, and
+widening it to the tag is left with the rest of this class's public methods,
+in the composer conversion this row shares with `AgentTraceWriter` — P7-05's
+`compose-settings.ts`, once it is a `Layer` that can hold the runtime and the
+cipher both.
+
 `tracedModelAdapter` in `packages/devtrace/src/brain-trace.ts` is on the same
 terms as `runCall`: the traced `respond` still answers the `ModelAdapter`
 interface's promise, so the `Effect.withSpan` wrapping the wrapped adapter's
