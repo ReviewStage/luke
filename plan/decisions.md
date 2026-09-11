@@ -372,3 +372,41 @@ writes `turns`, B5 writes `events` numbered per conversation. A test opens a tur
 composition, as C2c's merged tests do. C7 therefore started immediately rather than waiting on
 C2b, which matters because C7 is the narrowest link on the critical path: C7 → C8 → E5 → all five
 of lane G.
+
+
+## 2026-09-11 — C5 splits, C3 gains two things, and the speech claimant is C8 (orchestrator, from C5)
+
+C5 built LUKE-129 whole, measured it at ~1,750 changed lines, and split it before opening
+anything, at the seam pre-authorized in its brief: **(a)** the wire payloads, the speech store
+module, `announce`'s offer with its expiry, and the deletion of `store.briefings`; **(b)**
+`c5b-speech-sweep` stacked on it — hold, release, and expiry on the observation tick. Both PRs
+carry **LUKE-129**: the ticket's acceptance spans both halves, and one ticket marked Done when the
+guarantee is whole beats a tidier record. Finding the seam by building it rather than guessing is
+what the bound is for.
+
+**C3 gains two things from this, and neither is visible from either PR alone.**
+
+1. **The opener must drain queued `turns` rows into eve.** C5's hold release writes a queued row
+   with origin `hold_release` through `writer.enqueueTurn`, and **nothing drains queued rows
+   today.** Until C3, a calendar hold releasing queues a turn that never runs.
+2. **`BRAIN_HOST_TURN` has no `hold_release` kind.** The wire `TURN_ORIGIN` carries it; the host
+   turn kind does not, so a drainer has nothing to dispatch it as. C3 adds it, and that addition
+   is a wire value-set decision to be recorded here when made.
+
+**Ruling on the intermediate state:** C5 lands anyway, and **says in its PR body** that a release
+queues a turn nothing drains yet. A queued row nobody runs is the *looks-like-a-hang* class — the
+same shape E4 found where a typed ask's reply landed in a store the panel no longer drew — and an
+honest window in a PR body is the difference between a sequencing decision and a silent defect.
+
+**And one question closed that would otherwise have produced a route nobody needs: the speech
+claimant is C8, not D3 and not an HTTP route.** After C8 the live session service is the **sole
+speech sink**, it runs in `apps/web`, and B7's voice writer already writes the `speech.*` events.
+So C5's `claim` / `spoken` store functions are consumed **in-process by C8**, and **D3 only reads
+the standing to decide whether to push.** Nothing is missing; no claim route should be added. C5
+names the consumer in the module comment so the next reader does not go looking for one.
+
+**Also required of C5(a), because both are contract-shaped:** the expiry reason (`due` /
+`hold_released`) is an `as const` value set declared once in `@sidecar/wire`, not a string union
+in a payload schema; and the two-devices-claim test is named for the **guarantee** (at most one
+authorization to speak per run, never that the words were heard) rather than for the index, which
+is its backstop and not its mechanism.
