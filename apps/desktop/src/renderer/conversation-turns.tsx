@@ -11,6 +11,7 @@ import {
   WingFace,
 } from "@sidecar/panel";
 import {
+  CONVERSATION_VIEW_ACTION_OUTCOME,
   CONVERSATION_VIEW_TOOL_KIND,
   type ConversationViewMessage,
   type ConversationViewToolPart,
@@ -676,7 +677,7 @@ function messageRows(
         const row = toolRow(part, roster);
         if (row === undefined) {
           folded.push({ kind: CONVERSATION_VIEW_TOOL_KIND.DETAIL, part });
-        } else if (tool.refused) {
+        } else if (tool.outcome === CONVERSATION_VIEW_ACTION_OUTCOME.REFUSED) {
           folded.push({ kind: CONVERSATION_VIEW_TOOL_KIND.ACTION, row, part });
         } else {
           rows.push({ action: { key, row, at: view.createdAt } });

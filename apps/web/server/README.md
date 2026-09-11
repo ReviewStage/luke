@@ -429,10 +429,18 @@ before it executes and moved to `output-available` or `output-error` as its
 result lands, a reasoning summary is written as it completes, and the turn's
 completed message replaces the journal's parts whole and sets `finished_at`
 once, after which the row is immutable and a late event for it is refused. A
-turn that ends with a call still unanswered settles the call as an error,
-since nothing will answer it now, and closes the row; a writer that dies
-between the call and its result leaves the part in `input-available`, which
-is what a resume reads. A compaction is written by its owner through
+turn that ends with a call still unanswered settles the call as an answer
+whose envelope says its effect is unknown, since the call was dispatched and
+nothing will answer it now, and closes the row; a writer that dies between
+the call and its result leaves the part in `input-available`, which is what
+a resume reads. Only a refusal — a performer's rejection, an unsupported act,
+an admission's refusal — is an `output-error` part; an unknown outcome is an
+`output-available` part carrying its envelope, so the record can tell "Luke
+declined" from "Luke does not know", which are opposite claims. Because any
+call may answer with that envelope, a tool's declared output schema has to
+admit it, and the writer holds the catalog to that once, when it is
+composed, refusing to exist over a catalog that fails it rather than leaving
+a row nothing could read back. A compaction is written by its owner through
 `recordCompaction`, because the stream's compaction event names neither the
 first kept message nor, under eve, the summary's text; an event about a
 message goes through `recordEvent`, numbered by the conversation's event

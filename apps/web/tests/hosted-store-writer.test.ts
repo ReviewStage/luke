@@ -5,6 +5,7 @@ import { type ToolSet, tool, type UIMessage } from "ai";
 import { and, asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import {
+  ACTION_OUTPUT_STATUS,
   BRAIN_REQUEST_STATUS,
   BRAIN_RUN_EVENT,
   BRAIN_TURN_ORIGIN,
@@ -16,6 +17,8 @@ import {
   type BrainTurnTrigger,
   COMPACTION_SOURCE,
   CONVERSATION_EVENT_KIND,
+  isRecord,
+  isStoredToolPart,
   MAIN_SESSION_KEY,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
@@ -26,14 +29,18 @@ import {
   SLOW_STEP_KIND,
   TOOL_CALL_SETTLEMENT,
   TOOL_PART_STATE,
+  type ToolRefusalStatus,
   TURN_ORIGIN,
   TURN_STATUS,
   toolPartType,
   UI_PART_STATE,
   UI_PART_TYPE,
+  UNKNOWN_ACTION_STATUS,
   type UnparsedWireValue,
   type UserMessageMetadata,
+  unknownActionOutput,
   unparsedWire,
+  type WireBoundaryInput,
 } from "../server/core";
 import {
   CONVERSATION_KIND,
@@ -68,21 +75,46 @@ const MODEL_FAILURE: TurnFailure = "model";
 const database = await openHostedStoreTestDatabase();
 after(() => database.close());
 
+/** The envelope any call may answer with: its effect unknown. Every declared output schema admits it. */
+const UNKNOWN_OUTCOME = z.object({
+  status: z.literal(UNKNOWN_ACTION_STATUS),
+  reason: z.string(),
+});
+
 const TOOLS: ToolSet = {
   read_transcript: tool({
     description: "Reads the tail of an observed session's transcript.",
     inputSchema: z.object({ providerId: z.string(), providerSessionId: z.string() }),
-    outputSchema: z.object({ lines: z.array(z.string()) }),
+    outputSchema: z.union([z.object({ lines: z.array(z.string()) }), UNKNOWN_OUTCOME]),
   }),
   announce: tool({
     description: "Says a briefing aloud.",
     inputSchema: z.object({ text: z.string() }),
     outputSchema: z.object({ status: z.string() }),
   }),
+  send_session_message: tool({
+    description: "Sends a message to an observed session.",
+    inputSchema: z.object({
+      providerId: z.string(),
+      providerSessionId: z.string(),
+      text: z.string(),
+    }),
+    // An action's output is its envelope, whichever way it went: a tool that declares an output
+    // schema has to admit the unknown outcome, or the reader refuses the row of a call that did not answer.
+    outputSchema: z.object({
+      status: z.enum([
+        ACTION_OUTPUT_STATUS.ACCEPTED,
+        UNKNOWN_ACTION_STATUS,
+        ACTION_OUTPUT_STATUS.REFUSED,
+      ]),
+      reason: z.string().optional(),
+    }),
+  }),
 };
 
 const TRANSCRIPT_INPUT = { providerId: "conductor", providerSessionId: "s-1" };
 const TRANSCRIPT_OUTPUT = { lines: ["user: fixture ask", "assistant: fixture reply"] };
+const SEND_INPUT = { ...TRANSCRIPT_INPUT, text: "run the tests" };
 const ANNOUNCE_INPUT = { text: "The fixture session finished its turn." };
 
 const TYPED_ASK: UserMessageMetadata = {
@@ -90,7 +122,7 @@ const TYPED_ASK: UserMessageMetadata = {
   channel: MESSAGE_CHANNEL.TYPED,
 };
 
-const writer = storeWriter({ db: database.db, tools: TOOLS, now: () => new Date(NOW) });
+const writer = await storeWriter({ db: database.db, tools: TOOLS, now: () => new Date(NOW) });
 
 /** Messages as they cross into the reader: their JSON shape, which is what a row holds. */
 function asWire(stored: readonly UIMessage[]): UnparsedWireValue {
@@ -153,7 +185,12 @@ class Stream {
     });
   }
 
-  toolFailed(callId: string, name: string, errorText: string, status: string): BrainRunEvent {
+  toolFailed(
+    callId: string,
+    name: string,
+    errorText: string,
+    status: ToolRefusalStatus,
+  ): BrainRunEvent {
     return this.event({
       kind: BRAIN_RUN_EVENT.TOOL_CALL_SETTLED,
       callId,
@@ -301,6 +338,24 @@ function developerTurn(stream: Stream, askId: string, replyId: string): readonly
     stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED, { responseIds: ["resp_1", "resp_2"] }),
   ];
 }
+
+test("a writer refuses to be composed over a catalog whose declared output schema would not admit the unknown outcome", async () => {
+  const narrow: ToolSet = {
+    read_transcript: tool({
+      description: "Reads the tail of an observed session's transcript.",
+      inputSchema: z.object({ providerId: z.string(), providerSessionId: z.string() }),
+      outputSchema: z.object({ lines: z.array(z.string()) }),
+    }),
+  };
+  await assert.rejects(storeWriter({ db: database.db, tools: narrow }));
+  const undeclared: ToolSet = {
+    read_transcript: tool({
+      description: "Reads the tail of an observed session's transcript.",
+      inputSchema: z.object({ providerId: z.string(), providerSessionId: z.string() }),
+    }),
+  };
+  await storeWriter({ db: database.db, tools: undeclared });
+});
 
 test("a developer turn leaves its ask, its journal closed as the answer told, and a settled turn", async () => {
   const target = await conversation();
@@ -530,7 +585,12 @@ test("a refused call settles as an error part carrying the refusal's own reason 
   const results = await feed(target, [
     stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK),
     stream.toolCall("call_r", "read_transcript", TRANSCRIPT_INPUT),
-    stream.toolFailed("call_r", "read_transcript", "The session is not in the roster.", "refused"),
+    stream.toolFailed(
+      "call_r",
+      "read_transcript",
+      "The session is not in the roster.",
+      ACTION_OUTPUT_STATUS.REFUSED,
+    ),
   ]);
   assert.equal(
     results.every((result) => result.ok),
@@ -548,12 +608,56 @@ test("a refused call settles as an error part carrying the refusal's own reason 
   ]);
   const again = await writer.consume(
     target,
-    stream.toolFailed("call_r", "read_transcript", "The session is not in the roster.", "refused"),
+    stream.toolFailed(
+      "call_r",
+      "read_transcript",
+      "The session is not in the roster.",
+      ACTION_OUTPUT_STATUS.REFUSED,
+    ),
   );
   assert.deepEqual(again, { ok: true, effect: STORE_WRITE_EFFECT.REPEATED });
 });
 
-test("a turn that ends with a call unanswered settles the call as an error and closes the journal; a cancelled turn says so", async () => {
+test("an action whose effect is unknown settles as an answer carrying its envelope, distinguishable on the row from a refused one", async () => {
+  const target = await conversation();
+  const stream = new Stream();
+  const uncertain = unknownActionOutput("The node closed before it answered.");
+  const results = await feed(target, [
+    stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK),
+    stream.toolCall("call_u", "send_session_message", SEND_INPUT),
+    stream.toolCall("call_f", "send_session_message", SEND_INPUT),
+    stream.toolAnswered("call_u", "send_session_message", uncertain),
+    stream.toolFailed(
+      "call_f",
+      "send_session_message",
+      "Not in the roster.",
+      ACTION_OUTPUT_STATUS.REFUSED,
+    ),
+  ]);
+  assert.equal(
+    results.every((result) => result.ok),
+    true,
+  );
+  const [journal] = await storedMessages(target);
+  assert.deepEqual(journal?.parts, [
+    {
+      type: toolPartType("send_session_message"),
+      toolCallId: "call_u",
+      state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
+      input: SEND_INPUT,
+      output: uncertain,
+    },
+    {
+      type: toolPartType("send_session_message"),
+      toolCallId: "call_f",
+      state: TOOL_PART_STATE.OUTPUT_ERROR,
+      input: SEND_INPUT,
+      errorText: "Not in the roster.",
+    },
+  ]);
+});
+
+test("a turn that ends with a call unanswered settles the call as an answer whose envelope says unknown, closes the journal, and the row still reads back", async () => {
   const target = await conversation();
   const stream = new Stream();
   await feed(target, [
@@ -564,10 +668,27 @@ test("a turn that ends with a call unanswered settles the call as an error and c
   const [journal] = await storedMessages(target);
   assert.ok(journal);
   assert.equal(journal.finishedAt?.getTime(), NOW + 1_000);
-  assert.deepEqual(
-    journal.parts.map((part) => ("state" in part ? part.state : undefined)),
-    [TOOL_PART_STATE.OUTPUT_ERROR],
+  const [unanswered] = journal.parts;
+  assert.ok(
+    unanswered !== undefined &&
+      isStoredToolPart(unanswered) &&
+      unanswered.state === TOOL_PART_STATE.OUTPUT_AVAILABLE,
   );
+  // SAFETY: a stored part's output is JSON the store holds as jsonb; the wire boundary is where it is read.
+  const envelope = unparsedWire(unanswered.output as WireBoundaryInput);
+  assert.equal(isRecord(envelope) && envelope.status, UNKNOWN_ACTION_STATUS);
+  const read = await readStoredUIMessages(
+    asWire([
+      {
+        id: journal.clientId,
+        role: journal.role,
+        metadata: journal.metadata,
+        parts: journal.parts,
+      },
+    ]),
+    TOOLS,
+  );
+  assert.equal(read.ok, true);
   const turn = await storedTurn(stream.turnId);
   assert.deepEqual([turn?.status, turn?.failure], [TURN_STATUS.CANCELLED, null]);
 

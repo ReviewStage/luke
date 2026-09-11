@@ -16,7 +16,6 @@ import {
   type BrainRequestStatus,
   type BrainRunUsage,
 } from "./requests.js";
-import { TOOL_RESULT_STATUS } from "./runtime.js";
 import { BRAIN_TOOL } from "./tools.js";
 import { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
 
@@ -120,9 +119,36 @@ export const TOOL_CALL_SETTLEMENT = {
 } as const;
 
 /**
+ * The statuses under which a tool's output is a refusal rather than an
+ * answer: a performer's rejection (the runtime's loop guard answers with it
+ * too), an act the provider does not support, or an admission's refusal.
+ * Only these settle a call as an error. An unknown outcome is not among them
+ * on purpose: a call dispatched whose effect is uncertain did answer, and its
+ * answer is the envelope saying so — the action performer's, or the
+ * runtime's own for any tool that did not answer — which the record keeps
+ * whole rather than folding into an error that would read as a refusal, the
+ * opposite claim and one that would license doing it again.
+ */
+export const TOOL_REFUSAL_STATUS = {
+  REJECTED: ACTION_RESULT_STATUS.REJECTED,
+  UNSUPPORTED: ACTION_RESULT_STATUS.UNSUPPORTED,
+  REFUSED: ACTION_OUTPUT_STATUS.REFUSED,
+} as const;
+
+export type ToolRefusalStatus = (typeof TOOL_REFUSAL_STATUS)[keyof typeof TOOL_REFUSAL_STATUS];
+
+const TOOL_REFUSAL_STATUS_LIST: readonly string[] = Object.values(TOOL_REFUSAL_STATUS);
+
+export function isToolRefusalStatus(status: string): status is ToolRefusalStatus {
+  return TOOL_REFUSAL_STATUS_LIST.includes(status);
+}
+
+/**
  * A tool call's outcome: its output as the model read it, parsed, and the
- * status word the output carried. A refusal, an unsupported act, or a tool
- * that did not answer is an error, its text the output's own reason.
+ * status word the output carried. A refusal is an error, its text the
+ * output's own reason, and only a refusal status can make one; every other
+ * answer — an acceptance, a tool's plain output, or an envelope whose status
+ * is unknown — is available, envelope and all.
  */
 export type ToolCallSettlement =
   | {
@@ -134,7 +160,7 @@ export type ToolCallSettlement =
       readonly state: typeof TOOL_CALL_SETTLEMENT.OUTPUT_ERROR;
       readonly output: UnparsedWireValue;
       readonly errorText: string;
-      readonly status?: string;
+      readonly status: ToolRefusalStatus;
     };
 
 /** A compaction as the turn reports it: which way it folded, how much, and the summary where one was written. */
@@ -236,15 +262,6 @@ export function turnCompactionOf(
   };
 }
 
-/** The statuses whose output is a refusal or a silence rather than an answer: a tool's, a performer's, or the runtime's. */
-const TOOL_ERROR_STATUSES: ReadonlySet<string> = new Set([
-  ACTION_RESULT_STATUS.REJECTED,
-  ACTION_RESULT_STATUS.UNSUPPORTED,
-  ACTION_OUTPUT_STATUS.REFUSED,
-  ACTION_OUTPUT_STATUS.UNKNOWN,
-  TOOL_RESULT_STATUS.UNKNOWN,
-]);
-
 /** JSON the runtime serialized, read back as data; text that is not JSON is kept as the text it is. */
 function parsedJson(json: string): UnparsedWireValue {
   try {
@@ -260,13 +277,13 @@ export function toolCallInput(argumentsJson: string): UnparsedWireValue {
   return parsedJson(argumentsJson);
 }
 
-/** How a tool's result reads as a tool part's settlement: an answer, or an error carrying the output's own reason. */
+/** How a tool's result reads as a tool part's settlement: an answer, or a refusal carrying the output's own reason. */
 export function toolCallSettlementOf(
   outputJson: string,
   status: string | undefined,
 ): ToolCallSettlement {
   const output = parsedJson(outputJson);
-  if (status === undefined || !TOOL_ERROR_STATUSES.has(status)) {
+  if (status === undefined || !isToolRefusalStatus(status)) {
     return {
       state: TOOL_CALL_SETTLEMENT.OUTPUT_AVAILABLE,
       output,

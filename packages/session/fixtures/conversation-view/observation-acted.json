@@ -79,6 +79,26 @@
                 "errorText": "The control is no longer advertised."
               },
               {
+                "type": "tool-send_session_message",
+                "toolCallId": "call_4a0000000000000003",
+                "state": "output-available",
+                "input": {
+                  "provider_id": "conductor",
+                  "provider_session_id": "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50",
+                  "text": "Then run the linter too."
+                },
+                "output": {
+                  "status": "unknown",
+                  "reason": "The node's connection closed before it answered.",
+                  "target": {
+                    "providerId": "conductor",
+                    "providerSessionId": "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50",
+                    "title": "Fixture session",
+                    "agentId": "fixture-agent"
+                  }
+                }
+              },
+              {
                 "type": "text",
                 "text": "Told it to go ahead.",
                 "state": "done"
