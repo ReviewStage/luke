@@ -487,3 +487,38 @@ to the account's own devices on the events read) and the feedback composer's dra
 only if the developer presses send) are **two different things**. The counted event carries
 `rating` and the message's kind as a bucket, and no note, no message id, and no free text can
 reach a property — structurally, since the allowlist builds its output from the allowlist.
+
+
+## 2026-09-11 — Why the relay's reasoning identity is the item's text, and one caveat to the no-rebase rule (orchestrator, from C2b-1)
+
+**The soft spot I raised in the entry above is answered, from eve's source rather than from the
+shape of our code, and the answer favours C2b's design.** `harness/emission.js` keeps **one**
+reasoning buffer per model call and emits one `reasoning.completed` for it only when a text delta
+follows or the stream ends — a tool call does not flush it — so a step's reasoning items are
+eve's own concatenation in stream order. `harness/tool-loop.js` retries are always the **whole**
+model call from the step's start: `runModelCallWithRetries`, the empty-response reissue, and the
+unsupported-tool reissue each re-run the entire call. **There is no mid-stream resume**, and a
+durable replay re-emits the recorded stream in recorded order under new event ids. So
+`reasoningItemId`'s `ordinal` is stable across every failure mode eve actually has.
+
+**The relay dedupes a step's reasoning by its text before minting, and that is a deliberate trade
+rather than a heuristic left lying around.** Recorded here because the next reader will otherwise
+"fix" it into the failure it prevents:
+
+- Mint by **ordinal alone** and a **durable replay inside one relay lifetime** advances the
+  counter, so the same reasoning lands twice — and not only in the journal, which the completed
+  projection would heal, but **in the projection itself**, since the projection is built from the
+  relay's own step state. A replay on a function restart is ordinary eve behaviour.
+- Dedupe by **text** and the one cost is that **two distinct items with byte-identical text in one
+  step fold into one part**: one block drawn instead of two, nothing misattributed, nothing
+  duplicated, and vanishingly rare.
+
+A rare cosmetic loss in exchange for a common correctness failure is the right way round.
+
+**One caveat to my own no-rebase-on-`BEHIND` rule, which C2b-1 earned.** The rule stands — the
+queue carries behind-but-clean branches and a needless rebase costs a full check cycle. **But
+rebase when a PR merged since your base added tests that exercise the code you are changing.**
+C2c's merged ownership suite drives the relay through the real writer, and C2b-1 adds a step
+boundary to every answer, so C2c's assertions could have moved — and they would have moved **in
+the merge group**, which runs on current main, where a failure reads like somebody else's problem
+and costs an eviction to learn. Added to the standing addendum.
