@@ -45,6 +45,7 @@ import {
   readHostedRoster,
 } from "./roster.js";
 import { rotationSeedText } from "./seed.js";
+import { carryStop } from "./stop-carrier.js";
 import {
   type HostedToolDeclaration,
   hostedToolDeclarations,
@@ -170,11 +171,13 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         origin,
         caller: { kind: EVE_CALLER.DEPLOYMENT, secret, account: target.userId },
       });
-      await eve.cancel(sessionId, eveTurnId);
-      await (await seams.writer()).requestTurnCancel(target, {
+      await carryStop(
+        { eve, writer: await seams.writer(), now: seams.now, report: (m) => console.warn(m) },
+        target,
+        sessionId,
+        eveTurnId,
         turnId,
-        at: new Date(seams.now()),
-      });
+      );
     },
     offer: async (target, turnId) =>
       offerBriefing(
