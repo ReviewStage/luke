@@ -49,6 +49,7 @@ final class ConversationReadsFixtureTests: XCTestCase {
         XCTAssertEqual(ask.messages.map(\.seq), [1, 2])
         XCTAssertEqual(ask.messages[0].message.attribution, .user(.typedAsk))
         XCTAssertEqual(ask.messages[0].tools, [])
+        XCTAssertNil(ask.messages[1].rating)
         XCTAssertEqual(
             ask.messages[1].tools,
             [
@@ -67,6 +68,7 @@ final class ConversationReadsFixtureTests: XCTestCase {
         XCTAssertEqual(briefing.source, .observed(Self.fixtureSession))
         XCTAssertEqual(briefing.turn?.origin, .rosterDiff)
         XCTAssertEqual(briefing.messages.map(\.seq), [32])
+        XCTAssertEqual(briefing.messages[0].rating, RatingEventPayload(rating: .up))
         XCTAssertEqual(
             briefing.messages[0].tools,
             [

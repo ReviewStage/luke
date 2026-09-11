@@ -10,6 +10,7 @@ import {
 import {
   CONVERSATION_EVENT_KIND,
   isRecord,
+  MESSAGE_RATING,
   SCHEMA_REFUSAL,
   type Schema,
   TURN_ORIGIN,
@@ -214,6 +215,8 @@ test("the messages answer fixture reads as the view's groups, each message's too
       observed.source.session.providerId,
     "conductor",
   );
+  assert.deepEqual(observed.messages[0]?.rating, { rating: MESSAGE_RATING.UP });
+  assert.equal(main.messages[1]?.rating, undefined);
   const announce = observed.messages[0]?.tools[0];
   assert.equal(announce?.kind, CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE);
   assert.equal(announce?.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE && announce.unspoken, false);

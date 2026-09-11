@@ -13,6 +13,8 @@ import {
   type ConversationEventKind,
   isRecord,
   isWireString,
+  RATING_EVENT_PAYLOAD,
+  type RatingEventPayload,
   RECORD_EXTRA_KEYS,
   SCHEMA_REFUSAL,
   type Schema,
@@ -350,13 +352,22 @@ const wireValueSchema: Schema<WireValue> = s.reader<WireValue>({
   jsonSchema: () => ({ type: "object", properties: {}, required: [], additionalProperties: false }),
 });
 
-/** One message of a turn group: the stored row, its place in its conversation's sequence, and its tool calls as the view decided them. */
+/**
+ * One message of a turn group: the stored row, its place in its
+ * conversation's sequence, its tool calls as the view decided them, and the
+ * developer's latest rating of it, folded from the rating events the way an
+ * announcement's mark is folded from the speech events. A client reads the
+ * current rating from this page and never from the events resource's
+ * beginning; the events remain the record, one row per rating, and a
+ * re-rating is a newer row that this field then answers.
+ */
 export interface ConversationReadMessage {
   readonly message: WireRecord;
   readonly seq: number;
   /** Epoch milliseconds the row was written at; the order across conversations. */
   readonly createdAt: number;
   readonly tools: readonly ConversationViewToolPart[];
+  readonly rating?: RatingEventPayload;
 }
 
 const conversationReadMessageSchema: Schema<ConversationReadMessage> = s.record(
@@ -365,6 +376,7 @@ const conversationReadMessageSchema: Schema<ConversationReadMessage> = s.record(
     seq: s.wholeNumber({ minimum: 1 }),
     createdAt: countedNumber,
     tools: s.array(conversationViewToolPartSchema),
+    rating: RATING_EVENT_PAYLOAD.optional(),
   },
   { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
 );

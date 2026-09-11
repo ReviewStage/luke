@@ -153,14 +153,46 @@ public enum ConversationViewToolPart: Equatable, Sendable {
     }
 }
 
+/// The developer's rating of one of Luke's messages as the view folds it —
+/// `RatingEventPayload` in `@sidecar/wire`: the verdict, and the note the
+/// developer left with it where they left one.
+public struct RatingEventPayload: Equatable, Sendable {
+    public let rating: MessageRating
+    public let note: String?
+
+    public init(rating: MessageRating, note: String? = nil) {
+        self.rating = rating
+        self.note = note
+    }
+}
+
 /// One message of a turn group — `ConversationReadMessage` in
 /// `@sidecar/hosted`: the stored row, its place in its conversation's
-/// sequence, when it was written, and its tool calls as the view decided them.
+/// sequence, when it was written, its tool calls as the view decided them,
+/// and the developer's latest rating of it, folded by the service from the
+/// rating events the way an announcement's mark is folded from the speech
+/// events, so a device reads the current verdict from the page it is on and
+/// never from the events resource's beginning.
 public struct ConversationReadMessage: Equatable, Sendable {
     public let message: UIMessage
     public let seq: Int
     public let createdAt: Date
     public let tools: [ConversationViewToolPart]
+    public let rating: RatingEventPayload?
+
+    init(
+        message: UIMessage,
+        seq: Int,
+        createdAt: Date,
+        tools: [ConversationViewToolPart],
+        rating: RatingEventPayload? = nil
+    ) {
+        self.message = message
+        self.seq = seq
+        self.createdAt = createdAt
+        self.tools = tools
+        self.rating = rating
+    }
 }
 
 /// The messages one turn wrote that the view selected —
@@ -405,9 +437,23 @@ extension ConversationViewToolPart: Decodable {
     }
 }
 
+extension RatingEventPayload: Decodable {
+    private enum CodingKeys: String, CodingKey {
+        case rating, note
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            rating: try container.decodeRaw(MessageRating.self, forKey: .rating),
+            note: try container.decodeIfPresent(String.self, forKey: .note)
+        )
+    }
+}
+
 extension ConversationReadMessage: Decodable {
     private enum CodingKeys: String, CodingKey {
-        case message, seq, createdAt, tools
+        case message, seq, createdAt, tools, rating
     }
 
     public init(from decoder: Decoder) throws {
@@ -416,7 +462,8 @@ extension ConversationReadMessage: Decodable {
             message: try container.decode(UIMessage.self, forKey: .message),
             seq: try container.decodeSequence(forKey: .seq),
             createdAt: try container.decodeInstant(forKey: .createdAt),
-            tools: try container.decode([ConversationViewToolPart].self, forKey: .tools)
+            tools: try container.decode([ConversationViewToolPart].self, forKey: .tools),
+            rating: try container.decodeIfPresent(RatingEventPayload.self, forKey: .rating)
         )
     }
 }

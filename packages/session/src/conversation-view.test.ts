@@ -6,6 +6,7 @@ import {
   CONVERSATION_EVENT_KIND,
   type ConversationEventKind,
   MESSAGE_AUTHOR,
+  MESSAGE_RATING,
   MESSAGE_ROLE,
   type SchemaRead,
   TURN_ORIGIN,
@@ -287,6 +288,68 @@ test("an announcement is unspoken when its latest speech event is the expiry, wh
   const [group] = selectConversationView({ ...input, events: reversed });
   const [part] = group?.messages[0]?.tools ?? [];
   assert.equal(part?.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE && part.unspoken, true);
+});
+
+test("a message carries its latest rating by event sequence, a re-rating replaces it in the view, and an unreadable newest rating folds as none", async () => {
+  const input = await loadView(FIXTURE.OBSERVATION_ANNOUNCED);
+  const announcementId = input.observed[0]?.messages[1]?.message.id ?? "";
+  const ratingUnder = (events: readonly ConversationViewEvent[]) => {
+    const [group] = selectConversationView({ ...input, events });
+    return group?.messages[0]?.rating;
+  };
+  assert.equal(ratingUnder([]), undefined);
+  assert.deepEqual(
+    ratingUnder([
+      { messageId: announcementId, kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED, seq: 1 },
+      {
+        messageId: announcementId,
+        kind: CONVERSATION_EVENT_KIND.RATING,
+        seq: 2,
+        rating: { rating: MESSAGE_RATING.UP },
+      },
+    ]),
+    { rating: MESSAGE_RATING.UP },
+  );
+  assert.deepEqual(
+    ratingUnder([
+      {
+        messageId: announcementId,
+        kind: CONVERSATION_EVENT_KIND.RATING,
+        seq: 3,
+        rating: { rating: MESSAGE_RATING.DOWN, note: "Too early." },
+      },
+      {
+        messageId: announcementId,
+        kind: CONVERSATION_EVENT_KIND.RATING,
+        seq: 2,
+        rating: { rating: MESSAGE_RATING.UP },
+      },
+    ]),
+    { rating: MESSAGE_RATING.DOWN, note: "Too early." },
+  );
+  assert.equal(
+    ratingUnder([
+      {
+        messageId: announcementId,
+        kind: CONVERSATION_EVENT_KIND.RATING,
+        seq: 2,
+        rating: { rating: MESSAGE_RATING.UP },
+      },
+      { messageId: announcementId, kind: CONVERSATION_EVENT_KIND.RATING, seq: 3 },
+    ]),
+    undefined,
+  );
+  assert.equal(
+    ratingUnder([
+      {
+        messageId: "2b000000-0000-4000-8000-000000000099",
+        kind: CONVERSATION_EVENT_KIND.RATING,
+        seq: 2,
+        rating: { rating: MESSAGE_RATING.UP },
+      },
+    ]),
+    undefined,
+  );
 });
 
 test("an observation that acted crosses as its action parts, the refused one flagged and collapsed", async () => {

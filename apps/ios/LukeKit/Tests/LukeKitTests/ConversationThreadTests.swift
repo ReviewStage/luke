@@ -251,22 +251,69 @@ final class ConversationThreadTests: XCTestCase {
         XCTAssertEqual(thread.turnGroups[0].messages[0].tools, [.announce(identity, unspoken: false)])
     }
 
-    func testTheSignalsTurnsHeadSeedsOnlyAThreadThatHoldsNothingAndEventsNever() {
+    func testTheSignalsHeadsSeedTheTurnsAndEventsOfAThreadThatHoldsNothingAndNeverTheMessages() {
         var thread = ConversationThread()
         thread.adoptHeads(from: ChangesAnswer(seen: true, messages: "m1", events: "e1", turns: "t1"))
         XCTAssertNil(thread.messagesCursor)
-        XCTAssertNil(thread.eventsCursor)
+        XCTAssertEqual(thread.eventsCursor, "e1")
         XCTAssertEqual(thread.turnsCursor, "t1")
         thread.adoptHeads(from: ChangesAnswer(seen: true, messages: "m2", events: "e2", turns: "t2"))
-        XCTAssertNil(thread.eventsCursor)
+        XCTAssertEqual(thread.eventsCursor, "e1")
         XCTAssertEqual(thread.turnsCursor, "t1")
         var fresh = ConversationThread()
         fresh.adoptHeads(from: ChangesAnswer(seen: true, messages: "m1", events: "e1", turns: nil))
         XCTAssertNil(fresh.turnsCursor)
+        XCTAssertEqual(fresh.eventsCursor, "e1")
         fresh.apply(ConversationMessagesAnswer(conversations: mainOnly, groups: [], next: "m1", hasMore: false))
         fresh.adoptHeads(from: ChangesAnswer(seen: true, messages: "m1", events: "e2", turns: "t2"))
-        XCTAssertNil(fresh.eventsCursor)
+        XCTAssertEqual(fresh.eventsCursor, "e1")
         XCTAssertNil(fresh.turnsCursor)
+    }
+
+    func testTheFixtureAnswerFoldsTheRatingOntoItsMessage() throws {
+        var thread = ConversationThread()
+        thread.apply(try fixtureAnswer())
+        XCTAssertEqual(thread.ratings, ["2b000000-0000-4000-8000-000000000032": .up])
+    }
+
+    func testAFoldedRatingIsAmendedByANewerEventOnceTheEventsStandAtTheFold() {
+        var thread = ConversationThread()
+        let rated = ConversationReadMessage(
+            message: reply(id: "m1", parts: [.text("words")]),
+            seq: 1,
+            createdAt: Date(timeIntervalSince1970: 100),
+            tools: [],
+            rating: RatingEventPayload(rating: .up)
+        )
+        thread.apply(
+            ConversationMessagesAnswer(
+                conversations: mainOnly, groups: [group(turnId: "t1", turn: nil, messages: [rated])], next: "c1", hasMore: false
+            )
+        )
+        XCTAssertEqual(thread.ratings, ["m1": .up])
+        thread.apply(ConversationEventsAnswer(events: [ratingEvent(1, "down")], next: "e1", hasMore: true))
+        XCTAssertEqual(thread.ratings, ["m1": .up])
+        thread.apply(ConversationEventsAnswer(events: [], next: "e1", hasMore: false))
+        XCTAssertEqual(thread.ratings, ["m1": .down])
+
+        var unread = ConversationThread()
+        unread.apply(
+            ConversationMessagesAnswer(
+                conversations: mainOnly, groups: [group(turnId: "t1", turn: nil, messages: [rated])], next: "c1", hasMore: false
+            )
+        )
+        unread.record(ratingEvent(2, "down"))
+        XCTAssertEqual(unread.ratings, ["m1": .down])
+
+        var seeded = ConversationThread()
+        seeded.adoptHeads(from: ChangesAnswer(seen: true, messages: "m1", events: "e1", turns: nil))
+        seeded.apply(
+            ConversationMessagesAnswer(
+                conversations: mainOnly, groups: [group(turnId: "t1", turn: nil, messages: [rated])], next: "c1", hasMore: false
+            )
+        )
+        seeded.record(ratingEvent(2, "down"))
+        XCTAssertEqual(seeded.ratings, ["m1": .down])
     }
 
     private func ratingEvent(_ seq: Int, _ rating: String?, messageId: String = "m1") -> ConversationReadEvent {

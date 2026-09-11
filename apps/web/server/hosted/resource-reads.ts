@@ -2,6 +2,7 @@ import {
   type BrainTurnRecord,
   type BrainTurnsAnswer,
   type ClientUIMessage,
+  CONVERSATION_EVENT_KIND,
   CONVERSATION_VIEW_SOURCE,
   type ConversationEventsAnswer,
   type ConversationMessagesAnswer,
@@ -17,6 +18,7 @@ import {
   clientUIMessage,
   encodeSequenceReadCursor,
   encodeTurnReadCursor,
+  RATING_EVENT_PAYLOAD,
   READ_PAGE_BOUNDS,
   readLimitSchema,
   type Schema,
@@ -25,6 +27,8 @@ import {
   sequenceReadCursorSchema,
   type TurnReadCursor,
   turnReadCursorSchema,
+  unparsedWire,
+  type WireBoundaryInput,
   type WireValue,
 } from "../core.js";
 import { CONVERSATION_KIND } from "../db/schema.js";
@@ -319,7 +323,17 @@ function viewTurn(turn: StoredTurnRecord): ConversationViewTurn {
 }
 
 function viewEvent(event: StoredEventRecord): ConversationViewEvent {
-  return { messageId: event.messageId, kind: event.kind, seq: event.seq };
+  const rating =
+    event.kind === CONVERSATION_EVENT_KIND.RATING
+      ? // SAFETY: the payload column is jsonb, which the driver hands back as the JSON it holds; the read is the validation.
+        RATING_EVENT_PAYLOAD.parse(unparsedWire(event.payload as WireBoundaryInput))
+      : undefined;
+  return {
+    messageId: event.messageId,
+    kind: event.kind,
+    seq: event.seq,
+    ...(rating === undefined ? undefined : { rating }),
+  };
 }
 
 /**
@@ -423,6 +437,7 @@ export async function handleConversationMessages(options: ResourceReadOptions): 
           seq: message.seq,
           createdAt: message.createdAt,
           tools: message.tools,
+          ...(message.rating === undefined ? undefined : { rating: message.rating }),
         })),
       };
     }),

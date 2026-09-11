@@ -23,6 +23,7 @@ import {
   isRecord,
   isSpeechEventKind,
   MESSAGE_ROLE,
+  type RatingEventPayload,
   type TurnOrigin,
   type TurnStatus,
   UNKNOWN_ACTION_STATUS,
@@ -92,11 +93,18 @@ export interface ConversationViewTurn {
   readonly settledAt?: number;
 }
 
-/** An event row about a message, in its conversation's own event sequence. */
+/**
+ * An event row about a message, in its conversation's own event sequence. A
+ * rating event carries its verdict where the row's payload read under the
+ * vocabulary; one whose payload did not is still the latest rating by
+ * sequence and folds as no rating, since an older verdict is not the
+ * developer's last word.
+ */
 export interface ConversationViewEvent {
   readonly messageId: string;
   readonly kind: ConversationEventKind;
   readonly seq: number;
+  readonly rating?: RatingEventPayload;
 }
 
 export interface ConversationViewObservedConversation {
@@ -184,6 +192,13 @@ export interface ConversationViewMessage {
   readonly createdAt: number;
   /** The message's tool calls in part order, each as the view decided it. */
   readonly tools: readonly ConversationViewToolPart[];
+  /**
+   * The developer's latest rating of the message, folded from the rating
+   * events the way an announcement's mark is folded from the speech events:
+   * the record keeps every rating as its own row, and the view shows the
+   * newest. Absent where none was given or the newest could not be read.
+   */
+  readonly rating?: RatingEventPayload;
 }
 
 /** The messages one turn produced, in sequence, under the turn row where the store holds one. */
@@ -208,6 +223,19 @@ function latestSpeechEvents(
   const latest = new Map<string, ConversationViewEvent>();
   for (const event of events) {
     if (!isSpeechEventKind(event.kind)) continue;
+    const standing = latest.get(event.messageId);
+    if (standing === undefined || standing.seq < event.seq) latest.set(event.messageId, event);
+  }
+  return latest;
+}
+
+/** The latest rating event on each message, by the event sequence of the message's own conversation. */
+function latestRatingEvents(
+  events: readonly ConversationViewEvent[],
+): ReadonlyMap<string, ConversationViewEvent> {
+  const latest = new Map<string, ConversationViewEvent>();
+  for (const event of events) {
+    if (event.kind !== CONVERSATION_EVENT_KIND.RATING) continue;
     const standing = latest.get(event.messageId);
     if (standing === undefined || standing.seq < event.seq) latest.set(event.messageId, event);
   }
@@ -268,6 +296,7 @@ function viewMessage(
   row: ConversationViewStoredMessage,
   toolKinds: ConversationViewToolKinds,
   speech: ReadonlyMap<string, ConversationViewEvent>,
+  ratings: ReadonlyMap<string, ConversationViewEvent>,
 ): ConversationViewMessage {
   const { message } = row;
   const tools: ConversationViewToolPart[] = [];
@@ -275,7 +304,14 @@ function viewMessage(
     if (!isStoredToolPart(part)) continue;
     tools.push(describeToolPart(part, toolKindOf(part, toolKinds), speech, message.id));
   }
-  return { message, seq: row.seq, createdAt: row.createdAt, tools };
+  const rating = ratings.get(message.id)?.rating;
+  return {
+    message,
+    seq: row.seq,
+    createdAt: row.createdAt,
+    tools,
+    ...(rating === undefined ? undefined : { rating }),
+  };
 }
 
 type GroupedRows = { readonly source: ConversationViewSource; readonly rows: SourcedRow[] };
@@ -314,6 +350,7 @@ export function selectConversationView(
 ): readonly ConversationViewTurnGroup[] {
   const turns = new Map(input.turns.map((turn) => [turn.id, turn]));
   const speech = latestSpeechEvents(input.events);
+  const ratings = latestRatingEvents(input.events);
 
   const selected: SourcedRow[] = [];
   const main: ConversationViewSource = { kind: CONVERSATION_VIEW_SOURCE.MAIN };
@@ -345,7 +382,7 @@ export function selectConversationView(
       source,
       messages: rows
         .sort((a, b) => a.seq - b.seq)
-        .map((row) => viewMessage(row, input.toolKinds, speech)),
+        .map((row) => viewMessage(row, input.toolKinds, speech, ratings)),
     },
     instant: Math.min(...rows.map((row) => row.createdAt)),
   }));

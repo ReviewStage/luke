@@ -24,6 +24,7 @@ import {
   isRecord,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
+  MESSAGE_RATING,
   MESSAGE_ROLE,
   OBSERVATION_SOURCE,
   type Schema,
@@ -34,7 +35,7 @@ import {
   type WireBoundaryInput,
   type WireRecord,
 } from "@sidecar/wire";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterAll, test } from "vitest";
 import {
   CONVERSATION_KIND,
@@ -832,6 +833,61 @@ test("a Clear empties the thread of observed rows from before the new main and k
   const whole = await database.store.messages.list(userId, observed, CATALOG_TOOL_SET);
   assert.equal(whole.ok, true);
   assert.deepEqual(whole.ok ? whole.value.map((record) => record.seq) : [], [1, 2, 3, 4]);
+});
+
+test("a message carries its latest rating on a device's first page, a re-rating changes the next page, and the events record keeps every rating as its own row", async () => {
+  const userId = await database.createUser();
+  const { main, turns: ids } = await populate(userId);
+  const [sent] = await database.db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(and(eq(messages.conversationId, main), eq(messages.seq, 2)));
+  assert.ok(sent);
+  const first = await insertEvent(userId, main, sent.id, 1, {
+    kind: CONVERSATION_EVENT_KIND.RATING,
+    deviceId: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    payload: { rating: MESSAGE_RATING.UP },
+  });
+
+  const fresh = new Device(userId, 200);
+  await fresh.catchUp();
+  const before = fresh.groups.get(ids.typed)?.messages.get(2);
+  assert.deepEqual(before?.rating, { rating: MESSAGE_RATING.UP });
+  assert.equal(fresh.groups.get(ids.typed)?.messages.get(1)?.rating, undefined);
+  assert.equal(fresh.groups.get(ids.roster)?.messages.get(2)?.rating, undefined);
+
+  const second = await insertEvent(userId, main, sent.id, 2, {
+    kind: CONVERSATION_EVENT_KIND.RATING,
+    deviceId: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    payload: { rating: MESSAGE_RATING.DOWN, note: "Sent the wrong session." },
+  });
+  const rerated = new Device(userId, 200);
+  await rerated.catchUp();
+  assert.deepEqual(rerated.groups.get(ids.typed)?.messages.get(2)?.rating, {
+    rating: MESSAGE_RATING.DOWN,
+    note: "Sent the wrong session.",
+  });
+
+  const record = await database.db
+    .select({ id: events.id, seq: events.seq, kind: events.kind, payload: events.payload })
+    .from(events)
+    .where(and(eq(events.messageId, sent.id), eq(events.kind, CONVERSATION_EVENT_KIND.RATING)))
+    .orderBy(events.seq);
+  assert.deepEqual(
+    record.map((row) => [row.id, row.seq, row.payload]),
+    [
+      [first, 1, { rating: MESSAGE_RATING.UP }],
+      [second, 2, { rating: MESSAGE_RATING.DOWN, note: "Sent the wrong session." }],
+    ],
+  );
+  const listed = await database.store.events.list(userId, main);
+  assert.deepEqual(
+    listed.map((event) => [event.id, event.kind]),
+    [
+      [first, CONVERSATION_EVENT_KIND.RATING],
+      [second, CONVERSATION_EVENT_KIND.RATING],
+    ],
+  );
 });
 
 test("a row the catalog cannot read refuses the page whole, naming the row, whether the tool is unregistered or its input refused", async () => {
