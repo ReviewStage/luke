@@ -16,6 +16,7 @@ import {
   type ConversationKind,
   type ConversationRecord,
   DEFAULT_AGENT_ID,
+  type ExecutionRuntime,
   MAIN_CONVERSATION_NAME,
   MAIN_SESSION_KEY,
   type SessionKey,
@@ -43,6 +44,8 @@ export interface StoreWiringDependencies {
   persistent: boolean;
   /** How the store's client reaches its server: the worker thread in the app, the calling thread in a test. */
   transport: StoreTransport;
+  /** The runtime every ask of the store is a fiber of: the host's own, never a second one built here. */
+  execution: ExecutionRuntime;
   /** The agent's directory under Luke's application data, created on open. */
   agentRoot: () => string;
   /** The agent's identity workspace, the notebook's root; the worker writes USER.md there. */
@@ -158,7 +161,7 @@ export interface StoreWiring {
 export function wireStore(dependencies: StoreWiringDependencies): StoreWiring {
   let store: StoreClient | undefined;
   const client = (): StoreClient => {
-    store ??= storeClient(dependencies.transport);
+    store ??= storeClient(dependencies.transport, dependencies.execution);
     return store;
   };
 

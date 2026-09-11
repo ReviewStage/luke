@@ -391,8 +391,10 @@ runtime edge that launches it in production, `store/worker-entry.ts` is the
 same launch spawned directly by the store-client test, and
 `store/store-client.ts` is the main thread's `RpcClient`
 over a one-worker `NodeWorker` pool behind the Promise face the host still
-holds; `inProcessStoreTransport` serves the same handlers in the calling
-thread for a test. The synchronous function a table module still exports is
+holds, and that face runs on the runtime it is handed rather than one of its
+own, so every ask is a fiber of the host's own runtime;
+`inProcessStoreTransport` serves the same handlers in the calling thread for
+a test. The synchronous function a table module still exports is
 `StoreDatabase#run` wearing its old signature, for the two OpenClaw ports
 (`store/archives.ts`, `store/maintenance-run.ts`) that hold a handle rather
 than a client and import nothing from `effect`, and for the suites beside

@@ -90,7 +90,11 @@ its presence holds until, from the idle time and lock state the client reads
 off the machine and hands in as the `machinePresence` seam, and the instant
 the calendar's meeting hold ends, asked of the calendars composer; `null`
 where neither holds, so a registration that cleared them is never followed
-by a stale hold restated from memory. The conversation composer is the
+by a stale hold restated from memory. The brain composer is an effect over
+the kernel's own tag, and what it reads out of the build is the runtime it is
+being built on: the store's asks and every run of a conversation's tool loop
+are fibers of that one runtime, never of a default one built where the work
+lives. The conversation composer is the
 Conversation as the service holds it: on its own five-second loop it asks the
 change signal where each resource stands, reads only what moved behind the
 cursors this device holds, folds the pages into one picture

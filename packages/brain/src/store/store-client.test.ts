@@ -9,6 +9,7 @@ import {
   MAIN_CONVERSATION_NAME,
   MAIN_SESSION_KEY,
 } from "@sidecar/runtime/vocabulary";
+import { Runtime } from "effect";
 import { test } from "vitest";
 import { BrainStateStore } from "../state-store.js";
 import { StoreWorkerGone, storeClient, workerStoreTransport } from "./store-client.js";
@@ -65,13 +66,14 @@ function overWorker() {
       });
       return spawned;
     }),
+    Runtime.defaultRuntime,
   );
   return { client, worker: () => spawned };
 }
 
 test("the group answers every request once and serves the brain store, the thread, the notebook, and the index", async () => {
   const root = agentRoot();
-  const client = storeClient(inProcessStoreTransport());
+  const client = storeClient(inProcessStoreTransport(), Runtime.defaultRuntime);
   assert.equal(await client.open(openOptions(root)), true);
   assert.equal(fs.existsSync(path.join(root, "agent.sqlite")), true);
   let ids = 0;
@@ -150,7 +152,7 @@ test("the group answers every request once and serves the brain store, the threa
 });
 
 test("a request before any open is refused, and an open at a schema this build cannot reach names the version", async () => {
-  const client = storeClient(inProcessStoreTransport());
+  const client = storeClient(inProcessStoreTransport(), Runtime.defaultRuntime);
   assert.equal(await rejectedTag(client.ask("conversations.list", {})), "StoreNotOpen");
   const root = agentRoot();
   const raw = new DatabaseSync(path.join(root, "agent.sqlite"));
@@ -166,7 +168,7 @@ test("a request before any open is refused, and an open at a schema this build c
 
 test("two handles over the boundary: a stale checkpoint cannot replace the newer generation", async () => {
   const root = agentRoot();
-  const client = storeClient(inProcessStoreTransport());
+  const client = storeClient(inProcessStoreTransport(), Runtime.defaultRuntime);
   await client.open(openOptions(root));
   const first = client.brainStateRepository(MAIN_SESSION_KEY);
   const second = client.brainStateRepository(MAIN_SESSION_KEY);
@@ -183,7 +185,7 @@ test("two handles over the boundary: a stale checkpoint cannot replace the newer
 
 test("asks fired without awaiting land in the order they were made", async () => {
   const root = agentRoot();
-  const client = storeClient(inProcessStoreTransport());
+  const client = storeClient(inProcessStoreTransport(), Runtime.defaultRuntime);
   await client.open(openOptions(root));
   const eventIds = Array.from({ length: 24 }, (_, index) => `event-${index}`);
   const appends = eventIds.map((eventId) =>
@@ -205,6 +207,7 @@ test("asks fired without awaiting land in the order they were made", async () =>
 test("a worker that dies before it is ready fails the open typed and refuses every later ask", async () => {
   const client = storeClient(
     workerStoreTransport(() => new Worker("process.exit(3)", { eval: true })),
+    Runtime.defaultRuntime,
   );
   const opened = client.open(openOptions(agentRoot()));
   assert.equal((await rejectedWith(opened, StoreWorkerGone))?.code, 3);
@@ -243,7 +246,7 @@ test("the real worker entry serves the same group on its own thread and ends wit
 
 test("over the worker boundary an unreadable generation keeps its compare token, so the repair lands and a stale save does not", async () => {
   const root = agentRoot();
-  const client = storeClient(inProcessStoreTransport());
+  const client = storeClient(inProcessStoreTransport(), Runtime.defaultRuntime);
   await client.open(openOptions(root));
   const stale = client.brainStateRepository(MAIN_SESSION_KEY);
   await stale.load();

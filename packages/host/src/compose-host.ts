@@ -32,7 +32,7 @@ import {
   Scope,
 } from "effect";
 import { composeAccount } from "./compose-account.js";
-import { composeBrain } from "./compose-brain.js";
+import { type BrainComposer, composeBrain } from "./compose-brain.js";
 import { composeCalendars } from "./compose-calendars.js";
 import { composeConversation } from "./compose-conversation.js";
 import { composeDevices } from "./compose-devices.js";
@@ -160,9 +160,11 @@ export const hostAssemblyLayer: Layer.Layer<
         ...account.token,
       }),
     });
-    const brain = composeBrain({
-      kernel,
-      settings,
+    // Annotated because the brain and the live session are each other's
+    // cycle — a briefing reaches the live service, and the service hands a
+    // held one back to the brain that decided it — and an inferred type
+    // would be reading itself through the other.
+    const brain: BrainComposer = yield* composeBrain({
       account,
       issues,
       observation,

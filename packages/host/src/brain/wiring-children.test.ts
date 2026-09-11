@@ -34,6 +34,7 @@ import {
 import type { ConversationEntry } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
+import { Runtime } from "effect";
 import { type TestContext, test } from "vitest";
 import { type BrainWiring, wireBrain } from "./wiring.js";
 
@@ -189,6 +190,7 @@ async function composed(
   const clock = new FakeClock();
   const workspace = await temporaryDirectory(t, "luke-children-");
   const wiring = wireBrain({
+    execution: Runtime.defaultRuntime,
     childTimers: { schedule: clock.schedule, cancel: clock.cancel },
     repositoryFor: (sessionKey) => {
       let repository = repositories.get(sessionKey);
