@@ -20,13 +20,13 @@ import { type HostedStore, type HostedStoreDatabase, hostedStore } from "../../s
  */
 
 /** The env var naming a Postgres the store tests should run against instead of PGlite. */
-const STORE_TEST_DATABASE_ENVIRONMENT = {
+export const STORE_TEST_DATABASE_ENVIRONMENT = {
   URL: "LUKE_STORE_TEST_DATABASE_URL",
 } as const;
 
 export const TEST_PAYLOAD_SECRET = "c".repeat(64);
 
-const MIGRATIONS_FOLDER = fileURLToPath(new URL("../../drizzle", import.meta.url));
+export const MIGRATIONS_FOLDER = fileURLToPath(new URL("../../drizzle", import.meta.url));
 
 export interface HostedStoreTestDatabase {
   readonly db: HostedStoreDatabase;

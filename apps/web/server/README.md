@@ -92,18 +92,39 @@ instance reuses the services it built; a runtime built where the work lives
 would be a second copy of every service a `Context.Tag` was supposed to
 identify. `docs/adr/0001-effect.md` names this edge with the process's others.
 
-The layer carries what a Vercel function's own platform already offers, which
-today is an `HttpClient` over `fetch`. `@effect/platform-node` is not on it:
+The layer carries what a Vercel function's own platform already offers: an
+`HttpClient` over `fetch`, and the `SqlClient` of `server/db/sql-client.ts` over
+the database `DATABASE_URL` names. `@effect/platform-node` is not on it, and
 `repository-checks.sh` refuses that specifier and `@effect/sql*` under `api/`,
-because a Node-reaching companion behind this door would have to be traced into
-every bundle. A function is handed no shutdown hook — an instance is frozen
-between invocations and discarded without notice — so nothing in production
-disposes the runtime; `disposeWebRuntime()` exists so a test can end the one it
-started.
+where the stubs that re-export a bundle stand; the layer itself is behind
+`server/`, which is what the builder traces. A function is handed no shutdown
+hook — an instance is frozen between invocations and discarded without notice —
+so nothing in production disposes the runtime; `disposeWebRuntime()` exists so a
+test can end the one it started.
 
-`effect` and `@effect/platform` are declared dependencies of this app, which is
-what leaves them external to the bundles rather than inlined into each of them,
-so Vercel's builder traces one copy from `apps/web/node_modules`.
+The `SqlClient` is `PgClient.layerFromPool` over a pool built to the same
+`POOL_LIMITS` Drizzle's is, one connection per warm instance, and not
+`PgClient.layer`, which runs `SELECT 1` while the layer builds: an eager round
+trip there would land on the cold start of every function, including the ones
+that never query. `pg` connects on its first query instead. Nothing reads the
+client yet — the store is still Drizzle's — so the two stand side by side until
+the hosted store moves onto `@effect/sql`. What the layer does need at build
+time is the connection string, so an instance configured without `DATABASE_URL`
+is refused at the edge rather than at whichever query ran first.
+
+`effect`, `@effect/platform`, `@effect/experimental`, `@effect/sql`, and
+`@effect/sql-pg` are declared dependencies of this app, which is what leaves
+them external to the bundles rather than inlined into each of them, so Vercel's
+builder traces one copy from `apps/web/node_modules`. `@effect/sql-pg` reaches
+`pg`, which is external on the same terms and already was.
+
+A test reads the same client through `tests/support/sql-client.ts`, which
+chooses its dialect the way `tests/support/hosted-store-database.ts` does:
+PGlite in process, so `check.sh` needs no service, or the Postgres named by
+`LUKE_STORE_TEST_DATABASE_URL`, which the CI job points at its service
+container. The Postgres half is the production layer's own client; the PGlite
+half is a small `SqlClient` over `@electric-sql/pglite`, because no
+`@effect/sql-pglite` ships against the 3.x Effect line.
 
 ## Signing in on a Preview deployment
 

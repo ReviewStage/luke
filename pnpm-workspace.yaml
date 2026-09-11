@@ -10,8 +10,9 @@ catalog:
   "@effect-atom/atom-react": 0.7.0
   "@effect/platform": 0.97.2
   "@effect/platform-node": 0.108.0
-  "@effect/sql": 0.52.1
   "@effect/experimental": 0.61.1
+  "@effect/sql": 0.52.1
+  "@effect/sql-pg": 0.52.1
   "@types/node": 26.2.0
   tsx: 4.23.12
   react: 19.2.8
