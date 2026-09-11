@@ -169,3 +169,32 @@ changing at once, and each cost real time before someone proved what it actually
 
 The common shape: **every one was a gate that did not say what it appeared to say.** A missing
 gate is worse than a failing one, because nobody knows to look.
+
+## 2026-09-11 — Voice-only on the desktop, and what it does and does not touch (orchestrator, from the GPT-Live rollout)
+
+Charles's PR 20 (`live/20-voice-only`) makes Luke **voice only on the desktop**: the typed
+composer goes, with `BRAIN_SUBMIT_ASK`, `BRAIN_REQUEST_ORIGIN.TYPED`, and the typed thinking
+mirror; `CONVERSATION_ENTRY_KIND.TYPED_ASK` is deleted outright and `SPOKEN_ASK` becomes `ASK`.
+It touches no `apps/web/server`, no drizzle, no iOS.
+
+Recorded here because three of my tickets change and one wire value set was at risk:
+
+- **`TURN_ORIGIN` keeps `typed`.** Confirmed with the rollout: `BRAIN_REQUEST_ORIGIN` is the
+  desktop brain's enum, not the storage wire's. The phone still types, so `typed` is
+  load-bearing and C2b's ask route still takes `typed | spoken`.
+- **F2 (LUKE-140) stands as written.** Charles has ruled on the desktop composer only and has
+  **not** ruled on the phone; the rollout reads that as "not yet" and will say when it changes.
+- **E5 (LUKE-138) shrinks to the talk key alone.** Its scope was "composer and talk key submit
+  to the service"; there is no composer to move.
+- **C8 (LUKE-132) gets simpler, not bigger.** I earlier recorded that `LiveSessionService` had
+  grown to own typed-ask replies via `LiveComposer.followTypedAsk`, making C8 a larger lift.
+  **PR 20 deletes `followTypedAsk` and the adapter's `followCurrent`**, so when C8 opens there is
+  no typed seam on that service at all — only the delegation path (`submitAsk` origin `SPOKEN`
+  plus `onRunEvent`). One path to repoint rather than two. **Do not reintroduce a typed path in
+  the lift.**
+
+Also settled, and not a defect in this lane: the two-Luke-bubbles-per-reply the rollout saw was
+the desktop tab drawing the local brain store's lines (`publication.ts`'s reply line and
+live-record's transcript line). The desktop tab does not render E4's service-backed view on main
+yet. The Postgres split is unchanged — the assistant message is the brain's reply, the spoken
+words are `voice_transcript_segments`, and nothing spoken becomes a message.
