@@ -54,7 +54,9 @@ enum WatchNetwork {
         return error.localizedDescription
     }
 
-    private static let unreachable = "Couldn't reach Luke. Keep your iPhone nearby, or join Wi-Fi."
+    /// The sentence a request that found no path ends in, for the screens
+    /// that hear only that the service was unavailable rather than the error.
+    static let unreachable = "Couldn't reach Luke. Keep your iPhone nearby, or join Wi-Fi."
 }
 
 /// A connection failure carrying the wrist's own wording, for the callers

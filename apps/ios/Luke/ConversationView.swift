@@ -57,9 +57,9 @@ struct ConversationView: View {
                     }
                     let turnRows = turns
                     ForEach(Array(turnRows.enumerated()), id: \.element.id) { index, turn in
-                        if let opensAt = Self.firstInstant(of: turn),
+                        if let opensAt = turn.opensAt,
                            ConversationTimeBreak.opens(
-                               after: index == 0 ? nil : turnRows[index - 1].rows.compactMap(Self.instant).last,
+                               after: index == 0 ? nil : turnRows[index - 1].closesAt,
                                recordedAt: opensAt
                            )
                         {
@@ -132,17 +132,6 @@ struct ConversationView: View {
             get: { foldChoices[turnId] },
             set: { foldChoices[turnId] = $0 }
         )
-    }
-
-    private static func instant(_ row: ConversationRow) -> Date? {
-        switch row {
-        case .words(_, _, _, let at, _, _), .action(_, _, let at), .actionsFold(_, _, let at): at
-        case .reasoning, .details: nil
-        }
-    }
-
-    private static func firstInstant(of turn: ConversationTurnRows) -> Date? {
-        turn.rows.compactMap(instant).first
     }
 
     private func timeBreak(_ at: Date) -> some View {

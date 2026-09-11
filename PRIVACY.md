@@ -301,6 +301,9 @@ your account, and signing out starts a fresh anonymous one.
 
 The Apple Watch app records nothing and reports no crashes. It counts its use
 through the same fixed list as the other two apps, and nothing else leaves it.
+The Conversation it shows is read from the same stored messages the phone
+reads, under your account, and the watch only reads them: a rating you gave a
+message is shown there and cannot be given from the wrist.
 
 **Provider API keys (server-side vault).** While the "Sync provider keys"
 switch in Settings > Connections is on — it starts on — the provider API keys
