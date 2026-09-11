@@ -3,15 +3,11 @@ import {
   CONTEXT_ITEM_KIND,
   contextItemId,
   type ObservedSession,
-  remoteRealtimeClientSecretRequest,
 } from "../core.js";
-import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import { observedSessionForResponse } from "./observe.js";
-import type { HostedSpend } from "./quota.js";
 import { remoteSessionContextText } from "./remote-context.js";
 import { observeProviders, readApiKeyFor } from "./vault-keys.js";
 import type { HostedVaultRoute } from "./vault-route.js";
-import { mintRealtimeConnection, voiceMintPreferences } from "./voice-mint.js";
 
 /**
  * Mints one ephemeral Realtime credential for the signed-in iPhone, on the
@@ -25,105 +21,24 @@ import { mintRealtimeConnection, voiceMintPreferences } from "./voice-mint.js";
  * so the phone's narrowed set is a first gate, not the last.
  */
 
-export interface RemoteVoiceMintOptions
-  extends Pick<
-    HostedVaultRoute,
-    "request" | "resolveUserId" | "encryptionSecret" | "readVaultKeys"
-  > {
-  apiKey: string | undefined;
-  model?: string | undefined;
-  spend: (userId: string) => Promise<HostedSpend>;
+/** The fields the phone's mint takes, and nothing beyond them. */
+export const MOBILE_MINT_STRICT_FIELDS: readonly string[] = ["voice", "speed"];
+
+/** What a roster read needs of the deployment: the vault secret and the caller's stored keys. */
+export interface RemoteObserveSeams
+  extends Pick<HostedVaultRoute, "encryptionSecret" | "readVaultKeys"> {
   fetch?: CloudFetch | undefined;
-  now?: (() => number) | undefined;
-  timeoutMs?: number | undefined;
 }
 
-const MOBILE_MINT_STRICT_FIELDS: readonly string[] = ["voice", "speed"];
-
-export async function handleRemoteVoiceMint(options: RemoteVoiceMintOptions): Promise<Response> {
-  const { request } = options;
-  if (request.method !== "POST") {
-    return errorResponse(
-      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-    );
-  }
-
-  const apiKey = (options.apiKey ?? "").trim() || undefined;
-  const model = (options.model ?? "").trim() || undefined;
-
-  if (!apiKey) {
-    return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
-  }
-
-  const userId = await options.resolveUserId(request);
-  if (!userId) {
-    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
-  }
-
-  const preferences = await voiceMintPreferences(request, MOBILE_MINT_STRICT_FIELDS);
-  if (!preferences) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
-
-  const spend = await options.spend(userId);
-  if (!spend.allowed) {
-    return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED, {
-      quota: spend.quota,
-    });
-  }
-
-  const now = options.now ?? Date.now;
-
-  // Ephemeral Realtime keys expire in 60 s. Cap the observe leg to 30 s so the
-  // key still has plenty of time to connect even if a cloud pass runs long.
-  // observe resolves to [] on timeout rather than failing the whole request.
-  const OBSERVE_TIMEOUT_MS = 30_000;
-
-  // Mint credential and observe sessions concurrently — neither depends on the
-  // other, so there is no reason to serialize them.
-  let observeTimeoutHandle: ReturnType<typeof setTimeout> | undefined;
-  const [minted, sessions] = await Promise.all([
-    mintRealtimeConnection({
-      apiKey,
-      model,
-      preferences,
-      clientSecretRequest: remoteRealtimeClientSecretRequest,
-      fetch: options.fetch,
-      now: options.now,
-      timeoutMs: options.timeoutMs,
-    }),
-    Promise.race([
-      observeCloudSessions(userId, options),
-      new Promise<ObservedSession[]>((resolve) => {
-        observeTimeoutHandle = setTimeout(() => resolve([]), OBSERVE_TIMEOUT_MS);
-      }),
-    ]).finally(() => clearTimeout(observeTimeoutHandle)),
-  ]);
-
-  if ("failure" in minted) return minted.failure;
-
-  const sessionItemId = contextItemId(CONTEXT_ITEM_KIND.SESSIONS, 0);
-  const contextText = remoteSessionContextText(sessions, now());
-  // The label prefix matches the one `sessionContextEvents` in @sidecar/brain
-  // applies, so the model reads remote and desktop context items identically.
-  const sessionItemText = `[observed session status, sent automatically]\n${contextText}`;
-
-  return jsonResponse(HOSTED_HTTP_STATUS.OK, {
-    connection: minted.connection,
-    quota: spend.quota,
-    context: {
-      sessions: {
-        itemId: sessionItemId,
-        text: sessionItemText,
-      },
-    },
-  });
-}
-
-async function observeCloudSessions(
+/**
+ * The phone's roster: one cloud observe pass under the caller's own stored
+ * keys, or nothing at all when this deployment holds no vault secret. It
+ * answers a list rather than a refusal — a mint whose roster could not be
+ * read is still a mint.
+ */
+export async function observeCloudSessions(
   userId: string,
-  options: RemoteVoiceMintOptions,
+  options: RemoteObserveSeams,
 ): Promise<ObservedSession[]> {
   const secret = (options.encryptionSecret ?? "").trim();
   if (!secret) return [];
@@ -142,4 +57,26 @@ async function observeCloudSessions(
     }
   }
   return sessions;
+}
+
+/** The roster's context item as the mint answers it: the item's own id and its text. */
+export interface RemoteSessionContextItem {
+  itemId: string;
+  text: string;
+}
+
+/**
+ * The roster as the one context item the phone forwards into its Realtime
+ * conversation. The label prefix matches the one `sessionContextEvents` in
+ * `@sidecar/brain` applies, so the model reads remote and desktop context
+ * items identically.
+ */
+export function remoteSessionContextItem(
+  sessions: readonly ObservedSession[],
+  now: number,
+): RemoteSessionContextItem {
+  return {
+    itemId: contextItemId(CONTEXT_ITEM_KIND.SESSIONS, 0),
+    text: `[observed session status, sent automatically]\n${remoteSessionContextText(sessions, now)}`,
+  };
 }

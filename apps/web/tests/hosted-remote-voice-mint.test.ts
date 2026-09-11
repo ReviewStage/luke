@@ -12,7 +12,7 @@ import {
 } from "../server/core";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import type { HostedSpend } from "../server/hosted/quota";
-import { handleRemoteVoiceMint } from "../server/hosted/remote-voice-mint";
+import { type MintCall, mintAnswer } from "./support/mint-call";
 
 const NOW = Date.parse("2026-09-07T12:00:00.000Z");
 const API_KEY = "sk-hosted-secret";
@@ -42,13 +42,12 @@ function mintedPayload(): Response {
   return Response.json({ value: "eph-secret", expires_at: (NOW + 60_000) / 1000 });
 }
 
-function options(overrides: Partial<Parameters<typeof handleRemoteVoiceMint>[0]> = {}) {
+function options(overrides: Partial<MintCall> = {}) {
   return {
     request: mintRequest(),
     apiKey: API_KEY,
     resolveUserId: async () => "user-1",
     spend: async () => OPEN_SPEND,
-    encryptionSecret: undefined,
     readVaultKeys: async () => [],
     now: () => NOW,
     ...overrides,
@@ -57,7 +56,7 @@ function options(overrides: Partial<Parameters<typeof handleRemoteVoiceMint>[0]>
 
 test("a phone or watch mint keeps its own narrowed session document on the shared upstream helper", async () => {
   const call: UpstreamCall = {};
-  const response = await handleRemoteVoiceMint(
+  const response = await mintAnswer(
     options({
       fetch: async (url, init) => {
         call.url = url;
@@ -96,26 +95,22 @@ test("the remote mint gate order is method, kill switch, token, body, quota", as
     upstreamCalls += 1;
     return mintedPayload();
   };
-  const method = await handleRemoteVoiceMint(
+  const method = await mintAnswer(
     options({
       fetch,
       request: new Request("https://luke.test/api/voice/remote-mint", { method: "GET" }),
     }),
   );
   assert.equal(method.status, 405);
-  const off = await handleRemoteVoiceMint(options({ fetch, apiKey: "  " }));
+  const off = await mintAnswer(options({ fetch, apiKey: "  " }));
   assert.equal(off.status, 503);
   assert.deepEqual(await off.json(), { error: HOSTED_API_ERROR.UNAVAILABLE });
-  const anonymous = await handleRemoteVoiceMint(
-    options({ fetch, resolveUserId: async () => undefined }),
-  );
+  const anonymous = await mintAnswer(options({ fetch, resolveUserId: async () => undefined }));
   assert.equal(anonymous.status, 401);
-  const malformed = await handleRemoteVoiceMint(
-    options({ fetch, request: mintRequest({ voice: "nobody" }) }),
-  );
+  const malformed = await mintAnswer(options({ fetch, request: mintRequest({ voice: "nobody" }) }));
   assert.equal(malformed.status, 400);
   const quota = { used: 5_000, limit: 5_000, resetsAt: NOW + 1_000 };
-  const spent = await handleRemoteVoiceMint(
+  const spent = await mintAnswer(
     options({ fetch, spend: async () => ({ allowed: false, quota }) }),
   );
   assert.equal(spent.status, 429);

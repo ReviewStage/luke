@@ -3,11 +3,9 @@ import { HOSTED_WS_BASE_URL } from "@sidecar/hosted";
 import { test } from "vitest";
 import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "../server/core";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
-import {
-  handleIntroductionMint,
-  INTRODUCTION_SECRET_EXPIRY,
-} from "../server/hosted/introduction-mint";
+import { INTRODUCTION_SECRET_EXPIRY } from "../server/hosted/introduction-mint";
 import type { IntroductionSpend } from "../server/hosted/quota";
+import { type MintCall, mintAnswer } from "./support/mint-call";
 
 const NOW = Date.parse("2026-08-17T12:00:00.000Z");
 const API_KEY = "sk-hosted-secret";
@@ -50,11 +48,11 @@ function mintedPayload() {
   });
 }
 
-function options(overrides: Partial<Parameters<typeof handleIntroductionMint>[0]> = {}) {
+function options(overrides: Partial<MintCall> = {}) {
   return {
     request: mintRequest(),
     apiKey: API_KEY,
-    spend: async () => OPEN,
+    spendIntroduction: async () => OPEN,
     now: () => NOW,
     ...overrides,
   };
@@ -62,7 +60,7 @@ function options(overrides: Partial<Parameters<typeof handleIntroductionMint>[0]
 
 test("a mint hands back a short-capped credential aimed at OpenAI's own calls endpoint", async () => {
   const call: UpstreamCall = {};
-  const response = await handleIntroductionMint(
+  const response = await mintAnswer(
     options({
       request: mintRequest({ voice: REALTIME_VOICE.MARIN, speed: REALTIME_VOICE_SPEED.QUICK }),
       fetch: upstream(call, mintedPayload),
@@ -100,7 +98,7 @@ test("a mint hands back a short-capped credential aimed at OpenAI's own calls en
 
 test("an empty body mints the build's own defaults", async () => {
   const call: UpstreamCall = {};
-  const response = await handleIntroductionMint(options({ fetch: upstream(call, mintedPayload) }));
+  const response = await mintAnswer(options({ fetch: upstream(call, mintedPayload) }));
 
   assert.equal(response.status, 200);
   const sent = JSON.parse(String(call.init?.body));
@@ -110,19 +108,22 @@ test("an empty body mints the build's own defaults", async () => {
 
 test("a field beyond voice and speed is refused before anything is spent", async () => {
   let spent = 0;
-  const spend = async () => {
+  const spendIntroduction = async () => {
     spent += 1;
     return OPEN;
   };
 
-  const unknownField = await handleIntroductionMint(
-    options({ request: mintRequest({ voice: REALTIME_VOICE.MARIN, task: "say hi" }), spend }),
+  const unknownField = await mintAnswer(
+    options({
+      request: mintRequest({ voice: REALTIME_VOICE.MARIN, task: "say hi" }),
+      spendIntroduction,
+    }),
   );
-  const badVoice = await handleIntroductionMint(
-    options({ request: mintRequest({ voice: "not-a-voice" }), spend }),
+  const badVoice = await mintAnswer(
+    options({ request: mintRequest({ voice: "not-a-voice" }), spendIntroduction }),
   );
-  const badSpeed = await handleIntroductionMint(
-    options({ request: mintRequest({ speed: 9 }), spend }),
+  const badSpeed = await mintAnswer(
+    options({ request: mintRequest({ speed: 9 }), spendIntroduction }),
   );
 
   assert.equal(unknownField.status, 400);
@@ -133,21 +134,21 @@ test("a field beyond voice and speed is refused before anything is spent", async
 });
 
 test("the gate order is method, kill switch, body, meter", async () => {
-  const wrongMethod = await handleIntroductionMint(
+  const wrongMethod = await mintAnswer(
     options({
       request: new Request("https://luke.test/api/voice/introduction-mint", { method: "GET" }),
     }),
   );
   assert.equal(wrongMethod.status, 405);
 
-  const keyless = await handleIntroductionMint(options({ apiKey: undefined }));
+  const keyless = await mintAnswer(options({ apiKey: undefined }));
   assert.equal(keyless.status, 503);
   assert.equal((await keyless.json()).error, HOSTED_API_ERROR.UNAVAILABLE);
 
-  const blankKey = await handleIntroductionMint(options({ apiKey: "   " }));
+  const blankKey = await mintAnswer(options({ apiKey: "   " }));
   assert.equal(blankKey.status, 503);
 
-  const exhausted = await handleIntroductionMint(options({ spend: async () => SPENT }));
+  const exhausted = await mintAnswer(options({ spendIntroduction: async () => SPENT }));
   assert.equal(exhausted.status, 429);
   const body = await exhausted.json();
   assert.equal(body.error, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
@@ -156,7 +157,7 @@ test("the gate order is method, kill switch, body, meter", async () => {
 
 test("an upstream refusal answers with its status and never the key", async () => {
   const call: UpstreamCall = {};
-  const response = await handleIntroductionMint(
+  const response = await mintAnswer(
     options({ fetch: upstream(call, () => new Response("denied", { status: 401 })) }),
   );
 
@@ -167,14 +168,14 @@ test("an upstream refusal answers with its status and never the key", async () =
 });
 
 test("a credential that is malformed or already dead is refused rather than served", async () => {
-  const malformed = await handleIntroductionMint(
+  const malformed = await mintAnswer(
     options({
       fetch: upstream({}, () => new Response(JSON.stringify({ odd: true }), { status: 200 })),
     }),
   );
   assert.equal(malformed.status, 502);
 
-  const expired = await handleIntroductionMint(
+  const expired = await mintAnswer(
     options({
       fetch: upstream(
         {},

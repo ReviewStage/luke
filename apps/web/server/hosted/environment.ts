@@ -17,6 +17,8 @@ export interface HostedEnvironmentValues {
   readonly openAiKey: Redacted.Redacted | undefined;
   /** A deployment-configured brain model override; the contract's default otherwise. */
   readonly brainModel: string | undefined;
+  /** A deployment-configured Realtime model override, under the name the desktop honours. */
+  readonly realtimeModel: string | undefined;
   /** The analytics processor's own deletion key; absent means there is no person to erase. */
   readonly posthogPersonalApiKey: Redacted.Redacted | undefined;
   /** The analytics project the personal key deletes from; absent means there is nothing to erase it with. */
@@ -53,6 +55,7 @@ export const hostedEnvironment = Layer.effect(
     Config.all({
       apiKey: Config.option(Config.redacted(HOSTED_OPENAI_ENVIRONMENT.API_KEY)),
       brainModel: Config.option(Config.string(HOSTED_OPENAI_ENVIRONMENT.BRAIN_MODEL)),
+      realtimeModel: Config.option(Config.string(HOSTED_OPENAI_ENVIRONMENT.REALTIME_MODEL)),
       posthogPersonalApiKey: Config.option(Config.redacted(POSTHOG_ENVIRONMENT.PERSONAL_API_KEY)),
       posthogProjectId: Config.option(Config.string(POSTHOG_ENVIRONMENT.PROJECT_ID)),
       posthogApiHost: Config.option(Config.string(POSTHOG_ENVIRONMENT.API_HOST)),
@@ -63,6 +66,7 @@ export const hostedEnvironment = Layer.effect(
     (read) => ({
       openAiKey: presentRedacted(read.apiKey),
       brainModel: present(read.brainModel),
+      realtimeModel: present(read.realtimeModel),
       posthogPersonalApiKey: presentRedacted(read.posthogPersonalApiKey),
       posthogProjectId: present(read.posthogProjectId),
       posthogApiHost: present(read.posthogApiHost),

@@ -1,16 +1,4 @@
-import {
-  type CloudFetch,
-  introductionSessionConfig,
-  type RealtimeSessionOptions,
-  text as trimmedText,
-} from "../core.js";
-import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
-import type { IntroductionSpend } from "./quota.js";
-import {
-  mintRealtimeConnection,
-  type VoiceMintPreferences,
-  voiceMintPreferences,
-} from "./voice-mint.js";
+import { introductionSessionConfig, type RealtimeSessionOptions } from "../core.js";
 
 /**
  * Mints the one credential a fresh install may ask for before any account
@@ -52,72 +40,10 @@ export function introductionClientSecretRequest(options: RealtimeSessionOptions 
   };
 }
 
-const INTRODUCTION_MINT_FIELDS: readonly string[] = ["voice", "speed"];
-
 /**
- * Reads the caller's voice and pace, tolerating an empty body like the
- * ordinary mint but refusing any field beyond those two: an authenticated
- * desktop earns the ordinary reader's tolerance for extra fields, and an
- * anonymous caller sending something this endpoint does not take is probing
- * it, not misconfigured.
+ * The fields the introduction's own reader takes and nothing else: an
+ * authenticated desktop earns the ordinary reader's tolerance for extra
+ * fields, and an anonymous caller sending something this endpoint does not
+ * take is probing it, not misconfigured.
  */
-async function introductionMintPreferences(
-  request: Request,
-): Promise<VoiceMintPreferences | undefined> {
-  return voiceMintPreferences(request, INTRODUCTION_MINT_FIELDS);
-}
-
-export interface IntroductionMintOptions {
-  request: Request;
-  /** Luke's own OpenAI key, from the deployment environment; absent means the tier is off. */
-  apiKey: string | undefined;
-  /** A deployment-configured model override; the shared default otherwise. */
-  model?: string | undefined;
-  spend: () => Promise<IntroductionSpend>;
-  fetch?: CloudFetch | undefined;
-  now?: (() => number) | undefined;
-  timeoutMs?: number | undefined;
-}
-
-export async function handleIntroductionMint(options: IntroductionMintOptions): Promise<Response> {
-  const { request } = options;
-  if (request.method !== "POST") {
-    return errorResponse(
-      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-    );
-  }
-  // Trimmed like the ordinary mint's reads: a whitespace credential is the
-  // kill switch, not a key, and a blank model override is no override at all.
-  const apiKey = trimmedText(options.apiKey);
-  const model = trimmedText(options.model);
-  if (!apiKey) {
-    return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
-  }
-
-  // Body before meter, so a malformed request is refused before it spends.
-  const preferences = await introductionMintPreferences(request);
-  if (!preferences) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
-
-  // The refusal carries no quota: the introduction is not an allowance the
-  // desktop tracks, only a cap it may run into.
-  const spend = await options.spend();
-  if (!spend.allowed) {
-    return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
-  }
-
-  const minted = await mintRealtimeConnection({
-    apiKey,
-    model,
-    preferences,
-    clientSecretRequest: introductionClientSecretRequest,
-    fetch: options.fetch,
-    now: options.now,
-    timeoutMs: options.timeoutMs,
-  });
-  if ("failure" in minted) return minted.failure;
-
-  return jsonResponse(HOSTED_HTTP_STATUS.OK, { connection: minted.connection });
-}
+export const INTRODUCTION_MINT_FIELDS: readonly string[] = ["voice", "speed"];

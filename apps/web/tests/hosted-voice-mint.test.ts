@@ -5,7 +5,7 @@ import type { RealtimeVoice, RealtimeVoiceSpeed } from "../server/core";
 import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "../server/core";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import type { HostedSpend } from "../server/hosted/quota";
-import { handleVoiceMint } from "../server/hosted/voice-mint";
+import { type MintCall, mintAnswer } from "./support/mint-call";
 
 const NOW = Date.parse("2026-08-17T12:00:00.000Z");
 const API_KEY = "sk-hosted-secret";
@@ -53,7 +53,7 @@ function mintedPayload() {
   });
 }
 
-function options(overrides: Partial<Parameters<typeof handleVoiceMint>[0]> = {}) {
+function options(overrides: Partial<MintCall> = {}) {
   return {
     request: mintRequest(),
     apiKey: API_KEY,
@@ -66,7 +66,7 @@ function options(overrides: Partial<Parameters<typeof handleVoiceMint>[0]> = {})
 
 test("a mint hands back an ephemeral credential aimed at OpenAI's own calls endpoint", async () => {
   const call: UpstreamCall = {};
-  const response = await handleVoiceMint(
+  const response = await mintAnswer(
     options({
       request: mintRequest({ voice: REALTIME_VOICE.MARIN, speed: REALTIME_VOICE_SPEED.QUICK }),
       fetch: upstream(call, mintedPayload),
@@ -93,7 +93,7 @@ test("a mint hands back an ephemeral credential aimed at OpenAI's own calls endp
 });
 
 test("the wsUrl is pinned to the build's websocket base and carries the session's model", async () => {
-  const response = await handleVoiceMint(
+  const response = await mintAnswer(
     options({ model: "gpt-realtime-next", fetch: upstream({}, mintedPayload) }),
   );
   assert.equal(response.status, 200);
@@ -104,7 +104,7 @@ test("the wsUrl is pinned to the build's websocket base and carries the session'
 
 test("an empty body mints the build's own defaults", async () => {
   const call: UpstreamCall = {};
-  const response = await handleVoiceMint(options({ fetch: upstream(call, mintedPayload) }));
+  const response = await mintAnswer(options({ fetch: upstream(call, mintedPayload) }));
 
   assert.equal(response.status, 200);
   const sent = JSON.parse(String(call.init?.body));
@@ -114,7 +114,7 @@ test("an empty body mints the build's own defaults", async () => {
 
 test("a configured model labels the credential even when the payload omits its own", async () => {
   const call: UpstreamCall = {};
-  const response = await handleVoiceMint(
+  const response = await mintAnswer(
     options({ model: "gpt-realtime-next", fetch: upstream(call, mintedPayload) }),
   );
 
@@ -126,7 +126,7 @@ test("a configured model labels the credential even when the payload omits its o
 
 test("a blank model override is no override at all", async () => {
   const call: UpstreamCall = {};
-  const response = await handleVoiceMint(
+  const response = await mintAnswer(
     options({ model: "   ", fetch: upstream(call, mintedPayload) }),
   );
 
@@ -141,10 +141,10 @@ test("a voice or pace outside the build's sets is refused before anything is spe
     spent += 1;
     return OPEN_SPEND;
   };
-  const badVoice = await handleVoiceMint(
+  const badVoice = await mintAnswer(
     options({ request: mintRequest({ voice: "not-a-voice" }), spend }),
   );
-  const badSpeed = await handleVoiceMint(options({ request: mintRequest({ speed: 9 }), spend }));
+  const badSpeed = await mintAnswer(options({ request: mintRequest({ speed: 9 }), spend }));
 
   assert.equal(badVoice.status, 400);
   assert.equal((await badVoice.json()).error, HOSTED_API_ERROR.INVALID_REQUEST);
@@ -153,24 +153,24 @@ test("a voice or pace outside the build's sets is refused before anything is spe
 });
 
 test("the gate order is method, kill switch, token, body, quota", async () => {
-  const wrongMethod = await handleVoiceMint(
+  const wrongMethod = await mintAnswer(
     options({ request: new Request("https://luke.test/api/voice/mint", { method: "GET" }) }),
   );
   assert.equal(wrongMethod.status, 405);
 
-  const keyless = await handleVoiceMint(options({ apiKey: undefined }));
+  const keyless = await mintAnswer(options({ apiKey: undefined }));
   assert.equal(keyless.status, 503);
   assert.equal((await keyless.json()).error, HOSTED_API_ERROR.UNAVAILABLE);
 
-  const blankKey = await handleVoiceMint(options({ apiKey: "   " }));
+  const blankKey = await mintAnswer(options({ apiKey: "   " }));
   assert.equal(blankKey.status, 503);
   assert.equal((await blankKey.json()).error, HOSTED_API_ERROR.UNAVAILABLE);
 
-  const anonymous = await handleVoiceMint(options({ resolveUserId: async () => undefined }));
+  const anonymous = await mintAnswer(options({ resolveUserId: async () => undefined }));
   assert.equal(anonymous.status, 401);
   assert.equal((await anonymous.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);
 
-  const exhausted = await handleVoiceMint(options({ spend: async () => SPENT }));
+  const exhausted = await mintAnswer(options({ spend: async () => SPENT }));
   assert.equal(exhausted.status, 429);
   const body = await exhausted.json();
   assert.equal(body.error, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
@@ -179,7 +179,7 @@ test("the gate order is method, kill switch, token, body, quota", async () => {
 
 test("an upstream refusal answers with its status and never the key", async () => {
   const call: UpstreamCall = {};
-  const response = await handleVoiceMint(
+  const response = await mintAnswer(
     options({ fetch: upstream(call, () => new Response("denied", { status: 401 })) }),
   );
 
@@ -190,14 +190,14 @@ test("an upstream refusal answers with its status and never the key", async () =
 });
 
 test("a credential that is malformed or already dead is refused rather than served", async () => {
-  const malformed = await handleVoiceMint(
+  const malformed = await mintAnswer(
     options({
       fetch: upstream({}, () => new Response(JSON.stringify({ odd: true }), { status: 200 })),
     }),
   );
   assert.equal(malformed.status, 502);
 
-  const expired = await handleVoiceMint(
+  const expired = await mintAnswer(
     options({
       fetch: upstream(
         {},

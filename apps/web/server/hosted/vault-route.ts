@@ -60,10 +60,10 @@ function storeFor(secret: string): HostedStore {
 
 /**
  * The auth service's own userinfo endpoint, read at the hosted API boundary.
- * Every vault or device route resolves its bearer through this one, whether
- * it is built from the seams below or composed as an `HttpApp`.
+ * Every vault, device, or mint route resolves its bearer through this one,
+ * whether it is built from the seams below or composed as an `HttpApp`.
  */
-const hostedVaultUserInfo: UserInfoEndpoint = async (input) => {
+export const hostedVaultUserInfo: UserInfoEndpoint = async (input) => {
   // SAFETY: Better Auth hands back its parsed userinfo answer as structured-clone data; the wire guards below validate the selected field.
   const answer = (await auth.api.oauth2UserInfo(input)) as WireBoundaryInput;
   return oauthUserInfoFromAuthAnswer(unparsedWire(answer));

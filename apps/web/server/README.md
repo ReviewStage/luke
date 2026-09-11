@@ -158,11 +158,12 @@ half is a small `SqlClient` over `@electric-sql/pglite`, because no
 a function default-exports. It reads the runtime through `runWeb` and then
 holds the handler for the instance's life, so it is a caller of the edge rather
 than a second one, and a warm invocation reaches the services the cold one
-built. The brain group's four routes, the auth group, the actions group, the
-five routes behind the observation group below, the account group's
-`server/routes/account/delete.ts` and `server/routes/account/preferences.ts`,
-and the devices and vault group's three routes are converted this way; every
-other route still default-exports the promise-shaped handler beside it.
+built. The brain group's four routes, the three mint routes, the auth group,
+the actions group, the five routes behind the observation group below, the
+account group's `server/routes/account/delete.ts` and
+`server/routes/account/preferences.ts`, and the devices and vault group's three
+routes are converted this way; every other route still default-exports the
+promise-shaped handler beside it.
 
 `server/hosted/http-effect.ts` is the response vocabulary that conversion
 speaks: one schema per refusal, each annotated with the status it answers, and
@@ -351,9 +352,17 @@ OpenAI key for an installed desktop that predates the live session; a current
 desktop opens its voice through the hosted voice service below and never calls
 it. It is an exact-path file, so Vercel's zero-config `api/`
 detection routes it without a `routes` entry; only the bracketed auth
-catch-all needs one. The logic lives in `server/hosted/` behind injected
-seams, and each request is resolved to a user through the auth service's own
-`/oauth2/userinfo` endpoint, called in process.
+catch-all needs one. The mint lives behind the group in
+`server/voice-mint-app.ts`, which is what all three mint functions serve —
+the desktop's, the phone's `remote-mint`, and the accountless
+`introduction-mint` — each request resolved to a user through the auth
+service's own `/oauth2/userinfo` endpoint, called in process, except the
+introduction's, which carries no bearer at all. Each path is declared for
+every method, so the POST a mint documents stays its own
+`method-not-allowed`, and a path the group declares nothing for is the hosted
+vocabulary's `not-found`. `fixtures/voice-mint-route/` records what each mint
+and each refusal answers, recorded from the promise-shaped routes the group
+replaced and unchanged by the conversion.
 
 The mint answer's `connection` object carries both a WebRTC calls endpoint
 (`callsUrl`) for the desktop renderer and a WebSocket endpoint (`wsUrl`) for
@@ -371,7 +380,9 @@ and the hosted tier is simply off, the same kill switch as the feedback
 endpoint, which is the intended state for Preview deployments, so a preview
 never spends the production key. `LUKE_REALTIME_MODEL` optionally overrides
 the model, under the same name the desktop honours; a blank value is treated
-as absent.
+as absent. Neither is read at an invocation: `server/hosted/environment.ts`
+resolves both from `Config` as the runtime's services are built, and drops a
+blank there, so the group sees one absence.
 
 `server/routes/account/delete.ts` erases the signed-in user on the same bearer
 resolution: the desktop's Delete account confirm is the only caller. Deleting

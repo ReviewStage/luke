@@ -1,0 +1,11 @@
+{
+  "status": 502,
+  "statusText": "",
+  "headers": [
+    [
+      "content-type",
+      "application/json"
+    ]
+  ],
+  "body": "{\"error\":\"upstream-error\",\"upstreamStatus\":500}"
+}

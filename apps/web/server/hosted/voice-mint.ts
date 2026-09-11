@@ -11,15 +11,11 @@ import {
   type RealtimeSessionOptions,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
-  realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,
-  text as trimmedText,
   type UnparsedWireValue,
 } from "../core.js";
-import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import { HOSTED_OPENAI_DEFAULTS, type OpenAiPostBody, postOpenAi } from "./openai.js";
-import type { HostedSpend } from "./quota.js";
 
 /**
  * Mints one ephemeral Realtime credential on Luke's own key for a signed-in
@@ -36,19 +32,18 @@ export interface VoiceMintPreferences {
 }
 
 /**
- * Reads the caller's voice and pace, tolerating an empty body — the defaults
- * are a complete request. A value outside the build's own sets refuses the
- * request rather than being repaired: the desktop only sends values it
- * validated, so anything else is a bug or an impostor, and both should hear
- * no. A strict-fields allowlist additionally refuses any field beyond it, for
- * an endpoint whose callers earn no tolerance for extras.
+ * Reads the caller's voice and pace out of the body already read, tolerating
+ * an empty one — the defaults are a complete request. A value outside the
+ * build's own sets refuses the request rather than being repaired: the
+ * desktop only sends values it validated, so anything else is a bug or an
+ * impostor, and both should hear no. A strict-fields allowlist additionally
+ * refuses any field beyond it, for an endpoint whose callers earn no
+ * tolerance for extras.
  */
-export async function voiceMintPreferences(
-  request: Request,
+export function voiceMintPreferences(
+  raw: string,
   strictFields?: readonly string[],
-): Promise<VoiceMintPreferences | undefined> {
-  const raw = await request.text().catch(() => undefined);
-  if (raw === undefined) return undefined;
+): VoiceMintPreferences | undefined {
   if (!raw.trim()) return {};
 
   let payload: unknown;
@@ -85,7 +80,14 @@ export interface RealtimeConnectionMintOptions {
   timeoutMs?: number | undefined;
 }
 
-export type RealtimeConnectionMint = { failure: Response } | { connection: RealtimeConnection };
+/**
+ * Why a mint could not be handed back. Every one of them is the same refusal
+ * — the upstream failed — and the status it answered, when it answered at
+ * all, is the whole of what travels onward; the upstream's own words never do.
+ */
+export type RealtimeConnectionMint =
+  | { failure: { upstreamStatus?: number } }
+  | { connection: RealtimeConnection };
 
 /**
  * The upstream tail both mint handlers share: builds the session document
@@ -106,19 +108,9 @@ export async function mintRealtimeConnection(
     options.clientSecretRequest(sessionOptions),
     { apiKey: options.apiKey, fetch: options.fetch, timeoutMs: options.timeoutMs },
   );
-  if (!response) {
-    return {
-      failure: errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR),
-    };
-  }
-  if (!response.ok) {
-    // Status alone diagnoses the upstream without carrying its body onward.
-    return {
-      failure: errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR, {
-        upstreamStatus: response.status,
-      }),
-    };
-  }
+  if (!response) return { failure: {} };
+  // Status alone diagnoses the upstream without carrying its body onward.
+  if (!response.ok) return { failure: { upstreamStatus: response.status } };
 
   const payload: unknown = await response.json().catch(() => undefined);
   // A payload that omits its model still labels the credential with the model
@@ -132,11 +124,7 @@ export async function mintRealtimeConnection(
           options.model ?? REALTIME_DEFAULTS.MODEL,
         );
   const now = options.now ?? Date.now;
-  if (!credential || !realtimeCredentialIsUsable(credential, now())) {
-    return {
-      failure: errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR),
-    };
-  }
+  if (!credential || !realtimeCredentialIsUsable(credential, now())) return { failure: {} };
 
   return {
     connection: {
@@ -145,67 +133,4 @@ export async function mintRealtimeConnection(
       wsUrl: `${HOSTED_WS_BASE_URL}?model=${credential.model}`,
     },
   };
-}
-
-export interface VoiceMintOptions {
-  request: Request;
-  /** Luke's own OpenAI key, from the deployment environment; absent means the tier is off. */
-  apiKey: string | undefined;
-  /** A deployment-configured model override; the shared default otherwise. */
-  model?: string | undefined;
-  resolveUserId: (request: Request) => Promise<string | undefined>;
-  spend: (userId: string) => Promise<HostedSpend>;
-  fetch?: CloudFetch | undefined;
-  now?: (() => number) | undefined;
-  timeoutMs?: number | undefined;
-}
-
-export async function handleVoiceMint(options: VoiceMintOptions): Promise<Response> {
-  const { request } = options;
-  if (request.method !== "POST") {
-    return errorResponse(
-      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-    );
-  }
-  // Trimmed like the desktop's own key reads: a whitespace credential is the
-  // kill switch, not a key, and a blank model override is no override at all.
-  const apiKey = trimmedText(options.apiKey);
-  const model = trimmedText(options.model);
-  if (!apiKey) {
-    return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
-  }
-
-  const userId = await options.resolveUserId(request);
-  if (!userId) {
-    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
-  }
-
-  const preferences = await voiceMintPreferences(request);
-  if (!preferences) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
-
-  const spend = await options.spend(userId);
-  if (!spend.allowed) {
-    return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED, {
-      quota: spend.quota,
-    });
-  }
-
-  const minted = await mintRealtimeConnection({
-    apiKey,
-    model,
-    preferences,
-    clientSecretRequest: realtimeClientSecretRequest,
-    fetch: options.fetch,
-    now: options.now,
-    timeoutMs: options.timeoutMs,
-  });
-  if ("failure" in minted) return minted.failure;
-
-  return jsonResponse(HOSTED_HTTP_STATUS.OK, {
-    connection: minted.connection,
-    quota: spend.quota,
-  });
 }

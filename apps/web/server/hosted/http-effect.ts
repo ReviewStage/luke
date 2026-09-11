@@ -82,6 +82,22 @@ export function hostedJsonResponse<Body extends object>(
   return HttpServerResponse.unsafeJson(body, { status });
 }
 
+/**
+ * The upstream failed, which is one refusal whatever went wrong with it: the
+ * status it answered with, when it answered at all, is the whole of what
+ * travels onward, and its own words never do.
+ */
+export function hostedUpstreamErrorResponse(
+  upstreamStatus: number | undefined,
+): HttpServerResponse.HttpServerResponse {
+  return hostedJsonResponse(
+    HOSTED_HTTP_STATUS.BAD_GATEWAY,
+    upstreamStatus === undefined
+      ? { error: HOSTED_API_ERROR.UPSTREAM_ERROR }
+      : { error: HOSTED_API_ERROR.UPSTREAM_ERROR, upstreamStatus },
+  );
+}
+
 /** Refuses a request whose method is not the one the endpoint documents. */
 export function hostedMethod(
   method: string,
