@@ -171,11 +171,12 @@ node --input-type=module -e '
 
 # Admission has one home in the brain: a tool module's own `execute`, under
 # `packages/brain/src/tools/`. Nothing else of the brain, and nothing in the
-# host's brain wiring or the memory package, may call `admit()` or reach for
-# it, so no path can hand the host a raw call to admit and carry in one
-# breath — the notebook's two writes included, which arrive at the host as
-# admitted actions like every other. The check reads import lists rather than
-# call sites, because a file that never imports `admit` cannot call it.
+# host's brain wiring or the memory package, may call `admit()` or
+# `admitEffect()` or reach for either, so no path can hand the host a raw call
+# to admit and carry in one breath — the notebook's two writes included, which
+# arrive at the host as admitted actions like every other. The check reads
+# import lists rather than call sites, because a file that never imports
+# `admit` cannot call it.
 node --input-type=module -e '
   import { readdir, readFile } from "node:fs/promises";
   import path from "node:path";
@@ -199,7 +200,7 @@ node --input-type=module -e '
       const text = await readFile(file, "utf8");
       for (const match of text.matchAll(/import\s*(?:type\s+)?\{([^}]*)\}\s*from\s+"@sidecar\/actions"/g)) {
         const names = match[1].split(",").map((name) => name.trim().replace(/^type\s+/, "").split(/\s+as\s+/)[0]);
-        if (names.includes("admit")) reaching.push(relative);
+        if (names.includes("admit") || names.includes("admitEffect")) reaching.push(relative);
       }
     }
   }

@@ -17,12 +17,21 @@ Whether an action may run is decided once, by `admit()` in `@sidecar/actions`, w
 mints the only `ValidatedAction` there is: its brand is `@sidecar/wire`'s
 module-private symbol, which nothing anywhere can spell, so `admit` is the one
 place the repository enters the admitted set and a signature that takes one says
-the gauntlet ran. Everything below it re-shapes what it already holds through
-`reshapeAdmitted`, which needs an admitted value to answer at all — which is how
-a provider's write signature enforces the requirement rather than
-restating it. The direction stays actions → session → wire, and `@sidecar/session`
-keeps the narrower act vocabulary an observation advertises with; the two are
-proven to be the same strings where `@sidecar/actions` declares the whole of it.
+the gauntlet ran. The gauntlet itself is `admitEffect()`, an Effect that
+succeeds with the minted action or fails with an `AdmitRefusal` carrying the
+same sentence a `Refusal` does, and reads the roster for itself inside the
+effect; `admit()` is the Promise door over it, the strangler shim that runs
+the effect for the callers still holding a Promise — the brain's tool modules,
+the hosted action endpoint, the provider contract — until P5-14's turn runner
+and P7's composers call `admitEffect()` themselves, and P12-02 deletes the door
+with the `Settled` Promise signatures. `repository-checks.sh` fences both names
+to the brain's tool modules alike. Everything below it re-shapes what it
+already holds through `reshapeAdmitted`, which needs an admitted value to
+answer at all — which is how a provider's write signature enforces the
+requirement rather than restating it. The direction stays actions → session →
+wire, and `@sidecar/session` keeps the narrower act vocabulary an observation
+advertises with; the two are proven to be the same strings where
+`@sidecar/actions` declares the whole of it.
 
 A wire value's rules are declared once, as a `Schema` in `@sidecar/wire`,
 which both parses the untrusted value and emits the JSON Schema a model is

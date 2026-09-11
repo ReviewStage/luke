@@ -106,7 +106,8 @@ Canonical commands:
   own advertisement of the actions its provider documents for it now, by
   `@sidecar/actions`'s `admit()` — the one function that mints the validated action,
   not a Schema brand, reading the roster for itself rather than taking a caller's
-  copy of it — and
+  copy of it; `admitEffect()` is that same gauntlet answered as an Effect, and
+  `admit()` the Promise door over it — and
   by nothing else anywhere: a provider's write takes only what
   admission minted, so no path reaches a provider without it, and what a
   provider still answers for is its own route — the advertised control, spawn

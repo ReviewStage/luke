@@ -9,6 +9,10 @@
  * so an action whose turn ended while the roster was refreshing refuses rather
  * than dispatching.
  *
+ * The gauntlet is an Effect, {@link admitEffect}, failing with the refusal as a
+ * typed error; {@link admit} is the Promise door over it that every caller
+ * still holds, and the one place in this package an Effect is run.
+ *
  * Admission decides only whether an action may run. Which acts a conversation may
  * ask for at all was the effective tool policy's decision before a call left
  * the model, and who opened the turn is recorded on what admission mints and
@@ -53,6 +57,7 @@ import {
   type WireRecord,
   text as wireText,
 } from "@sidecar/wire";
+import { Cause, Data, Effect, Exit, Option } from "effect";
 import {
   ACTION_KIND,
   type ActionKind,
@@ -223,6 +228,18 @@ function refuse(reason: string): Refusal {
 }
 
 /**
+ * The refusal as {@link admitEffect} fails with it: the same sentence a
+ * {@link Refusal} carries, since that sentence reaches the action journal and
+ * the developer's ear, typed so a caller composing in Effect tells a refusal
+ * from a roster read that failed. One tag stands for the whole gauntlet
+ * because many reasons are sentences composed from what the roster already
+ * told the caller, not members of a fixed set a tag could name.
+ */
+export class AdmitRefusal extends Data.TaggedError("AdmitRefusal")<{
+  readonly reason: string;
+}> {}
+
+/**
  * A read awaited before an effect, held only as long as the guard's standing:
  * once the signal fires the wait answers nothing, and the `isRevoked` check
  * that follows every such read refuses the action before anything is dispatched.
@@ -272,9 +289,9 @@ export function guardedRead<T>(
  * the admitter that asked refuses rather than deciding on a half-read picture.
  */
 interface AdmittedReads {
-  sessions(): Promise<readonly Session[] | undefined>;
-  projects(): Promise<readonly ObservedWorkspaceProject[] | undefined>;
-  defaults(): Promise<
+  readonly sessions: Effect.Effect<readonly Session[] | undefined>;
+  readonly projects: Effect.Effect<readonly ObservedWorkspaceProject[] | undefined>;
+  readonly defaults: Effect.Effect<
     | {
         defaultProviderId?: string | undefined;
         defaultProjectIds?: Readonly<Partial<Record<string, string>>> | undefined;
@@ -283,24 +300,26 @@ interface AdmittedReads {
   >;
 }
 
-function admittedReads(context: AdmitContext): AdmittedReads {
-  const once = <T>(read: () => Promise<T>): (() => Promise<T | undefined>) => {
-    let pending: Promise<T | undefined> | undefined;
-    return () => {
-      pending ??= (async () => {
-        if (context.guard?.isRevoked()) return undefined;
-        const value = await guardedRead(read(), context.guard);
-        return context.guard?.isRevoked() ? undefined : value;
-      })();
-      return pending;
-    };
-  };
+/**
+ * The reads as admission performs them itself, on the readers the context
+ * carries and never on a copy: each is cached so a second admitter asking
+ * reads the same picture, and a read that fails is a defect, since a roster
+ * that cannot be read is not a refusal Luke has words for.
+ */
+function admittedReads(context: AdmitContext): Effect.Effect<AdmittedReads> {
+  const guarded = <T>(read: () => Promise<T>): Effect.Effect<T | undefined> =>
+    Effect.suspend(() => {
+      if (context.guard?.isRevoked()) return Effect.succeed(undefined);
+      return Effect.promise(() => guardedRead(read(), context.guard)).pipe(
+        Effect.map((value) => (context.guard?.isRevoked() ? undefined : value)),
+      );
+    });
   const projects = context.projects;
-  return {
-    sessions: once(() => context.roster.read()),
-    projects: once(async () => (projects ? projects.read() : [])),
-    defaults: once(async () => (projects ? projects.defaults() : {})),
-  };
+  return Effect.all({
+    sessions: Effect.cached(guarded(() => context.roster.read())),
+    projects: Effect.cached(guarded(async () => (projects ? projects.read() : []))),
+    defaults: Effect.cached(guarded(async () => (projects ? projects.defaults() : {}))),
+  });
 }
 
 function textArgument(fields: WireRecord, key: string): string | undefined {
@@ -496,302 +515,316 @@ const UPDATE_BUTTON_STANDING = {
 
 type AdmittedPayload<Kind extends ActionKind> = ({ kind: Kind } & ActionPayloads[Kind]) | Refusal;
 
+/** One kind's gauntlet over the reads admission made: the payload it carries, or the refusal. */
 type Admitter<Kind extends ActionKind> = (
   fields: WireRecord,
   context: AdmitContext,
   reads: AdmittedReads,
-) => Promise<AdmittedPayload<Kind>> | AdmittedPayload<Kind>;
+) => Effect.Effect<AdmittedPayload<Kind>>;
 
-async function admittedSession(
+/** A kind's gauntlet that reads nothing, deciding on the fields and the context alone. */
+type Decider<Kind extends ActionKind> = (
   fields: WireRecord,
-  reads: AdmittedReads,
-): Promise<{ session: Session; identity: SessionIdentity } | Refusal> {
-  const sessions = await reads.sessions();
-  if (!sessions) return refuse(ACTION_REFUSAL.TURN_OVER);
-  return sessionFrom(fields, sessions);
+  context: AdmitContext,
+) => AdmittedPayload<Kind>;
+
+function decidedAtOnce<Kind extends ActionKind>(decide: Decider<Kind>): Admitter<Kind> {
+  return (fields, context) => Effect.sync(() => decide(fields, context));
 }
 
-const admitMessage: Admitter<typeof ACTION_KIND.MESSAGE> = async (fields, _context, reads) => {
-  const found = await admittedSession(fields, reads);
-  if ("status" in found) return found;
-  if (!advertisedActionFor(found.session, ACTION_KIND.MESSAGE)) {
-    return refuse(ACTION_REFUSAL.NO_MESSAGES);
-  }
-  const text = MESSAGE_TEXT.parse(fields.text);
-  if (!text) return refuse(ACTION_REFUSAL.MESSAGE_BOUND);
-  return { kind: ACTION_KIND.MESSAGE, identity: found.identity, text };
-};
+const admittedSession = (
+  fields: WireRecord,
+  reads: AdmittedReads,
+): Effect.Effect<{ session: Session; identity: SessionIdentity } | Refusal> =>
+  Effect.map(reads.sessions, (sessions) =>
+    sessions ? sessionFrom(fields, sessions) : refuse(ACTION_REFUSAL.TURN_OVER),
+  );
 
-const admitControl: Admitter<typeof ACTION_KIND.CONTROL> = async (fields, _context, reads) => {
-  const found = await admittedSession(fields, reads);
-  if ("status" in found) return found;
-  const controlId = textArgument(fields, "control_id");
-  // The advertised control itself is what the action carries: the caller's copy
-  // names which one, and never what the effect is built from.
-  const control = controlId ? advertisedControl(found.session, controlId) : undefined;
-  if (!control) return refuse(ACTION_REFUSAL.NO_CONTROL);
-  return { kind: ACTION_KIND.CONTROL, identity: found.identity, control };
-};
-
-const admitOpen: Admitter<typeof ACTION_KIND.OPEN> = async (fields, _context, reads) => {
-  const found = await admittedSession(fields, reads);
-  if ("status" in found) return found;
-  const { session, identity } = found;
-  // The action carries the identity — and, when the developer named an app, that
-  // app's id — never the address: the address is read back out of the roster
-  // by whoever performs the open, the same as a pressed row or a pressed app mark.
-  const applicationWord = textArgument(fields, "application");
-  if (applicationWord !== undefined) {
-    const normalized = applicationWord.trim().toLowerCase();
-    const application = session.applications.find(
-      (candidate) =>
-        candidate.displayName.toLowerCase() === normalized || candidate.id === normalized,
-    );
-    // An association without an exact address identifies the app but opens
-    // nothing, so it refuses like an app the roster never listed — and the
-    // refusal names the apps that can open, which the roster already carries.
-    // The id must be one the build fixed: the bridge takes no other.
-    const applicationId = application?.link ? application.id : undefined;
-    if (applicationId === undefined || !isSessionApplicationId(applicationId)) {
-      const openable = session.applications.filter((candidate) => candidate.link);
-      return openable.length > 0
-        ? refuse(
-            `That session opens in ${openable
-              .map((candidate) => candidate.displayName)
-              .join(" or ")}, not there.`,
-          )
-        : refuse(ACTION_REFUSAL.NO_APP_ADDRESS);
+const admitMessage: Admitter<typeof ACTION_KIND.MESSAGE> = (fields, _context, reads) =>
+  Effect.gen(function* () {
+    const found = yield* admittedSession(fields, reads);
+    if ("status" in found) return found;
+    if (!advertisedActionFor(found.session, ACTION_KIND.MESSAGE)) {
+      return refuse(ACTION_REFUSAL.NO_MESSAGES);
     }
-    return { kind: ACTION_KIND.OPEN, identity, applicationId };
-  }
-  if (!session.detail.link) return refuse(ACTION_REFUSAL.NO_ADDRESS);
-  return { kind: ACTION_KIND.OPEN, identity };
-};
+    const text = MESSAGE_TEXT.parse(fields.text);
+    if (!text) return refuse(ACTION_REFUSAL.MESSAGE_BOUND);
+    return { kind: ACTION_KIND.MESSAGE, identity: found.identity, text };
+  });
 
-const admitCreateWorkspace: Admitter<typeof ACTION_KIND.CREATE_WORKSPACE> = async (
+const admitControl: Admitter<typeof ACTION_KIND.CONTROL> = (fields, _context, reads) =>
+  Effect.gen(function* () {
+    const found = yield* admittedSession(fields, reads);
+    if ("status" in found) return found;
+    const controlId = textArgument(fields, "control_id");
+    // The advertised control itself is what the action carries: the caller's copy
+    // names which one, and never what the effect is built from.
+    const control = controlId ? advertisedControl(found.session, controlId) : undefined;
+    if (!control) return refuse(ACTION_REFUSAL.NO_CONTROL);
+    return { kind: ACTION_KIND.CONTROL, identity: found.identity, control };
+  });
+
+const admitOpen: Admitter<typeof ACTION_KIND.OPEN> = (fields, _context, reads) =>
+  Effect.gen(function* () {
+    const found = yield* admittedSession(fields, reads);
+    if ("status" in found) return found;
+    const { session, identity } = found;
+    // The action carries the identity — and, when the developer named an app, that
+    // app's id — never the address: the address is read back out of the roster
+    // by whoever performs the open, the same as a pressed row or a pressed app mark.
+    const applicationWord = textArgument(fields, "application");
+    if (applicationWord !== undefined) {
+      const normalized = applicationWord.trim().toLowerCase();
+      const application = session.applications.find(
+        (candidate) =>
+          candidate.displayName.toLowerCase() === normalized || candidate.id === normalized,
+      );
+      // An association without an exact address identifies the app but opens
+      // nothing, so it refuses like an app the roster never listed — and the
+      // refusal names the apps that can open, which the roster already carries.
+      // The id must be one the build fixed: the bridge takes no other.
+      const applicationId = application?.link ? application.id : undefined;
+      if (applicationId === undefined || !isSessionApplicationId(applicationId)) {
+        const openable = session.applications.filter((candidate) => candidate.link);
+        return openable.length > 0
+          ? refuse(
+              `That session opens in ${openable
+                .map((candidate) => candidate.displayName)
+                .join(" or ")}, not there.`,
+            )
+          : refuse(ACTION_REFUSAL.NO_APP_ADDRESS);
+      }
+      return { kind: ACTION_KIND.OPEN, identity, applicationId };
+    }
+    if (!session.detail.link) return refuse(ACTION_REFUSAL.NO_ADDRESS);
+    return { kind: ACTION_KIND.OPEN, identity };
+  });
+
+const admitCreateWorkspace: Admitter<typeof ACTION_KIND.CREATE_WORKSPACE> = (
   fields,
   context,
   reads,
-) => {
-  // A creation ask names a project rather than a session, so it is admitted
-  // against the projects the conversation was shown — the same discipline,
-  // against the list that actually offered it.
-  const listed = await reads.projects();
-  const saved = await reads.defaults();
-  if (!listed || !saved) return refuse(ACTION_REFUSAL.TURN_OVER);
-  const providerId = textArgument(fields, "provider_id");
-  const projectId = textArgument(fields, "project_id");
-  const targetId = textArgument(fields, "target_id");
-  const namedProjects = listed.filter(
-    (candidate) =>
-      (!providerId || candidate.providerId === providerId) &&
-      (!projectId || candidate.providerProjectId === projectId),
-  );
-  // A target picks out a host among the projects the ask named — one
-  // repository a provider reports on several hosts under one project id — so
-  // it narrows only where a listed project carries one. A project listed
-  // without a target has no host to pick, and a target the ask invented for it
-  // cannot hide it: the action still carries the listed entry's own identity
-  // and never the ask's word. Where the named projects do carry targets and
-  // none is the one asked for, the refusal names the target, so the correction
-  // is said rather than guessed at or sent on to a target-less twin.
-  let matchingProjects = namedProjects;
-  if (targetId) {
-    const onTarget = namedProjects.filter((candidate) => candidate.providerTargetId === targetId);
-    matchingProjects =
-      onTarget.length > 0
-        ? onTarget
-        : namedProjects.filter((candidate) => candidate.providerTargetId === undefined);
-    if (matchingProjects.length === 0 && namedProjects.length > 0) {
-      return refuse(ACTION_REFUSAL.NO_TARGET);
-    }
-  }
-  // The saved defaults settle only what the ask left unnamed: no provider
-  // named sends a still-ambiguous ask to the default provider while it is
-  // offering, and no project named sends it on to that provider's chosen
-  // project. Neither step can leave the listed set, and an ask that named its
-  // own provider or project is never overridden.
-  if (!providerId && saved.defaultProviderId && matchingProjects.length > 1) {
-    const offeredByDefault = matchingProjects.filter(
-      (candidate) => candidate.providerId === saved.defaultProviderId,
-    );
-    if (offeredByDefault.length > 0) matchingProjects = offeredByDefault;
-  }
-  // A provider's chosen project settles which project, never which provider:
-  // while candidates still span providers, one provider's saved project must
-  // not quietly decide an ask the developer left open between them.
-  const [firstMatch] = matchingProjects;
-  const oneProviderMatches =
-    firstMatch !== undefined &&
-    matchingProjects.every((candidate) => candidate.providerId === firstMatch.providerId);
-  if (!projectId && oneProviderMatches && matchingProjects.length > 1) {
-    const chosenProjects = matchingProjects.filter(
+) =>
+  Effect.gen(function* () {
+    // A creation ask names a project rather than a session, so it is admitted
+    // against the projects the conversation was shown — the same discipline,
+    // against the list that actually offered it.
+    const listed = yield* reads.projects;
+    const saved = yield* reads.defaults;
+    if (!listed || !saved) return refuse(ACTION_REFUSAL.TURN_OVER);
+    const providerId = textArgument(fields, "provider_id");
+    const projectId = textArgument(fields, "project_id");
+    const targetId = textArgument(fields, "target_id");
+    const namedProjects = listed.filter(
       (candidate) =>
-        saved.defaultProjectIds?.[candidate.providerId] === workspaceProjectSelectionId(candidate),
+        (!providerId || candidate.providerId === providerId) &&
+        (!projectId || candidate.providerProjectId === projectId),
     );
-    if (chosenProjects.length === 1) matchingProjects = chosenProjects;
-  }
-  const [project] = matchingProjects;
-  if (matchingProjects.length !== 1 || project === undefined) {
-    return refuse(
-      matchingProjects.length > 1 ? ACTION_REFUSAL.MANY_PROJECTS : ACTION_REFUSAL.NO_PROJECT,
-    );
-  }
-  const requestedAgent = textArgument(fields, "agent");
-  const spawnable = project.spawnableAgents;
-  const agent =
-    (spawnable === undefined || requestedAgent === undefined
-      ? undefined
-      : namedOnce(
-          spawnable,
-          requestedAgent,
-          (agentKind) => agentKind,
-          (name) => name.toLocaleLowerCase(),
-        )) ?? project.defaultAgent;
-  if (spawnable && (!agent || !spawnable.includes(agent))) {
-    return refuse(agent ? ACTION_REFUSAL.NO_PROJECT_AGENT : ACTION_REFUSAL.NAME_A_PROJECT_AGENT);
-  }
-  let name: string | undefined;
-  if (fields.name !== undefined) {
-    if (project.namesItself) return refuse(ACTION_REFUSAL.PROJECT_NAMES_ITSELF);
-    name = WORKSPACE_NAME.parse(fields.name);
+    // A target picks out a host among the projects the ask named — one
+    // repository a provider reports on several hosts under one project id — so
+    // it narrows only where a listed project carries one. A project listed
+    // without a target has no host to pick, and a target the ask invented for it
+    // cannot hide it: the action still carries the listed entry's own identity
+    // and never the ask's word. Where the named projects do carry targets and
+    // none is the one asked for, the refusal names the target, so the correction
+    // is said rather than guessed at or sent on to a target-less twin.
+    let matchingProjects = namedProjects;
+    if (targetId) {
+      const onTarget = namedProjects.filter((candidate) => candidate.providerTargetId === targetId);
+      matchingProjects =
+        onTarget.length > 0
+          ? onTarget
+          : namedProjects.filter((candidate) => candidate.providerTargetId === undefined);
+      if (matchingProjects.length === 0 && namedProjects.length > 0) {
+        return refuse(ACTION_REFUSAL.NO_TARGET);
+      }
+    }
+    // The saved defaults settle only what the ask left unnamed: no provider
+    // named sends a still-ambiguous ask to the default provider while it is
+    // offering, and no project named sends it on to that provider's chosen
+    // project. Neither step can leave the listed set, and an ask that named its
+    // own provider or project is never overridden.
+    if (!providerId && saved.defaultProviderId && matchingProjects.length > 1) {
+      const offeredByDefault = matchingProjects.filter(
+        (candidate) => candidate.providerId === saved.defaultProviderId,
+      );
+      if (offeredByDefault.length > 0) matchingProjects = offeredByDefault;
+    }
+    // A provider's chosen project settles which project, never which provider:
+    // while candidates still span providers, one provider's saved project must
+    // not quietly decide an ask the developer left open between them.
+    const [firstMatch] = matchingProjects;
+    const oneProviderMatches =
+      firstMatch !== undefined &&
+      matchingProjects.every((candidate) => candidate.providerId === firstMatch.providerId);
+    if (!projectId && oneProviderMatches && matchingProjects.length > 1) {
+      const chosenProjects = matchingProjects.filter(
+        (candidate) =>
+          saved.defaultProjectIds?.[candidate.providerId] ===
+          workspaceProjectSelectionId(candidate),
+      );
+      if (chosenProjects.length === 1) matchingProjects = chosenProjects;
+    }
+    const [project] = matchingProjects;
+    if (matchingProjects.length !== 1 || project === undefined) {
+      return refuse(
+        matchingProjects.length > 1 ? ACTION_REFUSAL.MANY_PROJECTS : ACTION_REFUSAL.NO_PROJECT,
+      );
+    }
+    const requestedAgent = textArgument(fields, "agent");
+    const spawnable = project.spawnableAgents;
+    const agent =
+      (spawnable === undefined || requestedAgent === undefined
+        ? undefined
+        : namedOnce(
+            spawnable,
+            requestedAgent,
+            (agentKind) => agentKind,
+            (name) => name.toLocaleLowerCase(),
+          )) ?? project.defaultAgent;
+    if (spawnable && (!agent || !spawnable.includes(agent))) {
+      return refuse(agent ? ACTION_REFUSAL.NO_PROJECT_AGENT : ACTION_REFUSAL.NAME_A_PROJECT_AGENT);
+    }
+    let name: string | undefined;
+    if (fields.name !== undefined) {
+      if (project.namesItself) return refuse(ACTION_REFUSAL.PROJECT_NAMES_ITSELF);
+      name = WORKSPACE_NAME.parse(fields.name);
+      if (!name) return refuse(ACTION_REFUSAL.WORKSPACE_NAME_BOUND);
+    }
+    // The task is held to the project's own word for it: a project that takes
+    // none cannot be handed one, a project that needs one cannot be created
+    // without it, and the text itself is bounded like the message it is.
+    let task: string | undefined;
+    if (fields.task !== undefined) {
+      if (project.taskSupport === WORKSPACE_TASK_SUPPORT.NONE) {
+        return refuse(ACTION_REFUSAL.NO_TASK_TAKEN);
+      }
+      task = OPENING_TASK.parse(fields.task);
+      if (!task) return refuse(ACTION_REFUSAL.TASK_BOUND);
+    } else if (project.taskSupport === WORKSPACE_TASK_SUPPORT.REQUIRED) {
+      return refuse(ACTION_REFUSAL.TASK_REQUIRED);
+    }
+    // A model named for this one creation resolves against the provider's own
+    // documented table, and the effort only ever rides a model: alone it has
+    // nothing documented to attach to.
+    const spokenModel = textArgument(fields, "model");
+    const spokenEffort = textArgument(fields, "effort");
+    if (spokenEffort !== undefined && spokenModel === undefined) {
+      return refuse(ACTION_REFUSAL.EFFORT_NEEDS_MODEL);
+    }
+    let agentSelection: WorkspaceAgentSelection | undefined;
+    if (spokenModel !== undefined) {
+      const resolved = resolveWorkspaceAgentModel(
+        context.projects?.agentModels(project.providerId) ?? [],
+        spokenModel,
+        spokenEffort,
+      );
+      if ("refusal" in resolved) return resolved.refusal;
+      agentSelection = resolved.selection;
+    }
+    const action: {
+      kind: typeof ACTION_KIND.CREATE_WORKSPACE;
+    } & ActionPayloads[typeof ACTION_KIND.CREATE_WORKSPACE] = {
+      kind: ACTION_KIND.CREATE_WORKSPACE,
+      providerId: project.providerId,
+      providerProjectId: project.providerProjectId,
+    };
+    if (project.providerTargetId) action.providerTargetId = project.providerTargetId;
+    if (agent) action.agent = agent;
+    if (name) action.name = name;
+    if (task) action.task = task;
+    if (agentSelection) action.agentSelection = agentSelection;
+    return action;
+  });
+
+const admitAddAgent: Admitter<typeof ACTION_KIND.ADD_AGENT> = (fields, context, reads) =>
+  Effect.gen(function* () {
+    const found = yield* admittedSession(fields, reads);
+    if ("status" in found) return found;
+    const { session, identity } = found;
+    // The agent must be one this session's own roster entry listed: the list is
+    // the provider's word for what its endpoint takes, so an ask outside it is
+    // refused rather than forwarded to be refused.
+    const asked = textArgument(fields, "agent");
+    const advertised = advertisedActionFor(session, ACTION_KIND.ADD_AGENT)?.agents ?? [];
+    const agent = asked === undefined ? undefined : advertised.find((entry) => entry === asked);
+    if (agent === undefined) return refuse(ACTION_REFUSAL.NO_SESSION_AGENT);
+    let name: string | undefined;
+    if (fields.name !== undefined) {
+      name = WORKSPACE_NAME.parse(fields.name);
+      if (!name) return refuse(ACTION_REFUSAL.SESSION_NAME_BOUND);
+    }
+    let task: string | undefined;
+    if (fields.task !== undefined) {
+      task = OPENING_TASK.parse(fields.task);
+      if (!task) return refuse(ACTION_REFUSAL.TASK_BOUND);
+    }
+    // A model named for this one agent resolves within the asked-for kind alone:
+    // the developer's chosen agent is never re-decided by the model they named
+    // beside it, so a mismatch is a refusal rather than a swap.
+    const spokenModel = textArgument(fields, "model");
+    const spokenEffort = textArgument(fields, "effort");
+    if (spokenEffort !== undefined && spokenModel === undefined) {
+      return refuse(ACTION_REFUSAL.EFFORT_NEEDS_MODEL);
+    }
+    let selection: WorkspaceAgentSelection | undefined;
+    if (spokenModel !== undefined) {
+      const entries = (context.projects?.agentModels(session.providerId) ?? []).filter(
+        (candidate) => candidate.agent === agent,
+      );
+      const resolved = resolveWorkspaceAgentModel(entries, spokenModel, spokenEffort);
+      if ("refusal" in resolved) {
+        return resolved.unnamedModel
+          ? refuse(`A ${agent} agent runs no model by that name.`)
+          : resolved.refusal;
+      }
+      selection = resolved.selection;
+    }
+    const action: {
+      kind: typeof ACTION_KIND.ADD_AGENT;
+    } & ActionPayloads[typeof ACTION_KIND.ADD_AGENT] = {
+      kind: ACTION_KIND.ADD_AGENT,
+      identity,
+      agent,
+    };
+    if (name) action.name = name;
+    if (task) action.task = task;
+    if (selection) action.model = selection.model;
+    if (selection?.effort) action.effort = selection.effort;
+    return action;
+  });
+
+const admitRenameWorkspace: Admitter<typeof ACTION_KIND.RENAME_WORKSPACE> = (
+  fields,
+  _context,
+  reads,
+) =>
+  Effect.gen(function* () {
+    const found = yield* admittedSession(fields, reads);
+    if ("status" in found) return found;
+    // Only a session whose roster entry advertised renaming has a workspace a
+    // rename can land on. The action carries the identity and the name, never the
+    // target: the workspace is resolved from the observed entry, the same way an
+    // open never carries an address.
+    if (!advertisedActionFor(found.session, ACTION_KIND.RENAME_WORKSPACE)) {
+      return refuse(ACTION_REFUSAL.NO_WORKSPACE_RENAME);
+    }
+    const name = WORKSPACE_NAME.parse(fields.name);
     if (!name) return refuse(ACTION_REFUSAL.WORKSPACE_NAME_BOUND);
-  }
-  // The task is held to the project's own word for it: a project that takes
-  // none cannot be handed one, a project that needs one cannot be created
-  // without it, and the text itself is bounded like the message it is.
-  let task: string | undefined;
-  if (fields.task !== undefined) {
-    if (project.taskSupport === WORKSPACE_TASK_SUPPORT.NONE) {
-      return refuse(ACTION_REFUSAL.NO_TASK_TAKEN);
+    return { kind: ACTION_KIND.RENAME_WORKSPACE, identity: found.identity, name };
+  });
+
+const admitRenameSession: Admitter<typeof ACTION_KIND.RENAME_SESSION> = (fields, _context, reads) =>
+  Effect.gen(function* () {
+    const found = yield* admittedSession(fields, reads);
+    if ("status" in found) return found;
+    if (!advertisedActionFor(found.session, ACTION_KIND.RENAME_SESSION)) {
+      return refuse(ACTION_REFUSAL.NO_SESSION_RENAME);
     }
-    task = OPENING_TASK.parse(fields.task);
-    if (!task) return refuse(ACTION_REFUSAL.TASK_BOUND);
-  } else if (project.taskSupport === WORKSPACE_TASK_SUPPORT.REQUIRED) {
-    return refuse(ACTION_REFUSAL.TASK_REQUIRED);
-  }
-  // A model named for this one creation resolves against the provider's own
-  // documented table, and the effort only ever rides a model: alone it has
-  // nothing documented to attach to.
-  const spokenModel = textArgument(fields, "model");
-  const spokenEffort = textArgument(fields, "effort");
-  if (spokenEffort !== undefined && spokenModel === undefined) {
-    return refuse(ACTION_REFUSAL.EFFORT_NEEDS_MODEL);
-  }
-  let agentSelection: WorkspaceAgentSelection | undefined;
-  if (spokenModel !== undefined) {
-    const resolved = resolveWorkspaceAgentModel(
-      context.projects?.agentModels(project.providerId) ?? [],
-      spokenModel,
-      spokenEffort,
-    );
-    if ("refusal" in resolved) return resolved.refusal;
-    agentSelection = resolved.selection;
-  }
-  const action: {
-    kind: typeof ACTION_KIND.CREATE_WORKSPACE;
-  } & ActionPayloads[typeof ACTION_KIND.CREATE_WORKSPACE] = {
-    kind: ACTION_KIND.CREATE_WORKSPACE,
-    providerId: project.providerId,
-    providerProjectId: project.providerProjectId,
-  };
-  if (project.providerTargetId) action.providerTargetId = project.providerTargetId;
-  if (agent) action.agent = agent;
-  if (name) action.name = name;
-  if (task) action.task = task;
-  if (agentSelection) action.agentSelection = agentSelection;
-  return action;
-};
-
-const admitAddAgent: Admitter<typeof ACTION_KIND.ADD_AGENT> = async (fields, context, reads) => {
-  const found = await admittedSession(fields, reads);
-  if ("status" in found) return found;
-  const { session, identity } = found;
-  // The agent must be one this session's own roster entry listed: the list is
-  // the provider's word for what its endpoint takes, so an ask outside it is
-  // refused rather than forwarded to be refused.
-  const asked = textArgument(fields, "agent");
-  const advertised = advertisedActionFor(session, ACTION_KIND.ADD_AGENT)?.agents ?? [];
-  const agent = asked === undefined ? undefined : advertised.find((entry) => entry === asked);
-  if (agent === undefined) return refuse(ACTION_REFUSAL.NO_SESSION_AGENT);
-  let name: string | undefined;
-  if (fields.name !== undefined) {
-    name = WORKSPACE_NAME.parse(fields.name);
-    if (!name) return refuse(ACTION_REFUSAL.SESSION_NAME_BOUND);
-  }
-  let task: string | undefined;
-  if (fields.task !== undefined) {
-    task = OPENING_TASK.parse(fields.task);
-    if (!task) return refuse(ACTION_REFUSAL.TASK_BOUND);
-  }
-  // A model named for this one agent resolves within the asked-for kind alone:
-  // the developer's chosen agent is never re-decided by the model they named
-  // beside it, so a mismatch is a refusal rather than a swap.
-  const spokenModel = textArgument(fields, "model");
-  const spokenEffort = textArgument(fields, "effort");
-  if (spokenEffort !== undefined && spokenModel === undefined) {
-    return refuse(ACTION_REFUSAL.EFFORT_NEEDS_MODEL);
-  }
-  let selection: WorkspaceAgentSelection | undefined;
-  if (spokenModel !== undefined) {
-    const entries = (context.projects?.agentModels(session.providerId) ?? []).filter(
-      (candidate) => candidate.agent === agent,
-    );
-    const resolved = resolveWorkspaceAgentModel(entries, spokenModel, spokenEffort);
-    if ("refusal" in resolved) {
-      return resolved.unnamedModel
-        ? refuse(`A ${agent} agent runs no model by that name.`)
-        : resolved.refusal;
-    }
-    selection = resolved.selection;
-  }
-  const action: {
-    kind: typeof ACTION_KIND.ADD_AGENT;
-  } & ActionPayloads[typeof ACTION_KIND.ADD_AGENT] = {
-    kind: ACTION_KIND.ADD_AGENT,
-    identity,
-    agent,
-  };
-  if (name) action.name = name;
-  if (task) action.task = task;
-  if (selection) action.model = selection.model;
-  if (selection?.effort) action.effort = selection.effort;
-  return action;
-};
-
-const admitRenameWorkspace: Admitter<typeof ACTION_KIND.RENAME_WORKSPACE> = async (
-  fields,
-  _context,
-  reads,
-) => {
-  const found = await admittedSession(fields, reads);
-  if ("status" in found) return found;
-  // Only a session whose roster entry advertised renaming has a workspace a
-  // rename can land on. The action carries the identity and the name, never the
-  // target: the workspace is resolved from the observed entry, the same way an
-  // open never carries an address.
-  if (!advertisedActionFor(found.session, ACTION_KIND.RENAME_WORKSPACE)) {
-    return refuse(ACTION_REFUSAL.NO_WORKSPACE_RENAME);
-  }
-  const name = WORKSPACE_NAME.parse(fields.name);
-  if (!name) return refuse(ACTION_REFUSAL.WORKSPACE_NAME_BOUND);
-  return { kind: ACTION_KIND.RENAME_WORKSPACE, identity: found.identity, name };
-};
-
-const admitRenameSession: Admitter<typeof ACTION_KIND.RENAME_SESSION> = async (
-  fields,
-  _context,
-  reads,
-) => {
-  const found = await admittedSession(fields, reads);
-  if ("status" in found) return found;
-  if (!advertisedActionFor(found.session, ACTION_KIND.RENAME_SESSION)) {
-    return refuse(ACTION_REFUSAL.NO_SESSION_RENAME);
-  }
-  const name = WORKSPACE_NAME.parse(fields.name);
-  if (!name) return refuse(ACTION_REFUSAL.CHAT_NAME_BOUND);
-  return { kind: ACTION_KIND.RENAME_SESSION, identity: found.identity, name };
-};
+    const name = WORKSPACE_NAME.parse(fields.name);
+    if (!name) return refuse(ACTION_REFUSAL.CHAT_NAME_BOUND);
+    return { kind: ACTION_KIND.RENAME_SESSION, identity: found.identity, name };
+  });
 
 function admittedIssue(
   fields: WireRecord,
@@ -801,7 +834,7 @@ function admittedIssue(
   return issueFrom(fields, context.issues);
 }
 
-const admitIssueState: Admitter<typeof ACTION_KIND.ISSUE_STATE> = (fields, context) => {
+const admitIssueState: Decider<typeof ACTION_KIND.ISSUE_STATE> = (fields, context) => {
   const found = admittedIssue(fields, context);
   if ("status" in found) return found;
   const state = textArgument(fields, "state");
@@ -818,7 +851,7 @@ const admitIssueState: Admitter<typeof ACTION_KIND.ISSUE_STATE> = (fields, conte
   return { kind: ACTION_KIND.ISSUE_STATE, identity: found.identity, transition };
 };
 
-const admitIssueComment: Admitter<typeof ACTION_KIND.ISSUE_COMMENT> = (fields, context) => {
+const admitIssueComment: Decider<typeof ACTION_KIND.ISSUE_COMMENT> = (fields, context) => {
   const found = admittedIssue(fields, context);
   if ("status" in found) return found;
   if (!found.issue.canComment) return refuse(ACTION_REFUSAL.NO_COMMENTS);
@@ -827,7 +860,7 @@ const admitIssueComment: Admitter<typeof ACTION_KIND.ISSUE_COMMENT> = (fields, c
   return { kind: ACTION_KIND.ISSUE_COMMENT, identity: found.identity, body };
 };
 
-const admitSetting: Admitter<typeof ACTION_KIND.SETTING> = (fields, context) => {
+const admitSetting: Decider<typeof ACTION_KIND.SETTING> = (fields, context) => {
   const guide = context.guide ?? EMPTY_APP_GUIDE;
   const setting = appGuideSetting(guide, textArgument(fields, "setting_id"));
   if (!setting) return refuse(ACTION_REFUSAL.NO_SETTING);
@@ -859,41 +892,42 @@ const admitSetting: Admitter<typeof ACTION_KIND.SETTING> = (fields, context) => 
   return { kind: ACTION_KIND.SETTING, setting, value, effort };
 };
 
-const admitPanel: Admitter<typeof ACTION_KIND.PANEL> = async (fields, _context, reads) => {
-  const sessions = await reads.sessions();
-  if (!sessions) return refuse(ACTION_REFUSAL.TURN_OVER);
-  const askedTab = fields.tab ?? undefined;
-  const tab = askedTab === undefined ? APP_PANEL_TAB.SESSIONS : PANEL_TAB.parse(askedTab);
-  if (tab === undefined) return refuse(ACTION_REFUSAL.NO_TAB);
-  const sortWord = textArgument(fields, "sort");
-  const sort = sortWord === undefined ? undefined : PANEL_SORT.parse(sortWord);
-  if (sortWord !== undefined && sort === undefined) return refuse(ACTION_REFUSAL.NO_SORT);
-  // A search is bounded by the hand's own control: the magnifier is only
-  // offered beside a list with more than one session, and a spoken ask reaches
-  // no further than it. The words themselves are not validated against the
-  // rows the way a filter is — a query is read against the lines as the
-  // surface words them, which only the renderer knows, and a search matching
-  // nothing is the list's own honest answer rather than a stale narrowing to
-  // refuse.
-  const query = textArgument(fields, "query");
-  if (query !== undefined && sessions.length < 2) return refuse(ACTION_REFUSAL.NO_SEARCH);
-  const asked = PANEL_FILTERS.read(fields.filters);
-  if (!asked.ok) return refuse(ACTION_REFUSAL.FILTERS_SHAPE);
-  const action: { kind: typeof ACTION_KIND.PANEL } & ActionPayloads[typeof ACTION_KIND.PANEL] = {
-    kind: ACTION_KIND.PANEL,
-    tab,
-  };
-  if (asked.value !== undefined) {
-    const outcome = admittedFilters(asked.value, sessions);
-    if ("status" in outcome) return outcome;
-    action.filters = outcome.filters;
-  }
-  if (sort !== undefined) action.sort = sort;
-  if (query !== undefined) action.query = query;
-  return action;
-};
+const admitPanel: Admitter<typeof ACTION_KIND.PANEL> = (fields, _context, reads) =>
+  Effect.gen(function* () {
+    const sessions = yield* reads.sessions;
+    if (!sessions) return refuse(ACTION_REFUSAL.TURN_OVER);
+    const askedTab = fields.tab ?? undefined;
+    const tab = askedTab === undefined ? APP_PANEL_TAB.SESSIONS : PANEL_TAB.parse(askedTab);
+    if (tab === undefined) return refuse(ACTION_REFUSAL.NO_TAB);
+    const sortWord = textArgument(fields, "sort");
+    const sort = sortWord === undefined ? undefined : PANEL_SORT.parse(sortWord);
+    if (sortWord !== undefined && sort === undefined) return refuse(ACTION_REFUSAL.NO_SORT);
+    // A search is bounded by the hand's own control: the magnifier is only
+    // offered beside a list with more than one session, and a spoken ask reaches
+    // no further than it. The words themselves are not validated against the
+    // rows the way a filter is — a query is read against the lines as the
+    // surface words them, which only the renderer knows, and a search matching
+    // nothing is the list's own honest answer rather than a stale narrowing to
+    // refuse.
+    const query = textArgument(fields, "query");
+    if (query !== undefined && sessions.length < 2) return refuse(ACTION_REFUSAL.NO_SEARCH);
+    const asked = PANEL_FILTERS.read(fields.filters);
+    if (!asked.ok) return refuse(ACTION_REFUSAL.FILTERS_SHAPE);
+    const action: { kind: typeof ACTION_KIND.PANEL } & ActionPayloads[typeof ACTION_KIND.PANEL] = {
+      kind: ACTION_KIND.PANEL,
+      tab,
+    };
+    if (asked.value !== undefined) {
+      const outcome = admittedFilters(asked.value, sessions);
+      if ("status" in outcome) return outcome;
+      action.filters = outcome.filters;
+    }
+    if (sort !== undefined) action.sort = sort;
+    if (query !== undefined) action.query = query;
+    return action;
+  });
 
-const admitFeedback: Admitter<typeof ACTION_KIND.FEEDBACK> = (fields) => {
+const admitFeedback: Decider<typeof ACTION_KIND.FEEDBACK> = (fields) => {
   const composer = FEEDBACK_KIND.parse(fields.kind);
   if (composer === undefined) return refuse(ACTION_REFUSAL.NO_COMPOSER);
   // The draft is the developer's ask restated in their words, not a document,
@@ -910,7 +944,7 @@ const admitFeedback: Admitter<typeof ACTION_KIND.FEEDBACK> = (fields) => {
   return action;
 };
 
-const admitUpdate: Admitter<typeof ACTION_KIND.UPDATE> = (fields, context) => {
+const admitUpdate: Decider<typeof ACTION_KIND.UPDATE> = (fields, context) => {
   // The guide's update entry is the roster here: a run that reported nothing
   // about updates — a fixture, a pure caller — advertises no action to run.
   const update = (context.guide ?? EMPTY_APP_GUIDE).update;
@@ -925,7 +959,7 @@ const admitUpdate: Admitter<typeof ACTION_KIND.UPDATE> = (fields, context) => {
   return { kind: ACTION_KIND.UPDATE, action };
 };
 
-const admitRemember: Admitter<typeof ACTION_KIND.REMEMBER> = (fields, context) => {
+const admitRemember: Decider<typeof ACTION_KIND.REMEMBER> = (fields, context) => {
   const facts = context.rememberedFacts ?? [];
   const words = rememberedFactText(fields.words);
   if (!words) return refuse(ACTION_REFUSAL.MEMORY_BOUND);
@@ -940,7 +974,7 @@ const admitRemember: Admitter<typeof ACTION_KIND.REMEMBER> = (fields, context) =
   return { kind: ACTION_KIND.REMEMBER, words, ...(replaces ? { replaces } : undefined) };
 };
 
-const admitForget: Admitter<typeof ACTION_KIND.FORGET> = (fields, context) => {
+const admitForget: Decider<typeof ACTION_KIND.FORGET> = (fields, context) => {
   const id = textArgument(fields, "id");
   if (!id || !holdsRememberedFact(context.rememberedFacts ?? [], id)) {
     return refuse(ACTION_REFUSAL.NO_SUCH_FACT);
@@ -956,35 +990,62 @@ const ADMITTERS = {
   [ACTION_KIND.ADD_AGENT]: admitAddAgent,
   [ACTION_KIND.RENAME_WORKSPACE]: admitRenameWorkspace,
   [ACTION_KIND.RENAME_SESSION]: admitRenameSession,
-  [ACTION_KIND.ISSUE_STATE]: admitIssueState,
-  [ACTION_KIND.ISSUE_COMMENT]: admitIssueComment,
-  [ACTION_KIND.SETTING]: admitSetting,
+  [ACTION_KIND.ISSUE_STATE]: decidedAtOnce(admitIssueState),
+  [ACTION_KIND.ISSUE_COMMENT]: decidedAtOnce(admitIssueComment),
+  [ACTION_KIND.SETTING]: decidedAtOnce(admitSetting),
   [ACTION_KIND.PANEL]: admitPanel,
-  [ACTION_KIND.FEEDBACK]: admitFeedback,
-  [ACTION_KIND.UPDATE]: admitUpdate,
-  [ACTION_KIND.REMEMBER]: admitRemember,
-  [ACTION_KIND.FORGET]: admitForget,
+  [ACTION_KIND.FEEDBACK]: decidedAtOnce(admitFeedback),
+  [ACTION_KIND.UPDATE]: decidedAtOnce(admitUpdate),
+  [ACTION_KIND.REMEMBER]: decidedAtOnce(admitRemember),
+  [ACTION_KIND.FORGET]: decidedAtOnce(admitForget),
 } as const satisfies { [K in ActionKind]: Admitter<K> };
 
+const turnOver = Effect.fail(new AdmitRefusal({ reason: ACTION_REFUSAL.TURN_OVER }));
+
 /**
- * The one function that mints a {@link ValidatedAction}. Everything a performer
- * or an adapter needs to have been checked is checked here, once, and the type
- * it answers with is how every path is held to having run it.
+ * The one gauntlet that mints a {@link ValidatedAction}, as an Effect that
+ * fails with the refusal. Everything a performer or an adapter needs to have
+ * been checked is checked here, once, and the type it succeeds with is how
+ * every path is held to having run it. A roster read that fails is a defect,
+ * not a refusal: the caller that ran the effect sees the read's own failure.
+ */
+export function admitEffect<Kind extends ActionKind>(
+  request: ActionRequest<Kind>,
+  context: AdmitContext,
+): Effect.Effect<ValidatedAction<Kind>, AdmitRefusal> {
+  return Effect.gen(function* () {
+    if (context.guard?.isRevoked()) return yield* turnOver;
+    // SAFETY: the table is keyed by the same union `request.kind` ranges over, so
+    // the entry selected is the admitter written for this request's own kind.
+    const admitter = ADMITTERS[request.kind] as Admitter<Kind>;
+    const admitted = yield* admitter(request.fields, context, yield* admittedReads(context));
+    if ("status" in admitted)
+      return yield* Effect.fail(new AdmitRefusal({ reason: admitted.reason }));
+    // Asked once more after every read admission made, so an action whose turn
+    // ended while the roster was refreshing refuses rather than being minted.
+    if (context.guard?.isRevoked()) return yield* turnOver;
+    // SAFETY: the brand is nominal and this is its one producer in the
+    // repository; the payload stands exactly as the admitter built it.
+    return { ...admitted, origin: context.origin } as ValidatedAction<Kind>;
+  });
+}
+
+/**
+ * {@link admitEffect} answered as the Promise every caller still holds: the
+ * refusal comes back as the {@link Refusal} the action journal records, and a
+ * roster read that failed rejects with its own failure, as it always has. This
+ * door is the strangler shim that runs the effect where no runtime edge does
+ * yet; callers move onto `admitEffect` as their own runs become Effects
+ * (P5-14's turn runner, P7's composers), and the door goes with the `Settled`
+ * Promise signatures in P12-02.
  */
 export async function admit<Kind extends ActionKind>(
   request: ActionRequest<Kind>,
   context: AdmitContext,
 ): Promise<ValidatedAction<Kind> | Refusal> {
-  if (context.guard?.isRevoked()) return refuse(ACTION_REFUSAL.TURN_OVER);
-  // SAFETY: the table is keyed by the same union `request.kind` ranges over, so
-  // the entry selected is the admitter written for this request's own kind.
-  const admitter = ADMITTERS[request.kind] as Admitter<Kind>;
-  const admitted = await admitter(request.fields, context, admittedReads(context));
-  if ("status" in admitted) return admitted;
-  // Asked once more after every await admission made, so an action whose turn
-  // ended while the roster was refreshing refuses rather than being minted.
-  if (context.guard?.isRevoked()) return refuse(ACTION_REFUSAL.TURN_OVER);
-  // SAFETY: the brand is nominal and this is its one producer in the
-  // repository; the payload stands exactly as the admitter built it.
-  return { ...admitted, origin: context.origin } as ValidatedAction<Kind>;
+  const exit = await Effect.runPromiseExit(admitEffect(request, context));
+  if (Exit.isSuccess(exit)) return exit.value;
+  const refusal = Cause.failureOption(exit.cause);
+  if (Option.isSome(refusal)) return refuse(refusal.value.reason);
+  throw Cause.squash(exit.cause);
 }

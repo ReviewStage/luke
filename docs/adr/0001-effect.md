@@ -150,6 +150,14 @@ awaiting it, dropping it first so a pass the interruption has not reached yet
 finds the loop disarmed; P7-10 deletes both once every composer that arms a
 loop is a `Layer` and the scope is the host's own.
 
+`admit()` in `packages/actions/src/admit.ts` is the fourth: the gauntlet is
+`admitEffect()`, an Effect failing with an `AdmitRefusal`, and `admit()` runs it
+to the `Promise<ValidatedAction | Refusal>` its callers still hold, answering
+the refusal as the `Refusal` the action journal records and rethrowing a roster
+read's own failure. It goes in P12-02 with the `Settled` Promise signatures,
+once P5-14's turn runner and P7's composers call `admitEffect()` in runs of
+their own.
+
 ## Strangler shims and their deletions
 
 Old and new coexist behind a named shim rather than in a long-lived branch, so
@@ -167,6 +175,7 @@ design decision stated as such:
 | `cloudFetchFromHttpClient` | P1-07 | P12-04 |
 | `timersFromRuntime` | P2-01 | P12-03 |
 | `ObservationLoop`'s `start`/`stop` over its own `Scope` | P2-04 | P7-10 |
+| `admit()` Promise door over `admitEffect()` | P4-01 | P12-02 |
 | `Settled` Promise signatures | P5-01 | P12-02 |
 | `Layer.succeed(oldObject)` / `createHostKernel(options)` | P7-01 | P12-05 |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |
