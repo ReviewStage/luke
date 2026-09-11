@@ -45,6 +45,14 @@ import { STORE_WRITE_REFUSAL, type StoreWriter } from "./writer.js";
  * observation tick; no transition a device or the service asks for writes
  * any of the three.
  *
+ * A push is the other way an offer ends without a claim: the service sends
+ * the words to a phone when no device is placed to say them, and marks the
+ * offer pushed before it sends, so a second tick finds it settled and the
+ * push happens at most once. A claimed offer is never pushed, whatever
+ * became of the claim: the claim is exclusive and is never handed on, so a
+ * push racing a claim lands only if it reached the lock first, and the
+ * developer never hears one briefing from two devices.
+ *
  * Every transition is one event through the store writer, numbered by the
  * conversation's own event sequence and appended under the conversation's
  * row lock, and how an offer stands is folded from the speech events on its
@@ -61,7 +69,12 @@ import { STORE_WRITE_REFUSAL, type StoreWriter } from "./writer.js";
  * the partial unique index (`already_claimed`), and a transition losing to a
  * settled one is the exclusion check under the lock (`superseded`, answered
  * here as the refusal the offer's new standing names). Neither covers the
- * other.
+ * other. And the two ends a claim may meet are not symmetric: the sweep may
+ * expire a claimed offer, because a device that claimed and vanished must
+ * not hold a briefing forever and expiry is cleanup, but nothing may push
+ * over a claim, because a push is a second delivery and the harm is the
+ * developer hearing the same briefing twice. Expire may follow a claim; push
+ * may not.
  *
  * The order is a rule, not a detail: claim first, speak only if the claim
  * succeeded, never the other way round. A speaker that says the words and
@@ -308,8 +321,12 @@ const SPOKEN: SpeechTransition = {
 
 const PUSHED: SpeechTransition = {
   kind: CONVERSATION_EVENT_KIND.SPEECH_PUSHED,
-  refusals: { [SPEECH_STATE.HELD]: SPEECH_REFUSAL.HELD, ...ENDED_REFUSALS },
-  unless: NOT_OPEN_KINDS,
+  refusals: {
+    [SPEECH_STATE.CLAIMED]: SPEECH_REFUSAL.ALREADY_CLAIMED,
+    [SPEECH_STATE.HELD]: SPEECH_REFUSAL.HELD,
+    ...ENDED_REFUSALS,
+  },
+  unless: [CONVERSATION_EVENT_KIND.SPEECH_CLAIMED, ...NOT_OPEN_KINDS],
 };
 
 interface Move {
@@ -462,10 +479,12 @@ export function markSpeechSpoken(
 }
 
 /**
- * The service pushed the briefing to a device instead: from an offer nobody
- * claimed, or from a claim that never became speech, while the offer is not
- * yet due and not held. The device pushed to is recorded where the caller
- * names one.
+ * The service is about to push the briefing to a device instead: from an
+ * offer nobody claimed, while it is not yet due and not held. The mark
+ * precedes the send, so it is the one authorization to push the way the
+ * claim is the one authorization to speak, and a claim standing on the
+ * offer, or landing between the read and the lock, refuses it. The device
+ * pushed to is recorded where the caller names one.
  */
 export function markSpeechPushed(
   store: SpeechStore,
