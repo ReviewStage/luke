@@ -22,6 +22,9 @@ cannot be filled from eve's stream. Details in `spike-findings.md`.
    desktop's remaining loop until G1 deletes it. C1 writes no compaction rows.
 3. **Turn origin.** Add `child_completion` to the wire `TURN_ORIGIN`; observation stays
    `roster_diff` (cloud-only has no hooks). The writer maps nothing else. One small PR.
+   **Done: LUKE-154, #998 (`58c92d3c`)** — the wire value set, the Swift `TurnOrigin` mirror in
+   `ConversationReads.swift` and `UIMessage.swift`, and the writer's
+   `BRAIN_TURN_ORIGIN.CHILD_COMPLETION` map. Nothing else was added to the set.
 4. **Reasoning to clients.** Strip `providerMetadata.openai` (the opaque item and item id) on
    every read route before F1 merges; devices receive the summary text only.
 5. **Step-start.** One follow-up writes `step-start` parts in the brain's message builder and
@@ -67,7 +70,7 @@ Conductor roster, `read_transcript` through the plugin, `admit()` inside a tool'
 | Turn policy | `queue` for every trigger; fold-in is not built; Stop is eve's cancel. eve's `steer` cancels the running turn and discards the in-flight step whole, which is a kill, not a fold-in. |
 | Drainer and lease | Not built. One eve session per brain conversation serializes it. B4 cancelled; `conversation_lease` dropped in G4. |
 | Compaction | **None on the hosted path.** eve compacts its own context; `messages` is the record, not the model's context; rotation seeds from the last N rows; the view draws no divider. The `compaction` metadata stays in the vocabulary for the desktop loop until G1. |
-| Context engine | A7's `convertToModelMessages` derivation narrows to the rotation seed and the view; eve owns a live turn's context. |
+| Context engine | A7's `convertToModelMessages` derivation narrows to the rotation seed and the desktop's own loop until G1; `packages/brain/src/ui-message-context.ts` is its only caller anywhere. eve owns a live turn's context. **The Conversation view converts nothing:** `selectConversationView` selects `UIMessage` rows and the read routes answer them as rows, so no read path on the service depends on that derivation. |
 | `turns.response_ids` | Optional — OpenAI response ids are not on eve's stream. |
 | The opaque reasoning item | Not on eve's stream; eve owns replay. Clients receive the summary only (D2d strips it at the route). |
 | `defaultTools` | **`false`, and this is a trust rule rather than a cost saving.** eve ships `bash`, `read_file`, `write_file`; CLAUDE.md makes the workspace tools the one place the brain writes a file at all. Asserted in a test. |
@@ -75,14 +78,15 @@ Conductor roster, `read_transcript` through the plugin, `admit()` inside a tool'
 | One session per conversation | Admission requires the recorded session; a start claims the record forward-only by compare-and-set on eve's sortable ids. |
 | Rotation | An eve session is one long Workflow run against Vercel's 25,000-event cap (replay slows past 2,000), so it rotates every couple of hundred turns, seeded from our `messages` rows. Our tables are the record; eve is not. |
 | `turns.model`, `reasoning_effort` | Set on `TURN_STARTED` by C1 from eve's resolved model. `prompt_hash` and `tool_set_hash` stay C4's. |
-| Writer caveats (S0 Q3) | `reasoning.completed` arrives **after** the step's `action.result` — order by `stepIndex`, not arrival; `message.completed` fires per interim text and is null for `<eve-empty-delivery/>`; cancelled tool parts settle on `turn.cancelled`; retried steps re-emit under new `meta.id`s, so dedupe by `turnId`/`stepIndex`/`sequence`. |
+| Writer caveats (S0 Q3) | `reasoning.completed` arrives **after** the step's `action.result` — order by `stepIndex`, not arrival; `message.completed` fires per interim text and is null for `<eve-empty-delivery/>`; cancelled tool parts settle on `turn.cancelled`; retried steps re-emit under new `meta.id`s, so an adapter must carry a **call id** and a **reasoning item id** through a retry unchanged — the writer dedupes on those and never reads an event's `sequence`. See the writer-identity entry below for what it actually keys on. |
 | Measured cost | ~0.3 s per **step** boundary (300 ms typical, 425 ms worst, against 30–50 ms local); ~1.1 s warm `POST` → `turn.started`; ~$0.0006 per turn from measured event counts. **Budget scheduling per step, not per turn.** Nothing near the 240 s deadline. |
 
 **Orchestrator decisions taken under this record, each because the design already assumed the
 property and only a structure could keep it true:** `unique (conversation_id, seq)` on messages
 and events (ordering); `unique (live_session_id)` on voice sessions (re-attach idempotence);
 the partial unique index making one standing main per account structural; `timestamptz` on every
-v2 instant; `tokens_before` optional so an uncounted compaction is absent rather than zero; and
+v2 instant (narrowed and then extended by the ruling below: `devices`' three instants become
+`timestamptz` too, in LUKE-160); `tokens_before` optional so an uncounted compaction is absent rather than zero; and
 `unknown` routed to `output-available` carrying the envelope so an unknown action is never drawn
 or read as a refusal.
 
@@ -241,3 +245,41 @@ user content: **the events read carries a rating's free-text note (up to 500 cha
 device of the account.** That is the developer's own words going to the developer's own devices,
 which is fine — but nobody should read "no parts" as "no developer text", least of all anyone
 later deciding what may be logged, cached, or handed to a third party.
+
+
+## 2026-09-11 — What the writer dedupes on, and what that asks of an eve adapter (orchestrator, from C2b's audit)
+
+C2b audited this file against main before starting and found the lane-C table's "Writer
+caveats" row naming identities the writer does not use. The row is corrected above; this is the
+record of what `apps/web/server/hosted/store/writer.ts` on main actually keys on, because C2b's
+adapter is written against it and C3's and C7's will be too.
+
+| Thing written | The identity it is told twice by |
+|---|---|
+| A tool part | the call id (`toolPartOf(row.parts, event.callId)`) |
+| A reasoning summary | the reasoning item's own id, compared against the parts already held |
+| A step boundary | the journal's own **count** of `step-start` parts — steps are counted, not named, so a step the journal already holds is a repeat and any later one appends exactly one boundary, whatever the stream dropped between |
+| A message | its `clientId`, which is the client's minted id and not a row id |
+| A turn | its own id |
+
+**`sequence` is not an identity here. The writer never reads it.** So the requirement an eve
+adapter carries is not "order by our numbering" but **stability**: a step eve retries and
+re-emits under a new `meta.id` must still present the same call id for the same tool call and
+the same item id for the same reasoning item, or the retry lands as a second part.
+
+**And a reasoning event whose item names no id is dropped whole** — `IGNORED`, not written —
+because nothing could tell its second delivery from a second item. An adapter that cannot lift a
+stable id for a reasoning item therefore silently journals no reasoning at all. That is a real
+hazard for C2b to test rather than assume.
+
+What bounds both hazards: **the turn's completed projection replaces the journal whole,
+boundaries and all, when the turn answers.** A duplicate or a dropped summary is therefore a
+defect in what the panel sees *while the turn runs* and not in the record it settles to. That is
+a smaller blast radius than the row implied, and it is not permission to skip the identities —
+a live turn is what a developer watches.
+
+**Also from the same audit, and needing no change:** item 3 above is done and now says so;
+the `devices` timestamps were already ruled on in the corrections entry and are LUKE-160, in
+flight. Everything else the audit checked held — `response_ids` nullable, `unique (conversation_id,
+seq)` on messages and events, `unique (live_session_id)` on voice sessions, the standing-main
+partial unique index, and `conversation_lease` with no writer.
