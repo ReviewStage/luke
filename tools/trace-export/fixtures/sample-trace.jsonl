@@ -1,0 +1,9 @@
+not json
+{"at":"2026-01-01T00:00:00.000Z","kind":"wire","direction":"server","event":{"type":"session.started","session":{"id":"sess_sample","model":"gpt-live-1-preview"}}}
+{"at":"2026-01-01T00:00:01.000Z","kind":"wire","direction":"server","event":{"type":"session.input_transcript.delta","delta":"Is the sample workspace ready?","start_ms":1000,"end_ms":2000}}
+{"at":"2026-01-01T00:00:02.000Z","kind":"wire","direction":"server","event":{"type":"session.delegation.created","offset_ms":2000,"delegation":{"id":"dlg_sample","target":"client"}}}
+{"at":"2026-01-01T00:00:03.000Z","kind":"unrecognized","direction":"server","event":{"type":"ignored.by.schema"}}
+{"at":"2026-01-01T00:00:04.000Z","kind":"wire","direction":"client","event":{"type":"session.commentary.append","event_id":"evt_sample","delegation_id":"dlg_sample","content":"The sample workspace is ready."}}
+{"at":"2026-01-01T00:00:05.000Z","kind":"wire","direction":"server","event":{"type":"session.usage.updated","usage":{"seconds":5}}}
+{"at":"2026-01-01T00:00:06.000Z","kind":"wire","direction":"server","event":{"type":"session.closed","reason":"close_requested","usage":{"seconds":6}}}
+{"at":"2026-01-01T00:00:07.000Z","kind":"brain","trigger":"ask","tools":[],"inputItemKinds":["message"],"inputTokens":128,"transcriptBytes":256,"toolCalls":[],"outputText":"The sample workspace is ready.","deliveries":[],"elapsedMs":42,"iterations":1}

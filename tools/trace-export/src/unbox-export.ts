@@ -16,7 +16,12 @@
  */
 
 import { hostedBrainToolCatalog } from "@sidecar/brain";
-import { TRACE_DIRECTION, TRACE_ENTRY_KIND, TRACE_LIVE_EVENT } from "@sidecar/devtrace/vocabulary";
+import {
+  TRACE_DIRECTION,
+  TRACE_ENTRY_KIND,
+  TRACE_LIVE_EVENT,
+  TraceEntryKindSchema,
+} from "@sidecar/devtrace/vocabulary";
 import {
   LIVE_DEFAULTS,
   TRANSCRIPT_SPEAKER,
@@ -35,6 +40,7 @@ import {
   wholeNumber,
   wireRecord,
 } from "@sidecar/wire";
+import { Schema } from "effect";
 
 export interface UnboxExportOptions {
   /** Names the trace in the viewer, defaulting to a fixed label. */
@@ -42,6 +48,9 @@ export interface UnboxExportOptions {
 }
 
 const DEFAULT_TRACE_NAME = "luke-agent-trace";
+
+/** Which lines carry a kind this reader recognizes at all; anything else costs only itself. */
+const readsTraceEntryKind = Schema.is(TraceEntryKindSchema);
 
 /** The exchange before any delegation has no id of its own; a segment that closes with the session is named for it. */
 const SESSION_GENERATION_NAME = "session";
@@ -414,6 +423,7 @@ export function unboxTraceFromLines(
     state.firstAt ??= at;
     const parsedAt = at !== undefined ? Date.parse(at) : Number.NaN;
     const atMs = Number.isFinite(parsedAt) ? parsedAt : undefined;
+    if (!readsTraceEntryKind(entry.kind)) continue;
     if (entry.kind === TRACE_ENTRY_KIND.WIRE) applyWireEntry(state, entry, atMs);
     // A brain-request entry is the raw JSONL's own record of one model call;
     // the turn entry already stands for it in the viewer.

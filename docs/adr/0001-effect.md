@@ -120,6 +120,10 @@ are the process's own edges, one runtime each:
 - `apps/web/server/db/migrate.ts`, the migration command, through
   `NodeRuntime.runMain`. A command's whole life is one Effect, so the run is
   the edge and nothing of it outlives the process.
+- `tools/trace-export/src/cli.ts`, on the same terms: reading the trace file
+  and writing the document are both `FileSystem` effects, so the command runs
+  them through `NodeRuntime.runMain` over the `NodeFileSystem` layer rather
+  than awaiting `node:fs/promises` calls of its own.
 - the two renderer roots, `apps/desktop/src/renderer/index.tsx` and
   `apps/desktop/src/renderer/voice/index.tsx`, one browser `ManagedRuntime`
   each — two roots because the panel is the one surface that records, and the

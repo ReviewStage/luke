@@ -1503,8 +1503,9 @@ migration runs.
   brand a cast can spell is a brand anything can enter.
 - **A runtime only at an edge.** The places that may run an Effect are the
   ADR's list and nothing else: desktop main, each web function module through
-  `apps/web/server/runtime.ts`, the web migration command through
-  `NodeRuntime.runMain`, and the two renderer roots. Everything between
+  `apps/web/server/runtime.ts`, the web migration command and the trace-export
+  CLI each through their own `NodeRuntime.runMain`, and the two renderer
+  roots. Everything between
   them returns an Effect and lets its caller decide when to run it. A runtime
   built where the work lives is a second runtime, and two runtimes are two
   copies of every service a `Context.Tag` was supposed to identify.

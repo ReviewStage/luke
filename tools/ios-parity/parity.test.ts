@@ -26,14 +26,14 @@ import {
   remoteRealtimeToolDefinitions,
 } from "@sidecar/actions";
 import {
-  PRODUCT_ACCOUNT_ACTION,
-  PRODUCT_EVENT,
   PRODUCT_EVENT_BATCH_LIMIT,
-  PRODUCT_EVENT_CLIENT,
   PRODUCT_EVENT_CLIENT_HEADER,
-  PRODUCT_RATED_MESSAGE_KIND,
-  PRODUCT_SESSION_ACTION,
-  PRODUCT_SETTING_VALUE,
+  ProductAccountActionSchema,
+  ProductEventClientSchema,
+  ProductEventNameSchema,
+  ProductRatedMessageKindSchema,
+  ProductSessionActionSchema,
+  ProductSettingValueSchema,
 } from "@sidecar/analytics";
 import { APP_SETTING_ID } from "@sidecar/guide";
 import {
@@ -68,6 +68,7 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "@sidecar/wire";
+import { Schema, SchemaAST } from "effect";
 import { test } from "vitest";
 
 import {
@@ -115,6 +116,38 @@ function assertSubset(
   const known = new Set(typeScriptValues);
   assert.deepEqual(
     swiftValues.filter((value) => !known.has(value)),
+    [],
+    label,
+  );
+}
+
+const readsStringLiteral = Schema.is(Schema.String);
+
+/** Every literal an Effect Schema declares, in the order it declares them. */
+function schemaLiterals<A extends string>(schema: Schema.Schema<A>): readonly string[] {
+  const nodes = SchemaAST.isUnion(schema.ast) ? schema.ast.types : [schema.ast];
+  return nodes.flatMap((node) =>
+    SchemaAST.isLiteral(node) && readsStringLiteral(node.literal) ? [node.literal] : [],
+  );
+}
+
+/** The analytics vocabulary's own comparisons run through its Effect Schema declarations. */
+function assertSameSchemaSet<A extends string>(
+  swiftValues: readonly string[],
+  schema: Schema.Schema<A>,
+  label: string,
+): void {
+  assertSameValues(swiftValues, schemaLiterals(schema), label);
+}
+
+function assertSchemaSubset<A extends string>(
+  swiftValues: readonly string[],
+  schema: Schema.Schema<A>,
+  label: string,
+): void {
+  const isMember = Schema.is(schema);
+  assert.deepEqual(
+    swiftValues.filter((value) => !isMember(value)),
     [],
     label,
   );
@@ -258,33 +291,33 @@ test("RealtimeVoiceSpeed multiplies by what REALTIME_VOICE_SPEED holds", () => {
 });
 
 test("every ProductEvent name is a PRODUCT_EVENT", () => {
-  assertSubset(
+  assertSchemaSubset(
     swiftSwitchLiterals(swift(`${KIT}/ProductEvents.swift`), "ProductEvent", "name"),
-    Object.values(PRODUCT_EVENT),
+    ProductEventNameSchema,
     "an event name outside the allowlist is refused by the service as a whole batch",
   );
 });
 
 test("every ProductEventClient is a PRODUCT_EVENT_CLIENT", () => {
-  assertSubset(
+  assertSchemaSubset(
     swiftEnumRawValues(swift(`${KIT}/ProductEvents.swift`), "ProductEventClient"),
-    Object.values(PRODUCT_EVENT_CLIENT),
+    ProductEventClientSchema,
     "a client header value outside the set reads as the desktop's",
   );
 });
 
 test("ProductAccountAction is PRODUCT_ACCOUNT_ACTION", () => {
-  assertSameSet(
+  assertSameSchemaSet(
     swiftEnumRawValues(swift(`${KIT}/ProductEvents.swift`), "ProductAccountAction"),
-    PRODUCT_ACCOUNT_ACTION,
+    ProductAccountActionSchema,
     "an account act outside the allowlist is refused with its batch",
   );
 });
 
 test("ProductSessionAction is PRODUCT_SESSION_ACTION", () => {
-  assertSameSet(
+  assertSameSchemaSet(
     swiftEnumRawValues(swift(`${KIT}/ProductEvents.swift`), "ProductSessionAction"),
-    PRODUCT_SESSION_ACTION,
+    ProductSessionActionSchema,
     "a session action outside the allowlist is refused with its batch",
   );
 });
@@ -298,9 +331,9 @@ test("every ProductSettingID is an APP_SETTING_ID", () => {
 });
 
 test("ProductSettingValue is PRODUCT_SETTING_VALUE", () => {
-  assertSameSet(
+  assertSameSchemaSet(
     swiftEnumRawValues(swift(`${KIT}/ProductEvents.swift`), "ProductSettingValue"),
-    PRODUCT_SETTING_VALUE,
+    ProductSettingValueSchema,
     "a setting-change shape outside the allowlist is refused with its batch",
   );
 });
@@ -470,9 +503,9 @@ test("MessageRating is MESSAGE_RATING", () => {
 });
 
 test("ProductRatedMessageKind is PRODUCT_RATED_MESSAGE_KIND", () => {
-  assertSameSet(
+  assertSameSchemaSet(
     swiftEnumRawValues(swift(`${KIT}/ProductEvents.swift`), "ProductRatedMessageKind"),
-    PRODUCT_RATED_MESSAGE_KIND,
+    ProductRatedMessageKindSchema,
     "a message kind outside the allowlist is refused with its batch",
   );
 });

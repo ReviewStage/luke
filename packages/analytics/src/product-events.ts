@@ -15,6 +15,7 @@ import {
   type MessageRating,
   type UnparsedWireValue,
 } from "@sidecar/wire";
+import { Schema } from "effect";
 import { parseReleaseVersion } from "./release-version.js";
 
 /**
@@ -68,6 +69,8 @@ export const PRODUCT_EVENT = {
 } as const;
 
 export type ProductEventName = (typeof PRODUCT_EVENT)[keyof typeof PRODUCT_EVENT];
+
+export const ProductEventNameSchema = Schema.Literal(...Object.values(PRODUCT_EVENT));
 
 /**
  * The events the renderer may ask the main process to count, and the whole of
@@ -158,6 +161,8 @@ export const PRODUCT_SESSION_ACTION = {
 export type ProductSessionAction =
   (typeof PRODUCT_SESSION_ACTION)[keyof typeof PRODUCT_SESSION_ACTION];
 
+export const ProductSessionActionSchema = Schema.Literal(...Object.values(PRODUCT_SESSION_ACTION));
+
 /**
  * Which kind of fault an observation pass reported, never the fault itself:
  * the error's message stays in the local log, because the words of a failure
@@ -193,6 +198,8 @@ export const PRODUCT_ACCOUNT_ACTION = {
 
 export type ProductAccountAction =
   (typeof PRODUCT_ACCOUNT_ACTION)[keyof typeof PRODUCT_ACCOUNT_ACTION];
+
+export const ProductAccountActionSchema = Schema.Literal(...Object.values(PRODUCT_ACCOUNT_ACTION));
 
 /** How far a Superset connection got, never the code or the organization. */
 export const PRODUCT_SUPERSET_ACTION = {
@@ -334,6 +341,8 @@ export const PRODUCT_SETTING_VALUE = {
 export type ProductSettingValue =
   (typeof PRODUCT_SETTING_VALUE)[keyof typeof PRODUCT_SETTING_VALUE];
 
+export const ProductSettingValueSchema = Schema.Literal(...Object.values(PRODUCT_SETTING_VALUE));
+
 /**
  * Which kind of Luke's messages a rating landed on, never the message: a
  * reply to the developer, or a briefing he announced on his own. The verdict
@@ -348,6 +357,10 @@ export const PRODUCT_RATED_MESSAGE_KIND = {
 
 export type ProductRatedMessageKind =
   (typeof PRODUCT_RATED_MESSAGE_KIND)[keyof typeof PRODUCT_RATED_MESSAGE_KIND];
+
+export const ProductRatedMessageKindSchema = Schema.Literal(
+  ...Object.values(PRODUCT_RATED_MESSAGE_KIND),
+);
 
 /**
  * How long after the account's first sign-in the first announcement was
@@ -586,6 +599,8 @@ export const PRODUCT_EVENT_CLIENT = {
 
 export type ProductEventClient = (typeof PRODUCT_EVENT_CLIENT)[keyof typeof PRODUCT_EVENT_CLIENT];
 
+export const ProductEventClientSchema = Schema.Literal(...Object.values(PRODUCT_EVENT_CLIENT));
+
 /** The `$lib` tag the service stamps on each client's batches. */
 export const PRODUCT_EVENT_CLIENT_LIB = {
   [PRODUCT_EVENT_CLIENT.DESKTOP]: "luke-desktop",
@@ -593,15 +608,11 @@ export const PRODUCT_EVENT_CLIENT_LIB = {
   [PRODUCT_EVENT_CLIENT.WATCHOS]: "luke-watchos",
 } as const satisfies Record<ProductEventClient, string>;
 
-const PRODUCT_EVENT_CLIENTS: ReadonlySet<string> = new Set(Object.values(PRODUCT_EVENT_CLIENT));
+const readsProductEventClient = Schema.is(ProductEventClientSchema);
 
 /** Reads the client a batch names, or the desktop for anything else. */
 export function productEventClientFromWire(value: UnparsedWireValue): ProductEventClient {
-  if (!isWireString(value) || !PRODUCT_EVENT_CLIENTS.has(value)) {
-    return PRODUCT_EVENT_CLIENT.DESKTOP;
-  }
-  // SAFETY: the value is a member of the client set declared above.
-  return value as ProductEventClient;
+  return readsProductEventClient(value) ? value : PRODUCT_EVENT_CLIENT.DESKTOP;
 }
 
 type PropertyReader = {
@@ -649,10 +660,10 @@ const PRODUCT_EVENT_PROPERTY_READER: PropertyReader = {
   [PRODUCT_EVENT_PROPERTY.IMAGE_COUNT]: bucketReader,
 };
 
-const PRODUCT_EVENT_NAMES: ReadonlySet<string> = new Set(Object.values(PRODUCT_EVENT));
+const readsProductEventName = Schema.is(ProductEventNameSchema);
 
 function isProductEventName(value: UnparsedWireValue): value is ProductEventName {
-  return isWireString(value) && PRODUCT_EVENT_NAMES.has(value);
+  return readsProductEventName(value);
 }
 
 /**

@@ -12,6 +12,7 @@
 
 import { LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT } from "@sidecar/live";
 import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import { Schema } from "effect";
 
 /**
  * Which kind of record one line of the trace carries. It is vocabulary rather
@@ -25,6 +26,9 @@ export const TRACE_ENTRY_KIND = {
   SPEECH: "speech",
 } as const;
 
+/** Which lines a reader recognizes at all; anything else costs only itself. */
+export const TraceEntryKindSchema = Schema.Literal(...Object.values(TRACE_ENTRY_KIND));
+
 export const TRACE_DIRECTION = {
   CLIENT: "client",
   SERVER: "server",
@@ -32,7 +36,7 @@ export const TRACE_DIRECTION = {
 
 export type TraceDirection = (typeof TRACE_DIRECTION)[keyof typeof TRACE_DIRECTION];
 
-const TRACE_DIRECTIONS: readonly string[] = Object.values(TRACE_DIRECTION);
+const TraceDirectionSchema = Schema.Literal(...Object.values(TRACE_DIRECTION));
 
 /** One live event as the tap saw it cross the data channel. */
 export interface AgentWireTrace {
@@ -40,8 +44,10 @@ export interface AgentWireTrace {
   readonly event: WireRecord;
 }
 
+const readsTraceDirection = Schema.is(TraceDirectionSchema);
+
 function isTraceDirection(value: UnparsedWireValue): value is TraceDirection {
-  return isWireString(value) && TRACE_DIRECTIONS.includes(value);
+  return readsTraceDirection(value);
 }
 
 export function isAgentWireTrace(value: UnparsedWireValue): value is AgentWireTrace & WireRecord {
