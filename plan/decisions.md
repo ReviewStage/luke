@@ -2003,3 +2003,38 @@ matters for a conflict resolution — **their job in `writer.ts` and `speech.ts`
 own change on top, not to re-establish the invariants**, which are on main. **If a resolution seems
 to want one added back or dropped, stop and report**: that is the signal something was lost that
 this check did not catch.
+
+
+## 2026-09-11 — A requirement withdrawn: one lock at the database is not two transaction scopes (orchestrator, corrected by C2b-2b)
+
+**I relayed C8's "take one `HostedStoreContext`" as a requirement on C2b-2b, with my own reason
+attached: two runners over one database is two connection paths and two transaction scopes over the
+same rows. C2b read main and narrowed it, and it is right — so the requirement is withdrawn for
+that module.**
+
+**Two corrections, both from the tree:**
+
+- **`standingMain`'s drizzle transaction and Clear's `@effect/sql` transaction take the same
+  user-row lock AT THE DATABASE.** One lock, two clients, **still serialised** — and the Clear-race
+  test passing on the rebased branch is the evidence rather than the argument. My hazard is real for
+  **read-your-own-write visibility** and not for a row lock. **I was reasoning about clients; the
+  lock is not in the client.**
+- **`acceptAsk` never writes through `db` at all.** Its writes go through the injected `AskRecord`,
+  so there is no read-after-write across two clients inside one ask: admit reads, the record writes,
+  eve is dispatched. So it keeps `db` for `conversationOwnedBy`, `recordedRuntimeSession` and
+  `standingMain`, takes **no `run`**, and `askStanding` keeps `db.select`.
+
+**And the structural decision inside it, which is better than the shape I asked for: `run` enters 2b
+exactly once, in new code, in the new idiom.** The `AskRecord` implementation over the `asks` table
+becomes **its own module under `store/` beside `ratings` and `soft-delete`**, written on `run` the way
+`soft-delete.ts` and the writers now are, composed at the route from the web runtime. **So the one
+place 2b reaches the new table reaches it the way the store now does, and 2b adds no legacy-idiom
+module to a store mid-migration.**
+
+Both bodies will say which function takes which and why, including the lock sentence — because a
+reviewer who has read #1104 will see a drizzle transaction beside an `@effect/sql` one and raise
+exactly the objection I raised.
+
+**Third time today a worker has answered a question from main rather than from a summary of main,
+and the third time the answer was better than the summary.** The standing instruction to verify
+rather than take is what keeps a wrong requirement of mine from becoming a wrong line of code.
