@@ -96,7 +96,19 @@ by a stale hold restated from memory. The brain composer is an effect over
 the kernel's own tag, and what it reads out of the build is the runtime it is
 being built on: the store's asks and every run of a conversation's tool loop
 are fibers of that one runtime, never of a default one built where the work
-lives. The conversation composer is the
+lives. The calendars composer holds three
+observation-driven timers of its own — the held-notice release, the Apple
+access poll, and the meeting-boundary wake — each forked into one `Scope` this
+composer makes at `startObservation` and closes at `stopObservation`, so a
+sign-out's stop ends all three at once; the first two are fixed `Schedule`s on
+that scope, exactly as the devices composer's poll is, and the third is a
+one-shot fiber the composer re-arms itself, because its delay is recomputed
+from the meetings every observation pass just read rather than held fixed.
+Both the calendars and issues composers carry the runtime the layer they were
+built under is running on into the classes that still answer a promise —
+`GoogleCalendarReader`, `googleCalendarSignIn`, `LinearCredentials`'s renewal,
+and `linearSignIn` — so each runs its request or its consent trip there
+instead of on the ambient default runtime. The conversation composer is the
 Conversation as the service holds it: on its own five-second loop it asks the
 change signal where each resource stands, reads only what moved behind the
 cursors this device holds, folds the pages into one picture
@@ -124,7 +136,7 @@ hands a held briefing back to the brain that decided it — so those edges are
 `link()`'s, listed once in the merge and held in `@sidecar/wire`'s `LateRef`
 where the concern is still built as a plain object, and in the kernel's own
 set-once `Deferred` (`lateService`) where it is built as an effect, as the
-account's is; either throws by name when read before `link()` has run, since
+account's and the calendars' both are; either throws by name when read before `link()` has run, since
 what holds the link is a callback the session manager and the Gateway
 handlers answer synchronously. The desktop's own
 composition closes its cycles the same way, which is why the holder lives in

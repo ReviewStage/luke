@@ -14,7 +14,7 @@ import {
 } from "@sidecar/credentials";
 import { isWireString, type UnparsedWireValue, WireValueSchema, wireRecord } from "@sidecar/wire";
 import { layerFromCloudFetch } from "@sidecar/wire/effect";
-import { Data, Duration, Effect } from "effect";
+import { Data, Duration, Effect, Runtime } from "effect";
 
 /**
  * The sign-in behind the Google Calendar row: Google's OAuth flow for an
@@ -167,6 +167,8 @@ export interface GoogleCalendarSignInOptions {
   /** Injectable so tests exercise the exchange without a network. */
   fetchImplementation?: typeof fetch;
   timeoutMs?: number;
+  /** The runtime the exchange effect is run on; `Runtime.defaultRuntime` for a caller that gave none. */
+  runtime?: Runtime.Runtime<never>;
 }
 
 /** Reads the tokens Google answered the exchange with, trusting no shape. */
@@ -232,19 +234,19 @@ function exchangeEffect(
  * why a run holding no secret is offered no sign-in at all.
  *
  * @deprecated On the `Effect.runPromise` allowlist in
- * `docs/adr/0001-effect.md`: every caller of the sign-in still holds a
- * promise, not a fiber — `googleCalendarSignIn`'s `exchange` and
- * `packages/host/src/compose-calendars.ts` both call this synchronously — so
- * the exchange effect is run to one here rather than on a runtime this
- * function owns. P7-06 moves the calendars composer onto the host's own
- * runtime, at which point this run goes with it.
+ * `docs/adr/0001-effect.md`: `googleCalendarSignIn`'s `exchange` callback
+ * still answers a promise, not a fiber, so the exchange effect is run to one
+ * on the runtime the caller handed in — the calendars composer's own kernel
+ * runtime in production, `Runtime.defaultRuntime` for a caller that gave
+ * none.
  */
 export function exchangeGoogleCode(
   config: GoogleCalendarSignInConfig,
   input: { code: string; redirectUri: string; codeVerifier: string },
   fetchImplementation: typeof fetch = fetch,
+  runtime: Runtime.Runtime<never> = Runtime.defaultRuntime,
 ): Promise<GoogleCalendarSignInOutcome> {
-  return Effect.runPromise(
+  return Runtime.runPromise(runtime)(
     Effect.provide(
       Effect.match(exchangeEffect(config, input), {
         onFailure: (error): GoogleCalendarSignInOutcome => ({
@@ -301,7 +303,8 @@ export function googleCalendarSignIn(
       authorization.searchParams.set("state", state);
       return authorization.toString();
     },
-    exchange: (input) => exchangeGoogleCode(config, input, options.fetchImplementation ?? fetch),
+    exchange: (input) =>
+      exchangeGoogleCode(config, input, options.fetchImplementation ?? fetch, options.runtime),
     openExternal: options.openExternal,
     timeoutMs: options.timeoutMs,
   });

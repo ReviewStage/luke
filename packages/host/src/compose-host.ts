@@ -155,9 +155,9 @@ export const hostAssemblyLayer: Layer.Layer<
     const settings = yield* composeSettings();
     const account = yield* composeAccount({ settings });
     const observationGate = () => runMode.observesProviders && account.capabilitiesActive();
-    const issues = composeIssues({ kernel, settings, observationGate });
+    const issues = yield* composeIssues({ settings, observationGate });
     const observation = yield* composeObservation({ settings, account, issues, observationGate });
-    const calendars = composeCalendars({ kernel, settings, observationGate });
+    const calendars = yield* composeCalendars({ settings, observationGate });
     const devices = yield* composeDevices({ account, calendars });
     const conversation = composeConversation({
       kernel,

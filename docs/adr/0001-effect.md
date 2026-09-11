@@ -325,6 +325,26 @@ effect of its own and is on no allowlist, but is the same shim wearing a
 smaller face, answering this file's own tests without touching the ref at
 all. P8-07 deletes all four once every caller reads `changes` directly.
 
+`deviceCadence`'s `start` and `stop` in `packages/host/src/compose-devices.ts`
+are on the allowlist: the poll's cadence is a `Schedule` on a fiber forked
+into a `Scope` these two make and close, on their own `Runtime.runSync`/
+`runFork`, because the devices composer that calls them at the account gate's
+own edges is still a pair of promises. The calendars composer's
+`startObservation` and `stopObservation` in
+`packages/host/src/compose-calendars.ts` are on the same allowlist, for the
+same reason: the held-notice release and the Apple access poll are
+`Schedule`s on fibers forked into one `Scope` `startObservation` makes, and
+the meeting-boundary wake is a one-shot fiber the composer re-arms itself on
+every observation pass into that same scope, but the composer that calls
+`startObservation`/`stopObservation` — `compose-host.ts`'s own
+`startAccountCapabilities`/`stopAccountCapabilities`, at the account gate's
+edges — is still a pair of promises, so the scope is made and closed by these
+two functions rather than built around them. `stopObservation` closes the
+scope, and interrupts the boundary wake's own fiber if one still stands,
+without awaiting either: what it has to guarantee is that nothing more fires,
+never that a fiber has already ended. P7-10 deletes both pairs once the
+host's own drain owns a scope these fibers can be forked into directly.
+
 `shutdownGateway` in `packages/gateway/src/shutdown.ts` is on the same
 allowlist: the coordinator's fixed quit order — admissions closed, the
 cancellation and the settling raced against one shared deadline, whatever a
@@ -443,10 +463,16 @@ Both go with `CloudFetch` and `layerFromCloudFetch` in P12-04.
 `packages/credentials/src/loopback-consent.ts` is another, and the only one
 whose scope holds a listening socket: the trip itself is `signInEffect()`,
 whose `Scope` binds the loopback server and closes it on a grant, on the
-deadline, and on an interruption alike, while the settings rows that press
-this hold a Promise, so the scope is opened and closed here rather than by a
-caller's own fiber. P7-06 deletes it once the composers that own these flows
-are Layers holding a scope of their own. `timedRequest` in
+deadline, and on an interruption alike. Two of its three callers moved off it
+in P7-06: the calendars and issues composers, both built as effects now, call
+`signInEffect()` directly through `Runtime.runPromise` on the runtime their
+own layer runs on and `Effect.scoped` in place of the door's own scope. The
+one caller left is `AccountSessionManager`'s own sign-in, in
+`packages/credentials/src/account/session-manager.ts` — P7-04's account
+composer, already merged and deliberately kept promise-based, since what it
+holds late is a `Deferred`-backed `link`, not `refreshOnce` — so the scope
+still opens and closes here for that one trip. `signIn` goes once that caller
+is an effect too. `timedRequest` in
 `packages/credentials/src/linear/oauth.ts` is beside its namesake in
 `account/client.ts` and on exactly the same terms: Linear's three OAuth
 calls — the code exchange, the refresh, and the revocation — each build a
@@ -456,24 +482,35 @@ to one in place. It goes with `CloudFetch` and `layerFromCloudFetch` in
 P12-04.
 
 `singleFlight`'s returned closure in `packages/credentials/src/single-flight.ts`
-is on the allowlist too, and the only one not shaped by `CloudFetch`: its two
-callers, `AccountSessionManager.refresh` and `LinearCredentials`'s own
-renewal, hold a Promise from a package this migration has not yet reached, so
-the join over the internal `Semaphore` and `Deferred` is run to a promise for
-them. P7-06 moves the Linear caller onto the host's own runtime. The account's
-does not go with P7-04: what holds `refreshOnce` there is the `AccountToken`
-a hosted client is handed and the composer's own `link`, both of which answer
-promises, so that caller runs the join as an Effect only once
-`AccountSessionManager.refresh` is one itself.
+is on the allowlist too, and the only one not shaped by `CloudFetch`; P7-06
+moved its one caller that could move. `LinearCredentials`'s renewal in
+`packages/credentials/src/linear/credentials.ts` now holds the join itself as
+`singleFlightEffect` — the same check-and-create over the internal
+`Semaphore` and `Deferred`, answered as an Effect rather than run to a promise
+inside the function — and runs it on the issues composer's own runtime
+through a `runtime` option, exactly as `DeviceRegistration`'s reads.
+`singleFlight` itself stays, as the promise-returning wrapper over
+`singleFlightEffect`, for `AccountSessionManager.refresh`'s own renewal: what
+holds `refreshOnce` there is the `AccountToken` a hosted client is handed and
+the account composer's own `link`, both of which answer promises, so that
+caller runs the join as an Effect only once `AccountSessionManager.refresh`
+is one itself.
 
 `GoogleCalendarReader`'s `#run` in `packages/calendar/src/reader.ts` and
-`exchangeGoogleCode` in `packages/calendar/src/oauth.ts` are on the same
-allowlist: `packages/host/src/compose-calendars.ts` still calls both
-synchronously, as promises, so each runs its request effect over the ambient
-`HttpClient` down to a promise where it is built rather than on a runtime it
-owns. P7-06 moves the calendars composer onto the host's own runtime, at
-which point both run there instead and each disappears with its
-`Effect.runPromise`.
+`exchangeGoogleCode` in `packages/calendar/src/oauth.ts` are on the allowlist
+too, reworked in P7-06 rather than deleted outright as this document once
+planned: `packages/host/src/compose-calendars.ts` is built as an effect now
+and hands both a `Runtime.Runtime<never>` — its own, obtained inside the
+`Effect.gen` as `Effect.runtime<never>()` — through a `runtime` option each
+reads exactly as `DeviceRegistration`'s does, so each runs its request effect
+there instead of on the ambient default runtime. Full deletion did not follow,
+because the premise this document stated for it was wrong on contact:
+`compose-calendars.ts`'s own `GatewayMethodTable` handlers stay promises
+regardless of how the composer itself is built — the Gateway is not
+Rpc-shaped until Phase 6's server work reaches this host — so a bridge from a
+promise-returning method to the reader's own request effect is still
+necessary, just onto a real runtime instead of a default one. Both go once
+the calendars composer's own methods answer effects rather than promises.
 
 `LiveVoiceOrchestrator`'s `beginTalk`, `endTalk`, and `stopSpeaking` in
 `packages/voice/src/orchestrator/live-voice-orchestrator.ts` are on the
@@ -754,10 +791,10 @@ design decision stated as such:
 | `tracedModelAdapter`'s traced `respond` | P6-05 | P7-08b |
 | `timedRequest` (`credentials/account/client.ts`) | P4-03 | P12-04 |
 | `LinearIssueTracker#post` | P4-03 | P12-04 |
-| `singleFlight`'s Promise-returning closure | P4-03 | P7-06, and the account's caller once `AccountSessionManager.refresh` answers an Effect |
-| `LoopbackConsent`'s `signIn` Promise door over `signInEffect` | P4-04 | P7-06 |
+| `singleFlight`'s Promise-returning closure, over `singleFlightEffect` | P4-03 | the account's caller once `AccountSessionManager.refresh` answers an Effect |
+| `LoopbackConsent`'s `signIn` Promise door over `signInEffect` | P4-04 | once `AccountSessionManager`'s sign-in is an effect |
 | `timedRequest` (`credentials/linear/oauth.ts`) | P4-04 | P12-04 |
-| `GoogleCalendarReader#run` / `exchangeGoogleCode`'s internal run | P4-05 | P7-06 |
+| `GoogleCalendarReader#run` / `exchangeGoogleCode`'s internal run, now over a handed-in `Runtime` | P4-05 | once the calendars composer's methods answer effects |
 | `LiveVoiceOrchestrator`'s `beginTalk`/`endTalk`/`stopSpeaking` over its own runtime | P6-07 | P9-03 — its one caller is the renderer's `use-voice-session.ts`, never a `packages/host` composer |
 | `ReattachingSocket`'s recovery fiber over its own runtime | P6-07 | P9-03, for the same reason |
 | `LiveSessionSourceTag`/`IntroductionSessionSourceTag` over their plain source objects | P6-08 | pending — every caller today (`compose-live.ts`'s `account.voiceCapabilities.liveSessions`, the renderer's orchestrator, the desktop main's introduction flow) reads its source as a getter whose answer changes over the run; a static `Layer.succeed` cannot stand in for that, so nothing adopts the tag yet |
@@ -783,6 +820,9 @@ design decision stated as such:
 | `mergeMethods`, the throwing fold over `foldMethods` | P7-02 | P12-05 |
 | `startConversationMaintenance`'s own `Scope` | P7-05 | P7-10 |
 | `AppStateStore`'s `snapshot`/`update`/`touch` over its own `SubscriptionRef`, and `subscribe` beside them | P8-02 | P8-07 |
+| `deviceCadence`'s `start`/`stop` over their own `Scope` | P7-09 | P7-10 |
+| `LinearCredentials`'s renewal, running `singleFlightEffect` over a handed-in `Runtime` | P7-06 | once `LinearCredentials` answers an Effect itself |
+| The calendars composer's `startObservation`/`stopObservation` over their own `Scope` | P7-06 | P7-10 |
 | `AgentSeamTag` / `agentSeamLayer(seam)` over the plain `AgentSeam` object | P5-07 | P7-08b |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |
 
