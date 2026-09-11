@@ -142,7 +142,34 @@ function viewSource(conversation: StandingConversation): ConversationViewSource 
 }
 
 function readConversation(conversation: StandingConversation): ConversationReadConversation {
-  return { id: conversation.id, ...viewSource(conversation) };
+  if (conversation.kind === CONVERSATION_KIND.MAIN) {
+    return {
+      id: conversation.id,
+      kind: CONVERSATION_VIEW_SOURCE.MAIN,
+      openedAt: conversation.openedAt.getTime(),
+    };
+  }
+  return {
+    id: conversation.id,
+    kind: CONVERSATION_VIEW_SOURCE.OBSERVED,
+    session: {
+      providerId: conversation.providerId,
+      providerSessionId: conversation.providerSessionId,
+    },
+  };
+}
+
+/**
+ * Where the view's window starts: the instant the standing main was opened.
+ * A Clear stamps the main and its descendants and opens a new main, but an
+ * observed conversation is the brain's own per-session context and is never
+ * stamped, so its rows from before the new main opened would otherwise keep
+ * crossing into a thread the developer just emptied. The window is a cut on
+ * what a read returns, not a rule of the view's selection, which stays pure.
+ */
+function viewWindowStart(standing: readonly StandingConversation[]): Date | undefined {
+  const main = standing.find((conversation) => conversation.kind === CONVERSATION_KIND.MAIN);
+  return main?.kind === CONVERSATION_KIND.MAIN ? main.openedAt : undefined;
 }
 
 /** The row a page could not read back under the registry, named so the answer can say which. */
@@ -190,7 +217,9 @@ interface SequenceRowReading<Row> {
  * preview the next poll answers again, bounded to the wire's few preview
  * rows per conversation, so a journal that stays open cannot hold every
  * later conversation's rows behind it and a page can never outgrow the bound
- * the wire declares for it.
+ * the wire declares for it. A read that answers nothing up to the head passes
+ * the head: every row up to it exists, so a read that cut them all is one
+ * whose window they fall outside of, for good.
  */
 
 /**
@@ -241,7 +270,8 @@ async function walkSequences<Row>(
       : fetched.slice(0, remaining);
     const passedRows = previewing ? unsettledAt : rows.length;
     const lastPassed = rows[passedRows - 1];
-    const position = lastPassed === undefined ? from : reading.seqOf(lastPassed);
+    const position =
+      lastPassed !== undefined ? reading.seqOf(lastPassed) : fetched.length === 0 ? head : from;
     next.set(conversation.id, position);
     remaining -= passedRows;
     // Rows behind an unsettled one cannot be passed until it settles, so they never say more stands.
@@ -314,6 +344,7 @@ export async function handleConversationMessages(options: ResourceReadOptions): 
   const { store } = options;
 
   const standing = await store.directory.standing(userId);
+  const windowStart = viewWindowStart(standing);
   let walk: SequenceWalk<StoredMessageRecord>;
   try {
     walk = await walkSequences(
@@ -321,9 +352,11 @@ export async function handleConversationMessages(options: ResourceReadOptions): 
       page,
       (conversation) => conversation.nextMessageSeq - 1,
       async (conversation, after, limit) => {
+        const since = conversation.kind === CONVERSATION_KIND.OBSERVED ? windowStart : undefined;
         const read = await store.messages.list(userId, conversation.id, CATALOG_TOOL_SET, {
           after,
           limit,
+          ...(since !== undefined ? { since } : undefined),
         });
         if (!read.ok)
           throw new UnreadableRowError({ conversationId: conversation.id, seq: read.seq });

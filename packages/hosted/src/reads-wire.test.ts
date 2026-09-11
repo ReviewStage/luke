@@ -175,6 +175,20 @@ test("the messages answer fixture reads as the view's groups, each message's too
       [OBSERVED, CONVERSATION_VIEW_SOURCE.OBSERVED],
     ],
   );
+  const [mainEntry] = answer.conversations;
+  assert.equal(
+    mainEntry?.kind === CONVERSATION_VIEW_SOURCE.MAIN && mainEntry.openedAt,
+    1757505000000,
+  );
+  const raw = await fixture(FIXTURE.MESSAGES);
+  assert.ok(isRecord(raw));
+  assert.equal(
+    conversationMessagesAnswerSchema.parse({
+      ...raw,
+      conversations: [{ id: MAIN, kind: CONVERSATION_VIEW_SOURCE.MAIN }],
+    }),
+    undefined,
+  );
   const [main, observed] = answer.groups;
   assert.ok(main && observed);
   assert.equal(main.source.kind, CONVERSATION_VIEW_SOURCE.MAIN);
