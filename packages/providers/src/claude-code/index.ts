@@ -1,5 +1,6 @@
 import type { SessionProviderPlugin } from "@sidecar/session";
-import { jsonlTranscriptReader } from "../shared/jsonl-transcript.js";
+import { Effect } from "effect";
+import { jsonlTranscriptReader, promiseTranscriptReads } from "../shared/jsonl-transcript.js";
 import type { SessionFileCandidate } from "../shared/local-files.js";
 import { observationPass } from "../shared/observation-pass.js";
 import { defaultClaudeHome, readClaudeHookEvent } from "./hooks.js";
@@ -38,34 +39,37 @@ export function claudeCodePlugin(options: ClaudeCodePluginOptions = {}): Session
     now: options.now,
     discover: () => discoverClaudeSessions(claudeHome),
     parse: parseClaudeSessionFile,
-    async observation({ candidate, parsed, now, activeSessionFreshnessMs }) {
-      const hookEventsDirectory = options.hookEventsDirectory?.();
-      const hookEvent = hookEventsDirectory
-        ? await readClaudeHookEvent(hookEventsDirectory, candidate.providerSessionId).catch(
-            () => undefined,
-          )
-        : undefined;
-      return claudeObservation({
-        candidate,
-        parsed,
-        now,
-        activeSessionFreshnessMs,
-        ...(hookEvent ? { hookEvent } : undefined),
-      });
-    },
+    observation: ({ candidate, parsed, now, activeSessionFreshnessMs }) =>
+      Effect.gen(function* () {
+        const hookEventsDirectory = options.hookEventsDirectory?.();
+        // A spool that cannot be read costs only the refinement: the tail
+        // already said everything the hook sharpens.
+        const hookEvent = hookEventsDirectory
+          ? yield* Effect.orElseSucceed(
+              Effect.tryPromise(() =>
+                readClaudeHookEvent(hookEventsDirectory, candidate.providerSessionId),
+              ),
+              () => undefined,
+            )
+          : undefined;
+        return claudeObservation({
+          candidate,
+          parsed,
+          now,
+          activeSessionFreshnessMs,
+          ...(hookEvent ? { hookEvent } : undefined),
+        });
+      }),
   });
   const transcripts = jsonlTranscriptReader({
-    locate: (providerSessionId) => claudeTranscriptFilePath(claudeHome, providerSessionId),
+    locate: (providerSessionId) =>
+      Effect.promise(() => claudeTranscriptFilePath(claudeHome, providerSessionId)),
     lines: linesFromClaudeRecord,
   });
   return {
     provider: CLAUDE_CODE_PROVIDER,
-    observe: () => pass.run(),
+    observe: () => pass.runPromise(),
     latest: () => pass.latest(),
-    reads: {
-      transcript: (providerSessionId) => transcripts.read(providerSessionId),
-      transcriptSince: (providerSessionId, cursor) =>
-        transcripts.readSince(providerSessionId, cursor),
-    },
+    reads: promiseTranscriptReads(transcripts),
   };
 }

@@ -1,7 +1,9 @@
 import { OBSERVATION_WINDOW, type SessionProviderPlugin } from "@sidecar/session";
-import { jsonlTranscriptReader } from "../shared/jsonl-transcript.js";
+import { Effect } from "effect";
+import { jsonlTranscriptReader, promiseTranscriptReads } from "../shared/jsonl-transcript.js";
 import { defaultSqliteModule, type SqliteModuleLoader } from "../shared/local-sqlite.js";
 import { rosterHolder } from "../shared/observation-pass.js";
+import { runAdapterRead } from "../shared/promise-face.js";
 import { defaultCodexHome } from "./config.js";
 import { CODEX_PROVIDER, codexObservations } from "./observe.js";
 import { type CodexStateLocation, rolloutPathForThread, threadRows } from "./state.js";
@@ -46,26 +48,22 @@ export function codexLocalPlugin(options: CodexLocalPluginOptions = {}): Session
     refuses: codexRolloutRefusal,
     lines: linesFromCodexRecord,
   });
+  const observe = Effect.gen(function* () {
+    const observedAt = now();
+    const rows = yield* threadRows(location);
+    const observations = yield* codexObservations({
+      codexHome: location.codexHome,
+      rows,
+      hookEventsDirectory: options.hookEventsDirectory?.(),
+      now: observedAt,
+      activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
+    });
+    return roster.publish(observations);
+  });
   return {
     provider: CODEX_PROVIDER,
-    async observe() {
-      const observedAt = now();
-      const rows = await threadRows(location);
-      return roster.publish(
-        await codexObservations({
-          codexHome: location.codexHome,
-          rows,
-          hookEventsDirectory: options.hookEventsDirectory?.(),
-          now: observedAt,
-          activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
-        }),
-      );
-    },
+    observe: () => runAdapterRead(observe),
     latest: () => roster.latest(),
-    reads: {
-      transcript: (providerSessionId) => transcripts.read(providerSessionId),
-      transcriptSince: (providerSessionId, cursor) =>
-        transcripts.readSince(providerSessionId, cursor),
-    },
+    reads: promiseTranscriptReads(transcripts),
   };
 }

@@ -1,33 +1,33 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
+import { NodeFileSystem } from "@effect/platform-node";
+import { it } from "@effect/vitest";
+import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
 import type { WireRecord } from "@sidecar/wire";
-import { type TestContext, test } from "vitest";
+import { Effect } from "effect";
 import { readRecordsSince, TranscriptPathCache } from "./jsonl-transcript.js";
 
 const WINDOW_BYTES = 256;
-
-async function temporaryDirectory(t: TestContext): Promise<string> {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-transcript-since-"));
-  t.onTestFinished(async () => {
-    await fs.rm(directory, { recursive: true, force: true });
-  });
-  return directory;
-}
 
 function line(sequence: number): string {
   return `${JSON.stringify({ type: "user", n: sequence })}\n`;
 }
 
-async function writeLines(filePath: string, sequences: readonly number[]): Promise<number> {
+function writeLines(filePath: string, sequences: readonly number[]): Effect.Effect<number> {
   const content = sequences.map(line).join("");
-  await fs.writeFile(filePath, content);
-  return Buffer.byteLength(content);
+  return Effect.promise(async () => {
+    await fs.writeFile(filePath, content);
+    return Buffer.byteLength(content);
+  });
 }
 
-async function appendText(filePath: string, content: string): Promise<void> {
-  await fs.appendFile(filePath, content);
+function appendText(filePath: string, content: string): Effect.Effect<void> {
+  return Effect.promise(() => fs.appendFile(filePath, content));
+}
+
+function fileSize(filePath: string): Effect.Effect<number> {
+  return Effect.promise(async () => (await fs.stat(filePath)).size);
 }
 
 /** The fixture's own sequence number, `NaN` for a record that carries none. */
@@ -39,187 +39,247 @@ function sequences(records: readonly WireRecord[]): number[] {
   return records.map(sequenceOf);
 }
 
-test("without a cursor, a file inside the window is read whole and the cursor lands at its end", async (t) => {
-  const filePath = path.join(await temporaryDirectory(t), "session.jsonl");
-  const size = await writeLines(filePath, [1, 2, 3]);
+/** A session file inside a directory this test's own scope removes. */
+const sessionFile = (name = "session.jsonl") =>
+  Effect.map(temporaryDirectoryScoped(), (directory) => path.join(directory, name));
 
-  const read = await readRecordsSince(filePath, undefined, WINDOW_BYTES);
+it.effect(
+  "without a cursor, a file inside the window is read whole and the cursor lands at its end",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const filePath = yield* sessionFile();
+        const size = yield* writeLines(filePath, [1, 2, 3]);
 
-  assert.deepEqual(sequences(read.records), [1, 2, 3]);
-  assert.equal(read.cursor, String(size));
-  assert.equal(read.truncated, false);
-});
+        const read = yield* readRecordsSince(filePath, undefined, WINDOW_BYTES);
 
-test("a cursor read answers only the records appended since, and moves the cursor on", async (t) => {
-  const filePath = path.join(await temporaryDirectory(t), "session.jsonl");
-  await writeLines(filePath, [1, 2]);
-  const first = await readRecordsSince(filePath, undefined, WINDOW_BYTES);
-  await appendText(filePath, `${line(3)}${line(4)}`);
+        assert.deepEqual(sequences(read.records), [1, 2, 3]);
+        assert.equal(read.cursor, String(size));
+        assert.equal(read.truncated, false);
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
 
-  const second = await readRecordsSince(filePath, first.cursor, WINDOW_BYTES);
-  const third = await readRecordsSince(filePath, second.cursor, WINDOW_BYTES);
+it.effect("a cursor read answers only the records appended since, and moves the cursor on", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const filePath = yield* sessionFile();
+      yield* writeLines(filePath, [1, 2]);
+      const first = yield* readRecordsSince(filePath, undefined, WINDOW_BYTES);
+      yield* appendText(filePath, `${line(3)}${line(4)}`);
 
-  assert.deepEqual(sequences(second.records), [3, 4]);
-  assert.equal(second.truncated, false);
-  assert.equal(second.cursor, String((await fs.stat(filePath)).size));
-  // Nothing new: the cursor stands where it was and the read says so honestly.
-  assert.deepEqual(third.records, []);
-  assert.equal(third.cursor, second.cursor);
-  assert.equal(third.truncated, false);
-});
+      const second = yield* readRecordsSince(filePath, first.cursor, WINDOW_BYTES);
+      const third = yield* readRecordsSince(filePath, second.cursor, WINDOW_BYTES);
 
-test("a record still being appended is left for the next read to find whole", async (t) => {
-  const filePath = path.join(await temporaryDirectory(t), "session.jsonl");
-  const terminated = await writeLines(filePath, [1]);
-  const partial = '{"type":"user","n":2';
-  await appendText(filePath, partial);
+      assert.deepEqual(sequences(second.records), [3, 4]);
+      assert.equal(second.truncated, false);
+      assert.equal(second.cursor, String(yield* fileSize(filePath)));
+      // Nothing new: the cursor stands where it was and the read says so honestly.
+      assert.deepEqual(third.records, []);
+      assert.equal(third.cursor, second.cursor);
+      assert.equal(third.truncated, false);
+    }),
+  ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
 
-  const first = await readRecordsSince(filePath, undefined, WINDOW_BYTES);
-  await appendText(filePath, "}\n");
-  const second = await readRecordsSince(filePath, first.cursor, WINDOW_BYTES);
+it.effect("a record still being appended is left for the next read to find whole", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const filePath = yield* sessionFile();
+      const terminated = yield* writeLines(filePath, [1]);
+      yield* appendText(filePath, '{"type":"user","n":2');
 
-  assert.deepEqual(sequences(first.records), [1]);
-  assert.equal(first.cursor, String(terminated));
-  assert.deepEqual(sequences(second.records), [2]);
-});
+      const first = yield* readRecordsSince(filePath, undefined, WINDOW_BYTES);
+      yield* appendText(filePath, "}\n");
+      const second = yield* readRecordsSince(filePath, first.cursor, WINDOW_BYTES);
 
-test("a tail that begins mid-file drops its leading partial line and says it is truncated", async (t) => {
-  const filePath = path.join(await temporaryDirectory(t), "session.jsonl");
-  const size = await writeLines(filePath, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
-  assert.ok(size > WINDOW_BYTES);
+      assert.deepEqual(sequences(first.records), [1]);
+      assert.equal(first.cursor, String(terminated));
+      assert.deepEqual(sequences(second.records), [2]);
+    }),
+  ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
 
-  const read = await readRecordsSince(filePath, undefined, WINDOW_BYTES);
+it.effect(
+  "a tail that begins mid-file drops its leading partial line and says it is truncated",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const filePath = yield* sessionFile();
+        const size = yield* writeLines(
+          filePath,
+          [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+        );
+        assert.ok(size > WINDOW_BYTES);
 
-  assert.ok(sequenceOf(read.records[0]) > 1);
-  assert.equal(sequenceOf(read.records.at(-1)), 15);
-  assert.equal(read.cursor, String(size));
-  assert.equal(read.truncated, true);
-});
+        const read = yield* readRecordsSince(filePath, undefined, WINDOW_BYTES);
 
-test("a cursor the file no longer reaches falls back to the tail", async (t) => {
-  const filePath = path.join(await temporaryDirectory(t), "session.jsonl");
-  await writeLines(filePath, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
-  const first = await readRecordsSince(filePath, undefined, WINDOW_BYTES);
-  // The provider rotated the file: what stands now is shorter than the cursor.
-  const rewrittenSize = await writeLines(filePath, [21, 22]);
+        assert.ok(sequenceOf(read.records[0]) > 1);
+        assert.equal(sequenceOf(read.records.at(-1)), 15);
+        assert.equal(read.cursor, String(size));
+        assert.equal(read.truncated, true);
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
 
-  const read = await readRecordsSince(filePath, first.cursor, WINDOW_BYTES);
+it.effect("a cursor the file no longer reaches falls back to the tail", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const filePath = yield* sessionFile();
+      yield* writeLines(filePath, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+      const first = yield* readRecordsSince(filePath, undefined, WINDOW_BYTES);
+      // The provider rotated the file: what stands now is shorter than the cursor.
+      const rewrittenSize = yield* writeLines(filePath, [21, 22]);
 
-  assert.deepEqual(sequences(read.records), [21, 22]);
-  assert.equal(read.cursor, String(rewrittenSize));
-  // The whole rewritten file fit the window, so nothing before it was skipped.
-  assert.equal(read.truncated, false);
-});
+      const read = yield* readRecordsSince(filePath, first.cursor, WINDOW_BYTES);
 
-test("a cursor that is not one this reader minted is read as no cursor", async (t) => {
-  const filePath = path.join(await temporaryDirectory(t), "session.jsonl");
-  const size = await writeLines(filePath, [1, 2]);
+      assert.deepEqual(sequences(read.records), [21, 22]);
+      assert.equal(read.cursor, String(rewrittenSize));
+      // The whole rewritten file fit the window, so nothing before it was skipped.
+      assert.equal(read.truncated, false);
+    }),
+  ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
 
-  for (const cursor of ["-1", "1.5", "abc", "", "01"]) {
-    const read = await readRecordsSince(filePath, cursor, WINDOW_BYTES);
-    assert.deepEqual(sequences(read.records), [1, 2], cursor);
-    assert.equal(read.cursor, String(size), cursor);
-  }
-});
+it.effect("a cursor that is not one this reader minted is read as no cursor", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const filePath = yield* sessionFile();
+      const size = yield* writeLines(filePath, [1, 2]);
 
-test("a window that falls short of the end stops at a line and reports itself truncated", async (t) => {
-  const filePath = path.join(await temporaryDirectory(t), "session.jsonl");
-  await writeLines(filePath, [1]);
-  const first = await readRecordsSince(filePath, undefined, WINDOW_BYTES);
-  await appendText(
-    filePath,
-    [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map(line).join(""),
-  );
+      for (const cursor of ["-1", "1.5", "abc", "", "01"]) {
+        const read = yield* readRecordsSince(filePath, cursor, WINDOW_BYTES);
+        assert.deepEqual(sequences(read.records), [1, 2], cursor);
+        assert.equal(read.cursor, String(size), cursor);
+      }
+    }),
+  ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
 
-  const second = await readRecordsSince(filePath, first.cursor, WINDOW_BYTES);
-  const third = await readRecordsSince(filePath, second.cursor, WINDOW_BYTES * 4);
+it.effect("a window that falls short of the end stops at a line and reports itself truncated", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const filePath = yield* sessionFile();
+      yield* writeLines(filePath, [1]);
+      const first = yield* readRecordsSince(filePath, undefined, WINDOW_BYTES);
+      yield* appendText(
+        filePath,
+        [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map(line).join(""),
+      );
 
-  assert.equal(sequenceOf(second.records[0]), 2);
-  assert.ok(second.records.length < 19);
-  assert.equal(second.truncated, true);
-  // The window ended mid-record; the next read begins exactly at that record.
-  assert.equal(sequenceOf(third.records[0]), sequenceOf(second.records.at(-1)) + 1);
-  assert.equal(sequenceOf(third.records.at(-1)), 20);
-  assert.equal(third.truncated, false);
-});
+      const second = yield* readRecordsSince(filePath, first.cursor, WINDOW_BYTES);
+      const third = yield* readRecordsSince(filePath, second.cursor, WINDOW_BYTES * 4);
 
-test("a line wider than the window is skipped rather than stalled on", async (t) => {
-  const filePath = path.join(await temporaryDirectory(t), "session.jsonl");
-  await writeLines(filePath, [1]);
-  const first = await readRecordsSince(filePath, undefined, WINDOW_BYTES);
-  const wide = `${JSON.stringify({ type: "user", n: 2, pad: "x".repeat(WINDOW_BYTES * 2) })}\n`;
-  await appendText(filePath, `${wide}${line(3)}`);
+      assert.equal(sequenceOf(second.records[0]), 2);
+      assert.ok(second.records.length < 19);
+      assert.equal(second.truncated, true);
+      // The window ended mid-record; the next read begins exactly at that record.
+      assert.equal(sequenceOf(third.records[0]), sequenceOf(second.records.at(-1)) + 1);
+      assert.equal(sequenceOf(third.records.at(-1)), 20);
+      assert.equal(third.truncated, false);
+    }),
+  ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
 
-  const second = await readRecordsSince(filePath, first.cursor, WINDOW_BYTES);
-  const third = await readRecordsSince(filePath, second.cursor, WINDOW_BYTES);
-  const fourth = await readRecordsSince(filePath, third.cursor, WINDOW_BYTES);
+it.effect("a line wider than the window is skipped rather than stalled on", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const filePath = yield* sessionFile();
+      yield* writeLines(filePath, [1]);
+      const first = yield* readRecordsSince(filePath, undefined, WINDOW_BYTES);
+      const wide = `${JSON.stringify({ type: "user", n: 2, pad: "x".repeat(WINDOW_BYTES * 2) })}\n`;
+      yield* appendText(filePath, `${wide}${line(3)}`);
 
-  assert.deepEqual(second.records, []);
-  assert.equal(second.truncated, true);
-  assert.equal(Number(second.cursor), Number(first.cursor) + WINDOW_BYTES);
-  assert.deepEqual(third.records, []);
-  assert.deepEqual(sequences(fourth.records), [3]);
-  assert.equal(fourth.truncated, false);
-});
+      const second = yield* readRecordsSince(filePath, first.cursor, WINDOW_BYTES);
+      const third = yield* readRecordsSince(filePath, second.cursor, WINDOW_BYTES);
+      const fourth = yield* readRecordsSince(filePath, third.cursor, WINDOW_BYTES);
 
-test("an empty or missing file answers no records and a cursor at its start", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const emptyPath = path.join(directory, "empty.jsonl");
-  await fs.writeFile(emptyPath, "");
+      assert.deepEqual(second.records, []);
+      assert.equal(second.truncated, true);
+      assert.equal(Number(second.cursor), Number(first.cursor) + WINDOW_BYTES);
+      assert.deepEqual(third.records, []);
+      assert.deepEqual(sequences(fourth.records), [3]);
+      assert.equal(fourth.truncated, false);
+    }),
+  ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
 
-  const empty = await readRecordsSince(emptyPath, undefined, WINDOW_BYTES);
-  const missing = await readRecordsSince(path.join(directory, "missing.jsonl"), "42", WINDOW_BYTES);
+it.effect("an empty or missing file answers no records and a cursor at its start", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped();
+      const emptyPath = path.join(directory, "empty.jsonl");
+      yield* Effect.promise(() => fs.writeFile(emptyPath, ""));
 
-  assert.deepEqual(empty, { records: [], cursor: "0", truncated: false });
-  assert.deepEqual(missing, { records: [], cursor: "0", truncated: false });
-});
+      const empty = yield* readRecordsSince(emptyPath, undefined, WINDOW_BYTES);
+      const missing = yield* readRecordsSince(
+        path.join(directory, "missing.jsonl"),
+        "42",
+        WINDOW_BYTES,
+      );
 
-test("the path cache remembers a file while it stands and looks again once it is gone", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const firstPath = path.join(directory, "first.jsonl");
-  const secondPath = path.join(directory, "second.jsonl");
-  await fs.writeFile(firstPath, "");
-  const cache = new TranscriptPathCache();
-  const lookups: string[] = [];
-  let located: string | undefined = firstPath;
-  const locate = async () => {
-    lookups.push("lookup");
-    return located;
-  };
+      assert.deepEqual(empty, { records: [], cursor: "0", truncated: false });
+      assert.deepEqual(missing, { records: [], cursor: "0", truncated: false });
+    }),
+  ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
 
-  assert.equal(await cache.resolve("session", locate), firstPath);
-  assert.equal(await cache.resolve("session", locate), firstPath);
-  assert.equal(lookups.length, 1);
+it.effect("the path cache remembers a file while it stands and looks again once it is gone", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped();
+      const firstPath = path.join(directory, "first.jsonl");
+      const secondPath = path.join(directory, "second.jsonl");
+      yield* Effect.promise(() => fs.writeFile(firstPath, ""));
+      const cache = new TranscriptPathCache();
+      const lookups: string[] = [];
+      let located: string | undefined = firstPath;
+      const locate = () =>
+        Effect.sync(() => {
+          lookups.push("lookup");
+          return located;
+        });
 
-  await fs.rm(firstPath);
-  await fs.writeFile(secondPath, "");
-  located = secondPath;
-  assert.equal(await cache.resolve("session", locate), secondPath);
-  assert.equal(lookups.length, 2);
+      assert.equal(yield* cache.resolve("session", locate), firstPath);
+      assert.equal(yield* cache.resolve("session", locate), firstPath);
+      assert.equal(lookups.length, 1);
 
-  located = undefined;
-  assert.equal(await cache.resolve("other", locate), undefined);
-  assert.equal(await cache.resolve("other", locate), undefined);
-  assert.equal(lookups.length, 4);
-});
+      yield* Effect.promise(() => fs.rm(firstPath));
+      yield* Effect.promise(() => fs.writeFile(secondPath, ""));
+      located = secondPath;
+      assert.equal(yield* cache.resolve("session", locate), secondPath);
+      assert.equal(lookups.length, 2);
 
-test("the path cache forgets its oldest entry past the cap", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const cache = new TranscriptPathCache();
-  const filePath = path.join(directory, "shared.jsonl");
-  await fs.writeFile(filePath, "");
-  let lookups = 0;
-  const locate = async () => {
-    lookups += 1;
-    return filePath;
-  };
+      located = undefined;
+      assert.equal(yield* cache.resolve("other", locate), undefined);
+      assert.equal(yield* cache.resolve("other", locate), undefined);
+      assert.equal(lookups.length, 4);
+    }),
+  ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
 
-  for (let index = 0; index <= TranscriptPathCache.MAXIMUM_ENTRIES; index += 1) {
-    await cache.resolve(`session-${index}`, locate);
-  }
-  const before = lookups;
-  await cache.resolve(`session-${TranscriptPathCache.MAXIMUM_ENTRIES}`, locate);
-  assert.equal(lookups, before);
-  await cache.resolve("session-0", locate);
-  assert.equal(lookups, before + 1);
-});
+it.effect("the path cache forgets its oldest entry past the cap", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped();
+      const cache = new TranscriptPathCache();
+      const filePath = path.join(directory, "shared.jsonl");
+      yield* Effect.promise(() => fs.writeFile(filePath, ""));
+      let lookups = 0;
+      const locate = () =>
+        Effect.sync(() => {
+          lookups += 1;
+          return filePath;
+        });
+
+      for (let index = 0; index <= TranscriptPathCache.MAXIMUM_ENTRIES; index += 1) {
+        yield* cache.resolve(`session-${index}`, locate);
+      }
+      const before = lookups;
+      yield* cache.resolve(`session-${TranscriptPathCache.MAXIMUM_ENTRIES}`, locate);
+      assert.equal(lookups, before);
+      yield* cache.resolve("session-0", locate);
+      assert.equal(lookups, before + 1);
+    }),
+  ).pipe(Effect.provide(NodeFileSystem.layer)),
+);

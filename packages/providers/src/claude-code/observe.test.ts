@@ -10,6 +10,7 @@ import {
 } from "@sidecar/session";
 import { type ParsedJsonObject, temporaryDirectory } from "@sidecar/wire/testing";
 import { type TestContext, test } from "vitest";
+import { homeManifest } from "../testing/index.js";
 import { claudeCodePlugin } from "./index.js";
 import { CLAUDE_PROJECTS_DIRECTORY } from "./records.js";
 
@@ -758,4 +759,40 @@ test("observes nothing where Claude Code has no local project directory", async 
 
   assert.deepEqual(await plugin.observe(), []);
   assert.deepEqual(plugin.latest(), []);
+});
+
+// "Never write provider transcripts or session-state files. Reading them is
+// what Luke is for; writing to them is never." The observation pass and both
+// transcript reads run over a home holding Claude Code's own settings file —
+// the one surface the hook registration is allowed to merge into, and which
+// this plugin never touches — and every byte, size and date under it stands
+// where it stood.
+test("observing and reading a transcript writes nothing under Claude Code's home", async (t) => {
+  // The shape Claude Code mints, since a transcript read refuses any other.
+  const sessionId = "3f9a1b2c-4d5e-6789-abcd-ef0123456789";
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(claudeHome, {
+    sessionId,
+    records: [
+      { type: "user", message: { role: "user", content: "Fix the flaky test" } },
+      { type: "assistant", message: { stop_reason: "end_turn", content: [] } },
+    ],
+  });
+  await fs.writeFile(path.join(claudeHome, "settings.json"), '{"hooks":{}}\n');
+  const plugin = claudeCodePlugin({ claudeHome, now: () => TEST_TIME });
+  const before = await homeManifest(claudeHome);
+
+  await plugin.observe();
+  const read = await plugin.reads?.transcript?.(sessionId);
+  const since = await plugin.reads?.transcriptSince?.(sessionId);
+  // A read that found nothing would leave the home untouched for the wrong
+  // reason, so both reads answering is part of what is being pinned.
+  assert.equal(read?.status, "accepted");
+  assert.equal(since?.status, "accepted");
+  await plugin.reads?.transcriptSince?.(
+    sessionId,
+    since?.status === "accepted" ? since.cursor : undefined,
+  );
+
+  assert.deepEqual(await homeManifest(claudeHome), before);
 });

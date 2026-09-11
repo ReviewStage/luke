@@ -1,5 +1,7 @@
 import { OBSERVATION_WINDOW, type ProviderSessionObservation } from "@sidecar/session";
+import { Effect, Ref } from "effect";
 import type { SessionFileCandidate } from "./local-files.js";
+import { runAdapterRead } from "./promise-face.js";
 
 /**
  * The roster the latest pass published, and nothing else. Every action is
@@ -28,11 +30,11 @@ export function rosterHolder(): RosterHolder {
 /** Everything one file-backed provider decides about its own pass. */
 export interface ObservationPassInput<Candidate extends SessionFileCandidate, Parsed> {
   now?: (() => number) | undefined;
-  discover(): Promise<readonly Candidate[]>;
+  discover(): Effect.Effect<readonly Candidate[]>;
   /** Provider lookup state built once per pass, before any parse. */
-  prepare?(candidates: readonly Candidate[]): Promise<void> | void;
+  prepare?(candidates: readonly Candidate[]): Effect.Effect<void>;
   /** Called only for a candidate whose mtime moved since the last pass. */
-  parse(candidate: Candidate): Promise<Parsed>;
+  parse(candidate: Candidate): Effect.Effect<Parsed>;
   observation(input: {
     readonly candidate: Candidate;
     readonly parsed: Parsed;
@@ -43,13 +45,18 @@ export interface ObservationPassInput<Candidate extends SessionFileCandidate, Pa
      * observation and cannot decay against a different clock.
      */
     readonly activeSessionFreshnessMs: number;
-  }): Promise<ProviderSessionObservation | undefined> | ProviderSessionObservation | undefined;
+  }): Effect.Effect<ProviderSessionObservation | undefined>;
 }
 
 export interface ObservationPass {
   /** Discover, prepare, parse only what changed, assemble, prune vanished parses. */
-  run(): Promise<readonly ProviderSessionObservation[]>;
-  /** The roster the last `run` published — what every action is re-validated against. */
+  run: Effect.Effect<readonly ProviderSessionObservation[]>;
+  /**
+   * @deprecated The promise face of {@link ObservationPass.run}, for the
+   * plugin seam the host still holds; deleted with P7-05.
+   */
+  runPromise(): Promise<readonly ProviderSessionObservation[]>;
+  /** The roster the last run published — what every action is re-validated against. */
   latest(): readonly ProviderSessionObservation[];
 }
 
@@ -64,40 +71,51 @@ export function observationPass<Candidate extends SessionFileCandidate, Parsed>(
   input: ObservationPassInput<Candidate, Parsed>,
 ): ObservationPass {
   const now = input.now ?? Date.now;
-  const parsed = new Map<string, { mtimeMs: number; value: Parsed }>();
+  const parsed = Ref.unsafeMake(new Map<string, { mtimeMs: number; value: Parsed }>());
   const roster = rosterHolder();
 
-  const parseAndCache = async (candidate: Candidate): Promise<Parsed> => {
-    const value = await input.parse(candidate);
-    parsed.set(candidate.filePath, { mtimeMs: candidate.mtimeMs, value });
-    return value;
-  };
+  const parseAndCache = (candidate: Candidate): Effect.Effect<Parsed> =>
+    Effect.tap(input.parse(candidate), (value) =>
+      Ref.update(parsed, (held) =>
+        new Map(held).set(candidate.filePath, { mtimeMs: candidate.mtimeMs, value }),
+      ),
+    );
+
+  const parsedFor = (candidate: Candidate): Effect.Effect<Parsed> =>
+    Effect.flatMap(Ref.get(parsed), (held) => {
+      const cached = held.get(candidate.filePath);
+      return cached?.mtimeMs === candidate.mtimeMs
+        ? Effect.succeed(cached.value)
+        : parseAndCache(candidate);
+    });
+
+  const run = Effect.gen(function* () {
+    const observedAt = now();
+    const candidates = yield* input.discover();
+    if (input.prepare) yield* input.prepare(candidates);
+    const observations = new Map<string, ProviderSessionObservation>();
+    for (const candidate of candidates) {
+      if (observations.has(candidate.providerSessionId)) continue;
+      const value = yield* parsedFor(candidate);
+      const observation = yield* input.observation({
+        candidate,
+        parsed: value,
+        now: observedAt,
+        activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
+      });
+      if (observation) observations.set(candidate.providerSessionId, observation);
+    }
+    const discovered = new Set(candidates.map((candidate) => candidate.filePath));
+    yield* Ref.update(
+      parsed,
+      (held) => new Map([...held].filter(([filePath]) => discovered.has(filePath))),
+    );
+    return roster.publish([...observations.values()]);
+  });
 
   return {
-    async run() {
-      const observedAt = now();
-      const candidates = await input.discover();
-      await input.prepare?.(candidates);
-      const observations = new Map<string, ProviderSessionObservation>();
-      for (const candidate of candidates) {
-        if (observations.has(candidate.providerSessionId)) continue;
-        const cached = parsed.get(candidate.filePath);
-        const value =
-          cached?.mtimeMs === candidate.mtimeMs ? cached.value : await parseAndCache(candidate);
-        const observation = await input.observation({
-          candidate,
-          parsed: value,
-          now: observedAt,
-          activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
-        });
-        if (observation) observations.set(candidate.providerSessionId, observation);
-      }
-      const discovered = new Set(candidates.map((candidate) => candidate.filePath));
-      for (const filePath of parsed.keys()) {
-        if (!discovered.has(filePath)) parsed.delete(filePath);
-      }
-      return roster.publish([...observations.values()]);
-    },
+    run,
+    runPromise: () => runAdapterRead(run),
     latest: () => roster.latest(),
   };
 }

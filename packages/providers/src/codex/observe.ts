@@ -18,6 +18,7 @@ import {
   text,
   type WireRecord,
 } from "@sidecar/wire";
+import { Effect } from "effect";
 import { type HookStatusRefinement, hookRefinedStatus } from "../shared/hook-status.js";
 import { readTail, workspaceLabel } from "../shared/local-files.js";
 import { numberFromRow, textFromRow } from "../shared/local-sqlite.js";
@@ -463,7 +464,7 @@ function observationFromThreadRow(
  * keeps a crowded day from turning one observation pass into dozens of file
  * reads.
  */
-async function rollouts(rows: readonly CodexThreadRow[]): Promise<Map<string, ParsedCodexRollout>> {
+function rollouts(rows: readonly CodexThreadRow[]): Effect.Effect<Map<string, ParsedCodexRollout>> {
   const candidates = rows
     .slice(0, CODEX_OBSERVATION_DEFAULTS.MAXIMUM_ROLLOUT_READS)
     .map((row) => ({
@@ -475,16 +476,20 @@ async function rollouts(rows: readonly CodexThreadRow[]): Promise<Map<string, Pa
         candidate.id !== undefined && candidate.rolloutPath !== undefined,
     );
 
-  const parsed = await Promise.all(
-    candidates.map(async (candidate) => {
-      const tail = await readTail(
-        candidate.rolloutPath,
-        CODEX_OBSERVATION_DEFAULTS.READ_ROLLOUT_TAIL_BYTES,
-      );
-      return [candidate.id, parseCodexRolloutTail(tail)] as const;
-    }),
+  return Effect.map(
+    Effect.forEach(
+      candidates,
+      (candidate) =>
+        Effect.map(
+          Effect.promise(() =>
+            readTail(candidate.rolloutPath, CODEX_OBSERVATION_DEFAULTS.READ_ROLLOUT_TAIL_BYTES),
+          ),
+          (tail) => [candidate.id, parseCodexRolloutTail(tail)] as const,
+        ),
+      { concurrency: "unbounded" },
+    ),
+    (parsed) => new Map(parsed),
   );
-  return new Map(parsed);
 }
 
 /**
@@ -493,10 +498,10 @@ async function rollouts(rows: readonly CodexThreadRow[]): Promise<Map<string, Pa
  * second file read, so it is opened only when some row actually shows a
  * marker in need of a name.
  */
-async function threadNames(
+function threadNames(
   codexHome: string,
   rows: readonly CodexThreadRow[],
-): Promise<CodexThreadNameSources> {
+): Effect.Effect<CodexThreadNameSources> {
   const rowTitles = new Map<string, string>();
   let hasMarkerTitle = false;
   for (const row of rows) {
@@ -509,10 +514,12 @@ async function threadNames(
     }
     rowTitles.set(id, title);
   }
-  const indexNames = hasMarkerTitle
-    ? await readCodexSessionTitles(codexHome)
-    : new Map<string, string>();
-  return { indexNames, rowTitles };
+  return Effect.map(
+    hasMarkerTitle
+      ? Effect.promise(() => readCodexSessionTitles(codexHome))
+      : Effect.succeed(new Map<string, string>()),
+    (indexNames) => ({ indexNames, rowTitles }),
+  );
 }
 
 /**
@@ -521,21 +528,32 @@ async function threadNames(
  * or holding something unexpected reads as no event, and the row's own
  * verdict stands.
  */
-async function hookEvents(
+function hookEvents(
   hookEventsDirectory: string | undefined,
   rows: readonly CodexThreadRow[],
-): Promise<Map<string, ObservedCodexHookEvent>> {
+): Effect.Effect<Map<string, ObservedCodexHookEvent>> {
   const events = new Map<string, ObservedCodexHookEvent>();
-  if (!hookEventsDirectory) return events;
-  await Promise.all(
-    rows.map(async (row) => {
-      const id = textFromRow(row, CODEX_THREAD_COLUMN.ID);
-      if (!id) return;
-      const event = await readCodexHookEvent(hookEventsDirectory, id).catch(() => undefined);
-      if (event) events.set(id, event);
-    }),
+  if (!hookEventsDirectory) return Effect.succeed(events);
+  return Effect.as(
+    Effect.forEach(
+      rows,
+      (row) => {
+        const id = textFromRow(row, CODEX_THREAD_COLUMN.ID);
+        if (!id) return Effect.void;
+        return Effect.map(
+          Effect.orElseSucceed(
+            Effect.tryPromise(() => readCodexHookEvent(hookEventsDirectory, id)),
+            () => undefined,
+          ),
+          (event) => {
+            if (event) events.set(id, event);
+          },
+        );
+      },
+      { concurrency: "unbounded", discard: true },
+    ),
+    events,
   );
-  return events;
 }
 
 /**
@@ -543,31 +561,36 @@ async function hookEvents(
  * name-index reads all happen with the state database already closed, so a
  * slow disk never holds a read lock on state Codex itself is writing.
  */
-export async function codexObservations(input: {
+export function codexObservations(input: {
   readonly codexHome: string;
   readonly rows: readonly CodexThreadRow[];
   readonly hookEventsDirectory: string | undefined;
   readonly now: number;
   readonly activeSessionFreshnessMs: number;
-}): Promise<readonly ProviderSessionObservation[]> {
+}): Effect.Effect<readonly ProviderSessionObservation[]> {
   const { codexHome, rows, now, activeSessionFreshnessMs } = input;
-  const [parsedRollouts, events, names] = await Promise.all([
-    rollouts(rows),
-    hookEvents(input.hookEventsDirectory, rows),
-    threadNames(codexHome, rows),
-  ]);
-  linkDelegatedVoiceConversations(rows, parsedRollouts);
-  return rows
-    .map((row) => {
-      const id = textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? "";
-      return observationFromThreadRow(
-        row,
-        parsedRollouts.get(id),
-        names,
-        now,
-        activeSessionFreshnessMs,
-        events.get(id),
-      );
-    })
-    .filter((observation): observation is ProviderSessionObservation => observation !== undefined);
+  return Effect.map(
+    Effect.all(
+      [rollouts(rows), hookEvents(input.hookEventsDirectory, rows), threadNames(codexHome, rows)],
+      { concurrency: "unbounded" },
+    ),
+    ([parsedRollouts, events, names]) => {
+      linkDelegatedVoiceConversations(rows, parsedRollouts);
+      return rows
+        .map((row) => {
+          const id = textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? "";
+          return observationFromThreadRow(
+            row,
+            parsedRollouts.get(id),
+            names,
+            now,
+            activeSessionFreshnessMs,
+            events.get(id),
+          );
+        })
+        .filter(
+          (observation): observation is ProviderSessionObservation => observation !== undefined,
+        );
+    },
+  );
 }

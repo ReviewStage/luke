@@ -1,11 +1,12 @@
 import path from "node:path";
 import { isRecord, text, type WireRecord } from "@sidecar/wire";
+import { Data, Effect, Option } from "effect";
 import { uniquePaths } from "../shared/local-files.js";
 import {
   canIgnoreSqliteError,
-  openReadOnlyDatabase,
   type SqliteDatabase,
   type SqliteModuleLoader,
+  scopedReadOnlyDatabase,
 } from "../shared/local-sqlite.js";
 import { normalizeDirectory, sqliteHomeFromConfig, sqliteHomeFromEnvironment } from "./config.js";
 
@@ -104,30 +105,57 @@ async function stateDatabasePaths(
   );
 }
 
+/** What a refused question threw, carried where nothing but this module reads it. */
+class AskRefused extends Data.TaggedError("AskRefused")<{ readonly cause: unknown }> {}
+
+/**
+ * Asks one open database its question. A schema this build does not know is
+ * the same answer an absent database is — nothing here — and anything else
+ * is a defect, because the difference is between observing nothing in this
+ * file and failing the pass.
+ */
+function askDatabase<Answer>(
+  database: SqliteDatabase,
+  ask: (database: SqliteDatabase) => Answer | undefined,
+): Effect.Effect<Answer | undefined> {
+  return Effect.gen(function* () {
+    const asked = yield* Effect.either(
+      Effect.try({ try: () => ask(database), catch: (cause) => new AskRefused({ cause }) }),
+    );
+    if (asked._tag === "Right") return asked.right;
+    const cause = asked.left.cause;
+    if (!(cause instanceof Error) || !canIgnoreSqliteError(cause)) return yield* Effect.die(cause);
+    return undefined;
+  });
+}
+
 /**
  * Asks each candidate database one question, stopping at the first that
- * answers. `stamp` runs while the database is open and before the rows are
- * read, so an observation dates itself by the same instant the read it
- * belongs to began.
+ * answers. Each database is open only inside its own scope, which closes the
+ * handle, so the reads that follow never hold a lock on state Codex itself
+ * is writing.
  */
-async function askEachDatabase<Answer>(
+function askEachDatabase<Answer>(
   location: CodexStateLocation,
   ask: (database: SqliteDatabase) => Answer | undefined,
-): Promise<Answer | undefined> {
-  for (const databasePath of await stateDatabasePaths(location.codexHome, location.sqliteHome)) {
-    const database = await openReadOnlyDatabase(location.sqlite, databasePath);
-    if (!database) continue;
-    try {
-      const answer = ask(database);
+): Effect.Effect<Answer | undefined> {
+  return Effect.gen(function* () {
+    const databasePaths = yield* Effect.promise(() =>
+      stateDatabasePaths(location.codexHome, location.sqliteHome),
+    );
+    for (const databasePath of databasePaths) {
+      const answer = yield* Effect.scoped(
+        Effect.flatMap(scopedReadOnlyDatabase(location.sqlite, databasePath), (held) =>
+          Option.match(held, {
+            onNone: () => Effect.succeed(undefined),
+            onSome: (database) => askDatabase(database, ask),
+          }),
+        ),
+      );
       if (answer !== undefined) return answer;
-    } catch (error) {
-      if (error instanceof Error && canIgnoreSqliteError(error)) continue;
-      throw error;
-    } finally {
-      database.close();
     }
-  }
-  return undefined;
+    return undefined;
+  });
 }
 
 /**
@@ -136,14 +164,15 @@ async function askEachDatabase<Answer>(
  * one — a rollout tail, a hook spool — never hold a lock on state Codex
  * itself is writing.
  */
-export async function threadRows(location: CodexStateLocation): Promise<readonly CodexThreadRow[]> {
-  return (
-    (await askEachDatabase(location, (database) =>
+export function threadRows(location: CodexStateLocation): Effect.Effect<readonly CodexThreadRow[]> {
+  return Effect.map(
+    askEachDatabase(location, (database) =>
       database
         .prepare(CODEX_THREAD_QUERY)
         .all()
         .filter((row): row is CodexThreadRow => isRecord(row)),
-    )) ?? []
+    ),
+    (rows) => rows ?? [],
   );
 }
 
@@ -154,7 +183,7 @@ export async function threadRows(location: CodexStateLocation): Promise<readonly
 export function rolloutPathForThread(
   location: CodexStateLocation,
   providerSessionId: string,
-): Promise<string | undefined> {
+): Effect.Effect<string | undefined> {
   return askEachDatabase(location, (database) => {
     const row = database.prepare(CODEX_THREAD_ROLLOUT_QUERY).all(providerSessionId)[0];
     return isRecord(row) ? text(row.rollout_path) : undefined;
