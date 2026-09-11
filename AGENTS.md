@@ -515,7 +515,8 @@ Canonical commands:
   process today and reaches it over the in-process transport; a process on
   the other side of the socket is the same host reached over another
   transport, and nothing above the transport changes, because the desktop is
-  one operator client either way. The whole quit is `Host.stop()`, in one
+  one operator client either way. The whole quit is `Host.stop()`, the
+  closing of the one `Scope` the host's composers were built in, in one
   place and in one order, so no caller can run the steps in another. What the desktop keeps for itself is the
   windows, the keys, the Dock, the login item, the media duck, the output
   and microphone watchers, the microphone permission, the updater, the

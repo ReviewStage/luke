@@ -225,8 +225,9 @@ same allowlist: the registry is `providersLayer`, one layer per registration
 merged so a repeated provider id fails the build, and the composers that hold
 it are still promises reading a record, so the layers are built and the
 `Providers` service read there. Every registration is synchronous, so the run
-is a `runSync` over a scope that closes at once, holding nothing; P7-01 and
-P7-02 hand the layer to the host itself and delete the door.
+is a `runSync` over a scope that closes at once, holding nothing; P7-05
+converts the observation composer that reads the record, hands the layer to
+the host itself, and deletes the door.
 
 `GatewayServer` in `packages/gateway/src/server.ts` is on the same allowlist,
 as the class `@sidecar/host`'s `GatewayService` and the in-process transports
@@ -236,15 +237,29 @@ middleware and its event log a service, but the host composes it from a promise
 and the transports subscribe to it with callbacks, so the class builds a
 `ManagedRuntime` over those layers, runs a request as a promise on it, and runs
 an emit, a reconnect, and the close of admissions synchronously against the
-services it made ahead of the runtime. P7-01 hands the host the layers and the
-services as `Context` tags and P7-02 composes the host as a `Layer`, at which
-point the class and its runtime go. The socket binding
+services it made ahead of the runtime. P7-02 composed the host as a `Layer`
+and left the class standing, because the in-process transports and the
+desktop's host service still hold it; it goes when P6-04 moves the transports
+onto the layers and P8-04 the desktop's host service. The socket binding
 (`packages/gateway/src/websocket.ts`) holds the class no longer: it provides
 the `Protocol` a server is built over rather than attaching to one already
 built, and composes `layerGatewayServer` over it itself, so what it needs of
 a host is the server's own layer options, which `GatewayService` hands out as
 `serverOptions`. That field runs no effect and is on no allowlist, but it is
 the same shim wearing a smaller face, and the same two PRs delete it.
+
+`composeHost`'s `start()`/`stop()` in `packages/host/src/compose-host.ts` is
+on the same allowlist, as the face the desktop's host service still operates
+over `hostLayer`: the host is `hostStandingLayer` over `hostAssemblyLayer`,
+and the adaptor builds the assembly and a `Scope` of its own on a
+`ManagedRuntime` it makes, so the server stands before the start as it always
+has; `start` is `Layer.buildWithScope` of the standing layer into that scope,
+forked as a fiber, and `stop` interrupts that fiber if it is still under way,
+runs the drain under the caller's deadline, and then closes the scope,
+bounded, forking the close as a daemon and reporting what did not close in
+time rather than waiting on it. `hostLayerFromSeams(options)` beside
+it is `hostKernelLayerFromSeams` one level up. P8-01 takes `hostLayer` on the
+desktop's own runtime, and P12-05 deletes the adaptor with `createHostKernel`.
 
 `StoreDatabase#run` in `packages/brain/src/store/database.ts` is on the
 allowlist as the two OpenClaw ports' reach into the store. The store's worker
@@ -571,8 +586,8 @@ design decision stated as such:
 | `createAccountCall` Promise door over `accountCall` | P3-06 | P12-04 |
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04 |
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
-| `providerRegistrations` record door over `providersLayer` | P6-09 | P7-01, P7-02 |
-| `GatewayServer`, the promise-and-callback adaptor over `layerGatewayServer` | P6-02 | P7-01, P7-02 |
+| `providerRegistrations` record door over `providersLayer` | P6-09 | P7-05 |
+| `GatewayServer`, the promise-and-callback adaptor over `layerGatewayServer` | P6-02 | P6-04, P8-04 |
 | `runAdapterRead`, every adapter's Promise face over its read effects | P6-11a | P7-05 |
 | `AgentTraceWriter`'s own `ManagedRuntime` | P6-05 | Phase 7 devtrace composer |
 | `tracedModelAdapter`'s traced `respond` | P6-05 | P7-08 |
@@ -601,6 +616,8 @@ design decision stated as such:
 | `AskLedger#submit`'s pending-map decision over its own `Effect.runSync` | P5-03 | P7-08 |
 | `GenerationHolder`'s `Ref` decision and `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P7-08 |
 | `hostSeamLayers(options)`/`hostKernelLayerFromSeams(options)`, the host seams stood up from one object, and `createHostKernel` beside them | P7-01 | P12-05 |
+| `composeHost`'s `start()`/`stop()` adaptor over `hostLayer`, and `hostLayerFromSeams(options)` beside it | P7-02 | P12-05 |
+| `mergeMethods`, the throwing fold over `foldMethods` | P7-02 | P12-05 |
 | `AgentSeamTag` / `agentSeamLayer(seam)` over the plain `AgentSeam` object | P5-07 | P7-08 |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |
 
