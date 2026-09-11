@@ -402,9 +402,11 @@ Luke. It is shown on the lock screen, so it is readable on a locked phone
 without unlocking it, and Apple carries it under its own terms on the way.
 A briefing is pushed at most once; one a device is already saying is never
 pushed; and while any of your devices reports a quiet-until instant,
-nothing is pushed until it lifts. The iOS app asks Apple for a push token
-only after you have allowed notifications in the system's own dialog, and
-registers the token with our service only while alerts stay allowed: a
+nothing is pushed until it lifts. The iOS app asks for notification
+permission in the system's own dialog at its first launch, before you sign
+in; it asks Apple for a push token only where you allowed it, holds that
+token on the phone until a sign-in lands, and registers it with our service
+only while alerts stay allowed: a
 permission you later withdraw in Settings clears the token from your device
 row the next time the app comes to the foreground, so no briefing is
 settled as pushed to a phone that would show nothing. Tapping the

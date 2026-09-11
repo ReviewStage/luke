@@ -26,15 +26,18 @@ final class PushCoordinator: NSObject, UIApplicationDelegate, UNUserNotification
         return true
     }
 
-    /// The system's own dialog, asking to show alerts, and a token where it
-    /// is granted. The dialog appears once; the system remembers the answer.
+    /// The system's own dialog, asking to show alerts, at the app's first
+    /// launch: the dialog appears once and the system remembers the answer,
+    /// so every later launch passes straight through to the reconcile that
+    /// registers or withdraws under the answer given. The ask runs before any
+    /// account exists, so a token it earns is held by the registrar until a
+    /// sign-in lands and travels with that registration.
     func requestPermission(registering registrar: DeviceRegistrar) {
         self.registrar = registrar
         Task {
-            let granted = try? await UNUserNotificationCenter.current()
+            _ = try? await UNUserNotificationCenter.current()
                 .requestAuthorization(options: [.alert, .sound])
-            guard granted == true else { return }
-            UIApplication.shared.registerForRemoteNotifications()
+            reconcileRegistration(registering: registrar)
         }
     }
 

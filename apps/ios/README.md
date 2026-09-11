@@ -125,10 +125,14 @@ to Apple's push machinery, and `LukeKit`'s `BriefingPushTap` and
   portal needs the Push Notifications capability, which automatic signing
   adds on the first device build. The watch signs with none: a phone
   forwards its notifications to a paired watch itself.
-- **The token.** Where alerts are allowed, every signed-in launch and
-  foreground calls `registerForRemoteNotifications`, and the token Apple
-  hands back reaches this installation's device row through
-  `DeviceRegistrar`, named to the gateway the embedded provisioning profile
+- **The permission.** The system's dialog is asked at the app's first
+  launch, over the sign-in card and before any account (the phone runs no
+  introduction, so nothing spoken is interrupted); the system remembers the
+  answer, and later launches pass through without one.
+- **The token.** Where alerts are allowed, every launch and foreground calls
+  `registerForRemoteNotifications`; the token Apple hands back is held by
+  `DeviceRegistrar` until a sign-in lands and then reaches this
+  installation's device row, named to the gateway the embedded provisioning profile
   says issued it (sandbox for a development build or the simulator,
   production for TestFlight and the App Store). A permission withdrawn in
   Settings clears the token from the row on the next foreground, so no

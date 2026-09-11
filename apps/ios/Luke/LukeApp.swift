@@ -79,12 +79,13 @@ struct LukeApp: App {
                 .environment(events)
                 .environment(conversation)
                 .environment(push)
-                // A launch restored from the keychain passes no sign-in edge,
-                // and the scene may already be active when it is first seen.
+                // Notification permission is asked at the first launch, over
+                // the sign-in card and before any account: the phone runs no
+                // introduction, so no spoken beat is there to interrupt. Every
+                // later launch, a keychain restore included, passes through to
+                // the reconcile without a dialog.
                 .task {
-                    if accountPreferencesEnabled, case .signedIn = session.state {
-                        push.reconcileRegistration(registering: devices)
-                    }
+                    if accountPreferencesEnabled { push.requestPermission(registering: devices) }
                 }
                 .onChange(of: session.state) { previous, current in
                     accountEdge(from: previous, to: current)
