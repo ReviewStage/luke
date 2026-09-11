@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { FakeClock } from "@sidecar/runtime/testing";
+import { test } from "vitest";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
   type BrainPersistedState,

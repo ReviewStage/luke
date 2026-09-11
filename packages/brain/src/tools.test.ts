@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { ACTION_FAMILY, ACTION_TOOL, actionToolDefinitions } from "@sidecar/actions";
 import { NOTEBOOK_MEMORY_TOOL } from "@sidecar/memory";
 import {
@@ -10,6 +9,7 @@ import {
   TOOL_POLICY_LAYER,
 } from "@sidecar/runtime";
 import { wireRecord } from "@sidecar/wire";
+import { test } from "vitest";
 import { ACTION_TOOLS } from "./tools/action-tools.js";
 import {
   BRAIN_TOOL,

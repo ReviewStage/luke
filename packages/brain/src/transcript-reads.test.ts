@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { ACTION_RESULT_STATUS, isWireString, unparsedWire, wireRecord } from "@sidecar/wire";
+import { test } from "vitest";
 import {
   ABC,
   answered,

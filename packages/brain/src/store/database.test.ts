@@ -3,13 +3,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import test from "node:test";
 import { DEFAULT_AGENT_ID, MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
 import {
   CONVERSATION_ENTRY_KIND,
   maximumStoredConversationEntries,
   storedConversationMaximumAgeMs,
 } from "@sidecar/session";
+import { test } from "vitest";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
   type BrainPersistedState,

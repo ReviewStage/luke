@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { ACTION_TOOL, refusedActionOutput } from "@sidecar/actions";
 import { ACTION_RESULT_STATUS, isWireString } from "@sidecar/wire";
+import { test } from "vitest";
 import { freshBrainState } from "./envelope.js";
 import {
   ABC,

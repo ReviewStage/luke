@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   RESPONSES_CONTENT_PART_TYPE,
   RESPONSES_INPUT_ITEM_TYPE,
@@ -37,6 +36,7 @@ import {
   type UIMessagePart,
   type UITools,
 } from "ai";
+import { test } from "vitest";
 import { z } from "zod";
 import { ResponsesContextEngine } from "./context-engine.js";
 import {

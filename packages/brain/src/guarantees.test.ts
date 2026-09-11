@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import {
@@ -9,6 +8,7 @@ import {
   unparsedWire,
   wireRecord,
 } from "@sidecar/wire";
+import { test } from "vitest";
 import { LOOK_SUBJECT } from "./agent.js";
 import { hostedBrainTransport, keyedBrainTransport } from "./client.js";
 import {

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   ACTION_OUTPUT_STATUS,
   ACTION_TOOL,
@@ -20,6 +19,7 @@ import {
   valueFromJsonText,
 } from "@sidecar/wire";
 import { type ToolSet, tool, type UIMessage } from "ai";
+import { test } from "vitest";
 import { z } from "zod";
 import {
   ABC,

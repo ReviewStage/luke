@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { CHILD_RUN_STATUS } from "@sidecar/runtime/vocabulary";
+import { test } from "vitest";
 import {
   acceptedRunId,
   answered,

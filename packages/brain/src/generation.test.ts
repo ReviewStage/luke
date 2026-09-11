@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import {
   type AgentRuntime,
   CONTEXT_INPUT_KIND,
   type ContextOpening,
 } from "@sidecar/runtime/vocabulary";
+import { test } from "vitest";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { freshBrainState } from "./envelope.js";
 import { CONTEXT_OPENING, generationFrom } from "./generation.js";

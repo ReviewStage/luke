@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
 import { MEMORY_ORIGIN, parseNotebook } from "@sidecar/memory";
 import { WORKSPACE_FILE } from "@sidecar/runtime";
+import { test } from "vitest";
 import {
   forgetNotebookEntry,
   listNotebookEntries,

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { ACTION_KIND, ACTION_TOOL } from "@sidecar/actions";
 import { NOTEBOOK_MEMORY_TOOL } from "@sidecar/memory";
 import { CHILD_SPAWN_REFUSAL, TOOL_EFFECT, TOOL_POLICY_LAYER } from "@sidecar/runtime";
@@ -28,6 +27,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { test } from "vitest";
 import { BrainJournal } from "./journal.js";
 import { fakeActionPerformer } from "./testing.js";
 import {

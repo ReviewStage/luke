@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   ACTION_KIND,
   ACTION_TOOL,
@@ -17,6 +16,7 @@ import {
   SESSION_STATUS,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { test } from "vitest";
 import { type BrainPersistedState, freshBrainState } from "./envelope.js";
 import { BrainGenerationClock } from "./generation-clock.js";
 import {

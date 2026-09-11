@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { MODEL_FAILURE, MODEL_RESPONSE_OUTCOME } from "@sidecar/runtime/vocabulary";
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
+import { test } from "vitest";
 import { BRAIN_RATE_LIMIT_COOLDOWN_MS } from "./model-adapter-shared.js";
 import { OpenAiModelAdapter, openAiModelAdapter } from "./openai-model-adapter.js";
 import { BRAIN_REASONING_SUMMARY, userMessageItem } from "./responses-api.js";

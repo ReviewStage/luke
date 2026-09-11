@@ -16,7 +16,7 @@
   },
   "types": "./src/index.ts",
   "scripts": {
-    "test": "tsx --test 'src/**/*.test.ts'",
+    "test": "vitest run",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
@@ -33,6 +33,7 @@
     "@types/node": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
+    "vitest": "catalog:",
     "zod": "4.5.4"
   }
 }

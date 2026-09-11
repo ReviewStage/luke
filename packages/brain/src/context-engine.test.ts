@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { CONTEXT_INPUT_KIND, checkpointFormatTag } from "@sidecar/runtime/vocabulary";
 import { UNKNOWN_ACTION_STATUS, type WireRecord } from "@sidecar/wire";
+import { test } from "vitest";
 import { pairedDanglingCalls, ResponsesContextEngine } from "./context-engine.js";
 import { functionCallOutputItem, userMessageItem } from "./responses-api.js";
 

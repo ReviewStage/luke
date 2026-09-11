@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { SteeredDeliveries } from "./steered-deliveries.js";
 
 /** The rule in one place: on disk is delivered; ingested but never checkpointed, or never ingested, is not. */

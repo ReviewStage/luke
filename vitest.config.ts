@@ -23,6 +23,7 @@ export default defineConfig({
       "packages/analytics",
       "packages/memory",
       "packages/feedback",
+      "packages/brain",
       "packages/providers",
       "tools/ios-parity",
       "tools/trace-export",

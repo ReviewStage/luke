@@ -3,13 +3,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import test from "node:test";
 import { MessageChannel, Worker } from "node:worker_threads";
 import {
   DEFAULT_AGENT_ID,
   MAIN_CONVERSATION_NAME,
   MAIN_SESSION_KEY,
 } from "@sidecar/runtime/vocabulary";
+import { test } from "vitest";
 import { BrainStateStore } from "../state-store.js";
 import { storeClient } from "./store-client.js";
 import { line, NOW, populatedState } from "./testing.js";

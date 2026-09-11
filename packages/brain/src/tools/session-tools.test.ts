@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { CHILD_SPAWN_REFUSAL } from "@sidecar/runtime";
 import {
   CHILD_CLEANUP,
@@ -15,6 +14,7 @@ import {
   RUN_ORIGIN,
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { test } from "vitest";
 import { BRAIN_TOOL, maximumChildTaskLength, maximumSessionsConversationLines } from "./names.js";
 import { REFUSAL_REASON } from "./refusals.js";
 import {

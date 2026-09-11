@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
 import {
   ARCHIVE_REASON,
   COMPACTION_SOURCE,
@@ -18,6 +17,7 @@ import {
   threadSessionKey,
 } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND } from "@sidecar/session";
+import { test } from "vitest";
 import { freshBrainState } from "../envelope.js";
 import { userMessageItem } from "../responses-api.js";
 import { BrainStateStore } from "../state-store.js";

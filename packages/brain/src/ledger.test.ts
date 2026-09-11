@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   type ActionOutputEnvelope,
   acceptedActionOutput,
@@ -8,6 +7,7 @@ import {
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { test } from "vitest";
 import { BrainAgent, LOOK_SUBJECT } from "./agent.js";
 import { type BrainPersistedState, freshBrainState } from "./envelope.js";
 import {
