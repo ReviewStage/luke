@@ -241,7 +241,11 @@ because it reaches `node:fs` and `node:os`, and in this package because the
 clock stands in for the runtime's own `ScheduledTimer`. Both of those are
 deprecated in place, since a `TestClock` advanced by hand is the same thing
 said in the library every other seam is moving to, and P12-03 deletes them
-with the bridge that answers the seam from a runtime.
+with the bridge that answers the seam from a runtime. A test written on
+`it.effect` reaches for `TestClock` directly rather than a wrapper of its own —
+`../effect/timers.test.ts` is the pattern — and for `temporaryDirectoryScoped`,
+an `Effect` over `@effect/platform`'s `FileSystem` that is this same
+guarantee stated as an `acquireRelease` rather than a `TestContext` callback.
 
 `@sidecar/brain` is the reason the rule exists twice in one package: the barrel
 is a door the web functions and the renderer open, and the store beneath it
