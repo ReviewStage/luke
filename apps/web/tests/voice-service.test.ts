@@ -705,6 +705,33 @@ test("a caller who hangs up before the acknowledgment is cued nothing when it la
   ]);
 });
 
+test("a caller gone before the session starts is not greeted at all", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION));
+  assert.ok("reader" in opened);
+  const desktop = opened.reader;
+  await send(desktop.socket, createFrame([developerMessage("Running: api on main.")]));
+  const attach = await context.openAi.nextAttach();
+  const upstream = readSocket(attach.socket);
+  const created = sessionCreatedFrameFromWire(record(await desktop.next()));
+  assert.ok(created);
+
+  desktop.socket.close();
+  assert.equal(record(await upstream.next()).type, LIVE_CLIENT_EVENT.CLOSE);
+  await sendText(
+    upstream.socket,
+    JSON.stringify({
+      type: LIVE_SERVER_EVENT.SESSION_STARTED,
+      event_id: "started-1",
+      session: { id: created.sessionId },
+    }),
+  );
+
+  assert.equal(await upstream.arrives(), false);
+  assert.deepEqual(greetingLog(context), []);
+});
+
 test("an introduction seed beyond one bounded developer message is refused before any session is spent", async () => {
   const context = await stand();
   onTestFinished(() => context.stop());

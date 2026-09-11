@@ -27,7 +27,8 @@ import { FINALIZATION, type Finalization, type RelayCounts } from "./log.js";
  * sends of its own once `session.started` arrives follows the docs' order:
  * the command, then its acknowledgment or refusal matched by
  * `client_event_id` under a bounded wait, then whatever the service answers
- * that with. It ends the way the docs say a
+ * that with; a caller who has hung up is sent none of it, whichever side of
+ * the start they went. It ends the way the docs say a
  * session ends: `session.closed` is the finalization, reported once with the
  * seconds it named; a desktop that goes first has `session.close` sent on
  * its behalf and the sideband held open for the final event under a
@@ -124,6 +125,8 @@ export function relaySession(options: RelayOptions): Promise<RelaySummary> {
   };
   let closedSeen = false;
   let startedSeen = false;
+  /** Whether the caller has gone: an opening command is for someone still listening. */
+  let hungUp = false;
   let closed: LiveSessionClosed | undefined;
   let closeTimer: ReturnType<typeof setTimeout> | undefined;
   /** The `event_id` the opening command was sent with, until its acknowledgment settles it. */
@@ -204,7 +207,7 @@ export function relaySession(options: RelayOptions): Promise<RelaySummary> {
       }
       if (type === LIVE_SERVER_EVENT.SESSION_STARTED && !startedSeen) {
         startedSeen = true;
-        const opening = options.onSessionStarted?.();
+        const opening = hungUp ? undefined : options.onSessionStarted?.();
         if (opening !== undefined && isOpen(upstream)) {
           upstream.send(JSON.stringify(opening));
           openingEventId = opening.event_id;
@@ -258,6 +261,7 @@ export function relaySession(options: RelayOptions): Promise<RelaySummary> {
      * under the timeout after which finalization is reported incomplete.
      */
     const onDesktopGone = (): void => {
+      hungUp = true;
       if (closedSeen || settled) return;
       // The caller has hung up, so the opening command will never be answered
       // to any purpose: it is settled as unanswered here rather than left
