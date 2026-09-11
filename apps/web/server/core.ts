@@ -12,6 +12,7 @@ export { ACTION_KIND, type ActionKind } from "@sidecar/actions";
 export * from "@sidecar/analytics";
 export * from "@sidecar/brain";
 export * from "@sidecar/brain/store-shapes";
+export * from "@sidecar/brain/tool-set";
 export * from "@sidecar/hosted";
 export * from "@sidecar/runtime/vocabulary";
 export * from "@sidecar/session";

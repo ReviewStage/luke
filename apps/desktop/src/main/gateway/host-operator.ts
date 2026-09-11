@@ -22,6 +22,7 @@ import type { LiveDiagnostics } from "@sidecar/live";
 import type { SupersetSignInSnapshot } from "@sidecar/providers/superset/sign-in-stage";
 import {
   type ConversationEntry,
+  type ConversationViewSnapshot,
   isSessionWriteResult,
   type ObservedWorkspaceProject,
   type Session,
@@ -63,7 +64,7 @@ export interface HostBootstrap {
   sessions: readonly Session[];
   sessionsSettled: boolean;
   announcementsHeld: boolean;
-  conversationLines: readonly ConversationEntry[];
+  conversationView: ConversationViewSnapshot;
   workspaceProjects: readonly ObservedWorkspaceProject[];
   calendars: readonly ObservedAccountCalendars[];
   calendarOnboardingOwed: boolean;
@@ -165,6 +166,8 @@ export interface HostOperator {
     properties: ProductEventPropertiesFor<Name>,
   ): void;
   appendConversation(entries: readonly ConversationEntry[], reporter: string): Promise<boolean>;
+  /** The Conversation tab's Clear: the service's soft delete of the account's main conversation, answered as whether it landed. */
+  clearConversation(): Promise<boolean>;
   onboardingState(): Promise<{ calendarOnboardingOwed: boolean } | undefined>;
   skipCalendarOnboarding(): Promise<void>;
   completeCalendarOnboarding(): Promise<void>;
@@ -180,6 +183,7 @@ export interface HostOperator {
     listener: (calendars: readonly ObservedAccountCalendars[]) => void,
   ): () => void;
   onAnnouncementsHeldChanged(listener: (held: boolean) => void): () => void;
+  onConversationViewChanged(listener: (view: ConversationViewSnapshot) => void): () => void;
   onSupersetSignInChanged(listener: (state: SupersetSignInSnapshot) => void): () => void;
   onCalendarOnboardingChanged(listener: (owed: boolean) => void): () => void;
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
@@ -435,6 +439,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       );
       return answer?.accepted === true;
     },
+    clearConversation: async () => {
+      const answer = record(await client.call(GATEWAY_METHOD.CONVERSATION_CLEAR));
+      return answer?.cleared === true;
+    },
     onboardingState: async () => {
       const answer = record(await client.call(GATEWAY_METHOD.ONBOARDING_STATE));
       return answer
@@ -494,6 +502,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       on(
         GATEWAY_EVENT.ANNOUNCEMENTS_HELD_CHANGED,
         (payload) => (isRecord(payload) && isWireBoolean(payload.held) ? payload.held : undefined),
+        listener,
+      ),
+    onConversationViewChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.CONVERSATION_VIEW_CHANGED,
+        (payload) =>
+          isRecord(payload) && Array.isArray(payload.groups) && isWireBoolean(payload.settled)
+            ? answered<ConversationViewSnapshot>(payload)
+            : undefined,
         listener,
       ),
     onSupersetSignInChanged: (listener) =>

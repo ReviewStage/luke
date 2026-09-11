@@ -3,6 +3,7 @@ import { CREDENTIAL_PROVIDERS, isCredentialProviderId } from "@sidecar/credentia
 import {
   type ObservedWorkspaceProject,
   type SessionApplicationId,
+  type SessionIdentity,
   workspaceProjectSelectionId,
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
@@ -67,7 +68,11 @@ export interface SessionList {
   writes: SessionWriteHandlers;
   onViewChange: (next: SessionArrangement) => void;
   onFiltersChange: (filters: readonly SessionFilter[]) => void;
+  /** Every session the roster holds, unnarrowed, for a chip that names one by its current title. */
+  roster: readonly SessionView[];
   onOpenSession: (session: SessionView) => void;
+  /** A row's press by identity alone, for a chip naming a session the roster may have let go. */
+  onOpenChat: (identity: SessionIdentity) => void;
   onOpenSessionApplication: (session: SessionView, applicationId: SessionApplicationId) => void;
   toggleOptions: () => void;
   closeOptions: () => void;
@@ -316,17 +321,22 @@ export function useSessionList(options: UseSessionListOptions): SessionList {
    * a shape that is no longer drawn, so the close is asked for here rather than
    * waited for.
    */
-  const onOpenSession = useCallback(
-    (session: SessionView) => {
+  const onOpenChat = useCallback(
+    (identity: SessionIdentity) => {
       tell(ACT_KIND.SESSION_OPEN, {
         identity: {
-          providerId: session.providerId,
-          providerSessionId: session.id,
+          providerId: identity.providerId,
+          providerSessionId: identity.providerSessionId,
         },
       });
       dismissPanel();
     },
     [dismissPanel],
+  );
+  const onOpenSession = useCallback(
+    (session: SessionView) =>
+      onOpenChat({ providerId: session.providerId, providerSessionId: session.id }),
+    [onOpenChat],
   );
 
   /**
@@ -429,6 +439,7 @@ export function useSessionList(options: UseSessionListOptions): SessionList {
 
   return {
     list,
+    roster: visible,
     tally,
     view,
     optionsOpen,
@@ -440,6 +451,7 @@ export function useSessionList(options: UseSessionListOptions): SessionList {
     onViewChange,
     onFiltersChange,
     onOpenSession,
+    onOpenChat,
     onOpenSessionApplication,
     toggleOptions,
     closeOptions,

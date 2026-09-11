@@ -1,38 +1,30 @@
 import { type BrainRequestSnapshot, brainRequestPending } from "@sidecar/brain/requests-wire";
-import { WingFace } from "@sidecar/panel";
 import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
   type ConversationEntryKind,
-  conversationEntryKey,
+  type ConversationViewSnapshot,
+  type SessionIdentity,
 } from "@sidecar/session";
-import { FACE_MOTION } from "@sidecar/surface";
 import { useEffect, useRef, useState } from "react";
 import { type AskHandler, AskLuke } from "./ask-luke";
-import { ConversationCopyButton } from "./conversation-copy";
 import {
-  createConversationTimeBreakFormatter,
-  opensConversationTimeBreak,
-} from "./conversation-time-break";
+  CONVERSATION_ENTRY_SPEAKER,
+  type ConversationEntrySpeaker,
+  ConversationListeningRow,
+  ConversationThinkingRow,
+} from "./conversation-rows";
+import { ConversationTurns } from "./conversation-turns";
 import { MarkdownMessage } from "./markdown-message";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
-import { ThinkingDots } from "./thinking-dots";
-
-export const CONVERSATION_ENTRY_SPEAKER = {
-  YOU: "you",
-  LUKE: "luke",
-  EVENT: "event",
-} as const;
-
-export type ConversationEntrySpeaker =
-  (typeof CONVERSATION_ENTRY_SPEAKER)[keyof typeof CONVERSATION_ENTRY_SPEAKER];
+import type { SessionView } from "./session-model";
 
 export interface ConversationEntryPresentation {
   speaker: ConversationEntrySpeaker;
   label: string;
 }
 
-/** The user-facing voice for each kind of line in Luke's current-launch thread. */
+/** The user-facing voice for each kind of line still being said, before the record it settles into arrives. */
 export function conversationEntryPresentation(
   kind: ConversationEntryKind,
 ): ConversationEntryPresentation {
@@ -51,186 +43,28 @@ export function conversationEntryPresentation(
   }
 }
 
-const ENTRY_TIME = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
-
-const timeBreakLabel = createConversationTimeBreakFormatter();
-
-/** What a reader is told of a run still going; the sighted read the face and the dots. */
-const CONVERSATION_THINKING_LABEL = "Luke is thinking";
-
-/** What a reader is told while a spoken turn is still owed its first words. */
-const CONVERSATION_LISTENING_LABEL = "Luke is listening";
-
-/** How long a run goes before the wait says how long it has been. */
-const THINKING_ELAPSED_AFTER_MS = 10_000;
-
-/** How often the wait's own clock moves once it is saying its age. */
-const THINKING_CLOCK_MS = 1_000;
-
 /**
- * What the wait says once a run has gone on long enough to be worth a word,
- * and nothing before that: a quick reply earns no sentence, and a run that has
- * stood for minutes must not read like one that started a second ago.
+ * A line still being said, drawn as the bubble it will settle into: words
+ * growing, no timestamp, and no copy, because copying half a sentence would
+ * copy half a sentence. The settled line arrives from the service as a
+ * stored message and is drawn by the turn renderer above it.
  */
-export function thinkingElapsedLabel(since: number, now: number): string | undefined {
-  const elapsed = now - since;
-  if (elapsed < THINKING_ELAPSED_AFTER_MS) return undefined;
-  const seconds = Math.floor(elapsed / 1000);
-  return `Still thinking · ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-}
-
-/**
- * Luke's turn, drawn on his side of the thread in the bubble his reply will
- * fill, so the thread holds one object per turn and the reply replaces the wait
- * in place. His face plays the success hop on repeat — a run still going is
- * continuously true, which is what a repeating motion is for — and three dots
- * rise in its wake. Nothing here is a control: the stop is the composer's disc,
- * which both tabs share. The reader's line is the live region, and the age
- * beside it is not, so a ticking count is never read out second by second.
- */
-export function ConversationThinkingRow({
-  since,
-  now,
-}: {
-  since: number;
-  now: number;
-}): React.JSX.Element {
-  // The wait keeps a clock of its own past the app's, which moves only when
-  // the app renders: a count of how long a run has been going has to move on
-  // its own. Never behind the app's clock, so a fixed clock is never
-  // contradicted by this one.
-  const [clock, setClock] = useState(now);
-  useEffect(() => {
-    const timer = window.setInterval(() => setClock(Date.now()), THINKING_CLOCK_MS);
-    return () => window.clearInterval(timer);
-  }, []);
-  const elapsed = thinkingElapsedLabel(since, Math.max(clock, now));
-  return (
-    <li
-      className="conversation-entry"
-      data-speaker={CONVERSATION_ENTRY_SPEAKER.LUKE}
-      data-thinking="true"
-    >
-      <small className="visually-hidden">Luke</small>
-      <div className="conversation-message">
-        <span className="conversation-bubble">
-          <span className="conversation-thinking">
-            <WingFace motion={FACE_MOTION.SUCCESS} repeat />
-            <ThinkingDots />
-            {elapsed ? <span className="conversation-thinking-elapsed">{elapsed}</span> : null}
-            <span className="visually-hidden" role="status">
-              {CONVERSATION_THINKING_LABEL}
-            </span>
-          </span>
-        </span>
-      </div>
-    </li>
-  );
-}
-
-/**
- * The developer's turn before its words arrive, in the sent bubble the
- * transcript will fill: the press is heard the moment it lands, not seconds
- * later when the transcription's first words come back. Three dots and no
- * face — the face is Luke's own mark, and this turn is the developer's. It is
- * presentation alone, drawn from the reported voice view and never entering
- * the thread; the words that settle it arrive as a live line and then a
- * recorded one, exactly as they always did.
- */
-function ConversationListeningRow(): React.JSX.Element {
-  return (
-    <li
-      className="conversation-entry"
-      data-speaker={CONVERSATION_ENTRY_SPEAKER.YOU}
-      data-thinking="true"
-    >
-      <small className="visually-hidden">You</small>
-      <div className="conversation-message">
-        <span className="conversation-bubble">
-          <span className="conversation-listening">
-            <ThinkingDots />
-            <span className="visually-hidden" role="status">
-              {CONVERSATION_LISTENING_LABEL}
-            </span>
-          </span>
-        </span>
-      </div>
-    </li>
-  );
-}
-
-function ConversationEntryRow({
-  entry,
-  streaming,
-}: {
-  entry: ConversationEntry;
-  streaming?: boolean;
-}): React.JSX.Element {
+function ConversationStreamingRow({ entry }: { entry: ConversationEntry }): React.JSX.Element {
   const presentation = conversationEntryPresentation(entry.kind);
-  const words = entry.words;
-  const recordedAt = entry.recordedAt === undefined ? undefined : new Date(entry.recordedAt);
-
   return (
-    <li
-      className="conversation-entry"
-      data-speaker={presentation.speaker}
-      data-streaming={streaming ? "true" : undefined}
-    >
+    <li className="conversation-entry" data-speaker={presentation.speaker} data-streaming="true">
       <small className="visually-hidden">{presentation.label}</small>
       <div className="conversation-message">
         <span className="conversation-bubble">
-          <MarkdownMessage words={words} className="conversation-words" />
-          {/* Copying words still arriving would copy half a sentence; the control
-            appears with the settled line the same words become. */}
-          {presentation.speaker === CONVERSATION_ENTRY_SPEAKER.EVENT || streaming ? null : (
-            <ConversationCopyButton words={words} />
-          )}
+          <MarkdownMessage words={entry.words} className="conversation-words" />
         </span>
       </div>
-      {/* The stamp is the row's, not the bubble's: it stands in one column
-          past the thread's visible edge, sent and received alike, which the
-          thread's own sideways scroll brings into view. */}
-      {recordedAt ? (
-        <time className="conversation-time" dateTime={recordedAt.toISOString()}>
-          {ENTRY_TIME.format(recordedAt)}
-        </time>
-      ) : null}
     </li>
   );
 }
 
-/**
- * The moment a line was said, set over it the way iMessage dates a message
- * that followed a long silence. It is the thread's line, not a message: it
- * reads in the quiet voice the requested actions use, and it stands still under
- * the pull like Luke's rows do, so uncovering the stamp column never pushes
- * a date off the screen.
- */
-function ConversationTimeBreak({ recordedAt, now }: { recordedAt: number; now: number }) {
-  const at = new Date(recordedAt);
-  const label = timeBreakLabel(recordedAt, now);
-  return (
-    <li className="conversation-break">
-      <time className="conversation-break-time" dateTime={at.toISOString()}>
-        <strong>{label.day}</strong> {label.time}
-      </time>
-    </li>
-  );
-}
-
-/** Stable enough for repeated identical lines without pretending the record has durable ids. */
-function keyedConversationEntries(entries: readonly ConversationEntry[]) {
-  const occurrences = new Map<string, number>();
-  let previousRecordedAt: number | undefined;
-  return entries.map((entry) => {
-    const base = conversationEntryKey(entry);
-    const occurrence = (occurrences.get(base) ?? 0) + 1;
-    occurrences.set(base, occurrence);
-    const opensBreak = opensConversationTimeBreak(previousRecordedAt, entry.recordedAt);
-    if (entry.recordedAt !== undefined) previousRecordedAt = entry.recordedAt;
-    return { entry, key: `${base}:${occurrence}`, opensBreak };
-  });
-}
+/** What a reader is told when the service named a row this build could not read back; the thread stands as last read. */
+const UNREADABLE_NOTICE = "Part of the conversation could not be read.";
 
 /**
  * How close to the tail a reader still counts as following it. Words arriving
@@ -250,11 +84,12 @@ const CONVERSATION_COMPOSER_ROW_INDEX = 1;
 /**
  * The thread's one control, seated beside the tab bar the way each tab's
  * search is, so every tab's control is opened from the same place. Clearing
- * is the recoverable deletion, but it still asks twice: the second press
- * names what the first one meant, with a way to stand down beside it. The
- * confirmation needs no reset of its own — the button is drawn only over a
- * thread with recorded lines, so the clear that empties them unmounts it,
- * exactly as leaving the tab does.
+ * is the service's soft delete of the account's conversation, kept thirty
+ * days and reachable on every Mac signed in to it, but it still asks twice:
+ * the second press names what the first one meant, with a way to stand down
+ * beside it. The confirmation needs no reset of its own — the button is
+ * drawn only over a thread with turns, so the clear that empties them
+ * unmounts it, exactly as leaving the tab does.
  */
 export function ConversationClearButton({ onClear }: { onClear: () => void }): React.JSX.Element {
   const [confirming, setConfirming] = useState(false);
@@ -286,8 +121,15 @@ export function ConversationClearButton({ onClear }: { onClear: () => void }): R
   );
 }
 
+/** How many rows a stored thread stands as, for the scroll that follows an append. */
+function messageCount(view: ConversationViewSnapshot): number {
+  return view.groups.reduce((total, group) => total + group.messages.length, 0);
+}
+
 export function ConversationPanel({
-  entries,
+  view,
+  roster = [],
+  onOpenChat,
   live = [],
   requests = [],
   spokenAskPending = false,
@@ -297,7 +139,12 @@ export function ConversationPanel({
   askShortcut,
   onStop,
 }: {
-  entries: readonly ConversationEntry[];
+  /** The Conversation as the host's reads of the service compose it: the turn groups, and whether a read has landed. */
+  view: ConversationViewSnapshot;
+  /** The sessions as the roster holds them now, so an action's chip names a session by its current title. */
+  roster?: readonly SessionView[];
+  /** A session row's own press by identity, for the chip naming the session an action reached. */
+  onOpenChat?: (identity: SessionIdentity) => void;
   /**
    * The instant the thread's dates are read against, so a line from earlier
    * today says Today and one from last week says which day. Passed down like
@@ -329,7 +176,7 @@ export function ConversationPanel({
   onStop?: () => void;
 }): React.JSX.Element {
   const list = useRef<HTMLDivElement | null>(null);
-  const entryCount = entries.length;
+  const entryCount = messageCount(view);
   const liveLength = live.reduce((total, entry) => total + entry.words.length, 0);
   // One wait however many runs are going: a second ask joins the turn under
   // way, and two waits for one turn would say otherwise. Its age is the
@@ -357,12 +204,14 @@ export function ConversationPanel({
   }, [liveLength]);
 
   const thread =
-    entries.length > 0 || live.length > 0 || thinkingSince !== undefined || spokenAskPending;
+    view.groups.length > 0 || live.length > 0 || thinkingSince !== undefined || spokenAskPending;
 
   return (
     <section
-      // PostHog blocks this fixed class and its whole subtree. Conversation
-      // conversation belongs on this screen, but never in an optional recording.
+      // PostHog blocks this fixed class and its whole subtree. Everything the
+      // thread draws — the stored turns, a session's title on an action's
+      // chip, a line still being said — belongs on this screen, but never in
+      // an optional recording, so all of it is mounted under this one root.
       className="conversation-view ph-no-capture"
       role="tabpanel"
       id={panelPanelId(PANEL_TAB.CONVERSATION)}
@@ -375,22 +224,18 @@ export function ConversationPanel({
               stamp column wider than the view, and snapping puts it back the
               moment the fingers lift, which only the browser can see. */}
           <div className="conversation-pull">
-            <ol className="conversation-list">
-              {keyedConversationEntries(entries).flatMap(({ entry, key, opensBreak }) => {
-                const row = <ConversationEntryRow key={key} entry={entry} />;
-                return opensBreak && entry.recordedAt !== undefined
-                  ? [
-                      <ConversationTimeBreak
-                        key={`${key}:break`}
-                        recordedAt={entry.recordedAt}
-                        now={now}
-                      />,
-                      row,
-                    ]
-                  : [row];
-              })}
+            <ConversationTurns
+              groups={view.groups}
+              roster={roster}
+              now={now}
+              {...(onOpenChat ? { onOpenChat } : undefined)}
+            >
+              {/* A line still being said has no durable id, and its words change
+                  on every delta — a key made of either would remount the bubble
+                  mid-sentence, while its position holds still for exactly as
+                  long as the line does. */}
               {live.map((entry, index) => (
-                <ConversationEntryRow key={`live:${entry.kind}:${index}`} entry={entry} streaming />
+                <ConversationStreamingRow key={`live:${entry.kind}:${index}`} entry={entry} />
               ))}
               {/* After the lines still being said: the newest spoken turn's
                   place, held while its first words are still on the service's
@@ -401,14 +246,23 @@ export function ConversationPanel({
               {thinkingSince !== undefined ? (
                 <ConversationThinkingRow since={thinkingSince} now={now} />
               ) : null}
-            </ol>
+            </ConversationTurns>
           </div>
         </div>
-      ) : (
+      ) : view.settled ? (
         <div className="conversation-empty">
           <strong>No messages yet</strong>
         </div>
+      ) : (
+        // Nothing read yet says neither "nothing said" nor a thread: the room
+        // stands empty until the first read lands.
+        <div className="conversation-scroll" ref={list} />
       )}
+      {view.unreadable ? (
+        <p className="conversation-notice" role="status">
+          {UNREADABLE_NOTICE}
+        </p>
+      ) : null}
       {/* The thread is where a typed ask's reply lands as a bubble, so the field
           that asks stands at its foot — the same composer the sessions tab
           holds, addressed to the same conversation. It rides inside the

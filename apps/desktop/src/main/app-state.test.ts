@@ -186,7 +186,7 @@ const BOOT: HostBootstrap = {
   sessions: [],
   sessionsSettled: false,
   announcementsHeld: false,
-  conversationLines: [],
+  conversationView: { groups: [], settled: true },
   workspaceProjects: [],
   calendars: [],
   calendarOnboardingOwed: false,
@@ -204,7 +204,7 @@ test("a host bootstrap lands in the document as the host answered it", () => {
   assert.equal(held.run.agentTraceEnabled, true);
   assert.equal(held.superset.installed, true);
   assert.equal(held.sessions.settled, false);
-  assert.equal(held.conversation.cleared, true);
+  assert.deepEqual(held.conversation, { groups: [], settled: true });
   assert.deepEqual(held.sessionReplay, { permitted: true, accountId: "person", halted: false });
 });
 

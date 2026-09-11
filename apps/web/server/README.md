@@ -483,11 +483,21 @@ signal a device polls between them. The handlers are
 `server/hosted/resource-reads.ts` and `server/hosted/change-signal.ts`, over
 the store alone and never a table, composed by `server/hosted/store-route.ts`
 under the same bearer and the same kill switch the observation tick keeps.
+Beside them stands the one write the Conversation tab has,
+`api/conversation/clear.ts` (`server/hosted/conversation-clear.ts`): a POST
+carrying nothing, which runs the store's Clear — the standing main and its
+descendants stamped, a new main opened — and answers the main it opened and
+how many conversations the stamp reached, so every Mac on the account sees
+the same empty main on its next poll. The desktop's side of all of it is
+`@sidecar/hosted`'s `conversation-client.ts`, and the picture a Mac keeps
+from the reads is `@sidecar/host`'s `conversation-view-sync.ts`.
 The messages read is the Conversation view: the store's `listMessages` over
 the standing main and every standing observed conversation, read back under
-the brain catalog's registry (`server/hosted/brain-tool-set.ts`, every
+the brain catalog's registry (`server/hosted/brain-tool-set.ts`, the
+`@sidecar/brain/tool-set` door built once for the deployment: every
 catalog tool with its input validated by the wire schema the model was
-offered), then `@sidecar/session`'s `selectConversationView` over the page's
+offered, the same registry the desktop reads its pages under), then
+`@sidecar/session`'s `selectConversationView` over the page's
 rows with the catalog's own classification of which tools announce and which
 act, so an observed conversation's message crosses into the answer only cut
 to its announcement and action parts. A page holding a row the registry

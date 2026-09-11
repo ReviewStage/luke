@@ -111,6 +111,14 @@ export const HOSTED_SERVICE_PATH = {
   /** The account's turns in the order they last changed, behind a device's own cursor (GET). */
   BRAIN_TURNS: "/api/brain/turns",
   /**
+   * Clear (POST): the soft delete of the account's standing main conversation.
+   * Nothing is erased: the main and its descendants are stamped deleted and a
+   * new main opened in the same transaction, the reads above stop listing
+   * the stamped rows from the next call, and the purge removes them thirty
+   * days on. Every Mac on the account sees the same empty main on its next poll.
+   */
+  CONVERSATION_CLEAR: "/api/conversation/clear",
+  /**
    * The change signal (POST): where every resource's read stands now, so a
    * device reads only what moved. The same call moves the device row's
    * last-seen instant and carries its presence and quiet instants.

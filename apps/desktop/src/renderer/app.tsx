@@ -1049,7 +1049,9 @@ export function App(): React.JSX.Element {
             onOpenSession={sessions.onOpenSession}
             onOpenSessionApplication={sessions.onOpenSessionApplication}
             writes={sessions.writes}
-            conversationLines={state.conversation.entries}
+            conversation={state.conversation}
+            roster={sessions.roster}
+            onOpenChat={sessions.onOpenChat}
             liveConversationEntries={liveConversationEntries}
             spokenAskPending={spokenAskPending}
             onClearConversationConversation={clearConversationLines}

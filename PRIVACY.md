@@ -58,10 +58,13 @@ sends nothing anywhere. It stays on your Mac unless a feature below sends it.
 him — what you typed or said, what he spoke or announced, the actions he took
 at your request, and the asks he is still working on — in a database on your
 Mac, so they are still there the next time you open him. The Conversation tab
-shows the main conversation, the one the talk key and every observation
-reach. The tab draws a conversation's 200 most recent entries and nothing
-older than 14 days, each in full; that is what is shown, not what is kept.
-Every entry stays in the database until you clear the conversation or the
+draws a different record: the conversation Luke's own service keeps for your
+account, read by every Mac you sign in on, so two Macs on one account show
+the same thread. A signed-in Mac asks the service every few seconds what has
+changed and reads only what did, and it draws the 200 most recent turns; that
+is what is shown, not what is kept. What the service keeps of it is described
+under "Your account" below.
+Every entry on your Mac stays in its database until you clear the conversation or the
 housekeeping described below removes it. Beside the Conversation, Luke keeps a transcript
 of each conversation's turns in the same database: every input the model was
 shown and every point at which his working context was folded. The transcript
@@ -129,16 +132,20 @@ and then discarded. A child's conversation is archived an hour after it ends
 and lives under the same retention as every other conversation. Nothing a
 child does reaches you except through the conversation that asked for it.
 
-The Conversation tab's one control, **Clear**, removes the conversation's
-lines, transcript, and working memory from the database, and writes them
-first, in the same step, into a compressed recovery archive kept on your Mac
-under Luke's own data (a `.jsonl.deleted.<time>.zst` file, and until it is
-written to disk, a copy inside the database); the deletion is reported
-complete only once that file is written and verified, and a copy not yet
-written is written at the next launch. Nothing in the app reads an archive
-back yet; it stands on your Mac for you alone. Clearing never touches the
-separate things Luke remembers about you, described next, and never touches
-your agents' own files.
+The Conversation tab's one control, **Clear**, asks Luke's service to clear
+your account's conversation: nothing is erased at once — the conversation is
+marked deleted, a new empty one is opened in its place, every Mac on the
+account stops showing it on its next read, and the service removes the
+marked conversation thirty days later. A Clear the service did not take
+leaves the thread standing and says so. Once the service has taken it, the
+same press also removes the conversation's lines, transcript, and working
+memory from the database on your Mac, writing them first, in the same step,
+into a compressed recovery archive kept on your Mac under Luke's own data (a
+`.jsonl.deleted.<time>.zst` file, and until it is written to disk, a copy
+inside the database); a copy not yet written is written at the next launch.
+Nothing in the app reads an archive back yet; it stands on your Mac for you
+alone. Clearing never touches the separate things Luke remembers about you,
+described next, and never touches your agents' own files.
 
 Luke also tidies this storage on his own, on the terms OpenClaw's session
 store uses: a conversation untouched for 30 days, and a thread idle for 7, is
@@ -244,7 +251,11 @@ Luke's own maintainers can see that record — your name, email address, which
 sign-in you used, when you joined, when you were last active, and your daily
 counts — on an admin page of our site that only an account we have marked as an
 administrator can open; nothing you type, say, or run in a session appears on
-it.
+it. The service also keeps your account's conversation with Luke — the
+messages, the turns that produced them, and the events about them — as the
+record the Conversation tab draws on every Mac you sign in on. Clearing the
+tab marks that conversation deleted and the service removes it thirty days
+later; deleting your account removes it at once.
 
 **Usage data.** We count how Luke's features are used, on the Mac, in the
 iOS app, and in the Apple Watch app, and attach your name and email to that
@@ -493,9 +504,12 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
 - Delete your OpenAI key to turn voice off.
 - Delete any synced provider API key from that provider's row in Settings. Keys
   are also deleted when you delete your account.
-- Clear the Conversation tab to remove the stored conversation and Luke's working
-  memory of it behind a recovery archive on your Mac. Nothing discards them
-  on a schedule: a conversation stands until you clear it.
+- Clear the Conversation tab to have the service mark your account's
+  conversation deleted (removed thirty days later, and gone from every Mac on
+  the account at its next read) and to remove the stored conversation and
+  Luke's working memory of it on this Mac behind a recovery archive. Nothing
+  on your Mac discards them on a schedule: a conversation stands until you
+  clear it.
 - Ask Luke what he remembers, correct a memory, or tell him to forget one.
 - Edit or delete any of Luke's workspace files yourself; Luke never overwrites
   your edit, and clearing the Conversation tab does not touch them.

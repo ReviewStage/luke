@@ -18,8 +18,6 @@ import {
   type HostNodeOpenKind,
   isHostNodeOpenKind,
 } from "@sidecar/host";
-import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
-import { type ConversationEntry, storedConversationEntry } from "@sidecar/session";
 import {
   isRecord,
   isWireNumber,
@@ -109,20 +107,16 @@ export function wireGateway(dependencies: GatewayWiringDependencies): GatewayWir
     report,
   });
 
-  // What the host tells its clients: the runs and main's thread written to the
-  // document every window is told from, and the two a receiver alone may take
-  // — a reply offer and a withdrawal — handed to the voice window directly,
-  // because an offer is addressed to the receiver that stands now and no
-  // later window may find it waiting.
+  // What the host tells its clients: the runs and the Conversation as its
+  // reads of the service compose it, each written to the document every
+  // window is told from. The local store's own thread event still arrives
+  // for the voice window's relay and is written nowhere: the thread a panel
+  // draws is the account's.
   operator.onRunsChanged((runs) => {
     state.update({ brain: { runs } });
   });
-  operator.onConversationChanged((change) => {
-    if (change.sessionKey !== MAIN_SESSION_KEY) return;
-    const entries = change.entries
-      .map((entry) => storedConversationEntry(entry, { strict: false }))
-      .filter((entry): entry is ConversationEntry => entry !== undefined);
-    state.update({ conversation: { entries, cleared: change.cleared } });
+  host.onConversationViewChanged((view) => {
+    state.update({ conversation: view });
   });
 
   /**

@@ -314,3 +314,38 @@ test("a developer's row is a sent bubble with a copy control, and a note the bra
   assert.equal(count(note, "data-speaker", "event"), 1);
   assert.equal(count(note, "class", "conversation-copy"), 0);
 });
+
+test("a turn that followed a long silence is dated over it, and the caller's rows close the one list", () => {
+  const groups = fixtureConversationTurns();
+  const markup = render(groups);
+  // The first turn is always dated; the fixtures' turns follow one another
+  // within minutes, so no later one is.
+  assert.equal(markup.match(/<li class="conversation-break">/g)?.length, 1);
+  assert.ok(
+    markup.indexOf('<li class="conversation-break">') < markup.indexOf("conversation-entry"),
+  );
+  const hourLater = groups.map((group, index) =>
+    index === 0
+      ? group
+      : {
+          ...group,
+          messages: group.messages.map((message) => ({
+            ...message,
+            createdAt: message.createdAt + index * 60 * 60_000,
+          })),
+        },
+  );
+  assert.equal(render(hourLater).match(/<li class="conversation-break">/g)?.length, groups.length);
+  const withFoot = renderToStaticMarkup(
+    createElement(
+      ConversationTurns,
+      { groups, roster: FIXTURE_ROSTER, now: FIXTURE_NOW },
+      createElement("li", { className: "conversation-entry", "data-foot": "true" }),
+    ),
+  );
+  assert.equal(withFoot.match(/<ol class="conversation-list">/g)?.length, 1);
+  assert.ok(
+    withFoot.lastIndexOf('data-foot="true"') > withFoot.lastIndexOf('class="conversation-time"'),
+  );
+  assert.ok(withFoot.lastIndexOf('data-foot="true"') < withFoot.lastIndexOf("</ol>"));
+});

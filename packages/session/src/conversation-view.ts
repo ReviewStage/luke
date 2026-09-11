@@ -209,6 +209,26 @@ export interface ConversationViewTurnGroup {
   readonly messages: readonly ConversationViewMessage[];
 }
 
+/** A stored row a read could not hold to the vocabulary, named by its conversation and sequence so a person can find it. */
+export interface UnreadableRow {
+  readonly conversationId: string;
+  readonly seq: number;
+}
+
+/**
+ * The Conversation as one device holds it after reading the view: the turn
+ * groups in the view's order, whether a read has landed at all — before one,
+ * an empty thread says "not read yet" rather than "nothing said" — and the
+ * row the latest read could not read back where the reader named one, so
+ * the thread stands as last read and says so rather than drawing an empty
+ * page.
+ */
+export interface ConversationViewSnapshot {
+  readonly groups: readonly ConversationViewTurnGroup[];
+  readonly settled: boolean;
+  readonly unreadable?: UnreadableRow;
+}
+
 function toolKindOf(
   part: StoredToolPart,
   toolKinds: ConversationViewToolKinds,

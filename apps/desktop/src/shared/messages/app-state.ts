@@ -4,7 +4,7 @@ import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import type { LiveSessionPhase } from "@sidecar/gateway";
 import type { AppGuideSnapshot } from "@sidecar/guide";
 import type { SupersetSignInSnapshot } from "@sidecar/providers/superset/sign-in-stage";
-import type { ConversationEntry, ObservedWorkspaceProject } from "@sidecar/session";
+import type { ConversationViewSnapshot, ObservedWorkspaceProject } from "@sidecar/session";
 import type { FixtureSnapshot } from "@sidecar/session/fixtures";
 import type { AppSettings } from "@sidecar/settings/wire";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
@@ -103,21 +103,14 @@ interface AppSupersetSlice {
   signIn?: SupersetSignInSnapshot;
 }
 
-interface AppConversationSlice {
-  /**
-   * Every line the thread holds, words whole — this launch's and, ahead of
-   * them, what the last launch left within the retention policy — the same on
-   * every display's panel.
-   */
-  entries: readonly ConversationEntry[];
-  /**
-   * Whether the last thing to move this slice was a Clear. The voice window
-   * is told of a Clear on its own command, so a delivery that says cleared
-   * leaves it nothing to do; a panel needs nothing from it but the empty
-   * thread.
-   */
-  cleared: boolean;
-}
+/**
+ * The Conversation as the host's reads of the service compose it: the turn
+ * groups of stored `UIMessage` rows the panel draws, whether a read has
+ * landed, and the row the service could not read back where it named one.
+ * The same on every display's panel, and the same on every Mac signed in to
+ * the account, because the host reads it from the account's own record.
+ */
+type AppConversationSlice = ConversationViewSnapshot;
 
 /**
  * What this run may record, as its two halves: what the host answered, and
