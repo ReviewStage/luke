@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
+import { test } from "vitest";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
   BRAIN_STATE_VERSION,

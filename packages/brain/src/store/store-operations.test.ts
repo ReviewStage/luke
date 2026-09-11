@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   DEFAULT_AGENT_ID,
   MAIN_CONVERSATION_NAME,
   MAIN_SESSION_KEY,
 } from "@sidecar/runtime/vocabulary";
 import { type UnparsedWireValue, unparsedWire } from "@sidecar/wire";
+import { test } from "vitest";
 import { STORE_LIFECYCLE, STORE_OPERATIONS } from "./store-operations.js";
 import { type StoreMessage, type StorePort, storeRequestFromWire } from "./wire.js";
 import { serveStore, UNREADABLE_REQUEST } from "./worker-host.js";

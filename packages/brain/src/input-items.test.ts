@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   normalizeSession,
   type ProviderSessionObservation,
@@ -8,6 +7,7 @@ import {
   type SessionProvider,
 } from "@sidecar/session";
 import { unparsedWire, type WireRecord, wireRecord } from "@sidecar/wire";
+import { test } from "vitest";
 import { askInputText, holdReleasedInputText, wakeInputText } from "./input-items.js";
 import { BRAIN_WAKE_KIND, type BrainWakeEvent } from "./wake-events.js";
 

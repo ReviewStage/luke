@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   normalizeSession,
   type ObservedWorkspaceProject,
   SESSION_STATUS,
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
+import { test } from "vitest";
 import {
   CONTEXT_ITEM_KIND,
   contextItemId,

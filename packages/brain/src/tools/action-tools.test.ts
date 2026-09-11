@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   ACTION_KIND,
   ACTION_OUTPUT_STATUS,
@@ -10,6 +9,7 @@ import {
 } from "@sidecar/actions";
 import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { normalizeSession, SESSION_STATUS } from "@sidecar/session";
+import { test } from "vitest";
 import { ACTION_TOOLS, type ActionToolContext, actionToolNamed } from "./action-tools.js";
 
 const NOW = 1_800_000_000_000;

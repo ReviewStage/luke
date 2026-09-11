@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { MEMORY_HOUSEKEEPING_OUTCOME, memoryFlushPrompt } from "@sidecar/memory";
 import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME, WORKSPACE_FILE_REFUSAL } from "@sidecar/runtime";
@@ -11,6 +10,7 @@ import {
   type ModelResponse,
 } from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
+import { test } from "vitest";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { HOUSEKEEPING_REFUSAL, runMemoryHousekeeping } from "./housekeeping.js";
 import { type ResponsesInputItem, responsesModelAnswer } from "./responses-api.js";

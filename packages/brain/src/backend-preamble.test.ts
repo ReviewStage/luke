@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { buildSystemPrompt, PROMPT_PROFILE, PROMPT_SECTION } from "@sidecar/runtime";
+import { test } from "vitest";
 import {
   BACKEND_PREAMBLE,
   type BrainPromptVoice,

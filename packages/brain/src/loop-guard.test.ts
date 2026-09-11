@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import type { ToolInvocation } from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
+import { test } from "vitest";
 import {
   hashToolCall,
   LOOP_GUARD_DETECTOR,

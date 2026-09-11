@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import {
@@ -20,6 +19,7 @@ import {
   type ToolInvocation,
 } from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
+import { test } from "vitest";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { UNKNOWN_ACTION_RESULT } from "./journal.js";
 import { ToolLoopAgentRuntime } from "./runtime.js";

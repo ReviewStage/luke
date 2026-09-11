@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { HOSTED_BRAIN_CONTRACT_VERSION, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { MODEL_FAILURE, MODEL_RESPONSE_OUTCOME } from "@sidecar/runtime/vocabulary";
 import { HTTP_METHOD } from "@sidecar/wire";
+import { test } from "vitest";
 import { hostedBrainTransport, keyedBrainTransport } from "./client.js";
 import {
   BRAIN_RATE_LIMIT_COOLDOWN_MS,

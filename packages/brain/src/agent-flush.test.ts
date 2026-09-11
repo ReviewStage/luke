@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import {
   MEMORY_FLUSH_DEFAULTS,
@@ -20,6 +19,7 @@ import {
   type ModelResponse,
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { test } from "vitest";
 import { BrainAgent, type BrainFlushMarkerStore, LOOK_SUBJECT } from "./agent.js";
 import { ResponsesContextEngine } from "./context-engine.js";
 import {

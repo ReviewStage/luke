@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { test } from "vitest";
 import { BRAIN_TOOL } from "./names.js";
 import { REFUSAL_REASON } from "./refusals.js";
 import {

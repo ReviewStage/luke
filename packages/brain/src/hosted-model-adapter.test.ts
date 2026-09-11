@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_OPERATION,
@@ -12,6 +11,7 @@ import {
   REASONING_EFFORT,
 } from "@sidecar/runtime/vocabulary";
 import { isRecord, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import { test } from "vitest";
 import { HostedModelAdapter } from "./hosted-model-adapter.js";
 import {
   BRAIN_RATE_LIMIT_COOLDOWN_MS,

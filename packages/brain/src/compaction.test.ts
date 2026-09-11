@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { ESTIMATED_CHARS_PER_TOKEN } from "@sidecar/memory";
 import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
@@ -15,6 +14,7 @@ import {
   TRANSCRIPT_EVENT_KIND,
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { test } from "vitest";
 import { BrainAgent, LOOK_SUBJECT } from "./agent.js";
 import {
   assessCompaction,

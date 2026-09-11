@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   CHILD_CLEANUP,
   CHILD_CONTEXT_MODE,
@@ -12,6 +11,7 @@ import {
   DEFAULT_AGENT_ID,
   MAIN_SESSION_KEY,
 } from "@sidecar/runtime/vocabulary";
+import { test } from "vitest";
 import {
   deleteChildCompletion,
   deleteChildRun,

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
 import {
   ACTION_KIND,
   ACTION_TOOL,
@@ -61,6 +60,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { test } from "vitest";
 import { BrainAgent, type BrainAgentOptions, LOOK_SUBJECT } from "./agent.js";
 import { toolLoopRuntimeOver } from "./builtins.js";
 import { ResponsesContextEngine } from "./context-engine.js";

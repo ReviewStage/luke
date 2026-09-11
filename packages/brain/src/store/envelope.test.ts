@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { freshBrainState } from "../envelope.js";
 import { BRAIN_REQUEST_STATUS } from "../requests.js";
 import { brainStateSave, SAVE_KIND } from "./envelope.js";

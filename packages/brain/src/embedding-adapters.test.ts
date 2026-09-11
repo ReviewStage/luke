@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_OPERATION,
   HOSTED_SERVICE_PATH,
 } from "@sidecar/hosted";
 import { MODEL_FAILURE, MODEL_RESPONSE_OUTCOME } from "@sidecar/runtime/vocabulary";
+import { test } from "vitest";
 import {
   BRAIN_EMBEDDING_MODEL,
   BRAIN_EMBEDDINGS_PATH,

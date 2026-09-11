@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import {
   normalizeSession,
@@ -12,6 +11,7 @@ import {
   type SessionStatus,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, unparsedWire, wireRecord } from "@sidecar/wire";
+import { test } from "vitest";
 import { type BrainAgentOptions, LOOK_SUBJECT } from "./agent.js";
 import {
   ABC,
