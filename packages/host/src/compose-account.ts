@@ -49,6 +49,8 @@ interface AccountLinks {
   syncMemory: () => void;
   /** The device row let go of on the departing account's own token, before the credential is cleared. */
   releaseDevice: (account: StoredAccount) => Promise<void>;
+  /** This installation's device row id, once registered, for the live session's handshake. */
+  deviceId: () => string | undefined;
 }
 
 export interface AccountComposer extends Composer {
@@ -155,6 +157,7 @@ export function composeAccount(dependencies: AccountDependencies): AccountCompos
     }),
     openSocket: openSocketOverWs,
     refreshAccount: session.refreshOnce,
+    deviceId: () => links.get().deviceId(),
     ...(agentTrace
       ? {
           wrapBrainModel: (model) =>

@@ -5,6 +5,7 @@ import {
   VOICE_DELEGATION_MODE,
   type VoiceCloseReason,
 } from "../db/voice-schema.js";
+import { findHeldDevice } from "../hosted/device-store.js";
 import type { HostedStoreRun } from "../hosted/store/database.js";
 
 /**
@@ -18,9 +19,22 @@ import type { HostedStoreRun } from "../hosted/store/database.js";
  * writes nothing more: the last snapshot standing with `closed_at` null is
  * the honest record, and a later connection's `session.closed` confirms it.
  * The seconds the quota meters are a separate ledger, `recordVoiceSeconds`.
+ *
+ * The device the session names is the one the desktop's handshake claimed,
+ * and the write can name only a `devices` row the same account holds: the
+ * id is read back out of that table under the account, so a claim on
+ * another account's device, or on a row that has gone, leaves the column
+ * null — the column's own word for a session that names no device — and a
+ * briefing on offer stays unclaimed rather than claimed as someone else's.
  */
 export interface VoiceSessionRecord {
-  register(input: { userId: string; sessionId: string }): Promise<void>;
+  register(input: {
+    userId: string;
+    sessionId: string;
+    deviceId?: string | undefined;
+  }): Promise<void>;
+  /** Whether the account holds the device row named: the check the door makes before a session is spent on the claim. */
+  deviceOwned(input: { userId: string; deviceId: string }): Promise<boolean>;
   /** Whether the account created the live session named: one lookup over the indexed pair. */
   owned(input: { userId: string; sessionId: string }): Promise<boolean>;
   noteUsage(input: { sessionId: string; seconds: number }): Promise<void>;
@@ -43,6 +57,7 @@ const RegisterRequestSchema = Schema.Struct({
   userId: Schema.String,
   liveSessionId: Schema.String,
   delegationMode: Schema.Literal(VOICE_DELEGATION_MODE.CLIENT),
+  deviceId: Schema.NullOr(Schema.String),
 });
 
 const registerSession = SqlSchema.void({
@@ -50,8 +65,11 @@ const registerSession = SqlSchema.void({
   execute: (row) =>
     statement(
       (sql) => sql`
-        insert into voice_sessions (user_id, live_session_id, delegation_mode)
-        values (${row.userId}, ${row.liveSessionId}, ${row.delegationMode})
+        insert into voice_sessions (user_id, live_session_id, delegation_mode, device_id)
+        values (
+          ${row.userId}, ${row.liveSessionId}, ${row.delegationMode},
+          (select id from devices where id = ${row.deviceId} and user_id = ${row.userId})
+        )
         on conflict (live_session_id) do nothing
       `,
     ),
@@ -120,8 +138,10 @@ export function voiceSessionRecord(
           userId: input.userId,
           liveSessionId: input.sessionId,
           delegationMode: VOICE_DELEGATION_MODE.CLIENT,
+          deviceId: input.deviceId ?? null,
         }),
       ),
+    deviceOwned: (input) => run(Effect.map(findHeldDevice(input), Option.isSome)),
     owned: (input) =>
       run(
         Effect.map(

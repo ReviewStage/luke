@@ -174,8 +174,15 @@ dropped if mis-answered); and the desktop's `session.attach` (one session id)
 answered by `session.attached`, for a fresh connection to a session that
 stands, because a connection to a Vercel Function ends at the function's
 maximum duration while the WebRTC session does not. `sessionOpeningFrameSchema`
-reads either opener. After the opening pair, GPT Live events pass through the
-same socket as themselves and are declared in `@sidecar/live`, not here. A
+reads either opener. Beside the frames, `VOICE_SERVICE_HEADER` names the one
+header the desktop adds to a `session.create` handshake next to its bearer:
+its own `devices` row id, so the session the service records names the
+installation that opened it and a briefing claimed by that device speaks
+into it; the service admits the header only in a device id's shape, refuses
+a creation naming a row the account does not hold before a session is spent,
+and a `session.attach` carries none. After the opening pair, GPT Live events
+pass through the same socket as themselves and are declared in
+`@sidecar/live`, not here. A
 request frame refuses a key it did not name; an answer ignores one a newer
 service added, the rule every wire module here keeps.
 

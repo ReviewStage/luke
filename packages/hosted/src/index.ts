@@ -149,6 +149,7 @@ export {
   sessionOpeningFrameFromWire,
   sessionOpeningFrameSchema,
   VOICE_SERVICE_FRAME,
+  VOICE_SERVICE_HEADER,
   webSocketOrigin,
 } from "./live-contract.js";
 export {

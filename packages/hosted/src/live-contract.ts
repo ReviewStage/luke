@@ -111,6 +111,21 @@ export const VOICE_SERVICE_FRAME = {
 } as const;
 
 /**
+ * The one header the desktop adds to its `session.create` handshake beside
+ * the bearer: the id of its own `devices` row, so the session the service
+ * records names the installation that opened it, and a briefing offered to
+ * the account can be claimed by that device and spoken into that session.
+ * It rides the handshake rather than the frame because the service decides
+ * who is asking before any frame is read. A fresh connection's
+ * `session.attach` carries none: the session already names its device.
+ * Absent, the session names no device, and a briefing on offer is left
+ * unclaimed rather than claimed by nobody.
+ */
+export const VOICE_SERVICE_HEADER = {
+  DEVICE_ID: "x-luke-device-id",
+} as const;
+
+/**
  * The character bounds of a `session.create` frame. The seed's message count
  * is the API's own, `LIVE_INPUT_BOUNDS.MESSAGES`; the bound per item's text is
  * the whole of the API's token budget for `input` at four characters a

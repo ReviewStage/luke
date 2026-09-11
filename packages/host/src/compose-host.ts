@@ -126,6 +126,7 @@ export function composeHost(options: HostSeams): Host {
     rebuildBrain: () => brain.wiring.rebuild(),
     syncMemory: brain.syncMemory,
     releaseDevice: (stored) => devices.release(stored),
+    deviceId: () => devices.deviceId(),
   });
   observation.link({
     rosterLook: () => brain.wiring.rosterLook(),

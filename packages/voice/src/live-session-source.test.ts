@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { HOSTED_API_ERROR, VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/hosted";
+import {
+  HOSTED_API_ERROR,
+  VOICE_SERVICE_FRAME,
+  VOICE_SERVICE_HEADER,
+  VOICE_SERVICE_PATH,
+} from "@sidecar/hosted";
 import {
   developerSeedItem,
   LIVE_CLIENT_EVENT,
@@ -723,4 +728,35 @@ test("unavailable diagnostics name the fixture run apart from the missing key", 
   assert.equal(missing.lastOutcome, LIVE_SESSION_OUTCOME.NO_API_KEY);
   assert.equal(missing.sidebandAttached, false);
   assert.equal(missing.voice, LIVE_DEFAULTS.VOICE);
+});
+
+test("the hosted source names this installation's device on the create handshake alone, and none while no device is registered", async () => {
+  const deviceId = "6f0b1d2e-3c4a-4b5c-8d6e-7f8091a2b3c4";
+  const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
+  let registered: string | undefined = deviceId;
+  const source = reattaching(script, { deviceId: () => registered });
+
+  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
+  assert.ok(opened);
+  await opened.attach();
+  const [first] = script.sockets;
+  assert.ok(first);
+  first.closeFromServer({ code: 1006 });
+  await openedSockets(script, 2);
+
+  assert.deepEqual(script.opens[0]?.headers, {
+    authorization: "Bearer token-1",
+    [VOICE_SERVICE_HEADER.DEVICE_ID]: deviceId,
+  });
+  assert.deepEqual(script.opens[1]?.headers, { authorization: "Bearer token-1" });
+
+  registered = undefined;
+  const unregistered = scriptedOpenSocket([answering(createdFrame())]);
+  assert.ok(
+    await hosted(unregistered, { deviceId: () => registered }).create({
+      sdpOffer: SDP_OFFER,
+      input: [],
+    }),
+  );
+  assert.deepEqual(unregistered.opens[0]?.headers, { authorization: "Bearer token-1" });
 });

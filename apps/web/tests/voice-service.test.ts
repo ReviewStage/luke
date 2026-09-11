@@ -5,6 +5,7 @@ import {
   sessionAttachedFrameFromWire,
   sessionCreatedFrameFromWire,
   VOICE_SERVICE_FRAME,
+  VOICE_SERVICE_HEADER,
   VOICE_SERVICE_PATH,
 } from "@sidecar/hosted";
 import { isRecord, isWireString, unparsedWire, type WireRecord } from "@sidecar/wire";
@@ -255,7 +256,7 @@ test("a session is authorized, created, registered to its account, attached, and
   assert.deepEqual(context.accounts.resolved, [BEARER]);
   assert.deepEqual(context.accounts.spent, [FAKE_USER_ID]);
   assert.deepEqual(context.record.registered, [
-    { userId: FAKE_USER_ID, sessionId: created.sessionId },
+    { userId: FAKE_USER_ID, sessionId: created.sessionId, deviceId: undefined },
   ]);
 
   assert.equal(context.openAi.creates.length, 1);
@@ -746,4 +747,68 @@ test("the introduction never re-attaches", async () => {
     HOSTED_API_ERROR.INVALID_REQUEST,
   );
   assert.equal(context.openAi.attaches.length, 0);
+});
+
+const DEVICE_ID = "6f0b1d2e-3c4a-4b5c-8d6e-7f8091a2b3c4";
+
+test("the device the handshake names is registered with the session once the account is seen to hold it", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  context.record.devices.push({ userId: FAKE_USER_ID, deviceId: DEVICE_ID });
+
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+    authorization: BEARER,
+    [VOICE_SERVICE_HEADER.DEVICE_ID]: DEVICE_ID,
+  });
+  assert.ok("reader" in opened);
+  await send(opened.reader.socket, createFrame());
+  await context.openAi.nextAttach();
+  const created = sessionCreatedFrameFromWire(record(await opened.reader.next()));
+  assert.ok(created);
+
+  assert.deepEqual(context.record.registered, [
+    { userId: FAKE_USER_ID, sessionId: created.sessionId, deviceId: DEVICE_ID },
+  ]);
+});
+
+test("a handshake naming a device the account does not hold is refused before a session is spent, and a device that does not exist is refused the same way", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  context.record.devices.push({ userId: "user-2", deviceId: DEVICE_ID });
+  const unknownDeviceId = "0a1b2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d";
+
+  const refusals = [];
+  for (const deviceId of [DEVICE_ID, unknownDeviceId]) {
+    const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+      authorization: BEARER,
+      [VOICE_SERVICE_HEADER.DEVICE_ID]: deviceId,
+    });
+    assert.ok("reader" in opened);
+    await send(opened.reader.socket, createFrame());
+    refusals.push({
+      error: hostedErrorSchema.parse(record(await opened.reader.next())),
+      close: (await opened.reader.closed).code,
+    });
+  }
+
+  // Another account's device and no device at all are one answer, so a
+  // refusal tells the claimant nothing about which ids exist.
+  assert.deepEqual(refusals, [
+    { error: HOSTED_API_ERROR.INVALID_REQUEST, close: SOCKET_CLOSE_CODE.POLICY_VIOLATION },
+    { error: HOSTED_API_ERROR.INVALID_REQUEST, close: SOCKET_CLOSE_CODE.POLICY_VIOLATION },
+  ]);
+  assert.deepEqual(context.accounts.spent, []);
+  assert.equal(context.openAi.creates.length, 0);
+  assert.deepEqual(context.record.registered, []);
+});
+
+test("a device header in no device id's shape is refused with 400 before any socket stands", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+
+  const malformed = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+    authorization: BEARER,
+    [VOICE_SERVICE_HEADER.DEVICE_ID]: "not-a-device",
+  });
+  assert.deepEqual(malformed, { status: UPGRADE_STATUS.BAD_REQUEST });
 });

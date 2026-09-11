@@ -17,6 +17,7 @@ import {
   sessionAttachedFrameFromWire,
   sessionCreatedFrameFromWire,
   VOICE_SERVICE_FRAME,
+  VOICE_SERVICE_HEADER,
   VOICE_SERVICE_PATH,
 } from "@sidecar/hosted";
 import {
@@ -367,6 +368,12 @@ interface ServiceSessionOptions {
    * refresh-and-retry exists.
    */
   authorization?: AccountToken;
+  /**
+   * This installation's `devices` row id, read at each creation so a row
+   * registered after the source was built is still named; nothing while the
+   * device is not registered, and then the handshake carries no such header.
+   */
+  deviceId?: () => string | undefined;
   voice?: string;
   now?: () => number;
   requestTimeoutMs?: number;
@@ -383,6 +390,7 @@ class ServiceLiveSessionSource {
   readonly #address: string;
   readonly #openSocket: OpenSocket;
   readonly #authorization: AccountToken | undefined;
+  readonly #deviceId: (() => string | undefined) | undefined;
   readonly #configuredVoice: LiveVoice;
   #voice: LiveVoice;
   readonly #requestTimeoutMs: number;
@@ -399,6 +407,7 @@ class ServiceLiveSessionSource {
     this.#address = address;
     this.#openSocket = options.openSocket;
     this.#authorization = options.authorization;
+    this.#deviceId = options.deviceId;
     this.#configuredVoice = chosenVoice(options.voice, LIVE_DEFAULTS.VOICE);
     this.#voice = this.#configuredVoice;
     this.#requestTimeoutMs = positiveInteger(
@@ -443,7 +452,8 @@ class ServiceLiveSessionSource {
       this.#outcome.record(LIVE_SESSION_OUTCOME.NOT_SIGNED_IN, "no access token");
       return undefined;
     }
-    let opening = await this.#open(bearer);
+    const deviceId = this.#deviceId?.();
+    let opening = await this.#open(bearer, deviceId);
     if (
       !socketOpened(opening) &&
       opening.fault === SOCKET_OPEN_FAULT.REFUSED &&
@@ -460,7 +470,7 @@ class ServiceLiveSessionSource {
           this.#outcome.record(LIVE_SESSION_OUTCOME.NOT_SIGNED_IN, "the account changed");
           return undefined;
         }
-        opening = await this.#open(renewed);
+        opening = await this.#open(renewed, deviceId);
       }
     }
     if (!socketOpened(opening)) {
@@ -550,8 +560,12 @@ class ServiceLiveSessionSource {
     return this.#authorization?.readAccountKey?.().catch(() => undefined);
   }
 
-  #open(bearer: string | undefined): Promise<SocketOpening> {
-    return this.#openSocket(this.#address, bearer === undefined ? {} : { authorization: bearer });
+  /** The handshake's headers: the bearer where one stands, and on a creation the device the session is opened for. */
+  #open(bearer: string | undefined, deviceId?: string): Promise<SocketOpening> {
+    return this.#openSocket(this.#address, {
+      ...(bearer === undefined ? undefined : { authorization: bearer }),
+      ...(deviceId === undefined ? undefined : { [VOICE_SERVICE_HEADER.DEVICE_ID]: deviceId }),
+    });
   }
 
   /**

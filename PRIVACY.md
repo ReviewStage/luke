@@ -483,7 +483,10 @@ Send.
   between your Mac and OpenAI without reading them, drops the audio OpenAI
   reflects back so your voice never transits our service, keeps no
   conversation, logs only status codes and byte counts, and records the
-  billed seconds of each session once. With your own OpenAI key the Mac
+  billed seconds of each session once, beside which of your registered
+  devices opened it (the Mac names its own device row on the handshake, and
+  the service accepts that name only for a row your account holds), so a
+  briefing that device claims is spoken into that session and no other. With your own OpenAI key the Mac
   reaches OpenAI directly and our service sees nothing of the session. Luke's judgment is a separate call
   to OpenAI's Responses API, made when an agent's hook or his periodic look
   wakes the conversation following that session and when
