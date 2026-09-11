@@ -12,6 +12,7 @@ import {
   MethodNotAllowedRefusal,
   NotFoundRefusal,
   PromptTooLargeRefusal,
+  QuotaExhaustedRefusal,
   RequestTooLargeRefusal,
   UnavailableRefusal,
   UnknownToolRefusal,
@@ -79,6 +80,11 @@ const REFUSALS = [
     refusal: HOSTED_REFUSAL.PROMPT_TOO_LARGE,
     schema: PromptTooLargeRefusal,
     status: HOSTED_HTTP_STATUS.BAD_REQUEST,
+  },
+  {
+    refusal: HOSTED_REFUSAL.QUOTA_EXHAUSTED,
+    schema: QuotaExhaustedRefusal,
+    status: HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS,
   },
   {
     refusal: HOSTED_REFUSAL.UNKNOWN_TOOL,
