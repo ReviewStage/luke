@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { isToolUIPart } from "ai";
-import { and, asc, eq } from "drizzle-orm";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import {
@@ -18,13 +17,7 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "../server/core";
-import {
-  CONVERSATION_KIND,
-  conversations,
-  events,
-  messages,
-  turns,
-} from "../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../server/db/storage-schema";
 import { offerBriefing } from "../server/hosted/brain-host/announce";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "../server/hosted/brain-host/bounds";
 import { readRecentMessages } from "../server/hosted/brain-host/context";
@@ -45,6 +38,12 @@ import { askRecord } from "../server/hosted/store/asks";
 import { stampedEveEvent } from "./support/eve-events";
 import { spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import {
+  insertConversation,
+  readEventsByConversation,
+  readMessagesByConversationTyped,
+  readTurnsByConversation,
+} from "./support/store-rows";
 
 /**
  * The relay from eve's stream into the store writer, over the real
@@ -79,12 +78,8 @@ async function conversation(
   kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND] = CONVERSATION_KIND.MAIN,
 ): Promise<ConversationTarget> {
   const userId = await database.createUser();
-  const [row] = await database.db
-    .insert(conversations)
-    .values({ userId, kind })
-    .returning({ id: conversations.id });
-  assert.ok(row);
-  return { userId, conversationId: row.id };
+  const conversationId = await insertConversation(database.run, { userId, kind });
+  return { userId, conversationId };
 }
 
 const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
@@ -182,15 +177,8 @@ async function play(events: readonly MessageStreamEvent[], standing: RelayStandi
 }
 
 async function rows(target: ConversationTarget) {
-  const turnRows = await database.db
-    .select()
-    .from(turns)
-    .where(eq(turns.conversationId, target.conversationId));
-  const messageRows = await database.db
-    .select()
-    .from(messages)
-    .where(eq(messages.conversationId, target.conversationId))
-    .orderBy(asc(messages.seq));
+  const turnRows = await readTurnsByConversation(database.run, target.conversationId);
+  const messageRows = await readMessagesByConversationTyped(database.run, target.conversationId);
   return { turnRows, messageRows };
 }
 
@@ -392,10 +380,9 @@ test("an observation turn over a roster diff lands the same way, with the roster
     answer.parts.map((part) => part.type),
     [STEP_START, `tool-${BRAIN_TOOL.ANNOUNCE}`, STEP_START],
   );
-  const offered = await database.db
-    .select({ kind: events.kind, messageId: events.messageId, payload: events.payload })
-    .from(events)
-    .where(eq(events.conversationId, target.conversationId));
+  const offered = (await readEventsByConversation(database.run, target.conversationId)).map(
+    (event) => ({ kind: event.kind, messageId: event.message_id, payload: event.payload }),
+  );
   assert.deepEqual(offered, [
     {
       kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
@@ -605,16 +592,8 @@ test("a second turn of the same session is another turn row, keyed from eve's ow
     [hostTurnId(standing.sessionId, "turn_0"), hostTurnId(standing.sessionId, "turn_1")].sort(),
   );
   assert.equal(
-    (
-      await database.db
-        .select()
-        .from(messages)
-        .where(
-          and(
-            eq(messages.conversationId, target.conversationId),
-            eq(messages.role, MESSAGE_ROLE.USER),
-          ),
-        )
+    (await readMessagesByConversationTyped(database.run, target.conversationId)).filter(
+      (row) => row.role === MESSAGE_ROLE.USER,
     ).length,
     2,
   );

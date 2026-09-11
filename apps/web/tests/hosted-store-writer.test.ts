@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import * as SqlClient from "@effect/sql/SqlClient";
 import { type ToolSet, tool, type UIMessage } from "ai";
-import { and, asc, eq } from "drizzle-orm";
+import { Effect, Schema } from "effect";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
 import {
@@ -43,13 +44,7 @@ import {
   unparsedWire,
   type WireBoundaryInput,
 } from "../server/core";
-import {
-  CONVERSATION_KIND,
-  conversations,
-  events,
-  messages,
-  turns,
-} from "../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../server/db/storage-schema";
 import {
   type ConversationTarget,
   STORE_WRITE_EFFECT,
@@ -57,7 +52,16 @@ import {
   type StoreWriteResult,
   storeWriter,
 } from "../server/hosted/store";
+import { EpochMillisColumnSchema } from "../server/hosted/store/database";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import {
+  insertConversation,
+  insertMessage,
+  readEventsByConversation,
+  readMessagesByConversationTyped,
+  readTurnById,
+  setConversationDeletedAt,
+} from "./support/store-rows";
 
 /**
  * The store writer over the real migrations on PGlite. Synthetic fixtures
@@ -134,12 +138,8 @@ async function conversation(
   kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND] = CONVERSATION_KIND.MAIN,
 ): Promise<ConversationTarget> {
   const userId = await database.createUser();
-  const [row] = await database.db
-    .insert(conversations)
-    .values({ userId, kind })
-    .returning({ id: conversations.id });
-  assert.ok(row);
-  return { userId, conversationId: row.id };
+  const conversationId = await insertConversation(database.run, { userId, kind });
+  return { userId, conversationId };
 }
 
 /** One turn's stream, numbered as the turn's teller numbers it. */
@@ -262,44 +262,29 @@ function effects(results: readonly StoreWriteResult[]): readonly string[] {
 }
 
 async function storedMessages(target: ConversationTarget) {
-  return database.db
-    .select({
-      seq: messages.seq,
-      role: messages.role,
-      clientId: messages.clientId,
-      turnId: messages.turnId,
-      parts: messages.parts,
-      metadata: messages.metadata,
-      finishedAt: messages.finishedAt,
-    })
-    .from(messages)
-    .where(eq(messages.conversationId, target.conversationId))
-    .orderBy(asc(messages.seq));
+  return readMessagesByConversationTyped(database.run, target.conversationId);
 }
 
 async function storedTurn(turnId: string) {
-  const [row] = await database.db
-    .select({
-      origin: turns.origin,
-      status: turns.status,
-      queuedAt: turns.queuedAt,
-      startedAt: turns.startedAt,
-      settledAt: turns.settledAt,
-      failure: turns.failure,
-      usage: turns.usage,
-      responseIds: turns.responseIds,
-    })
-    .from(turns)
-    .where(eq(turns.id, turnId));
-  return row;
+  return readTurnById(database.run, turnId);
 }
 
+const CountersRowSchema = Schema.Struct({
+  message: EpochMillisColumnSchema,
+  event: EpochMillisColumnSchema,
+});
+
 async function counters(target: ConversationTarget) {
-  const [row] = await database.db
-    .select({ message: conversations.nextMessageSeq, event: conversations.nextEventSeq })
-    .from(conversations)
-    .where(eq(conversations.id, target.conversationId));
-  return row;
+  const [row] = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`
+        select next_message_seq as message, next_event_seq as event
+        from conversations where id = ${target.conversationId}
+      `;
+    }),
+  );
+  return row === undefined ? undefined : Schema.decodeUnknownSync(CountersRowSchema)(row);
 }
 
 type Part = UIMessage["parts"][number];
@@ -801,7 +786,7 @@ test("a sequence already taken under the counter is the retry signal: the write 
   await writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK));
   const before = await counters(target);
   assert.ok(before);
-  await database.db.insert(messages).values({
+  await insertMessage(database.run, {
     userId: target.userId,
     conversationId: target.conversationId,
     seq: before.message,
@@ -913,10 +898,7 @@ test("a write for a conversation, turn, or call that is not there is refused by 
 
 test("a cleared conversation is written by nothing, like one that never was", async () => {
   const target = await conversation();
-  await database.db
-    .update(conversations)
-    .set({ deletedAt: new Date(NOW) })
-    .where(eq(conversations.id, target.conversationId));
+  await setConversationDeletedAt(database.run, target.conversationId, new Date(NOW));
   const stream = new Stream();
   const started = await writer.consume(
     target,
@@ -1152,11 +1134,7 @@ test("events about a message are numbered by the conversation's own event sequen
   const target = await conversation();
   const stream = new Stream();
   await feed(target, developerTurn(stream, randomUUID(), randomUUID()));
-  const [, reply] = await database.db
-    .select({ id: messages.id })
-    .from(messages)
-    .where(eq(messages.conversationId, target.conversationId))
-    .orderBy(asc(messages.seq));
+  const [, reply] = await storedMessages(target);
   assert.ok(reply);
   const offered = await writer.recordEvent(target, {
     messageId: reply.id,
@@ -1172,16 +1150,14 @@ test("events about a message are numbered by the conversation's own event sequen
   });
   assert.equal(offered.ok && offered.seq, 1);
   assert.equal(claimed.ok && claimed.seq, 2);
-  const stored = await database.db
-    .select({
-      seq: events.seq,
-      kind: events.kind,
-      deviceId: events.deviceId,
-      payload: events.payload,
-    })
-    .from(events)
-    .where(and(eq(events.conversationId, target.conversationId), eq(events.messageId, reply.id)))
-    .orderBy(asc(events.seq));
+  const stored = (await readEventsByConversation(database.run, target.conversationId))
+    .filter((row) => row.message_id === reply.id)
+    .map((row) => ({
+      seq: Schema.decodeUnknownSync(EpochMillisColumnSchema)(row.seq),
+      kind: row.kind,
+      deviceId: row.device_id,
+      payload: row.payload,
+    }));
   assert.deepEqual(stored, [
     { seq: 1, kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED, deviceId: null, payload: null },
     {

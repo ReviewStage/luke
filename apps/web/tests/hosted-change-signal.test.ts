@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import * as SqlClient from "@effect/sql/SqlClient";
 import {
   changesAnswerSchema,
   DEVICE_PLATFORM,
@@ -16,19 +17,18 @@ import {
   type UnparsedWireValue,
   type WireValue,
 } from "@sidecar/wire";
-import { eq, sql } from "drizzle-orm";
+import { Effect } from "effect";
 import { afterAll, test } from "vitest";
-import {
-  CONVERSATION_KIND,
-  conversations,
-  devices,
-  events,
-  messages,
-  turns,
-} from "../server/db/schema";
+import { CONVERSATION_KIND } from "../server/db/schema";
 import { type ChangeSignalOptions, handleChanges } from "../server/hosted/change-signal";
 import { deviceSeams } from "../server/hosted/device-store";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import {
+  insertConversation,
+  insertEvent,
+  insertMessage,
+  readDeviceById,
+} from "./support/store-rows";
 
 /**
  * The change signal over the real store and device rows: one poll moves the
@@ -72,7 +72,7 @@ function options(userId: string, request: Request): ChangeSignalOptions {
 }
 
 async function deviceRow(id: string) {
-  const [row] = await database.db.select().from(devices).where(eq(devices.id, id));
+  const row = await readDeviceById(database.run, id);
   assert.ok(row);
   return row;
 }
@@ -189,60 +189,56 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
   assert.equal(empty.turns, undefined);
   assert.equal(empty.rosterObservedAt, undefined);
 
-  const [main] = await database.db
-    .insert(conversations)
-    .values({ userId, kind: CONVERSATION_KIND.MAIN, nextMessageSeq: 3, nextEventSeq: 1 })
-    .returning({ id: conversations.id });
-  const [observed] = await database.db
-    .insert(conversations)
-    .values({
-      userId,
-      kind: CONVERSATION_KIND.OBSERVED,
-      providerId: "conductor",
-      providerSessionId: "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50",
-      nextMessageSeq: 1,
-      nextEventSeq: 2,
-    })
-    .returning({ id: conversations.id });
-  const [child] = await database.db
-    .insert(conversations)
-    .values({
-      userId,
-      kind: CONVERSATION_KIND.CHILD,
-      parentConversationId: main?.id,
-      nextMessageSeq: 9,
-    })
-    .returning({ id: conversations.id });
-  assert.ok(main && observed && child);
-  const [turn] = await database.db
-    .insert(turns)
-    .values({
-      userId,
-      conversationId: main.id,
-      origin: TURN_ORIGIN.TYPED,
-      status: TURN_STATUS.RUNNING,
-      queuedAt: sql`'2026-09-10 12:00:00.000500+00'::timestamptz`,
-    })
-    .returning({ id: turns.id });
-  assert.ok(turn);
-  const [message] = await database.db
-    .insert(messages)
-    .values({
-      userId,
-      conversationId: main.id,
-      seq: 1,
-      clientId: "client-1",
-      role: MESSAGE_ROLE.USER,
-      parts: [{ type: "text", text: "ask" }],
-      metadata: TYPED_ASK,
-    })
-    .returning({ id: messages.id });
-  assert.ok(message);
-  await database.db.insert(events).values({
+  const main = await insertConversation(database.run, {
     userId,
-    conversationId: observed.id,
+    nextMessageSeq: 3,
+    nextEventSeq: 1,
+  });
+  const observed = await insertConversation(database.run, {
+    userId,
+    kind: CONVERSATION_KIND.OBSERVED,
+    providerId: "conductor",
+    providerSessionId: "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50",
+    nextMessageSeq: 1,
+    nextEventSeq: 2,
+  });
+  const child = await insertConversation(database.run, {
+    userId,
+    kind: CONVERSATION_KIND.CHILD,
+    parentConversationId: main,
+    nextMessageSeq: 9,
+  });
+  assert.ok(main && observed && child);
+  // A sub-millisecond instant, so the turn cursor's own precision (finer than a JS `Date`) is what the test compares.
+  const turnId = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql`
+        insert into turns (user_id, conversation_id, origin, status, queued_at)
+        values (
+          ${userId}, ${main}, ${TURN_ORIGIN.TYPED}, ${TURN_STATUS.RUNNING},
+          '2026-09-10 12:00:00.000500+00'::timestamptz
+        )
+        returning id
+      `;
+      return rows[0]?.id;
+    }),
+  );
+  assert.ok(turnId);
+  const messageId = await insertMessage(database.run, {
+    userId,
+    conversationId: main,
     seq: 1,
-    messageId: message.id,
+    clientId: "client-1",
+    role: MESSAGE_ROLE.USER,
+    parts: [{ type: "text", text: "ask" }],
+    metadata: TYPED_ASK,
+  });
+  await insertEvent(database.run, {
+    userId,
+    conversationId: observed,
+    seq: 1,
+    messageId,
     kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
   });
   await database.store.roster.write(userId, { body: "{}", observedAt: NOW - 30_000 });
@@ -253,20 +249,20 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
   assert.deepEqual(
     sorted(positionsOf(heads.messages)),
     sorted([
-      [main.id, 2],
-      [observed.id, 0],
+      [main, 2],
+      [observed, 0],
     ]),
   );
   assert.deepEqual(
     sorted(positionsOf(heads.events)),
     sorted([
-      [main.id, 0],
-      [observed.id, 1],
+      [main, 0],
+      [observed, 1],
     ]),
   );
   assert.deepEqual(turnReadCursorSchema.parse(heads.turns ?? ""), {
     changedAt: "2026-09-10 12:00:00.0005+00",
-    id: turn.id,
+    id: turnId,
   });
   assert.equal(heads.rosterObservedAt, NOW - 30_000);
 
@@ -285,7 +281,7 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
     sorted(positionsOf(cleared.messages)),
     sorted([
       [opened, 0],
-      [observed.id, 0],
+      [observed, 0],
     ]),
   );
   assert.equal(cleared.turns, undefined);

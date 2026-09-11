@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
-import { asc, eq } from "drizzle-orm";
+import * as SqlClient from "@effect/sql/SqlClient";
+import { Effect, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import {
@@ -10,9 +11,6 @@ import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
 } from "../server/core";
-import { devices } from "../server/db/devices-schema";
-import { CONVERSATION_KIND, conversations, events } from "../server/db/storage-schema";
-import { voiceSessions } from "../server/db/voice-schema";
 import { offerBriefing } from "../server/hosted/brain-host/announce";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { hostTurnId } from "../server/hosted/brain-host/ids";
@@ -29,6 +27,13 @@ import { type HostedBriefingDelivery, hostedBriefings } from "../server/voice/li
 import { voiceSessionRecord } from "../server/voice/session-record";
 import { announceTurn, FIRST_EVE_TURN } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import {
+  insertConversation,
+  insertDevice,
+  readVoiceSessionByLiveSessionId,
+  setDeviceQuietUntil,
+  setVoiceSessionDeviceId,
+} from "./support/store-rows";
 
 /**
  * The hosted briefing path over the real store on PGlite: an announce turn
@@ -62,17 +67,13 @@ const speech = { run: database.run, writer };
 
 async function account(): Promise<ConversationTarget> {
   const userId = await database.createUser();
-  const [row] = await database.db
-    .insert(conversations)
-    .values({ userId, kind: CONVERSATION_KIND.MAIN })
-    .returning({ id: conversations.id });
-  assert.ok(row);
-  return { userId, conversationId: row.id };
+  const conversationId = await insertConversation(database.run, { userId });
+  return { userId, conversationId };
 }
 
 async function device(userId: string): Promise<string> {
   const id = randomUUID();
-  await database.db.insert(devices).values({
+  await insertDevice(database.run, {
     id,
     userId,
     installationId: `install-${id}`,
@@ -87,10 +88,7 @@ async function voiceSession(userId: string, deviceId: string | undefined): Promi
   const liveSessionId = `sess_${randomUUID()}`;
   await sessionRecord.register({ userId, sessionId: liveSessionId });
   if (deviceId !== undefined) {
-    await database.db
-      .update(voiceSessions)
-      .set({ deviceId })
-      .where(eq(voiceSessions.liveSessionId, liveSessionId));
+    await setVoiceSessionDeviceId(database.run, liveSessionId, deviceId);
   }
   return liveSessionId;
 }
@@ -125,13 +123,20 @@ async function offered(target: ConversationTarget, briefing: string): Promise<st
 }
 
 async function speechEventsOf(messageId: string) {
-  const rows = await database.db
-    .select({ kind: events.kind, deviceId: events.deviceId })
-    .from(events)
-    .where(eq(events.messageId, messageId))
-    .orderBy(asc(events.seq));
-  return rows.map((row) => [row.kind, row.deviceId]);
+  const rows = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`
+        select kind, device_id from events where message_id = ${messageId} order by seq
+      `;
+    }),
+  );
+  return rows.map((row) => [row.kind, row.device_id]);
 }
+
+const VoiceSessionDeviceRowSchema = Schema.Struct({
+  device_id: Schema.NullOr(Schema.String),
+});
 
 interface Stand {
   readonly deliveries: HostedBriefingDelivery[];
@@ -154,11 +159,9 @@ function stand(
     offers: database.store.speech,
     tools: CATALOG_TOOL_SET,
     deviceId: async () => {
-      const [row] = await database.db
-        .select({ deviceId: voiceSessions.deviceId })
-        .from(voiceSessions)
-        .where(eq(voiceSessions.liveSessionId, liveSessionId));
-      return row?.deviceId ?? undefined;
+      const [row] = await readVoiceSessionByLiveSessionId(database.run, liveSessionId);
+      if (row === undefined) return undefined;
+      return Schema.decodeUnknownSync(VoiceSessionDeviceRowSchema)(row).device_id ?? undefined;
     },
     deliver: (delivery) => deliveries.push(delivery),
     now,
@@ -305,10 +308,7 @@ test("while a device of the account reports quiet ahead, the look claims nothing
   const target = await account();
   const deviceId = await device(target.userId);
   const quiet = await device(target.userId);
-  await database.db
-    .update(devices)
-    .set({ quietUntil: new Date(NOW + 60_000) })
-    .where(eq(devices.id, quiet));
+  await setDeviceQuietUntil(database.run, quiet, new Date(NOW + 60_000));
   const f = stand(target, await voiceSession(target.userId, deviceId));
   const messageId = await offered(target, "Into a meeting.");
 

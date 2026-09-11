@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import * as SqlClient from "@effect/sql/SqlClient";
 import {
   CONVERSATION_EVENT_KIND,
   MESSAGE_AUTHOR,
@@ -6,11 +7,17 @@ import {
   MESSAGE_RATING,
   MESSAGE_ROLE,
 } from "@sidecar/wire";
-import { asc, eq } from "drizzle-orm";
+import { Effect, Schema } from "effect";
 import { afterAll, test } from "vitest";
-import { CONVERSATION_KIND, conversations, events, messages } from "../server/db/schema";
 import { RATING_REFUSAL, type RatingStore, rateMessage, storeWriter } from "../server/hosted/store";
+import { EpochMillisColumnSchema } from "../server/hosted/store/database";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import {
+  insertConversation,
+  insertEvent,
+  insertMessage,
+  readEventsByConversation,
+} from "./support/store-rows";
 
 /**
  * Ratings against the real migrations on PGlite: a rating is an event on one
@@ -31,51 +38,33 @@ const store: RatingStore = {
   writer: await storeWriter({ run: database.run, tools: {}, now: () => NOW }),
 };
 
-async function insertConversation(
-  userId: string,
-  row: Partial<typeof conversations.$inferInsert> = {},
-): Promise<string> {
-  const [inserted] = await database.db
-    .insert(conversations)
-    .values({ userId, kind: CONVERSATION_KIND.MAIN, ...row })
-    .returning({ id: conversations.id });
-  assert.ok(inserted);
-  return inserted.id;
-}
-
-async function insertMessage(
-  userId: string,
-  conversationId: string,
-  seq: number,
-  row: Pick<typeof messages.$inferInsert, "role" | "metadata">,
-): Promise<string> {
-  const [inserted] = await database.db
-    .insert(messages)
-    .values({
-      userId,
-      conversationId,
-      seq,
-      clientId: `client-${seq}`,
-      parts: [{ type: "text", text: `words ${seq}` }],
-      ...row,
-    })
-    .returning({ id: messages.id });
-  assert.ok(inserted);
-  return inserted.id;
-}
-
 /** A main with the developer's ask, an observation note of the brain's, and Luke's reply. */
 async function populate(userId: string) {
-  const main = await insertConversation(userId);
-  const ask = await insertMessage(userId, main, 1, {
+  const main = await insertConversation(database.run, { userId });
+  const ask = await insertMessage(database.run, {
+    userId,
+    conversationId: main,
+    seq: 1,
+    clientId: "client-1",
+    parts: [{ type: "text", text: "words 1" }],
     role: MESSAGE_ROLE.USER,
     metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
   });
-  const note = await insertMessage(userId, main, 2, {
+  const note = await insertMessage(database.run, {
+    userId,
+    conversationId: main,
+    seq: 2,
+    clientId: "client-2",
+    parts: [{ type: "text", text: "words 2" }],
     role: MESSAGE_ROLE.USER,
     metadata: { author: MESSAGE_AUTHOR.BRAIN, source: "roster_look" },
   });
-  const reply = await insertMessage(userId, main, 3, {
+  const reply = await insertMessage(database.run, {
+    userId,
+    conversationId: main,
+    seq: 3,
+    clientId: "client-3",
+    parts: [{ type: "text", text: "words 3" }],
     role: MESSAGE_ROLE.ASSISTANT,
     metadata: { author: MESSAGE_AUTHOR.BRAIN },
   });
@@ -94,13 +83,16 @@ test("a rating is one event on Luke's message, carrying the verdict, the note, a
   assert.equal(written.ok, true);
   if (!written.ok) return;
 
-  const rows = await database.db
-    .select()
-    .from(events)
-    .where(eq(events.conversationId, main))
-    .orderBy(asc(events.seq));
+  const rows = await readEventsByConversation(database.run, main);
   assert.deepEqual(
-    rows.map((row) => [row.id, row.seq, row.messageId, row.kind, row.deviceId, row.payload]),
+    rows.map((row) => [
+      row.id,
+      Schema.decodeUnknownSync(EpochMillisColumnSchema)(row.seq),
+      row.message_id,
+      row.kind,
+      row.device_id,
+      row.payload,
+    ]),
     [
       [
         written.id,
@@ -143,10 +135,7 @@ test("a later rating is a second event and the one the latest read answers; the 
     [latest?.id, latest?.rating, latest?.note, latest?.deviceId],
     [second.id, MESSAGE_RATING.UP, "On reflection it was right.", OTHER_DEVICE_ID],
   );
-  const ratings = await database.db
-    .select({ id: events.id })
-    .from(events)
-    .where(eq(events.conversationId, main));
+  const ratings = await readEventsByConversation(database.run, main);
   assert.deepEqual(ratings.map((row) => row.id).sort(), [first.id, second.id].sort());
   assert.deepEqual(
     (await database.store.events.list(userId, main)).map((event) => [event.seq, event.kind]),
@@ -172,8 +161,14 @@ test("a message the account does not own is not found, whether another account's
     { ok: false, refusal: RATING_REFUSAL.NOT_FOUND },
   );
   assert.equal(await database.store.ratings.latest(userId, reply), undefined);
+  const allEvents = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`select message_id from events`;
+    }),
+  );
   assert.equal(
-    (await database.db.select().from(events)).some((row) => row.messageId === reply),
+    allEvents.some((row) => row.message_id === reply),
     false,
   );
 });
@@ -182,7 +177,12 @@ test("a message the account owns but Luke did not write is not rateable: the dev
   const userId = await database.createUser();
   const { ask, note, main } = await populate(userId);
   const rating = { rating: MESSAGE_RATING.UP, deviceId: DEVICE_ID } as const;
-  const compaction = await insertMessage(userId, main, 4, {
+  const compaction = await insertMessage(database.run, {
+    userId,
+    conversationId: main,
+    seq: 4,
+    clientId: "client-4",
+    parts: [{ type: "text", text: "words 4" }],
     role: MESSAGE_ROLE.ASSISTANT,
     metadata: {
       author: MESSAGE_AUTHOR.BRAIN,
@@ -230,7 +230,7 @@ test("a latest rating whose payload this build cannot read answers nothing rathe
     deviceId: DEVICE_ID,
   });
   assert.equal(first.ok, true);
-  await database.db.insert(events).values({
+  await insertEvent(database.run, {
     userId,
     conversationId: main,
     messageId: reply,

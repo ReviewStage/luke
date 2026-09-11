@@ -1,7 +1,10 @@
 import * as SqlClient from "@effect/sql/SqlClient";
+import { MessageRoleSchema } from "@sidecar/wire";
 import { Effect, Schema } from "effect";
+import type { StoredUIMessage } from "../../server/core";
 import { CONVERSATION_KIND } from "../../server/db/storage-schema";
 import type { HostedStoreRun } from "../../server/hosted/store";
+import { EpochMillisColumnSchema } from "../../server/hosted/store/database";
 
 /**
  * Raw rows over the ambient `SqlClient`, for the setup and assertions a test
@@ -137,6 +140,160 @@ export function readMessagesByConversation(run: HostedStoreRun, conversationId: 
   );
 }
 
+export interface TurnInsertRow {
+  readonly userId: string;
+  readonly conversationId: string;
+  readonly origin: string;
+  readonly status: string;
+  readonly queuedAt?: Date;
+  readonly settledAt?: Date | null;
+}
+
+export function insertTurn(run: HostedStoreRun, row: TurnInsertRow): Promise<string> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql`
+      insert into turns (user_id, conversation_id, origin, status, queued_at, settled_at)
+      values (
+        ${row.userId}, ${row.conversationId}, ${row.origin}, ${row.status},
+        ${row.queuedAt ?? new Date()}, ${row.settledAt ?? null}
+      )
+      returning id
+    `;
+      return Schema.decodeUnknownSync(IdRowSchema)(rows[0]).id;
+    }),
+  );
+}
+
+/** A turn row, decoded to the same camelCase shape the store's own writer builds it under. */
+const TurnRowSchema = Schema.Struct({
+  id: Schema.String,
+  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
+  conversationId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("conversation_id")),
+  origin: Schema.String,
+  status: Schema.String,
+  model: Schema.NullOr(Schema.String),
+  reasoningEffort: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
+    Schema.fromKey("reasoning_effort"),
+  ),
+  promptHash: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
+    Schema.fromKey("prompt_hash"),
+  ),
+  toolSetHash: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
+    Schema.fromKey("tool_set_hash"),
+  ),
+  responseIds: Schema.propertySignature(Schema.NullOr(Schema.Array(Schema.String))).pipe(
+    Schema.fromKey("response_ids"),
+  ),
+  usage: Schema.NullOr(Schema.Unknown),
+  queuedAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("queued_at")),
+  startedAt: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
+    Schema.fromKey("started_at"),
+  ),
+  settledAt: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
+    Schema.fromKey("settled_at"),
+  ),
+  failure: Schema.NullOr(Schema.String),
+  cancelRequestedAt: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
+    Schema.fromKey("cancel_requested_at"),
+  ),
+});
+export type TurnRow = Schema.Schema.Type<typeof TurnRowSchema>;
+const decodeTurnRow = Schema.decodeUnknownSync(TurnRowSchema);
+
+export function readTurnsByConversation(
+  run: HostedStoreRun,
+  conversationId: string,
+): Promise<readonly TurnRow[]> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql`select * from turns where conversation_id = ${conversationId}`;
+      return rows.map((row) => decodeTurnRow(row));
+    }),
+  );
+}
+
+export function readTurnById(run: HostedStoreRun, id: string): Promise<TurnRow | undefined> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql`select * from turns where id = ${id}`;
+      return rows[0] === undefined ? undefined : decodeTurnRow(rows[0]);
+    }),
+  );
+}
+
+/** Every part this build stores carries at least a `type`, the same shape `writer.ts`'s own column schema checks. */
+const readsPartsShape = Schema.is(Schema.Array(Schema.Struct({ type: Schema.String })));
+const StoredPartsColumnSchema: Schema.Schema<StoredUIMessage["parts"]> = Schema.declare(
+  (input): input is StoredUIMessage["parts"] => readsPartsShape(input),
+);
+
+/** A message row, decoded to the same camelCase shape the store's own writer builds it under. */
+const MessageRowFullSchema = Schema.Struct({
+  id: Schema.String,
+  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
+  conversationId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("conversation_id")),
+  seq: EpochMillisColumnSchema,
+  turnId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(Schema.fromKey("turn_id")),
+  clientId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("client_id")),
+  role: MessageRoleSchema,
+  parts: StoredPartsColumnSchema,
+  metadata: Schema.NullOr(Schema.Unknown),
+  createdAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("created_at")),
+  finishedAt: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
+    Schema.fromKey("finished_at"),
+  ),
+});
+export type MessageRowFull = Schema.Schema.Type<typeof MessageRowFullSchema>;
+const decodeMessageRow = Schema.decodeUnknownSync(MessageRowFullSchema);
+
+export function readMessagesByConversationTyped(
+  run: HostedStoreRun,
+  conversationId: string,
+): Promise<readonly MessageRowFull[]> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql`
+        select * from messages where conversation_id = ${conversationId} order by seq
+      `;
+      return rows.map((row) => decodeMessageRow(row));
+    }),
+  );
+}
+
+export interface EventInsertRow {
+  readonly userId: string;
+  readonly conversationId: string;
+  readonly seq: number;
+  readonly messageId: string;
+  readonly kind: string;
+  readonly deviceId?: string | null;
+  readonly payload?: unknown;
+  readonly createdAt?: Date;
+}
+
+export function insertEvent(run: HostedStoreRun, row: EventInsertRow): Promise<string> {
+  const payload = row.payload === undefined ? null : JSON.stringify(row.payload);
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql`
+      insert into events (user_id, conversation_id, seq, message_id, kind, device_id, payload, created_at)
+      values (
+        ${row.userId}, ${row.conversationId}, ${row.seq}, ${row.messageId}, ${row.kind},
+        ${row.deviceId ?? null}, ${payload}::jsonb, ${row.createdAt ?? new Date()}
+      )
+      returning id
+    `;
+      return Schema.decodeUnknownSync(IdRowSchema)(rows[0]).id;
+    }),
+  );
+}
+
 export function readEventsByConversation(run: HostedStoreRun, conversationId: string) {
   return run(
     Effect.gen(function* () {
@@ -146,7 +303,7 @@ export function readEventsByConversation(run: HostedStoreRun, conversationId: st
   );
 }
 
-export interface DeviceRow {
+export interface DeviceInsertRow {
   readonly id: string;
   readonly userId: string;
   readonly installationId: string;
@@ -158,7 +315,7 @@ export interface DeviceRow {
   readonly pushEnvironment?: string | null;
 }
 
-export function insertDevice(run: HostedStoreRun, row: DeviceRow): Promise<void> {
+export function insertDevice(run: HostedStoreRun, row: DeviceInsertRow): Promise<void> {
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -181,6 +338,89 @@ export function readDevicesByUser(run: HostedStoreRun, userId: string) {
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       return yield* sql`select * from devices where user_id = ${userId} order by last_seen_at`;
+    }),
+  );
+}
+
+/** A device row, decoded to the same camelCase shape the store's own device seams build it under. */
+export const DeviceRowSchema = Schema.Struct({
+  id: Schema.String,
+  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
+  installationId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("installation_id")),
+  platform: Schema.String,
+  lastSeenAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("last_seen_at")),
+  activeUntil: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
+    Schema.fromKey("active_until"),
+  ),
+  quietUntil: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
+    Schema.fromKey("quiet_until"),
+  ),
+  pushToken: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
+    Schema.fromKey("push_token"),
+  ),
+  pushEnvironment: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
+    Schema.fromKey("push_environment"),
+  ),
+});
+export type DeviceRow = Schema.Schema.Type<typeof DeviceRowSchema>;
+const decodeDeviceRow = Schema.decodeUnknownSync(DeviceRowSchema);
+
+export function readDeviceById(run: HostedStoreRun, id: string): Promise<DeviceRow | undefined> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql`select * from devices where id = ${id}`;
+      return rows[0] === undefined ? undefined : decodeDeviceRow(rows[0]);
+    }),
+  );
+}
+
+export function setVoiceSessionDeviceId(
+  run: HostedStoreRun,
+  liveSessionId: string,
+  deviceId: string,
+): Promise<void> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+      update voice_sessions set device_id = ${deviceId} where live_session_id = ${liveSessionId}
+    `;
+    }),
+  );
+}
+
+export function setDeviceQuietUntil(
+  run: HostedStoreRun,
+  id: string,
+  quietUntil: Date | null,
+): Promise<void> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`update devices set quiet_until = ${quietUntil} where id = ${id}`;
+    }),
+  );
+}
+
+export function setDeviceActiveUntil(
+  run: HostedStoreRun,
+  id: string,
+  activeUntil: Date | null,
+): Promise<void> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`update devices set active_until = ${activeUntil} where id = ${id}`;
+    }),
+  );
+}
+
+export function readEventsByMessage(run: HostedStoreRun, messageId: string) {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`select * from events where message_id = ${messageId} order by seq`;
     }),
   );
 }

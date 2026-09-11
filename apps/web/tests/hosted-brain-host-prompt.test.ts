@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { and, asc, eq } from "drizzle-orm";
-import { pgSchema, text } from "drizzle-orm/pg-core";
+import * as SqlClient from "@effect/sql/SqlClient";
+import { Effect, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
 import { BRAIN_TURN_TRIGGER, WORKSPACE_FILE } from "../server/core";
-import { CONVERSATION_KIND, conversations, toolSets, turns } from "../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../server/db/storage-schema";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_TURN,
@@ -25,6 +25,7 @@ import {
 } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { insertConversation, readTurnById, readTurnsByConversation } from "./support/store-rows";
 
 /**
  * What a turn ran under, on its row: the hash of the prompt the session
@@ -103,12 +104,8 @@ async function ownedConversation(
   kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND] = CONVERSATION_KIND.MAIN,
 ): Promise<ConversationTarget> {
   const userId = await database.createUser();
-  const [row] = await database.db
-    .insert(conversations)
-    .values({ userId, kind })
-    .returning({ id: conversations.id });
-  assert.ok(row);
-  return { userId, conversationId: row.id };
+  const conversationId = await insertConversation(database.run, { userId, kind });
+  return { userId, conversationId };
 }
 
 /** One session of one seat: claimed on the conversation as the store hook does at its start. */
@@ -188,36 +185,36 @@ async function relayTurn(
 
 /** The conversation's turn rows by id, since both turns of a test start on the one fixed clock. */
 async function turnRows(target: ConversationTarget) {
-  return database.db
-    .select({ id: turns.id, promptHash: turns.promptHash, toolSetHash: turns.toolSetHash })
-    .from(turns)
-    .where(eq(turns.conversationId, target.conversationId))
-    .orderBy(asc(turns.id));
+  const rows = await readTurnsByConversation(database.run, target.conversationId);
+  return [...rows]
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    .map((row) => ({ id: row.id, promptHash: row.promptHash, toolSetHash: row.toolSetHash }));
 }
 
 const PROMPTS_TABLE = "prompts";
 
-/** Postgres's own catalogue, read for the one table that must not stand. */
-const informationSchemaTables = pgSchema("information_schema").table("tables", {
-  tableSchema: text("table_schema").notNull(),
-  tableName: text("table_name").notNull(),
-});
+const TableNameRowSchema = Schema.Struct({ name: Schema.String });
 
 async function tablesNamed(name: string): Promise<readonly string[]> {
-  const rows = await database.db
-    .select({ name: informationSchemaTables.tableName })
-    .from(informationSchemaTables)
-    .where(
-      and(
-        eq(informationSchemaTables.tableSchema, "public"),
-        eq(informationSchemaTables.tableName, name),
-      ),
-    );
-  return rows.map((row) => row.name);
+  const rows = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`
+        select table_name as name from information_schema.tables
+        where table_schema = 'public' and table_name = ${name}
+      `;
+    }),
+  );
+  return rows.map((row) => Schema.decodeUnknownSync(TableNameRowSchema)(row).name);
 }
 
 async function toolSetRows(hash: string) {
-  return database.db.select().from(toolSets).where(eq(toolSets.hash, hash));
+  return database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`select * from tool_sets where hash = ${hash}`;
+    }),
+  );
 }
 
 test("two sessions composed over unchanged workspace rows carry one prompt hash, the hash of the prompt as sent, and the prompt is stored nowhere", async () => {
@@ -311,11 +308,8 @@ test("an observation turn is offered another tool set and records another hash, 
   const typedTurn = await relayTurn(host, typed, "turn_0", 0, { hash: typedPrompt.hash });
   const observationTurn = await relayTurn(host, observed, "turn_0", 0, {});
 
-  const [typedRow] = await database.db.select().from(turns).where(eq(turns.id, typedTurn));
-  const [observationRow] = await database.db
-    .select()
-    .from(turns)
-    .where(eq(turns.id, observationTurn));
+  const typedRow = await readTurnById(database.run, typedTurn);
+  const observationRow = await readTurnById(database.run, observationTurn);
   assert.ok(typedRow);
   assert.ok(observationRow?.toolSetHash);
   assert.notEqual(observationRow.toolSetHash, typedRow.toolSetHash);
