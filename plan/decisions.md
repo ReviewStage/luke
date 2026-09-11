@@ -555,3 +555,42 @@ actions and the strip is the only way to mint a `ClientUIMessage`. Stated in the
 and better still made unrepresentable in `recordEvent`'s own kind union if a type can carry it —
 this repository prefers the unrepresentable to the refused. Carried into C8's and D3's notes so
 neither begins by writing a `speech.*` event the wrong way.
+
+
+## 2026-09-11 — Nothing stores a turn's live events, and nothing should: C7 is a projection (orchestrator, from C7 #1032)
+
+**Correcting my own brief.** I told C7 that B5's numbered `events` rows were its cursor. They are
+not, and building on that premise would have put a run's moments into the conversation's record.
+Verified in the tree: `CONVERSATION_EVENT_KIND` is the six `speech.*` kinds and `rating`, and the
+store writer's `switch` **ignores** `SLOW_STEP`, `ACTIONS_SETTLED`, `REPLY_SENTENCE` and `ENDED`
+under a comment that settles it — *"The rest of the stream is the relay's, about a run's moments
+rather than the record."* B5's author drew that line deliberately.
+
+**Ruling: `GET /api/brain/turns/{id}/events` is a projection over the turn row and the turn's
+journal message, polled and numbered inside the turn. `CONVERSATION_EVENT_KIND` is NOT widened.**
+No schema, no migration, no wire value-set change. C7 stopped at the value set and asked rather
+than widening it, which is the behaviour the escalation rule exists to produce.
+
+**Three reasons, so the next person who wants stored turn events finds them:**
+
+1. **`events` is a record, not a transport.** Storing live telemetry there conflates the
+   conversation's durable record with delivery for one consumer.
+2. **The trust reason, which is the strongest: widening the kinds would push reply text to every
+   device of the account through `/api/conversation/events`.** The events read already carries a
+   rating's free-text note to the account's own devices, which is fine and disclosed; reply
+   *sentences* would turn a mid-turn transport into a read route, and what leaves the machine is
+   decided deliberately rather than as a side effect.
+3. No schema means nothing for G4 to unpick and nothing for another lane to collide with.
+
+**The consequence for C8, which is what CLAUDE.md already requires: reply sentences arrive at
+turn end on the eve path.** eve's interim `message.completed` text is not the reply, and the relay
+writes the answer only on `turn.completed`. CLAUDE.md: the desktop's voice "hands their words to
+the brain through the voice's one tool and **says the brain's reply whole**." So **C8 must not go
+looking for an incremental reply.** What the stream carries mid-turn is the slow step and actions
+settling — which is exactly the commentary the voice service needs, and the reply whole at the end
+is the shape the rollout's own seams assume.
+
+**Required in C7's body:** that a client attached *after* the end receives the end exactly once and
+closes (a poll's failure mode is hanging until a timeout, which reads to the voice service as a
+turn that never ended), and that the poll is bounded, ends with the turn, and assumes nothing that
+outlives a function's 800 s `maxDuration`.
