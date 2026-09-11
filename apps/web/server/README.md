@@ -457,14 +457,18 @@ reports it spoken or the service marks it pushed, and how an offer stands is
 folded from the speech events on its message in sequence order, the latest
 being the state. What is guaranteed is one authorization per briefing and
 never that the words were heard, so a claimed briefing whose device vanished
-is never offered to anyone else: it expires like an unclaimed one. The
-hold (`speech.held`, carrying the quiet instant a device reported, during
-which nothing is claimed, pushed, or expired), its release, and the expiry
-(`speech.expired`, carrying its reason: `due`, or `hold_released` for a
-briefing the brain re-decides rather than speaks stale) are the writes of a
-scheduled sweep over the open offers, which lands beside this module on the
-observation tick. The Conversation view marks an announcement unspoken when
-the latest speech event on its message is `speech.expired`. A prompt and a tool set are
+is never offered to anyone else: it expires like an unclaimed one. The sweep
+on the observation tick writes the rest: `speech.held`, carrying the quiet
+instant, on every open offer of an account whose device reports quiet still
+ahead, during which nothing is claimed, pushed, or expired; `speech.expired`
+with the reason `hold_released` once that quiet lifts, beside one
+`hold_release` turn queued on the offer's conversation so the brain decides
+again against the roster as it then is rather than speaking a stale
+briefing (a queued `turns` row; draining queued rows into eve is the
+opener's, not yet built); and `speech.expired` with the reason `due` on an
+offer past its own instant with no hold over it. The Conversation view marks
+an announcement unspoken when the latest speech event on its message is
+`speech.expired`. A prompt and a tool set are
 content-addressed, the hash of the text or the schemas as the key, so the same
 prompt written by every turn is one row a turn's hash names without a foreign
 key. A provider cursor is where the observation of one provider session last
@@ -639,6 +643,12 @@ gives it a 60-second function duration. The
 logic lives in `server/hosted/observation-tick.ts` and
 `server/hosted/observation-pass.ts`; the route hands them the deployment's
 seams and the account query. Vercel crons run only on production deployments.
+
+Two things ride on the tick because it is the one schedule the service runs,
+and neither observes anything: the purge of conversations a Clear stamped
+past their retention window, and the sweep over the briefings still on offer
+described under the hosted store above, which reads the offers' events and
+the devices' quiet instants and never a word.
 
 The tick needs `CRON_SECRET`, which Vercel sends as the bearer on every
 scheduled call once it is set in the project. Without it the route answers

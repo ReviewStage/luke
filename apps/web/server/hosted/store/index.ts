@@ -376,6 +376,9 @@ export {
   SPEECH_REFUSAL,
   SPEECH_STATE,
   type SpeechStore,
+  type SpeechSweepOutcome,
+  type SpeechSweepStore,
+  sweepSpeech,
 } from "./speech.js";
 export type { StandingConversation } from "./standing-conversations.js";
 
