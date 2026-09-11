@@ -64,9 +64,11 @@ prints: the identity reads "chief of staff" where the template reads "voice
 assistant". Every optional control from the guide's appendix is absent until
 listening shows a behavior it would change, and no persona stands here at
 all: `@sidecar/guide`'s is the brain's, whose words the voice says.
-`greetingInstruction` is the introduction's opening, sent as one
-instructions append after `session.started` by the voice service, from the
-trusted side; `introductionSeedItems` is the one developer message the
+`greetingInstruction` is the introduction's opening, carrying the exact
+welcome text, sent as one instructions append after `session.started` by the
+voice service, from the trusted side, and `greetingCue` is the guide's own
+sentence the service sends as one commentary append once that append is
+acknowledged; `introductionSeedItems` is the one developer message the
 introduction's `input` may carry, the detected titles under
 `INTRODUCTION_SEED_BOUNDS`, composed by the takeover and admitted by the
 service against the same bound. The docs' backend preamble is not here: it is a prompt section

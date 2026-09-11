@@ -17,6 +17,14 @@ export const LOG_EVENT = {
   /** A fresh connection's sideband stands again on a session created earlier. */
   SESSION_ATTACHED: "session-attached",
   GREETING_SENT: "greeting-sent",
+  /** The greeting's append was acknowledged by the id it was sent with. */
+  GREETING_ACKNOWLEDGED: "greeting-acknowledged",
+  /** An error named the greeting's append: its kind, never the sentence it came with. */
+  GREETING_REFUSED: "greeting-refused",
+  /** Neither acknowledgment nor error arrived inside the wait, so nothing followed the greeting. */
+  GREETING_UNACKNOWLEDGED: "greeting-unacknowledged",
+  /** The commentary that asks the model to begin, sent once the greeting stood. */
+  GREETING_CUED: "greeting-cued",
   USAGE_RECORDED: "usage-recorded",
   SESSION_ENDED: "session-ended",
 } as const;
@@ -46,6 +54,15 @@ export type LogEntry =
   | { event: typeof LOG_EVENT.SESSION_CREATED; route: VoiceRoute }
   | { event: typeof LOG_EVENT.SESSION_ATTACHED; route: VoiceRoute }
   | { event: typeof LOG_EVENT.GREETING_SENT; route: VoiceRoute }
+  | { event: typeof LOG_EVENT.GREETING_ACKNOWLEDGED; route: VoiceRoute }
+  | {
+      event: typeof LOG_EVENT.GREETING_REFUSED;
+      route: VoiceRoute;
+      errorType: string | undefined;
+      errorCode: string | undefined;
+    }
+  | { event: typeof LOG_EVENT.GREETING_UNACKNOWLEDGED; route: VoiceRoute }
+  | { event: typeof LOG_EVENT.GREETING_CUED; route: VoiceRoute }
   | {
       event: typeof LOG_EVENT.USAGE_RECORDED;
       route: VoiceRoute;
