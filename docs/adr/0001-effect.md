@@ -69,9 +69,10 @@ decision is re-evaluated when Effect 4 has a stable release and all three ship
 The flag was trialled in `tsconfig.base.json` against the whole workspace, with
 each error counted once by the file it lives in, since every project compiles
 its dependencies' sources and would otherwise report the same error from
-several packages. It is not enabled here; whether to enable it and fix the
-errors, or to have every Effect Schema spell `Schema.optionalWith(..., { exact:
-true })` instead, is decided by the migration's follow-up PR on this count.
+several packages. The counts below justified enabling it: every workspace
+fixed its own errors under a per-package override first, and `tsconfig.base.json`
+now enables `exactOptionalPropertyTypes: true` directly, with the
+per-workspace overrides removed.
 
 | Workspace | Errors |
 | --- | --- |
