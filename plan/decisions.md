@@ -1194,3 +1194,34 @@ machinery. **(a)** `fix(LUKE-134): a push never lands over a claim`, ~150 lines,
 enqueue on Vercel-pending. **(b)** the push pass, tick, route, PRIVACY.md and eight tests, ~1,000
 accepted with the production/test split stated — ~480 source against ~560 tests and ~90 of prose is
 inside what the bound measures, and **tests are not cut to reach a number.**
+
+
+## 2026-09-11 — The last double-delivery guarantee standing on discipline, and how it becomes a type (orchestrator, from D3b and C8)
+
+D3 was asked, in its brief, whether the push pass can tell **"unclaimed"** from **"spoken but the
+spoken mark was refused"** (`NOT_CLAIMANT`: an unclaimed briefing, another device's claim, or a
+voice session with no device — and `voice_sessions.device_id` is nullable, so the third is
+reachable). **Its answer, stated in #1055 rather than worked around: it cannot, from anything
+recorded** — the only trace of the second case is the voice's **paraphrased transcript**, not the
+briefing's text.
+
+So *"never speak without a claim"* is load-bearing for **not delivering the same briefing twice**,
+and until now it was held by C8's discipline alone: nothing stopped an append that never claimed.
+
+**Ruling: make it unrepresentable.** The briefing append **takes the claim's own result** — a value
+only `claimSpeech` can mint, the way the strip is the only way to produce a `ClientUIMessage` and
+`admit()` the only way to mint a validated action. Then "appended without claiming" is not a bug to
+avoid; it is a call that does not compile. If C8's seam makes that awkward inside a2 it becomes a
+named follow-up rather than bending the lift out of shape, and D3's sentence changes from *"closed
+from C8's side alone"* to *"closed by construction in C8"* when it is true.
+
+**Why this is worth a type and not a rule, in the shape this lane converged on:** every
+double-delivery risk in the speech design is now closed by a structure rather than a convention.
+C5a made a `speech.*` kind on a plain event write **not compile**. D3a made a push over a claim
+**refuse in the transition** rather than in its caller. Claim-before-append was the last one resting
+on discipline — **and it is the one whose failure a developer would actually hear.**
+
+**Also recorded from #1055, because it changes what to look for:** D3's push adds **no route and no
+`api/` stub.** The push rides inside `/api/observation/tick`, whose answer gains a push-counts
+object. It still waits for the Vercel preview because `apps/web` changed and the payload shape is
+new, which is the conservative side of the enqueue rule and the right one here.
