@@ -28,8 +28,9 @@ import { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
  * spoken update, the moment every action it took has its result journaled,
  * the final answer a sentence at a time once that moment has passed, and the
  * record's end. A writer keeping the conversation reads the turn whole: its
- * start and origin, each tool call before it runs and its output or error
- * after, each reasoning item's summary beside the provider's opaque item, the
+ * start and origin, each step as an inference answers and opens it, each
+ * tool call before it runs and its output or error after, each reasoning
+ * item's summary beside the provider's opaque item, the
  * messages the turn completed as AI SDK `UIMessage`s, a compaction it folded,
  * and its end with the status, the usage split four ways, and the response
  * ids. Every event carries the conversation's key, the turn's id, and its
@@ -49,6 +50,8 @@ export const BRAIN_RUN_EVENT = {
   ENDED: "ended",
   /** The turn opened past its door and is about to read its opening words. */
   TURN_STARTED: "turn_started",
+  /** One inference answered and opened a step: every reasoning item, word, and call it carried is told after this and before the next. */
+  STEP_STARTED: "step_started",
   /** The model asked for a tool; nothing of the call has run yet. */
   TOOL_CALL_STARTED: "tool_call_started",
   /** The tool answered, or was refused, and its output is in the context. */
@@ -214,6 +217,11 @@ export type BrainRunEventBody =
       readonly origin: BrainTurnOrigin;
       readonly trigger: BrainTurnTrigger;
       readonly at: number;
+    }
+  | {
+      readonly kind: typeof BRAIN_RUN_EVENT.STEP_STARTED;
+      /** The step's place in the turn, numbered from one; a step told twice is one step. */
+      readonly step: number;
     }
   | {
       readonly kind: typeof BRAIN_RUN_EVENT.TOOL_CALL_STARTED;

@@ -9,7 +9,14 @@ import {
   type UnparsedWireValue,
   type UserMessageMetadata,
 } from "@sidecar/wire";
-import type { ReasoningUIPart, TextUIPart, ToolUIPart, UIMessage, UITools } from "ai";
+import type {
+  ReasoningUIPart,
+  StepStartUIPart,
+  TextUIPart,
+  ToolUIPart,
+  UIMessage,
+  UITools,
+} from "ai";
 import { BRAIN_REQUEST_ORIGIN, type BrainRequestOrigin } from "./requests.js";
 import { TOOL_CALL_SETTLEMENT, type ToolCallSettlement } from "./run-events.js";
 import { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
@@ -21,7 +28,13 @@ import { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
  * its role's schema names where this build has a shape for it, and the
  * model's answer as one assistant message whose parts are its reasoning
  * summaries, its text, and its tool calls in their settled states, in the
- * order the run produced them. Nothing here reads inside a provider's item:
+ * order the run produced them, each inference's parts behind a `step-start`
+ * part, so the row carries its step boundaries rather than leaving them to
+ * be inferred from arrival order: the SDK converts an assistant row for the
+ * model one step at a time, each step's reasoning and calls as one assistant
+ * message followed by the tool message that answers those calls, and a
+ * reasoning item that reached the record after its step's results still
+ * sits inside its own step. Nothing here reads inside a provider's item:
  * the reasoning part keeps the summary and the replay data the adapter
  * lifted, under the key the AI SDK's own OpenAI provider reads them from.
  */
@@ -29,6 +42,7 @@ import { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
 export const UI_PART_TYPE = {
   TEXT: "text",
   REASONING: "reasoning",
+  STEP_START: "step-start",
 } as const;
 
 export const UI_PART_STATE = {
@@ -42,7 +56,10 @@ export const REASONING_PROVIDER_KEY = "openai";
 const TOOL_PART_TYPE_PREFIX = "tool-";
 
 type ToolPart = ToolUIPart<UITools>;
-type AssistantPart = TextUIPart | ReasoningUIPart | ToolPart;
+type AssistantPart = TextUIPart | ReasoningUIPart | ToolPart | StepStartUIPart;
+
+/** The boundary before one inference's parts, as the SDK spells it. */
+export const STEP_START_PART: StepStartUIPart = { type: UI_PART_TYPE.STEP_START };
 
 /** The SDK's own type discriminator for a tool part, spelled as it spells it. */
 export function toolPartType(name: string): ToolPart["type"] {
@@ -134,13 +151,20 @@ export function settledToolPart(part: ToolPart, settlement: ToolCallSettlement):
 
 /**
  * The assistant message of one turn, gathered part by part as the run
- * reports them. A tool call enters with its input before it runs and is
- * replaced in place by its settled state; `finish` answers the message as it
- * stands, and a turn that fails before its answer never finishes one.
+ * reports them. Each inference opens a step, so its reasoning, text, and
+ * calls stand behind one boundary; a tool call enters with its input before
+ * it runs and is replaced in place by its settled state; `finish` answers
+ * the message as it stands, and a turn that fails before its answer never
+ * finishes one.
  */
 export class AssistantMessageBuilder {
   readonly #parts: AssistantPart[] = [];
   readonly #toolParts = new Map<string, number>();
+
+  /** One inference answered: everything it carried follows this boundary. */
+  stepStart(): void {
+    this.#parts.push(STEP_START_PART);
+  }
 
   reasoning(reasoning: ReasoningSummary): void {
     this.#parts.push(reasoningPart(reasoning));

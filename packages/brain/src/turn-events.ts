@@ -44,6 +44,7 @@ export class TurnEvents {
   readonly #options: TurnEventsOptions;
   readonly #message = new AssistantMessageBuilder();
   #sequence = 0;
+  #steps = 0;
   #opened = false;
 
   constructor(options: TurnEventsOptions) {
@@ -93,9 +94,20 @@ export class TurnEvents {
     };
   }
 
-  /** What the runtime reports that the record hears: each reasoning item, each call before and after it runs, and the words. */
+  /**
+   * What the runtime reports that the record hears: each inference as a step
+   * opening, each reasoning item, each call before and after it runs, and the
+   * words. The step is told first, so a listener ordering by step rather than
+   * arrival — which eve's stream needs, since a step's reasoning reaches it
+   * after the step's results — has the boundary before anything it bounds.
+   */
   heard(event: RuntimeEvent): void {
     switch (event.kind) {
+      case RUNTIME_EVENT.ANSWERED:
+        this.#steps += 1;
+        this.#message.stepStart();
+        this.#emit({ kind: BRAIN_RUN_EVENT.STEP_STARTED, step: this.#steps });
+        return;
       case RUNTIME_EVENT.REASONING:
         this.#message.reasoning(event.reasoning);
         this.#emit({
@@ -169,7 +181,7 @@ export class TurnEvents {
    * where there is one, and with the run's own accounting.
    */
   ended(
-    run: RunControl,
+    run: Pick<RunControl, "usage" | "responseIds">,
     status: BrainRequestStatus,
     failure: BrainRequestFailure | undefined,
   ): void {
