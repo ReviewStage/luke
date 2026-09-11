@@ -1,3 +1,6 @@
+import type * as HttpClient from "@effect/platform/HttpClient";
+import type { Layer } from "effect";
+import { layerFromCloudFetch } from "../effect/http.js";
 import type { CloudFetch } from "../json.js";
 import { HTTP_STATUS, jsonResponse, type RecordedRequest, recordingFetch } from "./http-fake.js";
 import type { JsonValue } from "./json.js";
@@ -17,6 +20,12 @@ const FAKE_FAILURE_STATUS = HTTP_STATUS.SERVER_ERROR;
 
 export interface FakeCloudApi {
   readonly fetch: CloudFetch;
+  /**
+   * The same fake as the `HttpClient` an Effect caller takes, so a test over a
+   * migrated client hands the layer where it used to hand the fetch and reads
+   * the requests back from the same recorder.
+   */
+  readonly layer: Layer.Layer<HttpClient.HttpClient>;
   /** Every request the fake saw, in order. */
   requests(): readonly RecordedRequest[];
   /** Every credential presented, in order, so a test can watch one replace another. */
@@ -56,6 +65,7 @@ export function fakeCloudApi(routes: Readonly<Record<string, FakeCloudRoute>>): 
   });
   return {
     fetch: recording.fetch,
+    layer: layerFromCloudFetch(recording.fetch),
     requests: () => recording.requests,
     credentials: () =>
       recording.requests
