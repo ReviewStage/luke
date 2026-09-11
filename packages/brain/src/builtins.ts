@@ -1,5 +1,9 @@
 import { RESPONSES_ITEM_FORMAT } from "@sidecar/runtime";
-import type { AgentRuntime, ModelAdapter } from "@sidecar/runtime/vocabulary";
+import {
+  type AgentRuntime,
+  type ModelAdapter,
+  promiseAgentRuntime,
+} from "@sidecar/runtime/vocabulary";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { ToolLoopAgentRuntime } from "./runtime.js";
 
@@ -15,10 +19,12 @@ import { ToolLoopAgentRuntime } from "./runtime.js";
  * the AI SDK at run time and the barrel must not.
  */
 export function toolLoopRuntimeOver(model: ModelAdapter): AgentRuntime {
-  return new ToolLoopAgentRuntime({
-    model,
-    itemFormat: RESPONSES_ITEM_FORMAT,
-    createContext: (format) =>
-      new ResponsesContextEngine({ id: format.runtime, version: format.runtimeVersion }),
-  });
+  return promiseAgentRuntime(
+    new ToolLoopAgentRuntime({
+      model,
+      itemFormat: RESPONSES_ITEM_FORMAT,
+      createContext: (format) =>
+        new ResponsesContextEngine({ id: format.runtime, version: format.runtimeVersion }),
+    }),
+  );
 }

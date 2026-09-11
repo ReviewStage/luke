@@ -1382,11 +1382,11 @@ it.effect(
       const committed = h.repository.state;
       assert.ok(committed && committed.items.length > 0);
       // The runtime's own reopen refuses from here on.
-      const original = Object.getPrototypeOf(h.runtime).openContext;
+      const original = h.runtime.openContext;
       Object.defineProperty(h.runtime, "openContext", {
         configurable: true,
         value: async (...args: Parameters<typeof original>) => {
-          const opened = await original.apply(h.runtime, args);
+          const opened = await original(...args);
           return {
             context: opened.context,
             bootstrap: { loaded: false, reason: "refused reopen", repaired: 0 },
@@ -1413,13 +1413,13 @@ it.effect(
       const h = yield* effectHarness();
       let disposed = 0;
       let releaseReopen: (() => void) | undefined;
-      const original = Object.getPrototypeOf(h.runtime).openContext;
+      const original = h.runtime.openContext;
       let opens = 0;
       Object.defineProperty(h.runtime, "openContext", {
         configurable: true,
         value: async (...args: Parameters<typeof original>) => {
           opens += 1;
-          const opened = await original.apply(h.runtime, args);
+          const opened = await original(...args);
           if (opens === 1) return opened;
           Object.defineProperty(opened.context, "dispose", {
             value: () => {

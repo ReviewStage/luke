@@ -43,6 +43,7 @@ import {
   MEMORY_SCOPE_KIND,
   type MemoryDefinition,
   type ModelAdapter,
+  promiseAgentRuntime,
   REASONING_EFFORT,
   RUN_END_REASON,
   RUN_ORIGIN,
@@ -735,12 +736,14 @@ class HeldIngestEngine extends ResponsesContextEngine {
 }
 
 function heldIngestRuntime(model: ModelAdapter): AgentRuntime {
-  return new ToolLoopAgentRuntime({
-    model,
-    itemFormat: RESPONSES_ITEM_FORMAT,
-    createContext: (format) =>
-      new HeldIngestEngine({ id: format.runtime, version: format.runtimeVersion }),
-  });
+  return promiseAgentRuntime(
+    new ToolLoopAgentRuntime({
+      model,
+      itemFormat: RESPONSES_ITEM_FORMAT,
+      createContext: (format) =>
+        new HeldIngestEngine({ id: format.runtime, version: format.runtimeVersion }),
+    }),
+  );
 }
 
 test("an ingest held across a cancel that resolves after the successor turn began lands on the retired engine, never in the context the next turn reads or keeps", async () => {

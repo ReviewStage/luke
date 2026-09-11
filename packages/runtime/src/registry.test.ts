@@ -19,7 +19,10 @@ import {
   RESPONSES_ITEM_FORMAT,
   resolveConfiguration,
   resolveConfigurationEither,
+  TOOL_EFFECT,
+  TOOL_EXECUTION,
   TOOL_LOOP_RUNTIME,
+  type ToolPlacement,
   UI_MESSAGE_ITEM_FORMAT,
 } from "./registry.js";
 
@@ -172,6 +175,26 @@ test("a duplicate id in a built-in table is a type error, never a run-time refus
     [BUILTIN_MODEL_ADAPTER.OPENAI]: { credentialKind: CREDENTIAL_REFERENCE_KIND.HOSTED_ACCOUNT },
   };
   assert.deepEqual(Object.keys(shapedLikeBuiltins), [BUILTIN_MODEL_ADAPTER.OPENAI]);
+});
+
+test("a pairing the built-ins rule out is a type error, never a run-time refusal", () => {
+  type NotebookProvider = (typeof BUILTINS.memoryProviders)[typeof BUILTIN_MEMORY_PROVIDER.OPENAI];
+  // @ts-expect-error a vector provider must name the embedding adapter its vectors run on.
+  const withoutAnEmbeddingAdapter: NotebookProvider = {
+    capabilities: BUILTINS.memoryProviders[BUILTIN_MEMORY_PROVIDER.OPENAI].capabilities,
+  };
+  assert.deepEqual(Object.keys(withoutAnEmbeddingAdapter), ["capabilities"]);
+
+  // @ts-expect-error only a host tool may speak; a performer carries acts and cannot claim it.
+  const speakingPerformer: ToolPlacement = {
+    execution: TOOL_EXECUTION.PERFORMER,
+    effect: TOOL_EFFECT.SPEAK,
+  };
+  assert.equal(speakingPerformer.execution, TOOL_EXECUTION.PERFORMER);
+
+  // @ts-expect-error a name no built-in holds is refused by the derived id union.
+  const unknownAdapter = configuration({ modelAdapterId: "no-such-adapter" });
+  assert.equal(resolveConfigurationEither(unknownAdapter).pipe(Either.isLeft), true);
 });
 
 test("two agents are two isolated stores", () => {

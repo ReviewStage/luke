@@ -14,14 +14,17 @@ import { notebookMemoryProvider } from "@sidecar/memory";
 import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import {
+  type AgentRuntime,
   CHILD_CLEANUP,
   CHILD_CONTEXT_MODE,
   CHILD_RUN_STATUS,
   type ChildCompletionRecord,
   type ChildRunRecord,
   COMPLETION_DELIVERY_STATUS,
+  type ContextOpening,
   childSessionKey,
   DEFAULT_AGENT_ID,
+  type ExecutionRuntime,
   MAIN_SESSION_KEY,
   MEMORY_SCOPE_KIND,
   MODEL_FAILURE,
@@ -29,6 +32,7 @@ import {
   type ModelAdapter,
   type ModelRequestOptions,
   type ModelResponse,
+  promiseAgentRuntime,
   RUN_ORIGIN,
 } from "@sidecar/runtime/vocabulary";
 import {
@@ -42,9 +46,9 @@ import {
   type SessionProvider,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
+import { Effect } from "effect";
 import { BRAIN_DEFAULTS, BrainAgent, type BrainAgentOptions, LOOK_SUBJECT } from "./agent.js";
 import { ResponsesContextEngine } from "./context-engine.js";
-import type { BrainExecutionRuntime } from "./effect/execution.js";
 import { type BrainPersistedState, MAXIMUM_TERMINAL_REQUESTS } from "./envelope.js";
 import type { BrainActionExecution, BrainActionPerformer } from "./performer.js";
 import {
@@ -247,15 +251,15 @@ export function adapterOf(client: BrainClient): ModelAdapter {
   };
 }
 
-export function runtimeOver(
-  model: ModelAdapter,
-  execution?: BrainExecutionRuntime,
-): ToolLoopAgentRuntime {
+export function runtimeOver(model: ModelAdapter, execution?: ExecutionRuntime): AgentRuntime {
+  return promiseAgentRuntime(toolLoopOver(model), execution ? { execution } : {});
+}
+
+function toolLoopOver(model: ModelAdapter): ToolLoopAgentRuntime {
   return new ToolLoopAgentRuntime({
     model,
     itemFormat: RESPONSES_ITEM_FORMAT,
     createContext: () => new ResponsesContextEngine(TOOL_LOOP_IDENTITY),
-    ...(execution ? { execution } : undefined),
   });
 }
 
@@ -314,7 +318,7 @@ export async function settle(): Promise<void> {
 
 export interface Harness {
   agent: BrainAgent;
-  runtime: ToolLoopAgentRuntime;
+  runtime: AgentRuntime;
   client: FakeClient;
   clock: FakeClock;
   repository: FakeBrainStateRepository;
@@ -344,7 +348,7 @@ export const PLAIN_PREPARATION: BrainAgentOptions["prepareTurn"] = () => ({
 export type HarnessOverrides = Partial<Omit<BrainAgentOptions, "runtime">> & {
   client?: BrainClient;
   /** The runtime every run of this harness is a fiber on; the test's own where a test has one. */
-  execution?: BrainExecutionRuntime;
+  execution?: ExecutionRuntime;
 };
 
 export function harness(
@@ -670,7 +674,7 @@ export const LIFETIME = 14 * 24 * 60 * 60 * 1000;
  * retired, exactly once, and a dispose that never settles holds nothing.
  */
 export function heldOpenRuntime(model: ModelAdapter, disposeHangs = false) {
-  const inner = runtimeOver(model);
+  const inner = toolLoopOver(model);
   let release: (() => void) | undefined;
   let disposed = 0;
   const context = new ResponsesContextEngine(TOOL_LOOP_IDENTITY);
@@ -681,20 +685,25 @@ export function heldOpenRuntime(model: ModelAdapter, disposeHangs = false) {
     },
   });
   let opens = 0;
-  const runtime: typeof inner = Object.create(inner);
-  Object.defineProperty(runtime, "openContext", {
+  const held: ToolLoopAgentRuntime = Object.create(inner);
+  Object.defineProperty(held, "openContext", {
     value: (...args: Parameters<typeof inner.openContext>) => {
       opens += 1;
       if (opens > 1) return inner.openContext(...args);
-      return new Promise<Awaited<ReturnType<typeof inner.openContext>>>((resolve) => {
-        release = () => resolve({ context, bootstrap: { loaded: true, repaired: 0 } });
+      return Effect.async<ContextOpening>((resume) => {
+        release = () =>
+          resume(Effect.succeed({ context, bootstrap: { loaded: true, repaired: 0 } }));
       });
     },
   });
-  return { runtime, release: () => release?.(), disposed: () => disposed };
+  return {
+    runtime: promiseAgentRuntime(held),
+    release: () => release?.(),
+    disposed: () => disposed,
+  };
 }
 
-export function agentOn(runtime: ToolLoopAgentRuntime, h: Harness) {
+export function agentOn(runtime: AgentRuntime, h: Harness) {
   return new BrainAgent({
     conversationId: MAIN_SESSION_KEY,
     runtime,

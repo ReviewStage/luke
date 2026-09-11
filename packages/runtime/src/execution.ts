@@ -4,7 +4,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import { Schema } from "effect";
+import { Cause, Data, Effect, Either, Exit, ManagedRuntime, Runtime, Schema } from "effect";
 import type { CompactionSource } from "./storage.js";
 
 /**
@@ -529,10 +529,13 @@ export type RuntimeEvent =
  * next inference has the guarantee by construction: the model is not asked
  * again until the listener has returned.
  */
+type RuntimeEventListenerEffect = (event: RuntimeEvent) => Effect.Effect<void>;
+
+/** The same listener as the Promise door still hands it in. */
 type RuntimeEventListener = (event: RuntimeEvent) => void | Promise<void>;
 
 /** One execution as a host asks for it. */
-export interface RuntimeRunRequest {
+export interface RuntimeRunRequestEffect {
   readonly runId: string;
   readonly context: ContextEngine;
   readonly tools: ToolExecutor;
@@ -546,18 +549,40 @@ export interface RuntimeRunRequest {
   readonly reasoningEffort?: ReasoningEffort;
   /** The prefix cache every inference of this run asks for, when the transport routes by one. */
   readonly promptCacheKey?: string;
-  /** Fires when the host revokes the run; the runtime ends it at the next safe point. */
+  /**
+   * Fires when the host revokes the run. Inside the run it is an
+   * interruption: the runtime watches it and interrupts its own fiber, so no
+   * wait the loop holds reads it. It stays an `AbortSignal` because it is
+   * also what a dispatched tool's waits and a context engine's own hooks
+   * settle on, and the host hands both of those in as promises.
+   */
   readonly signal: AbortSignal;
+  readonly onEvent: RuntimeEventListenerEffect;
+}
+
+/** One execution as the Promise door still asks for it. */
+export interface RuntimeRunRequest extends Omit<RuntimeRunRequestEffect, "onEvent"> {
   readonly onEvent: RuntimeEventListener;
 }
 
-/** A run under way: the host may steer it with more words or cancel it, and awaits its end. */
-export interface RuntimeRun {
+/**
+ * A run the host holds: it may steer it with more words or cancel it, and
+ * carries it to its end through `done`, which is the run itself rather than
+ * a handle on one already going. Whoever holds the run runs `done` exactly
+ * once — forked or awaited — and a cancel asked before that ends it the
+ * instant it opens, exactly as one asked mid-flight does.
+ */
+export interface RuntimeRunEffect {
   readonly runId: string;
   /** Words for the model to read at the next safe boundary, before its next inference; answers false once the run has ended. */
   steer(input: ContextInput): boolean;
   /** Ends the run at the next safe point; a deadline is a cancel that says so. */
   cancel(reason?: { deadline: boolean }): void;
+  readonly done: Effect.Effect<RuntimeRunEnd>;
+}
+
+/** A run under way, as the Promise door answers one: started already, and awaited rather than run. */
+export interface RuntimeRun extends Omit<RuntimeRunEffect, "done"> {
   readonly done: Promise<RuntimeRunEnd>;
 }
 
@@ -591,35 +616,163 @@ export interface CompactionOptions {
   readonly signal: AbortSignal;
 }
 
+/** Why a resume would not open the checkpoint it was handed, in the engine's own words. */
+export class RuntimeResumeRefused extends Data.TaggedError("RuntimeResumeRefused")<{
+  readonly reason: string;
+}> {}
+
 /**
  * Turns a request into normalized events over a model adapter, a context
  * engine, and a tool executor. It owns the loop between the model and the
  * tools and nothing outside it: no scheduling, no persistence, no policy
  * about what a tool may do.
+ *
+ * Every wait it holds is an effect, so the fiber a host runs it on is the
+ * whole of its cancellation: an interruption reaches the model answer, the
+ * engine's hooks, and the listener alike, and nothing is read after it. The
+ * context engine, the model adapter, and the tool executor stay as the host
+ * hands them in, because the host owns each by identity — it marks and rolls
+ * back the engine it checkpoints, and folds the context through the same
+ * adapter — and those three move when the host hands them in as layers.
  */
-export interface AgentRuntime {
+export interface AgentRuntimeEffect {
   readonly descriptor: RuntimeIdentity;
   /** The moment held-back inferences may resume, for a host to ask before opening a turn. */
   quietUntil(): number | undefined;
   /** What the runtime's model can do and how large its window is, for the host's compaction policy; nothing when it cannot say. */
-  capabilities(): Promise<ModelCapabilities | undefined>;
+  capabilities(): Effect.Effect<ModelCapabilities | undefined>;
   /**
-   * Folds the context behind a summary so the next request fits. A failure
-   * changes nothing about the context; the host decides what a failure means
-   * for the turn that needed it.
+   * Folds the context behind a summary so the next request fits. A fold that
+   * did not happen is this answer's own `compacted: false` and not a failure:
+   * the context is exactly as it was either way, and the host decides what a
+   * refusal means for the turn that needed it.
    */
-  compact(context: ContextEngine, options: CompactionOptions): Promise<RuntimeCompaction>;
+  compact(context: ContextEngine, options: CompactionOptions): Effect.Effect<RuntimeCompaction>;
   /** A context engine of this runtime's format, bootstrapped from the checkpoint when one is compatible, its unpaired calls answered with the lost result. */
+  openContext(
+    checkpoint: RuntimeCheckpoint | undefined,
+    lostResult: UnknownActionResult,
+    lifecycle?: ContextLifecycle,
+  ): Effect.Effect<ContextOpening>;
+  /** The run, decided here and carried by whoever runs its `done`; steering and cancelling stand from this instant. */
+  start(request: RuntimeRunRequestEffect): RuntimeRunEffect;
+  /** A run over a context restored from the checkpoint, its unpaired calls answered with the lost result; a checkpoint of another format is refused. */
+  resume(
+    checkpoint: RuntimeCheckpoint,
+    request: Omit<RuntimeRunRequestEffect, "context">,
+    lostResult: UnknownActionResult,
+  ): Effect.Effect<RuntimeRunEffect, RuntimeResumeRefused>;
+}
+
+/**
+ * The same seam as the hosts still holding a promise read it.
+ *
+ * @deprecated Read `AgentRuntimeEffect` instead; P7-08 deletes this shape
+ * with `promiseAgentRuntime` once the host hands the brain its collaborators
+ * as layers and every turn is a fiber of its own.
+ */
+export interface AgentRuntime
+  extends Omit<
+    AgentRuntimeEffect,
+    "capabilities" | "compact" | "openContext" | "start" | "resume"
+  > {
+  capabilities(): Promise<ModelCapabilities | undefined>;
+  compact(context: ContextEngine, options: CompactionOptions): Promise<RuntimeCompaction>;
   openContext(
     checkpoint: RuntimeCheckpoint | undefined,
     lostResult: UnknownActionResult,
     lifecycle?: ContextLifecycle,
   ): Promise<ContextOpening>;
   start(request: RuntimeRunRequest): RuntimeRun;
-  /** Starts a run over a context restored from the checkpoint, its unpaired calls answered with the lost result; a checkpoint of another format is refused. */
   resume(
     checkpoint: RuntimeCheckpoint,
     request: Omit<RuntimeRunRequest, "context">,
     lostResult: UnknownActionResult,
   ): Promise<RuntimeRun | { readonly refused: string }>;
+}
+
+/** A runtime a run is carried on: the managed one an edge holds, or a plain one. */
+export type ExecutionRuntime = ManagedRuntime.ManagedRuntime<never, never> | Runtime.Runtime<never>;
+
+const exitsOn = (
+  execution: ExecutionRuntime,
+): (<Value>(effect: Effect.Effect<Value>) => Promise<Exit.Exit<Value>>) =>
+  ManagedRuntime.TypeId in execution
+    ? (effect) => execution.runPromiseExit(effect)
+    : Runtime.runPromiseExit(execution);
+
+const promisesOn = (
+  execution: ExecutionRuntime,
+): (<Value>(effect: Effect.Effect<Value>) => Promise<Value>) => {
+  const exits = exitsOn(execution);
+  return (effect) =>
+    exits(effect).then((exit) => {
+      if (Exit.isSuccess(exit)) return exit.value;
+      throw Cause.squash(exit.cause);
+    });
+};
+
+const listenerEffect =
+  (onEvent: RuntimeEventListener): RuntimeEventListenerEffect =>
+  (event) =>
+    Effect.promise(async () => {
+      await onEvent(event);
+    });
+
+const runOn = (
+  run: RuntimeRunEffect,
+  carry: <Value>(effect: Effect.Effect<Value>) => Promise<Value>,
+): RuntimeRun => ({
+  runId: run.runId,
+  steer: (input) => run.steer(input),
+  cancel: (reason) => run.cancel(reason),
+  done: carry(run.done),
+});
+
+/**
+ * The `AgentRuntime` shape a host still holding a promise reads, over the
+ * effects the runtime itself answers. Running here is a run outside a
+ * runtime edge, which the rule allows precisely because this door is that
+ * edge for as long as it exists: `AgentRuntime` is what declares a promise,
+ * and the door goes with that declaration. A defect is squashed back to the
+ * error that caused it, so a listener or an engine that threw reaches the
+ * caller as the error it threw rather than as the fiber failure that carried
+ * it, and a run's `done` is carried the instant `start` answers, so a host
+ * that steers or cancels before it awaits reaches a run already going.
+ *
+ * @deprecated The strangler shim on the `Effect.runPromise` allowlist in
+ * `docs/adr/0001-effect.md`; P7-08 deletes it once the host hands the brain
+ * its collaborators as layers and holds every run as a fiber of its own.
+ */
+export function promiseAgentRuntime(
+  runtime: AgentRuntimeEffect,
+  options: { readonly execution?: ExecutionRuntime } = {},
+): AgentRuntime {
+  const carry = promisesOn(options.execution ?? Runtime.defaultRuntime);
+  return {
+    // Read on each ask, because a hosted adapter learns its model only once
+    // its capabilities have been answered.
+    get descriptor(): RuntimeIdentity {
+      return runtime.descriptor;
+    },
+    quietUntil: () => runtime.quietUntil(),
+    capabilities: () => carry(runtime.capabilities()),
+    compact: (context, compaction) => carry(runtime.compact(context, compaction)),
+    openContext: (checkpoint, lostResult, lifecycle) =>
+      carry(runtime.openContext(checkpoint, lostResult, lifecycle)),
+    start: (request) =>
+      runOn(runtime.start({ ...request, onEvent: listenerEffect(request.onEvent) }), carry),
+    resume: (checkpoint, request, lostResult) =>
+      carry(
+        Effect.either(
+          runtime.resume(
+            checkpoint,
+            { ...request, onEvent: listenerEffect(request.onEvent) },
+            lostResult,
+          ),
+        ),
+      ).then((resumed) =>
+        Either.isLeft(resumed) ? { refused: resumed.left.reason } : runOn(resumed.right, carry),
+      ),
+  };
 }

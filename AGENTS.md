@@ -318,9 +318,12 @@ Canonical commands:
   host (`BrainAgent`) owns the conversation's standing — accepting asks into runs, queueing turns, the
   journal that records an action before its effect and its result before the
   next inference, the transcript cursors, the checkpoint — and reaches a
-  model only through an `AgentRuntime` over a `ModelAdapter`, a
-  `ContextEngine`, and the `ToolExecutor` the host itself supplies. Nothing in
-  the host reads inside a provider's item. Which parts stand is a
+  model only through an `AgentRuntimeEffect` over a `ModelAdapter`, a
+  `ContextEngine`, and the `ToolExecutor` the host itself supplies, every
+  answer of which is an effect, so a run is a fiber and the interruption of
+  that fiber is the whole of its cancellation; the `AgentRuntime` beside it is
+  the same seam answered as promises, for a host that still holds one.
+  Nothing in the host reads inside a provider's item. Which parts stand is a
   configuration, not a construction: `packages/runtime` names its built-in
   agent runtimes, model adapters, context engines, and memory providers in
   one `BUILTINS` table, whose ids a duplicate cannot enter and whose pairings
