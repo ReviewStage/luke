@@ -3,7 +3,7 @@ import { builtinModules } from "node:module";
 import { join, posix, relative, sep } from "node:path";
 import type { BuildOptions, Metafile, Plugin } from "esbuild";
 import type { FunctionDefinition } from "./function-durations.js";
-import { FUNCTION_BUNDLE_DIRECTORY, routeSourcePath, webFunctions } from "./function-stubs.js";
+import { FUNCTION_BUNDLE_DIRECTORY, routeSourcePath, webFunctions } from "./function-layout.js";
 
 /**
  * How the functions become bundles, declared once so the build script and the

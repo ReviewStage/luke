@@ -277,12 +277,9 @@ node "$SIDECAR_REPO_ROOT/design/generate-brand-assets.mjs" --check
 # source, four committed outputs in @sidecar/surface; --check fails if any drifted.
 node "$SIDECAR_REPO_ROOT/design/generate-surface-shared.mjs" --check
 
-# Vercel registers api/ functions from the uploaded tree before the build runs,
-# so each function's committed api/*.js stub is what gets deployed, and the
-# vercel.json rewrites are what land a route on its grouped function; --check
-# fails if a function has no stub, a stub or rewrite went stale, or a .js under
-# api/ has no function.
-pnpm --dir "$SIDECAR_REPO_ROOT/apps/web" exec tsx scripts/function-stubs.ts --check
+# The vercel.json rewrites are what land a route on its grouped function, and
+# they are generated from server/routes/; --check fails if a rewrite went stale.
+pnpm --dir "$SIDECAR_REPO_ROOT/apps/web" exec tsx scripts/function-rewrites.ts --check
 
 # The public platform table is a direct projection of the session package's
 # narrow provider identity catalog. Privacy wording stays manually reviewed.
@@ -388,8 +385,9 @@ if [[ -n "$snaps_outside_history" ]]; then
     exit 1
 fi
 
-# The web functions are bundled from server/routes/ into api/ with every
-# workspace package inlined, so a bare `@sidecar/…` specifier is resolved by
+# The web functions are bundled from server/routes/ into dist-functions/ and
+# the Build Output tree with every workspace package inlined, so a bare
+# `@sidecar/…` specifier is resolved by
 # esbuild at build time from apps/web's own node_modules. pnpm links there only
 # what apps/web/package.json declares, so a specifier the web app's sources name
 # without declaring resolves in a developer's hoisted tree, typechecks, and
@@ -626,14 +624,16 @@ fi
 
 # `@effect/platform-node` and `@effect/sql*` reach `node:` modules, so an import
 # of either compiles and bundles happily and then fails where there is no Node:
-# in the sandboxed renderer, and in a web function whose builder ships only what
-# it could follow. The renderer's `node:` grep above catches the direct reach;
-# this catches the Effect layer that would carry it in behind a bare specifier.
+# the sandboxed renderer. The renderer's `node:` grep above catches the direct
+# reach; this catches the Effect layer that would carry it in behind a bare
+# specifier. (A web function inlines its whole graph and runs on Node, and the
+# isolation guard in apps/web/tests/build-output.test.ts is what proves each one
+# loads.)
 node_reaching_effect=$(grep -rEn --include='*.ts' --include='*.tsx' \
     '"@effect/(platform-node|sql)' \
-    "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer" "$SIDECAR_REPO_ROOT/apps/web/api" || true)
+    "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer" || true)
 if [[ -n "$node_reaching_effect" ]]; then
-    printf 'error: @effect/platform-node and @effect/sql* reach node: modules and must not be imported by the renderer or a web function — put the layer behind the runtime edge that builds it:\n%s\n' \
+    printf 'error: @effect/platform-node and @effect/sql* reach node: modules and must not be imported by the renderer — put the layer behind the runtime edge that builds it:\n%s\n' \
         "$node_reaching_effect" >&2
     exit 1
 fi

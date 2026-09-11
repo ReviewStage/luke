@@ -1,7 +1,5 @@
 import { cp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join, posix } from "node:path";
-import type { FunctionDefinition } from "./function-durations.js";
-import { stubPath } from "./function-stubs.js";
 
 /**
  * The Build Output the web app's build leaves for Vercel: `.vercel/output`
@@ -48,7 +46,7 @@ export interface HandWrittenFunction {
 
 /** The one hand-written function: the feedback courier the desktop posts to. */
 export const HAND_WRITTEN_FUNCTIONS: readonly HandWrittenFunction[] = [
-  { source: posix.join("api", "feedback.mjs"), path: posix.join("api", "feedback.mjs") },
+  { source: posix.join("server", "feedback.mjs"), path: posix.join("api", "feedback.mjs") },
 ];
 
 /** A function as the tree emits it: its public path, its entry's contents, and the bound it runs under. */
@@ -65,11 +63,6 @@ export interface FunctionConfig {
   readonly launcherType: typeof NODE_LAUNCHER.launcherType;
   readonly shouldAddHelpers: typeof NODE_LAUNCHER.shouldAddHelpers;
   readonly maxDuration?: number;
-}
-
-/** The public path a bundled function answers on: the same path its rewrites name. */
-export function functionPublicPath(definition: FunctionDefinition): string {
-  return stubPath(definition);
 }
 
 /** The `.func` directory of a function under the output root. */

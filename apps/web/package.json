@@ -15,7 +15,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx server/db/migrate.ts",
     "dev": "vite",
-    "functions:stubs": "tsx scripts/function-stubs.ts --write",
+    "functions:rewrites": "tsx scripts/function-rewrites.ts --write",
     "functions:externals": "tsx scripts/function-externals.ts --write",
     "preview": "vite preview",
     "test": "vitest run && pnpm test:agent",

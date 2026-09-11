@@ -15,12 +15,11 @@ import {
   functionConfigPath,
   functionDirectory,
   functionEntryPath,
-  functionPublicPath,
   HAND_WRITTEN_FUNCTIONS,
 } from "../server/build-output";
 import { functionBundlePlan } from "../server/function-bundles";
+import { functionPublicPath, webFunctions } from "../server/function-layout";
 import { apiRewrites } from "../server/function-rewrites";
-import { webFunctions } from "../server/function-stubs";
 
 /**
  * The tree Vercel deploys is emitted here from the same plan the build step

@@ -18,25 +18,20 @@ import {
 } from "../server/function-bundles";
 import { DISPATCH_QUERY } from "../server/function-dispatch";
 import {
-  FUNCTION_GROUP,
   FUNCTION_MAX_DURATION_SECONDS,
-  functionConfigSource,
   functionDefinitions,
   functionPath,
   routeKeyOf,
   VOICE_FUNCTION_MAX_DURATION_SECONDS,
 } from "../server/function-durations";
-import { apiRewrites, rewritesDrifted } from "../server/function-rewrites";
 import {
-  bundlePath,
   FUNCTION_BUNDLE_DIRECTORY,
+  functionPublicPath,
   routeKeys,
   routeSourcePath,
-  stubDrift,
-  stubPath,
-  stubSource,
   webFunctions,
-} from "../server/function-stubs";
+} from "../server/function-layout";
+import { apiRewrites, rewritesDrifted } from "../server/function-rewrites";
 
 const WEB = fileURLToPath(new URL("..", import.meta.url));
 
@@ -81,45 +76,8 @@ test("a grouped function's routes all had the duration the group declares", asyn
   }
 });
 
-test("the config literal parses back to the duration it was written from", async () => {
-  const source = functionConfigSource(VOICE_FUNCTION_MAX_DURATION_SECONDS);
-  // SAFETY: the module is the one line `functionConfigSource` wrote, whose only export is `config`.
-  const module = (await import(`data:text/javascript,${encodeURIComponent(source)}`)) as {
-    config: { maxDuration: number };
-  };
-  assert.deepEqual(module.config, { maxDuration: VOICE_FUNCTION_MAX_DURATION_SECONDS });
-});
-
-test("every function has its committed stub, nothing under api/ is an orphan, and the rewrites are current", async () => {
-  assert.deepEqual(await stubDrift({ web: WEB }), []);
+test("the committed /api/ rewrites are the generated ones, in the generated order", async () => {
   assert.equal(await rewritesDrifted(WEB), false);
-});
-
-test("a stub carries the duration its function was given, and only then", async () => {
-  for (const definition of await webFunctions(WEB)) {
-    const configLine = stubSource(definition).split("\n")[1] ?? "";
-    if (definition.maxDuration === undefined) {
-      assert.equal(definition.file, FUNCTION_GROUP.DEFAULT);
-      assert.equal(configLine, "");
-      continue;
-    }
-    // SAFETY: the module is the config line the stub carries, whose only export is `config`.
-    const module = (await import(`data:text/javascript,${encodeURIComponent(configLine)}`)) as {
-      config: { maxDuration: number };
-    };
-    assert.deepEqual(module.config, { maxDuration: definition.maxDuration });
-  }
-});
-
-test("a nested stub's specifier resolves to its bundle under dist-functions/", async () => {
-  for (const definition of await webFunctions(WEB)) {
-    const specifier = stubSource(definition).match(/from "([^"]+)"/)?.[1] ?? "";
-    assert.equal(
-      posix.resolve("/", posix.dirname(stubPath(definition)), specifier),
-      `/${bundlePath(definition)}`,
-    );
-    assert.equal(bundlePath(definition).split(posix.sep)[0], FUNCTION_BUNDLE_DIRECTORY);
-  }
 });
 
 test("every dispatched route has one rewrite onto its function, carrying the route key", async () => {
@@ -135,7 +93,10 @@ test("every dispatched route has one rewrite onto its function, carrying the rou
   }
   for (const definition of functions) {
     for (const route of definition.routes) {
-      assert.equal(seen.get(route), definition.dispatches ? `/${stubPath(definition)}` : undefined);
+      assert.equal(
+        seen.get(route),
+        definition.dispatches ? `/${functionPublicPath(definition)}` : undefined,
+      );
     }
   }
 });

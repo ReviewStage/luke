@@ -4,7 +4,6 @@ import { build } from "esbuild";
 import {
   BUILD_OUTPUT_DIRECTORY,
   emitBuildOutput,
-  functionPublicPath,
   HAND_WRITTEN_FUNCTIONS,
 } from "../server/build-output.js";
 import {
@@ -16,7 +15,11 @@ import {
   importChain,
   packageNameOf,
 } from "../server/function-bundles.js";
-import { bundlePath, FUNCTION_BUNDLE_DIRECTORY, stubDrift } from "../server/function-stubs.js";
+import {
+  bundlePath,
+  FUNCTION_BUNDLE_DIRECTORY,
+  functionPublicPath,
+} from "../server/function-layout.js";
 
 /**
  * Bundles the functions the routes under `server/routes/` are grouped into,
@@ -26,32 +29,19 @@ import { bundlePath, FUNCTION_BUNDLE_DIRECTORY, stubDrift } from "../server/func
  * passes over the same sixteen workspace packages, most of a deploy's build
  * time, under compiler options that are not this repository's.
  *
- * The bundles cannot land in `api/` themselves: Vercel registers `api/`
- * functions from the uploaded source tree before `buildCommand` runs, so a
- * function first emitted here is never deployed. The committed stubs under
- * `api/` are what the builder discovers, each re-exporting its bundle and
- * carrying its `config` literal, and a route without one fails this build
- * rather than 404ing on production.
+ * Each bundle is emitted whole into a `.func` of the Build Output tree
+ * (`server/build-output.ts`), which is what Vercel deploys; nothing under
+ * `api/` is committed, so Vercel's zero-config pass has nothing to build
+ * beside it.
  *
- * Workspace packages are inlined; the web app's own declared runtime
- * dependencies stay external, because those are what the builder can trace
- * from `apps/web/node_modules`. Anything else that resolved external is a
- * dependency a bundled package reaches that this app never declared, and it
- * would fail at the first request as a missing module, so the build refuses it
- * here instead.
+ * Workspace packages and declared dependencies alike are inlined, since a
+ * `.func` carries only what is under it. Anything that still resolved
+ * external and is neither a Node builtin nor a named exception is a module
+ * the function would fail to load, so the build refuses it here instead.
  */
 const WEB = join(import.meta.dirname, "..");
 /** Where `vite build` and `prerender.ts` leave the site, copied whole under the output's `static/`. */
 const SITE_DIRECTORY = "dist";
-
-const drift = await stubDrift({ web: WEB });
-if (drift.length > 0) {
-  throw new Error(
-    `api/ stubs disagree with server/routes/ (run \`pnpm --filter @luke/web functions:stubs\`): ${drift
-      .map((entry) => `${entry.kind} ${entry.path}`)
-      .join(", ")}`,
-  );
-}
 
 const plan = await functionBundlePlan(WEB);
 // Emptied first, so a bundle an earlier plan emitted can never sit beside the shipping ones and be read as one of them.

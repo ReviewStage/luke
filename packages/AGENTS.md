@@ -186,15 +186,14 @@ function separately and in series, at several seconds apiece, so the routes
 share one function per duration bound (`apps/web/server/function-durations.ts`)
 behind a generated dispatcher that restores each request's own path; the two
 voice routes, which export the server Vercel upgrades WebSockets into, stay
-functions of their own. The committed stubs under `apps/web/api/` are what
-Vercel discovers, since it registers functions from the uploaded tree before
-the build runs; each re-exports its function's bundle, the `/api/` rewrites of
-`apps/web/vercel.json` land each route on its function, and `pnpm --filter
-@luke/web functions:stubs` regenerates both after a route is added. The build's
-last step also writes the Build Output tree (`apps/web/server/build-output.ts`):
-`.vercel/output` with the site and one `.func` per function, which static-build
-adopts as the deployment when present, so the deploy shape is the build's own
-on every preset. Reachability into a package is read from the bundles' inputs,
+functions of their own. The build's last step writes the Build Output tree
+(`apps/web/server/build-output.ts`): `.vercel/output` with the site and one
+`.func` per function, which static-build adopts as the deployment when present,
+so the deploy shape is the build's own on every preset and nothing is committed
+under `apps/web/api/` (Vercel's zero-config pass would build a file there beside
+the tree). The `/api/` rewrites of `apps/web/vercel.json` land each route on its
+function's public path, and `pnpm --filter @luke/web functions:rewrites`
+regenerates them after a route is added. Reachability into a package is read from the bundles' inputs,
 not their externals, because an inlined import leaves no external behind.
 Server code still names packages by bare specifier like everything else, and
 `apps/web/package.json` declares each one it names: the bundle step refuses an
