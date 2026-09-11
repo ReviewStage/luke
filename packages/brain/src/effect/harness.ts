@@ -13,7 +13,9 @@
  * handed, so capturing the currently running fiber's own runtime — the one
  * `it.effect` already provided a `TestClock` into — is what lets
  * `TestClock.setTime` reach the timers this harness's `BrainAgent` schedules,
- * with no clock of the harness's own to keep in step.
+ * with no clock of the harness's own to keep in step. The same runtime is
+ * what every run of the harness's agent is a fiber on, so a run and the
+ * timers around it stand on one clock rather than two.
  */
 import { type TimerSeam, timersFromRuntime } from "@sidecar/runtime/effect";
 import { Chunk, Effect, TestClock } from "effect";
@@ -56,8 +58,9 @@ export const effectHarness = (
 ): Effect.Effect<Harness> =>
   Effect.gen(function* () {
     yield* TestClock.setTime(NOW);
-    const { now, schedule, cancel } = yield* ambientTimers;
-    return plainHarness({ now, schedule, cancel, ...overrides }, repository);
+    const runtime = yield* Effect.runtime<never>();
+    const { now, schedule, cancel } = timersFromRuntime(runtime);
+    return plainHarness({ execution: runtime, now, schedule, cancel, ...overrides }, repository);
   });
 
 /**

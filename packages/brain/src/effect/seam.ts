@@ -16,7 +16,7 @@
  * splitting them would only add tags a caller could never provide
  * separately from the others.
  *
- * `agentSeamLayer` is a strangler shim: P5-14 deletes it once the agent's
+ * `agentSeamLayer` is a strangler shim: P5-14b deletes it once the agent's
  * own collaborators read the tag from their environment instead of taking
  * the plain object as a constructor argument.
  */
@@ -28,6 +28,6 @@ export class AgentSeamTag extends Context.Tag("@sidecar/brain/AgentSeam")<
   AgentSeam
 >() {}
 
-/** @deprecated Wraps the existing seam object as a `Layer`; P5-14 deletes it with the constructor argument it stands in for. */
+/** @deprecated Wraps the existing seam object as a `Layer`; P5-14b deletes it with the constructor argument it stands in for. */
 export const agentSeamLayer = (seam: AgentSeam): Layer.Layer<AgentSeamTag> =>
   Layer.succeed(AgentSeamTag, seam);

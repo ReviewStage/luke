@@ -244,7 +244,7 @@ export class AskLedger {
      *
      * This is `Effect.runSync` outside a runtime edge, the strangler shim
      * `docs/adr/0001-effect.md` lists for `AskLedger#submit`; it goes with
-     * P5-14's turn runner, once this class runs on a fiber of its own rather
+     * P5-14b's turn runner, once this class runs on a fiber of its own rather
      * than answering a caller's `Promise`.
      */
     const decideSubmission = (

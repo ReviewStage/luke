@@ -56,7 +56,7 @@ function answeredSummary(answer: Extract<ModelResponse, { outcome: "answered" }>
  * here, a strangler shim on the `Effect.runPromise` allowlist in
  * `docs/adr/0001-effect.md`: the turn that calls this adapter still holds a
  * promise, not a fiber. It goes with `BrainTransport#send`'s `runCall` once
- * P5-14 moves a turn onto the brain's own runtime.
+ * P5-14b moves a turn onto the brain's own runtime.
  */
 export function tracedModelAdapter(
   adapter: ModelAdapter,

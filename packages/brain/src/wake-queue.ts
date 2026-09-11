@@ -29,7 +29,7 @@ export interface WakeQueueOptions {
  * this class is the synchronous facade every caller here still holds, and
  * `Effect.runSync` is the bridge, safe because every operation that module
  * exposes is one that never suspends. It is a named strangler shim —
- * `docs/adr/0001-effect.md` carries it — deleted in P5-14 once the turn
+ * `docs/adr/0001-effect.md` carries it — deleted in P5-14b once the turn
  * runner and its callers hold a fiber of their own instead of this class.
  */
 export class WakeQueue {

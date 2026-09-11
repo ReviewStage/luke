@@ -18,7 +18,7 @@
  * never waits for a next element — so `../wake-queue.ts`'s synchronous
  * methods can run each one with `Effect.runSync` and stay exactly the
  * synchronous facade they were. That bridge is the strangler shim
- * `docs/adr/0001-effect.md` names; P5-14 deletes it once the turn runner and
+ * `docs/adr/0001-effect.md` names; P5-14b deletes it once the turn runner and
  * its callers hold a fiber of their own instead of this class.
  */
 import { Chunk, Effect, Queue, Stream } from "effect";
