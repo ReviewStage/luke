@@ -1945,3 +1945,29 @@ re-exports `dist-functions/brain/turns.js` and is **the turns LIST route**, and 
 brain rewrite is C7's `/api/brain/turns/([^/]+)/events` → `turns/events.js?id=$1`. **So
 `brainTurnPath(id)` and its cancel need their own function file and their own rewrite in that
 shape — not a rewrite onto `turns.js`**, or a per-turn read answers the list.
+
+
+## 2026-09-11 — An orchestrator error worth recording: a broadcast must be true of every recipient
+
+**I wrote the #1093 note for C2b-2b and sent it verbatim to C4, including the sentence that "your
+three routes ARE brain routes". C4 has no routes; #1045 adds none.** C4 checked it against its own
+thirteen files rather than believing it and said so.
+
+**The lesson is mine: sending one text to three sessions to save time means every sentence in it
+must be true of all three, or the message should be split.** Three lanes read main differently, and
+a claim that is precise for one is a false statement about another. **Twice today a worker has
+caught me over-generalising** — C3 narrowing the same #1093 note ("the HttpApi group is the hosted
+brain contract, not eve's channel, and my lane adds no brain route") and now C4 rejecting a sentence
+about routes it does not have.
+
+Both caught it because the standing instruction is to verify rather than take, including from me.
+**That instruction is load-bearing in both directions: it is what makes a wrong broadcast
+survivable.**
+
+## And one concrete trap made recognisable (C4)
+
+`bootstrap before check.sh` has been in the addendum all day without a symptom. C4 supplied one:
+**on today's main `packages/credentials` wants `@effect/platform-node` and `@effect/vitest`, so a
+`check.sh` run before bootstrapping reads as FIFTEEN FAILURES that look like your own broken
+imports.** That is the shape that sends someone hunting in their own diff, and a number makes it
+recognisable where the rule alone did not.
