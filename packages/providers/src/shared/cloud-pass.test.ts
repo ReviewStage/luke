@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { describe, it } from "@effect/vitest";
 import {
   ACTION_KIND,
   ACTION_RESULT_STATUS,
@@ -14,18 +15,22 @@ import {
 } from "@sidecar/session";
 import { type CloudFetch, isWireString } from "@sidecar/wire";
 import { admittedForTest, HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
+import { Duration, Effect, Exit, Fiber, TestClock } from "effect";
 import { test } from "vitest";
 import { ADAPTER_DIAGNOSTIC_KIND, type AdapterDiagnosticCallback } from "./adapter-diagnostics.js";
 import { ADAPTER_FAILURE } from "./adapter-failure.js";
-import { type CloudPass, type CloudSessionPlugin, cloudPass } from "./cloud-pass.js";
+import { type CloudPass, type CloudSessionPlugin, cloudPass, WRITE_SUBJECT } from "./cloud-pass.js";
 import {
+  type BackoffBudget,
   backoffBudget,
   CLOUD_ADAPTER_DEFAULTS,
   type CloudWriteRoute,
   isDefined,
   knownValue,
   RATE_LIMIT_BACKOFF,
+  RateLimitedRead,
   rateLimitDelayMs,
+  rateLimitSchedule,
   requestDeadlineMs,
 } from "./cloud-wire.js";
 
@@ -34,6 +39,9 @@ const TEST_BASE_URL = "https://api.provider.test";
 const TEST_API_KEY = "provider-test-key";
 
 const STUB_PROVIDER = { id: "stub", displayName: "Stub" };
+
+/** A read document the build would fix, standing in for a provider's own. */
+const STUB_READ_DOCUMENT = "query Transcript { messages { id } }";
 
 function stubFetch(status: () => number = () => HTTP_STATUS.OK) {
   return recordingFetch(() => jsonResponse({}, status()));
@@ -914,4 +922,162 @@ test("a pass with no credential reports it has nothing to observe with, and a wh
   status = HTTP_STATUS.UNAUTHORIZED;
   await failing.observe();
   assert.equal(failing.lastObservationFailure(), ADAPTER_FAILURE.UNAUTHORIZED);
+});
+
+describe("the 429 cadence", () => {
+  /**
+   * Retries a read the provider answers 429 for on the cadence itself, so what
+   * the schedule decides is observed as delays taken on the fiber's own clock
+   * rather than through a seam standing in for one. The attempts are counted,
+   * and the clock is advanced past any wait the cadence could ask for.
+   */
+  const spendCadence = (
+    retryAfter: string | null,
+    budget: BackoffBudget,
+  ): Effect.Effect<{ readonly attempts: number; readonly spentMs: number }> =>
+    Effect.gen(function* () {
+      let attempts = 0;
+      const fiber = yield* Effect.fork(
+        Effect.retry(
+          Effect.suspend(() => {
+            attempts += 1;
+            return Effect.fail(new RateLimitedRead({ retryAfter }));
+          }),
+          rateLimitSchedule(budget, () => TEST_TIME),
+        ),
+      );
+      yield* TestClock.adjust(Duration.millis(RATE_LIMIT_BACKOFF.PASS_CEILING_MS * 2));
+      const exit = yield* Fiber.await(fiber);
+      assert.equal(Exit.isFailure(exit), true);
+      return { attempts, spentMs: budget.spentMs };
+    });
+
+  it.effect("doubles each wait, spends the pass's budget, and stops at the retry count", () =>
+    Effect.gen(function* () {
+      const budget = backoffBudget();
+      const spent = yield* spendCadence(null, budget);
+
+      assert.equal(spent.attempts, RATE_LIMIT_BACKOFF.MAXIMUM_RETRIES + 1);
+      assert.equal(spent.spentMs, 7_500);
+    }),
+  );
+
+  it.effect("honours a Retry-After in seconds in place of the doubled wait", () =>
+    Effect.gen(function* () {
+      const budget = backoffBudget();
+      const spent = yield* spendCadence("3", budget);
+
+      assert.equal(spent.attempts, RATE_LIMIT_BACKOFF.MAXIMUM_RETRIES + 1);
+      assert.equal(spent.spentMs, 3_000 * RATE_LIMIT_BACKOFF.MAXIMUM_RETRIES);
+    }),
+  );
+
+  it.effect("gives the request up at once on a Retry-After past a single wait's maximum", () =>
+    Effect.gen(function* () {
+      const budget = backoffBudget();
+      const spent = yield* spendCadence(
+        String(RATE_LIMIT_BACKOFF.MAXIMUM_DELAY_MS / 1_000 + 1),
+        budget,
+      );
+
+      assert.equal(spent.attempts, 1);
+      assert.equal(spent.spentMs, 0);
+    }),
+  );
+
+  it.effect("gives up at once on a budget the pass has already spent", () =>
+    Effect.gen(function* () {
+      const budget: BackoffBudget = { spentMs: RATE_LIMIT_BACKOFF.PASS_CEILING_MS };
+      const spent = yield* spendCadence(null, budget);
+
+      assert.equal(spent.attempts, 1);
+      assert.equal(spent.spentMs, RATE_LIMIT_BACKOFF.PASS_CEILING_MS);
+    }),
+  );
+});
+
+test("sends a POSTed read as the document the build fixed and nothing else", async () => {
+  const stub = stubFetch();
+  const pass = cloudPass({
+    provider: STUB_PROVIDER,
+    defaultBaseUrl: TEST_BASE_URL,
+    baseUrl: TEST_BASE_URL,
+    readApiKey: async () => TEST_API_KEY,
+    fetch: stub.fetch,
+    now: () => TEST_TIME,
+    minimumRefreshIntervalMs: 0,
+    collect: async (request) => {
+      await request(["v0", "transcripts"], { limit: "1" }, { document: STUB_READ_DOCUMENT });
+      return [];
+    },
+  });
+
+  await pass.run();
+
+  const [request] = stub.requests;
+  assert.ok(request);
+  assert.equal(request.method, "POST");
+  assert.equal(request.url, `${TEST_BASE_URL}/v0/transcripts?limit=1`);
+  assert.equal(request.contentType, "application/json");
+  assert.deepEqual(JSON.parse(request.body ?? ""), { query: STUB_READ_DOCUMENT });
+});
+
+/** Answers headers and then a body that never arrives. */
+function stallingBodyFetch() {
+  return recordingFetch(
+    () =>
+      new Response(new ReadableStream({ start: () => undefined }), {
+        headers: { "content-type": "application/json" },
+      }),
+  );
+}
+
+/** Short enough for a test to outlive; what matters is that the deadline covers the body. */
+const STUB_STALLED_DEADLINE_MS = 25;
+
+test("a body that never arrives ends the read on its own deadline", async () => {
+  const stub = stallingBodyFetch();
+  const pass = cloudPass({
+    provider: STUB_PROVIDER,
+    defaultBaseUrl: TEST_BASE_URL,
+    baseUrl: TEST_BASE_URL,
+    readApiKey: async () => TEST_API_KEY,
+    fetch: stub.fetch,
+    now: () => TEST_TIME,
+    minimumRefreshIntervalMs: 0,
+    collect: async (request) => {
+      await request(["v0", "sessions"], {}, { timeoutMs: STUB_STALLED_DEADLINE_MS });
+      return [observation("session-one")];
+    },
+  });
+
+  const observations = await pass.run();
+
+  // The deadline is the request's, so the pass ends transiently rather than
+  // hanging on a provider that answered its headers and stopped.
+  assert.deepEqual(observations, []);
+  assert.equal(pass.lastFailure(), ADAPTER_FAILURE.TRANSIENT);
+});
+
+test("a write whose answer never arrives hedges on its own deadline", async () => {
+  const stub = stallingBodyFetch();
+  const pass = cloudPass({
+    provider: STUB_PROVIDER,
+    defaultBaseUrl: TEST_BASE_URL,
+    baseUrl: TEST_BASE_URL,
+    readApiKey: async () => TEST_API_KEY,
+    fetch: stub.fetch,
+    now: () => TEST_TIME,
+    minimumRefreshIntervalMs: 0,
+    collect: async () => [],
+  });
+
+  const written = await pass.write(
+    TEST_API_KEY,
+    { segments: ["v0", "sessions", "session-one", "approve"], timeoutMs: STUB_STALLED_DEADLINE_MS },
+    WRITE_SUBJECT.SESSION,
+  );
+
+  assert.equal(written.outcome.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.equal(written.body, undefined);
 });

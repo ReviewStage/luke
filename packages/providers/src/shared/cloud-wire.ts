@@ -7,6 +7,7 @@
 
 import { UNKNOWN_WORKSPACE_LABEL } from "@sidecar/session";
 import { isRecord, positiveInteger, text, type WireRecord } from "@sidecar/wire";
+import { Data, Duration, Schedule } from "effect";
 
 const GIT_SUFFIX = ".git";
 
@@ -68,6 +69,49 @@ export function rateLimitDelayMs(input: {
   if (delay > RATE_LIMIT_BACKOFF.MAXIMUM_DELAY_MS) return undefined;
   if (input.budget.spentMs + delay > RATE_LIMIT_BACKOFF.PASS_CEILING_MS) return undefined;
   return delay;
+}
+
+/**
+ * A read the provider answered 429, carrying the `Retry-After` it named so
+ * the cadence below can honour the provider's own word rather than guess at
+ * it. It is the failure the read raises and the schedule's own input; nothing
+ * outside the request path constructs one.
+ */
+export class RateLimitedRead extends Data.TaggedError("RateLimitedRead")<{
+  readonly retryAfter: string | null;
+}> {}
+
+/**
+ * The 429 cadence as a `Schedule`, so the wait is the fiber's own clock
+ * rather than a loop around a timer: the recurrence count is the attempt
+ * number {@link rateLimitDelayMs} decides against, the failure carries the
+ * header it reads, and the schedule stops the moment that decision says the
+ * request should give up — past the retry count, past a single wait's
+ * maximum, or past what the pass's shared ceiling still allows — which is
+ * what leaves the read's own rate-limited failure standing.
+ *
+ * The decision is taken once per step, inside the mapping, because it is also
+ * what spends the pass's budget: asking twice would read the clock twice and
+ * could decide differently on an HTTP-date `Retry-After`.
+ */
+export function rateLimitSchedule(
+  budget: BackoffBudget,
+  now: () => number,
+): Schedule.Schedule<number | undefined, RateLimitedRead> {
+  return Schedule.intersect(Schedule.identity<RateLimitedRead>(), Schedule.forever).pipe(
+    Schedule.map(([limited, attempt]) => {
+      const delay = rateLimitDelayMs({
+        attempt,
+        retryAfter: limited.retryAfter,
+        budget,
+        now: now(),
+      });
+      if (delay !== undefined) budget.spentMs += delay;
+      return delay;
+    }),
+    Schedule.whileOutput(isDefined),
+    Schedule.modifyDelay((delay) => Duration.millis(delay ?? 0)),
+  );
 }
 
 function retryAfterMs(header: string | null, now: number): number | undefined {

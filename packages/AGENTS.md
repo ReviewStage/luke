@@ -202,6 +202,20 @@ resolve nowhere at run time, so the bundle step refuses any import that
 resolved external and is not one of those declared dependencies or a Node
 builtin.
 
+Vercel roots its install at `apps/web`, so a package the web compiles by
+relative door must be declared there too. `server/hosted/` names
+`@sidecar/providers` by path rather than by specifier, and while everything
+that package reached from inside its own directory was another workspace
+package, the omission cost nothing; the first third-party dependency it
+needed resolved from there — `@effect/platform`, when the cloud pass moved
+onto `HttpClient` — failed the deploy and nothing else, because an undeclared
+package is not part of what Vercel installs where a whole-workspace install
+would have had it. The declaration is what the app owes for a package it
+compiles at all, however it names it, and `knip` is told to ignore that one
+because the name never appears as a specifier. Giving `@sidecar/providers`
+export subpaths so those imports could be specifiers is the better shape and
+a decision about that package's doors.
+
 ## A barrel is an all-or-nothing door
 
 Importing a package resolves its whole export graph, not the one name asked
@@ -257,7 +271,13 @@ thing: `providersLayer` with its `Providers` tag and the
 `DuplicateProviderRegistration` a merged build refuses a repeated id with, so
 which providers stand is decided where their layers are merged. `builtProviders`
 beside it is that registry read out of a build for a caller holding a `Scope`,
-which is what `providerRegistrations` still is a Promise door over.
+which is what `providerRegistrations` still is a Promise door over. The
+package's shared mechanics stay on the barrel beside the promise faces they
+replace — `observationSpoolEvents`, the hook spool as a `Stream` over
+`FileSystem.watch`, and `scopedReadOnlyDatabase`, a provider's own database
+open inside a `Scope` — and each takes the `FileSystem` or the `Scope` it
+needs from whoever runs it, so the package names `@effect/platform` and no
+`@effect/platform-node` layer of its own.
 `@sidecar/memory/effect` is the same door one package over: `housekeepingEffect`
 reads a completed or nothing-to-store result as a success and an interrupted
 or failed one as a `MemoryHousekeepingFellShort` carrying the outcome's own

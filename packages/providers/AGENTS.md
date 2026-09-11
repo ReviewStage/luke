@@ -46,6 +46,37 @@ functions with one home each: `observationPass` for a file-backed pass,
 claims, and `AdapterFailure` with `clearsObservedState` for whether a failed
 read clears what was observed.
 
+Three of those mechanics reach outside the process, and each reaches it
+through Effect's own. A cloud provider's requests are `HttpClient` requests
+under the fiber's own deadline, and the 429 cadence is a `Schedule`:
+`rateLimitSchedule` in `cloud-wire.ts` steps on the `RateLimitedRead` a
+retried read fails with, takes each delay from `rateLimitDelayMs` — the same
+doubling, the same honoured `Retry-After`, the same single-wait maximum and
+one pass-wide ceiling — spends the pass's budget as it decides, and stops
+where that decision gives the request up, which is what leaves the read's own
+rate-limited failure standing. The hook spool is a `Stream` over
+`FileSystem.watch`, grouped into the window a batch is read in and re-armed
+by `Stream.retry` on a spaced schedule, so a spool directory hook
+installation has not created yet and a watcher that fails later are the same
+answer, tried again later. The window is `groupedWithin`'s beat rather than
+the anchored one the hand-rolled debounce opened at its first id, which is a
+deliberate difference and the one behaviour this move did not preserve: two
+hooks a few milliseconds apart can straddle a boundary and arrive as two
+batches, so the run that consumes the stream has to tolerate a session named
+twice — which it must anyway, since a hook delivered twice is one entry. A provider's own SQLite file is opened read-only
+inside a `Scope` that closes it, and never through the store's opener in
+`@sidecar/brain`, which sets pragmas and may `VACUUM` — writes a provider's
+file must never take.
+
+Two of the three keep a promise face as a strangler shim, each `@deprecated`
+and listed in `docs/adr/0001-effect.md`: `cloudPass` runs its request effects
+because an adapter's `collect` and every caller of a provider write still
+hold a promise, and `openReadOnlyDatabase` answers a handle the caller closes
+itself in a `finally`. P6-11a and P6-11b move the adapters onto the effects.
+The spool has no promise face: `observationSpoolEvents` is the whole of it,
+and P6-12 runs that stream where the hook wiring lives, which is also what
+decides what a batch is delivered to and what a reader that throws costs.
+
 Every provider passes one contract suite. `describeProviderContract` in
 `@sidecar/providers/testing` states the trust constraints as tests over
 recorded fixtures under `packages/session/fixtures/providers/<provider>/`,

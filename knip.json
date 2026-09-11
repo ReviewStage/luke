@@ -52,7 +52,16 @@
         "agent/**/*.ts",
         "evals/**/*.ts"
       ],
-      "project": ["api/**", "src/**", "server/**", "scripts/**", "tests/**", "agent/**", "evals/**"]
+      "project": [
+        "api/**",
+        "src/**",
+        "server/**",
+        "scripts/**",
+        "tests/**",
+        "agent/**",
+        "evals/**"
+      ],
+      "ignoreDependencies": ["@sidecar/providers"]
     },
     "packages/*": {
       "entry": [
