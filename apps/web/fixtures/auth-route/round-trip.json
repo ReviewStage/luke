@@ -1,0 +1,23 @@
+{
+  "status": 200,
+  "statusText": "",
+  "headers": [
+    [
+      "content-type",
+      "application/json"
+    ],
+    [
+      "set-cookie",
+      "luke.session_token=abc; Path=/; HttpOnly; SameSite=Lax"
+    ],
+    [
+      "set-cookie",
+      "luke.session_data=def; Path=/; HttpOnly"
+    ],
+    [
+      "x-better-auth",
+      "1"
+    ]
+  ],
+  "body": "{\"redirect\":false,\"token\":\"abc\"}"
+}
