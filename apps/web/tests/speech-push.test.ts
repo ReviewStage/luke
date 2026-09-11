@@ -310,7 +310,7 @@ test("the notification carries the briefing and nothing else: one alert body, th
   });
 });
 
-test("Mac inactive: the briefing is pushed once to the most recently seen device with a token, speech.pushed is written naming it, and a second pass pushes nothing", async () => {
+test("Mac inactive: the briefing is pushed once to the most recently seen device with a token, whatever presence the phone itself reports, speech.pushed is written naming it, and a second pass pushes nothing", async () => {
   clock = NOW;
   const userId = await database.createUser();
   await device(userId, { platform: DEVICE_PLATFORM.MACOS, activeUntil: null, lastSeenAt: NOW });
@@ -319,8 +319,10 @@ test("Mac inactive: the briefing is pushed once to the most recently seen device
     lastSeenAt: NOW - 60_000,
   });
   const phoneToken = token();
+  // The phone's conversation screen reports presence on its poll, and nothing on it speaks: not a reason to wait.
   const phone = await device(userId, {
     push: { token: phoneToken, environment: PUSH_ENVIRONMENT.SANDBOX },
+    activeUntil: NOW + SPEECH_OFFER.TTL_MS,
     lastSeenAt: NOW - 1_000,
   });
   const row = await offered(userId);

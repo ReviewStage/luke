@@ -386,8 +386,9 @@ account, when Apple reports a push token gone, and alongside your account if
 you delete that.
 
 **Briefing notifications.** When Luke decides to tell you something about your
-sessions and no device of yours is placed to say it — none reports itself
-active, or the active one has not taken the briefing within two minutes —
+sessions and no device of yours is placed to say it — no Mac of yours
+reports itself active, or the active one has not taken the briefing within
+two minutes —
 our service sends the briefing to one of your devices as a push
 notification, through Apple's push notification service, addressed to the
 push token that device registered. The notification carries Luke's own

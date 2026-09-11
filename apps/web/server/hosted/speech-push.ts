@@ -2,6 +2,9 @@ import type { ToolSet } from "ai";
 import { desc, inArray } from "drizzle-orm";
 import {
   BRAIN_TOOL,
+  DEVICE_PLATFORM,
+  type DevicePlatform,
+  isDevicePlatform,
   isPushEnvironment,
   isRecord,
   isStoredToolPart,
@@ -36,10 +39,10 @@ import {
  * developer who is not at a Mac that can say them. It runs on the
  * observation tick, after the sweep, and decides from two things it reads
  * and nothing it infers — how each offer stands, and what the account's
- * devices last reported of themselves. No device active means the words are
- * pushed at once; a device active but not claiming past a short grace means
- * the Mac is awake and Luke is not being heard there, so they are pushed
- * anyway; a claim means a device is saying them, and the offer is never
+ * devices last reported of themselves. No speaking device active means the
+ * words are pushed at once; one active but not claiming past a short grace
+ * means the Mac is awake and Luke is not being heard there, so they are
+ * pushed anyway; a claim means a device is saying them, and the offer is never
  * pushed, whatever became of the claim; and a quiet instant standing on any
  * device — a meeting its calendar hold observes — means nothing is pushed
  * and nothing expires until it lifts. The quiet is read the way the sweep
@@ -68,6 +71,16 @@ import {
  * holding a push token — because a phone forwards its notifications to a
  * paired watch itself, and two pushes would be one briefing told twice.
  */
+
+/**
+ * The platforms whose live session can claim an offer and say it, so whose
+ * reported presence is a reason to wait for a claim. The phone reports
+ * presence too, from its conversation screen, but nothing on it speaks a
+ * briefing yet, so a developer reading the phone with the Mac idle is pushed
+ * to at once rather than made to wait out a grace nobody will use. Widening
+ * this is a product decision made when another platform can speak.
+ */
+const SPEAKING_PLATFORMS: ReadonlySet<DevicePlatform> = new Set([DEVICE_PLATFORM.MACOS]);
 
 export const SPEECH_PUSH = {
   /**
@@ -105,7 +118,7 @@ export type SpeechPushDecision = (typeof SPEECH_PUSH_DECISION)[keyof typeof SPEE
 
 /**
  * The rule, as a function of what was read: the offer's standing, and
- * whether any device of its account reports itself active now. A held offer
+ * whether any speaking device of its account reports itself active now. A held offer
  * is left to the sweep; a claimed one to its claimant; one past its instant
  * to the sweep; and an offered one is pushed unless a device is active and
  * the grace since the offer has not run out.
@@ -192,12 +205,13 @@ export interface SpeechPushOptions {
 interface DeviceRow {
   readonly id: string;
   readonly userId: string;
+  readonly platform: string;
   readonly activeUntil: Date | null;
   readonly pushToken: string | null;
   readonly pushEnvironment: string | null;
 }
 
-/** What each account's devices reported, and the one device a push would address, most recently seen first. */
+/** Whether a speaking device of the account reports itself active, and the one device a push would address, most recently seen first. */
 interface AccountDevices {
   readonly active: boolean;
   readonly target: PushableDevice | undefined;
@@ -214,6 +228,7 @@ async function devicesByAccount(
     .select({
       id: devices.id,
       userId: devices.userId,
+      platform: devices.platform,
       activeUntil: devices.activeUntil,
       pushToken: devices.pushToken,
       pushEnvironment: devices.pushEnvironment,
@@ -223,7 +238,12 @@ async function devicesByAccount(
     .orderBy(desc(devices.lastSeenAt), devices.id);
   for (const row of rows) {
     const held = byAccount.get(row.userId) ?? { active: false, target: undefined };
-    const active = held.active || (row.activeUntil !== null && row.activeUntil.getTime() > now);
+    const active =
+      held.active ||
+      (isDevicePlatform(row.platform) &&
+        SPEAKING_PLATFORMS.has(row.platform) &&
+        row.activeUntil !== null &&
+        row.activeUntil.getTime() > now);
     const target =
       held.target ??
       (row.pushToken !== null && isPushEnvironment(row.pushEnvironment)
