@@ -7,103 +7,122 @@ import {
   nextIntroductionBeat,
 } from "./introduction-takeover";
 
-test("the happy path walks every beat in order", () => {
-  const walk = [
-    [INTRODUCTION_EVENT.DARK_SETTLED, INTRODUCTION_BEAT.WAKE],
-    [INTRODUCTION_EVENT.WAKE_DONE, INTRODUCTION_BEAT.HELLO],
-    [INTRODUCTION_EVENT.LINES_DONE, INTRODUCTION_BEAT.DETECT],
-    [INTRODUCTION_EVENT.LINES_DONE, INTRODUCTION_BEAT.FLIGHT],
-    [INTRODUCTION_EVENT.FLIGHT_SETTLED, INTRODUCTION_BEAT.TOUR],
-    [INTRODUCTION_EVENT.LINES_DONE, INTRODUCTION_BEAT.MICROPHONE],
-    [INTRODUCTION_EVENT.LINES_DONE, INTRODUCTION_BEAT.MICROPHONE_DIALOG],
-    [INTRODUCTION_EVENT.MICROPHONE_GRANTED, INTRODUCTION_BEAT.PRACTICE],
-    [INTRODUCTION_EVENT.PRACTICE_DONE, INTRODUCTION_BEAT.SIGN_OFF],
-    [INTRODUCTION_EVENT.LINES_DONE, INTRODUCTION_BEAT.STAND_DOWN],
-    [INTRODUCTION_EVENT.STOOD_DOWN, INTRODUCTION_BEAT.DONE],
-  ] as const;
-  let beat: IntroductionBeat = INTRODUCTION_BEAT.DARK;
-  for (const [event, expected] of walk) {
-    beat = nextIntroductionBeat(beat, event);
+function walk(from: IntroductionBeat, steps: readonly (readonly [string, IntroductionBeat])[]) {
+  let beat = from;
+  for (const [event, expected] of steps) {
+    // SAFETY: the table's own event vocabulary, spelled by the test.
+    beat = nextIntroductionBeat(beat, event as never);
     assert.equal(beat, expected);
   }
+  return beat;
+}
+
+test("the happy path asks for the microphone before any session, and greets after landing", () => {
+  walk(INTRODUCTION_BEAT.DARK, [
+    [INTRODUCTION_EVENT.DARK_SETTLED, INTRODUCTION_BEAT.WAKE],
+    [INTRODUCTION_EVENT.WAKE_DONE, INTRODUCTION_BEAT.MICROPHONE],
+    [INTRODUCTION_EVENT.MICROPHONE_PRESSED, INTRODUCTION_BEAT.MICROPHONE_DIALOG],
+    [INTRODUCTION_EVENT.MICROPHONE_GRANTED, INTRODUCTION_BEAT.DETECT],
+    [INTRODUCTION_EVENT.DETECTED, INTRODUCTION_BEAT.FLIGHT],
+    [INTRODUCTION_EVENT.FLIGHT_SETTLED, INTRODUCTION_BEAT.CONNECT],
+    [INTRODUCTION_EVENT.SESSION_STARTED, INTRODUCTION_BEAT.GREETING],
+    [INTRODUCTION_EVENT.OUTPUT_QUIET, INTRODUCTION_BEAT.LISTEN],
+    [INTRODUCTION_EVENT.LISTEN_DONE, INTRODUCTION_BEAT.STAND_DOWN],
+    [INTRODUCTION_EVENT.STOOD_DOWN, INTRODUCTION_BEAT.DONE],
+  ]);
 });
 
-test("a granted microphone needs no dialog and walks straight to practice", () => {
+test("no session beat is reachable before the microphone was granted", () => {
+  const beats = Object.values(INTRODUCTION_BEAT);
+  const sessionBeats: readonly IntroductionBeat[] = [
+    INTRODUCTION_BEAT.CONNECT,
+    INTRODUCTION_BEAT.GREETING,
+    INTRODUCTION_BEAT.LISTEN,
+  ];
+  const beforeGrant: readonly IntroductionBeat[] = [
+    INTRODUCTION_BEAT.DARK,
+    INTRODUCTION_BEAT.WAKE,
+    INTRODUCTION_BEAT.MICROPHONE,
+    INTRODUCTION_BEAT.MICROPHONE_DIALOG,
+  ];
+  for (const beat of beforeGrant) {
+    for (const event of Object.values(INTRODUCTION_EVENT)) {
+      const next = nextIntroductionBeat(beat, event);
+      assert.equal(sessionBeats.includes(next), false);
+      assert.equal(beats.includes(next), true);
+    }
+  }
+  assert.equal(
+    nextIntroductionBeat(INTRODUCTION_BEAT.MICROPHONE_DIALOG, INTRODUCTION_EVENT.SESSION_STARTED),
+    INTRODUCTION_BEAT.MICROPHONE_DIALOG,
+  );
+});
+
+test("a granted microphone needs no press and no dialog", () => {
   assert.equal(
     nextIntroductionBeat(INTRODUCTION_BEAT.MICROPHONE, INTRODUCTION_EVENT.MICROPHONE_GRANTED),
-    INTRODUCTION_BEAT.PRACTICE,
+    INTRODUCTION_BEAT.DETECT,
   );
 });
 
-test("a refused dialog is answered kindly, then walks past practice to the sign-off", () => {
+test("a refused microphone glides to the ordinary launch, from the ask or the dialog", () => {
+  assert.equal(
+    nextIntroductionBeat(INTRODUCTION_BEAT.MICROPHONE, INTRODUCTION_EVENT.MICROPHONE_DENIED),
+    INTRODUCTION_BEAT.GLIDE,
+  );
   assert.equal(
     nextIntroductionBeat(INTRODUCTION_BEAT.MICROPHONE_DIALOG, INTRODUCTION_EVENT.MICROPHONE_DENIED),
-    INTRODUCTION_BEAT.MICROPHONE_DENIED,
+    INTRODUCTION_BEAT.GLIDE,
   );
-  assert.equal(
-    nextIntroductionBeat(
-      INTRODUCTION_BEAT.MICROPHONE_DENIED,
-      INTRODUCTION_EVENT.MICROPHONE_DENIED_SAID,
-    ),
-    INTRODUCTION_BEAT.SIGN_OFF,
-  );
-});
-
-test("a refusal standing before Luke ever asked skips the dialog and the answer", () => {
-  assert.equal(
-    nextIntroductionBeat(INTRODUCTION_BEAT.MICROPHONE, INTRODUCTION_EVENT.MICROPHONE_DENIED_SAID),
-    INTRODUCTION_BEAT.SIGN_OFF,
-  );
+  walk(INTRODUCTION_BEAT.GLIDE, [
+    [INTRODUCTION_EVENT.FLIGHT_SETTLED, INTRODUCTION_BEAT.STAND_DOWN],
+    [INTRODUCTION_EVENT.STOOD_DOWN, INTRODUCTION_BEAT.DONE],
+  ]);
 });
 
 test("an event a beat does not name leaves it standing", () => {
   assert.equal(
-    nextIntroductionBeat(INTRODUCTION_BEAT.PRACTICE, INTRODUCTION_EVENT.LINES_DONE),
-    INTRODUCTION_BEAT.PRACTICE,
+    nextIntroductionBeat(INTRODUCTION_BEAT.GREETING, INTRODUCTION_EVENT.LISTEN_DONE),
+    INTRODUCTION_BEAT.GREETING,
   );
   assert.equal(
     nextIntroductionBeat(INTRODUCTION_BEAT.DARK, INTRODUCTION_EVENT.FLIGHT_SETTLED),
     INTRODUCTION_BEAT.DARK,
   );
+  assert.equal(
+    nextIntroductionBeat(INTRODUCTION_BEAT.CONNECT, INTRODUCTION_EVENT.OUTPUT_QUIET),
+    INTRODUCTION_BEAT.CONNECT,
+  );
 });
 
 test("a voice that failed before the flight glides; one that died after stands down", () => {
-  assert.equal(
-    nextIntroductionBeat(INTRODUCTION_BEAT.DARK, INTRODUCTION_EVENT.VOICE_FAILED),
-    INTRODUCTION_BEAT.GLIDE,
-  );
-  assert.equal(
-    nextIntroductionBeat(INTRODUCTION_BEAT.HELLO, INTRODUCTION_EVENT.VOICE_FAILED),
-    INTRODUCTION_BEAT.GLIDE,
-  );
-  assert.equal(
-    nextIntroductionBeat(INTRODUCTION_BEAT.DETECT, INTRODUCTION_EVENT.VOICE_FAILED),
-    INTRODUCTION_BEAT.GLIDE,
-  );
-  // The glide lands where the flight lands and hands off from there.
-  assert.equal(
-    nextIntroductionBeat(INTRODUCTION_BEAT.GLIDE, INTRODUCTION_EVENT.FLIGHT_SETTLED),
-    INTRODUCTION_BEAT.STAND_DOWN,
-  );
+  for (const beat of [
+    INTRODUCTION_BEAT.DARK,
+    INTRODUCTION_BEAT.WAKE,
+    INTRODUCTION_BEAT.MICROPHONE,
+    INTRODUCTION_BEAT.MICROPHONE_DIALOG,
+    INTRODUCTION_BEAT.DETECT,
+  ]) {
+    assert.equal(
+      nextIntroductionBeat(beat, INTRODUCTION_EVENT.VOICE_FAILED),
+      INTRODUCTION_BEAT.GLIDE,
+    );
+  }
   // The real signed-out gate needs no voice, so a failure past the flight
   // stands the panel down and hands the screen to it rather than replaying
   // the whole introduction.
-  assert.equal(
-    nextIntroductionBeat(INTRODUCTION_BEAT.FLIGHT, INTRODUCTION_EVENT.VOICE_FAILED),
+  for (const beat of [
+    INTRODUCTION_BEAT.FLIGHT,
+    INTRODUCTION_BEAT.CONNECT,
+    INTRODUCTION_BEAT.GREETING,
+    INTRODUCTION_BEAT.LISTEN,
     INTRODUCTION_BEAT.STAND_DOWN,
-  );
-  assert.equal(
-    nextIntroductionBeat(INTRODUCTION_BEAT.TOUR, INTRODUCTION_EVENT.VOICE_FAILED),
-    INTRODUCTION_BEAT.STAND_DOWN,
-  );
-  assert.equal(
-    nextIntroductionBeat(INTRODUCTION_BEAT.MICROPHONE_DIALOG, INTRODUCTION_EVENT.VOICE_FAILED),
-    INTRODUCTION_BEAT.STAND_DOWN,
-  );
-  assert.equal(
-    nextIntroductionBeat(INTRODUCTION_BEAT.SIGN_OFF, INTRODUCTION_EVENT.VOICE_FAILED),
-    INTRODUCTION_BEAT.STAND_DOWN,
-  );
+  ]) {
+    assert.equal(
+      nextIntroductionBeat(beat, INTRODUCTION_EVENT.VOICE_FAILED),
+      INTRODUCTION_BEAT.STAND_DOWN,
+    );
+  }
 });
 
 test("the ending is terminal", () => {

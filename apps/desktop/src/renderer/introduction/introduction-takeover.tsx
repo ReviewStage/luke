@@ -1,8 +1,9 @@
+import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
+import { LIVE_TRANSPORT_STATE } from "@sidecar/gateway";
+import { boundedIntroductionTitles, LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import { WingFace as LukeFace, MicrophoneIcon } from "@sidecar/panel";
-import { introductionSessionConfig, REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
 import { SESSION_URGENCY, type Session } from "@sidecar/session";
 import { FIXTURE_EPOCH_MS } from "@sidecar/session/fixtures";
-import { DEFAULT_VOICE_HOTKEYS, TALK_KEY_RELEASE, talkKeyRelease } from "@sidecar/settings";
 import {
   FACE_MOTION,
   FACE_MOTION_CYCLE_MS,
@@ -11,7 +12,7 @@ import {
   WORDMARK_ART,
 } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
-import { activeVoiceStream } from "@sidecar/voice/orchestrator";
+import type { LiveCaptionRow } from "@sidecar/voice/orchestrator";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -19,7 +20,6 @@ import type { AppStateSnapshot } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import type { DisplayDiagnostic } from "#shared/messages/session";
 import { act, tell } from "../act";
-import { Keycaps } from "../keycaps";
 import { NotchWings } from "../notch-wings";
 import { PANEL_PRESENTATION } from "../panel-state";
 import {
@@ -32,56 +32,52 @@ import { parseMilliseconds, useSessionReorderMotion } from "../session-motion";
 import { SessionRow, type SessionWriteHandlers } from "../session-row-view";
 import { useSignInFaceCycle } from "../sign-in-gate";
 import { appStateNow } from "../use-app-state";
-import { useMeasuredHeight } from "../use-measured-height";
 import { usePrefersReducedMotion } from "../use-reduced-motion";
-import { ConversationCall } from "../voice/conversation-call";
+import { LiveCall } from "../voice/live-call";
 import { openPreferredMicrophone } from "../voice/microphone-choice";
+import { startVoiceLevelMeter } from "../voice/voice-level-meter";
 import { outputSilent } from "../volume-hint";
 import { WAVEFORM_VOICE, Waveform, type WaveformVoice } from "../waveform";
 import { IntroductionAudio } from "./introduction-audio";
 import { capsuleFaceCenter, FLIGHT_LANDING_SIZE } from "./introduction-flight";
+import { lukeCaption, lukeOutputQuiet } from "./introduction-quiet";
 
 /**
- * The introduction's beats and the script each one speaks, as one pure
- * transition table. What follows below owns the clocks, the voice, and the
- * drawing; what belongs here is the order of the moments and the words fixed
- * by the build.
+ * The introduction's beats, as one pure transition table. What follows below
+ * owns the clocks, the session, and the drawing; what belongs here is the
+ * order of the moments. The order is the Live guide's "greet before the
+ * caller speaks": the microphone is asked for first, at the developer's own
+ * press, so the session opens with the input track running, and the greeting
+ * is the voice service's one instruction on `session.started` — the takeover
+ * sends nothing but the microphone switch and the hang-up.
  */
 
 export const INTRODUCTION_BEAT = {
-  /** The desktop dims, the tone rises, the voice connects in the background. */
+  /** The desktop dims and the tone rises. */
   DARK: "dark",
   /** The smile draws itself and the eyes blink open. */
   WAKE: "wake",
-  /** "Hi! I'm Luke." */
-  HELLO: "hello",
+  /** Luke asks, on screen, to be let hear the developer; the press is theirs. */
+  MICROPHONE: "microphone",
+  /** macOS's own dialog is up; the stage waits on its answer. */
+  MICROPHONE_DIALOG: "microphone-dialog",
   /** The keyless peek answers and the detected rows materialize. */
   DETECT: "detect",
   /** The scrim lifts and everything springs up into the notch. */
   FLIGHT: "flight",
   /**
-   * The flight's quiet twin, for a voice that never stood up: no line was or
-   * will be spoken, so Luke glides from the centre straight toward the
-   * capsule and the ordinary gate — the room tone fading under the sweep
-   * rather than being cut with the window.
+   * The flight's quiet twin, for an introduction that will not be spoken: the
+   * microphone refused, or a voice that never stood up. Luke glides from the
+   * centre straight toward the capsule and the ordinary gate, the room tone
+   * fading under the sweep rather than being cut with the window.
    */
   GLIDE: "glide",
-  /** The landed panel holds and the staged "needs you" moment plays. */
-  TOUR: "tour",
-  /** Luke asks before macOS does. */
-  MICROPHONE: "microphone",
-  /**
-   * macOS's own dialog is up: the landed panel stands aside to the waiting
-   * slot for as long as the ask stands — the same pill a calendar consent
-   * stands down to — and springs back the moment it is answered.
-   */
-  MICROPHONE_DIALOG: "microphone-dialog",
-  /** The panel back up, the refusal answered kindly. */
-  MICROPHONE_DENIED: "microphone-denied",
-  /** The talk key is drawn and a real spoken exchange happens. */
-  PRACTICE: "practice",
-  /** The sign-off line, spoken over the landed panel with the voice still up. */
-  SIGN_OFF: "sign-off",
+  /** Landed; the session is being created against the offer and the titles. */
+  CONNECT: "connect",
+  /** The session started and the voice service's greeting is being spoken. */
+  GREETING: "greeting",
+  /** The greeting has gone quiet; Luke listens for the developer's word back. */
+  LISTEN: "listen",
   /** The landed panel stands down to the capsule, rows first, shape after. */
   STAND_DOWN: "stand-down",
   /** The takeover fades over the real capsule, whose greeting then expands. */
@@ -91,21 +87,25 @@ export const INTRODUCTION_BEAT = {
 export type IntroductionBeat = (typeof INTRODUCTION_BEAT)[keyof typeof INTRODUCTION_BEAT];
 
 export const INTRODUCTION_EVENT = {
-  VOICE_READY: "voice-ready",
-  VOICE_FAILED: "voice-failed",
-  /** The dark has held long enough on its own clock; the wake need not wait. */
+  /** The dark has held long enough on its own clock. */
   DARK_SETTLED: "dark-settled",
   WAKE_DONE: "wake-done",
-  /** Every line the current beat had to say has been spoken to the end. */
-  LINES_DONE: "lines-done",
-  FLIGHT_SETTLED: "flight-settled",
+  /** The developer pressed to be heard; macOS asks next. */
+  MICROPHONE_PRESSED: "microphone-pressed",
   MICROPHONE_GRANTED: "microphone-granted",
-  /** macOS's dialog was refused; the kind answer has not been spoken yet. */
+  /** macOS's dialog was refused, or a refusal already stood. */
   MICROPHONE_DENIED: "microphone-refused",
-  /** The refusal was answered kindly and the answer has finished. */
-  MICROPHONE_DENIED_SAID: "microphone-denied-said",
-  /** The practice exchange was answered, or its patience ran out. */
-  PRACTICE_DONE: "practice-done",
+  /** The detected rows have stood long enough to be seen. */
+  DETECTED: "detected",
+  FLIGHT_SETTLED: "flight-settled",
+  /** The session announced itself started; the greeting follows on its own. */
+  SESSION_STARTED: "session-started",
+  /** The session could not be opened, did not start, or ended before its end. */
+  VOICE_FAILED: "voice-failed",
+  /** Luke's output has gone quiet, by the ledger's settle and the track's level. */
+  OUTPUT_QUIET: "output-quiet",
+  /** The listening window ended: the developer said their piece or said nothing. */
+  LISTEN_DONE: "listen-done",
   /** The landed panel has finished standing down to the capsule. */
   STOOD_DOWN: "stood-down",
 } as const;
@@ -116,55 +116,43 @@ export type IntroductionEvent = (typeof INTRODUCTION_EVENT)[keyof typeof INTRODU
  * Where each event moves each beat. An event a beat does not name leaves it
  * standing — the component fires clocks and callbacks freely, and only the
  * table decides which of them matter where. Total over the beats, so a new
- * beat does not build until this table has answered for it; the three rows
- * with no entries move only on the cross-cutting events below.
+ * beat does not build until this table has answered for it.
  */
 const TRANSITIONS = {
   [INTRODUCTION_BEAT.DARK]: {
-    // Whichever comes first wakes him: the voice standing up, or the dark
-    // simply having held long enough — the wake plays while the call is
-    // still connecting, and the first spoken line waits on the call instead.
-    [INTRODUCTION_EVENT.VOICE_READY]: INTRODUCTION_BEAT.WAKE,
     [INTRODUCTION_EVENT.DARK_SETTLED]: INTRODUCTION_BEAT.WAKE,
   },
   [INTRODUCTION_BEAT.WAKE]: {
-    [INTRODUCTION_EVENT.WAKE_DONE]: INTRODUCTION_BEAT.HELLO,
+    [INTRODUCTION_EVENT.WAKE_DONE]: INTRODUCTION_BEAT.MICROPHONE,
   },
-  [INTRODUCTION_BEAT.HELLO]: {
-    [INTRODUCTION_EVENT.LINES_DONE]: INTRODUCTION_BEAT.DETECT,
+  [INTRODUCTION_BEAT.MICROPHONE]: {
+    [INTRODUCTION_EVENT.MICROPHONE_PRESSED]: INTRODUCTION_BEAT.MICROPHONE_DIALOG,
+    // A grant already standing needs no dialog and no press; a refusal already
+    // standing gets no dialog either, so there is nothing to introduce with.
+    [INTRODUCTION_EVENT.MICROPHONE_GRANTED]: INTRODUCTION_BEAT.DETECT,
+    [INTRODUCTION_EVENT.MICROPHONE_DENIED]: INTRODUCTION_BEAT.GLIDE,
+  },
+  [INTRODUCTION_BEAT.MICROPHONE_DIALOG]: {
+    [INTRODUCTION_EVENT.MICROPHONE_GRANTED]: INTRODUCTION_BEAT.DETECT,
+    [INTRODUCTION_EVENT.MICROPHONE_DENIED]: INTRODUCTION_BEAT.GLIDE,
   },
   [INTRODUCTION_BEAT.DETECT]: {
-    [INTRODUCTION_EVENT.LINES_DONE]: INTRODUCTION_BEAT.FLIGHT,
+    [INTRODUCTION_EVENT.DETECTED]: INTRODUCTION_BEAT.FLIGHT,
   },
   [INTRODUCTION_BEAT.FLIGHT]: {
-    [INTRODUCTION_EVENT.FLIGHT_SETTLED]: INTRODUCTION_BEAT.TOUR,
+    [INTRODUCTION_EVENT.FLIGHT_SETTLED]: INTRODUCTION_BEAT.CONNECT,
   },
   [INTRODUCTION_BEAT.GLIDE]: {
     [INTRODUCTION_EVENT.FLIGHT_SETTLED]: INTRODUCTION_BEAT.STAND_DOWN,
   },
-  [INTRODUCTION_BEAT.TOUR]: {
-    [INTRODUCTION_EVENT.LINES_DONE]: INTRODUCTION_BEAT.MICROPHONE,
+  [INTRODUCTION_BEAT.CONNECT]: {
+    [INTRODUCTION_EVENT.SESSION_STARTED]: INTRODUCTION_BEAT.GREETING,
   },
-  [INTRODUCTION_BEAT.MICROPHONE]: {
-    // A grant or refusal already standing needs no dialog: the beat's own
-    // probe short-circuits straight past the aside.
-    [INTRODUCTION_EVENT.MICROPHONE_GRANTED]: INTRODUCTION_BEAT.PRACTICE,
-    [INTRODUCTION_EVENT.MICROPHONE_DENIED_SAID]: INTRODUCTION_BEAT.SIGN_OFF,
-    // The warning spoken, macOS asks next — and the panel gets out of its way.
-    [INTRODUCTION_EVENT.LINES_DONE]: INTRODUCTION_BEAT.MICROPHONE_DIALOG,
+  [INTRODUCTION_BEAT.GREETING]: {
+    [INTRODUCTION_EVENT.OUTPUT_QUIET]: INTRODUCTION_BEAT.LISTEN,
   },
-  [INTRODUCTION_BEAT.MICROPHONE_DIALOG]: {
-    [INTRODUCTION_EVENT.MICROPHONE_GRANTED]: INTRODUCTION_BEAT.PRACTICE,
-    [INTRODUCTION_EVENT.MICROPHONE_DENIED]: INTRODUCTION_BEAT.MICROPHONE_DENIED,
-  },
-  [INTRODUCTION_BEAT.MICROPHONE_DENIED]: {
-    [INTRODUCTION_EVENT.MICROPHONE_DENIED_SAID]: INTRODUCTION_BEAT.SIGN_OFF,
-  },
-  [INTRODUCTION_BEAT.PRACTICE]: {
-    [INTRODUCTION_EVENT.PRACTICE_DONE]: INTRODUCTION_BEAT.SIGN_OFF,
-  },
-  [INTRODUCTION_BEAT.SIGN_OFF]: {
-    [INTRODUCTION_EVENT.LINES_DONE]: INTRODUCTION_BEAT.STAND_DOWN,
+  [INTRODUCTION_BEAT.LISTEN]: {
+    [INTRODUCTION_EVENT.LISTEN_DONE]: INTRODUCTION_BEAT.STAND_DOWN,
   },
   [INTRODUCTION_BEAT.STAND_DOWN]: {
     [INTRODUCTION_EVENT.STOOD_DOWN]: INTRODUCTION_BEAT.DONE,
@@ -187,7 +175,8 @@ function eventTarget(
 const PRE_FLIGHT_BEATS: ReadonlySet<IntroductionBeat> = new Set([
   INTRODUCTION_BEAT.DARK,
   INTRODUCTION_BEAT.WAKE,
-  INTRODUCTION_BEAT.HELLO,
+  INTRODUCTION_BEAT.MICROPHONE,
+  INTRODUCTION_BEAT.MICROPHONE_DIALOG,
   INTRODUCTION_BEAT.DETECT,
 ]);
 
@@ -209,76 +198,24 @@ export function nextIntroductionBeat(
   return eventTarget(TRANSITIONS[beat], event) ?? beat;
 }
 
-/**
- * How many detected sessions' titles may travel to the voice. The drawn list
- * is unbounded — the developer's own sessions on their own screen, scrolling
- * exactly as the panel's list does — but what leaves the machine stays a
- * first impression, not an inventory: the panel's own visible depth.
- */
-const INTRODUCTION_SPOKEN_SESSION_LIMIT = 5;
-
-/**
- * The script, as directions to the voice rather than text to display: the
- * introduction is entirely spoken, so these lines never render. Quoted words
- * are kept exactly; the rest is said in Luke's own voice.
- */
-const INTRODUCTION_SCRIPT = {
-  // Where Luke lives is said after he has flown there, not before: the words
-  // and the screen must agree.
-  HELLO: [
-    'Say exactly: "Hi! I\'m Luke."',
-    'Say close to: "I keep an eye on your coding agents — so you don\'t have to."',
-  ],
-  DETECT_FOUND: [
-    "The developer's own coding agent sessions just appeared on screen; their titles are in the data. " +
-      'Say close to: "These are your coding agents. I can already see them from here." ' +
-      "Then mention one or two of them by title, briefly.",
-  ],
-  DETECT_PRETEND: [
-    "No local sessions were found, so pretend example rows are on screen instead. " +
-      "Say that these ones are pretend, until their real coding agents show up — " +
-      "and that this is what their agents will look like from here.",
-  ],
-  TOUR_HOME: [
-    "The whole stage just flew up and settled at the top of the screen, beside the notch. " +
-      'Say close to: "And this is where I live — right up here, next to the notch."',
-  ],
-  TOUR: [
-    'One of the rows just flipped to "Needs you", with a ding. ' +
-      'Say close to: "When one of them needs you — like this — I say so."',
-  ],
-  MICROPHONE: [
-    "Say close to: \"Want to be able to talk to me? Your Mac's about to ask about the " +
-      "microphone — I only hear you while you're holding the talk key.\"",
-  ],
-  MICROPHONE_DENIED: [
-    "The developer declined the microphone. Say kindly that that is fine, it lives in settings " +
-      "if they change their mind — and even then Luke only hears them while the talk key is " +
-      "held — and Luke will still tap them on the shoulder up here.",
-  ],
-  PRACTICE: ['Say close to: "Hold Option Space and ask me anything."'],
-  // Sign-in is not the last thing any more — the calendar step stands right
-  // behind it — so the sign-off promises no count it cannot keep: setting up
-  // covers however many screens stand between here and the roster.
-  SIGN_OFF: ['Say close to: "Sign in, and I\'ll get you set up."'],
-} as const;
-
 /** How many pretend rows stand in when the peek finds nothing. */
 const PRETEND_ROW_COUNT = 4;
-/** How long the practice beat waits for an ask before moving on. */
-const PRACTICE_TIMEOUT_MS = 45_000;
-/** How the takeover retries a line the call was not ready for. Patient on
- * purpose: the wake no longer waits for the call, so the first line may
- * arrive while the handshake is still running and must outwait it. */
-const SPEAK_RETRY_MS = 350;
-const SPEAK_RETRY_ATTEMPTS = 30;
-/** How long the dark holds before the wake, voice ready or not. */
+/** How long the detected rows stand mid-screen before the flight, so they are seen arriving. */
+const DETECT_HOLD_MS = 1_600;
+/** How long the dark holds before the wake. */
 const DARK_HOLD_MS = 900;
-/** How patiently the dark waits for the voice before standing the takeover down. */
-const CONNECT_ATTEMPTS = 3;
-const CONNECT_RETRY_MS = 1_500;
 /** The bell leads the wake's end by the eyes' opening, not the head's settle. */
 const WAKE_BELL_LEAD_MS = 600;
+/** How long a started session may stay silent before the greeting is given up on. */
+const GREETING_TIMEOUT_MS = 20_000;
+/** Into the greeting, the staged "needs you" moment plays on one of the rows. */
+const TOUR_FLIP_DELAY_MS = 6_000;
+/** How long the listening window waits for a word back, restarted by any word either way. */
+const LISTEN_PATIENCE_MS = 12_000;
+/** The listening window's ceiling however lively the exchange, so the introduction ends. */
+const LISTEN_CEILING_MS = 90_000;
+/** How often the listening window re-reads whether Luke is quiet enough to end. */
+const LISTEN_TICK_MS = 500;
 
 /**
  * The signature reveal's layout, as fractions of the drawn face's size: the
@@ -358,12 +295,9 @@ function inertRow(row: SessionView): SessionView {
 const FLOWN_BEATS: ReadonlySet<IntroductionBeat> = new Set([
   INTRODUCTION_BEAT.FLIGHT,
   INTRODUCTION_BEAT.GLIDE,
-  INTRODUCTION_BEAT.TOUR,
-  INTRODUCTION_BEAT.MICROPHONE,
-  INTRODUCTION_BEAT.MICROPHONE_DIALOG,
-  INTRODUCTION_BEAT.MICROPHONE_DENIED,
-  INTRODUCTION_BEAT.PRACTICE,
-  INTRODUCTION_BEAT.SIGN_OFF,
+  INTRODUCTION_BEAT.CONNECT,
+  INTRODUCTION_BEAT.GREETING,
+  INTRODUCTION_BEAT.LISTEN,
   INTRODUCTION_BEAT.STAND_DOWN,
   INTRODUCTION_BEAT.DONE,
 ]);
@@ -375,12 +309,9 @@ const FLOWN_BEATS: ReadonlySet<IntroductionBeat> = new Set([
  * now holds.
  */
 const LANDED_BEATS: ReadonlySet<IntroductionBeat> = new Set([
-  INTRODUCTION_BEAT.TOUR,
-  INTRODUCTION_BEAT.MICROPHONE,
-  INTRODUCTION_BEAT.MICROPHONE_DIALOG,
-  INTRODUCTION_BEAT.MICROPHONE_DENIED,
-  INTRODUCTION_BEAT.PRACTICE,
-  INTRODUCTION_BEAT.SIGN_OFF,
+  INTRODUCTION_BEAT.CONNECT,
+  INTRODUCTION_BEAT.GREETING,
+  INTRODUCTION_BEAT.LISTEN,
   INTRODUCTION_BEAT.STAND_DOWN,
   INTRODUCTION_BEAT.DONE,
 ]);
@@ -393,6 +324,19 @@ const LANDED_BEATS: ReadonlySet<IntroductionBeat> = new Set([
 const STANDING_DOWN_BEATS: ReadonlySet<IntroductionBeat> = new Set([
   INTRODUCTION_BEAT.STAND_DOWN,
   INTRODUCTION_BEAT.DONE,
+]);
+
+/** The beats a session stands or is coming up in, where its ending is news. */
+const SESSION_BEATS: ReadonlySet<IntroductionBeat> = new Set([
+  INTRODUCTION_BEAT.CONNECT,
+  INTRODUCTION_BEAT.GREETING,
+  INTRODUCTION_BEAT.LISTEN,
+]);
+
+/** The two beats the microphone ask is drawn on the dark stage. */
+const ASKING_BEATS: ReadonlySet<IntroductionBeat> = new Set([
+  INTRODUCTION_BEAT.MICROPHONE,
+  INTRODUCTION_BEAT.MICROPHONE_DIALOG,
 ]);
 
 /**
@@ -419,16 +363,19 @@ export function IntroductionTakeover(): React.JSX.Element | null {
 }
 
 /**
- * The one-time fullscreen introduction. Entirely spoken: the script's lines
- * are directions to the voice, never text on screen, and the one text drawn
- * beside the sign-in controls is the caption strip, forced on exactly where
- * the app itself forces it — when the machine's output is silent, where the
- * caption is the speech. The voice call behind it is the introduction's own:
- * minted without an account, tool-free at the API, carrying nothing but the
- * script and the detected sessions' titles as data. What lands at the top of
- * the screen is the app's own furniture — the panel's session rows, the
- * wings, the sign-in gate — so the handoff to the real panel changes nothing
- * the developer can see.
+ * The one-time fullscreen introduction. Entirely spoken by the voice
+ * service's greeting: no line is drawn, and the one text beside the sign-in
+ * controls is the caption strip, forced on exactly where the app itself
+ * forces it — when the machine's output is silent, where the caption is the
+ * speech. The session behind it is the introduction's own: created with no
+ * account through the voice service, which holds its trusted side and sends
+ * the greeting, carrying nothing but the detected sessions' titles as data.
+ * This window is a peer of it and nothing more — the same `LiveCall` the
+ * conversation runs on, sending only the microphone switch and the hang-up —
+ * so nothing said, heard, or shown here can become an action. What lands at
+ * the top of the screen is the app's own furniture — the panel's session
+ * rows, the wings, the sign-in gate — so the handoff to the real panel
+ * changes nothing the developer can see.
  */
 function IntroductionFlight({
   state,
@@ -440,33 +387,34 @@ function IntroductionFlight({
 }): React.JSX.Element {
   const [beat, setBeat] = useState<IntroductionBeat>(INTRODUCTION_BEAT.DARK);
   const beatRef = useRef<IntroductionBeat>(beat);
-  const [voiceStatus, setVoiceStatus] = useState<RealtimeStatus>(REALTIME_STATUS.IDLE);
+  const [voiceStatus, setVoiceStatus] = useState<LiveStatus>(LIVE_STATUS.IDLE);
+  const voiceStatusRef = useRef<LiveStatus>(voiceStatus);
   const [localStream, setLocalStream] = useState<MediaStream | undefined>(undefined);
   const [remoteStream, setRemoteStream] = useState<MediaStream | undefined>(undefined);
   const [meterAnalyser, setMeterAnalyser] = useState<AnalyserNode | undefined>(undefined);
   const [rows, setRows] = useState<readonly SessionView[]>([]);
   const [rowsPretend, setRowsPretend] = useState(false);
   /**
-   * The row the tour's staged moment is drawn on: one of the detected rows,
-   * picked from the middle so the reorder is seen. The flip is a picture —
-   * every staged row is inert by construction, so nothing of the session
-   * behind it changes — and it is restored the moment the beat ends.
+   * The row the greeting's staged moment is drawn on: one of the detected
+   * rows, picked from the middle so the reorder is seen. The flip is a
+   * picture — every staged row is inert by construction, so nothing of the
+   * session behind it changes — and it is restored the moment the beat ends.
    */
   const [tourFlipId, setTourFlipId] = useState<string | undefined>(undefined);
-  const [captions, setCaptions] = useState<readonly string[] | undefined>(undefined);
+  /** Both speakers' words as the call groups them; Luke's rows are the captions and the quiet. */
+  const [captionRows, setCaptionRows] = useState<readonly LiveCaptionRow[]>([]);
+  const captionRowsRef = useRef<readonly LiveCaptionRow[]>(captionRows);
   const [flightStyle, setFlightStyle] = useState<CSSProperties>({});
-  /** The drawn keycaps mirror the developer's own hands on the talk key. */
-  const [talkHeld, setTalkHeld] = useState(false);
 
-  const sessionRef = useRef<ConversationCall | undefined>(undefined);
+  const callRef = useRef<LiveCall | undefined>(undefined);
   const audioRef = useRef<IntroductionAudio | undefined>(undefined);
-  /** The meter's own graph, reading levels only — nothing reaches a speaker. */
+  /** The meters' own graph, reading levels only — nothing reaches a speaker. */
   const meterContextRef = useRef<AudioContext | undefined>(undefined);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const faceRef = useRef<HTMLSpanElement | null>(null);
   const panelGroupRef = useRef<HTMLDivElement | null>(null);
-  /** The panel's own FLIP motion, so the tour's reorder travels like a re-sort. */
+  /** The panel's own FLIP motion, so the staged reorder travels like a re-sort. */
   const rowsListRef = useSessionReorderMotion();
   /**
    * The real surface's measured height, the same contract the app keeps:
@@ -483,24 +431,20 @@ function IntroductionFlight({
     observer.observe(group);
     return () => observer.disconnect();
   }, []);
-  /** The microphone wait's own pill, measured so the surface ends where it does. */
-  const [slotElement, slotHeight] = useMeasuredHeight();
-  /** The current beat's remaining lines, and what to do when the last one ends. */
-  const lineQueueRef = useRef<readonly string[]>([]);
-  const afterLinesRef = useRef<(() => void) | undefined>(undefined);
-  /** Whether the practice beat has heard a real ask committed. */
-  const practiceAskedRef = useRef(false);
   /**
-   * Whether the introduction was actually given — the sign-off spoken to its
-   * end. A glide past a voice that never stood up hands off the same way but
-   * marks nothing, so the introduction still plays for real on a later launch.
+   * The detected titles the session is created with: bounded here to the
+   * same count and length the voice service admits, and only for rows that
+   * are real — pretend rows send nothing, since their titles are the
+   * fixture's and not the developer's.
+   */
+  const titlesRef = useRef<readonly string[]>([]);
+  /**
+   * Whether the introduction was actually given — the greeting spoken to its
+   * quiet. A glide past a refused microphone or a voice that never stood up
+   * hands off the same way but marks nothing, so the introduction still plays
+   * for real on a later launch.
    */
   const givenRef = useRef(false);
-  /** The talk key's latch, the same tap-to-latch the app's own key keeps. */
-  const latchedRef = useRef(false);
-  const heldSinceRef = useRef(0);
-  /** Whether the connect loop has delivered its verdict, ready or failed. */
-  const connectSettledRef = useRef(false);
 
   const reducedMotion = usePrefersReducedMotion();
 
@@ -520,185 +464,125 @@ function IntroductionFlight({
   }, [state]);
 
   /**
-   * Speaks one direction, retrying briefly while the call settles between
-   * turns. A line the call never takes fails the voice rather than hanging
-   * the beat — the table decides what a failed voice means where. One pending
-   * retry at a time: a new line supersedes the old chain, a beat change
-   * orphans it (the beat captured at scheduling no longer stands), and the
-   * unmount cleanup clears it, so no retry outlives what asked for it.
+   * The introduction's peer. Its acts are the introduction's own two: the
+   * offer, with the titles, to the accountless session the main process
+   * holds, and the hang-up; a transport that closed or failed is the same
+   * hang-up, so the main process never keeps a session whose peer is gone.
+   * Idle is the takeover's own clock here, so the idle report goes nowhere.
    */
-  const speakRetryTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const trySpeak = useCallback(
-    (line: { direction: string; data?: readonly string[] }, attempts = SPEAK_RETRY_ATTEMPTS) => {
-      if (speakRetryTimerRef.current !== undefined) {
-        clearTimeout(speakRetryTimerRef.current);
-        speakRetryTimerRef.current = undefined;
-      }
-      const session = sessionRef.current;
-      if (session?.speakIntroduction(line)) return;
-      if (attempts > 0) {
-        const beatAtSchedule = beatRef.current;
-        speakRetryTimerRef.current = setTimeout(() => {
-          speakRetryTimerRef.current = undefined;
-          if (beatRef.current !== beatAtSchedule) return;
-          trySpeak(line, attempts - 1);
-        }, SPEAK_RETRY_MS);
-        return;
-      }
-      dispatch(INTRODUCTION_EVENT.VOICE_FAILED);
-    },
-    [dispatch],
-  );
-
-  const speakLines = useCallback(
-    (lines: readonly string[], data: readonly string[] | undefined, after: () => void) => {
-      const [first, ...rest] = lines;
-      if (first === undefined) {
-        after();
-        return;
-      }
-      lineQueueRef.current = rest;
-      afterLinesRef.current = after;
-      trySpeak(data ? { direction: first, data } : { direction: first });
-    },
-    [trySpeak],
-  );
-
-  const ensureSession = useCallback((): ConversationCall => {
-    sessionRef.current ??= new ConversationCall({
-      requestConnection: () => act(ACT_KIND.VOICE_MINT_CREDENTIAL),
-      sessionConfig: (model) => introductionSessionConfig({ model }),
-      audioElement: () => remoteAudioRef.current,
-      requestMicrophoneStream: () =>
+  const ensureCall = useCallback((): LiveCall => {
+    callRef.current ??= new LiveCall({
+      events: {
+        onStatus: (status) => {
+          voiceStatusRef.current = status;
+          setVoiceStatus(status);
+          if (!SESSION_BEATS.has(beatRef.current)) return;
+          if (status === LIVE_STATUS.FAILED) {
+            dispatch(INTRODUCTION_EVENT.VOICE_FAILED);
+            return;
+          }
+          // The session ending on the server's side — its duration limit, a
+          // connection lost — is a failure before the greeting was heard out
+          // and simply the end afterwards.
+          if (status === LIVE_STATUS.IDLE) {
+            dispatch(
+              beatRef.current === INTRODUCTION_BEAT.LISTEN
+                ? INTRODUCTION_EVENT.LISTEN_DONE
+                : INTRODUCTION_EVENT.VOICE_FAILED,
+            );
+          }
+        },
+        onCaptions: (next) => {
+          captionRowsRef.current = next;
+          setCaptionRows(next);
+        },
+        onError: () => undefined,
+      },
+      acts: {
+        createSession: (sdp) =>
+          act(ACT_KIND.INTRODUCTION_CREATE_SESSION, { sdp, titles: [...titlesRef.current] }),
+        endSession: () => tell(ACT_KIND.INTRODUCTION_END_SESSION),
+        reportTransport: (transport) => {
+          if (
+            transport === LIVE_TRANSPORT_STATE.CLOSED ||
+            transport === LIVE_TRANSPORT_STATE.FAILED
+          ) {
+            tell(ACT_KIND.INTRODUCTION_END_SESSION);
+          }
+        },
+        reportActivity: () => undefined,
+      },
+      createPeerConnection: () => new RTCPeerConnection(),
+      openMicrophone: () =>
         openPreferredMicrophone({
           route: () => act(ACT_KIND.MICROPHONE_ROUTE),
           enumerate: () => navigator.mediaDevices.enumerateDevices(),
           open: (audioConstraints) =>
             navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false }),
         }),
-      onStatus: (status) => {
-        setVoiceStatus(status);
-        // While the connect loop runs it owns the verdict — it retries a
-        // failed mint before giving up, and a failure dispatched here would
-        // abandon the introduction on the first attempt.
-        if (!connectSettledRef.current) return;
-        if (status === REALTIME_STATUS.FAILED || status === REALTIME_STATUS.UNAVAILABLE) {
-          dispatch(INTRODUCTION_EVENT.VOICE_FAILED);
-        }
-      },
-      onLocalStream: (stream) => setLocalStream(stream),
       onRemoteStream: (stream) => {
         if (remoteAudioRef.current) remoteAudioRef.current.srcObject = stream ?? null;
         setRemoteStream(stream);
       },
-      onError: () => undefined,
-      onCaption: (texts) => setCaptions(texts),
-      // Advancement rides the settled signal rather than the words: a reply
-      // the server failed or answered without a transcript still concludes,
-      // and a beat waiting on its words alone would wait forever.
-      onReplySettled: () => {
-        const [next, ...rest] = lineQueueRef.current;
-        if (next !== undefined) {
-          lineQueueRef.current = rest;
-          trySpeak({ direction: next });
-          return;
-        }
-        const after = afterLinesRef.current;
-        afterLinesRef.current = undefined;
-        if (after) {
-          after();
-          return;
-        }
-        // A reply with no line behind it is the practice exchange's answer,
-        // and the answer ending is what moves the flow on — no waiting.
-        if (beatRef.current === INTRODUCTION_BEAT.PRACTICE && practiceAskedRef.current) {
-          dispatch(INTRODUCTION_EVENT.PRACTICE_DONE);
-        }
+      onLocalStream: (stream) => setLocalStream(stream),
+      now: () => Date.now(),
+      schedule: (callback, delayMs) => window.setTimeout(callback, delayMs),
+      // SAFETY: every timer the call cancels is one the scheduler above made, a window timeout handle.
+      cancel: (timer) => window.clearTimeout(timer as number),
+      onWireEvent: (direction, event) => {
+        if (appStateNow()?.run.agentTraceEnabled !== true) return;
+        window.sidecar.recordAgentTrace({ direction, event: sanitizedTraceEvent(event) });
       },
     });
-    return sessionRef.current;
-  }, [dispatch, trySpeak]);
+    return callRef.current;
+  }, [dispatch]);
 
-  // The whole flow's standing wiring: the call opening in the background under
-  // the dark, the account landing that completes it from anywhere, and the
-  // talk key the main process routes here for the introduction's duration.
+  // The whole flow's standing wiring: the dark's own clock, the talk key the
+  // main process routes here for the introduction's duration, and the
+  // teardown that hangs up whatever stands.
   useEffect(() => {
-    const session = ensureSession();
-    let gone = false;
-    // The dark is the one moment with room to be patient: a mint that failed
-    // on a network blip is retried before the whole introduction is given up,
-    // while a service that genuinely cannot answer still fails in seconds.
-    const connectUnderTheDark = async () => {
-      for (let attempt = 1; attempt <= CONNECT_ATTEMPTS; attempt += 1) {
-        const opened = await session.connect();
-        if (gone) return;
-        if (opened) {
-          connectSettledRef.current = true;
-          dispatch(INTRODUCTION_EVENT.VOICE_READY);
-          return;
-        }
-        if (attempt < CONNECT_ATTEMPTS) {
-          await new Promise((resolve) => setTimeout(resolve, CONNECT_RETRY_MS));
-          if (gone) return;
-        }
-      }
-      connectSettledRef.current = true;
-      dispatch(INTRODUCTION_EVENT.VOICE_FAILED);
-    };
-    void connectUnderTheDark();
-    // The wake need not wait for the network: the dark holds a beat of its
-    // own and Luke wakes into a call still connecting; the first spoken line
-    // is what waits, retrying until the call stands.
     const darkTimer = setTimeout(() => dispatch(INTRODUCTION_EVENT.DARK_SETTLED), DARK_HOLD_MS);
+    // The microphone is a switch on the session, unmuted from the start so
+    // the greeting is answered like a conversation; the key is the same
+    // switch the app's own key is, and a release ends nothing.
     const unsubscribePress = window.sidecar.onVoiceHotkeyPress(() => {
-      if (beatRef.current !== INTRODUCTION_BEAT.PRACTICE) return;
-      // A latched turn is already open; this press says done — the release owns it.
-      if (latchedRef.current) return;
-      heldSinceRef.current = Date.now();
-      setTalkHeld(true);
-      ensureSession().beginTurn();
-    });
-    const unsubscribeRelease = window.sidecar.onVoiceHotkeyRelease(() => {
-      if (beatRef.current !== INTRODUCTION_BEAT.PRACTICE) return;
-      // A release with no press behind it — the key was already down when the
-      // beat began — holds no turn to send.
-      if (heldSinceRef.current === 0 && !latchedRef.current) return;
-      const release = talkKeyRelease({
-        heldMs: Date.now() - heldSinceRef.current,
-        latched: latchedRef.current,
-      });
-      // A latched turn keeps the caps pressed: the floor is still theirs.
-      if (release === TALK_KEY_RELEASE.LATCH) {
-        latchedRef.current = true;
-        return;
-      }
-      latchedRef.current = false;
-      heldSinceRef.current = 0;
-      practiceAskedRef.current = true;
-      setTalkHeld(false);
-      ensureSession().endTurn(true);
+      const call = callRef.current;
+      if (call?.standing) void call.unmute();
     });
     return () => {
-      gone = true;
       clearTimeout(darkTimer);
       unsubscribePress();
-      unsubscribeRelease();
-      if (speakRetryTimerRef.current !== undefined) clearTimeout(speakRetryTimerRef.current);
-      void session.close();
+      void callRef.current?.close();
       audioRef.current?.dispose();
       void meterContextRef.current?.close().catch(() => undefined);
       meterContextRef.current = undefined;
     };
-  }, [dispatch, ensureSession]);
+  }, [dispatch]);
 
-  // The meter reads whoever holds the floor, exactly as the app's own does:
-  // Luke's stream while he replies, the developer's while a practice turn is
-  // held, and nothing between turns.
-  const meterStream = activeVoiceStream({
-    status: voiceStatus,
-    local: localStream,
-    remote: remoteStream,
-  });
+  // Two meters over one context, exactly as the voice window keeps them:
+  // Luke's track decides whether he is speaking, since the guide forbids
+  // reading that off transcript events, and the microphone's feeds nothing
+  // here but the drawn meter, since idle is this takeover's own clock.
+  useEffect(() => {
+    if (!remoteStream) return;
+    const context = meterContextRef.current ?? new AudioContext({ latencyHint: "interactive" });
+    meterContextRef.current = context;
+    return startVoiceLevelMeter({
+      stream: remoteStream,
+      audioContext: context,
+      onActivity: (active) => callRef.current?.reportRemoteAudioLevel(active),
+      onLevel: () => undefined,
+    });
+  }, [remoteStream]);
+
+  // The drawn meter reads whoever holds the floor, exactly as the app's own
+  // does: Luke's stream while he speaks, the developer's while he listens.
+  const meterStream =
+    voiceStatus === LIVE_STATUS.SPEAKING
+      ? remoteStream
+      : voiceStatus === LIVE_STATUS.LISTENING
+        ? localStream
+        : undefined;
   useEffect(() => {
     if (!meterStream) {
       setMeterAnalyser(undefined);
@@ -720,6 +604,16 @@ function IntroductionFlight({
     };
   }, [meterStream]);
 
+  // The greeting's end is read from the evidence the guide allows: Luke's
+  // rows settled on the ledger's clock and his track quiet. Marking the
+  // introduction given belongs here, because this is the moment it was.
+  useEffect(() => {
+    if (beat !== INTRODUCTION_BEAT.GREETING) return;
+    if (!lukeOutputQuiet(captionRows, voiceStatus === LIVE_STATUS.SPEAKING)) return;
+    givenRef.current = true;
+    dispatch(INTRODUCTION_EVENT.OUTPUT_QUIET);
+  }, [beat, captionRows, voiceStatus, dispatch]);
+
   // What each beat does on arrival. The clocks live here; the order lives in
   // the transition table.
   useEffect(() => {
@@ -736,14 +630,32 @@ function IntroductionFlight({
           clearTimeout(doneTimer);
         };
       }
-      case INTRODUCTION_BEAT.HELLO: {
-        speakLines(INTRODUCTION_SCRIPT.HELLO, undefined, () =>
-          dispatch(INTRODUCTION_EVENT.LINES_DONE),
-        );
+      case INTRODUCTION_BEAT.MICROPHONE: {
+        // A grant already standing needs no press; a refusal already standing
+        // gets no dialog, so nothing spoken could follow and Luke glides on.
+        if (state.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED) {
+          dispatch(INTRODUCTION_EVENT.MICROPHONE_GRANTED);
+        } else if (state.audio.microphoneStatus !== MICROPHONE_STATUS.NOT_DETERMINED) {
+          dispatch(INTRODUCTION_EVENT.MICROPHONE_DENIED);
+        }
+        return;
+      }
+      case INTRODUCTION_BEAT.MICROPHONE_DIALOG: {
+        // macOS's own dialog, raised by the developer's press and answered
+        // only by its buttons; the stage waits on the answer.
+        void act(ACT_KIND.MICROPHONE_REQUEST).then((status) => {
+          if (beatRef.current !== INTRODUCTION_BEAT.MICROPHONE_DIALOG) return;
+          dispatch(
+            status === MICROPHONE_STATUS.GRANTED
+              ? INTRODUCTION_EVENT.MICROPHONE_GRANTED
+              : INTRODUCTION_EVENT.MICROPHONE_DENIED,
+          );
+        });
         return;
       }
       case INTRODUCTION_BEAT.DETECT: {
         let stale = false;
+        let holdTimer: ReturnType<typeof setTimeout> | undefined;
         const stage = (detected: readonly Session[]) => {
           if (stale) return;
           const found = detected.length > 0;
@@ -756,18 +668,16 @@ function IntroductionFlight({
           // Titles alone travel — the one observed thing the introduction's
           // bounds allow on the wire; the providers stay on the screen, and
           // however long the drawn list scrolls, only the first few titles
-          // leave the machine.
-          speakLines(
-            found ? INTRODUCTION_SCRIPT.DETECT_FOUND : INTRODUCTION_SCRIPT.DETECT_PRETEND,
-            found
-              ? staged.slice(0, INTRODUCTION_SPOKEN_SESSION_LIMIT).map((row) => row.title)
-              : undefined,
-            () => dispatch(INTRODUCTION_EVENT.LINES_DONE),
-          );
+          // leave the machine, each cut to the length the service admits.
+          titlesRef.current = found
+            ? boundedIntroductionTitles(staged.map((row) => row.title))
+            : [];
+          holdTimer = setTimeout(() => dispatch(INTRODUCTION_EVENT.DETECTED), DETECT_HOLD_MS);
         };
         act(ACT_KIND.INTRODUCTION_PEEK_SESSIONS).then(stage, () => stage([]));
         return () => {
           stale = true;
+          if (holdTimer !== undefined) clearTimeout(holdTimer);
         };
       }
       case INTRODUCTION_BEAT.GLIDE:
@@ -801,87 +711,71 @@ function IntroductionFlight({
         }, flightMs + 160);
         return () => clearTimeout(timer);
       }
-      case INTRODUCTION_BEAT.TOUR: {
-        // The staged moment plays on one of the rows already standing — from
-        // the middle of the list, so the ride to the top is seen. The rows
-        // are inert pictures, so the flip changes nothing of the session
-        // behind it, and the beat's cleanup restores the picture. Where Luke
-        // lives is said first — now that he lives there — and the line's own
-        // length is the beat the list holds before its flip.
-        speakLines(INTRODUCTION_SCRIPT.TOUR_HOME, undefined, () => {
-          if (beatRef.current !== INTRODUCTION_BEAT.TOUR) return;
+      case INTRODUCTION_BEAT.CONNECT: {
+        // Landed, the session opens: the offer with the titles goes to the
+        // main process, the answer comes back, and `open` resolves on
+        // `session.started`. The microphone is unmuted at once — the guide's
+        // greeting pattern wants the input running from the start — and the
+        // greeting itself is the voice service's, sent on the same event.
+        let gone = false;
+        const call = ensureCall();
+        void call.open().then(async (opened) => {
+          if (gone) return;
+          if (!opened) {
+            dispatch(INTRODUCTION_EVENT.VOICE_FAILED);
+            return;
+          }
+          // A greeting nobody can answer is not the introduction: an unmute
+          // the session refused, or a track that never arrived, stands the
+          // takeover down rather than consuming the one introduction.
+          const heard = await call.unmute();
+          if (gone) return;
+          dispatch(heard ? INTRODUCTION_EVENT.SESSION_STARTED : INTRODUCTION_EVENT.VOICE_FAILED);
+        });
+        return () => {
+          gone = true;
+        };
+      }
+      case INTRODUCTION_BEAT.GREETING: {
+        // A started session that says nothing is a greeting that never came,
+        // and the staged "needs you" moment plays into the greeting on one of
+        // the rows already standing — from the middle, so the ride to the top
+        // is seen — and is restored when the beat ends.
+        const silence = setTimeout(() => {
+          if (lukeCaption(captionRowsRef.current) === undefined) {
+            dispatch(INTRODUCTION_EVENT.VOICE_FAILED);
+          }
+        }, GREETING_TIMEOUT_MS);
+        const flip = setTimeout(() => {
           setRows((current) => {
             const middle = current[Math.floor((current.length - 1) / 2)];
             setTourFlipId(middle?.id);
             return current;
           });
           audio().ding();
-          speakLines(INTRODUCTION_SCRIPT.TOUR, undefined, () =>
-            dispatch(INTRODUCTION_EVENT.LINES_DONE),
-          );
-        });
-        return () => setTourFlipId(undefined);
+        }, TOUR_FLIP_DELAY_MS);
+        return () => {
+          clearTimeout(silence);
+          clearTimeout(flip);
+          setTourFlipId(undefined);
+        };
       }
-      case INTRODUCTION_BEAT.MICROPHONE: {
-        if (state.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED) {
-          dispatch(INTRODUCTION_EVENT.MICROPHONE_GRANTED);
-          return;
-        }
-        if (state.audio.microphoneStatus !== MICROPHONE_STATUS.NOT_DETERMINED) {
-          // Denied before Luke ever asked: no dialog will appear, so there is
-          // nothing to warn about; practice is skipped the same kind way.
-          dispatch(INTRODUCTION_EVENT.MICROPHONE_DENIED_SAID);
-          return;
-        }
-        speakLines(INTRODUCTION_SCRIPT.MICROPHONE, undefined, () =>
-          dispatch(INTRODUCTION_EVENT.LINES_DONE),
+      case INTRODUCTION_BEAT.LISTEN: {
+        // The ceiling on the word back, whatever is still being said: the
+        // patience below is what ends it kindly, this is what ends it at all.
+        const ceiling = setTimeout(
+          () => dispatch(INTRODUCTION_EVENT.LISTEN_DONE),
+          LISTEN_CEILING_MS,
         );
-        return;
-      }
-      case INTRODUCTION_BEAT.MICROPHONE_DIALOG: {
-        // The dialog is macOS's own window mid-screen; while it stands, the
-        // panel is the waiting slot — the same pill a calendar consent
-        // stands down to — and the answer is what brings it back.
-        void act(ACT_KIND.MICROPHONE_REQUEST).then((status) => {
-          if (beatRef.current !== INTRODUCTION_BEAT.MICROPHONE_DIALOG) return;
-          dispatch(
-            status === MICROPHONE_STATUS.GRANTED
-              ? INTRODUCTION_EVENT.MICROPHONE_GRANTED
-              : INTRODUCTION_EVENT.MICROPHONE_DENIED,
-          );
-        });
-        return;
-      }
-      case INTRODUCTION_BEAT.MICROPHONE_DENIED: {
-        speakLines(INTRODUCTION_SCRIPT.MICROPHONE_DENIED, undefined, () =>
-          dispatch(INTRODUCTION_EVENT.MICROPHONE_DENIED_SAID),
-        );
-        return;
-      }
-      case INTRODUCTION_BEAT.PRACTICE: {
-        practiceAskedRef.current = false;
-        speakLines(INTRODUCTION_SCRIPT.PRACTICE, undefined, () => undefined);
-        // Unconditional: an ask whose turn was dropped mid-handshake (the
-        // device never arrived, a release with nothing captured) would
-        // otherwise disarm the only clock this beat has.
-        const timer = setTimeout(
-          () => dispatch(INTRODUCTION_EVENT.PRACTICE_DONE),
-          PRACTICE_TIMEOUT_MS,
-        );
-        return () => clearTimeout(timer);
-      }
-      case INTRODUCTION_BEAT.SIGN_OFF: {
-        speakLines(INTRODUCTION_SCRIPT.SIGN_OFF, undefined, () => {
-          givenRef.current = true;
-          dispatch(INTRODUCTION_EVENT.LINES_DONE);
-        });
-        return;
+        return () => clearTimeout(ceiling);
       }
       case INTRODUCTION_BEAT.STAND_DOWN: {
-        // The collapse spends the panel's own clock — content leaves over the
+        // The hang-up first, so nothing is said over the stand-down. The
+        // collapse spends the panel's own clock — content leaves over the
         // exit, the shape follows on the spring — and only then does the
         // handoff run, so the capsule the takeover fades over is the capsule
         // the real panel draws.
+        void callRef.current?.close();
         const root = rootRef.current;
         const standMs = root
           ? parseMilliseconds(getComputedStyle(root).getPropertyValue("--duration-exit")) +
@@ -891,7 +785,7 @@ function IntroductionFlight({
         return () => clearTimeout(timer);
       }
       case INTRODUCTION_BEAT.DONE: {
-        void sessionRef.current?.close();
+        void callRef.current?.close();
         audioRef.current?.dispose();
         // What the stand-down leaves drawn is the identical compact signed-out
         // panel the app itself draws, so reporting the ending here — and
@@ -903,7 +797,30 @@ function IntroductionFlight({
       default:
         return;
     }
-  }, [audio, beat, state, display, dispatch, reducedMotion, speakLines]);
+  }, [audio, beat, state, display, dispatch, ensureCall, reducedMotion]);
+
+  // The listening window's patience: restarted by any word either way, so a
+  // developer mid-sentence is not cut off, and ended only through the quiet
+  // check above so Luke's answer is heard out.
+  useEffect(() => {
+    if (beat !== INTRODUCTION_BEAT.LISTEN) return;
+    let tick: ReturnType<typeof setTimeout> | undefined;
+    // The rows are the ones this run of the effect was started by: a newer
+    // fragment restarts the whole wait, so at the moment the clock fires they
+    // are the latest, while the track's level moves without a re-render.
+    const endWhenQuiet = () => {
+      if (lukeOutputQuiet(captionRows, voiceStatusRef.current === LIVE_STATUS.SPEAKING)) {
+        dispatch(INTRODUCTION_EVENT.LISTEN_DONE);
+        return;
+      }
+      tick = setTimeout(endWhenQuiet, LISTEN_TICK_MS);
+    };
+    const patience = setTimeout(endWhenQuiet, LISTEN_PATIENCE_MS);
+    return () => {
+      clearTimeout(patience);
+      if (tick !== undefined) clearTimeout(tick);
+    };
+  }, [beat, captionRows, dispatch]);
 
   // Once the flight lands, the desktop is the developer's again: the window
   // stops intercepting the pointer, and the landed panel and its strip are
@@ -927,7 +844,7 @@ function IntroductionFlight({
     const handleMove = (event: MouseEvent) => {
       const island = document
         .elementFromPoint(event.clientX, event.clientY)
-        ?.closest(".introduction-panel, .notch-wings, .slot-stage");
+        ?.closest(".introduction-panel, .notch-wings");
       update(island != null);
     };
     const handleLeave = () => {
@@ -958,16 +875,9 @@ function IntroductionFlight({
     return () => clearTimeout(timer);
   }, [landed]);
   const standingDown = STANDING_DOWN_BEATS.has(beat);
-  // Stood aside, not down: while macOS's microphone dialog is up the panel
-  // is the waiting slot — the same pill a calendar consent stands down to,
-  // wings ungated — and the panel it springs back to is unchanged.
-  const standingAside = beat === INTRODUCTION_BEAT.MICROPHONE_DIALOG;
-  const presentation = standingDown
-    ? PANEL_PRESENTATION.CAPSULE
-    : standingAside
-      ? PANEL_PRESENTATION.SLOT
-      : PANEL_PRESENTATION.PANEL;
-  // The tour's flipped row wears the attention look and rides to the top,
+  const presentation = standingDown ? PANEL_PRESENTATION.CAPSULE : PANEL_PRESENTATION.PANEL;
+  const asking = ASKING_BEATS.has(beat);
+  // The staged flipped row wears the attention look and rides to the top,
   // exactly as the panel re-sorts a session that starts needing someone.
   const tourFlipped = tourFlipId ? rows.find((row) => row.id === tourFlipId) : undefined;
   const stagedRows = tourFlipped
@@ -987,20 +897,21 @@ function IntroductionFlight({
   // yields to the meter while the developer holds the floor — the real wings
   // own that trade, exactly as they do in the panel.
   const voiceTurn: WaveformVoice | undefined =
-    voiceStatus === REALTIME_STATUS.RESPONDING
+    voiceStatus === LIVE_STATUS.SPEAKING
       ? WAVEFORM_VOICE.LUKE
-      : voiceStatus === REALTIME_STATUS.LISTENING
+      : voiceStatus === LIVE_STATUS.LISTENING
         ? WAVEFORM_VOICE.DEVELOPER
         : undefined;
   const face: { motion?: FaceMotion; repeat: boolean; play: string } = reducedMotion
     ? { repeat: false, play: "still" }
     : beat === INTRODUCTION_BEAT.WAKE
       ? { motion: FACE_MOTION.WAKE, repeat: false, play: "wake" }
-      : voiceStatus === REALTIME_STATUS.RESPONDING
+      : voiceStatus === LIVE_STATUS.SPEAKING
         ? { motion: FACE_MOTION.TALKING, repeat: true, play: "talking" }
         : { repeat: false, play: "rest" };
   const gateFace = useSignInFaceCycle(reducedMotion || !standingDown);
-  const showCaptions = captions !== undefined && outputSilent(state.audio.outputAudio);
+  const caption = lukeCaption(captionRows);
+  const showCaptions = caption !== undefined && outputSilent(state.audio.outputAudio);
 
   return (
     <div
@@ -1018,7 +929,6 @@ function IntroductionFlight({
           "--notch-top-inset": `${display.notch.topInset}px`,
           "--notch-housing-width": `${display.notch.housingWidth}px`,
           "--panel-height": `${panelHeight}px`,
-          ...(slotHeight !== undefined ? { "--slot-height": `${slotHeight}px` } : undefined),
           "--introduction-wordmark-left": WORDMARK_FRACTION.left,
           "--introduction-wordmark-top": WORDMARK_FRACTION.top,
           "--introduction-wordmark-width": WORDMARK_FRACTION.width,
@@ -1053,40 +963,7 @@ function IntroductionFlight({
             />
           ))}
         </div>
-        {beat === INTRODUCTION_BEAT.PRACTICE ? (
-          <div className="introduction-keycaps" data-held={String(talkHeld)} aria-hidden="true">
-            <span className="introduction-keycaps-hold">Hold</span>
-            <Keycaps accelerator={state.hotkeys.talk ?? DEFAULT_VOICE_HOTKEYS[0] ?? "Alt+Space"} />
-          </div>
-        ) : null}
       </div>
-      {/* The microphone wait's pill, on the consent slot's exact terms: the
-          shape shrinks to a line that says what it is waiting for while
-          macOS's own dialog holds the room. Its mark is the microphone
-          itself, in Luke's own glyph vocabulary, because macOS's ask has no
-          brand mark of its own; there is no way out, because the dialog's
-          buttons are the only honest answer — base.css's slot rules own its
-          arrival, its exit, and the pointer it may take while drawn. */}
-      {flown ? (
-        <div
-          className="slot-stage"
-          data-drawn={String(standingAside)}
-          aria-hidden={!standingAside}
-          inert={!standingAside}
-        >
-          <div ref={slotElement} className="key-slot sign-in-slot">
-            <div className="key-slot-row">
-              <span className="key-slot-mark">
-                <MicrophoneIcon />
-              </span>
-              <span className="sign-in-slot-copy" role="status">
-                <strong>Waiting for macOS…</strong>
-                <small>Allow microphone access in macOS's dialog.</small>
-              </span>
-            </div>
-          </div>
-        </div>
-      ) : null}
       {/* The real wings, the moment there is a strip to stand in: the same
           face, meter, and marks the app draws, trading the face for the meter
           while the developer holds the floor. At the gate the strip goes
@@ -1098,7 +975,7 @@ function IntroductionFlight({
           {...(voiceTurn ? { voice: voiceTurn } : undefined)}
           fixtureSpeaking={false}
           hasAudioSignal={meterAnalyser !== undefined}
-          voiceOpening={false}
+          voiceOpening={beat === INTRODUCTION_BEAT.CONNECT}
           // The introduction runs before any account, so no run of Luke's can
           // be under way behind its strip.
           thinking={false}
@@ -1184,11 +1061,59 @@ function IntroductionFlight({
               </span>
             ) : null}
           </div>
+          {/* The microphone ask, under the lockup: Luke's one request before
+              he speaks, because the greeting wants to be answered and the
+              session opens with the developer's track running. The press is
+              theirs — it is what raises macOS's own dialog — and the way out
+              is theirs too, an ordinary signed-out launch with nothing said
+              and nothing written. While the dialog holds the room, the block
+              says what it is waiting for and offers nothing else, because the
+              dialog's buttons are the only honest answer. */}
+          {asking ? (
+            <div
+              className="introduction-ask"
+              data-waiting={String(beat === INTRODUCTION_BEAT.MICROPHONE_DIALOG)}
+            >
+              {beat === INTRODUCTION_BEAT.MICROPHONE ? (
+                <>
+                  <button
+                    type="button"
+                    className="action-button introduction-ask-button"
+                    onClick={() => dispatch(INTRODUCTION_EVENT.MICROPHONE_PRESSED)}
+                  >
+                    <MicrophoneIcon />
+                    Let Luke hear you
+                  </button>
+                  <small className="introduction-ask-note">
+                    Your Mac will ask about the microphone first. Luke listens only while a
+                    conversation is open.
+                  </small>
+                  <button
+                    type="button"
+                    className="quiet-button introduction-ask-skip"
+                    onClick={() => dispatch(INTRODUCTION_EVENT.MICROPHONE_DENIED)}
+                  >
+                    Not now
+                  </button>
+                </>
+              ) : (
+                <span className="introduction-ask-wait" role="status">
+                  <span className="key-slot-mark">
+                    <MicrophoneIcon />
+                  </span>
+                  <span>
+                    <strong>Waiting for macOS…</strong>
+                    <small>Allow microphone access in macOS's dialog.</small>
+                  </span>
+                </span>
+              )}
+            </div>
+          ) : null}
         </div>
       )}
       {showCaptions ? (
         <div className="introduction-caption" role="status">
-          {captions.join(" ")}
+          {caption}
         </div>
       ) : null}
       {/* Luke's own voice, like the panel's one sounding element. */}

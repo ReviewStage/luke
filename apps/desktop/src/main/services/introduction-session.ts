@@ -1,0 +1,61 @@
+import {
+  PRODUCT_CREDENTIAL_SOURCE,
+  PRODUCT_EVENT,
+  type RecordProductEvent,
+} from "@sidecar/analytics";
+import type { VoiceCreateLiveSessionResult } from "@sidecar/gateway";
+import { introductionSeedItems } from "@sidecar/live";
+import type { IntroductionLiveSessionOpened, IntroductionSessionSource } from "@sidecar/voice";
+
+export interface IntroductionSessionDependencies {
+  source: IntroductionSessionSource;
+  recordProductEvent: RecordProductEvent;
+}
+
+/**
+ * The introduction's one GPT Live session, as the main process holds it: the
+ * takeover's offer goes to the accountless voice service with the detected
+ * titles as the session's only seed, the answer goes back to the takeover,
+ * and what stays here is the connection the session was created over, which
+ * the service reads as the caller's presence. Closing it is the hang-up, so
+ * the session cannot outlive the takeover: a second offer ends the first
+ * session, and the introduction's ending ends whichever stands. No credential
+ * is held or handed on at any point; the service owns the key and the
+ * sideband both.
+ */
+export class IntroductionSession {
+  readonly #dependencies: IntroductionSessionDependencies;
+  #standing: IntroductionLiveSessionOpened | undefined;
+
+  constructor(dependencies: IntroductionSessionDependencies) {
+    this.#dependencies = dependencies;
+  }
+
+  get standing(): boolean {
+    return this.#standing !== undefined;
+  }
+
+  async open(input: {
+    sdp: string;
+    titles: readonly string[];
+  }): Promise<VoiceCreateLiveSessionResult | undefined> {
+    this.end();
+    const opened = await this.#dependencies.source.create({
+      sdpOffer: input.sdp,
+      input: introductionSeedItems(input.titles),
+    });
+    if (!opened) return undefined;
+    this.#standing = opened;
+    this.#dependencies.recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {
+      credential_source: PRODUCT_CREDENTIAL_SOURCE.INTRODUCTION,
+    });
+    return { sessionId: opened.sessionId, sdpAnswer: opened.sdpAnswer };
+  }
+
+  end(): void {
+    const standing = this.#standing;
+    if (!standing) return;
+    this.#standing = undefined;
+    standing.close();
+  }
+}

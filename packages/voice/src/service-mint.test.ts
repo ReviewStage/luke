@@ -6,8 +6,6 @@ import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import {
   type HostedRealtimeCredentialOptions,
   hostedRealtimeCredentialMinter,
-  type IntroductionRealtimeCredentialOptions,
-  introductionRealtimeCredentialMinter,
 } from "./service-mint.js";
 
 const NOW = 1_800_000_000_000;
@@ -63,14 +61,6 @@ function hosted(options: Partial<HostedRealtimeCredentialOptions>) {
   });
 }
 
-function introduction(options: Partial<IntroductionRealtimeCredentialOptions>) {
-  return introductionRealtimeCredentialMinter({
-    serviceBaseUrl: SERVICE,
-    now: () => NOW,
-    ...options,
-  });
-}
-
 test("mints through the hosted service on the account's bearer token", async () => {
   const { requests, fetchLike } = service([minted(mintedBody())]);
   const minter = hosted({
@@ -96,26 +86,6 @@ test("mints through the hosted service on the account's bearer token", async () 
   assert.deepEqual(report.quota, QUOTA);
 });
 
-test("mints through the introduction endpoint with no authorization at all", async () => {
-  const { requests, fetchLike } = service([minted({ connection: CONNECTION })]);
-  const minter = introduction({
-    fetch: fetchLike,
-    voice: REALTIME_VOICE.MARIN,
-    speed: REALTIME_VOICE_SPEED.QUICK,
-  });
-
-  assert.deepEqual(await minter.mint(), CONNECTION);
-
-  const [request] = requests;
-  assert.equal(request?.url, "https://tryluke.dev/api/voice/introduction-mint");
-  assert.equal(new Headers(request?.init.headers).get("authorization"), null);
-  assert.deepEqual(JSON.parse(String(request?.init.body)), {
-    voice: REALTIME_VOICE.MARIN,
-    speed: REALTIME_VOICE_SPEED.QUICK,
-  });
-  assert.equal(minter.diagnostics().lastOutcome, REALTIME_MINT_OUTCOME.SUCCEEDED);
-});
-
 test("mints a fresh secret for every call and follows a voice change on the next", async () => {
   const { requests, fetchLike } = service([minted(mintedBody())]);
   const minter = hosted({ fetch: fetchLike });
@@ -131,15 +101,6 @@ test("mints a fresh secret for every call and follows a voice change on the next
   await minter.mint();
   assert.equal(requests.length, 3);
   assert.equal(JSON.parse(String(requests[2]?.init.body)).voice, REALTIME_VOICE.SAGE);
-});
-
-test("the introduction mints a fresh secret for every call too", async () => {
-  const { requests, fetchLike } = service([minted({ connection: CONNECTION })]);
-  const minter = introduction({ fetch: fetchLike });
-
-  await minter.mint();
-  await minter.mint();
-  assert.equal(requests.length, 2);
 });
 
 test("no access token asks the service nothing and says why voice is off", async () => {
@@ -167,15 +128,6 @@ test("a refresh that changes nothing is not retried and reads as signed out", as
   assert.equal(minter.diagnostics().lastOutcome, REALTIME_MINT_OUTCOME.NOT_SIGNED_IN);
 });
 
-test("a 401 on the endpoint that sent no identity is a plain failure", async () => {
-  const minter = introduction({
-    fetch: service([refused(401, { error: "unauthorized" })]).fetchLike,
-  });
-
-  assert.equal(await minter.mint(), undefined);
-  assert.equal(minter.diagnostics().lastOutcome, REALTIME_MINT_OUTCOME.HTTP_ERROR);
-});
-
 test("a spent allowance is diagnosed with the quota the refusal carried", async () => {
   const spent = { used: 51, limit: 50, resetsAt: NOW + 3_600_000 };
   const minter = hosted({
@@ -186,20 +138,6 @@ test("a spent allowance is diagnosed with the quota the refusal carried", async 
   const report = minter.diagnostics();
   assert.equal(report.lastOutcome, REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED);
   assert.deepEqual(report.quota, spent);
-});
-
-// The introduction's cap is a spent allowance too — today's free calls for
-// this endpoint are gone and return at midnight UTC — and it carries no quota
-// to draw, where the http-error fallback would read as a fault worth chasing.
-test("a spent introduction cap reads as an exhausted quota it cannot draw", async () => {
-  const minter = introduction({
-    fetch: service([refused(429, { error: "quota-exhausted" })]).fetchLike,
-  });
-
-  assert.equal(await minter.mint(), undefined);
-  const report = minter.diagnostics();
-  assert.equal(report.lastOutcome, REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED);
-  assert.equal(report.quota, undefined);
 });
 
 test("a switched-off service and a plain failure are told apart", async () => {
@@ -227,7 +165,7 @@ test("a credential aimed anywhere but OpenAI's calls endpoint is refused", async
 });
 
 test("a network fault resolves to nothing and says so", async () => {
-  const minter = introduction({
+  const minter = hosted({
     fetch: async () => {
       throw new Error("offline");
     },

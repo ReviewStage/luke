@@ -96,8 +96,16 @@ export interface LiveSessionOpened extends LiveSessionCreated {
   attach(): Promise<LiveSideband>;
 }
 
-/** The introduction's session has no trusted half on the desktop; the voice service holds that sideband. */
-export type IntroductionLiveSessionOpened = LiveSessionCreated;
+/**
+ * The introduction's session has no trusted half on the desktop; the voice
+ * service holds that sideband. What the desktop holds instead is the
+ * connection the session was created over: the service closes the session
+ * on the caller's behalf the moment that connection ends, so the takeover
+ * keeps it for the introduction's duration and `close` is the hang-up.
+ */
+export interface IntroductionLiveSessionOpened extends LiveSessionCreated {
+  close(): void;
+}
 
 export interface LiveSessionSource {
   create(input: LiveSessionCreateInput): Promise<LiveSessionOpened | undefined>;
@@ -797,7 +805,9 @@ export type IntroductionLiveSessionOptions = Omit<ServiceSourceOptions, "voice">
  * handshake deliberately carries no authorization header — the endpoint takes
  * no identity and this source holds none to send — and the session has no
  * sideband on this side by type: the voice service holds it and sends the
- * greeting, so nothing on this machine can append to it.
+ * greeting, so nothing on this machine can append to it. The socket the
+ * service answered on is kept open and never read, because the service treats
+ * its close as the caller hanging up; the caller closes it to end the session.
  */
 export class IntroductionLiveSessionSource
   extends ServiceLiveSessionSource
@@ -814,8 +824,7 @@ export class IntroductionLiveSessionSource
   async create(input: LiveSessionCreateInput): Promise<IntroductionLiveSessionOpened | undefined> {
     const opened = await this.createSession(input);
     if (!opened) return undefined;
-    opened.socket.close();
-    return opened.created;
+    return { ...opened.created, close: () => opened.socket.close() };
   }
 }
 

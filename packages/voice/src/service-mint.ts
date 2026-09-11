@@ -263,21 +263,3 @@ export function hostedRealtimeCredentialMinter(
     authorization: { readAccessToken, refreshAccount, readAccountKey },
   });
 }
-
-export type IntroductionRealtimeCredentialOptions = RealtimeCredentialOptions;
-
-/**
- * The one-time onboarding introduction's mint, before any account exists. The
- * request deliberately carries no authorization header — the endpoint takes no
- * identity and this minter holds none to send.
- */
-export function introductionRealtimeCredentialMinter(
-  options: IntroductionRealtimeCredentialOptions,
-): RealtimeCredentialMinter {
-  return new ServiceRealtimeCredentialMinter({
-    ...options,
-    servicePath: HOSTED_SERVICE_PATH.INTRODUCTION_MINT,
-    logLabel: "Introduction realtime mint",
-    malformedDetail: "no usable introduction credential",
-  });
-}

@@ -17,14 +17,14 @@ import {
   feedbackSubmission,
 } from "@sidecar/feedback";
 import {
+  LIVE_SDP_MAX_CHARACTERS,
   type VoiceCreateLiveSessionResult,
   voiceCreateLiveSessionParamsSchema,
   voiceCreateLiveSessionResultSchema,
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
-import type { RealtimeConnection } from "@sidecar/hosted";
-import type { LiveDiagnostics } from "@sidecar/live";
+import { INTRODUCTION_SEED_BOUNDS, type LiveDiagnostics } from "@sidecar/live";
 import type { SupersetSignInSnapshot } from "@sidecar/providers/superset/sign-in-stage";
 import {
   isSessionApplicationId,
@@ -140,12 +140,6 @@ export const ACT_KIND = {
   VOICE_END_LIVE_SESSION: "voice.endLiveSession",
   VOICE_REPORT_LIVE_TRANSPORT: "voice.reportLiveTransport",
   VOICE_REPORT_LIVE_ACTIVITY: "voice.reportLiveActivity",
-  /**
-   * The spoken introduction's bounded Realtime credential, answered only
-   * while the takeover holds the panel; the voice window's own sessions carry
-   * no credential at all.
-   */
-  VOICE_MINT_CREDENTIAL: "voice.mintCredential",
   VOICE_DIAGNOSTICS: "voice.diagnostics",
   MICROPHONE_REQUEST: "microphone.request",
   /**
@@ -165,6 +159,16 @@ export const ACT_KIND = {
   ONBOARDING_SKIP_CALENDAR: "onboarding.skipCalendar",
   ONBOARDING_COMPLETE_CALENDAR: "onboarding.completeCalendar",
   INTRODUCTION_PEEK_SESSIONS: "introduction.peekSessions",
+  /**
+   * The introduction's own GPT Live session: the takeover's SDP offer and the
+   * detected titles it may name, handed to the accountless voice service,
+   * which answers the SDP and holds the session's trusted side; and the
+   * hang-up, which closes the connection the service reads as the end. Both
+   * are answered only while the takeover holds the panel, and no credential
+   * travels in either.
+   */
+  INTRODUCTION_CREATE_SESSION: "introduction.createSession",
+  INTRODUCTION_END_SESSION: "introduction.endSession",
   INTRODUCTION_COMPLETE: "introduction.complete",
   INTRODUCTION_ABANDON: "introduction.abandon",
 } as const;
@@ -546,11 +550,6 @@ export const ACT = {
     result: wireResult<undefined>((value) => value === undefined),
     refusal: "Could not report the voice activity on this system.",
   },
-  [ACT_KIND.VOICE_MINT_CREDENTIAL]: {
-    payload: noPayload,
-    result: wireResult<RealtimeConnection | undefined>(),
-    refusal: "Could not open a voice call on this system.",
-  },
   [ACT_KIND.VOICE_DIAGNOSTICS]: {
     payload: noPayload,
     result: wireResult<LiveDiagnostics | undefined>(),
@@ -601,6 +600,19 @@ export const ACT = {
     result: wireResult<readonly Session[]>(),
     refusal: "Could not read this machine's sessions.",
   },
+  [ACT_KIND.INTRODUCTION_CREATE_SESSION]: {
+    payload: s.record({
+      sdp: s.text({ max: LIVE_SDP_MAX_CHARACTERS, ends: TEXT_ENDS.KEEP }),
+      titles: s.array(s.text({ max: INTRODUCTION_SEED_BOUNDS.TITLE_CHARS, oneLine: true }), {
+        max: INTRODUCTION_SEED_BOUNDS.TITLES,
+      }),
+    }),
+    result: wireResult<VoiceCreateLiveSessionResult | undefined>(
+      (value) => value === undefined || voiceCreateLiveSessionResultSchema.read(value).ok,
+    ),
+    refusal: "Could not open the introduction's voice session on this system.",
+  },
+  [ACT_KIND.INTRODUCTION_END_SESSION]: press("Could not end the introduction's voice session."),
   [ACT_KIND.INTRODUCTION_COMPLETE]: {
     payload: s.record({ given: s.boolean() }),
     result: answersNothing,

@@ -87,11 +87,19 @@ are the host's, from the transcript its trusted sideband receives. The
 `index.html` CSP's `connect-src` is `'none'`, since the SDP exchange crosses
 main and WebRTC media needs no fetch.
 
-The Realtime call classes still under `voice/` — `ConversationCall`,
-`SpeakOnlyCall`, `realtime-call.ts`, and the pieces they own — are the spoken
-introduction's alone until its own change lands: the takeover in
-`renderer/introduction/` constructs one against the introduction's bounded
-mint, and nothing the voice window mounts reaches them.
+The spoken introduction in `renderer/introduction/` is a peer of the same
+kind, over the same `LiveCall`, with the introduction's own two acts behind
+it: `ACT_KIND.INTRODUCTION_CREATE_SESSION` carries the offer and the detected
+titles (bounded to `INTRODUCTION_SEED_BOUNDS`) to the accountless session the
+main process holds, and `ACT_KIND.INTRODUCTION_END_SESSION` is the hang-up.
+The order is the Live guide's greeting before the caller speaks: the
+microphone is asked for first, at the developer's press, and the session
+opens only once it is granted; the greeting is the voice service's, the
+takeover sends nothing but the microphone switch and the hang-up, and it ends
+when Luke's output has gone quiet by the ledger's settle and the remote
+track's level (`introduction-quiet.ts`), never by a missing event. The panel
+window's `connect-src` names no OpenAI host: nothing in this bundle fetches
+one any more.
 
 The same trap arrives through a package barrel, where nothing greps for it.
 Importing `@sidecar/calendar` for one string constant resolves that package's

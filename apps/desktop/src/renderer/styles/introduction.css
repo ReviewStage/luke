@@ -467,3 +467,58 @@
   line-height: 1.45;
   text-align: center;
 }
+
+/* The microphone ask, under the lockup on the dark stage: Luke's one request
+   before he speaks. It is the same ink and the same button the panel uses,
+   centred beneath the face, and it holds still while macOS's own dialog has
+   the room — the waiting line takes the button's place rather than moving
+   anything else on the stage. */
+.introduction-ask {
+  position: absolute;
+  top: calc(100% + 28px);
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: min(420px, 80vw);
+  transform: translateX(-50%);
+  color: var(--text-primary);
+  text-align: center;
+  animation: introduction-fade-arrive var(--duration-fast) var(--motion-exit) backwards;
+}
+
+.introduction-ask-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.introduction-ask-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.introduction-ask-note {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.introduction-ask-wait {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: left;
+}
+
+.introduction-ask-wait strong {
+  display: block;
+  color: var(--text-primary);
+}
+
+.introduction-ask-wait small {
+  display: block;
+}

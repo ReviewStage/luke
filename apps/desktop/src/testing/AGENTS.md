@@ -14,8 +14,7 @@ The shared ones, and the rule each carries:
   through, at a stated resting state and at every connection offered, with
   every action wired to nothing: the table's own tests and the row's read the
   same fixture, so neither can pass against a shape the other never sees.
-- `realtime-fixtures.ts` and `spoken-setting-bridge.ts` — the browser surfaces
-  the realtime session opens, and the bridge a spoken settings change crosses.
+- `spoken-setting-bridge.ts` — the bridge a spoken settings change crosses.
 
 Three fixtures every test in the repository shares live in
 `@sidecar/runtime/testing` instead, because the host's tests are in a package

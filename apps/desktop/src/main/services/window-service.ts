@@ -5,14 +5,13 @@ import { PRODUCT_EVENT } from "@sidecar/analytics";
 import {
   INTRODUCTION_HANDOFF_READY_MS,
   onboardingStateFile,
+  openSocketOverWs,
   shouldRunIntroduction,
 } from "@sidecar/host";
+import { hostedVoiceServiceOrigin } from "@sidecar/hosted";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
-import {
-  introductionRealtimeCredentialMinter,
-  type RealtimeCredentialMinter,
-} from "@sidecar/voice";
+import { IntroductionLiveSessionSource } from "@sidecar/voice";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import {
   app,
@@ -32,6 +31,7 @@ import { HOTKEY_RANK, HotkeyRegistrar } from "../window/hotkey-registrar";
 import { PanelManager } from "../window/panel-manager";
 import { VoiceWindow } from "../window/voice-window";
 import type { DesktopConfig } from "./desktop-config";
+import { IntroductionSession } from "./introduction-session";
 import type { NativeNode } from "./native-node";
 import type { OperatorClient } from "./operator-client";
 import type { DesktopService } from "./service";
@@ -61,8 +61,8 @@ export interface WindowService extends DesktopService {
   readonly voiceWindow: VoiceWindow;
   readonly hotkeys: HotkeyRegistrar;
   readonly dock: DockPresence;
-  /** The takeover's own bounded mint, the one voice that stands with no account behind it. */
-  readonly introductionMinter: RealtimeCredentialMinter;
+  /** The takeover's own voice session, the one that stands with no account behind it. */
+  readonly introductionSession: IntroductionSession;
   /** Hands a payload to every panel and the voice window, less the window given. */
   broadcast: <Payload>(channel: string, payload: Payload, except?: WebContents) => void;
   /**
@@ -256,8 +256,17 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     }, delayMs);
     pendingWaits.add(wait);
   }
-  const introductionMinter = introductionRealtimeCredentialMinter({
-    serviceBaseUrl: config.hostedServiceBaseUrl,
+  // The voice service origin is pinned by the build; a development build may
+  // point it elsewhere the way the account service is, and a packaged one may not.
+  const introductionSession = new IntroductionSession({
+    source: new IntroductionLiveSessionSource({
+      serviceOrigin: hostedVoiceServiceOrigin({
+        packaged: config.packaged,
+        override: config.environment.LUKE_VOICE_SERVICE_ORIGIN,
+      }),
+      openSocket: openSocketOverWs,
+    }),
+    recordProductEvent,
   });
   const onboarding = onboardingStateFile(() => config.stateRoot, config.report);
 
@@ -281,12 +290,13 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
    * The introduction's one ending, however the takeover reported it: the
    * sign-off spoken to its end, or a takeover that cannot be given at all.
    * The standing goes down first, so nothing granted against it — the keyless
-   * talk key, the accountless mint, the takeover's own reports — outlives the
-   * ending; the window follows the panel that draws in its place.
+   * talk key, the accountless session, the takeover's own reports — outlives
+   * the ending; the window follows the panel that draws in its place.
    * Idempotent through that standing: a second ending finds nothing playing.
    */
   async function endIntroduction(given: boolean): Promise<void> {
     if (!introductionPlaying() || !launchStanding()) return;
+    introductionSession.end();
     if (given) {
       onboarding.update((current) => ({
         ...current,
@@ -418,7 +428,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     voiceWindow,
     hotkeys,
     dock,
-    introductionMinter,
+    introductionSession,
     broadcast,
     publishAppState,
     windowFactsFor,
