@@ -818,3 +818,68 @@ side. A barrel import is how a verified constraint gets undone anyway.
 since they are what the web side consumes. And the body says `apps/web` reaches that package
 **only through subpath doors** — checkable from the diff, the way "names no `ws`" was made
 checkable. Added to the standing addendum.
+
+
+## 2026-09-11 — ESCALATED: `prompts.text` de-seals the workspace and outlives an account deletion (orchestrator, from C4)
+
+**Correcting my own brief, which got this wrong in the reassuring direction.** I told C4 that
+storing the composed prompt introduced "no new category of data" because the hosted workspace
+already lives in this database. C4 read the schema instead of my paragraph:
+
+- **`workspace_file.sealed_content` and `personal_fact.sealed_words` are sealed per user** under the
+  payload key ring, for the reason the file states — *"the contents are sealed, because every word
+  of them is the developer's or the brain's."*
+- **The composed prompt embeds `AGENTS.md`, `IDENTITY.md`, `USER.md`, `MEMORY.md` and
+  `BOOTSTRAP.md` whole** (under the 20,000 / 60,000 bounds).
+- **`prompts` is `hash` primary key, `text` not null — no `user_id`, no cascade.** Verified in the
+  tree. Every other table in `storage-schema.ts` is keyed by the user it belongs to and cascades
+  with the user row; `provider_cursors` says so in its own comment, and the header makes "deleting
+  an account is still one statement" a property of the schema.
+
+So writing `prompts.text` as the plan draws it **de-seals sealed content into an unsealed
+cross-account table, and puts the developer's remembered facts where account deletion cannot reach
+them.** The second half is the decisive one: it is not an exposure question but a deletion that does
+not delete.
+
+**Escalated to Dean. Orchestrator recommendation: seal `prompts.text` under the user's own payload
+key ring — not a deployment-wide seal — and key the table `(user_id, hash)`.**
+
+- The **user's own ring** because the content's owner is the user and the posture for exactly this
+  content exists one table over; a deployment-wide seal protects against a database dump and not
+  against the service, and leaves the content unattributed.
+- **`(user_id, hash)`** restores the cascade. It costs cross-account dedupe, whose value is near
+  zero — a composed prompt embeds `USER.md` and `MEMORY.md`, so two accounts sharing a hash is a
+  curiosity. **The ticket's acceptance is satisfied per user, which is all it ever meant.**
+- One pre-release migration over an empty table (nothing has written `prompt_hash` yet; C4 counts
+  and says so).
+- It **contradicts `storage-schema.ts`'s "nothing here is sealed" line**, which changes with the
+  reason attached: that line was true when these tables held no sealed-origin content, and the
+  prompt is the first thing that does.
+- **The cost, stated rather than hidden: an operator can no longer read a stored prompt.** The
+  service holds the ring so automated replay still works; debugging by eye does not. That is the
+  right trade for content whose every word is the developer's.
+
+C4 builds the write behind one `prompts.record` seam so the choice is a one-module change, opens
+under the plan's shape, and **does not enqueue until Dean rules.**
+
+## And the eve semantics that make the ticket's acceptance wrong as written
+
+A `session.started` dynamic system instruction **applies at its lifecycle scope**, which is the
+session. So the prompt a turn runs under is the one composed at **session start**, carried
+`session.started` → `turn.started` in eve's durable state. A workspace edit mid-session shows on
+**the first turn of the next session**, not the next turn of the running one, and **recording a
+recomputed hash per turn would make the record claim a prompt the turn did not run under.** The
+hash recorded is the session-start hash. LUKE-128's acceptance is amended to say so.
+
+## A disclosure defect on main today, filed as LUKE-161
+
+`PRIVACY.md` says *"Nothing about a conversation is written on our servers"* and that the workspace
+files *"stay on your Mac."* **Both are untrue of the service running now** — C1 writes `messages`,
+`events` and `turns` per turn, D2 answers them, E4 and F1 draw them, and the hosted workspace lives
+in `workspace_file` / `personal_fact` rows. Found by C4 and not C4's to fix.
+
+**Ruling: this does not wait for G5.** G5 is last, behind four refactors, and that ordering is right
+for a rewrite and wrong for a falsehood — `PRIVACY.md` is the file CLAUDE.md names as *where a user
+learns any of this happens*, and it is currently wrong about where the developer's conversation
+lives. Filed as **LUKE-161** with the minimum true statement as its scope, **owner Dean's call**,
+because deciding what a privacy document says about a live service is not an implementation detail.
