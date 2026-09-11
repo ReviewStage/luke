@@ -27,12 +27,12 @@ import {
   saveBrainEnvelopeEffect,
 } from "./brain-envelope.js";
 import {
-  deleteChildCompletion,
-  deleteChildRun,
-  listChildCompletions,
-  listChildRuns,
-  putChildCompletion,
-  putChildRun,
+  deleteChildCompletionEffect,
+  deleteChildRunEffect,
+  listChildCompletionsEffect,
+  listChildRunsEffect,
+  putChildCompletionEffect,
+  putChildRunEffect,
 } from "./children-table.js";
 import {
   appendConversationEffect,
@@ -52,23 +52,23 @@ import {
 import { AGENT_DATABASE_FILE, StoreDatabase } from "./database.js";
 import type { BrainStateSave } from "./envelope.js";
 import { type MaintenanceReport, runConversationMaintenance } from "./maintenance-run.js";
-import { type FlushState, flushState, recordFlush } from "./memory-flush-table.js";
+import { type FlushState, flushStateEffect, recordFlushEffect } from "./memory-flush-table.js";
 import {
-  applyMemorySync,
+  applyMemorySyncEffect,
   type MemoryIndexStatus,
-  memoryIndexStatus,
-  planMemorySync,
+  memoryIndexStatusEffect,
+  planMemorySyncEffect,
   readMemoryLines,
-  rebuildMemoryIndex,
-  searchMemoryIndex,
+  rebuildMemoryIndexEffect,
+  searchMemoryIndexEffect,
 } from "./memory-index-table.js";
 import {
-  forgetNotebookEntry,
-  listNotebookEntries,
-  migrateFactsIntoNotebook,
+  forgetNotebookEntryEffect,
+  listNotebookEntriesEffect,
+  migrateFactsIntoNotebookEffect,
   type NotebookEntry,
   type NotebookMutation,
-  rememberNotebookEntry,
+  rememberNotebookEntryEffect,
 } from "./notebook-table.js";
 
 /**
@@ -135,16 +135,22 @@ export const STORE_OPERATIONS = {
     s.db.run(searchConversationEffect(p.sessionKeys, p.query, p.limit, p.now)),
 
   "notebook.list": (s, p: { now: number }): readonly NotebookEntry[] =>
-    listNotebookEntries(s.db, s.workspace, p.now),
+    s.db.run(listNotebookEntriesEffect(s.workspace, p.now)),
   "notebook.remember": (
     s,
     p: { id: string; words: string; replaces?: string; now: number },
-  ): NotebookMutation => rememberNotebookEntry(s.db, s.workspace, p, p.now),
+  ): NotebookMutation => s.db.run(rememberNotebookEntryEffect(s.workspace, p, p.now)),
   "notebook.forget": (s, p: { id: string; now: number }): NotebookMutation =>
-    forgetNotebookEntry(s.db, s.workspace, p.id, p.now),
+    s.db.run(forgetNotebookEntryEffect(s.workspace, p.id, p.now)),
 
   "memory.plan-sync": (s, p: { identity?: EmbeddingModelIdentity; now: number }): MemoryScanPlan =>
-    planMemorySync(s.db, s.workspace, p.identity, listNotebookEntries(s.db, s.workspace, p.now)),
+    s.db.run(
+      planMemorySyncEffect(
+        s.workspace,
+        p.identity,
+        s.db.run(listNotebookEntriesEffect(s.workspace, p.now)),
+      ),
+    ),
   "memory.apply-sync": (
     s,
     p: {
@@ -155,26 +161,28 @@ export const STORE_OPERATIONS = {
       now: number;
     },
   ): MemoryApplyReport =>
-    applyMemorySync(
-      s.db,
-      { changed: p.changed, removed: p.removed },
-      p.embeddings,
-      p.identity,
-      p.now,
+    s.db.run(
+      applyMemorySyncEffect(
+        { changed: p.changed, removed: p.removed },
+        p.embeddings,
+        p.identity,
+        p.now,
+      ),
     ),
-  "memory.search": (s, p: MemorySearchQuery): MemorySearchOutcome => searchMemoryIndex(s.db, p),
+  "memory.search": (s, p: MemorySearchQuery): MemorySearchOutcome =>
+    s.db.run(searchMemoryIndexEffect(p)),
   "memory.get": (
     s,
     p: { path: string; from?: number; lines?: number },
   ): MemoryReadResult | undefined => readMemoryLines(s.workspace, p.path, p.from, p.lines),
-  "memory.rebuild": (s, _p: NoParams): boolean => rebuildMemoryIndex(s.db),
-  "memory.status": (s, _p: NoParams): MemoryIndexStatus => memoryIndexStatus(s.db),
+  "memory.rebuild": (s, _p: NoParams): boolean => s.db.run(rebuildMemoryIndexEffect),
+  "memory.status": (s, _p: NoParams): MemoryIndexStatus => s.db.run(memoryIndexStatusEffect),
   "memory.flush-state.get": (
     s,
     p: { sessionKey: SessionKey; generationId: string },
-  ): FlushState | undefined => flushState(s.db, p.sessionKey, p.generationId),
+  ): FlushState | undefined => s.db.run(flushStateEffect(p.sessionKey, p.generationId)),
   "memory.flush-state.put": (s, p: { sessionKey: SessionKey; state: FlushState }): boolean => {
-    recordFlush(s.db, p.sessionKey, p.state);
+    s.db.run(recordFlushEffect(p.sessionKey, p.state));
     return true;
   },
 
@@ -198,15 +206,17 @@ export const STORE_OPERATIONS = {
   "maintenance.run": (s, p: { now: number; preserve: readonly SessionKey[] }): MaintenanceReport =>
     runConversationMaintenance(s.db, s.agentRoot, p),
 
-  "children.list": (s, _p: NoParams): readonly ChildRunRecord[] => listChildRuns(s.db),
-  "children.put": (s, p: { record: ChildRunRecord }): boolean => putChildRun(s.db, p.record),
-  "children.delete": (s, p: { childId: string }): boolean => deleteChildRun(s.db, p.childId),
+  "children.list": (s, _p: NoParams): readonly ChildRunRecord[] => s.db.run(listChildRunsEffect),
+  "children.put": (s, p: { record: ChildRunRecord }): boolean =>
+    s.db.run(putChildRunEffect(p.record)),
+  "children.delete": (s, p: { childId: string }): boolean =>
+    s.db.run(deleteChildRunEffect(p.childId)),
   "completions.list": (s, _p: NoParams): readonly ChildCompletionRecord[] =>
-    listChildCompletions(s.db),
+    s.db.run(listChildCompletionsEffect),
   "completions.put": (s, p: { completion: ChildCompletionRecord }): boolean =>
-    putChildCompletion(s.db, p.completion),
+    s.db.run(putChildCompletionEffect(p.completion)),
   "completions.delete": (s, p: { completionId: string }): boolean =>
-    deleteChildCompletion(s.db, p.completionId),
+    s.db.run(deleteChildCompletionEffect(p.completionId)),
 } as const satisfies Record<string, StoreOperation>;
 
 export type StoreOperationName = keyof typeof STORE_OPERATIONS;
@@ -261,6 +271,6 @@ export function openStore(options: StoreOpenOptions): OpenStore {
   );
   // The stable facts an earlier build kept move into the notebook at the
   // first open that finds them, under their own ids, and never again.
-  migrateFactsIntoNotebook(db, workspace, options.now);
+  db.run(migrateFactsIntoNotebookEffect(workspace, options.now));
   return store;
 }

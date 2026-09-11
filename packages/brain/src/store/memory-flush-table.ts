@@ -1,6 +1,10 @@
+import * as Client from "@effect/sql/SqlClient";
+import type { SqlError } from "@effect/sql/SqlError";
+import * as SqlSchema from "@effect/sql/SqlSchema";
 import { MEMORY_HOUSEKEEPING_OUTCOME, type MemoryHousekeepingOutcome } from "@sidecar/memory";
 import type { SessionKey } from "@sidecar/runtime/vocabulary";
-import type { StoreDatabase } from "./database.js";
+import { Effect, Option, Schema } from "effect";
+import { columnsDecoded } from "./rows.js";
 
 /**
  * Where one conversation's flush marker outlives the process: the generation
@@ -18,45 +22,58 @@ export interface FlushState {
   readonly flushedAt: number;
 }
 
+const FlushRow = Schema.Struct({
+  generation_id: Schema.String,
+  compaction_count: Schema.Number,
+  outcome: Schema.String,
+  flushed_at: Schema.Number,
+});
+
+const flushRowAt = SqlSchema.findOne({
+  Request: Schema.Struct({ sessionKey: Schema.String, generationId: Schema.String }),
+  Result: FlushRow,
+  execute: ({ sessionKey, generationId }) =>
+    Effect.flatMap(
+      Client.SqlClient,
+      (sql) =>
+        sql`SELECT generation_id, compaction_count, outcome, flushed_at FROM memory_flush_state
+            WHERE session_key = ${sessionKey} AND generation_id = ${generationId}`,
+    ),
+});
+
 /** The conversation's flush marker, only when it was written under the generation asked about. */
-export function flushState(
-  database: StoreDatabase,
+export const flushStateEffect = (
   sessionKey: SessionKey,
   generationId: string,
-): FlushState | undefined {
-  // SAFETY: the columns selected are the ones the row type names.
-  const row = database
-    .prepare(
-      `SELECT generation_id, compaction_count, outcome, flushed_at FROM memory_flush_state
-       WHERE session_key = ? AND generation_id = ?`,
-    )
-    .get(sessionKey, generationId) as
-    | { generation_id: string; compaction_count: number; outcome: string; flushed_at: number }
-    | undefined;
-  if (!row) return undefined;
-  const outcome = OUTCOMES.find((candidate) => candidate === row.outcome);
-  // An outcome this build does not name reads as no recorded flush rather than as a failed one.
-  if (!outcome) return undefined;
-  return {
-    generationId: row.generation_id,
-    compactionCount: row.compaction_count,
-    outcome,
-    flushedAt: row.flushed_at,
-  };
-}
+): Effect.Effect<FlushState | undefined, SqlError, Client.SqlClient> =>
+  Effect.map(columnsDecoded(flushRowAt({ sessionKey, generationId })), (row) =>
+    Option.match(row, {
+      onNone: () => undefined,
+      onSome: (found) => {
+        const outcome = OUTCOMES.find((candidate) => candidate === found.outcome);
+        // An outcome this build does not name reads as no recorded flush rather than as a failed one.
+        if (!outcome) return undefined;
+        return {
+          generationId: found.generation_id,
+          compactionCount: found.compaction_count,
+          outcome,
+          flushedAt: found.flushed_at,
+        };
+      },
+    }),
+  );
 
-export function recordFlush(
-  database: StoreDatabase,
+export const recordFlushEffect = (
   sessionKey: SessionKey,
   state: FlushState,
-): void {
-  database
-    .prepare(
-      `INSERT INTO memory_flush_state (session_key, generation_id, compaction_count, outcome, flushed_at)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(session_key) DO UPDATE SET generation_id = excluded.generation_id,
-         compaction_count = excluded.compaction_count,
-         outcome = excluded.outcome, flushed_at = excluded.flushed_at`,
-    )
-    .run(sessionKey, state.generationId, state.compactionCount, state.outcome, state.flushedAt);
-}
+): Effect.Effect<void, SqlError, Client.SqlClient> =>
+  Effect.flatMap(
+    Client.SqlClient,
+    (sql) =>
+      sql`INSERT INTO memory_flush_state (session_key, generation_id, compaction_count, outcome, flushed_at)
+          VALUES (${sessionKey}, ${state.generationId}, ${state.compactionCount}, ${state.outcome},
+                  ${state.flushedAt})
+          ON CONFLICT(session_key) DO UPDATE SET generation_id = excluded.generation_id,
+            compaction_count = excluded.compaction_count,
+            outcome = excluded.outcome, flushed_at = excluded.flushed_at`,
+  ).pipe(Effect.asVoid);
