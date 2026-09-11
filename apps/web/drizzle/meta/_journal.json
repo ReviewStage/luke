@@ -141,6 +141,13 @@
       "when": 1789085813569,
       "tag": "0019_d2_devices_quiet_until",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1789107380481,
+      "tag": "0020_e6b_devices_timestamptz",
+      "breakpoints": true
     }
   ]
 }

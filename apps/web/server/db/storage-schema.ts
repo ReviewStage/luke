@@ -17,12 +17,12 @@ import {
   pgTable,
   primaryKey,
   text,
-  timestamp,
   unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema.js";
+import { instant } from "./instant.js";
 
 /**
  * The conversation storage the LUKE-95 rework settles on: one row per
@@ -31,8 +31,9 @@ import { user } from "./auth-schema.js";
  * Nothing here is sealed: sealing survives only for the provider keys in the
  * vault, and the content stored here is readable by an operator.
  *
- * These tables stand beside the v1 tables in `conversation-schema.ts`, which
- * every current reader still uses; nothing reads or writes these yet. Every
+ * These tables stand beside the v1 tables in `conversation-schema.ts` while
+ * the readers move over; the hosted brain writes here through the store
+ * writer and the read routes answer from these rows. Every
  * row is keyed by the user it belongs to and cascades with the user row, so
  * deleting an account is still one statement, and a conversation's children
  * cascade with their parent. Clear is a soft delete here, `deleted_at`
@@ -54,8 +55,6 @@ export const CONVERSATION_KIND = {
 } as const;
 
 type ConversationKind = (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND];
-
-const instant = (name: string) => timestamp(name, { withTimezone: true });
 
 export const conversations = pgTable(
   "conversations",

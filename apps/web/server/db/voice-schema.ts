@@ -1,15 +1,7 @@
 import { MESSAGE_ROLE } from "@sidecar/wire";
-import {
-  index,
-  integer,
-  jsonb,
-  pgTable,
-  primaryKey,
-  text,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema.js";
+import { instant } from "./instant.js";
 
 /**
  * Voice, stored the way a call platform stores a call: one row per live
@@ -66,8 +58,6 @@ export interface VoiceSessionUsage {
   readonly seconds: number;
   readonly confirmed: boolean;
 }
-
-const instant = (name: string) => timestamp(name, { withTimezone: true });
 
 /**
  * One live session. `live_session_id` is the Live API's own id for it, and
