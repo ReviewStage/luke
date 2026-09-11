@@ -33,6 +33,9 @@ required_files=(
     scripts/verify.sh
     docs/DESIGN.md
     docs/adr/0001-effect.md
+    skills-lock.json
+    .agents/skills/README.md
+    .agents/skills/effect-ts/SKILL.md
     apps/desktop/src/renderer/AGENTS.md
     apps/desktop/src/renderer/CLAUDE.md
     packages/AGENTS.md
