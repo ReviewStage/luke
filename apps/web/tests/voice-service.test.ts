@@ -687,6 +687,24 @@ test("a greeting neither acknowledged nor refused inside the wait cues nothing, 
   assert.equal(await upstream.arrives(), false);
 });
 
+test("a caller who hangs up before the acknowledgment is cued nothing when it lands", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  const { desktop, upstream, eventId } = await greetedIntroduction(context);
+
+  desktop.socket.close();
+  // The graceful close the docs describe: `session.close` goes up, and the
+  // acknowledgment arriving inside that window cues a session on its way out.
+  assert.equal(record(await upstream.next()).type, LIVE_CLIENT_EVENT.CLOSE);
+  await sendText(upstream.socket, appended(eventId));
+
+  assert.equal(await upstream.arrives(), false);
+  assert.deepEqual(greetingLog(context), [
+    { event: LOG_EVENT.GREETING_SENT, route: VOICE_ROUTE.INTRODUCTION },
+    { event: LOG_EVENT.GREETING_UNACKNOWLEDGED, route: VOICE_ROUTE.INTRODUCTION },
+  ]);
+});
+
 test("an introduction seed beyond one bounded developer message is refused before any session is spent", async () => {
   const context = await stand();
   onTestFinished(() => context.stop());

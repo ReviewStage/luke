@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { APPEND_TOKEN_BOUND, chunkForAppend } from "./chunks.js";
-import { greetingCue, greetingInstruction, LIVE_SCENE, sessionInstructions } from "./instructions.js";
+import {
+  greetingCue,
+  greetingInstruction,
+  LIVE_SCENE,
+  sessionInstructions,
+} from "./instructions.js";
 import { estimatedTokens } from "./tokens.js";
 
 /** The API's bound on `instructions`, in tokens. */

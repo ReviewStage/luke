@@ -136,6 +136,7 @@ export function relaySession(options: RelayOptions): Promise<RelaySummary> {
       if (settled) return;
       settled = true;
       if (closeTimer !== undefined) clearTimeout(closeTimer);
+      openingEventId = undefined;
       if (openingTimer !== undefined) clearTimeout(openingTimer);
       if (isOpen(desktop)) {
         desktop.close(
@@ -258,6 +259,11 @@ export function relaySession(options: RelayOptions): Promise<RelaySummary> {
      */
     const onDesktopGone = (): void => {
       if (closedSeen || settled) return;
+      // The caller has hung up, so the opening command will never be answered
+      // to any purpose: it is settled as unanswered here rather than left
+      // armed, where an acknowledgment arriving during the graceful close
+      // would cue a session already on its way out.
+      settleOpening({ outcome: OPENING_OUTCOME.UNACKNOWLEDGED });
       if (!isOpen(upstream)) {
         settle(FINALIZATION.UNCONFIRMED);
         return;
