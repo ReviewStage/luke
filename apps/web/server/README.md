@@ -1036,9 +1036,14 @@ fresh instance continues a session where the last one stopped.
 
 The store tests run the generated migrations on PGlite in process, so
 `check.sh` needs no service; the `postgres` CI job runs the same migrations
-and tests against a Postgres service container. A Postgres is migrated by
-`db:migrate` alone, because that is the runner which records what it applied,
-so run it first against a Postgres of your own:
+and tests against a Postgres service container. Every one of those is
+Postgres 18, the major production runs: Neon serves 18.x, PGlite 0.5.8
+embeds PostgreSQL 18.3, and the CI service image is `postgres:18`, so a test
+that fails in any of them fails about the database the service actually
+runs, and a local `check.sh` is a reproduction on 18 already. A reproduction
+against a real Postgres needs an 18 of your own, migrated by `db:migrate`
+alone, because that is the runner which records what it applied, so run it
+first:
 
 ```sh
 DATABASE_URL_UNPOOLED=postgresql://... pnpm --filter @luke/web db:migrate
