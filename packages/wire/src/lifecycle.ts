@@ -16,6 +16,8 @@ export interface IDisposable {
  * stops tracking whether it already ran. The callback is dropped rather than
  * flagged spent, so whatever it captured is collectable once it has run even
  * where the disposable itself is held on.
+ *
+ * @deprecated Use `Scope.addFinalizer` with an `Effect`. P12-06 deletes this.
  */
 export function toDisposable(run: () => void): IDisposable {
   let pending: (() => void) | undefined = run;
@@ -34,6 +36,8 @@ export function toDisposable(run: () => void): IDisposable {
  * failures are reported together once the round is complete, as a single
  * `AggregateError` whatever their number, so a caller catches one shape rather
  * than deciding at run time whether it holds the failure or a bag of them.
+ *
+ * @deprecated A `Scope` closing already does this. P12-06 deletes this.
  */
 export function disposeAll(disposables: Iterable<IDisposable>): void {
   const failures: unknown[] = [];
@@ -56,6 +60,10 @@ export function disposeAll(disposables: Iterable<IDisposable>): void {
  * reverse of the order it was added: the later entry is the one that may still
  * be reading the earlier, so unwinding a construction backwards is what keeps
  * a teardown from reaching through something already gone.
+ *
+ * @deprecated Use a `Scope` with `addDisposable` from `./effect/scope.js`,
+ * which closes in the same reverse order and aggregates the same failures.
+ * P12-06 deletes this.
  */
 export class DisposableStore implements IDisposable {
   #held: IDisposable[] = [];

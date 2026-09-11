@@ -38,7 +38,15 @@ dependency that defines it.
 `IDisposable`, `DisposableStore`, `toDisposable`, `Event`, and `Emitter` — so a
 listener's unsubscribe, a watcher's teardown, and the store that ends both are
 one shape wherever they are held, and adopting it adds no edge: every package
-but `packages/panel` already depends on wire.
+but `packages/panel` already depends on wire. That base is being replaced by
+Effect's own, and while both stand `packages/wire/src/effect/scope.ts` is the
+bridge: `addDisposable` carries a disposable into a `Scope`,
+`disposableFromScope` carries a scope back to a caller that speaks only
+`dispose()`, and `layerFromDisposable` builds a service that its layer's scope
+ends. A `Scope` closing already guarantees what `DisposableStore` was written
+for — the reverse order and the failures aggregated into one shape — so the
+store, `toDisposable`, and `disposeAll` are deprecated in place and P12-06
+deletes them with the bridge.
 
 Every tool the brain's catalog lists is a module under
 `packages/brain/src/tools/` (the memory provider's two reads are declared in

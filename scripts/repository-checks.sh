@@ -470,6 +470,7 @@ fi
 # a literal version here is the one thing that can quietly reintroduce a second
 # copy.
 literal_effect_versions=$(grep -RnE '"effect": *"[^c]' --include=package.json \
+    --exclude-dir=node_modules \
     "$SIDECAR_REPO_ROOT/apps" "$SIDECAR_REPO_ROOT/packages" "$SIDECAR_REPO_ROOT/tools" || true)
 if [[ -n "$literal_effect_versions" ]]; then
     printf 'error: "effect" must be declared as "catalog:", never a literal version:\n%s\n' \

@@ -12,9 +12,12 @@
     "test": "vitest run",
     "typecheck": "tsc --project tsconfig.json"
   },
+  "dependencies": {
+    "effect": "catalog:"
+  },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
-    "effect": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }
