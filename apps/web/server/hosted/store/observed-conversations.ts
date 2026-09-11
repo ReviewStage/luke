@@ -1,7 +1,8 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { SqlClient, SqlSchema } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, Option, type ParseResult, Schema } from "effect";
 import type { SessionIdentity } from "../../core.js";
-import { CONVERSATION_KIND, conversations } from "../../db/storage-schema.js";
-import type { HostedStoreDatabase } from "./database.js";
+import { CONVERSATION_KIND } from "../../db/storage-schema.js";
 
 /**
  * The conversation the brain keeps for one observed session: a row of kind
@@ -13,47 +14,89 @@ import type { HostedStoreDatabase } from "./database.js";
  * never Clear's to stamp, so a stamped one is another build's doing and is
  * answered as no conversation rather than reopened beside it.
  */
-async function standingObservedConversationId(
-  db: Pick<HostedStoreDatabase, "select">,
+
+/** How a statement here fails: the driver's own refusal, or a row this build could not decode. */
+type ObservedConversationFailure = SqlError | ParseResult.ParseError;
+
+/** A statement over the ambient client, so the query below reads as the query it is. */
+const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
+  Effect.flatMap(SqlClient.SqlClient, build);
+
+const ObservedSessionSchema = Schema.Struct({
+  userId: Schema.String,
+  providerId: Schema.String,
+  providerSessionId: Schema.String,
+});
+
+const ConversationIdRowSchema = Schema.Struct({ id: Schema.String });
+
+const findStandingObservedConversationId = SqlSchema.findOne({
+  Request: ObservedSessionSchema,
+  Result: ConversationIdRowSchema,
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        select id from conversations
+        where user_id = ${request.userId}
+          and kind = ${CONVERSATION_KIND.OBSERVED}
+          and provider_id = ${request.providerId}
+          and provider_session_id = ${request.providerSessionId}
+          and deleted_at is null
+      `,
+    ),
+});
+
+function standingObservedConversationId(
   userId: string,
   identity: SessionIdentity,
-): Promise<string | undefined> {
-  const [row] = await db
-    .select({ id: conversations.id })
-    .from(conversations)
-    .where(
-      and(
-        eq(conversations.userId, userId),
-        eq(conversations.kind, CONVERSATION_KIND.OBSERVED),
-        eq(conversations.providerId, identity.providerId),
-        eq(conversations.providerSessionId, identity.providerSessionId),
-        isNull(conversations.deletedAt),
-      ),
-    );
-  return row?.id;
+): Effect.Effect<string | undefined, ObservedConversationFailure, SqlClient.SqlClient> {
+  return Effect.map(
+    findStandingObservedConversationId({
+      userId,
+      providerId: identity.providerId,
+      providerSessionId: identity.providerSessionId,
+    }),
+    (row) => Option.getOrUndefined(Option.map(row, (found) => found.id)),
+  );
 }
 
+const insertObservedConversation = SqlSchema.void({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    providerId: Schema.String,
+    providerSessionId: Schema.String,
+    now: Schema.DateFromSelf,
+  }),
+  execute: (write) =>
+    statement(
+      (sql) => sql`
+        insert into conversations (
+          user_id, kind, provider_id, provider_session_id, created_at, last_activity_at
+        )
+        values (
+          ${write.userId}, ${CONVERSATION_KIND.OBSERVED}, ${write.providerId},
+          ${write.providerSessionId}, ${write.now}, ${write.now}
+        )
+        on conflict (user_id, provider_id, provider_session_id) do nothing
+      `,
+    ),
+});
+
 /** The id of the account's standing observed conversation for the session, opened now where none stood. */
-export async function standingObservedConversation(
-  db: Pick<HostedStoreDatabase, "select" | "insert">,
+export function standingObservedConversation(
   userId: string,
   identity: SessionIdentity,
   now: Date,
-): Promise<string | undefined> {
-  const standing = await standingObservedConversationId(db, userId, identity);
-  if (standing !== undefined) return standing;
-  await db
-    .insert(conversations)
-    .values({
+): Effect.Effect<string | undefined, ObservedConversationFailure, SqlClient.SqlClient> {
+  return Effect.gen(function* () {
+    const standing = yield* standingObservedConversationId(userId, identity);
+    if (standing !== undefined) return standing;
+    yield* insertObservedConversation({
       userId,
-      kind: CONVERSATION_KIND.OBSERVED,
       providerId: identity.providerId,
       providerSessionId: identity.providerSessionId,
-      createdAt: now,
-      lastActivityAt: now,
-    })
-    .onConflictDoNothing({
-      target: [conversations.userId, conversations.providerId, conversations.providerSessionId],
+      now,
     });
-  return standingObservedConversationId(db, userId, identity);
+    return yield* standingObservedConversationId(userId, identity);
+  });
 }

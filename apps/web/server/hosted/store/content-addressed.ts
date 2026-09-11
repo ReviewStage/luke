@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { toolSets } from "../../db/storage-schema.js";
-import type { HostedStoreDatabase } from "./database.js";
+import { SqlClient, SqlSchema } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, type ParseResult, Schema } from "effect";
 
 /**
  * What a turn ran under, addressed by the SHA-256 of the bytes as the model
@@ -37,16 +38,33 @@ export function toolSetHashOf(schemas: readonly OfferedToolSchema[]): string {
   return sha256Hex(JSON.stringify(schemas));
 }
 
+/** A statement over the ambient client, so the query below reads as the query it is. */
+const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
+  Effect.flatMap(SqlClient.SqlClient, build);
+
+const RecordToolSetSchema = Schema.Struct({
+  hash: Schema.String,
+  schemas: Schema.String,
+  createdAt: Schema.DateFromSelf,
+});
+
+const insertToolSet = SqlSchema.void({
+  Request: RecordToolSetSchema,
+  execute: (write) =>
+    statement(
+      (sql) => sql`
+        insert into tool_sets (hash, schemas, created_at)
+        values (${write.hash}, ${write.schemas}::jsonb, ${write.createdAt})
+        on conflict (hash) do nothing
+      `,
+    ),
+});
+
 /** Writes the tool set where no row stands for its hash; answers the hash either way. */
-export async function recordToolSet(
-  db: HostedStoreDatabase,
+export function recordToolSet(
   schemas: readonly OfferedToolSchema[],
   now: Date,
-): Promise<string> {
+): Effect.Effect<string, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
   const hash = toolSetHashOf(schemas);
-  await db
-    .insert(toolSets)
-    .values({ hash, schemas: [...schemas], createdAt: now })
-    .onConflictDoNothing();
-  return hash;
+  return Effect.as(insertToolSet({ hash, schemas: JSON.stringify(schemas), createdAt: now }), hash);
 }

@@ -180,7 +180,7 @@ export interface HostedStore {
   };
 }
 
-export function hostedStore({ db, keys, run }: HostedStoreContext): HostedStore {
+export function hostedStore({ keys, run }: HostedStoreContext): HostedStore {
   const sealFor = (userId: string) => userSeal(keys, userId);
   return {
     messages: {
@@ -201,7 +201,7 @@ export function hostedStore({ db, keys, run }: HostedStoreContext): HostedStore 
     directory: {
       standing: (userId) => run(standingConversations(userId)),
       observed: (userId, identity, now) =>
-        standingObservedConversation(db, userId, identity, new Date(now)),
+        run(standingObservedConversation(userId, identity, new Date(now))),
     },
     main: {
       clear: (userId, now) => run(clearMainConversation(userId, now)),
@@ -217,7 +217,7 @@ export function hostedStore({ db, keys, run }: HostedStoreContext): HostedStore 
       replace: (userId, facts, now) => run(replaceFacts(sealFor(userId), userId, facts, now)),
     },
     toolSets: {
-      record: (schemas, now) => recordToolSet(db, schemas, now),
+      record: (schemas, now) => run(recordToolSet(schemas, now)),
     },
     workspace: {
       read: (userId, path) =>
@@ -230,7 +230,7 @@ export function hostedStore({ db, keys, run }: HostedStoreContext): HostedStore 
       list: (userId) => run(listWorkspaceFiles(userId)),
     },
     roster: {
-      read: (userId) => readRosterSnapshot(db, sealFor(userId), userId),
+      read: (userId) => run(readRosterSnapshot(sealFor(userId), userId)),
       observedAt: (userId) => run(rosterSnapshotObservedAt(userId)),
       write: (userId, snapshot) => run(writeRosterSnapshot(sealFor(userId), userId, snapshot)),
       advance: (userId, snapshot, diff, previousObservedAt) =>

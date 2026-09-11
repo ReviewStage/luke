@@ -1,9 +1,7 @@
 import { SqlClient, SqlSchema } from "@effect/sql";
 import type { SqlError } from "@effect/sql/SqlError";
-import { eq } from "drizzle-orm";
 import { Effect, Option, type ParseResult, Schema } from "effect";
-import { rosterSnapshot } from "../../db/schema.js";
-import { EpochMillisColumnSchema, type HostedStoreDatabase, type UserSeal } from "./database.js";
+import { EpochMillisColumnSchema, type UserSeal } from "./database.js";
 
 /**
  * The latest roster an observation pass reported for a user, one row
@@ -11,13 +9,8 @@ import { EpochMillisColumnSchema, type HostedStoreDatabase, type UserSeal } from
  * titles, branches, error lines — and is sealed; the instant it was observed
  * stands clear, because it is what decides whether the snapshot is current.
  *
- * Every function here but `readRosterSnapshot` itself is an
- * `Effect<A, SqlError | ParseResult.ParseError, SqlClient.SqlClient>` over
- * `@effect/sql`. `readRosterSnapshot` stays on the Drizzle handle:
- * `hosted-store.test.ts` calls it directly with `database.db` to prove a
- * sealed row does not open under another user's seal, and that oracle is
- * unchanged by this PR, so its one exported function keeps the signature the
- * test already calls.
+ * Every function here is an `Effect<A, SqlError | ParseResult.ParseError,
+ * SqlClient.SqlClient>` over `@effect/sql`.
  */
 export interface RosterSnapshotRecord {
   readonly body: string;
@@ -79,14 +72,31 @@ type RosterFailure = SqlError | ParseResult.ParseError;
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
   Effect.flatMap(SqlClient.SqlClient, build);
 
-export async function readRosterSnapshot(
-  db: HostedStoreDatabase,
+const RosterSnapshotRowSchema = Schema.Struct({
+  sealedBody: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("sealed_body")),
+  observedAt: Schema.propertySignature(EpochMillisColumnSchema).pipe(Schema.fromKey("observed_at")),
+});
+
+const findRosterSnapshot = SqlSchema.findOne({
+  Request: Schema.String,
+  Result: RosterSnapshotRowSchema,
+  execute: (userId) =>
+    statement(
+      (sql) => sql`select sealed_body, observed_at from roster_snapshot where user_id = ${userId}`,
+    ),
+});
+
+export function readRosterSnapshot(
   seal: UserSeal,
   userId: string,
-): Promise<RosterSnapshotRecord | undefined> {
-  const [row] = await db.select().from(rosterSnapshot).where(eq(rosterSnapshot.userId, userId));
-  if (!row) return undefined;
-  return { body: seal.open(row.sealedBody), observedAt: row.observedAt };
+): Effect.Effect<RosterSnapshotRecord | undefined, RosterFailure, SqlClient.SqlClient> {
+  return Effect.map(
+    findRosterSnapshot(userId),
+    Option.match({
+      onNone: () => undefined,
+      onSome: (row) => ({ body: seal.open(row.sealedBody), observedAt: row.observedAt }),
+    }),
+  );
 }
 
 const RosterSnapshotObservedAtRowSchema = Schema.Struct({

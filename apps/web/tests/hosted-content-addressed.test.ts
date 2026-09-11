@@ -47,8 +47,8 @@ test("the same prompt text is one hash whenever it is taken, and one character a
 
 test("the same tool set recorded twice is one row holding the declarations as offered", async () => {
   const offered = [schemaNamed(`list_${randomUUID()}`), schemaNamed("read_transcript")];
-  const first = await recordToolSet(database.db, offered, NOW);
-  const second = await recordToolSet(database.db, offered, NOW);
+  const first = await database.run(recordToolSet(offered, NOW));
+  const second = await database.run(recordToolSet(offered, NOW));
 
   assert.equal(second, first);
   assert.equal(first, toolSetHashOf(offered));

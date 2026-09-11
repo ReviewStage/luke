@@ -5,13 +5,13 @@ import type * as schema from "../../db/schema.js";
 import { openPayload, type PayloadKeyRing, sealPayload } from "../encryption.js";
 
 /**
- * What a table module here still on Drizzle runs over: a Drizzle database on
- * the hosted schema, whichever driver stands behind it — `pg` on Neon in a
- * function, PGlite in a test — or a transaction on one, since a transaction
- * is a database with the same query surface. The modules never name a driver,
- * so the one store runs against both. A module moved onto `@effect/sql` names
- * no database at all: it reads the ambient `SqlClient` and is answered through
- * `HostedStoreRun` below.
+ * The Drizzle database no table module under `hosted/store/` still runs a
+ * query over: every one of them now reads the ambient `SqlClient` and is
+ * answered through `HostedStoreRun` below. `HostedStoreContext.db` and this
+ * type stay only because the routes that build a context (`store-route.ts`,
+ * `brain-host/production.ts`) and the store's own test harness still hand
+ * one in; P10-14d deletes both together with the Drizzle handle itself in
+ * `server/db/index.ts`.
  */
 type HostedSchema = typeof schema;
 
@@ -22,15 +22,18 @@ export type HostedStoreDatabase = PgDatabase<PgQueryResultHKT, HostedSchema>;
  * holding a promise. The implementation is the edge's own runner — `runWeb`
  * in a function, the test harness's runtime over the database its Drizzle
  * handle stands on — so nothing here builds a runtime of its own; the door
- * exists because the `HostedStore` methods answer promises while the modules
- * beneath them are converted one at a time.
+ * exists because the `HostedStore` methods answer promises rather than the
+ * Effects every module beneath them now builds.
  *
  * The writers and the speech module are handed the same runner directly
  * rather than through a store context, because a route composes them apart
  * from the store: the door is one shim either way.
  *
- * @deprecated A strangler shim. P10-14 deletes it with the Drizzle half, once
- * every module here is an effect and the routes above take one.
+ * @deprecated A strangler shim. Every module here already answers an Effect;
+ * this is what still turns it into the promise `HostedStore` answers. P10-15
+ * deletes it, once `HostedStore`'s own public interface moves from promises
+ * to Effects across every brain-host and route caller — a separate change
+ * from P10-14's Drizzle deletion, which this door does not depend on.
  */
 export type HostedStoreRun = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) => Promise<A>;
 
