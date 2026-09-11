@@ -99,7 +99,8 @@ export function registerDevice(write: {
 
 const HeldDeviceSchema = Schema.Struct({ userId: Schema.String, deviceId: Schema.String });
 
-const findHeldDevice = SqlSchema.findOne({
+/** The account's own device row by id, or none: the one fact a voice session's device claim is admitted on. */
+export const findHeldDevice = SqlSchema.findOne({
   Request: HeldDeviceSchema,
   Result: DeviceIdRowSchema,
   execute: (key) =>

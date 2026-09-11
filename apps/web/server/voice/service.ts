@@ -8,6 +8,7 @@ import {
   HOSTED_API_ERROR,
   type HostedApiError,
   HTTP_STATUS,
+  isDeviceWireId,
   type SessionAttachedFrame,
   type SessionAttachFrame,
   type SessionCreatedFrame,
@@ -15,6 +16,7 @@ import {
   type SessionOpeningFrame,
   sessionOpeningFrameFromWire,
   VOICE_SERVICE_FRAME,
+  VOICE_SERVICE_HEADER,
 } from "../core.js";
 import {
   decodeLivePayload,
@@ -73,6 +75,8 @@ const SERVICE_DEFAULTS = {
 
 /** The statuses an upgrade is refused with, before any socket stands. */
 export const UPGRADE_STATUS = {
+  /** The handshake named a device in a shape no device id has; a desktop of this build never does. */
+  BAD_REQUEST: 400,
   UNAUTHORIZED: HTTP_STATUS.UNAUTHORIZED,
   /** The handshake carried a browser `Origin`; the desktop connects from its main process and never does. */
   FORBIDDEN: HTTP_STATUS.FORBIDDEN,
@@ -114,10 +118,22 @@ export interface VoiceServiceOptions {
   firstFrameTimeoutMs?: number;
 }
 
-/** Who an upgrade admitted: a desktop with the `Authorization` value it presented, or an introduction with nothing. */
+/**
+ * Who an upgrade admitted: a desktop with the `Authorization` value it
+ * presented and the device row it claimed to be, or an introduction with
+ * nothing. The claim is a well-formed id and no more until the account is
+ * resolved; whether that account holds the row is asked then.
+ */
 type Admission =
-  | { route: typeof VOICE_ROUTE.SESSIONS; bearer: string }
+  | { route: typeof VOICE_ROUTE.SESSIONS; bearer: string; deviceId: string | undefined }
   | { route: typeof VOICE_ROUTE.INTRODUCTION };
+
+type SessionsAdmission = Extract<Admission, { route: typeof VOICE_ROUTE.SESSIONS }>;
+
+/** The account a desktop's handshake resolved to, its device claim admitted and a session spent, or the reason it is refused. */
+type AdmittedAccount =
+  | { accountId: string; deviceId: string | undefined; quota: SessionCreatedFrame["quota"] }
+  | { refusal: HostedApiError };
 
 type UpgradeDecision = Admission | { status: number };
 
@@ -262,7 +278,12 @@ export class VoiceService {
     if (request.headers.origin !== undefined) return { status: UPGRADE_STATUS.FORBIDDEN };
     if (route === VOICE_ROUTE.SESSIONS) {
       const bearer = presentedBearer(request);
-      return bearer === undefined ? { status: UPGRADE_STATUS.UNAUTHORIZED } : { route, bearer };
+      if (bearer === undefined) return { status: UPGRADE_STATUS.UNAUTHORIZED };
+      const deviceId = headerValue(request.headers[VOICE_SERVICE_HEADER.DEVICE_ID]);
+      if (deviceId !== undefined && !isDeviceWireId(deviceId)) {
+        return { status: UPGRADE_STATUS.BAD_REQUEST };
+      }
+      return { route, bearer, deviceId };
     }
     return { route };
   }
@@ -357,19 +378,15 @@ export class VoiceService {
         return { refusal: HOSTED_API_ERROR.QUOTA_EXHAUSTED };
       }
     }
+    const account =
+      admission.route === VOICE_ROUTE.SESSIONS ? await this.#admitAccount(admission) : undefined;
+    if (account && "refusal" in account) return account;
     const answer: SessionCreatedFrame = {
       type: VOICE_SERVICE_FRAME.SESSION_CREATED,
       sessionId: "",
       sdpAnswer: "",
+      ...(account?.quota === undefined ? undefined : { quota: account.quota }),
     };
-    let accountId: string | undefined;
-    if (admission.route === VOICE_ROUTE.SESSIONS) {
-      accountId = await this.#accounts.resolveUserId(admission.bearer);
-      if (accountId === undefined) return { refusal: HOSTED_API_ERROR.INVALID_TOKEN };
-      const spend = await this.#accounts.spend(accountId);
-      if (!spend.allowed) return { refusal: HOSTED_API_ERROR.QUOTA_EXHAUSTED };
-      answer.quota = spend.quota;
-    }
 
     const config = liveSessionConfig({
       scene: route === VOICE_ROUTE.SESSIONS ? LIVE_SCENE.DESKTOP : LIVE_SCENE.INTRODUCTION,
@@ -391,18 +408,45 @@ export class VoiceService {
     }
     answer.sessionId = created.answer.session.id;
     answer.sdpAnswer = created.answer.transport.sdp;
-    if (accountId !== undefined) {
-      await this.#record.register({ userId: accountId, sessionId: answer.sessionId });
+    if (account) {
+      await this.#record.register({
+        userId: account.accountId,
+        sessionId: answer.sessionId,
+        deviceId: account.deviceId,
+      });
     }
     const sideband = await this.#attach(upstream, answer.sessionId);
     if (sideband === undefined) return { refusal: HOSTED_API_ERROR.UPSTREAM_ERROR };
     return {
       sessionId: answer.sessionId,
-      accountId,
+      accountId: account?.accountId,
       sideband,
       answer,
       logEvent: LOG_EVENT.SESSION_CREATED,
     };
+  }
+
+  /**
+   * The desktop's handshake as an account, in the order the refusals are
+   * cheapest: the bearer resolved, the device it claimed to be checked
+   * against the rows the account holds, and only then a session spent. A
+   * device the account does not hold is refused before the spend, so a claim
+   * on someone else's device costs the claimant nothing and creates nothing;
+   * the record's own write checks the same fact again, so a row gone between
+   * here and there names no device.
+   */
+  async #admitAccount(admission: SessionsAdmission): Promise<AdmittedAccount> {
+    const accountId = await this.#accounts.resolveUserId(admission.bearer);
+    if (accountId === undefined) return { refusal: HOSTED_API_ERROR.INVALID_TOKEN };
+    if (
+      admission.deviceId !== undefined &&
+      !(await this.#record.deviceOwned({ userId: accountId, deviceId: admission.deviceId }))
+    ) {
+      return { refusal: HOSTED_API_ERROR.INVALID_REQUEST };
+    }
+    const spend = await this.#accounts.spend(accountId);
+    if (!spend.allowed) return { refusal: HOSTED_API_ERROR.QUOTA_EXHAUSTED };
+    return { accountId, deviceId: admission.deviceId, quota: spend.quota };
   }
 
   /**
