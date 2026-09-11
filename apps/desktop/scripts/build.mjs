@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { gzipSync } from "node:zlib";
 import { sentryEsbuildPlugin } from "@sentry/esbuild-plugin";
 import { build } from "esbuild";
 import { signingModeDefine } from "./package-config.mjs";
@@ -12,6 +13,7 @@ const brandRoot = path.resolve(appRoot, "../../design/brand");
 const appVersion = JSON.parse(
   await fs.readFile(path.join(appRoot, "package.json"), "utf8"),
 ).version;
+const budgetFile = path.join(appRoot, "bundle-budget.json");
 // The Dock takes one large PNG per mode and swaps them as the theme changes.
 const DOCK_ICON_IMAGES = {
   "luke-icon-light.png": "luke-icon-light-512.png",
@@ -156,3 +158,46 @@ await Promise.all([
     fs.copyFile(path.join(brandRoot, "icon", source), path.join(outputRoot, "icon", name)),
   ),
 ]);
+
+// The panel's and the voice window's bundles are the two that a browser context
+// parses at every window open, so their compressed size is a cost the user pays
+// rather than one the build absorbs. The baseline is recorded rather than
+// derived, because the number worth holding is the one a reviewer agreed to: a
+// dependency that adds a fifth to the panel is a decision, and
+// `LUKE_UPDATE_BUNDLE_BUDGET=1` is how that decision is written down once it has
+// been made.
+const budget = JSON.parse(await fs.readFile(budgetFile, "utf8"));
+const measured = Object.fromEntries(
+  await Promise.all(
+    Object.keys(budget.gzipBytes).map(async (bundle) => [
+      bundle,
+      gzipSync(await fs.readFile(path.join(outputRoot, bundle)), { level: 9 }).length,
+    ]),
+  ),
+);
+
+if (process.env.LUKE_UPDATE_BUNDLE_BUDGET === "1") {
+  await fs.writeFile(
+    budgetFile,
+    `${JSON.stringify({ ...budget, gzipBytes: measured }, undefined, 2)}\n`,
+  );
+  for (const [bundle, bytes] of Object.entries(measured)) {
+    console.log(`bundle budget recorded: ${bundle} ${bytes} gzipped bytes`);
+  }
+} else {
+  const exceeded = Object.entries(measured).flatMap(([bundle, bytes]) => {
+    const ceiling = Math.floor(budget.gzipBytes[bundle] * (1 + budget.slack));
+    return bytes > ceiling ? [{ bundle, bytes, ceiling }] : [];
+  });
+  if (exceeded.length > 0) {
+    for (const { bundle, bytes, ceiling } of exceeded) {
+      console.error(
+        `error: ${bundle} is ${bytes} gzipped bytes, over its ceiling of ${ceiling} (baseline ${budget.gzipBytes[bundle]} plus ${budget.slack * 100}%)`,
+      );
+    }
+    console.error(
+      "Reduce the bundle, or record the new baseline with LUKE_UPDATE_BUNDLE_BUDGET=1 and say why in the pull request.",
+    );
+    process.exitCode = 1;
+  }
+}

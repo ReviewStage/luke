@@ -1458,3 +1458,49 @@ noise.
   sites. Raw strings are only for freeform, user-facing text.
 - Do not construct keys by concatenating or interpolating identifiers. Use
   nested objects or nested `Map` instances keyed by the original identifiers.
+
+## Effect idioms
+
+Effect is the repository's infrastructure library, adopted in place of the
+parts Luke had hand-rolled for want of one; `docs/adr/0001-effect.md` records
+the decision, the pinned 3.x line, the re-evaluation trigger for Effect 4, and
+every strangler shim with the PR that deletes it. Five idioms decide most
+questions, and each replaces something that is still in the tree while the
+migration runs.
+
+- **Schema at the boundaries.** A value crossing into the process is decoded by
+  a Schema and is a typed value afterwards: no `typeof` narrowing behind the
+  door, no `as`, no optional field read hopefully. The refusal a decode answers
+  with is the refusal the caller reports. Inside the boundary the type is the
+  guarantee, so nothing revalidates. Two things stay outside this: the JSON
+  Schema a model reads is emitted by `@sidecar/wire`'s own emitter rather than
+  `JSONSchema.make`, because those bytes are prompt-cache bytes and their
+  goldens are compared as bytes; and the `Admitted` brand stays a type-level
+  `unique symbol` minted by `admit()` alone, never a `Schema.brand`, because a
+  brand a cast can spell is a brand anything can enter.
+- **A runtime only at an edge.** The places that may run an Effect are the
+  ADR's list and nothing else: desktop main, each web function module through
+  `apps/web/server/runtime.ts`, and the two renderer roots. Everything between
+  them returns an Effect and lets its caller decide when to run it. A runtime
+  built where the work lives is a second runtime, and two runtimes are two
+  copies of every service a `Context.Tag` was supposed to identify.
+- **Scope, not dispose.** A resource is acquired and released by
+  `Effect.acquireRelease` in a `Scope`, and a composition is a `Layer`. The
+  reverse-order teardown and the aggregated failures that `DisposableStore`
+  carried are what `Scope` closing already guarantees, so nothing hand-rolls
+  the ordering and no caller can run the steps in another order.
+- **Schedule, not a loop.** A retry, a backoff, a poll, and an interval are all
+  one `Schedule`, forked in the Scope that owns them: `Effect.repeat` and
+  `Effect.retry` rather than `setInterval`, `setTimeout`, or a `while` around an
+  attempt counter. The delay table stays data — a schedule is composed from it,
+  so the cadence is still readable as a list of numbers — and a scope closing is
+  what stops the loop, not a flag another fiber reads.
+- **TestClock, not a fake clock.** Time in a test is advanced through
+  `TestClock`, and interruption is tested by interrupting a fiber. An injected
+  `now`/`schedule` seam, a `FakeClock`, and a microtask drain were each a way of
+  saying the same thing before there was one; a new test uses none of them, and
+  a package that has migrated has none left.
+
+A file ported from OpenClaw obeys none of this: its internals stay faithful to
+the pinned source and it imports nothing from `effect`. The Effect wrap is a
+sibling module beside it.
