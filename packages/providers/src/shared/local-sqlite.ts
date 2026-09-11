@@ -1,5 +1,5 @@
 import { text, type UnparsedWireValue, type WireRecord, wholeNumber } from "@sidecar/wire";
-import { Cause, Data, Effect, Exit, Option, type Scope } from "effect";
+import { Data, Effect, Option, type Scope } from "effect";
 import { canIgnoreFilesystemError, fileStats } from "./local-files.js";
 
 export function numberFromRow(row: WireRecord, key: string): number | undefined {
@@ -118,21 +118,4 @@ export function scopedReadOnlyDatabase(
       onSome: (database) => Effect.sync(() => database.close()),
     }),
   );
-}
-
-/**
- * @deprecated The promise face of {@link scopedReadOnlyDatabase}, whose
- * caller closes the handle itself in a `finally`; deleted with P6-11a and
- * P6-11b, which move each adapter's read into a scope.
- */
-export async function openReadOnlyDatabase(
-  sqlite: SqliteModuleLoader,
-  filePath: string,
-): Promise<SqliteDatabase | undefined> {
-  // The open's own unexpected errors are defects, so what the promise rejects
-  // with is the error itself rather than the fiber's wrapping of it: a caller
-  // reading `canIgnoreSqliteError` off a rejection reads what it always did.
-  const exit = await Effect.runPromiseExit(openHandle(sqlite, filePath));
-  if (Exit.isFailure(exit)) throw Cause.squash(exit.cause);
-  return Option.getOrUndefined(exit.value);
 }

@@ -32,6 +32,22 @@ import {
 import type { SupersetSessionContext } from "./wire.js";
 
 /**
+ * The fixed segments of the CLI invocations root `AGENTS.md` authorizes:
+ * `auth logout`, `workspaces create`/`open`/`update`/`delete`, and
+ * `terminals send`. Each command's own observed identifiers and the
+ * developer's own words still follow these segments at the call site; only
+ * the words naming the command and its flags are pinned here.
+ */
+const SUPERSET_CLI_COMMAND = {
+  AUTH_LOGOUT: ["auth", "logout", "--json"],
+  WORKSPACES_CREATE: ["workspaces", "create"],
+  WORKSPACES_OPEN: ["workspaces", "open"],
+  WORKSPACES_UPDATE: ["workspaces", "update"],
+  WORKSPACES_DELETE: ["workspaces", "delete"],
+  TERMINALS_SEND: ["terminals", "send"],
+} as const;
+
+/**
  * The stderr a failed invocation attached to what it threw, whether the runner
  * is the injected one or `execFile`. The parameter is the thrown cause itself,
  * because that attachment is the only place the CLI's own words survive.
@@ -153,7 +169,7 @@ export class SupersetCli {
    */
   async signOut(): Promise<boolean> {
     try {
-      await this.#run(this.executable, ["auth", "logout", "--json"]);
+      await this.#run(this.executable, SUPERSET_CLI_COMMAND.AUTH_LOGOUT);
     } catch {
       return false;
     }
@@ -294,8 +310,7 @@ export class SupersetCli {
         ? ["--local"]
         : ["--host", request.providerTargetId];
     const arguments_ = [
-      "workspaces",
-      "create",
+      ...SUPERSET_CLI_COMMAND.WORKSPACES_CREATE,
       ...targetArguments,
       "--project",
       request.providerProjectId,
@@ -330,8 +345,7 @@ export class SupersetCli {
       if (!workspaceId) return { status: ACTION_RESULT_STATUS.ACCEPTED };
       try {
         await this.#run(this.executable, [
-          "workspaces",
-          "open",
+          ...SUPERSET_CLI_COMMAND.WORKSPACES_OPEN,
           workspaceId,
           ...(request.providerTargetId === SUPERSET_LOCAL_TARGET_ID
             ? []
@@ -371,8 +385,7 @@ export class SupersetCli {
       };
     return this.#action(
       [
-        "terminals",
-        "send",
+        ...SUPERSET_CLI_COMMAND.TERMINALS_SEND,
         "--workspace",
         context.workspaceId,
         "--terminal",
@@ -393,7 +406,7 @@ export class SupersetCli {
     // as the command's single argument, nothing else ever deleted.
     if (controlId === SUPERSET_CONTROL_ID.DELETE_WORKSPACE) {
       return this.#action(
-        ["workspaces", "delete", context.workspaceId, "--json"],
+        [...SUPERSET_CLI_COMMAND.WORKSPACES_DELETE, context.workspaceId, "--json"],
         "Superset could not delete that workspace.",
       );
     }
@@ -424,8 +437,7 @@ export class SupersetCli {
       };
     try {
       await this.#run(this.executable, [
-        "workspaces",
-        "update",
+        ...SUPERSET_CLI_COMMAND.WORKSPACES_UPDATE,
         context.workspaceId,
         "--name",
         name,

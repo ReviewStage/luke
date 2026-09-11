@@ -78,13 +78,12 @@ may `VACUUM` — writes a provider's file must never take.
 write, and its credential-bound read are effects, and Conductor — the one
 adapter that rides it — reaches every one of them through `runAdapterRead`
 below, the same door every other adapter answers its plugin from.
-`openReadOnlyDatabase` in `local-sqlite.ts` still keeps its own, listed
-`@deprecated` in `docs/adr/0001-effect.md`: it answers a handle the caller
-closes itself in a `finally`, which is now Superset's alone, since Conductor's
-two local SQLite reads (`applications.ts`'s session index,
-`local-workspaces.ts`'s repository index) ask inside a `Scope` through
-`scopedReadOnlyDatabase` instead. P6-11c moves Superset onto it and deletes
-the face.
+`openReadOnlyDatabase` in `local-sqlite.ts` is gone outright: every local
+SQLite read in this package — Codex's state reader, Conductor's session
+index and repository index, and Superset's own host-state reader
+(`reader.ts`) — asks inside a `Scope` through `scopedReadOnlyDatabase`
+instead, closing the handle itself rather than answering one the caller
+closes in a `finally`.
 The spool has no promise face and, in this build, no consumer either:
 `observationSpoolEvents` is the whole of it. The hook wiring that would have
 run it is gone — the local loop registers no hook and watches no spool now
@@ -93,30 +92,35 @@ read above are settled on the stream's own terms, and a build that wakes on
 hook events again provides `FileSystem` where it runs the stream and needs
 nothing else of it.
 
-Every adapter is already there but Superset. What Claude Code, Codex, and OMP
-read is an `Effect`: the observation pass discovers, parses and assembles as
-effects over a parse cache held in a `Ref`; the JSONL transcript reader's two
-reads and the path cache behind the incremental one are effects; and Codex's
+Every adapter is already there. What Claude Code, Codex, and OMP read is an
+`Effect`: the observation pass discovers, parses and assembles as effects
+over a parse cache held in a `Ref`; the JSONL transcript reader's two reads
+and the path cache behind the incremental one are effects; and Codex's
 state database is asked inside a `Scope` that closes the handle, through
 `scopedReadOnlyDatabase`, with a question that answers nothing for a schema
 this build does not know and dies for anything else. Conductor's cloud pass
 is the same shape one level up: its `observe`, its actions' one write, and
 its conversation reads' one credential-bound read are each effects now that
 `cloudPass` itself is, and its two local SQLite reads ask inside a `Scope`
-the same way Codex's does. What each plugin publishes is unchanged, because
-`SessionProviderPlugin` is still promises: `runAdapterRead` in
-`shared/promise-face.ts` is the one `@deprecated` place those effects are
-run — `ObservationPass#runPromise`, `promiseTranscriptReads`, Codex's own
-`observe`, and Conductor's `observe`, its actions' write, its conversation
-reads, and its two local reads — and P7-05 deletes it when observation is
-composed as effects. Every one of those reads is still a read: an adapter
-opens the provider's files, or its own credential-bound endpoint, for
-reading alone, and a value test over a manifest of each on-disk home — its
-files, sizes, dates and hashes — pins that a pass and both transcript reads
-leave the home exactly as they found it, the provider's own hook
+the same way Codex's does. Superset's own host-state reader (`reader.ts`)
+asks each organization's database inside its own `Scope` the same way,
+folding every organization's read into one snapshot; its plugin stays
+promises throughout, since Superset names no observation pass or transcript
+reader of its own — its rows come from `refresh()`, not `observe()`. What
+each plugin publishes is unchanged, because `SessionProviderPlugin` is still
+promises: `runAdapterRead` in `shared/promise-face.ts` is the one
+`@deprecated` place those effects are run — `ObservationPass#runPromise`,
+`promiseTranscriptReads`, Codex's own `observe`, Conductor's `observe`, its
+actions' write, its conversation reads, its two local reads, and Superset's
+own host-state read — and P7-05 deletes it when observation is composed as
+effects. Every one of those reads is still a read: an adapter opens the
+provider's files, its own credential-bound endpoint, or its own database,
+for reading alone, and a value test over a manifest of each on-disk home —
+its files, sizes, dates and hashes — pins that a pass and both transcript
+reads leave the home exactly as they found it, the provider's own hook
 configuration file included where one exists, since the registration that
-merges into that one is not the plugin; Conductor's own local SQLite reads
-carry the same pin over the database file each opens.
+merges into that one is not the plugin; Conductor's and Superset's own local
+SQLite reads carry the same pin over the database file each opens.
 
 Every provider passes one contract suite. `describeProviderContract` in
 `@sidecar/providers/testing` states the trust constraints as tests over

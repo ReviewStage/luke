@@ -1,14 +1,16 @@
 import path from "node:path";
 import { type WireRecord, wireRecord } from "@sidecar/wire";
+import { Data, Effect, Option } from "effect";
 import { readDirectory } from "../shared/local-files.js";
 import {
   canIgnoreSqliteError,
   defaultSqliteModule,
-  openReadOnlyDatabase,
   type SqliteDatabase,
   type SqliteModuleLoader,
+  scopedReadOnlyDatabase,
   textFromRow,
 } from "../shared/local-sqlite.js";
+import { runAdapterRead } from "../shared/promise-face.js";
 import { type SupersetSnapshot, supersetSnapshot } from "./snapshot.js";
 import {
   contextFromRow,
@@ -183,48 +185,72 @@ interface OrganizationState {
 
 const NO_ORGANIZATION_STATE: OrganizationState = { contexts: [], worktrees: [] };
 
-async function readOrganization(
+/** What one organization's read threw, carried where nothing but this module reads it. */
+class OrganizationReadFailed extends Data.TaggedError("OrganizationReadFailed")<{
+  readonly cause: unknown;
+}> {}
+
+/**
+ * The three documented reads against one already-open database, as the
+ * single synchronous attempt whose failure `readOrganization` classifies:
+ * a schema `rows` itself could not fall back from is a schema miss the same
+ * as any other, and every other error is a bug.
+ */
+function readState(
+  database: SqliteDatabase,
+  organizationId: string,
+): Effect.Effect<OrganizationState, OrganizationReadFailed> {
+  return Effect.try({
+    try: () => {
+      const spawnableAgents = rows(
+        database,
+        SUPERSET_AGENT_QUERY,
+        (row) => textFromRow(row, "preset_id"),
+        "empty",
+      );
+      return {
+        contexts: [
+          ...rows(
+            database,
+            SUPERSET_WORKSPACE_QUERY,
+            (row) => contextFromRow(organizationId, row, spawnableAgents),
+            { fallback: SUPERSET_LEGACY_WORKSPACE_QUERY },
+          ),
+          ...rows(
+            database,
+            SUPERSET_CHATLESS_WORKSPACE_QUERY,
+            (row) => contextFromWorkspaceRow(organizationId, row, spawnableAgents),
+            "empty",
+          ),
+        ],
+        worktrees: rows(
+          database,
+          SUPERSET_WORKTREE_DIRECTORY_QUERY,
+          (row) => worktreeContextFromRow(organizationId, row, spawnableAgents),
+          "empty",
+        ),
+      };
+    },
+    catch: (cause) => new OrganizationReadFailed({ cause }),
+  });
+}
+
+function readOrganization(
   sqlite: SqliteModuleLoader,
   organizationId: string,
   databasePath: string,
-): Promise<OrganizationState> {
-  const database = await openReadOnlyDatabase(sqlite, databasePath);
-  if (!database) return NO_ORGANIZATION_STATE;
-  try {
-    const spawnableAgents = rows(
-      database,
-      SUPERSET_AGENT_QUERY,
-      (row) => textFromRow(row, "preset_id"),
-      "empty",
-    );
-    return {
-      contexts: [
-        ...rows(
-          database,
-          SUPERSET_WORKSPACE_QUERY,
-          (row) => contextFromRow(organizationId, row, spawnableAgents),
-          { fallback: SUPERSET_LEGACY_WORKSPACE_QUERY },
-        ),
-        ...rows(
-          database,
-          SUPERSET_CHATLESS_WORKSPACE_QUERY,
-          (row) => contextFromWorkspaceRow(organizationId, row, spawnableAgents),
-          "empty",
-        ),
-      ],
-      worktrees: rows(
-        database,
-        SUPERSET_WORKTREE_DIRECTORY_QUERY,
-        (row) => worktreeContextFromRow(organizationId, row, spawnableAgents),
-        "empty",
-      ),
-    };
-  } catch (error) {
-    if (error instanceof Error && canIgnoreSqliteError(error)) return NO_ORGANIZATION_STATE;
-    throw error;
-  } finally {
-    database.close();
-  }
+): Effect.Effect<OrganizationState> {
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const database = yield* scopedReadOnlyDatabase(sqlite, databasePath);
+      if (Option.isNone(database)) return NO_ORGANIZATION_STATE;
+      return yield* Effect.catchAll(readState(database.value, organizationId), (failure) =>
+        failure.cause instanceof Error && canIgnoreSqliteError(failure.cause)
+          ? Effect.succeed(NO_ORGANIZATION_STATE)
+          : Effect.die(failure.cause),
+      );
+    }),
+  );
 }
 
 /**
@@ -232,21 +258,24 @@ async function readOrganization(
  * into one snapshot. The directories under `host/` are named by organization,
  * not by machine: every database beneath them is this machine's own.
  */
-export async function supersetHostState(
-  options: SupersetHostStateOptions,
-): Promise<SupersetSnapshot> {
-  const sqlite = options.sqlite ?? defaultSqliteModule;
-  const hostDirectory = path.join(options.homeDirectory, "host");
-  const entries = await readDirectory(hostDirectory);
-  const organizations = await Promise.all(
-    entries
-      .filter((entry) => entry.isDirectory())
-      .map((entry) =>
-        readOrganization(sqlite, entry.name, path.join(hostDirectory, entry.name, "host.db")),
-      ),
-  );
-  return supersetSnapshot(
-    organizations.flatMap((organization) => organization.contexts),
-    organizations.flatMap((organization) => organization.worktrees),
+export function supersetHostState(options: SupersetHostStateOptions): Promise<SupersetSnapshot> {
+  return runAdapterRead(
+    Effect.gen(function* () {
+      const sqlite = options.sqlite ?? defaultSqliteModule;
+      const hostDirectory = path.join(options.homeDirectory, "host");
+      const entries = yield* Effect.promise(() => readDirectory(hostDirectory));
+      const organizations = yield* Effect.all(
+        entries
+          .filter((entry) => entry.isDirectory())
+          .map((entry) =>
+            readOrganization(sqlite, entry.name, path.join(hostDirectory, entry.name, "host.db")),
+          ),
+        { concurrency: "unbounded" },
+      );
+      return supersetSnapshot(
+        organizations.flatMap((organization) => organization.contexts),
+        organizations.flatMap((organization) => organization.worktrees),
+      );
+    }),
   );
 }

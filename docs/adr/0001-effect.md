@@ -419,16 +419,16 @@ caller already branches on is the failure it reads rather than the fiber's
 wrapping of it, but that is `promise-face.ts`'s allowlist entry, not a second
 one of `cloudPass`'s own.
 
-`openReadOnlyDatabase` in the same package's `local-sqlite.ts` is the
-smallest of them: the open is an `acquireRelease` in a `Scope` that closes the
-handle, and this face runs it for the adapters that still close the handle
-themselves in a `finally`. Codex's state reader and Conductor's two local
+`openReadOnlyDatabase` in the same package's `local-sqlite.ts` needed no
+allowlist entry either, once P6-11c moved Superset's own host-state reader
+onto `scopedReadOnlyDatabase`: Codex's state reader, Conductor's two local
 SQLite reads (`applications.ts`'s session index, `local-workspaces.ts`'s
-repository index) now ask inside a scope of their own, so what is left of this
-face is Superset's alone, which P6-11c moves. The hook spool has no such face
-at all: `observationSpoolEvents` is a `Stream`, and nothing in this build runs
-it — the hook wiring P6-12 would have run it under is gone, so the window it
-groups on is settled on the stream's own terms in
+repository index), and Superset's (`reader.ts`'s host-state read) all ask
+inside a scope of their own that closes the handle, so nothing in this
+package still closes one itself in a `finally`. The hook spool has no such
+face at all: `observationSpoolEvents` is a `Stream`, and nothing in this
+build runs it — the hook wiring P6-12 would have run it under is gone, so the
+window it groups on is settled on the stream's own terms in
 `packages/providers/AGENTS.md` — which leaves nothing in that package forking
 a fiber of its own.
 
@@ -465,11 +465,15 @@ own `observe`, its actions' one write, and its conversation reads' one
 credential-bound read are each effects now that `cloudPass` is, so its plugin
 calls the same face rather than a second one of its own, and its two local
 SQLite reads (`applications.ts`, `local-workspaces.ts`) call it too, each over
-`Effect.scoped(scopedReadOnlyDatabase(...))`. These reads tolerate everything
-an absent or unreadable provider directory, or an unauthorized or unreachable
-credential, answers, so the face rethrows `Cause.squash` and a caller reads the
-failure or the defect it always did. P7-05 composes observation as effects and
-deletes it.
+`Effect.scoped(scopedReadOnlyDatabase(...))`. Superset's own host-state read
+(`reader.ts`'s `supersetHostState`) is the same shape once more: one
+`Effect.scoped(scopedReadOnlyDatabase(...))` per organization's database,
+folded into one snapshot, reached through this same face rather than a
+promise face of its own. These reads tolerate everything an absent or
+unreadable provider directory, or an unauthorized or unreachable credential,
+answers, so the face rethrows `Cause.squash` and a caller reads the failure or
+the defect it always did. P7-05 composes observation as effects and deletes
+it.
 
 ## Strangler shims and their deletions
 
@@ -494,7 +498,6 @@ design decision stated as such:
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04 |
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
 | `providerRegistrations` record door over `providersLayer` | P6-09 | P7-01, P7-02 |
-| `openReadOnlyDatabase` Promise door over `scopedReadOnlyDatabase` | P6-10 | P6-11c |
 | `runAdapterRead`, every adapter's Promise face over its read effects | P6-11a | P7-05 |
 | `AgentTraceWriter`'s own `ManagedRuntime` | P6-05 | Phase 7 devtrace composer |
 | `tracedModelAdapter`'s traced `respond` | P6-05 | P5-14b |
