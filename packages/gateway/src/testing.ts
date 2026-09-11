@@ -7,6 +7,7 @@ import {
   type GatewayRequest,
   type GatewayResponse,
   gatewayEventFromWire,
+  gatewayEventToWire,
   gatewayRefusal,
   gatewayRequestFromWire,
   gatewayRequestToWire,
@@ -20,7 +21,6 @@ import {
   nodeInvocationToWire,
 } from "./protocol.js";
 import type { GatewayServer } from "./server.js";
-import { eventToWire } from "./server.js";
 import { ServerBoundTransport } from "./transport.js";
 
 /**
@@ -99,7 +99,7 @@ export class TextLoopbackTransport extends ServerBoundTransport {
       this.#missed.push(event);
       return;
     }
-    const carried = gatewayEventFromWire(throughText(eventToWire(event)));
+    const carried = gatewayEventFromWire(throughText(gatewayEventToWire(event)));
     if (carried) this.deliver(carried);
   }
 

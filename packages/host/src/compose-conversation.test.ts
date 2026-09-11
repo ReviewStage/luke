@@ -189,7 +189,6 @@ async function clear(composer: ReturnType<typeof composeConversation>) {
       client: { clientId: "test", role: GATEWAY_CLIENT_ROLE.OPERATOR },
       request: {
         protocolVersion: GATEWAY_PROTOCOL_VERSION,
-        id: "clear-1",
         method: GATEWAY_METHOD.CONVERSATION_CLEAR,
         params: {},
         idempotencyKey: "clear-1",
@@ -444,7 +443,6 @@ async function rateOutcome(composer: ReturnType<typeof composeConversation>, par
       client: { clientId: "test", role: GATEWAY_CLIENT_ROLE.OPERATOR },
       request: {
         protocolVersion: GATEWAY_PROTOCOL_VERSION,
-        id: "rate-1",
         method: GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE,
         params: {},
         idempotencyKey: "rate-1",

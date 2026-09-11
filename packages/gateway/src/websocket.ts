@@ -26,6 +26,7 @@ import {
   type GatewayRequest,
   type GatewayResponse,
   gatewayEventFromWire,
+  gatewayEventToWire,
   gatewayRequestFromWire,
   gatewayRequestToWire,
   gatewayResponseFromWire,
@@ -37,7 +38,7 @@ import {
   nodeInvocationFromWire,
   nodeInvocationToWire,
 } from "./protocol.js";
-import { eventToWire, type GatewayServer } from "./server.js";
+import type { GatewayServer } from "./server.js";
 import type { GatewayEventSink, GatewayHostConnection, GatewayTransport } from "./transport.js";
 
 /**
@@ -196,7 +197,7 @@ export class WebSocketTransport {
         this.#unsubscribe = this.#options.server.subscribe((event) => {
           const frame = JSON.stringify({
             kind: GATEWAY_FRAME.EVENT,
-            envelope: eventToWire(event),
+            envelope: gatewayEventToWire(event),
           });
           for (const socket of this.#clients.keys()) {
             if (socket.readyState === socket.OPEN) socket.send(frame);

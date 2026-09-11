@@ -3,12 +3,12 @@ import {
   carried,
   GATEWAY_METHOD,
   type GatewayMethodTable,
-  type GatewayServer,
   type GatewayShutdownOptions,
   type GatewayShutdownSteps,
   gatewayOk,
   shutdownGateway,
 } from "@sidecar/gateway";
+import type { GatewayServer } from "@sidecar/gateway/server";
 import { HostedChangesClient, HostedConversationClient } from "@sidecar/hosted";
 import { PROACTIVE_SPEECH_KIND } from "@sidecar/live";
 import { ObservationSupervisor } from "@sidecar/runtime";

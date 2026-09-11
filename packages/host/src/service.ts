@@ -16,7 +16,6 @@ import {
   type GatewayMethodHandler,
   type GatewayMethodOutcome,
   type GatewayMethodTable,
-  GatewayServer,
   gatewayError,
   gatewayOk,
   invalid,
@@ -24,6 +23,7 @@ import {
   NodeRegistry,
   nodeSnapshotToWire,
 } from "@sidecar/gateway";
+import { GatewayServer } from "@sidecar/gateway/server";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
 import {
   type ChildRunRecord,

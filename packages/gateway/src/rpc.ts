@@ -11,6 +11,7 @@ import {
   GatewayErrorSchema,
   type GatewayEvent,
   GatewayEventSchema,
+  type GatewayExpectedRevision,
   type GatewayMethod,
   GatewayMethodSchema,
   GatewayParamsSchema,
@@ -117,18 +118,23 @@ function requestHeaders(request: GatewayRequest): RequestHeaders {
   ];
 }
 
-/** The protocol version a decoded request said it speaks; a request that named none speaks this build's. */
-export function gatewayRequestVersion(headers: RequestHeaders): number {
-  const version = new Map(headers).get(GATEWAY_REQUEST_HEADER.PROTOCOL_VERSION);
-  return version === undefined ? GATEWAY_PROTOCOL_VERSION : readHeaderNumber(version);
+/** What a request's headers said beside the method and its parameters, read off any carrier of name–value pairs: an Rpc message's tuples or the server's own header record. */
+export interface GatewayHeaderFields {
+  readonly protocolVersion: number;
+  readonly idempotencyKey?: string;
+  readonly expectedRevision?: GatewayExpectedRevision;
 }
 
-function requestFromMessage(message: RpcRequestMessage): GatewayRequest {
-  const headers = new Map(message.headers);
-  const idempotencyKey = headers.get(GATEWAY_REQUEST_HEADER.IDEMPOTENCY_KEY);
-  const sessionKey = headers.get(GATEWAY_REQUEST_HEADER.EXPECTED_SESSION_KEY);
-  const sessionRevision = headers.get(GATEWAY_REQUEST_HEADER.EXPECTED_SESSION_REVISION);
-  const configurationRevision = headers.get(GATEWAY_REQUEST_HEADER.EXPECTED_CONFIGURATION_REVISION);
+/** Reads the request fields the headers carry; a request that named no version speaks this build's. */
+export function gatewayHeaderFields(
+  headers: Iterable<readonly [string, string]>,
+): GatewayHeaderFields {
+  const held = new Map(headers);
+  const version = held.get(GATEWAY_REQUEST_HEADER.PROTOCOL_VERSION);
+  const idempotencyKey = held.get(GATEWAY_REQUEST_HEADER.IDEMPOTENCY_KEY);
+  const sessionKey = held.get(GATEWAY_REQUEST_HEADER.EXPECTED_SESSION_KEY);
+  const sessionRevision = held.get(GATEWAY_REQUEST_HEADER.EXPECTED_SESSION_REVISION);
+  const configurationRevision = held.get(GATEWAY_REQUEST_HEADER.EXPECTED_CONFIGURATION_REVISION);
   const expectedRevision = {
     ...(sessionKey !== undefined ? { sessionKey } : undefined),
     ...(sessionRevision !== undefined ? { sessionRevision } : undefined),
@@ -137,12 +143,23 @@ function requestFromMessage(message: RpcRequestMessage): GatewayRequest {
       : undefined),
   };
   return {
-    protocolVersion: gatewayRequestVersion(message.headers),
+    protocolVersion: version === undefined ? GATEWAY_PROTOCOL_VERSION : readHeaderNumber(version),
+    ...(idempotencyKey !== undefined ? { idempotencyKey } : undefined),
+    ...(Object.keys(expectedRevision).length > 0 ? { expectedRevision } : undefined),
+  };
+}
+
+/** The protocol version a decoded request said it speaks; a request that named none speaks this build's. */
+export function gatewayRequestVersion(headers: RequestHeaders): number {
+  return gatewayHeaderFields(headers).protocolVersion;
+}
+
+function requestFromMessage(message: RpcRequestMessage): GatewayRequest {
+  return {
+    ...gatewayHeaderFields(message.headers),
     id: message.id,
     method: message.tag,
     params: message.payload,
-    ...(idempotencyKey !== undefined ? { idempotencyKey } : undefined),
-    ...(Object.keys(expectedRevision).length > 0 ? { expectedRevision } : undefined),
   };
 }
 
@@ -169,7 +186,10 @@ const RpcRequestMessageSchema = Schema.Struct({
   headers: Schema.Array(Schema.Tuple(Schema.String, Schema.String)),
 });
 
-type RpcRequestMessage = typeof RpcRequestMessageSchema.Type;
+export type RpcRequestMessage = typeof RpcRequestMessageSchema.Type;
+
+/** Reads one decoded frame as a request message of the group, or nothing for any other message the parser answered. */
+export const readRpcRequestMessage = Schema.decodeUnknownOption(RpcRequestMessageSchema);
 
 const GatewayExitSchema = Schema.Exit({
   success: GatewayResultSchema,

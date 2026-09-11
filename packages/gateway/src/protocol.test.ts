@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
 import { test } from "vitest";
 import { GatewayClient } from "./client.js";
+import { gatewayError, gatewayOk } from "./methods.js";
 import { NodeRegistry } from "./nodes.js";
 import {
   GATEWAY_CLIENT_ROLE,
@@ -17,7 +18,7 @@ import {
   gatewayRequestToWire,
   NODE_CAPABILITY_STATUS,
 } from "./protocol.js";
-import { GatewayServer, gatewayError, gatewayOk } from "./server.js";
+import { GatewayServer } from "./server.js";
 import { TextLoopbackTransport } from "./testing.js";
 import { type GatewayTransport, InProcessTransport } from "./transport.js";
 
