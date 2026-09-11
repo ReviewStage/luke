@@ -215,7 +215,15 @@ process reads, and `makePendingInputQueue` with `admitInput` and
 door names none of them, so a package that opens only it resolves no `effect`,
 while the barrel now does: `ObservationLoop` keeps its cadence on a `Schedule`
 forked into a `Scope` of its own rather than on an interval, so a caller that
-opens the barrel resolves `effect` behind it.
+opens the barrel resolves `effect` behind it. `@sidecar/memory/effect` is the
+same door one package over: `housekeepingEffect` reads a completed or
+nothing-to-store result as a success and an interrupted or failed one as a
+`MemoryHousekeepingFellShort` carrying the outcome's own code, and
+`markerWriteSchedule` states the port's marker-write attempt bound as a
+`Schedule` a caller composes with `Effect.retry` rather than counting
+attempts by hand; the ranking and chunking ports beside it stay untouched,
+since neither reaches outside its own arguments or fails in a way Effect's
+channel would change.
 
 A file ported from OpenClaw `b7528507` imports nothing from `effect`, so a
 later port of an upstream change stays a diff of that source; Effect reaches
