@@ -42,7 +42,11 @@ import {
  * anyway; a claim means a device is saying them, and the offer is never
  * pushed, whatever became of the claim; and a quiet instant standing on any
  * device — a meeting its calendar hold observes — means nothing is pushed
- * and nothing expires until it lifts, the same standing the sweep holds on.
+ * and nothing expires until it lifts. The quiet is read the way the sweep
+ * reads it, through the same query, and an account with quiet standing is
+ * left out of the read of open offers entirely, so a long meeting's held
+ * offers, the oldest open rows, cannot fill the bound and starve every other
+ * account's push.
  *
  * The mark precedes the send. `markSpeechPushed` settles the offer under the
  * conversation's lock, refusing where a claim or another settlement landed
@@ -50,7 +54,10 @@ import {
  * tick a minute later finds the offer settled and pushes nothing. What is
  * guaranteed is therefore at most one push per briefing, never that it
  * arrived: a send Apple refused or the network dropped is counted here and
- * retried nowhere, like a claim whose device fell silent.
+ * retried nowhere, like a claim whose device fell silent. Such an answer
+ * also ends the pass, since the credential or the gateway is what failed
+ * and every send after it would settle another offer for nothing; the rest
+ * stand for the next tick.
  *
  * The notification carries the briefing and nothing else. Its words are
  * Luke's own, what he chose to say, and they are readable on a locked
@@ -79,7 +86,7 @@ export const SPEECH_PUSH_DECISION = {
   WAIT: "wait",
   /** A device holds the claim; the offer is theirs and never pushed. */
   CLAIMED: "claimed",
-  /** A quiet instant stands on a device of the account; nothing is pushed and nothing expires until it lifts. */
+  /** A hold stands on the offer; nothing is pushed and nothing expires until the sweep releases it. */
   HELD: "held",
   /** The offer's own instant has passed; the sweep's to end, never pushed stale. */
   DUE: "due",
@@ -87,30 +94,22 @@ export const SPEECH_PUSH_DECISION = {
 
 export type SpeechPushDecision = (typeof SPEECH_PUSH_DECISION)[keyof typeof SPEECH_PUSH_DECISION];
 
-/** What an account's devices last reported that the decision reads: whether any is active now, and whether any reports quiet still ahead. */
-export interface AccountPresence {
-  readonly active: boolean;
-  readonly quiet: boolean;
-}
-
 /**
- * The rule, as a function of what was read. A held offer, or an account
- * with quiet standing the sweep has not yet marked, is held either way; a
- * claimed one is left to its claimant; one past its instant is left to the
- * sweep; and an offered one is pushed unless a device is active and the
- * grace since the offer has not run out.
+ * The rule, as a function of what was read: the offer's standing, and
+ * whether any device of its account reports itself active now. A held offer
+ * is left to the sweep; a claimed one to its claimant; one past its instant
+ * to the sweep; and an offered one is pushed unless a device is active and
+ * the grace since the offer has not run out.
  */
 export function speechPushDecision(
   offer: SpeechOffer,
-  presence: AccountPresence,
+  active: boolean,
   now: number,
 ): SpeechPushDecision {
-  if (offer.state === SPEECH_STATE.HELD || presence.quiet) return SPEECH_PUSH_DECISION.HELD;
+  if (offer.state === SPEECH_STATE.HELD) return SPEECH_PUSH_DECISION.HELD;
   if (offer.state === SPEECH_STATE.CLAIMED) return SPEECH_PUSH_DECISION.CLAIMED;
   if (offer.expiresAt <= now) return SPEECH_PUSH_DECISION.DUE;
-  if (presence.active && now - offer.offeredAt < SPEECH_PUSH.GRACE_MS) {
-    return SPEECH_PUSH_DECISION.WAIT;
-  }
+  if (active && now - offer.offeredAt < SPEECH_PUSH.GRACE_MS) return SPEECH_PUSH_DECISION.WAIT;
   return SPEECH_PUSH_DECISION.PUSH;
 }
 
@@ -147,7 +146,7 @@ export function briefingNotification(briefing: string, device: PushableDevice): 
 export interface SpeechPushOutcome {
   /** Offers marked pushed whose notification Apple accepted. */
   readonly pushed: number;
-  /** Offers marked pushed whose notification Apple refused or the network dropped; settled, and retried nowhere. */
+  /** Offers marked pushed whose notification Apple refused, the network dropped, or a gone token could not take; settled, and retried nowhere. */
   readonly undelivered: number;
   /** Offers the rule would push whose account holds no device with a push token; left standing for the sweep. */
   readonly unaddressed: number;
@@ -197,7 +196,7 @@ async function devicesByAccount(
   store: SpeechStore,
   userIds: readonly string[],
   now: number,
-): Promise<ReadonlyMap<string, AccountDevices>> {
+): Promise<Map<string, AccountDevices>> {
   const byAccount = new Map<string, AccountDevices>();
   if (userIds.length === 0) return byAccount;
   const rows: readonly DeviceRow[] = await store.db
@@ -270,20 +269,20 @@ export async function pushSpeech(
 ): Promise<SpeechPushOutcome> {
   const { now, limit, userIds } = options;
   const outcome = { pushed: 0, undelivered: 0, unaddressed: 0, unreadable: 0, waiting: 0 };
-  const offers = await openSpeechOffers(seams.store.db, { userIds, limit });
-  const accounts = [...new Set(offers.map((offer) => offer.userId))];
-  const [quiet, devicesRead] = await Promise.all([
-    quietUntilByAccount(seams.store.db, now, accounts),
-    devicesByAccount(seams.store, accounts, now),
-  ]);
-  const reported = new Map(devicesRead);
+  const quiet = await quietUntilByAccount(seams.store.db, now, userIds);
+  const offers = await openSpeechOffers(seams.store.db, {
+    userIds,
+    notUserIds: [...quiet.keys()],
+    limit,
+  });
+  const reported = await devicesByAccount(
+    seams.store,
+    [...new Set(offers.map((offer) => offer.userId))],
+    now,
+  );
   for (const offer of offers) {
     const account = reported.get(offer.userId) ?? { active: false, target: undefined };
-    const decision = speechPushDecision(
-      offer,
-      { active: account.active, quiet: quiet.has(offer.userId) },
-      now,
-    );
+    const decision = speechPushDecision(offer, account.active, now);
     if (decision === SPEECH_PUSH_DECISION.WAIT) outcome.waiting += 1;
     if (decision !== SPEECH_PUSH_DECISION.PUSH) continue;
     if (account.target === undefined) {
@@ -309,10 +308,9 @@ export async function pushSpeech(
       continue;
     }
     outcome.undelivered += 1;
-    if (delivery === APNS_DELIVERY.TOKEN_GONE) {
-      await seams.forgetDevice(offer.userId, account.target.deviceId);
-      reported.set(offer.userId, { active: account.active, target: undefined });
-    }
+    if (delivery !== APNS_DELIVERY.TOKEN_GONE) break;
+    await seams.forgetDevice(offer.userId, account.target.deviceId);
+    reported.set(offer.userId, { active: account.active, target: undefined });
   }
   return outcome;
 }

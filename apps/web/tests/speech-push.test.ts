@@ -242,48 +242,42 @@ function offer(overrides: Partial<SpeechOffer> = {}): SpeechOffer {
   };
 }
 
-test("the rule: no active device pushes at once, an active device is given the grace and then pushed, a claim is never pushed, quiet holds everything, and a due offer is the sweep's", () => {
-  const idle = { active: false, quiet: false };
-  const active = { active: true, quiet: false };
-  assert.equal(speechPushDecision(offer(), idle, NOW), SPEECH_PUSH_DECISION.PUSH);
-  assert.equal(speechPushDecision(offer(), active, NOW), SPEECH_PUSH_DECISION.WAIT);
+test("the rule: no active device pushes at once, an active device is given the grace and then pushed, a claim is never pushed, a hold is the sweep's, and a due offer is the sweep's", () => {
+  assert.equal(speechPushDecision(offer(), false, NOW), SPEECH_PUSH_DECISION.PUSH);
+  assert.equal(speechPushDecision(offer(), true, NOW), SPEECH_PUSH_DECISION.WAIT);
   assert.equal(
-    speechPushDecision(offer(), active, NOW + SPEECH_PUSH.GRACE_MS - 1),
+    speechPushDecision(offer(), true, NOW + SPEECH_PUSH.GRACE_MS - 1),
     SPEECH_PUSH_DECISION.WAIT,
   );
   assert.equal(
-    speechPushDecision(offer(), active, NOW + SPEECH_PUSH.GRACE_MS),
+    speechPushDecision(offer(), true, NOW + SPEECH_PUSH.GRACE_MS),
     SPEECH_PUSH_DECISION.PUSH,
   );
-  for (const presence of [idle, active]) {
+  for (const active of [false, true]) {
     assert.equal(
       speechPushDecision(
         offer({ state: SPEECH_STATE.CLAIMED, claimedByDeviceId: "mac" }),
-        presence,
+        active,
         NOW + SPEECH_PUSH.GRACE_MS,
       ),
       SPEECH_PUSH_DECISION.CLAIMED,
     );
     assert.equal(
-      speechPushDecision(offer(), { ...presence, quiet: true }, NOW + SPEECH_PUSH.GRACE_MS),
-      SPEECH_PUSH_DECISION.HELD,
-    );
-    assert.equal(
       speechPushDecision(
         offer({ state: SPEECH_STATE.HELD, quietUntil: NOW + 60_000 }),
-        presence,
+        active,
         NOW,
       ),
       SPEECH_PUSH_DECISION.HELD,
     );
     assert.equal(
-      speechPushDecision(offer(), presence, NOW + SPEECH_OFFER.TTL_MS),
+      speechPushDecision(offer(), active, NOW + SPEECH_OFFER.TTL_MS),
       SPEECH_PUSH_DECISION.DUE,
     );
   }
   // A held offer past its instant is still held, not due: nothing expires under a hold.
   assert.equal(
-    speechPushDecision(offer({ state: SPEECH_STATE.HELD }), idle, NOW + SPEECH_OFFER.TTL_MS),
+    speechPushDecision(offer({ state: SPEECH_STATE.HELD }), false, NOW + SPEECH_OFFER.TTL_MS),
     SPEECH_PUSH_DECISION.HELD,
   );
 });
@@ -452,6 +446,21 @@ test("quiet reported: nothing is pushed and nothing expires while it stands, whe
   );
   assert.deepEqual(sent, []);
 
+  // A quiet account's held offers are the oldest open rows; under a read bound of one they must not hide another account's push.
+  const other = await database.createUser();
+  await device(other, { push: { token: token(), environment: PUSH_ENVIRONMENT.PRODUCTION } });
+  const unheld = await offered(other);
+  assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: [userId, other], limit: 1 }), {
+    ...NOTHING,
+    pushed: 1,
+  });
+  assert.deepEqual(
+    (await speechEvents(unheld.messageId)).map((event) => event.kind),
+    [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, CONVERSATION_EVENT_KIND.SPEECH_PUSHED],
+  );
+  assert.equal(sent.length, 1);
+  sent.length = 0;
+
   await report(mac, { quietUntil: null });
   // Between the quiet lifting and the sweep's release, the held offer is still not pushed.
   assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: [userId] }), NOTHING);
@@ -517,11 +526,13 @@ test("an account with no token-holding device leaves the offer standing for the 
   });
 });
 
-test("a send Apple refuses or the network drops leaves the offer settled and counted undelivered, and a token Apple reports gone takes its device row with it", async () => {
+test("a send Apple refuses or the network drops leaves that offer settled and counted undelivered and ends the pass, leaving the rest standing; a token Apple reports gone takes its device row with it and the pass goes on", async () => {
   clock = NOW;
   const refused = await database.createUser();
   await device(refused, { push: { token: token(), environment: PUSH_ENVIRONMENT.PRODUCTION } });
   const dropped = await offered(refused);
+  clock = NOW + 1_000;
+  const spared = await offered(refused);
   const failing = fakeSender(APNS_DELIVERY.FAILED);
   assert.deepEqual(await pushSpeech(failing.seams, { now: clock, userIds: [refused] }), {
     ...NOTHING,
@@ -533,13 +544,24 @@ test("a send Apple refuses or the network drops leaves the offer settled and cou
     (await speechEvents(dropped.messageId)).map((event) => event.kind),
     [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, CONVERSATION_EVENT_KIND.SPEECH_PUSHED],
   );
-  assert.deepEqual(await pushSpeech(failing.seams, { now: clock, userIds: [refused] }), NOTHING);
-  assert.equal(failing.sent.length, 1);
+  assert.deepEqual(
+    (await openSpeechOffers(database.db, { userId: refused })).map((open) => open.messageId),
+    [spared.messageId],
+  );
+  // The next tick, with Apple answering, delivers the one left standing and the settled one is not sent again.
+  const recovered = fakeSender();
+  assert.deepEqual(await pushSpeech(recovered.seams, { now: clock, userIds: [refused] }), {
+    ...NOTHING,
+    pushed: 1,
+  });
+  assert.equal(recovered.sent.length, 1);
+  assert.deepEqual(await openSpeechOffers(database.db, { userId: refused }), []);
 
   const gone = await database.createUser();
   const stale = await device(gone, {
     push: { token: token(), environment: PUSH_ENVIRONMENT.PRODUCTION },
   });
+  clock = NOW;
   const first = await offered(gone);
   clock = NOW + 1_000;
   const second = await offered(gone);
