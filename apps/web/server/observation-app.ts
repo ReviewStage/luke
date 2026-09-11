@@ -8,7 +8,16 @@ import { devices, observationPass, providerKey, user } from "./db/schema.js";
 import { executeConversationRead } from "./hosted/action-execute.js";
 import { ApnsSender } from "./hosted/apns.js";
 import { hostedUserId } from "./hosted/bearer.js";
+import { EVE_CALLER, eveSessions } from "./hosted/brain-host/eve-sessions.js";
+import {
+  NOTHING_OPENED,
+  openObservationTurns,
+  type ScheduledTurn,
+} from "./hosted/brain-host/opener.js";
+import { readHostedRoster } from "./hosted/brain-host/roster.js";
+import { hostedTranscriptReads } from "./hosted/brain-host/transcript.js";
 import { CATALOG_TOOL_SET } from "./hosted/brain-tool-set.js";
+import { cloudSessionPluginFor } from "./hosted/cloud-adapters.js";
 import { handleConversationRead } from "./hosted/conversation-read.js";
 import { deviceSeams } from "./hosted/device-store.js";
 import { payloadKeyRing } from "./hosted/encryption.js";
@@ -26,6 +35,7 @@ import {
   storeWriter,
   sweepSpeech,
 } from "./hosted/store/index.js";
+import { readApiKeyFor } from "./hosted/vault-keys.js";
 import { hostedEncryptionSecret, hostedVaultSeams } from "./hosted/vault-route.js";
 import { runWeb } from "./runtime.js";
 
@@ -43,6 +53,12 @@ import { runWeb } from "./runtime.js";
 const CLOUD_PROVIDER_IDS = Object.values(CLOUD_AGENT_PROVIDER_ID);
 
 const NOTHING_SWEPT: SpeechSweepOutcome = { held: 0, released: 0, expired: 0, turns: 0 };
+
+/** The environment the opener reads beside the tick's own: where eve answers, when the deployment's own origin is not it. */
+const OPENER_ENVIRONMENT = {
+  /** The origin eve's `/eve/v1/*` routes answer on; absent, the origin the tick itself was called on, which the deployment's rewrites carry into the eve service. */
+  EVE_ORIGIN: "LUKE_EVE_ORIGIN",
+} as const;
 
 const NOTHING_PUSHED: SpeechPushOutcome = {
   pushed: 0,
@@ -161,7 +177,10 @@ async function eventsHandler(request: Request): Promise<Response> {
  * `last_seen_at`, which every platform moves along while the app is open. A
  * deployment without the Apple push credential pushes nothing and reads
  * nothing for it; one with it opens a sender for the tick and closes it with
- * the tick, so the notifications share one connection to Apple.
+ * the tick, so the notifications share one connection to Apple. The opener
+ * reaches eve as the deployment acting for the one account the tick is
+ * passing over, under the tick's own secret, so the account named to eve is
+ * only ever one this tick enumerated.
  */
 async function observationTickHandler(request: Request): Promise<Response> {
   const database = getDatabase();
@@ -175,11 +194,19 @@ async function observationTickHandler(request: Request): Promise<Response> {
   const sender = environment.apnsCredentials
     ? new ApnsSender({ credentials: environment.apnsCredentials })
     : undefined;
+  const cronSecret =
+    environment.cronSecret === undefined ? undefined : Redacted.value(environment.cronSecret);
+  const eveOrigin =
+    process.env[OPENER_ENVIRONMENT.EVE_ORIGIN]?.trim() || new URL(request.url).origin;
+  const vaultRows = (userId: string) =>
+    database
+      .select({ providerId: providerKey.providerId, ciphertext: providerKey.ciphertext })
+      .from(providerKey)
+      .where(eq(providerKey.userId, userId));
 
   const options: ObservationTickOptions = {
     request,
-    cronSecret:
-      environment.cronSecret === undefined ? undefined : Redacted.value(environment.cronSecret),
+    cronSecret,
     encryptionSecret,
     listAccounts: async (limit, seenAfter) => {
       const rows = await database
@@ -222,10 +249,7 @@ async function observationTickHandler(request: Request): Promise<Response> {
     },
     observe: async (userId) => {
       if (!store || !encryptionSecret) return { complete: false, changed: false };
-      const rows = await database
-        .select({ providerId: providerKey.providerId, ciphertext: providerKey.ciphertext })
-        .from(providerKey)
-        .where(eq(providerKey.userId, userId));
+      const rows = await vaultRows(userId);
       const outcome = await observeAndSnapshot({
         userId,
         rows,
@@ -235,6 +259,37 @@ async function observationTickHandler(request: Request): Promise<Response> {
         now: Date.now(),
       });
       return { complete: outcome.complete, changed: outcome.changed };
+    },
+    openTurns: async (userId) => {
+      if (!store || !encryptionSecret || !cronSecret) return NOTHING_OPENED;
+      const rows = await vaultRows(userId);
+      const roster = await readHostedRoster(store, userId, rows, encryptionSecret);
+      const readApiKey = readApiKeyFor(rows, encryptionSecret);
+      return openObservationTurns(
+        {
+          run: runWeb,
+          store,
+          eve: eveSessions<ScheduledTurn>({
+            origin: eveOrigin,
+            caller: { kind: EVE_CALLER.DEPLOYMENT, secret: cronSecret, account: userId },
+          }),
+          roster,
+          transcripts: hostedTranscriptReads({
+            run: runWeb,
+            userId,
+            roster: async () => roster,
+            pluginFor: (providerId) =>
+              cloudSessionPluginFor(providerId, {
+                readApiKey: readApiKey(providerId),
+                reported: () => roster.observations.get(providerId) ?? [],
+              }),
+            now: Date.now,
+          }),
+          now: Date.now,
+          report: (message) => console.warn(message),
+        },
+        userId,
+      );
     },
   };
 

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 import { FUNCTION_MAX_DURATION_SECONDS } from "../server/function-durations";
 import { APNS_REQUEST_TIMEOUT_MS } from "../server/hosted/apns";
+import type { TurnOpeningOutcome } from "../server/hosted/brain-host/opener";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import {
   type AccountPassOutcome,
@@ -26,6 +27,8 @@ const PUSHED: SpeechPushOutcome = {
   unreadable: 0,
   waiting: 1,
 };
+/** What one account's opening answers unless a test says otherwise: nothing pending, nothing opened. */
+const NOTHING_OPENED: TurnOpeningOutcome = { observation: 0, failed: 0 };
 
 /** The scheduler's call; `null` sends no bearer at all. */
 function tickRequest(authorization: string | null = `Bearer ${CRON_SECRET}`): Request {
@@ -43,6 +46,8 @@ interface Recorded {
   pushed: number[];
   listed: Array<{ limit: number; seenAfter: number }>;
   observed: string[];
+  /** Each account's pass and opening in the order the tick ran them, as one list, so the order between them is what a test reads. */
+  ran: string[];
 }
 
 function tickOptions(
@@ -52,6 +57,7 @@ function tickOptions(
     complete: true,
     changed: false,
   }),
+  opening: (userId: string) => Promise<TurnOpeningOutcome> = async () => NOTHING_OPENED,
 ) {
   const recorded: Recorded = {
     forgot: [],
@@ -60,6 +66,7 @@ function tickOptions(
     pushed: [],
     listed: [],
     observed: [],
+    ran: [],
   };
   const options: ObservationTickOptions = {
     request: tickRequest(),
@@ -86,7 +93,12 @@ function tickOptions(
     },
     observe: async (userId) => {
       recorded.observed.push(userId);
+      recorded.ran.push(`observe:${userId}`);
       return outcome(userId);
+    },
+    openTurns: async (userId) => {
+      recorded.ran.push(`open:${userId}`);
+      return opening(userId);
     },
     now: () => TICK_TIME,
     ...overrides,
@@ -148,6 +160,7 @@ test("a tick forgets the ineligible, lists accounts seen within the week, and ob
     purged: 2,
     speech: SWEPT,
     push: PUSHED,
+    turns: NOTHING_OPENED,
   });
   const seenAfter = TICK_TIME - OBSERVATION_TICK.ACCOUNT_SEEN_WITHIN_MS;
   assert.deepEqual(recorded.forgot, [seenAfter]);
@@ -175,6 +188,7 @@ test("a pass that throws is counted as failed and does not end the tick", async 
     purged: 2,
     speech: SWEPT,
     push: PUSHED,
+    turns: NOTHING_OPENED,
   });
 });
 
@@ -217,6 +231,73 @@ test("a pass that outruns its deadline is counted failed and the tick moves on",
     purged: 2,
     speech: SWEPT,
     push: PUSHED,
+    turns: { observation: 0, failed: 1 },
+  });
+});
+
+test("each account's opening runs after its own pass, inside the same share of the tick, and its counts are summed; a pass that throws is still followed by its opening", async () => {
+  const openings = new Map<string, TurnOpeningOutcome>([
+    ["user-a", { observation: 2, failed: 0 }],
+    ["user-b", { observation: 1, failed: 1 }],
+  ]);
+  const { options, recorded } = tickOptions(
+    {},
+    ["user-a", "user-b"],
+    async (userId) => {
+      if (userId === "user-a") throw new Error("the adapter had a bug");
+      return { complete: true, changed: true };
+    },
+    async (userId) => {
+      const opened = openings.get(userId);
+      assert.ok(opened);
+      return opened;
+    },
+  );
+
+  const response = await handleObservationTick(options);
+
+  assert.deepEqual(await response.json(), {
+    accounts: 2,
+    observed: 1,
+    failed: 1,
+    changed: 1,
+    exhausted: false,
+    purged: 2,
+    speech: SWEPT,
+    push: PUSHED,
+    turns: { observation: 3, failed: 1 },
+  });
+  assert.deepEqual(recorded.ran, [
+    "observe:user-a",
+    "observe:user-b",
+    "open:user-a",
+    "open:user-b",
+  ]);
+});
+
+test("an opening that throws is one failed opening and nothing else of the tick is lost", async () => {
+  const { options } = tickOptions(
+    {},
+    ["user-a", "user-b"],
+    async () => ({ complete: true, changed: false }),
+    async (userId) => {
+      if (userId === "user-a") throw new Error("eve went away");
+      return { observation: 1, failed: 0 };
+    },
+  );
+
+  const response = await handleObservationTick(options);
+
+  assert.deepEqual(await response.json(), {
+    accounts: 2,
+    observed: 2,
+    failed: 0,
+    changed: 0,
+    exhausted: false,
+    purged: 2,
+    speech: SWEPT,
+    push: PUSHED,
+    turns: { observation: 1, failed: 1 },
   });
 });
 

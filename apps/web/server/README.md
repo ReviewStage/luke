@@ -984,10 +984,58 @@ observations as reported, advertisements and projects included, sealed — and
 records the diff against the snapshot it replaced in `roster_diff`, sealed,
 where up to 20 wait for the brain host to consume; a pass any provider
 refused, rate limited, or failed leaves the previous snapshot standing and is
-recorded as failed in `observation_pass`. Nothing here decides anything: no
-model runs on the tick, no notification leaves, and the diff is written and
-left. Message cursors are not recorded by the pass, because observation never
-reads a chat's messages; the brain host's own reads will write them.
+recorded as failed in `observation_pass`. Nothing in the pass decides
+anything: no model runs in it, no notification leaves, and the diff is
+written and left. Message cursors are not recorded by the pass, because
+observation never reads a chat's messages; the opener's reads, next, write
+them.
+
+The opener (`server/hosted/brain-host/opener.ts`) is what the diffs are
+written for. It runs for each account right after that account's pass,
+inside the same 25-second share of the tick, so the tick's order is: forget
+the ineligible, purge, sweep the briefings on offer, then per batch of four
+accounts the pass and then the opening, each account under one deadline, and
+a batch started only while a whole deadline still fits the budget; an
+opening that outruns it is counted failed and what it did not consume waits
+for the next minute. It reads the account's pending diffs oldest first,
+groups every change they name by the session it happened to, and hands eve
+one message per observed conversation — a row of kind `observed`, keyed by
+the provider and the session's id and opened on the first diff that names
+it — carrying all of that session's news as the same `[observed events]`
+item the desktop's brain opens its observation turns with, each live chat's
+transcript since the cursor kept for it read through the provider's own
+`transcriptSince` and riding on the session's first wake. The message goes
+to the eve session the conversation's row records, or opens one where none
+runs or eve has retired it, under `x-luke-turn: observation`, and the turn
+itself is eve's: the relay records it under eve's own identity as eve starts
+it, the received message is the observation message, and `roster_diff` is
+its origin. No queued `turns` row is written for it — under eve the queued
+delivery is the queue, and a row minted ahead of eve's turn could never be
+the turn eve folds it into. Once eve has taken every message of the pass,
+one transaction keeps each cursor the pass read past and marks each diff it
+carried consumed; a message eve refuses ends the pass before that
+transaction, so the cursors and the diffs stand and the next tick opens the
+same news again. Nothing is recorded that eve has not accepted. The pass is
+per account by construction and opens at most eight conversations of an
+account a tick, taking whole diffs while their sessions fit and leaving the
+rest pending; the one diff wider than the bound is cut to it, the sessions
+past it not woken for that diff, since the snapshot is the truth the diff was
+read from.
+
+The opener reaches eve as the deployment acting for the one account the tick
+is passing over, since the tick holds no account's bearer. It calls eve's
+session routes under the tick's own `CRON_SECRET` as its bearer with the
+account in `x-luke-account`, and the eve door's first authenticator admits
+that pair as a principal of the deployment's own type — the deployment's one
+id, the account as its attribute — for a message naming an observation turn
+and nothing else: any other route or kind of turn carrying the secret is
+refused outright rather than passed to the account authenticator behind it.
+Which account a request acts for is one accessor over both principal types,
+and the door's ownership checks and the host's admission read that answer, so
+the deployment can open a turn only on a conversation the named account
+owns, and the account it names is only ever one the tick enumerated. Where
+eve answers is the origin the tick was called on, whose rewrites carry
+`/eve/v1/*` into the eve service, unless `LUKE_EVE_ORIGIN` names another.
 
 `server/routes/observe.ts` answers the stored snapshot, mapped onto the wire rows and
 dated with `observedAt`; a user with no snapshot yet is answered from a live

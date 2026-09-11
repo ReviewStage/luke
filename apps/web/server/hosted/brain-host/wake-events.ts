@@ -29,7 +29,8 @@ interface NamedChanges {
   readonly changes: string[];
 }
 
-function identityKey(identity: SessionIdentity): string {
+/** One session's identity as a map key, so two readers of the same diffs agree on what is one session. */
+export function identityKey(identity: SessionIdentity): string {
   return JSON.stringify([identity.providerId, identity.providerSessionId]);
 }
 

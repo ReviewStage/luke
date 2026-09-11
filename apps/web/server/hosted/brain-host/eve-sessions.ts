@@ -104,7 +104,7 @@ type EveCancelled =
   | { readonly outcome: typeof EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN }
   | { readonly outcome: typeof EVE_CANCEL_OUTCOME.FAILED; readonly status: number };
 
-interface EveMessage<Turn extends BrainHostTurn = BrainHostTurn> {
+export interface EveMessage<Turn extends BrainHostTurn = BrainHostTurn> {
   readonly conversationId: string;
   readonly turn: Turn;
   readonly message: string;

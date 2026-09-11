@@ -1,5 +1,6 @@
 import type { ToolSet } from "ai";
 import { Effect, Option } from "effect";
+import type { SessionIdentity } from "../../core.js";
 import { type HostedStoreContext, userSeal } from "./database.js";
 import { type FactWrite, listFacts, replaceFacts, type StoredFact } from "./facts.js";
 import {
@@ -20,6 +21,7 @@ import {
   type TurnCursorPosition,
   turnsNamed,
 } from "./message-reads.js";
+import { standingObservedConversation } from "./observed-conversations.js";
 import {
   advanceRosterSnapshot,
   consumeRosterDiff,
@@ -109,6 +111,8 @@ export interface HostedStore {
   directory: {
     /** The view's conversations: the standing main and every standing observed conversation, with their counters. */
     standing(userId: string): Promise<readonly StandingConversation[]>;
+    /** The observed conversation for one session, opened on its first diff and standing after; nothing where a stamped row blocks it. */
+    observed(userId: string, identity: SessionIdentity, now: number): Promise<string | undefined>;
   };
   main: {
     /** Clear: stamps the standing main and its descendants and opens a new main, in one transaction. */
@@ -186,6 +190,8 @@ export function hostedStore({ db, keys, run }: HostedStoreContext): HostedStore 
     },
     directory: {
       standing: (userId) => run(standingConversations(userId)),
+      observed: (userId, identity, now) =>
+        standingObservedConversation(db, userId, identity, new Date(now)),
     },
     main: {
       clear: (userId, now) => run(clearMainConversation(userId, now)),
