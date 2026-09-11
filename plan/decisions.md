@@ -1318,3 +1318,63 @@ run"* is a ticket, and better had now than after the first quiet morning where L
 **And one ordering detail from D3 worth keeping:** `SPEECH_PUSH.BUDGET_MS` is checked **before the
 mark**, so nothing is settled unsent. Same family as record-precedes-speech and
 claim-before-append — **never record an effect you have not performed.**
+
+
+## 2026-09-11 — A queued turn is the opener's inbox, never the run's record; and ESCALATED: who may open a durable eve run for an account (orchestrator, from C3)
+
+### Approved: observation turns write no queued row at all
+
+C3 found that **a queued `turns` row cannot become the turn eve runs** — the relay mints
+`hostTurnId(session, eveTurnId)` at `turn.started` and eve may fold several deliveries into one
+turn, which is the same fact that forced the `asks` record. So a pre-minted row could only ever
+misname the run.
+
+**The design, approved:** observation turns write **no queued row**; eve's queued delivery *is* the
+queue; the relay records the turn under eve's identity with origin `roster_diff`; the received
+message is the observation message. **Cursors advance and diffs are consumed in one transaction only
+after eve accepted the send**, and a refused send leaves both standing.
+
+**C5b's `hold_release` rows keep their meaning and lose their pretence:** the opener drains each
+conversation's queued rows into one eve message under a new host turn kind and, on acceptance,
+removes them through a new writer op **`dequeueTurn`**, guarded to *a queued row no message
+references*; the relay's row for that turn carries origin `hold_release`.
+
+**The sentence to keep: a queued `turns` row is the opener's inbox, never the run's record.** It
+binds C2b-2b and the G lane.
+
+Two answers wanted in C3's body rather than changes: **does D1's view draw a queued turn** (between
+`enqueueTurn` and `dequeueTurn` a row stands, and a view that draws it shows a turn that never ran
+and then vanishes), and **does the causal record survive the dequeue** (the relay's row plus its
+`hold_release` origin must still say why Luke spoke).
+
+**Wire additions:** `BRAIN_HOST_TURN.HOLD_RELEASE = "hold_release"` → `BRAIN_TURN_ORIGIN.HOLD_RELEASE`
+/ `BRAIN_TURN_TRIGGER.HOLD_RELEASED` / `TURN_ORIGIN.HOLD_RELEASE`, and
+`BRAIN_HOST_HEADER.ACCOUNT = "x-luke-account"`. **Fairness answered by construction:** the opener is
+per account with no cross-account read, tested with two accounts under `limit: 1`.
+
+### ESCALATED: the tick has no user bearer
+
+`eve-sessions.ts` forwards **the caller's** `Authorization`, and the tick has none — **nothing in the
+tree lets the deployment act for an account at eve's door.** So observation cannot open a turn at
+all until this is decided. C3's design: a second authenticator ahead of `lukeAccount`, admitting the
+deployment's `CRON_SECRET` (constant-time) with the account named in `x-luke-account`, as principal
+`{ principalId: account, principalType: user, authenticator: luke-scheduled-observer }`, with
+`ownedAuth`'s ownership check still running on it.
+
+**Recommendation: reuse `CRON_SECRET` rather than add a secret.** The decisive argument is that
+**whoever holds `CRON_SECRET` can already read every account's provider keys and write their
+rosters** — letting that holder also open a metered run is not the marginal risk, while a second
+secret narrows nothing that matters and adds a state where **observation is silently off until
+someone provisions it**, which is the exact class of gate this rework has spent the day finding.
+
+**Required whichever secret is chosen: the scheduled principal is a different TYPE, not a flag.**
+`authenticator: luke-scheduled-observer` as a field is a distinction every route must remember to
+check; a distinct type means a route serving a developer **cannot be handed the scheduler's
+principal at all**, so `CRON_SECRET` cannot become a universal impersonation token through one
+forgotten check. **Ownership is not scope** — `ownedAuth` proves the account owns the conversation,
+not that the caller may ask anything of it. The scheduled principal opens observation turns and does
+nothing else: no ask route, no cancel, no rating, and the compiler says so.
+
+**And it is not only C3's:** C8 part b needs the same header-based account naming, because the voice
+function drops the bearer after the handshake. **One shape for both**, written so part b uses it
+unchanged.
