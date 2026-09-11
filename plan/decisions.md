@@ -1225,3 +1225,36 @@ on discipline — **and it is the one whose failure a developer would actually h
 `api/` stub.** The push rides inside `/api/observation/tick`, whose answer gains a push-counts
 object. It still waits for the Vercel preview because `apps/web` changed and the payload shape is
 new, which is the conservative side of the enqueue rule and the right one here.
+
+
+## 2026-09-11 — The `asks` ruling now gates six tickets, and a correction to my own status (orchestrator)
+
+**A correction first, because I have said the wrong thing twice.** I have been reporting that a2
+merging releases **E5**. It does not. C8's own reading, which I accept:
+
+- **a2** completes the hosted **record** and the **sideband**. It wires **no briefing delivery at
+  all** — no `deliverBriefing` caller, no `noteAppend`, no claim.
+- **Part b** is the hosted composition with the **in-process `LiveBrain`**, and it is what makes the
+  service able to run an ask. **The lift is not whole until part b.**
+
+So **E5 needs C8 whole**, and part b needs the ask door, which is C2b-2b, which is held on Dean's
+`asks` table ruling. The chain reads:
+
+**`asks` ruling → C2b-2b → C8 part b → LUKE-132 done → E5 → G1, G2, G3, G5.**
+
+**One decision gating six tickets.** G4 is the exception in lane G — its preconditions (C5, D2, E4,
+F1) are all met, and it is held only behind the worker cap.
+
+**And the claim-token ruling lands in part b rather than a2, for a reason that is now three lanes
+deep:** a branded `SpeechClaim` in a2 would be an export with no consumer, which `knip` refuses.
+**A guarantee introduced before its consumer is not a guarantee; it is a lint failure.** C2b found
+that rule, C8 hit it splitting the move, D3 applied it unprompted, and it decides the placement
+here.
+
+The shape, which is better than the one I asked for: `LiveSessionService` is **generic over its
+`Delivery` type**, so the **hosted composition alone** declares
+`Delivery = { briefing, decidedAt, claim: SpeechClaim }`, with `SpeechClaim` a brand only
+`claimSpeech` mints. `deliverBriefing` without a claim then **does not compile on the hosted path**,
+and the desktop's composition is untouched — a small change rather than a rewrite of a live path.
+**Recorded as a commitment: its absence from part b is a regression, not an omission**, and D3's
+#1055 now says "closed by construction in C8 part b".
