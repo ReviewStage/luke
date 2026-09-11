@@ -65,22 +65,35 @@ function goldenPath(root: string, name: string): string {
   return path.join(root, `${name}${GOLDEN_SUFFIX}`);
 }
 
+/**
+ * Compares one emitted schema with the recorded bytes and never records:
+ * for a test that proves another emitter reproduces a golden some other
+ * package's test owns, so a recording run rewrites each golden from the one
+ * declaration that records it and never from the emitter being measured.
+ */
+export async function matchJsonSchemaGolden(
+  root: string,
+  name: string,
+  emitted: JsonSchemaGolden,
+): Promise<void> {
+  const filePath = goldenPath(root, name);
+  const held = await fs.readFile(filePath, "utf8").catch(() => undefined);
+  assert.ok(held !== undefined, `no JSON Schema recorded at ${filePath}`);
+  assert.equal(goldenText(emitted), held);
+}
+
 /** Compares one emitted schema with the recorded bytes, or records it. */
 export async function settleJsonSchemaGolden(
   root: string,
   name: string,
   recorded: JsonSchemaGolden,
 ): Promise<void> {
-  const filePath = goldenPath(root, name);
-  const serialized = goldenText(recorded);
   if (UPDATE_FIXTURES) {
     await fs.mkdir(root, { recursive: true });
-    await fs.writeFile(filePath, serialized);
+    await fs.writeFile(goldenPath(root, name), goldenText(recorded));
     return;
   }
-  const held = await fs.readFile(filePath, "utf8").catch(() => undefined);
-  assert.ok(held !== undefined, `no JSON Schema recorded at ${filePath}`);
-  assert.equal(serialized, held);
+  await matchJsonSchemaGolden(root, name, recorded);
 }
 
 /**
