@@ -33,12 +33,7 @@ import {
   workspaceProjectSelectionId,
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
-import {
-  isRecord,
-  isWireString,
-  type UnparsedWireValue,
-  type WireRecord,
-} from "@sidecar/wire";
+import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import { Effect, Option } from "effect";
 import type { WorkspaceCreationDefaults } from "./brain/action-performer.js";
 import { hostedTranscriptReads, type SessionTranscriptReads } from "./brain/hosted-transcripts.js";

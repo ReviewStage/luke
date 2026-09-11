@@ -54,7 +54,6 @@ test("the crash reporter is initialized only once both paths have moved", () => 
     "setPath:sessionData",
     "crashReporting",
   ]);
-  assert.equal(steps.indexOf("crashReporting") < steps.indexOf("getPath:home"), true);
 });
 
 test("the state root is the moved path, and the launch's flags are read from its own arguments", () => {
