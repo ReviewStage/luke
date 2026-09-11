@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
+    "./effect": "./src/effect/index.js",
     "./superset/sign-in-stage": "./src/superset/sign-in-stage.js",
     "./testing": "./src/testing/index.js"
   },
@@ -18,9 +19,11 @@
     "@sidecar/credentials": "workspace:*",
     "@sidecar/runtime": "workspace:*",
     "@sidecar/session": "workspace:*",
-    "@sidecar/wire": "workspace:*"
+    "@sidecar/wire": "workspace:*",
+    "effect": "catalog:"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

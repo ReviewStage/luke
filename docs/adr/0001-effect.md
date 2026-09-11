@@ -127,7 +127,7 @@ decide. The migration enforces this by review until the lint rule
 `no-run-promise-outside-edges` lands, after which the edges above are its
 allowlist.
 
-Eight strangler shims are on that allowlist for as long as they live.
+Nine strangler shims are on that allowlist for as long as they live.
 `cloudFetchFromHttpClient` in `packages/wire/src/effect/http.ts` answers a
 promise, because that is what the `CloudFetch` seam its callers still hold
 answers, so the bridge is where the effect is run until every one of them takes
@@ -190,6 +190,14 @@ runs them rather than the host's own. P7-03 deletes the runtime this class
 holds once that composer is a `Layer` and can hand the sender an edge to fork
 on instead.
 
+`providerRegistrations` in `packages/providers/src/registrations.ts` is the
+ninth: the registry is `providersLayer`, one layer per registration merged so
+a repeated provider id fails the build, and the composers that hold it are
+still promises reading a record, so the layers are built and the `Providers`
+service read there. Every registration is synchronous, so the run is a
+`runSync` over a scope that closes at once, holding nothing; P7-01 and P7-02
+hand the layer to the host itself and delete the door.
+
 ## Strangler shims and their deletions
 
 Old and new coexist behind a named shim rather than in a long-lived branch, so
@@ -212,6 +220,7 @@ design decision stated as such:
 | `createAccountCall` Promise door over `accountCall` | P3-06 | P12-04 |
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04 |
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
+| `providerRegistrations` record door over `providersLayer` | P6-09 | P7-01, P7-02 |
 | `Settled` Promise signatures | P5-01 | P12-02 |
 | `Layer.succeed(oldObject)` / `createHostKernel(options)` | P7-01 | P12-05 |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |
