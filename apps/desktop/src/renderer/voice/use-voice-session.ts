@@ -1,3 +1,5 @@
+import * as Atom from "@effect-atom/atom/Atom";
+import { useAtomValue } from "@effect-atom/atom-react/Hooks";
 import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
 import { appSettingsView } from "@sidecar/settings/wire";
 import {
@@ -5,13 +7,14 @@ import {
   LiveVoiceOrchestrator,
   type LiveVoiceSurroundings,
 } from "@sidecar/voice/orchestrator";
-import { type RefObject, useEffect, useRef, useState } from "react";
+import { Duration, Effect, FiberId, Runtime, Schedule } from "effect";
+import { type RefObject, useEffect, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { VOICE_COMMAND, voiceExchangeKind } from "#shared/messages/voice-view";
 import { act, useAct } from "../act";
 import { hostedVoiceUnavailableNote } from "../microphone-access";
-import { rendererRuntimeNow } from "../renderer-runtime";
+import { rendererRegistry, rendererRuntimeNow } from "../renderer-runtime";
 import { appSettingsNow, appStateNow, useAppState } from "../use-app-state";
 import { outputSilent } from "../volume-hint";
 import { LiveCall } from "./live-call";
@@ -40,11 +43,19 @@ const BRIDGE: LiveVoiceBridge = {
   stopSpeaking: () => act(ACT_KIND.VOICE_STOP_SPEAKING).catch(() => false),
 };
 
-/** The two streams the meters listen to and the element plays, as the call hands them over. */
-interface Streams {
-  local: MediaStream | undefined;
-  remote: MediaStream | undefined;
-}
+/**
+ * The two streams the meters listen to and the element plays, each a writable
+ * atom the call's own callbacks set: the hook subscribes through the Hooks
+ * door rather than through a `useState` a DOM callback would have to close
+ * over, and a callback outside any render reads or writes the same value a
+ * hook does.
+ */
+const remoteStreamAtom: Atom.Writable<MediaStream | undefined> = Atom.make<MediaStream | undefined>(
+  undefined,
+);
+const localStreamAtom: Atom.Writable<MediaStream | undefined> = Atom.make<MediaStream | undefined>(
+  undefined,
+);
 
 /**
  * The spoken conversation, held in the hidden voice window so no panel does.
@@ -57,7 +68,8 @@ interface Streams {
  */
 export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>): void {
   const { act, tell } = useAct();
-  const [streams, setStreams] = useState<Streams>({ local: undefined, remote: undefined });
+  const local = useAtomValue(localStreamAtom);
+  const remote = useAtomValue(remoteStreamAtom);
   const callRef = useRef<LiveCall | undefined>(undefined);
   const orchestratorRef = useRef<LiveVoiceOrchestrator | undefined>(undefined);
   orchestratorRef.current ??= new LiveVoiceOrchestrator({
@@ -86,8 +98,8 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
             enumerate: () => navigator.mediaDevices.enumerateDevices(),
             open: (audio) => navigator.mediaDevices.getUserMedia({ audio, video: false }),
           }),
-        onRemoteStream: (remote) => setStreams((held) => ({ ...held, remote })),
-        onLocalStream: (local) => setStreams((held) => ({ ...held, local })),
+        onRemoteStream: (remote) => rendererRegistry.set(remoteStreamAtom, remote),
+        onLocalStream: (local) => rendererRegistry.set(localStreamAtom, local),
         runtime: rendererRuntimeNow(),
         // The development trace's tap, checked at each event rather than at
         // construction because a session outlives any one version of the
@@ -127,56 +139,54 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   // microphone's track decides idle, since the guide forbids reading silence
   // off a missing one. The loudness the panels draw is whoever is talking.
   useEffect(() => {
-    if (!streams.remote) return;
+    if (!remote) return;
     const context = audioContext.current ?? new AudioContext({ latencyHint: "interactive" });
     audioContext.current = context;
     return startVoiceLevelMeter({
-      stream: streams.remote,
+      stream: remote,
       audioContext: context,
       onActivity: (active) => callRef.current?.reportRemoteAudioLevel(active),
       onLevel: (level) => {
         if (!callRef.current?.listening) window.sidecar.reportVoiceLevel(level);
       },
     });
-  }, [streams.remote]);
+  }, [remote]);
 
   useEffect(() => {
-    if (!streams.local) return;
+    if (!local) return;
     const context = audioContext.current ?? new AudioContext({ latencyHint: "interactive" });
     audioContext.current = context;
     return startVoiceLevelMeter({
-      stream: streams.local,
+      stream: local,
       audioContext: context,
       onActivity: (active) => callRef.current?.reportMicrophoneActivity(active),
       onLevel: (level) => {
         if (callRef.current?.listening) window.sidecar.reportVoiceLevel(level);
       },
     });
-  }, [streams.local]);
+  }, [local]);
 
   useEffect(() => {
     const element = remoteAudio.current;
     if (!element) return;
-    element.srcObject = streams.remote ?? null;
-    if (!streams.remote) return;
+    element.srcObject = remote ?? null;
+    if (!remote) return;
     // A refused play is the one failure the call cannot see: Luke speaks and
     // the captions draw while nothing is heard. A session opened for a
     // briefing is exactly the one with no user gesture behind it to satisfy a
     // playback gate, so the refusal is retried for as long as the stream
-    // stands rather than swallowed once.
-    let retryTimer: ReturnType<typeof setTimeout> | undefined;
-    let detached = false;
-    const play = () => {
-      element.play().catch(() => {
-        if (!detached) retryTimer = setTimeout(play, REMOTE_AUDIO_RETRY_MS);
-      });
-    };
-    play();
+    // stands rather than swallowed once, on the renderer's own runtime rather
+    // than a timer seam.
+    const fiber = Runtime.runFork(rendererRuntimeNow())(
+      Effect.retry(
+        Effect.tryPromise(() => element.play()),
+        Schedule.spaced(Duration.millis(REMOTE_AUDIO_RETRY_MS)),
+      ),
+    );
     return () => {
-      detached = true;
-      if (retryTimer !== undefined) clearTimeout(retryTimer);
+      fiber.unsafeInterruptAsFork(FiberId.none);
     };
-  }, [remoteAudio, streams.remote]);
+  }, [remoteAudio, remote]);
 
   // A panel's ask, validated and forwarded by the main process. Each command
   // is the same action the panel used to perform on its own session; none opens

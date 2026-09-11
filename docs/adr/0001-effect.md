@@ -366,3 +366,16 @@ library at all: naming `Deferred`, `Scope`, `Clock`, and `Duration` where a
 timer seam stood cost `renderer.js` 2,914 gzipped bytes and `voice.js` 2,940,
 the same modules in each, and both bundles stay under the baselines above, so
 the budget is left as P9-01 recorded it.
+
+P9-05's atoms for `use-voice-session.ts`'s local and remote streams reach for
+nothing `voice.js` had not already paid for — `Atom` and the Hooks door's
+`useAtomValue` are the same modules `use-app-state.ts` already put there — so
+the whole of its cost is `effect/Schedule`, named for the first time on this
+bundle by the retry that replaced a `window.setTimeout` loop for a refused
+remote-audio play: `voice.js` measured 318,521 gzipped bytes on this branch
+before the change and 324,967 after, a 6,446-byte cost for the one module.
+`renderer.js` does not import this hook at all and measured 642,985 gzipped
+bytes identically before and after, so the gap between that number and the
+645,185 `bundle-budget.json` still records is drift the panel bundle
+accumulated since P9-03's baseline, unrelated to this PR. Both bundles stay
+under their recorded ceilings, so the budget is left as P9-01 recorded it.
