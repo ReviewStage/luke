@@ -333,7 +333,7 @@ test("a Stop stamped on a waiting ask is carried the moment eve's start names it
   );
 });
 
-test("a Stop that stamps a waiting ask the start has bound meanwhile reads the binding and cancels the turn itself, so neither order leaves the turn running", async () => {
+test("the stamp and the start's binding converge in either order: bound-then-stamped, the Stop cancels the turn itself; stamped-then-bound, the start carries it; each order stops the turn once", async () => {
   const userId = await database.createUser();
   const conversationId = await conversation(userId);
   const target = { userId, conversationId };
@@ -387,6 +387,41 @@ test("a Stop that stamps a waiting ask the start has bound meanwhile reads the b
   assert.deepEqual(cancels, [sessionId]);
   const [turn] = await database.store.turns.named(userId, [turnId]);
   assert.equal(turn?.cancelRequestedAt?.getTime(), NOW);
+
+  // The other order in the same run: the Stop stamps first and finds nothing bound, so it cancels
+  // nothing itself; the start that binds the ask afterwards reads the stamp and carries it.
+  const later = await asks.record(write(userId, conversationId));
+  await asks.dispatchOnce(target, later.id, async () => ({ sessionId, deliveryId: "delivery-l" }));
+  const stampedFirst = await stopAsk(
+    { store: database.store, run: database.run, asks, writer, eve, now: () => NOW },
+    userId,
+    later.id,
+  );
+  assert.equal(stampedFirst.ok, true);
+  assert.deepEqual(cancels, [sessionId]);
+  const stops: (readonly [string, string, string, string])[] = [];
+  const relay = new StreamRelay({
+    writer,
+    asks,
+    stopTurn: async (stopped, session, eveTurnId, stoppedTurn) => {
+      stops.push([stopped.conversationId, session, eveTurnId, stoppedTurn]);
+    },
+    offer: async () => true,
+    now: () => NOW,
+    report: () => undefined,
+  });
+  const started = stampedEveEvent(
+    { type: "turn.started", data: { turnId: "turn_10", sequence: 1 } },
+    NOW,
+  );
+  await relay.handle(
+    { ...started, meta: { ...started.meta, deliveryIds: ["delivery-l"] } },
+    { sessionId, target, turn: BRAIN_HOST_TURN.TYPED, state: memoryRelayState() },
+  );
+  assert.deepEqual(stops, [
+    [conversationId, sessionId, "turn_10", hostTurnId(sessionId, "turn_10")],
+  ]);
+  assert.deepEqual(cancels, [sessionId]);
 });
 
 test("over the real record, a follow-up ask stands queued under its own id until eve's start names its delivery, and then reads as the turn it ran in", async () => {
