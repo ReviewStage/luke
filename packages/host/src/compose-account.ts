@@ -123,10 +123,15 @@ export function composeAccount(dependencies: AccountDependencies): AccountCompos
     return accountGateOpen(runMode, account.status === ACCOUNT_STATUS.SIGNED_IN);
   }
 
+  // The holder is the account's own address, so a call's one retry after a
+  // 401 can tell a renewed token from a different person's: a sign-out and
+  // sign-in between the attempt and its retry reads as the caller's account
+  // gone, never as a fresh bearer to carry the old account's payload under.
   const token: AccountToken = {
     readAccessToken: async () =>
       runMode.sendsNetwork ? (await settings.store.readAccount())?.accessToken : undefined,
     refreshAccount: session.refreshOnce,
+    readAccountKey: async () => (await settings.store.readAccount())?.email,
   };
 
   const voiceCapabilities = new VoiceCapabilityAssembler({
