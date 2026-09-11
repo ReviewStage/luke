@@ -594,3 +594,39 @@ is the shape the rollout's own seams assume.
 closes (a poll's failure mode is hanging until a timeout, which reads to the voice service as a
 turn that never ended), and that the poll is bounded, ends with the turn, and assumes nothing that
 outlives a function's 800 s `maxDuration`.
+
+
+## 2026-09-11 — The one door is a type, and claiming precedes speaking (orchestrator, from C5a #1030)
+
+**The one-door requirement is enforced by the compiler rather than a comment**, which is better
+than what I asked for: the plain write's kind is `Exclude<ConversationEventKind, SpeechEventKind>`
+and a speech write is a separate `SpeechEventWrite` whose `unless` is **required**, so a `speech.*`
+kind on a plain event write does not compile. Nobody can forget the guard, including someone who
+never read the PR. The module comment names the two races apart: the unique partial index answers
+`already_claimed`, the exclusion check under the lock answers `superseded`.
+
+**A test that passed for the wrong reason, found and fixed:** the claim transition's own `unless`
+was never exercised, because PGlite always ordered the racing claim first. C5a added a
+deterministic interleaving through the writer seam; mutation M9 (`unless: []`) now fails it. Six
+mutations, each failing a test. **This is what the mutation standard is for** — not to prove the
+tests are thorough, but to find the ones that are decorative.
+
+**New wire payload schema:** `SPEECH_SPOKEN_EVENT_PAYLOAD { voiceSessionId, atMs }`, replacing
+B7's ad-hoc snake_case body. **Verified safe for the phone before approving:** LukeKit's
+`ConversationEvent` carries `payload` as an untyped `JSONValue?`, and only `RatingEventPayload` is
+typed (`rating`, `note`). So speech payload fields ride as opaque JSON today — and a client that
+ever wants to *read* `voiceSessionId` is the moment that needs a typed Swift mirror, with
+`tools/ios-parity` holding the two equal.
+
+**And a rule that follows from B7's refusal, which reaches C8 and D3 rather than C5.**
+`markSpeechSpoken` refuses `NOT_CLAIMANT` for an unclaimed briefing, another device's claim, or a
+voice session with **no device** — and `voice_sessions.device_id` is nullable, so the third case is
+reachable.
+
+**Ruling: claim first, speak only if the claim succeeded, never the other way round.** Speak-then-
+record leaves the offer unclaimed when the record refuses; the sweep expires it; **D3 then pushes
+the same briefing to another device and the developer hears it twice.** CLAUDE.md's own shape is
+the same — the Conversation write precedes any offer, and what is guaranteed is at most one
+authorization to speak per run, never that the words were heard. Carried into C8's and D3's notes,
+and into C5a's module comment beside the two races, because whoever gets it wrong will be reading
+that module and not this file.
