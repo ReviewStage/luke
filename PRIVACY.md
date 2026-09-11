@@ -98,11 +98,12 @@ working memory as described below; dated notes travel only when he reads one
 or when a conversation starts fresh. Luke may edit these files himself through
 his own tools, in any of his turns, and nothing else on your machine: a
 coding agent's transcript or session state is never written, and a write whose
-arguments are malformed is refused rather than filled in. When Luke's judgment
-runs on our service, the same set of files is kept as rows in our database
-instead, one row per file per account: seeded once with the same defaults,
-composed into the standing instructions his turns run under, bounded the
-same way, and edited only through Luke's own workspace tools there. The file's name is stored in
+arguments are malformed is refused rather than filled in. When Luke runs a
+turn for you on our service, that turn reads the same set of files from rows
+in our database instead, one row per file per account: seeded with the same
+defaults the first time a turn runs for you, composed into the standing
+instructions the turn runs under, bounded the same way, and edited only
+through Luke's own workspace tools there. The file's name is stored in
 the clear and its contents are sealed under a key only our service holds,
 each row bound to your account so it cannot be opened under another. Those
 rows are untouched by clearing the conversation and are removed when you
@@ -212,9 +213,9 @@ bookkeeping about each line — an id Luke can name to correct or forget it, whe
 it was written, and whether it came from you, from Luke, or from the list an
 earlier version kept in the database — and that list, if one was found, was
 moved into `USER.md` once under the same ids and is not written any more. The
-iOS app keeps no such memory and does not read the Mac's. When Luke's judgment
-runs on our service, the facts he remembers are rows of their own in our
-database instead, their words sealed the same way as his workspace files
+iOS app keeps no such memory and does not read the Mac's. When Luke runs a
+turn for you on our service, the facts he remembers in it are rows of their
+own in our database instead, their words sealed the same way as his workspace files
 there and bound to your account; a changed fact replaces the one it corrects,
 clearing the conversation does not touch them, and they are removed when you
 delete your account. You can ask Luke what
@@ -273,8 +274,8 @@ counts — on an admin page of our site that only an account we have marked as a
 administrator can open; nothing you type, say, or run in a session appears on
 it. The service also keeps your account's conversation with Luke, as the
 record the Conversation tab draws on every Mac you sign in on and the iOS and
-Apple Watch apps read. When Luke's judgment runs on our service, every turn
-writes rows to our database: your ask as it was given; Luke's reply, the
+Apple Watch apps read. When Luke runs a turn for you on our service, that
+turn writes rows to our database: your ask as it was given; Luke's reply, the
 summaries of his reasoning, and each tool he called with its input and its
 result, the briefing he offered you among them; the words an observation
 turn opened with, which for a Conductor session include the messages that
@@ -493,7 +494,7 @@ Send.
   our service performs one model call per request and stores and logs none of
   the request, the reply, or the encrypted reasoning that travels in it; the
   record the reply joins is kept only on your Mac, under the lifetime above.
-  When Luke's judgment itself runs on our service, the call to OpenAI is made
+  When Luke runs a turn for you on our service, the call to OpenAI is made
   from there, and the record it joins is the conversation our service keeps,
   described under "Your account" above.
   Each call counts against
@@ -585,10 +586,10 @@ remembered facts of a Luke whose judgment runs on your Mac.
 Local keys and calendar access are encrypted in the macOS Keychain. Provider
 API keys you sync to the hosted service, and the latest roster of your
 Conductor sessions with what changed since the pass before, are stored
-encrypted in our own database, as described above. When Luke's judgment runs
-on our service, his workspace files and the facts he remembers about you are
-stored sealed in the same database, and your account's conversation with him
-is stored there unsealed, each as described above. Your account information is held by our own
+encrypted in our own database, as described above. When Luke runs a turn for
+you on our service, the workspace files and remembered facts that turn reads
+and writes are stored sealed in the same database, and the conversation it
+writes is stored there unsealed, each as described above. Your account information is held by our own
 service, usage counts and recordings by PostHog, and crash reports by Sentry.
 
 ## Your choices
@@ -605,8 +606,8 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
   clear it.
 - Ask Luke what he remembers, correct a memory, or tell him to forget one.
 - Edit or delete any of Luke's workspace files yourself; Luke never overwrites
-  your edit, and clearing the Conversation tab does not touch them. The rows
-  our service keeps of them are edited through Luke alone, and go with your
+  your edit, and clearing the Conversation tab does not touch them. Rows of
+  them on our service are edited through Luke alone, and go with your
   account.
 - Luke may act on his own judgment in a turn you did not open — answering a
   coding agent, keeping his notes, on a hook or a look
