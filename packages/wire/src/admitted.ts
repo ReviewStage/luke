@@ -11,6 +11,11 @@
  * It lives here, below every package that has an opinion about actions, because
  * both the action vocabulary that mints and the provider contract that demands
  * one have to name it, and the graph stays acts → session → wire.
+ *
+ * It stays a type-level brand rather than a `Schema.brand`, on purpose: a
+ * `Schema.brand` is unwrapped by any caller holding the right decoder, so a
+ * brand a cast can spell is a brand anything can enter. This one is spelled
+ * nowhere but the cast below.
  */
 
 declare const ADMITTED: unique symbol;

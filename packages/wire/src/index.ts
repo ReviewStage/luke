@@ -1,7 +1,9 @@
 export {
   ACTION_RESULT_STATUS,
   type ActionResult,
+  ActionResultSchema,
   type ActionResultStatus,
+  ActionResultStatusSchema,
   isActionResult,
   isActionResultStatus,
   UNKNOWN_ACTION_STATUS,
@@ -96,6 +98,7 @@ export {
 } from "./turn.js";
 export {
   ASSISTANT_MESSAGE_METADATA,
+  ASSISTANT_MESSAGE_METADATA_STANDARD_SCHEMA,
   type AssistantMessageMetadata,
   COMPACTION_METADATA,
   type CompactionMetadata,
@@ -103,14 +106,19 @@ export {
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   type MessageAuthor,
+  MessageAuthorSchema,
   type MessageChannel,
+  MessageChannelSchema,
   type MessageRole,
+  MessageRoleSchema,
   OBSERVATION_SOURCE,
   type ObservationMetadata,
   type ObservationSource,
+  ObservationSourceSchema,
   type SpokenAskMetadata,
   type StoredMessageMetadata,
   type TypedAskMetadata,
   USER_MESSAGE_METADATA,
+  USER_MESSAGE_METADATA_STANDARD_SCHEMA,
   type UserMessageMetadata,
 } from "./ui-message-metadata.js";

@@ -1,4 +1,5 @@
-import { isRecord, isWireString, type UnparsedWireValue } from "./json.js";
+import { Schema } from "effect";
+import type { UnparsedWireValue } from "./json.js";
 
 export const ACTION_RESULT_STATUS = {
   ACCEPTED: "accepted",
@@ -8,6 +9,15 @@ export const ACTION_RESULT_STATUS = {
 
 export type ActionResultStatus = (typeof ACTION_RESULT_STATUS)[keyof typeof ACTION_RESULT_STATUS];
 
+export const ActionResultStatusSchema = Schema.Literal(...Object.values(ACTION_RESULT_STATUS));
+
+const readsActionResultStatus = Schema.is(ActionResultStatusSchema);
+
+/** Whether an untrusted value names one of the three statuses an action can end in. */
+export function isActionResultStatus(value: UnparsedWireValue): value is ActionResultStatus {
+  return readsActionResultStatus(value);
+}
+
 /**
  * The one sentence an adapter answers an action its target's latest observation
  * did not advertise. It is written once because it is one refusal: the latest
@@ -16,13 +26,6 @@ export type ActionResultStatus = (typeof ACTION_RESULT_STATUS)[keyof typeof ACTI
  * asked.
  */
 export const UNSUPPORTED_BY_OBSERVATION = "That action is not supported by the latest observation.";
-
-const ACTION_RESULT_STATUSES: ReadonlySet<string> = new Set(Object.values(ACTION_RESULT_STATUS));
-
-/** Whether an untrusted value names one of the three statuses an action can end in. */
-export function isActionResultStatus(value: UnparsedWireValue): value is ActionResultStatus {
-  return isWireString(value) && ACTION_RESULT_STATUSES.has(value);
-}
 
 /**
  * The one status outside the three above an action can end in: dispatched, and
@@ -37,19 +40,33 @@ export type UnknownActionResult = {
   readonly reason: string;
 };
 
-export type ActionResult =
-  | { status: typeof ACTION_RESULT_STATUS.ACCEPTED }
-  | { status: typeof ACTION_RESULT_STATUS.REJECTED; reason: string }
-  | { status: typeof ACTION_RESULT_STATUS.UNSUPPORTED; reason: string };
+/** A record whose keys stop at the ones its fields name, the way a strict wire record does. */
+const strict = { parseOptions: { onExcessProperty: "error" as const } };
+
+const ACCEPTED_ACTION_RESULT = Schema.Struct({
+  status: Schema.Literal(ACTION_RESULT_STATUS.ACCEPTED),
+}).annotations(strict);
+
+const REJECTED_ACTION_RESULT = Schema.Struct({
+  status: Schema.Literal(ACTION_RESULT_STATUS.REJECTED),
+  reason: Schema.String,
+}).annotations(strict);
+
+const UNSUPPORTED_ACTION_RESULT = Schema.Struct({
+  status: Schema.Literal(ACTION_RESULT_STATUS.UNSUPPORTED),
+  reason: Schema.String,
+}).annotations(strict);
+
+export const ActionResultSchema = Schema.Union(
+  ACCEPTED_ACTION_RESULT,
+  REJECTED_ACTION_RESULT,
+  UNSUPPORTED_ACTION_RESULT,
+);
+
+export type ActionResult = Schema.Schema.Type<typeof ActionResultSchema>;
+
+const readsActionResult = Schema.is(ActionResultSchema);
 
 export function isActionResult(value: UnparsedWireValue): value is ActionResult {
-  if (!isRecord(value) || !isActionResultStatus(value.status)) return false;
-  const fieldCount = Object.keys(value).length;
-  if (value.status === ACTION_RESULT_STATUS.ACCEPTED) return fieldCount === 1;
-  return (
-    fieldCount === 2 &&
-    (value.status === ACTION_RESULT_STATUS.REJECTED ||
-      value.status === ACTION_RESULT_STATUS.UNSUPPORTED) &&
-    isWireString(value.reason)
-  );
+  return readsActionResult(value);
 }

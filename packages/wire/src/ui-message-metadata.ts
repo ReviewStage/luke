@@ -1,4 +1,6 @@
-import { type RecordOf, type Schema, type SchemaFields, s } from "./schema.js";
+import { Schema as EffectSchema } from "effect";
+import { emitJsonSchema, readEither, toSchemaRead, wireRefusal } from "./effect/json-schema.js";
+import { effectSchema, SCHEMA_REFUSAL, type Schema, s } from "./schema.js";
 
 /**
  * What a stored message says about itself beside its parts. The message
@@ -12,6 +14,13 @@ import { type RecordOf, type Schema, type SchemaFields, s } from "./schema.js";
  * metadata at all. Declared here so the desktop, the service, and the phone
  * decode one shape, and so a key the schema does not name is refused rather
  * than stored.
+ *
+ * Every shape below is an Effect `Schema.Struct`, composed directly rather
+ * than through the `s.*` facade; {@link fromEffect} is what still answers the
+ * facade's `read`/`parse`/`jsonSchema` for the callers that hold one, and the
+ * `Schema.standardSchemaV1` twins beside `USER_MESSAGE_METADATA` and
+ * `ASSISTANT_MESSAGE_METADATA` are what the ai SDK's `validateUIMessages`
+ * takes directly, once a caller passes one.
  */
 
 /** The roles a stored message may carry, as the SDK names them. */
@@ -23,6 +32,8 @@ export const MESSAGE_ROLE = {
 
 export type MessageRole = (typeof MESSAGE_ROLE)[keyof typeof MESSAGE_ROLE];
 
+export const MessageRoleSchema = EffectSchema.Literal(...Object.values(MESSAGE_ROLE));
+
 /** Who wrote a message: the developer, Luke's own judgment, the voice model, or a child run. */
 export const MESSAGE_AUTHOR = {
   DEVELOPER: "developer",
@@ -33,6 +44,8 @@ export const MESSAGE_AUTHOR = {
 
 export type MessageAuthor = (typeof MESSAGE_AUTHOR)[keyof typeof MESSAGE_AUTHOR];
 
+export const MessageAuthorSchema = EffectSchema.Literal(...Object.values(MESSAGE_AUTHOR));
+
 /** How a developer's ask arrived. */
 export const MESSAGE_CHANNEL = {
   TYPED: "typed",
@@ -40,6 +53,8 @@ export const MESSAGE_CHANNEL = {
 } as const;
 
 export type MessageChannel = (typeof MESSAGE_CHANNEL)[keyof typeof MESSAGE_CHANNEL];
+
+export const MessageChannelSchema = EffectSchema.Literal(...Object.values(MESSAGE_CHANNEL));
 
 /**
  * What the brain wrote a user row down for itself about: the words a turn
@@ -66,41 +81,60 @@ export const OBSERVATION_SOURCE = {
 
 export type ObservationSource = (typeof OBSERVATION_SOURCE)[keyof typeof OBSERVATION_SOURCE];
 
+export const ObservationSourceSchema = EffectSchema.Literal(...Object.values(OBSERVATION_SOURCE));
+
+/** A struct whose keys stop at the ones it names, the way a strict wire record does. */
+const strict = { parseOptions: { onExcessProperty: "error" as const } };
+
 /** An identifier another table minted: a voice session's, a delegation's, a message's. */
-const identifier = s.text({ max: 128 });
+const identifier = effectSchema(s.text({ max: 128 }));
 
 /** A millisecond offset into a voice session's own clock, never a wall-clock instant. */
-const spanInstant = s.wholeNumber({ minimum: 0 });
+const spanInstant = effectSchema(s.wholeNumber({ minimum: 0 }));
+
+/**
+ * The Effect schema a declaration was composed from, adapted to the facade
+ * still-held callers use: `read` through `readEither`, `jsonSchema` through
+ * the emitter walking the same schema. `Schema.standardSchemaV1` reads the
+ * schema this hands to it directly, so the two never drift.
+ */
+function fromEffect<Value, Encoded>(core: EffectSchema.Schema<Value, Encoded>): Schema<Value> {
+  const read = readEither(core);
+  return s.reader({
+    read: (value) => toSchemaRead(read(value)),
+    jsonSchema: () => emitJsonSchema(core),
+  });
+}
 
 /**
  * A user row is one of three things, and the shape says which: the
  * developer's typed ask, a spoken ask cut from a voice session, or an
- * observation the brain wrote down for itself. Three records rather than one
+ * observation the brain wrote down for itself. Three structs rather than one
  * with every field optional, so an observation carrying a channel or a typed
  * ask carrying a voice session has no shape to arrive in.
  */
-const TYPED_ASK_METADATA_FIELDS = {
-  author: s.literal(MESSAGE_AUTHOR.DEVELOPER),
-  channel: s.literal(MESSAGE_CHANNEL.TYPED),
-} satisfies SchemaFields;
+const TYPED_ASK_METADATA = EffectSchema.Struct({
+  author: EffectSchema.Literal(MESSAGE_AUTHOR.DEVELOPER),
+  channel: EffectSchema.Literal(MESSAGE_CHANNEL.TYPED),
+}).annotations(strict);
 
-export type TypedAskMetadata = RecordOf<typeof TYPED_ASK_METADATA_FIELDS>;
+export type TypedAskMetadata = EffectSchema.Schema.Type<typeof TYPED_ASK_METADATA>;
 
 /**
  * A spoken ask is the developer's own words, or the voice model's delegation
  * of them, cut from the session and delegation it names over a span of that
  * session's clock whose two ends come together or not at all and run forward.
  */
-const SPOKEN_ASK_METADATA_FIELDS = {
-  author: s.enumOf([MESSAGE_AUTHOR.DEVELOPER, MESSAGE_AUTHOR.VOICE_MODEL]),
-  channel: s.literal(MESSAGE_CHANNEL.VOICE),
-  voice_session_id: identifier.optional(),
-  delegation_id: identifier.optional(),
-  from_ms: spanInstant.optional(),
-  to_ms: spanInstant.optional(),
-} satisfies SchemaFields;
+const SPOKEN_ASK_STRUCT = EffectSchema.Struct({
+  author: EffectSchema.Literal(MESSAGE_AUTHOR.DEVELOPER, MESSAGE_AUTHOR.VOICE_MODEL),
+  channel: EffectSchema.Literal(MESSAGE_CHANNEL.VOICE),
+  voice_session_id: EffectSchema.optional(identifier),
+  delegation_id: EffectSchema.optional(identifier),
+  from_ms: EffectSchema.optional(spanInstant),
+  to_ms: EffectSchema.optional(spanInstant),
+}).annotations(strict);
 
-export type SpokenAskMetadata = RecordOf<typeof SPOKEN_ASK_METADATA_FIELDS>;
+export type SpokenAskMetadata = EffectSchema.Schema.Type<typeof SPOKEN_ASK_STRUCT>;
 
 function coherentSpan(metadata: SpokenAskMetadata): boolean {
   if (metadata.from_ms === undefined || metadata.to_ms === undefined) {
@@ -109,22 +143,33 @@ function coherentSpan(metadata: SpokenAskMetadata): boolean {
   return metadata.from_ms <= metadata.to_ms;
 }
 
-/** An observation arrives on no channel: the brain's own note of what opened the turn or what the host handed it. */
-const OBSERVATION_METADATA_FIELDS = {
-  author: s.literal(MESSAGE_AUTHOR.BRAIN),
-  source: s.enumOf(Object.values(OBSERVATION_SOURCE)),
-} satisfies SchemaFields;
+const SPOKEN_ASK_METADATA = SPOKEN_ASK_STRUCT.pipe(EffectSchema.filter(coherentSpan));
 
-export type ObservationMetadata = RecordOf<typeof OBSERVATION_METADATA_FIELDS>;
+/** An observation arrives on no channel: the brain's own note of what opened the turn or what the host handed it. */
+const OBSERVATION_METADATA = EffectSchema.Struct({
+  author: EffectSchema.Literal(MESSAGE_AUTHOR.BRAIN),
+  source: ObservationSourceSchema,
+}).annotations(strict);
+
+export type ObservationMetadata = EffectSchema.Schema.Type<typeof OBSERVATION_METADATA>;
 
 export type UserMessageMetadata = TypedAskMetadata | SpokenAskMetadata | ObservationMetadata;
 
+const USER_MESSAGE_METADATA_SCHEMA = EffectSchema.Union(
+  TYPED_ASK_METADATA,
+  SPOKEN_ASK_METADATA,
+  OBSERVATION_METADATA,
+).annotations(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
+
 /** What a user row says about itself. */
-export const USER_MESSAGE_METADATA: Schema<UserMessageMetadata> = s.union([
-  s.record(TYPED_ASK_METADATA_FIELDS),
-  s.refine(s.record(SPOKEN_ASK_METADATA_FIELDS), coherentSpan),
-  s.record(OBSERVATION_METADATA_FIELDS),
-]);
+export const USER_MESSAGE_METADATA: Schema<UserMessageMetadata> = fromEffect(
+  USER_MESSAGE_METADATA_SCHEMA,
+);
+
+/** The Standard Schema v1 the ai SDK's `validateUIMessages` takes for a user row's metadata. */
+export const USER_MESSAGE_METADATA_STANDARD_SCHEMA = EffectSchema.standardSchemaV1(
+  USER_MESSAGE_METADATA_SCHEMA,
+);
 
 /**
  * A compaction row's account of what it folded: the first message the model
@@ -133,25 +178,38 @@ export const USER_MESSAGE_METADATA: Schema<UserMessageMetadata> = s.union([
  * An absent count means it did not; it is never written as zero, which would
  * say nothing was folded, nor as an estimate wearing a measurement's shape.
  */
-const COMPACTION_METADATA_FIELDS = {
+const COMPACTION_METADATA_SCHEMA = EffectSchema.Struct({
   first_kept_message_id: identifier,
-  tokens_before: s.wholeNumber({ minimum: 0 }).optional(),
-} satisfies SchemaFields;
+  tokens_before: EffectSchema.optional(effectSchema(s.wholeNumber({ minimum: 0 }))),
+}).annotations(strict);
 
-export type CompactionMetadata = RecordOf<typeof COMPACTION_METADATA_FIELDS>;
+export type CompactionMetadata = EffectSchema.Schema.Type<typeof COMPACTION_METADATA_SCHEMA>;
 
-export const COMPACTION_METADATA: Schema<CompactionMetadata> = s.record(COMPACTION_METADATA_FIELDS);
+export const COMPACTION_METADATA: Schema<CompactionMetadata> = fromEffect(
+  COMPACTION_METADATA_SCHEMA,
+);
 
-const ASSISTANT_MESSAGE_METADATA_FIELDS = {
-  author: s.enumOf([MESSAGE_AUTHOR.BRAIN, MESSAGE_AUTHOR.VOICE_MODEL, MESSAGE_AUTHOR.CHILD]),
-  compaction: COMPACTION_METADATA.optional(),
-} satisfies SchemaFields;
+const ASSISTANT_MESSAGE_METADATA_SCHEMA = EffectSchema.Struct({
+  author: EffectSchema.Literal(
+    MESSAGE_AUTHOR.BRAIN,
+    MESSAGE_AUTHOR.VOICE_MODEL,
+    MESSAGE_AUTHOR.CHILD,
+  ),
+  compaction: EffectSchema.optional(COMPACTION_METADATA_SCHEMA),
+}).annotations(strict);
 
-export type AssistantMessageMetadata = RecordOf<typeof ASSISTANT_MESSAGE_METADATA_FIELDS>;
+export type AssistantMessageMetadata = EffectSchema.Schema.Type<
+  typeof ASSISTANT_MESSAGE_METADATA_SCHEMA
+>;
 
 /** What an assistant row says about itself. */
-export const ASSISTANT_MESSAGE_METADATA: Schema<AssistantMessageMetadata> = s.record(
-  ASSISTANT_MESSAGE_METADATA_FIELDS,
+export const ASSISTANT_MESSAGE_METADATA: Schema<AssistantMessageMetadata> = fromEffect(
+  ASSISTANT_MESSAGE_METADATA_SCHEMA,
+);
+
+/** The Standard Schema v1 the ai SDK's `validateUIMessages` takes for an assistant row's metadata. */
+export const ASSISTANT_MESSAGE_METADATA_STANDARD_SCHEMA = EffectSchema.standardSchemaV1(
+  ASSISTANT_MESSAGE_METADATA_SCHEMA,
 );
 
 /** The metadata a stored message of either speaking role carries. */
