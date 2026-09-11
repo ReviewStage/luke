@@ -42,6 +42,7 @@
     "apps/web": {
       "entry": [
         "server/routes/**/*.ts",
+        "api/**/*.js",
         "api/**/*.mjs",
         "src/*.tsx",
         "src/entry-server.tsx",

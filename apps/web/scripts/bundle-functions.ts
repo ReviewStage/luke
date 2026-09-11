@@ -1,20 +1,24 @@
-import { appendFile, readdir, readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { builtinModules } from "node:module";
 import { join, relative } from "node:path";
 import { build } from "esbuild";
-import {
-  FUNCTION_MAX_DURATION_SECONDS,
-  functionConfigSource,
-  functionPath,
-} from "../server/function-durations.js";
+import { FUNCTION_MAX_DURATION_SECONDS, functionPath } from "../server/function-durations.js";
+import { FUNCTION_BUNDLE_DIRECTORY, stubDrift } from "../server/function-stubs.js";
 
 /**
  * Bundles every route under `server/routes/` into a plain ESM file under
- * `api/`, mirroring the tree, so Vercel's builder finds JavaScript and only
- * traces dependencies. Handed TypeScript, the builder runs its own compiler
- * over each function's whole import graph separately — thirty-odd passes over
- * the same sixteen workspace packages, most of a deploy's build time, under
- * compiler options that are not this repository's.
+ * `dist-functions/`, mirroring the tree, so Vercel's builder finds JavaScript
+ * and only traces dependencies. Handed TypeScript, the builder runs its own
+ * compiler over each function's whole import graph separately — thirty-odd
+ * passes over the same sixteen workspace packages, most of a deploy's build
+ * time, under compiler options that are not this repository's.
+ *
+ * The bundles cannot land in `api/` themselves: Vercel registers `api/`
+ * functions from the uploaded source tree before `buildCommand` runs, so a
+ * function first emitted here is never deployed. The committed stubs under
+ * `api/` are what the builder discovers, each re-exporting its bundle and
+ * carrying its `config` literal, and a route without one fails this build
+ * rather than 404ing on production.
  *
  * Workspace packages are inlined; the web app's own declared runtime
  * dependencies stay external, because those are what the builder can trace
@@ -25,7 +29,7 @@ import {
  */
 const WEB = join(import.meta.dirname, "..");
 const ROUTES = join(WEB, "server", "routes");
-const API = join(WEB, "api");
+const BUNDLES = join(WEB, FUNCTION_BUNDLE_DIRECTORY);
 
 const WORKSPACE_PROTOCOL = "workspace:";
 
@@ -42,6 +46,15 @@ const external = new Set([
   ...builtinModules.map((name) => `node:${name}`),
 ]);
 
+const drift = await stubDrift({ web: WEB });
+if (drift.length > 0) {
+  throw new Error(
+    `api/ stubs disagree with server/routes/ (run \`pnpm --filter @luke/web functions:stubs\`): ${drift
+      .map((entry) => `${entry.kind} ${entry.path}`)
+      .join(", ")}`,
+  );
+}
+
 const entryPoints = (await readdir(ROUTES, { recursive: true }))
   .filter((path) => path.endsWith(".ts"))
   .map((path) => join(ROUTES, path));
@@ -49,7 +62,7 @@ const entryPoints = (await readdir(ROUTES, { recursive: true }))
 const result = await build({
   entryPoints,
   outbase: ROUTES,
-  outdir: API,
+  outdir: BUNDLES,
   bundle: true,
   platform: "node",
   format: "esm",
@@ -82,9 +95,6 @@ for (const [file, output] of Object.entries(result.metafile.outputs)) {
         functionPath(relative(ROUTES, join(WEB, output.entryPoint))),
       )
     : undefined;
-  if (maxDuration !== undefined) {
-    await appendFile(join(WEB, file), functionConfigSource(maxDuration));
-  }
   // biome-ignore lint/suspicious/noConsole: a build script's output is its log — what it wrote, and how much of it.
   console.log(
     `bundled ${relative(WEB, file)} (${output.bytes} bytes${maxDuration === undefined ? "" : `, ${maxDuration}s`})`,

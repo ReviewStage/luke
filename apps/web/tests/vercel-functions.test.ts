@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
+import { join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import { VOICE_SERVICE_PATH } from "@sidecar/hosted";
 import { test } from "vitest";
@@ -9,6 +10,15 @@ import {
   functionPath,
   VOICE_FUNCTION_MAX_DURATION_SECONDS,
 } from "../server/function-durations";
+import {
+  FUNCTION_BUNDLE_DIRECTORY,
+  routeRelativePaths,
+  stubDrift,
+  stubPath,
+  stubSource,
+} from "../server/function-stubs";
+
+const WEB = fileURLToPath(new URL("..", import.meta.url));
 
 test("both voice functions carry the 800 second maximum duration", () => {
   for (const path of Object.values(VOICE_SERVICE_PATH)) {
@@ -33,4 +43,33 @@ test("the config literal parses back to the duration it was written from", async
     config: { maxDuration: number };
   };
   assert.deepEqual(module.config, { maxDuration: VOICE_FUNCTION_MAX_DURATION_SECONDS });
+});
+
+test("every route has its committed stub and nothing under api/ is an orphan", async () => {
+  assert.deepEqual(await stubDrift({ web: WEB }), []);
+});
+
+test("a stub carries the duration its route was given, and only then", async () => {
+  for (const route of await routeRelativePaths(join(WEB, "server", "routes"))) {
+    const maxDuration = FUNCTION_MAX_DURATION_SECONDS.get(functionPath(route));
+    const configLine = stubSource(route).split("\n")[1] ?? "";
+    if (maxDuration === undefined) {
+      assert.equal(configLine, "");
+      continue;
+    }
+    // SAFETY: the module is the config line the stub carries, whose only export is `config`.
+    const module = (await import(`data:text/javascript,${encodeURIComponent(configLine)}`)) as {
+      config: { maxDuration: number };
+    };
+    assert.deepEqual(module.config, { maxDuration });
+  }
+});
+
+test("a nested stub's specifier resolves to its bundle under dist-functions/", () => {
+  const route = "brain/v2/respond.ts";
+  const specifier = stubSource(route).match(/from "([^"]+)"/)?.[1] ?? "";
+  assert.equal(
+    posix.resolve("/", posix.dirname(stubPath(route)), specifier),
+    `/${FUNCTION_BUNDLE_DIRECTORY}/brain/v2/respond.js`,
+  );
 });
