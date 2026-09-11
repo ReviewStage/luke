@@ -197,6 +197,8 @@ interface Exchange {
   pendingRecords: number;
   /** Run events held while a record write is out, replayed in order once it lands. */
   deferred: LiveBrainRunEvent[];
+  /** The delegation whose ask the record refused, if any: once every write is in, the exchange is dropped and told so once. */
+  unrecorded: string | undefined;
   /** The session the delegations belong to; a closed session's ids die with it and later sentences go session-wide. */
   sessionId: string | undefined;
   settled: boolean;
@@ -227,6 +229,7 @@ function newExchange(
     delegationIds,
     pendingRecords: 0,
     deferred: [],
+    unrecorded: undefined,
     sessionId,
     settled: false,
     buffered: [],
@@ -747,14 +750,17 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       runId: submission.runId,
     });
     exchange.pendingRecords -= 1;
-    if (!recorded) {
+    if (!recorded) exchange.unrecorded ??= delegationId;
+    // A sibling ask steered into this exchange may still have its own write
+    // out; the exchange is settled once, when the last of them is in.
+    if (exchange.pendingRecords > 0) return;
+    if (exchange.unrecorded !== undefined) {
+      const refusedDelegation = exchange.unrecorded;
       this.#dropExchange(exchange);
-      this.#speakInto(session, delegationId, ASK_UNRECORDED_NOTE);
+      this.#speakInto(session, refusedDelegation, ASK_UNRECORDED_NOTE);
       return;
     }
-    if (exchange.pendingRecords === 0) {
-      for (const event of exchange.deferred.splice(0)) this.#onRunEvent(event);
-    }
+    for (const event of exchange.deferred.splice(0)) this.#onRunEvent(event);
   }
 
   /** The run joins the exchange open on its session, or opens one; either way its events are read from now on. */

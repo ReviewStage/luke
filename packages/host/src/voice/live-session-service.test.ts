@@ -1166,3 +1166,42 @@ test("an ask whose record write fails is answered with the unrecorded note once,
   assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
   assert.equal(f.record.developer.length, 0);
 });
+
+test("a steered ask whose sibling's record write fails is settled once every write is in: one unrecorded note, nothing spoken", async () => {
+  const f = fixture();
+  const sideband = await f.open();
+  f.record.hold();
+  sideband.input("What failed?", 0, 800);
+  sideband.delegation("item_1", 900);
+  await drainMicrotasks();
+  sideband.input("In the API repo.", 5000, 5800);
+  sideband.delegation("item_2", 5900);
+  await drainMicrotasks();
+  assert.equal(f.brain.asks.length, 2);
+  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+  f.brain.fire({
+    kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+    runId: "run-2",
+    sentence: "Two tests.",
+  });
+  f.record.release(false);
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
+  f.record.release(true);
+  await drainMicrotasks();
+  const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+  assert.equal(commentary.length, 1);
+  assert.equal(
+    commentary[0] && "content" in commentary[0] && commentary[0].content,
+    ASK_UNRECORDED_NOTE,
+  );
+  assert.equal(
+    commentary[0] && "delegation_id" in commentary[0] && commentary[0].delegation_id,
+    "item_1",
+  );
+  sideband.acknowledge(0, 6000, 6100);
+  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: "run-2", sentence: "Late." });
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
+  assert.equal(f.record.developer.length, 1);
+});
