@@ -22,9 +22,9 @@ Three things are deliberately not Effect's. The `Admitted` brand stays a
 type-level `unique symbol` with `admit()` its sole minter, never a
 `Schema.brand`, because a brand a cast can spell is a brand anything can enter.
 The JSON Schema a model reads is emitted by `@sidecar/wire`'s own emitter
-(`packages/wire/src/effect/json-schema.ts` for an Effect `Schema`) rather than
-`JSONSchema.make`, because those bytes are prompt-cache bytes and their goldens
-are compared as bytes. And every file ported from OpenClaw keeps
+(`packages/wire/src/effect/json-schema.ts`, which the `s.*` facade shows
+through as well) rather than `JSONSchema.make`, because those bytes are
+prompt-cache bytes and their goldens are compared as bytes. And every file ported from OpenClaw keeps
 its internals faithful to the pinned source and imports nothing from `effect`;
 the Effect wrap is a sibling module.
 

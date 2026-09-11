@@ -27,20 +27,28 @@ proven to be the same strings where `@sidecar/actions` declares the whole of it.
 A wire value's rules are declared once, as a `Schema` in `@sidecar/wire`,
 which both parses the untrusted value and emits the JSON Schema a model is
 shown for it. A hand-written parser beside a hand-written schema is two
-statements of the same rule that can drift. The node a model is shown is
-produced by wire's own emitter and never by Effect's `JSONSchema.make`: the
-`s.*` builder answers it today, and for an Effect `Schema` it is
-`packages/wire/src/effect/json-schema.ts`'s `emitJsonSchema`, which walks the
-schema's AST into the same `JsonSchemaNode`, key for key and in the same
+statements of the same rule that can drift. Every declaration is an Effect
+`Schema` underneath: the `s.*` builder in `packages/wire/src/schema.ts` is a
+facade whose every combinator constructs one, reads through `readEither`,
+and shows the node `emitJsonSchema` walks out of that schema's AST, so what a
+declaration parses and what it shows are one AST, and `effectSchema(declaration)`
+hands the Effect schema out of a facade value, typed as the declaration types
+itself, for a caller that declares directly. The node a model is shown is
+produced by wire's own emitter, `packages/wire/src/effect/json-schema.ts`'s
+`emitJsonSchema`, and never by Effect's `JSONSchema.make`: it writes the same
+`JsonSchemaNode` the builder always answered, key for key and in the same
 order, reading only wire's own annotations — the description `describeWire`
-sets under `WireDescriptionAnnotationId`, the refusal word `wireRefusal`
-sets on a filter or transformation, and the node `verbatimJsonSchema`
-declares beside a reader — and never Effect's `title` or `description`,
-which Effect writes on every primitive and every built-in filter. A decode
-failure becomes a `SchemaRefusalError` in the same three refusal words the
-builder answers, through `readEither`; `toSchemaRead` is the strangler shim
-that hands the `Either` to a caller still holding a `SchemaRead`, deleted
-with it in P12-07.
+sets under `WireDescriptionAnnotationId`, the refusal word `wireRefusal` sets
+on a filter, a transformation, or a union, and the node `verbatimJsonSchema`
+declares beside a reader, where `declareReader` is a reader as an Effect
+declaration, failing with the issue `refusalIssue` writes for the word and
+path the reader decided — and never Effect's `title` or `description`, which
+Effect writes on every primitive and every built-in filter. A decode failure
+becomes a `SchemaRefusalError` in the same three refusal words the builder
+answers, through `readEither`; `toSchemaRead` is the strangler shim that
+hands the `Either` to a caller still holding a `SchemaRead`, deleted with it
+in P12-07, and the facade itself is the shim P12-08 deletes once every caller
+declares directly.
 
 What a schema emits is recorded rather than described. Every tool definition
 the action catalog produces, every schema the hosted wire and the live
@@ -197,12 +205,12 @@ beside the hand-rolled base while both are still in use — the `Scope`,
 `Stream`, and `HttpClient` bridges over `IDisposable`, `Event`, and
 `CloudFetch`, and the JSON Schema emitter with its `readEither` and
 `toSchemaRead` — kept off the main barrel so a caller that only wants the
-wire vocabulary never resolves `effect`. `@sidecar/runtime/effect` is that door
-one package up: `scheduleOnce` and `scheduleRepeat` fork delayed and repeated
-work into a `Scope`, which is what cancels it, and `timersFromRuntime` answers
-the old `now`/`schedule`/`cancel` seam from a runtime's own `Clock` so a caller
-still injected with those closures reads the clock the rest of the process
-reads, and `makePendingInputQueue` with `admitInput` and
+wire vocabulary never resolves `@effect/platform`. `@sidecar/runtime/effect` is
+that door one package up: `scheduleOnce` and `scheduleRepeat` fork delayed and
+repeated work into a `Scope`, which is what cancels it, `timersFromRuntime`
+answers the old `now`/`schedule`/`cancel` seam from a runtime's own `Clock` so
+a caller still injected with those closures reads the clock the rest of the
+process reads, and `makePendingInputQueue` with `admitInput` and
 `queueDebounceSchedule` are the reply queue's Effect surface. The vocabulary
 door names none of them, so a package that opens only it resolves no `effect`,
 while the barrel now does: `ObservationLoop` keeps its cadence on a `Schedule`
@@ -215,12 +223,13 @@ it through a sibling named for it (`queue.ts` and `queue.effect.ts`), which
 wraps the ported exports, states the port's refusals as tagged errors carrying
 the codes it already decides, and hands a caller any delay table the port
 states as a `Schedule`. `repository-checks.sh` names the ported files and
-refuses an `effect` import in any of them. A door is not what keeps
-`effect` out of a bundle generally, and `@sidecar/session` is where that stops
-being true: its fixed value sets are declared as `Schema.Literal` beside the
-`as const` object they derive from, and each `is*` guard over one is that
-schema's own `Schema.is`, so a renderer naming a single guard resolves
-`Schema`, `SchemaAST`, and `ParseResult`. That is the deliberate cost
+refuses an `effect` import in any of them. A door is not what keeps `effect`
+out of a bundle generally: `@sidecar/wire`'s own barrel resolves `Schema`,
+`SchemaAST`, and `ParseResult` beneath the `s.*` builder, and
+`@sidecar/session`'s fixed value sets are declared as `Schema.Literal` beside
+the `as const` object they derive from, each `is*` guard over one that
+schema's own `Schema.is`, so a renderer naming a single declaration or a
+single guard resolves all three. That is the deliberate cost
 `docs/adr/0001-effect.md` records against the desktop's bundle budget: one copy
 per bundle, paid once, and what the door still keeps out is a Node-reaching
 companion like `@effect/platform`.

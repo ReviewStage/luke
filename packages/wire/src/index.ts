@@ -67,6 +67,7 @@ export {
   type Branded,
   type DescribedOptions,
   type EnumOptions,
+  effectSchema,
   type JsonSchemaNode,
   type NumberOptions,
   RECORD_EXTRA_KEYS,
