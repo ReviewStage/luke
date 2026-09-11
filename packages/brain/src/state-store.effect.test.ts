@@ -99,6 +99,21 @@ describe("loadBrainState", () => {
 });
 
 describe("writeBrainState", () => {
+  it.effect("does not call the store until the effect is run", () =>
+    Effect.gen(function* () {
+      const { store, repository } = openStore();
+      const state = yield* loadBrainState(store);
+      const lease = store.lease();
+      const savesBeforeConstruction = repository.saves;
+
+      const effect = writeBrainState(store, lease, state.generationId, (mutable) => mutable);
+      assert.equal(repository.saves, savesBeforeConstruction);
+
+      yield* effect;
+      assert.equal(repository.saves, savesBeforeConstruction + 1);
+    }),
+  );
+
   it.effect("succeeds when the generation named is the one that stands", () =>
     Effect.gen(function* () {
       const { store } = openStore();
@@ -182,6 +197,21 @@ describe("clearBrainState and resetBrainState", () => {
 });
 
 describe("saveWorkingState, saveRecordState, saveWholeState, and saveCaptureState", () => {
+  it.effect("saveWorkingState does not call the store until the effect is run", () =>
+    Effect.gen(function* () {
+      const { store, repository } = openStore();
+      const { generation, context } = yield* Effect.promise(() => openGeneration(store));
+      const lease = store.lease();
+      const savesBeforeConstruction = repository.saves;
+
+      const effect = saveWorkingState(store, lease, generation, { context });
+      assert.equal(repository.saves, savesBeforeConstruction);
+
+      yield* effect;
+      assert.equal(repository.saves, savesBeforeConstruction + 1);
+    }),
+  );
+
   it.effect("saveWorkingState succeeds and carries the checkpoint into the store", () =>
     Effect.gen(function* () {
       const { store } = openStore();

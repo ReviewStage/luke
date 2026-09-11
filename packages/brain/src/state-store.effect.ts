@@ -32,9 +32,9 @@ export const loadBrainState = (store: BrainStateStore): Effect.Effect<BrainPersi
 
 const refusedUnlessLanded = (
   generationId: string | undefined,
-  landed: Promise<boolean>,
+  landed: () => Promise<boolean>,
 ): Effect.Effect<void, BrainStateWriteRefused> =>
-  Effect.promise(() => landed).pipe(
+  Effect.promise(landed).pipe(
     Effect.flatMap((ok) =>
       ok ? Effect.void : Effect.fail(new BrainStateWriteRefused({ generationId })),
     ),
@@ -42,9 +42,9 @@ const refusedUnlessLanded = (
 
 const refusedUnlessSaved = (
   generationId: string,
-  result: Promise<BrainSaveResult>,
+  result: () => Promise<BrainSaveResult>,
 ): Effect.Effect<BrainSaveResult, BrainStateWriteRefused> =>
-  Effect.promise(() => result).pipe(
+  Effect.promise(result).pipe(
     Effect.flatMap((outcome) =>
       outcome.saved
         ? Effect.succeed(outcome)
@@ -63,7 +63,7 @@ export const saveWorkingState = (
     consumes?: readonly string[];
   },
 ): Effect.Effect<BrainSaveResult, BrainStateWriteRefused> =>
-  refusedUnlessSaved(generation.id, store.saveWorking(lease, generation, working));
+  refusedUnlessSaved(generation.id, () => store.saveWorking(lease, generation, working));
 
 /** A staged write of some fields of one record; fails the same way `saveWorkingState` does. */
 export const saveRecordState = (
@@ -72,7 +72,7 @@ export const saveRecordState = (
   generation: Generation,
   change: BrainRecordChange,
 ): Effect.Effect<BrainSaveResult, BrainStateWriteRefused> =>
-  refusedUnlessSaved(generation.id, store.saveRecord(lease, generation, change));
+  refusedUnlessSaved(generation.id, () => store.saveRecord(lease, generation, change));
 
 /** The restore's own save, carrying the loaded context only when the runtime could read it. */
 export const saveWholeState = (
@@ -81,7 +81,7 @@ export const saveWholeState = (
   generation: Generation,
   context: RecordingContextEngine | undefined,
 ): Effect.Effect<BrainSaveResult, BrainStateWriteRefused> =>
-  refusedUnlessSaved(generation.id, store.saveWhole(lease, generation, context));
+  refusedUnlessSaved(generation.id, () => store.saveWhole(lease, generation, context));
 
 /** Observations captured into the inbox, with the capture cursors they advanced. */
 export const saveCaptureState = (
@@ -90,7 +90,7 @@ export const saveCaptureState = (
   generation: Generation,
   entries: readonly BrainObservationEntry[],
 ): Effect.Effect<BrainSaveResult, BrainStateWriteRefused> =>
-  refusedUnlessSaved(generation.id, store.saveCapture(lease, generation, entries));
+  refusedUnlessSaved(generation.id, () => store.saveCapture(lease, generation, entries));
 
 /** Writes a new envelope of the generation named, under the lease given; fails when it did not land. */
 export const writeBrainState = (
@@ -100,14 +100,14 @@ export const writeBrainState = (
   mutate: (state: BrainPersistedState) => BrainStateMutation,
   committed?: (commit: BrainWriteCommit) => void,
 ): Effect.Effect<void, BrainStateWriteRefused> =>
-  refusedUnlessLanded(generationId, store.write(lease, generationId, mutate, committed));
+  refusedUnlessLanded(generationId, () => store.write(lease, generationId, mutate, committed));
 
 /** Replaces the envelope whole; fails when the write did not land. */
 export const replaceBrainState = (
   store: BrainStateStore,
   state: BrainPersistedState,
 ): Effect.Effect<void, BrainStateWriteRefused> =>
-  refusedUnlessLanded(state.generationId, store.replace(state));
+  refusedUnlessLanded(state.generationId, () => store.replace(state));
 
 /**
  * The Clear; fails when the erasure's marker did not reach storage. The
@@ -122,7 +122,7 @@ export const clearBrainState = (
 ): Effect.Effect<void, BrainStateWriteRefused> =>
   Effect.suspend(() => {
     const landed = store.clear(now);
-    return refusedUnlessLanded(store.generationId(), landed);
+    return refusedUnlessLanded(store.generationId(), () => landed);
   });
 
 /** Start fresh; fails when the successor did not reach storage, named the same way `clearBrainState` names it. */
@@ -132,7 +132,7 @@ export const resetBrainState = (
 ): Effect.Effect<void, BrainStateWriteRefused> =>
   Effect.suspend(() => {
     const landed = store.reset(now);
-    return refusedUnlessLanded(store.generationId(), landed);
+    return refusedUnlessLanded(store.generationId(), () => landed);
   });
 
 /** Settles once every write queued so far has landed or been refused. */
