@@ -1461,3 +1461,44 @@ with it by cascade. **Required: assert after the migration that `conversations`,
 `roster_snapshot` and `roster_diff` still seal through them, which is what the ticket's "remove the
 sealing helpers for conversation payloads (the vault's stay)" meant. `@sidecar/brain/store-shapes`
 and an unused `RunEndReason` export go, both having existed only for what G4 removed.
+
+
+## 2026-09-11 — C3 splits three ways, and puts the trust decision alone in one small PR (orchestrator)
+
+C3 measured its work at ~1,690 insertions / 354 deletions and stopped before opening anything. The
+split, approved:
+
+- **(a) `feat(LUKE-127): the deployment acts for an account at eve's door`** — ~280 production /
+  ~230 tests. The **trust half**: the `ACCOUNT` header, the authenticator and principal-type sets,
+  `deploymentActor` + `actedForAccount`, the door and conversation reads taking the acted-for
+  account, `channel.ts` composing `scheduledObserver` first, **the secret behind one production
+  seam**, `eveSessions` taking a typed `EveCaller` (account bearer | deployment secret + account)
+  and a turn-kind type parameter, and the constant-time bearer check shared with `http.ts`.
+- **(b)** the opener, the tick's `openTurns` seam, the route composition, `store.directory.observed`,
+  the cursor writer split out — ~430 production / ~640 tests. **Accepted at ~1,070** with the split
+  stated; tests are not cut to reach a number.
+- **(c)** the `hold_release` drain (`BRAIN_HOST_TURN.HOLD_RELEASE`, the relay mapping,
+  `writer.dequeueTurn`, the released-briefings read, the opener extension), ~300 lines, not yet
+  built.
+
+**(a) alone is the best structural decision of the day**, and the reason is sequencing rather than
+tidiness: **it is the trust half Dean is ruling on, reviewable without the opener, and C8 part b can
+proceed on it without waiting for (b) or (c).** A decision that was blocking two lanes is now one
+small PR that either lands or does not, with **Dean's ruling changing one constant and one production
+seam.** All five of C8's requirements are met in it, including attribution through
+`admitted.target`, refusal-not-redirect, and the fake-eve harness taking a caller.
+
+**Recorded because it is the right way to hold a requirement: my two-types-one-accessor line is one
+of (a)'s five mutation checks.** "The accessor collapsing to `principalId`" fails a named test, so
+the next person who writes `ownedAuth` against `principalId` because it is simpler breaks a check
+rather than quietly deleting the guarantee. The other four: writes outside the transaction, **consume
+before the send** (cursors advancing before eve accepted would lose an observation permanently and
+look like a quiet morning), no per-account bound, and the actor checking no turn kind.
+
+**(c) is a PR and not a follow-up: LUKE-127 is not Done until it lands**, because until then a
+calendar hold releasing queues a turn that nothing runs — the window C5b states honestly in its own
+body.
+
+**And the tick question is answered by fitting inside the arithmetic rather than claiming a share of
+it:** the opener runs inside each account's 25 s pass, no fourth constant, D3's assertion untouched.
+D3's test now guards three consumers and refused to become a fourth's problem.
