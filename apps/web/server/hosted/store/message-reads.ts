@@ -274,6 +274,32 @@ export async function readMessageByClientId(
   return readSelected(conversationId, selected, tools);
 }
 
+/**
+ * The one message of a conversation its own id names, read back under the
+ * registry like a page: the announcement a speech offer hangs on is the row
+ * the offer's event names. Answers an empty page where none stands.
+ */
+export async function readMessageById(
+  db: HostedStoreDatabase,
+  userId: string,
+  conversationId: string,
+  tools: ToolSet,
+  messageId: string,
+): Promise<MessageListRead> {
+  const selected = await db
+    .select(MESSAGE_COLUMNS)
+    .from(messages)
+    .innerJoin(conversations, standingConversation(messages))
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        eq(messages.userId, userId),
+        eq(messages.id, messageId),
+      ),
+    );
+  return readSelected(conversationId, selected, tools);
+}
+
 /** The row a writer's own client id names in a conversation, by its id alone; nothing where none stands. */
 export async function findMessageByClientId(
   db: HostedStoreDatabase,

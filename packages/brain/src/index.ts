@@ -129,6 +129,7 @@ export {
   brainToolCatalog,
   brainToolRegistry,
   hostedBrainToolCatalog,
+  maximumBriefingLength,
   resolveTurnToolPolicy,
   TOOL_GROUP,
 } from "./tools.js";

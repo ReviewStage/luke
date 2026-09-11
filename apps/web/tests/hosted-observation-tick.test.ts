@@ -11,12 +11,20 @@ import {
   OBSERVATION_TICK_PATH,
   type ObservationTickOptions,
 } from "../server/hosted/observation-tick";
+import type { SpeechPushOutcome } from "../server/hosted/speech-push";
 import type { SpeechSweepOutcome } from "../server/hosted/store";
 
 const CRON_SECRET = "cron-secret-1";
 const ENCRYPTION_SECRET = "a".repeat(64);
 const TICK_TIME = Date.parse("2026-08-12T02:45:00.000Z");
 const SWEPT: SpeechSweepOutcome = { held: 1, released: 0, expired: 3, turns: 0 };
+const PUSHED: SpeechPushOutcome = {
+  pushed: 1,
+  undelivered: 0,
+  unaddressed: 2,
+  unreadable: 0,
+  waiting: 1,
+};
 
 /** The scheduler's call; `null` sends no bearer at all. */
 function tickRequest(authorization: string | null = `Bearer ${CRON_SECRET}`): Request {
@@ -31,6 +39,7 @@ interface Recorded {
   forgot: number[];
   purged: number[];
   swept: number[];
+  pushed: number[];
   listed: Array<{ limit: number; seenAfter: number }>;
   observed: string[];
 }
@@ -43,7 +52,14 @@ function tickOptions(
     changed: false,
   }),
 ) {
-  const recorded: Recorded = { forgot: [], purged: [], swept: [], listed: [], observed: [] };
+  const recorded: Recorded = {
+    forgot: [],
+    purged: [],
+    swept: [],
+    pushed: [],
+    listed: [],
+    observed: [],
+  };
   const options: ObservationTickOptions = {
     request: tickRequest(),
     cronSecret: CRON_SECRET,
@@ -62,6 +78,10 @@ function tickOptions(
     sweepSpeech: async (now) => {
       recorded.swept.push(now);
       return SWEPT;
+    },
+    pushSpeech: async (now) => {
+      recorded.pushed.push(now);
+      return PUSHED;
     },
     observe: async (userId) => {
       recorded.observed.push(userId);
@@ -126,11 +146,13 @@ test("a tick forgets the ineligible, lists accounts seen within the week, and ob
     exhausted: false,
     purged: 2,
     speech: SWEPT,
+    push: PUSHED,
   });
   const seenAfter = TICK_TIME - OBSERVATION_TICK.ACCOUNT_SEEN_WITHIN_MS;
   assert.deepEqual(recorded.forgot, [seenAfter]);
   assert.deepEqual(recorded.purged, [TICK_TIME]);
   assert.deepEqual(recorded.swept, [TICK_TIME]);
+  assert.deepEqual(recorded.pushed, [TICK_TIME]);
   assert.deepEqual(recorded.listed, [{ limit: OBSERVATION_TICK.MAX_ACCOUNTS, seenAfter }]);
   assert.deepEqual(recorded.observed, ["user-a", "user-b", "user-c"]);
 });
@@ -151,6 +173,7 @@ test("a pass that throws is counted as failed and does not end the tick", async 
     exhausted: false,
     purged: 2,
     speech: SWEPT,
+    push: PUSHED,
   });
 });
 
@@ -192,6 +215,7 @@ test("a pass that outruns its deadline is counted failed and the tick moves on",
     exhausted: false,
     purged: 2,
     speech: SWEPT,
+    push: PUSHED,
   });
 });
 

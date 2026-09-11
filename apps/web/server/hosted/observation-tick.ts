@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
+import type { SpeechPushOutcome } from "./speech-push.js";
 import type { SpeechSweepOutcome } from "./store/speech.js";
 
 /**
@@ -7,8 +8,10 @@ import type { SpeechSweepOutcome } from "./store/speech.js";
  * the last week and holding a cloud provider key, the service runs the same
  * read-only pass the on-demand endpoint runs and writes the roster down —
  * the snapshot, and the diff the brain host will wake on. Nothing here
- * decides anything: no model runs, no notification leaves, and what a pass
- * leaves behind is a stored roster and a stored difference.
+ * decides anything: no model runs, and what a pass leaves behind is a
+ * stored roster and a stored difference. The one thing that leaves the
+ * service from a tick is a briefing already decided, pushed to a phone by
+ * the speech push pass when no device is placed to say it.
  */
 
 /** Where Vercel's scheduler calls, fixed here so the cron entry can be checked against it. */
@@ -86,6 +89,14 @@ export interface ObservationTickOptions {
    * the offers' events and the devices' quiet instants, never a word.
    */
   sweepSpeech: (now: number) => Promise<SpeechSweepOutcome>;
+  /**
+   * The pass over the briefings still on offer after the sweep, of any
+   * account, pushing to a phone the ones no device is placed to say, as the
+   * push module decides from the offers' standing and the devices' reported
+   * presence. It runs after the sweep so an offer the sweep just held or
+   * ended is never read as open here.
+   */
+  pushSpeech: (now: number) => Promise<SpeechPushOutcome>;
   /** One read-only pass over the account's cloud providers, written down as the pass module does. */
   observe: (userId: string) => Promise<AccountPassOutcome>;
   now?: () => number;
@@ -108,6 +119,8 @@ interface ObservationTickAnswer {
   purged: number;
   /** What the sweep over the briefings on offer did. */
   speech: SpeechSweepOutcome;
+  /** What the push over the briefings still on offer did. */
+  push: SpeechPushOutcome;
 }
 
 const FAILED_PASS: AccountPassOutcome = { complete: false, changed: false };
@@ -159,6 +172,7 @@ export async function handleObservationTick(options: ObservationTickOptions): Pr
   await options.forgetIneligible(seenAfter);
   const purged = await options.purgeCleared(startedAt);
   const speech = await options.sweepSpeech(startedAt);
+  const push = await options.pushSpeech(startedAt);
   const accounts = await options.listAccounts(OBSERVATION_TICK.MAX_ACCOUNTS, seenAfter);
 
   const answer: ObservationTickAnswer = {
@@ -169,6 +183,7 @@ export async function handleObservationTick(options: ObservationTickOptions): Pr
     exhausted: false,
     purged,
     speech,
+    push,
   };
   for (let index = 0; index < accounts.length; index += OBSERVATION_TICK.CONCURRENCY) {
     if (now() - startedAt + passDeadlineMs > budgetMs) {

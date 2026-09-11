@@ -87,8 +87,10 @@ import { STORE_WRITE_REFUSAL, type StoreWriter } from "./writer.js";
  * Who calls what: the relay offers, through `offerBriefing`, as it settles
  * an announce call; the claim and the spoken report are the live session
  * service's, the one speech sink, calling in process once it runs here (no
- * HTTP route claims, and none should); a push reads the standing to decide
- * and marks the offer pushed; and the sweep runs on the observation tick.
+ * HTTP route claims, and none should); the push pass (`speech-push.ts`)
+ * reads the standing and the account's devices to decide, marks the offer
+ * pushed through `markSpeechPushed`, and only then sends; and the sweep runs
+ * on the observation tick.
  */
 
 export const SPEECH_OFFER = {
@@ -593,8 +595,12 @@ export interface SpeechSweepOptions {
   readonly userIds?: readonly string[] | undefined;
 }
 
-/** The latest quiet instant still ahead among each account's devices; an account with none reports no hold. */
-async function quietByAccount(
+/**
+ * The latest quiet instant still ahead among each account's devices; an
+ * account with none reports no hold. The sweep reads it to hold and the push
+ * pass to stay its hand, so the two decide on one standing.
+ */
+export async function quietUntilByAccount(
   db: HostedStoreDatabase,
   now: number,
   userIds: readonly string[] | undefined,
@@ -649,7 +655,7 @@ export async function sweepSpeech(
   options: SpeechSweepOptions,
 ): Promise<SpeechSweepOutcome> {
   const { now, limit, userIds } = options;
-  const quiet = await quietByAccount(store.db, now, userIds);
+  const quiet = await quietUntilByAccount(store.db, now, userIds);
   const outcome = { held: 0, released: 0, expired: 0, turns: 0 };
   for (const [userId, quietUntil] of quiet) {
     for (const offer of await openSpeechOffers(store.db, { userId, limit })) {

@@ -99,8 +99,9 @@ export const APNS_INTERRUPTION_LEVEL = {
 
 type ApnsInterruptionLevel = (typeof APNS_INTERRUPTION_LEVEL)[keyof typeof APNS_INTERRUPTION_LEVEL];
 
+/** The alert as Apple documents it; a notification with a body alone is drawn under the app's own name. */
 interface ApnsAlert {
-  title: string;
+  title?: string;
   subtitle?: string;
   body?: string;
 }
