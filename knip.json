@@ -57,7 +57,8 @@
         "src/**/*.test.ts",
         "src/**/worker-entry.ts",
         "src/ui-messages/index.ts",
-        "src/testing/index.ts"
+        "src/testing/index.ts",
+        "src/effect/index.ts"
       ],
       "project": ["src/**"]
     },

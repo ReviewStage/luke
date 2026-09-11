@@ -165,6 +165,12 @@ vocabulary a subpath of its own (`@sidecar/calendar/vocabulary`,
 the renderer bundle fails to resolve `node:http` behind a string constant it
 wanted to draw.
 
+`@sidecar/wire/effect` is the same door for the Effect bridges that stand
+beside the hand-rolled base while both are still in use — the `Scope`,
+`Stream`, and `HttpClient` bridges over `IDisposable`, `Event`, and
+`CloudFetch` — kept off the main barrel so a caller that only wants the wire
+vocabulary never resolves `effect`.
+
 A subpath is also how a package keeps something out of a bundle that has no
 use for it. `@sidecar/session/fixtures` is the synthetic snapshot the fixture
 runs and the marketing mock draw, and it stays off the barrel because three

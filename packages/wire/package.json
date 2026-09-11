@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
+    "./effect": "./src/effect/index.js",
     "./testing": "./src/testing/index.js"
   },
   "types": "./src/index.ts",
