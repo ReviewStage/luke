@@ -3,6 +3,7 @@ import { auth } from "../auth.js";
 import { getDatabase } from "../db/index.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "../hosted/openai.js";
 import { POSTHOG_ENVIRONMENT, posthogProjectConsoleUrl } from "../hosted/posthog.js";
+import { runWeb } from "../runtime.js";
 import type { AdminViewer } from "./admin-access.js";
 import { buildAdminDayDetail } from "./admin-day.js";
 import { adminIntegrations, buildAdminMetrics } from "./admin-metrics.js";
@@ -65,13 +66,15 @@ export function hostedAdminSeams(): AdminSeams {
     resolveViewer: resolveSessionViewer,
     readMetrics: async (now, scope, windowDays) =>
       buildAdminMetrics(
-        await readAdminMetricsSource(getDatabase(), {
-          now,
-          integrations,
-          analyticsConsoleUrl,
-          scope,
-          windowDays,
-        }),
+        await runWeb(
+          readAdminMetricsSource({
+            now,
+            integrations,
+            analyticsConsoleUrl,
+            scope,
+            windowDays,
+          }),
+        ),
         now,
         windowDays,
       ),

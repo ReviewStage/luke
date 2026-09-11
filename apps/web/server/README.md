@@ -278,7 +278,11 @@ secret ever travels in an answer — and answers only the boolean or the
 snapshot the caller's own account carries. `server/hosted/account-seams.ts` is
 the one place that hands the group a real user table and a real preferences
 store, so both `api/account/delete.ts` and `api/account/preferences.ts` build
-the same group from the same wiring; the analytics erasure key and project are
+the same group from the same wiring; the reads and the writes themselves are
+`server/hosted/account-store.ts`'s effects over the ambient `SqlClient`, which
+names no database and reaches no auth session, so `tests/hosted-account-store.test.ts`
+exercises the erasure's cascade and the snapshot's replacement against a real
+dialect; the analytics erasure key and project are
 read from `HostedEnvironment` instead, the way the brain group's own key and
 model override are, and the erasure call itself runs over the ambient
 `HttpClient` rather than an injected transport, so nothing in `AccountAppSeams`
@@ -348,7 +352,12 @@ database. Each read still answers for its own parameters and its own body,
 and the group carries that answer as it came, status, headers, and bytes, the
 way the auth group carries Better Auth's. `server/admin/admin-route.ts` is
 the one place that hands the group this deployment's real session resolver,
-database, and integration presence booleans.
+database, and integration presence booleans. The overview's own aggregates are
+`readAdminMetricsSource`'s effects over the ambient `SqlClient`, run at the
+edge like every other converted read, and `tests/admin-metrics-queries.test.ts`
+pins what they answer for a seeded window under both scopes; the roster, the
+account detail, the day detail, and the favorite write are still Drizzle
+queries taking `getDatabase()`.
 
 Every admin answer is viewer-gated account data, refusals included, so each
 one carries `no-store`; `fixtures/admin-refusal/` records the five the group
