@@ -107,10 +107,10 @@ export interface GatewayService {
    * (`testing.ts`) still construct over `GatewayServer` directly — moving
    * their callers onto the layers changed the request's own microtask timing
    * enough to break their reconnection-race tests (the reason P6-04 left them
-   * standing) — and the desktop's `InProcessTransport` construction in
-   * `apps/desktop/src/main/services/operator-client.ts` goes through the same
-   * `transport.ts`, so both fields go together once a later PR resolves that
-   * and hands every transport the layers directly.
+   * standing, and P8-04 confirmed the desktop's own `InProcessTransport`
+   * construction in `apps/desktop/src/main/services/operator-client.ts` goes
+   * through the same `transport.ts` rather than converting it) — so both
+   * fields go together once P6-13 hands every transport the layers directly.
    */
   readonly serverOptions: GatewayServerOptions;
   readonly nodes: NodeRegistry;

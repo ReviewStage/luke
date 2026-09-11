@@ -191,10 +191,9 @@ standing, because `transport.ts`'s `ServerBoundTransport` (and the
 its subclasses; moving `ServerBoundTransport`'s callers onto the layers
 directly changed the request's own microtask timing enough to break the
 reconnection-race tests it and its callers hold, so P6-04 left it standing on
-purpose, and P8-04 left it standing too — the desktop host service's own
-attach is now a retry over `retryAttachWhileDetachedEffect` rather than a
-Promise door over it, which is unrelated to the class. Both fields go
-together once a later PR resolves that timing and hands every transport the
+purpose, and P8-04 (the desktop's host service) confirmed the same is still
+true of the desktop rather than converting it. Both fields go together once
+P6-13 converts `transport.ts` and `testing.ts` and hands every transport the
 layers directly.
 
 ## Five doors, because three of them reach beyond the vocabulary
