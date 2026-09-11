@@ -1045,3 +1045,38 @@ and **no open PR in this rework carries a `drizzle/0*.sql`**, so the namespace i
 asserts a real eve run carries `prompt_hash` **through durable state** from `session.started` to the
 turn row. The amendment to LUKE-128's acceptance rests on eve's documented lifecycle scope; that
 test is what makes it a fact about this build.
+
+
+## 2026-09-11 — DEPLOYMENT GATE: the preset flip must precede #1018's merge, not follow it (orchestrator)
+
+The strongest reason for C2a's enqueue hold is one neither the worker nor I said out loud until the
+fourth preview. **#1018 is not merely unverified until the framework preset is flipped — it is
+unsafe to merge until then.**
+
+C2a's diff **removes** the top-level `installCommand`, `buildCommand` and `ignoreCommand` and puts
+them inside `services.web`, which is correct for services mode. **On a project still set to the
+single-app preset, a merged #1018 therefore leaves `vercel.json` with no top-level build at all and
+a `services` key Vercel ignores** — Vercel auto-detects Vite and **skips `pnpm db:migrate && pnpm
+auth:seed`** and the function bundling, on **main**, for every production deploy until someone
+changes the setting.
+
+**So the order is fixed, and it is the reverse of the intuitive one:**
+
+1. **Flip the project's framework preset to Services first.** Safe on main because main's
+   `vercel.json` carries no `services` key and Vercel requires **both** conditions — the project
+   keeps building the old way. Confirm with one redeploy of main.
+2. **Then** #1018's preview builds as services, the eve service's outcome is read from the build
+   log, and only then does it merge.
+
+**Recorded as a merge precondition in #1018's own body**, in those words rather than as "waiting on
+a preview": anyone with merge rights reading "green, waiting for a preview" might reasonably help by
+enqueueing it, and that sentence is what stops them.
+
+**A cheap signal, since previews are behind Deployment Protection and no worker holds a Vercel
+credential (gate finding 8):** a services build that runs `eve build` and writes a 13.7 MB /
+3.01 MB gzip `__server` output cannot finish in about a minute. **Ready in ~70 s is the single-app
+signature** — four previews now, at 72 s and 69 s among them. If a post-flip redeploy returns Ready
+that fast, the preset did not take.
+
+This is the one place in the rework where **the order of a settings change and a merge decides
+whether production keeps migrating its database.**
