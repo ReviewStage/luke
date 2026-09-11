@@ -1,11 +1,28 @@
+import { Schema as EffectSchema, ParseResult, type SchemaAST } from "effect";
 import {
-  isRecord,
-  isWireBoolean,
-  isWireNumber,
-  isWireString,
-  type UnparsedWireValue,
-  wholeText,
-} from "./json.js";
+  declareReader,
+  describeWire,
+  emitJsonSchema,
+  readEither,
+  toSchemaRead,
+  verbatimJsonSchema,
+  wireRefusal,
+} from "./effect/json-schema.js";
+import { isRecord, type UnparsedWireValue, type WireValue, wholeText } from "./json.js";
+import {
+  type JsonSchemaNode,
+  SCHEMA_REFUSAL,
+  type SchemaRead,
+  type SchemaRefusal,
+} from "./schema-vocabulary.js";
+
+export {
+  type JsonSchemaNode,
+  SCHEMA_REFUSAL,
+  type SchemaPath,
+  type SchemaRead,
+  type SchemaRefusal,
+} from "./schema-vocabulary.js";
 
 /**
  * One declaration per wire value, which both parses what arrived and emits
@@ -15,74 +32,17 @@ import {
  * advertises, and a field the parser never reads is a field no model is
  * offered.
  *
+ * Every combinator here constructs an Effect `Schema` and answers for it:
+ * `read` is `readEither` over that schema and `jsonSchema` is the emitter
+ * walking it, so what a declaration parses and what it shows are one AST.
+ * The builder is the strangler facade the migration keeps while callers
+ * still hold a `Schema<Value>`; `effectSchema` hands the Effect schema out
+ * of one, and P12-08 deletes the facade once every caller declares directly.
+ *
  * Nothing here throws at a value: a refusal is a returned word and a path.
  * The one thing that throws is a schema declared with rules that contradict
  * each other, at construction, so a wrong declaration cannot ship.
  */
-
-/** Why a value was refused. Three words, because a caller can only action on three. */
-export const SCHEMA_REFUSAL = {
-  /** Wrong type, wrong structure, unknown key, missing required key, unlisted literal. */
-  MALFORMED: "malformed",
-  /** Well-formed but past a declared bound: a bounded text, array, or number. */
-  TOO_LARGE: "too-large",
-  /** Well-formed but outside a registry the schema was built with (an unregistered tool name). */
-  NOT_REGISTERED: "not-registered",
-} as const;
-
-export type SchemaRefusal = (typeof SCHEMA_REFUSAL)[keyof typeof SCHEMA_REFUSAL];
-
-/** Where in the value the refusal happened: record keys and array indices, outermost first. */
-export type SchemaPath = readonly (string | number)[];
-
-export type SchemaRead<Value> =
-  | { readonly ok: true; readonly value: Value }
-  | { readonly ok: false; readonly refusal: SchemaRefusal; readonly path: SchemaPath };
-
-/** A JSON Schema node, in the strict form a function tool's parameters take. */
-export type JsonSchemaNode =
-  | {
-      readonly type: "string";
-      readonly description?: string;
-      readonly enum?: readonly string[];
-      readonly minLength?: number;
-      readonly maxLength?: number;
-    }
-  | {
-      readonly type: "number" | "integer";
-      readonly description?: string;
-      readonly enum?: readonly number[];
-      readonly minimum?: number;
-      readonly maximum?: number;
-    }
-  | { readonly type: "boolean"; readonly description?: string; readonly enum?: readonly boolean[] }
-  | { readonly type: "null"; readonly description?: string }
-  | {
-      readonly type: "array";
-      readonly description?: string;
-      readonly items: JsonSchemaNode;
-      readonly minItems?: number;
-      readonly maxItems?: number;
-    }
-  | {
-      readonly type: "object";
-      readonly description?: string;
-      readonly properties: { readonly [key: string]: JsonSchemaNode };
-      readonly required: readonly string[];
-      readonly additionalProperties: false;
-    }
-  | { readonly anyOf: readonly JsonSchemaNode[]; readonly description?: string };
-
-/**
- * A node while its bounds are being written, before it is emitted read-only.
- * Derived from {@link JsonSchemaNode} rather than restated, so a member added
- * to the emitted form is a member the builder can write.
- */
-type Draft<Node> = { -readonly [Key in keyof Node]: Node[Key] };
-
-type StringNodeDraft = Draft<Extract<JsonSchemaNode, { type: "string" }>>;
-type NumberNodeDraft = Draft<Extract<JsonSchemaNode, { type: "number" | "integer" }>>;
-type ArrayNodeDraft = Draft<Extract<JsonSchemaNode, { type: "array" }>>;
 
 export interface Schema<Value> {
   /**
@@ -99,6 +59,23 @@ export interface Schema<Value> {
   optional(): Schema<Value | undefined>;
   /** A human sentence carried into the emitted node's description. Returns a new schema. */
   describe(description: string): Schema<Value>;
+  /**
+   * The Effect `Schema` this declaration is built over, admitting exactly
+   * what `read` admits. Its decoded type is not stated here, because Effect's
+   * `Schema` is invariant in it and a `Schema<string>` has to remain a
+   * `Schema<unknown>` to every field table; {@link effectSchema} states it.
+   */
+  readonly effect: EffectSchema.Schema<unknown, UnparsedWireValue>;
+}
+
+/** What a declaration decodes from: a JSON value, or none where the declaration admits absence. */
+type WireEncoded<Value> = undefined extends Value ? UnparsedWireValue : WireValue;
+
+/** The Effect `Schema` beneath a declaration, typed as the declaration types itself. */
+export function effectSchema<Value>(
+  schema: Schema<Value>,
+): EffectSchema.Schema<Value, WireEncoded<Value>> {
+  return EffectSchema.make(schema.effect.ast);
 }
 
 export type SchemaFields = { readonly [key: string]: Schema<unknown> };
@@ -124,48 +101,73 @@ export type RecordOf<Fields extends SchemaFields> = {
 /** A nominal brand over a parsed value; the emitted node is the inner one's. */
 export type Branded<Value, Brand extends string> = Value & { readonly __brand: Brand };
 
-function admit<Value>(value: Value): SchemaRead<Value> {
-  return { ok: true, value };
+/** The Effect schema a declaration parses with, before its absence is admitted. */
+type Core<Value> = EffectSchema.Schema<Value, UnparsedWireValue>;
+
+/**
+ * What a declaration was built from. A table rather than fields on
+ * {@link Schema}, so `optional` stays the only way a key becomes optional and
+ * no caller can declare one by hand or substitute a core of its own.
+ */
+interface Declared {
+  readonly core: EffectSchema.Schema.All;
+  readonly absentAdmitted: boolean;
 }
 
-function refuse(refusal: SchemaRefusal, path: SchemaPath = []): SchemaRead<never> {
-  return { ok: false, refusal, path };
+const DECLARED = new WeakMap<Schema<unknown>, Declared>();
+
+function declaredOf(schema: Schema<unknown>): Declared {
+  const declared = DECLARED.get(schema);
+  if (declared === undefined) {
+    throw new Error("A schema combined here has to be one this builder declared.");
+  }
+  return declared;
 }
 
-function describedNode(node: JsonSchemaNode, description: string | undefined): JsonSchemaNode {
-  return description === undefined ? node : { ...node, description };
+function coreOf<Value>(schema: Schema<Value>): Core<Value> {
+  return EffectSchema.make(declaredOf(schema).core.ast);
 }
 
 /**
- * Which schemas a record may leave the key out for. A set rather than a field
- * on {@link Schema}, so `optional` stays the only way a key becomes optional
- * and no caller can declare one by hand.
+ * The Effect schema an operation answered, under the type the declaration
+ * states for it. Every combinator composes an AST whose parse is exactly its
+ * rule; the type is the builder's own claim over that AST — `RecordOf` over a
+ * struct assembled from a field table, a nominal brand over an unchanged
+ * node, a mapping's result — which `Schema.make` states over the AST alone.
  */
-const ABSENT_ADMITTED = new WeakSet<Schema<unknown>>();
+function over<Value>(schema: EffectSchema.Schema.All): Core<Value> {
+  return EffectSchema.make(schema.ast);
+}
 
-function schemaOver<Value>(
-  read: (value: UnparsedWireValue) => SchemaRead<Value>,
-  node: () => JsonSchemaNode,
-  absentAdmitted = false,
-): Schema<Value> {
+/**
+ * The declaration over its core. An absent-admitted one reads through the
+ * core or `undefined`, and still shows the core's node alone, because a JSON
+ * value is never `undefined` and a key's absence is what a record's `required`
+ * already says.
+ */
+function schemaOver<Value>(core: Core<Value>, absentAdmitted = false): Schema<Value> {
+  const admitting: Core<Value> = absentAdmitted
+    ? over<Value>(EffectSchema.UndefinedOr(core))
+    : core;
+  const read = readEither(admitting);
   const schema: Schema<Value> = {
-    read,
+    effect: EffectSchema.make(admitting.ast),
+    read: (value) => toSchemaRead(read(value)),
     parse(value) {
-      const result = read(value);
+      const result = schema.read(value);
       return result.ok ? result.value : undefined;
     },
-    jsonSchema: node,
+    jsonSchema: () => emitJsonSchema(core),
     optional: () =>
-      schemaOver<Value | undefined>(
-        (value) => (value === undefined ? admit(undefined) : read(value)),
-        node,
-        true,
-      ),
-    describe: (description) =>
-      schemaOver<Value>(read, () => describedNode(node(), description), absentAdmitted),
+      absentAdmitted ? schema : schemaOver<Value | undefined>(over<Value | undefined>(core), true),
+    describe: (description) => schemaOver<Value>(describeWire(core, description), absentAdmitted),
   };
-  if (absentAdmitted) ABSENT_ADMITTED.add(schema);
+  DECLARED.set(schema, { core, absentAdmitted });
   return schema;
+}
+
+function admit<Value>(value: Value): SchemaRead<Value> {
+  return { ok: true, value };
 }
 
 /** What a text longer than its bound earns. */
@@ -187,6 +189,10 @@ export type TextEnds = (typeof TEXT_ENDS)[keyof typeof TEXT_ENDS];
 /** What every combinator takes: the sentence its node carries, and nothing else. */
 export interface DescribedOptions {
   description?: string;
+}
+
+function described<Value>(core: Core<Value>, description: string | undefined): Core<Value> {
+  return description === undefined ? core : describeWire(core, description);
 }
 
 /** A bounded text whose bound refuses rather than cuts. */
@@ -211,18 +217,30 @@ export interface TextOptions extends DescribedOptions {
   allowEmpty?: boolean;
 }
 
+type Text = EffectSchema.Schema<string, string>;
+
+/** A text settled by a rule of the declaration's, before its bounds are read. */
+function settledText(settle: (value: string) => string): Text {
+  return EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
+    strict: true,
+    decode: settle,
+    encode: (value) => value,
+  });
+}
+
 /**
- * A text's node carries every bound its schema enforces. `minLength` is `1`
- * wherever an empty text is refused: JSON Schema cannot say "not only
- * whitespace", so the emitted bound is necessary rather than sufficient, but a
- * bound the parser holds and the node omits is drift in the direction that
- * misleads a model.
+ * A text of nothing but whitespace carries nothing. JSON Schema cannot say
+ * "not only whitespace", so the rule is shown as `minLength: 1`, a bound
+ * necessary rather than sufficient; a bound the parser holds and the node
+ * omits would be drift in the direction that misleads a model.
  */
-function stringNode(bounds: { max: number | undefined; allowEmpty?: boolean }): JsonSchemaNode {
-  const node: StringNodeDraft = { type: "string" };
-  if (bounds.allowEmpty !== true) node.minLength = 1;
-  if (bounds.max !== undefined) node.maxLength = bounds.max;
-  return node;
+function nonBlank(text: Text): Text {
+  return text.pipe(
+    EffectSchema.filter((value) => value.trim().length > 0, {
+      schemaId: EffectSchema.MinLengthSchemaId,
+      jsonSchema: { minLength: 1 },
+    }),
+  );
 }
 
 function textSchema(options: TextOptions = {}): Schema<string> {
@@ -241,20 +259,16 @@ function textSchema(options: TextOptions = {}): Schema<string> {
       "A one-line text settles both its ends by collapsing, so declaring `ends` beside `oneLine` states a rule that would never be read.",
     );
   }
-  return schemaOver<string>(
-    (value) => {
-      if (!isWireString(value)) return refuse(SCHEMA_REFUSAL.MALFORMED);
-      const collapsed = collapse ? value.replace(/\s+/gu, " ") : value;
-      const normalized = collapse || ends === TEXT_ENDS.TRIM ? collapsed.trim() : collapsed;
-      if (!allowEmpty && normalized.trim().length === 0) return refuse(SCHEMA_REFUSAL.MALFORMED);
-      if (max === undefined || normalized.length <= max) return admit(normalized);
-      if (overflow === TEXT_OVERFLOW.ELLIPSIS) {
-        return admit(`${normalized.slice(0, max - 1).trimEnd()}…`);
-      }
-      return refuse(SCHEMA_REFUSAL.TOO_LARGE);
-    },
-    () => describedNode(stringNode({ max, allowEmpty }), description),
-  );
+  let core: Text = settledText((value) => {
+    const collapsed = collapse ? value.replace(/\s+/gu, " ") : value;
+    const normalized = collapse || ends === TEXT_ENDS.TRIM ? collapsed.trim() : collapsed;
+    return overflow === TEXT_OVERFLOW.ELLIPSIS && max !== undefined && normalized.length > max
+      ? `${normalized.slice(0, max - 1).trimEnd()}…`
+      : normalized;
+  });
+  if (!allowEmpty) core = nonBlank(core);
+  if (max !== undefined) core = core.pipe(EffectSchema.maxLength(max));
+  return schemaOver(described(over<string>(core), description));
 }
 
 /**
@@ -263,16 +277,9 @@ function textSchema(options: TextOptions = {}): Schema<string> {
  */
 function wholeTextSchema(options: BoundedTextOptions = {}): Schema<string> {
   const { max, description } = options;
-  return schemaOver<string>(
-    (value) => {
-      if (!isWireString(value)) return refuse(SCHEMA_REFUSAL.MALFORMED);
-      const normalized = wholeText(value);
-      if (normalized === undefined) return refuse(SCHEMA_REFUSAL.MALFORMED);
-      if (max !== undefined && normalized.length > max) return refuse(SCHEMA_REFUSAL.TOO_LARGE);
-      return admit(normalized);
-    },
-    () => describedNode(stringNode({ max }), description),
-  );
+  let core: Text = settledText((value) => wholeText(value) ?? "").pipe(EffectSchema.minLength(1));
+  if (max !== undefined) core = core.pipe(EffectSchema.maxLength(max));
+  return schemaOver(described(over<string>(core), description));
 }
 
 export interface NumberOptions extends DescribedOptions {
@@ -285,32 +292,17 @@ export interface NumberOptions extends DescribedOptions {
   maximum?: number;
 }
 
-function numberNode(whole: boolean, options: NumberOptions): JsonSchemaNode {
-  const node: NumberNodeDraft = { type: whole ? "integer" : "number" };
-  if (options.minimum !== undefined) node.minimum = options.minimum;
-  if (options.maximum !== undefined) node.maximum = options.maximum;
-  return node;
-}
-
 function boundedNumber(options: NumberOptions, whole: boolean): Schema<number> {
   const { minimum, maximum, description } = options;
-  return schemaOver<number>(
-    (value) => {
-      if (!isWireNumber(value) || !Number.isFinite(value)) return refuse(SCHEMA_REFUSAL.MALFORMED);
-      if (whole && !Number.isSafeInteger(value)) return refuse(SCHEMA_REFUSAL.MALFORMED);
-      if (minimum !== undefined && value < minimum) return refuse(SCHEMA_REFUSAL.MALFORMED);
-      if (maximum !== undefined && value > maximum) return refuse(SCHEMA_REFUSAL.TOO_LARGE);
-      return admit(value);
-    },
-    () => describedNode(numberNode(whole, options), description),
-  );
+  let core: EffectSchema.Schema<number, number> = EffectSchema.Number.pipe(EffectSchema.finite());
+  if (whole) core = core.pipe(EffectSchema.int());
+  if (minimum !== undefined) core = core.pipe(EffectSchema.greaterThanOrEqualTo(minimum));
+  if (maximum !== undefined) core = core.pipe(EffectSchema.lessThanOrEqualTo(maximum));
+  return schemaOver(described(over<number>(core), description));
 }
 
 function booleanSchema(options: DescribedOptions = {}): Schema<boolean> {
-  return schemaOver<boolean>(
-    (value) => (isWireBoolean(value) ? admit(value) : refuse(SCHEMA_REFUSAL.MALFORMED)),
-    () => describedNode({ type: "boolean" }, options.description),
-  );
+  return schemaOver(described(over<boolean>(EffectSchema.Boolean), options.description));
 }
 
 /**
@@ -318,23 +310,11 @@ function booleanSchema(options: DescribedOptions = {}): Schema<boolean> {
  * field that must be exactly `2` advertised as an integer would offer a model
  * every other integer, which is the drift these declarations exist to close.
  */
-function literalNode(literal: string | number | boolean | null): JsonSchemaNode {
-  if (literal === null) return { type: "null" };
-  if (isWireString(literal)) return { type: "string", enum: [literal] };
-  if (isWireNumber(literal)) {
-    return { type: Number.isSafeInteger(literal) ? "integer" : "number", enum: [literal] };
-  }
-  return { type: "boolean", enum: [literal] };
-}
-
 function literalSchema<const Literal extends string | number | boolean | null>(
   literal: Literal,
   options: DescribedOptions = {},
 ): Schema<Literal> {
-  return schemaOver<Literal>(
-    (value) => (value === literal ? admit(literal) : refuse(SCHEMA_REFUSAL.MALFORMED)),
-    () => describedNode(literalNode(literal), options.description),
-  );
+  return schemaOver(described(over<Literal>(EffectSchema.Literal(literal)), options.description));
 }
 
 export interface EnumOptions extends DescribedOptions {
@@ -347,22 +327,29 @@ export interface EnumOptions extends DescribedOptions {
   ends?: TextEnds;
 }
 
+/**
+ * A member set is a union of literals, which the emitter shows as one `enum`.
+ * A set read with its ends trimmed settles the text ahead of the membership
+ * test, and the node is declared beside it, because what the emitter shows
+ * for a transformation is the text it decodes from.
+ */
 function enumSchema<const Member extends string>(
   members: readonly Member[],
   options: EnumOptions = {},
 ): Schema<Member> {
-  const admitted = new Set<string>(members);
-  const trim = options.ends === TEXT_ENDS.TRIM;
-  return schemaOver<Member>(
-    (value) => {
-      if (!isWireString(value)) return refuse(SCHEMA_REFUSAL.MALFORMED);
-      const normalized = trim ? value.trim() : value;
-      if (!admitted.has(normalized)) return refuse(SCHEMA_REFUSAL.MALFORMED);
-      // SAFETY: membership in the declared member set was just checked.
-      return admit(normalized as Member);
-    },
-    () => describedNode({ type: "string", enum: members }, options.description),
-  );
+  const literals = EffectSchema.Literal(...members);
+  const core =
+    options.ends === TEXT_ENDS.TRIM
+      ? verbatimJsonSchema(
+          EffectSchema.transform(EffectSchema.String, literals, {
+            strict: false,
+            decode: (value) => value.trim(),
+            encode: (value) => value,
+          }),
+          { type: "string", enum: members },
+        )
+      : literals;
+  return schemaOver(described(over<Member>(core), options.description));
 }
 
 export interface ArrayOptions extends DescribedOptions {
@@ -374,44 +361,42 @@ export interface ArrayOptions extends DescribedOptions {
   skipRefused?: boolean;
 }
 
-function arrayNode(
-  items: JsonSchemaNode,
-  minimum: number | undefined,
-  max: number | undefined,
-): JsonSchemaNode {
-  const node: ArrayNodeDraft = { type: "array", items };
-  if (minimum !== undefined) node.minItems = minimum;
-  if (max !== undefined) node.maxItems = max;
-  return node;
+/**
+ * The entries of an array that drops a refused one: each is read forgivingly,
+ * and the entries that were dropped are then taken out of the count.
+ */
+function keptEntries<Value>(item: Core<Value>): Core<Value[]> {
+  const forgiving = EffectSchema.Array(droppedCore(item));
+  return over<Value[]>(
+    EffectSchema.transform(forgiving, EffectSchema.Unknown, {
+      strict: false,
+      decode: (entries) => entries.filter((entry) => entry !== undefined),
+      encode: (entries) => entries,
+    }),
+  );
 }
 
 function arraySchema<Value>(item: Schema<Value>, options: ArrayOptions = {}): Schema<Value[]> {
   const { max, minimum, description } = options;
-  const skipRefused = options.skipRefused === true;
-  return schemaOver<Value[]>(
-    (value) => {
-      if (!Array.isArray(value)) return refuse(SCHEMA_REFUSAL.MALFORMED);
-      if (max !== undefined && value.length > max) return refuse(SCHEMA_REFUSAL.TOO_LARGE);
-      const admitted: Value[] = [];
-      for (let index = 0; index < value.length; index += 1) {
-        const read = item.read(value[index]);
-        if (read.ok) {
-          admitted.push(read.value);
-          continue;
-        }
-        if (skipRefused) continue;
-        return { ok: false, refusal: read.refusal, path: [index, ...read.path] };
-      }
-      // The count that has to clear `minimum` is the one admitted, not the one that arrived:
-      // `skipRefused` drops entries, and `minItems` is a bound on the value this read answers
-      // with. `max` is read before the loop instead, since nothing admitted can exceed it.
-      if (minimum !== undefined && admitted.length < minimum) {
-        return refuse(SCHEMA_REFUSAL.MALFORMED);
-      }
-      return admit(admitted);
-    },
-    () => describedNode(arrayNode(item.jsonSchema(), minimum, max), description),
-  );
+  const itemCore = coreOf(item);
+  const entries =
+    options.skipRefused === true ? keptEntries(itemCore) : EffectSchema.Array(itemCore);
+  // A bound on the count is read before any entry is, and it counts the entries that arrived:
+  // `max` is declared over the arriving array and composed ahead of the entries, and the node
+  // the arriving entries show is the item's own. `minimum` follows the entries instead, since
+  // with `skipRefused` the count that has to clear it is the one admitted.
+  let core: EffectSchema.Schema.All =
+    max === undefined
+      ? entries
+      : EffectSchema.compose(
+          EffectSchema.Array(verbatimJsonSchema(EffectSchema.Unknown, item.jsonSchema())).pipe(
+            EffectSchema.maxItems(max),
+          ),
+          entries,
+          { strict: false },
+        );
+  if (minimum !== undefined) core = core.pipe(EffectSchema.minItems(minimum));
+  return schemaOver(described(over<Value[]>(core), description));
 }
 
 /** What a record does with a key its field table does not name. */
@@ -433,8 +418,54 @@ export interface RecordOptions extends DescribedOptions {
   extraKeys?: RecordExtraKeys;
 }
 
+const EXCESS_PROPERTY = {
+  [RECORD_EXTRA_KEYS.REFUSE]: "error",
+  [RECORD_EXTRA_KEYS.IGNORE]: "ignore",
+} as const satisfies {
+  readonly [Rule in RecordExtraKeys]: SchemaAST.ParseOptions["onExcessProperty"];
+};
+
+/**
+ * A field table as a struct, each field's rule on excess keys carried on the
+ * struct itself so a strict record nested in a tolerant one stays strict:
+ * Effect hands a struct's parse options down to its fields, and a struct that
+ * said nothing would inherit the rule above it.
+ */
+function structOf(
+  entries: readonly (readonly [string, Schema<unknown>])[],
+  extraKeys: RecordExtraKeys,
+) {
+  const properties = Object.fromEntries(
+    entries.map(([key, field]) => {
+      const { core, absentAdmitted } = declaredOf(field);
+      return [key, absentAdmitted ? EffectSchema.optional(core) : core] as const;
+    }),
+  );
+  return EffectSchema.Struct(properties).annotations({
+    parseOptions: { onExcessProperty: EXCESS_PROPERTY[extraKeys] },
+  });
+}
+
 /** Any one of a field table's parsed values, which is what its record's own values are. */
 type AdmittedFieldValue<Fields extends SchemaFields> = FieldValue<Fields[keyof Fields]>;
+
+/**
+ * The record a struct decoded, rebuilt from the field table's own keys and
+ * never from what arrived: an optional field written as `undefined` and a
+ * field whose own reader answered nothing are both left out rather than
+ * written, exactly as an absent optional key is.
+ */
+function admittedFields<Fields extends SchemaFields>(
+  fields: Fields,
+  decoded: { readonly [Key in keyof Fields]?: AdmittedFieldValue<Fields> },
+): { readonly [key: string]: AdmittedFieldValue<Fields> } {
+  return Object.fromEntries(
+    Object.keys(fields).flatMap((key) => {
+      const value = decoded[key];
+      return Object.hasOwn(decoded, key) && value !== undefined ? [[key, value] as const] : [];
+    }),
+  );
+}
 
 function recordSchema<Fields extends SchemaFields>(
   fields: Fields,
@@ -442,80 +473,59 @@ function recordSchema<Fields extends SchemaFields>(
 ): Schema<RecordOf<Fields>> {
   const entries = Object.entries(fields);
   const extraKeys = options.extraKeys ?? RECORD_EXTRA_KEYS.REFUSE;
-  const { description } = options;
-  return schemaOver<RecordOf<Fields>>(
-    (value) => {
-      if (!isRecord(value)) return refuse(SCHEMA_REFUSAL.MALFORMED);
-      if (extraKeys === RECORD_EXTRA_KEYS.REFUSE) {
-        for (const key of Object.keys(value)) {
-          if (!Object.hasOwn(fields, key)) return refuse(SCHEMA_REFUSAL.MALFORMED, [key]);
+  const struct = structOf(entries, extraKeys);
+  // Effect reads a struct out of any object and admits any non-null value for a struct with no
+  // fields, where a record here is a plain object and nothing else; the arriving value is read
+  // again for that, and a fieldless record checks its own keys, since Effect checks none for it.
+  const core = EffectSchema.transformOrFail(struct, EffectSchema.Unknown, {
+    strict: false,
+    decode: (decoded, _options, ast, arrived) => {
+      if (!isRecord(arrived)) return ParseResult.fail(new ParseResult.Type(ast, arrived));
+      if (entries.length === 0 && extraKeys === RECORD_EXTRA_KEYS.REFUSE) {
+        const [unexpected] = Object.keys(arrived);
+        if (unexpected !== undefined) {
+          return ParseResult.fail(
+            new ParseResult.Pointer(
+              unexpected,
+              arrived,
+              new ParseResult.Unexpected(arrived[unexpected]),
+            ),
+          );
         }
       }
-      const admitted = new Map<string, AdmittedFieldValue<Fields>>();
-      for (const [key, field] of entries) {
-        if (!Object.hasOwn(value, key) && !ABSENT_ADMITTED.has(field)) {
-          return refuse(SCHEMA_REFUSAL.MALFORMED, [key]);
-        }
-        const read = field.read(value[key]);
-        if (!read.ok) return { ok: false, refusal: read.refusal, path: [key, ...read.path] };
-        // SAFETY: `field` is the schema RecordOf types this key by, so what it admitted is one
-        // of this table's field values; an optional field admits absence as undefined.
-        const parsed = read.value as AdmittedFieldValue<Fields> | undefined;
-        if (parsed !== undefined) admitted.set(key, parsed);
-      }
-      // SAFETY: every named key was read by the schema RecordOf types it by, and an absent
-      // optional field is left out, which is the optional property RecordOf declares.
-      return admit(Object.fromEntries(admitted) as RecordOf<Fields>);
+      return ParseResult.succeed(admittedFields(fields, decoded));
     },
-    () =>
-      describedNode(
-        {
-          type: "object",
-          properties: Object.fromEntries(
-            entries.map(([key, field]) => [key, field.jsonSchema()] as const),
-          ),
-          required: entries.filter(([, field]) => !ABSENT_ADMITTED.has(field)).map(([key]) => key),
-          additionalProperties: false,
-        },
-        description,
-      ),
-  );
+    encode: (value) => ParseResult.succeed(value),
+  });
+  return schemaOver(described(over<RecordOf<Fields>>(core), options.description));
 }
 
+/**
+ * A union admits the first member that reads the value and shows an `anyOf`
+ * of its members. A value no member admits is malformed at the union itself:
+ * which member came closest is not a fact the union states, so the refusal
+ * is the union's own word rather than the first member's.
+ */
 function unionSchema<const Members extends readonly Schema<unknown>[]>(
   members: Members,
   options: DescribedOptions = {},
 ): Schema<FieldValue<Members[number]>> {
-  return schemaOver<FieldValue<Members[number]>>(
-    (value) => {
-      for (const member of members) {
-        const read = member.read(value);
-        if (!read.ok) continue;
-        // SAFETY: this member admitted the value, so it is one of the members' parsed types.
-        return admit(read.value as FieldValue<Members[number]>);
-      }
-      return refuse(SCHEMA_REFUSAL.MALFORMED);
-    },
-    () =>
-      describedNode({ anyOf: members.map((member) => member.jsonSchema()) }, options.description),
+  const core = EffectSchema.Union(...members.map((member) => declaredOf(member).core)).annotations(
+    wireRefusal(SCHEMA_REFUSAL.MALFORMED),
   );
+  return schemaOver(described(over<FieldValue<Members[number]>>(core), options.description));
 }
 
 /**
  * A nominal brand over a parsed value. The brand is carried by the type
  * parameter alone, which the second argument is there to infer; nothing about
- * the value changes, so nothing reads it at run time.
+ * the value or its schema changes, so nothing reads it at run time.
  */
 function brandSchema<Value, Brand extends string>(
   inner: Schema<Value>,
   _brand: Brand,
 ): Schema<Branded<Value, Brand>> {
-  return schemaOver<Branded<Value, Brand>>((value) => {
-    const read = inner.read(value);
-    if (!read.ok) return read;
-    // SAFETY: the brand is nominal only; the value stands exactly as the inner schema admitted it.
-    return admit(read.value as Branded<Value, Brand>);
-  }, inner.jsonSchema);
+  return schemaOver(over<Branded<Value, Brand>>(coreOf(inner)));
 }
 
 /**
@@ -528,11 +538,16 @@ function registeredSchema<Value extends string>(
   inner: Schema<Value>,
   registry: ReadonlySet<string>,
 ): Schema<Value> {
-  return schemaOver<Value>((value) => {
-    const read = inner.read(value);
-    if (!read.ok) return read;
-    return registry.has(read.value) ? read : refuse(SCHEMA_REFUSAL.NOT_REGISTERED);
-  }, inner.jsonSchema);
+  return schemaOver(
+    over<Value>(
+      coreOf(inner).pipe(
+        EffectSchema.filter(
+          (value) => registry.has(value),
+          wireRefusal(SCHEMA_REFUSAL.NOT_REGISTERED),
+        ),
+      ),
+    ),
+  );
 }
 
 /**
@@ -545,11 +560,20 @@ function refineSchema<Value>(
   admits: (value: Value) => boolean,
   refusal: SchemaRefusal = SCHEMA_REFUSAL.MALFORMED,
 ): Schema<Value> {
-  return schemaOver<Value>((value) => {
-    const read = inner.read(value);
-    if (!read.ok) return read;
-    return admits(read.value) ? admit(read.value) : refuse(refusal);
-  }, inner.jsonSchema);
+  return schemaOver(
+    over<Value>(
+      coreOf(inner).pipe(EffectSchema.filter((value) => admits(value), wireRefusal(refusal))),
+    ),
+  );
+}
+
+/** The inner schema read forgivingly: what it refuses decodes to nothing, and its node stands. */
+function droppedCore<Value>(inner: Core<Value>): Core<Value | undefined> {
+  const read = readEither(inner);
+  return declareReader((value) => {
+    const result = toSchemaRead(read(value));
+    return admit(result.ok ? result.value : undefined);
+  }, emitJsonSchema(inner));
 }
 
 /**
@@ -562,11 +586,7 @@ function refineSchema<Value>(
  * the key out entirely, exactly as it does for an absent optional one.
  */
 function droppedSchema<Value>(inner: Schema<Value>): Schema<Value | undefined> {
-  return schemaOver<Value | undefined>(
-    (value) => admit(inner.parse(value)),
-    inner.jsonSchema,
-    true,
-  );
+  return schemaOver(droppedCore(coreOf(inner)), true);
 }
 
 /** A parsed value carried into another; the emitted node is the inner one's. */
@@ -574,10 +594,15 @@ function mapSchema<Value, Mapped>(
   inner: Schema<Value>,
   to: (value: Value) => Mapped,
 ): Schema<Mapped> {
-  return schemaOver<Mapped>((value) => {
-    const read = inner.read(value);
-    return read.ok ? admit(to(read.value)) : read;
-  }, inner.jsonSchema);
+  return schemaOver(
+    over<Mapped>(
+      EffectSchema.transform(coreOf(inner), EffectSchema.Unknown, {
+        strict: false,
+        decode: (value) => to(value),
+        encode: (value) => value,
+      }),
+    ),
+  );
 }
 
 export interface SchemaReader<Value> {
@@ -586,14 +611,14 @@ export interface SchemaReader<Value> {
 }
 
 /**
- * The seam every combinator above is built from, for the one kind of rule
- * they cannot express: a reader that rebuilds a value field by field from an
- * allowlist rather than narrowing what arrived. Its node is declared beside
- * its reader and is the one place the two can drift, so a reader is worth
- * writing only where a combinator genuinely cannot say the rule.
+ * The seam for the one kind of rule the combinators above cannot express: a
+ * reader that rebuilds a value field by field from an allowlist rather than
+ * narrowing what arrived. Its node is declared beside its reader and is the
+ * one place the two can drift, so a reader is worth writing only where a
+ * combinator genuinely cannot say the rule.
  */
 function readerSchema<Value>(reader: SchemaReader<Value>): Schema<Value> {
-  return schemaOver<Value>(reader.read, reader.jsonSchema);
+  return schemaOver(declareReader(reader.read, reader.jsonSchema()));
 }
 
 export const s = {

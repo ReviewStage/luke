@@ -1,4 +1,4 @@
-import { Data, Either, Option, type ParseResult, Schema, SchemaAST } from "effect";
+import { Array as Arr, Data, Either, Option, ParseResult, Schema, SchemaAST } from "effect";
 import type { UnparsedWireValue } from "../json.js";
 import {
   type JsonSchemaNode,
@@ -6,7 +6,7 @@ import {
   type SchemaPath,
   type SchemaRead,
   type SchemaRefusal,
-} from "../schema.js";
+} from "../schema-vocabulary.js";
 
 /**
  * The JSON Schema a model is shown for an Effect `Schema`, emitted by walking
@@ -406,27 +406,39 @@ function refinementRefusal(refinement: SchemaAST.Refinement): SchemaRefusal {
  * the failed rule earns and the record keys and array indices down to it,
  * outermost first. A wrong type, a missing key, an unlisted key, and a
  * literal outside its set are each malformed; a built-in maximum is too
- * large; and a refinement or transformation carrying its own refusal
- * annotation answers that word instead.
+ * large; and a node carrying its own refusal annotation answers that word
+ * wherever it fails — a refinement's predicate, a transformation's decode, a
+ * type check, or a union none of whose members admitted the value — at the
+ * path of the node itself. A transformation that failed with an issue of its
+ * own and names no word is read through to that issue, so a decode that ran
+ * another schema inside it reports where that schema refused.
  */
 function refusalOf(issue: ParseResult.ParseIssue, path: SchemaPath): SchemaRefusalError {
   switch (issue._tag) {
     case "Pointer":
       return refusalOf(issue.issue, [...path, ...pathSegments(issue.path)]);
-    case "Composite":
-      return refusalOf(Array.isArray(issue.issues) ? issue.issues[0] : issue.issues, path);
+    case "Composite": {
+      const named = annotatedRefusal(issue.ast);
+      return named === undefined
+        ? refusalOf(Array.isArray(issue.issues) ? issue.issues[0] : issue.issues, path)
+        : new SchemaRefusalError({ refusal: named, path });
+    }
     case "Refinement":
       return issue.kind === "From"
         ? refusalOf(issue.issue, path)
         : new SchemaRefusalError({ refusal: refinementRefusal(issue.ast), path });
-    case "Transformation":
-      return issue.kind === "Transformation"
-        ? new SchemaRefusalError({
-            refusal: annotatedRefusal(issue.ast) ?? SCHEMA_REFUSAL.MALFORMED,
-            path,
-          })
-        : refusalOf(issue.issue, path);
+    case "Transformation": {
+      if (issue.kind !== "Transformation") return refusalOf(issue.issue, path);
+      const named = annotatedRefusal(issue.ast);
+      return named === undefined
+        ? refusalOf(issue.issue, path)
+        : new SchemaRefusalError({ refusal: named, path });
+    }
     case "Type":
+      return new SchemaRefusalError({
+        refusal: annotatedRefusal(issue.ast) ?? SCHEMA_REFUSAL.MALFORMED,
+        path,
+      });
     case "Missing":
     case "Unexpected":
     case "Forbidden":
@@ -449,6 +461,57 @@ export const readEither =
     })(value);
     return Either.mapLeft(decoded, (error) => refusalOf(error.issue, []));
   };
+
+/**
+ * The Effect declaration of a wire reader: a rule no combinator holds, decoded
+ * by the reader's own code and shown as the node declared beside it. The
+ * reader's refusal travels as the issue {@link refusalIssue} writes, so a
+ * read through {@link readEither} answers the word and path the reader
+ * decided; nothing encodes, because a wire reader only ever reads.
+ */
+export function declareReader<Value>(
+  read: (value: UnparsedWireValue) => SchemaRead<Value>,
+  node: JsonSchemaNode,
+): Schema.Schema<Value, UnparsedWireValue> {
+  const declaration = Schema.declare([], {
+    decode: () => (input: unknown) => {
+      // SAFETY: a decode is handed the value `readEither` took as an `UnparsedWireValue`, erased to
+      // `unknown` by Effect's own decode signature; the reader is the boundary's own defensive parser.
+      const value = input as UnparsedWireValue;
+      const result = read(value);
+      return result.ok
+        ? ParseResult.succeed(result.value)
+        : ParseResult.fail(refusalIssue(result.refusal, result.path, value));
+    },
+    encode: () => (input: unknown, _options, ast) =>
+      ParseResult.fail(
+        new ParseResult.Forbidden(ast, input, "a wire reader decodes and never encodes"),
+      ),
+  });
+  return verbatimJsonSchema(Schema.make<Value, UnparsedWireValue>(declaration.ast), node);
+}
+
+const REFUSAL_AST = {
+  [SCHEMA_REFUSAL.MALFORMED]: Schema.Unknown.annotations(wireRefusal(SCHEMA_REFUSAL.MALFORMED)).ast,
+  [SCHEMA_REFUSAL.TOO_LARGE]: Schema.Unknown.annotations(wireRefusal(SCHEMA_REFUSAL.TOO_LARGE)).ast,
+  [SCHEMA_REFUSAL.NOT_REGISTERED]: Schema.Unknown.annotations(
+    wireRefusal(SCHEMA_REFUSAL.NOT_REGISTERED),
+  ).ast,
+} satisfies { readonly [Refusal in SchemaRefusal]: SchemaAST.AST };
+
+/**
+ * The issue {@link readEither} reads back as exactly this refusal at this
+ * path: the inverse of the reading above, for a declaration whose own reader
+ * has already decided both and fails its decode with what it decided.
+ */
+export function refusalIssue(
+  refusal: SchemaRefusal,
+  path: SchemaPath,
+  actual: unknown,
+): ParseResult.ParseIssue {
+  const issue = new ParseResult.Type(REFUSAL_AST[refusal], actual);
+  return Arr.isNonEmptyReadonlyArray(path) ? new ParseResult.Pointer(path, actual, issue) : issue;
+}
 
 /**
  * A strangler shim: the `SchemaRead` a caller of the builder still holds,

@@ -1,9 +1,11 @@
 export { eventFromStream, streamFromEvent } from "./event.js";
 export { cloudFetchFromHttpClient, httpClientFromCloudFetch, layerFromCloudFetch } from "./http.js";
 export {
+  declareReader,
   describeWire,
   emitJsonSchema,
   readEither,
+  refusalIssue,
   SchemaRefusalError,
   toSchemaRead,
   verbatimJsonSchema,
