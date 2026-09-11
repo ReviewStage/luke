@@ -1,3 +1,6 @@
+import * as HttpBody from "@effect/platform/HttpBody";
+import * as HttpClient from "@effect/platform/HttpClient";
+import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
 import {
   ACTION_RESULT_STATUS,
   ISSUE_ACTION_KIND,
@@ -19,6 +22,8 @@ import {
   type WireRecord,
   wireRecord,
 } from "@sidecar/wire";
+import { layerFromCloudFetch, webResponseFromClientResponse } from "@sidecar/wire/effect";
+import { Cause, Duration, Effect, Exit, type Layer } from "effect";
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "../credential-providers.js";
 
 // Shared with the credential registry so the key the user saves and the
@@ -135,13 +140,13 @@ export class LinearIssueTracker implements IssueTrackerAdapter {
   };
 
   readonly #readAccessToken: () => Promise<string | undefined>;
-  readonly #fetch: typeof fetch;
+  readonly #client: Layer.Layer<HttpClient.HttpClient>;
   readonly #now: () => number;
   readonly #endpoint: string;
 
   constructor(options: LinearTrackerOptions) {
     this.#readAccessToken = options.readAccessToken;
-    this.#fetch = options.fetchImplementation ?? fetch;
+    this.#client = layerFromCloudFetch(options.fetchImplementation ?? fetch);
     this.#now = options.now ?? Date.now;
     this.#endpoint = process.env[LINEAR_ENVIRONMENT.API_URL]?.trim() || LINEAR_DEFAULT_API_URL;
   }
@@ -235,22 +240,39 @@ export class LinearIssueTracker implements IssueTrackerAdapter {
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
   }
 
+  /**
+   * @deprecated The `Effect.runPromiseExit` below is the CloudFetch-shaped
+   * seam on the `Effect.runPromise` allowlist in `docs/adr/0001-effect.md`:
+   * `observe` and `execute` still answer a Promise over the
+   * `fetchImplementation` a caller hands in, so the request built over the
+   * ambient `HttpClient` is run to a promise here. Deleted with `CloudFetch`
+   * and `layerFromCloudFetch` in P12-04.
+   */
   async #post(
     accessToken: string,
     document: string,
     variables: WireRecord,
   ): Promise<GraphQlPayload> {
-    const response = await this.#fetch(this.#endpoint, {
-      method: "POST",
+    const request = HttpClientRequest.post(this.#endpoint, {
       headers: {
         // What the consent page granted is an OAuth access token, which
         // Linear reads under the scheme every OAuth token is sent with.
         authorization: `Bearer ${accessToken}`,
-        "content-type": "application/json",
       },
-      body: JSON.stringify({ query: document, variables }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      body: HttpBody.raw(JSON.stringify({ query: document, variables }), {
+        contentType: "application/json",
+      }),
     });
+    const answer = HttpClient.execute(request).pipe(
+      Effect.flatMap(webResponseFromClientResponse),
+      Effect.timeoutFail({
+        duration: Duration.millis(REQUEST_TIMEOUT_MS),
+        onTimeout: () => new Error("The request to Linear timed out"),
+      }),
+    );
+    const exit = await Effect.runPromiseExit(Effect.provide(answer, this.#client));
+    if (Exit.isFailure(exit)) throw Cause.squash(exit.cause);
+    const response = exit.value;
     if (!response.ok) throw new Error(`Linear answered ${response.status}`);
     const payload = await response.json();
     const wirePayload = wireRecord(unparsedWire(payload));
