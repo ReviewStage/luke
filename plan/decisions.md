@@ -1691,3 +1691,46 @@ for a turn none of them can see — a poll storm whose cause is invisible from t
 row** as their fixture. Left alone they would have asserted the read's behaviour on a row the read
 now skips — passing, and testing nothing. Moved to started rows **with assertions unchanged**, which
 shows the behaviour on real rows did not change and only the queued case did.
+
+
+## 2026-09-11 — A fix that flipped the failure direction, and why loss is worse than duplication here (orchestrator, from C3's (c))
+
+Bugbot found two real gaps in #1079 and both fixes are recorded, but the first one is worth reading
+carefully because **it traded one failure for its opposite.**
+
+**Before:** the opener's lookback of one offer lifetime could **re-list** releases an earlier drain
+already carried — a duplicate re-decision. **After:** the boundary is the record's rather than a
+clock's — `releasedBriefings` takes releases strictly after the instant eve started the
+conversation's newest `hold_release` turn, read from the relay's own row via
+`latestStartedTurnQueuedAt`. Anything released before it "was that turn's or an earlier one's to
+carry".
+
+**The direction it flipped to is the worse one**, by the ruling already in this file: a hold is a
+known, bounded reason the words were not said, and when it lifts the briefing **deserves a fresh
+decision against the roster as it then is.** A duplicate means the brain decides twice and may say
+nothing the second time. **A lost release means Luke is silent after a meeting — the precise outcome
+the hold exists to prevent.** C3 knows this hazard: it is the reason it gave for removing the
+eight-briefing cap in the same PR (*"a release left behind would fall behind the next turn's
+boundary and never be decided again"*). **The cap fix removed that loss; the boundary is where it
+still lives.**
+
+**The assumption, stated in C3's body, which is honest and is still timing:** the sweep writes a
+release a minute after the last, and eve starts a turn seconds after taking its message, so the
+last re-decision has started before the next release could be written. **Probably true.** Two holds
+on one conversation lifting inside a minute — a device reporting a `quiet_until` a few seconds out,
+a meeting ending as another's grace expires — is uncommon rather than impossible, and the symptom is
+silence nobody can trace.
+
+**Question put to C3, its call with a reason either way: can the boundary be the message's CONTENTS
+rather than the turn's start instant?** The opener already builds one eve message per drain
+**listing the briefings it carries**, so "unhandled" could be *released and named in no prior
+`hold_release` message* — the record itself, no clock, no assumption, duplicates impossible rather
+than improbable. If the read is unaffordable, the cost goes in the body and the assumption stands
+named.
+
+**The second fix needs nothing: no per-turn cap, every unhandled release in the one message, and a
+read bound of 64 against a runaway only — reported when met rather than trimmed silently.** That
+last word is what makes it acceptable: at sixty-five releases something says so, and a reader can
+tell a bound from a loss.
+
+**Ten mutation checks across C3's three PRs**, each naming a way the record could have lied.
