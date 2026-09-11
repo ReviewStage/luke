@@ -1,5 +1,5 @@
-import { cp, mkdir, rm, writeFile } from "node:fs/promises";
-import { join, posix } from "node:path";
+import { cp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { basename, dirname, join, posix } from "node:path";
 
 /**
  * The Build Output the web app's build leaves for Vercel: `.vercel/output`
@@ -19,6 +19,15 @@ import { join, posix } from "node:path";
  * (`packages/node/src/build.ts`, the `NodejsLambda` it returns), so the
  * launcher that adapts a `{ fetch }` route object and the voice functions'
  * exported `http.Server` is the platform's, unchanged.
+ *
+ * Vercel's zero-config pass served every `api/` function at two URLs, its
+ * file name and the same path without the extension, and the clients use
+ * the second: the voice sessions open at `/api/voice/sessions`, the desktop
+ * posts feedback at `/api/feedback`. A `.func` answers only at its own name,
+ * so each function is emitted twice, the bundle under its file name (the
+ * destination the `/api/` rewrites carry) and an extensionless `.func` that
+ * is a symlink to it, which the Build Output API names as the way to serve
+ * one function at more than one path.
  */
 export const BUILD_OUTPUT_DIRECTORY = join(".vercel", "output");
 const BUILD_OUTPUT_VERSION = 3;
@@ -70,6 +79,11 @@ export function functionDirectory(outputDirectory: string, path: string): string
   return join(outputDirectory, FUNCTIONS_DIRECTORY, `${path}${FUNCTION_DIRECTORY_SUFFIX}`);
 }
 
+/** The function's second public path: the same path without its extension, as the zero-config pass served it. */
+export function functionAliasPath(path: string): string {
+  return path.slice(0, path.length - posix.extname(path).length);
+}
+
 export function functionConfigPath(outputDirectory: string, path: string): string {
   return join(functionDirectory(outputDirectory, path), FUNCTION_CONFIG_FILE);
 }
@@ -111,12 +125,16 @@ export async function emitBuildOutput(input: BuildOutputInput): Promise<readonly
     });
   }
   for (const fn of input.functions) {
-    await mkdir(functionDirectory(input.outputDirectory, fn.path), { recursive: true });
+    const directory = functionDirectory(input.outputDirectory, fn.path);
+    await mkdir(directory, { recursive: true });
     await writeFile(functionEntryPath(input.outputDirectory, fn.path), fn.contents);
     await writeFile(
       functionConfigPath(input.outputDirectory, fn.path),
       `${JSON.stringify(functionConfig(fn.maxDuration), null, 2)}\n`,
     );
+    const alias = functionDirectory(input.outputDirectory, functionAliasPath(fn.path));
+    await mkdir(dirname(alias), { recursive: true });
+    await symlink(basename(directory), alias, "dir");
   }
   return input.functions.map((fn) => fn.path).sort();
 }

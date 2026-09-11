@@ -1,16 +1,18 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdtempSync, readFileSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { VOICE_SERVICE_PATH } from "@sidecar/hosted";
 import { Schema } from "effect";
 import { build } from "esbuild";
 import { test } from "vitest";
 import {
   type EmittedFunction,
   emitBuildOutput,
+  functionAliasPath,
   functionConfig,
   functionConfigPath,
   functionDirectory,
@@ -119,6 +121,34 @@ test("every planned function and every rewrite lands on a .func carrying the pla
       rewrite.dest,
     );
   }
+});
+
+/**
+ * The zero-config pass served each function at its file name and at the same
+ * path without the extension, and the clients call the second: the voice
+ * sessions open at the paths `VOICE_SERVICE_PATH` names and the desktop posts
+ * feedback at `/api/feedback`. Each alias is a symlink onto the primary, so
+ * one function stands behind both paths rather than two copies of it.
+ */
+test("every function also answers at its extensionless path, through a symlink onto the same .func", {
+  timeout: 180_000,
+}, async () => {
+  const { outputDirectory, paths } = await emitFromPlan();
+  for (const path of paths) {
+    const primary = functionDirectory(outputDirectory, path);
+    const alias = functionDirectory(outputDirectory, functionAliasPath(path));
+    assert.equal(lstatSync(alias).isSymbolicLink(), true, alias);
+    assert.equal(realpathSync(alias), realpathSync(primary));
+  }
+  const standalone = (await webFunctions(WEB)).filter((definition) => !definition.dispatches);
+  assert.deepEqual(
+    standalone.map((definition) => `/${functionAliasPath(functionPublicPath(definition))}`).sort(),
+    Object.values(VOICE_SERVICE_PATH).sort(),
+  );
+  assert.deepEqual(
+    HAND_WRITTEN_FUNCTIONS.map((fn) => functionAliasPath(fn.path)),
+    ["api/feedback"],
+  );
 });
 
 test("each .func loads with nothing above it available", { timeout: 180_000 }, async () => {

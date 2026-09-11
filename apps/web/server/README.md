@@ -147,7 +147,11 @@ planned function has a `.func` carrying the plan's configuration and every
 nothing above it on disk, given only a database URL that connects to nothing,
 which is how the platform mounts it. The routes are unchanged byte for byte:
 a `.func` named `api/default.js.func` answers at `/api/default.js`, the path
-the rewrites already carry. Reverting the PR that introduced the tree is one
+the rewrites already carry. Each function is also emitted at its extensionless
+path, as a `.func` that is a symlink onto the first, because Vercel's own pass
+served both spellings and the clients use the second: the voice sessions open
+at the `VOICE_SERVICE_PATH` paths and the desktop posts feedback to
+`/api/feedback`. Reverting the PR that introduced the tree is one
 commit with no migration and no dashboard state, and the deploy shape returns
 to Vercel's own pass.
 
