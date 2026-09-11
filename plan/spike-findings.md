@@ -293,3 +293,54 @@ for the live turn; and OpenAI response ids are not recoverable from eve.
   `compaction.completed` and the manual `/compact` route are documented but unobserved.
 - Children (`subagent.*` events, `agent/subagents/*`) and the `defineWorkflowTool` durable-wait
   path were not exercised.
+
+---
+
+# Addendum: the hosted measurement (C1, LUKE-100, 2026-09-11)
+
+S0 above ran locally and left hosted cold start and Vercel Workflow billing answered from
+documentation only. C1 closed that gap before building the host. This addendum records what was
+actually measured on Vercel, so the eve decision rests on numbers rather than on the plan's
+confidence in them.
+
+**Setup.** eve 0.53.1 prebuilt (`eve build` under `VERCEL=1`: one `__server` function, 13 MB /
+2.9 MB gzip) deployed to a throwaway project `luke-eve-spike` (production, SSO off, `EVE_DEV=1`
+so the dev principal is admitted), Vercel Workflow as the durable runtime, a throwaway Neon
+Postgres with our migrations, the scripted fixture model, and the real tools, admission, relay,
+and writer. `luke-web` was untouched throughout and no OpenAI key was created anywhere. Both
+throwaways were deleted afterwards (Vercel project, HTTP 204; Neon project
+`gentle-field-38429013`).
+
+**Every figure below marked hosted is a real measurement. The model-bound figure is S0's,
+carried over: the scripted model means platform cost was measured and model time was not.**
+
+| | S0 local | Hosted warm | Hosted idle ~3–5 min | Hosted first call |
+|---|---|---|---|---|
+| `POST /eve/v1/session` | 47–112 ms | 78 ms | 315 ms | 669 ms |
+| `POST` → `turn.started` | 120–480 ms | 1.1 s | 1.7 s | 2.6 s |
+| `turn.started` → `turn.completed` (2 steps, 1 call) | — | 1.0–1.3 s | — | — |
+| 6-step turn (5 calls, 28 events) | — | 3.4 s | 4.1 s semi-warm | — |
+| **Inter-step gap** | **30–50 ms** | **290–425 ms** | — | — |
+| tool call (admission + Neon write + writer) | — | 124–281 ms | — | — |
+| model-bound 3-step roster-diff turn | 9–11 s (S0) | not measured | | |
+
+**The finding that shapes a design rather than a number: Workflow's scheduling cost is paid per
+step, not per turn.** About a third of a second at every step boundary, six to ten times the
+local figure. A 3-step turn carries ~0.6 s of scheduling and a 10-step turn ~3 s — both small
+beside 9–11 s of model time and negligible against the 240 s run deadline inside the 300 s
+function window, but a design that assumed step boundaries were free would be wrong by seconds
+on a long turn. C2 budgets it per step.
+
+**Workflow cost is computed from measured counts, not read from billing.** The `/v1/usage`
+endpoint refused every range tried (format accepted; "timerange not supported" for hours, days,
+and the billing period start). Measured 12 stream events for a 1-call turn and 28 for a 5-call
+turn; at S0's $0.02 per 1,000 events that is ~$0.00024 and ~$0.00056 per turn, consistent with
+S0's ~$0.0006 estimate but now resting on a measured event count.
+
+**A true cold start after more than ten minutes idle was not taken.** The ~3–5 minute idle
+figures above are the coldest measured. It was dropped deliberately: it is a once-per-idle-period
+cost on a path that already tolerates seconds, and the two figures that could have changed the
+plan — inter-step latency and per-turn cost — had both answered by then.
+
+**Conclusion: eve stands.** Nothing measured comes near the deadline. The hosted penalty over
+local is about a second once per turn to start, plus about a third of a second per step boundary.
