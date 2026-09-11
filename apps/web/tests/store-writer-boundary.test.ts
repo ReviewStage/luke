@@ -6,15 +6,18 @@ import { test } from "vitest";
 
 /**
  * No code path writes a message, a turn, or an event except the store writer:
- * the invariant the writer establishes, stated over the server's import graph.
- * A module that could write one of the three tables has to import it from the
- * schema by name, so the set of server modules that do is the set that could
- * write, and that set is the writer and the one reader that selects from
- * the same three tables. The import graph cannot tell a select from an
- * insert, so the reader stands in the list by name, in the open, beside the
- * statement that it writes none of them. The aggregate schema module
- * re-exports them for the query builder and imports nothing, and another
- * reader that lands later joins this list the same way.
+ * the invariant the writer establishes, stated over the server's own sources.
+ * A module that could write one of the three tables has to name it — as a
+ * Drizzle table imported from the schema, or in the text of a statement the
+ * `SqlClient` runs — so the modules that name one are the modules that could
+ * write one, and that set is the writer and the two readers that select from
+ * the same tables. Neither a Drizzle import nor a statement's `from` clause
+ * tells a select from an insert, so each reader stands in the list by name,
+ * in the open, and the modules that write are read from the writes
+ * themselves, which is the writer alone. The
+ * aggregate schema module re-exports the tables for the query builder and
+ * imports nothing, and another reader that lands later joins this list the
+ * same way.
  */
 
 const SERVER_ROOTS = ["server", "api"].map((root) =>
@@ -31,11 +34,23 @@ const READER = "server/hosted/store/message-reads.ts";
 /** The speech module: folds a briefing's standing from the events on its message and writes every transition through the writer. */
 const SPEECH_READER = "server/hosted/store/speech.ts";
 
-const SPEECH_READ_TABLES: ReadonlySet<string> = new Set(["messages", "events"]);
+/** The tables each module names at all, whichever half of the store's migration it is on. */
+const TABLES_NAMED: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  [WRITER, WRITTEN_TABLES],
+  [READER, WRITTEN_TABLES],
+  [SPEECH_READER, new Set(["messages", "events"])],
+]);
 
-const TABLE_IMPORTERS: ReadonlySet<string> = new Set([WRITER, READER, SPEECH_READER]);
+/** The modules that may write one of the three tables, which is the writer and nothing else. */
+const TABLE_WRITERS: ReadonlySet<string> = new Set([WRITER]);
 
-const WRITE_STATEMENT = /\.(insert|update|delete)\(\s*(messages|turns|events)\s*\)/;
+/** A Drizzle write over one of the three tables. */
+const DRIZZLE_WRITE = /\.(insert|update|delete)\(\s*(messages|turns|events)\s*\)/;
+
+/** A statement's write over one of the three tables, and the clauses that merely name one. */
+const STATEMENT_WRITE = /\b(?:insert\s+into|update|delete\s+from)\s+(messages|turns|events)\b/g;
+
+const STATEMENT_TABLE = /\b(?:from|join|into|update)\s+(messages|turns|events)\b/g;
 
 /**
  * The modules that import the whole schema as a namespace, which reaches
@@ -87,26 +102,37 @@ function importedTables(source: string): readonly string[] {
   return tables;
 }
 
-test("the writer and the two readers are the server modules that import the messages, turns, or events table, only the writer writes them, and the schema is imported whole by the two that build queries over it", async () => {
+/** The written tables a pattern finds in a module's statements. */
+function matchedTables(source: string, pattern: RegExp): readonly string[] {
+  return [...source.matchAll(pattern)].flatMap((match) =>
+    match[1] === undefined ? [] : [match[1]],
+  );
+}
+
+test("the writer and the two readers are the server modules that name the messages, turns, or events table, only the writer writes one, and the schema is imported whole by the two that build queries over it", async () => {
   const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
-  const importers = new Map<string, readonly string[]>();
+  const named = new Map<string, ReadonlySet<string>>();
+  const writers = new Set<string>();
   const namespaceImporters = new Set<string>();
   for (const root of SERVER_ROOTS) {
     for (const file of await sourceFiles(root)) {
       const source = await readFile(file, "utf8");
       const relative = path.relative(repositoryRoot, file);
-      const tables = importedTables(source);
-      if (tables.length > 0) importers.set(relative, tables);
+      const tables = [...importedTables(source), ...matchedTables(source, STATEMENT_TABLE)];
+      if (tables.length > 0) named.set(relative, new Set(tables));
+      if (DRIZZLE_WRITE.test(source) || matchedTables(source, STATEMENT_WRITE).length > 0) {
+        writers.add(relative);
+      }
       if (importsSchemaNamespace(source)) namespaceImporters.add(relative);
     }
   }
-  assert.deepEqual(new Set(importers.keys()), TABLE_IMPORTERS);
-  assert.deepEqual(new Set(importers.get(WRITER)), WRITTEN_TABLES);
-  assert.deepEqual(new Set(importers.get(READER)), WRITTEN_TABLES);
-  assert.deepEqual(new Set(importers.get(SPEECH_READER)), SPEECH_READ_TABLES);
-  for (const reader of [READER, SPEECH_READER]) {
-    const source = await readFile(path.join(repositoryRoot, reader), "utf8");
-    assert.equal(WRITE_STATEMENT.test(source), false, reader);
-  }
+  assert.deepEqual(named, TABLES_NAMED);
+  assert.deepEqual(writers, TABLE_WRITERS);
+  assert.deepEqual(
+    new Set(
+      matchedTables(await readFile(path.join(repositoryRoot, WRITER), "utf8"), STATEMENT_WRITE),
+    ),
+    WRITTEN_TABLES,
+  );
   assert.deepEqual(namespaceImporters, SCHEMA_NAMESPACE_IMPORTERS);
 });

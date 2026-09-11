@@ -1,4 +1,4 @@
-import type { HostedStoreDatabase } from "../store/database.js";
+import type { HostedStoreDatabase, HostedStoreRun } from "../store/database.js";
 import {
   type ConversationTarget,
   findMessageByClientId,
@@ -22,6 +22,8 @@ export type StoreWriter = Awaited<ReturnType<typeof storeWriter>>;
 
 export interface BriefingOfferSeams {
   readonly db: HostedStoreDatabase;
+  /** The runner the speech module's own reads are answered through. */
+  readonly run: HostedStoreRun;
   readonly writer: Pick<StoreWriter, "recordEvent">;
   readonly now: () => number;
 }
@@ -40,7 +42,7 @@ export async function offerBriefing(
   );
   if (!journal) return false;
   const offered = await offerSpeech(
-    { db: seams.db, writer: seams.writer },
+    { run: seams.run, writer: seams.writer },
     target.userId,
     journal.id,
     seams.now(),

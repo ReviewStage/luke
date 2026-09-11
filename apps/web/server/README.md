@@ -123,13 +123,17 @@ trip there would land on the cold start of every function, including the ones
 that never query. `pg` connects on its first query instead. The hosted store is
 moving onto the client a module at a time, so the two stand side by side over
 the one database: `server/hosted/store/workspace-files.ts`,
-`standing-conversations.ts`, and `soft-delete.ts` read and write through this
-client, as does `roster-snapshot.ts` but for its one exported
-`readRosterSnapshot`, which `hosted-store.test.ts` still calls directly with
-the Drizzle handle to prove a sealed row does not open under another user's
-seal — every other module still through Drizzle — and the store is
-handed its edge's own runner to answer the promises the routes hold — `runWeb`
-in a function, the store tests' runtime in a test. What the layer does need at build
+`standing-conversations.ts`, `soft-delete.ts`, the store writer, the voice
+writer, and the speech module read and write through this client, as does
+`roster-snapshot.ts` but for its one exported `readRosterSnapshot`, which
+`hosted-store.test.ts` still calls directly with the Drizzle handle to prove a
+sealed row does not open under another user's seal — every other module still
+through Drizzle — and each is handed its edge's own runner to answer the
+promises the routes hold — `runWeb` in a function, the store tests' runtime in
+a test. The writers take that runner directly rather than through the store's
+context, because a route composes them apart from the store; the conversation
+row lock every write runs under is the client's own transaction. What the layer
+does need at build
 time is the connection string, so an instance configured without `DATABASE_URL`
 is refused at the edge rather than at whichever query ran first.
 
@@ -686,8 +690,11 @@ routes answer it as rows.
 
 The store writer, `server/hosted/store/writer.ts`, is the one path by which a
 `messages`, `turns`, or `events` row is written, and
-`tests/store-writer-boundary.test.ts` holds the server's import graph to that:
-the writer is the one server module that imports any of the three tables. It
+`tests/store-writer-boundary.test.ts` holds the server's own sources to that:
+the writer is the one server module with an insert, an update, or a delete over
+any of the three, whether as a Drizzle table imported from the schema or in the
+text of a statement, and the modules that name one at all are the writer and
+the two readers, each listed there by name. It
 consumes the brain's run event stream (`BrainRunEvent`, every kind of turn)
 for a conversation the caller names by its row id and account. A turn row
 goes from queued (written ahead of the stream by `enqueueTurn`, or at the

@@ -1,13 +1,10 @@
-import { and, eq, gte, lt, sql } from "drizzle-orm";
+import { SqlClient, SqlSchema } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, Option, type ParseResult, Schema } from "effect";
 import { MESSAGE_AUTHOR, MESSAGE_CHANNEL, type SpokenAskMetadata } from "../../core.js";
-import {
-  VOICE_SEGMENT_ROLE,
-  type VoiceSegmentRole,
-  voiceSessions,
-  voiceTranscriptSegments,
-} from "../../db/voice-schema.js";
+import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "../../db/voice-schema.js";
 import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../../live.js";
-import type { HostedStoreDatabase } from "./database.js";
+import type { HostedStoreRun } from "./database.js";
 import { markSpeechSpoken, SPEECH_REFUSAL } from "./speech.js";
 import {
   type ConversationTarget,
@@ -44,6 +41,12 @@ import {
  * message the model's context replays; what the voice spoke of it is a
  * paraphrase, and it lives as segments. Segments may overlap, because timed
  * deltas do, and no audio is ever stored.
+ *
+ * Every statement here is an `Effect` over the ambient `SqlClient`, decoded
+ * by a `Schema` rather than trusted, and run through the runner the edge that
+ * composed the writer handed it; the position a segment takes is allocated
+ * inside the session row's own lock, which is the transaction the client
+ * opens.
  */
 
 /** The live session a stream belongs to, and the conversation its asks and briefings belong to. */
@@ -91,7 +94,8 @@ export interface VoiceWriter {
 }
 
 interface VoiceWriterOptions {
-  readonly db: HostedStoreDatabase;
+  /** The runner of the edge that composed the writer, which is what answers every statement below. */
+  readonly run: HostedStoreRun;
   /** The messages and events writer, which the spoken ask and the speech event go through. */
   readonly store: StoreWriter;
 }
@@ -128,7 +132,117 @@ const SEGMENT_ROLE_OF_DELTA = {
   [LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA]: VOICE_SEGMENT_ROLE.ASSISTANT,
 } as const satisfies Record<SegmentDelta["type"], VoiceSegmentRole>;
 
-export function voiceWriter({ db, store }: VoiceWriterOptions): VoiceWriter {
+/** How a statement here fails: the driver's own refusal, or a row the schema refused. */
+type VoiceWriteFailure = SqlError | ParseResult.ParseError;
+
+/** A statement over the ambient client, so the query below reads as the query it is. */
+const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
+  Effect.flatMap(SqlClient.SqlClient, build);
+
+const VoiceSessionKeySchema = Schema.Struct({
+  userId: Schema.String,
+  liveSessionId: Schema.String,
+});
+
+/** The `voice_sessions` row this writer reads: its id, and the device the session belongs to. */
+const VoiceSessionRowSchema = Schema.Struct({
+  id: Schema.String,
+  deviceId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
+    Schema.fromKey("device_id"),
+  ),
+});
+
+type VoiceSessionRow = Schema.Schema.Type<typeof VoiceSessionRowSchema>;
+
+const VoiceSegmentRoleSchema = Schema.Literal(...Object.values(VOICE_SEGMENT_ROLE));
+
+const findVoiceSession = SqlSchema.findOne({
+  Request: VoiceSessionKeySchema,
+  Result: VoiceSessionRowSchema,
+  execute: (key) =>
+    statement(
+      (sql) => sql`
+        select id, device_id
+        from voice_sessions
+        where user_id = ${key.userId} and live_session_id = ${key.liveSessionId}
+      `,
+    ),
+});
+
+/** The same row, locked, where the caller is about to take a position in the session's sequence. */
+const lockVoiceSession = SqlSchema.findOne({
+  Request: VoiceSessionKeySchema,
+  Result: VoiceSessionRowSchema,
+  execute: (key) =>
+    statement(
+      (sql) => sql`
+        select id, device_id
+        from voice_sessions
+        where user_id = ${key.userId} and live_session_id = ${key.liveSessionId}
+        for update
+      `,
+    ),
+});
+
+const findLastSegmentSeq = SqlSchema.findOne({
+  Request: Schema.String,
+  Result: Schema.Struct({ seq: Schema.Number }),
+  execute: (voiceSessionId) =>
+    statement(
+      (sql) => sql`
+        select coalesce(max(seq), 0)::int as seq
+        from voice_transcript_segments
+        where voice_session_id = ${voiceSessionId}
+      `,
+    ),
+});
+
+const insertSegment = SqlSchema.void({
+  Request: Schema.Struct({
+    voiceSessionId: Schema.String,
+    seq: Schema.Int,
+    role: VoiceSegmentRoleSchema,
+    text: Schema.String,
+    startMs: Schema.Int,
+    endMs: Schema.Int,
+  }),
+  execute: (row) =>
+    statement(
+      (sql) => sql`
+        insert into voice_transcript_segments (voice_session_id, seq, role, text, start_ms, end_ms)
+        values (
+          ${row.voiceSessionId}, ${row.seq}, ${row.role}, ${row.text}, ${row.startMs}, ${row.endMs}
+        )
+      `,
+    ),
+});
+
+/** The developer's own segments of one session inside a span, in the order the deltas came. */
+const findSpokenSegments = SqlSchema.findAll({
+  Request: Schema.Struct({
+    voiceSessionId: Schema.String,
+    fromMs: Schema.Int,
+    toMs: Schema.Int,
+  }),
+  Result: Schema.Struct({
+    text: Schema.String,
+    startMs: Schema.propertySignature(Schema.Number).pipe(Schema.fromKey("start_ms")),
+  }),
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        select text, start_ms
+        from voice_transcript_segments
+        where voice_session_id = ${request.voiceSessionId}
+          and role = ${VOICE_SEGMENT_ROLE.USER}
+          and start_ms >= ${request.fromMs}
+          and start_ms < ${request.toMs}
+        order by seq asc
+      `,
+    ),
+});
+
+export function voiceWriter({ run, store }: VoiceWriterOptions): VoiceWriter {
   /** Appends by live session and client event id: the one thing kept in memory, and only until the speech lands. */
   const pending = new Map<string, Map<string, PendingAppend>>();
 
@@ -140,60 +254,32 @@ export function voiceWriter({ db, store }: VoiceWriterOptions): VoiceWriter {
     return created;
   };
 
-  /**
-   * The row's id, or nothing when no row stands for this account and live
-   * session, since the writer invents no session. Locked where the caller is
-   * about to take a position in the session's sequence, so two deltas of one
-   * session take theirs in turn.
-   */
-  async function session(
-    tx: HostedStoreDatabase,
-    target: VoiceTarget,
-    lock: boolean,
-  ): Promise<{ id: string; deviceId: string | null } | undefined> {
-    const query = tx
-      .select({ id: voiceSessions.id, deviceId: voiceSessions.deviceId })
-      .from(voiceSessions)
-      .where(
-        and(
-          eq(voiceSessions.userId, target.userId),
-          eq(voiceSessions.liveSessionId, target.liveSessionId),
-        ),
-      );
-    const [row] = await (lock ? query.for("update") : query);
-    return row;
-  }
-
-  async function sessionId(
-    tx: HostedStoreDatabase,
-    target: VoiceTarget,
-    lock: boolean,
-  ): Promise<string | undefined> {
-    return (await session(tx, target, lock))?.id;
-  }
-
   /** One segment, at the next position of the session's own sequence; the primary key is the backstop. Answers the session row. */
-  async function appendSegment(
+  function appendSegment(
     target: VoiceTarget,
     delta: SegmentDelta,
-  ): Promise<{ id: string; deviceId: string | null } | undefined> {
-    return db.transaction(async (tx) => {
-      const voiceSession = await session(tx, target, true);
-      if (voiceSession === undefined) return undefined;
-      const [last] = await tx
-        .select({ seq: sql<number>`coalesce(max(${voiceTranscriptSegments.seq}), 0)::int` })
-        .from(voiceTranscriptSegments)
-        .where(eq(voiceTranscriptSegments.voiceSessionId, voiceSession.id));
-      await tx.insert(voiceTranscriptSegments).values({
-        voiceSessionId: voiceSession.id,
-        seq: (last?.seq ?? 0) + 1,
-        role: SEGMENT_ROLE_OF_DELTA[delta.type],
-        text: delta.delta,
-        startMs: delta.start_ms,
-        endMs: delta.end_ms,
-      });
-      return voiceSession;
-    });
+  ): Effect.Effect<Option.Option<VoiceSessionRow>, VoiceWriteFailure, SqlClient.SqlClient> {
+    return Effect.flatMap(SqlClient.SqlClient, (sql) =>
+      sql.withTransaction(
+        Effect.gen(function* () {
+          const voiceSession = yield* lockVoiceSession({
+            userId: target.userId,
+            liveSessionId: target.liveSessionId,
+          });
+          if (Option.isNone(voiceSession)) return voiceSession;
+          const last = yield* findLastSegmentSeq(voiceSession.value.id);
+          yield* insertSegment({
+            voiceSessionId: voiceSession.value.id,
+            seq: Option.match(last, { onNone: () => 0, onSome: (row) => row.seq }) + 1,
+            role: SEGMENT_ROLE_OF_DELTA[delta.type],
+            text: delta.delta,
+            startMs: delta.start_ms,
+            endMs: delta.end_ms,
+          });
+          return voiceSession;
+        }),
+      ),
+    );
   }
 
   /**
@@ -210,7 +296,7 @@ export function voiceWriter({ db, store }: VoiceWriterOptions): VoiceWriter {
   async function markSpoken(
     target: VoiceTarget,
     delta: SegmentDelta,
-    voiceSession: { id: string; deviceId: string | null },
+    voiceSession: VoiceSessionRow,
   ): Promise<VoiceWriteResult | undefined> {
     const appends = appendsOf(target.liveSessionId);
     let outcome: VoiceWriteResult | undefined;
@@ -222,7 +308,7 @@ export function voiceWriter({ db, store }: VoiceWriterOptions): VoiceWriter {
         continue;
       }
       const marked = await markSpeechSpoken(
-        { db, writer: store },
+        { run, writer: store },
         target.userId,
         append.messageId,
         voiceSession.deviceId,
@@ -265,26 +351,23 @@ export function voiceWriter({ db, store }: VoiceWriterOptions): VoiceWriter {
     target: VoiceTarget,
     created: DelegationCreated,
   ): Promise<VoiceWriteResult> {
-    const voiceSessionId = await sessionId(db, target, false);
-    if (voiceSessionId === undefined) return NO_SESSION;
+    const voiceSession = await run(
+      findVoiceSession({ userId: target.userId, liveSessionId: target.liveSessionId }),
+    );
+    if (Option.isNone(voiceSession)) return NO_SESSION;
+    const voiceSessionId = voiceSession.value.id;
     const previous = await store.spokenAskEnd(target.conversation, {
       voiceSessionId,
       delegationId: created.delegation.id,
     });
     if (!previous.ok) return { ok: false, refusal: previous.refusal };
-    const fromMs = previous.toMs;
-    const spoken = await db
-      .select({ text: voiceTranscriptSegments.text, startMs: voiceTranscriptSegments.startMs })
-      .from(voiceTranscriptSegments)
-      .where(
-        and(
-          eq(voiceTranscriptSegments.voiceSessionId, voiceSessionId),
-          eq(voiceTranscriptSegments.role, VOICE_SEGMENT_ROLE.USER),
-          gte(voiceTranscriptSegments.startMs, fromMs),
-          lt(voiceTranscriptSegments.startMs, created.offset_ms),
-        ),
-      )
-      .orderBy(voiceTranscriptSegments.seq);
+    const spoken = await run(
+      findSpokenSegments({
+        voiceSessionId,
+        fromMs: previous.toMs,
+        toMs: created.offset_ms,
+      }),
+    );
     const text = spoken.map((segment) => segment.text).join("");
     if (text.length === 0) return IGNORED;
     const metadata: SpokenAskMetadata = {
@@ -314,11 +397,11 @@ export function voiceWriter({ db, store }: VoiceWriterOptions): VoiceWriter {
     async consume(target, event) {
       switch (event.type) {
         case LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA:
-          return (await appendSegment(target, event)) === undefined ? NO_SESSION : WRITTEN;
+          return Option.isNone(await run(appendSegment(target, event))) ? NO_SESSION : WRITTEN;
         case LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA: {
-          const voiceSession = await appendSegment(target, event);
-          if (voiceSession === undefined) return NO_SESSION;
-          return (await markSpoken(target, event, voiceSession)) ?? WRITTEN;
+          const voiceSession = await run(appendSegment(target, event));
+          if (Option.isNone(voiceSession)) return NO_SESSION;
+          return (await markSpoken(target, event, voiceSession.value)) ?? WRITTEN;
         }
         case LIVE_SERVER_EVENT.COMMENTARY_APPENDED:
           return placeAppend(target, event);

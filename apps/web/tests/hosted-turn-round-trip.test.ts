@@ -80,7 +80,7 @@ const TOOLS: ToolSet = {
   }),
 };
 
-const writer = await storeWriter({ db: database.db, tools: TOOLS, now: () => new Date(NOW) });
+const writer = await storeWriter({ run: database.run, tools: TOOLS, now: () => new Date(NOW) });
 
 const TRANSCRIPT = { lines: ["user: fixture ask", "assistant: fixture reply"] };
 const UNKNOWN_SEND = unknownActionOutput("the node closed before it answered");

@@ -62,14 +62,29 @@ function pgliteConnection(client: PGlite): SqlConnection.Connection {
  * A `SqlClient` over a PGlite the caller already opened and still closes
  * itself, so a harness holding one database can read it through this client
  * and through the Drizzle handle beside it.
+ *
+ * PGlite is one connection, so the client is handed that connection under a
+ * permit rather than directly: a statement holds the permit for its own
+ * execution and a transaction for its whole span, which is what a pool gives
+ * a Postgres and what PGlite's own exclusive transaction gave the Drizzle
+ * handle beside this one. Without it two concurrent transactions would
+ * nest their `BEGIN` on one connection and a plain read of another fiber
+ * would land inside whichever transaction was open.
  */
 export const sqlClientOverPglite = (client: PGlite): Layer.Layer<SqlClient.SqlClient> =>
   Layer.scoped(
     SqlClient.SqlClient,
-    SqlClient.make({
-      acquirer: Effect.succeed(pgliteConnection(client)),
-      compiler: PgClient.makeCompiler(),
-      spanAttributes: [],
+    Effect.flatMap(Effect.makeSemaphore(1), (connections) => {
+      const exclusive = Effect.acquireRelease(
+        Effect.as(connections.take(1), pgliteConnection(client)),
+        () => connections.release(1),
+      );
+      return SqlClient.make({
+        acquirer: exclusive,
+        transactionAcquirer: exclusive,
+        compiler: PgClient.makeCompiler(),
+        spanAttributes: [],
+      });
     }),
   ).pipe(Layer.provide(Reactivity.layer));
 

@@ -136,7 +136,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
     },
     offer: async (target, turnId) =>
       offerBriefing(
-        { db: seams.db(), writer: await seams.writer(), now: seams.now },
+        { db: seams.db(), run: seams.run, writer: await seams.writer(), now: seams.now },
         target,
         turnId,
       ),

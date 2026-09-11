@@ -62,7 +62,7 @@ const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
 const writer = await storeWriter({
-  db: database.db,
+  run: database.run,
   tools: CATALOG_TOOL_SET,
   now: () => new Date(NOW),
 });
@@ -91,6 +91,7 @@ function hostOverTestDatabase(): TestHost {
   let storeReads = 0;
   const seams: BrainHostSeams = {
     db: () => database.db,
+    run: database.run,
     store: () => {
       storeReads += 1;
       return database.store;

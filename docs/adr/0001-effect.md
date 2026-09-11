@@ -319,9 +319,12 @@ moved onto `@effect/sql` answers an `Effect<A, SqlError | ParseError,
 SqlClient>`, while the `HostedStore` methods above it answer the promises the
 routes still hold, so the store is handed the runner of whichever edge composed
 it — `runWeb` in a web function, the store tests' own runtime over the database
-their Drizzle handle stands on — and builds nothing itself. P10-14 deletes it
-with the Drizzle half, once every module here is an effect and the routes take
-one.
+their Drizzle handle stands on — and builds nothing itself. The store writer,
+the voice writer, and the speech module take the same runner directly rather
+than through the store's context, because a route composes each of them apart
+from the store: it is the one door either way, and the transaction a write runs
+under is the client's own. P10-14 deletes it with the Drizzle half, once every
+module here is an effect and the routes take one.
 
 `Maintenance`'s `#writeFlushMarker` in `packages/brain/src/maintenance.ts` is on
 the allowlist too: its own caller still holds a `Promise<Settled<...>>` for

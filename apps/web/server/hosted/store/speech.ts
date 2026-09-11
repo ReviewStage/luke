@@ -1,5 +1,6 @@
-import { and, asc, eq, gt, inArray, isNull, notExists, notInArray, sql } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import { SqlClient, SqlSchema } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, Option, type ParseResult, Schema } from "effect";
 import {
   CONVERSATION_EVENT_KIND,
   type ConversationEventKind,
@@ -14,12 +15,10 @@ import {
   type SpeechSpokenEventPayload,
   TURN_ORIGIN,
   unparsedWire,
-  type WireBoundaryInput,
+  WireValueSchema,
 } from "../../core.js";
-import { devices } from "../../db/devices-schema.js";
-import { conversations, events, messages } from "../../db/storage-schema.js";
-import type { HostedStoreDatabase } from "./database.js";
-import { STORE_WRITE_REFUSAL, type StoreWriter } from "./writer.js";
+import { EpochMillisColumnSchema, type HostedStoreRun } from "./database.js";
+import { ConversationEventKindSchema, STORE_WRITE_REFUSAL, type StoreWriter } from "./writer.js";
 
 /**
  * A briefing's delivery as events on the assistant message that announced
@@ -83,6 +82,11 @@ import { STORE_WRITE_REFUSAL, type StoreWriter } from "./writer.js";
  * the developer hears it twice, which is the one thing the claim exists to
  * rule out. `markSpeechSpoken` therefore admits the mark only from the
  * device that claimed, and a speaker with no claim has nothing to say.
+ *
+ * Every read below is an `Effect<A, SqlError | ParseError, SqlClient>` whose
+ * rows a `Schema` decodes rather than trusts; the transitions stay promises,
+ * because their writes are the store writer's, and each runs its reads
+ * through the runner its caller's edge composed.
  *
  * Who calls what: the relay offers, through `offerBriefing`, as it settles
  * an announce call; the claim and the spoken report are the live session
@@ -157,9 +161,17 @@ export type SpeechWriteResult =
   | { readonly ok: false; readonly refusal: SpeechRefusal };
 
 export interface SpeechStore {
-  readonly db: HostedStoreDatabase;
+  /** The runner of the edge that composed this store, which is what answers the reads below. */
+  readonly run: HostedStoreRun;
   readonly writer: Pick<StoreWriter, "recordEvent">;
 }
+
+/** How a read here fails: the driver's own refusal, or a row the schema refused. */
+type SpeechReadFailure = SqlError | ParseResult.ParseError;
+
+/** A statement over the ambient client, so the query below reads as the query it is. */
+const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
+  Effect.flatMap(SqlClient.SqlClient, build);
 
 /** How one offer stands, folded from every speech event on its message in sequence order. */
 interface SpeechStanding {
@@ -180,12 +192,82 @@ export interface SpeechOffer extends SpeechStanding {
   readonly messageId: string;
 }
 
-interface SpeechEventRow {
-  readonly kind: ConversationEventKind;
-  readonly deviceId: string | null;
-  readonly payload: WireBoundaryInput;
-  readonly createdAt: Date;
-}
+/**
+ * One event on a message, as the `events` row holds it. The payload is the
+ * `jsonb` column read as the wire value it is, which the payload schemas
+ * above are what hold to a shape; the kind is one of the vocabulary's own,
+ * so a row naming anything else is refused rather than folded.
+ */
+const SpeechEventRowSchema = Schema.Struct({
+  messageId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("message_id")),
+  kind: ConversationEventKindSchema,
+  deviceId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
+    Schema.fromKey("device_id"),
+  ),
+  payload: WireValueSchema,
+  createdAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("created_at")),
+});
+
+type SpeechEventRow = Schema.Schema.Type<typeof SpeechEventRowSchema>;
+
+/** The conversation a message belongs to, where the message is the account's and its conversation stands. */
+const MessageConversationSchema = Schema.Struct({
+  conversationId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("conversation_id")),
+});
+
+const MessageKeySchema = Schema.Struct({
+  userId: Schema.String,
+  messageId: Schema.String,
+});
+
+/** Where an event landed, which is what an offer already standing answers with. */
+const EventPositionSchema = Schema.Struct({
+  id: Schema.String,
+  seq: EpochMillisColumnSchema,
+});
+
+const findMessageConversation = SqlSchema.findOne({
+  Request: MessageKeySchema,
+  Result: MessageConversationSchema,
+  execute: (key) =>
+    statement(
+      (sql) => sql`
+        select messages.conversation_id
+        from messages
+        join conversations
+          on conversations.id = messages.conversation_id and conversations.deleted_at is null
+        where messages.id = ${key.messageId} and messages.user_id = ${key.userId}
+      `,
+    ),
+});
+
+const findSpeechEvents = SqlSchema.findAll({
+  Request: Schema.Array(Schema.String),
+  Result: SpeechEventRowSchema,
+  execute: (messageIds) =>
+    statement(
+      (sql) => sql`
+        select message_id, kind, device_id, payload, created_at
+        from events
+        where message_id in ${sql.in(messageIds)}
+        order by message_id asc, seq asc
+      `,
+    ),
+});
+
+const findOfferedEvent = SqlSchema.findOne({
+  Request: Schema.String,
+  Result: EventPositionSchema,
+  execute: (messageId) =>
+    statement(
+      (sql) => sql`
+        select id, seq
+        from events
+        where message_id = ${messageId}
+          and kind = ${CONVERSATION_EVENT_KIND.SPEECH_OFFERED}
+      `,
+    ),
+});
 
 /** The standing the events fold to, or nothing where no offer is among them. */
 function speechStandingOf(rows: readonly SpeechEventRow[]): SpeechStanding | undefined {
@@ -195,7 +277,7 @@ function speechStandingOf(rows: readonly SpeechEventRow[]): SpeechStanding | und
     if (standing === undefined) {
       if (row.kind !== CONVERSATION_EVENT_KIND.SPEECH_OFFERED) continue;
       const offeredAt = row.createdAt.getTime();
-      const payload = SPEECH_OFFERED_EVENT_PAYLOAD.parse(unparsedWire(row.payload));
+      const payload = SPEECH_OFFERED_EVENT_PAYLOAD.parse(row.payload);
       standing = {
         state: SPEECH_STATE.OFFERED,
         offeredAt,
@@ -210,54 +292,30 @@ function speechStandingOf(rows: readonly SpeechEventRow[]): SpeechStanding | und
       standing = { ...standing, claimedByDeviceId: row.deviceId };
     }
     if (row.kind === CONVERSATION_EVENT_KIND.SPEECH_HELD) {
-      const held = SPEECH_HELD_EVENT_PAYLOAD.parse(unparsedWire(row.payload));
+      const held = SPEECH_HELD_EVENT_PAYLOAD.parse(row.payload);
       standing = held === undefined ? standing : { ...standing, quietUntil: held.quietUntil };
     }
   }
   return standing;
 }
 
-/** The message's conversation, where the message is the account's and its conversation stands. */
-async function conversationOfMessage(
-  db: HostedStoreDatabase,
-  userId: string,
-  messageId: string,
-): Promise<string | undefined> {
-  const [row] = await db
-    .select({ conversationId: messages.conversationId })
-    .from(messages)
-    .innerJoin(
-      conversations,
-      and(eq(conversations.id, messages.conversationId), isNull(conversations.deletedAt)),
-    )
-    .where(and(eq(messages.id, messageId), eq(messages.userId, userId)));
-  return row?.conversationId;
-}
-
-async function speechEventsOf(
-  db: HostedStoreDatabase,
+function speechEventsOf(
   messageIds: readonly string[],
-): Promise<ReadonlyMap<string, readonly SpeechEventRow[]>> {
-  const byMessage = new Map<string, SpeechEventRow[]>();
-  if (messageIds.length === 0) return byMessage;
-  const rows = await db
-    .select({
-      messageId: events.messageId,
-      kind: events.kind,
-      deviceId: events.deviceId,
-      // The jsonb column as the unparsed boundary value it holds; the payload schemas above are what read it.
-      payload: sql<WireBoundaryInput>`${events.payload}`,
-      createdAt: events.createdAt,
-    })
-    .from(events)
-    .where(inArray(events.messageId, messageIds))
-    .orderBy(asc(events.messageId), asc(events.seq));
-  for (const row of rows) {
-    const held = byMessage.get(row.messageId) ?? [];
-    held.push(row);
-    byMessage.set(row.messageId, held);
-  }
-  return byMessage;
+): Effect.Effect<
+  ReadonlyMap<string, readonly SpeechEventRow[]>,
+  SpeechReadFailure,
+  SqlClient.SqlClient
+> {
+  if (messageIds.length === 0) return Effect.succeed(new Map());
+  return Effect.map(findSpeechEvents(messageIds), (rows) => {
+    const byMessage = new Map<string, SpeechEventRow[]>();
+    for (const row of rows) {
+      const held = byMessage.get(row.messageId) ?? [];
+      held.push(row);
+      byMessage.set(row.messageId, held);
+    }
+    return byMessage;
+  });
 }
 
 type Located =
@@ -265,16 +323,18 @@ type Located =
   | { readonly ok: false; readonly refusal: SpeechRefusal };
 
 /** The offer on one of the account's messages as it stands now, or why there is none to move. */
-async function locate(
-  db: HostedStoreDatabase,
+function locate(
   userId: string,
   messageId: string,
-): Promise<Located> {
-  const conversationId = await conversationOfMessage(db, userId, messageId);
-  if (conversationId === undefined) return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
-  const standing = speechStandingOf((await speechEventsOf(db, [messageId])).get(messageId) ?? []);
-  if (standing === undefined) return { ok: false, refusal: SPEECH_REFUSAL.NOT_OFFERED };
-  return { ok: true, conversationId, standing };
+): Effect.Effect<Located, SpeechReadFailure, SqlClient.SqlClient> {
+  return Effect.gen(function* () {
+    const conversation = yield* findMessageConversation({ userId, messageId });
+    if (Option.isNone(conversation)) return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
+    const events = yield* speechEventsOf([messageId]);
+    const standing = speechStandingOf(events.get(messageId) ?? []);
+    if (standing === undefined) return { ok: false, refusal: SPEECH_REFUSAL.NOT_OFFERED };
+    return { ok: true, conversationId: conversation.value.conversationId, standing };
+  });
 }
 
 /**
@@ -355,7 +415,7 @@ async function move(
   messageId: string,
   { transition, deviceId, payload, guard }: Move,
 ): Promise<SpeechWriteResult> {
-  const located = await locate(store.db, userId, messageId);
+  const located = await store.run(locate(userId, messageId));
   if (!located.ok) return located;
   const refusal = transition.refusals[located.standing.state] ?? guard?.(located.standing);
   if (refusal !== undefined) return { ok: false, refusal };
@@ -374,7 +434,7 @@ async function move(
     case STORE_WRITE_REFUSAL.ALREADY_CLAIMED:
       return { ok: false, refusal: SPEECH_REFUSAL.ALREADY_CLAIMED };
     case STORE_WRITE_REFUSAL.SUPERSEDED: {
-      const now = await locate(store.db, userId, messageId);
+      const now = await store.run(locate(userId, messageId));
       return {
         ok: false,
         refusal: now.ok
@@ -400,22 +460,14 @@ export async function offerSpeech(
   messageId: string,
   now: number,
 ): Promise<SpeechWriteResult> {
-  const conversationId = await conversationOfMessage(store.db, userId, messageId);
-  if (conversationId === undefined) return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
-  const standingOffer = () =>
-    store.db
-      .select({ id: events.id, seq: events.seq })
-      .from(events)
-      .where(
-        and(
-          eq(events.messageId, messageId),
-          eq(events.kind, CONVERSATION_EVENT_KIND.SPEECH_OFFERED),
-        ),
-      );
-  const [standing] = await standingOffer();
-  if (standing !== undefined) return { ok: true, id: standing.id, seq: standing.seq };
+  const conversation = await store.run(findMessageConversation({ userId, messageId }));
+  if (Option.isNone(conversation)) return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
+  const standing = await store.run(findOfferedEvent(messageId));
+  if (Option.isSome(standing)) {
+    return { ok: true, id: standing.value.id, seq: standing.value.seq };
+  }
   const written = await store.writer.recordEvent(
-    { userId, conversationId },
+    { userId, conversationId: conversation.value.conversationId },
     {
       messageId,
       kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
@@ -427,10 +479,10 @@ export async function offerSpeech(
   switch (written.refusal) {
     case STORE_WRITE_REFUSAL.SUPERSEDED: {
       // The same offer landed from another caller between the read and the lock; it is the one to answer.
-      const [landed] = await standingOffer();
-      return landed === undefined
+      const landed = await store.run(findOfferedEvent(messageId));
+      return Option.isNone(landed)
         ? { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND }
-        : { ok: true, id: landed.id, seq: landed.seq };
+        : { ok: true, id: landed.value.id, seq: landed.value.seq };
     }
     case STORE_WRITE_REFUSAL.ALREADY_CLAIMED:
     case STORE_WRITE_REFUSAL.NO_CONVERSATION:
@@ -513,55 +565,75 @@ export interface OpenSpeechOffersQuery {
 }
 
 /**
+ * The query as the statement takes it: every filter present, an absent one as
+ * null, so the read's shape is one declaration rather than a condition per
+ * call. The bound is a whole number, because `limit` takes one.
+ */
+const OpenOffersRequestSchema = Schema.Struct({
+  userId: Schema.NullOr(Schema.String),
+  userIds: Schema.NullOr(Schema.Array(Schema.String)),
+  notUserIds: Schema.Array(Schema.String),
+  limit: Schema.Int,
+});
+
+/** An offer's rows before its standing is folded: the account, the conversation, and the message announcing it. */
+const OfferedMessageSchema = Schema.Struct({
+  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
+  conversationId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("conversation_id")),
+  messageId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("message_id")),
+});
+
+const findOfferedMessages = SqlSchema.findAll({
+  Request: OpenOffersRequestSchema,
+  Result: OfferedMessageSchema,
+  execute: (query) =>
+    statement(
+      (sql) => sql`
+        select events.user_id, events.conversation_id, events.message_id
+        from events
+        join conversations
+          on conversations.id = events.conversation_id and conversations.deleted_at is null
+        where ${sql.and([
+          sql`events.kind = ${CONVERSATION_EVENT_KIND.SPEECH_OFFERED}`,
+          ...(query.userId === null ? [] : [sql`events.user_id = ${query.userId}`]),
+          ...(query.userIds === null ? [] : [sql`events.user_id in ${sql.in(query.userIds)}`]),
+          ...(query.notUserIds.length === 0
+            ? []
+            : [sql`events.user_id not in ${sql.in(query.notUserIds)}`]),
+          sql`not exists (
+            select 1 from events settled
+            where settled.message_id = events.message_id
+              and settled.kind in ${sql.in(SETTLED_KINDS)}
+          )`,
+        ])}
+        order by events.created_at asc, events.conversation_id asc, events.seq asc
+        limit ${query.limit}
+      `,
+    ),
+});
+
+/**
  * The offers not yet ended — no spoken, pushed, or expired event on their
  * message — over standing conversations, oldest offer first, each folded to
  * how it stands now.
  */
-export async function openSpeechOffers(
-  db: HostedStoreDatabase,
+export function openSpeechOffers(
   query: OpenSpeechOffersQuery = {},
-): Promise<readonly SpeechOffer[]> {
-  const settled = alias(events, "settled");
-  const offered = await db
-    .select({
-      userId: events.userId,
-      conversationId: events.conversationId,
-      messageId: events.messageId,
-    })
-    .from(events)
-    .innerJoin(
-      conversations,
-      and(eq(conversations.id, events.conversationId), isNull(conversations.deletedAt)),
-    )
-    .where(
-      and(
-        eq(events.kind, CONVERSATION_EVENT_KIND.SPEECH_OFFERED),
-        query.userId !== undefined ? eq(events.userId, query.userId) : undefined,
-        query.userIds !== undefined ? inArray(events.userId, [...query.userIds]) : undefined,
-        query.notUserIds !== undefined && query.notUserIds.length > 0
-          ? notInArray(events.userId, [...query.notUserIds])
-          : undefined,
-        notExists(
-          db
-            .select({ id: settled.id })
-            .from(settled)
-            .where(
-              and(eq(settled.messageId, events.messageId), inArray(settled.kind, SETTLED_KINDS)),
-            ),
-        ),
-      ),
-    )
-    .orderBy(asc(events.createdAt), asc(events.conversationId), asc(events.seq))
-    .limit(query.limit ?? OPEN_OFFERS.MAX);
-  // A message told its offer twice is one offer; the first row keeps its place.
-  const distinct = [...new Map(offered.map((row) => [row.messageId, row])).values()];
-  const speech = await speechEventsOf(
-    db,
-    distinct.map((row) => row.messageId),
-  );
-  return distinct.flatMap((row) => {
-    const standing = speechStandingOf(speech.get(row.messageId) ?? []);
-    return standing === undefined ? [] : [{ ...row, ...standing }];
+): Effect.Effect<readonly SpeechOffer[], SpeechReadFailure, SqlClient.SqlClient> {
+  return Effect.gen(function* () {
+    const offered = yield* findOfferedMessages({
+      userId: query.userId ?? null,
+      userIds: query.userIds ?? null,
+      notUserIds: query.notUserIds ?? [],
+      limit: query.limit ?? OPEN_OFFERS.MAX,
+    });
+    // A message told its offer twice is one offer; the first row keeps its place.
+    const distinct = [...new Map(offered.map((row) => [row.messageId, row])).values()];
+    const speech = yield* speechEventsOf(distinct.map((row) => row.messageId));
+    return distinct.flatMap((row) => {
+      const standing = speechStandingOf(speech.get(row.messageId) ?? []);
+      return standing === undefined ? [] : [{ ...row, ...standing }];
+    });
   });
 }
 
@@ -579,7 +651,7 @@ export interface SpeechSweepOutcome {
 
 /** The sweep's store: the writer's events path and, for a release, its turn queue. */
 export interface SpeechSweepStore {
-  readonly db: HostedStoreDatabase;
+  readonly run: HostedStoreRun;
   readonly writer: Pick<StoreWriter, "recordEvent" | "enqueueTurn">;
 }
 
@@ -595,27 +667,47 @@ export interface SpeechSweepOptions {
   readonly userIds?: readonly string[] | undefined;
 }
 
+/** The latest quiet instant of one account's devices still ahead of the read. */
+const QuietAccountSchema = Schema.Struct({
+  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
+  quietUntil: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("quiet_until")),
+});
+
+const QuietRequestSchema = Schema.Struct({
+  now: Schema.DateFromSelf,
+  userIds: Schema.NullOr(Schema.Array(Schema.String)),
+});
+
+const findQuietAccounts = SqlSchema.findAll({
+  Request: QuietRequestSchema,
+  Result: QuietAccountSchema,
+  execute: (query) =>
+    statement(
+      (sql) => sql`
+        select devices.user_id, max(devices.quiet_until) as quiet_until
+        from devices
+        where ${sql.and([
+          sql`devices.quiet_until > ${query.now}`,
+          ...(query.userIds === null ? [] : [sql`devices.user_id in ${sql.in(query.userIds)}`]),
+        ])}
+        group by devices.user_id
+      `,
+    ),
+});
+
 /**
  * The latest quiet instant still ahead among each account's devices; an
  * account with none reports no hold. The sweep reads it to hold and the push
  * pass to stay its hand, so the two decide on one standing.
  */
-export async function quietUntilByAccount(
-  db: HostedStoreDatabase,
+export function quietUntilByAccount(
   now: number,
   userIds: readonly string[] | undefined,
-): Promise<ReadonlyMap<string, number>> {
-  const rows = await db
-    .select({ userId: devices.userId, quietUntil: sql<Date>`max(${devices.quietUntil})` })
-    .from(devices)
-    .where(
-      and(
-        gt(devices.quietUntil, new Date(now)),
-        userIds !== undefined ? inArray(devices.userId, [...userIds]) : undefined,
-      ),
-    )
-    .groupBy(devices.userId);
-  return new Map(rows.map((row) => [row.userId, new Date(row.quietUntil).getTime()]));
+): Effect.Effect<ReadonlyMap<string, number>, SpeechReadFailure, SqlClient.SqlClient> {
+  return Effect.map(
+    findQuietAccounts({ now: new Date(now), userIds: userIds ?? null }),
+    (rows) => new Map(rows.map((row) => [row.userId, row.quietUntil.getTime()])),
+  );
 }
 
 /** One of the sweep's writes on an open offer, refused under the lock if the offer ended meanwhile; answers whether it landed. */
@@ -655,10 +747,10 @@ export async function sweepSpeech(
   options: SpeechSweepOptions,
 ): Promise<SpeechSweepOutcome> {
   const { now, limit, userIds } = options;
-  const quiet = await quietUntilByAccount(store.db, now, userIds);
+  const quiet = await store.run(quietUntilByAccount(now, userIds));
   const outcome = { held: 0, released: 0, expired: 0, turns: 0 };
   for (const [userId, quietUntil] of quiet) {
-    for (const offer of await openSpeechOffers(store.db, { userId, limit })) {
+    for (const offer of await store.run(openSpeechOffers({ userId, limit }))) {
       if (offer.state === SPEECH_STATE.HELD && (offer.quietUntil ?? 0) >= quietUntil) continue;
       if (await sweepWrite(store, offer, CONVERSATION_EVENT_KIND.SPEECH_HELD, { quietUntil })) {
         outcome.held += 1;
@@ -666,11 +758,13 @@ export async function sweepSpeech(
     }
   }
   const released = new Set<string>();
-  const unheld = await openSpeechOffers(store.db, {
-    userIds,
-    notUserIds: [...quiet.keys()],
-    limit,
-  });
+  const unheld = await store.run(
+    openSpeechOffers({
+      userIds,
+      notUserIds: [...quiet.keys()],
+      limit,
+    }),
+  );
   for (const offer of unheld) {
     if (offer.state === SPEECH_STATE.HELD) {
       const ended = await sweepWrite(store, offer, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED, {
