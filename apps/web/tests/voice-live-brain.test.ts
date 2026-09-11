@@ -51,8 +51,15 @@ afterAll(() => database.close());
 
 const NOW = 1_800_000_000_000;
 const EVE_TURN = "turn_0";
-/** The follow's bounds narrowed so a poll is milliseconds and the bound is reached inside a test. */
-const QUICK = { POLL_MS: 5, FOLLOW_MS: 150 };
+/**
+ * The follow's bounds narrowed so a poll is milliseconds, with the bound left
+ * wide: a turn's events land through the store, and the store on CI is one
+ * Postgres shared with every other job, so a bound measured in milliseconds
+ * against it would expire under load before the turn's first event arrives.
+ */
+const QUICK = { POLL_MS: 5, FOLLOW_MS: 60_000 };
+/** The same cadence with the bound close enough to reach inside a test. */
+const BOUNDED = { POLL_MS: 5, FOLLOW_MS: 150 };
 
 const writer = await storeWriter({
   run: database.run,
@@ -317,7 +324,7 @@ test("a refusal at the door is spoken as the build's own note for it, and every 
 
 test("an ask whose turn never starts is told as failed at the follow bound, once, and the bound is reported", async () => {
   const target = await account();
-  const f = stand(target);
+  const f = stand(target, BOUNDED);
   const accepted = await f.brain.submitAsk({ submissionId: randomUUID(), question: "q" });
   assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
   if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
@@ -332,7 +339,7 @@ test("an ask whose turn never starts is told as failed at the follow bound, once
 
 test("an ask the record no longer holds ends as failed rather than being followed forever", async () => {
   const target = await account();
-  const f = stand(target, { POLL_MS: 5, FOLLOW_MS: 60_000 });
+  const f = stand(target);
   const accepted = await f.brain.submitAsk({ submissionId: randomUUID(), question: "q" });
   assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
   if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
@@ -346,7 +353,7 @@ test("an ask the record no longer holds ends as failed rather than being followe
 
 test("stop ends every follow: a turn that completes after it reaches no listener", async () => {
   const target = await account();
-  const f = stand(target, { POLL_MS: 5, FOLLOW_MS: 60_000 });
+  const f = stand(target);
   const accepted = await f.brain.submitAsk({ submissionId: randomUUID(), question: "q" });
   assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
   if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
