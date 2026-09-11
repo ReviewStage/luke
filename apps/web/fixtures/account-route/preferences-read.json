@@ -1,0 +1,11 @@
+{
+  "status": 200,
+  "statusText": "",
+  "headers": [
+    [
+      "content-type",
+      "application/json"
+    ]
+  ],
+  "body": "{\"preferences\":{\"voice\":\"coral\",\"voiceSpeed\":1.25},\"updatedAt\":1788868800000}"
+}

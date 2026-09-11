@@ -155,9 +155,10 @@ a function default-exports. It reads the runtime through `runWeb` and then
 holds the handler for the instance's life, so it is a caller of the edge rather
 than a second one, and a warm invocation reaches the services the cold one
 built. The brain group's four routes, `server/routes/auth/[...all].ts`, the
-six routes behind the actions group, and the five routes behind the
-observation group below are converted this way; every other route still
-default-exports the promise-shaped handler beside it.
+six routes behind the actions group, the five routes behind the observation
+group below, and the account group's `server/routes/account/delete.ts` and
+`server/routes/account/preferences.ts` are the routes converted this way;
+every other route still default-exports the promise-shaped handler beside it.
 
 `server/hosted/http-effect.ts` is the response vocabulary that conversion
 speaks: one schema per refusal, each annotated with the status it answers, and
@@ -229,6 +230,31 @@ queries without a second copy of them. `fixtures/observation-route/` records
 one answer per route, a wrong method on a declared path, and a path outside
 the group, and `tests/observation-app.test.ts` answers each twice — through
 the group and by calling the handler directly — and compares the two.
+
+## The account group
+
+`server/account-app.ts` is the account route group: the signed-in desktop's
+own delete and preferences endpoints, described as an `HttpRouter` rather
+than carried as a passthrough, because both answer from this deployment's own
+database and neither owns a contract of its own the way Better Auth does.
+Each endpoint resolves the bearer against the deployment's own account store
+before touching anything — root AGENTS.md pins that no credential or account
+secret ever travels in an answer — and answers only the boolean or the
+snapshot the caller's own account carries. `server/hosted/account-seams.ts` is
+the one place that hands the group a real user table and a real preferences
+store, so both `api/account/delete.ts` and `api/account/preferences.ts` build
+the same group from the same wiring; the analytics erasure key and project are
+read from `HostedEnvironment` instead, the way the brain group's own key and
+model override are, and only the deletion's own transport stays an injectable
+seam. `server/hosted/account-delete.ts` and `server/hosted/account-preferences.ts`
+keep the promise-shaped handlers they always answered with, now read only by
+their own tests and as the byte-identity oracle `tests/account-app.test.ts`
+checks the group against, with the environment handed in directly the way
+`tests/support/brain-call.ts` hands it to the brain group. `fixtures/account-route/`
+records what the group answers for a delete, a read, a write, a refused
+method, an invalid token, an invalid body, and a path outside the group, with
+`content-length` checked against the body it frames and then dropped before
+comparing, the way `tests/brain-app.test.ts` holds it.
 
 ## Signing in on a Preview deployment
 

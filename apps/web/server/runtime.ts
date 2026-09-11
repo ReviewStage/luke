@@ -11,7 +11,8 @@ import { hostedEnvironment } from "./hosted/environment.js";
  *
  * What the deployment's environment says about the hosted tier is read here
  * too, once per instance rather than at each invocation: `HostedEnvironment`
- * is the one place `OPENAI_API_KEY` and the brain model override are read.
+ * is the one place `OPENAI_API_KEY`, the brain model override, and the
+ * analytics processor's own deletion key and project are read.
  *
  * `@effect/platform-node` has no entry: a Vercel function's platform is the
  * Web `fetch` its runtime already carries, and a Node-reaching companion
