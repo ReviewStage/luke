@@ -1,4 +1,4 @@
-import { Duration, Effect, Fiber, Queue, Ref, type Scope } from "effect";
+import { Duration, Effect, Queue, Ref, type Scope } from "effect";
 
 export const ATTACH_RETRY_DEFAULTS = {
   /** The first pause before a failed attach is tried again; each next pause doubles up to the cap. */
@@ -29,8 +29,11 @@ function nextDelayMs(delayMs: number, maximumDelayMs: number): number {
  * with none for good. So every detachment is followed by another attach
  * after a growing pause, capped, until one attaches or the fiber running this
  * effect is interrupted; nothing is drawn for it, and the disconnected posture
- * stands meanwhile. This is the policy a client over a socket needs; the
- * client composed in this process reaches its host without one.
+ * stands meanwhile. A client over a socket needs this for every reconnection;
+ * the desktop's own in-process operator (`apps/desktop/src/main/services/host-service.ts`)
+ * needs it only for the first attach, since nothing in this process can drop
+ * the connection once it stands: a first failure there falls into this same
+ * policy rather than failing the launch outright.
  *
  * The attempt itself is forked into the ambient `Scope`, so interrupting the
  * fiber that runs this effect — closing that scope — cancels a pause still
@@ -74,21 +77,4 @@ export function retryAttachWhileDetachedEffect(
       yield* Ref.set(delayRef, nextDelayMs(delayMs, maximumDelayMs));
     }
   });
-}
-
-/**
- * The Promise-facing door over {@link retryAttachWhileDetachedEffect} for a
- * caller that still holds a release closure rather than a fiber. Its own
- * scope lives exactly as long as the fiber it forks, and releasing interrupts
- * that fiber rather than waiting for the interruption to finish, which is all
- * a release ever guaranteed.
- *
- * @deprecated Strangler shim over {@link retryAttachWhileDetachedEffect}; P8-04
- * moves the desktop operator onto the effect directly and deletes this door.
- */
-export function retryAttachWhileDetached(ports: AttachRetryPorts): () => void {
-  const fiber = Effect.runFork(Effect.scoped(retryAttachWhileDetachedEffect(ports)));
-  return () => {
-    Effect.runFork(Fiber.interrupt(fiber));
-  };
 }

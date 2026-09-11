@@ -175,8 +175,8 @@ its own door and the server's together.
 
 The `GatewayServer` class is what `@sidecar/host`'s `GatewayService` and the
 in-process transports still hold, and it is a
-strangler shim (`@deprecated`, deleted by P7-01 and P7-02, on the ADR's
-allowlist): it makes the log, the admissions door, and the registry ahead of
+strangler shim (`@deprecated`, on the ADR's allowlist): it makes the log, the
+admissions door, and the registry ahead of
 a `ManagedRuntime` over the layers above, runs a request as a promise through
 the in-process protocol, and runs an emit, a reconnect, and the close of
 admissions synchronously, delivering each emitted event to its own listeners
@@ -184,7 +184,18 @@ on the same tick beside the stream the log publishes. The socket binding holds
 it no longer: it provides the `Protocol` a server is built over rather than
 attaching to one already built, so what it needs of a host is the server's own
 layer options, which `GatewayService` hands out as `serverOptions` — a shim of
-the same family, deleted with the class.
+the same family. P7-02 composed the host itself as a `Layer` and left both
+standing, because `transport.ts`'s `ServerBoundTransport` (and the
+`TextLoopbackTransport` `testing.ts` builds over it) still construct with a
+`GatewayServer` in hand, and the desktop's own `InProcessTransport` is one of
+its subclasses; moving `ServerBoundTransport`'s callers onto the layers
+directly changed the request's own microtask timing enough to break the
+reconnection-race tests it and its callers hold, so P6-04 left it standing on
+purpose, and P8-04 left it standing too — the desktop host service's own
+attach is now a retry over `retryAttachWhileDetachedEffect` rather than a
+Promise door over it, which is unrelated to the class. Both fields go
+together once a later PR resolves that timing and hands every transport the
+layers directly.
 
 ## Five doors, because three of them reach beyond the vocabulary
 

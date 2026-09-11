@@ -151,7 +151,7 @@ test("the host service starts and stops leaving no handle, and says what the dra
   await host.stop();
 });
 
-test("the host's standup carries the operator's attach, and a failed attach fails the start", async (t) => {
+test("the host's standup carries the operator's attach", async (t) => {
   const stateRoot = await temporaryDirectory(t);
   const order: string[] = [];
   const host = createHostService({
@@ -161,15 +161,38 @@ test("the host's standup carries the operator's attach, and a failed attach fail
   host.link({
     attach: async () => {
       order.push("attach");
+    },
+  });
+  await host.start();
+  assert.deepEqual(order, ["attach"]);
+  await host.stop();
+});
+
+test("a first attach that fails does not fail the start, and falls to a retry the drain can interrupt", async (t) => {
+  const stateRoot = await temporaryDirectory(t);
+  const reports: string[] = [];
+  const order: string[] = [];
+  const host = createHostService({
+    config: fixtureConfig(stateRoot, (message) => reports.push(message)),
+    cipher: CIPHER,
+  });
+  host.link({
+    attach: async () => {
+      order.push("attach");
       throw new Error("the host answered no bootstrap");
     },
   });
-  await assert.rejects(() => host.start(), /the host answered no bootstrap/);
+  // A host merely slow to arm its capabilities must not read as a launch
+  // that failed to stand up: the first attach's failure falls to the
+  // growing-pause retry rather than rejecting the standup.
+  await host.start();
   assert.deepEqual(order, ["attach"]);
-  // The drain is owed from before the start, so a launch that could not stand
-  // up still has a runtime to give back.
   assert.equal(host.drainOwed(), true);
+  assert.ok(reports.some((message) => message.includes("the operator could not attach")));
+  // The drain interrupts the pending retry rather than waiting out its pause
+  // or calling `attach` once more behind the close.
   await host.stop();
+  assert.equal(host.drainOwed(), false);
 });
 
 test("the host service reads its links by name rather than answering nothing", async (t) => {

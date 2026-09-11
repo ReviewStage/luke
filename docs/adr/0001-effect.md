@@ -242,15 +242,23 @@ and left the class standing, because the in-process transports and the
 desktop's host service still hold it; P6-04 left the transports as they
 stood — moving `ServerBoundTransport`'s callers onto the layers directly
 turned out to change the request's own microtask timing enough to break the
-transports' own reconnection-race tests, so it goes once a later PR moves
-the transports onto the layers, and P8-04 the desktop's host service. The
+transports' own reconnection-race tests. P8-04 is the desktop's host service,
+and it leaves the class standing too, for the same reason: the desktop's
+`InProcessTransport` (`apps/desktop/src/main/services/operator-client.ts`)
+is one of `ServerBoundTransport`'s own subclasses, so detaching the desktop
+from `GatewayServer` without the microtask-timing regression means converting
+`transport.ts` and `testing.ts` first, which is not this PR's diff; what P8-04
+does take off the class is unrelated to the transport at all — the desktop
+host service's own attach retry, moved onto `retryAttachWhileDetachedEffect`
+directly. Both fields go once a later PR resolves that timing and moves every
+transport onto the layers. The
 socket binding
 (`packages/gateway/src/websocket.ts`) holds the class no longer: it provides
 the `Protocol` a server is built over rather than attaching to one already
 built, and composes `layerGatewayServer` over it itself, so what it needs of
 a host is the server's own layer options, which `GatewayService` hands out as
 `serverOptions`. That field runs no effect and is on no allowlist, but it is
-the same shim wearing a smaller face, and the same two PRs delete it.
+the same shim wearing a smaller face, and the same later PR deletes it.
 
 `composeHost`'s `start()`/`stop()` in `packages/host/src/compose-host.ts` is
 on the same allowlist, as the face the desktop's host service still operates
@@ -275,19 +283,22 @@ but the host's coordinator (`packages/host/src/compose-host.ts`) still holds
 a plain async `stop()` over those same promise-returning steps, so
 `shutdownGateway` runs the effect to that promise in place. P7-10 (the drain)
 composes the host's quit as an effect directly and deletes this door.
-`retryAttachWhileDetached` in `packages/gateway/src/attachment.ts` is on the
-allowlist too, and for its own reason rather than a caller's: nothing in this
-build composes it yet — the client this policy is for is the one a socket
-attaches, which does not exist before P8-04 — so the door forks
-`retryAttachWhileDetachedEffect`'s backoff loop on its own scope and answers a
-release closure over `Fiber.interrupt` rather than one built by an edge that
-holds it. `retryAttachWhileDetachedEffect` is itself the whole policy: the
-pause doubles on a `Schedule.exponential` unioned with a `Schedule.spaced`
-ceiling, and the attempt is forked into the ambient `Scope`, so interrupting
-it — closing the scope the door made, or the one an edge builds instead —
-cancels a pause still being waited out rather than merely gating the call it
-would have made. P8-04 hands the desktop's operator that scope directly and
-deletes the door.
+`packages/gateway/src/attachment.ts`'s `retryAttachWhileDetachedEffect` is
+the whole backoff policy: a pause that doubles from
+`ATTACH_RETRY_DEFAULTS.INITIAL_DELAY_MS` up to its cap on every announced
+detachment, the attempt itself forked into the ambient `Scope` so
+interrupting it — closing that scope — cancels a pause still being waited out
+and never calls `attach` again. `apps/desktop/src/main/services/host-service.ts`
+is its first caller: the standup's first attach still runs once,
+synchronously, exactly as it did before this policy existed, and only a
+failure of that one falls into the growing pause, forked with
+`Effect.runFork(Effect.scoped(...))` on a fiber the host service keeps for
+its own drain to interrupt. That run is on this allowlist rather than an
+edge's, because `apps/desktop/src/main/main.ts` holds no `ManagedRuntime` of
+its own yet; P8-01 gives it one and this fork moves onto it. The
+Promise-facing door this effect stood behind, `retryAttachWhileDetached`, is
+gone: P8-04 is the effect's first caller and holds the fiber itself, so
+nothing ever needed the door's release closure.
 
 `StoreDatabase#run` in `packages/brain/src/store/database.ts` is on the
 allowlist as the two OpenClaw ports' reach into the store. The store's worker
@@ -624,9 +635,9 @@ design decision stated as such:
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04 |
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
 | `providerRegistrations` record door over `providersLayer` | P6-09 | P7-01, P7-02 |
-| `GatewayServer`, the promise-and-callback adaptor over `layerGatewayServer` | P6-02 | P7-01, P7-02 |
+| `GatewayServer`, the promise-and-callback adaptor over `layerGatewayServer` | P6-02 | a later PR converting `transport.ts`/`testing.ts` |
 | `shutdownGateway`, the promise door over `shutdownGatewayEffect` | P6-04 | P7-10 |
-| `retryAttachWhileDetached`, the promise door over `retryAttachWhileDetachedEffect` | P6-04 | P8-04 |
+| the desktop host service's own `Effect.runFork` over `retryAttachWhileDetachedEffect` | P8-04 | P8-01 |
 | `runAdapterRead`, every adapter's Promise face over its read effects | P6-11a | P7-05 |
 | `AgentTraceWriter`'s own `ManagedRuntime` | P6-05 | Phase 7 devtrace composer |
 | `tracedModelAdapter`'s traced `respond` | P6-05 | P7-08 |

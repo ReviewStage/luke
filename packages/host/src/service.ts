@@ -102,9 +102,15 @@ export interface GatewayService {
    * methods over the same readers.
    *
    * @deprecated A strangler shim beside `GatewayServer`'s: P7-02 composed the
-   * host as a `Layer` and left both standing; they go together when P6-04
-   * moves the in-process transports onto the layers and P8-04 the desktop's
-   * host service, at which point a transport is provided the layers directly.
+   * host as a `Layer` and left both standing. `packages/gateway`'s
+   * `ServerBoundTransport` (`transport.ts`) and `TextLoopbackTransport`
+   * (`testing.ts`) still construct over `GatewayServer` directly — moving
+   * their callers onto the layers changed the request's own microtask timing
+   * enough to break their reconnection-race tests (the reason P6-04 left them
+   * standing) — and the desktop's `InProcessTransport` construction in
+   * `apps/desktop/src/main/services/operator-client.ts` goes through the same
+   * `transport.ts`, so both fields go together once a later PR resolves that
+   * and hands every transport the layers directly.
    */
   readonly serverOptions: GatewayServerOptions;
   readonly nodes: NodeRegistry;

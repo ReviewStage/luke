@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { Worker } from "node:worker_threads";
+import { retryAttachWhileDetachedEffect } from "@sidecar/gateway";
 import type { GatewayServer } from "@sidecar/gateway/server";
 import { composeHost, type HostSeams, storeWorkerPath } from "@sidecar/host";
 import { type LateRef, lateRef } from "@sidecar/wire";
+import { Effect, Fiber } from "effect";
 import type { DesktopConfig } from "./desktop-config";
 import type { DesktopService } from "./service";
 
@@ -105,6 +107,55 @@ export function createHostService(dependencies: HostServiceDependencies): HostSe
   let standup: Promise<unknown> = Promise.resolve();
   let draining: Promise<void> | undefined;
 
+  /**
+   * The retries a first attach that failed is owed. A first attach is not
+   * this: it runs once, synchronously, inside the standup, exactly as before —
+   * only a failure of that one falls into the growing pause this fiber owns,
+   * carried on its own scope so a drain can cancel a pause still being waited
+   * out rather than have it call `attach` once more behind the close.
+   */
+  let attachRetry: Fiber.RuntimeFiber<never, never> | undefined;
+  const attachListeners = new Set<(attached: boolean) => void>();
+
+  function attachOnceMore(): Promise<void> {
+    return links
+      .get()
+      .attach()
+      .then(() => {
+        for (const listener of [...attachListeners]) listener(true);
+      })
+      .catch((error) => {
+        config.report(
+          `the operator could not attach: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        for (const listener of [...attachListeners]) listener(false);
+        throw error;
+      });
+  }
+
+  function retryAttach(): void {
+    attachRetry = Effect.runFork(
+      Effect.scoped(
+        retryAttachWhileDetachedEffect({
+          onAttachedChanged: (listener) => {
+            attachListeners.add(listener);
+            return () => attachListeners.delete(listener);
+          },
+          attached: () => false,
+          attach: () => attachOnceMore(),
+          report: config.report,
+        }),
+      ),
+    );
+  }
+
+  async function interruptAttachRetry(): Promise<void> {
+    const fiber = attachRetry;
+    if (!fiber) return;
+    attachRetry = undefined;
+    await Effect.runPromise(Fiber.interrupt(fiber));
+  }
+
   function drain(): Promise<void> {
     if (state === HOST_DRAIN.OWED) {
       state = HOST_DRAIN.UNDER_WAY;
@@ -113,12 +164,15 @@ export function createHostService(dependencies: HostServiceDependencies): HostSe
       // hooks, and the observation behind the close, which is the one thing a
       // quit must not leave running. With the host's own two bounds, the
       // whole quit is bounded at twenty seconds.
-      draining = Promise.race([
-        standup.catch(() => undefined),
-        new Promise<void>((resolve) => {
-          setTimeout(resolve, STANDUP_DRAIN_WAIT_MS);
-        }),
-      ])
+      draining = interruptAttachRetry()
+        .then(() =>
+          Promise.race([
+            standup.catch(() => undefined),
+            new Promise<void>((resolve) => {
+              setTimeout(resolve, STANDUP_DRAIN_WAIT_MS);
+            }),
+          ]),
+        )
         .then(() => host.stop())
         .finally(() => {
           state = HOST_DRAIN.NOTHING_OWED;
@@ -140,7 +194,13 @@ export function createHostService(dependencies: HostServiceDependencies): HostSe
       state = HOST_DRAIN.OWED;
       standup = (async () => {
         await host.start();
-        await links.get().attach();
+        // The first attach runs synchronously, as it always has, so the
+        // bootstrap every later decision is made from is read before the
+        // standup answers. A failure here is not the standup's own: it falls
+        // to the growing-pause retry rather than failing the launch, since a
+        // host merely slow to arm its capabilities must not read as one that
+        // never will.
+        await attachOnceMore().catch(() => retryAttach());
       })();
       await standup;
     },
