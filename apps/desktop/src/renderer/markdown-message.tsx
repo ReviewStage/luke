@@ -33,7 +33,7 @@ const COMPONENTS: Components = {
         {children}
       </span>
     ) : (
-      <>{children}</>
+      children
     ),
   h1: ({ children }) => heading(1, children),
   h2: ({ children }) => heading(2, children),

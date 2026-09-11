@@ -235,7 +235,7 @@ node "$SIDECAR_REPO_ROOT/design/check-design-contract.mjs"
 # A prior cleanup stamped this sentence ahead of assertions without explaining
 # any invariant. Specific SAFETY comments are part of the executable style
 # contract; the boilerplate must not return.
-generic_safety=$(grep -RFn --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
+generic_safety=$(grep -rFn --exclude-dir=node_modules --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
     'SAFETY: The preceding check establishes the asserted contract.' \
     "$SIDECAR_REPO_ROOT/apps" "$SIDECAR_REPO_ROOT/packages" || true)
 if [[ -n "$generic_safety" ]]; then
@@ -419,7 +419,7 @@ fi
 # the one place that may attach it to Electron. A handler registered beside its
 # domain logic would bypass the manifest's sender and wire guards, and an act
 # registered on a channel of its own would bypass the router.
-direct_ipc_registration=$(grep -RnaE --include='*.ts' 'ipcMain\.(handle|on)\(' \
+direct_ipc_registration=$(grep -rnaE --exclude-dir=node_modules --include='*.ts' 'ipcMain\.(handle|on)\(' \
     "$SIDECAR_REPO_ROOT/apps/desktop/src" |
     grep -v '/main/bridge-host.ts:' || true)
 if [[ -n "$direct_ipc_registration" ]]; then
@@ -469,7 +469,7 @@ fi
 # check. The catalog is what pins every package to the one resolved version, so
 # a literal version here is the one thing that can quietly reintroduce a second
 # copy.
-literal_effect_versions=$(grep -RnE '"effect": *"[^c]' --include=package.json \
+literal_effect_versions=$(grep -rnE '"effect": *"[^c]' --include=package.json \
     --exclude-dir=node_modules \
     "$SIDECAR_REPO_ROOT/apps" "$SIDECAR_REPO_ROOT/packages" "$SIDECAR_REPO_ROOT/tools" || true)
 if [[ -n "$literal_effect_versions" ]]; then
@@ -484,7 +484,7 @@ fi
 # set from anywhere it is written, so the cast lives in the two wire modules that
 # define and re-shape the brand and in `admit()`, the one minter. An Effect
 # `Schema.brand` would be a third way in, which is why admission is not one.
-admitted_casts=$(grep -rEn --include='*.ts' --include='*.tsx' 'as Admitted\b' \
+admitted_casts=$(grep -rEn --exclude-dir=node_modules --include='*.ts' --include='*.tsx' 'as Admitted\b' \
     "$SIDECAR_REPO_ROOT/apps" "$SIDECAR_REPO_ROOT/packages" "$SIDECAR_REPO_ROOT/tools" |
     grep -vE '/(packages/actions/src/admit\.ts|packages/wire/src/admitted\.ts|packages/wire/src/testing/admitted[^/]*\.ts):' || true)
 if [[ -n "$admitted_casts" ]]; then

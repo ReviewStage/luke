@@ -265,12 +265,7 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
       return (
         <>
           {shape.bones.map((bone, index) => (
-            <SkeletonLine
-              // biome-ignore lint/suspicious/noArrayIndexKey: a paragraph's bones are its line widths in order, and two lines may share one.
-              key={index}
-              box="h-5"
-              bone={`h-3.5 ${bone}`}
-            />
+            <SkeletonLine key={index} box="h-5" bone={`h-3.5 ${bone}`} />
           ))}
         </>
       );
@@ -364,7 +359,6 @@ export function SkeletonBody({ shapes }: { shapes: readonly SkeletonShape[] }): 
     <>
       {shapes.map((shape, index) => {
         return (
-          // biome-ignore lint/suspicious/noArrayIndexKey: a region's identity is its place in the page's own order.
           <div key={index} className={shapeSpacing(shape, shapes[index - 1])}>
             <SkeletonShapeBody shape={shape} />
           </div>

@@ -1244,7 +1244,6 @@ export function App(): React.JSX.Element {
       >
         <span className="voice-caption-stack" ref={caption.textRef}>
           {caption.settled.map((words, index) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: a segment's place in the reply is its identity — the strip never reorders or removes one while the reply stands — and the live slot below takes the next place, so the block a segment streamed into is the block it settles in.
             <MarkdownMessage key={index} className="voice-caption-text" words={words} />
           ))}
           <MarkdownMessage

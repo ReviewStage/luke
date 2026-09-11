@@ -265,7 +265,7 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
           detail: answer.reason,
         });
       }
-      const continued = await this.#absorb(answer, request, emit, ingest, lifecycle);
+      const continued = await this.#absorb(answer, emit, ingest, lifecycle);
       if (signal.aborted) return cancelled();
       if (!continued && steered.length > 0) {
         // Words steered in while the model was answering are still unread: the
@@ -340,9 +340,8 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
   /** Keeps what the answer carried; answers whether there are calls to run. */
   async #absorb(
     answer: ModelAnswer,
-    request: RuntimeRunRequest,
     emit: (event: RuntimeEvent) => Promise<void>,
-    ingest: (input: ContextInput) => Promise<void | undefined>,
+    ingest: (input: ContextInput) => Promise<void>,
     lifecycle: ContextLifecycle,
   ): Promise<boolean> {
     await emit({ kind: RUNTIME_EVENT.ANSWERED, toolCalls: answer.toolCalls.length });

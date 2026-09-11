@@ -77,7 +77,6 @@ function AnimationCard({ entry }: { entry: AnimationEntry }): React.JSX.Element 
               className="aspect-square overflow-hidden rounded-md [&>svg]:block [&>svg]:size-full"
               style={{ backgroundColor: ANIMATION_SWATCH[variant] }}
               aria-hidden="true"
-              // biome-ignore lint/security/noDangerouslySetInnerHtml: the markup is a committed design/brand/motion SVG inlined at build time, not user input.
               dangerouslySetInnerHTML={markup}
             />
           );

@@ -31,6 +31,7 @@
     "build": "node scripts/build.mjs",
     "build:native": "node scripts/build-native.mjs",
     "package": "pnpm build:native && pnpm build && node scripts/prepare-builder-assets.mjs && electron-builder --config electron-builder.ts --mac --arm64 --publish never",
+    "package:dir": "pnpm build:native && pnpm build && node scripts/prepare-builder-assets.mjs && electron-builder --config electron-builder.ts --mac --arm64 --dir --publish never",
     "release": "LUKE_ELECTRON_BUILDER_NOTARIZE=1 pnpm package",
     "start": "pnpm build:native && pnpm build && electron .",
     "test": "vitest run",

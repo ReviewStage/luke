@@ -216,7 +216,6 @@ function GeminiCliMark({ className }: MarkProps): React.JSX.Element {
           <filter
             // The published artwork stacks one blob twice, so the layer list
             // holds duplicates and only the position names a layer.
-            // biome-ignore lint/suspicious/noArrayIndexKey: see above
             key={index}
             id={`${idPrefix}-blur-${index}`}
             filterUnits="userSpaceOnUse"
@@ -232,11 +231,7 @@ function GeminiCliMark({ className }: MarkProps): React.JSX.Element {
       </defs>
       <g mask={`url(#${maskId})`}>
         {GEMINI_CLI_MARK_LAYERS.map((layer, index) => (
-          <g
-            // biome-ignore lint/suspicious/noArrayIndexKey: same duplicate-layer list as above
-            key={index}
-            filter={`url(#${idPrefix}-blur-${index})`}
-          >
+          <g key={index} filter={`url(#${idPrefix}-blur-${index})`}>
             <path fill={layer.fill} d={layer.path} />
           </g>
         ))}
