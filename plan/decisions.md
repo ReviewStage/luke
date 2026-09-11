@@ -1908,3 +1908,40 @@ test harness, G4's table drops, and now #1093's brain group. **All four were abs
 branches waited rather than discovered at the rebase.** That is the whole argument for sweeping main
 during a quiet period instead of treating quiet as idle: **a lane that is finished and waiting is
 not static, and the cost of finding out late is paid by three PRs at once.**
+
+
+## 2026-09-11 — The ask's logic is a function, not a handler (orchestrator, from C8 reading #1093)
+
+**A requirement on C2b-2b, relayed as a requirement rather than a suggestion, because it decides
+whether part b needs a follow-up in someone else's file.**
+
+**#1093's brain group is not a template for the ask.** C8 read `brain-app.ts` and
+`routes/brain/capabilities.ts`: the group is an `HttpRouter` of Effects whose handlers read the
+caller **straight off `HttpServerRequest`** — `account()` takes `request.headers.authorization`,
+`brainOperation` reads the body from the request — and answer `HttpServerResponse`. **Nothing in that
+composition is reachable in process without fabricating a request.** Correct for the four brain
+routes, which have no in-process caller. **Wrong for the one route that has one.**
+
+**The requirement:**
+
+- **The ask's logic is a function over plain arguments** — the already-resolved `userId`, the
+  question, origin, `clientId`, optional `conversationId`, **and the `EveCaller` to reach eve as** —
+  answering `HostedBrainAskAnswer` / `HostedBrainTurnAnswer` **or a typed refusal**. Admission,
+  `standingMain`, the eve open-or-send, the record: all inside it.
+- **The handler is a thin adapter**: resolve the bearer, read the body, call the function with
+  `EVE_CALLER.ACCOUNT`.
+- **Part b calls the same two functions** with the `userId` it resolved at the handshake and
+  `EVE_CALLER.DEPLOYMENT`.
+- **Where they are mounted — inside #1093's group or beside it — is C2b-2b's call.** The only
+  requirement is that **the logic is not inside the handler.** `askStanding` is already this shape;
+  this extends it to the ask.
+
+**The consequence C8 named, which is what makes it act-now rather than act-later:** *"if C2b-2b
+writes the ask the way `brain-app.ts` writes `respond()`, part b would need a request-shaped seam
+that does not exist, and that is a follow-up in someone else's file."*
+
+**And a route-layout correction, verified in the tree rather than relayed:** `api/brain/turns.js`
+re-exports `dist-functions/brain/turns.js` and is **the turns LIST route**, and `vercel.json`'s only
+brain rewrite is C7's `/api/brain/turns/([^/]+)/events` → `turns/events.js?id=$1`. **So
+`brainTurnPath(id)` and its cancel need their own function file and their own rewrite in that
+shape — not a rewrite onto `turns.js`**, or a per-turn read answers the list.
