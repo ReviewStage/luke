@@ -1,7 +1,7 @@
 import type { CredentialProvider, CredentialSource } from "@sidecar/credentials/vocabulary";
 import { useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
-import { tell } from "../act";
+import { useAct } from "../act";
 import {
   CREDENTIAL_PLACEHOLDER,
   type CredentialEntry,
@@ -45,6 +45,7 @@ export function CredentialField({
    */
   stilled?: boolean;
 }): React.JSX.Element {
+  const { tell } = useAct();
   const field = useRef<HTMLInputElement | null>(null);
   const fieldId = `${provider.id}-api-key`;
   const busy = entry.busy || stilled === true;

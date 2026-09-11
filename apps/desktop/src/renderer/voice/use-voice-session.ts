@@ -9,7 +9,7 @@ import { type RefObject, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { VOICE_COMMAND, voiceExchangeKind } from "#shared/messages/voice-view";
-import { act, tell } from "../act";
+import { act, useAct } from "../act";
 import { hostedVoiceUnavailableNote } from "../microphone-access";
 import { appSettingsNow, appStateNow, useAppState } from "../use-app-state";
 import { outputSilent } from "../volume-hint";
@@ -55,6 +55,7 @@ interface Streams {
  * here, and nothing here appends to the model: every append is the host's.
  */
 export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>): void {
+  const { act, tell } = useAct();
   const [streams, setStreams] = useState<Streams>({ local: undefined, remote: undefined });
   const callRef = useRef<LiveCall | undefined>(undefined);
   const orchestratorRef = useRef<LiveVoiceOrchestrator | undefined>(undefined);

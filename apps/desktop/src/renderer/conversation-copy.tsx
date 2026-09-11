@@ -1,7 +1,7 @@
 import { CheckIcon, CopyIcon } from "@sidecar/panel";
 import { useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
-import { tell } from "./act";
+import { useAct } from "./act";
 
 const COPY_CONFIRMATION_MS = 1500;
 
@@ -14,6 +14,7 @@ const COPY_CONFIRMATION_MS = 1500;
  * the control returns to its resting glyph.
  */
 export function ConversationCopyButton({ words }: { words: string }): React.JSX.Element {
+  const { tell } = useAct();
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {

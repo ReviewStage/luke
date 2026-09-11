@@ -46,7 +46,12 @@ the only caller: `act` for a row that reads the answer, and `tell` for an
 effect whose answer nothing reads, which drops the refusal rather than leaving
 it to surface as an unhandled rejection. A new command is a new `ACT_KIND`
 entry with its payload schema, its answer's guard, and its one router row;
-there is no second write path to add one on.
+there is no second write path to add one on. The channel itself is an
+`Atom.fn` on the runtime `renderer-runtime.ts` builds; a component or a hook
+reaches it through `useAct()`'s `useAtomSet`, and `act`/`tell` stay as a
+Promise door over the same atom for the few callers outside any render
+tree — a static writes table built at module scope, and a bootstrap-failure
+path with no component to hold a hook's return value.
 
 Two renderers run under the same rule, and they are two bundles rather than
 one bundle branching on a role. The panel's is `renderer/index.tsx`, which

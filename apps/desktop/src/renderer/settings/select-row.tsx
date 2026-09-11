@@ -1,7 +1,7 @@
 import { PopUpIcon } from "@sidecar/panel";
 import type { ActionResult } from "@sidecar/wire";
 import { ACT_KIND } from "#shared/messages/acts";
-import { tell } from "../act";
+import { useAct } from "../act";
 import { type ErrandTarget, errandTargetProps } from "../luke-errand";
 import { searchAnchorProps } from "../settings-anchors";
 import { ChangedMark } from "./marks";
@@ -57,6 +57,7 @@ export function SelectRow<Value extends string | number>({
   // biome-ignore lint/suspicious/noConfusingVoidType: the voice and pace cannot be refused, so those writes answer void
   onChange: (value: Value) => void | Promise<ActionResult>;
 }): React.JSX.Element {
+  const { tell } = useAct();
   const { busy, rejection, run } = useSettingWrite(onChange);
   return (
     <>

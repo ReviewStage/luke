@@ -2,7 +2,7 @@ import type { FeedbackImage, FeedbackKind } from "@sidecar/feedback";
 import { FEEDBACK_LIMITS } from "@sidecar/feedback";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
-import { act } from "./act";
+import { useAct } from "./act";
 import {
   confirmationHoldMs,
   type FeedbackConfirmation,
@@ -72,6 +72,7 @@ export interface FeedbackComposer {
  * act — writing a note — drawn in one shape.
  */
 export function useFeedbackComposer(options: UseFeedbackComposerOptions): FeedbackComposer {
+  const { act } = useAct();
   const { surface, presentation, stillMotion, standDownPage } = options;
   const [notice, setNotice] = useState<string>();
   const [confirming, setConfirming] = useState<{

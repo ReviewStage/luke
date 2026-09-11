@@ -2,7 +2,7 @@ import { MOTION_DURATION_MS } from "@sidecar/surface";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { WindowMode } from "#shared/messages/session";
-import { act } from "./act";
+import { useAct } from "./act";
 import {
   HIT_REGION,
   HIT_REGION_ATTRIBUTE,
@@ -159,6 +159,7 @@ export interface PanelPresentationApi {
  * hand on the shape does.
  */
 export function usePanelPresentation(options: PanelPresentationOptions): PanelPresentationApi {
+  const { act } = useAct();
   const optionsRef = useRef(options);
   optionsRef.current = options;
 

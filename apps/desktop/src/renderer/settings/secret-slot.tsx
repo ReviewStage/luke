@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
-import { tell } from "../act";
+import { useAct } from "../act";
 import { useStagedFocus } from "../credential-entry";
 import { type Destination, DestinationNote } from "../destination-note";
 
@@ -68,6 +68,7 @@ export function SecretSlot({
   onCancel: () => void;
   onFetch?: () => void;
 }): React.JSX.Element {
+  const { tell } = useAct();
   const field = useRef<HTMLInputElement | null>(null);
   // Holding a secret is what brings the confirm out; being able to send it is
   // what makes it pressable. They differ while one is being written, and the

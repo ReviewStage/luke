@@ -4,7 +4,7 @@ import { ThumbsDownIcon, ThumbsUpIcon } from "@sidecar/panel";
 import { MESSAGE_RATING, type MessageRating } from "@sidecar/wire";
 import { useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
-import { act } from "./act";
+import { useAct } from "./act";
 
 /**
  * Two thumbs under one of Luke's messages, the way a chat rates a reply: the
@@ -92,6 +92,7 @@ export function ConversationRatingControl({
   /** Opens the composer on the draft; absent where no composer can be offered, and a thumbs down offers nothing. */
   onOfferFeedback?: (draft: string) => void;
 }): React.JSX.Element {
+  const { act } = useAct();
   const [pending, setPending] = useState<MessageRating | undefined>(undefined);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   // A verdict that moved — this press landing, or another device's read back — is the refusal's answer.
