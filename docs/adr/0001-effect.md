@@ -127,7 +127,7 @@ decide. The migration enforces this by review until the lint rule
 `no-run-promise-outside-edges` lands, after which the edges above are its
 allowlist.
 
-Three strangler shims are on that allowlist for as long as they live.
+Five strangler shims are on that allowlist for as long as they live.
 `cloudFetchFromHttpClient` in `packages/wire/src/effect/http.ts` answers a
 promise, because that is what the `CloudFetch` seam its callers still hold
 answers, so the bridge is where the effect is run until every one of them takes
@@ -158,6 +158,14 @@ read's own failure. It goes in P12-02 with the `Settled` Promise signatures,
 once P5-14's turn runner and P7's composers call `admitEffect()` in runs of
 their own.
 
+`BrainTransport#send`'s internal `runCall` in `packages/brain/src/client.ts`
+is the fifth: every caller of the brain's model transport still holds a
+promise, not a fiber, so the request effect built over `@sidecar/hosted`'s
+`accountCall` is run to a promise there, joining the caller's own
+`AbortSignal` to the run exactly as `createAccountCall` does. P5-14 moves a
+turn onto the brain's own runtime, at which point this request runs on it
+instead and `runCall` goes with it.
+
 ## Strangler shims and their deletions
 
 Old and new coexist behind a named shim rather than in a long-lived branch, so
@@ -176,6 +184,7 @@ design decision stated as such:
 | `timersFromRuntime` | P2-01 | P12-03 |
 | `ObservationLoop`'s `start`/`stop` over its own `Scope` | P2-04 | P7-10 |
 | `admit()` Promise door over `admitEffect()` | P4-01 | P12-02 |
+| `BrainTransport#send`'s internal `runCall` | P5-05 | P5-14 |
 | `Settled` Promise signatures | P5-01 | P12-02 |
 | `Layer.succeed(oldObject)` / `createHostKernel(options)` | P7-01 | P12-05 |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |

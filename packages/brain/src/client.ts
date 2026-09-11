@@ -1,11 +1,13 @@
+import type * as HttpClient from "@effect/platform/HttpClient";
 import {
-  type AccountCall,
+  type AccountCallEffects,
   type AccountToken,
   accountBearer,
+  accountCall,
   CALL_FAULT,
+  type CallAnswer,
   type CallCredential,
   callAnswered,
-  createAccountCall,
   fixedBearer,
   HOSTED_API_ERROR,
   HOSTED_BRAIN_CONTRACT_VERSION,
@@ -25,6 +27,8 @@ import {
   unparsedWire,
   wireRecord,
 } from "@sidecar/wire";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
+import { Cause, Effect, Exit, type Layer } from "effect";
 import {
   BRAIN_REQUEST_TIMEOUT_MS,
   type Failure,
@@ -46,6 +50,39 @@ export interface BrainTransportOptions {
   requestTimeoutMs?: number;
 }
 
+/** The error's kind alone, as a caller's own cancellation names it, never its words. */
+function errorName(cause: unknown): string | undefined {
+  return cause instanceof Error ? cause.name : undefined;
+}
+
+/**
+ * Runs a call effect to its promise answer, over the transport's own
+ * `HttpClient`. The caller's cancellation is the run's own interruption
+ * rather than a value in the request, so its end is read back here, named by
+ * the reason their signal carried, exactly as an aborted fetch named it.
+ *
+ * @deprecated `BrainTransport#send` is a promise-facing strangler shim on the
+ * `Effect.runPromise` allowlist in `docs/adr/0001-effect.md`: it runs the
+ * call effect here because every caller still holds a promise, not a fiber.
+ * P5-14 moves a turn onto the brain's own runtime, at which point this
+ * request runs there instead and `runCall` goes with it.
+ */
+async function runCall(
+  effect: Effect.Effect<CallAnswer, never, HttpClient.HttpClient>,
+  client: Layer.Layer<HttpClient.HttpClient>,
+  signal: AbortSignal | undefined,
+): Promise<CallAnswer> {
+  const exit = await Effect.runPromiseExit(Effect.provide(effect, client), {
+    ...(signal === undefined ? undefined : { signal }),
+  });
+  if (Exit.isSuccess(exit)) return exit.value;
+  if (signal?.aborted === true && Cause.isInterruptedOnly(exit.cause)) {
+    const name = errorName(signal.reason);
+    return { fault: CALL_FAULT.NETWORK, ...(name === undefined ? undefined : { errorName: name }) };
+  }
+  throw Cause.squash(exit.cause);
+}
+
 /**
  * One call out of the brain, whatever authorizes it: the account call's own
  * bearer header, renewal, and single retry, with the two readings that are
@@ -55,7 +92,8 @@ export interface BrainTransportOptions {
  * quiet is reported with.
  */
 export class BrainTransport {
-  readonly #call: AccountCall;
+  readonly #call: AccountCallEffects;
+  readonly #client: Layer.Layer<HttpClient.HttpClient>;
   readonly #label: string;
   readonly #now: () => number;
 
@@ -66,15 +104,15 @@ export class BrainTransport {
       label: string;
     },
   ) {
-    this.#call = createAccountCall({
+    this.#call = accountCall({
       baseUrl: options.baseUrl,
       credential: options.credential,
-      fetch: options.fetch,
       // A turn may read a transcript, reason over it, and act, so the brain
       // asks for its own deadline rather than the ten seconds a settings row
       // would wait.
       requestTimeoutMs: options.requestTimeoutMs ?? BRAIN_REQUEST_TIMEOUT_MS,
     });
+    this.#client = layerFromCloudFetch(options.fetch ?? ((input, init) => fetch(input, init)));
     this.#label = options.label;
     this.#now = options.now ?? Date.now;
   }
@@ -95,7 +133,7 @@ export class BrainTransport {
     body?: string,
     signal?: AbortSignal,
   ): Promise<Response | Failure> {
-    const answer = await this.#call.send({ path, method, body, signal });
+    const answer = await runCall(this.#call.send({ path, method, body }), this.#client, signal);
     if (callAnswered(answer)) return answer.response;
     switch (answer.fault) {
       case CALL_FAULT.NO_CREDENTIAL:

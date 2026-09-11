@@ -21,6 +21,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
+    "@effect/platform": "catalog:",
     "@sidecar/actions": "workspace:*",
     "@sidecar/guide": "workspace:*",
     "@sidecar/hosted": "workspace:*",
@@ -28,7 +29,8 @@
     "@sidecar/runtime": "workspace:*",
     "@sidecar/session": "workspace:*",
     "@sidecar/wire": "workspace:*",
-    "ai": "catalog:"
+    "ai": "catalog:",
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",

@@ -388,6 +388,9 @@ importers:
 
   packages/brain:
     dependencies:
+      '@effect/platform':
+        specifier: 'catalog:'
+        version: 0.97.2(effect@3.22.2)
       '@sidecar/actions':
         specifier: workspace:*
         version: link:../actions
@@ -412,6 +415,9 @@ importers:
       ai:
         specifier: 'catalog:'
         version: 7.0.97(zod@4.5.4)
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.2
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
