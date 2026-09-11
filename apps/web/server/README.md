@@ -244,6 +244,13 @@ queries without a second copy of them. `fixtures/observation-route/` records
 one answer per route, a wrong method on a declared path, and a path outside
 the group, and `tests/observation-app.test.ts` answers each twice — through
 the group and by calling the handler directly — and compares the two.
+`server/observation-app.ts` itself holds no Drizzle call: the events
+handler's PostHog person read and the tick's eligible-account listing across
+`provider_key`, `devices`, and `observation_pass` are `SqlSchema` queries over
+the ambient `SqlClient`, run through `runWeb`, and the tick's vault-key read
+now calls `server/hosted/vault-key-store.ts`'s own converted query instead of
+repeating it. `tests/observation-app-queries.test.ts` covers the two queries
+this file still owns directly.
 
 ## The account group
 
