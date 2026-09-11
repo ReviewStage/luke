@@ -1,0 +1,15 @@
+{
+  "status": 200,
+  "statusText": "",
+  "headers": [
+    [
+      "content-length",
+      "13"
+    ],
+    [
+      "content-type",
+      "application/json"
+    ]
+  ],
+  "body": "{\"seen\":true}"
+}

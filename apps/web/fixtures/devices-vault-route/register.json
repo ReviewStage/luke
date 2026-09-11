@@ -1,0 +1,15 @@
+{
+  "status": 200,
+  "statusText": "",
+  "headers": [
+    [
+      "content-length",
+      "51"
+    ],
+    [
+      "content-type",
+      "application/json"
+    ]
+  ],
+  "body": "{\"deviceId\":\"7c9e6679-7425-40de-944b-e07fc1f90ae7\"}"
+}

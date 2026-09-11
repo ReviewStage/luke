@@ -23,6 +23,7 @@ const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.METHOD_NOT_ALLOWED]: HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
   [HOSTED_API_ERROR.NOT_FOUND]: HOSTED_HTTP_STATUS.NOT_FOUND,
   [HOSTED_API_ERROR.PROMPT_TOO_LARGE]: HOSTED_HTTP_STATUS.BAD_REQUEST,
+  [HOSTED_API_ERROR.QUOTA_EXHAUSTED]: HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS,
   [HOSTED_API_ERROR.UNKNOWN_TOOL]: HOSTED_HTTP_STATUS.BAD_REQUEST,
   [HOSTED_API_ERROR.REQUEST_TOO_LARGE]: HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE,
   [HOSTED_API_ERROR.UNAVAILABLE]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
@@ -41,6 +42,7 @@ export const InvalidRequestRefusal = refusalSchema(HOSTED_API_ERROR.INVALID_REQU
 export const MethodNotAllowedRefusal = refusalSchema(HOSTED_API_ERROR.METHOD_NOT_ALLOWED);
 export const NotFoundRefusal = refusalSchema(HOSTED_API_ERROR.NOT_FOUND);
 export const PromptTooLargeRefusal = refusalSchema(HOSTED_API_ERROR.PROMPT_TOO_LARGE);
+export const QuotaExhaustedRefusal = refusalSchema(HOSTED_API_ERROR.QUOTA_EXHAUSTED);
 export const UnknownToolRefusal = refusalSchema(HOSTED_API_ERROR.UNKNOWN_TOOL);
 export const RequestTooLargeRefusal = refusalSchema(HOSTED_API_ERROR.REQUEST_TOO_LARGE);
 export const UnavailableRefusal = refusalSchema(HOSTED_API_ERROR.UNAVAILABLE);
@@ -56,6 +58,7 @@ export const HOSTED_REFUSAL = {
   NOT_FOUND: { error: HOSTED_API_ERROR.NOT_FOUND },
   /** The prepared prompt is longer than the brain contract's own envelope; nothing was sent upstream. */
   PROMPT_TOO_LARGE: { error: HOSTED_API_ERROR.PROMPT_TOO_LARGE },
+  QUOTA_EXHAUSTED: { error: HOSTED_API_ERROR.QUOTA_EXHAUSTED },
   /** A tool name the brain contract's catalog does not register; no schema was selected. */
   UNKNOWN_TOOL: { error: HOSTED_API_ERROR.UNKNOWN_TOOL },
   REQUEST_TOO_LARGE: { error: HOSTED_API_ERROR.REQUEST_TOO_LARGE },

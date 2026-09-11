@@ -3,9 +3,12 @@ import { auth } from "../auth.js";
 import { unparsedWire, type WireBoundaryInput } from "../core.js";
 import { getDatabase } from "../db/index.js";
 import { providerKey } from "../db/schema.js";
+import type { DevicesVaultSeams } from "../devices-vault-app.js";
 import type { Route } from "../route.js";
 import { runWeb } from "../runtime.js";
-import { hostedUserId, oauthUserInfoFromAuthAnswer } from "./bearer.js";
+import type { UserInfoEndpoint } from "./bearer.js";
+import { hostedUserId, oauthUserInfoFromAuthAnswer, userIdForAuthorization } from "./bearer.js";
+import { deviceSeams } from "./device-store.js";
 import { payloadKeyRing, VAULT_ENCRYPTION_ENVIRONMENT } from "./encryption.js";
 import { type HostedStore, hostedStore } from "./store/index.js";
 
@@ -55,13 +58,20 @@ function storeFor(secret: string): HostedStore {
   return storeUnderSecret.store;
 }
 
+/**
+ * The auth service's own userinfo endpoint, read at the hosted API boundary.
+ * Every vault or device route resolves its bearer through this one, whether
+ * it is built from the seams below or composed as an `HttpApp`.
+ */
+const hostedVaultUserInfo: UserInfoEndpoint = async (input) => {
+  // SAFETY: Better Auth hands back its parsed userinfo answer as structured-clone data; the wire guards below validate the selected field.
+  const answer = (await auth.api.oauth2UserInfo(input)) as WireBoundaryInput;
+  return oauthUserInfoFromAuthAnswer(unparsedWire(answer));
+};
+
 /** The bearer resolved against the deployment's own account store, the same for every hosted route. */
 export function resolveHostedUserId(request: Request): Promise<string | undefined> {
-  return hostedUserId(request, async (input) => {
-    // SAFETY: Better Auth hands back its parsed userinfo answer as structured-clone data; the wire guards below validate the selected field.
-    const answer = (await auth.api.oauth2UserInfo(input)) as WireBoundaryInput;
-    return oauthUserInfoFromAuthAnswer(unparsedWire(answer));
-  });
+  return hostedUserId(request, hostedVaultUserInfo);
 }
 
 /**
@@ -115,4 +125,15 @@ export const hostedVaultSeams = {
  */
 export function hostedVaultRoute(handler: (route: HostedVaultRoute) => Promise<Response>): Route {
   return { fetch: (request) => handler({ ...hostedVaultSeams, request }) };
+}
+
+/** The devices-and-vault group's real seams: the same account store the `hostedVaultRoute` seams other, still-promise-shaped hosted routes read. */
+export function productionDevicesVaultSeams(): DevicesVaultSeams {
+  return {
+    resolveUserId: (authorization) => userIdForAuthorization(authorization, hostedVaultUserInfo),
+    storeKey: hostedVaultSeams.storeKey,
+    listKeys: hostedVaultSeams.listKeys,
+    deleteKey: hostedVaultSeams.deleteKey,
+    ...deviceSeams(getDatabase()),
+  };
 }

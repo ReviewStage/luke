@@ -1,0 +1,15 @@
+{
+  "status": 200,
+  "statusText": "",
+  "headers": [
+    [
+      "content-length",
+      "63"
+    ],
+    [
+      "content-type",
+      "application/json"
+    ]
+  ],
+  "body": "{\"keys\":[{\"providerId\":\"conductor\",\"updatedAt\":1787875200000}]}"
+}

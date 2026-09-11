@@ -1,5 +1,6 @@
 import { Config, ConfigProvider, Context, Effect, Layer, Option, Redacted } from "effect";
 import { text } from "../core.js";
+import { VAULT_ENCRYPTION_ENVIRONMENT } from "./encryption.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "./openai.js";
 import { POSTHOG_ENVIRONMENT } from "./posthog.js";
 
@@ -22,6 +23,8 @@ export interface HostedEnvironmentValues {
   readonly posthogProjectId: string | undefined;
   /** The private API host deletion is asked of, which is not the ingestion host. */
   readonly posthogApiHost: string | undefined;
+  /** The provider key vault's AES-256-GCM secret; absent means the vault is off. */
+  readonly providerKeyEncryptionSecret: Redacted.Redacted | undefined;
 }
 
 export class HostedEnvironment extends Context.Tag("HostedEnvironment")<
@@ -53,6 +56,9 @@ export const hostedEnvironment = Layer.effect(
       posthogPersonalApiKey: Config.option(Config.redacted(POSTHOG_ENVIRONMENT.PERSONAL_API_KEY)),
       posthogProjectId: Config.option(Config.string(POSTHOG_ENVIRONMENT.PROJECT_ID)),
       posthogApiHost: Config.option(Config.string(POSTHOG_ENVIRONMENT.API_HOST)),
+      providerKeyEncryptionSecret: Config.option(
+        Config.redacted(VAULT_ENCRYPTION_ENVIRONMENT.SECRET),
+      ),
     }),
     (read) => ({
       openAiKey: presentRedacted(read.apiKey),
@@ -60,6 +66,7 @@ export const hostedEnvironment = Layer.effect(
       posthogPersonalApiKey: presentRedacted(read.posthogPersonalApiKey),
       posthogProjectId: present(read.posthogProjectId),
       posthogApiHost: present(read.posthogApiHost),
+      providerKeyEncryptionSecret: presentRedacted(read.providerKeyEncryptionSecret),
     }),
   ).pipe(Effect.withConfigProvider(ConfigProvider.fromEnv())),
 );

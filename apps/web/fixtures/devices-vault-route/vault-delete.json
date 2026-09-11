@@ -1,0 +1,15 @@
+{
+  "status": 200,
+  "statusText": "",
+  "headers": [
+    [
+      "content-length",
+      "16"
+    ],
+    [
+      "content-type",
+      "application/json"
+    ]
+  ],
+  "body": "{\"deleted\":true}"
+}

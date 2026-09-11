@@ -1,18 +1,11 @@
-import { getDatabase } from "../db/index.js";
-import { deviceSeams } from "../hosted/device-store.js";
-import { handleDevices } from "../hosted/devices.js";
-import { hostedVaultRoute } from "../hosted/vault-route.js";
+import { devicesVaultApp } from "../devices-vault-app.js";
+import { productionDevicesVaultSeams } from "../hosted/vault-route.js";
+import { routeFromHttpApp } from "../route-effect.js";
 
 /**
  * Registers (POST), heartbeats (PUT), and forgets (DELETE) the signed-in
- * installation's device row. The logic lives in `server/hosted/devices.ts`
- * and the writes in `server/hosted/device-store.ts`; this file only hands
- * them the deployment's real database.
+ * installation's device row, and stores, lists, and deletes the provider key
+ * vault. The logic lives in `server/devices-vault-app.ts`; this file only
+ * hands it the deployment's real seams.
  */
-export default hostedVaultRoute((route) =>
-  handleDevices({
-    request: route.request,
-    resolveUserId: route.resolveUserId,
-    ...deviceSeams(getDatabase()),
-  }),
-);
+export default routeFromHttpApp(devicesVaultApp(productionDevicesVaultSeams()));

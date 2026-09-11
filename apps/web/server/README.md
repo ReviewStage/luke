@@ -158,11 +158,11 @@ half is a small `SqlClient` over `@electric-sql/pglite`, because no
 a function default-exports. It reads the runtime through `runWeb` and then
 holds the handler for the instance's life, so it is a caller of the edge rather
 than a second one, and a warm invocation reaches the services the cold one
-built. The brain group's four routes, `server/routes/auth/[...all].ts`, the
-six routes behind the actions group, the five routes behind the observation
-group below, and the account group's `server/routes/account/delete.ts` and
-`server/routes/account/preferences.ts` are the routes converted this way;
-every other route still default-exports the promise-shaped handler beside it.
+built. The brain group's four routes, the auth group, the actions group, the
+five routes behind the observation group below, the account group's
+`server/routes/account/delete.ts` and `server/routes/account/preferences.ts`,
+and the devices and vault group's three routes are converted this way; every
+other route still default-exports the promise-shaped handler beside it.
 
 `server/hosted/http-effect.ts` is the response vocabulary that conversion
 speaks: one schema per refusal, each annotated with the status it answers, and
@@ -259,6 +259,39 @@ records what the group answers for a delete, a read, a write, a refused
 method, an invalid token, an invalid body, and a path outside the group, with
 `content-length` checked against the body it frames and then dropped before
 comparing, the way `tests/brain-app.test.ts` holds it.
+
+## The devices and vault group
+
+`server/devices-vault-app.ts` is another `HttpApi` group: the device row's
+three writes on `/api/devices` (register, heartbeat, forget) and the provider
+key vault's on `/api/vault/key` (store, delete) and `/api/vault/keys` (list),
+each dispatched by an `Effect.gen` that reads the method off
+`HttpServerRequest`, reads the bearer, checks the device brake or the vault
+secret (`HostedEnvironment`'s `providerKeyEncryptionSecret`, the same
+environment-at-build-time rule the brain group's key and model override
+read), reads the body through `readJsonBodyEffect`, and decodes it through
+the hosted wire's own Effect declarations
+(`readEither(effectSchema(deviceRegisterRequestSchema))` and its heartbeat and
+forget siblings; the vault's provider id and key are read by hand, the way the
+promise-shaped route always did). Unlike the auth group, this one owns its
+answers rather than carrying someone else's: `server/hosted/devices.ts` is cut
+down to the seams' vocabulary (`DeviceSeams`, `DeviceRegistration`,
+`DeviceHeartbeat`, and the `pushAddress`/`heartbeatFrom` helpers
+`change-signal.ts`'s poll still reaches for), and `server/hosted/vault.ts` is
+gone outright. `server/hosted/vault-route.ts`'s `productionDevicesVaultSeams`
+is the deployment's real wiring — the same account store the `hostedVaultRoute`
+seams other, still-promise-shaped hosted routes read — so each of the three
+route files is one line handing it to `routeFromHttpApp(devicesVaultApp(...))`.
+`HOSTED_API_ERROR.QUOTA_EXHAUSTED` gained a row in `HOSTED_REFUSAL_STATUS`
+(429), for the device brake's own refusal. Reading a body through
+`readJsonBodyEffect` needed a byte bound neither route held before; both take
+the 8 KiB bound a handful of short fields never approaches, matching the
+bound the rating and change-signal routes already read their own bodies
+under. `fixtures/devices-vault-route/` pins a representative exchange on each
+path — a register, a heartbeat, a forget, a store, a delete, a list, and one
+refusal of each shape — and `tests/devices-vault-app.test.ts` carries every
+gate-order and validation case the promise-shaped handlers were tested
+against, run against the group instead.
 
 ## Signing in on a Preview deployment
 
@@ -594,7 +627,8 @@ fifteen quiet seconds so the connection is known to stand.
 ## Provider key vault
 
 `server/routes/vault/key.ts` and `server/routes/vault/keys.ts` store, list, and delete the provider
-API keys a signed-in user syncs for server-side observation. Keys are encrypted
+API keys a signed-in user syncs for server-side observation, dispatched by the
+devices-and-vault group in `server/devices-vault-app.ts`. Keys are encrypted
 at rest using AES-256-GCM before they touch the database; the plaintext never
 reaches a database column and there is no endpoint that reads it back.
 
@@ -932,7 +966,9 @@ one per installation; a registration or heartbeat that presents a token
 another row holds takes it off that row in the same transaction. The
 installation id and a push token are not credentials. Rows go with the
 account, at sign-out, and when Apple answers that the token is gone. The
-handler is `server/hosted/devices.ts` and the writes `server/hosted/device-store.ts`.
+handler is the devices-and-vault group in `server/devices-vault-app.ts`, the
+seams' vocabulary is `server/hosted/devices.ts`, and the writes are
+`server/hosted/device-store.ts`.
 Beside the presence window stands `quiet_until`, the instant a meeting hold
 the device observes ends; both arrive on the change-signal poll
 (`server/routes/changes.ts`), which moves the row exactly as the heartbeat does; the Mac
