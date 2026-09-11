@@ -129,8 +129,15 @@ through this client, `ratings.ts` reaches `message-reads.ts`'s one read the
 same way, and `roster-snapshot.ts` too but for its one exported
 `readRosterSnapshot`, which `hosted-store.test.ts` still calls directly with
 the Drizzle handle to prove a sealed row does not open under another user's
-seal — every other module still through Drizzle — and each is handed its
-edge's own runner to answer the promises the routes hold — `runWeb` in a
+seal. Outside `server/hosted/store/`, `server/hosted/device-store.ts` and the
+provider-key vault's `server/hosted/vault-key-store.ts` are on the same client;
+`server/hosted/quota.ts`, `speech-push.ts` (partly), and
+`server/voice/session-record.ts` are still through Drizzle, and
+`brain-host/production.ts` still holds a `HostedStoreDatabase` accessor it
+forwards into `quota.ts` and into `hostedStore()` for `readRosterSnapshot`'s
+sake, though the rest of `brain-host/` runs no query of its own any more.
+Each converted module is handed its edge's own runner to answer the promises
+the routes hold — `runWeb` in a
 function, the store tests' runtime in a test. The writers take that runner
 directly rather than through the store's context, because a route composes
 them apart from the store; the conversation row lock every write runs under

@@ -1,8 +1,6 @@
-import { and, eq } from "drizzle-orm";
 import { auth } from "../auth.js";
 import { unparsedWire, type WireBoundaryInput } from "../core.js";
 import { getDatabase } from "../db/index.js";
-import { providerKey } from "../db/schema.js";
 import type { DevicesVaultSeams } from "../devices-vault-app.js";
 import type { Route } from "../route.js";
 import { runWeb } from "../runtime.js";
@@ -11,6 +9,13 @@ import { hostedUserId, oauthUserInfoFromAuthAnswer, userIdForAuthorization } fro
 import { deviceSeams } from "./device-store.js";
 import { payloadKeyRing, VAULT_ENCRYPTION_ENVIRONMENT } from "./encryption.js";
 import { type HostedStore, hostedStore } from "./store/index.js";
+import {
+  deleteVaultKey,
+  listVaultKeys,
+  readStoredVaultKeys,
+  readVaultKey,
+  storeVaultKey,
+} from "./vault-key-store.js";
 
 /**
  * The deployment's own seams, handed to a hosted route once instead of
@@ -82,40 +87,12 @@ export function resolveHostedUserId(request: Request): Promise<string | undefine
 export const hostedVaultSeams = {
   resolveUserId: resolveHostedUserId,
   encryptionSecret: process.env[VAULT_ENCRYPTION_ENVIRONMENT.SECRET],
-  readKey: async (userId: string, providerId: string) => {
-    const rows = await getDatabase()
-      .select({ ciphertext: providerKey.ciphertext })
-      .from(providerKey)
-      .where(and(eq(providerKey.userId, userId), eq(providerKey.providerId, providerId)))
-      .limit(1);
-    return rows[0];
-  },
-  readVaultKeys: (userId: string) =>
-    getDatabase()
-      .select({ providerId: providerKey.providerId, ciphertext: providerKey.ciphertext })
-      .from(providerKey)
-      .where(eq(providerKey.userId, userId)),
-  listKeys: (userId: string) =>
-    getDatabase()
-      .select({ providerId: providerKey.providerId, updatedAt: providerKey.updatedAt })
-      .from(providerKey)
-      .where(eq(providerKey.userId, userId)),
-  storeKey: async (userId: string, providerId: string, ciphertext: string) => {
-    await getDatabase()
-      .insert(providerKey)
-      .values({ userId, providerId, ciphertext, updatedAt: new Date() })
-      .onConflictDoUpdate({
-        target: [providerKey.userId, providerKey.providerId],
-        set: { ciphertext, updatedAt: new Date() },
-      });
-  },
-  deleteKey: async (userId: string, providerId: string) => {
-    const result = await getDatabase()
-      .delete(providerKey)
-      .where(and(eq(providerKey.userId, userId), eq(providerKey.providerId, providerId)))
-      .returning({ userId: providerKey.userId });
-    return result.length > 0;
-  },
+  readKey: (userId: string, providerId: string) => runWeb(readVaultKey(userId, providerId)),
+  readVaultKeys: (userId: string) => runWeb(readStoredVaultKeys(userId)),
+  listKeys: (userId: string) => runWeb(listVaultKeys(userId)),
+  storeKey: (userId: string, providerId: string, ciphertext: string) =>
+    runWeb(storeVaultKey(userId, providerId, ciphertext)),
+  deleteKey: (userId: string, providerId: string) => runWeb(deleteVaultKey(userId, providerId)),
   store: storeFor,
 } satisfies Omit<HostedVaultRoute, "request">;
 
@@ -134,6 +111,6 @@ export function productionDevicesVaultSeams(): DevicesVaultSeams {
     storeKey: hostedVaultSeams.storeKey,
     listKeys: hostedVaultSeams.listKeys,
     deleteKey: hostedVaultSeams.deleteKey,
-    ...deviceSeams(getDatabase()),
+    ...deviceSeams(runWeb),
   };
 }
