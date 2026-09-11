@@ -586,6 +586,43 @@ test("a send Apple refuses or the network drops leaves that offer settled and co
   );
 });
 
+test("a pass spends its budget and leaves the rest standing unsettled for the next tick", async () => {
+  clock = NOW;
+  const userId = await database.createUser();
+  await device(userId, { push: { token: token(), environment: PUSH_ENVIRONMENT.PRODUCTION } });
+  const first = await offered(userId);
+  clock = NOW + 1_000;
+  const second = await offered(userId);
+  let wall = 0;
+  const slow = fakeSender();
+  const seams: SpeechPushSeams = {
+    ...slow.seams,
+    send: async (notification) => {
+      wall += SPEECH_PUSH.BUDGET_MS;
+      return slow.seams.send(notification);
+    },
+  };
+
+  assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: [userId], clock: () => wall }), {
+    ...NOTHING,
+    pushed: 1,
+  });
+  assert.equal(slow.sent.length, 1);
+  assert.deepEqual(
+    (await speechEvents(first.messageId)).map((event) => event.kind),
+    [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, CONVERSATION_EVENT_KIND.SPEECH_PUSHED],
+  );
+  assert.deepEqual(
+    (await openSpeechOffers(database.db, { userId })).map((open) => open.messageId),
+    [second.messageId],
+  );
+  assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: [userId], clock: () => wall }), {
+    ...NOTHING,
+    pushed: 1,
+  });
+  assert.deepEqual(await openSpeechOffers(database.db, { userId }), []);
+});
+
 test("a pass reads only the accounts it is told", async () => {
   clock = NOW;
   const mine = await database.createUser();

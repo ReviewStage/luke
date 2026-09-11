@@ -57,7 +57,7 @@ import {
  * retried nowhere, like a claim whose device fell silent. Such an answer
  * also ends the pass, since the credential or the gateway is what failed
  * and every send after it would settle another offer for nothing; the rest
- * stand for the next tick.
+ * stand for the next tick, as do the offers past the pass's own budget.
  *
  * The notification carries the briefing and nothing else. Its words are
  * Luke's own, what he chose to say, and they are readable on a locked
@@ -76,6 +76,14 @@ export const SPEECH_PUSH = {
    * offer it will say; two ticks without a claim means it will not.
    */
   GRACE_MS: 2 * 60_000,
+  /**
+   * How long one pass may spend before leaving the rest of the offers for
+   * the next tick. A send to Apple may wait out its own timeout, and the
+   * pass runs ahead of the observation batches on a tick whose budget is
+   * theirs; this keeps a slow gateway from starting the observation already
+   * exhausted.
+   */
+  BUDGET_MS: 15_000,
 } as const;
 
 /** What the pass decided about one open offer, from its standing and its account's devices. */
@@ -176,6 +184,8 @@ export interface SpeechPushOptions {
    * same time — a test file beside others on one Postgres — names its own.
    */
   readonly userIds?: readonly string[] | undefined;
+  /** The wall clock the pass's budget is measured on; the system's where absent. */
+  readonly clock?: (() => number) | undefined;
 }
 
 interface DeviceRow {
@@ -267,7 +277,8 @@ export async function pushSpeech(
   seams: SpeechPushSeams,
   options: SpeechPushOptions,
 ): Promise<SpeechPushOutcome> {
-  const { now, limit, userIds } = options;
+  const { now, limit, userIds, clock = Date.now } = options;
+  const until = clock() + SPEECH_PUSH.BUDGET_MS;
   const outcome = { pushed: 0, undelivered: 0, unaddressed: 0, unreadable: 0, waiting: 0 };
   const quiet = await quietUntilByAccount(seams.store.db, now, userIds);
   const offers = await openSpeechOffers(seams.store.db, {
@@ -294,6 +305,8 @@ export async function pushSpeech(
       outcome.unreadable += 1;
       continue;
     }
+    // Checked before the mark, so an offer the budget leaves for the next tick is never settled unsent.
+    if (clock() >= until) break;
     const marked = await markSpeechPushed(
       seams.store,
       offer.userId,
