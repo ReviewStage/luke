@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { HTTP_STATUS, jsonResponse } from "@sidecar/wire/testing";
 import { test } from "vitest";
-import type { AccountClient, StoredAccount } from "./client.js";
+import { AccountClient, type FetchLike, type StoredAccount } from "./client.js";
 import { AccountSessionManager } from "./session-manager.js";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "./snapshot.js";
 
@@ -17,25 +18,27 @@ function manager(options: {
   revoke?: (token: string) => Promise<void>;
   exchangeCode?: () => Promise<{ accessToken: string; refreshToken: string }>;
   onSignOut?: (account: StoredAccount) => Promise<void>;
+  client?: AccountClient;
 }) {
   let stored = options.stored;
   const changes: string[] = [];
   const events: string[] = [];
   const authorizations: { redirectUri: string; state: string }[] = [];
+  // SAFETY: Fixture client implements only the AccountClient methods the manager calls.
+  const fixtureClient = {
+    revoke: options.revoke ?? (async () => undefined),
+    userInfo: async () => STORED,
+    refresh: async () => ({ accessToken: "new-access", refreshToken: "new-refresh" }),
+    authorizeUrl: (input: { redirectUri: string; state: string }) => {
+      authorizations.push(input);
+      return `https://accounts.example/authorize?state=${encodeURIComponent(input.state)}`;
+    },
+    exchangeCode:
+      options.exchangeCode ??
+      (async () => ({ accessToken: "issued-access", refreshToken: "issued-refresh" })),
+  } as unknown as AccountClient;
   const instance = new AccountSessionManager({
-    // SAFETY: Fixture client implements only the AccountClient methods the manager calls.
-    client: {
-      revoke: options.revoke ?? (async () => undefined),
-      userInfo: async () => STORED,
-      refresh: async () => ({ accessToken: "new-access", refreshToken: "new-refresh" }),
-      authorizeUrl: (input: { redirectUri: string; state: string }) => {
-        authorizations.push(input);
-        return `https://accounts.example/authorize?state=${encodeURIComponent(input.state)}`;
-      },
-      exchangeCode:
-        options.exchangeCode ??
-        (async () => ({ accessToken: "issued-access", refreshToken: "issued-refresh" })),
-    } as unknown as AccountClient,
+    client: options.client ?? fixtureClient,
     store: {
       readAccount: async () => stored,
       setAccount: async (next) => {
@@ -105,6 +108,63 @@ test("refresh keeps a valid stored account signed in without rewriting it", asyn
   await subject.instance.refresh();
   assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_IN);
   assert.equal(subject.stored()?.accessToken, "access");
+});
+
+/**
+ * The real `AccountClient` over the ambient `HttpClient`, so the renewal
+ * decision below runs through the actual conversion this PR made rather than
+ * a synthetic error object: a network the token endpoint cannot be reached
+ * over must never be read as the service's own refusal.
+ */
+function refreshingClient(tokenEndpoint: (request: Request) => Promise<Response>): AccountClient {
+  const fetchStub: FetchLike = async (input, init) => {
+    const request = new Request(input, init);
+    if (request.url.endsWith("/oauth2/userinfo")) {
+      return jsonResponse({ error: "invalid_token" }, HTTP_STATUS.UNAUTHORIZED);
+    }
+    if (request.url.endsWith("/oauth2/token")) return tokenEndpoint(request);
+    throw new Error(`unexpected request to ${request.url}`);
+  };
+  return new AccountClient({
+    baseUrl: "https://tryluke.dev/api/auth",
+    clientId: "luke-desktop",
+    fetch: fetchStub,
+  });
+}
+
+test("a renewal a network cannot carry keeps the stored account standing, never a sign-out", async () => {
+  const subject = manager({
+    stored: STORED,
+    client: refreshingClient(() => {
+      throw new TypeError("fetch failed");
+    }),
+  });
+  subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+
+  await subject.instance.refresh();
+
+  assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_IN);
+  assert.deepEqual(subject.stored(), STORED);
+});
+
+test("a renewal the service refuses with invalid_grant is the one path that signs the account out", async () => {
+  const subject = manager({
+    stored: STORED,
+    client: refreshingClient(() =>
+      Promise.resolve(
+        jsonResponse(
+          { error: "invalid_grant", error_description: "Refresh token was revoked" },
+          400,
+        ),
+      ),
+    ),
+  });
+  subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+
+  await subject.instance.refresh();
+
+  assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_OUT);
+  assert.equal(subject.stored(), undefined);
 });
 
 /** Waits for the consent trip to have composed its authorization page. */
