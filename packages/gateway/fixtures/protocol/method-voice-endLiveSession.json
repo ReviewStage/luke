@@ -1,0 +1,20 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-voice-endLiveSession",
+    "method": "voice.endLiveSession",
+    "params": {},
+    "idempotencyKey": "key-voice-endLiveSession"
+  },
+  "response": {
+    "id": "request-voice-endLiveSession",
+    "ok": true,
+    "result": {
+      "answered": "voice.endLiveSession"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

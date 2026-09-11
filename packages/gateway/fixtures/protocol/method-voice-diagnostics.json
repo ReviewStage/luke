@@ -1,0 +1,31 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-voice-diagnostics",
+    "method": "voice.diagnostics",
+    "params": {
+      "case": "voice.diagnostics",
+      "note": "synthetic",
+      "detail": {
+        "flag": true,
+        "count": 2,
+        "absent": null,
+        "list": [
+          "first",
+          "second"
+        ]
+      }
+    }
+  },
+  "response": {
+    "id": "request-voice-diagnostics",
+    "ok": true,
+    "result": {
+      "answered": "voice.diagnostics"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

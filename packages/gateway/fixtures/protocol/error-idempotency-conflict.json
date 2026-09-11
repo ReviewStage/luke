@@ -1,0 +1,23 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-configuration-update",
+    "method": "configuration.update",
+    "params": {
+      "case": "reused key, other parameters"
+    },
+    "idempotencyKey": "key-configuration-update"
+  },
+  "response": {
+    "id": "request-configuration-update",
+    "ok": false,
+    "error": {
+      "code": "idempotency_conflict",
+      "message": "<message>"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

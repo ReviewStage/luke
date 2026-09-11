@@ -1,0 +1,22 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-voice-reportLiveActivity",
+    "method": "voice.reportLiveActivity",
+    "params": {
+      "idle": false
+    },
+    "idempotencyKey": "key-voice-reportLiveActivity"
+  },
+  "response": {
+    "id": "request-voice-reportLiveActivity",
+    "ok": true,
+    "result": {
+      "answered": "voice.reportLiveActivity"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

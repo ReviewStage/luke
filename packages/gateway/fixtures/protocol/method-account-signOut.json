@@ -1,0 +1,32 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-account-signOut",
+    "method": "account.signOut",
+    "params": {
+      "case": "account.signOut",
+      "note": "synthetic",
+      "detail": {
+        "flag": true,
+        "count": 2,
+        "absent": null,
+        "list": [
+          "first",
+          "second"
+        ]
+      }
+    },
+    "idempotencyKey": "key-account-signOut"
+  },
+  "response": {
+    "id": "request-account-signOut",
+    "ok": true,
+    "result": {
+      "answered": "account.signOut"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-onboarding-completeCalendar",
+    "method": "onboarding.completeCalendar",
+    "params": {
+      "case": "onboarding.completeCalendar",
+      "note": "synthetic",
+      "detail": {
+        "flag": true,
+        "count": 2,
+        "absent": null,
+        "list": [
+          "first",
+          "second"
+        ]
+      }
+    },
+    "idempotencyKey": "key-onboarding-completeCalendar"
+  },
+  "response": {
+    "id": "request-onboarding-completeCalendar",
+    "ok": true,
+    "result": {
+      "answered": "onboarding.completeCalendar"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

@@ -28,6 +28,19 @@ delivery claims, `speech.offered`, `speech.withdrawn`, `delivery.offered`) are
 gone from the table rather than kept as names no handler answers: a retired
 method is refused as unknown exactly like one that never existed.
 
+What an envelope looks like on the wire is recorded rather than described.
+`fixtures/protocol/` holds one request and one answer for every method, one
+answer for every error code, and the two reconnection answers — a replay from
+inside the window and a snapshot from past it — each carried by the text
+transport so that a golden is what a socket would have seen rather than what a
+reader believed. Key order is part of the contract, so nothing sorts the
+recorded keys and the formatter is kept off the tree. One field is not
+recorded verbatim: an error's `message` is prose written for a person and
+improved like prose, so it travels into a golden as a fixed token while the
+exchange asserts that a message was said at all. A rewrite of what composes an
+envelope is measured against those bytes, and recording them again
+(`LUKE_UPDATE_FIXTURES=1`) is a claim that the protocol itself moved.
+
 ## Three doors, because one of them reaches `ws`
 
 The barrel carries the protocol, the server, the client, the in-process

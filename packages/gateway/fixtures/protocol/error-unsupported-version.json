@@ -1,0 +1,32 @@
+{
+  "request": {
+    "protocolVersion": 0,
+    "id": "request-gateway-hello",
+    "method": "gateway.hello",
+    "params": {
+      "case": "gateway.hello",
+      "note": "synthetic",
+      "detail": {
+        "flag": true,
+        "count": 2,
+        "absent": null,
+        "list": [
+          "first",
+          "second"
+        ]
+      }
+    }
+  },
+  "response": {
+    "id": "request-gateway-hello",
+    "ok": false,
+    "error": {
+      "code": "unsupported_version",
+      "message": "<message>"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-gateway-reconnect",
+    "method": "gateway.reconnect",
+    "params": {
+      "lastSequence": -1
+    }
+  },
+  "response": {
+    "id": "request-gateway-reconnect",
+    "ok": false,
+    "error": {
+      "code": "invalid_params",
+      "message": "<message>"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

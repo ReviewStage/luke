@@ -1,0 +1,32 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-conversation-append",
+    "method": "conversation.append",
+    "params": {
+      "case": "conversation.append",
+      "note": "synthetic",
+      "detail": {
+        "flag": true,
+        "count": 2,
+        "absent": null,
+        "list": [
+          "first",
+          "second"
+        ]
+      }
+    },
+    "idempotencyKey": "key-conversation-append"
+  },
+  "response": {
+    "id": "request-conversation-append",
+    "ok": true,
+    "result": {
+      "answered": "conversation.append"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

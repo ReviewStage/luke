@@ -1,0 +1,32 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-calendar-cancelGoogleSignIn",
+    "method": "calendar.cancelGoogleSignIn",
+    "params": {
+      "case": "calendar.cancelGoogleSignIn",
+      "note": "synthetic",
+      "detail": {
+        "flag": true,
+        "count": 2,
+        "absent": null,
+        "list": [
+          "first",
+          "second"
+        ]
+      }
+    },
+    "idempotencyKey": "key-calendar-cancelGoogleSignIn"
+  },
+  "response": {
+    "id": "request-calendar-cancelGoogleSignIn",
+    "ok": true,
+    "result": {
+      "answered": "calendar.cancelGoogleSignIn"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

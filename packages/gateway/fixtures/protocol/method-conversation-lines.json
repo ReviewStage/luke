@@ -1,0 +1,31 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-conversation-lines",
+    "method": "conversation.lines",
+    "params": {
+      "case": "conversation.lines",
+      "note": "synthetic",
+      "detail": {
+        "flag": true,
+        "count": 2,
+        "absent": null,
+        "list": [
+          "first",
+          "second"
+        ]
+      }
+    }
+  },
+  "response": {
+    "id": "request-conversation-lines",
+    "ok": true,
+    "result": {
+      "answered": "conversation.lines"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

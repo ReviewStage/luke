@@ -1,0 +1,32 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-guide-report",
+    "method": "guide.report",
+    "params": {
+      "case": "guide.report",
+      "note": "synthetic",
+      "detail": {
+        "flag": true,
+        "count": 2,
+        "absent": null,
+        "list": [
+          "first",
+          "second"
+        ]
+      }
+    },
+    "idempotencyKey": "key-guide-report"
+  },
+  "response": {
+    "id": "request-guide-report",
+    "ok": true,
+    "result": {
+      "answered": "guide.report"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

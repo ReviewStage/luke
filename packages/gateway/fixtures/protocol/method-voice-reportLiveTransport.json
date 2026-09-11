@@ -1,0 +1,22 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-voice-reportLiveTransport",
+    "method": "voice.reportLiveTransport",
+    "params": {
+      "state": "connected"
+    },
+    "idempotencyKey": "key-voice-reportLiveTransport"
+  },
+  "response": {
+    "id": "request-voice-reportLiveTransport",
+    "ok": true,
+    "result": {
+      "answered": "voice.reportLiveTransport"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

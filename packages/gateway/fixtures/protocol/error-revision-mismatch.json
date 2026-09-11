@@ -1,0 +1,36 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-settings-update",
+    "method": "settings.update",
+    "params": {
+      "case": "settings.update",
+      "note": "synthetic",
+      "detail": {
+        "flag": true,
+        "count": 2,
+        "absent": null,
+        "list": [
+          "first",
+          "second"
+        ]
+      }
+    },
+    "idempotencyKey": "key-settings-update",
+    "expectedRevision": {
+      "configurationRevision": 8
+    }
+  },
+  "response": {
+    "id": "request-settings-update",
+    "ok": false,
+    "error": {
+      "code": "revision_mismatch",
+      "message": "<message>"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}
