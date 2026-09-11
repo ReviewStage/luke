@@ -2266,3 +2266,57 @@ the **phone and the watch both** report presence from their Conversation screen 
 an **inference from a partial report rather than a reading of the code** — `PRIVACY.md`'s three, and
 now mine. The workers who caught each of them did the same thing every time: they opened the file.
 **A "true statement" assembled from two correct reports can still be false, and mine was.**
+
+
+## 2026-09-11 — Incident: five failed production deploys from the Vercel Services preset, and four errors of mine (orchestrator)
+
+**Closed. Cause confirmed by recovery.**
+
+**Timeline.** Dean saved the project's Framework Preset as **Services** at ~15:05Z while main's
+`vercel.json` carried no `services` key. **Five consecutive production deploys then failed**
+(15:05:58Z → 15:15:18Z) on **five unrelated merges**, one of them ours. Zero had failed earlier that
+day. Production served the previous deployment throughout — probed every two minutes at 200/401/401,
+never down. Dean reverted to **Vite**; no merge existed to test it, so he redeployed main's head; the
+**first real merge after the revert (96e01cbd, 15:37:25Z) succeeded and built** — "Deployment has
+completed" rather than a skip. **Services preset with no services key is a failed build, not a
+fallback.**
+
+**The doc says otherwise, which is why this happened.** Vercel's Services guide: *"A project builds as
+services only when two conditions are both true… If either is missing, Vercel falls back to its
+default framework detection and ignores your services configuration."* **That fallback does not hold
+in the preset-set/key-missing direction.** My "flip first, it is safe on main" ordering rested on that
+sentence.
+
+**Four errors of mine, recorded because each has a general form.**
+
+1. **I trusted a documented fallback over an untested state.** The right instruction would have been
+   "flip and immediately redeploy main to confirm", which I did say — but I framed the flip as safe
+   rather than as needing confirmation before anyone merged.
+2. **I invented a diagnostic from an unmeasured assumption and offered it twice.** "Ready in ~70 s
+   means single-app" rested on the belief that a services build must take much longer. C2a measured
+   `eve build` at **42 s**, and the two services build in parallel — so **duration cannot distinguish
+   the shapes at all**, including for the four builds I had already classified with it.
+3. **I held enqueues after authorising one, and the hold raced the work.** F3 enqueued under my go at
+   15:07:33Z and merged at 15:14:14Z; my blanket hold surfaced afterwards. **Our own merge became the
+   fourth failure.** A hold must account for what is already in the queue; the queue is where
+   in-flight lives.
+4. **My reopen broadcast was false for the one PR it would have broken worst.** Merging the services
+   PR under Vite puts main in the third state — key present, preset off — where Vite detection ignores
+   the block and main deploys with **no top-level `buildCommand`**: no `db:migrate`, no `auth:seed`, no
+   function bundling, so **every `api/` stub re-exports a bundle that was never built.** Worse than
+   the five failures, because it *succeeds* and serves a site whose API routes point at nothing. C2a
+   caught it. **Third over-broad broadcast of the day, second after I wrote the rule against them.**
+
+**Three self-corrections from C2a, each tightening a claim it had just made:** that "Skipped — Not
+affected" proved services mode (it is consistent with a dashboard Ignored Build Step, not proof); the
+duration heuristic, which it withdrew including for its own earlier builds; and finding the doc line
+that cut against its own diagnosis and reporting it anyway.
+
+**What remains and why it is not urgent.** The services PR is held. It is a **leaf** — no ticket
+depends on it — so it blocks no merge; it gates the hosted brain **running a turn end to end in
+production**, since eve is not deployable without it. **The sitting:** Dean re-flips to Services, the
+preview is confirmed green under services mode (which is itself the verification, since the project
+would be in services mode and the branch carries the key), the PR enqueues within the minute, and our
+other lanes hold. **Its price, stated rather than discovered: any other workstream's merge inside that
+window costs one transient failed deploy**, resolved the moment the PR lands. Cheapest when that lane
+is idle.
