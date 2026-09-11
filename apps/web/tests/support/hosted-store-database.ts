@@ -1,11 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle as drizzleNodePostgres } from "drizzle-orm/node-postgres";
-import { migrate as migrateNodePostgres } from "drizzle-orm/node-postgres/migrator";
 import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 import { migrate as migratePglite } from "drizzle-orm/pglite/migrator";
 import { Pool } from "pg";
+import { DRIZZLE_MIGRATIONS_FOLDER } from "../../server/db/effect-migrator";
 import * as schema from "../../server/db/schema";
 import { payloadKeyRing } from "../../server/hosted/encryption";
 import { type HostedStore, type HostedStoreDatabase, hostedStore } from "../../server/hosted/store";
@@ -14,9 +13,9 @@ import { type HostedStore, type HostedStoreDatabase, hostedStore } from "../../s
  * The store's tests run against the real generated migrations on a real
  * Postgres dialect: PGlite in process by default, so `check.sh` needs no
  * service, or the Postgres named by `LUKE_STORE_TEST_DATABASE_URL`, which the
- * CI job points at its service container after `db:migrate` has run there.
- * Either way `migrate` is applied here too, which is idempotent, so the test
- * never depends on who migrated first.
+ * CI job points at its service container after `db:migrate` has run there. A
+ * PGlite is migrated here, because it is opened empty; a Postgres is not,
+ * because `db:migrate` is the one runner that records what it applied.
  */
 
 /** The env var naming a Postgres the store tests should run against instead of PGlite. */
@@ -26,7 +25,7 @@ export const STORE_TEST_DATABASE_ENVIRONMENT = {
 
 export const TEST_PAYLOAD_SECRET = "c".repeat(64);
 
-export const MIGRATIONS_FOLDER = fileURLToPath(new URL("../../drizzle", import.meta.url));
+export const MIGRATIONS_FOLDER = DRIZZLE_MIGRATIONS_FOLDER;
 
 export interface HostedStoreTestDatabase {
   readonly db: HostedStoreDatabase;
@@ -68,9 +67,8 @@ async function openPglite(): Promise<OpenedDatabase> {
   return { db, close: () => client.close() };
 }
 
+/** Migrates nothing: `db:migrate` is what applies the migrations to a Postgres. */
 async function openNodePostgres(connectionString: string): Promise<OpenedDatabase> {
   const pool = new Pool({ connectionString, max: 1 });
-  const db = drizzleNodePostgres(pool, { schema });
-  await migrateNodePostgres(db, { migrationsFolder: MIGRATIONS_FOLDER });
-  return { db, close: () => pool.end() };
+  return { db: drizzleNodePostgres(pool, { schema }), close: () => pool.end() };
 }

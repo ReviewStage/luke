@@ -11,6 +11,7 @@ import { and, eq, getTableName, is, type SQL, sql } from "drizzle-orm";
 import { PgTable, pgSchema, text } from "drizzle-orm/pg-core";
 import { afterAll, test } from "vitest";
 import { user } from "../server/db/auth-schema";
+import { MIGRATIONS_TABLE } from "../server/db/effect-migrator";
 import * as schema from "../server/db/schema";
 import {
   CONVERSATION_KIND,
@@ -31,7 +32,9 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
  * neighbour, a fresh conversation numbers its messages and events from one,
  * one claim stands per briefing, a prompt or tool set is one row however
  * often it is written, an observed session keeps one cursor per account, and
- * the v1 conversation tables and the briefing table are gone.
+ * the v1 conversation tables and the briefing table are gone. The migration
+ * runner's own bookkeeping table is not one of them: it records which of these
+ * tables a database has, and is declared by no schema file.
  */
 
 const database = await openHostedStoreTestDatabase();
@@ -53,7 +56,10 @@ async function publicTableNames(): Promise<readonly string[]> {
     .select({ name: informationSchemaTables.tableName })
     .from(informationSchemaTables)
     .where(eq(informationSchemaTables.tableSchema, "public"));
-  return rows.map((row) => row.name).sort();
+  return rows
+    .map((row) => row.name)
+    .filter((name) => name !== MIGRATIONS_TABLE)
+    .sort();
 }
 
 test("the migrations end at the declared schema: every declared table stands, and nothing undeclared, the v1 conversation tables and the briefing table included, remains", async () => {

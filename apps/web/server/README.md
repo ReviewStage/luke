@@ -20,7 +20,21 @@ For a Luke-owned table, add its own schema module and export it from
 Vercel runs `pnpm db:migrate` before every deployment build, using the direct
 connection Neon supplies for that deployment. The runner holds a PostgreSQL
 advisory lock for the migration session, so overlapping builds targeting one
-branch cannot apply the same migration concurrently. The Neon integration creates
+branch cannot apply the same migration concurrently.
+
+What applies them is `@effect/sql`'s own migrator, over the same generated
+folder Drizzle Kit writes: `server/db/effect-migrator.ts` reads
+`drizzle/meta/_journal.json` and the `.sql` file each entry names, so the
+statements and their order stay Drizzle's and nothing here rewrites a
+migration. Drizzle Kit still generates them — `pnpm db:generate` is unchanged
+— and what moved is only the bookkeeping: `effect_sql_migrations` in `public`
+rather than `drizzle.__drizzle_migrations`. A database Drizzle's runner had
+already migrated is bootstrapped once rather than migrated again: Drizzle
+stamped every row it wrote with the journal instant of the migration it had
+just applied and refused anything at or below the greatest instant it found,
+so that greatest instant is read, every journal entry at or below it is
+recorded as applied, and the copy runs only into an empty table, which is what
+makes a second deploy a no-op. The Neon integration creates
 a database branch for each Preview deployment, so its committed schema changes
 are applied to the matching branch before Vite builds the application. No package
 lifecycle hook runs migrations.
@@ -706,8 +720,9 @@ fresh instance continues a session where the last one stopped.
 
 The store tests run the generated migrations on PGlite in process, so
 `check.sh` needs no service; the `postgres` CI job runs the same migrations
-and tests against a Postgres service container. To run them against a
-Postgres of your own:
+and tests against a Postgres service container. A Postgres is migrated by
+`db:migrate` alone, because that is the runner which records what it applied,
+so run it first against a Postgres of your own:
 
 ```sh
 DATABASE_URL_UNPOOLED=postgresql://... pnpm --filter @luke/web db:migrate
