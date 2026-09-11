@@ -199,7 +199,7 @@ async function observationTickHandler(request: Request): Promise<Response> {
       const writer = await storeWriter({ run: runWeb, tools: CATALOG_TOOL_SET });
       return pushSpeech(
         {
-          store: { db: database, run: runWeb, writer },
+          store: { run: runWeb, writer },
           tools: CATALOG_TOOL_SET,
           send: (notification) => sender.send(notification),
           forgetDevice: deviceSeams(database).forgetDevice,

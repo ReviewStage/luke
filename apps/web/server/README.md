@@ -129,7 +129,11 @@ through this client, `ratings.ts` reaches `message-reads.ts`'s one read the
 same way, and `roster-snapshot.ts` too but for its one exported
 `readRosterSnapshot`, which `hosted-store.test.ts` still calls directly with
 the Drizzle handle to prove a sealed row does not open under another user's
-seal — every other module still through Drizzle — and each is handed its
+seal. `server/hosted/speech-push.ts` reads the account's devices through this
+client too, beside the speech module's own reads, and
+`server/voice/session-record.ts` is on it whole, its four methods each one
+statement over the live session row — every other module still through
+Drizzle — and each is handed its
 edge's own runner to answer the promises the routes hold — `runWeb` in a
 function, the store tests' runtime in a test. The writers take that runner
 directly rather than through the store's context, because a route composes

@@ -80,7 +80,7 @@ const TOOLS: ToolSet = {
 };
 
 const store = await storeWriter({ run: database.run, tools: TOOLS, now: () => new Date(NOW) });
-const sessionRecord = voiceSessionRecord(database.db, () => NOW);
+const sessionRecord = voiceSessionRecord(database.run, () => NOW);
 const writer = voiceWriter({ run: database.run, store });
 
 /**
