@@ -31,7 +31,7 @@ import {
   readJsonBody,
 } from "./http.js";
 import { createRateBrake } from "./rate-brake.js";
-import type { AskRecord, AskRow } from "./store/asks.js";
+import { ASK_DISPATCH_REFUSAL, type AskRecord, type AskRow } from "./store/asks.js";
 import type { HostedStoreRun } from "./store/database.js";
 import type { HostedStore, StoredTurnRecord } from "./store/index.js";
 
@@ -329,7 +329,9 @@ export async function acceptAsk(seams: AskSeams, input: AskInput): Promise<AskOu
       };
     },
   );
-  if (dispatched === undefined) return { ok: false, refusal: ASK_REFUSAL.NOT_FOUND };
+  if (dispatched === ASK_DISPATCH_REFUSAL.NO_CONVERSATION) {
+    return { ok: false, refusal: ASK_REFUSAL.NOT_FOUND };
+  }
   return failed ?? accepted;
 }
 

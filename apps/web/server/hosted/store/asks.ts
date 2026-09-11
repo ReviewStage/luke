@@ -50,6 +50,13 @@ interface AskDispatch {
   readonly turnId?: string;
 }
 
+/** The one answer a dispatch gives besides the row: the conversation it would run in no longer stands, a Clear having landed between the ask's admission and the dispatch's lock. */
+export const ASK_DISPATCH_REFUSAL = {
+  NO_CONVERSATION: "no_conversation",
+} as const;
+
+type AskDispatchRefusal = (typeof ASK_DISPATCH_REFUSAL)[keyof typeof ASK_DISPATCH_REFUSAL];
+
 /** The ask record as the routes and the voice function read and write it. */
 export interface AskRecord {
   /** Records the ask once per conversation and client id; answers the row standing, this call's or an earlier one's. */
@@ -61,14 +68,14 @@ export interface AskRecord {
   /**
    * Runs the dispatch under the conversation's lock unless a session is already written, handing it
    * the conversation's newest session as read under that lock, and writes what eve answered; answers
-   * the row after, or nothing when the conversation no longer stands, so a Clear landing between the
-   * ask's admission and its dispatch is the caller's refusal and not a failure.
+   * the row after, or `NO_CONVERSATION` when the conversation no longer stands, so a Clear landing
+   * between the ask's admission and its dispatch is the caller's refusal and not a failure.
    */
   dispatchOnce(
     target: ConversationTarget,
     id: string,
     dispatch: (sessionId: string | undefined) => Promise<AskDispatch | undefined>,
-  ): Promise<AskRow | undefined>;
+  ): Promise<AskRow | AskDispatchRefusal>;
   /** Stamps a Stop on an ask whose turn has not started, for the start to honour. */
   cancelRequested(id: string, at: Date): Promise<void>;
 }
@@ -343,12 +350,12 @@ function dispatchAskOnce(
   target: ConversationTarget,
   id: string,
   dispatch: (sessionId: string | undefined) => Promise<AskDispatch | undefined>,
-): Effect.Effect<AskRow | undefined, AskFailure, SqlClient.SqlClient> {
+): Effect.Effect<AskRow | AskDispatchRefusal, AskFailure, SqlClient.SqlClient> {
   return Effect.flatMap(SqlClient.SqlClient, (sql) =>
     sql.withTransaction(
       Effect.gen(function* () {
         const locked = yield* lockConversation(target);
-        if (Option.isNone(locked)) return undefined;
+        if (Option.isNone(locked)) return ASK_DISPATCH_REFUSAL.NO_CONVERSATION;
         const read = yield* readAsk(id);
         if (Option.isNone(read)) throw new Error("the ask to dispatch is not standing");
         const standing = askRow(read.value);

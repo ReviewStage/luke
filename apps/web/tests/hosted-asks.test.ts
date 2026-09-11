@@ -21,7 +21,7 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { storeWriter } from "../server/hosted/store";
-import { askRecord } from "../server/hosted/store/asks";
+import { ASK_DISPATCH_REFUSAL, type AskRow, askRecord } from "../server/hosted/store/asks";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
@@ -110,19 +110,21 @@ test("a second dispatch on an ask already handed to eve runs nothing and changes
     turnId,
   }));
   let ran = 0;
-  const after = await asks.dispatchOnce({ userId, conversationId }, ask.id, async () => {
-    ran += 1;
-    return { sessionId: "wrun_2", deliveryId: "delivery-1" };
-  });
+  const after = dispatchedRow(
+    await asks.dispatchOnce({ userId, conversationId }, ask.id, async () => {
+      ran += 1;
+      return { sessionId: "wrun_2", deliveryId: "delivery-1" };
+    }),
+  );
   assert.equal(ran, 0);
-  assert.ok(after);
   assert.equal(after.sessionId, "wrun_1");
   assert.equal(after.turnId, turnId);
   assert.equal(after.deliveryId, undefined);
   const undispatched = await asks.record(write(userId, conversationId));
   assert.equal(
-    (await asks.dispatchOnce({ userId, conversationId }, undispatched.id, async () => undefined))
-      ?.sessionId,
+    dispatchedRow(
+      await asks.dispatchOnce({ userId, conversationId }, undispatched.id, async () => undefined),
+    ).sessionId,
     undefined,
   );
 
@@ -159,6 +161,14 @@ test("binding a turn's deliveries names the turn on each delivered ask not yet b
   assert.deepEqual(await asks.bindDeliveries(target, ["delivery-a", "delivery-b"], turnId), []);
   assert.deepEqual(await asks.bindDeliveries(target, [], turnId), []);
 });
+
+/** The row a dispatch answered; a refusal fails the test naming it. */
+function dispatchedRow(answer: AskRow | typeof ASK_DISPATCH_REFUSAL.NO_CONVERSATION): AskRow {
+  if (answer === ASK_DISPATCH_REFUSAL.NO_CONVERSATION) {
+    assert.fail("the dispatch refused: the conversation is not standing");
+  }
+  return answer;
+}
 
 function eveAccepting(
   sessionId: string,
@@ -327,7 +337,7 @@ test("a dispatch on a conversation cleared since the ask was admitted runs nothi
     dispatched += 1;
     return { sessionId: "wrun_never" };
   });
-  assert.equal(outcome, undefined);
+  assert.equal(outcome, ASK_DISPATCH_REFUSAL.NO_CONVERSATION);
   assert.equal(dispatched, 0);
   assert.equal((await asks.named(userId, ask.id))?.sessionId, undefined);
 });
