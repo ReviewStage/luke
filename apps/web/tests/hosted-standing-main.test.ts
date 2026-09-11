@@ -27,21 +27,21 @@ async function standingMains(userId: string): Promise<string[]> {
 test("the first ask opens the account's main once, however many open it together, and every later ask finds that one", async () => {
   const userId = await database.createUser();
   const opened = await Promise.all([
-    standingMain(database.db, userId, NOW),
-    standingMain(database.db, userId, NOW),
-    standingMain(database.db, userId, NOW),
+    database.run(standingMain(userId, NOW)),
+    database.run(standingMain(userId, NOW)),
+    database.run(standingMain(userId, NOW)),
   ]);
   const [first] = opened;
   assert.ok(first);
   assert.deepEqual(opened, [first, first, first]);
   assert.deepEqual(await standingMains(userId), [first]);
-  assert.equal(await standingMain(database.db, userId, NOW), first);
+  assert.equal(await database.run(standingMain(userId, NOW)), first);
 });
 
 test("a first ask and a Clear racing on an account with no main both land, and one standing main is left: the one the Clear opened", async () => {
   const userId = await database.createUser();
   const [asked, cleared] = await Promise.all([
-    standingMain(database.db, userId, NOW),
+    database.run(standingMain(userId, NOW)),
     database.store.main.clear(userId, NOW),
   ]);
   const standing = await standingMains(userId);
@@ -51,12 +51,12 @@ test("a first ask and a Clear racing on an account with no main both land, and o
 
 test("a cleared main is not the standing one: the next ask opens another beside the stamped row", async () => {
   const userId = await database.createUser();
-  const first = await standingMain(database.db, userId, NOW);
+  const first = await database.run(standingMain(userId, NOW));
   await database.db
     .update(conversations)
     .set({ deletedAt: NOW })
     .where(eq(conversations.id, first));
-  const next = await standingMain(database.db, userId, NOW);
+  const next = await database.run(standingMain(userId, NOW));
   assert.notEqual(next, first);
   assert.deepEqual(await standingMains(userId), [next]);
 });

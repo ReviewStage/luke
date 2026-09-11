@@ -1,7 +1,7 @@
-import { eq } from "drizzle-orm";
+import { SqlClient, SqlSchema } from "@effect/sql";
+import { Effect, Schema } from "effect";
 import { type CloudAgentProviderId, unparsedWire, type WireBoundaryInput } from "../../core.js";
 import { getDatabase } from "../../db/index.js";
-import { providerKey } from "../../db/schema.js";
 import { runWeb } from "../../runtime.js";
 import { executeSessionAction } from "../action-execute.js";
 import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "../bearer.js";
@@ -65,6 +65,29 @@ export interface BrainHostSeams {
   readonly now: () => number;
 }
 
+/** A statement over the ambient client, so the query below reads as the query it is. */
+const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
+  Effect.flatMap(SqlClient.SqlClient, build);
+
+/** A stored provider key as the vault holds it, still sealed: the roster and the actions are admitted under these. */
+const VaultKeyRowSchema = Schema.Struct({
+  providerId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("provider_id")),
+  ciphertext: Schema.String,
+});
+
+const findVaultRows = SqlSchema.findAll({
+  Request: Schema.String,
+  Result: VaultKeyRowSchema,
+  execute: (userId) =>
+    statement(
+      (sql) => sql`
+        select provider_id, ciphertext
+        from provider_key
+        where user_id = ${userId}
+      `,
+    ),
+});
+
 function once<Value>(build: () => Value): () => Value {
   let built: { value: Value } | undefined;
   return () => {
@@ -86,11 +109,8 @@ export function productionBrainHostSeams(): BrainHostSeams {
     hostedStore({ db: db(), keys: payloadKeyRing(vaultSecret()), run: runWeb }),
   );
   const writer = once(() => storeWriter({ run: runWeb, tools: CATALOG_TOOL_SET }));
-  const vaultRows = async (userId: string): Promise<readonly VaultKeyRow[]> =>
-    db()
-      .select({ providerId: providerKey.providerId, ciphertext: providerKey.ciphertext })
-      .from(providerKey)
-      .where(eq(providerKey.userId, userId));
+  const vaultRows = (userId: string): Promise<readonly VaultKeyRow[]> =>
+    runWeb(findVaultRows(userId));
   return {
     db,
     run: runWeb,

@@ -231,7 +231,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       const now = seams.now();
       const [roster, defaults, facts, recent] = await Promise.all([
         rosterOf(userId),
-        readWorkspaceDefaults(seams.db(), userId),
+        seams.run(readWorkspaceDefaults(userId)),
         seams.store().facts.list(userId),
         readRecentMessages(
           seams.run,
@@ -282,7 +282,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       });
       const carrier = hostedActionCarrier({
         roster,
-        defaults: () => readWorkspaceDefaults(seams.db(), userId),
+        defaults: () => seams.run(readWorkspaceDefaults(userId)),
         facts: hostedFactsWriter(seams.store(), userId, seams.now),
         apiKey: (providerId) => seams.providerKey(userId, providerId),
         execute: seams.executeAction,

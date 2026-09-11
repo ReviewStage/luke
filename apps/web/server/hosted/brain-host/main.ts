@@ -1,6 +1,7 @@
-import { and, eq, isNull } from "drizzle-orm";
-import { CONVERSATION_KIND, conversations, user } from "../../db/schema.js";
-import type { HostedStoreDatabase } from "../store/database.js";
+import { SqlClient, SqlSchema } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, Option, type ParseResult, Schema } from "effect";
+import { CONVERSATION_KIND } from "../../db/schema.js";
 
 /**
  * The account's standing main conversation, opened on first use. Nothing
@@ -18,34 +19,62 @@ import type { HostedStoreDatabase } from "../store/database.js";
  * catches that refusal on purpose.
  */
 
-async function standingMainId(
-  db: Pick<HostedStoreDatabase, "select">,
-  userId: string,
-): Promise<string | undefined> {
-  const [row] = await db
-    .select({ id: conversations.id })
-    .from(conversations)
-    .where(
-      and(
-        eq(conversations.userId, userId),
-        eq(conversations.kind, CONVERSATION_KIND.MAIN),
-        isNull(conversations.deletedAt),
-      ),
-    );
-  return row?.id;
-}
+/** How the open fails: the driver's own refusal, or a row the schema refused. */
+type StandingMainFailure = SqlError | ParseResult.ParseError;
+
+/** A statement over the ambient client, so the query below reads as the query it is. */
+const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
+  Effect.flatMap(SqlClient.SqlClient, build);
+
+const IdRowSchema = Schema.Struct({ id: Schema.String });
+
+/** Postgres reserves the word `user`, so the identity table's name is quoted wherever it is written by hand. */
+const lockUser = (userId: string) =>
+  statement((sql) => sql`select id from "user" where id = ${userId} for update`);
+
+const findStandingMain = SqlSchema.findOne({
+  Request: Schema.String,
+  Result: IdRowSchema,
+  execute: (userId) =>
+    statement(
+      (sql) => sql`
+        select id
+        from conversations
+        where user_id = ${userId} and kind = ${CONVERSATION_KIND.MAIN} and deleted_at is null
+      `,
+    ),
+});
+
+const OpenMainSchema = Schema.Struct({ userId: Schema.String, now: Schema.DateFromSelf });
+
+const openMain = SqlSchema.findOne({
+  Request: OpenMainSchema,
+  Result: IdRowSchema,
+  execute: (write) =>
+    statement(
+      (sql) => sql`
+        insert into conversations (user_id, kind, created_at, last_activity_at)
+        values (${write.userId}, ${CONVERSATION_KIND.MAIN}, ${write.now}, ${write.now})
+        returning id
+      `,
+    ),
+});
 
 /** The id of the account's standing main, opened now where none stood. */
-export function standingMain(db: HostedStoreDatabase, userId: string, now: Date): Promise<string> {
-  return db.transaction(async (tx) => {
-    await tx.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
-    const standing = await standingMainId(tx, userId);
-    if (standing !== undefined) return standing;
-    const [opened] = await tx
-      .insert(conversations)
-      .values({ userId, kind: CONVERSATION_KIND.MAIN, createdAt: now, lastActivityAt: now })
-      .returning({ id: conversations.id });
-    if (opened === undefined) throw new Error("the open inserted no main conversation");
-    return opened.id;
-  });
+export function standingMain(
+  userId: string,
+  now: Date,
+): Effect.Effect<string, StandingMainFailure, SqlClient.SqlClient> {
+  return Effect.flatMap(SqlClient.SqlClient, (sql) =>
+    sql.withTransaction(
+      Effect.gen(function* () {
+        yield* lockUser(userId);
+        const standing = yield* findStandingMain(userId);
+        if (Option.isSome(standing)) return standing.value.id;
+        const opened = yield* openMain({ userId, now });
+        if (Option.isNone(opened)) throw new Error("the open inserted no main conversation");
+        return opened.value.id;
+      }),
+    ),
+  );
 }
