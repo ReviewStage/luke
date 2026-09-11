@@ -97,6 +97,7 @@ const GATEWAY_METHODS = {
   VOICE_END_LIVE_SESSION: { name: "voice.endLiveSession", mutates: true },
   VOICE_REPORT_LIVE_TRANSPORT: { name: "voice.reportLiveTransport", mutates: true },
   VOICE_REPORT_LIVE_ACTIVITY: { name: "voice.reportLiveActivity", mutates: true },
+  VOICE_STOP_SPEAKING: { name: "voice.stopSpeaking", mutates: true },
   /** One live event the renderer's tap saw cross the data channel, for the host's development trace; a no-op where no writer stands. */
   VOICE_RECORD_TRACE: { name: "voice.recordTrace", mutates: true },
   GUIDE_REPORT: { name: "guide.report", mutates: true },
@@ -183,6 +184,18 @@ export const voiceReportLiveTransportParamsSchema = s.record({
 
 /** `voice.reportLiveActivity`: whether the peer has decided, from its own local signals, that the exchange is idle. */
 export const voiceReportLiveActivityParamsSchema = s.record({ idle: s.boolean() });
+
+const VOICE_STOP_SPEAKING_RESULT = { stopped: s.boolean() } as const;
+
+/**
+ * What `voice.stopSpeaking` answers: whether a standing session was told to
+ * stop. The stop key is the one ask that carries this; a muted microphone
+ * says nothing about Luke's own output, so the method takes no parameters
+ * and the mute carries none of its meaning.
+ */
+export const voiceStopSpeakingResultSchema = s.record(VOICE_STOP_SPEAKING_RESULT, {
+  extraKeys: RECORD_EXTRA_KEYS.IGNORE,
+});
 
 const VOICE_LIVE_SESSION_CHANGED = {
   sessionId: s.text().optional(),

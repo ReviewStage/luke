@@ -14,6 +14,7 @@ import {
   voiceLiveSessionChangedSchema,
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
+  voiceStopSpeakingResultSchema,
 } from "./protocol.js";
 
 const LIVE_METHODS = [
@@ -21,14 +22,24 @@ const LIVE_METHODS = [
   GATEWAY_METHOD.VOICE_END_LIVE_SESSION,
   GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT,
   GATEWAY_METHOD.VOICE_REPORT_LIVE_ACTIVITY,
+  GATEWAY_METHOD.VOICE_STOP_SPEAKING,
 ] as const;
 
-test("the four live session methods are in the vocabulary, and every one of them mutates", () => {
+test("the five live session methods are in the vocabulary, and every one of them mutates", () => {
   for (const method of LIVE_METHODS) {
     assert.equal(isGatewayMethod(method), true);
     assert.equal(isMutatingGatewayMethod(method), true);
   }
   assert.equal(isGatewayEventKind(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED), true);
+});
+
+test("a stop answer carries one boolean and nothing else is read from it", () => {
+  assert.deepEqual(voiceStopSpeakingResultSchema.parse({ stopped: true }), { stopped: true });
+  assert.deepEqual(voiceStopSpeakingResultSchema.parse({ stopped: false, extra: 1 }), {
+    stopped: false,
+  });
+  assert.equal(voiceStopSpeakingResultSchema.parse({}), undefined);
+  assert.equal(voiceStopSpeakingResultSchema.parse({ stopped: "yes" }), undefined);
 });
 
 test("the retired Realtime vocabulary is no longer in the contract", () => {

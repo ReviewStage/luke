@@ -191,6 +191,10 @@ export function composeLive(dependencies: LiveDependencies): LiveComposer {
       service.reportActivity(report.idle);
       return gatewayOk({});
     },
+    // The stop key alone: the mute the peer sends on its own says nothing
+    // about Luke's output, so this is the one ask that tells him to stop.
+    [GATEWAY_METHOD.VOICE_STOP_SPEAKING]: () =>
+      gatewayOk(carried({ stopped: service.stopSpeaking() })),
     // What the host knows about why voice is or is not available, carrying no
     // credential and no session's SDP: the source's own reading while one
     // stands, and the reason there is none otherwise.

@@ -17,10 +17,14 @@ export interface VoiceWindowSurface {
   owns(webContents: WebContents): boolean;
 }
 
-/** The host's one live session, as the voice window's four acts reach it through the operator client. */
+/** The host's one live session, as the voice window's five acts reach it through the operator client. */
 type LiveSessionActs = Pick<
   HostOperator,
-  "createLiveSession" | "endLiveSession" | "reportLiveTransport" | "reportLiveActivity"
+  | "createLiveSession"
+  | "endLiveSession"
+  | "reportLiveTransport"
+  | "reportLiveActivity"
+  | "stopSpeaking"
 >;
 
 export interface VoiceRuntimeDependencies {
@@ -49,6 +53,7 @@ type VoiceRuntimeActKind =
   | typeof ACT_KIND.VOICE_END_LIVE_SESSION
   | typeof ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT
   | typeof ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY
+  | typeof ACT_KIND.VOICE_STOP_SPEAKING
   | typeof ACT_KIND.VOICE_DIAGNOSTICS
   | typeof ACT_KIND.MICROPHONE_OPEN_SETTINGS
   | typeof ACT_KIND.CREDENTIAL_OPEN_API_KEYS;
@@ -90,6 +95,10 @@ export function voiceRuntimeActRows(
     [ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY]: ({ idle }, { voice }) => {
       if (voice) void liveSession.reportLiveActivity(idle);
     },
+    // The stop key, pressed in the voice window that owns the session; a
+    // panel has no session to stop and is answered false.
+    [ACT_KIND.VOICE_STOP_SPEAKING]: (_payload, { voice }) =>
+      voice ? liveSession.stopSpeaking() : Promise.resolve(false),
     [ACT_KIND.VOICE_DIAGNOSTICS]: () => dependencies.liveDiagnostics(),
     [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: () =>
       dependencies.openExternal(

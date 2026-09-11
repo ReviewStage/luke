@@ -45,7 +45,6 @@ import {
   LiveSessionService,
   RUN_END_NOTE,
   STOP_SPEAKING_INSTRUCTION,
-  STOP_SPEAKING_OUTPUT_RECENCY_MS,
 } from "./live-session-service.js";
 import { SIDEBAND_CLOSE_TIMEOUT_MS } from "./live-sideband.js";
 import { LIVE_TRACE_DECISION, type LiveTraceRecord } from "./live-trace.js";
@@ -917,29 +916,45 @@ test("a typed ask's reply with no session standing asks for one and is spoken on
   );
 });
 
-test("a microphone muted over Luke's own words carries the stop instruction; one muted at a turn's end, or a session opened muted, carries none", async () => {
+test("a muted microphone never carries the stop instruction, whether Luke is silent or mid-sentence", async () => {
   const f = fixture();
   const sideband = await f.open();
   sideband.receive({ type: LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED, event_id: "muted-0" });
   await drainMicrotasks();
   assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 0);
-  // The developer's turn ends with Luke silent: the talk key's mute stops nothing.
+  // The developer's turn ends with Luke silent.
   sideband.receive({ type: LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED, event_id: "unmuted-1" });
   sideband.receive({ type: LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED, event_id: "muted-1" });
   await drainMicrotasks();
   assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 0);
-  // Luke is speaking when the microphone is muted: stop means stop.
+  // The talk key released while Luke is still answering: the release is a mute and nothing more.
   sideband.receive({ type: LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED, event_id: "unmuted-2" });
   sideband.output("Two sessions", 0, 800);
-  await f.clock.advance(f.clock.now + STOP_SPEAKING_OUTPUT_RECENCY_MS - 1);
   sideband.receive({ type: LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED, event_id: "muted-2" });
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 0);
+  assert.equal(sideband.sent.length, 0);
+});
+
+test("the stop key sends exactly one instruction with no delegation into the standing session, and nothing when none stands", async () => {
+  const f = fixture();
+  assert.equal(f.service.stopSpeaking(), false);
+  const sideband = await f.open();
+  sideband.output("Two sessions", 0, 800);
+  assert.equal(f.service.stopSpeaking(), true);
   await drainMicrotasks();
   const instructions = appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND);
   assert.equal(instructions.length, 1);
-  assert.equal(
-    instructions[0] && "content" in instructions[0] && instructions[0].content,
-    STOP_SPEAKING_INSTRUCTION,
-  );
+  const [instruction] = instructions;
+  assert.ok(instruction && "delegation_id" in instruction && "content" in instruction);
+  assert.equal(instruction.delegation_id, null);
+  assert.equal(instruction.content, STOP_SPEAKING_INSTRUCTION);
+  const ending = f.service.endSession();
+  await drainMicrotasks();
+  sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 9);
+  await ending;
+  assert.equal(f.service.stopSpeaking(), false);
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 1);
 });
 
 test("both speakers' utterances reach the record after the gap and the settle margin, grouped, once", async () => {

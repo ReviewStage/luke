@@ -15,6 +15,7 @@ import {
   type VoiceLiveSessionChanged,
   voiceCreateLiveSessionResultSchema,
   voiceLiveSessionChangedSchema,
+  voiceStopSpeakingResultSchema,
 } from "@sidecar/gateway";
 import type { AppGuideSnapshot } from "@sidecar/guide";
 import type { LiveDiagnostics } from "@sidecar/live";
@@ -154,6 +155,8 @@ export interface HostOperator {
   reportLiveTransport(state: LiveTransportState): Promise<void>;
   /** The peer's own idle decision, from its local signals alone; the host decides the close. */
   reportLiveActivity(idle: boolean): Promise<void>;
+  /** The stop key: the standing session is told to stop speaking; answers whether one stood to tell. */
+  stopSpeaking(): Promise<boolean>;
   /** One tapped wire event for the host's development trace; the host drops it where no writer stands. */
   recordAgentTrace(trace: AgentWireTrace): void;
   reportGuide(guide: AppGuideSnapshot): Promise<void>;
@@ -406,6 +409,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       fire(client.call(GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT, { state })),
     reportLiveActivity: (idle) =>
       fire(client.call(GATEWAY_METHOD.VOICE_REPORT_LIVE_ACTIVITY, { idle })),
+    stopSpeaking: async () => {
+      const answer = await client.call(GATEWAY_METHOD.VOICE_STOP_SPEAKING);
+      return answer.ok
+        ? (voiceStopSpeakingResultSchema.parse(answer.result)?.stopped ?? false)
+        : false;
+    },
     recordAgentTrace: (trace) => {
       void client.call(GATEWAY_METHOD.VOICE_RECORD_TRACE, { trace: carried(trace) });
     },

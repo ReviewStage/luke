@@ -77,6 +77,10 @@ function fixture(clearConversation: () => Promise<boolean>) {
       reportLiveActivity: async (idle: boolean) => {
         liveCalls.push(`activity:${idle}`);
       },
+      stopSpeaking: async () => {
+        liveCalls.push("stop");
+        return true;
+      },
     },
     liveDiagnostics: async () => undefined,
     recordProductEvent: () => undefined,
@@ -102,7 +106,7 @@ function fixture(clearConversation: () => Promise<boolean>) {
   return { command, perform, liveCalls, sentToVoice, panelSender, voiceSender };
 }
 
-test("the four live session acts reach the host from the voice window alone", async () => {
+test("the five live session acts reach the host from the voice window alone", async () => {
   const f = fixture(async () => true);
   const offer = "v=0\r\noffer\r\n";
   assert.deepEqual(
@@ -120,8 +124,18 @@ test("the four live session acts reach the host from the voice window alone", as
     kind: ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY,
     payload: { idle: true },
   });
+  assert.deepEqual(await f.perform(f.voiceSender, { kind: ACT_KIND.VOICE_STOP_SPEAKING }), {
+    status: "done",
+    value: true,
+  });
   await f.perform(f.voiceSender, { kind: ACT_KIND.VOICE_END_LIVE_SESSION });
-  assert.deepEqual(f.liveCalls, [`create:${offer}`, "transport:connected", "activity:true", "end"]);
+  assert.deepEqual(f.liveCalls, [
+    `create:${offer}`,
+    "transport:connected",
+    "activity:true",
+    "stop",
+    "end",
+  ]);
   // A panel offering an SDP or reporting a transport it does not hold reaches nothing.
   assert.deepEqual(
     await f.perform(f.panelSender, {
@@ -134,8 +148,12 @@ test("the four live session acts reach the host from the voice window alone", as
     kind: ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY,
     payload: { idle: false },
   });
+  assert.deepEqual(await f.perform(f.panelSender, { kind: ACT_KIND.VOICE_STOP_SPEAKING }), {
+    status: "done",
+    value: false,
+  });
   await f.perform(f.panelSender, { kind: ACT_KIND.VOICE_END_LIVE_SESSION });
-  assert.equal(f.liveCalls.length, 4);
+  assert.equal(f.liveCalls.length, 5);
 });
 
 test("the voice window is told to clear at the fence, before the disk answers, and the panel hears the disk's answer", async () => {

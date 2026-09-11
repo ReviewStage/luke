@@ -94,7 +94,13 @@ conversations guide prescribes. The live service is the one sink for
 everything Luke says unprompted: `compose-live.ts` takes every briefing from
 the brain, every typed ask's run to speak its reply, and the two onboarding
 beats. A briefing or reply with no session standing makes the service say it
-wants one, and the voice window opens it muted. Nothing else in the host
+wants one, and the voice window opens it muted. The one instruction the
+service sends on the developer's behalf is the stop key's, through
+`voice.stopSpeaking`: one `session.instructions.append` telling the model to
+stop and wait, into the standing session's own queue. A muted microphone is
+read as nothing but `micLive = false`; under hold-to-talk the talk key's
+release mutes while Luke is still answering, so no recency of his output
+turns a mute into a stop. Nothing else in the host
 speaks: the earlier speech arbiter, reply ledger, and receiver epochs
 are gone, and the guarantee they carried — at most one spoken reply per run —
 now holds by construction, since a run's sentences reach the voice only as

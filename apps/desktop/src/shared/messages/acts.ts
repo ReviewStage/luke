@@ -140,6 +140,7 @@ export const ACT_KIND = {
   VOICE_END_LIVE_SESSION: "voice.endLiveSession",
   VOICE_REPORT_LIVE_TRANSPORT: "voice.reportLiveTransport",
   VOICE_REPORT_LIVE_ACTIVITY: "voice.reportLiveActivity",
+  VOICE_STOP_SPEAKING: "voice.stopSpeaking",
   VOICE_DIAGNOSTICS: "voice.diagnostics",
   MICROPHONE_REQUEST: "microphone.request",
   /**
@@ -549,6 +550,11 @@ export const ACT = {
     payload: voiceReportLiveActivityParamsSchema,
     result: wireResult<undefined>((value) => value === undefined),
     refusal: "Could not report the voice activity on this system.",
+  },
+  [ACT_KIND.VOICE_STOP_SPEAKING]: {
+    payload: noPayload,
+    result: wireResult<boolean>((value) => s.boolean().read(value).ok),
+    refusal: "Could not tell Luke to stop speaking on this system.",
   },
   [ACT_KIND.VOICE_DIAGNOSTICS]: {
     payload: noPayload,

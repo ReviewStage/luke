@@ -99,19 +99,13 @@ export const ASK_UNRECORDED_NOTE =
 
 /**
  * What the stop key says to the model. Muting the microphone never stops the
- * output, as the live guide notes, so a microphone muted while Luke is
- * speaking also carries the guide's corrective instruction: stop means stop.
+ * output, as the live guide notes, so the stop key alone carries the guide's
+ * corrective instruction, through `voice.stopSpeaking`: stop means stop. A
+ * mute carries none of it, because under hold-to-talk the talk key's release
+ * mutes while Luke is routinely still answering.
  */
 export const STOP_SPEAKING_INSTRUCTION =
   "Stop speaking now and wait quietly until the developer speaks again.";
-
-/**
- * How recently an output transcript fragment must have arrived for a mute to
- * count as cutting Luke off. The talk key mutes at the end of every turn of
- * the developer's; only a mute that lands over Luke's own words is the stop
- * key's meaning, and only that one carries the instruction.
- */
-export const STOP_SPEAKING_OUTPUT_RECENCY_MS = 2_000;
 
 /** A briefing as the brain delivered it; the rest of the delivery rides along for a held re-decision. */
 export interface BriefingDelivery {
@@ -168,8 +162,6 @@ interface StandingSession {
   /** The graceful close under way, so a second ask to end the session waits on the first. */
   closing: Promise<void> | undefined;
   micLive: boolean;
-  /** When Luke's output transcript last moved, on this host's clock; what tells a stop from a turn's end. */
-  lastOutputAt: number | undefined;
   usageSeconds: number | undefined;
   lastDelegationOffsetMs: number;
   readonly claimedDelegations: Set<string>;
@@ -430,6 +422,20 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     });
   }
 
+  /**
+   * The stop key: the model is told to stop speaking and wait, once, through
+   * the standing session's own queue. Answers whether a session was there to
+   * tell; the microphone is the peer's to mute and is not touched here.
+   */
+  stopSpeaking(): boolean {
+    const session = this.#speakable();
+    if (!session) return false;
+    session.channel.enqueue(async () => {
+      await session.channel.send(instructionsAppend(this.#input(null, STOP_SPEAKING_INSTRUCTION)));
+    });
+    return true;
+  }
+
   /** The roster moved; rapid changes are combined and an unchanged view is skipped. */
   rosterChanged(): void {
     if (!this.sessionStands()) return;
@@ -522,7 +528,6 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       ended: false,
       closing: undefined,
       micLive: false,
-      lastOutputAt: undefined,
       usageSeconds: undefined,
       lastDelegationOffsetMs: 0,
       claimedDelegations: new Set(),
@@ -559,20 +564,6 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         this.#onClosed(session, event);
         return;
       case LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED:
-        // A microphone muted over Luke's own words is the stop key's meaning;
-        // one muted at the end of the developer's turn, or a session that
-        // opened muted for a briefing, has nothing to stop.
-        if (
-          session.micLive &&
-          session.lastOutputAt !== undefined &&
-          this.#options.now() - session.lastOutputAt < STOP_SPEAKING_OUTPUT_RECENCY_MS
-        ) {
-          session.channel.enqueue(async () => {
-            await session.channel.send(
-              instructionsAppend(this.#input(null, STOP_SPEAKING_INSTRUCTION)),
-            );
-          });
-        }
         session.micLive = false;
         return;
       case LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED:
@@ -597,7 +588,6 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
           event.start_ms,
           event.end_ms,
         );
-        session.lastOutputAt = this.#options.now();
         session.channel.outputReached(event.end_ms);
         return;
       case LIVE_SERVER_EVENT.DELEGATION_CREATED:
