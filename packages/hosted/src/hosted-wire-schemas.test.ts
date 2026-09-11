@@ -8,6 +8,7 @@ import {
 import { test } from "vitest";
 import * as actionWire from "./action-wire.js";
 import * as brainContract from "./brain-contract.js";
+import * as conversationClearWire from "./conversation-clear-wire.js";
 import * as conversationWire from "./conversation-wire.js";
 import * as deviceWire from "./device-wire.js";
 import * as liveContract from "./live-contract.js";
@@ -43,6 +44,9 @@ const MODULE_SCHEMAS = {
     hostedBrainEmbedAnswerSchema: brainContract.hostedBrainEmbedAnswerSchema,
     hostedBrainCountTokensAnswerSchema: brainContract.hostedBrainCountTokensAnswerSchema,
   } satisfies RecordedJsonSchemas<typeof brainContract>,
+  "conversation-clear-wire": {
+    conversationClearAnswerSchema: conversationClearWire.conversationClearAnswerSchema,
+  } satisfies RecordedJsonSchemas<typeof conversationClearWire>,
   "conversation-wire": {
     hostedConversationAnswerSchema: conversationWire.hostedConversationAnswerSchema,
   } satisfies RecordedJsonSchemas<typeof conversationWire>,
@@ -86,6 +90,7 @@ const MODULE_SCHEMAS = {
     brainTurnsAnswerSchema: readsWire.brainTurnsAnswerSchema,
     changesRequestSchema: readsWire.changesRequestSchema,
     changesAnswerSchema: readsWire.changesAnswerSchema,
+    unreadableRowRefusalSchema: readsWire.unreadableRowRefusalSchema,
   } satisfies RecordedJsonSchemas<typeof readsWire>,
   "service-wire": {
     writtenText: serviceWire.writtenText,

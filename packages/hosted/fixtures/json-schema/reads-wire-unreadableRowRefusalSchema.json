@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "properties": {
+    "error": {
+      "type": "string",
+      "enum": [
+        "unreadable-row"
+      ]
+    },
+    "unreadableRow": {
+      "type": "object",
+      "properties": {
+        "conversationId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "conversationId",
+        "seq"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "error",
+    "unreadableRow"
+  ],
+  "additionalProperties": false
+}
