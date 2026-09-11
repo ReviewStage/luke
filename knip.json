@@ -60,6 +60,11 @@
       ],
       "project": ["src/**"]
     },
+    "packages/brain": {
+      "entry": ["src/**/*.test.ts", "src/**/worker-entry.ts", "src/ui-messages/index.ts"],
+      "project": ["src/**"],
+      "ignoreDependencies": ["tsx"]
+    },
     "tools/*": {
       "entry": ["src/*.ts", "*.ts", "*.mjs", "**/*.test.*"],
       "project": ["**/*.ts", "**/*.mjs"]
