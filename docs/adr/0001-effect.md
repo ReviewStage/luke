@@ -299,6 +299,20 @@ exactly as the interval it replaces ran its callback once before arming.
 P7-08 deletes this once the brain composer is a `Layer` and the scope is the
 host's own.
 
+`UpdateService`'s `start`, `stop`, and `#armPublishingRetry` in
+`apps/desktop/src/main/update-service.ts` are on the same allowlist, on the
+same terms as `ObservationLoop`: the timed check and the publishing-window
+retry are each a `Schedule` forked into a fiber of the service's own `Scope`,
+but the composer that builds and arms it (`update-service-host.ts`, called
+from `compose-desktop.ts`) still holds a promise-returning `start`/`stop`
+pair, so the scope is made in the constructor and closed there rather than
+built around the composer. The publishing retry steps `Schedule#step`
+directly rather than driving it through a `ScheduleDriver`, because the
+driver's own `next` sleeps out the delay it returns where this needs the
+delay back, to arm a cancellable fiber a fresh check can still collapse
+mid-wait. It goes once `update-service-host.ts`'s own composer is a `Layer`
+of its own rather than a promise calling these two synchronous methods.
+
 `shutdownGateway` in `packages/gateway/src/shutdown.ts` is on the same
 allowlist: the coordinator's fixed quit order — admissions closed, the
 cancellation and the settling raced against one shared deadline, whatever a
@@ -736,6 +750,7 @@ design decision stated as such:
 | `GenerationHolder`'s `Ref` decision and `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P7-08 |
 | `hostSeamLayers(options)`/`hostKernelLayerFromSeams(options)`, the host seams stood up from one object, and `createHostKernel` beside them | P7-01 | P12-05 |
 | `composeHost`'s `start()`/`stop()` adaptor over `hostLayer`, and `hostLayerFromSeams(options)` beside it | P7-02 | P12-05 |
+| `UpdateService`'s `start`/`stop`/`#armPublishingRetry` over its own `Scope` | P8-03 | once `update-service-host.ts`'s composer is a `Layer` of its own |
 | `mergeMethods`, the throwing fold over `foldMethods` | P7-02 | P12-05 |
 | `startConversationMaintenance`'s own `Scope` | P7-05 | P7-08 |
 | `AgentSeamTag` / `agentSeamLayer(seam)` over the plain `AgentSeam` object | P5-07 | P7-08 |
