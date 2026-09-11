@@ -1,0 +1,11 @@
+{
+  "status": 429,
+  "statusText": "",
+  "headers": [
+    [
+      "content-type",
+      "application/json"
+    ]
+  ],
+  "body": "{\"error\":\"quota-exhausted\"}"
+}

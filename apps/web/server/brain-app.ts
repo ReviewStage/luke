@@ -42,6 +42,7 @@ import {
   hostedJsonResponse,
   hostedMethod,
   hostedRefusalResponse,
+  hostedUpstreamErrorResponse,
   readJsonBodyEffect,
 } from "./hosted/http-effect.js";
 import { postOpenAi } from "./hosted/openai.js";
@@ -214,18 +215,9 @@ function brainOperation<Admitted>(
       operation.body(read.request, modelOf(model)),
     );
     const body = answered === undefined ? undefined : operation.answer(answered);
-    if (!body) return yield* Effect.fail(upstreamErrorResponse(undefined));
+    if (!body) return yield* Effect.fail(hostedUpstreamErrorResponse(undefined));
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, body);
   });
-}
-
-function upstreamErrorResponse(upstreamStatus: number | undefined): Answer {
-  return hostedJsonResponse(
-    HOSTED_HTTP_STATUS.BAD_GATEWAY,
-    upstreamStatus === undefined
-      ? { error: HOSTED_API_ERROR.UPSTREAM_ERROR }
-      : { error: HOSTED_API_ERROR.UPSTREAM_ERROR, upstreamStatus },
-  );
 }
 
 /**
@@ -261,7 +253,7 @@ function upstream(
         }).pipe(HttpServerResponse.setHeader(RETRY_AFTER_HEADER, String(Math.ceil(waitMs / 1000)))),
       );
     }
-    if (!response?.ok) return yield* Effect.fail(upstreamErrorResponse(response?.status));
+    if (!response?.ok) return yield* Effect.fail(hostedUpstreamErrorResponse(response?.status));
     const parsed: unknown = yield* Effect.promise(() => response.json().catch(() => undefined));
     // SAFETY: response.json returns a runtime value; every reader below validates it as wire.
     return parsed as UnparsedWireValue;

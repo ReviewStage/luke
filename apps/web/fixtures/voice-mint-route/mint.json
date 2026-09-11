@@ -1,0 +1,11 @@
+{
+  "status": 200,
+  "statusText": "",
+  "headers": [
+    [
+      "content-type",
+      "application/json"
+    ]
+  ],
+  "body": "{\"connection\":{\"value\":\"eph-secret\",\"expiresAt\":1786968060000,\"model\":\"gpt-realtime-2.1\",\"callsUrl\":\"https://api.openai.com/v1/realtime/calls\",\"wsUrl\":\"wss://api.openai.com/v1/realtime?model=gpt-realtime-2.1\"},\"quota\":{\"used\":1,\"limit\":5000,\"resetsAt\":1787011200000}}"
+}
