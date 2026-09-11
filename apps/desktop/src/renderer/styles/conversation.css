@@ -499,6 +499,103 @@ button.conversation-action-chip:focus-visible {
   vertical-align: middle;
 }
 
+/* Luke's rows stack: the bubble, then the thumbs under it. The thumbs stand
+   beside the bubble rather than inside it, so the copy control, anchored to
+   the bubble's own middle, still centres on the words and not on the words
+   and the thumbs together. */
+.conversation-entry[data-speaker="luke"] .conversation-message {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+/* The developer's verdict on one of Luke's messages: two thumbs under the
+   words, quiet until chosen, the chosen one filled and in the text colour so
+   a verdict already given reads at a glance. Each thumb keeps a 24px target
+   around a smaller glyph, and the pair is always drawn rather than revealed
+   on hover, because a control that records something is one a reader has
+   to be able to find. A thumbs down stands the composer's offer beside them
+   for as long as the verdict does; a refused press says so under them, in
+   the danger colour, as a live status. */
+.conversation-rating {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 6px 0;
+}
+
+.conversation-rating-thumb,
+.conversation-rating-offer {
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.conversation-rating-thumb {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-tertiary);
+}
+
+.conversation-rating-thumb svg {
+  width: 13px;
+  height: 13px;
+}
+
+.conversation-rating-thumb:hover,
+.conversation-rating-thumb:focus-visible {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+.conversation-rating-thumb[aria-pressed="true"] {
+  color: var(--text-primary);
+}
+
+.conversation-rating-thumb[aria-pressed="true"] svg {
+  fill: currentColor;
+}
+
+.conversation-rating-thumb[data-pending] {
+  color: var(--text-secondary);
+}
+
+.conversation-rating-offer {
+  min-height: 24px;
+  margin-left: 4px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: var(--raised);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 620;
+}
+
+.conversation-rating-offer:hover,
+.conversation-rating-offer:focus-visible {
+  background: var(--selected);
+  color: var(--text-primary);
+}
+
+.conversation-rating-refusal {
+  flex-basis: 100%;
+  padding: 0 2px 2px;
+  color: var(--danger);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+/* Under Luke's own judgment the thumbs sit in the quiet row's own column,
+   flush with its words rather than the bubble's padding. */
+.conversation-entry[data-own-words] .conversation-rating {
+  padding: 2px 0 0;
+}
+
 /* An announcement nobody heard says so beside its words, so a briefing that
    lapsed unclaimed is never read as one that was spoken. */
 .conversation-unspoken {

@@ -62,8 +62,15 @@ draws a different record: the conversation Luke's own service keeps for your
 account, read by every Mac you sign in on, so two Macs on one account show
 the same thread. A signed-in Mac asks the service every few seconds what has
 changed and reads only what did, and it draws the 200 most recent turns; that
-is what is shown, not what is kept. What the service keeps of it is described
-under "Your account" below.
+is what is shown, not what is kept. A thumbs up or down you give one of Luke's
+messages there is written to the same service as a rating event beside that
+message, naming the verdict and the Mac it came from, so it shows on every
+device signed in to your account, including the next time you open Luke; a
+second verdict is a second event, and the newest is what every device shows.
+Pressing thumbs down also offers the feedback composer, prefilled with that
+message and your ask before it, and nothing of it leaves the Mac unless you
+press Send. What the service keeps of it is described under "Your account"
+below.
 Every entry on your Mac stays in its database until you clear the conversation or the
 housekeeping described below removes it. Beside the Conversation, Luke keeps a transcript
 of each conversation's turns in the same database: every input the model was
@@ -274,7 +281,9 @@ screen, your editor, your terminal, or any other app. A recording shows whatever
 the panel showed you, including session titles, branches and error
 text, your name and email address, and any screenshot you attached to the
 feedback form. The Conversation tab is blocked from recordings, so neither the words in your
-conversation with Luke nor the things he remembers about you are included. Text you type into a field is replaced
+conversation with Luke nor the things he remembers about you are included, and
+the feedback form's message field is blocked the same way, since a thumbs down
+can open it prefilled with those words. Text you type into a field is replaced
 with blocks before the recording leaves your Mac, so an API key or a sign-in
 code you enter is not in it. While recording is on, Luke also reports what you
 clicked, including the text on it; the fixed list above does not cover those
@@ -379,7 +388,11 @@ notifications ships as a separate feature; this describes only the
 registration.
 
 **Feedback.** If you use the feedback form, we receive what you typed, the name
-and email you signed it with, and any screenshots you attached.
+and email you signed it with, and any screenshots you attached. A thumbs down
+on one of Luke's messages offers to open the form prefilled with that message
+and your ask before it, words already on your screen; they are yours to edit or
+delete, and like everything else in the form they reach us only when you press
+Send.
 
 ## Who we send it to
 

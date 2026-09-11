@@ -819,7 +819,9 @@ Canonical commands:
   posture Luke keeps. The one explicit blocked subtree is Conversation: its root
   carries the recording library's fixed blocking class, so neither the
   conversation's words nor the entries Luke was asked to remember leave the
-  machine in a recording. That view retains every line the retention policy
+  machine in a recording; the feedback composer's message field carries the
+  same class on itself, and nothing wider, because a thumbs down on one of
+  Luke's messages can open it prefilled with those words. That view retains every line the retention policy
   holds, its words whole, including session actions and the lines that outlived
   the last launch, until the developer clears it — the same thread on every
   display's panel, relayed between windows through the main process. There is

@@ -15,7 +15,7 @@ import {
   TOOL_PART_STATE,
 } from "@sidecar/session";
 import type { StoredUIMessage } from "@sidecar/session/ui-messages";
-import { TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
+import { CONVERSATION_EVENT_KIND, MESSAGE_RATING, TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
 import type { SessionView } from "./session-model";
 
 /**
@@ -191,6 +191,9 @@ const AT = {
 
 /** The instant the fixtures are read against: the running turn has been going for a while. */
 export const FIXTURE_NOW = 1757506300000;
+
+/** The one reply the fixture rates: the first turn's answer, rated down as its newest word. */
+export const FIXTURE_RATED_MESSAGE = "2b000000-0000-4000-8000-000000000202";
 
 /** One conversation covering every row the renderer draws. */
 export const FIXTURE_INPUT: ConversationViewInput = {
@@ -501,7 +504,22 @@ export const FIXTURE_INPUT: ConversationViewInput = {
       queuedAt: AT.OWN,
     },
   ],
-  events: [],
+  // The developer's verdicts, as the record holds them: the first reply rated
+  // up, then down, so the newest word is what the thumbs show.
+  events: [
+    {
+      messageId: FIXTURE_RATED_MESSAGE,
+      kind: CONVERSATION_EVENT_KIND.RATING,
+      seq: 1,
+      rating: { rating: MESSAGE_RATING.UP },
+    },
+    {
+      messageId: FIXTURE_RATED_MESSAGE,
+      kind: CONVERSATION_EVENT_KIND.RATING,
+      seq: 2,
+      rating: { rating: MESSAGE_RATING.DOWN },
+    },
+  ],
   toolKinds: FIXTURE_TOOL_KINDS,
 };
 

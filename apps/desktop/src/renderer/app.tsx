@@ -6,7 +6,7 @@ import {
 import { brainRequestPending } from "@sidecar/brain/requests-wire";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { CREDENTIAL_PROVIDER_LIST, CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
-import { feedbackKindForLifecycleEvent } from "@sidecar/feedback";
+import { FEEDBACK_KIND, feedbackKindForLifecycleEvent } from "@sidecar/feedback";
 import { LIVE_STATUS } from "@sidecar/live";
 import { WingFace as LukeFace } from "@sidecar/panel";
 import type { ObservedWorkspaceProject } from "@sidecar/session";
@@ -441,6 +441,18 @@ export function App(): React.JSX.Element {
     stillMotion,
     standDownPage,
   });
+
+  /**
+   * The composer a thumbs down offers, opened only at the offer's own press:
+   * the panel asking, so leaving returns to it, on a draft of words the thread
+   * already drew, which lands only in a note with nothing written yet.
+   */
+  const offerRatingFeedback = useCallback(
+    (draft: string) => {
+      feedback.begin(FEEDBACK_KIND.FEEDBACK, true, draft);
+    },
+    [feedback.begin],
+  );
 
   /**
    * Moves the talk key, or resets it when no chord is named. The key the row
@@ -993,6 +1005,7 @@ export function App(): React.JSX.Element {
             conversation={state.conversation}
             roster={sessions.roster}
             onOpenChat={sessions.onOpenChat}
+            onOfferRatingFeedback={offerRatingFeedback}
             liveConversationEntries={liveConversationEntries}
             spokenAskPending={spokenAskPending}
             onClearConversationConversation={clearConversationLines}

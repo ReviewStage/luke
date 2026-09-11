@@ -67,6 +67,24 @@ export function CopyIcon(): React.JSX.Element {
   );
 }
 
+export function ThumbsUpIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M7 10.5V20H4.6a1.1 1.1 0 0 1-1.1-1.1v-7.3a1.1 1.1 0 0 1 1.1-1.1z" />
+      <path d="M7 10.5l4.3-7.2a1.7 1.7 0 0 1 3.1.9V9h4.2a2.1 2.1 0 0 1 2.1 2.4l-1.1 6.7A2.3 2.3 0 0 1 17.3 20H7" />
+    </Glyph>
+  );
+}
+
+export function ThumbsDownIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M7 13.5V4H4.6a1.1 1.1 0 0 0-1.1 1.1v7.3a1.1 1.1 0 0 0 1.1 1.1z" />
+      <path d="M7 13.5l4.3 7.2a1.7 1.7 0 0 0 3.1-.9V15h4.2a2.1 2.1 0 0 0 2.1-2.4l-1.1-6.7A2.3 2.3 0 0 0 17.3 4H7" />
+    </Glyph>
+  );
+}
+
 export function PencilIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">

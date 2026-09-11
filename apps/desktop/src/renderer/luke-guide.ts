@@ -379,7 +379,10 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "into a call beside Luke's working memory of what he read, said, and did, which lives " +
         "in its own file on this Mac for exactly 14 days from when it began. The view is " +
         "blocked from panel recordings, is not exportable, and can be cleared by hand from " +
-        "that tab, which discards the working memory with it. The tab has no field to type " +
+        "that tab, which discards the working memory with it. Under each of Luke's messages " +
+        "stand two thumbs to rate it, up or down; a thumbs down also offers the feedback form, " +
+        "prefilled with that message and the ask before it, and nothing is sent unless the " +
+        "developer presses Send. The tab has no field to type " +
         "into: every ask is spoken. A spoken open still reaches only sessions currently observed.",
     },
     {
