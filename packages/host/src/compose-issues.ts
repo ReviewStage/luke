@@ -9,7 +9,10 @@ import { carried, GATEWAY_METHOD, type GatewayMethodTable, gatewayOk } from "@si
 import { ObservationLoop } from "@sidecar/runtime";
 import { ISSUE_TRACKER_ID, normalizeTrackedIssue, type TrackedIssue } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import type { Composer, ComposerContext } from "./composer.js";
+import { Effect, Runtime } from "effect";
+import type { SettingsComposer } from "./compose-settings.js";
+import type { Composer } from "./composer.js";
+import { HostKernelTag } from "./effect/kernel.js";
 import { reporterOf } from "./wire-helpers.js";
 
 /** A board changes at the pace of hands, not of models; a minute is current. */
@@ -25,129 +28,146 @@ export interface IssuesComposer extends Composer {
   stopObservation: () => void;
 }
 
-export interface IssuesDependencies extends ComposerContext {
+export interface IssuesDependencies {
+  settings: SettingsComposer;
   observationGate: () => boolean;
 }
 
-export function composeIssues(dependencies: IssuesDependencies): IssuesComposer {
-  const { kernel, settings, observationGate } = dependencies;
-  const { report } = kernel;
-  const settingsStore = settings.store;
+/**
+ * The issues concern, over the kernel it takes as a tag and the runtime the
+ * layer it is built under is running on: Linear's renewal and its consent
+ * trip both carry that runtime rather than the ambient default one.
+ */
+export const composeIssues = (
+  dependencies: IssuesDependencies,
+): Effect.Effect<IssuesComposer, never, HostKernelTag> =>
+  Effect.gen(function* () {
+    const { settings, observationGate } = dependencies;
+    const kernel = yield* HostKernelTag;
+    const runtime = yield* Effect.runtime<never>();
+    const { report } = kernel;
+    const settingsStore = settings.store;
 
-  const linearCredentials = new LinearCredentials({
-    readGrant: () => settingsStore.readGrant(CREDENTIAL_PROVIDER_ID.LINEAR),
-    writeGrant: async (grant) => {
-      await settingsStore.setGrant(CREDENTIAL_PROVIDER_ID.LINEAR, grant);
-    },
-    forgetGrant: async () => {
-      const cleared = await settingsStore.clearGrant(CREDENTIAL_PROVIDER_ID.LINEAR);
-      // Nobody pressed anything to end this connection — Linear refused the
-      // renewal — so no settings reply is on its way to say so.
-      settings.emitSettingsSnapshot(cleared.settings);
-    },
-  });
-  const linearTracker = new LinearIssueTracker({
-    readAccessToken: () => linearCredentials.accessToken(),
-  });
-  const linearConsent = linearSignIn({
-    openExternal: (url) => void kernel.openExternalThroughNode(url).catch(kernel.reportOpenFailure),
-  });
-  const issueTrackers = [linearTracker] as const;
-  let trackedIssues: readonly TrackedIssue[] | undefined;
+    const linearCredentials = new LinearCredentials({
+      readGrant: () => settingsStore.readGrant(CREDENTIAL_PROVIDER_ID.LINEAR),
+      writeGrant: async (grant) => {
+        await settingsStore.setGrant(CREDENTIAL_PROVIDER_ID.LINEAR, grant);
+      },
+      forgetGrant: async () => {
+        const cleared = await settingsStore.clearGrant(CREDENTIAL_PROVIDER_ID.LINEAR);
+        // Nobody pressed anything to end this connection — Linear refused the
+        // renewal — so no settings reply is on its way to say so.
+        settings.emitSettingsSnapshot(cleared.settings);
+      },
+      runtime,
+    });
+    const linearTracker = new LinearIssueTracker({
+      readAccessToken: () => linearCredentials.accessToken(),
+    });
+    const linearConsent = linearSignIn({
+      openExternal: (url) =>
+        void kernel.openExternalThroughNode(url).catch(kernel.reportOpenFailure),
+    });
+    const issueTrackers = [linearTracker] as const;
+    let trackedIssues: readonly TrackedIssue[] | undefined;
 
-  async function refreshTrackedIssues(generation: number): Promise<void> {
-    try {
-      const collected: TrackedIssue[] = [];
-      let connected = false;
-      for (const tracker of issueTrackers) {
-        const observations = await tracker.observe();
-        if (!observations) continue;
-        connected = true;
-        for (const observation of observations) {
-          const issue = normalizeTrackedIssue(tracker.tracker, observation);
-          if (issue) collected.push(issue);
+    async function refreshTrackedIssues(generation: number): Promise<void> {
+      try {
+        const collected: TrackedIssue[] = [];
+        let connected = false;
+        for (const tracker of issueTrackers) {
+          const observations = await tracker.observe();
+          if (!observations) continue;
+          connected = true;
+          for (const observation of observations) {
+            const issue = normalizeTrackedIssue(tracker.tracker, observation);
+            if (issue) collected.push(issue);
+          }
         }
+        if (loop.isCurrent(generation)) {
+          trackedIssues = connected ? collected : undefined;
+        }
+      } catch (error) {
+        report(
+          `Issue observation failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
-      if (loop.isCurrent(generation)) {
-        trackedIssues = connected ? collected : undefined;
-      }
-    } catch (error) {
-      report(`Issue observation failed: ${error instanceof Error ? error.message : String(error)}`);
     }
-  }
 
-  function stopObservation(): void {
-    trackedIssues = undefined;
-  }
+    function stopObservation(): void {
+      trackedIssues = undefined;
+    }
 
-  const loop = new ObservationLoop({
-    gate: observationGate,
-    intervalMs: ISSUE_REFRESH_INTERVAL_MS,
-    run: refreshTrackedIssues,
+    const loop = new ObservationLoop({
+      gate: observationGate,
+      intervalMs: ISSUE_REFRESH_INTERVAL_MS,
+      run: refreshTrackedIssues,
+    });
+
+    const methods: GatewayMethodTable = {
+      [GATEWAY_METHOD.TRACKER_CONNECT]: async (params) => {
+        const result = await settings.settingsWrite(
+          async () => {
+            const outcome = await Runtime.runPromise(runtime)(
+              Effect.scoped(linearConsent.signInEffect()),
+            );
+            if ("reason" in outcome) return settings.refusedSettings(outcome.reason);
+            return settingsStore.setGrant(CREDENTIAL_PROVIDER_ID.LINEAR, outcome);
+          },
+          (saved) => {
+            if (saved.reason) return;
+            void loop.refresh();
+            settings.recordProductEvent(PRODUCT_EVENT.TRACKER_CONNECT, {
+              tracker_id: ISSUE_TRACKER_ID.LINEAR,
+            });
+          },
+          "Could not connect Linear on this system.",
+          reporterOf(params),
+        );
+        return gatewayOk(carried(result));
+      },
+      [GATEWAY_METHOD.TRACKER_CANCEL_SIGN_IN]: () => {
+        linearConsent.cancel();
+        return gatewayOk({});
+      },
+      [GATEWAY_METHOD.TRACKER_REOPEN_SIGN_IN]: () => {
+        linearConsent.reopen();
+        return gatewayOk({});
+      },
+      [GATEWAY_METHOD.TRACKER_DISCONNECT]: async (params) => {
+        const result = await settings.settingsWrite(
+          async () => {
+            await linearCredentials.disconnect();
+            return {
+              status: ACTION_RESULT_STATUS.ACCEPTED,
+              settings: await settingsStore.snapshot(),
+            };
+          },
+          (saved) => {
+            if (saved.reason) return;
+            void loop.refresh();
+            settings.recordProductEvent(PRODUCT_EVENT.TRACKER_DISCONNECT, {
+              tracker_id: ISSUE_TRACKER_ID.LINEAR,
+            });
+          },
+          "Could not disconnect Linear on this system.",
+          reporterOf(params),
+        );
+        return gatewayOk(carried(result));
+      },
+    };
+
+    return {
+      methods,
+      loop,
+      trackers: issueTrackers,
+      issues: () => trackedIssues,
+      refresh: () => void loop.refresh(),
+      stopObservation,
+      // The loop is armed by the merge's supervisor, so there is nothing of its own to begin.
+      start: async () => undefined,
+      stop: async () => {
+        stopObservation();
+      },
+    };
   });
-
-  const methods: GatewayMethodTable = {
-    [GATEWAY_METHOD.TRACKER_CONNECT]: async (params) => {
-      const result = await settings.settingsWrite(
-        async () => {
-          const outcome = await linearConsent.signIn();
-          if ("reason" in outcome) return settings.refusedSettings(outcome.reason);
-          return settingsStore.setGrant(CREDENTIAL_PROVIDER_ID.LINEAR, outcome);
-        },
-        (saved) => {
-          if (saved.reason) return;
-          void loop.refresh();
-          settings.recordProductEvent(PRODUCT_EVENT.TRACKER_CONNECT, {
-            tracker_id: ISSUE_TRACKER_ID.LINEAR,
-          });
-        },
-        "Could not connect Linear on this system.",
-        reporterOf(params),
-      );
-      return gatewayOk(carried(result));
-    },
-    [GATEWAY_METHOD.TRACKER_CANCEL_SIGN_IN]: () => {
-      linearConsent.cancel();
-      return gatewayOk({});
-    },
-    [GATEWAY_METHOD.TRACKER_REOPEN_SIGN_IN]: () => {
-      linearConsent.reopen();
-      return gatewayOk({});
-    },
-    [GATEWAY_METHOD.TRACKER_DISCONNECT]: async (params) => {
-      const result = await settings.settingsWrite(
-        async () => {
-          await linearCredentials.disconnect();
-          return {
-            status: ACTION_RESULT_STATUS.ACCEPTED,
-            settings: await settingsStore.snapshot(),
-          };
-        },
-        (saved) => {
-          if (saved.reason) return;
-          void loop.refresh();
-          settings.recordProductEvent(PRODUCT_EVENT.TRACKER_DISCONNECT, {
-            tracker_id: ISSUE_TRACKER_ID.LINEAR,
-          });
-        },
-        "Could not disconnect Linear on this system.",
-        reporterOf(params),
-      );
-      return gatewayOk(carried(result));
-    },
-  };
-
-  return {
-    methods,
-    loop,
-    trackers: issueTrackers,
-    issues: () => trackedIssues,
-    refresh: () => void loop.refresh(),
-    stopObservation,
-    // The loop is armed by the merge's supervisor, so there is nothing of its own to begin.
-    start: async () => undefined,
-    stop: async () => {
-      stopObservation();
-    },
-  };
-}

@@ -1,8 +1,9 @@
 // The same collapsing the account's refresh uses, and for the same reason:
 // Linear consumes a refresh token when it is spent, so two refreshes racing
 // would have the loser spend one Linear has already rotated away.
+import { Cause, type Effect, Exit, Runtime } from "effect";
 import { ACCESS_TOKEN_EXPIRY_SLACK_MS } from "../expiry.js";
-import { singleFlight } from "../single-flight.js";
+import { singleFlightEffect } from "../single-flight.js";
 import {
   LINEAR_REFRESH_STATUS,
   type LinearGrant,
@@ -23,6 +24,8 @@ export interface LinearCredentialsOptions {
   environment?: NodeJS.ProcessEnv;
   fetchImplementation?: typeof fetch;
   now?: () => number;
+  /** The runtime the renewal's single-flight join is run on; the issues composer's own kernel runtime in production. */
+  runtime?: Runtime.Runtime<never>;
 }
 
 /**
@@ -37,14 +40,16 @@ export interface LinearCredentialsOptions {
 export class LinearCredentials {
   readonly #options: LinearCredentialsOptions;
   readonly #now: () => number;
-  readonly #renew: () => Promise<void>;
+  readonly #runtime: Runtime.Runtime<never>;
+  readonly #renewEffect: () => Effect.Effect<void, unknown>;
   #disconnecting = false;
   #generation = 0;
 
   constructor(options: LinearCredentialsOptions) {
     this.#options = options;
     this.#now = options.now ?? Date.now;
-    this.#renew = singleFlight(async () => {
+    this.#runtime = options.runtime ?? Runtime.defaultRuntime;
+    this.#renewEffect = singleFlightEffect(async () => {
       const generation = this.#generation;
       if (this.#disconnecting) return;
       const grant = await this.#options.readGrant();
@@ -128,6 +133,18 @@ export class LinearCredentials {
     } finally {
       this.#disconnecting = false;
     }
+  }
+
+  /**
+   * The single-flight join, run on this credential's own runtime — the
+   * issues composer's kernel runtime in production — rather than on the
+   * ambient default one.
+   */
+  #renew(): Promise<void> {
+    return Runtime.runPromiseExit(this.#runtime)(this.#renewEffect()).then((exit) => {
+      if (Exit.isSuccess(exit)) return;
+      throw Cause.squash(exit.cause);
+    });
   }
 
   #current(grant: LinearGrant): boolean {

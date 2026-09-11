@@ -13,7 +13,7 @@ import {
   WireValueSchema,
 } from "@sidecar/wire";
 import { layerFromCloudFetch } from "@sidecar/wire/effect";
-import { Data, Duration, Effect, type Layer } from "effect";
+import { Data, Duration, Effect, type Layer, Runtime } from "effect";
 import {
   CALENDAR_LOOKAHEAD_MS,
   MAXIMUM_MEETING_LENGTH_MS,
@@ -166,6 +166,8 @@ export interface GoogleCalendarReaderOptions {
   /** Injectable so tests exercise the reader without a network. */
   fetchImplementation?: typeof fetch;
   now?: () => number;
+  /** The runtime a request effect is run on; `Runtime.defaultRuntime` for a caller that gave none. */
+  runtime?: Runtime.Runtime<never>;
 }
 
 /**
@@ -180,6 +182,7 @@ export class GoogleCalendarReader {
   readonly #signInConfig: () => GoogleCalendarSignInConfig | undefined;
   readonly #client: Layer.Layer<HttpClient.HttpClient>;
   readonly #now: () => number;
+  readonly #runtime: Runtime.Runtime<never>;
   /** Short-lived access tokens by account id, so passes never drum the minter. */
   readonly #accessTokens = new Map<string, CachedAccessToken>();
   /** Each account's last good observation, which stands in when a pass fails. */
@@ -191,19 +194,21 @@ export class GoogleCalendarReader {
     const fetchImplementation = options.fetchImplementation ?? fetch;
     this.#client = layerFromCloudFetch((url, init) => fetchImplementation(url, init));
     this.#now = options.now ?? Date.now;
+    this.#runtime = options.runtime ?? Runtime.defaultRuntime;
   }
 
   /**
    * @deprecated On the `Effect.runPromise` allowlist in
    * `docs/adr/0001-effect.md`: every caller of this reader still holds a
-   * promise, not a fiber, so the request effect is run to one here rather
-   * than on a runtime this class owns. P7-06 moves the calendars composer
-   * onto the host's own runtime, at which point this method goes with it.
+   * promise, not a fiber, so the request effect is run to one on the
+   * runtime the caller handed in — the calendars composer's own kernel
+   * runtime in production, `Runtime.defaultRuntime` for a caller that gave
+   * none — rather than on a fiber of the caller's own.
    */
   #run<Answer>(
     effect: Effect.Effect<Answer, GoogleCalendarRequestError, HttpClient.HttpClient>,
   ): Promise<Answer> {
-    return Effect.runPromise(Effect.provide(effect, this.#client));
+    return Runtime.runPromise(this.#runtime)(Effect.provide(effect, this.#client));
   }
 
   /**
