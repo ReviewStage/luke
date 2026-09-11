@@ -1,6 +1,9 @@
+import { RegistryContext } from "@effect-atom/atom-react/RegistryContext";
 import * as Sentry from "@sentry/electron/renderer";
+import { Effect } from "effect";
 import { createRoot } from "react-dom/client";
-import { readAppState } from "../use-app-state";
+import { rendererRegistry } from "../renderer-runtime";
+import { appStateFirstRead } from "../use-app-state";
 import { VoiceHost } from "./voice-host";
 
 Sentry.init();
@@ -16,8 +19,12 @@ const root = createRoot(rootElement);
 // window that draws none, and the main process stands a fresh renderer up.
 void (async () => {
   try {
-    await readAppState();
-    root.render(<VoiceHost />);
+    await Effect.runPromise(appStateFirstRead);
+    root.render(
+      <RegistryContext.Provider value={rendererRegistry}>
+        <VoiceHost />
+      </RegistryContext.Provider>,
+    );
   } catch (error) {
     console.error("The voice window's state could not be read; it holds no conversation.", error);
   }

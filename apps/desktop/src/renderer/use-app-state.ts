@@ -1,6 +1,11 @@
+import * as Atom from "@effect-atom/atom/Atom";
+import * as Registry from "@effect-atom/atom/Registry";
+import * as Result from "@effect-atom/atom/Result";
+import { useAtomValue } from "@effect-atom/atom-react/Hooks";
 import { type AppSettingsView, appSettingsView } from "@sidecar/settings/wire";
-import { useSyncExternalStore } from "react";
+import { Data, Effect, identity, Option, Stream } from "effect";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
+import { rendererRegistry, rendererRuntime } from "./renderer-runtime";
 
 /** The two bridge calls a window reads its state through, and nothing else. */
 export interface AppStateSource {
@@ -8,86 +13,108 @@ export interface AppStateSource {
   read: () => Promise<AppStateSnapshot>;
 }
 
-export interface AppStateClient {
-  /**
-   * The document as main holds it, read once and adopted like any delivery.
-   * It installs the subscription before it asks for anything: a delivery
-   * landing while the request is in flight is then kept rather than lost,
-   * which is what makes this a bootstrap and not a race.
-   */
-  read: () => Promise<AppStateSnapshot>;
-  snapshot: () => AppStateSnapshot | undefined;
-  subscribe: (reader: () => void) => () => void;
-}
+/** The bridge refused the one read, so this window has no document to draw. */
+export class AppStateUnread extends Data.TaggedError("AppStateUnread")<{
+  readonly cause: unknown;
+}> {}
+
+/**
+ * Where the state is read from. The bridge is what a window holds; a test
+ * holds a source of its own, in a registry of its own, which is why the source
+ * is an atom rather than a module constant.
+ *
+ * The two calls are thunks read at each use rather than at module load: this
+ * module is imported by the tests that exercise the rule below, which have no
+ * bridge. It is kept alive so a source set into a registry stands there for
+ * that registry's life, rather than being swept between the set and the read
+ * it was set for.
+ */
+export const appStateSourceAtom: Atom.Writable<AppStateSource> = Atom.keepAlive(
+  Atom.make({
+    subscribe: (onDelivered: (delivered: AppStateSnapshot) => void) =>
+      window.sidecar.onAppState(onDelivered),
+    read: () => window.sidecar.requestAppState(),
+  }),
+);
+
+/**
+ * Every reading the bridge has for this window, the subscription installed
+ * before anything is asked for: a delivery landing while the read is in
+ * flight is then kept rather than lost, which is what makes that read a
+ * bootstrap and not a race.
+ */
+const deliveries = (source: AppStateSource): Stream.Stream<AppStateSnapshot, AppStateUnread> =>
+  Stream.asyncPush<AppStateSnapshot, AppStateUnread>((emit) =>
+    Effect.gen(function* () {
+      yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          source.subscribe((delivered) => {
+            emit.single(delivered);
+          }),
+        ),
+        (stop) => Effect.sync(stop),
+      );
+      yield* Effect.forkScoped(
+        Effect.matchEffect(
+          Effect.tryPromise({
+            try: () => source.read(),
+            catch: (cause) => new AppStateUnread({ cause }),
+          }),
+          {
+            onFailure: (refusal) =>
+              Effect.sync(() => {
+                emit.fail(refusal);
+              }),
+            onSuccess: (answered) =>
+              Effect.sync(() => {
+                emit.single(answered);
+              }),
+          },
+        ),
+      );
+    }),
+  );
+
+/**
+ * The one rule a window adopts a delivery by. A delivery older than the one
+ * held is dropped and nothing else is: the version rises with the document,
+ * and a delivery that repeats it is this window's own facts having moved — its
+ * mode, or the display under it — which the document does not number and
+ * every reader still has to be told.
+ */
+const adopted = (
+  delivered: Stream.Stream<AppStateSnapshot, AppStateUnread>,
+): Stream.Stream<AppStateSnapshot, AppStateUnread> =>
+  Stream.filterMap(
+    Stream.mapAccum(delivered, Option.none<AppStateSnapshot>(), (held, delivery) =>
+      Option.isSome(held) && delivery.version < held.value.version
+        ? [held, Option.none<AppStateSnapshot>()]
+        : [Option.some(delivery), Option.some(delivery)],
+    ),
+    identity,
+  );
 
 /**
  * This window's copy of the one document main holds, and the one subscription
  * behind it.
  *
- * Every reader shares it, so `app:state` is subscribed to exactly once
- * however many components read state, and a component that mounts late is
- * handed what already arrived rather than asking again. A delivery older than
- * the one held is dropped and nothing else is: the version rises with the
- * document, and a delivery that repeats it is this window's own facts having
- * moved — its mode, or the display under it — which the document does not
- * number and every reader still has to be told.
+ * Every reader shares it, so `app:state` is subscribed to exactly once however
+ * many components read state, and a component that mounts late is handed what
+ * already arrived rather than asking again. It is kept alive because the
+ * subscription is every reader's: a component unmounting is no reason to stop
+ * listening, and the window going away is the whole of its life.
  */
-export function createAppStateClient(source: AppStateSource): AppStateClient {
-  let held: AppStateSnapshot | undefined;
-  const readers = new Set<() => void>();
-  /**
-   * Whether the subscription stands. It is never taken back: the client is
-   * every reader's, so a component unmounting is no reason to stop listening,
-   * and the window going away is the whole of its life.
-   */
-  let attached = false;
-
-  function adopt(delivered: AppStateSnapshot): void {
-    if (held !== undefined && delivered.version < held.version) return;
-    held = delivered;
-    for (const reader of Array.from(readers)) reader();
-  }
-
-  function attach(): void {
-    if (attached) return;
-    attached = true;
-    source.subscribe(adopt);
-  }
-
-  return {
-    read: async () => {
-      attach();
-      const answered = await source.read();
-      adopt(answered);
-      // A delivery may have raced past the reply, in which case the held one
-      // is the newer reading and the answer has already been dropped.
-      return held ?? answered;
-    },
-    snapshot: () => held,
-    subscribe: (reader) => {
-      readers.add(reader);
-      return () => {
-        readers.delete(reader);
-      };
-    },
-  };
-}
-
-// The thunks are read at each call rather than at module load: this module is
-// imported by the tests that exercise the rule above, which have no bridge.
-const client = createAppStateClient({
-  subscribe: (onDelivered) => window.sidecar.onAppState(onDelivered),
-  read: () => window.sidecar.requestAppState(),
-});
+export const appStateAtom: Atom.Atom<Result.Result<AppStateSnapshot, AppStateUnread>> =
+  Atom.keepAlive(rendererRuntime.atom((get) => adopted(deliveries(get(appStateSourceAtom)))));
 
 /**
- * The document as main holds it, read before anything is drawn over it. The
- * one place a window asks: every later reading arrives on the subscription
- * this installs.
+ * The document as main holds it, read before anything is drawn over it: the
+ * first reading the atom answers with, which is the read the subscription was
+ * installed for. Every later reading arrives on that subscription. Run at a
+ * renderer root and nowhere else.
  */
-export function readAppState(): Promise<AppStateSnapshot> {
-  return client.read();
-}
+export const appStateFirstRead: Effect.Effect<AppStateSnapshot, AppStateUnread> =
+  Registry.getResult(rendererRegistry, appStateAtom);
 
 /**
  * The snapshot as it stands, for a callback that cannot wait a render: two
@@ -95,12 +122,12 @@ export function readAppState(): Promise<AppStateSnapshot> {
  * has to read what the first left. Not a hook, so nothing redraws for it.
  */
 export function appStateNow(): AppStateSnapshot | undefined {
-  return client.snapshot();
+  return Option.getOrUndefined(Result.value(rendererRegistry.get(appStateAtom)));
 }
 
-/** This window's snapshot, absent only before {@link readAppState} has answered. */
+/** This window's snapshot, absent only before the first read has answered. */
 export function useAppState(): AppStateSnapshot | undefined {
-  return useSyncExternalStore(client.subscribe, client.snapshot);
+  return Option.getOrUndefined(Result.value(useAtomValue(appStateAtom)));
 }
 
 /**
@@ -109,6 +136,6 @@ export function useAppState(): AppStateSnapshot | undefined {
  * the second has to compose against what the first stored.
  */
 export function appSettingsNow(): AppSettingsView | undefined {
-  const stored = client.snapshot()?.settings;
+  const stored = appStateNow()?.settings;
   return stored ? appSettingsView(stored) : undefined;
 }

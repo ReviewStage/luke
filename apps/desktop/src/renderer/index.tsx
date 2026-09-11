@@ -1,10 +1,13 @@
+import { RegistryContext } from "@effect-atom/atom-react/RegistryContext";
 import * as Sentry from "@sentry/electron/renderer";
+import { Effect } from "effect";
 import { createRoot } from "react-dom/client";
 import { ACT_KIND } from "#shared/messages/acts";
 import { tell } from "./act";
 import { App } from "./app";
 import { IntroductionTakeover } from "./introduction/introduction-takeover";
-import { readAppState, useAppState } from "./use-app-state";
+import { rendererRegistry } from "./renderer-runtime";
+import { appStateFirstRead, useAppState } from "./use-app-state";
 
 Sentry.init();
 
@@ -27,7 +30,7 @@ const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Renderer root element is missing");
 void (async () => {
   try {
-    await readAppState();
+    await Effect.runPromise(appStateFirstRead);
   } catch (error) {
     // A window whose state cannot be read mounts nothing: a panel in that
     // state is already broken, since it draws from the same read, so a
@@ -41,4 +44,8 @@ void (async () => {
     console.error("The window's state could not be read; nothing is drawn.", error);
   }
 })();
-createRoot(rootElement).render(<Surface />);
+createRoot(rootElement).render(
+  <RegistryContext.Provider value={rendererRegistry}>
+    <Surface />
+  </RegistryContext.Provider>,
+);

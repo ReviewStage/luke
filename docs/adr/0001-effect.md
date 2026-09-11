@@ -117,7 +117,11 @@ are the process's own edges, one runtime each:
 - the two renderer roots, `apps/desktop/src/renderer/index.tsx` and
   `apps/desktop/src/renderer/voice/index.tsx`, one browser `ManagedRuntime`
   each — two roots because the panel is the one surface that records, and the
-  voice window must not be able to reach it.
+  voice window must not be able to reach it. The runtime each holds is the one
+  `apps/desktop/src/renderer/renderer-runtime.ts` builds: the module is
+  instantiated once per bundle, so the panel and the voice window each get
+  their own registry and their own runtime under it, and an atom's work runs
+  on the runtime of the window that mounted it.
 
 `Effect.runPromise`, `Effect.runSync`, and `Effect.runFork` belong nowhere
 else: a runtime built where the work lives is a second runtime, and two
@@ -217,7 +221,21 @@ reaches resolves them, and nothing after that adds another copy. The session
 vocabulary's guards (P3-01) are where that first reach happened, ahead of the
 renderer's own adoption in P9-01 and P9-03: `renderer.js` went from 455,802 to
 555,670 gzipped bytes and `voice.js` from 137,943 to 236,810, both recorded as
-the new baselines in `apps/desktop/bundle-budget.json`. Paying it there rather
+the new baselines in `apps/desktop/bundle-budget.json`.
+
+P9-01's `@effect-atom/atom-react` is the second fixed cost, and the last one
+this lane budgets for: `renderer.js` went from 555,670 to 645,185 gzipped
+bytes and `voice.js` from 236,810 to 321,864, again recorded as the new
+baselines. The two bundles grew by 89,515 and 85,054 bytes, which is the same
+library in each rather than anything either surface reached for on its own:
+`@effect-atom/atom`'s `Atom` module pulls `effect/Stream`, `effect/Channel`,
+`effect/Subscribable`, `effect/SubscriptionRef`, and
+`@effect/experimental/Reactivity` whatever an atom is built over, so the cost
+is paid by importing the library at all. What the measurement also confirms is
+the two things the budget exists to refuse: the panel bundle resolves exactly
+one copy of `effect`, and neither bundle reaches `@effect/platform-node` or
+`@effect/sql` — `@effect/platform`'s `KeyValueStore`, the one companion module
+`Atom` names, is tree-shaken out entirely. Paying it there rather
 than at P9-01 changes when, not whether, since Effect in the renderer is a
 decision this ADR already records. The budget exists to catch growth nobody
 chose, so a deliberate adoption re-records it and says so; what it still

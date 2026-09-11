@@ -26,6 +26,16 @@ expires before the next version of the document could carry it — which is
 what the voice level is, twenty readings a second each good for fifty
 milliseconds.
 
+That one subscription is an `Atom` over the stream of the bridge's deliveries,
+held in the registry `renderer-runtime.ts` makes and each root provides. The
+stream's scope is what installs the subscription, before anything is asked
+for, so the one read a root awaits is a bootstrap rather than a race, and the
+version rule above is a step of the stream rather than a comparison a reader
+makes. `useAppState` is the hook over it, `appStateNow` the same value for a
+callback that cannot wait a render, and both read the registry the root
+provided, so a hook and a callback in the same window cannot disagree. A
+component reading state reads one of those two and never the registry.
+
 It causes effects one way: `app:act`, one invoke carrying one `{kind, payload}`
 from `ACT_KIND`. The kind's own schema parses the payload here before the
 invoke leaves and again in `main/act-router.ts`, that kind's trust checks run
