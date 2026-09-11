@@ -154,8 +154,11 @@ function fixture(options: { microphone?: boolean; sessionCreated?: boolean } = {
   let microphoneGranted = options.microphone !== false;
   const clock = new FakeClock();
   const peer = new FakePeerConnection();
-  const track = new FakeTrack();
-  const stream = new FakeStream([track]);
+  /** One device per open, so a release's stop and a later press's fresh device can each be told apart. */
+  const tracks: FakeTrack[] = [new FakeTrack()];
+  let microphoneOpens = 0;
+  let devicesOpened = 0;
+  let holdMicrophone: (() => void) | undefined;
   const statuses: LiveStatus[] = [];
   const captions: (readonly LiveCaptionRow[])[] = [];
   const errors: (string | undefined)[] = [];
@@ -187,9 +190,15 @@ function fixture(options: { microphone?: boolean; sessionCreated?: boolean } = {
     },
     createPeerConnection: () => peer,
     openMicrophone: async () => {
+      microphoneOpens += 1;
+      if (holdMicrophone) await new Promise<void>((resolve) => (holdMicrophone = resolve));
       if (!microphoneGranted) throw new Error("refused");
+      const track = devicesOpened === 0 ? tracks[0] : new FakeTrack();
+      assert.ok(track);
+      if (devicesOpened > 0) tracks.push(track);
+      devicesOpened += 1;
       // SAFETY: the call reads only the audio tracks and their `enabled` and `stop` off the stream.
-      return stream as unknown as MediaStream;
+      return new FakeStream([track]) as unknown as MediaStream;
     },
     onRemoteStream: (value) => remote.push(value),
     onLocalStream: (value) => local.push(value),
@@ -223,7 +232,22 @@ function fixture(options: { microphone?: boolean; sessionCreated?: boolean } = {
   return {
     clock,
     peer,
-    track,
+    get track(): FakeTrack {
+      const first = tracks[0];
+      assert.ok(first);
+      return first;
+    },
+    tracks,
+    microphoneOpens: () => microphoneOpens,
+    /** The next device open waits until `releaseMicrophone` lets it finish. */
+    holdNextMicrophone: () => {
+      holdMicrophone = () => undefined;
+    },
+    releaseMicrophone: () => {
+      const release = holdMicrophone;
+      holdMicrophone = undefined;
+      release?.();
+    },
     call,
     statuses,
     captions,
@@ -247,7 +271,7 @@ function fixture(options: { microphone?: boolean; sessionCreated?: boolean } = {
 
 test("the peer is built in the guide's order: track, channel before the offer, ICE under its bound, the host's answer set, and started awaited", async () => {
   const f = fixture();
-  const opening = f.call.open();
+  const opening = f.call.open({ byPress: true });
   await drainMicrotasks();
   assert.deepEqual(f.peer.steps, ["add-track", "create-channel", "create-offer", "set-local"]);
   assert.equal(f.track.enabled, false);
@@ -269,7 +293,7 @@ test("the peer is built in the guide's order: track, channel before the offer, I
 
 test("ICE gathering that never completes sends the offer at the bound", async () => {
   const f = fixture();
-  void f.call.open();
+  void f.call.open({ byPress: true });
   await drainMicrotasks();
   await f.clock.advance(f.clock.now + 5_000);
   assert.equal(f.offers.length, 1);
@@ -277,7 +301,7 @@ test("ICE gathering that never completes sends the offer at the bound", async ()
 
 test("a host that creates no session leaves the peer closed and the call failed", async () => {
   const f = fixture({ sessionCreated: false });
-  const opening = f.call.open();
+  const opening = f.call.open({ byPress: true });
   await drainMicrotasks();
   f.peer.gathered();
   assert.equal(await opening, false);
@@ -290,7 +314,7 @@ test("a host that creates no session leaves the peer closed and the call failed"
 
 test("a session that never announces itself started is given up at the bound", async () => {
   const f = fixture();
-  const opening = f.call.open();
+  const opening = f.call.open({ byPress: true });
   await drainMicrotasks();
   f.peer.gathered();
   await drainMicrotasks();
@@ -302,7 +326,7 @@ test("a session that never announces itself started is given up at the bound", a
 
 test("unmute and mute send the switch and flip the track only on the acknowledgment; an error naming the switch refuses it", async () => {
   const f = fixture();
-  const opening = f.call.open();
+  const opening = f.call.open({ byPress: true });
   await drainMicrotasks();
   f.peer.gathered();
   await drainMicrotasks();
@@ -330,18 +354,185 @@ test("unmute and mute send the switch and flip the track only on the acknowledgm
     error: { type: "invalid_request_error", message: "no" },
   });
   assert.equal(await muting, false);
-  assert.equal(f.track.enabled, true);
-  assert.equal(f.call.listening, true);
-  // An acknowledgment that never comes gives the switch up at the bound.
-  const again = f.call.mute();
+  // Refused or not, the key is up: the device leaves the line and stops.
+  assert.deepEqual(f.peer.replaced, [null]);
+  assert.equal(f.track.stopped, true);
+  assert.equal(f.call.listening, false);
+  assert.equal(f.local.at(-1), undefined);
+  assert.equal(f.statuses.at(-1), LIVE_STATUS.MUTED);
+});
+
+test("the release after the acknowledgment takes the track off the line and stops the device exactly once", async () => {
+  const f = fixture();
+  const opening = f.call.open({ byPress: true });
+  await drainMicrotasks();
+  f.peer.gathered();
+  await drainMicrotasks();
+  f.started();
+  await opening;
+  const unmuting = f.call.unmute();
+  await drainMicrotasks();
+  f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
+  assert.equal(await unmuting, true);
+  const muting = f.call.mute();
+  await drainMicrotasks();
+  // The switch first, the device after: nothing is taken off the line while the mute is in flight.
+  assert.deepEqual(f.peer.replaced, []);
+  assert.equal(f.track.stopped, false);
+  f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED);
+  assert.equal(await muting, true);
+  assert.deepEqual(f.peer.replaced, [null]);
+  assert.equal(f.track.stopped, true);
+  assert.equal(f.local.at(-1), undefined);
+  assert.equal(f.call.listening, false);
+  // A second release finds no device and sends nothing.
+  assert.equal(await f.call.mute(), true);
+  assert.deepEqual(f.peer.replaced, [null]);
+  assert.equal(f.sentTypes().length, 2);
+});
+
+test("a mute the server never acknowledges still releases the device at the bound", async () => {
+  const f = fixture();
+  const opening = f.call.open({ byPress: true });
+  await drainMicrotasks();
+  f.peer.gathered();
+  await drainMicrotasks();
+  f.started();
+  await opening;
+  const unmuting = f.call.unmute();
+  await drainMicrotasks();
+  f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
+  await unmuting;
+  const muting = f.call.mute();
   await drainMicrotasks();
   await f.clock.advance(f.clock.now + MICROPHONE_ACK_TIMEOUT_MS);
-  assert.equal(await again, false);
+  assert.equal(await muting, false);
+  assert.deepEqual(f.peer.replaced, [null]);
+  assert.equal(f.track.stopped, true);
+  assert.equal(f.local.at(-1), undefined);
+});
+
+test("the next press after a release opens a fresh device and puts it on the line before the switch", async () => {
+  const f = fixture();
+  const opening = f.call.open({ byPress: true });
+  await drainMicrotasks();
+  f.peer.gathered();
+  await drainMicrotasks();
+  f.started();
+  await opening;
+  assert.equal(f.microphoneOpens(), 1);
+  const first = f.call.unmute();
+  await drainMicrotasks();
+  f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
+  await first;
+  const muting = f.call.mute();
+  await drainMicrotasks();
+  f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED);
+  await muting;
+  const second = f.call.unmute();
+  await drainMicrotasks();
+  assert.equal(f.microphoneOpens(), 2);
+  assert.equal(f.tracks.length, 2);
+  const fresh = f.tracks[1];
+  assert.ok(fresh);
+  assert.deepEqual(f.peer.replaced, [null, fresh]);
+  assert.equal(fresh.enabled, false);
+  assert.deepEqual(f.sentTypes().at(-1), LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE);
+  f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
+  assert.equal(await second, true);
+  assert.equal(fresh.enabled, true);
+  assert.equal(f.local.at(-1) !== undefined, true);
+});
+
+test("a release while the press's device is still opening stops that device instead of attaching it", async () => {
+  const f = fixture();
+  const opening = f.call.open({ byPress: false });
+  await drainMicrotasks();
+  f.peer.gathered();
+  await drainMicrotasks();
+  f.started();
+  await opening;
+  f.holdNextMicrophone();
+  const unmuting = f.call.unmute();
+  await drainMicrotasks();
+  assert.equal(f.microphoneOpens(), 1);
+  const muting = f.call.mute();
+  assert.equal(await muting, true);
+  f.releaseMicrophone();
+  assert.equal(await unmuting, false);
+  assert.equal(f.track.stopped, true);
+  assert.deepEqual(f.peer.replaced, []);
+  assert.deepEqual(f.sentTypes(), []);
+  assert.equal(f.call.listening, false);
+});
+
+test("a release while the press's device is being attached takes it back off the line and stops it", async () => {
+  const f = fixture();
+  const opening = f.call.open({ byPress: false });
+  await drainMicrotasks();
+  f.peer.gathered();
+  await drainMicrotasks();
+  f.started();
+  await opening;
+  let attach: (() => void) | undefined;
+  f.peer.sender.replaceTrack = (track) => {
+    f.peer.replaced.push(track);
+    return track === null
+      ? Promise.resolve()
+      : new Promise<void>((resolve) => {
+          attach = resolve;
+        });
+  };
+  const unmuting = f.call.unmute();
+  await drainMicrotasks();
+  assert.deepEqual(f.peer.replaced, [f.track]);
+  assert.equal(await f.call.mute(), true);
+  attach?.();
+  assert.equal(await unmuting, false);
+  assert.deepEqual(f.peer.replaced, [f.track, null]);
+  assert.equal(f.track.stopped, true);
+  assert.deepEqual(f.sentTypes(), []);
+  assert.equal(f.local.length, 1);
+});
+
+test("a session opened for Luke's own speech carries no device: a trackless line and no microphone open", async () => {
+  const f = fixture();
+  const opening = f.call.open({ byPress: false });
+  await drainMicrotasks();
+  assert.deepEqual(f.peer.steps.slice(0, 2), ["add-transceiver", "create-channel"]);
+  assert.equal(f.microphoneOpens(), 0);
+  f.peer.gathered();
+  await drainMicrotasks();
+  f.started();
+  assert.equal(await opening, true);
+  assert.equal(f.local.at(-1), undefined);
+  assert.equal(f.track.stopped, false);
+  // The press against it opens the device then, and only then.
+  const unmuting = f.call.unmute();
+  await drainMicrotasks();
+  assert.equal(f.microphoneOpens(), 1);
+  assert.deepEqual(f.peer.replaced, [f.track]);
+  f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
+  assert.equal(await unmuting, true);
+});
+
+test("a muted session with no device still reports idle once the window passes", async () => {
+  const f = fixture();
+  const opening = f.call.open({ byPress: false });
+  await drainMicrotasks();
+  f.peer.gathered();
+  await drainMicrotasks();
+  f.started();
+  await opening;
+  await f.clock.advance(f.clock.now + LIVE_IDLE_WINDOW_MS - 1);
+  assert.deepEqual(f.activity, []);
+  await f.clock.advance(f.clock.now + 1);
+  assert.deepEqual(f.activity, [true]);
 });
 
 test("a stop during an unmute still awaiting its acknowledgment gives the unmute up and mutes anyway", async () => {
   const f = fixture();
-  const opening = f.call.open();
+  const opening = f.call.open({ byPress: true });
   await drainMicrotasks();
   f.peer.gathered();
   await drainMicrotasks();
@@ -364,7 +555,7 @@ test("a stop during an unmute still awaiting its acknowledgment gives the unmute
 
 test("a microphone the system refused rides as a trackless line and is filled by the first unmute", async () => {
   const f = fixture({ microphone: false });
-  const opening = f.call.open();
+  const opening = f.call.open({ byPress: true });
   await drainMicrotasks();
   assert.deepEqual(f.peer.steps.slice(0, 2), ["add-transceiver", "create-channel"]);
   f.peer.gathered();
@@ -380,7 +571,7 @@ test("a microphone the system refused rides as a trackless line and is filled by
 
 test("granted after the session opened, the first unmute fills the trackless line before the switch goes", async () => {
   const f = fixture({ microphone: false });
-  const opening = f.call.open();
+  const opening = f.call.open({ byPress: true });
   await drainMicrotasks();
   f.peer.gathered();
   await drainMicrotasks();
@@ -399,7 +590,7 @@ test("granted after the session opened, the first unmute fills the trackless lin
 
 test("the speaking status comes from the remote track's level and never from transcript events; captions draw both speakers", async () => {
   const f = fixture();
-  const opening = f.call.open();
+  const opening = f.call.open({ byPress: true });
   await drainMicrotasks();
   f.peer.gathered();
   await drainMicrotasks();
@@ -449,7 +640,7 @@ test("the speaking status comes from the remote track's level and never from tra
 
 test("the transport is reported as the peer connection moves, and a failed one ends the call", async () => {
   const f = fixture();
-  const opening = f.call.open();
+  const opening = f.call.open({ byPress: true });
   await drainMicrotasks();
   f.peer.gathered();
   await drainMicrotasks();
@@ -474,7 +665,7 @@ test("the transport is reported as the peer connection moves, and a failed one e
 
 test("idle is reported once after the window with no microphone activity, and cleared once on the next", async () => {
   const f = fixture();
-  const opening = f.call.open();
+  const opening = f.call.open({ byPress: true });
   await drainMicrotasks();
   f.peer.gathered();
   await drainMicrotasks();
@@ -495,7 +686,7 @@ test("idle is reported once after the window with no microphone activity, and cl
 
 test("the hang-up registers closed, sends close, holds everything open until closed arrives, and gives up at the bound", async () => {
   const f = fixture();
-  const opening = f.call.open();
+  const opening = f.call.open({ byPress: true });
   await drainMicrotasks();
   f.peer.gathered();
   await drainMicrotasks();
@@ -519,7 +710,7 @@ test("the hang-up registers closed, sends close, holds everything open until clo
   assert.deepEqual(f.remote.at(-1), undefined);
   // A second call with no closed event gives up at the bound.
   const g = fixture();
-  const opened = g.call.open();
+  const opened = g.call.open({ byPress: true });
   await drainMicrotasks();
   g.peer.gathered();
   await drainMicrotasks();
@@ -539,7 +730,7 @@ test("the hang-up registers closed, sends close, holds everything open until clo
 
 test("a channel that closes under the call ends it, and a hang-up over a channel that cannot carry it is left to the host", async () => {
   const f = fixture();
-  const opening = f.call.open();
+  const opening = f.call.open({ byPress: true });
   await drainMicrotasks();
   f.peer.gathered();
   await drainMicrotasks();
@@ -550,7 +741,7 @@ test("a channel that closes under the call ends it, and a hang-up over a channel
   assert.equal(f.statuses.at(-1), LIVE_STATUS.IDLE);
   assert.equal(f.transports.at(-1), LIVE_TRANSPORT_STATE.CLOSED);
   const g = fixture();
-  const opened = g.call.open();
+  const opened = g.call.open({ byPress: true });
   await drainMicrotasks();
   g.peer.gathered();
   await drainMicrotasks();

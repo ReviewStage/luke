@@ -74,14 +74,16 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
 /**
  * The one voice session as the desktop drives it, following the live guide's
  * one-owner rule: the renderer owns the microphone switch and the hang-up,
- * the host owns every append and the close decision. The talk key opens the
- * session if none stands and unmutes it; pressed again while the developer is
- * heard, it mutes, as the stop key does. The host's `voiceLiveSession.changed`
- * is obeyed rather than reasoned about: wanted opens a session muted for
- * whatever Luke has to say, closing hangs up, and a session lost with the
- * microphone live is listened to again on the session that replaces it. No
- * turn is committed, no reply is claimed, and no words are written here: both
- * speakers' lines are the host's, from the transcript its sideband receives.
+ * the host owns every append and the close decision. The talk key is held to
+ * talk: its press opens the session if none stands and unmutes it, its
+ * release mutes, and the microphone is open exactly between the two; the
+ * stop key mutes the same way. The host's `voiceLiveSession.changed` is
+ * obeyed rather than reasoned about: wanted opens a session with no
+ * microphone for whatever Luke has to say, closing hangs up, and a session
+ * lost while the key is still held is listened to again on the session that
+ * replaces it. No turn is committed, no reply is claimed, and no words are
+ * written here: both speakers' lines are the host's, from the transcript its
+ * sideband receives.
  */
 export class LiveVoiceOrchestrator {
   readonly #bridge: LiveVoiceBridge;
@@ -106,8 +108,13 @@ export class LiveVoiceOrchestrator {
   /** Whether the session standing was opened by a press rather than for Luke's own speech. */
   #openedByPress = false;
   #opening: Promise<boolean> | undefined;
-  /** A stop pressed while a press's session was still opening: the press ends muted rather than unmuting a session nobody wants heard. */
-  #pressStopped = false;
+  /**
+   * Whether the talk key is down. A press's unmute follows the session it
+   * opened only while this still stands, so a key let go of, or a stop
+   * pressed, during the opening leaves the session muted rather than
+   * unmuting one nobody wants heard.
+   */
+  #pressHeld = false;
   #reported: LiveVoiceView | undefined;
   /** The call whose exchange has been counted, so a session pausing between Luke's sentences is not a second exchange. */
   #countedCall: LiveVoiceCall | undefined;
@@ -131,9 +138,11 @@ export class LiveVoiceOrchestrator {
   }
 
   /**
-   * The talk key. Against no session it opens one and unmutes it; against a
-   * muted session it unmutes; against a listening one it mutes, so the key
-   * alone can end what it began.
+   * The talk key going down. Against no session it opens one and unmutes it;
+   * against a standing session it unmutes. It never mutes: the key coming up
+   * does that, so a hold is heard for exactly as long as it lasts, and a
+   * hold that ended while the system's microphone dialog stood, or while the
+   * session was opening, unmutes nothing.
    */
   async beginTalk(): Promise<void> {
     if (this.#surroundings.voiceAvailable === false) {
@@ -141,21 +150,17 @@ export class LiveVoiceOrchestrator {
       if (unavailable) this.#strip.showNotice(unavailable);
       return;
     }
-    const standing = this.#call;
-    if (standing?.listening) {
-      await standing.mute();
-      return;
-    }
+    this.#pressHeld = true;
     if (!this.#surroundings.microphoneGranted) {
       const granted = await this.#bridge.requestMicrophone();
       if (!granted) {
         this.#strip.showError(MICROPHONE_REFUSED_NOTE);
         return;
       }
+      if (!this.#pressHeld) return;
     }
-    this.#pressStopped = false;
     const call = await this.#ensureSession({ byPress: true });
-    if (call && !this.#pressStopped) await call.unmute();
+    if (call && this.#pressHeld) await call.unmute();
     // The press is answered once the session hears the developer; between the
     // offer and the unmute the session passes through muted, which is not the
     // exchange ending.
@@ -164,17 +169,28 @@ export class LiveVoiceOrchestrator {
   }
 
   /**
+   * The talk key coming up: the microphone closes. A release while the
+   * press's session is still opening leaves it to open muted, and one with
+   * no press behind it does nothing.
+   */
+  async endTalk(): Promise<void> {
+    if (!this.#pressHeld) return;
+    this.#pressHeld = false;
+    if (this.#opening) return;
+    const call = this.#call;
+    if (call?.standing) await call.mute();
+  }
+
+  /**
    * The stop key, and the panel's Escape: the microphone closes and the host
    * tells the model to stop. Pressed while a press's session is still
    * opening, it cancels that press's unmute, so the session opens muted.
    */
   async stopSpeaking(): Promise<boolean> {
-    // A session still being opened has no peer to mute yet; the stop is
-    // remembered for the press, which then leaves the session muted.
-    if (this.#opening) {
-      this.#pressStopped = true;
-      return true;
-    }
+    this.#pressHeld = false;
+    // A session still being opened has no peer to mute yet; the press
+    // remembers the key is no longer held and leaves the session muted.
+    if (this.#opening) return true;
     const call = this.#call;
     if (!call?.standing) return false;
     await call.mute();
@@ -198,19 +214,19 @@ export class LiveVoiceOrchestrator {
 
   /**
    * The host's word on the one session. Wanted is Luke with something to say
-   * and no session to say it into, so one opens muted; closing is the host's
-   * decision to end it, so the peer hangs up; a close that lost the developer
-   * mid-conversation is remembered so the next session listens again.
+   * and no session to say it into, so one opens with no microphone; closing
+   * is the host's decision to end it, so the peer hangs up; a close that lost
+   * the developer mid-hold is remembered so the next session listens again,
+   * for as long as the key is still down.
    */
   obeySessionChange(change: VoiceLiveSessionChanged): void {
     switch (change.phase) {
       case LIVE_SESSION_PHASE.WANTED:
         if (this.#surroundings.voiceAvailable === false) return;
         void this.#ensureSession({ byPress: false }).then(async (call) => {
-          if (call && this.#resumeListening) {
-            this.#resumeListening = false;
-            await call.unmute();
-          }
+          const resume = this.#resumeListening;
+          this.#resumeListening = false;
+          if (call && resume && this.#pressHeld) await call.unmute();
         });
         return;
       case LIVE_SESSION_PHASE.CLOSING:
@@ -288,7 +304,7 @@ export class LiveVoiceOrchestrator {
     this.#call = call;
     this.#talkOpening = input.byPress;
     this.#touch();
-    this.#opening = call.open();
+    this.#opening = call.open({ byPress: input.byPress });
     const opened = await this.#opening;
     this.#opening = undefined;
     if (!opened) {

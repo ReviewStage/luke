@@ -266,6 +266,7 @@ export function App(): React.JSX.Element {
       hotkey: {
         ...(held.hotkeys.talk ? { hotkey: voiceHotkeyLabel(held.hotkeys.talk) } : undefined),
         removed: current.voiceHotkey === VOICE_HOTKEY_NONE,
+        held: held.hotkeys.talkHeld,
       },
       ...(held.hotkeys.ask ? { askKey: voiceHotkeyLabel(held.hotkeys.ask) } : undefined),
       askKeyRemoved: current.askHotkey === VOICE_HOTKEY_NONE,

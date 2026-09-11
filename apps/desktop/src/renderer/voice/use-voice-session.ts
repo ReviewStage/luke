@@ -210,12 +210,18 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   );
 
   // The talk key is registered by the main process so it answers from any app,
-  // which is the whole point: no window to find, nothing to focus first. Only
-  // the press decides anything: the microphone is a switch on the session, so
-  // a release ends nothing. A press during a chord being recorded is held
-  // back in the main process, where the recording is known.
+  // which is the whole point: no window to find, nothing to focus first. It
+  // is held to talk: the press opens the microphone and the release closes
+  // it, so the device is open exactly while the key is down. A press during
+  // a chord being recorded is held back in the main process, where the
+  // recording is known; a release always lands, so a hold begun before the
+  // recording still ends.
   useEffect(
     () => window.sidecar.onVoiceHotkeyPress(() => void orchestrator.beginTalk()),
+    [orchestrator],
+  );
+  useEffect(
+    () => window.sidecar.onVoiceHotkeyRelease(() => void orchestrator.endTalk()),
     [orchestrator],
   );
   // The stop key asks for quiet from any app, exactly as Escape asks for it

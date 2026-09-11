@@ -2,12 +2,14 @@ import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 
 /**
  * The WebRTC peer the voice window is, as the WebRTC guide builds one: the
- * microphone track added first, the `oai-events` data channel created before
- * the offer, ICE gathered under a bound, the offer handed to the host that
- * holds the key, and the host's answer applied. The HTTP request the host
- * makes is what starts the session, so nothing here sends `session.start`.
- * The peer is written over the narrowest slice of the browser's objects the
- * peer touches, so a test can stand a fake in for each without a browser.
+ * audio line first (the microphone's track where a press opened the session,
+ * a sending line with no track otherwise), the `oai-events` data channel
+ * created before the offer, ICE gathered under a bound, the offer handed to
+ * the host that holds the key, and the host's answer applied. The HTTP
+ * request the host makes is what starts the session, so nothing here sends
+ * `session.start`. The peer is written over the narrowest slice of the
+ * browser's objects the peer touches, so a test can stand a fake in for each
+ * without a browser.
  */
 
 /** How long ICE gathering may run before the offer goes with what it has. */
@@ -36,7 +38,7 @@ export interface LivePeerConnection {
   readonly localDescription: { readonly sdp: string } | null;
   createDataChannel(label: string): LiveDataChannel;
   addTrack(track: MediaStreamTrack, stream: MediaStream): LiveTrackSender;
-  /** A sending audio line with no track yet, for a session opened before the microphone is granted. */
+  /** A sending audio line with no track, filled by the first unmute a press asks for. */
   addTransceiver(kind: "audio", init: { direction: "sendrecv" }): { sender: LiveTrackSender };
   createOffer(): Promise<RTCSessionDescriptionInit>;
   setLocalDescription(description: RTCSessionDescriptionInit): Promise<void>;
@@ -49,8 +51,14 @@ export interface LivePeerConnection {
 
 export interface LivePeerSeams {
   createPeerConnection: () => LivePeerConnection;
-  /** The preferred capture device; a refusal opens the session with no track until the first unmute. */
-  openMicrophone: () => Promise<MediaStream>;
+  /**
+   * The preferred capture device, handed over only for a session a press
+   * opened, since the press is the user action the WebRTC guide asks the
+   * microphone be requested from; absent, the session opens with no device
+   * and its first unmute opens one. A refusal opens the session the same
+   * way, with no track until the first unmute.
+   */
+  openMicrophone?: () => Promise<MediaStream>;
   /** The host: the peer's offer becomes the one session, answered with the SDP the peer sets. */
   createSession: (sdp: string) => Promise<{ sessionId: string; sdpAnswer: string } | undefined>;
   onRemoteStream: (stream: MediaStream) => void;
@@ -63,7 +71,7 @@ export interface LivePeer {
   sessionId: string;
   connection: LivePeerConnection;
   channel: LiveDataChannel;
-  /** The developer's track, disabled until the session is unmuted; absent when the microphone was refused. */
+  /** The developer's track while the talk key holds the device open, disabled until the session is unmuted; absent otherwise. */
   microphone: MediaStreamTrack | undefined;
   microphoneStream: MediaStream | undefined;
   sender: LiveTrackSender;
@@ -98,10 +106,11 @@ async function gatherIce(connection: LivePeerConnection, seams: LivePeerSeams): 
 }
 
 /**
- * Opens the peer in the guide's order. The microphone rides the offer with
- * its track disabled, so a session opened for Luke's own speech hears nothing
- * until the talk key; a microphone the system refuses leaves a sending line
- * with no track, which the first unmute fills.
+ * Opens the peer in the guide's order. A press's microphone rides the offer
+ * with its track disabled until the session acknowledges the unmute; a
+ * session opened for Luke's own speech, or one whose microphone the system
+ * refuses, carries a sending line with no track, which the first unmute
+ * fills, so no capture device is open behind a session nobody pressed for.
  */
 export async function openLivePeer(seams: LivePeerSeams): Promise<LivePeerOpening> {
   let connection: LivePeerConnection | undefined;
@@ -113,11 +122,13 @@ export async function openLivePeer(seams: LivePeerSeams): Promise<LivePeerOpenin
       seams.onRemoteStream(stream);
     };
     let microphone: MediaStreamTrack | undefined;
-    try {
-      microphoneStream = await seams.openMicrophone();
-      microphone = microphoneStream.getAudioTracks()[0];
-    } catch {
-      microphoneStream = undefined;
+    if (seams.openMicrophone) {
+      try {
+        microphoneStream = await seams.openMicrophone();
+        microphone = microphoneStream.getAudioTracks()[0];
+      } catch {
+        microphoneStream = undefined;
+      }
     }
     let sender: LiveTrackSender;
     if (microphone && microphoneStream) {
@@ -158,11 +169,16 @@ export async function openLivePeer(seams: LivePeerSeams): Promise<LivePeerOpenin
   }
 }
 
-/** Closes the peer and stops the capture device it opened. */
+/** Stops every track of a capture device, so the system's indicator goes with it. */
+export function stopDevice(stream: MediaStream | undefined): void {
+  for (const track of stream?.getTracks() ?? []) track.stop();
+}
+
+/** Closes the peer and stops the capture device standing on it. */
 export function teardown(
   connection: LivePeerConnection,
   microphoneStream: MediaStream | undefined,
 ): void {
-  for (const track of microphoneStream?.getTracks() ?? []) track.stop();
+  stopDevice(microphoneStream);
   connection.close();
 }

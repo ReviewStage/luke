@@ -356,9 +356,10 @@ and email you signed it with, and any screenshots you attached.
 ## Who we send it to
 
 - OpenAI, for voice and for Luke's own judgment. On the Mac, a voice session
-  is one continuous conversation: while the microphone is unmuted everything
-  it hears streams to OpenAI, and while it is muted nothing does; Luke can
-  still speak into a muted session. A typed turn sends your words, each voice
+  is one continuous conversation: while you hold the talk key everything the
+  microphone hears streams to OpenAI, and the moment you let go the
+  microphone is closed and nothing does; Luke can still speak into a session
+  whose microphone is closed. A typed turn sends your words, each voice
   session carries the recent Conversation lines and the session summary
   described above as it opens, and both kinds of turn send the session fields
   listed above — on the Mac app, read locally from your machine; on iOS and
@@ -488,9 +489,13 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
 - What you type or say to Luke goes to his main conversation; the
   conversation an ask is for is fixed at the moment you send it and never
   moved afterwards.
-- Luke does not listen through your microphone until you press the talk
-  key: a voice session Luke opens to speak to you keeps the microphone muted,
-  and the stop key or a second press of the talk key mutes it again.
+- Luke does not listen through your microphone except while you hold the
+  talk key. The press opens the microphone and letting go closes it, so
+  macOS's microphone indicator is lit exactly while the key is down; the stop
+  key closes it too. A voice session Luke opens to speak to you opens no
+  microphone at all. If Luke's key helper cannot start, the key reports
+  presses alone, so one press opens the microphone and the next closes it,
+  and the Keyboard shortcuts page says so.
 - Delete your account from the Account section in Settings. This erases your
   account, your sign-in records, your usage counts, and any provider API keys
   you synced to the hosted service, and asks PostHog to erase your usage data

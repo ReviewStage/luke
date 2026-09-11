@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { VOICE_HOTKEY_NONE } from "@sidecar/settings";
+import type { BrowserWindow } from "electron";
+import { channels } from "#shared/bridge";
 import type { TalkKeyEdges } from "../native/talk-key";
 import {
   HOTKEY_RANK,
@@ -23,6 +25,11 @@ function harness(options: { credentials?: boolean; registers?: boolean } = {}) {
   const talkStops: number[] = [];
   let talkEdges: TalkKeyEdges | undefined;
   let talkStart = true;
+  const voiceHostSent: string[] = [];
+  // SAFETY: the registrar reaches only `webContents.send` on the voice host.
+  const voiceHost = {
+    webContents: { send: (channel: string) => voiceHostSent.push(channel) },
+  } as unknown as BrowserWindow;
 
   const shortcut: ShortcutSurface = {
     register(accelerator, callback) {
@@ -54,7 +61,7 @@ function harness(options: { credentials?: boolean; registers?: boolean } = {}) {
     },
     recordProductEvent: () => undefined,
     host: {
-      voiceHost: () => undefined,
+      voiceHost: () => voiceHost,
       primaryPanel: () => undefined,
       displayIdFor: () => undefined,
       modeFor: () => "compact",
@@ -70,12 +77,24 @@ function harness(options: { credentials?: boolean; registers?: boolean } = {}) {
     unregisterAllCount: () => unregisterAllCount,
     announced: () => announced,
     talkStops: () => talkStops,
+    voiceHostSent: () => voiceHostSent,
+    pressTalk() {
+      const talk = registered.find((entry) => entry.accelerator === registrar.talk);
+      assert.ok(talk, "the talk key is registered with Electron");
+      talk.callback();
+    },
+    pressStop() {
+      const stop = registered.find((entry) => entry.accelerator === registrar.stop);
+      assert.ok(stop, "the stop key is registered with Electron");
+      stop.callback();
+    },
     failTalkStart() {
       talkStart = false;
     },
     announceTalk(accelerator: string) {
       talkEdges?.onRegistered(accelerator);
     },
+    talkEdges: () => talkEdges,
   };
 }
 
@@ -191,10 +210,47 @@ test("no credential takes no system key", async () => {
   assert.deepEqual(context.registered(), []);
 });
 
-test("a helper that cannot start falls back to a toggle", async () => {
+test("a helper that cannot start falls back to Electron, whose talk key reports no hold", async () => {
   const context = harness();
   context.failTalkStart();
   await context.registrar.reapply(HOTKEY_RANK.TALK);
   assert.equal(context.registrar.talk, "Alt+Space");
   assert.equal(context.registrar.held, false);
+});
+
+test("the Electron fallback alternates press and release across presses, and a stop ends the pair", async () => {
+  const context = harness();
+  context.failTalkStart();
+  await context.registrar.reapply(HOTKEY_RANK.TALK);
+  context.pressTalk();
+  context.pressTalk();
+  context.pressTalk();
+  assert.deepEqual(context.voiceHostSent(), [
+    channels.onVoiceHotkeyPress,
+    channels.onVoiceHotkeyRelease,
+    channels.onVoiceHotkeyPress,
+  ]);
+  context.pressStop();
+  context.pressTalk();
+  assert.deepEqual(context.voiceHostSent().slice(3), [
+    channels.onStopHotkeyPress,
+    channels.onVoiceHotkeyPress,
+  ]);
+  // A press held back by a chord being recorded moves the pair nowhere.
+  context.registrar.setShortcutCapturing(true);
+  context.pressTalk();
+  context.registrar.setShortcutCapturing(false);
+  context.pressTalk();
+  assert.deepEqual(context.voiceHostSent().slice(5), [channels.onVoiceHotkeyRelease]);
+});
+
+test("the native watcher's edges reach the voice host as they are", async () => {
+  const context = harness();
+  await context.registrar.reapply(HOTKEY_RANK.TALK);
+  context.talkEdges()?.onPress();
+  context.talkEdges()?.onRelease();
+  assert.deepEqual(context.voiceHostSent(), [
+    channels.onVoiceHotkeyPress,
+    channels.onVoiceHotkeyRelease,
+  ]);
 });

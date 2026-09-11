@@ -128,11 +128,18 @@ export class HotkeyRegistrar {
   #talkKeyWatcher: TalkKeyHandle | undefined;
   /**
    * Whether the key reports being let go of. The helper does and the Electron
-   * fallback cannot, and that is the difference between holding a turn and
-   * toggling one — so the panel is told which key it actually has rather than
-   * describing the one it hoped for.
+   * fallback cannot, and that is the difference between holding the
+   * microphone open and pressing to start and again to stop — so the panel is
+   * told which key it actually has rather than describing the one it hoped
+   * for.
    */
   #held = true;
+  /**
+   * Under the Electron fallback, whether the last press started a hold that
+   * has not been ended: Electron reports presses alone, so a press stands in
+   * for the release the key cannot report, and the two alternate.
+   */
+  #fallbackTalking = false;
 
   /**
    * True while a settings row is recording a chord. Both Luke keys stay
@@ -156,13 +163,7 @@ export class HotkeyRegistrar {
         HOTKEY_RANK.TALK,
         {
           candidates: voiceHotkeyCandidates,
-          onPress: () => {
-            this.#sendPress(channels.onVoiceHotkeyPress);
-            // A toggle has only the one edge, so it reports a release immediately
-            // and one short enough to read as a tap. Every press then latches or
-            // ends a turn.
-            this.#sendTo(this.#voiceHostContents(), channels.onVoiceHotkeyRelease);
-          },
+          onPress: () => this.#toggleFallbackTalk(),
           chosen: undefined,
           accelerator: undefined,
         },
@@ -180,7 +181,12 @@ export class HotkeyRegistrar {
         HOTKEY_RANK.STOP,
         {
           candidates: stopHotkeyCandidates,
-          onPress: () => this.#sendPress(channels.onStopHotkeyPress),
+          onPress: () => {
+            // The stop ends whatever hold the fallback had begun, so the next
+            // talk press starts one rather than ending one already over.
+            this.#fallbackTalking = false;
+            this.#sendPress(channels.onStopHotkeyPress);
+          },
           chosen: undefined,
           accelerator: undefined,
         },
@@ -323,6 +329,22 @@ export class HotkeyRegistrar {
   }
 
   /**
+   * The Electron fallback's talk key. The system gives it no release edge, so
+   * one press starts the hold and the next ends it: the one place a press
+   * stands in for letting go, and only because nothing else can. A press
+   * held back by a recording moves nothing, so the pair stays in step with
+   * what the voice host was actually told.
+   */
+  #toggleFallbackTalk(): void {
+    const voiceHost = this.#voiceHostContents();
+    if (this.#shortcutCapturing || !voiceHost) return;
+    this.#fallbackTalking = !this.#fallbackTalking;
+    voiceHost.send(
+      this.#fallbackTalking ? channels.onVoiceHotkeyPress : channels.onVoiceHotkeyRelease,
+    );
+  }
+
+  /**
    * The panel stands up focused, then the renderer is asked to put the caret in
    * the field — or, when the caret is already there, it reads the same press as
    * the dismissal, so one key summons and puts away like every launcher does.
@@ -366,17 +388,20 @@ export class HotkeyRegistrar {
   }
 
   /**
-   * The candidate loop against Electron. For the talk key it is a toggle rather
-   * than a hold, because Electron reports only the press: a lesser thing than
-   * the helper rather than a broken one, and what lets one key interrupt a
-   * reply already playing.
+   * The candidate loop against Electron. For the talk key it is press to
+   * start and press again to stop rather than a hold, because Electron
+   * reports only the press: a lesser thing than the helper rather than a
+   * broken one.
    */
   #registerWithElectron(rank: HotkeyRank): void {
     const state = this.#key(rank);
     for (const accelerator of state.candidates(state.chosen, this.#taken(rank))) {
       if (!this.#shortcut.register(accelerator, state.onPress)) continue;
       state.accelerator = accelerator;
-      if (rank === HOTKEY_RANK.TALK) this.#held = false;
+      if (rank === HOTKEY_RANK.TALK) {
+        this.#held = false;
+        this.#fallbackTalking = false;
+      }
       return;
     }
   }
